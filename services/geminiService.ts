@@ -1,5 +1,6 @@
 import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import { createTextureSheet, optimizePayload, createSolidFence, createMasterReferenceSheet } from "../utils/imageProcessor";
+import { getSystemApiKey, reportKeyFailure } from "./economyService";
 
 export interface CharacterData {
   id: number;
@@ -153,66 +154,110 @@ const runWithTimeout = <T>(promise: Promise<T>, ms: number, label: string): Prom
 
 // Cấu hình timeout cao hơn cho Client (mặc định fetch là ngắn)
 const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string) => {
+    let apiKey: string | null | undefined = specificKey;
+    if (!apiKey) {
+        apiKey = await getSystemApiKey(tier);
+    }
+    if (!apiKey) {
+        throw new Error("No API Key or Service Account available. Please add one in the Admin Panel.");
+    }
+    
+    const isServiceAccount = apiKey.includes('project_id') && apiKey.includes('private_key');
+
+    // 1. Nếu là API Key thường (AI Studio) -> Dùng SDK chính thức
+    if (!isServiceAccount) {
+        const ai = new GoogleGenAI({ apiKey });
+        return {
+            ...ai,
+            models: {
+                ...ai.models,
+                generateContent: async (params: any) => {
+                    try {
+                        return await ai.models.generateContent(params);
+                    } catch (error: any) {
+                        const isRateLimit = error?.status === 429 || error?.message?.includes('429') || error?.message?.includes('quota');
+                        const isAuthError = error?.status === 403 || error?.message?.includes('403') || error?.message?.includes('PERMISSION_DENIED');
+                        if (isRateLimit || isAuthError) {
+                            reportKeyFailure(apiKey!);
+                        }
+                        throw error;
+                    }
+                }
+            },
+            files: ai.files
+        } as any;
+    }
+
+    // 2. Nếu là Service Account JSON -> Dùng Vertex AI REST API
     return {
         models: {
             generateContent: async (params: any) => {
-                // 1. Xin Access Token từ Netlify Function
-                const tokenRes = await fetch('/api/get-vertex-token', { 
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(specificKey ? { service_account_json: specificKey } : {})
-                });
-                if (!tokenRes.ok) {
-                    const err = await tokenRes.json().catch(() => ({}));
-                    throw new Error(err.error || 'Failed to get Vertex Token from Server');
-                }
-                const { accessToken, projectId, location } = await tokenRes.json();
-
-                // 2. Gọi trực tiếp Vertex AI REST API từ trình duyệt
-                const url = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${params.model}:generateContent`;
-                
-                // Chuyển đổi config sang generationConfig cho REST API
-                const payload: any = {
-                    contents: params.contents.parts ? [params.contents] : params.contents,
-                };
-                
-                if (params.config) {
-                    payload.generationConfig = { ...params.config };
-                    // Xóa các trường không hợp lệ trong REST API nếu có
-                    delete payload.generationConfig.tools;
-                    delete payload.generationConfig.imageConfig;
-                    
-                    // Map imageConfig sang generationConfig cho model ảnh
-                    if (params.config.imageConfig) {
-                        Object.assign(payload.generationConfig, params.config.imageConfig);
+                try {
+                    // Xin Access Token từ Netlify Function
+                    const tokenRes = await fetch('/api/get-vertex-token', { 
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ service_account_json: apiKey })
+                    });
+                    if (!tokenRes.ok) {
+                        const err = await tokenRes.json().catch(() => ({}));
+                        throw new Error(err.error || 'Failed to get Vertex Token from Server');
                     }
-                }
-                
-                if (params.config?.tools) {
-                    payload.tools = params.config.tools;
-                }
+                    const { accessToken, projectId, location } = await tokenRes.json();
 
-                const res = await fetch(url, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${accessToken}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(payload)
-                });
+                    // QUAN TRỌNG: Dùng v1beta1 thay vì v1. 
+                    // Các model preview (như gemini-3.1-flash-image-preview) trên Vertex AI thường chỉ có ở endpoint v1beta1.
+                    const url = `https://${location}-aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/${location}/publishers/google/models/${params.model}:generateContent`;
+                    
+                    // Chuyển đổi config sang generationConfig cho REST API
+                    const payload: any = {
+                        contents: params.contents.parts ? [params.contents] : params.contents,
+                    };
+                    
+                    if (params.config) {
+                        payload.generationConfig = { ...params.config };
+                        delete payload.generationConfig.tools;
+                        delete payload.generationConfig.imageConfig;
+                        
+                        // Map imageConfig sang generationConfig cho model ảnh
+                        if (params.config.imageConfig) {
+                            Object.assign(payload.generationConfig, params.config.imageConfig);
+                        }
+                    }
+                    
+                    if (params.config?.tools) {
+                        payload.tools = params.config.tools;
+                    }
 
-                if (!res.ok) {
-                    const err = await res.json().catch(() => ({}));
-                    throw new Error(err.error?.message || `Vertex AI Error: ${res.status}`);
+                    const res = await fetch(url, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${accessToken}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!res.ok) {
+                        const err = await res.json().catch(() => ({}));
+                        throw new Error(err.error?.message || `Vertex AI Error: ${res.status}`);
+                    }
+
+                    const data = await res.json();
+                    
+                    // Giả lập response của SDK
+                    return {
+                        text: data.candidates?.[0]?.content?.parts?.[0]?.text || '',
+                        candidates: data.candidates
+                    };
+                } catch (error: any) {
+                    const isRateLimit = error?.status === 429 || error?.message?.includes('429') || error?.message?.includes('quota');
+                    const isAuthError = error?.status === 403 || error?.message?.includes('403') || error?.message?.includes('PERMISSION_DENIED');
+                    if (isRateLimit || isAuthError) {
+                        reportKeyFailure(apiKey!);
+                    }
+                    throw error;
                 }
-
-                const data = await res.json();
-                
-                // Giả lập response của SDK
-                return {
-                    text: data.candidates?.[0]?.content?.parts?.[0]?.text || '',
-                    candidates: data.candidates
-                };
             }
         }
     } as any;

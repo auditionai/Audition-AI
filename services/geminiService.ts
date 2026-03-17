@@ -68,7 +68,7 @@ const retryWithBackoff = async <T>(
 
 // --- NEW: ANALYZE STYLE IMAGE (For Admin) ---
 export const analyzeStyleImage = async (imageBase64: string): Promise<string> => {
-    const model = 'gemini-1.5-pro-002'; // Use stable pro for analysis
+    const model = 'gemini-2.5-pro'; // Use 2.5 pro for analysis
 
     const result: any = await retryWithBackoff(
         async () => {
@@ -218,12 +218,11 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     const isImageGeneration = vertexModel.includes('image') || vertexModel.includes('imagen');
                     
                     if (isImageGeneration) {
-                        console.log("Vertex AI: Starting Identity Transfer Pipeline (Gemini 1.5 Pro -> Imagen 4)...");
+                        console.log("Vertex AI: Starting Identity Transfer Pipeline (Gemini 2.5 Pro -> Imagen 4)...");
                         
-                        // STAGE 1: THE BRAIN (Gemini 1.5 Pro - Stable & Powerful)
-                        // Using 1.5 Pro 002 as it's the most stable on Vertex AI for reasoning
-                        const stage1Model = 'gemini-1.5-pro-002';
-                        const stage1Url = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${stage1Model}:generateContent`;
+                        // STAGE 1: THE BRAIN (Gemini 2.5 Pro)
+                        const stage1Model = 'gemini-2.5-pro';
+                        const stage1Url = `https://${location}-aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/${location}/publishers/google/models/${stage1Model}:generateContent`;
                         
                         // Extract images from params.contents for Imagen 4
                         const parts = params.contents.parts || [];
@@ -418,15 +417,15 @@ ONLY output the raw, final text prompt in English. No conversation.`
                     }
                     
                     // --- STANDARD TEXT PIPELINE ---
-                    // Map text models to stable versions for Vertex AI to avoid 404s
+                    // Map text models to stable versions for Vertex AI
                     if (vertexModel.includes('flash')) {
-                        // On Vertex AI, use stable 1.5 Flash 002
-                        vertexModel = 'gemini-1.5-flash-002';
-                        apiVersion = 'v1'; 
+                        // On Vertex AI, use 2.5 Flash
+                        vertexModel = 'gemini-2.5-flash';
+                        apiVersion = 'v1beta1'; 
                     } else if (vertexModel.includes('pro')) {
-                        // On Vertex AI, use stable 1.5 Pro 002
-                        vertexModel = 'gemini-1.5-pro-002';
-                        apiVersion = 'v1'; 
+                        // On Vertex AI, use 2.5 Pro
+                        vertexModel = 'gemini-2.5-pro';
+                        apiVersion = 'v1beta1'; 
                     }
 
                     // QUAN TRỌNG: Dùng v1beta1 cho preview, v1 cho stable.

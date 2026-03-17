@@ -153,12 +153,13 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
 export const logVisit = async () => {
     if (!supabase) return;
     try {
-        const { data: { user } } = await supabase.auth.getUser();
-        const visitData = { user_id: user?.id || null };
+        // We only log the visit without user_id to avoid 400 Foreign Key errors
+        // if the user row hasn't been created in the users table yet.
+        const visitData = { user_id: null };
         const { error } = await supabase.from('app_visits').insert(visitData);
         
         if (error && error.message.includes('column "user_id" does not exist')) {
-            await supabase.from('app_visits').insert({ uid: user?.id || null });
+            await supabase.from('app_visits').insert({ uid: null });
         }
     } catch(e) {
         // Silent
@@ -252,25 +253,29 @@ export const updatePackageOrder = async (packages: CreditPackage[]): Promise<{su
 export const getActivePromotion = async (): Promise<PromotionCampaign | null> => {
     if (!supabase) return null;
     const now = new Date().toISOString();
-    const { data } = await supabase
-        .from('promotions')
-        .select('*')
-        .eq('is_active', true)
-        .lt('start_time', now)
-        .gt('end_time', now)
-        .single();
+    try {
+        const { data, error } = await supabase
+            .from('promotions')
+            .select('*')
+            .eq('is_active', true)
+            .lt('start_time', now)
+            .gt('end_time', now)
+            .single();
+            
+        if (error || !data) return null;
         
-    if (!data) return null;
-    
-    return {
-        id: data.id,
-        name: data.title || 'Event',
-        marqueeText: data.description || '',
-        bonusPercent: data.bonus_percent || 0,
-        startTime: data.start_time,
-        endTime: data.end_time,
-        isActive: data.is_active
-    };
+        return {
+            id: data.id,
+            name: data.title || 'Event',
+            marqueeText: data.description || '',
+            bonusPercent: data.bonus_percent || 0,
+            startTime: data.start_time,
+            endTime: data.end_time,
+            isActive: data.is_active
+        };
+    } catch (e) {
+        return null;
+    }
 };
 
 export const savePromotion = async (promo: PromotionCampaign): Promise<{success: boolean, error?: string}> => {
@@ -1024,7 +1029,14 @@ export const getAdminStats = async () => {
         console.error("Error fetching users for Admin Stats:", userError);
     }
     const { data: pkgs } = await supabase.from('credit_packages').select('*').order('display_order');
-    const { data: promos } = await supabase.from('promotions').select('*');
+    
+    let promos = [];
+    try {
+        const { data } = await supabase.from('promotions').select('*');
+        promos = data || [];
+    } catch (e) {
+        // Silent
+    }
     
     // Fetch giftcodes with accurate usage count from relation
     const { data: codes } = await supabase

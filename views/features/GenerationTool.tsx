@@ -90,6 +90,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const [resultImage, setResultImage] = useState<string | null>(null);
   const [generatedData, setGeneratedData] = useState<GeneratedImage | null>(null);
 
+  // --- NEW: COOLDOWN STATE ---
+  const [cooldownRemaining, setCooldownRemaining] = useState(0);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeUploadType = useRef<{ charId?: number, type: 'body' | 'face' | 'ref' } | null>(null);
 
@@ -125,6 +128,16 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       loadPrices();
   }, []);
   // -------------------------------
+
+  // --- COOLDOWN TIMER EFFECT ---
+  useEffect(() => {
+      if (cooldownRemaining > 0) {
+          const timer = setInterval(() => {
+              setCooldownRemaining(prev => prev - 1);
+          }, 1000);
+          return () => clearInterval(timer);
+      }
+  }, [cooldownRemaining]);
 
   useEffect(() => {
       const interval = setInterval(() => {
@@ -390,6 +403,11 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
   const handleGenerate = async () => {
     // 1. Validation
+    if (cooldownRemaining > 0) {
+        notify(`Vui lòng đợi ${cooldownRemaining} giây trước khi tạo ảnh tiếp theo.`, 'warning');
+        return;
+    }
+
     if (!prompt.trim()) {
          notify(lang === 'vi' ? 'Vui lòng nhập mô tả' : 'Please enter a prompt', 'warning');
          return;
@@ -545,6 +563,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
         saveImageToStorage(newImage).catch(console.error);
         setStage('result');
         notify(lang === 'vi' ? 'Tạo ảnh thành công!' : 'Generation successful!', 'success');
+        
+        // Bắt đầu đếm ngược 60s sau khi tạo thành công
+        setCooldownRemaining(60);
       } else {
           throw new Error("No result returned (Empty)");
       }
@@ -1280,10 +1301,24 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
             </div>
             <button 
                 onClick={handleGenerate}
-                className="px-8 py-3 bg-gradient-to-r from-audi-pink to-audi-purple rounded-xl font-bold text-white shadow-[0_0_20px_rgba(255,0,153,0.4)] hover:scale-105 transition-all flex items-center gap-2"
+                disabled={cooldownRemaining > 0}
+                className={`px-8 py-3 rounded-xl font-bold text-white shadow-[0_0_20px_rgba(255,0,153,0.4)] transition-all flex items-center gap-2 ${
+                    cooldownRemaining > 0 
+                    ? 'bg-slate-600 cursor-not-allowed opacity-70' 
+                    : 'bg-gradient-to-r from-audi-pink to-audi-purple hover:scale-105'
+                }`}
             >
-                <Icons.Wand className="w-5 h-5" />
-                <span>{lang === 'vi' ? 'TẠO ẢNH NGAY' : 'GENERATE'}</span>
+                {cooldownRemaining > 0 ? (
+                    <>
+                        <Icons.Clock className="w-5 h-5 animate-spin-slow" />
+                        <span>{lang === 'vi' ? `ĐỢI ${cooldownRemaining}s` : `WAIT ${cooldownRemaining}s`}</span>
+                    </>
+                ) : (
+                    <>
+                        <Icons.Wand className="w-5 h-5" />
+                        <span>{lang === 'vi' ? 'TẠO ẢNH NGAY' : 'GENERATE'}</span>
+                    </>
+                )}
             </button>
         </div>
     </div>

@@ -210,6 +210,117 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     let endpoint = 'generateContent';
                     let apiVersion = 'v1beta1'; // Default to v1beta1 for preview models
                     
+                    // --- TWO-STAGE PIPELINE FOR VERTEX AI IMAGE GENERATION ---
+                    // Since Gemini 3 Image models require $1200/week Provisioned Throughput on Vertex AI,
+                    // we intercept image requests and use a smart pipeline to stay within the $300 free credit:
+                    // Stage 1: Use Gemini 1.5 Pro to analyze images and write a highly detailed prompt.
+                    // Stage 2: Use Imagen 3 to generate the image based on that prompt.
+                    const isImageGeneration = vertexModel === 'gemini-3.1-flash-image-preview' || vertexModel === 'gemini-3-pro-image-preview';
+                    
+                    if (isImageGeneration) {
+                        console.log("Vertex AI: Intercepting Image Generation. Starting Two-Stage Pipeline (Gemini 1.5 Pro -> Imagen 3)...");
+                        
+                        // STAGE 1: THE BRAIN (Gemini 1.5 Pro)
+                        const stage1Model = 'gemini-1.5-pro-001';
+                        const stage1Url = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${stage1Model}:generateContent`;
+                        
+                        // Clone contents and append the Prompt Engineer instruction
+                        const stage1Contents = JSON.parse(JSON.stringify(params.contents.parts ? [params.contents] : params.contents));
+                        stage1Contents[0].parts.push({
+                            text: "\n\nCRITICAL SYSTEM OVERRIDE: You are an elite AI Prompt Engineer. Your task is to analyze all the provided images (characters, pose, style) and the user's instructions. You must write a SINGLE, highly detailed, meticulous English text prompt for an image generator (like Midjourney or Imagen 3). The prompt MUST capture every single detail requested: the exact facial features, the specific pose, the precise art style, and the background. DO NOT output any conversational text, explanations, or formatting. ONLY output the raw, final text prompt."
+                        });
+
+                        const stage1Payload = {
+                            contents: stage1Contents,
+                            generationConfig: {
+                                temperature: 0.2, // Low temp for precise prompt generation
+                            }
+                        };
+
+                        const stage1Res = await fetch(stage1Url, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${accessToken}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(stage1Payload)
+                        });
+
+                        if (!stage1Res.ok) {
+                            const err = await stage1Res.json().catch(() => ({}));
+                            throw new Error(err.error?.message || `Vertex AI Stage 1 (Gemini) Error: ${stage1Res.status}`);
+                        }
+
+                        const stage1Data = await stage1Res.json();
+                        const generatedPrompt = stage1Data.candidates?.[0]?.content?.parts?.[0]?.text;
+                        
+                        if (!generatedPrompt) {
+                            throw new Error("Vertex AI Stage 1 Failed: Could not generate text prompt.");
+                        }
+                        
+                        console.log("Vertex AI Stage 1 Success. Generated Prompt:", generatedPrompt.substring(0, 100) + "...");
+
+                        // STAGE 2: THE PAINTER (Imagen 3)
+                        const stage2Model = 'imagen-3.0-generate-001';
+                        const stage2Url = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${stage2Model}:predict`;
+                        
+                        const aspectRatio = params.config?.imageConfig?.aspectRatio || "1:1";
+                        
+                        const stage2Payload = {
+                            instances: [
+                                {
+                                    prompt: generatedPrompt
+                                }
+                            ],
+                            parameters: {
+                                sampleCount: 1,
+                                aspectRatio: aspectRatio
+                            }
+                        };
+
+                        const stage2Res = await fetch(stage2Url, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${accessToken}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(stage2Payload)
+                        });
+
+                        if (!stage2Res.ok) {
+                            const err = await stage2Res.json().catch(() => ({}));
+                            throw new Error(err.error?.message || `Vertex AI Stage 2 (Imagen 3) Error: ${stage2Res.status}`);
+                        }
+
+                        const stage2Data = await stage2Res.json();
+                        const base64Image = stage2Data.predictions?.[0]?.bytesBase64Encoded;
+                        const mimeType = stage2Data.predictions?.[0]?.mimeType || 'image/png';
+
+                        if (!base64Image) {
+                            throw new Error("Vertex AI Stage 2 Failed: No image returned from Imagen 3.");
+                        }
+
+                        // Map back to Gemini SDK format so the rest of the app works seamlessly
+                        return {
+                            candidates: [
+                                {
+                                    content: {
+                                        parts: [
+                                            {
+                                                inlineData: {
+                                                    mimeType: mimeType,
+                                                    data: base64Image
+                                                }
+                                            }
+                                        ]
+                                    },
+                                    finishReason: "STOP"
+                                }
+                            ]
+                        };
+                    }
+                    
+                    // --- STANDARD TEXT PIPELINE ---
                     // Map text models to standard 1.5 for Vertex AI to avoid 404s on preview/002 text models
                     if (vertexModel === 'gemini-3.1-flash-preview' || vertexModel === 'gemini-3-flash-preview') {
                         // On Vertex AI, you often need the exact version suffix for stable models
@@ -219,10 +330,6 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                         // On Vertex AI, you often need the exact version suffix for stable models
                         vertexModel = 'gemini-1.5-pro-001';
                         apiVersion = 'v1'; // Stable models must use v1 endpoint
-                    } else if (vertexModel === 'gemini-3.1-flash-image-preview' || vertexModel === 'gemini-3-pro-image-preview') {
-                        // Keep the exact image model name as requested
-                        vertexModel = params.model;
-                        apiVersion = 'v1beta1'; // Preview models must use v1beta1
                     }
 
                     // QUAN TRỌNG: Dùng v1beta1 cho preview, v1 cho stable.

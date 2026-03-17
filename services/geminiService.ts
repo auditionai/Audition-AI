@@ -209,11 +209,11 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     let vertexModel = params.model;
                     let endpoint = 'generateContent';
                     
-                    // Map text models to 1.5 for Vertex AI to avoid 404s on preview text models
+                    // Map text models to standard 1.5 for Vertex AI to avoid 404s on preview/002 text models
                     if (vertexModel === 'gemini-3.1-flash-preview' || vertexModel === 'gemini-3-flash-preview') {
-                        vertexModel = 'gemini-1.5-flash-002';
+                        vertexModel = 'gemini-1.5-flash';
                     } else if (vertexModel === 'gemini-3.1-pro-preview') {
-                        vertexModel = 'gemini-1.5-pro-002';
+                        vertexModel = 'gemini-1.5-pro';
                     } else if (vertexModel === 'gemini-3.1-flash-image-preview' || vertexModel === 'gemini-3-pro-image-preview') {
                         // Keep the exact image model name as requested
                         vertexModel = params.model;

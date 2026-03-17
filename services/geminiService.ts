@@ -316,24 +316,11 @@ DO NOT output any conversational text, explanations, or formatting. ONLY output 
                         
                         const aspectRatio = params.config?.imageConfig?.aspectRatio || "1:1";
                         
-                        const stage2Payload: any = {
-                            instances: [
-                                {
-                                    prompt: generatedPrompt
-                                }
-                            ],
-                            parameters: {
-                                sampleCount: 1,
-                                aspectRatio: aspectRatio
-                            }
-                        };
-
-                        // Add reference images to the instance
+                        // Extract reference images
                         const referenceImages: any[] = [];
                         let refId = 1;
 
                         // Add Character Images as SUBJECT reference
-                        // FIXED: Use 'image' field instead of 'referenceImage' to avoid 400 error
                         characterImages.forEach((b64) => {
                             referenceImages.push({
                                 image: { bytesBase64Encoded: b64 },
@@ -351,8 +338,21 @@ DO NOT output any conversational text, explanations, or formatting. ONLY output 
                             });
                         });
 
+                        const stage2Payload: any = {
+                            instances: [
+                                {
+                                    prompt: generatedPrompt
+                                }
+                            ],
+                            parameters: {
+                                sampleCount: 1,
+                                aspectRatio: aspectRatio
+                            }
+                        };
+
+                        // CRITICAL FIX: referenceImages must be in parameters, not instances for Imagen 3/4
                         if (referenceImages.length > 0) {
-                            stage2Payload.instances[0].referenceImages = referenceImages;
+                            stage2Payload.parameters.referenceImages = referenceImages;
                         }
 
                         let stage2Res = await fetch(stage2Url, {

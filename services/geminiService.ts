@@ -214,17 +214,17 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     // Since Gemini 3 Image models require $1200/week Provisioned Throughput on Vertex AI,
                     // we intercept image requests and use a smart pipeline to stay within the $300 free credit:
                     // Stage 1: Use Gemini 1.5 Pro to analyze images and write a highly detailed prompt.
-                    // Stage 2: Use Imagen 3 to generate the image based on that prompt.
+                    // Stage 2: Use Imagen 4 to generate the image based on that prompt.
                     const isImageGeneration = vertexModel === 'gemini-3.1-flash-image-preview' || vertexModel === 'gemini-3-pro-image-preview';
                     
                     if (isImageGeneration) {
-                        console.log("Vertex AI: Intercepting Image Generation. Starting Two-Stage Pipeline (Gemini 1.5 Pro -> Imagen 3)...");
+                        console.log("Vertex AI: Intercepting Image Generation. Starting Two-Stage Pipeline (Gemini 1.5 Pro -> Imagen 4)...");
                         
                         // STAGE 1: THE BRAIN (Gemini 2.5 Pro)
                         const stage1Model = 'gemini-2.5-pro';
                         const stage1Url = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${stage1Model}:generateContent`;
                         
-                        // Extract images from params.contents for Imagen 3
+                        // Extract images from params.contents for Imagen 4
                         const parts = params.contents.parts || [];
                         let currentContext = "";
                         const characterImages: string[] = [];
@@ -268,7 +268,7 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                         });
 
                         stage1Contents[0].parts.push({
-                            text: `\n\nCRITICAL SYSTEM OVERRIDE: You are an elite AI Prompt Engineer. Your task is to analyze all the provided images (characters, pose, style) and the user's instructions. You must write a SINGLE, highly detailed, meticulous English text prompt for an image generator (like Midjourney or Imagen 3). 
+                            text: `\n\nCRITICAL SYSTEM OVERRIDE: You are an elite AI Prompt Engineer. Your task is to analyze all the provided images (characters, pose, style) and the user's instructions. You must write a SINGLE, highly detailed, meticulous English text prompt for an image generator (like Midjourney or Imagen 4). 
                             
 CRITICAL RULES:
 1. ART STYLE (HIGHEST PRIORITY): You MUST explicitly describe the art style from the Style Reference images. If the style is a 3D avatar, 3D game render, or stylized 3D, you MUST start your prompt with "A highly detailed 3D game render of..." or "A stylized 3D avatar of...". DO NOT use words like "realistic", "photograph", or "real person" unless the style is actually realistic.
@@ -309,8 +309,8 @@ DO NOT output any conversational text, explanations, or formatting. ONLY output 
                         
                         console.log("Vertex AI Stage 1 Success. Generated Prompt:", generatedPrompt.substring(0, 100) + "...");
 
-                        // STAGE 2: THE PAINTER (Imagen 3)
-                        const stage2Model = 'imagen-3.0-generate-001';
+                        // STAGE 2: THE PAINTER (Imagen 4)
+                        const stage2Model = 'imagen-4.0-generate-001';
                         const stage2Url = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${stage2Model}:predict`;
                         
                         const aspectRatio = params.config?.imageConfig?.aspectRatio || "1:1";
@@ -332,12 +332,11 @@ DO NOT output any conversational text, explanations, or formatting. ONLY output 
                         let refId = 1;
 
                         // Add Character Images as SUBJECT reference
-                        // Note: imagen-3.0-generate-001 does not support "SUBJECT" referenceType without allowlisting.
-                        // We fallback to "STYLE" to prevent 400 Bad Request errors.
+                        // Since the user is on a paid account, we can use SUBJECT referenceType
                         characterImages.forEach((b64) => {
                             referenceImages.push({
                                 referenceImage: { bytesBase64Encoded: b64 },
-                                referenceType: "STYLE",
+                                referenceType: "SUBJECT",
                                 referenceId: refId++
                             });
                         });
@@ -351,18 +350,22 @@ DO NOT output any conversational text, explanations, or formatting. ONLY output 
                             });
                         });
 
+                        // Enable reference images now that the user has a paid account
                         if (referenceImages.length > 0) {
                             stage2Payload.instances[0].referenceImages = referenceImages;
                         }
 
-                        // Add Pose Image as base image for Image-to-Image
+                        // NOTE: We also comment out the base image (poseImage) for Imagen 4.
+                        // Passing an image to Imagen triggers Image-to-Image editing, which often
+                        // requires editConfig and can overwrite the character details with the original
+                        // person in the pose image. Gemini 1.5 Pro has already described the pose in the text prompt.
+                        /*
                         if (poseImage) {
                             stage2Payload.instances[0].image = {
                                 bytesBase64Encoded: poseImage
                             };
-                            // When using base image, we might need to set editConfig or mode, 
-                            // but for imagen-3.0-generate-001, providing 'image' usually triggers image-to-image.
                         }
+                        */
 
                         let stage2Res = await fetch(stage2Url, {
                             method: 'POST',
@@ -375,8 +378,8 @@ DO NOT output any conversational text, explanations, or formatting. ONLY output 
 
                         if (!stage2Res.ok) {
                             const errText = await stage2Res.text();
-                            console.error("Vertex AI Stage 2 (Imagen 3) Error Response:", errText);
-                            let errMsg = `Vertex AI Stage 2 (Imagen 3) Error: ${stage2Res.status}`;
+                            console.error("Vertex AI Stage 2 (Imagen 4) Error Response:", errText);
+                            let errMsg = `Vertex AI Stage 2 (Imagen 4) Error: ${stage2Res.status}`;
                             try {
                                 const errJson = JSON.parse(errText);
                                 if (errJson.error?.message) {
@@ -391,7 +394,7 @@ DO NOT output any conversational text, explanations, or formatting. ONLY output 
                         const mimeType = stage2Data.predictions?.[0]?.mimeType || 'image/png';
 
                         if (!base64Image) {
-                            throw new Error("Vertex AI Stage 2 Failed: No image returned from Imagen 3.");
+                            throw new Error("Vertex AI Stage 2 Failed: No image returned from Imagen 4.");
                         }
 
                         // Map back to Gemini SDK format so the rest of the app works seamlessly

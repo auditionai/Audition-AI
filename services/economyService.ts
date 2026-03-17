@@ -514,10 +514,11 @@ export const getSystemApiKey = async (tier: 'flash' | 'pro' = 'flash', excludedK
     }
 };
 
-export const saveSystemApiKey = async (key: string): Promise<{success: boolean, error?: string}> => {
+export const saveSystemApiKey = async (key: string, tier: 'flash' | 'pro' = 'flash'): Promise<{success: boolean, error?: string}> => {
     if (!supabase) return { success: false, error: "No Database" };
     try {
         const cleanKey = key.trim();
+        const tierTag = tier === 'pro' ? '[PRO]' : '[FLASH]';
         
         // Check if exists
         const { data: existing } = await supabase
@@ -527,11 +528,15 @@ export const saveSystemApiKey = async (key: string): Promise<{success: boolean, 
             .single();
 
         if (existing) {
-             const { error } = await supabase.from('api_keys').update({ status: 'active' }).eq('id', existing.id);
+             let newName = existing.name || `Service Account ${new Date().toISOString()}`;
+             if (!newName.includes(tierTag)) {
+                 newName = `${tierTag} ${newName.replace(/\[PRO\]|\[FLASH\]/g, '').trim()}`;
+             }
+             const { error } = await supabase.from('api_keys').update({ status: 'active', name: newName }).eq('id', existing.id);
              if (error) throw error;
         } else {
              const { error } = await supabase.from('api_keys').insert({
-                 name: `Service Account ` + new Date().toISOString(),
+                 name: `${tierTag} Service Account ` + new Date().toISOString(),
                  key_value: cleanKey,
                  status: 'active'
              });

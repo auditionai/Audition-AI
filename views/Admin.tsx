@@ -478,7 +478,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       }
 
       if (shouldSave) {
-          const result = await saveSystemApiKey(apiKey);
+          const result = await saveSystemApiKey(apiKey, apiKeyTier);
           if (result.success) {
               setKeyStatus('valid');
               showToast('Đã lưu API Key vào Database thành công!');
@@ -1559,23 +1559,33 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   </div>
                               </div>
                               <div className="flex gap-2 relative">
-                                  <input 
-                                      type={showKey ? "text" : "password"}
-                                      value={apiKey}
-                                      onChange={(e) => {
-                                          setApiKey(e.target.value);
-                                          setKeyStatus('unknown');
-                                      }}
-                                      placeholder='{"type": "service_account", "project_id": "...", ...}'
-                                      className="flex-1 bg-black/40 border border-white/10 rounded-lg p-3 text-white font-mono text-sm pr-12"
-                                  />
-                                  <button 
-                                    onClick={() => setShowKey(!showKey)} 
-                                    className="absolute right-36 top-3 text-slate-500 hover:text-white hidden md:block"
-                                    title="Hiện/Ẩn Key"
+                                  <select
+                                      value={apiKeyTier}
+                                      onChange={(e) => setApiKeyTier(e.target.value as 'flash' | 'pro')}
+                                      className="bg-black/40 border border-white/10 rounded-lg p-3 text-white text-sm outline-none focus:border-audi-pink"
                                   >
-                                      {showKey ? <Icons.Eye className="w-5 h-5" /> : <Icons.Lock className="w-5 h-5" />}
-                                  </button>
+                                      <option value="flash">Flash Key</option>
+                                      <option value="pro">Pro Key</option>
+                                  </select>
+                                  <div className="flex-1 relative">
+                                      <input 
+                                          type={showKey ? "text" : "password"}
+                                          value={apiKey}
+                                          onChange={(e) => {
+                                              setApiKey(e.target.value);
+                                              setKeyStatus('unknown');
+                                          }}
+                                          placeholder='{"type": "service_account", "project_id": "...", ...}'
+                                          className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-white font-mono text-sm pr-12"
+                                      />
+                                      <button 
+                                        onClick={() => setShowKey(!showKey)} 
+                                        className="absolute right-3 top-3 text-slate-500 hover:text-white hidden md:block"
+                                        title="Hiện/Ẩn Key"
+                                      >
+                                          {showKey ? <Icons.Eye className="w-5 h-5" /> : <Icons.Lock className="w-5 h-5" />}
+                                      </button>
+                                  </div>
                                   <button onClick={handleSaveApiKey} disabled={keyStatus === 'checking'} className="px-6 py-3 bg-audi-pink text-white font-bold rounded-lg hover:bg-pink-600 disabled:opacity-50 text-sm whitespace-nowrap">
                                       {keyStatus === 'checking' ? <Icons.Loader className="animate-spin w-5 h-5"/> : 'Thêm Key'}
                                   </button>

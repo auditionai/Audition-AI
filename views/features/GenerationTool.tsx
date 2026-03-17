@@ -91,7 +91,17 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const [generatedData, setGeneratedData] = useState<GeneratedImage | null>(null);
 
   // --- NEW: COOLDOWN STATE ---
-  const [cooldownRemaining, setCooldownRemaining] = useState(0);
+  const [cooldownRemaining, setCooldownRemaining] = useState(() => {
+      const saved = localStorage.getItem('gen_cooldown_end');
+      if (saved) {
+          const end = parseInt(saved, 10);
+          const now = Date.now();
+          if (end > now) {
+              return Math.ceil((end - now) / 1000);
+          }
+      }
+      return 0;
+  });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeUploadType = useRef<{ charId?: number, type: 'body' | 'face' | 'ref' } | null>(null);
@@ -133,11 +143,23 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   useEffect(() => {
       if (cooldownRemaining > 0) {
           const timer = setInterval(() => {
-              setCooldownRemaining(prev => prev - 1);
+              setCooldownRemaining(prev => {
+                  if (prev <= 1) {
+                      localStorage.removeItem('gen_cooldown_end');
+                      return 0;
+                  }
+                  return prev - 1;
+              });
           }, 1000);
           return () => clearInterval(timer);
       }
   }, [cooldownRemaining]);
+
+  // Helper to start cooldown
+  const startCooldown = (seconds: number) => {
+      setCooldownRemaining(seconds);
+      localStorage.setItem('gen_cooldown_end', (Date.now() + seconds * 1000).toString());
+  };
 
   useEffect(() => {
       const interval = setInterval(() => {
@@ -550,7 +572,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           timestamp: Date.now(),
           toolId: feature.id,
           toolName: feature.name['en'],
-          engine: aiModel === 'flash' ? `Gemini 2.5 Flash ${resolution}` : `Gemini 2.5 Pro ${resolution}`
+          engine: aiModel === 'flash' ? `Gemini 3.1 Flash ${resolution}` : `Gemini 3 Pro ${resolution}`
         };
         setGeneratedData(newImage);
         
@@ -559,7 +581,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
         notify(lang === 'vi' ? 'Tạo ảnh thành công!' : 'Generation successful!', 'success');
         
         // Bắt đầu đếm ngược 60s sau khi tạo thành công
-        setCooldownRemaining(60);
+        startCooldown(60);
       } else {
           throw new Error("No result returned (Empty)");
       }
@@ -690,8 +712,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                   <Icons.Cpu className="w-5 h-5" />
                               </div>
                               <div>
-                                  <h4 className="text-sm font-bold text-white">Model 2.5 Pro</h4>
-                                  <p className="text-xs text-slate-400 mt-1">Sử dụng mô hình Gemini 2.5 Pro mới nhất. Hiểu lệnh tốt hơn, chi tiết trang phục sắc nét hơn bản Flash.</p>
+                                  <h4 className="text-sm font-bold text-white">Model 3 Pro</h4>
+                                  <p className="text-xs text-slate-400 mt-1">Sử dụng mô hình Gemini 3 Pro mới nhất. Hiểu lệnh tốt hơn, chi tiết trang phục sắc nét hơn bản Flash.</p>
                               </div>
                           </div>
 
@@ -771,7 +793,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                   <div className="flex justify-between items-center p-3 border-b border-white/10 bg-white/5">
                       <div className="flex items-center gap-2">
                           <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                          <span className="font-bold text-xs text-white">Kết quả (Gemini 2.5 Pro)</span>
+                          <span className="font-bold text-xs text-white">Kết quả (Gemini 3 Pro)</span>
                       </div>
                       <button onClick={() => setStage('input')} className="text-[10px] font-bold text-slate-400 hover:text-white px-2 py-1 rounded bg-white/5 hover:bg-white/10">X</button>
                   </div>

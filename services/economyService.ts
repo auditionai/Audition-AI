@@ -427,6 +427,13 @@ export const claimMilestoneReward = async (day: number): Promise<{success: boole
 // In-memory blacklist for the current session (to avoid hitting bad keys repeatedly in a loop)
 const temporarilyDisabledKeys: Set<string> = new Set();
 const KEY_COOLDOWN_MS = 60000; // 1 minute cooldown for bad keys
+const MAX_REQ_PER_MIN = 4; // Safe limit (Google allows 5/min)
+
+interface KeyStats {
+    usageCount: number;
+    resetAt: number;
+}
+const keyUsageStats = new Map<string, KeyStats>();
 
 export const isKeyDisabled = (key: string): boolean => {
     return temporarilyDisabledKeys.has(key);
@@ -435,8 +442,15 @@ export const isKeyDisabled = (key: string): boolean => {
 export const reportKeyFailure = (key: string) => {
     if (!key) return;
     const shortKey = key.substring(0, 4) + '...' + key.slice(-4);
-    console.warn(`[System] 🔴 API Key ${shortKey} failed. Temporarily disabling for 1 minute.`);
+    console.warn(`[System] 🔴 API Key ${shortKey} failed (429/503). Temporarily disabling for 1 minute.`);
     temporarilyDisabledKeys.add(key);
+    
+    // Also max out its usage stats so it's deprioritized
+    keyUsageStats.set(key, {
+        usageCount: MAX_REQ_PER_MIN,
+        resetAt: Date.now() + KEY_COOLDOWN_MS
+    });
+
     setTimeout(() => {
         temporarilyDisabledKeys.delete(key);
         console.log(`[System] 🟢 API Key ${shortKey} is back in rotation.`);
@@ -448,62 +462,85 @@ let lastUsedKey: string | null = null;
 export const getSystemApiKey = async (tier: 'flash' | 'pro' = 'flash', excludedKeys: string[] = []): Promise<string | null> => {
     if (!supabase) return process.env.API_KEY || null;
     try {
-        // 1. Get all active keys
+        // 1. Clean up expired stats
+        const now = Date.now();
+        for (const [k, v] of keyUsageStats.entries()) {
+            if (now > v.resetAt) {
+                keyUsageStats.delete(k);
+            }
+        }
+
+        // 2. Get all active keys
         const { data: allKeys, error } = await supabase
             .from('api_keys')
             .select('id, key_value, last_used_at, name')
             .eq('status', 'active');
         
         if (error || !allKeys || allKeys.length === 0) {
-            // Fallback if DB error or empty
             return process.env.API_KEY || null;
         }
 
-        // Filter by tier
+        // 3. Filter by tier
         let tierKeys = allKeys;
         if (tier === 'pro') {
             tierKeys = allKeys.filter((k: any) => k.name && k.name.includes('[PRO]'));
         } else {
-            // Flash keys are those without [PRO] (or explicitly marked [FLASH])
             tierKeys = allKeys.filter((k: any) => !k.name || !k.name.includes('[PRO]'));
         }
 
         if (tierKeys.length === 0) {
-            // If no keys for this tier, fallback to ANY active key before falling back to env key
             if (allKeys.length > 0) {
-                tierKeys = allKeys;
+                tierKeys = allKeys; // Borrow from other tier if empty
             } else {
                 return process.env.API_KEY || null;
             }
         }
 
-        // 2. Filter out keys that are in the in-memory blacklist OR the excluded list (from retry loop)
+        // 4. Filter out disabled or excluded keys
         let validKeys = tierKeys.filter((k: any) => 
             !temporarilyDisabledKeys.has(k.key_value) && 
             !excludedKeys.includes(k.key_value)
         );
 
-        // 3. If all keys are disabled/excluded, clear the temporary blacklist and try again (Desperation mode)
+        // 5. Desperation mode: If all valid keys are exhausted, try borrowing from the other tier
         if (validKeys.length === 0) {
-            console.warn("[System] All keys exhausted. Resetting temporary blacklist.");
+            console.warn(`[System] All ${tier.toUpperCase()} keys exhausted. Attempting to borrow from other tier...`);
+            const otherTierKeys = allKeys.filter((k: any) => !tierKeys.includes(k));
+            validKeys = otherTierKeys.filter((k: any) => 
+                !temporarilyDisabledKeys.has(k.key_value) && 
+                !excludedKeys.includes(k.key_value)
+            );
+        }
+
+        // 6. Extreme desperation: clear temporary blacklist
+        if (validKeys.length === 0) {
+            console.warn("[System] ALL keys exhausted across all tiers. Resetting temporary blacklist.");
             temporarilyDisabledKeys.clear();
-            validKeys = tierKeys;
+            validKeys = allKeys; // Use any key available
         }
 
-        // 4. Avoid picking the exact same key as last time if we have multiple choices
-        let candidates = validKeys;
-        if (candidates.length > 1 && lastUsedKey) {
-            const filtered = candidates.filter((k: any) => k.key_value !== lastUsedKey);
-            if (filtered.length > 0) {
-                candidates = filtered;
-            }
+        // 7. Sort by usage count (Least Recently/Frequently Used)
+        validKeys.sort((a: any, b: any) => {
+            const statA = keyUsageStats.get(a.key_value) || { usageCount: 0 };
+            const statB = keyUsageStats.get(b.key_value) || { usageCount: 0 };
+            return statA.usageCount - statB.usageCount;
+        });
+
+        // 8. Select the best key
+        let selectedKey = validKeys[0];
+        const bestStat = keyUsageStats.get(selectedKey.key_value) || { usageCount: 0, resetAt: now + 60000 };
+
+        // 9. If even the best key is at max capacity, we should ideally queue, but here we just pick it and hope for the best (or the retry loop in geminiService will handle it)
+        if (bestStat.usageCount >= MAX_REQ_PER_MIN) {
+            console.warn(`[System] High Load Warning: Best available key is already at max capacity (${bestStat.usageCount}/${MAX_REQ_PER_MIN}).`);
         }
 
-        // 5. Pick a RANDOM candidate
-        const randomIndex = Math.floor(Math.random() * candidates.length);
-        const selectedKey = candidates[randomIndex];
+        // 10. Update stats
+        keyUsageStats.set(selectedKey.key_value, {
+            usageCount: bestStat.usageCount + 1,
+            resetAt: bestStat.resetAt > now ? bestStat.resetAt : now + 60000
+        });
 
-        // 6. Update usage timestamp & state
         lastUsedKey = selectedKey.key_value;
         supabase.from('api_keys').update({ last_used_at: new Date().toISOString() }).eq('id', selectedKey.id).then(() => {});
         

@@ -169,6 +169,7 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
         const ai = new GoogleGenAI({ apiKey });
         return {
             ...ai,
+            _internalApiKey: apiKey,
             models: {
                 ...ai.models,
                 generateContent: async (params: any) => {
@@ -190,6 +191,7 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
 
     // 2. Nếu là Service Account JSON -> Dùng Vertex AI REST API
     return {
+        _internalApiKey: apiKey,
         models: {
             generateContent: async (params: any) => {
                 try {
@@ -926,12 +928,10 @@ export const generateImage = async (
                      console.warn(`${model} 503/Timeout. Retrying...`);
                      onLog(`⏳ Đang xếp hàng chờ Google Render ảnh (${modelType === 'pro' ? 'Model Pro' : 'Model Flash'} đang xử lý)...`);
                      // Force Key Rotation for 503 too, to avoid hammering the same busy shard/key
-                     
+                     if (currentKey) reportKeyFailure(currentKey);
                 } else if (isRateLimit) {
                      console.warn(`${model} 429 (Rate Limit). Banning key and retrying with a new one...`);
-                     
-                } else {
-                     
+                     if (currentKey) reportKeyFailure(currentKey);
                 }
                 
                 throw e;

@@ -278,6 +278,11 @@ export const shareImageToShowcase = async (id: string, isShared: boolean): Promi
     });
 };
 
+const mapEngineName = (engine: string) => {
+    if (!engine) return 'AI Gen';
+    return engine.replace('Gemini 2.5 Flash', 'Gemini 3.1 Flash').replace('Gemini 2.5 Pro', 'Gemini 3 Pro');
+};
+
 export const getShowcaseImages = async (): Promise<GeneratedImage[]> => {
     // 1. SUPABASE
     if (supabase) {
@@ -297,8 +302,8 @@ export const getShowcaseImages = async (): Promise<GeneratedImage[]> => {
                     prompt: row.prompt,
                     timestamp: new Date(row.created_at).getTime(),
                     toolId: 'gen_tool', 
-                    toolName: row.model_used || 'AI Tool',
-                    engine: row.model_used,
+                    toolName: mapEngineName(row.model_used),
+                    engine: mapEngineName(row.model_used),
                     isShared: row.is_public,
                     userName: 'Artist' // Fallback name
                 }));
@@ -317,7 +322,12 @@ export const getShowcaseImages = async (): Promise<GeneratedImage[]> => {
 
         request.onsuccess = () => {
             const results = request.result as GeneratedImage[];
-            const shared = results.filter(img => img.isShared);
+            const mappedResults = results.map(img => ({
+                ...img,
+                toolName: mapEngineName(img.toolName),
+                engine: mapEngineName(img.engine)
+            }));
+            const shared = mappedResults.filter(img => img.isShared);
             resolve(shared.sort((a, b) => b.timestamp - a.timestamp).slice(0, 20));
         };
         request.onerror = () => reject(request.error);
@@ -341,8 +351,8 @@ export const getAllImagesSystemWide = async (): Promise<GeneratedImage[]> => {
             prompt: row.prompt,
             timestamp: new Date(row.created_at).getTime(),
             toolId: 'gen_tool',
-            toolName: row.model_used || 'AI Gen',
-            engine: row.model_used,
+            toolName: mapEngineName(row.model_used),
+            engine: mapEngineName(row.model_used),
             isShared: row.is_public,
             userId: row.user_id,
             userName: 'User'
@@ -372,8 +382,8 @@ export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
                     prompt: row.prompt,
                     timestamp: new Date(row.created_at).getTime(),
                     toolId: 'gen_tool',
-                    toolName: row.model_used || 'AI Gen',
-                    engine: row.model_used,
+                    toolName: mapEngineName(row.model_used),
+                    engine: mapEngineName(row.model_used),
                     isShared: row.is_public,
                     userName: 'Me',
                     userId: row.user_id
@@ -394,7 +404,12 @@ export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
 
     request.onsuccess = () => {
       const results = request.result as GeneratedImage[];
-      resolve(results.sort((a, b) => b.timestamp - a.timestamp));
+      const mappedResults = results.map(img => ({
+          ...img,
+          toolName: mapEngineName(img.toolName),
+          engine: mapEngineName(img.engine)
+      }));
+      resolve(mappedResults.sort((a, b) => b.timestamp - a.timestamp));
     };
     request.onerror = () => reject(request.error);
   });
@@ -418,8 +433,8 @@ export const getUserImagesFromStorage = async (userId: string): Promise<Generate
             prompt: row.prompt,
             timestamp: new Date(row.created_at).getTime(),
             toolId: 'gen_tool',
-            toolName: row.model_used || 'AI Gen',
-            engine: row.model_used,
+            toolName: mapEngineName(row.model_used),
+            engine: mapEngineName(row.model_used),
             isShared: row.is_public,
             userId: row.user_id,
             userName: 'User'

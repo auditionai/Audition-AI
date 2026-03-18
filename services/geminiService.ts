@@ -244,7 +244,7 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     // QUAN TRỌNG: Dùng v1beta1 cho preview, v1 cho stable.
                     // Sử dụng location global để tận dụng Quota tổng hợp (aggregate quota) cao hơn
                     const actualLocation = 'global';
-                    const apiEndpoint = 'us-central1-aiplatform.googleapis.com'; // Endpoint cho global location thường là us-central1
+                    const apiEndpoint = 'aiplatform.googleapis.com'; // Dùng endpoint chung cho global location
                     let url = `https://${apiEndpoint}/${apiVersion}/projects/${projectId}/locations/${actualLocation}/publishers/google/models/${vertexModel}:${endpoint}`;
                     
                     // Chuyển đổi config sang generationConfig cho REST API

@@ -971,22 +971,33 @@ export const editImageWithInstructions = async (
             onLog(`> Đang dùng API Key: ${shortKey} | Model: ${model}`);
 
             try {
+                const config: any = {
+                    imageConfig: {
+                        aspectRatio: "1:1"
+                    }
+                };
+                
+                if (model.includes('3.1-flash-image') || model.includes('3-pro-image')) {
+                    config.imageConfig.imageSize = "1K";
+                }
+
                 return await runWithTimeout(
                     freshAi.models.generateContent({
                         model: model,
                         contents: {
                             parts: [
                                 {
-                                    text: instruction
-                                },
-                                {
                                     inlineData: {
                                         mimeType: mimeType || 'image/png',
                                         data: cleanBase64(base64Data)
                                     }
+                                },
+                                {
+                                    text: instruction
                                 }
                             ]
-                        }
+                        },
+                        config: config
                     }),
                     45000,
                     "Image Editing"

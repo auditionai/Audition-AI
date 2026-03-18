@@ -6,6 +6,7 @@ import { editImageWithInstructions } from '../../services/geminiService';
 import { saveImageToStorage } from '../../services/storageService';
 import { getUserProfile, updateUserBalance } from '../../services/economyService';
 import { useNotification } from '../../components/NotificationSystem';
+import { optimizePayload } from '../../utils/imageProcessor';
 
 interface EditingToolProps {
   feature: Feature;
@@ -119,8 +120,10 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
 
          const instruction = constructPrompt();
          
-         const base64Data = uploadedImage.split(',')[1];
-         const mimeType = uploadedImage.substring(uploadedImage.indexOf(':') + 1, uploadedImage.indexOf(';'));
+         // Optimize the image before sending to reduce payload size and avoid 429/Resource Exhausted
+         const optimizedImage = await optimizePayload(uploadedImage, 2048);
+         const base64Data = optimizedImage.split(',')[1];
+         const mimeType = optimizedImage.substring(optimizedImage.indexOf(':') + 1, optimizedImage.indexOf(';'));
 
          const result = await editImageWithInstructions(
              base64Data, 

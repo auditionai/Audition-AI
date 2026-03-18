@@ -66,6 +66,33 @@ interface ConfirmState {
     onConfirm: () => void;
 }
 
+const CooldownTimer = ({ lastUsedAt }: { lastUsedAt: string }) => {
+    const [timeLeft, setTimeLeft] = useState<number>(0);
+
+    useEffect(() => {
+        const calculateTimeLeft = () => {
+            const lastUsed = new Date(lastUsedAt).getTime();
+            const now = Date.now();
+            const diff = now - lastUsed;
+            const remaining = Math.max(0, 60000 - diff);
+            setTimeLeft(remaining);
+        };
+
+        calculateTimeLeft();
+        const interval = setInterval(calculateTimeLeft, 1000);
+        return () => clearInterval(interval);
+    }, [lastUsedAt]);
+
+    if (timeLeft <= 0) return <span className="text-[10px] text-green-400 font-mono">Sẵn sàng</span>;
+
+    return (
+        <span className="text-[10px] text-amber-400 font-mono flex items-center gap-1">
+            <Icons.Clock className="w-3 h-3" />
+            Đang chờ: {Math.ceil(timeLeft / 1000)}s
+        </span>
+    );
+};
+
 // SQL Code for fixing Giftcode table issues
 const GIFTCODE_FIX_SQL = `-- FIX DATABASE STRUCTURE (GIFTCODES & SETTINGS)
 
@@ -1773,10 +1800,23 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
                   {/* List of Keys in DB */}
                   <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
-                      <h3 className="font-bold text-lg text-white mb-4 flex items-center gap-2">
-                          <Icons.Database className="w-5 h-5 text-audi-cyan" />
-                          Danh sách Service Account trong Database
-                      </h3>
+                      <div className="flex justify-between items-center mb-4">
+                          <h3 className="font-bold text-lg text-white flex items-center gap-2">
+                              <Icons.Database className="w-5 h-5 text-audi-cyan" />
+                              Danh sách Service Account trong Database
+                          </h3>
+                          <button 
+                              onClick={async () => {
+                                  const keys = await getApiKeysList();
+                                  setDbKeys(keys);
+                                  showToast('Đã làm mới danh sách key', 'success');
+                              }}
+                              className="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-slate-300 transition-colors"
+                              title="Làm mới danh sách"
+                          >
+                              <Icons.RefreshCw className="w-4 h-4" />
+                          </button>
+                      </div>
                       
                       <div className="hidden md:block overflow-x-auto">
                           <table className="w-full text-left text-sm text-slate-400">
@@ -1818,9 +1858,14 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               {k.key_value ? `${k.key_value.substring(0, 8)}...${k.key_value.substring(k.key_value.length - 6)}` : 'N/A'}
                                           </td>
                                           <td className="px-4 py-3">
-                                              <span className={`text-[10px] font-bold px-2 py-1 rounded border ${k.status === 'active' ? 'bg-green-500/20 text-green-500 border-green-500/50' : 'bg-slate-500/20 text-slate-500 border-slate-500/50'}`}>
-                                                  {k.status?.toUpperCase() || 'UNKNOWN'}
-                                              </span>
+                                              <div className="flex flex-col gap-1">
+                                                  <span className={`text-[10px] font-bold px-2 py-1 rounded border w-fit ${k.status === 'active' ? 'bg-green-500/20 text-green-500 border-green-500/50' : 'bg-slate-500/20 text-slate-500 border-slate-500/50'}`}>
+                                                      {k.status?.toUpperCase() || 'UNKNOWN'}
+                                                  </span>
+                                                  {k.last_used_at && (
+                                                      <CooldownTimer lastUsedAt={k.last_used_at} />
+                                                  )}
+                                              </div>
                                           </td>
                                           <td className="px-4 py-3 text-xs">{new Date(k.created_at).toLocaleString()}</td>
                                           <td className="px-4 py-3 text-right flex justify-end gap-2">
@@ -1856,9 +1901,14 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           <div className="font-bold text-white text-sm">{displayName}</div>
                                           <div className="font-mono text-[10px] text-slate-500">{k.id}</div>
                                       </div>
-                                      <span className={`text-[10px] font-bold px-2 py-1 rounded border ${k.status === 'active' ? 'bg-green-500/20 text-green-500 border-green-500/50' : 'bg-slate-500/20 text-slate-500 border-slate-500/50'}`}>
-                                          {k.status?.toUpperCase()}
-                                      </span>
+                                      <div className="flex flex-col items-end gap-1">
+                                          <span className={`text-[10px] font-bold px-2 py-1 rounded border ${k.status === 'active' ? 'bg-green-500/20 text-green-500 border-green-500/50' : 'bg-slate-500/20 text-slate-500 border-slate-500/50'}`}>
+                                              {k.status?.toUpperCase()}
+                                          </span>
+                                          {k.last_used_at && (
+                                              <CooldownTimer lastUsedAt={k.last_used_at} />
+                                          )}
+                                      </div>
                                   </div>
                                   <div className="font-mono text-xs text-slate-300 break-all mb-3 bg-black/30 p-2 rounded">
                                       {k.key_value ? `${k.key_value.substring(0, 15)}...` : 'N/A'}

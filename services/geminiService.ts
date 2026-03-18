@@ -50,15 +50,15 @@ const retryWithBackoff = async <T>(
         if (retries > 0 && isTransient) {
             const isRateLimit = error?.status === 429 || error?.message?.includes('429') || error?.message?.includes('quota');
             const msg = isRateLimit 
-                ? `${label} - API Key hết hạn mức (429). Đang tự động đổi sang Key dự phòng... (Còn ${retries} lần)`
+                ? `${label} - API Key hết hạn mức (429). Đang đợi và thử lại... (Còn ${retries} lần)`
                 : `${label} - Server Google đang xử lý quá tải. Tự động kết nối lại... (Còn ${retries} lần)`;
             
             console.warn(msg, error.message);
             if (onLog) onLog(`🔄 ${msg}`);
             
             // Wait before retry
-            // If it's a rate limit, we can retry faster because we are swapping keys
-            const waitTime = isRateLimit ? 1000 : delay;
+            // For 429, wait longer (10s) to let quota reset
+            const waitTime = isRateLimit ? 10000 : delay;
             await new Promise(resolve => setTimeout(resolve, waitTime));
             return retryWithBackoff(operation, retries - 1, delay, label, onLog);
         }
@@ -68,7 +68,7 @@ const retryWithBackoff = async <T>(
 
 // --- NEW: ANALYZE STYLE IMAGE (For Admin) ---
 export const analyzeStyleImage = async (imageBase64: string): Promise<string> => {
-    const model = 'gemini-3.1-pro-preview'; // Use 3.1 pro for analysis
+    const model = 'gemini-3.0-pro-preview'; // Use latest pro for analysis
 
     const result: any = await retryWithBackoff(
         async () => {
@@ -153,7 +153,7 @@ const runWithTimeout = <T>(promise: Promise<T>, ms: number, label: string): Prom
 };
 
 // Cấu hình timeout cao hơn cho Client (mặc định fetch là ngắn)
-const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string) => {
+const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string, onLog: (msg: string) => void = () => {}, attempt: number = -1) => {
     let apiKey: string | null | undefined = specificKey;
     if (!apiKey) {
         apiKey = await getSystemApiKey(tier);
@@ -208,37 +208,45 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     const { accessToken, projectId, location } = await tokenRes.json();
 
                     // Map model names for Vertex AI
-                    let vertexModel = params.model;
+                    let vertexModel = params.model || (tier === 'flash' ? 'gemini-3-flash-preview' : 'gemini-3.0-pro-preview');
                     let endpoint = 'generateContent';
-                    let apiVersion = 'v1beta1'; // Default to v1beta1 for preview models
-                    let isGlobalImageModel = false;
+                    let apiVersion = 'v1'; // Default to v1
+                    let isImageModel = false;
                     
                     // --- STANDARD PIPELINE ---
-                    // Map models to stable versions for Vertex AI
+                    // Map models to specific versions for Vertex AI
                     if (vertexModel.includes('image')) {
                         if (vertexModel.includes('flash')) {
+                            // Vertex AI ID for Flash Image
                             vertexModel = 'gemini-3.1-flash-image-preview';
-                            apiVersion = 'v1'; // Gemini 3.1 Image uses v1
+                            apiVersion = 'v1beta1';
                         } else if (vertexModel.includes('pro')) {
-                            vertexModel = 'gemini-3-pro-image-preview';
-                            apiVersion = 'v1beta1'; // Gemini 3 Pro Image uses v1beta1
+                            // Vertex AI ID for Pro Image
+                            vertexModel = 'gemini-3.0-pro-image-preview';
+                            apiVersion = 'v1beta1';
                         }
-                        isGlobalImageModel = true; // Both use global location
+                        isImageModel = true;
                     } else {
                         if (vertexModel.includes('flash')) {
-                            // On Vertex AI, use 3 Flash
+                            // Vertex AI ID for Flash
                             vertexModel = 'gemini-3-flash-preview';
                             apiVersion = 'v1beta1'; 
                         } else if (vertexModel.includes('pro')) {
-                            // On Vertex AI, use 3.1 Pro
-                            vertexModel = 'gemini-3.1-pro-preview';
+                            // Vertex AI ID for Pro
+                            vertexModel = 'gemini-3.0-pro-preview';
                             apiVersion = 'v1beta1'; 
                         }
                     }
 
-                    // QUAN TRỌNG: Dùng v1beta1 cho preview, v1 cho stable.
-                    // Sử dụng location global cho tất cả các model theo yêu cầu
-                    let url = `https://aiplatform.googleapis.com/${apiVersion}/projects/${projectId}/locations/global/publishers/google/models/${vertexModel}:${endpoint}`;
+                    // --- SMART REGION ROTATION ---
+                    let actualLocation = 'global'; // User requested global
+
+                    const apiEndpoint = `us-central1-aiplatform.googleapis.com`; // Vertex AI endpoint for global is usually us-central1 or just aiplatform.googleapis.com
+                    
+                    let url = `https://${apiEndpoint}/${apiVersion}/projects/${projectId}/locations/${actualLocation}/publishers/google/models/${vertexModel}:${endpoint}`;
+
+                    
+                    onLog(`> [VertexAI] Region: ${actualLocation} | Model: ${vertexModel} | Tier: ${tier.toUpperCase()}`);
                     
                     // Chuyển đổi config sang generationConfig cho REST API
                     let payloadContents = params.contents;
@@ -268,21 +276,20 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                             delete payload.generationConfig.safetySettings;
                         }
 
+                        // Move systemInstruction to top level if present
+                        if (payload.generationConfig.systemInstruction) {
+                            if (typeof payload.generationConfig.systemInstruction === 'string') {
+                                payload.systemInstruction = {
+                                    role: 'system',
+                                    parts: [{ text: payload.generationConfig.systemInstruction }]
+                                };
+                            } else {
+                                payload.systemInstruction = payload.generationConfig.systemInstruction;
+                            }
+                            delete payload.generationConfig.systemInstruction;
+                        }
+
                         delete payload.generationConfig.tools;
-                        
-                        // Map imageConfig sang generationConfig cho model ảnh (Vertex AI REST API)
-                        if (params.config.imageConfig) {
-                            payload.generationConfig.image_config = {
-                                aspect_ratio: params.config.imageConfig.aspectRatio,
-                                image_size: params.config.imageConfig.imageSize
-                            };
-                            delete payload.generationConfig.imageConfig;
-                        }
-                        
-                        // Gemini 3.1 Image Preview requires response_modalities
-                        if (isGlobalImageModel) {
-                            payload.generationConfig.response_modalities = ["IMAGE"];
-                        }
                     }
                     
                     if (params.config?.tools) {
@@ -294,7 +301,7 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                         payload.safetySettings = params.safetySettings;
                     }
 
-                    const res = await fetch(url, {
+                    let res = await fetch(url, {
                         method: 'POST',
                         headers: {
                             'Authorization': `Bearer ${accessToken}`,
@@ -303,9 +310,44 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                         body: JSON.stringify(payload)
                     });
 
+                    // --- AUTO FALLBACK FOR 404 (MODEL NOT FOUND / NO ACCESS) ---
+                    if (res.status === 404) {
+                        let fallbackModels: string[] = [];
+                        if (vertexModel.includes('pro') && !vertexModel.includes('image')) {
+                            fallbackModels = ['gemini-1.5-pro-002', 'gemini-1.5-pro-001'];
+                        } else if (vertexModel.includes('pro') && vertexModel.includes('image')) {
+                            fallbackModels = ['gemini-3.1-flash-image-preview']; // Fallback to flash image if pro image fails
+                        } else if (vertexModel.includes('flash') && !vertexModel.includes('image')) {
+                            fallbackModels = ['gemini-1.5-flash-002', 'gemini-1.5-flash-001'];
+                        }
+
+                        for (const fallbackModel of fallbackModels) {
+                            if (fallbackModel && fallbackModel !== vertexModel) {
+                                onLog(`> [VertexAI] Model ${vertexModel} not found in ${actualLocation}. Auto-falling back to ${fallbackModel}...`);
+                                const fallbackUrl = `https://${apiEndpoint}/${apiVersion}/projects/${projectId}/locations/${actualLocation}/publishers/google/models/${fallbackModel}:${endpoint}`;
+                                
+                                const fallbackRes = await fetch(fallbackUrl, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Authorization': `Bearer ${accessToken}`,
+                                        'Content-Type': 'application/json'
+                                    },
+                                    body: JSON.stringify(payload)
+                                });
+                                
+                                if (fallbackRes.ok) {
+                                    res = fallbackRes;
+                                    break; // Stop trying fallbacks if one succeeds
+                                }
+                            }
+                        }
+                    }
+
                     if (!res.ok) {
                         const err = await res.json().catch(() => ({}));
-                        throw new Error(err.error?.message || `Vertex AI Error: ${res.status}`);
+                        const errorMsg = err.error?.message || err.message || `Vertex AI Error: ${res.status}`;
+                        onLog(`> [VertexAI] Error ${res.status}: ${errorMsg.substring(0, 100)}...`);
+                        throw new Error(errorMsg);
                     }
 
                     const data = await res.json();
@@ -371,9 +413,9 @@ const extractImage = (response: any): string | null => {
 };
 
 // --- NEW: TEST API KEY ---
-export const testApiKey = async (tier: 'flash' | 'pro' = 'flash'): Promise<boolean> => {
+export const testApiKey = async (tier: 'flash' | 'pro' = 'flash', attempt: number = 0): Promise<boolean> => {
     try {
-        const freshAi = await getAiClient(tier);
+        const freshAi = await getAiClient(tier, undefined, () => {}, attempt);
         const testModel = tier === 'pro' ? 'gemini-3.1-pro-preview' : 'gemini-3-flash-preview';
 
         await runWithTimeout(
@@ -482,7 +524,7 @@ export const checkConnection = async (key?: string): Promise<{ success: boolean;
 };
 
 // --- NEW: ANALYZE REFERENCE IMAGE (POSE/BG) ---
-const analyzeReferenceImage = async (base64Data: string): Promise<string> => {
+const analyzeReferenceImage = async (base64Data: string, onLog: (msg: string) => void = () => {}): Promise<string> => {
     const model = 'gemini-3-flash-preview'; 
 
     try {
@@ -492,7 +534,7 @@ const analyzeReferenceImage = async (base64Data: string): Promise<string> => {
 
         // AGGRESSIVE FAIL-FAST: No retries, short timeout (15s)
         // If analysis fails, we proceed without it rather than blocking generation.
-        const freshAi = await getAiClient('flash');
+        const freshAi = await getAiClient('flash', undefined, onLog);
         try {
             const result: any = await runWithTimeout(
                 freshAi.models.generateContent({
@@ -525,14 +567,16 @@ const optimizePromptWithThinking = async (
     rawPrompt: string, 
     styleContext: string = "", 
     poseContext: string = "",
-    masterSheetPart: any | null = null
+    masterSheetPart: any | null = null,
+    tier: 'flash' | 'pro' = 'pro', // Thêm tham số tier
+    onLog: (msg: string) => void = () => {}
 ): Promise<string> => {
-    // Use Gemini 3.1 Pro for the "Brain" of the operation.
-    const model = 'gemini-3.1-pro-preview'; 
+    // Sử dụng đúng model theo tier đã chọn
+    const model = tier === 'pro' ? 'gemini-3.1-pro-preview' : 'gemini-3-flash-preview'; 
 
     try {
-        // Use Pro client for reasoning (it's text-only so it's cheap/fast enough)
-        const freshAi = await getAiClient('pro');
+        // Sử dụng client tương ứng với tier
+        const freshAi = await getAiClient(tier, undefined, onLog);
         
         const parts: any[] = [];
         
@@ -683,7 +727,7 @@ export const generateImage = async (
             }
 
             if (cleanRefImage) {
-                poseDescription = await analyzeReferenceImage(cleanRefImage);
+                poseDescription = await analyzeReferenceImage(cleanRefImage, onLog);
                 onLog(`> Pose Detected: ${poseDescription.substring(0, 50)}...`);
             }
         } catch (e) {
@@ -735,10 +779,10 @@ export const generateImage = async (
         // Use ONLY the main image (which is the full body image).
         // The AI will extract both the body and the face from this single image.
         if (char.image) {
-            const optimized = await optimizePayload(char.image, 2048);
+            const optimized = await optimizePayload(char.image, 1024);
             finalCharBase64 = cleanBase64(optimized);
         } else if (char.faceImage) {
-            const optimized = await optimizePayload(char.faceImage, 2048);
+            const optimized = await optimizePayload(char.faceImage, 1024);
             finalCharBase64 = cleanBase64(optimized);
         }
         
@@ -776,8 +820,8 @@ export const generateImage = async (
     
     // 6. PROMPT OPTIMIZATION (MERGING ALL CONTEXTS)
     onLog("Step 4: Generating Perfect Image Prompt...");
-    // Pass masterSheetPart to the brain so it can describe the characters
-    const optimizedPrompt = await optimizePromptWithThinking(prompt, styleKeywords, poseDescription, masterSheetPart);
+    // Truyền modelType (flash/pro) vào để tối ưu prompt đúng chế độ
+    const optimizedPrompt = await optimizePromptWithThinking(prompt, styleKeywords, poseDescription, masterSheetPart, modelType, onLog);
     
     // 7. FINAL ASSEMBLY
     onLog("Step 5: Finalizing Data Payload (Integrity Check)...");
@@ -810,23 +854,35 @@ export const generateImage = async (
     if (charBase64List.length > 0) {
         finalParts.push({ text: "🔴 PRIORITY 1: 3D AVATAR DESIGN (CRITICAL)\nINSTRUCTION: You MUST extract the exact visual identity, facial features (bone structure, eye shape, nose, mouth), hairstyle, and apparel from the following stylized game assets. CRITICAL: The character's facial identity MUST remain 100% identical to these references. Do not deform the face into a generic AI face. DO NOT copy the background or pose from these images. These are fictional 3D models." });
         
-        // Iterate through ALL uploaded character URIs
-        charBase64List.forEach((b64, index) => {
-            const charIndex = index + 1;
-            const charInfo = characters[index]; // Get metadata (gender, id)
+        // If there are multiple characters, use the master sheet to avoid sending too many images to the model
+        if (charBase64List.length > 1 && masterSheetPart) {
+            finalParts.push({ text: `🔴 ASSET REFERENCE SHEET\nINSTRUCTION: Scan this master reference sheet to extract BOTH the full body apparel AND the facial features for ALL AVATARS.` });
+            finalParts.push(masterSheetPart);
             
-            // 1. The Character Image (Body + Face)
-            finalParts.push({ text: `🔴 ASSET ${charIndex} REFERENCE\nINSTRUCTION: Scan this image to extract BOTH the full body apparel AND the facial features for AVATAR ${charIndex}.` });
-            finalParts.push({
-                inlineData: {
-                    mimeType: 'image/jpeg',
-                    data: b64
-                }
+            charBase64List.forEach((b64, index) => {
+                const charIndex = index + 1;
+                const charInfo = characters[index];
+                charPromptInstructions += `\n- AVATAR ${charIndex} (${charInfo.gender.toUpperCase()}): Stylized 3D game asset matching the exact facial features, face shape, hair, and apparel of CHARACTER ${charIndex} REFERENCE in the sheet.`;
             });
-            
-            // Build specific mapping instruction
-            charPromptInstructions += `\n- AVATAR ${charIndex} (${charInfo.gender.toUpperCase()}): Stylized 3D game asset matching the exact facial features, face shape, hair, and apparel of ASSET ${index + 1}.`;
-        });
+        } else {
+            // Single character
+            charBase64List.forEach((b64, index) => {
+                const charIndex = index + 1;
+                const charInfo = characters[index]; // Get metadata (gender, id)
+                
+                // 1. The Character Image (Body + Face)
+                finalParts.push({ text: `🔴 ASSET ${charIndex} REFERENCE\nINSTRUCTION: Scan this image to extract BOTH the full body apparel AND the facial features for AVATAR ${charIndex}.` });
+                finalParts.push({
+                    inlineData: {
+                        mimeType: 'image/jpeg',
+                        data: b64
+                    }
+                });
+                
+                // Build specific mapping instruction
+                charPromptInstructions += `\n- AVATAR ${charIndex} (${charInfo.gender.toUpperCase()}): Stylized 3D game asset matching the exact facial features, face shape, hair, and apparel of ASSET ${index + 1}.`;
+            });
+        }
     }
 
     // PRIORITY 2: POSE/STRUCTURE REFERENCE
@@ -899,10 +955,10 @@ export const generateImage = async (
 
     const response = await retryWithBackoff(
         async () => {
-            const freshAi = await getAiClient(modelType);
+            const freshAi = await getAiClient(modelType, undefined, onLog);
             const currentKey = (freshAi as any)._internalApiKey;
             const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
-            onLog(`> Đang dùng API Key: ${shortKey} | Model: ${model}`);
+            onLog(`> Đang dùng API Key: ${shortKey} | Model: ${model} | Tier: ${modelType.toUpperCase()}`);
             
             try {
                 const REQUEST_TIMEOUT = 180000; // 3 Minutes
@@ -948,14 +1004,35 @@ export const generateImage = async (
 export const editImageWithInstructions = async (
     base64Data: string, 
     instruction: string, 
-    mimeType: string
+    mimeType: string,
+    modelType: 'flash' | 'pro' = 'flash',
+    onLog: (msg: string) => void = () => {}
 ): Promise<string> => {
-    const model = 'gemini-3.1-flash-image-preview'; 
+    // Use gemini-3.1-flash-image-preview or gemini-3-pro-image-preview for ALL editing features
+    let model = modelType === 'flash' ? 'gemini-3.1-flash-image-preview' : 'gemini-3-pro-image-preview';
 
     const response = await retryWithBackoff(
         async () => {
-            const freshAi = await getAiClient('flash');
+            const freshAi = await getAiClient(modelType, undefined, onLog);
+            const currentKey = (freshAi as any)._internalApiKey;
+            const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
+            onLog(`> Đang dùng API Key: ${shortKey} | Model: ${model} | Tier: ${modelType.toUpperCase()}`);
+
             try {
+                const config: any = {
+                    imageConfig: {}
+                };
+                
+                if (model.includes('3.1-flash-image') || model.includes('3-pro-image')) {
+                    // Luôn dùng 2K cho các tính năng chỉnh sửa để giữ chất lượng cao
+                    config.imageConfig.imageSize = "2K"; // 2K is ~2048px, matching optimizePayload
+                }
+
+                // Remove empty imageConfig if not used
+                if (Object.keys(config.imageConfig).length === 0) {
+                    delete config.imageConfig;
+                }
+
                 return await runWithTimeout(
                     freshAi.models.generateContent({
                         model: model,
@@ -971,22 +1048,171 @@ export const editImageWithInstructions = async (
                                     text: instruction
                                 }
                             ]
-                        }
+                        },
+                        config: config
                     }),
                     45000,
                     "Image Editing"
                 );
-            } catch (e) {
+            } catch (e: any) {
+                const isOverload = e.message?.includes('503') || e.message?.includes('Overloaded') || e.status === 503 || e.message?.includes('timed out') || e.message?.includes('Timeout');
+                const isRateLimit = e.message?.includes('429') || e.status === 429 || e.message?.includes('quota');
+
+                if (isOverload) {
+                     console.warn(`${model} 503/Timeout. Retrying...`);
+                     onLog(`⏳ Đang xếp hàng chờ Google Render ảnh (${modelType === 'pro' ? 'Model Pro' : 'Model Flash'} đang xử lý)...`);
+                     if (currentKey) reportKeyFailure(currentKey);
+                } else if (isRateLimit) {
+                     console.warn(`${model} 429 (Rate Limit). Banning key and retrying with a new one...`);
+                     if (currentKey) reportKeyFailure(currentKey);
+                }
                 
                 throw e;
             }
         },
-        3,
-        2000,
-        "Image Editing"
+        10, // Tăng lên 10 lần thử lại để cơ chế đổi key hoạt động tốt
+        8000, // Chờ 8s mỗi lần thử lại
+        "Image Editing",
+        onLog
     );
 
     const result = extractImage(response);
     if (!result) throw new Error("Editing failed: No image output");
+    return result;
+}
+
+export const removeBackgroundImage = async (
+    base64Data: string, 
+    instruction: string, 
+    mimeType: string,
+    onLog: (msg: string) => void = () => {}
+): Promise<string> => {
+    const model = 'gemini-3.1-flash-image-preview';
+
+    const response = await retryWithBackoff(
+        async () => {
+            const freshAi = await getAiClient('flash', undefined, onLog);
+            const currentKey = (freshAi as any)._internalApiKey;
+            const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
+            onLog(`> Đang dùng API Key: ${shortKey} | Model: ${model} | Tier: FLASH`);
+
+            try {
+                const config: any = {
+                    imageConfig: {
+                        imageSize: "2K"
+                    }
+                };
+
+                const finalParts = [
+                    {
+                        inlineData: {
+                            mimeType: mimeType || 'image/png',
+                            data: cleanBase64(base64Data)
+                        }
+                    },
+                    { text: `🔴 PRIORITY 1: REFERENCE IMAGE\nINSTRUCTION: Use this image as the base for editing. Keep the main subject exactly the same.\n\n🔴 FINAL EXECUTION COMMAND:\n${instruction}` }
+                ];
+
+                return await runWithTimeout(
+                    freshAi.models.generateContent({
+                        model: model,
+                        contents: { parts: finalParts },
+                        config: config
+                    }),
+                    45000,
+                    "Remove Background"
+                );
+            } catch (e: any) {
+                const isOverload = e.message?.includes('503') || e.message?.includes('Overloaded') || e.status === 503 || e.message?.includes('timed out') || e.message?.includes('Timeout');
+                const isRateLimit = e.message?.includes('429') || e.status === 429 || e.message?.includes('quota');
+
+                if (isOverload) {
+                     console.warn(`${model} 503/Timeout. Retrying...`);
+                     onLog(`⏳ Đang xếp hàng chờ Google Render ảnh (Model Flash đang xử lý)...`);
+                     if (currentKey) reportKeyFailure(currentKey);
+                } else if (isRateLimit) {
+                     console.warn(`${model} 429 (Rate Limit). Banning key and retrying with a new one...`);
+                     if (currentKey) reportKeyFailure(currentKey);
+                }
+                
+                throw e;
+            }
+        },
+        10,
+        8000,
+        "Remove Background",
+        onLog
+    );
+
+    const result = extractImage(response);
+    if (!result) throw new Error("Remove Background failed: No image output");
+    return result;
+}
+
+export const upscaleImage = async (
+    base64Data: string, 
+    instruction: string, 
+    mimeType: string,
+    onLog: (msg: string) => void = () => {}
+): Promise<string> => {
+    const model = 'gemini-3.1-flash-image-preview';
+
+    const response = await retryWithBackoff(
+        async () => {
+            const freshAi = await getAiClient('flash', undefined, onLog);
+            const currentKey = (freshAi as any)._internalApiKey;
+            const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
+            onLog(`> Đang dùng API Key: ${shortKey} | Model: ${model} | Tier: FLASH`);
+
+            try {
+                const config: any = {
+                    imageConfig: {
+                        imageSize: "2K"
+                    }
+                };
+
+                const finalParts = [
+                    {
+                        inlineData: {
+                            mimeType: mimeType || 'image/png',
+                            data: cleanBase64(base64Data)
+                        }
+                    },
+                    { text: `🔴 PRIORITY 1: REFERENCE IMAGE\nINSTRUCTION: Use this image as the base for editing. Keep the main subject exactly the same.\n\n🔴 FINAL EXECUTION COMMAND:\n${instruction}` }
+                ];
+
+                return await runWithTimeout(
+                    freshAi.models.generateContent({
+                        model: model,
+                        contents: { parts: finalParts },
+                        config: config
+                    }),
+                    45000,
+                    "Upscale Image"
+                );
+            } catch (e: any) {
+                const isOverload = e.message?.includes('503') || e.message?.includes('Overloaded') || e.status === 503 || e.message?.includes('timed out') || e.message?.includes('Timeout');
+                const isRateLimit = e.message?.includes('429') || e.status === 429 || e.message?.includes('quota');
+
+                if (isOverload) {
+                     console.warn(`${model} 503/Timeout. Retrying...`);
+                     onLog(`⏳ Đang xếp hàng chờ Google Render ảnh (Model Flash đang xử lý)...`);
+                     if (currentKey) reportKeyFailure(currentKey);
+                } else if (isRateLimit) {
+                     console.warn(`${model} 429 (Rate Limit). Banning key and retrying with a new one...`);
+                     if (currentKey) reportKeyFailure(currentKey);
+                }
+                
+                throw e;
+            }
+        },
+        10,
+        8000,
+        "Upscale Image",
+        onLog
+    );
+
+    const result = extractImage(response);
+    if (!result) throw new Error("Upscale failed: No image output");
     return result;
 }

@@ -948,13 +948,14 @@ export const generateImage = async (
 export const editImageWithInstructions = async (
     base64Data: string, 
     instruction: string, 
-    mimeType: string
+    mimeType: string,
+    modelType: 'flash' | 'pro' = 'flash'
 ): Promise<string> => {
-    const model = 'gemini-3.1-flash-image-preview'; 
+    const model = modelType === 'flash' ? 'gemini-3.1-flash-image-preview' : 'gemini-3-pro-image-preview'; 
 
     const response = await retryWithBackoff(
         async () => {
-            const freshAi = await getAiClient('flash');
+            const freshAi = await getAiClient(modelType);
             try {
                 return await runWithTimeout(
                     freshAi.models.generateContent({

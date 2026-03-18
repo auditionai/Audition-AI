@@ -31,6 +31,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [resultImage, setResultImage] = useState<string | null>(null);
   const [isComparing, setIsComparing] = useState(false);
+  const [aiModel, setAiModel] = useState<'flash' | 'pro'>('flash');
   
   // Specific States
   const isUpscaler = feature.id === 'sharpen_upscale';
@@ -100,6 +101,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
      // Cost Calculation: Photo Editor is more expensive (Premium)
      const cost = isMagicEditor ? 3 : (isUpscaler ? 2 : 1); 
      const user = await getUserProfile();
+     if (!user) return;
      
      if ((user.balance || 0) < cost) {
          notify(lang === 'vi' ? `Số dư không đủ (Cần ${cost} Vcoin)` : `Insufficient balance (Need ${cost} Vcoin)`, 'error');
@@ -118,7 +120,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
          const base64Data = uploadedImage.split(',')[1];
          const mimeType = uploadedImage.substring(uploadedImage.indexOf(':') + 1, uploadedImage.indexOf(';'));
 
-         const result = await editImageWithInstructions(base64Data, instruction, mimeType);
+         const result = await editImageWithInstructions(base64Data, instruction, mimeType, aiModel);
 
          if (result) {
             setResultImage(result);
@@ -289,6 +291,30 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
                      />
                  </div>
              )}
+         </div>
+
+         {/* MODEL SELECTOR */}
+         <div className="space-y-2">
+             <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1">
+                 <Icons.Cpu className="w-3 h-3" />
+                 {lang === 'vi' ? 'AI Model' : 'AI Model'}
+             </label>
+             <div className="flex bg-white/5 p-1 rounded-xl border border-white/10">
+                 <button 
+                     onClick={() => setAiModel('flash')}
+                     className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1 ${aiModel === 'flash' ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                 >
+                     <Icons.Zap className="w-3 h-3" />
+                     Flash (Fast)
+                 </button>
+                 <button 
+                     onClick={() => setAiModel('pro')}
+                     className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1 ${aiModel === 'pro' ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                 >
+                     <Icons.Sparkles className="w-3 h-3" />
+                     Pro (High Quality)
+                 </button>
+             </div>
          </div>
 
          {/* COST & ACTION */}

@@ -211,19 +211,19 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     let vertexModel = params.model;
                     let endpoint = 'generateContent';
                     let apiVersion = 'v1beta1'; // Default to v1beta1 for preview models
-                    let isGlobalImageModel = false;
+                    let isImageModel = false;
                     
                     // --- STANDARD PIPELINE ---
                     // Map models to stable versions for Vertex AI
                     if (vertexModel.includes('image')) {
                         if (vertexModel.includes('flash')) {
                             vertexModel = 'gemini-3.1-flash-image-preview';
-                            apiVersion = 'v1'; // Gemini 3.1 Image uses v1
+                            apiVersion = 'v1beta1'; // Preview models use v1beta1
                         } else if (vertexModel.includes('pro')) {
                             vertexModel = 'gemini-3-pro-image-preview';
-                            apiVersion = 'v1beta1'; // Gemini 3 Pro Image uses v1beta1
+                            apiVersion = 'v1beta1'; // Preview models use v1beta1
                         }
-                        isGlobalImageModel = true; // Both use global location
+                        isImageModel = true; // Flag as image model
                     } else {
                         if (vertexModel.includes('flash')) {
                             // On Vertex AI, use 3 Flash
@@ -237,8 +237,9 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     }
 
                     // QUAN TRỌNG: Dùng v1beta1 cho preview, v1 cho stable.
-                    // Sử dụng location global cho tất cả các model theo yêu cầu
-                    let url = `https://aiplatform.googleapis.com/${apiVersion}/projects/${projectId}/locations/global/publishers/google/models/${vertexModel}:${endpoint}`;
+                    // Sử dụng location global cho tất cả các model theo yêu cầu của user
+                    const actualLocation = 'global';
+                    let url = `https://aiplatform.googleapis.com/${apiVersion}/projects/${projectId}/locations/${actualLocation}/publishers/google/models/${vertexModel}:${endpoint}`;
                     
                     // Chuyển đổi config sang generationConfig cho REST API
                     let payloadContents = params.contents;
@@ -269,23 +270,14 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                         }
 
                         delete payload.generationConfig.tools;
-                        
-                        // Map imageConfig sang generationConfig cho model ảnh (Vertex AI REST API)
-                        if (params.config.imageConfig) {
-                            payload.generationConfig.image_config = {
-                                aspect_ratio: params.config.imageConfig.aspectRatio,
-                                image_size: params.config.imageConfig.imageSize
-                            };
-                            delete payload.generationConfig.imageConfig;
-                        }
                     }
                     
-                    // Gemini 3.1 Image Preview requires response_modalities
-                    if (isGlobalImageModel) {
+                    // Gemini 3.1 Image Preview requires responseModalities
+                    if (isImageModel) {
                         if (!payload.generationConfig) {
                             payload.generationConfig = {};
                         }
-                        payload.generationConfig.response_modalities = ["IMAGE"];
+                        payload.generationConfig.responseModalities = ["IMAGE"];
                     }
                     
                     if (params.config?.tools) {
@@ -971,21 +963,15 @@ export const editImageWithInstructions = async (
                         contents: {
                             parts: [
                                 {
+                                    text: instruction
+                                },
+                                {
                                     inlineData: {
                                         mimeType: mimeType || 'image/png',
                                         data: cleanBase64(base64Data)
                                     }
-                                },
-                                {
-                                    text: instruction
                                 }
                             ]
-                        },
-                        config: {
-                            imageConfig: {
-                                aspectRatio: "1:1",
-                                imageSize: "1K"
-                            }
                         }
                     }),
                     45000,

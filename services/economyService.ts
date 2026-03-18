@@ -1172,8 +1172,31 @@ export const getAdminStats = async () => {
         dashboard: { visitsToday: 0, visitsTotal: 0, newUsersToday: 0, usersTotal: 0, imagesToday: 0, imagesTotal: 0, aiUsage: [] },
         usersList: [], packages: [], promotions: [], giftcodes: [], transactions: []
     };
-    // Fetch Users
-    const { data: users, error: userError } = await supabase.from('users').select('*');
+    // Fetch Users (Handling > 1000 rows limit)
+    let users: any[] = [];
+    let userError = null;
+    let page = 0;
+    const pageSize = 1000;
+    
+    while (true) {
+        const { data, error } = await supabase
+            .from('users')
+            .select('*')
+            .range(page * pageSize, (page + 1) * pageSize - 1);
+            
+        if (error) {
+            userError = error;
+            break;
+        }
+        
+        if (data && data.length > 0) {
+            users = [...users, ...data];
+            if (data.length < pageSize) break;
+            page++;
+        } else {
+            break;
+        }
+    }
     console.log("Admin Stats - Users fetched:", users?.length, userError);
 
     if (userError) {
@@ -1194,10 +1217,10 @@ export const getAdminStats = async () => {
         .from('gift_codes')
         .select('*, gift_code_usages(count)');
 
-    let { data: txs, error: txError } = await supabase.from('transactions').select('*, users(email, display_name, photo_url)').order('created_at', { ascending: false });
+    let { data: txs, error: txError } = await supabase.from('transactions').select('*, users(email, display_name, photo_url)').order('created_at', { ascending: false }).limit(5000);
     if (txError) {
         console.warn("Failed to join users on transactions, falling back to select *", txError);
-        const fallback = await supabase.from('transactions').select('*').order('created_at', { ascending: false });
+        const fallback = await supabase.from('transactions').select('*').order('created_at', { ascending: false }).limit(5000);
         txs = fallback.data;
     }
     console.log("Admin Stats - Transactions fetched:", txs?.length);
@@ -1208,12 +1231,12 @@ export const getAdminStats = async () => {
     // Try to fetch logs from both potential table names
     let usageLogs: any[] = [];
     
-    // Attempt 1: diamond_transactions_log
-    const { data: logs1, error: err1 } = await supabase.from('diamond_transactions_log').select('*');
+    // Attempt 1: diamond_transactions_log (Fetch up to 10000)
+    const { data: logs1, error: err1 } = await supabase.from('diamond_transactions_log').select('*').order('created_at', { ascending: false }).limit(10000);
     if (logs1) usageLogs = [...usageLogs, ...logs1];
     
-    // Attempt 2: diamond_transactions
-    const { data: logs2, error: err2 } = await supabase.from('diamond_transactions').select('*');
+    // Attempt 2: diamond_transactions (Fetch up to 10000)
+    const { data: logs2, error: err2 } = await supabase.from('diamond_transactions').select('*').order('created_at', { ascending: false }).limit(10000);
     if (logs2) usageLogs = [...usageLogs, ...logs2];
 
     // Filter for usage: type 'usage' OR negative amount

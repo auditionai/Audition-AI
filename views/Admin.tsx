@@ -1254,7 +1254,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           </thead>
                           <tbody className="divide-y divide-white/5">
                               {(stats?.usersList || [])
-                                  .filter((u: any) => u.email.toLowerCase().includes(userSearchEmail.toLowerCase()))
+                                  .filter((u: any) => (u.email || '').toLowerCase().includes(userSearchEmail.toLowerCase()))
                                   .sort((a: UserProfile, b: UserProfile) => {
                                       const aOnline = isUserOnline(a.lastActive);
                                       const bOnline = isUserOnline(b.lastActive);
@@ -1312,7 +1312,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   {/* Mobile View */}
                   <div className="md:hidden space-y-4">
                       {(stats?.usersList || [])
-                          .filter((u: any) => u.email.toLowerCase().includes(userSearchEmail.toLowerCase()))
+                          .filter((u: any) => (u.email || '').toLowerCase().includes(userSearchEmail.toLowerCase()))
                           .sort((a: UserProfile, b: UserProfile) => {
                               const aOnline = isUserOnline(a.lastActive);
                               const bOnline = isUserOnline(b.lastActive);

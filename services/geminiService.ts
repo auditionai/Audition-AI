@@ -153,7 +153,7 @@ const runWithTimeout = <T>(promise: Promise<T>, ms: number, label: string): Prom
 };
 
 // Cấu hình timeout cao hơn cho Client (mặc định fetch là ngắn)
-const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string) => {
+const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string, onLog: (msg: string) => void = () => {}) => {
     let apiKey: string | null | undefined = specificKey;
     if (!apiKey) {
         apiKey = await getSystemApiKey(tier);
@@ -208,7 +208,7 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     const { accessToken, projectId, location } = await tokenRes.json();
 
                     // Map model names for Vertex AI
-                    let vertexModel = params.model;
+                    let vertexModel = params.model || (tier === 'flash' ? 'gemini-3.1-flash-image-preview' : 'gemini-3-pro-image-preview');
                     let endpoint = 'generateContent';
                     let apiVersion = 'v1beta1'; // Default to v1beta1 for preview models
                     let isImageModel = false;
@@ -217,43 +217,42 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     // Map models to stable versions for Vertex AI
                     if (vertexModel.includes('image')) {
                         if (vertexModel.includes('flash')) {
-                            if (vertexModel === 'gemini-2.5-flash-image') {
-                                // Keep it as gemini-2.5-flash-image for editing
-                                apiVersion = 'v1beta1';
-                            } else {
-                                vertexModel = 'gemini-3.1-flash-image-preview';
-                                apiVersion = 'v1beta1';
-                            }
+                            // Vertex AI ID for 3.1 Flash Image
+                            vertexModel = 'gemini-3.1-flash-image';
+                            apiVersion = 'v1beta1';
                         } else if (vertexModel.includes('pro')) {
-                            vertexModel = 'gemini-3.0-pro-image-preview';
-                            apiVersion = 'v1beta1'; // Preview models use v1beta1
+                            // Vertex AI ID for 3.0 Pro Image
+                            vertexModel = 'gemini-3.0-pro-image';
+                            apiVersion = 'v1beta1';
                         }
-                        isImageModel = true; // Flag as image model
+                        isImageModel = true;
                     } else {
                         if (vertexModel.includes('flash')) {
-                            // On Vertex AI, use 3 Flash
-                            vertexModel = 'gemini-3-flash-preview';
+                            // Vertex AI ID for 3 Flash
+                            vertexModel = 'gemini-3-flash';
                             apiVersion = 'v1beta1'; 
                         } else if (vertexModel.includes('pro')) {
-                            // On Vertex AI, use 3 Pro 02-2026
-                            vertexModel = 'gemini-3-pro-preview-02-2026';
+                            // Vertex AI ID for 3 Pro
+                            vertexModel = 'gemini-3-pro';
                             apiVersion = 'v1beta1'; 
                         }
                     }
 
                     // --- SMART REGION ROTATION ---
-                    // Danh sách các vùng có hạ tầng mạnh và Quota cao cho Gemini 3
+                    // Tập trung vào các vùng có hạ tầng Gemini 3 mạnh nhất và ổn định nhất
                     const regions = [
                         'us-central1',
                         'us-east4',
-                        'europe-west9',
                         'us-west1',
+                        'europe-west1',
                         'asia-northeast1'
                     ];
                     // Chọn ngẫu nhiên một vùng cho mỗi request để lách bộ lọc nghẽn
                     const actualLocation = regions[Math.floor(Math.random() * regions.length)];
                     const apiEndpoint = `${actualLocation}-aiplatform.googleapis.com`; 
                     let url = `https://${apiEndpoint}/${apiVersion}/projects/${projectId}/locations/${actualLocation}/publishers/google/models/${vertexModel}:${endpoint}`;
+                    
+                    onLog(`> [VertexAI] Region: ${actualLocation} | Model: ${vertexModel} | Tier: ${tier.toUpperCase()}`);
                     
                     // Chuyển đổi config sang generationConfig cho REST API
                     let payloadContents = params.contents;
@@ -314,7 +313,9 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
 
                     if (!res.ok) {
                         const err = await res.json().catch(() => ({}));
-                        throw new Error(err.error?.message || `Vertex AI Error: ${res.status}`);
+                        const errorMsg = err.error?.message || err.message || `Vertex AI Error: ${res.status}`;
+                        onLog(`> [VertexAI] Error ${res.status}: ${errorMsg.substring(0, 100)}...`);
+                        throw new Error(errorMsg);
                     }
 
                     const data = await res.json();
@@ -383,7 +384,7 @@ const extractImage = (response: any): string | null => {
 export const testApiKey = async (tier: 'flash' | 'pro' = 'flash'): Promise<boolean> => {
     try {
         const freshAi = await getAiClient(tier);
-        const testModel = tier === 'pro' ? 'gemini-3-pro-preview-02-2026' : 'gemini-3-flash-preview';
+        const testModel = tier === 'pro' ? 'gemini-3-pro' : 'gemini-3-flash';
 
         await runWithTimeout(
             freshAi.models.generateContent({
@@ -491,7 +492,7 @@ export const checkConnection = async (key?: string): Promise<{ success: boolean;
 };
 
 // --- NEW: ANALYZE REFERENCE IMAGE (POSE/BG) ---
-const analyzeReferenceImage = async (base64Data: string): Promise<string> => {
+const analyzeReferenceImage = async (base64Data: string, onLog: (msg: string) => void = () => {}): Promise<string> => {
     const model = 'gemini-3-flash-preview'; 
 
     try {
@@ -501,7 +502,7 @@ const analyzeReferenceImage = async (base64Data: string): Promise<string> => {
 
         // AGGRESSIVE FAIL-FAST: No retries, short timeout (15s)
         // If analysis fails, we proceed without it rather than blocking generation.
-        const freshAi = await getAiClient('flash');
+        const freshAi = await getAiClient('flash', undefined, onLog);
         try {
             const result: any = await runWithTimeout(
                 freshAi.models.generateContent({
@@ -535,14 +536,15 @@ const optimizePromptWithThinking = async (
     styleContext: string = "", 
     poseContext: string = "",
     masterSheetPart: any | null = null,
-    tier: 'flash' | 'pro' = 'pro' // Thêm tham số tier
+    tier: 'flash' | 'pro' = 'pro', // Thêm tham số tier
+    onLog: (msg: string) => void = () => {}
 ): Promise<string> => {
     // Sử dụng đúng model theo tier đã chọn
     const model = tier === 'pro' ? 'gemini-3.1-pro-preview' : 'gemini-3-flash-preview'; 
 
     try {
         // Sử dụng client tương ứng với tier
-        const freshAi = await getAiClient(tier);
+        const freshAi = await getAiClient(tier, undefined, onLog);
         
         const parts: any[] = [];
         
@@ -693,7 +695,7 @@ export const generateImage = async (
             }
 
             if (cleanRefImage) {
-                poseDescription = await analyzeReferenceImage(cleanRefImage);
+                poseDescription = await analyzeReferenceImage(cleanRefImage, onLog);
                 onLog(`> Pose Detected: ${poseDescription.substring(0, 50)}...`);
             }
         } catch (e) {
@@ -787,7 +789,7 @@ export const generateImage = async (
     // 6. PROMPT OPTIMIZATION (MERGING ALL CONTEXTS)
     onLog("Step 4: Generating Perfect Image Prompt...");
     // Truyền modelType (flash/pro) vào để tối ưu prompt đúng chế độ
-    const optimizedPrompt = await optimizePromptWithThinking(prompt, styleKeywords, poseDescription, masterSheetPart, modelType);
+    const optimizedPrompt = await optimizePromptWithThinking(prompt, styleKeywords, poseDescription, masterSheetPart, modelType, onLog);
     
     // 7. FINAL ASSEMBLY
     onLog("Step 5: Finalizing Data Payload (Integrity Check)...");
@@ -909,10 +911,10 @@ export const generateImage = async (
 
     const response = await retryWithBackoff(
         async () => {
-            const freshAi = await getAiClient(modelType);
+            const freshAi = await getAiClient(modelType, undefined, onLog);
             const currentKey = (freshAi as any)._internalApiKey;
             const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
-            onLog(`> Đang dùng API Key: ${shortKey} | Model: ${model}`);
+            onLog(`> Đang dùng API Key: ${shortKey} | Model: ${model} | Tier: ${modelType.toUpperCase()}`);
             
             try {
                 const REQUEST_TIMEOUT = 180000; // 3 Minutes
@@ -967,10 +969,10 @@ export const editImageWithInstructions = async (
 
     const response = await retryWithBackoff(
         async () => {
-            const freshAi = await getAiClient(modelType);
+            const freshAi = await getAiClient(modelType, undefined, onLog);
             const currentKey = (freshAi as any)._internalApiKey;
             const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
-            onLog(`> Đang dùng API Key: ${shortKey} | Model: ${model}`);
+            onLog(`> Đang dùng API Key: ${shortKey} | Model: ${model} | Tier: ${modelType.toUpperCase()}`);
 
             try {
                 const config: any = {
@@ -1045,10 +1047,10 @@ export const removeBackgroundImage = async (
 
     const response = await retryWithBackoff(
         async () => {
-            const freshAi = await getAiClient('flash');
+            const freshAi = await getAiClient('flash', undefined, onLog);
             const currentKey = (freshAi as any)._internalApiKey;
             const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
-            onLog(`> Đang dùng API Key: ${shortKey} | Model: ${model}`);
+            onLog(`> Đang dùng API Key: ${shortKey} | Model: ${model} | Tier: FLASH`);
 
             try {
                 const config: any = {
@@ -1114,10 +1116,10 @@ export const upscaleImage = async (
 
     const response = await retryWithBackoff(
         async () => {
-            const freshAi = await getAiClient('flash');
+            const freshAi = await getAiClient('flash', undefined, onLog);
             const currentKey = (freshAi as any)._internalApiKey;
             const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
-            onLog(`> Đang dùng API Key: ${shortKey} | Model: ${model}`);
+            onLog(`> Đang dùng API Key: ${shortKey} | Model: ${model} | Tier: FLASH`);
 
             try {
                 const config: any = {

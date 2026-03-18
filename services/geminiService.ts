@@ -967,39 +967,28 @@ export const editImageWithInstructions = async (
             try {
                 const config: any = {
                     imageConfig: {
-                        aspectRatio: calculatedAspectRatio
+                        aspectRatio: calculatedAspectRatio,
+                        imageSize: "2K" // Luôn dùng 2K cho các tính năng chỉnh sửa để giữ chất lượng cao
                     }
                 };
-                
-                if (model.includes('3.1-flash-image') || model.includes('3-pro-image')) {
-                    // Luôn dùng 2K cho các tính năng chỉnh sửa để giữ chất lượng cao
-                    config.imageConfig.imageSize = "2K"; // 2K is ~2048px, matching optimizePayload
-                } else if (model === 'gemini-2.5-flash-image') {
-                    // gemini-2.5-flash-image does not support imageSize
-                    delete config.imageConfig;
-                }
 
-                // Remove empty imageConfig if not used
-                if (Object.keys(config.imageConfig).length === 0) {
-                    delete config.imageConfig;
-                }
+                // gemini-3.1-flash-image-preview and gemini-3-pro-image-preview require [text, inlineData] order
+                const parts = [
+                    {
+                        text: instruction
+                    },
+                    {
+                        inlineData: {
+                            mimeType: mimeType || 'image/png',
+                            data: cleanBase64(base64Data)
+                        }
+                    }
+                ];
 
                 return await runWithTimeout(
                     freshAi.models.generateContent({
                         model: model,
-                        contents: {
-                            parts: [
-                                {
-                                    text: instruction
-                                },
-                                {
-                                    inlineData: {
-                                        mimeType: mimeType || 'image/png',
-                                        data: cleanBase64(base64Data)
-                                    }
-                                }
-                            ]
-                        },
+                        contents: { parts },
                         config: config
                     }),
                     180000,
@@ -1038,9 +1027,7 @@ export const removeBackgroundImage = async (
     mimeType: string,
     onLog: (msg: string) => void = () => {}
 ): Promise<string> => {
-    const model = 'gemini-3.1-flash-image-preview';
-
-    const calculatedAspectRatio = await getClosestAspectRatio(`data:${mimeType || 'image/png'};base64,${base64Data}`);
+    const model = 'gemini-2.5-flash-image';
 
     const response = await retryWithBackoff(
         async () => {
@@ -1050,13 +1037,6 @@ export const removeBackgroundImage = async (
             onLog(`> Đang dùng API Key: ${shortKey} | Model: ${model}`);
 
             try {
-                const config: any = {
-                    imageConfig: {
-                        aspectRatio: calculatedAspectRatio,
-                        imageSize: "2K"
-                    }
-                };
-
                 const combinedInstruction = `🔴 PRIORITY 1: REFERENCE IMAGE\nINSTRUCTION: Use this image as the base for editing. Keep the main subject exactly the same.\n🔴 FINAL EXECUTION COMMAND:\n${instruction}`;
                 
                 return await runWithTimeout(
@@ -1065,17 +1045,16 @@ export const removeBackgroundImage = async (
                         contents: {
                             parts: [
                                 {
-                                    text: combinedInstruction
-                                },
-                                {
                                     inlineData: {
                                         mimeType: mimeType || 'image/png',
                                         data: cleanBase64(base64Data)
                                     }
+                                },
+                                {
+                                    text: combinedInstruction
                                 }
                             ]
-                        },
-                        config: config
+                        }
                     }),
                     180000,
                     "Remove Background"
@@ -1113,9 +1092,7 @@ export const upscaleImage = async (
     mimeType: string,
     onLog: (msg: string) => void = () => {}
 ): Promise<string> => {
-    const model = 'gemini-3.1-flash-image-preview';
-
-    const calculatedAspectRatio = await getClosestAspectRatio(`data:${mimeType || 'image/png'};base64,${base64Data}`);
+    const model = 'gemini-2.5-flash-image';
 
     const response = await retryWithBackoff(
         async () => {
@@ -1125,13 +1102,6 @@ export const upscaleImage = async (
             onLog(`> Đang dùng API Key: ${shortKey} | Model: ${model}`);
 
             try {
-                const config: any = {
-                    imageConfig: {
-                        aspectRatio: calculatedAspectRatio,
-                        imageSize: "2K"
-                    }
-                };
-
                 const combinedInstruction = `🔴 PRIORITY 1: REFERENCE IMAGE\nINSTRUCTION: Use this image as the base for editing. Keep the main subject exactly the same.\n🔴 FINAL EXECUTION COMMAND:\n${instruction}`;
 
                 return await runWithTimeout(
@@ -1140,17 +1110,16 @@ export const upscaleImage = async (
                         contents: {
                             parts: [
                                 {
-                                    text: combinedInstruction
-                                },
-                                {
                                     inlineData: {
                                         mimeType: mimeType || 'image/png',
                                         data: cleanBase64(base64Data)
                                     }
+                                },
+                                {
+                                    text: combinedInstruction
                                 }
                             ]
-                        },
-                        config: config
+                        }
                     }),
                     180000,
                     "Upscale Image"

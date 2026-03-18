@@ -1047,6 +1047,8 @@ export const removeBackgroundImage = async (
                     }
                 };
 
+                const combinedInstruction = `🔴 PRIORITY 1: REFERENCE IMAGE\nINSTRUCTION: Use this image as the base for editing. Keep the main subject exactly the same.\n🔴 FINAL EXECUTION COMMAND:\n${instruction}`;
+
                 return await runWithTimeout(
                     freshAi.models.generateContent({
                         model: model,
@@ -1059,7 +1061,7 @@ export const removeBackgroundImage = async (
                                     }
                                 },
                                 {
-                                    text: instruction
+                                    text: combinedInstruction
                                 }
                             ]
                         },
@@ -1117,6 +1119,8 @@ export const upscaleImage = async (
                     }
                 };
 
+                const combinedInstruction = `🔴 PRIORITY 1: REFERENCE IMAGE\nINSTRUCTION: Use this image as the base for editing. Keep the main subject exactly the same.\n🔴 FINAL EXECUTION COMMAND:\n${instruction}`;
+
                 return await runWithTimeout(
                     freshAi.models.generateContent({
                         model: model,
@@ -1129,7 +1133,7 @@ export const upscaleImage = async (
                                     }
                                 },
                                 {
-                                    text: instruction
+                                    text: combinedInstruction
                                 }
                             ]
                         },

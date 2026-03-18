@@ -1,5 +1,5 @@
 import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from "@google/genai";
-import { createTextureSheet, optimizePayload, createSolidFence, createMasterReferenceSheet } from "../utils/imageProcessor";
+import { createTextureSheet, optimizePayload, createSolidFence, createMasterReferenceSheet, getClosestAspectRatio } from "../utils/imageProcessor";
 import { getSystemApiKey, reportKeyFailure } from "./economyService";
 
 export interface CharacterData {
@@ -952,8 +952,10 @@ export const editImageWithInstructions = async (
     modelType: 'flash' | 'pro' = 'flash',
     onLog: (msg: string) => void = () => {}
 ): Promise<string> => {
-    // Use gemini-3.1-flash-image-preview or gemini-3-pro-image-preview for ALL editing features
+    // Use gemini-3.1-flash-image-preview for flash editing
     let model = modelType === 'flash' ? 'gemini-3.1-flash-image-preview' : 'gemini-3-pro-image-preview';
+
+    const calculatedAspectRatio = await getClosestAspectRatio(`data:${mimeType || 'image/png'};base64,${base64Data}`);
 
     const response = await retryWithBackoff(
         async () => {
@@ -964,12 +966,17 @@ export const editImageWithInstructions = async (
 
             try {
                 const config: any = {
-                    imageConfig: {}
+                    imageConfig: {
+                        aspectRatio: calculatedAspectRatio
+                    }
                 };
                 
                 if (model.includes('3.1-flash-image') || model.includes('3-pro-image')) {
                     // Luôn dùng 2K cho các tính năng chỉnh sửa để giữ chất lượng cao
                     config.imageConfig.imageSize = "2K"; // 2K is ~2048px, matching optimizePayload
+                } else if (model === 'gemini-2.5-flash-image') {
+                    // gemini-2.5-flash-image does not support imageSize
+                    delete config.imageConfig;
                 }
 
                 // Remove empty imageConfig if not used
@@ -983,13 +990,13 @@ export const editImageWithInstructions = async (
                         contents: {
                             parts: [
                                 {
+                                    text: instruction
+                                },
+                                {
                                     inlineData: {
                                         mimeType: mimeType || 'image/png',
                                         data: cleanBase64(base64Data)
                                     }
-                                },
-                                {
-                                    text: instruction
                                 }
                             ]
                         },
@@ -1033,6 +1040,8 @@ export const removeBackgroundImage = async (
 ): Promise<string> => {
     const model = 'gemini-3.1-flash-image-preview';
 
+    const calculatedAspectRatio = await getClosestAspectRatio(`data:${mimeType || 'image/png'};base64,${base64Data}`);
+
     const response = await retryWithBackoff(
         async () => {
             const freshAi = await getAiClient('flash');
@@ -1043,25 +1052,26 @@ export const removeBackgroundImage = async (
             try {
                 const config: any = {
                     imageConfig: {
+                        aspectRatio: calculatedAspectRatio,
                         imageSize: "2K"
                     }
                 };
 
                 const combinedInstruction = `🔴 PRIORITY 1: REFERENCE IMAGE\nINSTRUCTION: Use this image as the base for editing. Keep the main subject exactly the same.\n🔴 FINAL EXECUTION COMMAND:\n${instruction}`;
-
+                
                 return await runWithTimeout(
                     freshAi.models.generateContent({
                         model: model,
                         contents: {
                             parts: [
                                 {
+                                    text: combinedInstruction
+                                },
+                                {
                                     inlineData: {
                                         mimeType: mimeType || 'image/png',
                                         data: cleanBase64(base64Data)
                                     }
-                                },
-                                {
-                                    text: combinedInstruction
                                 }
                             ]
                         },
@@ -1105,6 +1115,8 @@ export const upscaleImage = async (
 ): Promise<string> => {
     const model = 'gemini-3.1-flash-image-preview';
 
+    const calculatedAspectRatio = await getClosestAspectRatio(`data:${mimeType || 'image/png'};base64,${base64Data}`);
+
     const response = await retryWithBackoff(
         async () => {
             const freshAi = await getAiClient('flash');
@@ -1115,6 +1127,7 @@ export const upscaleImage = async (
             try {
                 const config: any = {
                     imageConfig: {
+                        aspectRatio: calculatedAspectRatio,
                         imageSize: "2K"
                     }
                 };
@@ -1127,13 +1140,13 @@ export const upscaleImage = async (
                         contents: {
                             parts: [
                                 {
+                                    text: combinedInstruction
+                                },
+                                {
                                     inlineData: {
                                         mimeType: mimeType || 'image/png',
                                         data: cleanBase64(base64Data)
                                     }
-                                },
-                                {
-                                    text: combinedInstruction
                                 }
                             ]
                         },

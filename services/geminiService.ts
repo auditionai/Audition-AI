@@ -1,6 +1,6 @@
 import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import { createTextureSheet, optimizePayload, createSolidFence, createMasterReferenceSheet } from "../utils/imageProcessor";
-import { getSystemApiKey, reportKeyFailure } from "./economyService";
+import { getSystemApiKey, reportKeyFailure, getApiKeyName } from "./economyService";
 
 export interface CharacterData {
   id: number;
@@ -902,10 +902,11 @@ export const generateImage = async (
             const freshAi = await getAiClient(modelType);
             const currentKey = (freshAi as any)._internalApiKey;
             const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
-            onLog(`> Đang dùng API Key: ${shortKey} | Model: ${model}`);
+            const keyName = currentKey ? await getApiKeyName(currentKey) : 'Default';
+            onLog(`> Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
             
             try {
-                const REQUEST_TIMEOUT = 180000; // 3 Minutes
+                const REQUEST_TIMEOUT = 600000; // 10 Minutes
                 
                 return await runWithTimeout(
                     freshAi.models.generateContent({
@@ -959,7 +960,8 @@ export const editImageWithInstructions = async (
             const freshAi = await getAiClient(modelType);
             const currentKey = (freshAi as any)._internalApiKey;
             const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
-            onLog(`> Đang dùng API Key: ${shortKey} | Model: ${model}`);
+            const keyName = currentKey ? await getApiKeyName(currentKey) : 'Default';
+            onLog(`> Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
             
             try {
                 const config: any = {
@@ -992,7 +994,7 @@ export const editImageWithInstructions = async (
                         },
                         config: config
                     }),
-                    180000,
+                    300000, // 5 Minutes
                     "Image Editing"
                 );
             } catch (e: any) {
@@ -1035,7 +1037,8 @@ export const removeBackgroundImage = async (
             const freshAi = await getAiClient('flash');
             const currentKey = (freshAi as any)._internalApiKey;
             const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
-            onLog(`> Đang dùng API Key: ${shortKey} | Model: ${model}`);
+            const keyName = currentKey ? await getApiKeyName(currentKey) : 'Default';
+            onLog(`> Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
 
             try {
                 const finalParts = [
@@ -1054,7 +1057,7 @@ export const removeBackgroundImage = async (
                         model: model,
                         contents: { parts: finalParts }
                     }),
-                    180000,
+                    300000, // 5 Minutes
                     "Remove Background"
                 );
             } catch (e: any) {
@@ -1097,7 +1100,8 @@ export const upscaleImage = async (
             const freshAi = await getAiClient('flash');
             const currentKey = (freshAi as any)._internalApiKey;
             const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
-            onLog(`> Đang dùng API Key: ${shortKey} | Model: ${model}`);
+            const keyName = currentKey ? await getApiKeyName(currentKey) : 'Default';
+            onLog(`> Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
 
             try {
                 const finalParts = [
@@ -1116,7 +1120,7 @@ export const upscaleImage = async (
                         model: model,
                         contents: { parts: finalParts }
                     }),
-                    180000,
+                    300000, // 5 Minutes
                     "Upscale Image"
                 );
             } catch (e: any) {

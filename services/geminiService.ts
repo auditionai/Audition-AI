@@ -1,5 +1,5 @@
 import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from "@google/genai";
-import { createTextureSheet, optimizePayload, createSolidFence, createMasterReferenceSheet, getClosestAspectRatio } from "../utils/imageProcessor";
+import { createTextureSheet, optimizePayload, createSolidFence, createMasterReferenceSheet } from "../utils/imageProcessor";
 import { getSystemApiKey, reportKeyFailure } from "./economyService";
 
 export interface CharacterData {
@@ -210,7 +210,7 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     // Map model names for Vertex AI
                     let vertexModel = params.model;
                     let endpoint = 'generateContent';
-                    let apiVersion = 'v1'; // Changed to v1 as requested
+                    let apiVersion = 'v1beta1'; // Default to v1beta1 for preview models
                     let isImageModel = false;
                     
                     // --- STANDARD PIPELINE ---
@@ -219,29 +219,29 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                         if (vertexModel.includes('flash')) {
                             if (vertexModel === 'gemini-2.5-flash-image') {
                                 // Keep it as gemini-2.5-flash-image for editing
-                                apiVersion = 'v1';
+                                apiVersion = 'v1beta1';
                             } else {
                                 vertexModel = 'gemini-3.1-flash-image-preview';
-                                apiVersion = 'v1';
+                                apiVersion = 'v1beta1';
                             }
                         } else if (vertexModel.includes('pro')) {
                             vertexModel = 'gemini-3-pro-image-preview';
-                            apiVersion = 'v1';
+                            apiVersion = 'v1beta1'; // Preview models use v1beta1
                         }
                         isImageModel = true; // Flag as image model
                     } else {
                         if (vertexModel.includes('flash')) {
                             // On Vertex AI, use 3 Flash
                             vertexModel = 'gemini-3-flash-preview';
-                            apiVersion = 'v1'; 
+                            apiVersion = 'v1beta1'; 
                         } else if (vertexModel.includes('pro')) {
                             // On Vertex AI, use 3.1 Pro
                             vertexModel = 'gemini-3.1-pro-preview';
-                            apiVersion = 'v1'; 
+                            apiVersion = 'v1beta1'; 
                         }
                     }
 
-                    // QUAN TRỌNG: Dùng v1 theo yêu cầu
+                    // QUAN TRỌNG: Dùng v1beta1 cho preview, v1 cho stable.
                     // Sử dụng location global cho tất cả các model theo yêu cầu của user
                     const actualLocation = 'global';
                     let url = `https://aiplatform.googleapis.com/${apiVersion}/projects/${projectId}/locations/${actualLocation}/publishers/google/models/${vertexModel}:${endpoint}`;
@@ -952,10 +952,8 @@ export const editImageWithInstructions = async (
     modelType: 'flash' | 'pro' = 'flash',
     onLog: (msg: string) => void = () => {}
 ): Promise<string> => {
-    // Use gemini-3.1-flash-image-preview for flash editing
+    // Use gemini-3.1-flash-image-preview or gemini-3-pro-image-preview for ALL editing features
     let model = modelType === 'flash' ? 'gemini-3.1-flash-image-preview' : 'gemini-3-pro-image-preview';
-
-    const calculatedAspectRatio = await getClosestAspectRatio(`data:${mimeType || 'image/png'};base64,${base64Data}`);
 
     const response = await retryWithBackoff(
         async () => {
@@ -966,32 +964,38 @@ export const editImageWithInstructions = async (
 
             try {
                 const config: any = {
-                    imageConfig: {
-                        aspectRatio: calculatedAspectRatio,
-                        imageSize: "2K" // Luôn dùng 2K cho các tính năng chỉnh sửa để giữ chất lượng cao
-                    }
+                    imageConfig: {}
                 };
+                
+                if (model.includes('3.1-flash-image') || model.includes('3-pro-image')) {
+                    // Luôn dùng 2K cho các tính năng chỉnh sửa để giữ chất lượng cao
+                    config.imageConfig.imageSize = "2K"; // 2K is ~2048px, matching optimizePayload
+                }
 
-                // gemini-3.1-flash-image-preview and gemini-3-pro-image-preview require [text, inlineData] order
-                const parts = [
-                    {
-                        text: instruction
-                    },
-                    {
-                        inlineData: {
-                            mimeType: mimeType || 'image/png',
-                            data: cleanBase64(base64Data)
-                        }
-                    }
-                ];
+                // Remove empty imageConfig if not used
+                if (Object.keys(config.imageConfig).length === 0) {
+                    delete config.imageConfig;
+                }
 
                 return await runWithTimeout(
                     freshAi.models.generateContent({
                         model: model,
-                        contents: { parts },
+                        contents: {
+                            parts: [
+                                {
+                                    inlineData: {
+                                        mimeType: mimeType || 'image/png',
+                                        data: cleanBase64(base64Data)
+                                    }
+                                },
+                                {
+                                    text: instruction
+                                }
+                            ]
+                        },
                         config: config
                     }),
-                    180000,
+                    45000,
                     "Image Editing"
                 );
             } catch (e: any) {
@@ -1027,7 +1031,7 @@ export const removeBackgroundImage = async (
     mimeType: string,
     onLog: (msg: string) => void = () => {}
 ): Promise<string> => {
-    const model = 'gemini-2.5-flash-image';
+    const model = 'gemini-3.1-flash-image-preview';
 
     const response = await retryWithBackoff(
         async () => {
@@ -1037,26 +1041,30 @@ export const removeBackgroundImage = async (
             onLog(`> Đang dùng API Key: ${shortKey} | Model: ${model}`);
 
             try {
-                const combinedInstruction = `🔴 PRIORITY 1: REFERENCE IMAGE\nINSTRUCTION: Use this image as the base for editing. Keep the main subject exactly the same.\n🔴 FINAL EXECUTION COMMAND:\n${instruction}`;
-                
+                const config: any = {
+                    imageConfig: {
+                        imageSize: "2K"
+                    }
+                };
+
+                const finalParts = [
+                    { text: "🔴 PRIORITY 1: REFERENCE IMAGE\nINSTRUCTION: Use this image as the base for editing. Keep the main subject exactly the same." },
+                    {
+                        inlineData: {
+                            mimeType: mimeType || 'image/png',
+                            data: cleanBase64(base64Data)
+                        }
+                    },
+                    { text: `🔴 FINAL EXECUTION COMMAND:\n${instruction}` }
+                ];
+
                 return await runWithTimeout(
                     freshAi.models.generateContent({
                         model: model,
-                        contents: {
-                            parts: [
-                                {
-                                    inlineData: {
-                                        mimeType: mimeType || 'image/png',
-                                        data: cleanBase64(base64Data)
-                                    }
-                                },
-                                {
-                                    text: combinedInstruction
-                                }
-                            ]
-                        }
+                        contents: { parts: finalParts },
+                        config: config
                     }),
-                    180000,
+                    45000,
                     "Remove Background"
                 );
             } catch (e: any) {
@@ -1092,7 +1100,7 @@ export const upscaleImage = async (
     mimeType: string,
     onLog: (msg: string) => void = () => {}
 ): Promise<string> => {
-    const model = 'gemini-2.5-flash-image';
+    const model = 'gemini-3.1-flash-image-preview';
 
     const response = await retryWithBackoff(
         async () => {
@@ -1102,26 +1110,30 @@ export const upscaleImage = async (
             onLog(`> Đang dùng API Key: ${shortKey} | Model: ${model}`);
 
             try {
-                const combinedInstruction = `🔴 PRIORITY 1: REFERENCE IMAGE\nINSTRUCTION: Use this image as the base for editing. Keep the main subject exactly the same.\n🔴 FINAL EXECUTION COMMAND:\n${instruction}`;
+                const config: any = {
+                    imageConfig: {
+                        imageSize: "2K"
+                    }
+                };
+
+                const finalParts = [
+                    { text: "🔴 PRIORITY 1: REFERENCE IMAGE\nINSTRUCTION: Use this image as the base for editing. Keep the main subject exactly the same." },
+                    {
+                        inlineData: {
+                            mimeType: mimeType || 'image/png',
+                            data: cleanBase64(base64Data)
+                        }
+                    },
+                    { text: `🔴 FINAL EXECUTION COMMAND:\n${instruction}` }
+                ];
 
                 return await runWithTimeout(
                     freshAi.models.generateContent({
                         model: model,
-                        contents: {
-                            parts: [
-                                {
-                                    inlineData: {
-                                        mimeType: mimeType || 'image/png',
-                                        data: cleanBase64(base64Data)
-                                    }
-                                },
-                                {
-                                    text: combinedInstruction
-                                }
-                            ]
-                        }
+                        contents: { parts: finalParts },
+                        config: config
                     }),
-                    180000,
+                    45000,
                     "Upscale Image"
                 );
             } catch (e: any) {

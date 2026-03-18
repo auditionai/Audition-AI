@@ -232,7 +232,7 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                             vertexModel = 'gemini-3-flash-preview';
                             apiVersion = 'v1beta1'; 
                         } else if (vertexModel.includes('pro')) {
-                            // Vertex AI ID for 3.0 Pro
+                            // Vertex AI ID for 3.1 Pro
                             vertexModel = 'gemini-3.1-pro-preview';
                             apiVersion = 'v1beta1'; 
                         }
@@ -243,20 +243,15 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     const regions = [
                         'global',
                         'us-central1',
-                        'asia-southeast1',
                         'us-east1',
                         'us-west1',
-                        'europe-west4'
+                        'europe-west4',
+                        'asia-southeast1'
                     ];
                     // Chọn vùng dựa trên attempt nếu có, ngược lại ngẫu nhiên
                     let actualLocation = attempt >= 0 
                         ? regions[attempt % regions.length] 
                         : regions[Math.floor(Math.random() * regions.length)];
-                    
-                    // Image models are usually only available in us-central1
-                    if (isImageModel) {
-                        actualLocation = 'us-central1';
-                    }
 
                     const apiEndpoint = actualLocation === 'global' 
                         ? 'aiplatform.googleapis.com' 
@@ -294,15 +289,28 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                             delete payload.generationConfig.safetySettings;
                         }
 
+                        // Move systemInstruction to top level if present
+                        if (payload.generationConfig.systemInstruction) {
+                            if (typeof payload.generationConfig.systemInstruction === 'string') {
+                                payload.systemInstruction = {
+                                    role: 'system',
+                                    parts: [{ text: payload.generationConfig.systemInstruction }]
+                                };
+                            } else {
+                                payload.systemInstruction = payload.generationConfig.systemInstruction;
+                            }
+                            delete payload.generationConfig.systemInstruction;
+                        }
+
                         delete payload.generationConfig.tools;
                     }
                     
-                    // Gemini 3.1 Image Preview requires responseModalities
+                    // Gemini Image Preview requires responseModalities
                     if (isImageModel) {
                         if (!payload.generationConfig) {
                             payload.generationConfig = {};
                         }
-                        payload.generationConfig.responseModalities = ["IMAGE"];
+                        payload.generationConfig.responseModalities = ["TEXT", "IMAGE"];
                     }
                     
                     if (params.config?.tools) {

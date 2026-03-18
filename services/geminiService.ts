@@ -102,7 +102,7 @@ const selectBestStyle = async (prompt: string, styles: any[]): Promise<any | nul
     if (styles.length === 1) return styles[0]; // Only one choice
 
     // Use latest Flash for fast routing
-    const model = 'gemini-3-flash-preview'; 
+    const model = 'gemini-3.0-flash-preview-02-2026'; 
 
     const styleList = styles.map(s => `- ID: ${s.id} | Name: ${s.name} | Keywords: ${s.trigger_prompt}`).join('\n');
 
@@ -208,7 +208,7 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     const { accessToken, projectId, location } = await tokenRes.json();
 
                     // Map model names for Vertex AI
-                    let vertexModel = params.model || (tier === 'flash' ? 'gemini-3.1-flash-image-preview' : 'gemini-3.0-pro-image-preview');
+                    let vertexModel = params.model || (tier === 'flash' ? 'gemini-3-flash-preview' : 'gemini-3.1-pro-preview');
                     let endpoint = 'generateContent';
                     let apiVersion = 'v1beta1'; // Default to v1beta1 for preview models
                     let isImageModel = false;
@@ -218,21 +218,21 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     if (vertexModel.includes('image')) {
                         if (vertexModel.includes('flash')) {
                             // Vertex AI ID for 3.1 Flash Image
-                            vertexModel = 'gemini-3.1-flash-image-preview';
+                            vertexModel = 'gemini-3.1-flash-image-preview-02-2026';
                             apiVersion = 'v1beta1';
                         } else if (vertexModel.includes('pro')) {
                             // Vertex AI ID for 3.0 Pro Image
-                            vertexModel = 'gemini-3.0-pro-image-preview';
+                            vertexModel = 'gemini-3.0-pro-image-preview-02-2026';
                             apiVersion = 'v1beta1';
                         }
                         isImageModel = true;
                     } else {
                         if (vertexModel.includes('flash')) {
-                            // Vertex AI ID for 3 Flash
-                            vertexModel = 'gemini-3-flash-preview';
+                            // Vertex AI ID for 3.0 Flash
+                            vertexModel = 'gemini-3.0-flash-preview-02-2026';
                             apiVersion = 'v1beta1'; 
                         } else if (vertexModel.includes('pro')) {
-                            // Vertex AI ID for 3 Pro
+                            // Vertex AI ID for 3.0 Pro
                             vertexModel = 'gemini-3-pro-preview-02-2026';
                             apiVersion = 'v1beta1'; 
                         }
@@ -384,7 +384,7 @@ const extractImage = (response: any): string | null => {
 export const testApiKey = async (tier: 'flash' | 'pro' = 'flash'): Promise<boolean> => {
     try {
         const freshAi = await getAiClient(tier);
-        const testModel = tier === 'pro' ? 'gemini-3-pro-preview-02-2026' : 'gemini-3-flash-preview';
+        const testModel = tier === 'pro' ? 'gemini-3-pro-preview-02-2026' : 'gemini-3.0-flash-preview-02-2026';
 
         await runWithTimeout(
             freshAi.models.generateContent({
@@ -467,7 +467,7 @@ export const checkConnection = async (key?: string): Promise<{ success: boolean;
         // Sử dụng Flash cho checkConnection (Admin) để ping nhanh và ổn định nhất
         await runWithTimeout(
             ai.models.generateContent({
-                model: 'gemini-3-flash-preview',
+                model: 'gemini-3.0-flash-preview-02-2026',
                 contents: { parts: [{ text: "Ping" }] }
             }),
             15000,
@@ -493,7 +493,7 @@ export const checkConnection = async (key?: string): Promise<{ success: boolean;
 
 // --- NEW: ANALYZE REFERENCE IMAGE (POSE/BG) ---
 const analyzeReferenceImage = async (base64Data: string, onLog: (msg: string) => void = () => {}): Promise<string> => {
-    const model = 'gemini-3-flash-preview'; 
+    const model = 'gemini-3.0-flash-preview-02-2026'; 
 
     try {
         // Optimize image before sending to reduce payload size and prevent 503
@@ -540,7 +540,7 @@ const optimizePromptWithThinking = async (
     onLog: (msg: string) => void = () => {}
 ): Promise<string> => {
     // Sử dụng đúng model theo tier đã chọn
-    const model = tier === 'pro' ? 'gemini-3-pro-preview-02-2026' : 'gemini-3-flash-preview'; 
+    const model = tier === 'pro' ? 'gemini-3-pro-preview-02-2026' : 'gemini-3.0-flash-preview-02-2026'; 
 
     try {
         // Sử dụng client tương ứng với tier
@@ -667,7 +667,7 @@ export const generateImage = async (
 ): Promise<string> => {
     // Use Gemini 3.1 Flash Image Preview for FLASH Tier
     // Use Gemini 3.0 Pro Image Preview for PRO Tier
-    const model = modelType === 'flash' ? 'gemini-3.1-flash-image-preview' : 'gemini-3.0-pro-image-preview'; 
+    const model = modelType === 'flash' ? 'gemini-3.1-flash-image-preview-02-2026' : 'gemini-3.0-pro-image-preview-02-2026'; 
     onLog(`Initializing ${model} Pipeline...`);
     
     // 1. PROCESS REFERENCE IMAGE (VISUAL & TEXTUAL ANALYSIS)
@@ -965,7 +965,7 @@ export const editImageWithInstructions = async (
     onLog: (msg: string) => void = () => {}
 ): Promise<string> => {
     // Use gemini-3.1-flash-image-preview or gemini-3.0-pro-image-preview for ALL editing features
-    let model = modelType === 'flash' ? 'gemini-3.1-flash-image-preview' : 'gemini-3.0-pro-image-preview';
+    let model = modelType === 'flash' ? 'gemini-3.1-flash-image-preview-02-2026' : 'gemini-3.0-pro-image-preview-02-2026';
 
     const response = await retryWithBackoff(
         async () => {
@@ -1043,7 +1043,7 @@ export const removeBackgroundImage = async (
     mimeType: string,
     onLog: (msg: string) => void = () => {}
 ): Promise<string> => {
-    const model = 'gemini-3.1-flash-image-preview';
+    const model = 'gemini-3.1-flash-image-preview-02-2026';
 
     const response = await retryWithBackoff(
         async () => {
@@ -1112,7 +1112,7 @@ export const upscaleImage = async (
     mimeType: string,
     onLog: (msg: string) => void = () => {}
 ): Promise<string> => {
-    const model = 'gemini-3.1-flash-image-preview';
+    const model = 'gemini-3.1-flash-image-preview-02-2026';
 
     const response = await retryWithBackoff(
         async () => {

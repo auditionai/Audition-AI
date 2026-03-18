@@ -143,16 +143,15 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           if (videoConfig && videoConfig.isActive && videoConfig.url) {
               let videoId = TUTORIAL_VIDEO_ID;
               try {
-                  const urlStr = videoConfig.url.trim();
-                  // Check if it's just an 11-character ID
-                  if (/^[a-zA-Z0-9_-]{11}$/.test(urlStr)) {
-                      videoId = urlStr;
-                  } else {
-                      const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|shorts\/|live\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-                      const match = urlStr.match(regExp);
-                      if (match && match[2].length === 11) {
-                          videoId = match[2];
+                  const urlObj = new URL(videoConfig.url);
+                  if (urlObj.hostname.includes('youtube.com')) {
+                      if (urlObj.pathname.includes('/embed/')) {
+                          videoId = urlObj.pathname.split('/embed/')[1].split('?')[0];
+                      } else {
+                          videoId = urlObj.searchParams.get('v') || videoId;
                       }
+                  } else if (urlObj.hostname.includes('youtu.be')) {
+                      videoId = urlObj.pathname.slice(1).split('?')[0];
                   }
               } catch (e) {
                   console.warn("Invalid video URL format", e);
@@ -479,11 +478,11 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
     await new Promise(r => setTimeout(r, 100));
 
     try {
-        // --- NEW: API KEY PRE-FLIGHT TEST (120s Timeout / 15s Retry) ---
+        // --- NEW: API KEY PRE-FLIGHT TEST (120s Timeout / 5s Retry) ---
         let isKeyValid = false;
         const startTime = Date.now();
         const TIMEOUT_LIMIT = 300000; // 5 mins
-        const RETRY_INTERVAL = 15000; // 15s
+        const RETRY_INTERVAL = 5000; // 5s
         let attempt = 0;
 
         while (Date.now() - startTime < TIMEOUT_LIMIT) {
@@ -491,7 +490,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
             addLog(`Đang kết nối đến máy chủ đồ họa Google (Lần ${attempt})...`);
             
             const stepStart = Date.now();
-            isKeyValid = await testApiKey(aiModel, attempt);
+            isKeyValid = await testApiKey(aiModel);
             
             if (isKeyValid) break;
             

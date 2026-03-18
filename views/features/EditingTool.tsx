@@ -100,7 +100,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
      }
 
      // Cost Calculation: Photo Editor is more expensive (Premium)
-     const cost = isMagicEditor ? 3 : (isUpscaler ? 2 : 1); 
+     const cost = isMagicEditor ? 3 : 2; 
      const user = await getUserProfile();
      if (!user) return;
      
@@ -127,7 +127,8 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
              instruction, 
              mimeType, 
              aiModel,
-             (msg) => setProgressLogs(prev => [...prev, msg])
+             (msg) => setProgressLogs(prev => [...prev, msg]),
+             feature.id
          );
 
          if (result) {
@@ -302,33 +303,35 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
          </div>
 
          {/* MODEL SELECTOR */}
-         <div className="space-y-2">
-             <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1">
-                 <Icons.Cpu className="w-3 h-3" />
-                 {lang === 'vi' ? 'AI Model' : 'AI Model'}
-             </label>
-             <div className="flex bg-white/5 p-1 rounded-xl border border-white/10">
-                 <button 
-                     onClick={() => setAiModel('flash')}
-                     className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1 ${aiModel === 'flash' ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
-                 >
-                     <Icons.Zap className="w-3 h-3" />
-                     Flash (Fast)
-                 </button>
-                 <button 
-                     onClick={() => setAiModel('pro')}
-                     className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1 ${aiModel === 'pro' ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
-                 >
-                     <Icons.Sparkles className="w-3 h-3" />
-                     Pro (High Quality)
-                 </button>
+         {isMagicEditor && (
+             <div className="space-y-2">
+                 <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1">
+                     <Icons.Cpu className="w-3 h-3" />
+                     {lang === 'vi' ? 'AI Model' : 'AI Model'}
+                 </label>
+                 <div className="flex bg-white/5 p-1 rounded-xl border border-white/10">
+                     <button 
+                         onClick={() => setAiModel('flash')}
+                         className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1 ${aiModel === 'flash' ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                     >
+                         <Icons.Zap className="w-3 h-3" />
+                         Flash (Fast)
+                     </button>
+                     <button 
+                         onClick={() => setAiModel('pro')}
+                         className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1 ${aiModel === 'pro' ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                     >
+                         <Icons.Sparkles className="w-3 h-3" />
+                         Pro (High Quality)
+                     </button>
+                 </div>
              </div>
-         </div>
+         )}
 
          {/* COST & ACTION */}
          <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/10">
              <span className="text-xs text-slate-400 font-bold uppercase">{lang === 'vi' ? 'Chi phí' : 'Cost'}</span>
-             <span className="text-sm font-bold text-audi-yellow">{isMagicEditor ? 3 : (isUpscaler ? 2 : 1)} Vcoin</span>
+             <span className="text-sm font-bold text-audi-yellow">{isMagicEditor ? 3 : 2} Vcoin</span>
          </div>
 
          <button 

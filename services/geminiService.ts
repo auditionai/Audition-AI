@@ -950,10 +950,18 @@ export const editImageWithInstructions = async (
     instruction: string, 
     mimeType: string,
     modelType: 'flash' | 'pro' = 'flash',
-    onLog: (msg: string) => void = () => {}
+    onLog: (msg: string) => void = () => {},
+    featureId?: string
 ): Promise<string> => {
-    // Use gemini-2.5-flash-image for editing as per documentation
-    const model = modelType === 'flash' ? 'gemini-2.5-flash-image' : 'gemini-3-pro-image-preview'; 
+    // Use gemini-2.5-flash-image for background removal and upscaling
+    // Use gemini-3.1-flash-image-preview or gemini-3-pro-image-preview for editing
+    let model = '';
+    if (featureId === 'remove_bg_pro' || featureId === 'sharpen_upscale') {
+        model = 'gemini-2.5-flash-image';
+        modelType = 'flash'; // Force flash key for these features
+    } else {
+        model = modelType === 'flash' ? 'gemini-3.1-flash-image-preview' : 'gemini-3-pro-image-preview';
+    }
 
     const response = await retryWithBackoff(
         async () => {

@@ -15,8 +15,9 @@ import { PayOSGateway } from './views/PayOSGateway';
 import { Language, Theme, ViewId, Feature } from './types';
 import { APP_CONFIG } from './constants';
 import { supabase } from './services/supabaseClient';
-import { logVisit, updateLastActive } from './services/economyService';
+import { logVisit, updateLastActive, getMaintenanceMode } from './services/economyService';
 import { NotificationProvider, useNotification } from './components/NotificationSystem';
+import { Icons } from './components/Icons';
 
 function AppContent() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -31,6 +32,9 @@ function AppContent() {
 
   // Lifted state for Daily Checkin Modal
   const [showCheckin, setShowCheckin] = useState(false);
+
+  // Maintenance Mode State
+  const [maintenanceMode, setMaintenanceMode] = useState({ isActive: false, message: "" });
 
   // Custom Notification Hook
   const { notify } = useNotification();
@@ -61,6 +65,15 @@ function AppContent() {
 
     // Check for existing session on load
     if (supabase) {
+        // Fetch Maintenance Mode periodically
+        const fetchMaintenance = () => {
+            getMaintenanceMode().then(res => {
+                setMaintenanceMode(res);
+            });
+        };
+        fetchMaintenance();
+        const maintenanceInterval = setInterval(fetchMaintenance, 60000); // Check every minute
+
         supabase.auth.getSession().then(({ data: { session } }: any) => {
             if (session) {
                 setIsAuthenticated(true);
@@ -82,6 +95,7 @@ function AppContent() {
         return () => {
             subscription.unsubscribe();
             clearInterval(activeInterval);
+            clearInterval(maintenanceInterval);
             document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
     }
@@ -156,6 +170,10 @@ function AppContent() {
   };
 
   const handleSelectFeature = (feature: Feature) => {
+    if (maintenanceMode.isActive && userRole !== 'admin') {
+        notify(maintenanceMode.message, 'warning');
+        return;
+    }
     setSelectedFeature(feature);
     setCurrentView('tool_workspace');
   };
@@ -171,7 +189,7 @@ function AppContent() {
   const renderContent = () => {
     switch (currentView) {
       case 'home':
-        return <Home lang={lang} onSelectFeature={handleSelectFeature} onNavigate={handleNavigate} onOpenCheckin={() => setShowCheckin(true)} />;
+        return <Home lang={lang} onSelectFeature={handleSelectFeature} onNavigate={handleNavigate} onOpenCheckin={() => setShowCheckin(true)} isMaintenance={maintenanceMode.isActive && userRole !== 'admin'} maintenanceMessage={maintenanceMode.message} />;
       case 'tool_workspace':
         return selectedFeature ? (
           <ToolWorkspace 
@@ -180,9 +198,9 @@ function AppContent() {
             onBack={() => handleNavigate('home')} 
             onNavigateToFeature={handleNavigateToFeature}
           />
-        ) : <Home lang={lang} onSelectFeature={handleSelectFeature} onNavigate={handleNavigate} onOpenCheckin={() => setShowCheckin(true)} />;
+        ) : <Home lang={lang} onSelectFeature={handleSelectFeature} onNavigate={handleNavigate} onOpenCheckin={() => setShowCheckin(true)} isMaintenance={maintenanceMode.isActive && userRole !== 'admin'} maintenanceMessage={maintenanceMode.message} />;
       case 'tools':
-        return <Home lang={lang} onSelectFeature={handleSelectFeature} onNavigate={handleNavigate} onOpenCheckin={() => setShowCheckin(true)} />;
+        return <Home lang={lang} onSelectFeature={handleSelectFeature} onNavigate={handleNavigate} onOpenCheckin={() => setShowCheckin(true)} isMaintenance={maintenanceMode.isActive && userRole !== 'admin'} maintenanceMessage={maintenanceMode.message} />;
       case 'admin':
         return <Admin lang={lang} isAdmin={userRole === 'admin'} />;
       case 'settings':
@@ -209,7 +227,7 @@ function AppContent() {
             />
         ) : <TopUp lang={lang} onNavigate={handleNavigate} />;
       default:
-        return <Home lang={lang} onSelectFeature={handleSelectFeature} onNavigate={handleNavigate} onOpenCheckin={() => setShowCheckin(true)} />;
+        return <Home lang={lang} onSelectFeature={handleSelectFeature} onNavigate={handleNavigate} onOpenCheckin={() => setShowCheckin(true)} isMaintenance={maintenanceMode.isActive && userRole !== 'admin'} maintenanceMessage={maintenanceMode.message} />;
     }
   };
 
@@ -228,6 +246,26 @@ function AppContent() {
       showCheckin={showCheckin}
       setShowCheckin={setShowCheckin}
     >
+      {/* Maintenance Modal Overlay */}
+      {maintenanceMode.isActive && userRole !== 'admin' && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+              <div className="bg-[#12121a] border border-red-500/30 rounded-2xl p-8 max-w-md w-full text-center shadow-2xl animate-fade-in">
+                  <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                      <Icons.AlertTriangle className="w-10 h-10 text-red-500" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-white mb-4">Hệ Thống Đang Bảo Trì</h2>
+                  <p className="text-slate-400 leading-relaxed mb-8">
+                      {maintenanceMode.message || "Hệ thống đang bảo trì, vui lòng quay lại sau."}
+                  </p>
+                  <button 
+                      onClick={() => window.location.reload()}
+                      className="px-6 py-3 bg-white text-black font-bold rounded-xl hover:bg-slate-200 transition-colors w-full"
+                  >
+                      Tải lại trang
+                  </button>
+              </div>
+          </div>
+      )}
       {renderContent()}
     </Layout>
   );

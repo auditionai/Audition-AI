@@ -14,6 +14,8 @@ import {
     deleteGiftcode, 
     getGiftcodePromoConfig, 
     saveGiftcodePromoConfig, 
+    getTutorialVideo,
+    saveTutorialVideo,
     savePromotion, 
     deletePromotion,
     adminApproveTransaction, 
@@ -29,7 +31,9 @@ import {
     getUnifiedHistory,
     getGiftcodeUsages,
     getGenerationPrices,
-    saveGenerationPrices
+    saveGenerationPrices,
+    getMaintenanceMode,
+    saveMaintenanceMode
 } from '../services/economyService';
 import { getAllImagesFromStorage, deleteImageFromStorage, checkR2Connection, getUserImagesFromStorage, cleanupExpiredImages, cleanupR2Directly } from '../services/storageService';
 import { checkConnection, analyzeStyleImage } from '../services/geminiService';
@@ -315,6 +319,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       pro_1k: 5, pro_2k: 10, pro_4k: 15,
       couple: 2, group3: 4, group4: 6
   });
+  const [maintenanceMode, setMaintenanceMode] = useState({ isActive: false, message: "Hệ thống đang bảo trì, vui lòng quay lại sau." });
 
   // API Key States
   const [apiKey, setApiKey] = useState('');
@@ -325,6 +330,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   
   // Giftcode Promo Config
   const [giftcodePromo, setGiftcodePromo] = useState({ text: '', isActive: false });
+
+  // Tutorial Video Config
+  const [tutorialVideo, setTutorialVideo] = useState({ url: '', isActive: true });
 
   // Search States
   const [userSearchEmail, setUserSearchEmail] = useState('');
@@ -396,10 +404,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
         init();
     }
     // Get current user email for recovery instructions
-    supabase.auth.getUser().then((response: any) => {
-        const data = response.data;
-        if (data?.user?.email) setCurrentUserEmail(data.user.email);
-    });
+    if (supabase) {
+      supabase.auth.getUser().then((response: any) => {
+          const data = response.data;
+          if (data?.user?.email) setCurrentUserEmail(data.user.email);
+      });
+    }
   }, [isAdmin]);
 
   const refreshData = async () => {
@@ -420,11 +430,17 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       const promoConfig = await getGiftcodePromoConfig();
       setGiftcodePromo(promoConfig);
 
+      const tutorialConfig = await getTutorialVideo();
+      setTutorialVideo(tutorialConfig);
+
       const styles = await getStylePresets();
       setStylePresets(styles || []);
 
       const prices = await getGenerationPrices();
       setGenerationPrices(prices);
+
+      const maintenance = await getMaintenanceMode();
+      setMaintenanceMode(maintenance);
   };
 
   const runSystemChecks = async (specificKey?: string) => {
@@ -643,6 +659,19 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           if (result.error?.includes('relation "public.system_settings" does not exist')) {
               setShowGiftcodeFix(true);
           }
+      }
+  }
+
+  const handleSaveTutorialVideo = async () => {
+      if (tutorialVideo.isActive && !tutorialVideo.url.trim()) {
+          showToast('Vui lòng nhập link video YouTube!', 'error');
+          return;
+      }
+      const result = await saveTutorialVideo(tutorialVideo.url, tutorialVideo.isActive);
+      if (result.success) {
+          showToast('Đã lưu link video hướng dẫn thành công!');
+      } else {
+          showToast('Lỗi lưu: ' + result.error, 'error');
       }
   }
 
@@ -1001,6 +1030,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex justify-between items-center">
                       <h2 className="text-lg md:text-2xl font-bold text-white">Giao Dịch</h2>
+                      <div className="text-xs text-slate-400">Users fetched: {stats?.usersList?.length || 0}</div>
                       <div className="flex gap-2">
                           {selectedTxIds.length > 0 && (
                               <div className="flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-lg animate-fade-in">
@@ -1460,6 +1490,90 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       </div>
                   </div>
 
+                  {/* Tutorial Video Configuration */}
+                  <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
+                      <div className="flex justify-between items-center mb-4">
+                          <h3 className="font-bold text-lg text-white flex items-center gap-2">
+                              <Icons.Play className="w-5 h-5 text-audi-pink" />
+                              Video Hướng Dẫn (Trình Tạo Ảnh)
+                          </h3>
+                          <button 
+                              onClick={handleSaveTutorialVideo}
+                              className="px-4 py-2 bg-audi-pink/20 text-audi-pink font-bold rounded-lg text-sm hover:bg-audi-pink hover:text-white transition-colors border border-audi-pink/30"
+                          >
+                              Lưu Cấu Hình
+                          </button>
+                      </div>
+                      
+                      <div className="space-y-4">
+                          <div className="flex items-center gap-3">
+                              <input 
+                                  type="checkbox" 
+                                  id="tutorialVideoToggle"
+                                  checked={tutorialVideo.isActive}
+                                  onChange={(e) => setTutorialVideo({...tutorialVideo, isActive: e.target.checked})}
+                                  className="w-5 h-5 rounded border-white/20 bg-black/50 text-audi-pink focus:ring-audi-pink focus:ring-offset-gray-900"
+                              />
+                              <label htmlFor="tutorialVideoToggle" className="text-white font-medium">Hiển thị video hướng dẫn</label>
+                          </div>
+                          <div>
+                              <label className="text-xs text-slate-400 mb-1 block">Link Video YouTube (URL)</label>
+                              <input 
+                                  type="text"
+                                  value={tutorialVideo.url} 
+                                  onChange={e => setTutorialVideo({...tutorialVideo, url: e.target.value})} 
+                                  className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-white"
+                                  placeholder="Ví dụ: https://www.youtube.com/watch?v=ba2WR8txe_c"
+                              />
+                              <p className="text-xs text-slate-500 mt-2">
+                                  Hỗ trợ các định dạng link: youtube.com/watch?v=..., youtu.be/..., youtube.com/embed/...
+                              </p>
+                          </div>
+                      </div>
+                  </div>
+
+                  {/* Maintenance Mode Configuration */}
+                  <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
+                      <div className="flex justify-between items-center mb-4">
+                          <h3 className="font-bold text-lg text-white flex items-center gap-2">
+                              <Icons.AlertTriangle className="w-5 h-5 text-red-500" />
+                              Chế độ bảo trì
+                          </h3>
+                          <button 
+                              onClick={async () => {
+                                  const res = await saveMaintenanceMode(maintenanceMode.isActive, maintenanceMode.message);
+                                  if (res.success) showToast("Đã lưu cấu hình bảo trì thành công!", "success");
+                                  else showToast(`Lỗi khi lưu cấu hình bảo trì: ${res.error}`, "error");
+                              }}
+                              className="px-4 py-2 bg-red-500 text-white font-bold rounded-lg text-sm hover:bg-red-600 transition-colors"
+                          >
+                              Lưu Cấu Hình
+                          </button>
+                      </div>
+                      
+                      <div className="space-y-4">
+                          <div className="flex items-center gap-3">
+                              <input 
+                                  type="checkbox" 
+                                  id="maintenanceToggle"
+                                  checked={maintenanceMode.isActive}
+                                  onChange={(e) => setMaintenanceMode({...maintenanceMode, isActive: e.target.checked})}
+                                  className="w-5 h-5 rounded border-white/20 bg-black/50 text-red-500 focus:ring-red-500 focus:ring-offset-gray-900"
+                              />
+                              <label htmlFor="maintenanceToggle" className="text-white font-medium">Bật chế độ bảo trì</label>
+                          </div>
+                          <div>
+                              <label className="text-xs text-slate-400 mb-1 block">Thông báo bảo trì</label>
+                              <textarea 
+                                  value={maintenanceMode.message} 
+                                  onChange={e => setMaintenanceMode({...maintenanceMode, message: e.target.value})} 
+                                  className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-white h-24 resize-none"
+                                  placeholder="Hệ thống đang bảo trì, vui lòng quay lại sau."
+                              />
+                          </div>
+                      </div>
+                  </div>
+
                   {/* Generation Prices Configuration */}
                   <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
                       <div className="flex justify-between items-center mb-4">
@@ -1537,12 +1651,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
                       <h3 className="font-bold text-lg text-white mb-4 flex items-center gap-2">
                           <Icons.Lock className="w-5 h-5 text-audi-pink" />
-                          Thêm mới Gemini API Key (System)
+                          Thêm mới Google Cloud Service Account JSON (Vertex AI)
                       </h3>
                       <div className="space-y-4">
                           <div>
                               <div className="flex justify-between items-end mb-2">
-                                  <label className="text-xs font-bold text-slate-400 uppercase">Google GenAI API Key</label>
+                                  <label className="text-xs font-bold text-slate-400 uppercase">Service Account JSON</label>
                                   <div className="flex items-center gap-2">
                                       <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${
                                           keyStatus === 'valid' ? 'bg-green-500/20 text-green-400' :
@@ -1557,31 +1671,33 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   </div>
                               </div>
                               <div className="flex gap-2 relative">
-                                  <select 
+                                  <select
                                       value={apiKeyTier}
                                       onChange={(e) => setApiKeyTier(e.target.value as 'flash' | 'pro')}
-                                      className="bg-black/40 border border-white/10 rounded-lg p-3 text-white font-bold text-sm"
+                                      className="bg-black/40 border border-white/10 rounded-lg p-3 text-white text-sm outline-none focus:border-audi-pink"
                                   >
-                                      <option value="flash">Flash Tier</option>
-                                      <option value="pro">Pro Tier</option>
+                                      <option value="flash">Flash Key</option>
+                                      <option value="pro">Pro Key</option>
                                   </select>
-                                  <input 
-                                      type={showKey ? "text" : "password"}
-                                      value={apiKey}
-                                      onChange={(e) => {
-                                          setApiKey(e.target.value);
-                                          setKeyStatus('unknown');
-                                      }}
-                                      placeholder="AIzaSy..."
-                                      className="flex-1 bg-black/40 border border-white/10 rounded-lg p-3 text-white font-mono text-sm pr-12"
-                                  />
-                                  <button 
-                                    onClick={() => setShowKey(!showKey)} 
-                                    className="absolute right-36 top-3 text-slate-500 hover:text-white hidden md:block"
-                                    title="Hiện/Ẩn Key"
-                                  >
-                                      {showKey ? <Icons.Eye className="w-5 h-5" /> : <Icons.Lock className="w-5 h-5" />}
-                                  </button>
+                                  <div className="flex-1 relative">
+                                      <input 
+                                          type={showKey ? "text" : "password"}
+                                          value={apiKey}
+                                          onChange={(e) => {
+                                              setApiKey(e.target.value);
+                                              setKeyStatus('unknown');
+                                          }}
+                                          placeholder='{"type": "service_account", "project_id": "...", ...}'
+                                          className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-white font-mono text-sm pr-12"
+                                      />
+                                      <button 
+                                        onClick={() => setShowKey(!showKey)} 
+                                        className="absolute right-3 top-3 text-slate-500 hover:text-white hidden md:block"
+                                        title="Hiện/Ẩn Key"
+                                      >
+                                          {showKey ? <Icons.Eye className="w-5 h-5" /> : <Icons.Lock className="w-5 h-5" />}
+                                      </button>
+                                  </div>
                                   <button onClick={handleSaveApiKey} disabled={keyStatus === 'checking'} className="px-6 py-3 bg-audi-pink text-white font-bold rounded-lg hover:bg-pink-600 disabled:opacity-50 text-sm whitespace-nowrap">
                                       {keyStatus === 'checking' ? <Icons.Loader className="animate-spin w-5 h-5"/> : 'Thêm Key'}
                                   </button>
@@ -1597,7 +1713,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
                       <h3 className="font-bold text-lg text-white mb-4 flex items-center gap-2">
                           <Icons.Database className="w-5 h-5 text-audi-cyan" />
-                          Danh sách API Key trong Database
+                          Danh sách Service Account trong Database
                       </h3>
                       
                       <div className="hidden md:block overflow-x-auto">

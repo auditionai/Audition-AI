@@ -1,6 +1,6 @@
 import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from "@google/genai";
-import { getSystemApiKey, reportKeyFailure, isKeyDisabled } from "./economyService";
 import { createTextureSheet, optimizePayload, createSolidFence, createMasterReferenceSheet } from "../utils/imageProcessor";
+import { getSystemApiKey, reportKeyFailure } from "./economyService";
 
 export interface CharacterData {
   id: number;
@@ -68,9 +68,9 @@ const retryWithBackoff = async <T>(
 
 // --- NEW: ANALYZE STYLE IMAGE (For Admin) ---
 export const analyzeStyleImage = async (imageBase64: string): Promise<string> => {
-    const model = 'gemini-3.1-pro-preview'; // Use pro for stability
+    const model = 'gemini-3.1-pro-preview'; // Use 3.1 pro for analysis
 
-    const result = await retryWithBackoff(
+    const result: any = await retryWithBackoff(
         async () => {
             const freshAi = await getAiClient('pro');
             try {
@@ -84,7 +84,7 @@ export const analyzeStyleImage = async (imageBase64: string): Promise<string> =>
                     }
                 });
             } catch (e) {
-                reportKeyFailure((freshAi as any)._internalApiKey);
+                
                 throw e;
             }
         },
@@ -101,7 +101,7 @@ const selectBestStyle = async (prompt: string, styles: any[]): Promise<any | nul
     if (!styles || styles.length === 0) return null;
     if (styles.length === 1) return styles[0]; // Only one choice
 
-    // Use Flash for fast routing
+    // Use latest Flash for fast routing
     const model = 'gemini-3-flash-preview'; 
 
     const styleList = styles.map(s => `- ID: ${s.id} | Name: ${s.name} | Keywords: ${s.trigger_prompt}`).join('\n');
@@ -122,7 +122,7 @@ const selectBestStyle = async (prompt: string, styles: any[]): Promise<any | nul
     try {
         // AGGRESSIVE FAIL-FAST: No retries, 5s timeout
         const freshAi = await getAiClient('flash');
-        const result = await runWithTimeout(
+        const result: any = await runWithTimeout(
             freshAi.models.generateContent({
                 model: model,
                 contents: { parts: [{ text: routerPrompt }] }
@@ -154,39 +154,178 @@ const runWithTimeout = <T>(promise: Promise<T>, ms: number, label: string): Prom
 
 // Cấu hình timeout cao hơn cho Client (mặc định fetch là ngắn)
 const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string) => {
-    // 1. Specific key (testing)
-    if (specificKey) {
-        const ai = new GoogleGenAI({ apiKey: specificKey });
-        (ai as any)._internalApiKey = specificKey;
-        return ai;
+    let apiKey: string | null | undefined = specificKey;
+    if (!apiKey) {
+        apiKey = await getSystemApiKey(tier);
+    }
+    if (!apiKey) {
+        throw new Error("No API Key or Service Account available. Please add one in the Admin Panel.");
+    }
+    
+    const isServiceAccount = apiKey.includes('project_id') && apiKey.includes('private_key');
+
+    // 1. Nếu là API Key thường (AI Studio) -> Dùng SDK chính thức
+    if (!isServiceAccount) {
+        const ai = new GoogleGenAI({ apiKey });
+        return {
+            ...ai,
+            _internalApiKey: apiKey,
+            models: {
+                ...ai.models,
+                generateContent: async (params: any) => {
+                    try {
+                        return await ai.models.generateContent(params);
+                    } catch (error: any) {
+                        const isRateLimit = error?.status === 429 || error?.message?.includes('429') || error?.message?.includes('quota');
+                        const isAuthError = error?.status === 403 || error?.message?.includes('403') || error?.message?.includes('PERMISSION_DENIED');
+                        if (isRateLimit || isAuthError) {
+                            reportKeyFailure(apiKey!);
+                        }
+                        throw error;
+                    }
+                }
+            },
+            files: ai.files
+        } as any;
     }
 
-    // 2. Env Key (Priority - User Selected Key in AI Studio)
-    // We MUST prioritize the user's selected key because gemini-3-pro-image-preview requires a paid key.
-    // BUT we must also respect the blacklist if this key has failed recently.
-    if (process.env.API_KEY && !isKeyDisabled(process.env.API_KEY)) {
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        (ai as any)._internalApiKey = process.env.API_KEY;
-        return ai;
-    }
+    // 2. Nếu là Service Account JSON -> Dùng Vertex AI REST API
+    return {
+        _internalApiKey: apiKey,
+        models: {
+            generateContent: async (params: any) => {
+                try {
+                    // Xin Access Token từ Netlify Function
+                    const tokenRes = await fetch('/api/get-vertex-token', { 
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ service_account_json: apiKey })
+                    });
+                    if (!tokenRes.ok) {
+                        const err = await tokenRes.json().catch(() => ({}));
+                        throw new Error(err.error || 'Failed to get Vertex Token from Server');
+                    }
+                    const { accessToken, projectId, location } = await tokenRes.json();
 
-    // 3. DB Key (Rotation System - Fallback)
-    const dbKey = await getSystemApiKey(tier);
-    if (dbKey) {
-        const ai = new GoogleGenAI({ apiKey: dbKey });
-        (ai as any)._internalApiKey = dbKey;
-        return ai;
-    }
+                    // Map model names for Vertex AI
+                    let vertexModel = params.model;
+                    let endpoint = 'generateContent';
+                    let apiVersion = 'v1beta1'; // Default to v1beta1 for preview models
+                    let isGlobalImageModel = false;
+                    
+                    // --- STANDARD PIPELINE ---
+                    // Map models to stable versions for Vertex AI
+                    if (vertexModel.includes('image')) {
+                        if (vertexModel.includes('flash')) {
+                            vertexModel = 'gemini-3.1-flash-image-preview';
+                            apiVersion = 'v1'; // Gemini 3.1 Image uses v1
+                        } else if (vertexModel.includes('pro')) {
+                            vertexModel = 'gemini-3-pro-image-preview';
+                            apiVersion = 'v1beta1'; // Gemini 3 Pro Image uses v1beta1
+                        }
+                        isGlobalImageModel = true; // Both use global location
+                    } else {
+                        if (vertexModel.includes('flash')) {
+                            // On Vertex AI, use 3 Flash
+                            vertexModel = 'gemini-3-flash-preview';
+                            apiVersion = 'v1beta1'; 
+                        } else if (vertexModel.includes('pro')) {
+                            // On Vertex AI, use 3.1 Pro
+                            vertexModel = 'gemini-3.1-pro-preview';
+                            apiVersion = 'v1beta1'; 
+                        }
+                    }
 
-    // If everything fails and we have an env key (even if disabled), try it as a last resort
-    if (process.env.API_KEY) {
-         console.warn("[System] All keys exhausted or disabled. Forcing retry with Env Key.");
-         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-         (ai as any)._internalApiKey = process.env.API_KEY;
-         return ai;
-    }
+                    // QUAN TRỌNG: Dùng v1beta1 cho preview, v1 cho stable.
+                    // Sử dụng location global cho tất cả các model theo yêu cầu
+                    let url = `https://aiplatform.googleapis.com/${apiVersion}/projects/${projectId}/locations/global/publishers/google/models/${vertexModel}:${endpoint}`;
+                    
+                    // Chuyển đổi config sang generationConfig cho REST API
+                    let payloadContents = params.contents;
+                    if (typeof payloadContents === 'string') {
+                        payloadContents = [{ role: 'user', parts: [{ text: payloadContents }] }];
+                    } else if (payloadContents.parts) {
+                        payloadContents = [payloadContents];
+                    }
+                    
+                    payloadContents = payloadContents.map((c: any) => {
+                        if (!c.role) {
+                            c.role = 'user';
+                        }
+                        return c;
+                    });
 
-    throw new Error("API Key missing. Set process.env.API_KEY or configure in Admin.");
+                    const payload: any = {
+                        contents: payloadContents,
+                    };
+                    
+                    if (params.config) {
+                        payload.generationConfig = { ...params.config };
+                        
+                        // Move safetySettings to top level if present
+                        if (payload.generationConfig.safetySettings) {
+                            payload.safetySettings = payload.generationConfig.safetySettings;
+                            delete payload.generationConfig.safetySettings;
+                        }
+
+                        delete payload.generationConfig.tools;
+                        
+                        // Map imageConfig sang generationConfig cho model ảnh (Vertex AI REST API)
+                        if (params.config.imageConfig) {
+                            payload.generationConfig.image_config = {
+                                aspect_ratio: params.config.imageConfig.aspectRatio,
+                                image_size: params.config.imageConfig.imageSize
+                            };
+                            delete payload.generationConfig.imageConfig;
+                        }
+                        
+                        // Gemini 3.1 Image Preview requires response_modalities
+                        if (isGlobalImageModel) {
+                            payload.generationConfig.response_modalities = ["IMAGE"];
+                        }
+                    }
+                    
+                    if (params.config?.tools) {
+                        payload.tools = params.config.tools;
+                    }
+
+                    // Also check top-level safetySettings in params
+                    if (params.safetySettings) {
+                        payload.safetySettings = params.safetySettings;
+                    }
+
+                    const res = await fetch(url, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${accessToken}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!res.ok) {
+                        const err = await res.json().catch(() => ({}));
+                        throw new Error(err.error?.message || `Vertex AI Error: ${res.status}`);
+                    }
+
+                    const data = await res.json();
+                    
+                    // Giả lập response của SDK
+                    return {
+                        text: data.candidates?.[0]?.content?.parts?.[0]?.text || '',
+                        candidates: data.candidates
+                    };
+                } catch (error: any) {
+                    const isRateLimit = error?.status === 429 || error?.message?.includes('429') || error?.message?.includes('quota');
+                    const isAuthError = error?.status === 403 || error?.message?.includes('403') || error?.message?.includes('PERMISSION_DENIED');
+                    if (isRateLimit || isAuthError) {
+                        reportKeyFailure(apiKey!);
+                    }
+                    throw error;
+                }
+            }
+        }
+    } as any;
 };
 
 // --- ERROR HANDLER & EXTRACTOR ---
@@ -233,21 +372,14 @@ const extractImage = (response: any): string | null => {
 
 // --- NEW: TEST API KEY ---
 export const testApiKey = async (tier: 'flash' | 'pro' = 'flash'): Promise<boolean> => {
-    let currentKey = "";
     try {
-        // Use the correct client based on the selected tier
         const freshAi = await getAiClient(tier);
-        currentKey = (freshAi as any)._internalApiKey;
-        
-        // Use a lightweight model for testing based on tier
-        // For Pro: Use gemini-3.1-pro-preview (Text)
-        // For Flash: Use gemini-3-flash-preview (Text) - Faster & Cheaper
         const testModel = tier === 'pro' ? 'gemini-3.1-pro-preview' : 'gemini-3-flash-preview';
 
         await runWithTimeout(
             freshAi.models.generateContent({
                 model: testModel,
-                contents: { parts: [{ text: "Hello" }] }
+                contents: [{ role: 'user', parts: [{ text: "Hello" }] }]
             }),
             15000, // 15s Timeout
             "API Key Authentication"
@@ -255,23 +387,6 @@ export const testApiKey = async (tier: 'flash' | 'pro' = 'flash'): Promise<boole
         return true;
     } catch (e: any) {
         console.warn(`API Key Test Failed (${tier})`, e);
-        
-        const isServerBusy = e.status === 503 || 
-                             e.message?.includes('503') || 
-                             e.message?.includes('Overloaded') ||
-                             e.message?.includes('timed out') || e.message?.includes('Timeout');
-
-        // CRITICAL FIX: If the error is 503 (Overloaded) or Timeout,
-        // the API Key is actually VALID and authenticated successfully.
-        if (isServerBusy) {
-            console.log(`[System] API Key (${tier}) is VALID, but Gemini is busy (503/Timeout). Passing test.`);
-            return true; 
-        }
-
-        // Only ban the key if it's a real error (e.g., 400 Bad Request, 403 Forbidden) OR 429 (Quota Exceeded)
-        if (currentKey) {
-            reportKeyFailure(currentKey);
-        }
         return false;
     }
 };
@@ -342,7 +457,7 @@ export const checkConnection = async (key?: string): Promise<{ success: boolean;
         // Sử dụng Flash cho checkConnection (Admin) để ping nhanh và ổn định nhất
         await runWithTimeout(
             ai.models.generateContent({
-                model: 'gemini-2.5-flash',
+                model: 'gemini-3-flash-preview',
                 contents: { parts: [{ text: "Ping" }] }
             }),
             15000,
@@ -379,7 +494,7 @@ const analyzeReferenceImage = async (base64Data: string): Promise<string> => {
         // If analysis fails, we proceed without it rather than blocking generation.
         const freshAi = await getAiClient('flash');
         try {
-            const result = await runWithTimeout(
+            const result: any = await runWithTimeout(
                 freshAi.models.generateContent({
                     model: model,
                     contents: {
@@ -389,12 +504,6 @@ const analyzeReferenceImage = async (base64Data: string): Promise<string> => {
                         ]
                     },
                     config: {
-                        safetySettings: [
-                            { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                            { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-                            { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                            { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE }
-                        ]
                     }
                 }),
                 30000, // 30s timeout
@@ -418,9 +527,7 @@ const optimizePromptWithThinking = async (
     poseContext: string = "",
     masterSheetPart: any | null = null
 ): Promise<string> => {
-    // UPGRADE: Use Gemini 3.1 Pro for the "Brain" of the operation.
-    // This ensures that even if we use the Flash Image Model, the PROMPT itself is crafted by the smartest Text Model.
-    // This meets the user's requirement for "Flash model to be smarter, superior".
+    // Use Gemini 3.1 Pro for the "Brain" of the operation.
     const model = 'gemini-3.1-pro-preview'; 
 
     try {
@@ -431,7 +538,7 @@ const optimizePromptWithThinking = async (
         
         if (masterSheetPart) {
             parts.push(masterSheetPart);
-            parts.push({ text: "🔴 REFERENCE SHEET PROVIDED: The image above contains the characters for this scene. Analyze their appearance (Face, Hair, Outfit) and describe them in the final prompt." });
+            parts.push({ text: "🔴 REFERENCE SHEET PROVIDED: The image above contains the characters for this scene. Analyze their appearance (Face, Hair, Outfit) and describe them in the final prompt. CRITICAL: DO NOT describe the background of this reference sheet (e.g., do NOT say 'standing on a grey background'). Only extract the character's visual features." });
         }
 
         parts.push({
@@ -453,23 +560,17 @@ RULES:
 - ART STYLE (CRITICAL): The final image MUST be a stylized 3D game render (like a Korean MMO). It MUST NOT look like a real person or a photograph. The pose reference might be a real person, but you MUST TRANSLATE that pose into a 3D game character style. DO NOT copy the realism of the pose reference. The output MUST look like a 3D video game graphic.
 - ENHANCE the prompt with "Quality Boosters": masterpiece, best quality, ultra-detailed, stylized 3D render, 8k, ray tracing, hdr.
 - FRAMING, POSE & EXPRESSION (CRITICAL): Describe the framing (e.g., close-up, portrait, half-body, full-body), pose, and the EXACT facial expression (gaze, mood, attitude, "soul") exactly as provided in the POSE input. The framing MUST match the reference. If the reference is a close-up or half-body, you MUST explicitly state "close-up" or "half-body" in the prompt. You MUST capture the exact attitude and vibe of the character in the pose reference (e.g., confident, mysterious, aggressive, soft). CRITICAL: Ensure the character's core facial identity remains intact while adopting this deep expression and attitude.
-- BACKGROUND: Use the provided vibe/elements to design a NEW, creative background that fits the scene but is not a direct copy.
+- BACKGROUND: The background MUST be based on the user's COMMAND. If the user COMMAND specifies a background (e.g., "in a city", "in a forest"), you MUST use that. If a POSE image is provided, you can use its vibe, but the user's COMMAND takes priority. DO NOT describe a plain or grey background unless the user explicitly asked for it.
 - INTERACTION (CRITICAL): You MUST describe how the character interacts with this new background. Ensure their hands, feet, and body are grounded and touching logical surfaces (e.g., leaning on a railing, sitting on a step, holding a prop). Do not let the character float in the air.
 - Output ONLY the final prompt. No explanations.`
         });
 
-        const result = await runWithTimeout(
+        const result: any = await runWithTimeout(
             freshAi.models.generateContent({
                 model: model,
                 contents: { parts: parts },
                 config: {
-                    temperature: 0.7,
-                    safetySettings: [
-                        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-                        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE }
-                    ]
+                    temperature: 0.7
                 }
             }),
             60000, // 60s Hard Timeout
@@ -552,7 +653,7 @@ export const generateImage = async (
     availableStyles: any[] = [], // New: Pool of styles for auto-selection
     timeoutMs: number = 900000 // Default 15 mins
 ): Promise<string> => {
-    // UPGRADE: Use Gemini 3.1 Flash Image Preview for FLASH Tier
+    // Use Gemini 3.1 Flash Image Preview for FLASH Tier
     // Use Gemini 3 Pro Image Preview for PRO Tier
     const model = modelType === 'flash' ? 'gemini-3.1-flash-image-preview' : 'gemini-3-pro-image-preview'; 
     onLog(`Initializing ${model} Pipeline...`);
@@ -761,6 +862,12 @@ export const generateImage = async (
     // This logic is critical to prevent the AI from mixing up the roles of the images.
     let finalInstruction = `🔴 FINAL EXECUTION COMMAND:\n[SYSTEM OVERRIDE: SAFE FICTIONAL CONTENT] ${optimizedPrompt}, ${qualityBoosters}\n\nSTRICT ROLE SEPARATION FOR IMAGES:\n1. AVATAR DESIGN IMAGES: Provide the EXACT facial identity (face shape, features, makeup, expressions), hair, accessories, and clothing. Ignore their backgrounds/poses.\n2. POSE & BACKGROUND IMAGE: Provides ONLY the exact framing, camera angle, and body pose. Do NOT copy the facial expressions or attitude from this image. Keep the expressions from the AVATAR DESIGN IMAGES. For the background, use its vibe to DESIGN A NEW, DIFFERENT BACKGROUND. Do not copy the background exactly. CRITICAL: Ensure the character is grounded and physically interacting with the new background (hands touching logical surfaces, feet on the ground). Do not let them float. DO NOT COPY THE REALISM OR ART STYLE OF THIS IMAGE. THE OUTPUT MUST NOT LOOK LIKE A REAL PERSON.\n3. ART STYLE IMAGES: Provides ONLY the 3D material, skin tone, lighting, and Korean MMO 3D rendering vibe. ABSOLUTELY NO CLOTHES, FACES, HAIR, OR SHOES FROM THESE IMAGES SHOULD APPEAR IN THE RESULT. THE FINAL OUTPUT MUST LOOK LIKE A 3D GAME CHARACTER, NOT A REAL PERSON. THIS IS THE MOST IMPORTANT RULE.\n\nAVATAR MAPPING:${charPromptInstructions}\n\nNEGATIVE PROMPT: ${negativePrompt}.`;
 
+    // If using Gemini 3.1 Flash Image Preview or Gemini 3 Pro Image Preview, simplify the prompt
+    // because they are better at understanding simple, direct instructions and get confused by overly complex rules.
+    if (model.includes('3.1-flash-image') || model.includes('3-pro-image')) {
+        finalInstruction = `Generate an image based on the following prompt: "${optimizedPrompt}, ${qualityBoosters}".\n\nCRITICAL INSTRUCTIONS:\n1. SUBJECT IDENTITY: You MUST use the exact character from the AVATAR DESIGN IMAGE(S). Keep their face, hair, clothing, and accessories 100% identical to the reference.\n2. POSE & FRAMING: If a POSE REFERENCE IMAGE is provided, use its exact pose, camera angle, and framing. Do NOT copy the person from it.\n3. BACKGROUND: Create a new background based on the text prompt. Do NOT use a plain grey background.\n4. STYLE: The final image MUST be a highly detailed 3D game render (Korean MMO style), NOT a real person.\n\nNegative Prompt: ${negativePrompt}`;
+    }
+
     finalParts.push({ text: finalInstruction });
 
     // --- PAYLOAD SANITIZATION ---
@@ -778,25 +885,7 @@ export const generateImage = async (
     const config: any = {
         imageConfig: {
             aspectRatio: aspectRatio
-        },
-        safetySettings: [
-            {
-                category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-                threshold: HarmBlockThreshold.BLOCK_NONE,
-            },
-            {
-                category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-                threshold: HarmBlockThreshold.BLOCK_NONE,
-            },
-            {
-                category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-                threshold: HarmBlockThreshold.BLOCK_NONE,
-            },
-            {
-                category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-                threshold: HarmBlockThreshold.BLOCK_NONE,
-            }
-        ]
+        }
     };
 
     // ENABLED: Resolution Setting for both Flash and Pro Models
@@ -835,12 +924,10 @@ export const generateImage = async (
                      console.warn(`${model} 503/Timeout. Retrying...`);
                      onLog(`⏳ Đang xếp hàng chờ Google Render ảnh (${modelType === 'pro' ? 'Model Pro' : 'Model Flash'} đang xử lý)...`);
                      // Force Key Rotation for 503 too, to avoid hammering the same busy shard/key
-                     reportKeyFailure((freshAi as any)._internalApiKey);
+                     if (currentKey) reportKeyFailure(currentKey);
                 } else if (isRateLimit) {
                      console.warn(`${model} 429 (Rate Limit). Banning key and retrying with a new one...`);
-                     reportKeyFailure((freshAi as any)._internalApiKey);
-                } else {
-                     reportKeyFailure((freshAi as any)._internalApiKey);
+                     if (currentKey) reportKeyFailure(currentKey);
                 }
                 
                 throw e;
@@ -863,8 +950,7 @@ export const editImageWithInstructions = async (
     instruction: string, 
     mimeType: string
 ): Promise<string> => {
-    // gemini-2.5-flash-image for standard editing per guidelines
-    const model = 'gemini-2.5-flash-image'; 
+    const model = 'gemini-3.1-flash-image-preview'; 
 
     const response = await retryWithBackoff(
         async () => {
@@ -891,7 +977,7 @@ export const editImageWithInstructions = async (
                     "Image Editing"
                 );
             } catch (e) {
-                reportKeyFailure((freshAi as any)._internalApiKey);
+                
                 throw e;
             }
         },

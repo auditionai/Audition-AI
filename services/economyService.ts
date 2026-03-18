@@ -15,15 +15,31 @@ export const getUserProfile = async (): Promise<UserProfile> => {
         .eq('id', user.id)
         .maybeSingle();
 
-    if (error || !data) {
-        // Return dummy/fallback if profile missing (handled by SQL trigger normally)
-        return {
+    if (error || !data || !data.email || !data.display_name) {
+        // Create or update profile if missing or incomplete (fallback for missing trigger)
+        const newProfile = {
             id: user.id,
-            username: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
-            email: user.email || '',
-            avatar: user.user_metadata?.avatar_url || 'https://picsum.photos/100/100',
-            balance: 0,
-            role: 'user',
+            email: user.email || data?.email || '',
+            display_name: user.user_metadata?.full_name || user.email?.split('@')[0] || data?.display_name || 'User',
+            photo_url: user.user_metadata?.avatar_url || data?.photo_url || 'https://picsum.photos/100/100',
+            diamonds: data?.diamonds ?? 0,
+            is_admin: data?.is_admin ?? false,
+            last_active: new Date().toISOString()
+        };
+        
+        try {
+            await supabase.from('users').upsert(newProfile);
+        } catch (e) {
+            console.warn("Failed to auto-create/update user profile", e);
+        }
+
+        return {
+            id: newProfile.id,
+            username: newProfile.display_name,
+            email: newProfile.email,
+            avatar: newProfile.photo_url,
+            balance: newProfile.diamonds,
+            role: newProfile.is_admin ? 'admin' : 'user',
             isVip: false,
             streak: 0,
             lastCheckin: null,
@@ -49,6 +65,7 @@ export const getUserProfile = async (): Promise<UserProfile> => {
 };
 
 export const updateLastActive = async () => {
+    if (!supabase) return;
     try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
@@ -60,6 +77,7 @@ export const updateLastActive = async () => {
 };
 
 export const updateAdminUserProfile = async (profile: UserProfile): Promise<{success: boolean, error?: string}> => {
+    if (!supabase) return { success: false, error: "No Database" };
     try {
         const { error } = await supabase
             .from('users')
@@ -78,6 +96,7 @@ export const updateAdminUserProfile = async (profile: UserProfile): Promise<{suc
 };
 
 export const updateUserBalance = async (amount: number, reason: string, type: string, targetUserId?: string) => {
+    if (!supabase) return;
     let userId = targetUserId;
     if (!userId) {
         const user = await getUserProfile();
@@ -86,40 +105,45 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
     
     // 1. Log transaction (Silent Fail Safe)
     try {
-        // Attempt 1: Try 'note' (Legacy column)
-        const { error } = await supabase.from('diamond_transactions_log').insert({
-            user_id: userId,
+        const transactionData: any = {
             amount,
-            note: reason, 
+            reason: reason, 
             type
+        };
+        
+        // Try to detect column name or just try both silently
+        const { error } = await supabase.from('diamond_transactions').insert({
+            ...transactionData,
+            user_id: userId
         });
         
+        if (error && error.message.includes('column "user_id" does not exist')) {
+             await supabase.from('diamond_transactions').insert({
+                ...transactionData,
+                uid: userId
+            });
+        }
+        
         if (error) {
-            // Attempt 2: If 'note' column missing, try 'reason' (New column)
-            if (error.message?.includes('note') || error.message?.includes('does not exist')) {
-                 const { error: err2 } = await supabase.from('diamond_transactions_log').insert({
-                    user_id: userId,
-                    amount,
-                    reason: reason, 
-                    type
+            const logData: any = {
+                amount,
+                note: reason, 
+                type
+            };
+            const { error: logError } = await supabase.from('diamond_transactions_log').insert({
+                ...logData,
+                user_id: userId
+            });
+            
+            if (logError && logError.message.includes('column "user_id" does not exist')) {
+                await supabase.from('diamond_transactions_log').insert({
+                    ...logData,
+                    uid: userId
                 });
-                
-                if (err2) {
-                    // Attempt 3: Try 'diamond_transactions' table with 'note'
-                    const { error: err3 } = await supabase.from('diamond_transactions').insert({
-                        user_id: userId,
-                        amount,
-                        note: reason, 
-                        type
-                    });
-                    if (err3) console.warn("[Economy] Failed to log (Retry 3):", err3.message);
-                }
-            } else {
-                console.warn("[Economy] Failed to log transaction:", error.message);
             }
         }
     } catch (e) {
-        console.warn("[Economy] Log table missing or inaccessible.");
+        // Completely silent
     }
     
     // 2. Update balance directly (skip RPC to avoid 404)
@@ -143,27 +167,25 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
 };
 
 export const logVisit = async () => {
+    if (!supabase) return;
     try {
-        const { data: { user } } = await supabase.auth.getUser();
+        // We only log the visit without user_id to avoid 400 Foreign Key errors
+        // if the user row hasn't been created in the users table yet.
+        const visitData = { user_id: null };
+        const { error } = await supabase.from('app_visits').insert(visitData);
         
-        // Log visit - rely on DB defaults for dates
-        const { error } = await supabase.from('app_visits').insert({
-            user_id: user?.id || null
-        });
-        
-        if (error) {
-            console.warn("Failed to log visit (Table might be missing):", error.message);
-        } else {
-            console.log("Visit logged successfully!");
+        if (error && error.message.includes('column "user_id" does not exist')) {
+            await supabase.from('app_visits').insert({ uid: null });
         }
     } catch(e) {
-        console.warn("Error logging visit:", e);
+        // Silent
     }
 };
 
 // --- PACKAGES & PROMOTIONS ---
 
 export const getPackages = async (): Promise<CreditPackage[]> => {
+    if (!supabase) return [];
     const { data } = await supabase
         .from('credit_packages')
         .select('*')
@@ -189,6 +211,7 @@ export const getPackages = async (): Promise<CreditPackage[]> => {
 };
 
 export const savePackage = async (pkg: CreditPackage): Promise<{success: boolean, error?: string}> => {
+    if (!supabase) return { success: false, error: "No Database" };
     try {
         const payload = {
             name: pkg.name,
@@ -217,6 +240,7 @@ export const savePackage = async (pkg: CreditPackage): Promise<{success: boolean
 };
 
 export const deletePackage = async (id: string): Promise<{success: boolean, error?: string, action?: string}> => {
+    if (!supabase) return { success: false, error: "No Database" };
     try {
         const { error } = await supabase.from('credit_packages').delete().eq('id', id);
         if (error) {
@@ -231,6 +255,7 @@ export const deletePackage = async (id: string): Promise<{success: boolean, erro
 };
 
 export const updatePackageOrder = async (packages: CreditPackage[]): Promise<{success: boolean, error?: string}> => {
+    if (!supabase) return { success: false, error: "No Database" };
     try {
         for (let i = 0; i < packages.length; i++) {
             await supabase.from('credit_packages').update({ display_order: i }).eq('id', packages[i].id);
@@ -242,29 +267,35 @@ export const updatePackageOrder = async (packages: CreditPackage[]): Promise<{su
 }
 
 export const getActivePromotion = async (): Promise<PromotionCampaign | null> => {
+    if (!supabase) return null;
     const now = new Date().toISOString();
-    const { data } = await supabase
-        .from('promotions')
-        .select('*')
-        .eq('is_active', true)
-        .lt('start_time', now)
-        .gt('end_time', now)
-        .single();
+    try {
+        const { data, error } = await supabase
+            .from('promotions')
+            .select('*')
+            .eq('is_active', true)
+            .lt('start_time', now)
+            .gt('end_time', now)
+            .single();
+            
+        if (error || !data) return null;
         
-    if (!data) return null;
-    
-    return {
-        id: data.id,
-        name: data.title || 'Event',
-        marqueeText: data.description || '',
-        bonusPercent: data.bonus_percent || 0,
-        startTime: data.start_time,
-        endTime: data.end_time,
-        isActive: data.is_active
-    };
+        return {
+            id: data.id,
+            name: data.title || 'Event',
+            marqueeText: data.description || '',
+            bonusPercent: data.bonus_percent || 0,
+            startTime: data.start_time,
+            endTime: data.end_time,
+            isActive: data.is_active
+        };
+    } catch (e) {
+        return null;
+    }
 };
 
 export const savePromotion = async (promo: PromotionCampaign): Promise<{success: boolean, error?: string}> => {
+    if (!supabase) return { success: false, error: "No Database" };
     try {
          const payload = {
             title: promo.name,
@@ -290,6 +321,7 @@ export const savePromotion = async (promo: PromotionCampaign): Promise<{success:
 };
 
 export const deletePromotion = async (id: string): Promise<{success: boolean, error?: string}> => {
+    if (!supabase) return { success: false, error: "No Database" };
     try {
         const { error } = await supabase.from('promotions').delete().eq('id', id);
         if (error) throw error;
@@ -308,6 +340,7 @@ export const getLocalTodayStr = () => {
 // --- CHECKIN & REWARDS ---
 
 export const getCheckinStatus = async () => {
+    if (!supabase) return { streak: 0, isCheckedInToday: false, history: [], claimedMilestones: [] };
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { streak: 0, isCheckedInToday: false, history: [], claimedMilestones: [] };
 
@@ -343,6 +376,7 @@ export const getCheckinStatus = async () => {
 };
 
 export const performCheckin = async (): Promise<{success: boolean, reward: number, newStreak: number, message?: string}> => {
+    if (!supabase) return { success: false, reward: 0, newStreak: 0, message: "No Database" };
     const user = await getUserProfile();
     const today = getLocalTodayStr();
     const reward = 5;
@@ -366,6 +400,7 @@ export const performCheckin = async (): Promise<{success: boolean, reward: numbe
 };
 
 export const claimMilestoneReward = async (day: number): Promise<{success: boolean, message: string}> => {
+    if (!supabase) return { success: false, message: "No Database" };
     const user = await getUserProfile();
     const rewards: Record<number, number> = { 7: 20, 14: 50, 30: 100 };
     const amount = rewards[day] || 0;
@@ -408,6 +443,13 @@ export const claimMilestoneReward = async (day: number): Promise<{success: boole
 // In-memory blacklist for the current session (to avoid hitting bad keys repeatedly in a loop)
 const temporarilyDisabledKeys: Set<string> = new Set();
 const KEY_COOLDOWN_MS = 60000; // 1 minute cooldown for bad keys
+const MAX_REQ_PER_MIN = 4; // Safe limit (Google allows 5/min)
+
+interface KeyStats {
+    usageCount: number;
+    resetAt: number;
+}
+const keyUsageStats = new Map<string, KeyStats>();
 
 export const isKeyDisabled = (key: string): boolean => {
     return temporarilyDisabledKeys.has(key);
@@ -416,8 +458,15 @@ export const isKeyDisabled = (key: string): boolean => {
 export const reportKeyFailure = (key: string) => {
     if (!key) return;
     const shortKey = key.substring(0, 4) + '...' + key.slice(-4);
-    console.warn(`[System] 🔴 API Key ${shortKey} failed. Temporarily disabling for 1 minute.`);
+    console.warn(`[System] 🔴 API Key ${shortKey} failed (429/503). Temporarily disabling for 1 minute.`);
     temporarilyDisabledKeys.add(key);
+    
+    // Also max out its usage stats so it's deprioritized
+    keyUsageStats.set(key, {
+        usageCount: MAX_REQ_PER_MIN,
+        resetAt: Date.now() + KEY_COOLDOWN_MS
+    });
+
     setTimeout(() => {
         temporarilyDisabledKeys.delete(key);
         console.log(`[System] 🟢 API Key ${shortKey} is back in rotation.`);
@@ -427,59 +476,87 @@ export const reportKeyFailure = (key: string) => {
 let lastUsedKey: string | null = null;
 
 export const getSystemApiKey = async (tier: 'flash' | 'pro' = 'flash', excludedKeys: string[] = []): Promise<string | null> => {
+    if (!supabase) return process.env.API_KEY || null;
     try {
-        // 1. Get all active keys
+        // 1. Clean up expired stats
+        const now = Date.now();
+        for (const [k, v] of keyUsageStats.entries()) {
+            if (now > v.resetAt) {
+                keyUsageStats.delete(k);
+            }
+        }
+
+        // 2. Get all active keys
         const { data: allKeys, error } = await supabase
             .from('api_keys')
             .select('id, key_value, last_used_at, name')
             .eq('status', 'active');
         
         if (error || !allKeys || allKeys.length === 0) {
-            // Fallback if DB error or empty
             return process.env.API_KEY || null;
         }
 
-        // Filter by tier
+        // 3. Filter by tier
         let tierKeys = allKeys;
         if (tier === 'pro') {
             tierKeys = allKeys.filter((k: any) => k.name && k.name.includes('[PRO]'));
         } else {
-            // Flash keys are those without [PRO] (or explicitly marked [FLASH])
             tierKeys = allKeys.filter((k: any) => !k.name || !k.name.includes('[PRO]'));
         }
 
         if (tierKeys.length === 0) {
-            // If no keys for this tier, fallback to env key
-            return process.env.API_KEY || null;
+            if (allKeys.length > 0) {
+                tierKeys = allKeys; // Borrow from other tier if empty
+            } else {
+                return process.env.API_KEY || null;
+            }
         }
 
-        // 2. Filter out keys that are in the in-memory blacklist OR the excluded list (from retry loop)
+        // 4. Filter out disabled or excluded keys
         let validKeys = tierKeys.filter((k: any) => 
             !temporarilyDisabledKeys.has(k.key_value) && 
             !excludedKeys.includes(k.key_value)
         );
 
-        // 3. If all keys are disabled/excluded, clear the temporary blacklist and try again (Desperation mode)
+        // 5. Desperation mode: If all valid keys are exhausted, try borrowing from the other tier
         if (validKeys.length === 0) {
-            console.warn("[System] All keys exhausted. Resetting temporary blacklist.");
+            console.warn(`[System] All ${tier.toUpperCase()} keys exhausted. Attempting to borrow from other tier...`);
+            const otherTierKeys = allKeys.filter((k: any) => !tierKeys.includes(k));
+            validKeys = otherTierKeys.filter((k: any) => 
+                !temporarilyDisabledKeys.has(k.key_value) && 
+                !excludedKeys.includes(k.key_value)
+            );
+        }
+
+        // 6. Extreme desperation: clear temporary blacklist
+        if (validKeys.length === 0) {
+            console.warn("[System] ALL keys exhausted across all tiers. Resetting temporary blacklist.");
             temporarilyDisabledKeys.clear();
-            validKeys = tierKeys;
+            validKeys = allKeys; // Use any key available
         }
 
-        // 4. Avoid picking the exact same key as last time if we have multiple choices
-        let candidates = validKeys;
-        if (candidates.length > 1 && lastUsedKey) {
-            const filtered = candidates.filter((k: any) => k.key_value !== lastUsedKey);
-            if (filtered.length > 0) {
-                candidates = filtered;
-            }
+        // 7. Sort by usage count (Least Recently/Frequently Used)
+        validKeys.sort((a: any, b: any) => {
+            const statA = keyUsageStats.get(a.key_value) || { usageCount: 0 };
+            const statB = keyUsageStats.get(b.key_value) || { usageCount: 0 };
+            return statA.usageCount - statB.usageCount;
+        });
+
+        // 8. Select the best key
+        let selectedKey = validKeys[0];
+        const bestStat = keyUsageStats.get(selectedKey.key_value) || { usageCount: 0, resetAt: now + 60000 };
+
+        // 9. If even the best key is at max capacity, we should ideally queue, but here we just pick it and hope for the best (or the retry loop in geminiService will handle it)
+        if (bestStat.usageCount >= MAX_REQ_PER_MIN) {
+            console.warn(`[System] High Load Warning: Best available key is already at max capacity (${bestStat.usageCount}/${MAX_REQ_PER_MIN}).`);
         }
 
-        // 5. Pick a RANDOM candidate
-        const randomIndex = Math.floor(Math.random() * candidates.length);
-        const selectedKey = candidates[randomIndex];
+        // 10. Update stats
+        keyUsageStats.set(selectedKey.key_value, {
+            usageCount: bestStat.usageCount + 1,
+            resetAt: bestStat.resetAt > now ? bestStat.resetAt : now + 60000
+        });
 
-        // 6. Update usage timestamp & state
         lastUsedKey = selectedKey.key_value;
         supabase.from('api_keys').update({ last_used_at: new Date().toISOString() }).eq('id', selectedKey.id).then(() => {});
         
@@ -491,9 +568,10 @@ export const getSystemApiKey = async (tier: 'flash' | 'pro' = 'flash', excludedK
 };
 
 export const saveSystemApiKey = async (key: string, tier: 'flash' | 'pro' = 'flash'): Promise<{success: boolean, error?: string}> => {
+    if (!supabase) return { success: false, error: "No Database" };
     try {
         const cleanKey = key.trim();
-        const prefix = tier === 'pro' ? '[PRO]' : '[FLASH]';
+        const tierTag = tier === 'pro' ? '[PRO]' : '[FLASH]';
         
         // Check if exists
         const { data: existing } = await supabase
@@ -503,14 +581,15 @@ export const saveSystemApiKey = async (key: string, tier: 'flash' | 'pro' = 'fla
             .single();
 
         if (existing) {
-             const newName = existing.name?.includes('[') 
-                ? existing.name.replace(/\[.*?\]/, prefix) 
-                : `${prefix} ${existing.name || 'Admin Key'}`;
+             let newName = existing.name || `Service Account ${new Date().toISOString()}`;
+             if (!newName.includes(tierTag)) {
+                 newName = `${tierTag} ${newName.replace(/\[PRO\]|\[FLASH\]/g, '').trim()}`;
+             }
              const { error } = await supabase.from('api_keys').update({ status: 'active', name: newName }).eq('id', existing.id);
              if (error) throw error;
         } else {
              const { error } = await supabase.from('api_keys').insert({
-                 name: `${prefix} Admin Key ` + new Date().toISOString(),
+                 name: `${tierTag} Service Account ` + new Date().toISOString(),
                  key_value: cleanKey,
                  status: 'active'
              });
@@ -523,10 +602,12 @@ export const saveSystemApiKey = async (key: string, tier: 'flash' | 'pro' = 'fla
 };
 
 export const deleteApiKey = async (id: string) => {
+    if (!supabase) return;
     await supabase.from('api_keys').delete().eq('id', id);
 };
 
 export const getApiKeysList = async () => {
+    if (!supabase) return [];
     const { data } = await supabase.from('api_keys').select('*').order('created_at', { ascending: false });
     return data || [];
 }
@@ -534,6 +615,7 @@ export const getApiKeysList = async () => {
 // --- TRANSACTIONS ---
 
 export const createPaymentLink = async (packageId: string): Promise<Transaction> => {
+    if (!supabase) throw new Error("No Database");
     const user = await getUserProfile();
     const pkg = (await getPackages()).find(p => p.id === packageId);
     if (!pkg) throw new Error("Invalid package");
@@ -607,6 +689,7 @@ export const mockPayOSSuccess = async (txId: string) => {
 };
 
 export const adminApproveTransaction = async (txId: string): Promise<{success: boolean, error?: string}> => {
+    if (!supabase) return { success: false, error: "No Database" };
     try {
         const { data: tx, error: fetchError } = await supabase.from('transactions').select('*').eq('id', txId).single();
         if (fetchError || !tx) throw new Error("Tx not found");
@@ -631,6 +714,7 @@ export const adminApproveTransaction = async (txId: string): Promise<{success: b
 };
 
 export const adminRejectTransaction = async (txId: string): Promise<{success: boolean, error?: string}> => {
+     if (!supabase) return { success: false, error: "No Database" };
      try {
         const { error } = await supabase
             .from('transactions')
@@ -644,6 +728,7 @@ export const adminRejectTransaction = async (txId: string): Promise<{success: bo
 };
 
 export const adminBulkApproveTransactions = async (txIds: string[]): Promise<{success: boolean, error?: string, count?: number}> => {
+    if (!supabase) return { success: false, error: "No Database" };
     try {
         let successCount = 0;
         for (const id of txIds) {
@@ -657,6 +742,7 @@ export const adminBulkApproveTransactions = async (txIds: string[]): Promise<{su
 };
 
 export const adminBulkRejectTransactions = async (txIds: string[]): Promise<{success: boolean, error?: string, count?: number}> => {
+    if (!supabase) return { success: false, error: "No Database" };
     try {
         const { error, count } = await supabase
             .from('transactions')
@@ -671,6 +757,7 @@ export const adminBulkRejectTransactions = async (txIds: string[]): Promise<{suc
 };
 
 export const deleteTransaction = async (txId: string): Promise<{success: boolean, error?: string}> => {
+    if (!supabase) return { success: false, error: "No Database" };
     try {
         const { error } = await supabase.from('transactions').delete().eq('id', txId);
         if (error) throw error;
@@ -681,6 +768,7 @@ export const deleteTransaction = async (txId: string): Promise<{success: boolean
 };
 
 export const getUnifiedHistory = async (targetUserId?: string): Promise<HistoryItem[]> => {
+    if (!supabase) return [];
     let userId = targetUserId;
     if (!userId) {
         const user = await getUserProfile();
@@ -730,9 +818,53 @@ export const getUnifiedHistory = async (targetUserId?: string): Promise<HistoryI
     return history.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 };
 
+// --- MAINTENANCE MODE ---
+
+export const getMaintenanceMode = async () => {
+    if (!supabase) return { isActive: false, message: "Hệ thống đang bảo trì, vui lòng quay lại sau." };
+    try {
+        const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'maintenance_mode').maybeSingle();
+        
+        if (data && data.value) {
+            let parsedValue = data.value;
+            if (typeof parsedValue === 'string') {
+                try {
+                    parsedValue = JSON.parse(parsedValue);
+                } catch (e) {}
+            }
+            return {
+                isActive: !!parsedValue.isActive,
+                message: parsedValue.message || "Hệ thống đang bảo trì, vui lòng quay lại sau."
+            };
+        }
+        return { isActive: false, message: "Hệ thống đang bảo trì, vui lòng quay lại sau." };
+    } catch (e) {
+        console.error("Get Maintenance Mode Error", e);
+        return { isActive: false, message: "Hệ thống đang bảo trì, vui lòng quay lại sau." };
+    }
+};
+
+export const saveMaintenanceMode = async (isActive: boolean, message: string) => {
+    if (!supabase) return { success: false, error: "No Database" };
+    try {
+        const valueToSave = JSON.stringify({ isActive, message });
+        const { data, error } = await supabase.from('system_settings').upsert(
+            { key: 'maintenance_mode', value: valueToSave },
+            { onConflict: 'key' }
+        ).select();
+        
+        if (error) throw error;
+        return { success: true };
+    } catch (e) {
+        console.error("Save Maintenance Mode Error", e);
+        return { success: false, error: e };
+    }
+};
+
 // --- GENERATION PRICES ---
 
 export const getGenerationPrices = async () => {
+    if (!supabase) return { flash_1k: 1, flash_2k: 2, flash_4k: 4, pro_1k: 5, pro_2k: 10, pro_4k: 15, couple: 2, group3: 4, group4: 6 };
     try {
         const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'generation_prices').maybeSingle();
         
@@ -741,6 +873,9 @@ export const getGenerationPrices = async () => {
             if (typeof parsedValue === 'string') {
                 try {
                     parsedValue = JSON.parse(parsedValue);
+                    if (typeof parsedValue === 'string') {
+                        parsedValue = JSON.parse(parsedValue);
+                    }
                 } catch (e) {
                     console.error("Failed to parse generation_prices JSON string", e);
                 }
@@ -774,6 +909,7 @@ export const getGenerationPrices = async () => {
 };
 
 export const saveGenerationPrices = async (prices: any) => {
+    if (!supabase) return { success: false, error: "No Database" };
     try {
         const sanitizedPrices = {
             flash_1k: Number(prices.flash_1k) || 1,
@@ -806,7 +942,47 @@ export const saveGenerationPrices = async (prices: any) => {
 
 // --- GIFTCODES ---
 
+export const getTutorialVideo = async () => {
+    if (!supabase) return { url: "https://www.youtube.com/watch?v=ba2WR8txe_c", isActive: true };
+    try {
+        const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'tutorial_video').maybeSingle();
+        
+        if (data && data.value) {
+            return {
+                url: data.value.url || "https://www.youtube.com/watch?v=ba2WR8txe_c",
+                isActive: data.value.isActive !== undefined ? data.value.isActive : true
+            };
+        }
+        
+        return { url: "https://www.youtube.com/watch?v=ba2WR8txe_c", isActive: true };
+    } catch (e) {
+        return { url: "https://www.youtube.com/watch?v=ba2WR8txe_c", isActive: true };
+    }
+};
+
+export const saveTutorialVideo = async (url: string, isActive: boolean) => {
+    if (!supabase) return { success: false, error: "No Database" };
+    try {
+        const { data: existing } = await supabase.from('system_settings').select('key').eq('key', 'tutorial_video').maybeSingle();
+        
+        let error;
+        if (existing) {
+            const res = await supabase.from('system_settings').update({ value: { url, isActive } }).eq('key', 'tutorial_video');
+            error = res.error;
+        } else {
+            const res = await supabase.from('system_settings').insert({ key: 'tutorial_video', value: { url, isActive } });
+            error = res.error;
+        }
+        
+        if (error) throw error;
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+};
+
 export const getGiftcodePromoConfig = async () => {
+    if (!supabase) return { text: "Nhập CODE \"HELLO2026\" để nhận 20 Vcoin miễn phí !!!", isActive: true };
     try {
         const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'giftcode_promo').maybeSingle();
         
@@ -834,6 +1010,7 @@ export const getGiftcodePromoConfig = async () => {
 };
 
 export const saveGiftcodePromoConfig = async (text: string, isActive: boolean) => {
+    if (!supabase) return { success: false, error: "No Database" };
     try {
         const { data: existing } = await supabase.from('system_settings').select('key').eq('key', 'giftcode_promo').maybeSingle();
         
@@ -854,6 +1031,7 @@ export const saveGiftcodePromoConfig = async (text: string, isActive: boolean) =
 };
 
 export const saveGiftcode = async (code: Giftcode): Promise<{success: boolean, error?: string}> => {
+    if (!supabase) return { success: false, error: "No Database" };
     try {
         const payload = {
             code: code.code,
@@ -878,10 +1056,12 @@ export const saveGiftcode = async (code: Giftcode): Promise<{success: boolean, e
 };
 
 export const deleteGiftcode = async (id: string) => {
+    if (!supabase) return;
     await supabase.from('gift_codes').delete().eq('id', id);
 };
 
 export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean, reward: number, message: string}> => {
+    if (!supabase) return { success: false, reward: 0, message: "No Database" };
     const user = await getUserProfile();
     const cleanCode = codeStr.trim().toUpperCase();
 
@@ -915,6 +1095,7 @@ export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean
 };
 
 export const getGiftcodeUsages = async (codeId: string) => {
+    if (!supabase) return [];
     const { data, error } = await supabase
         .from('gift_code_usages')
         .select('user_id, created_at, users(display_name, email, photo_url)')
@@ -923,23 +1104,28 @@ export const getGiftcodeUsages = async (codeId: string) => {
         
     if (error) throw error;
     
-    return data.map((u: any) => ({
-        userId: u.user_id,
-        usedAt: u.created_at,
-        userName: u.users?.display_name || 'Unknown',
-        userEmail: u.users?.email || 'No Email',
-        userAvatar: u.users?.photo_url || 'https://picsum.photos/50/50'
-    }));
+    return data.map((u: any) => {
+        const userObj = Array.isArray(u.users) ? u.users[0] : u.users;
+        return {
+            userId: u.user_id,
+            usedAt: u.created_at,
+            userName: userObj?.display_name || userObj?.email?.split('@')[0] || 'Unknown',
+            userEmail: userObj?.email || 'No Email',
+            userAvatar: userObj?.photo_url || 'https://picsum.photos/50/50'
+        };
+    });
 };
 
 // --- STYLE PRESETS ---
 
 export const getStylePresets = async () => {
+    if (!supabase) return [];
     const { data } = await supabase.from('style_presets').select('*').eq('is_active', true);
     return data || [];
 };
 
 export const saveStylePreset = async (style: any) => {
+    if (!supabase) return { success: false, error: "No Database" };
     try {
         if (style.is_default) {
             // Unset other defaults
@@ -968,27 +1154,49 @@ export const saveStylePreset = async (style: any) => {
 };
 
 export const deleteStylePreset = async (id: string) => {
+    if (!supabase) return;
     await supabase.from('style_presets').delete().eq('id', id);
 };
 
 // --- ADMIN STATS ---
 
 export const getAdminStats = async () => {
+    if (!supabase) return {
+        dashboard: { visitsToday: 0, visitsTotal: 0, newUsersToday: 0, usersTotal: 0, imagesToday: 0, imagesTotal: 0, aiUsage: [] },
+        usersList: [], packages: [], promotions: [], giftcodes: [], transactions: []
+    };
     // Fetch Users
-    const { data: users, error: userError } = await supabase.from('users').select('id, email, display_name, diamonds, is_admin, created_at, photo_url, last_active');
+    const { data: users, error: userError } = await supabase.from('users').select('*');
+    console.log("Admin Stats - Users fetched:", users?.length, userError);
 
     if (userError) {
         console.error("Error fetching users for Admin Stats:", userError);
     }
     const { data: pkgs } = await supabase.from('credit_packages').select('*').order('display_order');
-    const { data: promos } = await supabase.from('promotions').select('*');
+    
+    let promos = [];
+    try {
+        const { data } = await supabase.from('promotions').select('*');
+        promos = data || [];
+    } catch (e) {
+        // Silent
+    }
     
     // Fetch giftcodes with accurate usage count from relation
     const { data: codes } = await supabase
         .from('gift_codes')
         .select('*, gift_code_usages(count)');
 
-    const { data: txs } = await supabase.from('transactions').select('*').order('created_at', { ascending: false });
+    let { data: txs, error: txError } = await supabase.from('transactions').select('*, users(email, display_name, photo_url)').order('created_at', { ascending: false });
+    if (txError) {
+        console.warn("Failed to join users on transactions, falling back to select *", txError);
+        const fallback = await supabase.from('transactions').select('*').order('created_at', { ascending: false });
+        txs = fallback.data;
+    }
+    console.log("Admin Stats - Transactions fetched:", txs?.length);
+    if (txs && txs.length > 0) {
+        console.log("First Tx user_id:", txs[0].user_id, "uid:", txs[0].uid, "users join:", txs[0].users);
+    }
     
     // Try to fetch logs from both potential table names
     let usageLogs: any[] = [];
@@ -1114,12 +1322,20 @@ export const getAdminStats = async () => {
              }
          }
 
+         const txUserId = t.user_id || t.userId || t.uid;
+         let txUser = null;
+         if (t.users) {
+             txUser = Array.isArray(t.users) ? t.users[0] : t.users;
+         } else {
+             txUser = users?.find((u: any) => u.id === txUserId);
+         }
+         
          return {
              id: t.id,
-             userId: t.user_id,
-             userName: users?.find((u: any) => u.id === t.user_id)?.display_name,
-             userEmail: users?.find((u: any) => u.id === t.user_id)?.email,
-             userAvatar: users?.find((u: any) => u.id === t.user_id)?.photo_url,
+             userId: txUserId,
+             userName: txUser?.display_name || txUser?.email?.split('@')[0] || t.user_name || t.userName,
+             userEmail: txUser?.email || t.user_email || t.userEmail,
+             userAvatar: txUser?.photo_url || t.user_avatar || t.userAvatar,
              packageId: t.package_id,
              amount: t.amount ? Number(t.amount) : (t.price ? Number(t.price) : (t.amount_vnd ? Number(t.amount_vnd) : 0)),
              coins: coins,

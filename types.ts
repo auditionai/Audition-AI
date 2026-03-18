@@ -3,6 +3,12 @@ export type Language = 'vi' | 'en';
 export type Theme = 'light' | 'dark';
 export type ViewId = 'home' | 'tools' | 'gallery' | 'admin' | 'guide' | 'about' | 'tool_workspace' | 'support' | 'settings' | 'topup' | 'payment_gateway';
 
+declare global {
+  interface Window {
+    aistudio: any;
+  }
+}
+
 export interface LocalizedString {
   vi: string;
   en: string;

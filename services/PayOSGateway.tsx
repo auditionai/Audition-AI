@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Transaction } from '../types';
 import { Icons } from '../components/Icons';
-import { mockPayOSSuccess } from '../services/economyService';
+import { mockPayOSSuccess, updateLastActive } from '../services/economyService';
 
 interface PayOSGatewayProps {
   transaction: Transaction;
@@ -18,7 +18,7 @@ export const PayOSGateway: React.FC<PayOSGatewayProps> = ({ transaction, onSucce
   const BANK_INFO = {
       bankId: 'MB',
       accountNo: '0824280497', 
-      accountName: 'DONG MINH PHU',
+      accountName: 'NGUYEN QUOC CUONG',
       template: 'compact' 
   };
 
@@ -42,18 +42,22 @@ export const PayOSGateway: React.FC<PayOSGatewayProps> = ({ transaction, onSucce
   };
 
   const handleConfirmPayment = async () => {
+      // Simulate API check
       setIsPaid(true);
-      // Wait a moment then redirect to history
-      // Note: We do NOT auto-approve here to simulate real flow. Admin must approve.
+      updateLastActive(); // Mark active on payment confirmation
+      // Even though user clicks "Paid", in this flow we keep it pending until Admin approves,
+      // But we show a success message then redirect.
+      // Or if we want auto-approve logic (mocked):
+      // await mockPayOSSuccess(transaction.id); 
       setTimeout(() => {
           onSuccess();
-      }, 3000);
+      }, 2000);
   };
 
-  const qrUrl = `https://img.vietqr.io/image/${BANK_INFO.bankId}-${BANK_INFO.accountNo}-${BANK_INFO.template}.png?amount=${transaction.amount}&addInfo=${transaction.code}&accountName=${encodeURIComponent(BANK_INFO.accountName)}`;
+  const qrUrl = `https://img.vietqr.io/image/${BANK_INFO.bankId}-${BANK_INFO.accountNo}-${BANK_INFO.template}.png?amount=${transaction.amount || 0}&addInfo=${transaction.code}&accountName=${encodeURIComponent(BANK_INFO.accountName)}`;
 
   return (
-    <div className="fixed inset-0 z-[200] bg-[#f0f2f5] flex items-center justify-center font-sans text-slate-800 animate-fade-in overflow-y-auto">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center font-sans text-slate-800 animate-fade-in overflow-y-auto">
         <div className="w-full max-w-5xl bg-white shadow-2xl rounded-xl overflow-hidden flex flex-col md:flex-row min-h-[600px] m-4">
             
             {/* LEFT: Order Info */}
@@ -79,7 +83,7 @@ export const PayOSGateway: React.FC<PayOSGatewayProps> = ({ transaction, onSucce
                             <div className="w-full h-px bg-slate-200 my-2"></div>
                             <div className="flex justify-between items-center">
                                 <span className="text-sm text-slate-500">Số tiền</span>
-                                <span className="font-bold text-2xl text-[#233dff]">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(transaction.amount)}</span>
+                                <span className="font-bold text-2xl text-[#233dff]">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(transaction.amount || 0)}</span>
                             </div>
                         </div>
 
@@ -135,8 +139,8 @@ export const PayOSGateway: React.FC<PayOSGatewayProps> = ({ transaction, onSucce
                              <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center text-white mb-4 animate-bounce">
                                  <Icons.Check className="w-8 h-8" />
                              </div>
-                             <span className="font-bold text-green-600">Đã xác nhận lệnh!</span>
-                             <span className="text-xs text-green-500 mt-1 text-center px-4">Hệ thống đang kiểm tra giao dịch. Vui lòng chờ...</span>
+                             <span className="font-bold text-green-600">Thanh toán thành công!</span>
+                             <span className="text-xs text-green-500">Đang chuyển hướng...</span>
                          </div>
                      ) : (
                         <>
@@ -154,10 +158,10 @@ export const PayOSGateway: React.FC<PayOSGatewayProps> = ({ transaction, onSucce
                             onClick={handleConfirmPayment}
                             className="w-full py-3 bg-[#233dff] hover:bg-blue-700 text-white font-bold rounded-lg shadow-lg shadow-blue-500/30 transition-all active:scale-95"
                         >
-                            Tôi đã thanh toán
+                            Đã thanh toán
                         </button>
                         <p className="text-xs text-center text-slate-400">
-                            Lưu ý: Nhập chính xác nội dung <b className="text-slate-600">{transaction.code}</b>. Giao dịch sẽ hiển thị "Pending" cho đến khi hệ thống xác nhận tiền về.
+                            Lưu ý: Nhập chính xác nội dung chuyển khoản <b className="text-slate-600">{transaction.code}</b> để đơn hàng được duyệt tự động.
                         </p>
                     </div>
                 )}

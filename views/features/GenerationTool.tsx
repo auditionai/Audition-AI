@@ -5,7 +5,7 @@ import { Icons } from '../../components/Icons';
 import { generateImage, testApiKey } from '../../services/geminiService';
 import { saveImageToStorage, uploadFileToR2 } from '../../services/storageService';
 import { createSolidFence, optimizePayload, urlToBase64 } from '../../utils/imageProcessor';
-import { getUserProfile, updateUserBalance, getStylePresets, getGenerationPrices } from '../../services/economyService';
+import { getUserProfile, updateUserBalance, getStylePresets, getGenerationPrices, getTutorialVideo } from '../../services/economyService';
 import { useNotification } from '../../components/NotificationSystem';
 import { caulenhauClient } from '../../services/supabaseClient';
 
@@ -86,9 +86,23 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const [guideTopic, setGuideTopic] = useState<'chars' | 'settings' | null>(null);
   const [currentTipIdx, setCurrentTipIdx] = useState(0);
   const [showVideo, setShowVideo] = useState(false);
+  const [tutorialVideoUrl, setTutorialVideoUrl] = useState<string | null>(null);
 
   const [resultImage, setResultImage] = useState<string | null>(null);
   const [generatedData, setGeneratedData] = useState<GeneratedImage | null>(null);
+
+  // --- NEW: COOLDOWN STATE ---
+  const [cooldownRemaining, setCooldownRemaining] = useState(() => {
+      const saved = localStorage.getItem('gen_cooldown_end');
+      if (saved) {
+          const end = parseInt(saved, 10);
+          const now = Date.now();
+          if (end > now) {
+              return Math.ceil((end - now) / 1000);
+          }
+      }
+      return 0;
+  });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeUploadType = useRef<{ charId?: number, type: 'body' | 'face' | 'ref' } | null>(null);
@@ -123,8 +137,55 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           setPrices(p);
       };
       loadPrices();
+
+      const loadTutorialVideo = async () => {
+          const videoConfig = await getTutorialVideo();
+          if (videoConfig && videoConfig.isActive && videoConfig.url) {
+              let videoId = TUTORIAL_VIDEO_ID;
+              try {
+                  const urlObj = new URL(videoConfig.url);
+                  if (urlObj.hostname.includes('youtube.com')) {
+                      if (urlObj.pathname.includes('/embed/')) {
+                          videoId = urlObj.pathname.split('/embed/')[1].split('?')[0];
+                      } else {
+                          videoId = urlObj.searchParams.get('v') || videoId;
+                      }
+                  } else if (urlObj.hostname.includes('youtu.be')) {
+                      videoId = urlObj.pathname.slice(1).split('?')[0];
+                  }
+              } catch (e) {
+                  console.warn("Invalid video URL format", e);
+              }
+              setTutorialVideoUrl(`https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&playsinline=1`);
+          } else {
+              setTutorialVideoUrl(null);
+          }
+      };
+      loadTutorialVideo();
   }, []);
   // -------------------------------
+
+  // --- COOLDOWN TIMER EFFECT ---
+  useEffect(() => {
+      if (cooldownRemaining > 0) {
+          const timer = setInterval(() => {
+              setCooldownRemaining(prev => {
+                  if (prev <= 1) {
+                      localStorage.removeItem('gen_cooldown_end');
+                      return 0;
+                  }
+                  return prev - 1;
+              });
+          }, 1000);
+          return () => clearInterval(timer);
+      }
+  }, [cooldownRemaining]);
+
+  // Helper to start cooldown
+  const startCooldown = (seconds: number) => {
+      setCooldownRemaining(seconds);
+      localStorage.setItem('gen_cooldown_end', (Date.now() + seconds * 1000).toString());
+  };
 
   useEffect(() => {
       const interval = setInterval(() => {
@@ -390,6 +451,11 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
   const handleGenerate = async () => {
     // 1. Validation
+    if (cooldownRemaining > 0) {
+        notify(`Vui lòng đợi ${cooldownRemaining} giây trước khi tạo ảnh tiếp theo.`, 'warning');
+        return;
+    }
+
     if (!prompt.trim()) {
          notify(lang === 'vi' ? 'Vui lòng nhập mô tả' : 'Please enter a prompt', 'warning');
          return;
@@ -415,16 +481,15 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
         // --- NEW: API KEY PRE-FLIGHT TEST (120s Timeout / 5s Retry) ---
         let isKeyValid = false;
         const startTime = Date.now();
-        const TIMEOUT_LIMIT = 300000; // Tăng lên 5 phút (300s) để có đủ thời gian test và xoay vòng Key khi Server quá tải
+        const TIMEOUT_LIMIT = 300000; // 5 mins
         const RETRY_INTERVAL = 5000; // 5s
         let attempt = 0;
 
         while (Date.now() - startTime < TIMEOUT_LIMIT) {
             attempt++;
-            addLog(`Xác thực tài khoản VIP & Khởi tạo luồng Render - Lần ${attempt}...`);
+            addLog(`Đang kết nối đến máy chủ đồ họa Google (Lần ${attempt})...`);
             
             const stepStart = Date.now();
-            // Pass the selected AI Model (flash/pro) to testApiKey so it tests the correct key/tier
             isKeyValid = await testApiKey(aiModel);
             
             if (isKeyValid) break;
@@ -433,12 +498,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
             const waitTime = Math.max(0, RETRY_INTERVAL - elapsed);
             
             if (Date.now() - startTime + waitTime < TIMEOUT_LIMIT) {
-                if (waitTime > 1000) {
-                     addLog(`Đang kết nối đến máy chủ đồ họa Google...`);
-                     await new Promise(r => setTimeout(r, waitTime));
-                } else {
-                     addLog(`Đang kết nối đến máy chủ đồ họa Google...`);
-                }
+                await new Promise(r => setTimeout(r, waitTime));
             }
         }
 
@@ -538,13 +598,16 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           timestamp: Date.now(),
           toolId: feature.id,
           toolName: feature.name['en'],
-          engine: aiModel === 'flash' ? `Gemini 3.1 Flash ${resolution}` : `Gemini 3.0 Pro ${resolution}`
+          engine: aiModel === 'flash' ? `Gemini 3.1 Flash ${resolution}` : `Gemini 3 Pro ${resolution}`
         };
         setGeneratedData(newImage);
         
         saveImageToStorage(newImage).catch(console.error);
         setStage('result');
         notify(lang === 'vi' ? 'Tạo ảnh thành công!' : 'Generation successful!', 'success');
+        
+        // Bắt đầu đếm ngược 60s sau khi tạo thành công
+        startCooldown(60);
       } else {
           throw new Error("No result returned (Empty)");
       }
@@ -675,8 +738,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                   <Icons.Cpu className="w-5 h-5" />
                               </div>
                               <div>
-                                  <h4 className="text-sm font-bold text-white">Model 3.0 Pro</h4>
-                                  <p className="text-xs text-slate-400 mt-1">Sử dụng mô hình Nano Banana Pro mới nhất. Hiểu lệnh tốt hơn, chi tiết trang phục sắc nét hơn bản Flash cũ.</p>
+                                  <h4 className="text-sm font-bold text-white">Model 3 Pro</h4>
+                                  <p className="text-xs text-slate-400 mt-1">Sử dụng mô hình Gemini 3 Pro mới nhất. Hiểu lệnh tốt hơn, chi tiết trang phục sắc nét hơn bản Flash.</p>
                               </div>
                           </div>
 
@@ -756,7 +819,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                   <div className="flex justify-between items-center p-3 border-b border-white/10 bg-white/5">
                       <div className="flex items-center gap-2">
                           <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                          <span className="font-bold text-xs text-white">Result (3.0 Pro)</span>
+                          <span className="font-bold text-xs text-white">Kết quả (Gemini 3 Pro)</span>
                       </div>
                       <button onClick={() => setStage('input')} className="text-[10px] font-bold text-slate-400 hover:text-white px-2 py-1 rounded bg-white/5 hover:bg-white/10">X</button>
                   </div>
@@ -804,7 +867,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                     </button>
                     <iframe 
                         className="w-full h-full"
-                        src={`https://www.youtube.com/embed/${TUTORIAL_VIDEO_ID}?autoplay=1&rel=0&playsinline=1`}
+                        src={tutorialVideoUrl || `https://www.youtube.com/embed/${TUTORIAL_VIDEO_ID}?autoplay=1&rel=0&playsinline=1`}
                         title="Hướng dẫn sử dụng"
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                         referrerPolicy="strict-origin-when-cross-origin"
@@ -1009,13 +1072,15 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                 </button>
                             </>
                         )}
-                        <button 
-                            onClick={() => setShowVideo(true)}
-                            className="flex items-center gap-1 text-[10px] font-bold text-white hover:scale-105 transition-transform bg-red-600 px-3 py-1 rounded-full shadow-[0_0_10px_rgba(220,38,38,0.5)] border border-red-400 group"
-                        >
-                            <Icons.Play className="w-3 h-3 fill-white group-hover:animate-pulse" />
-                            Video HD
-                        </button>
+                        {tutorialVideoUrl && (
+                            <button 
+                                onClick={() => setShowVideo(true)}
+                                className="flex items-center gap-1 text-[10px] font-bold text-white hover:scale-105 transition-transform bg-red-600 px-3 py-1 rounded-full shadow-[0_0_10px_rgba(220,38,38,0.5)] border border-red-400 group"
+                            >
+                                <Icons.Play className="w-3 h-3 fill-white group-hover:animate-pulse" />
+                                Video HD
+                            </button>
+                        )}
                         <button 
                             onClick={() => setGuideTopic('chars')}
                             className="flex items-center gap-1 text-[10px] font-bold text-audi-yellow hover:text-white transition-colors bg-audi-yellow/10 px-2 py-1 rounded-full border border-audi-yellow/30"
@@ -1280,10 +1345,24 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
             </div>
             <button 
                 onClick={handleGenerate}
-                className="px-8 py-3 bg-gradient-to-r from-audi-pink to-audi-purple rounded-xl font-bold text-white shadow-[0_0_20px_rgba(255,0,153,0.4)] hover:scale-105 transition-all flex items-center gap-2"
+                disabled={cooldownRemaining > 0}
+                className={`px-8 py-3 rounded-xl font-bold text-white shadow-[0_0_20px_rgba(255,0,153,0.4)] transition-all flex items-center gap-2 ${
+                    cooldownRemaining > 0 
+                    ? 'bg-slate-600 cursor-not-allowed opacity-70' 
+                    : 'bg-gradient-to-r from-audi-pink to-audi-purple hover:scale-105'
+                }`}
             >
-                <Icons.Wand className="w-5 h-5" />
-                <span>{lang === 'vi' ? 'TẠO ẢNH NGAY' : 'GENERATE'}</span>
+                {cooldownRemaining > 0 ? (
+                    <>
+                        <Icons.Clock className="w-5 h-5 animate-spin-slow" />
+                        <span>{lang === 'vi' ? `ĐỢI ${cooldownRemaining}s` : `WAIT ${cooldownRemaining}s`}</span>
+                    </>
+                ) : (
+                    <>
+                        <Icons.Wand className="w-5 h-5" />
+                        <span>{lang === 'vi' ? 'TẠO ẢNH NGAY' : 'GENERATE'}</span>
+                    </>
+                )}
             </button>
         </div>
     </div>

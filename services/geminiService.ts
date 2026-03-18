@@ -995,7 +995,7 @@ export const editImageWithInstructions = async (
                         },
                         config: config
                     }),
-                    45000,
+                    180000,
                     "Image Editing"
                 );
             } catch (e: any) {
@@ -1067,7 +1067,7 @@ export const removeBackgroundImage = async (
                         },
                         config: config
                     }),
-                    45000,
+                    180000,
                     "Remove Background"
                 );
             } catch (e: any) {
@@ -1139,7 +1139,7 @@ export const upscaleImage = async (
                         },
                         config: config
                     }),
-                    45000,
+                    180000,
                     "Upscale Image"
                 );
             } catch (e: any) {

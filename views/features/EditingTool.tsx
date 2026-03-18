@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Feature, Language, GeneratedImage } from '../../types';
 import { Icons } from '../../components/Icons';
 import { editImageWithInstructions } from '../../services/geminiService';
-import { saveImageToStorage } from '../../services/storageService';
+import { saveImageToStorage, uploadFileToR2 } from '../../services/storageService';
 import { getUserProfile, updateUserBalance } from '../../services/economyService';
 import { useNotification } from '../../components/NotificationSystem';
 import { optimizePayload } from '../../utils/imageProcessor';
@@ -121,9 +121,19 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
          const instruction = constructPrompt();
          
          // Optimize the image before sending to reduce payload size and avoid 429/Resource Exhausted
-         const optimizedImage = await optimizePayload(uploadedImage, 2048);
+         const optimizedImage = await optimizePayload(uploadedImage, 768);
          const base64Data = optimizedImage.split(',')[1];
          const mimeType = optimizedImage.substring(optimizedImage.indexOf(':') + 1, optimizedImage.indexOf(';'));
+
+         // --- NEW: UPLOAD TO R2 CLOUD (INPUTS - LOGGING ONLY) ---
+         // We upload to R2 for persistent storage/logging, but we pass the ORIGINAL BASE64 to editImageWithInstructions
+         // to avoid CORS issues when the browser tries to fetch the R2 URL to send to Google.
+         if (uploadedImage && uploadedImage.startsWith('data:')) {
+             setProgressLogs(prev => [...prev, "Đang tải ảnh gốc lên R2 Cloud (Backup)..."]);
+             uploadFileToR2(uploadedImage, 'inputs').then(url => {
+                 console.log("R2 Edit Backup URL:", url);
+             }).catch(e => console.warn("R2 Edit Backup Failed", e));
+         }
 
          const result = await editImageWithInstructions(
              base64Data, 
@@ -330,6 +340,23 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
                  </div>
              </div>
          )}
+
+         {/* HQ Cloud Link (Always On) */}
+         <div className="pt-4 border-t border-white/10 space-y-3">
+             <label className="text-[10px] font-bold text-slate-400 uppercase">Tính năng mặc định (Included)</label>
+             <div className="flex items-center justify-between p-3 rounded-xl bg-audi-cyan/10 border border-audi-cyan/30">
+                 <div className="flex items-center gap-3">
+                     <div className="w-8 h-8 rounded-full bg-audi-cyan/20 flex items-center justify-center text-audi-cyan">
+                         <Icons.Cloud className="w-4 h-4" />
+                     </div>
+                     <div>
+                         <div className="text-xs font-bold text-white">HQ Cloud Link (R2)</div>
+                         <div className="text-[9px] text-audi-cyan font-bold">ACTIVE • FREE</div>
+                     </div>
+                 </div>
+                 <Icons.Lock className="w-4 h-4 text-audi-cyan opacity-50" />
+             </div>
+         </div>
 
          {/* COST & ACTION */}
          <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/10">

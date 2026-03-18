@@ -958,7 +958,7 @@ export const editImageWithInstructions = async (
     let model = '';
     if (featureId === 'remove_bg_pro' || featureId === 'sharpen_upscale') {
         model = 'gemini-2.5-flash-image';
-        modelType = 'flash'; // Force flash key for these features
+        modelType = 'flash'; // Force flash key
     } else {
         model = modelType === 'flash' ? 'gemini-3.1-flash-image-preview' : 'gemini-3-pro-image-preview';
     }

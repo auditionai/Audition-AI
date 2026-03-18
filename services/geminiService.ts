@@ -210,7 +210,7 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     // Map model names for Vertex AI
                     let vertexModel = params.model;
                     let endpoint = 'generateContent';
-                    let apiVersion = 'v1beta1'; // Default to v1beta1 for preview models
+                    let apiVersion = 'v1'; // Changed to v1 as requested
                     let isImageModel = false;
                     
                     // --- STANDARD PIPELINE ---
@@ -219,29 +219,29 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                         if (vertexModel.includes('flash')) {
                             if (vertexModel === 'gemini-2.5-flash-image') {
                                 // Keep it as gemini-2.5-flash-image for editing
-                                apiVersion = 'v1beta1';
+                                apiVersion = 'v1';
                             } else {
                                 vertexModel = 'gemini-3.1-flash-image-preview';
-                                apiVersion = 'v1beta1';
+                                apiVersion = 'v1';
                             }
                         } else if (vertexModel.includes('pro')) {
                             vertexModel = 'gemini-3-pro-image-preview';
-                            apiVersion = 'v1beta1'; // Preview models use v1beta1
+                            apiVersion = 'v1';
                         }
                         isImageModel = true; // Flag as image model
                     } else {
                         if (vertexModel.includes('flash')) {
                             // On Vertex AI, use 3 Flash
                             vertexModel = 'gemini-3-flash-preview';
-                            apiVersion = 'v1beta1'; 
+                            apiVersion = 'v1'; 
                         } else if (vertexModel.includes('pro')) {
                             // On Vertex AI, use 3.1 Pro
                             vertexModel = 'gemini-3.1-pro-preview';
-                            apiVersion = 'v1beta1'; 
+                            apiVersion = 'v1'; 
                         }
                     }
 
-                    // QUAN TRỌNG: Dùng v1beta1 cho preview, v1 cho stable.
+                    // QUAN TRỌNG: Dùng v1 theo yêu cầu
                     // Sử dụng location global cho tất cả các model theo yêu cầu của user
                     const actualLocation = 'global';
                     let url = `https://aiplatform.googleapis.com/${apiVersion}/projects/${projectId}/locations/${actualLocation}/publishers/google/models/${vertexModel}:${endpoint}`;

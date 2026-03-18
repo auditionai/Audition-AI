@@ -225,7 +225,7 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                                 apiVersion = 'v1beta1';
                             }
                         } else if (vertexModel.includes('pro')) {
-                            vertexModel = 'gemini-3-pro-image-preview';
+                            vertexModel = 'gemini-3.0-pro-image-preview';
                             apiVersion = 'v1beta1'; // Preview models use v1beta1
                         }
                         isImageModel = true; // Flag as image model
@@ -235,8 +235,8 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                             vertexModel = 'gemini-3-flash-preview';
                             apiVersion = 'v1beta1'; 
                         } else if (vertexModel.includes('pro')) {
-                            // On Vertex AI, use 3.1 Pro
-                            vertexModel = 'gemini-3.1-pro-preview';
+                            // On Vertex AI, use 3 Pro 02-2026
+                            vertexModel = 'gemini-3-pro-preview-02-2026';
                             apiVersion = 'v1beta1'; 
                         }
                     }

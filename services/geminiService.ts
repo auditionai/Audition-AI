@@ -50,15 +50,15 @@ const retryWithBackoff = async <T>(
         if (retries > 0 && isTransient) {
             const isRateLimit = error?.status === 429 || error?.message?.includes('429') || error?.message?.includes('quota');
             const msg = isRateLimit 
-                ? `${label} - API Key hết hạn mức (429). Đang tự động đổi sang Key dự phòng... (Còn ${retries} lần)`
+                ? `${label} - API Key hết hạn mức (429). Đang đợi và thử lại... (Còn ${retries} lần)`
                 : `${label} - Server Google đang xử lý quá tải. Tự động kết nối lại... (Còn ${retries} lần)`;
             
             console.warn(msg, error.message);
             if (onLog) onLog(`🔄 ${msg}`);
             
             // Wait before retry
-            // If it's a rate limit, we can retry faster because we are swapping keys
-            const waitTime = isRateLimit ? 1000 : delay;
+            // For 429, wait longer (10s) to let quota reset
+            const waitTime = isRateLimit ? 10000 : delay;
             await new Promise(resolve => setTimeout(resolve, waitTime));
             return retryWithBackoff(operation, retries - 1, delay, label, onLog);
         }
@@ -241,10 +241,18 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                         }
                     }
 
-                    // QUAN TRỌNG: Dùng v1beta1 cho preview, v1 cho stable.
-                    // Sử dụng location global để tận dụng Quota tổng hợp (aggregate quota) cao hơn
-                    const actualLocation = 'global';
-                    const apiEndpoint = 'aiplatform.googleapis.com'; // Dùng endpoint chung cho global location
+                    // --- SMART REGION ROTATION ---
+                    // Danh sách các vùng có hạ tầng mạnh và Quota cao cho Gemini 3
+                    const regions = [
+                        'us-central1',
+                        'us-east4',
+                        'europe-west9',
+                        'us-west1',
+                        'asia-northeast1'
+                    ];
+                    // Chọn ngẫu nhiên một vùng cho mỗi request để lách bộ lọc nghẽn
+                    const actualLocation = regions[Math.floor(Math.random() * regions.length)];
+                    const apiEndpoint = `${actualLocation}-aiplatform.googleapis.com`; 
                     let url = `https://${apiEndpoint}/${apiVersion}/projects/${projectId}/locations/${actualLocation}/publishers/google/models/${vertexModel}:${endpoint}`;
                     
                     // Chuyển đổi config sang generationConfig cho REST API
@@ -375,7 +383,7 @@ const extractImage = (response: any): string | null => {
 export const testApiKey = async (tier: 'flash' | 'pro' = 'flash'): Promise<boolean> => {
     try {
         const freshAi = await getAiClient(tier);
-        const testModel = tier === 'pro' ? 'gemini-3.1-pro-preview' : 'gemini-3-flash-preview';
+        const testModel = tier === 'pro' ? 'gemini-3-pro-preview-02-2026' : 'gemini-3-flash-preview';
 
         await runWithTimeout(
             freshAi.models.generateContent({
@@ -526,14 +534,15 @@ const optimizePromptWithThinking = async (
     rawPrompt: string, 
     styleContext: string = "", 
     poseContext: string = "",
-    masterSheetPart: any | null = null
+    masterSheetPart: any | null = null,
+    tier: 'flash' | 'pro' = 'pro' // Thêm tham số tier
 ): Promise<string> => {
-    // Use Gemini 3.1 Pro for the "Brain" of the operation.
-    const model = 'gemini-3.1-pro-preview'; 
+    // Sử dụng đúng model theo tier đã chọn
+    const model = tier === 'pro' ? 'gemini-3.1-pro-preview' : 'gemini-3-flash-preview'; 
 
     try {
-        // Use Pro client for reasoning (it's text-only so it's cheap/fast enough)
-        const freshAi = await getAiClient('pro');
+        // Sử dụng client tương ứng với tier
+        const freshAi = await getAiClient(tier);
         
         const parts: any[] = [];
         
@@ -777,8 +786,8 @@ export const generateImage = async (
     
     // 6. PROMPT OPTIMIZATION (MERGING ALL CONTEXTS)
     onLog("Step 4: Generating Perfect Image Prompt...");
-    // Pass masterSheetPart to the brain so it can describe the characters
-    const optimizedPrompt = await optimizePromptWithThinking(prompt, styleKeywords, poseDescription, masterSheetPart);
+    // Truyền modelType (flash/pro) vào để tối ưu prompt đúng chế độ
+    const optimizedPrompt = await optimizePromptWithThinking(prompt, styleKeywords, poseDescription, masterSheetPart, modelType);
     
     // 7. FINAL ASSEMBLY
     onLog("Step 5: Finalizing Data Payload (Integrity Check)...");

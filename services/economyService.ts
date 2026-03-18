@@ -146,15 +146,23 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
         // Completely silent
     }
     
-    // 2. Update balance directly (skip RPC to avoid 404)
+    // 2. Update balance using SECURE RPC (Atomicity & Security)
     try {
-        // Fetch latest balance first to minimize race condition
-        const { data: latestUser } = await supabase.from('users').select('diamonds').eq('id', userId).maybeSingle();
-        const currentBalance = latestUser?.diamonds || 0;
-        const newBalance = currentBalance + amount;
+        const { error } = await supabase.rpc('secure_update_balance', {
+            amount: amount,
+            reason: reason,
+            log_type: type
+        });
         
-        const { error } = await supabase.from('users').update({ diamonds: newBalance }).eq('id', userId);
-        if (error) throw error;
+        if (error) {
+            // Fallback for legacy systems without RPC
+            console.warn("[Economy] RPC failed, falling back to direct update (Legacy Mode)", error);
+            const { data: latestUser } = await supabase.from('users').select('diamonds').eq('id', userId).maybeSingle();
+            const currentBalance = latestUser?.diamonds || 0;
+            const newBalance = currentBalance + amount;
+            const { error: directError } = await supabase.from('users').update({ diamonds: newBalance }).eq('id', userId);
+            if (directError) throw directError;
+        }
     } catch (e: any) {
         console.error("[Economy] Critical: Failed to update balance", e);
         throw new Error("Failed to update balance: " + e.message);

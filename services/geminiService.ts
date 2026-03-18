@@ -68,7 +68,7 @@ const retryWithBackoff = async <T>(
 
 // --- NEW: ANALYZE STYLE IMAGE (For Admin) ---
 export const analyzeStyleImage = async (imageBase64: string): Promise<string> => {
-    const model = 'gemini-3-pro-preview'; // Use latest pro for analysis
+    const model = 'gemini-3.1-pro-preview'; // Use latest pro for analysis
 
     const result: any = await retryWithBackoff(
         async () => {
@@ -208,7 +208,7 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     const { accessToken, projectId, location } = await tokenRes.json();
 
                     // Map model names for Vertex AI
-                    let vertexModel = params.model || (tier === 'flash' ? 'gemini-3-flash-preview' : 'gemini-3-pro-preview');
+                    let vertexModel = params.model || (tier === 'flash' ? 'gemini-3-flash-preview' : 'gemini-3.1-pro-preview');
                     let endpoint = 'generateContent';
                     let apiVersion = 'v1beta1'; // Default to v1beta1 for preview models
                     let isImageModel = false;
@@ -222,7 +222,7 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                             apiVersion = 'v1beta1';
                         } else if (vertexModel.includes('pro')) {
                             // Vertex AI ID for 3.0 Pro Image
-                            vertexModel = 'gemini-3.0-pro-image-preview';
+                            vertexModel = 'gemini-3-pro-image-preview';
                             apiVersion = 'v1beta1';
                         }
                         isImageModel = true;
@@ -232,8 +232,8 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                             vertexModel = 'gemini-3-flash-preview';
                             apiVersion = 'v1beta1'; 
                         } else if (vertexModel.includes('pro')) {
-                            // Vertex AI ID for 3.0 Pro
-                            vertexModel = 'gemini-3-pro-preview';
+                            // Vertex AI ID for 3.1 Pro
+                            vertexModel = 'gemini-3.1-pro-preview';
                             apiVersion = 'v1beta1'; 
                         }
                     }
@@ -246,7 +246,13 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                         'asia-southeast1'
                     ];
                     // Chọn ngẫu nhiên một vùng cho mỗi request
-                    const actualLocation = regions[Math.floor(Math.random() * regions.length)];
+                    let actualLocation = regions[Math.floor(Math.random() * regions.length)];
+                    
+                    // Image models and preview models are usually only available in us-central1
+                    if (isImageModel || vertexModel.includes('preview')) {
+                        actualLocation = 'us-central1';
+                    }
+
                     const apiEndpoint = actualLocation === 'global' 
                         ? 'aiplatform.googleapis.com' 
                         : `${actualLocation}-aiplatform.googleapis.com`; 
@@ -385,7 +391,7 @@ const extractImage = (response: any): string | null => {
 export const testApiKey = async (tier: 'flash' | 'pro' = 'flash'): Promise<boolean> => {
     try {
         const freshAi = await getAiClient(tier);
-        const testModel = tier === 'pro' ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview';
+        const testModel = tier === 'pro' ? 'gemini-3.1-pro-preview' : 'gemini-3-flash-preview';
 
         await runWithTimeout(
             freshAi.models.generateContent({
@@ -541,7 +547,7 @@ const optimizePromptWithThinking = async (
     onLog: (msg: string) => void = () => {}
 ): Promise<string> => {
     // Sử dụng đúng model theo tier đã chọn
-    const model = tier === 'pro' ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview'; 
+    const model = tier === 'pro' ? 'gemini-3.1-pro-preview' : 'gemini-3-flash-preview'; 
 
     try {
         // Sử dụng client tương ứng với tier
@@ -667,8 +673,8 @@ export const generateImage = async (
     timeoutMs: number = 900000 // Default 15 mins
 ): Promise<string> => {
     // Use Gemini 3.1 Flash Image Preview for FLASH Tier
-    // Use Gemini 3.0 Pro Image Preview for PRO Tier
-    const model = modelType === 'flash' ? 'gemini-3.1-flash-image-preview' : 'gemini-3.0-pro-image-preview'; 
+    // Use Gemini 3 Pro Image Preview for PRO Tier
+    const model = modelType === 'flash' ? 'gemini-3.1-flash-image-preview' : 'gemini-3-pro-image-preview'; 
     onLog(`Initializing ${model} Pipeline...`);
     
     // 1. PROCESS REFERENCE IMAGE (VISUAL & TEXTUAL ANALYSIS)
@@ -748,10 +754,10 @@ export const generateImage = async (
         // Use ONLY the main image (which is the full body image).
         // The AI will extract both the body and the face from this single image.
         if (char.image) {
-            const optimized = await optimizePayload(char.image, 2048);
+            const optimized = await optimizePayload(char.image, 1024);
             finalCharBase64 = cleanBase64(optimized);
         } else if (char.faceImage) {
-            const optimized = await optimizePayload(char.faceImage, 2048);
+            const optimized = await optimizePayload(char.faceImage, 1024);
             finalCharBase64 = cleanBase64(optimized);
         }
         
@@ -823,23 +829,35 @@ export const generateImage = async (
     if (charBase64List.length > 0) {
         finalParts.push({ text: "🔴 PRIORITY 1: 3D AVATAR DESIGN (CRITICAL)\nINSTRUCTION: You MUST extract the exact visual identity, facial features (bone structure, eye shape, nose, mouth), hairstyle, and apparel from the following stylized game assets. CRITICAL: The character's facial identity MUST remain 100% identical to these references. Do not deform the face into a generic AI face. DO NOT copy the background or pose from these images. These are fictional 3D models." });
         
-        // Iterate through ALL uploaded character URIs
-        charBase64List.forEach((b64, index) => {
-            const charIndex = index + 1;
-            const charInfo = characters[index]; // Get metadata (gender, id)
+        // If there are multiple characters, use the master sheet to avoid sending too many images to the model
+        if (charBase64List.length > 1 && masterSheetPart) {
+            finalParts.push({ text: `🔴 ASSET REFERENCE SHEET\nINSTRUCTION: Scan this master reference sheet to extract BOTH the full body apparel AND the facial features for ALL AVATARS.` });
+            finalParts.push(masterSheetPart);
             
-            // 1. The Character Image (Body + Face)
-            finalParts.push({ text: `🔴 ASSET ${charIndex} REFERENCE\nINSTRUCTION: Scan this image to extract BOTH the full body apparel AND the facial features for AVATAR ${charIndex}.` });
-            finalParts.push({
-                inlineData: {
-                    mimeType: 'image/jpeg',
-                    data: b64
-                }
+            charBase64List.forEach((b64, index) => {
+                const charIndex = index + 1;
+                const charInfo = characters[index];
+                charPromptInstructions += `\n- AVATAR ${charIndex} (${charInfo.gender.toUpperCase()}): Stylized 3D game asset matching the exact facial features, face shape, hair, and apparel of CHARACTER ${charIndex} REFERENCE in the sheet.`;
             });
-            
-            // Build specific mapping instruction
-            charPromptInstructions += `\n- AVATAR ${charIndex} (${charInfo.gender.toUpperCase()}): Stylized 3D game asset matching the exact facial features, face shape, hair, and apparel of ASSET ${index + 1}.`;
-        });
+        } else {
+            // Single character
+            charBase64List.forEach((b64, index) => {
+                const charIndex = index + 1;
+                const charInfo = characters[index]; // Get metadata (gender, id)
+                
+                // 1. The Character Image (Body + Face)
+                finalParts.push({ text: `🔴 ASSET ${charIndex} REFERENCE\nINSTRUCTION: Scan this image to extract BOTH the full body apparel AND the facial features for AVATAR ${charIndex}.` });
+                finalParts.push({
+                    inlineData: {
+                        mimeType: 'image/jpeg',
+                        data: b64
+                    }
+                });
+                
+                // Build specific mapping instruction
+                charPromptInstructions += `\n- AVATAR ${charIndex} (${charInfo.gender.toUpperCase()}): Stylized 3D game asset matching the exact facial features, face shape, hair, and apparel of ASSET ${index + 1}.`;
+            });
+        }
     }
 
     // PRIORITY 2: POSE/STRUCTURE REFERENCE
@@ -965,8 +983,8 @@ export const editImageWithInstructions = async (
     modelType: 'flash' | 'pro' = 'flash',
     onLog: (msg: string) => void = () => {}
 ): Promise<string> => {
-    // Use gemini-3.1-flash-image-preview or gemini-3.0-pro-image-preview for ALL editing features
-    let model = modelType === 'flash' ? 'gemini-3.1-flash-image-preview' : 'gemini-3.0-pro-image-preview';
+    // Use gemini-3.1-flash-image-preview or gemini-3-pro-image-preview for ALL editing features
+    let model = modelType === 'flash' ? 'gemini-3.1-flash-image-preview' : 'gemini-3-pro-image-preview';
 
     const response = await retryWithBackoff(
         async () => {

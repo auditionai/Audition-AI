@@ -68,7 +68,7 @@ const retryWithBackoff = async <T>(
 
 // --- NEW: ANALYZE STYLE IMAGE (For Admin) ---
 export const analyzeStyleImage = async (imageBase64: string): Promise<string> => {
-    const model = 'gemini-3.1-pro-preview'; // Use latest pro for analysis
+    const model = 'gemini-3.0-pro-preview'; // Use latest pro for analysis
 
     const result: any = await retryWithBackoff(
         async () => {
@@ -208,7 +208,7 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     const { accessToken, projectId, location } = await tokenRes.json();
 
                     // Map model names for Vertex AI
-                    let vertexModel = params.model || (tier === 'flash' ? 'gemini-3-flash-preview' : 'gemini-3.1-pro-preview');
+                    let vertexModel = params.model || (tier === 'flash' ? 'gemini-3-flash-preview' : 'gemini-3.0-pro-preview');
                     let endpoint = 'generateContent';
                     let apiVersion = 'v1beta1'; // Default to v1beta1 for preview models
                     let isImageModel = false;
@@ -232,8 +232,8 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                             vertexModel = 'gemini-3-flash-preview';
                             apiVersion = 'v1beta1'; 
                         } else if (vertexModel.includes('pro')) {
-                            // Vertex AI ID for 3.1 Pro
-                            vertexModel = 'gemini-3.1-pro-preview';
+                            // Vertex AI ID for 3.0 Pro
+                            vertexModel = 'gemini-3.0-pro-preview';
                             apiVersion = 'v1beta1'; 
                         }
                     }
@@ -404,7 +404,7 @@ const extractImage = (response: any): string | null => {
 export const testApiKey = async (tier: 'flash' | 'pro' = 'flash', attempt: number = 0): Promise<boolean> => {
     try {
         const freshAi = await getAiClient(tier, undefined, () => {}, attempt);
-        const testModel = tier === 'pro' ? 'gemini-3.1-pro-preview' : 'gemini-3-flash-preview';
+        const testModel = tier === 'pro' ? 'gemini-3.0-pro-preview' : 'gemini-3-flash-preview';
 
         await runWithTimeout(
             freshAi.models.generateContent({
@@ -560,7 +560,7 @@ const optimizePromptWithThinking = async (
     onLog: (msg: string) => void = () => {}
 ): Promise<string> => {
     // Sử dụng đúng model theo tier đã chọn
-    const model = tier === 'pro' ? 'gemini-3.1-pro-preview' : 'gemini-3-flash-preview'; 
+    const model = tier === 'pro' ? 'gemini-3.0-pro-preview' : 'gemini-3-flash-preview'; 
 
     try {
         // Sử dụng client tương ứng với tier

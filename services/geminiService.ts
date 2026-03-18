@@ -950,8 +950,7 @@ export const editImageWithInstructions = async (
     instruction: string, 
     mimeType: string,
     modelType: 'flash' | 'pro' = 'flash',
-    onLog: (msg: string) => void = () => {},
-    featureId?: string
+    onLog: (msg: string) => void = () => {}
 ): Promise<string> => {
     // Use gemini-3.1-flash-image-preview or gemini-3-pro-image-preview for ALL editing features
     let model = modelType === 'flash' ? 'gemini-3.1-flash-image-preview' : 'gemini-3-pro-image-preview';
@@ -969,12 +968,8 @@ export const editImageWithInstructions = async (
                 };
                 
                 if (model.includes('3.1-flash-image') || model.includes('3-pro-image')) {
-                    // Cố gắng giữ nguyên chất lượng gốc (2K) hoặc làm nét (4K)
-                    if (featureId === 'sharpen_upscale') {
-                        config.imageConfig.imageSize = "4K";
-                    } else {
-                        config.imageConfig.imageSize = "2K"; // 2K is ~2048px, matching optimizePayload
-                    }
+                    // Luôn dùng 2K cho các tính năng chỉnh sửa để giữ chất lượng cao
+                    config.imageConfig.imageSize = "2K"; // 2K is ~2048px, matching optimizePayload
                 }
 
                 // Remove empty imageConfig if not used
@@ -1027,5 +1022,145 @@ export const editImageWithInstructions = async (
 
     const result = extractImage(response);
     if (!result) throw new Error("Editing failed: No image output");
+    return result;
+}
+
+export const removeBackgroundImage = async (
+    base64Data: string, 
+    instruction: string, 
+    mimeType: string,
+    onLog: (msg: string) => void = () => {}
+): Promise<string> => {
+    const model = 'gemini-3.1-flash-image-preview';
+
+    const response = await retryWithBackoff(
+        async () => {
+            const freshAi = await getAiClient('flash');
+            const currentKey = (freshAi as any)._internalApiKey;
+            const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
+            onLog(`> Đang dùng API Key: ${shortKey} | Model: ${model}`);
+
+            try {
+                const config: any = {
+                    imageConfig: {
+                        imageSize: "2K"
+                    }
+                };
+
+                return await runWithTimeout(
+                    freshAi.models.generateContent({
+                        model: model,
+                        contents: {
+                            parts: [
+                                {
+                                    inlineData: {
+                                        mimeType: mimeType || 'image/png',
+                                        data: cleanBase64(base64Data)
+                                    }
+                                },
+                                {
+                                    text: instruction
+                                }
+                            ]
+                        },
+                        config: config
+                    }),
+                    45000,
+                    "Remove Background"
+                );
+            } catch (e: any) {
+                const isOverload = e.message?.includes('503') || e.message?.includes('Overloaded') || e.status === 503 || e.message?.includes('timed out') || e.message?.includes('Timeout');
+                const isRateLimit = e.message?.includes('429') || e.status === 429 || e.message?.includes('quota');
+
+                if (isOverload) {
+                     console.warn(`${model} 503/Timeout. Retrying...`);
+                     onLog(`⏳ Đang xếp hàng chờ Google Render ảnh (Model Flash đang xử lý)...`);
+                     if (currentKey) reportKeyFailure(currentKey);
+                } else if (isRateLimit) {
+                     console.warn(`${model} 429 (Rate Limit). Banning key and retrying with a new one...`);
+                     if (currentKey) reportKeyFailure(currentKey);
+                }
+                
+                throw e;
+            }
+        },
+        10,
+        8000,
+        "Remove Background",
+        onLog
+    );
+
+    const result = extractImage(response);
+    if (!result) throw new Error("Remove Background failed: No image output");
+    return result;
+}
+
+export const upscaleImage = async (
+    base64Data: string, 
+    instruction: string, 
+    mimeType: string,
+    onLog: (msg: string) => void = () => {}
+): Promise<string> => {
+    const model = 'gemini-3.1-flash-image-preview';
+
+    const response = await retryWithBackoff(
+        async () => {
+            const freshAi = await getAiClient('flash');
+            const currentKey = (freshAi as any)._internalApiKey;
+            const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
+            onLog(`> Đang dùng API Key: ${shortKey} | Model: ${model}`);
+
+            try {
+                const config: any = {
+                    imageConfig: {
+                        imageSize: "2K"
+                    }
+                };
+
+                return await runWithTimeout(
+                    freshAi.models.generateContent({
+                        model: model,
+                        contents: {
+                            parts: [
+                                {
+                                    inlineData: {
+                                        mimeType: mimeType || 'image/png',
+                                        data: cleanBase64(base64Data)
+                                    }
+                                },
+                                {
+                                    text: instruction
+                                }
+                            ]
+                        },
+                        config: config
+                    }),
+                    45000,
+                    "Upscale Image"
+                );
+            } catch (e: any) {
+                const isOverload = e.message?.includes('503') || e.message?.includes('Overloaded') || e.status === 503 || e.message?.includes('timed out') || e.message?.includes('Timeout');
+                const isRateLimit = e.message?.includes('429') || e.status === 429 || e.message?.includes('quota');
+
+                if (isOverload) {
+                     console.warn(`${model} 503/Timeout. Retrying...`);
+                     onLog(`⏳ Đang xếp hàng chờ Google Render ảnh (Model Flash đang xử lý)...`);
+                     if (currentKey) reportKeyFailure(currentKey);
+                } else if (isRateLimit) {
+                     console.warn(`${model} 429 (Rate Limit). Banning key and retrying with a new one...`);
+                     if (currentKey) reportKeyFailure(currentKey);
+                }
+                
+                throw e;
+            }
+        },
+        10,
+        8000,
+        "Upscale Image",
+        onLog
+    );
+
+    const result = extractImage(response);
+    if (!result) throw new Error("Upscale failed: No image output");
     return result;
 }

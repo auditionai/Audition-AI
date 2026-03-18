@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Feature, Language, GeneratedImage } from '../../types';
 import { Icons } from '../../components/Icons';
-import { editImageWithInstructions } from '../../services/geminiService';
+import { editImageWithInstructions, removeBackgroundImage, upscaleImage } from '../../services/geminiService';
 import { saveImageToStorage, uploadFileToR2 } from '../../services/storageService';
 import { getUserProfile, updateUserBalance } from '../../services/economyService';
 import { useNotification } from '../../components/NotificationSystem';
@@ -136,14 +136,30 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
              }).catch(e => console.warn("R2 Edit Backup Failed", e));
          }
 
-         const result = await editImageWithInstructions(
-             base64Data, 
-             instruction, 
-             mimeType, 
-             aiModel,
-             (msg) => setProgressLogs(prev => [...prev, msg]),
-             feature.id
-         );
+         let result;
+         if (isRemover) {
+             result = await removeBackgroundImage(
+                 base64Data, 
+                 instruction, 
+                 mimeType, 
+                 (msg) => setProgressLogs(prev => [...prev, msg])
+             );
+         } else if (isUpscaler) {
+             result = await upscaleImage(
+                 base64Data, 
+                 instruction, 
+                 mimeType, 
+                 (msg) => setProgressLogs(prev => [...prev, msg])
+             );
+         } else {
+             result = await editImageWithInstructions(
+                 base64Data, 
+                 instruction, 
+                 mimeType, 
+                 aiModel,
+                 (msg) => setProgressLogs(prev => [...prev, msg])
+             );
+         }
 
          if (result) {
             setResultImage(result);

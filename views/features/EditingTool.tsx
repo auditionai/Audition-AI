@@ -83,7 +83,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
 
       // 3. Background Remover Logic (Force Black & High Quality)
       if (isRemover) {
-          return "Remove the background completely and place the subject on a pure BLACK background (#000000). CRITICAL: Maintain the original image resolution (4K) and subject details exactly. Do NOT downscale, do NOT blur edges, do NOT alter the subject's lighting.";
+          return "Remove the background completely and place the subject on a pure BLACK background (#000000). CRITICAL: Maintain the original image resolution and subject details exactly. Do NOT downscale, do NOT blur edges, do NOT alter the subject's lighting.";
       }
 
       return feature.defaultPrompt || "";
@@ -121,7 +121,8 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
          const instruction = constructPrompt();
          
          // Optimize the image before sending to reduce payload size and avoid 429/Resource Exhausted
-         const optimizedImage = await optimizePayload(uploadedImage, 768);
+         // Using 2048 to keep high quality for editing and background removal
+         const optimizedImage = await optimizePayload(uploadedImage, 2048);
          const base64Data = optimizedImage.split(',')[1];
          const mimeType = optimizedImage.substring(optimizedImage.indexOf(':') + 1, optimizedImage.indexOf(';'));
 

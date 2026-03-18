@@ -953,15 +953,8 @@ export const editImageWithInstructions = async (
     onLog: (msg: string) => void = () => {},
     featureId?: string
 ): Promise<string> => {
-    // Use gemini-2.5-flash-image for background removal and upscaling
-    // Use gemini-3.1-flash-image-preview or gemini-3-pro-image-preview for editing
-    let model = '';
-    if (featureId === 'remove_bg_pro' || featureId === 'sharpen_upscale') {
-        model = 'gemini-2.5-flash-image';
-        modelType = 'flash'; // Force flash key
-    } else {
-        model = modelType === 'flash' ? 'gemini-3.1-flash-image-preview' : 'gemini-3-pro-image-preview';
-    }
+    // Use gemini-3.1-flash-image-preview or gemini-3-pro-image-preview for ALL editing features
+    let model = modelType === 'flash' ? 'gemini-3.1-flash-image-preview' : 'gemini-3-pro-image-preview';
 
     const response = await retryWithBackoff(
         async () => {
@@ -972,13 +965,21 @@ export const editImageWithInstructions = async (
 
             try {
                 const config: any = {
-                    imageConfig: {
-                        aspectRatio: "1:1"
-                    }
+                    imageConfig: {}
                 };
                 
                 if (model.includes('3.1-flash-image') || model.includes('3-pro-image')) {
-                    config.imageConfig.imageSize = "1K";
+                    // Cố gắng giữ nguyên chất lượng gốc (2K) hoặc làm nét (4K)
+                    if (featureId === 'sharpen_upscale') {
+                        config.imageConfig.imageSize = "4K";
+                    } else {
+                        config.imageConfig.imageSize = "2K"; // 2K is ~2048px, matching optimizePayload
+                    }
+                }
+
+                // Remove empty imageConfig if not used
+                if (Object.keys(config.imageConfig).length === 0) {
+                    delete config.imageConfig;
                 }
 
                 return await runWithTimeout(

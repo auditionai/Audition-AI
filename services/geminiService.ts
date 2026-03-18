@@ -949,13 +949,18 @@ export const editImageWithInstructions = async (
     base64Data: string, 
     instruction: string, 
     mimeType: string,
-    modelType: 'flash' | 'pro' = 'flash'
+    modelType: 'flash' | 'pro' = 'flash',
+    onLog: (msg: string) => void = () => {}
 ): Promise<string> => {
     const model = modelType === 'flash' ? 'gemini-3.1-flash-image-preview' : 'gemini-3-pro-image-preview'; 
 
     const response = await retryWithBackoff(
         async () => {
             const freshAi = await getAiClient(modelType);
+            const currentKey = (freshAi as any)._internalApiKey;
+            const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
+            onLog(`> Đang dùng API Key: ${shortKey} | Model: ${model}`);
+
             try {
                 return await runWithTimeout(
                     freshAi.models.generateContent({
@@ -977,14 +982,26 @@ export const editImageWithInstructions = async (
                     45000,
                     "Image Editing"
                 );
-            } catch (e) {
+            } catch (e: any) {
+                const isOverload = e.message?.includes('503') || e.message?.includes('Overloaded') || e.status === 503 || e.message?.includes('timed out') || e.message?.includes('Timeout');
+                const isRateLimit = e.message?.includes('429') || e.status === 429 || e.message?.includes('quota');
+
+                if (isOverload) {
+                     console.warn(`${model} 503/Timeout. Retrying...`);
+                     onLog(`⏳ Đang xếp hàng chờ Google Render ảnh (${modelType === 'pro' ? 'Model Pro' : 'Model Flash'} đang xử lý)...`);
+                     if (currentKey) reportKeyFailure(currentKey);
+                } else if (isRateLimit) {
+                     console.warn(`${model} 429 (Rate Limit). Banning key and retrying with a new one...`);
+                     if (currentKey) reportKeyFailure(currentKey);
+                }
                 
                 throw e;
             }
         },
-        3,
-        2000,
-        "Image Editing"
+        10, // Tăng lên 10 lần thử lại để cơ chế đổi key hoạt động tốt
+        8000, // Chờ 8s mỗi lần thử lại
+        "Image Editing",
+        onLog
     );
 
     const result = extractImage(response);

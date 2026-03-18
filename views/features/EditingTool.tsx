@@ -32,6 +32,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
   const [resultImage, setResultImage] = useState<string | null>(null);
   const [isComparing, setIsComparing] = useState(false);
   const [aiModel, setAiModel] = useState<'flash' | 'pro'>('flash');
+  const [progressLogs, setProgressLogs] = useState<string[]>([]);
   
   // Specific States
   const isUpscaler = feature.id === 'sharpen_upscale';
@@ -110,6 +111,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
 
      setLoading(true);
      setResultImage(null);
+     setProgressLogs([]);
 
      try {
          // Deduct cost and log usage
@@ -120,7 +122,13 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
          const base64Data = uploadedImage.split(',')[1];
          const mimeType = uploadedImage.substring(uploadedImage.indexOf(':') + 1, uploadedImage.indexOf(';'));
 
-         const result = await editImageWithInstructions(base64Data, instruction, mimeType, aiModel);
+         const result = await editImageWithInstructions(
+             base64Data, 
+             instruction, 
+             mimeType, 
+             aiModel,
+             (msg) => setProgressLogs(prev => [...prev, msg])
+         );
 
          if (result) {
             setResultImage(result);
@@ -336,13 +344,29 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
       {/* RESULT AREA */}
       <div className="flex-1 glass-panel rounded-3xl p-6 flex flex-col items-center justify-center bg-slate-100/50 dark:bg-black/20 min-h-[400px] relative overflow-hidden">
           {loading ? (
-               <div className="text-center animate-pulse z-10">
+               <div className="text-center animate-pulse z-10 w-full max-w-md">
                    <div className="relative w-24 h-24 mx-auto mb-6">
                        <div className={`absolute inset-0 rounded-full border-4 border-t-transparent animate-spin ${isUpscaler ? 'border-audi-cyan' : isMagicEditor ? 'border-audi-purple' : 'border-audi-pink'}`}></div>
                        <Icons.Sparkles className={`w-10 h-10 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 ${isUpscaler ? 'text-audi-cyan' : isMagicEditor ? 'text-audi-purple' : 'text-audi-pink'}`} />
                    </div>
                    <p className="text-white font-bold text-lg font-game tracking-widest">{lang === 'vi' ? 'AI ĐANG SUY NGHĨ...' : 'AI THINKING...'}</p>
-                   <p className="text-slate-500 text-sm mt-2">{isMagicEditor ? (lang === 'vi' ? 'Đang thực hiện chỉnh sửa...' : 'Editing...') : (lang === 'vi' ? 'Đang xử lý...' : 'Processing...')}</p>
+                   
+                   {/* Progress Logs */}
+                   <div className="mt-6 text-left bg-black/40 rounded-xl p-4 border border-white/5 h-32 overflow-y-auto custom-scrollbar flex flex-col gap-2">
+                       {progressLogs.length === 0 ? (
+                           <div className="text-xs text-slate-500 italic flex items-center gap-2">
+                               <Icons.Loader className="w-3 h-3 animate-spin" />
+                               {lang === 'vi' ? 'Đang khởi tạo...' : 'Initializing...'}
+                           </div>
+                       ) : (
+                           progressLogs.map((log, idx) => (
+                               <div key={idx} className="text-xs text-slate-300 font-mono animate-fade-in flex items-start gap-2">
+                                   <span className="text-audi-cyan mt-0.5">›</span>
+                                   <span>{log}</span>
+                               </div>
+                           ))
+                       )}
+                   </div>
                </div>
           ) : resultImage ? (
               <div className="w-full h-full flex flex-col items-center justify-center gap-4 z-10">

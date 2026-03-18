@@ -239,19 +239,8 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     }
 
                     // --- SMART REGION ROTATION ---
-                    // Tập trung vào các vùng được yêu cầu
-                    const regions = [
-                        'global',
-                        'us-central1',
-                        'us-east1',
-                        'us-west1',
-                        'europe-west4',
-                        'asia-southeast1'
-                    ];
-                    // Chọn vùng dựa trên attempt nếu có, ngược lại ngẫu nhiên
-                    let actualLocation = attempt >= 0 
-                        ? regions[attempt % regions.length] 
-                        : regions[Math.floor(Math.random() * regions.length)];
+                    // Force global region as requested by user
+                    let actualLocation = 'global';
 
                     const apiEndpoint = actualLocation === 'global' 
                         ? 'aiplatform.googleapis.com' 

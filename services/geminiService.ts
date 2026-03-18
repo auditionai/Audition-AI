@@ -278,11 +278,14 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                             };
                             delete payload.generationConfig.imageConfig;
                         }
-                        
-                        // Gemini 3.1 Image Preview requires response_modalities
-                        if (isGlobalImageModel) {
-                            payload.generationConfig.response_modalities = ["IMAGE"];
+                    }
+                    
+                    // Gemini 3.1 Image Preview requires response_modalities
+                    if (isGlobalImageModel) {
+                        if (!payload.generationConfig) {
+                            payload.generationConfig = {};
                         }
+                        payload.generationConfig.response_modalities = ["IMAGE"];
                     }
                     
                     if (params.config?.tools) {
@@ -977,6 +980,12 @@ export const editImageWithInstructions = async (
                                     text: instruction
                                 }
                             ]
+                        },
+                        config: {
+                            imageConfig: {
+                                aspectRatio: "1:1",
+                                imageSize: "1K"
+                            }
                         }
                     }),
                     45000,

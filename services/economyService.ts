@@ -124,23 +124,22 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
             });
         }
         
-        if (error) {
-            const logData: any = {
-                amount,
-                note: reason, 
-                type
-            };
-            const { error: logError } = await supabase.from('diamond_transactions_log').insert({
+        // ALWAYS log to diamond_transactions_log
+        const logData: any = {
+            amount,
+            note: reason, 
+            type
+        };
+        const { error: logError } = await supabase.from('diamond_transactions_log').insert({
+            ...logData,
+            user_id: userId
+        });
+        
+        if (logError && logError.message.includes('column "user_id" does not exist')) {
+            await supabase.from('diamond_transactions_log').insert({
                 ...logData,
-                user_id: userId
+                uid: userId
             });
-            
-            if (logError && logError.message.includes('column "user_id" does not exist')) {
-                await supabase.from('diamond_transactions_log').insert({
-                    ...logData,
-                    uid: userId
-                });
-            }
         }
     } catch (e) {
         // Completely silent

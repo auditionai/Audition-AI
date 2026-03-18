@@ -217,8 +217,13 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     // Map models to stable versions for Vertex AI
                     if (vertexModel.includes('image')) {
                         if (vertexModel.includes('flash')) {
-                            vertexModel = 'gemini-3.1-flash-image-preview';
-                            apiVersion = 'v1beta1'; // Preview models use v1beta1
+                            if (vertexModel === 'gemini-2.5-flash-image') {
+                                // Keep it as gemini-2.5-flash-image for editing
+                                apiVersion = 'v1beta1';
+                            } else {
+                                vertexModel = 'gemini-3.1-flash-image-preview';
+                                apiVersion = 'v1beta1';
+                            }
                         } else if (vertexModel.includes('pro')) {
                             vertexModel = 'gemini-3-pro-image-preview';
                             apiVersion = 'v1beta1'; // Preview models use v1beta1
@@ -947,7 +952,8 @@ export const editImageWithInstructions = async (
     modelType: 'flash' | 'pro' = 'flash',
     onLog: (msg: string) => void = () => {}
 ): Promise<string> => {
-    const model = modelType === 'flash' ? 'gemini-3.1-flash-image-preview' : 'gemini-3-pro-image-preview'; 
+    // Use gemini-2.5-flash-image for editing as per documentation
+    const model = modelType === 'flash' ? 'gemini-2.5-flash-image' : 'gemini-3-pro-image-preview'; 
 
     const response = await retryWithBackoff(
         async () => {

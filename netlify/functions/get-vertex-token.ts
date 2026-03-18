@@ -80,7 +80,7 @@ export const handler = async (event: any, context: any) => {
       body: JSON.stringify({
         accessToken: accessToken.token,
         projectId: project_id,
-        location: 'us-central1'
+        location: 'global'
       })
     };
 

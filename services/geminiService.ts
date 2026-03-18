@@ -237,12 +237,8 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     }
 
                     // QUAN TRỌNG: Dùng v1beta1 cho preview, v1 cho stable.
-                    let url = `https://${location}-aiplatform.googleapis.com/${apiVersion}/projects/${projectId}/locations/${location}/publishers/google/models/${vertexModel}:${endpoint}`;
-                    
-                    // Gemini 3.1 Image Preview models require the global endpoint
-                    if (isGlobalImageModel) {
-                        url = `https://aiplatform.googleapis.com/${apiVersion}/projects/${projectId}/locations/global/publishers/google/models/${vertexModel}:${endpoint}`;
-                    }
+                    // Sử dụng location global cho tất cả các model theo yêu cầu
+                    let url = `https://aiplatform.googleapis.com/${apiVersion}/projects/${projectId}/locations/global/publishers/google/models/${vertexModel}:${endpoint}`;
                     
                     // Chuyển đổi config sang generationConfig cho REST API
                     let payloadContents = params.contents;

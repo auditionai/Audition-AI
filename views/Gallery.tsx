@@ -18,6 +18,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
   const [loadingImages, setLoadingImages] = useState(true);
   const [filter, setFilter] = useState<'all' | 'completed' | 'failed' | 'processing' | 'queued'>('all');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [viewingImage, setViewingImage] = useState<GeneratedImage | null>(null);
 
   // Transaction History State
   const [transactions, setTransactions] = useState<HistoryItem[]>([]);
@@ -309,8 +310,12 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                 const isProcessing = img.status === 'processing' || img.status === 'queued';
                                 
                                 return (
-                                    <tr key={img.id} className="hover:bg-white/[0.02] transition-colors group">
-                                        <td className="px-6 py-4">
+                                    <tr 
+                                        key={img.id} 
+                                        className="hover:bg-white/[0.05] transition-colors group cursor-pointer"
+                                        onClick={() => setViewingImage(img)}
+                                    >
+                                        <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                                             <input 
                                                 type="checkbox" 
                                                 className="w-4 h-4 rounded border-white/20 bg-black/50 text-audi-cyan focus:ring-audi-cyan focus:ring-offset-black"
@@ -360,7 +365,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                                 </span>
                                             )}
                                         </td>
-                                        <td className="px-6 py-4 text-right">
+                                        <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                                             <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                                 {isCompleted && img.url && (
                                                     <button 
@@ -447,6 +452,155 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                 </div>
             </div>
         </div>
+
+        {/* Image Details Modal */}
+        {viewingImage && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 animate-fade-in">
+                <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setViewingImage(null)}></div>
+                <div className="relative w-full max-w-5xl bg-[#12121a] rounded-3xl border border-white/10 shadow-2xl overflow-hidden flex flex-col md:flex-row max-h-[90vh]">
+                    {/* Close Button */}
+                    <button 
+                        onClick={() => setViewingImage(null)}
+                        className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-black/50 border border-white/10 flex items-center justify-center text-white hover:bg-white/10 transition-colors"
+                    >
+                        <Icons.X className="w-5 h-5" />
+                    </button>
+
+                    {/* Left: Image Preview */}
+                    <div className="w-full md:w-3/5 bg-black/50 flex items-center justify-center p-6 relative group min-h-[300px]">
+                        {viewingImage.url ? (
+                            <img src={viewingImage.url} alt="Generated" className="max-w-full max-h-full object-contain rounded-xl shadow-2xl" />
+                        ) : (
+                            <div className="flex flex-col items-center justify-center text-slate-500">
+                                {viewingImage.status === 'failed' ? (
+                                    <Icons.AlertTriangle className="w-16 h-16 mb-4 text-red-500/50" />
+                                ) : viewingImage.status === 'processing' || viewingImage.status === 'queued' ? (
+                                    <Icons.Loader className="w-16 h-16 mb-4 animate-spin text-audi-cyan/50" />
+                                ) : (
+                                    <Icons.Image className="w-16 h-16 mb-4 opacity-50" />
+                                )}
+                                <p>{viewingImage.status === 'failed' ? (lang === 'vi' ? 'Tạo ảnh thất bại' : 'Image generation failed') : viewingImage.status === 'processing' || viewingImage.status === 'queued' ? (lang === 'vi' ? 'Đang tạo ảnh...' : 'Image is generating...') : (lang === 'vi' ? 'Không có ảnh' : 'No image available')}</p>
+                            </div>
+                        )}
+                        
+                        {/* Image Actions Overlay */}
+                        {viewingImage.url && (
+                            <div className="absolute bottom-6 right-6 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button 
+                                    onClick={() => window.open(viewingImage.url, '_blank')}
+                                    className="bg-black/70 backdrop-blur-md border border-white/20 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-white/20 transition-colors shadow-lg"
+                                >
+                                    <Icons.ExternalLink className="w-4 h-4" />
+                                </button>
+                                <button 
+                                    onClick={() => handleDownload(viewingImage.url, `auditionai-${viewingImage.id}.png`)}
+                                    className="bg-black/70 backdrop-blur-md border border-white/20 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-white/20 transition-colors shadow-lg"
+                                >
+                                    <Icons.Download className="w-4 h-4" />
+                                    {lang === 'vi' ? 'Tải xuống' : 'Download'}
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Right: Details */}
+                    <div className="w-full md:w-2/5 p-6 md:p-8 overflow-y-auto custom-scrollbar border-t md:border-t-0 md:border-l border-white/10 bg-gradient-to-b from-white/[0.02] to-transparent">
+                        <h3 className="text-2xl font-game font-bold text-white mb-6 flex items-center gap-3">
+                            <Icons.Image className="w-6 h-6 text-audi-cyan" />
+                            {lang === 'vi' ? 'Chi tiết ảnh' : 'Image Details'}
+                        </h3>
+
+                        <div className="space-y-6">
+                            {/* Prompt */}
+                            <div>
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">Prompt</div>
+                                    {viewingImage.prompt && (
+                                        <button 
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(viewingImage.prompt);
+                                                notify(lang === 'vi' ? 'Đã sao chép prompt!' : 'Prompt copied!', 'success');
+                                            }}
+                                            className="text-[10px] font-bold text-audi-cyan uppercase tracking-wider hover:text-white transition-colors flex items-center gap-1"
+                                        >
+                                            <Icons.Copy className="w-3 h-3" />
+                                            {lang === 'vi' ? 'Sao chép' : 'Copy'}
+                                        </button>
+                                    )}
+                                </div>
+                                <div className="bg-black/30 border border-white/5 rounded-xl p-4 text-sm text-slate-300 leading-relaxed break-words">
+                                    {viewingImage.prompt || <span className="italic text-slate-600">No prompt provided</span>}
+                                </div>
+                            </div>
+
+                            {/* Meta Grid */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="bg-black/20 border border-white/5 rounded-xl p-4">
+                                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">ID</div>
+                                    <div className="font-mono text-xs text-white truncate">#{viewingImage.id.substring(0, 8)}</div>
+                                </div>
+                                <div className="bg-black/20 border border-white/5 rounded-xl p-4">
+                                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{lang === 'vi' ? 'Thời gian' : 'Time'}</div>
+                                    <div className="font-mono text-xs text-white">{formatDate(viewingImage.timestamp)}</div>
+                                </div>
+                                <div className="bg-black/20 border border-white/5 rounded-xl p-4">
+                                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{lang === 'vi' ? 'Công cụ' : 'Tool'}</div>
+                                    <div className="text-sm font-bold text-audi-cyan truncate" title={viewingImage.toolName}>{viewingImage.toolName}</div>
+                                </div>
+                                <div className="bg-black/20 border border-white/5 rounded-xl p-4">
+                                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{lang === 'vi' ? 'Chi phí' : 'Cost'}</div>
+                                    <div className="text-sm font-bold text-audi-pink">{viewingImage.engine === 'tramsangtao' ? '12 Vcoin' : '25 Vcoin'}</div>
+                                </div>
+                            </div>
+
+                            {/* Status */}
+                            <div className="bg-black/20 border border-white/5 rounded-xl p-4 flex items-center justify-between">
+                                <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">{lang === 'vi' ? 'Trạng thái' : 'Status'}</div>
+                                <div>
+                                    {(!viewingImage.status || viewingImage.status === 'completed') && (
+                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/20 text-xs font-bold uppercase tracking-wider">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-green-500"></div> Hoàn thành
+                                        </span>
+                                    )}
+                                    {viewingImage.status === 'failed' && (
+                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 text-xs font-bold uppercase tracking-wider">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-red-500"></div> Thất bại
+                                        </span>
+                                    )}
+                                    {(viewingImage.status === 'processing' || viewingImage.status === 'queued') && (
+                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 text-xs font-bold uppercase tracking-wider">
+                                            <Icons.Loader className="w-3 h-3 animate-spin" /> Đang chờ
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Error Message if failed */}
+                            {viewingImage.status === 'failed' && viewingImage.error && (
+                                <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4">
+                                    <div className="text-xs font-bold text-red-400 uppercase tracking-wider mb-1">Error Details</div>
+                                    <div className="text-sm text-red-300">{viewingImage.error}</div>
+                                </div>
+                            )}
+
+                            {/* Actions */}
+                            <div className="pt-4 border-t border-white/10 flex gap-3">
+                                <button 
+                                    onClick={(e) => {
+                                        setViewingImage(null);
+                                        handleDelete(e, viewingImage.id);
+                                    }}
+                                    className="flex-1 py-3 rounded-xl bg-red-500/10 text-red-400 border border-red-500/20 font-bold text-sm uppercase hover:bg-red-500/20 transition-colors flex items-center justify-center gap-2"
+                                >
+                                    <Icons.Trash className="w-4 h-4" />
+                                    {lang === 'vi' ? 'Xóa ảnh' : 'Delete'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
     </div>
   );
 };

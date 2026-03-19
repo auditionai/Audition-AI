@@ -36,6 +36,7 @@ import {
     saveMaintenanceMode
 } from '../services/economyService';
 import { getAllImagesFromStorage, deleteImageFromStorage, checkR2Connection, getUserImagesFromStorage, cleanupExpiredImages, cleanupR2Directly } from '../services/storageService';
+import { useConcurrency } from '../services/concurrencyService';
 import { checkConnection, analyzeStyleImage } from '../services/geminiService';
 import { checkSupabaseConnection } from '../services/supabaseClient';
 import { Icons } from '../components/Icons';
@@ -365,6 +366,7 @@ const isUserOnline = (dateString?: string) => {
 };
 
 export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
+  const { triggerPoll } = useConcurrency();
   const [activeView, setActiveView] = useState<'overview' | 'transactions' | 'users' | 'packages' | 'promotion' | 'giftcodes' | 'system' | 'styles'>('overview');
   const [stats, setStats] = useState<any>(null);
   const [allImages, setAllImages] = useState<GeneratedImage[]>([]);
@@ -761,6 +763,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const handleDeleteContent = async (id: string) => {
       showConfirm('Xóa vĩnh viễn hình ảnh này?', async () => {
           await deleteImageFromStorage(id);
+          triggerPoll();
           setAllImages(prev => prev.filter(img => img.id !== id));
           showToast('Đã xóa ảnh');
       });

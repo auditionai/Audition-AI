@@ -9,6 +9,7 @@ import { getUserProfile, updateUserBalance, getStylePresets, getGenerationPrices
 import { useNotification } from '../../components/NotificationSystem';
 import { caulenhauClient } from '../../services/supabaseClient';
 import { ConcurrencyStatusComponent } from '../../components/ConcurrencyStatusComponent';
+import { useConcurrency } from '../../services/concurrencyService';
 
 interface GenerationToolProps {
   feature: Feature;
@@ -51,6 +52,7 @@ interface SamplePrompt {
 
 export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, onNavigateToFeature }) => {
   const { notify } = useNotification();
+  const { activeJobs, userId, triggerPoll } = useConcurrency();
   const [stage, setStage] = useState<Stage>('input');
   const [progressMsg, setProgressMsg] = useState('');
   const [progressLogs, setProgressLogs] = useState<string[]>([]);
@@ -460,15 +462,18 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
     // Check concurrency limit
     try {
-        const images = await getAllImagesFromStorage();
-        let activeCount = 0;
-        images.forEach(img => {
-            if (img.status === 'processing' || img.status === 'queued') {
-                activeCount++;
-            }
-        });
-        if (activeCount >= 2) {
-            notify(lang === 'vi' ? 'Bạn đã đạt giới hạn 2 tiến trình tạo ảnh cùng lúc. Vui lòng đợi.' : 'You have reached the limit of 2 concurrent generations. Please wait.', 'warning');
+        const globalQueued = activeJobs.filter(j => j.status === 'queued').length;
+        const myJobs = activeJobs.filter(j => j.userId === userId);
+        const myProcessing = myJobs.filter(j => j.status === 'processing').length;
+        const myQueued = myJobs.filter(j => j.status === 'queued').length;
+
+        if (myProcessing >= 1 && myQueued >= 1) {
+            notify(lang === 'vi' ? 'Bạn đã đạt giới hạn 1 luồng xử lý và 1 hàng chờ. Vui lòng đợi.' : 'You have reached the limit of 1 processing and 1 queued job. Please wait.', 'warning');
+            return;
+        }
+
+        if (globalQueued >= 5) {
+            notify(lang === 'vi' ? 'Hệ thống đang quá tải (Hàng chờ đầy). Vui lòng thử lại sau ít phút.' : 'System is overloaded (Queue full). Please try again later.', 'error');
             return;
         }
     } catch (error) {
@@ -605,6 +610,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           status: 'processing'
       };
       await saveImageToStorage(tempImage);
+      triggerPoll();
           const result = await Promise.race([
               generateImage(
                   finalPrompt, 
@@ -634,7 +640,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
             };
             setGeneratedData(newImage);
             
-            saveImageToStorage(newImage).catch(console.error);
+            saveImageToStorage(newImage).then(() => triggerPoll()).catch(console.error);
             setStage('result');
             notify(lang === 'vi' ? 'Tạo ảnh thành công!' : 'Generation successful!', 'success');
             
@@ -674,7 +680,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                       status: 'queued',
                       jobId: jobId
                   };
-                  saveImageToStorage(newImage).catch(console.error);
+                  saveImageToStorage(newImage).then(() => triggerPoll()).catch(console.error);
               }
               
               notify(lang === 'vi' ? 'Quá trình tạo ảnh được chuyển sang chế độ chạy ngầm, kết quả sẽ được hiển thị trong lịch sử, bạn có thể quay lại và bắt đầu tạo ảnh mới trong lúc chờ đợi.' : 'Generation moved to background. Check History later.', 'info');
@@ -691,7 +697,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       addLog(`💸 Đang thực hiện hoàn tiền...`);
       
       // Delete the temporary job from storage
-      deleteImageFromStorage(tempJobId).catch(console.error);
+      deleteImageFromStorage(tempJobId).then(() => triggerPoll()).catch(console.error);
       
       try {
           await updateUserBalance(cost, `Refund: ${feature.name['en']} Failed`, 'refund');

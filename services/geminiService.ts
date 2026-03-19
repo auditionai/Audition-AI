@@ -20,8 +20,7 @@ const retryWithBackoff = async <T>(
     retries: number = 10, // Tăng số lần thử lại lên 10 lần (Thô bạo nhất)
     delay: number = 5000, // Cố định chờ 5s mỗi lần
     label: string = "Operation",
-    onLog?: (msg: string) => void,
-    hasLoggedRetry: boolean = false
+    onLog?: (msg: string) => void
 ): Promise<T> => {
     try {
         return await operation();
@@ -30,11 +29,13 @@ const retryWithBackoff = async <T>(
         const isTransient = 
             error?.status === 503 || 
             error?.status === 429 ||
+            error?.status === 403 ||
             error?.status === 500 ||
             error?.status === 502 ||
             error?.status === 504 ||
             error?.message?.includes('503') || 
             error?.message?.includes('429') ||
+            error?.message?.includes('403') ||
             error?.message?.includes('500') ||
             error?.message?.includes('502') ||
             error?.message?.includes('504') ||
@@ -49,17 +50,17 @@ const retryWithBackoff = async <T>(
         if (retries > 0 && isTransient) {
             const isRateLimit = error?.status === 429 || error?.message?.includes('429') || error?.message?.includes('quota');
             const msg = isRateLimit 
-                ? `${label} - Hệ thống đang xử lý ảnh, vui lòng chờ trong ít phút...`
-                : `${label} - Server Google đang bận, tự động kết nối lại...`;
+                ? `${label} - API Key hết hạn mức (429). Đang tự động đổi sang Key dự phòng... (Còn ${retries} lần)`
+                : `${label} - Server Google đang xử lý quá tải. Tự động kết nối lại... (Còn ${retries} lần)`;
             
             console.warn(msg, error.message);
-            if (onLog && !hasLoggedRetry) onLog(`🔄 ${msg}`);
+            if (onLog) onLog(`🔄 ${msg}`);
             
             // Wait before retry
-            // If it's a rate limit, we wait the full delay (e.g., 60s) to allow quota to reset
-            const waitTime = isRateLimit ? Math.max(delay, 30000) : delay;
+            // If it's a rate limit, we can retry faster because we are swapping keys
+            const waitTime = isRateLimit ? 1000 : delay;
             await new Promise(resolve => setTimeout(resolve, waitTime));
-            return retryWithBackoff(operation, retries - 1, delay, label, onLog, true);
+            return retryWithBackoff(operation, retries - 1, delay, label, onLog);
         }
         throw error;
     }
@@ -177,7 +178,7 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     } catch (error: any) {
                         const isRateLimit = error?.status === 429 || error?.message?.includes('429') || error?.message?.includes('quota');
                         const isAuthError = error?.status === 403 || error?.message?.includes('403') || error?.message?.includes('PERMISSION_DENIED');
-                        if (isAuthError) {
+                        if (isRateLimit || isAuthError) {
                             reportKeyFailure(apiKey!);
                         }
                         throw error;
@@ -217,7 +218,7 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     if (vertexModel.includes('image')) {
                         if (vertexModel.includes('flash')) {
                             vertexModel = 'gemini-3.1-flash-image-preview';
-                            apiVersion = 'v1beta1'; // Gemini 3.1 Image uses v1beta1
+                            apiVersion = 'v1'; // Gemini 3.1 Image uses v1
                         } else if (vertexModel.includes('pro')) {
                             vertexModel = 'gemini-3-pro-image-preview';
                             apiVersion = 'v1beta1'; // Gemini 3 Pro Image uses v1beta1
@@ -317,7 +318,7 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                 } catch (error: any) {
                     const isRateLimit = error?.status === 429 || error?.message?.includes('429') || error?.message?.includes('quota');
                     const isAuthError = error?.status === 403 || error?.message?.includes('403') || error?.message?.includes('PERMISSION_DENIED');
-                    if (isAuthError) {
+                    if (isRateLimit || isAuthError) {
                         reportKeyFailure(apiKey!);
                     }
                     throw error;
@@ -896,69 +897,51 @@ export const generateImage = async (
         config.tools = [{ googleSearch: {} }];
     }
 
-    let response: any = null;
-    let attempts = 0;
-    const MAX_KEY_SWITCHES = 2; // Try up to 2 keys
-
-    while (attempts < MAX_KEY_SWITCHES) {
-        attempts++;
-        const freshAi = await getAiClient(modelType);
-        const currentKey = (freshAi as any)._internalApiKey;
-        const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
-        const keyName = currentKey ? await getApiKeyName(currentKey) : 'Default';
-        
-        onLog(`> Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
-        console.log(`[API CALL START] Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
-        
-        try {
-            response = await retryWithBackoff(
-                async () => {
-                    const specificAi = await getAiClient(modelType, currentKey);
-                    try {
-                        const REQUEST_TIMEOUT = 600000; // 10 Minutes
-                        
-                        const res = await runWithTimeout(
-                            specificAi.models.generateContent({
-                                model: model,
-                                contents: { parts: finalParts },
-                                config: config
-                            }),
-                            Math.min(timeoutMs, REQUEST_TIMEOUT), 
-                            "Image Generation"
-                        );
-                        console.log(`[API CALL SUCCESS] Ảnh được tạo thành công bởi API Key: ${keyName} (${shortKey})`);
-                        return res;
-                    } catch (e: any) {
-                        // Removed redundant console.warn to prevent spam
-                        throw e;
-                    }
-                },
-                5, // 5 retries (wait and retry on same key)
-                120000, // 120 seconds each (2 minutes)
-                "Image Generation",
-                onLog
-            );
-            break; // Success, exit the key switching loop
-        } catch (error: any) {
-            const isRateLimit = error?.status === 429 || error?.message?.includes('429') || error?.message?.includes('quota');
-            const isOverload = error?.status === 503 || error?.message?.includes('503') || error?.message?.includes('Overloaded') || error?.message?.includes('timed out') || error?.message?.includes('Timeout');
-            const isAuthError = error?.status === 403 || error?.message?.includes('403') || error?.message?.includes('PERMISSION_DENIED');
-
-            if (!isRateLimit && !isOverload && !isAuthError) {
-                // If it's a 400 Bad Request (e.g., safety violation), don't ban the key, just throw the error to the user
-                throw error;
-            }
-
-            console.warn(`Key ${shortKey} completely failed after retries. Banning it.`);
-            if (currentKey) reportKeyFailure(currentKey);
+    const response = await retryWithBackoff(
+        async () => {
+            const freshAi = await getAiClient(modelType);
+            const currentKey = (freshAi as any)._internalApiKey;
+            const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
+            const keyName = currentKey ? await getApiKeyName(currentKey) : 'Default';
+            onLog(`> Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
+            console.log(`[API CALL START] Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
             
-            if (attempts < MAX_KEY_SWITCHES) {
-                onLog(`❌ Key ${keyName} thất bại. Đang tự động đổi sang Key khác và thử lại...`);
-            } else {
-                throw error;
+            try {
+                const REQUEST_TIMEOUT = 600000; // 10 Minutes
+                
+                const res = await runWithTimeout(
+                    freshAi.models.generateContent({
+                        model: model,
+                        contents: { parts: finalParts },
+                        config: config
+                    }),
+                    Math.min(timeoutMs, REQUEST_TIMEOUT), 
+                    "Image Generation"
+                );
+                console.log(`[API CALL SUCCESS] Ảnh được tạo thành công bởi API Key: ${keyName} (${shortKey})`);
+                return res;
+            } catch (e: any) {
+                const isOverload = e.message?.includes('503') || e.message?.includes('Overloaded') || e.status === 503 || e.message?.includes('timed out') || e.message?.includes('Timeout');
+                const isRateLimit = e.message?.includes('429') || e.status === 429 || e.message?.includes('quota');
+
+                if (isOverload) {
+                     console.warn(`${model} 503/Timeout. Retrying...`);
+                     onLog(`⏳ Đang xếp hàng chờ Google Render ảnh (${modelType === 'pro' ? 'Model Pro' : 'Model Flash'} đang xử lý)...`);
+                     // Force Key Rotation for 503 too, to avoid hammering the same busy shard/key
+                     if (currentKey) reportKeyFailure(currentKey);
+                } else if (isRateLimit) {
+                     console.warn(`${model} 429 (Rate Limit). Banning key and retrying with a new one...`);
+                     if (currentKey) reportKeyFailure(currentKey);
+                }
+                
+                throw e;
             }
-        }
-    }
+        },
+        10, // Tăng lên 10 lần thử lại cho Pro
+        8000, // Chờ 8s mỗi lần thử lại để Google kịp xả tải
+        "Image Generation",
+        onLog
+    );
 
     onLog("Downloading result...");
     const result = extractImage(response);
@@ -975,91 +958,72 @@ export const editImageWithInstructions = async (
 ): Promise<string> => {
     const model = modelType === 'flash' ? 'gemini-3.1-flash-image-preview' : 'gemini-3-pro-image-preview'; 
 
-    let response: any = null;
-    let attempts = 0;
-    const MAX_KEY_SWITCHES = 2;
-
-    while (attempts < MAX_KEY_SWITCHES) {
-        attempts++;
-        const freshAi = await getAiClient(modelType);
-        const currentKey = (freshAi as any)._internalApiKey;
-        const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
-        const keyName = currentKey ? await getApiKeyName(currentKey) : 'Default';
-        
-        onLog(`> Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
-        console.log(`[API CALL START] Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
-        
-        try {
-            response = await retryWithBackoff(
-                async () => {
-                    const specificAi = await getAiClient(modelType, currentKey);
-                    try {
-                        const config: any = {
-                            imageConfig: {}
-                        };
-                        
-                        if (model.includes('3.1-flash-image') || model.includes('3-pro-image')) {
-                            config.imageConfig.imageSize = "2K";
-                        }
-
-                        if (Object.keys(config.imageConfig).length === 0) {
-                            delete config.imageConfig;
-                        }
-
-                        const res = await runWithTimeout(
-                            specificAi.models.generateContent({
-                                model: model,
-                                contents: {
-                                    parts: [
-                                        {
-                                            inlineData: {
-                                                mimeType: mimeType || 'image/png',
-                                                data: cleanBase64(base64Data)
-                                            }
-                                        },
-                                        {
-                                            text: instruction
-                                        }
-                                    ]
-                                },
-                                config: config
-                            }),
-                            300000, // 5 Minutes
-                            "Image Editing"
-                        );
-                        console.log(`[API CALL SUCCESS] Ảnh được chỉnh sửa thành công bởi API Key: ${keyName} (${shortKey})`);
-                        return res;
-                    } catch (e: any) {
-                        // Removed redundant console.warn to prevent spam
-                        throw e;
-                    }
-                },
-                5, // 5 retries (wait and retry on same key)
-                120000,
-                "Image Editing",
-                onLog
-            );
-            break;
-        } catch (error: any) {
-            const isRateLimit = error?.status === 429 || error?.message?.includes('429') || error?.message?.includes('quota');
-            const isOverload = error?.status === 503 || error?.message?.includes('503') || error?.message?.includes('Overloaded') || error?.message?.includes('timed out') || error?.message?.includes('Timeout');
-            const isAuthError = error?.status === 403 || error?.message?.includes('403') || error?.message?.includes('PERMISSION_DENIED');
-
-            if (!isRateLimit && !isOverload && !isAuthError) {
-                // If it's a 400 Bad Request (e.g., safety violation), don't ban the key, just throw the error to the user
-                throw error;
-            }
-
-            console.warn(`Key ${shortKey} completely failed after retries. Banning it.`);
-            if (currentKey) reportKeyFailure(currentKey);
+    const response = await retryWithBackoff(
+        async () => {
+            const freshAi = await getAiClient(modelType);
+            const currentKey = (freshAi as any)._internalApiKey;
+            const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
+            const keyName = currentKey ? await getApiKeyName(currentKey) : 'Default';
+            onLog(`> Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
+            console.log(`[API CALL START] Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
             
-            if (attempts < MAX_KEY_SWITCHES) {
-                onLog(`❌ Key ${keyName} thất bại. Đang tự động đổi sang Key khác và thử lại...`);
-            } else {
-                throw error;
+            try {
+                const config: any = {
+                    imageConfig: {}
+                };
+                
+                if (model.includes('3.1-flash-image') || model.includes('3-pro-image')) {
+                    config.imageConfig.imageSize = "2K";
+                }
+
+                if (Object.keys(config.imageConfig).length === 0) {
+                    delete config.imageConfig;
+                }
+
+                const res = await runWithTimeout(
+                    freshAi.models.generateContent({
+                        model: model,
+                        contents: {
+                            parts: [
+                                {
+                                    inlineData: {
+                                        mimeType: mimeType || 'image/png',
+                                        data: cleanBase64(base64Data)
+                                    }
+                                },
+                                {
+                                    text: instruction
+                                }
+                            ]
+                        },
+                        config: config
+                    }),
+                    300000, // 5 Minutes
+                    "Image Editing"
+                );
+                console.log(`[API CALL SUCCESS] Ảnh được chỉnh sửa thành công bởi API Key: ${keyName} (${shortKey})`);
+                return res;
+            } catch (e: any) {
+                const isOverload = e.message?.includes('503') || e.message?.includes('Overloaded') || e.status === 503 || e.message?.includes('timed out') || e.message?.includes('Timeout');
+                const isRateLimit = e.message?.includes('429') || e.status === 429 || e.message?.includes('quota');
+
+                if (isOverload) {
+                     console.warn(`${model} 503/Timeout. Retrying...`);
+                     onLog(`⏳ Đang xếp hàng chờ Google Render ảnh (${modelType === 'pro' ? 'Model Pro' : 'Model Flash'} đang xử lý)...`);
+                     if (currentKey) reportKeyFailure(currentKey);
+                } else if (isRateLimit) {
+                     console.warn(`${model} 429 (Rate Limit). Banning key and retrying with a new one...`);
+                     if (currentKey) reportKeyFailure(currentKey);
+                }
+                
+                throw e;
             }
-        }
-    }
+        },
+        10,
+        8000,
+        "Image Editing",
+        onLog
+    );
 
     const result = extractImage(response);
     if (!result) throw new Error("Editing failed: No image output");
@@ -1074,77 +1038,58 @@ export const removeBackgroundImage = async (
 ): Promise<string> => {
     const model = 'gemini-2.5-flash-image';
 
-    let response: any = null;
-    let attempts = 0;
-    const MAX_KEY_SWITCHES = 2;
+    const response = await retryWithBackoff(
+        async () => {
+            const freshAi = await getAiClient('flash');
+            const currentKey = (freshAi as any)._internalApiKey;
+            const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
+            const keyName = currentKey ? await getApiKeyName(currentKey) : 'Default';
+            onLog(`> Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
+            console.log(`[API CALL START] Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
 
-    while (attempts < MAX_KEY_SWITCHES) {
-        attempts++;
-        const freshAi = await getAiClient('flash');
-        const currentKey = (freshAi as any)._internalApiKey;
-        const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
-        const keyName = currentKey ? await getApiKeyName(currentKey) : 'Default';
-        
-        onLog(`> Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
-        console.log(`[API CALL START] Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
+            try {
+                const finalParts = [
+                    { text: "🔴 PRIORITY 1: REFERENCE IMAGE\nINSTRUCTION: Remove the background of this image and make it solid black. Keep the main subject exactly the same." },
+                    {
+                        inlineData: {
+                            mimeType: mimeType || 'image/png',
+                            data: cleanBase64(base64Data)
+                        }
+                    },
+                    { text: `🔴 FINAL EXECUTION COMMAND:\n${instruction}` }
+                ];
 
-        try {
-            response = await retryWithBackoff(
-                async () => {
-                    const specificAi = await getAiClient('flash', currentKey);
-                    try {
-                        const finalParts = [
-                            { text: "🔴 PRIORITY 1: REFERENCE IMAGE\nINSTRUCTION: Remove the background of this image and make it solid black. Keep the main subject exactly the same." },
-                            {
-                                inlineData: {
-                                    mimeType: mimeType || 'image/png',
-                                    data: cleanBase64(base64Data)
-                                }
-                            },
-                            { text: `🔴 FINAL EXECUTION COMMAND:\n${instruction}` }
-                        ];
+                const res = await runWithTimeout(
+                    freshAi.models.generateContent({
+                        model: model,
+                        contents: { parts: finalParts }
+                    }),
+                    300000, // 5 Minutes
+                    "Remove Background"
+                );
+                console.log(`[API CALL SUCCESS] Ảnh được tách nền thành công bởi API Key: ${keyName} (${shortKey})`);
+                return res;
+            } catch (e: any) {
+                const isOverload = e.message?.includes('503') || e.message?.includes('Overloaded') || e.status === 503 || e.message?.includes('timed out') || e.message?.includes('Timeout');
+                const isRateLimit = e.message?.includes('429') || e.status === 429 || e.message?.includes('quota');
 
-                        const res = await runWithTimeout(
-                            specificAi.models.generateContent({
-                                model: model,
-                                contents: { parts: finalParts }
-                            }),
-                            300000, // 5 Minutes
-                            "Remove Background"
-                        );
-                        console.log(`[API CALL SUCCESS] Ảnh được tách nền thành công bởi API Key: ${keyName} (${shortKey})`);
-                        return res;
-                    } catch (e: any) {
-                        // Removed redundant console.warn to prevent spam
-                        throw e;
-                    }
-                },
-                5, // 5 retries (wait and retry on same key)
-                120000,
-                "Remove Background",
-                onLog
-            );
-            break;
-        } catch (error: any) {
-            const isRateLimit = error?.status === 429 || error?.message?.includes('429') || error?.message?.includes('quota');
-            const isOverload = error?.status === 503 || error?.message?.includes('503') || error?.message?.includes('Overloaded') || error?.message?.includes('timed out') || error?.message?.includes('Timeout');
-            const isAuthError = error?.status === 403 || error?.message?.includes('403') || error?.message?.includes('PERMISSION_DENIED');
-
-            if (!isRateLimit && !isOverload && !isAuthError) {
-                // If it's a 400 Bad Request (e.g., safety violation), don't ban the key, just throw the error to the user
-                throw error;
+                if (isOverload) {
+                     console.warn(`${model} 503/Timeout. Retrying...`);
+                     onLog(`⏳ Đang xếp hàng chờ Google Render ảnh (Model Flash đang xử lý)...`);
+                     if (currentKey) reportKeyFailure(currentKey);
+                } else if (isRateLimit) {
+                     console.warn(`${model} 429 (Rate Limit). Banning key and retrying with a new one...`);
+                     if (currentKey) reportKeyFailure(currentKey);
+                }
+                
+                throw e;
             }
-
-            console.warn(`Key ${shortKey} completely failed after retries. Banning it.`);
-            if (currentKey) reportKeyFailure(currentKey);
-            
-            if (attempts < MAX_KEY_SWITCHES) {
-                onLog(`❌ Key ${keyName} thất bại. Đang tự động đổi sang Key khác và thử lại...`);
-            } else {
-                throw error;
-            }
-        }
-    }
+        },
+        10,
+        8000,
+        "Remove Background",
+        onLog
+    );
 
     const result = extractImage(response);
     if (!result) throw new Error("Remove Background failed: No image output");
@@ -1159,77 +1104,58 @@ export const upscaleImage = async (
 ): Promise<string> => {
     const model = 'gemini-2.5-flash-image';
 
-    let response: any = null;
-    let attempts = 0;
-    const MAX_KEY_SWITCHES = 2;
+    const response = await retryWithBackoff(
+        async () => {
+            const freshAi = await getAiClient('flash');
+            const currentKey = (freshAi as any)._internalApiKey;
+            const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
+            const keyName = currentKey ? await getApiKeyName(currentKey) : 'Default';
+            onLog(`> Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
+            console.log(`[API CALL START] Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
 
-    while (attempts < MAX_KEY_SWITCHES) {
-        attempts++;
-        const freshAi = await getAiClient('flash');
-        const currentKey = (freshAi as any)._internalApiKey;
-        const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
-        const keyName = currentKey ? await getApiKeyName(currentKey) : 'Default';
-        
-        onLog(`> Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
-        console.log(`[API CALL START] Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
+            try {
+                const finalParts = [
+                    { text: "🔴 PRIORITY 1: REFERENCE IMAGE\nINSTRUCTION: Upscale this image to 2K resolution. Enhance the details and make it sharper while keeping the original content exactly the same." },
+                    {
+                        inlineData: {
+                            mimeType: mimeType || 'image/png',
+                            data: cleanBase64(base64Data)
+                        }
+                    },
+                    { text: `🔴 FINAL EXECUTION COMMAND:\n${instruction}` }
+                ];
 
-        try {
-            response = await retryWithBackoff(
-                async () => {
-                    const specificAi = await getAiClient('flash', currentKey);
-                    try {
-                        const finalParts = [
-                            { text: "🔴 PRIORITY 1: REFERENCE IMAGE\nINSTRUCTION: Upscale this image to 2K resolution. Enhance the details and make it sharper while keeping the original content exactly the same." },
-                            {
-                                inlineData: {
-                                    mimeType: mimeType || 'image/png',
-                                    data: cleanBase64(base64Data)
-                                }
-                            },
-                            { text: `🔴 FINAL EXECUTION COMMAND:\n${instruction}` }
-                        ];
+                const res = await runWithTimeout(
+                    freshAi.models.generateContent({
+                        model: model,
+                        contents: { parts: finalParts }
+                    }),
+                    300000, // 5 Minutes
+                    "Upscale Image"
+                );
+                console.log(`[API CALL SUCCESS] Ảnh được làm nét thành công bởi API Key: ${keyName} (${shortKey})`);
+                return res;
+            } catch (e: any) {
+                const isOverload = e.message?.includes('503') || e.message?.includes('Overloaded') || e.status === 503 || e.message?.includes('timed out') || e.message?.includes('Timeout');
+                const isRateLimit = e.message?.includes('429') || e.status === 429 || e.message?.includes('quota');
 
-                        const res = await runWithTimeout(
-                            specificAi.models.generateContent({
-                                model: model,
-                                contents: { parts: finalParts }
-                            }),
-                            300000, // 5 Minutes
-                            "Upscale Image"
-                        );
-                        console.log(`[API CALL SUCCESS] Ảnh được làm nét thành công bởi API Key: ${keyName} (${shortKey})`);
-                        return res;
-                    } catch (e: any) {
-                        // Removed redundant console.warn to prevent spam
-                        throw e;
-                    }
-                },
-                5, // 5 retries (wait and retry on same key)
-                120000,
-                "Upscale Image",
-                onLog
-            );
-            break;
-        } catch (error: any) {
-            const isRateLimit = error?.status === 429 || error?.message?.includes('429') || error?.message?.includes('quota');
-            const isOverload = error?.status === 503 || error?.message?.includes('503') || error?.message?.includes('Overloaded') || error?.message?.includes('timed out') || error?.message?.includes('Timeout');
-            const isAuthError = error?.status === 403 || error?.message?.includes('403') || error?.message?.includes('PERMISSION_DENIED');
-
-            if (!isRateLimit && !isOverload && !isAuthError) {
-                // If it's a 400 Bad Request (e.g., safety violation), don't ban the key, just throw the error to the user
-                throw error;
+                if (isOverload) {
+                     console.warn(`${model} 503/Timeout. Retrying...`);
+                     onLog(`⏳ Đang xếp hàng chờ Google Render ảnh (Model Flash đang xử lý)...`);
+                     if (currentKey) reportKeyFailure(currentKey);
+                } else if (isRateLimit) {
+                     console.warn(`${model} 429 (Rate Limit). Banning key and retrying with a new one...`);
+                     if (currentKey) reportKeyFailure(currentKey);
+                }
+                
+                throw e;
             }
-
-            console.warn(`Key ${shortKey} completely failed after retries. Banning it.`);
-            if (currentKey) reportKeyFailure(currentKey);
-            
-            if (attempts < MAX_KEY_SWITCHES) {
-                onLog(`❌ Key ${keyName} thất bại. Đang tự động đổi sang Key khác và thử lại...`);
-            } else {
-                throw error;
-            }
-        }
-    }
+        },
+        10,
+        8000,
+        "Upscale Image",
+        onLog
+    );
 
     const result = extractImage(response);
     if (!result) throw new Error("Upscale failed: No image output");

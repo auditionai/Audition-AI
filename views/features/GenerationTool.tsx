@@ -8,7 +8,7 @@ import { createSolidFence, optimizePayload, urlToBase64 } from '../../utils/imag
 import { getUserProfile, updateUserBalance, getStylePresets, getGenerationPrices, getTutorialVideo } from '../../services/economyService';
 import { useNotification } from '../../components/NotificationSystem';
 import { caulenhauClient } from '../../services/supabaseClient';
-import { ConcurrencyStatus } from '../../components/ConcurrencyStatus';
+import { ConcurrencyStatusComponent } from '../../components/ConcurrencyStatusComponent';
 
 interface GenerationToolProps {
   feature: Feature;
@@ -1281,7 +1281,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                     </div>
                 </div>
                 
-                <ConcurrencyStatus />
+                <ConcurrencyStatusComponent />
             </div>
 
             <div className="lg:col-span-1 space-y-6">

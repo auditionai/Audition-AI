@@ -677,7 +677,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                   saveImageToStorage(newImage).catch(console.error);
               }
               
-              notify(lang === 'vi' ? 'Quá trình tạo ảnh được chuyển sang chế độ chạy ngầm, kết quả sẽ được hiển thị trong thư viện, bạn có thể quay lại và bắt đầu tạo ảnh mới trong lúc chờ đợi.' : 'Generation moved to background. Check Gallery later.', 'info');
+              notify(lang === 'vi' ? 'Quá trình tạo ảnh được chuyển sang chế độ chạy ngầm, kết quả sẽ được hiển thị trong lịch sử, bạn có thể quay lại và bắt đầu tạo ảnh mới trong lúc chờ đợi.' : 'Generation moved to background. Check History later.', 'info');
               setStage('input'); // Reset UI so user can generate again
               return; // Exit successfully
           } else {

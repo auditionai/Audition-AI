@@ -12,7 +12,7 @@ export const APP_CONFIG: AppConfig = {
     menu: [
       {id: "home", label: {vi: "Trang chủ", en: "Dashboard"}, icon: "Home"},
       {id: "tools", label: {vi: "Công cụ", en: "Tools"}, icon: "Wand"},
-      {id: "gallery", label: {vi: "Thư viện", en: "Gallery"}, icon: "Image"},
+      {id: "gallery", label: {vi: "Lịch sử", en: "History"}, icon: "Image"},
       {id: "support", label: {vi: "Hỗ trợ", en: "Support"}, icon: "Heart"},
       {id: "guide", label: {vi: "Hướng dẫn", en: "Guide"}, icon: "BookOpen"},
       {id: "about", label: {vi: "Giới thiệu", en: "About"}, icon: "Info"},

@@ -20,7 +20,8 @@ const retryWithBackoff = async <T>(
     retries: number = 10, // Tăng số lần thử lại lên 10 lần (Thô bạo nhất)
     delay: number = 5000, // Cố định chờ 5s mỗi lần
     label: string = "Operation",
-    onLog?: (msg: string) => void
+    onLog?: (msg: string) => void,
+    hasLoggedRetry: boolean = false
 ): Promise<T> => {
     try {
         return await operation();
@@ -48,17 +49,17 @@ const retryWithBackoff = async <T>(
         if (retries > 0 && isTransient) {
             const isRateLimit = error?.status === 429 || error?.message?.includes('429') || error?.message?.includes('quota');
             const msg = isRateLimit 
-                ? `${label} - Hệ thống đang kết nối đến Google. Đang chờ để thử lại... (Còn ${retries} lần)`
-                : `${label} - Server Google đang xử lý quá tải. Tự động kết nối lại... (Còn ${retries} lần)`;
+                ? `${label} - Hệ thống đang xử lý ảnh, vui lòng chờ trong ít phút...`
+                : `${label} - Server Google đang bận, tự động kết nối lại...`;
             
             console.warn(msg, error.message);
-            if (onLog) onLog(`🔄 ${msg}`);
+            if (onLog && !hasLoggedRetry) onLog(`🔄 ${msg}`);
             
             // Wait before retry
             // If it's a rate limit, we wait the full delay (e.g., 60s) to allow quota to reset
             const waitTime = isRateLimit ? Math.max(delay, 30000) : delay;
             await new Promise(resolve => setTimeout(resolve, waitTime));
-            return retryWithBackoff(operation, retries - 1, delay, label, onLog);
+            return retryWithBackoff(operation, retries - 1, delay, label, onLog, true);
         }
         throw error;
     }
@@ -932,16 +933,16 @@ export const generateImage = async (
                         const isRateLimit = e.message?.includes('429') || e.status === 429 || e.message?.includes('quota');
 
                         if (isOverload) {
-                             console.warn(`${model} 503/Timeout. Switching key...`);
+                             console.warn(`${model} 503/Timeout. Retrying...`);
                         } else if (isRateLimit) {
-                             console.warn(`${model} 429 (Rate Limit). Switching key...`);
+                             console.warn(`${model} 429 (Rate Limit). Retrying...`);
                         }
                         
                         throw e;
                     }
                 },
-                0, // 0 retries (fail fast to switch key)
-                60000, // 60 seconds each
+                5, // 5 retries (wait and retry on same key)
+                120000, // 120 seconds each (2 minutes)
                 "Image Generation",
                 onLog
             );
@@ -1041,16 +1042,16 @@ export const editImageWithInstructions = async (
                         const isRateLimit = e.message?.includes('429') || e.status === 429 || e.message?.includes('quota');
 
                         if (isOverload) {
-                             console.warn(`${model} 503/Timeout. Switching key...`);
+                             console.warn(`${model} 503/Timeout. Retrying...`);
                         } else if (isRateLimit) {
-                             console.warn(`${model} 429 (Rate Limit). Switching key...`);
+                             console.warn(`${model} 429 (Rate Limit). Retrying...`);
                         }
                         
                         throw e;
                     }
                 },
-                0, // 0 retries (fail fast to switch key)
-                60000,
+                5, // 5 retries (wait and retry on same key)
+                120000,
                 "Image Editing",
                 onLog
             );
@@ -1134,16 +1135,16 @@ export const removeBackgroundImage = async (
                         const isRateLimit = e.message?.includes('429') || e.status === 429 || e.message?.includes('quota');
 
                         if (isOverload) {
-                             console.warn(`${model} 503/Timeout. Switching key...`);
+                             console.warn(`${model} 503/Timeout. Retrying...`);
                         } else if (isRateLimit) {
-                             console.warn(`${model} 429 (Rate Limit). Switching key...`);
+                             console.warn(`${model} 429 (Rate Limit). Retrying...`);
                         }
                         
                         throw e;
                     }
                 },
-                0, // 0 retries (fail fast to switch key)
-                60000,
+                5, // 5 retries (wait and retry on same key)
+                120000,
                 "Remove Background",
                 onLog
             );
@@ -1227,16 +1228,16 @@ export const upscaleImage = async (
                         const isRateLimit = e.message?.includes('429') || e.status === 429 || e.message?.includes('quota');
 
                         if (isOverload) {
-                             console.warn(`${model} 503/Timeout. Switching key...`);
+                             console.warn(`${model} 503/Timeout. Retrying...`);
                         } else if (isRateLimit) {
-                             console.warn(`${model} 429 (Rate Limit). Switching key...`);
+                             console.warn(`${model} 429 (Rate Limit). Retrying...`);
                         }
                         
                         throw e;
                     }
                 },
-                0, // 0 retries (fail fast to switch key)
-                60000,
+                5, // 5 retries (wait and retry on same key)
+                120000,
                 "Upscale Image",
                 onLog
             );

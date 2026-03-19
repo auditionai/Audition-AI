@@ -806,23 +806,21 @@ export const generateImage = async (
     }
 
     // 8. FINAL ASSEMBLY
-    let finalMasterSheetBase64: string | null = null;
-    try {
-        onLog("Step 4.5: Assembling Final Master Sheet for Generation...");
-        const styleBase64 = cleanStyleImages.length > 0 ? cleanStyleImages[0] : null;
-        const poseBase64 = cleanRefImage || null;
-        
-        const combinedBase64 = await createMasterReferenceSheet(
-            styleBase64,
-            poseBase64,
-            charBase64List
-        );
-        
-        if (combinedBase64) {
-            finalMasterSheetBase64 = cleanBase64(combinedBase64);
-        }
-    } catch (e) {
-        console.warn("Final Master Sheet creation failed", e);
+    const referenceImages: string[] = [];
+    
+    // Add style image if available
+    if (cleanStyleImages.length > 0) {
+        referenceImages.push(cleanStyleImages[0]);
+    }
+    
+    // Add pose image if available
+    if (cleanRefImage) {
+        referenceImages.push(cleanRefImage);
+    }
+    
+    // Add character images
+    if (charBase64List.length > 0) {
+        referenceImages.push(...charBase64List);
     }
 
     let charPromptInstructions = "";
@@ -830,7 +828,7 @@ export const generateImage = async (
         charBase64List.forEach((b64, index) => {
             const charIndex = index + 1;
             const charInfo = characters[index];
-            charPromptInstructions += `\n- CHARACTER ${charIndex} (${charInfo.gender.toUpperCase()}): Stylized 3D game asset matching the exact facial features, face shape, hair, and apparel of the "CHARACTER ${charIndex} REFERENCE" section.`;
+            charPromptInstructions += `\n- CHARACTER ${charIndex} (${charInfo.gender.toUpperCase()}): Stylized 3D game asset matching the exact facial features, face shape, hair, and apparel of the provided character reference image ${charIndex}.`;
         });
     }
 
@@ -838,7 +836,7 @@ export const generateImage = async (
     const qualityBoosters = "masterpiece, best quality, ultra-detailed, 8k, stylized 3D game render, Korean MMO 3D style, stylized 3D skin texture, smooth 3D rendering, ray tracing, hdr, cinematic lighting, unreal engine 5 render";
     const negativePrompt = "low quality, bad anatomy, worst quality, blur, grain, watermark, text, signature, bad hands, bad face, mixed backgrounds, conflicting styles, extra characters, unwanted people from style reference, real people, photorealistic humans, photograph, realistic photography, real life, anime, cartoon, 2d, flat shading, floating character, disconnected limbs, hands in the air, feet not touching the ground, floating objects, unnatural posture, floating in mid-air, levitating, hovering, disconnected from background, bad perspective, illogical physics";
     
-    const finalInstruction = `Generate an image based on the following prompt: "${optimizedPrompt}, ${qualityBoosters}".\n\nCRITICAL INSTRUCTIONS:\n1. CHARACTER IDENTITY: You MUST use the exact character from the "CHARACTER ${charBase64List.length > 0 ? '1 ' : ''}REFERENCE" section of the provided image (if any). Keep their face, hair, clothing, shoes, makeup, and accessories 100% identical to the reference.\n2. POSE & BACKGROUND: Use the exact pose, body language, camera angle, and framing from the "POSE REFERENCE" section (if provided). Do NOT copy the person's face or clothes from it. Create a new background based on the text prompt, matching the vibe of the pose image.\n3. STYLE & QUALITY: The final image MUST match the 3D quality, skin texture, and rendering style of the "STYLE REFERENCE" section (if provided). It MUST be a highly detailed 3D game render (Korean MMO style), NOT a real person.\n\nAVATAR MAPPING:${charPromptInstructions}\n\nNegative Prompt: ${negativePrompt}`;
+    const finalInstruction = `Generate an image based on the following prompt: "${optimizedPrompt}, ${qualityBoosters}".\n\nCRITICAL INSTRUCTIONS:\n1. CHARACTER IDENTITY: You MUST use the exact character from the provided character reference images (if any). Keep their face, hair, clothing, shoes, makeup, and accessories 100% identical to the reference.\n2. POSE & BACKGROUND: Use the exact pose, body language, camera angle, and framing from the provided pose reference image (if provided). Do NOT copy the person's face or clothes from it. Create a new background based on the text prompt, matching the vibe of the pose image.\n3. STYLE & QUALITY: The final image MUST match the 3D quality, skin texture, and rendering style of the provided style reference image (if provided). It MUST be a highly detailed 3D game render (Korean MMO style), NOT a real person.\n\nAVATAR MAPPING:${charPromptInstructions}\n\nNegative Prompt: ${negativePrompt}`;
 
     // --- IMAGE GENERATION API INTEGRATION ---
     onLog("Step 5: Sending payload to Image Generation API...");
@@ -846,7 +844,7 @@ export const generateImage = async (
     const resultUrl = await runTramsangtaoGenerate(
         finalInstruction,
         modelType,
-        finalMasterSheetBase64,
+        referenceImages.length > 0 ? referenceImages : null,
         'image/jpeg',
         resolution,
         onLog,
@@ -885,18 +883,22 @@ const uploadBase64ToTramsangtao = async (base64Data: string, mimeType: string, o
     return uploadData.url;
 };
 
-const runTramsangtaoGenerate = async (
+export const generateWithTramsangtao = async (
     prompt: string,
     modelType: 'flash' | 'pro' = 'flash',
-    base64Data?: string | null,
-    mimeType: string = 'image/jpeg',
     resolution?: string,
-    onLog: (msg: string) => void = () => {},
-    aspectRatio?: string
+    aspectRatio?: string,
+    base64Data?: string | string[] | null,
+    mimeType: string = 'image/jpeg',
+    onLog: (msg: string) => void = () => {}
 ): Promise<string> => {
-    let imgUrl = undefined;
+    let imgUrls: string[] = [];
     if (base64Data) {
-        imgUrl = await uploadBase64ToTramsangtao(base64Data, mimeType, onLog);
+        const dataArray = Array.isArray(base64Data) ? base64Data : [base64Data];
+        for (let i = 0; i < dataArray.length; i++) {
+            const url = await uploadBase64ToTramsangtao(dataArray[i], mimeType, onLog);
+            imgUrls.push(url);
+        }
     }
     const model = modelType === 'flash' ? 'nano-banana-2' : 'nano-banana-pro';
     
@@ -905,8 +907,63 @@ const runTramsangtaoGenerate = async (
         prompt: prompt,
         model: model,
     };
-    if (imgUrl) {
-        payload.img_url = imgUrl;
+    if (imgUrls.length > 0) {
+        payload.img_url = imgUrls.length === 1 ? imgUrls[0] : imgUrls;
+    }
+    if (resolution) {
+        payload.resolution = resolution;
+    }
+    if (aspectRatio) {
+        payload.aspect_ratio = aspectRatio;
+    }
+
+    const genRes = await fetch('/api/tst-generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+
+    if (!genRes.ok) {
+        const err = await genRes.json();
+        throw new Error(`Image API error: ${err.error || genRes.statusText}`);
+    }
+
+    const genData = await genRes.json();
+    const jobId = genData.job_id;
+
+    if (!jobId) {
+        throw new Error("Image API did not return a job_id");
+    }
+
+    onLog(`Job created (ID: ${jobId}).`);
+    return jobId;
+};
+export const runTramsangtaoGenerate = async (
+    prompt: string,
+    modelType: 'flash' | 'pro' = 'flash',
+    base64Data?: string | string[] | null,
+    mimeType: string = 'image/jpeg',
+    resolution?: string,
+    onLog: (msg: string) => void = () => {},
+    aspectRatio?: string
+): Promise<string> => {
+    let imgUrls: string[] = [];
+    if (base64Data) {
+        const dataArray = Array.isArray(base64Data) ? base64Data : [base64Data];
+        for (let i = 0; i < dataArray.length; i++) {
+            const url = await uploadBase64ToTramsangtao(dataArray[i], mimeType, onLog);
+            imgUrls.push(url);
+        }
+    }
+    const model = modelType === 'flash' ? 'nano-banana-2' : 'nano-banana-pro';
+    
+    onLog(`Calling Image API (Model: ${model})...`);
+    const payload: any = {
+        prompt: prompt,
+        model: model,
+    };
+    if (imgUrls.length > 0) {
+        payload.img_url = imgUrls.length === 1 ? imgUrls[0] : imgUrls;
     }
     if (resolution) {
         payload.resolution = resolution;

@@ -2,12 +2,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Feature, Language, GeneratedImage } from '../../types';
 import { Icons } from '../../components/Icons';
-import { generateImage, testApiKey } from '../../services/geminiService';
-import { saveImageToStorage, uploadFileToR2 } from '../../services/storageService';
+import { generateImage, testApiKey, generateWithTramsangtao } from '../../services/geminiService';
+import { saveImageToStorage, uploadFileToR2, getAllImagesFromStorage, deleteImageFromStorage } from '../../services/storageService';
 import { createSolidFence, optimizePayload, urlToBase64 } from '../../utils/imageProcessor';
 import { getUserProfile, updateUserBalance, getStylePresets, getGenerationPrices, getTutorialVideo } from '../../services/economyService';
 import { useNotification } from '../../components/NotificationSystem';
 import { caulenhauClient } from '../../services/supabaseClient';
+import { ConcurrencyStatus } from '../../components/ConcurrencyStatus';
 
 interface GenerationToolProps {
   feature: Feature;
@@ -457,6 +458,23 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
         return;
     }
 
+    // Check concurrency limit
+    try {
+        const images = await getAllImagesFromStorage();
+        let activeCount = 0;
+        images.forEach(img => {
+            if (img.status === 'processing' || img.status === 'queued') {
+                activeCount++;
+            }
+        });
+        if (activeCount >= 2) {
+            notify(lang === 'vi' ? 'Bạn đã đạt giới hạn 2 tiến trình tạo ảnh cùng lúc. Vui lòng đợi.' : 'You have reached the limit of 2 concurrent generations. Please wait.', 'warning');
+            return;
+        }
+    } catch (error) {
+        console.error("Failed to check concurrency limit", error);
+    }
+
     if (!prompt.trim()) {
          notify(lang === 'vi' ? 'Vui lòng nhập mô tả' : 'Please enter a prompt', 'warning');
          return;
@@ -477,6 +495,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
     
     // Force a small delay to allow React to render the Loading UI before blocking logic starts
     await new Promise(r => setTimeout(r, 100));
+
+    let tempJobId = crypto.randomUUID();
+    let tempImage: GeneratedImage | null = null;
 
     try {
         // --- NEW: API KEY PRE-FLIGHT TEST (120s Timeout / 15s Retry) ---
@@ -564,59 +585,113 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       addLog("Gửi lệnh đến Image Generation Engine...");
 
       // 5. EXECUTE WITH DYNAMIC TIMEOUT
-      let timeoutMs = 900000; // 15 mins (Single)
-      if (activeMode === 'couple') timeoutMs = 1200000; // 20 mins
-      if (activeMode.startsWith('group')) timeoutMs = 1800000; // 30 mins
+      let timeoutMs = 300000; // 5 mins for Vertex AI
+      if (activeMode === 'couple') timeoutMs = 420000; // 7 mins
+      if (activeMode.startsWith('group')) timeoutMs = 480000; // 8 mins
       
       setEstimatedSeconds(timeoutMs / 1000);
 
-      const result = await Promise.race([
-          generateImage(
-              finalPrompt, 
-              aspectRatio, 
-              structureRefData, 
-              characterDataList, 
-              resolution,
-              aiModel, // Use selected AI Model
-              useSearch,
-              useCloudRef, 
-              (msg) => addLog(msg),
-              activeStylePreset, // Pass the style reference
-              availableStyles, // Pass the pool for auto-selection
-              timeoutMs // Pass Dynamic Timeout
-          ),
-          new Promise<null>((_, reject) => setTimeout(() => reject(new Error(`Timeout: Limit reached (${timeoutMs/60000} mins)`)), timeoutMs))
-      ]);
-
-      if (result) {
-        addLog(lang === 'vi' ? 'Hoàn tất!' : 'Finalizing...');
-        setResultImage(result); 
-        
-        const newImage: GeneratedImage = {
-          id: crypto.randomUUID(),
-          url: result,
+      // Create a temporary job ID to track concurrency
+      tempJobId = crypto.randomUUID();
+      try {
+      tempImage = {
+          id: tempJobId,
+          url: '', // Empty URL means it's processing
           prompt: finalPrompt,
           timestamp: Date.now(),
           toolId: feature.id,
           toolName: feature.name['en'],
-          engine: aiModel === 'flash' ? `Flash Engine ${resolution}` : `Pro Engine ${resolution}`
-        };
-        setGeneratedData(newImage);
-        
-        saveImageToStorage(newImage).catch(console.error);
-        setStage('result');
-        notify(lang === 'vi' ? 'Tạo ảnh thành công!' : 'Generation successful!', 'success');
-        
-        // Bắt đầu đếm ngược 60s sau khi tạo thành công
-        startCooldown(60);
-      } else {
-          throw new Error("No result returned (Empty)");
+          engine: aiModel === 'flash' ? `Flash Engine ${resolution}` : `Pro Engine ${resolution}`,
+          status: 'processing'
+      };
+      await saveImageToStorage(tempImage);
+          const result = await Promise.race([
+              generateImage(
+                  finalPrompt, 
+                  aspectRatio, 
+                  structureRefData, 
+                  characterDataList, 
+                  resolution,
+                  aiModel, // Use selected AI Model
+                  useSearch,
+                  useCloudRef, 
+                  (msg) => addLog(msg),
+                  activeStylePreset, // Pass the style reference
+                  availableStyles, // Pass the pool for auto-selection
+                  timeoutMs // Pass Dynamic Timeout
+              ),
+              new Promise<null>((_, reject) => setTimeout(() => reject(new Error(`Timeout: Limit reached (${timeoutMs/60000} mins)`)), timeoutMs))
+          ]);
+
+          if (result) {
+            addLog(lang === 'vi' ? 'Hoàn tất!' : 'Finalizing...');
+            setResultImage(result); 
+            
+            const newImage: GeneratedImage = {
+              ...tempImage,
+              url: result,
+              status: 'completed'
+            };
+            setGeneratedData(newImage);
+            
+            saveImageToStorage(newImage).catch(console.error);
+            setStage('result');
+            notify(lang === 'vi' ? 'Tạo ảnh thành công!' : 'Generation successful!', 'success');
+            
+            // Bắt đầu đếm ngược 60s sau khi tạo thành công
+            startCooldown(60);
+          } else {
+              throw new Error("No result returned (Empty)");
+          }
+      } catch (error: any) {
+          const is429 = error.message.includes('429') || error.message.includes('Resource has been exhausted') || error.message.includes('Quota exceeded');
+          const isTimeout = error.message.includes('Timeout');
+          
+          if (is429 || isTimeout) {
+              addLog(lang === 'vi' ? "Vertex AI quá tải hoặc hết thời gian. Đang chuyển sang Trạm Sáng Tạo (Chạy ngầm)..." : "Vertex AI overloaded/timeout. Switching to Trạm Sáng Tạo (Background)...");
+              
+              // Determine reference image for TST (TST only takes 1 image)
+              let tstRefImage: string | null | undefined = structureRefData;
+              if (!tstRefImage && characterDataList.length > 0) {
+                  tstRefImage = characterDataList[0].image;
+              }
+              
+              const jobId = await generateWithTramsangtao(
+                  finalPrompt,
+                  aiModel,
+                  resolution,
+                  aspectRatio,
+                  tstRefImage || undefined,
+                  'image/jpeg', // assuming jpeg
+                  addLog
+              );
+              
+              // Save job to local storage for Gallery to poll
+              if (tempImage) {
+                  const newImage: GeneratedImage = {
+                      ...tempImage,
+                      engine: aiModel === 'flash' ? `TST Flash ${resolution}` : `TST Pro ${resolution}`,
+                      status: 'queued',
+                      jobId: jobId
+                  };
+                  saveImageToStorage(newImage).catch(console.error);
+              }
+              
+              notify(lang === 'vi' ? 'Quá trình tạo ảnh được chuyển sang chế độ chạy ngầm, kết quả sẽ được hiển thị trong thư viện, bạn có thể quay lại và bắt đầu tạo ảnh mới trong lúc chờ đợi.' : 'Generation moved to background. Check Gallery later.', 'info');
+              setStage('input'); // Reset UI so user can generate again
+              return; // Exit successfully
+          } else {
+              throw error; // Rethrow other errors to be caught by the outer catch block
+          }
       }
     } catch (error: any) {
       console.error(error);
       const errorMsg = error.message || (lang === 'vi' ? 'Lỗi không xác định' : 'Unknown Error');
       addLog(`❌ LỖI: ${errorMsg}`);
       addLog(`💸 Đang thực hiện hoàn tiền...`);
+      
+      // Delete the temporary job from storage
+      deleteImageFromStorage(tempJobId).catch(console.error);
       
       try {
           await updateUserBalance(cost, `Refund: ${feature.name['en']} Failed`, 'refund');
@@ -1205,6 +1280,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                         />
                     </div>
                 </div>
+                
+                <ConcurrencyStatus />
             </div>
 
             <div className="lg:col-span-1 space-y-6">

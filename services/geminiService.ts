@@ -217,7 +217,7 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     if (vertexModel.includes('image')) {
                         if (vertexModel.includes('flash')) {
                             vertexModel = 'gemini-3.1-flash-image-preview';
-                            apiVersion = 'v1'; // Gemini 3.1 Image uses v1
+                            apiVersion = 'v1beta1'; // Gemini 3.1 Image uses v1beta1
                         } else if (vertexModel.includes('pro')) {
                             vertexModel = 'gemini-3-pro-image-preview';
                             apiVersion = 'v1beta1'; // Gemini 3 Pro Image uses v1beta1
@@ -929,15 +929,7 @@ export const generateImage = async (
                         console.log(`[API CALL SUCCESS] Ảnh được tạo thành công bởi API Key: ${keyName} (${shortKey})`);
                         return res;
                     } catch (e: any) {
-                        const isOverload = e.message?.includes('503') || e.message?.includes('Overloaded') || e.status === 503 || e.message?.includes('timed out') || e.message?.includes('Timeout');
-                        const isRateLimit = e.message?.includes('429') || e.status === 429 || e.message?.includes('quota');
-
-                        if (isOverload) {
-                             console.warn(`${model} 503/Timeout. Retrying...`);
-                        } else if (isRateLimit) {
-                             console.warn(`${model} 429 (Rate Limit). Retrying...`);
-                        }
-                        
+                        // Removed redundant console.warn to prevent spam
                         throw e;
                     }
                 },
@@ -1038,15 +1030,7 @@ export const editImageWithInstructions = async (
                         console.log(`[API CALL SUCCESS] Ảnh được chỉnh sửa thành công bởi API Key: ${keyName} (${shortKey})`);
                         return res;
                     } catch (e: any) {
-                        const isOverload = e.message?.includes('503') || e.message?.includes('Overloaded') || e.status === 503 || e.message?.includes('timed out') || e.message?.includes('Timeout');
-                        const isRateLimit = e.message?.includes('429') || e.status === 429 || e.message?.includes('quota');
-
-                        if (isOverload) {
-                             console.warn(`${model} 503/Timeout. Retrying...`);
-                        } else if (isRateLimit) {
-                             console.warn(`${model} 429 (Rate Limit). Retrying...`);
-                        }
-                        
+                        // Removed redundant console.warn to prevent spam
                         throw e;
                     }
                 },
@@ -1131,15 +1115,7 @@ export const removeBackgroundImage = async (
                         console.log(`[API CALL SUCCESS] Ảnh được tách nền thành công bởi API Key: ${keyName} (${shortKey})`);
                         return res;
                     } catch (e: any) {
-                        const isOverload = e.message?.includes('503') || e.message?.includes('Overloaded') || e.status === 503 || e.message?.includes('timed out') || e.message?.includes('Timeout');
-                        const isRateLimit = e.message?.includes('429') || e.status === 429 || e.message?.includes('quota');
-
-                        if (isOverload) {
-                             console.warn(`${model} 503/Timeout. Retrying...`);
-                        } else if (isRateLimit) {
-                             console.warn(`${model} 429 (Rate Limit). Retrying...`);
-                        }
-                        
+                        // Removed redundant console.warn to prevent spam
                         throw e;
                     }
                 },
@@ -1224,15 +1200,7 @@ export const upscaleImage = async (
                         console.log(`[API CALL SUCCESS] Ảnh được làm nét thành công bởi API Key: ${keyName} (${shortKey})`);
                         return res;
                     } catch (e: any) {
-                        const isOverload = e.message?.includes('503') || e.message?.includes('Overloaded') || e.status === 503 || e.message?.includes('timed out') || e.message?.includes('Timeout');
-                        const isRateLimit = e.message?.includes('429') || e.status === 429 || e.message?.includes('quota');
-
-                        if (isOverload) {
-                             console.warn(`${model} 503/Timeout. Retrying...`);
-                        } else if (isRateLimit) {
-                             console.warn(`${model} 429 (Rate Limit). Retrying...`);
-                        }
-                        
+                        // Removed redundant console.warn to prevent spam
                         throw e;
                     }
                 },

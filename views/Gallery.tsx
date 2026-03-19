@@ -458,7 +458,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
         {viewingImage && createPortal(
             <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 animate-fade-in">
                 <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setViewingImage(null)}></div>
-                <div className="relative w-full max-w-5xl bg-[#12121a] rounded-3xl border border-white/10 shadow-2xl overflow-hidden flex flex-col md:flex-row max-h-[90vh]">
+                <div className="relative w-full max-w-4xl bg-[#12121a] rounded-3xl border border-white/10 shadow-2xl overflow-hidden flex flex-col md:flex-row max-h-[90vh]">
                     {/* Close Button */}
                     <button 
                         onClick={() => setViewingImage(null)}
@@ -529,7 +529,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                         </button>
                                     )}
                                 </div>
-                                <div className="bg-black/30 border border-white/5 rounded-xl p-4 text-sm text-slate-300 leading-relaxed break-words">
+                                <div className="bg-black/30 border border-white/5 rounded-xl p-4 text-sm text-slate-300 leading-relaxed break-words line-clamp-3" title={viewingImage.prompt}>
                                     {viewingImage.prompt || <span className="italic text-slate-600">No prompt provided</span>}
                                 </div>
                             </div>
@@ -586,6 +586,15 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
 
                             {/* Actions */}
                             <div className="pt-4 border-t border-white/10 flex gap-3">
+                                {viewingImage.url && (
+                                    <button 
+                                        onClick={() => handleDownload(viewingImage.url, `auditionai-${viewingImage.id}.png`)}
+                                        className="flex-1 py-3 rounded-xl bg-audi-cyan/10 text-audi-cyan border border-audi-cyan/20 font-bold text-sm uppercase hover:bg-audi-cyan/20 transition-colors flex items-center justify-center gap-2"
+                                    >
+                                        <Icons.Download className="w-4 h-4" />
+                                        {lang === 'vi' ? 'Tải xuống' : 'Download'}
+                                    </button>
+                                )}
                                 <button 
                                     onClick={(e) => {
                                         setViewingImage(null);

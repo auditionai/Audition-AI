@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { GeneratedImage, Language, HistoryItem } from '../types';
 import { getAllImagesFromStorage, deleteImageFromStorage, cleanupExpiredImages } from '../services/storageService';
 import { getUnifiedHistory } from '../services/economyService';
@@ -454,7 +455,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
         </div>
 
         {/* Image Details Modal */}
-        {viewingImage && (
+        {viewingImage && createPortal(
             <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 animate-fade-in">
                 <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setViewingImage(null)}></div>
                 <div className="relative w-full max-w-5xl bg-[#12121a] rounded-3xl border border-white/10 shadow-2xl overflow-hidden flex flex-col md:flex-row max-h-[90vh]">
@@ -599,7 +600,8 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                         </div>
                     </div>
                 </div>
-            </div>
+            </div>,
+            document.body
         )}
     </div>
   );

@@ -26,8 +26,10 @@ export const Layout: React.FC<LayoutProps> = ({
   const [promoConfig, setPromoConfig] = useState<PromotionCampaign | null>(null);
 
   useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 20);
-    window.addEventListener('scroll', handleScroll);
+    const root = document.getElementById('root');
+    const handleScroll = () => setScrolled((root?.scrollTop || 0) > 20);
+    
+    root?.addEventListener('scroll', handleScroll);
     
     // Initial User Load
     const refreshUser = () => getUserProfile().then(setUser);
@@ -45,7 +47,7 @@ export const Layout: React.FC<LayoutProps> = ({
     const interval = setInterval(refreshUser, 5000); // Relaxed to 5s since we have events
 
     return () => {
-        window.removeEventListener('scroll', handleScroll);
+        root?.removeEventListener('scroll', handleScroll);
         window.removeEventListener('balance_updated', refreshUser);
         clearInterval(interval);
     };

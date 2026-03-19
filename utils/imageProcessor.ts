@@ -21,7 +21,7 @@ export const urlToBase64 = async (url: string): Promise<string | null> => {
 };
 
 // Helper: Load Image with Timeout
-const loadImageWithTimeout = (src: string, timeoutMs = 5000): Promise<HTMLImageElement> => {
+export const loadImageWithTimeout = (src: string, timeoutMs = 5000): Promise<HTMLImageElement> => {
     return new Promise((resolve, reject) => {
         const img = new Image();
         img.crossOrigin = "Anonymous";

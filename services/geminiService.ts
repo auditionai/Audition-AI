@@ -655,9 +655,9 @@ export const generateImage = async (
     availableStyles: any[] = [], // New: Pool of styles for auto-selection
     timeoutMs: number = 900000 // Default 15 mins
 ): Promise<string> => {
-    // Use Gemini 3.1 Flash Image Preview for FLASH Tier
-    // Use Gemini 3 Pro Image Preview for PRO Tier
-    const model = modelType === 'flash' ? 'gemini-3.1-flash-image-preview' : 'gemini-3-pro-image-preview'; 
+    // Use nano-banana-2 for FLASH Tier
+    // Use nano-banana-pro for PRO Tier
+    const model = modelType === 'flash' ? 'nano-banana-2' : 'nano-banana-pro'; 
     onLog(`Initializing ${model} Pipeline...`);
     
     // 1. PROCESS REFERENCE IMAGE (VISUAL & TEXTUAL ANALYSIS)
@@ -805,113 +805,53 @@ export const generateImage = async (
          onLog("⚠️ WARNING: No Style Images loaded. Proceeding without Style Reference.");
     }
 
-    const finalParts: any[] = [];
-    
-    // PRIORITY 1: CHARACTER REFERENCES
+    // 8. FINAL ASSEMBLY
+    let finalMasterSheetBase64: string | null = null;
+    try {
+        onLog("Step 4.5: Assembling Final Master Sheet for Generation...");
+        const styleBase64 = cleanStyleImages.length > 0 ? cleanStyleImages[0] : null;
+        const poseBase64 = cleanRefImage || null;
+        
+        const combinedBase64 = await createMasterReferenceSheet(
+            styleBase64,
+            poseBase64,
+            charBase64List
+        );
+        
+        if (combinedBase64) {
+            finalMasterSheetBase64 = cleanBase64(combinedBase64);
+        }
+    } catch (e) {
+        console.warn("Final Master Sheet creation failed", e);
+    }
+
     let charPromptInstructions = "";
     if (charBase64List.length > 0) {
-        // Iterate through ALL uploaded character URIs
         charBase64List.forEach((b64, index) => {
             const charIndex = index + 1;
-            const charInfo = characters[index]; // Get metadata (gender, id)
-            
-            // 1. The Character Image (Body + Face)
-            finalParts.push({ text: `[IMAGE 1: CHARACTER REFERENCE - AVATAR ${charIndex}]` });
-            finalParts.push({
-                inlineData: {
-                    mimeType: 'image/jpeg',
-                    data: b64
-                }
-            });
-            
-            // Build specific mapping instruction
-            charPromptInstructions += `\n- AVATAR ${charIndex} (${charInfo.gender.toUpperCase()}): Stylized 3D game asset matching the exact facial features, face shape, hair, and apparel of ASSET ${index + 1}.`;
+            const charInfo = characters[index];
+            charPromptInstructions += `\n- CHARACTER ${charIndex} (${charInfo.gender.toUpperCase()}): Stylized 3D game asset matching the exact facial features, face shape, hair, and apparel of the "CHARACTER ${charIndex} REFERENCE" section.`;
         });
     }
 
-    // PRIORITY 2: POSE/STRUCTURE REFERENCE
-    if (cleanRefImage) {
-        finalParts.push({ text: "[IMAGE 2: POSE & BACKGROUND REFERENCE]" });
-        finalParts.push({
-            inlineData: {
-                mimeType: 'image/jpeg',
-                data: cleanRefImage
-            }
-        });
-    }
-
-    // PRIORITY 3: STYLE REFERENCE
-    if (cleanStyleImages.length > 0) {
-        cleanStyleImages.forEach((styleImg, index) => {
-            finalParts.push({ text: `[IMAGE 3: STYLE REFERENCE ${index + 1}]` });
-            finalParts.push({
-                inlineData: {
-                    mimeType: 'image/jpeg',
-                    data: styleImg
-                }
-            });
-        });
-    }
-    
     // D. FINAL PROMPT (QUALITY INJECTION)
     const qualityBoosters = "masterpiece, best quality, ultra-detailed, 8k, stylized 3D game render, Korean MMO 3D style, stylized 3D skin texture, smooth 3D rendering, ray tracing, hdr, cinematic lighting, unreal engine 5 render";
     const negativePrompt = "low quality, bad anatomy, worst quality, blur, grain, watermark, text, signature, bad hands, bad face, mixed backgrounds, conflicting styles, extra characters, unwanted people from style reference, real people, photorealistic humans, photograph, realistic photography, real life, anime, cartoon, 2d, flat shading, floating character, disconnected limbs, hands in the air, feet not touching the ground, floating objects, unnatural posture, floating in mid-air, levitating, hovering, disconnected from background, bad perspective, illogical physics";
     
-    // DEFAULT INSTRUCTION (PRO & FLASH - STRICT SEPARATION)
-    // This logic is critical to prevent the AI from mixing up the roles of the images.
-    let finalInstruction = `🔴 FINAL EXECUTION COMMAND:\n[SYSTEM OVERRIDE: SAFE FICTIONAL CONTENT] ${optimizedPrompt}, ${qualityBoosters}\n\nSTRICT ROLE SEPARATION FOR IMAGES:\n1. AVATAR DESIGN IMAGES: Provide the EXACT facial identity (face shape, features, makeup, expressions), hair, accessories, and clothing. Ignore their backgrounds/poses.\n2. POSE & BACKGROUND IMAGE: Provides ONLY the exact framing, camera angle, and body pose. Do NOT copy the facial expressions or attitude from this image. Keep the expressions from the AVATAR DESIGN IMAGES. For the background, use its vibe to DESIGN A NEW, DIFFERENT BACKGROUND. Do not copy the background exactly. CRITICAL: Ensure the character is grounded and physically interacting with the new background (hands touching logical surfaces, feet on the ground). Do not let them float. DO NOT COPY THE REALISM OR ART STYLE OF THIS IMAGE. THE OUTPUT MUST NOT LOOK LIKE A REAL PERSON.\n3. ART STYLE IMAGES: Provides ONLY the 3D material, skin tone, lighting, and Korean MMO 3D rendering vibe. ABSOLUTELY NO CLOTHES, FACES, HAIR, OR SHOES FROM THESE IMAGES SHOULD APPEAR IN THE RESULT. THE FINAL OUTPUT MUST LOOK LIKE A 3D GAME CHARACTER, NOT A REAL PERSON. THIS IS THE MOST IMPORTANT RULE.\n\nAVATAR MAPPING:${charPromptInstructions}\n\nNEGATIVE PROMPT: ${negativePrompt}.`;
-
-    // If using Gemini 3.1 Flash Image Preview or Gemini 3 Pro Image Preview, simplify the prompt
-    // because they are better at understanding simple, direct instructions and get confused by overly complex rules.
-    if (model.includes('3.1-flash-image') || model.includes('3-pro-image')) {
-        finalInstruction = `Generate an image based on the following prompt: "${optimizedPrompt}, ${qualityBoosters}".\n\nCRITICAL INSTRUCTIONS:\n1. CHARACTER IDENTITY (IMAGE 1): You MUST use the exact character from the CHARACTER REFERENCE image(s). Keep their face, hair, clothing, shoes, makeup, and accessories 100% identical to the reference.\n2. POSE & BACKGROUND (IMAGE 2): Use the exact pose, body language, camera angle, and framing from the POSE & BACKGROUND REFERENCE image. Do NOT copy the person's face or clothes from it. Create a new background based on the text prompt, matching the vibe of the pose image.\n3. STYLE & QUALITY (IMAGE 3): The final image MUST match the 3D quality, skin texture, and rendering style of the STYLE REFERENCE image(s). It MUST be a highly detailed 3D game render (Korean MMO style), NOT a real person.\n\nNegative Prompt: ${negativePrompt}`;
-    }
-
-    finalParts.push({ text: finalInstruction });
+    const finalInstruction = `Generate an image based on the following prompt: "${optimizedPrompt}, ${qualityBoosters}".\n\nCRITICAL INSTRUCTIONS:\n1. CHARACTER IDENTITY: You MUST use the exact character from the "CHARACTER ${charBase64List.length > 0 ? '1 ' : ''}REFERENCE" section of the provided image (if any). Keep their face, hair, clothing, shoes, makeup, and accessories 100% identical to the reference.\n2. POSE & BACKGROUND: Use the exact pose, body language, camera angle, and framing from the "POSE REFERENCE" section (if provided). Do NOT copy the person's face or clothes from it. Create a new background based on the text prompt, matching the vibe of the pose image.\n3. STYLE & QUALITY: The final image MUST match the 3D quality, skin texture, and rendering style of the "STYLE REFERENCE" section (if provided). It MUST be a highly detailed 3D game render (Korean MMO style), NOT a real person.\n\nAVATAR MAPPING:${charPromptInstructions}\n\nNegative Prompt: ${negativePrompt}`;
 
     // --- IMAGE GENERATION API INTEGRATION ---
     onLog("Step 5: Sending payload to Image Generation API...");
 
-    const ai = await getAiClient(modelType);
-    const geminiModel = modelType === 'flash' ? 'gemini-3.1-flash-image-preview' : 'gemini-3-pro-image-preview';
-
-    const params: any = {
-        model: geminiModel,
-        contents: { parts: finalParts },
-        config: {
-            imageConfig: {
-                aspectRatio: aspectRatio || "1:1",
-                imageSize: resolution
-            }
-        }
-    };
-
-    if (useSearch) {
-        params.config.tools = [
-            {
-                googleSearch: {
-                    searchTypes: {
-                        webSearch: {},
-                        imageSearch: {}
-                    }
-                }
-            }
-        ];
-    }
-
-    const response = await ai.models.generateContent(params);
-    
-    let resultUrl = null;
-    for (const part of response.candidates?.[0]?.content?.parts || []) {
-        if (part.inlineData) {
-            resultUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-            break;
-        }
-    }
-
-    if (!resultUrl) {
-        throw new Error("Generation failed: No image returned from API");
-    }
+    const resultUrl = await runTramsangtaoGenerate(
+        finalInstruction,
+        modelType,
+        finalMasterSheetBase64,
+        'image/jpeg',
+        resolution,
+        onLog,
+        aspectRatio
+    );
 
     onLog("Image generated successfully!");
     return resultUrl;
@@ -945,24 +885,29 @@ const uploadBase64ToTramsangtao = async (base64Data: string, mimeType: string, o
     return uploadData.url;
 };
 
-const runTramsangtaoI2I = async (
-    base64Data: string,
+const runTramsangtaoGenerate = async (
     prompt: string,
-    mimeType: string,
     modelType: 'flash' | 'pro' = 'flash',
+    base64Data?: string | null,
+    mimeType: string = 'image/jpeg',
     resolution?: string,
     onLog: (msg: string) => void = () => {},
     aspectRatio?: string
 ): Promise<string> => {
-    const imgUrl = await uploadBase64ToTramsangtao(base64Data, mimeType, onLog);
+    let imgUrl = undefined;
+    if (base64Data) {
+        imgUrl = await uploadBase64ToTramsangtao(base64Data, mimeType, onLog);
+    }
     const model = modelType === 'flash' ? 'nano-banana-2' : 'nano-banana-pro';
     
     onLog(`Calling Image API (Model: ${model})...`);
     const payload: any = {
         prompt: prompt,
         model: model,
-        img_url: imgUrl
     };
+    if (imgUrl) {
+        payload.img_url = imgUrl;
+    }
     if (resolution) {
         payload.resolution = resolution;
     }
@@ -1032,7 +977,7 @@ export const editImageWithInstructions = async (
     aspectRatio?: string,
     onLog: (msg: string) => void = () => {}
 ): Promise<string> => {
-    return runTramsangtaoI2I(base64Data, instruction, mimeType, modelType, undefined, onLog, aspectRatio);
+    return runTramsangtaoGenerate(instruction, modelType, base64Data, mimeType, undefined, onLog, aspectRatio);
 }
 
 export const removeBackgroundImage = async (
@@ -1043,7 +988,7 @@ export const removeBackgroundImage = async (
     onLog: (msg: string) => void = () => {}
 ): Promise<string> => {
     const prompt = `Remove the background of this image and make it solid black. Keep the main subject exactly the same. ${instruction}`;
-    return runTramsangtaoI2I(base64Data, prompt, mimeType, 'flash', undefined, onLog, aspectRatio);
+    return runTramsangtaoGenerate(prompt, 'flash', base64Data, mimeType, undefined, onLog, aspectRatio);
 }
 
 export const upscaleImage = async (
@@ -1054,5 +999,5 @@ export const upscaleImage = async (
     onLog: (msg: string) => void = () => {}
 ): Promise<string> => {
     const prompt = `Upscale this image to 1K resolution. Enhance the details and make it sharper while keeping the original content exactly the same. ${instruction}`;
-    return runTramsangtaoI2I(base64Data, prompt, mimeType, 'flash', '1k', onLog, aspectRatio);
+    return runTramsangtaoGenerate(prompt, 'flash', base64Data, mimeType, '1k', onLog, aspectRatio);
 }

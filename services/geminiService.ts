@@ -807,18 +807,16 @@ export const generateImage = async (
 
     const finalParts: any[] = [];
     
-    // PRIORITY 1: CHARACTER REFERENCES (Moved to TOP for Attention Priority)
+    // PRIORITY 1: CHARACTER REFERENCES
     let charPromptInstructions = "";
     if (charBase64List.length > 0) {
-        finalParts.push({ text: "🔴 PRIORITY 1: 3D AVATAR DESIGN (CRITICAL)\nINSTRUCTION: You MUST extract the exact visual identity, facial features (bone structure, eye shape, nose, mouth), hairstyle, and apparel from the following stylized game assets. CRITICAL: The character's facial identity MUST remain 100% identical to these references. Do not deform the face into a generic AI face. DO NOT copy the background or pose from these images. These are fictional 3D models." });
-        
         // Iterate through ALL uploaded character URIs
         charBase64List.forEach((b64, index) => {
             const charIndex = index + 1;
             const charInfo = characters[index]; // Get metadata (gender, id)
             
             // 1. The Character Image (Body + Face)
-            finalParts.push({ text: `🔴 ASSET ${charIndex} REFERENCE\nINSTRUCTION: Scan this image to extract BOTH the full body apparel AND the facial features for AVATAR ${charIndex}.` });
+            finalParts.push({ text: `[IMAGE 1: CHARACTER REFERENCE - AVATAR ${charIndex}]` });
             finalParts.push({
                 inlineData: {
                     mimeType: 'image/jpeg',
@@ -833,7 +831,7 @@ export const generateImage = async (
 
     // PRIORITY 2: POSE/STRUCTURE REFERENCE
     if (cleanRefImage) {
-        finalParts.push({ text: "🔴 PRIORITY 2: FRAMING, POSE & BACKGROUND (SOURCE OF TRUTH)\nINSTRUCTION:\n1. FRAMING & CAMERA (CRITICAL): You MUST exactly replicate the framing (e.g., close-up, portrait, half-body, full-body) and camera angle from this image. If this image is a close-up or half-body, your output MUST also be a close-up or half-body. DO NOT generate a full-body image if the reference is half-body.\n2. POSE & BODY LANGUAGE (CRITICAL): Replicate the exact pose, posture, and body language. DO NOT copy the facial expressions from this image. You MUST keep the original facial expressions, makeup, and accessories from the AVATAR DESIGN IMAGES.\n3. BACKGROUND: DO NOT copy the background exactly. Instead, analyze the background's vibe, lighting, perspective, and key elements, and DESIGN A NEW, unique background that shares the same atmosphere and composition, but looks different and creative.\n4. INTERACTION (CRITICAL): The character MUST be grounded in the new background. Ensure their hands, feet, and body interact naturally with the new environment (e.g., leaning on a logical surface, stepping on the ground). Do not let them float in the air.\nDO NOT copy the character's specific identity, clothes, expressions, or art style from this image. DO NOT COPY THE REALISM OF THIS IMAGE. THE OUTPUT MUST BE A 3D GAME RENDER." });
+        finalParts.push({ text: "[IMAGE 2: POSE & BACKGROUND REFERENCE]" });
         finalParts.push({
             inlineData: {
                 mimeType: 'image/jpeg',
@@ -844,9 +842,8 @@ export const generateImage = async (
 
     // PRIORITY 3: STYLE REFERENCE
     if (cleanStyleImages.length > 0) {
-        finalParts.push({ text: "🔴 PRIORITY 3: ART STYLE & MATERIAL (CRITICAL: DO NOT COPY SUBJECTS)\nINSTRUCTION: Look at ALL the following style reference images. Extract ONLY the exact 3D material, character style, skin tone, detailed 3D texture, lighting, and rendering vibe. YOU MUST COMPLETELY IGNORE AND EXCLUDE ANY CLOTHES, FACES, HAIR, SHOES, OR SUBJECTS SHOWN IN THESE IMAGES. DO NOT ADD THEM TO THE FINAL RESULT. The final output MUST NOT be anime or cartoon, it MUST be a highly detailed 3D render in the style of a Korean 18+ MMO game." });
         cleanStyleImages.forEach((styleImg, index) => {
-            finalParts.push({ text: `🔴 STYLE REFERENCE ${index + 1}` });
+            finalParts.push({ text: `[IMAGE 3: STYLE REFERENCE ${index + 1}]` });
             finalParts.push({
                 inlineData: {
                     mimeType: 'image/jpeg',
@@ -867,123 +864,53 @@ export const generateImage = async (
     // If using Gemini 3.1 Flash Image Preview or Gemini 3 Pro Image Preview, simplify the prompt
     // because they are better at understanding simple, direct instructions and get confused by overly complex rules.
     if (model.includes('3.1-flash-image') || model.includes('3-pro-image')) {
-        finalInstruction = `Generate an image based on the following prompt: "${optimizedPrompt}, ${qualityBoosters}".\n\nCRITICAL INSTRUCTIONS:\n1. SUBJECT IDENTITY: You MUST use the exact character from the AVATAR DESIGN IMAGE(S). Keep their face, hair, clothing, and accessories 100% identical to the reference.\n2. POSE & FRAMING: If a POSE REFERENCE IMAGE is provided, use its exact pose, camera angle, and framing. Do NOT copy the person from it.\n3. BACKGROUND: Create a new background based on the text prompt. Do NOT use a plain grey background.\n4. STYLE: The final image MUST be a highly detailed 3D game render (Korean MMO style), NOT a real person.\n\nNegative Prompt: ${negativePrompt}`;
+        finalInstruction = `Generate an image based on the following prompt: "${optimizedPrompt}, ${qualityBoosters}".\n\nCRITICAL INSTRUCTIONS:\n1. CHARACTER IDENTITY (IMAGE 1): You MUST use the exact character from the CHARACTER REFERENCE image(s). Keep their face, hair, clothing, shoes, makeup, and accessories 100% identical to the reference.\n2. POSE & BACKGROUND (IMAGE 2): Use the exact pose, body language, camera angle, and framing from the POSE & BACKGROUND REFERENCE image. Do NOT copy the person's face or clothes from it. Create a new background based on the text prompt, matching the vibe of the pose image.\n3. STYLE & QUALITY (IMAGE 3): The final image MUST match the 3D quality, skin texture, and rendering style of the STYLE REFERENCE image(s). It MUST be a highly detailed 3D game render (Korean MMO style), NOT a real person.\n\nNegative Prompt: ${negativePrompt}`;
     }
 
     finalParts.push({ text: finalInstruction });
 
-    // --- TRAMSANGTAO API INTEGRATION ---
-    onLog("Step 5: Preparing payload for Tramsangtao API...");
+    // --- IMAGE GENERATION API INTEGRATION ---
+    onLog("Step 5: Sending payload to Image Generation API...");
 
-    const tstModel = modelType === 'flash' ? 'nano-banana-2' : 'nano-banana-pro';
-    
-    const imgUrls: string[] = [];
-    
-    // Upload reference image (pose)
-    if (cleanRefImage) {
-        onLog("Uploading reference image (pose) to Tramsangtao CDN...");
-        try {
-            const url = await uploadBase64ToTramsangtao(cleanRefImage, 'image/jpeg', onLog);
-            imgUrls.push(url);
-        } catch (e) {
-            console.warn("Failed to upload reference image", e);
+    const ai = await getAiClient(modelType);
+    const geminiModel = modelType === 'flash' ? 'gemini-3.1-flash-image-preview' : 'gemini-3-pro-image-preview';
+
+    const params: any = {
+        model: geminiModel,
+        contents: { parts: finalParts },
+        config: {
+            imageConfig: {
+                aspectRatio: aspectRatio || "1:1",
+                imageSize: resolution
+            }
         }
-    }
-
-    // Upload character images
-    for (let i = 0; i < charBase64List.length; i++) {
-        onLog(`Uploading character image ${i + 1} to Tramsangtao CDN...`);
-        try {
-            const url = await uploadBase64ToTramsangtao(charBase64List[i], 'image/jpeg', onLog);
-            imgUrls.push(url);
-        } catch (e) {
-            console.warn(`Failed to upload character image ${i + 1}`, e);
-        }
-    }
-
-    // Upload style images
-    for (let i = 0; i < cleanStyleImages.length; i++) {
-        onLog(`Uploading style image ${i + 1} to Tramsangtao CDN...`);
-        try {
-            const url = await uploadBase64ToTramsangtao(cleanStyleImages[i], 'image/jpeg', onLog);
-            imgUrls.push(url);
-        } catch (e) {
-            console.warn(`Failed to upload style image ${i + 1}`, e);
-        }
-    }
-
-    const payload: any = {
-        prompt: finalInstruction,
-        model: tstModel,
-        resolution: resolution.toLowerCase() // "1k", "2k", "4k"
     };
 
-    if (aspectRatio) {
-        payload.aspect_ratio = aspectRatio;
+    if (useSearch) {
+        params.config.tools = [
+            {
+                googleSearch: {
+                    searchTypes: {
+                        webSearch: {},
+                        imageSearch: {}
+                    }
+                }
+            }
+        ];
     }
 
-    if (imgUrls.length > 0) {
-        payload.image_urls = imgUrls;
-        payload.img_urls = imgUrls;
-        payload.img_url = imgUrls; // To be safe, pass array to all possible fields
-    }
-
-    onLog(`Sending request to Tramsangtao API (Model: ${tstModel}) with ${imgUrls.length} images...`);
-
-    const generateRes = await fetch('/api/tst-generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-    });
-
-    if (!generateRes.ok) {
-        const err = await generateRes.json().catch(() => ({}));
-        throw new Error(err.error || "Failed to generate image with Tramsangtao");
-    }
-
-    const generateData = await generateRes.json();
-    const jobId = generateData.job_id;
-
-    if (!jobId) {
-        throw new Error("No job_id returned from Tramsangtao");
-    }
-
-    onLog(`Job created (ID: ${jobId}). Polling every 8 seconds...`);
-
+    const response = await ai.models.generateContent(params);
+    
     let resultUrl = null;
-    let pollAttempts = 0;
-    const maxPollAttempts = 150; // 150 * 8s = 1200s (20 minutes)
-
-    while (pollAttempts < maxPollAttempts) {
-        await new Promise(resolve => setTimeout(resolve, 8000)); // 8 seconds poll
-        pollAttempts++;
-        
-        try {
-            const pollRes = await fetch(`/api/tst-poll?jobId=${jobId}`);
-            if (!pollRes.ok) {
-                console.warn(`Poll request failed (Attempt ${pollAttempts})`);
-                continue;
-            }
-            
-            const pollData = await pollRes.json();
-            onLog(`Job status: ${pollData.status} (${pollData.progress || 0}%)...`);
-            
-            if (pollData.status === 'completed') {
-                resultUrl = pollData.result;
-                break;
-            } else if (pollData.status === 'failed' || pollData.status === 'error') {
-                throw new Error(`Tramsangtao job failed: ${pollData.error || 'Unknown error'}`);
-            }
-        } catch (e: any) {
-            console.warn("Polling error:", e);
-            if (e.message.includes('Tramsangtao job failed')) {
-                throw e;
-            }
+    for (const part of response.candidates?.[0]?.content?.parts || []) {
+        if (part.inlineData) {
+            resultUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+            break;
         }
     }
 
     if (!resultUrl) {
-        throw new Error("Generation failed: Timeout waiting for Tramsangtao job to complete");
+        throw new Error("Generation failed: No image returned from API");
     }
 
     onLog("Image generated successfully!");
@@ -991,7 +918,7 @@ export const generateImage = async (
 };
 
 const uploadBase64ToTramsangtao = async (base64Data: string, mimeType: string, onLog: (msg: string) => void): Promise<string> => {
-    onLog("Uploading image to Tramsangtao CDN...");
+    onLog("Uploading image to CDN...");
     const base64Content = base64Data.split(',')[1] || base64Data;
     const byteCharacters = atob(base64Content);
     const byteNumbers = new Array(byteCharacters.length);
@@ -1011,7 +938,7 @@ const uploadBase64ToTramsangtao = async (base64Data: string, mimeType: string, o
 
     if (!uploadRes.ok) {
         const err = await uploadRes.json();
-        throw new Error(`Failed to upload image to Tramsangtao: ${err.error || uploadRes.statusText}`);
+        throw new Error(`Failed to upload image: ${err.error || uploadRes.statusText}`);
     }
 
     const uploadData = await uploadRes.json();
@@ -1029,7 +956,7 @@ const runTramsangtaoI2I = async (
     const imgUrl = await uploadBase64ToTramsangtao(base64Data, mimeType, onLog);
     const model = modelType === 'flash' ? 'nano-banana-2' : 'nano-banana-pro';
     
-    onLog(`Calling Tramsangtao API (Model: ${model})...`);
+    onLog(`Calling Image API (Model: ${model})...`);
     const payload: any = {
         prompt: prompt,
         model: model,
@@ -1047,14 +974,14 @@ const runTramsangtaoI2I = async (
 
     if (!genRes.ok) {
         const err = await genRes.json();
-        throw new Error(`Tramsangtao API error: ${err.error || genRes.statusText}`);
+        throw new Error(`Image API error: ${err.error || genRes.statusText}`);
     }
 
     const genData = await genRes.json();
     const jobId = genData.job_id;
 
     if (!jobId) {
-        throw new Error("Tramsangtao API did not return a job_id");
+        throw new Error("Image API did not return a job_id");
     }
 
     onLog(`Job created (ID: ${jobId}). Polling every 8 seconds...`);
@@ -1078,15 +1005,15 @@ const runTramsangtaoI2I = async (
                 resultUrl = pollData.result;
                 break;
             } else if (pollData.status === 'failed' || pollData.status === 'error') {
-                throw new Error(`Tramsangtao job failed: ${pollData.error || 'Unknown error'}`);
+                throw new Error(`Job failed: ${pollData.error || 'Unknown error'}`);
             }
         } catch (e: any) {
-            if (e.message.includes('Tramsangtao job failed')) throw e;
+            if (e.message.includes('Job failed')) throw e;
         }
     }
 
     if (!resultUrl) {
-        throw new Error("Generation failed: Timeout waiting for Tramsangtao job to complete");
+        throw new Error("Generation failed: Timeout waiting for job to complete");
     }
 
     onLog("Image processed successfully!");

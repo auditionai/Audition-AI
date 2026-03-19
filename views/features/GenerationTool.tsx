@@ -561,7 +561,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       let finalPrompt = (feature.defaultPrompt || "") + prompt;
       if (negativePrompt) finalPrompt += ` --no ${negativePrompt}`;
       
-      addLog("Gửi lệnh đến Gemini Intelligence Grid...");
+      addLog("Gửi lệnh đến Image Generation Engine...");
 
       // 5. EXECUTE WITH DYNAMIC TIMEOUT
       let timeoutMs = 900000; // 15 mins (Single)
@@ -599,7 +599,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           timestamp: Date.now(),
           toolId: feature.id,
           toolName: feature.name['en'],
-          engine: aiModel === 'flash' ? `Gemini 3.1 Flash ${resolution}` : `Gemini 3 Pro ${resolution}`
+          engine: aiModel === 'flash' ? `Flash Engine ${resolution}` : `Pro Engine ${resolution}`
         };
         setGeneratedData(newImage);
         
@@ -740,7 +740,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                               </div>
                               <div>
                                   <h4 className="text-sm font-bold text-white">Model 3 Pro</h4>
-                                  <p className="text-xs text-slate-400 mt-1">Sử dụng mô hình Gemini 3 Pro mới nhất. Hiểu lệnh tốt hơn, chi tiết trang phục sắc nét hơn bản Flash.</p>
+                                  <p className="text-xs text-slate-400 mt-1">Sử dụng mô hình Pro mới nhất. Hiểu lệnh tốt hơn, chi tiết trang phục sắc nét hơn bản Flash.</p>
                               </div>
                           </div>
 
@@ -826,7 +826,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                   <div className="flex justify-between items-center p-3 border-b border-white/10 bg-white/5">
                       <div className="flex items-center gap-2">
                           <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                          <span className="font-bold text-xs text-white">Kết quả (Gemini 3 Pro)</span>
+                          <span className="font-bold text-xs text-white">Kết quả (Pro Engine)</span>
                       </div>
                       <button onClick={() => setStage('input')} className="text-[10px] font-bold text-slate-400 hover:text-white px-2 py-1 rounded bg-white/5 hover:bg-white/10">X</button>
                   </div>

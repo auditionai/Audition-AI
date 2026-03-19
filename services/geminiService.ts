@@ -872,101 +872,142 @@ export const generateImage = async (
 
     finalParts.push({ text: finalInstruction });
 
-    // --- PAYLOAD SANITIZATION ---
-    const sanitizedParts = finalParts.filter(p => {
-        if (!p) return false;
-        if (p.text && typeof p.text === 'string' && p.text.trim().length > 0) return true;
-        if (p.inlineData && p.inlineData.data) return true;
-        return false;
-    });
+    // --- TRAMSANGTAO API INTEGRATION ---
+    onLog("Step 5: Preparing payload for Tramsangtao API...");
 
-    if (sanitizedParts.length === 0) throw new Error("CRITICAL: Final payload is empty! Data assembly failed.");
+    const tstModel = modelType === 'flash' ? 'nano-banana-2' : 'nano-banana-pro';
+    
+    let imgUrl = undefined;
+    
+    // If we have a reference image (pose), upload it to Tramsangtao CDN
+    if (cleanRefImage) {
+        onLog("Uploading reference image to Tramsangtao CDN...");
+        try {
+            const formData = new FormData();
+            const byteCharacters = atob(cleanRefImage);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            const blob = new Blob([byteArray], { type: 'image/jpeg' });
+            formData.append('file', blob, 'ref.jpg');
 
-    onLog(`Step 5: Sending Payload (${sanitizedParts.length} parts) to ${model}...`);
-
-    const config: any = {
-        imageConfig: {
-            aspectRatio: aspectRatio
+            const uploadRes = await fetch('/api/tst-upload', {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (!uploadRes.ok) {
+                throw new Error("Failed to upload reference image");
+            }
+            
+            const uploadData = await uploadRes.json();
+            imgUrl = uploadData.url;
+            onLog("Reference image uploaded successfully.");
+        } catch (e) {
+            console.warn("Failed to upload reference image to Tramsangtao", e);
         }
+    } else if (charBase64List.length > 0) {
+        // Fallback: use the first character image if no pose reference
+        onLog("Uploading character image to Tramsangtao CDN...");
+        try {
+            const formData = new FormData();
+            const byteCharacters = atob(charBase64List[0]);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            const blob = new Blob([byteArray], { type: 'image/jpeg' });
+            formData.append('file', blob, 'char.jpg');
+
+            const uploadRes = await fetch('/api/tst-upload', {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (uploadRes.ok) {
+                const uploadData = await uploadRes.json();
+                imgUrl = uploadData.url;
+                onLog("Character image uploaded successfully.");
+            }
+        } catch (e) {
+            console.warn("Failed to upload character image to Tramsangtao", e);
+        }
+    }
+
+    const payload: any = {
+        prompt: finalInstruction,
+        model: tstModel,
+        aspect_ratio: aspectRatio,
+        resolution: resolution.toLowerCase() // "1k", "2k", "4k"
     };
 
-    // ENABLED: Resolution Setting for both Flash and Pro Models
-    // Both gemini-3.1-flash-image-preview and gemini-3-pro-image-preview support 1K/2K/4K.
-    config.imageConfig.imageSize = resolution;
-
-    // googleSearch is only supported on gemini-3-pro-image-preview
-    if (useSearch && modelType === 'pro') {
-        config.tools = [{ googleSearch: {} }];
+    if (imgUrl) {
+        payload.img_url = imgUrl;
     }
 
-    let response: any = null;
-    let attempts = 0;
-    const MAX_KEY_SWITCHES = 2; // Try up to 2 keys
+    onLog(`Sending request to Tramsangtao API (Model: ${tstModel})...`);
 
-    while (attempts < MAX_KEY_SWITCHES) {
-        attempts++;
-        const freshAi = await getAiClient(modelType);
-        const currentKey = (freshAi as any)._internalApiKey;
-        const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
-        const keyName = currentKey ? await getApiKeyName(currentKey) : 'Default';
-        
-        onLog(`> Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
-        console.log(`[API CALL START] Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
+    const generateRes = await fetch('/api/tst-generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+
+    if (!generateRes.ok) {
+        const err = await generateRes.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to generate image with Tramsangtao");
+    }
+
+    const generateData = await generateRes.json();
+    const jobId = generateData.job_id;
+
+    if (!jobId) {
+        throw new Error("No job_id returned from Tramsangtao");
+    }
+
+    onLog(`Job created (ID: ${jobId}). Polling every 8 seconds...`);
+
+    let resultUrl = null;
+    let pollAttempts = 0;
+    const maxPollAttempts = 150; // 150 * 8s = 1200s (20 minutes)
+
+    while (pollAttempts < maxPollAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 8000)); // 8 seconds poll
+        pollAttempts++;
         
         try {
-            response = await retryWithBackoff(
-                async () => {
-                    const specificAi = await getAiClient(modelType, currentKey);
-                    try {
-                        const REQUEST_TIMEOUT = 600000; // 10 Minutes
-                        
-                        const res = await runWithTimeout(
-                            specificAi.models.generateContent({
-                                model: model,
-                                contents: { parts: finalParts },
-                                config: config
-                            }),
-                            Math.min(timeoutMs, REQUEST_TIMEOUT), 
-                            "Image Generation"
-                        );
-                        console.log(`[API CALL SUCCESS] Ảnh được tạo thành công bởi API Key: ${keyName} (${shortKey})`);
-                        return res;
-                    } catch (e: any) {
-                        // Removed redundant console.warn to prevent spam
-                        throw e;
-                    }
-                },
-                5, // 5 retries (wait and retry on same key)
-                120000, // 120 seconds each (2 minutes)
-                "Image Generation",
-                onLog
-            );
-            break; // Success, exit the key switching loop
-        } catch (error: any) {
-            const isRateLimit = error?.status === 429 || error?.message?.includes('429') || error?.message?.includes('quota');
-            const isOverload = error?.status === 503 || error?.message?.includes('503') || error?.message?.includes('Overloaded') || error?.message?.includes('timed out') || error?.message?.includes('Timeout');
-            const isAuthError = error?.status === 403 || error?.message?.includes('403') || error?.message?.includes('PERMISSION_DENIED');
-
-            if (!isRateLimit && !isOverload && !isAuthError) {
-                // If it's a 400 Bad Request (e.g., safety violation), don't ban the key, just throw the error to the user
-                throw error;
+            const pollRes = await fetch(`/api/tst-poll?jobId=${jobId}`);
+            if (!pollRes.ok) {
+                console.warn(`Poll request failed (Attempt ${pollAttempts})`);
+                continue;
             }
-
-            console.warn(`Key ${shortKey} completely failed after retries. Banning it.`);
-            if (currentKey) reportKeyFailure(currentKey);
             
-            if (attempts < MAX_KEY_SWITCHES) {
-                onLog(`❌ Key ${keyName} thất bại. Đang tự động đổi sang Key khác và thử lại...`);
-            } else {
-                throw error;
+            const pollData = await pollRes.json();
+            onLog(`Job status: ${pollData.status} (${pollData.progress || 0}%)...`);
+            
+            if (pollData.status === 'completed') {
+                resultUrl = pollData.result;
+                break;
+            } else if (pollData.status === 'failed' || pollData.status === 'error') {
+                throw new Error(`Tramsangtao job failed: ${pollData.error || 'Unknown error'}`);
+            }
+        } catch (e: any) {
+            console.warn("Polling error:", e);
+            if (e.message.includes('Tramsangtao job failed')) {
+                throw e;
             }
         }
     }
 
-    onLog("Downloading result...");
-    const result = extractImage(response);
-    if (!result) throw new Error("Generation failed: No image output");
-    return result;
+    if (!resultUrl) {
+        throw new Error("Generation failed: Timeout waiting for Tramsangtao job to complete");
+    }
+
+    onLog("Image generated successfully!");
+    return resultUrl;
 };
 
 export const editImageWithInstructions = async (

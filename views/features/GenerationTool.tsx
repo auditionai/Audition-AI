@@ -143,15 +143,16 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           if (videoConfig && videoConfig.isActive && videoConfig.url) {
               let videoId = TUTORIAL_VIDEO_ID;
               try {
-                  const urlObj = new URL(videoConfig.url);
-                  if (urlObj.hostname.includes('youtube.com')) {
-                      if (urlObj.pathname.includes('/embed/')) {
-                          videoId = urlObj.pathname.split('/embed/')[1].split('?')[0];
-                      } else {
-                          videoId = urlObj.searchParams.get('v') || videoId;
+                  const urlStr = videoConfig.url.trim();
+                  // Check if it's just an 11-character ID
+                  if (/^[a-zA-Z0-9_-]{11}$/.test(urlStr)) {
+                      videoId = urlStr;
+                  } else {
+                      const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|shorts\/|live\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+                      const match = urlStr.match(regExp);
+                      if (match && match[2].length === 11) {
+                          videoId = match[2];
                       }
-                  } else if (urlObj.hostname.includes('youtu.be')) {
-                      videoId = urlObj.pathname.slice(1).split('?')[0];
                   }
               } catch (e) {
                   console.warn("Invalid video URL format", e);
@@ -478,11 +479,11 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
     await new Promise(r => setTimeout(r, 100));
 
     try {
-        // --- NEW: API KEY PRE-FLIGHT TEST (120s Timeout / 5s Retry) ---
+        // --- NEW: API KEY PRE-FLIGHT TEST (120s Timeout / 15s Retry) ---
         let isKeyValid = false;
         const startTime = Date.now();
         const TIMEOUT_LIMIT = 300000; // 5 mins
-        const RETRY_INTERVAL = 5000; // 5s
+        const RETRY_INTERVAL = 15000; // 15s
         let attempt = 0;
 
         while (Date.now() - startTime < TIMEOUT_LIMIT) {
@@ -490,7 +491,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
             addLog(`Đang kết nối đến máy chủ đồ họa Google (Lần ${attempt})...`);
             
             const stepStart = Date.now();
-            isKeyValid = await testApiKey(aiModel);
+            isKeyValid = await testApiKey(aiModel, attempt);
             
             if (isKeyValid) break;
             
@@ -788,9 +789,15 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
               <div className="text-4xl font-mono font-bold text-audi-yellow mb-4 animate-pulse">
                   {formatTime(elapsedSeconds)} <span className="text-sm text-slate-500">/ ~{formatTime(estimatedSeconds)}</span>
               </div>
-              <p className="text-audi-cyan font-mono text-sm max-w-xs mx-auto mb-8 animate-pulse font-bold">
+              <p className="text-audi-cyan font-mono text-sm max-w-xs mx-auto mb-4 animate-pulse font-bold">
                   {progressMsg}
               </p>
+              <div className="w-full bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3 mb-6 flex items-start gap-3 animate-pulse text-left">
+                  <Icons.AlertTriangle className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" />
+                  <p className="text-xs text-yellow-400 font-bold leading-relaxed">
+                      {lang === 'vi' ? 'Quá trình tạo ảnh thường mất từ 5-10 phút. Vui lòng chờ đợi quá trình tạo ảnh hoàn tất, không tải lại trang!' : 'Image generation usually takes 5-10 minutes. Please wait for the process to complete, do not reload the page!'}
+                  </p>
+              </div>
               <div className="w-full bg-[#12121a] border border-white/10 rounded-2xl p-4 space-y-2 shadow-2xl text-left h-48 overflow-y-auto custom-scrollbar">
                   {progressLogs.map((log, idx) => (
                       <div key={idx} className="flex items-start gap-2 text-xs font-mono border-b border-white/5 pb-1 last:border-0 animate-fade-in">

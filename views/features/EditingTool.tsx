@@ -417,6 +417,12 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
                            ))
                        )}
                    </div>
+                   <div className="mt-6 w-full bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3 flex items-start gap-3 animate-pulse text-left">
+                       <Icons.AlertTriangle className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" />
+                       <p className="text-xs text-yellow-400 font-bold leading-relaxed">
+                           {lang === 'vi' ? 'Quá trình xử lý thường mất từ 5-10 phút. Vui lòng chờ đợi quá trình hoàn tất, không tải lại trang!' : 'Processing usually takes 5-10 minutes. Please wait for the process to complete, do not reload the page!'}
+                       </p>
+                   </div>
                </div>
           ) : resultImage ? (
               <div className="w-full h-full flex flex-col items-center justify-center gap-4 z-10">

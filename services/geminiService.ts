@@ -904,11 +904,12 @@ export const generateImage = async (
             const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
             const keyName = currentKey ? await getApiKeyName(currentKey) : 'Default';
             onLog(`> Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
+            console.log(`[API CALL START] Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
             
             try {
                 const REQUEST_TIMEOUT = 600000; // 10 Minutes
                 
-                return await runWithTimeout(
+                const res = await runWithTimeout(
                     freshAi.models.generateContent({
                         model: model,
                         contents: { parts: finalParts },
@@ -917,6 +918,8 @@ export const generateImage = async (
                     Math.min(timeoutMs, REQUEST_TIMEOUT), 
                     "Image Generation"
                 );
+                console.log(`[API CALL SUCCESS] Ảnh được tạo thành công bởi API Key: ${keyName} (${shortKey})`);
+                return res;
             } catch (e: any) {
                 const isOverload = e.message?.includes('503') || e.message?.includes('Overloaded') || e.status === 503 || e.message?.includes('timed out') || e.message?.includes('Timeout');
                 const isRateLimit = e.message?.includes('429') || e.status === 429 || e.message?.includes('quota');
@@ -962,6 +965,7 @@ export const editImageWithInstructions = async (
             const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
             const keyName = currentKey ? await getApiKeyName(currentKey) : 'Default';
             onLog(`> Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
+            console.log(`[API CALL START] Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
             
             try {
                 const config: any = {
@@ -976,7 +980,7 @@ export const editImageWithInstructions = async (
                     delete config.imageConfig;
                 }
 
-                return await runWithTimeout(
+                const res = await runWithTimeout(
                     freshAi.models.generateContent({
                         model: model,
                         contents: {
@@ -997,6 +1001,8 @@ export const editImageWithInstructions = async (
                     300000, // 5 Minutes
                     "Image Editing"
                 );
+                console.log(`[API CALL SUCCESS] Ảnh được chỉnh sửa thành công bởi API Key: ${keyName} (${shortKey})`);
+                return res;
             } catch (e: any) {
                 const isOverload = e.message?.includes('503') || e.message?.includes('Overloaded') || e.status === 503 || e.message?.includes('timed out') || e.message?.includes('Timeout');
                 const isRateLimit = e.message?.includes('429') || e.status === 429 || e.message?.includes('quota');
@@ -1039,6 +1045,7 @@ export const removeBackgroundImage = async (
             const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
             const keyName = currentKey ? await getApiKeyName(currentKey) : 'Default';
             onLog(`> Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
+            console.log(`[API CALL START] Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
 
             try {
                 const finalParts = [
@@ -1052,7 +1059,7 @@ export const removeBackgroundImage = async (
                     { text: `🔴 FINAL EXECUTION COMMAND:\n${instruction}` }
                 ];
 
-                return await runWithTimeout(
+                const res = await runWithTimeout(
                     freshAi.models.generateContent({
                         model: model,
                         contents: { parts: finalParts }
@@ -1060,6 +1067,8 @@ export const removeBackgroundImage = async (
                     300000, // 5 Minutes
                     "Remove Background"
                 );
+                console.log(`[API CALL SUCCESS] Ảnh được tách nền thành công bởi API Key: ${keyName} (${shortKey})`);
+                return res;
             } catch (e: any) {
                 const isOverload = e.message?.includes('503') || e.message?.includes('Overloaded') || e.status === 503 || e.message?.includes('timed out') || e.message?.includes('Timeout');
                 const isRateLimit = e.message?.includes('429') || e.status === 429 || e.message?.includes('quota');
@@ -1102,6 +1111,7 @@ export const upscaleImage = async (
             const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
             const keyName = currentKey ? await getApiKeyName(currentKey) : 'Default';
             onLog(`> Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
+            console.log(`[API CALL START] Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
 
             try {
                 const finalParts = [
@@ -1115,7 +1125,7 @@ export const upscaleImage = async (
                     { text: `🔴 FINAL EXECUTION COMMAND:\n${instruction}` }
                 ];
 
-                return await runWithTimeout(
+                const res = await runWithTimeout(
                     freshAi.models.generateContent({
                         model: model,
                         contents: { parts: finalParts }
@@ -1123,6 +1133,8 @@ export const upscaleImage = async (
                     300000, // 5 Minutes
                     "Upscale Image"
                 );
+                console.log(`[API CALL SUCCESS] Ảnh được làm nét thành công bởi API Key: ${keyName} (${shortKey})`);
+                return res;
             } catch (e: any) {
                 const isOverload = e.message?.includes('503') || e.message?.includes('Overloaded') || e.status === 503 || e.message?.includes('timed out') || e.message?.includes('Timeout');
                 const isRateLimit = e.message?.includes('429') || e.status === 429 || e.message?.includes('quota');

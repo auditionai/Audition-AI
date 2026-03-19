@@ -65,7 +65,9 @@ import {
   MessageSquare,
   AlertTriangle,
   Globe,
-  Video
+  Video,
+  Activity,
+  RefreshCw
 } from 'lucide-react';
 
 export const Icons = {
@@ -134,5 +136,7 @@ export const Icons = {
   MessageSquare,
   AlertTriangle,
   Globe,
-  Video
+  Video,
+  Activity,
+  RefreshCw
 };

@@ -4,7 +4,6 @@ import { APP_CONFIG } from '../constants';
 import { Language, Feature, ViewId } from '../types';
 import { Icons } from '../components/Icons';
 import { getCheckinStatus } from '../services/economyService';
-import { ConcurrencyStatusComponent } from '../components/ConcurrencyStatusComponent';
 
 interface HomeProps {
   lang: Language;
@@ -127,9 +126,6 @@ export const Home: React.FC<HomeProps> = ({ lang, onSelectFeature, onNavigate, o
   return (
     <div className="space-y-16 pb-24 relative">
       
-      {/* Concurrency Status */}
-      <ConcurrencyStatusComponent />
-
       {/* Optimized Slim Hero Section */}
       <div className="relative rounded-2xl overflow-hidden border border-white/10 bg-gradient-to-r from-[#120024] to-black py-4 px-6 flex items-center justify-between">
           <div className="absolute top-0 right-0 w-32 h-32 bg-audi-pink/10 blur-[50px] rounded-full animate-pulse"></div>

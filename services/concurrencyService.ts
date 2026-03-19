@@ -116,13 +116,6 @@ export const useConcurrency = () => {
             } catch (err) {
               console.error(`Failed to poll TST API for job ${img.jobId}`, err);
             }
-          } else if (img.status === 'processing' && !img.jobId) {
-            // Vertex AI synchronous jobs that are stuck (older than 10 minutes)
-            if (now - img.timestamp > 10 * 60 * 1000) {
-              img.status = 'failed';
-              await saveImageToStorage(img);
-              stateChanged = true;
-            }
           }
         }
 
@@ -130,7 +123,7 @@ export const useConcurrency = () => {
         const finalImages = stateChanged ? await getAllImagesFromStorage() : images;
 
         const myActiveJobs: JobState[] = finalImages
-          .filter(img => img.status === 'processing' || img.status === 'queued')
+          .filter(img => (img.status === 'processing' || img.status === 'queued') && img.jobId)
           .map(img => ({
             jobId: img.id,
             userId: userId,

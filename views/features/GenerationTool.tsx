@@ -8,7 +8,6 @@ import { createSolidFence, optimizePayload, urlToBase64 } from '../../utils/imag
 import { getUserProfile, updateUserBalance, getStylePresets, getGenerationPrices, getTutorialVideo } from '../../services/economyService';
 import { useNotification } from '../../components/NotificationSystem';
 import { caulenhauClient } from '../../services/supabaseClient';
-import { ConcurrencyStatusComponent } from '../../components/ConcurrencyStatusComponent';
 import { useConcurrency } from '../../services/concurrencyService';
 
 interface GenerationToolProps {
@@ -1287,7 +1286,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                     </div>
                 </div>
                 
-                <ConcurrencyStatusComponent />
             </div>
 
             <div className="lg:col-span-1 space-y-6">
@@ -1363,64 +1361,130 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                 </button>
                             ))}
                         </div>
-                        
-                        {/* Redesigned Pricing Display */}
-                        <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-audi-purple/20 to-audi-pink/20 border border-white/10 p-3">
-                            <div className="flex justify-between items-center relative z-10">
-                                <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Giá hiện tại</span>
-                                <div className="flex items-end gap-1">
-                                    <span className="text-xl font-black text-white font-game drop-shadow-md">
-                                        {calculateCost()}
-                                    </span>
-                                    <span className="text-[10px] font-bold text-audi-yellow mb-1">VCOIN</span>
-                                </div>
-                            </div>
-                            {aiModel === 'pro' ? (
-                                <div className="flex justify-between text-[9px] text-slate-500 mt-2 font-mono border-t border-white/5 pt-2">
-                                    <span className={resolution === '1K' ? 'text-white font-bold' : ''}>1K: {prices.pro_1k}VC</span>
-                                    <span className={resolution === '2K' ? 'text-white font-bold' : ''}>2K: {prices.pro_2k}VC</span>
-                                    <span className={resolution === '4K' ? 'text-white font-bold' : ''}>4K: {prices.pro_4k}VC</span>
-                                </div>
-                            ) : (
-                                <div className="flex justify-between text-[9px] text-slate-500 mt-2 font-mono border-t border-white/5 pt-2">
-                                    <span className={resolution === '1K' ? 'text-white font-bold' : ''}>1K: {prices.flash_1k}VC</span>
-                                    <span className={resolution === '2K' ? 'text-white font-bold' : ''}>2K: {prices.flash_2k}VC</span>
-                                    <span className={resolution === '4K' ? 'text-white font-bold' : ''}>4K: {prices.flash_4k}VC</span>
-                                </div>
-                            )}
-                        </div>
                     </div>
 
-                    <div className="pt-4 border-t border-white/10 space-y-3">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase">Tính năng mặc định (Included)</label>
+                    {/* NEW CONCURRENCY UI */}
+                    <div className="space-y-3 pt-4 border-t border-white/10">
+                        <div className="flex items-center justify-between">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-2">
+                                <Icons.Activity className="w-3 h-3 text-audi-cyan" />
+                                Luồng xử lý
+                            </label>
+                            <button onClick={triggerPoll} className="text-slate-500 hover:text-white transition-colors">
+                                <Icons.RefreshCw className="w-3 h-3" />
+                            </button>
+                        </div>
                         
-                        {/* HQ Cloud Link (Always On) */}
-                        <div className="flex items-center justify-between p-3 rounded-xl bg-audi-cyan/10 border border-audi-cyan/30">
-                            <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-full bg-audi-cyan/20 flex items-center justify-center text-audi-cyan">
-                                    <Icons.Cloud className="w-4 h-4" />
+                        <div className="bg-[#0a0a0f] rounded-xl border border-white/5 p-3 space-y-4">
+                            {/* User Concurrency */}
+                            <div className="space-y-2">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Của bạn</span>
                                 </div>
-                                <div>
-                                    <div className="text-xs font-bold text-white">HQ Cloud Link (R2)</div>
-                                    <div className="text-[9px] text-audi-cyan font-bold">ACTIVE • FREE</div>
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between text-xs">
+                                        <span className="text-slate-300">Đang xử lý</span>
+                                        <span className="font-mono text-audi-cyan bg-audi-cyan/10 px-2 py-0.5 rounded-md">
+                                            {activeJobs.filter(j => j.userId === userId && j.status === 'processing').length}/1
+                                        </span>
+                                    </div>
+                                    <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
+                                        <div 
+                                            className="bg-audi-cyan h-full transition-all duration-500 ease-out" 
+                                            style={{ width: `${(activeJobs.filter(j => j.userId === userId && j.status === 'processing').length / 1) * 100}%` }}
+                                        />
+                                    </div>
+                                    
+                                    <div className="flex items-center justify-between text-xs pt-1">
+                                        <span className="text-slate-300">Hàng chờ</span>
+                                        <span className="font-mono text-audi-yellow bg-audi-yellow/10 px-2 py-0.5 rounded-md">
+                                            {activeJobs.filter(j => j.userId === userId && j.status === 'queued').length}/1
+                                        </span>
+                                    </div>
+                                    <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
+                                        <div 
+                                            className="bg-audi-yellow h-full transition-all duration-500 ease-out" 
+                                            style={{ width: `${(activeJobs.filter(j => j.userId === userId && j.status === 'queued').length / 1) * 100}%` }}
+                                        />
+                                    </div>
                                 </div>
                             </div>
-                            <Icons.Lock className="w-4 h-4 text-audi-cyan opacity-50" />
-                        </div>
 
-                        {/* Google Search (Always On) */}
-                        <div className="flex items-center justify-between p-3 rounded-xl bg-blue-500/10 border border-blue-500/30">
-                            <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400">
-                                    <Icons.Search className="w-4 h-4" />
+                            <div className="h-px bg-white/5 w-full" />
+
+                            {/* System Concurrency */}
+                            <div className="space-y-2">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Hệ thống</span>
                                 </div>
-                                <div>
-                                    <div className="text-xs font-bold text-white">Google Search (Grounding)</div>
-                                    <div className="text-[9px] text-blue-400 font-bold">ACTIVE • FREE</div>
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between text-xs">
+                                        <span className="text-slate-300">Ảnh</span>
+                                        <span className="font-mono text-slate-400 bg-white/5 px-2 py-0.5 rounded-md">
+                                            {activeJobs.filter(j => j.type === 'image' && j.status === 'processing').length}/2
+                                        </span>
+                                    </div>
+                                    <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
+                                        <div 
+                                            className="bg-slate-400 h-full transition-all duration-500 ease-out" 
+                                            style={{ width: `${(activeJobs.filter(j => j.type === 'image' && j.status === 'processing').length / 2) * 100}%` }}
+                                        />
+                                    </div>
+
+                                    <div className="flex items-center justify-between text-xs pt-1">
+                                        <span className="text-slate-300">Video</span>
+                                        <span className="font-mono text-slate-400 bg-white/5 px-2 py-0.5 rounded-md">
+                                            {activeJobs.filter(j => j.type === 'video' && j.status === 'processing').length}/2
+                                        </span>
+                                    </div>
+                                    <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
+                                        <div 
+                                            className="bg-slate-400 h-full transition-all duration-500 ease-out" 
+                                            style={{ width: `${(activeJobs.filter(j => j.type === 'video' && j.status === 'processing').length / 2) * 100}%` }}
+                                        />
+                                    </div>
+
+                                    <div className="flex items-center justify-between text-xs pt-1">
+                                        <span className="text-slate-300">Hàng chờ chung</span>
+                                        <span className="font-mono text-orange-400 bg-orange-400/10 px-2 py-0.5 rounded-md">
+                                            {activeJobs.filter(j => j.status === 'queued').length}/5
+                                        </span>
+                                    </div>
+                                    <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
+                                        <div 
+                                            className="bg-orange-400 h-full transition-all duration-500 ease-out" 
+                                            style={{ width: `${(activeJobs.filter(j => j.status === 'queued').length / 5) * 100}%` }}
+                                        />
+                                    </div>
                                 </div>
                             </div>
-                            <Icons.Lock className="w-4 h-4 text-blue-400 opacity-50" />
                         </div>
+                    </div>
+                        
+                    {/* Redesigned Pricing Display */}
+                    <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-audi-purple/20 to-audi-pink/20 border border-white/10 p-3 mt-4">
+                        <div className="flex justify-between items-center relative z-10">
+                            <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Giá hiện tại</span>
+                            <div className="flex items-end gap-1">
+                                <span className="text-xl font-black text-white font-game drop-shadow-md">
+                                    {calculateCost()}
+                                </span>
+                                <span className="text-[10px] font-bold text-audi-yellow mb-1">VCOIN</span>
+                            </div>
+                        </div>
+                        {aiModel === 'pro' ? (
+                            <div className="flex justify-between text-[9px] text-slate-500 mt-2 font-mono border-t border-white/5 pt-2">
+                                <span className={resolution === '1K' ? 'text-white font-bold' : ''}>1K: {prices.pro_1k}VC</span>
+                                <span className={resolution === '2K' ? 'text-white font-bold' : ''}>2K: {prices.pro_2k}VC</span>
+                                <span className={resolution === '4K' ? 'text-white font-bold' : ''}>4K: {prices.pro_4k}VC</span>
+                            </div>
+                        ) : (
+                            <div className="flex justify-between text-[9px] text-slate-500 mt-2 font-mono border-t border-white/5 pt-2">
+                                <span className={resolution === '1K' ? 'text-white font-bold' : ''}>1K: {prices.flash_1k}VC</span>
+                                <span className={resolution === '2K' ? 'text-white font-bold' : ''}>2K: {prices.flash_2k}VC</span>
+                                <span className={resolution === '4K' ? 'text-white font-bold' : ''}>4K: {prices.flash_4k}VC</span>
+                            </div>
+                        )}
                     </div>
 
                 </div>
@@ -1428,17 +1492,13 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
         </div>
 
-        <div className="fixed bottom-24 left-4 right-4 md:left-[50%] md:-translate-x-1/2 md:w-[900px] p-4 bg-[#090014]/90 backdrop-blur-md border border-white/10 rounded-2xl z-50 shadow-2xl flex items-center justify-between">
-            <div className="flex flex-col">
-                <span className="text-[10px] text-slate-400 font-bold uppercase">Chi phí ước tính</span>
-                <span className="text-xl font-black text-white">{calculateCost()} <span className="text-audi-yellow text-sm">VCOIN</span></span>
-            </div>
+        <div className="fixed bottom-24 left-4 right-4 md:left-[50%] md:-translate-x-1/2 md:w-[900px] p-4 bg-[#090014]/90 backdrop-blur-md border border-white/10 rounded-2xl z-50 shadow-2xl flex items-center justify-center">
             <button 
                 onClick={handleGenerate}
                 disabled={cooldownRemaining > 0}
-                className={`px-8 py-3 rounded-xl font-bold text-white shadow-[0_0_20px_rgba(255,0,153,0.4)] transition-all flex items-center gap-2 ${
+                className={`px-12 py-3 rounded-xl font-bold text-white shadow-[0_0_20px_rgba(255,0,153,0.4)] transition-all flex items-center gap-2 ${
                     cooldownRemaining > 0 
-                    ? 'bg-slate-600 cursor-not-allowed opacity-70' 
+                    ? 'bg-slate-600 cursor-not-allowed opacity-70 shadow-none' 
                     : 'bg-gradient-to-r from-audi-pink to-audi-purple hover:scale-105'
                 }`}
             >

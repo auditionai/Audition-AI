@@ -6,7 +6,7 @@ import { editImageWithInstructions, removeBackgroundImage, upscaleImage } from '
 import { saveImageToStorage, uploadFileToR2 } from '../../services/storageService';
 import { getUserProfile, updateUserBalance } from '../../services/economyService';
 import { useNotification } from '../../components/NotificationSystem';
-import { optimizePayload } from '../../utils/imageProcessor';
+import { optimizePayload, loadImageWithTimeout, calculateAspectRatioString } from '../../utils/imageProcessor';
 
 interface EditingToolProps {
   feature: Feature;
@@ -126,6 +126,15 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
          const base64Data = optimizedImage.split(',')[1];
          const mimeType = optimizedImage.substring(optimizedImage.indexOf(':') + 1, optimizedImage.indexOf(';'));
 
+         // Calculate aspect ratio
+         let aspectRatio = "1:1";
+         try {
+             const img = await loadImageWithTimeout(uploadedImage);
+             aspectRatio = calculateAspectRatioString(img.width, img.height);
+         } catch (e) {
+             console.warn("Failed to calculate aspect ratio", e);
+         }
+
          // --- NEW: UPLOAD TO R2 CLOUD (INPUTS - LOGGING ONLY) ---
          // We upload to R2 for persistent storage/logging, but we pass the ORIGINAL BASE64 to editImageWithInstructions
          // to avoid CORS issues when the browser tries to fetch the R2 URL to send to Google.
@@ -142,6 +151,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
                  base64Data, 
                  instruction, 
                  mimeType, 
+                 aspectRatio,
                  (msg) => setProgressLogs(prev => [...prev, msg])
              );
          } else if (isUpscaler) {
@@ -149,6 +159,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
                  base64Data, 
                  instruction, 
                  mimeType, 
+                 aspectRatio,
                  (msg) => setProgressLogs(prev => [...prev, msg])
              );
          } else {
@@ -157,6 +168,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
                  instruction, 
                  mimeType, 
                  aiModel,
+                 aspectRatio,
                  (msg) => setProgressLogs(prev => [...prev, msg])
              );
          }

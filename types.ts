@@ -73,6 +73,11 @@ export interface GeneratedImage {
   isShared?: boolean; // New: Status for Showcase
   userName?: string;  // New: Author name
   userId?: string; // New: User ID for storage organization
+  status?: 'processing' | 'queued' | 'completed' | 'failed';
+  jobId?: string;
+  progress?: number;
+  error?: string;
+  cost?: number; // Keep track of cost for refunds
 }
 
 // --- NEW ECONOMY & USER TYPES ---
@@ -178,4 +183,16 @@ export interface PromotionCampaign {
     isActive: boolean; // Manual Kill Switch
 }
 
-export type PromotionConfig = PromotionCampaign;
+export type PromotionConfig = Promotion;
+export interface Promotion { 
+    id: string; 
+    name: string; 
+    bonus_percent: number; 
+    status: 'active' | 'inactive'; 
+    created_at: string; 
+    isActive?: boolean;
+    marqueeText?: string;
+}
+export interface DailyCheckin { user_id: string; last_checkin: string; streak: number; }
+export interface SystemSettings { id: string; maintenance_mode: boolean; announcement: string; min_topup: number; support_email: string; version: string; pricing_config?: any; giftcode_promo_config?: any; }
+export interface ApiKey { id: string; key: string; name: string; tier: 'flash' | 'pro'; status: 'active' | 'inactive' | 'error'; last_used?: string; created_at: string; }

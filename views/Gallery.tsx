@@ -1,6 +1,5 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
-import { createPortal } from 'react-dom';
 import { GeneratedImage, Language } from '../types';
 import { getAllImagesFromStorage, deleteImageFromStorage, shareImageToShowcase, cleanupExpiredImages } from '../services/storageService';
 import { Icons } from '../components/Icons';
@@ -34,12 +33,21 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
         }
     };
     init();
+    
+    // Poll for updates if there are processing images
+    const interval = setInterval(() => {
+        loadImages(true); // silent load
+    }, 5000);
+    return () => clearInterval(interval);
   }, []);
 
-  const loadImages = async () => {
+  const loadImages = async (silent = false) => {
     try {
       const storedImages = await getAllImagesFromStorage();
       setImages(storedImages);
+      if (!silent && storedImages.length > 0 && !selectedImage) {
+          setSelectedImage(storedImages[0]);
+      }
     } catch (error) {
       console.error("Failed to load gallery", error);
     }
@@ -92,6 +100,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
 
   // --- ROBUST DOWNLOAD LOGIC (V3 - PROXY SUPPORTED) ---
   const handleDownload = async (imageUrl: string, filename: string) => {
+      if (!imageUrl || imageUrl.startsWith('blob:')) return;
       notify(lang === 'vi' ? 'Đang xử lý tải xuống...' : 'Processing download...', 'info');
       
       try {
@@ -190,20 +199,50 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                 <div 
                   key={img.id} 
                   onClick={() => setSelectedImage(img)}
-                  className="group relative aspect-square rounded-2xl overflow-hidden cursor-pointer border border-slate-200 dark:border-white/10 shadow-sm hover:shadow-xl transition-all hover:scale-[1.02]"
+                  className={`group relative aspect-square rounded-2xl overflow-hidden cursor-pointer border shadow-sm hover:shadow-xl transition-all hover:scale-[1.02] ${
+                      selectedImage?.id === img.id ? 'border-brand-500 ring-2 ring-brand-500/50' : 'border-slate-200 dark:border-white/10'
+                  }`}
                 >
-                  <img 
-                    src={img.url} 
-                    alt={img.toolName} 
-                    className="w-full h-full object-cover" 
-                    loading="lazy"
-                  />
+                  {img.url ? (
+                      <img 
+                        src={img.url} 
+                        alt={img.toolName} 
+                        className={`w-full h-full object-cover ${img.status === 'failed' ? 'grayscale opacity-50' : ''}`} 
+                        loading="lazy"
+                      />
+                  ) : (
+                      <div className="w-full h-full bg-slate-100 dark:bg-slate-800 flex flex-col items-center justify-center p-4 text-center">
+                          {img.status === 'processing' && <Icons.Loader className="w-8 h-8 animate-spin text-blue-500 mb-2" />}
+                          {img.status === 'queued' && <Icons.Clock className="w-8 h-8 text-yellow-500 mb-2" />}
+                          {img.status === 'failed' && <Icons.AlertTriangle className="w-8 h-8 text-red-500 mb-2" />}
+                          <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                              {img.status === 'processing' ? 'Đang xử lý...' : 
+                               img.status === 'queued' ? 'Đang chờ...' : 
+                               img.status === 'failed' ? 'Lỗi' : 'Đang tải...'}
+                          </span>
+                      </div>
+                  )}
                   
+                  {/* JOB STATUS BADGE */}
+                  {img.status && img.status !== 'completed' && (
+                      <div className={`absolute top-2 left-2 z-10 px-2 py-1 text-[10px] font-bold text-white rounded-md shadow-md flex items-center gap-1 ${
+                          img.status === 'processing' ? 'bg-blue-500 animate-pulse' :
+                          img.status === 'queued' ? 'bg-yellow-500' :
+                          'bg-red-500'
+                      }`}>
+                          {img.status === 'processing' && 'ĐANG XỬ LÝ'}
+                          {img.status === 'queued' && 'HÀNG CHỜ'}
+                          {img.status === 'failed' && 'LỖI (ĐÃ HOÀN TIỀN)'}
+                      </div>
+                  )}
+
                   {/* EXPIRATION / SHARED BADGE */}
-                  <div className={`absolute top-2 right-2 z-10 px-2 py-1 text-[9px] font-bold text-white rounded-md shadow-md flex items-center gap-1 ${status.color}`}>
-                      {status.type === 'saved' ? <Icons.Lock className="w-3 h-3" /> : <Icons.Clock className="w-3 h-3" />}
-                      {status.label}
-                  </div>
+                  {(!img.status || img.status === 'completed') && (
+                      <div className={`absolute top-2 right-2 z-10 px-2 py-1 text-[9px] font-bold text-white rounded-md shadow-md flex items-center gap-1 ${status.color}`}>
+                          {status.type === 'saved' ? <Icons.Lock className="w-3 h-3" /> : <Icons.Clock className="w-3 h-3" />}
+                          {status.label}
+                      </div>
+                  )}
 
                   {img.isShared && (
                       <div className="absolute top-2 left-2 z-10 px-2 py-0.5 bg-audi-pink text-white text-[9px] font-bold rounded-full shadow-lg border border-white/20">
@@ -224,13 +263,13 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                 </div>
             );
       });
-  }, [images, lang]);
+  }, [images, lang, selectedImage]);
 
   return (
-    <div className="space-y-6 animate-fade-in pb-20">
+    <div className="h-[calc(100vh-100px)] flex flex-col animate-fade-in pb-6">
       
       {/* STORAGE POLICY WARNING BANNER */}
-      <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-start gap-3 animate-pulse">
+      <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 flex items-start gap-3 mb-4 shrink-0">
           <Icons.AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
           <div className="space-y-1">
               <h4 className="text-sm font-bold text-red-400">LƯU Ý QUAN TRỌNG: Chính sách lưu trữ ảnh</h4>
@@ -241,141 +280,166 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
           </div>
       </div>
 
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center mb-4 shrink-0">
         <div>
-          <h2 className="text-3xl font-bold text-slate-900 dark:text-white">
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
             {lang === 'vi' ? 'Thư viện của tôi' : 'My Gallery'}
           </h2>
-          <p className="text-slate-500">
+          <p className="text-sm text-slate-500">
             {lang === 'vi' 
               ? `Đã lưu ${images.length} tác phẩm` 
               : `${images.length} masterpieces saved`}
           </p>
         </div>
         <button 
-          onClick={loadImages}
+          onClick={() => loadImages()}
           className="p-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-full transition-colors"
         >
           <Icons.Zap className="w-5 h-5 text-slate-600 dark:text-slate-300" />
         </button>
       </div>
 
-      {loading ? (
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-500"></div>
-        </div>
-      ) : images.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-64 text-center glass-panel rounded-3xl p-10">
-          <div className="w-16 h-16 bg-slate-100 dark:bg-white/5 rounded-full flex items-center justify-center mb-4 text-slate-400">
-            <Icons.Image className="w-8 h-8" />
+      <div className="flex flex-col lg:flex-row gap-6 flex-1 min-h-0">
+          {/* LEFT COLUMN: LIST */}
+          <div className="w-full lg:w-1/2 xl:w-7/12 flex flex-col bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-white/10 overflow-hidden shadow-sm">
+              {loading && images.length === 0 ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-500"></div>
+                </div>
+              ) : images.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-center p-10">
+                  <div className="w-16 h-16 bg-slate-100 dark:bg-white/5 rounded-full flex items-center justify-center mb-4 text-slate-400">
+                    <Icons.Image className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-700 dark:text-white">
+                    {lang === 'vi' ? 'Chưa có ảnh nào' : 'No images yet'}
+                  </h3>
+                  <p className="text-slate-500 max-w-xs mt-2 text-sm">
+                    {lang === 'vi' ? 'Hãy bắt đầu tạo ảnh với các công cụ AI!' : 'Start creating images with our AI tools!'}
+                  </p>
+                </div>
+              ) : (
+                <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 sm:grid-cols-3 gap-4 custom-scrollbar content-start">
+                  {renderedImages}
+                </div>
+              )}
           </div>
-          <h3 className="text-lg font-bold text-slate-700 dark:text-white">
-            {lang === 'vi' ? 'Chưa có ảnh nào' : 'No images yet'}
-          </h3>
-          <p className="text-slate-500 max-w-xs mt-2">
-            {lang === 'vi' ? 'Hãy bắt đầu tạo ảnh với các công cụ AI!' : 'Start creating images with our AI tools!'}
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {renderedImages}
-        </div>
-      )}
 
-      {selectedImage && createPortal(
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-fade-in">
-           <div className="relative w-full max-w-4xl max-h-[90vh] flex flex-col md:flex-row bg-slate-900 rounded-3xl overflow-hidden border border-white/10 shadow-2xl">
-              
-              <button 
-                onClick={() => setSelectedImage(null)}
-                className="absolute top-4 right-4 z-10 p-2 bg-black/50 text-white rounded-full hover:bg-white/20"
-              >
-                <Icons.X className="w-6 h-6" />
-              </button>
-
-              <div className="flex-1 bg-black flex items-center justify-center p-4 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]">
-                <img src={selectedImage.url} alt="Full view" className="max-w-full max-h-[80vh] object-contain shadow-2xl" />
-              </div>
-              
-              <div className="w-full md:w-80 bg-slate-800 p-6 flex flex-col border-l border-white/10 overflow-y-auto">
-                 <h3 className="text-xl font-bold text-white mb-1">{selectedImage.toolName}</h3>
-                 <span className="text-xs text-brand-400 font-mono mb-6">{selectedImage.engine}</span>
-                 
-                 {/* Expiration Info in Detail View */}
-                 {!selectedImage.isShared && (
-                     <div className="bg-orange-500/10 border border-orange-500/30 p-3 rounded-xl mb-4 flex items-center gap-3">
-                         <Icons.Clock className="w-5 h-5 text-orange-500" />
-                         <div>
-                             <p className="text-[10px] text-slate-400 font-bold uppercase">Tự động xóa sau</p>
-                             <p className="text-orange-400 font-bold">
-                                 {getExpirationStatus(selectedImage.timestamp, false).label} nữa
-                             </p>
+          {/* RIGHT COLUMN: DETAILS */}
+          <div className="w-full lg:w-1/2 xl:w-5/12 flex flex-col bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-white/10 overflow-hidden shadow-sm">
+              {selectedImage ? (
+                  <div className="flex flex-col h-full">
+                      {/* Image Preview Area */}
+                      <div className="relative h-1/2 min-h-[300px] bg-slate-100 dark:bg-black flex items-center justify-center p-4 border-b border-slate-200 dark:border-white/10 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]">
+                          {selectedImage.url ? (
+                              <img src={selectedImage.url} alt="Full view" className="max-w-full max-h-full object-contain shadow-2xl rounded-lg" />
+                          ) : (
+                              <div className="flex flex-col items-center justify-center text-slate-400">
+                                  {selectedImage.status === 'processing' && <Icons.Loader className="w-12 h-12 animate-spin text-blue-500 mb-4" />}
+                                  {selectedImage.status === 'queued' && <Icons.Clock className="w-12 h-12 text-yellow-500 mb-4" />}
+                                  {selectedImage.status === 'failed' && <Icons.AlertTriangle className="w-12 h-12 text-red-500 mb-4" />}
+                                  <p className="font-bold">
+                                      {selectedImage.status === 'processing' ? 'Đang xử lý hình ảnh...' : 
+                                       selectedImage.status === 'queued' ? 'Đang chờ tới lượt...' : 
+                                       selectedImage.status === 'failed' ? 'Xử lý thất bại' : 'Đang tải...'}
+                                  </p>
+                                  {selectedImage.error && (
+                                      <p className="text-red-400 text-xs mt-2 max-w-xs text-center">{selectedImage.error}</p>
+                                  )}
+                              </div>
+                          )}
+                      </div>
+                      
+                      {/* Details Area */}
+                      <div className="flex-1 p-6 flex flex-col overflow-y-auto custom-scrollbar">
+                         <div className="flex justify-between items-start mb-4">
+                             <div>
+                                 <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-1">{selectedImage.toolName}</h3>
+                                 <span className="text-xs text-brand-500 dark:text-brand-400 font-mono">{selectedImage.engine}</span>
+                             </div>
+                             <button 
+                               onClick={(e) => handleDelete(e, selectedImage.id)}
+                               className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-red-100 dark:hover:bg-red-500/20 text-slate-500 hover:text-red-500 rounded-xl transition-colors"
+                             >
+                                <Icons.Trash className="w-5 h-5" />
+                             </button>
                          </div>
-                     </div>
-                 )}
+                         
+                         {/* Expiration Info in Detail View */}
+                         {(!selectedImage.status || selectedImage.status === 'completed') && !selectedImage.isShared && (
+                             <div className="bg-orange-500/10 border border-orange-500/30 p-3 rounded-xl mb-4 flex items-center gap-3 shrink-0">
+                                 <Icons.Clock className="w-5 h-5 text-orange-500" />
+                                 <div>
+                                     <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">Tự động xóa sau</p>
+                                     <p className="text-orange-600 dark:text-orange-400 font-bold text-sm">
+                                         {getExpirationStatus(selectedImage.timestamp, false).label} nữa
+                                     </p>
+                                 </div>
+                             </div>
+                         )}
 
-                 {selectedImage.isShared && (
-                     <div className="bg-green-500/10 border border-green-500/30 p-3 rounded-xl mb-4 flex items-center gap-3">
-                         <Icons.Lock className="w-5 h-5 text-green-500" />
-                         <div>
-                             <p className="text-[10px] text-slate-400 font-bold uppercase">Trạng thái</p>
-                             <p className="text-green-400 font-bold">Đã lưu trữ vĩnh viễn</p>
+                         {selectedImage.isShared && (
+                             <div className="bg-green-500/10 border border-green-500/30 p-3 rounded-xl mb-4 flex items-center gap-3 shrink-0">
+                                 <Icons.Lock className="w-5 h-5 text-green-500" />
+                                 <div>
+                                     <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">Trạng thái</p>
+                                     <p className="text-green-600 dark:text-green-400 font-bold text-sm">Đã lưu trữ vĩnh viễn</p>
+                                 </div>
+                             </div>
+                         )}
+
+                         <div className="space-y-4 flex-1">
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{lang === 'vi' ? 'Thời gian' : 'Date Created'}</label>
+                                <p className="text-slate-700 dark:text-slate-300 text-sm">{formatDate(selectedImage.timestamp)}</p>
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{lang === 'vi' ? 'Prompt / Lệnh' : 'Prompt Used'}</label>
+                                <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg mt-1 border border-slate-200 dark:border-white/5">
+                                    <p className="text-slate-700 dark:text-slate-300 text-sm italic leading-relaxed break-words">"{selectedImage.prompt}"</p>
+                                </div>
+                            </div>
                          </div>
-                     </div>
-                 )}
 
-                 <div className="space-y-4 flex-1">
-                    <div>
-                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">{lang === 'vi' ? 'Thời gian' : 'Date Created'}</label>
-                        <p className="text-slate-300 text-sm">{formatDate(selectedImage.timestamp)}</p>
-                    </div>
-                    <div>
-                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">{lang === 'vi' ? 'Prompt / Lệnh' : 'Prompt Used'}</label>
-                        <div className="p-3 bg-slate-900/50 rounded-lg mt-1 border border-white/5">
-                            <p className="text-slate-300 text-sm italic leading-relaxed max-h-40 overflow-y-auto custom-scrollbar">"{selectedImage.prompt}"</p>
-                        </div>
-                    </div>
-                 </div>
+                         <div className="pt-4 mt-4 border-t border-slate-200 dark:border-white/10 flex flex-col gap-3 shrink-0">
+                            {(!selectedImage.status || selectedImage.status === 'completed') && (
+                                <>
+                                    <button 
+                                        onClick={handleShare}
+                                        disabled={sharing}
+                                        className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-sm ${
+                                            selectedImage.isShared 
+                                            ? 'bg-red-50 dark:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-500/50 hover:bg-red-100 dark:hover:bg-red-500 hover:text-red-700 dark:hover:text-white' 
+                                            : 'bg-gradient-to-r from-audi-pink to-audi-purple text-white hover:shadow-md hover:scale-[1.02]'
+                                        }`}
+                                    >
+                                        {sharing ? <Icons.Loader className="w-4 h-4 animate-spin" /> : <Icons.Share className="w-4 h-4" />}
+                                        {selectedImage.isShared 
+                                            ? (lang === 'vi' ? 'Gỡ khỏi Trang chủ' : 'Unshare') 
+                                            : (lang === 'vi' ? 'Chia sẻ lên Trang chủ (Lưu)' : 'Share to Homepage')
+                                        }
+                                    </button>
 
-                 <div className="pt-6 mt-6 border-t border-white/10 flex flex-col gap-3">
-                    
-                    <button 
-                        onClick={handleShare}
-                        disabled={sharing}
-                        className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg ${
-                            selectedImage.isShared 
-                            ? 'bg-red-500/20 text-red-400 border border-red-500/50 hover:bg-red-500 hover:text-white' 
-                            : 'bg-gradient-to-r from-audi-pink to-audi-purple text-white hover:scale-105'
-                        }`}
-                    >
-                        {sharing ? <Icons.Loader className="w-4 h-4 animate-spin" /> : <Icons.Share className="w-4 h-4" />}
-                        {selectedImage.isShared 
-                            ? (lang === 'vi' ? 'Gỡ khỏi Trang chủ' : 'Unshare') 
-                            : (lang === 'vi' ? 'Chia sẻ lên Trang chủ (Lưu)' : 'Share to Homepage')
-                        }
-                    </button>
-
-                    <div className="flex gap-3">
-                        <button 
-                          onClick={() => handleDownload(selectedImage.url, `auditionai-image-${selectedImage.id}.png`)}
-                          className="flex-1 py-3 bg-slate-700 hover:bg-brand-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-colors border border-white/5"
-                        >
-                            <Icons.Download className="w-4 h-4" />
-                            {lang === 'vi' ? 'Tải về' : 'Download'}
-                        </button>
-                        <button 
-                           onClick={(e) => handleDelete(e, selectedImage.id)}
-                           className="p-3 bg-slate-700 hover:bg-red-500/20 hover:text-red-500 text-slate-300 rounded-xl transition-colors border border-white/5"
-                        >
-                           <Icons.Trash className="w-5 h-5" />
-                        </button>
-                    </div>
-                 </div>
-              </div>
-           </div>
-        </div>,
-        document.body
-      )}
+                                    <button 
+                                      onClick={() => handleDownload(selectedImage.url, `auditionai-image-${selectedImage.id}.png`)}
+                                      className="w-full py-3 bg-slate-100 dark:bg-slate-700 hover:bg-brand-500 dark:hover:bg-brand-500 text-slate-700 dark:text-white hover:text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-colors border border-slate-200 dark:border-white/5"
+                                    >
+                                        <Icons.Download className="w-4 h-4" />
+                                        {lang === 'vi' ? 'Tải ảnh về máy' : 'Download Image'}
+                                    </button>
+                                </>
+                            )}
+                         </div>
+                      </div>
+                  </div>
+              ) : (
+                  <div className="flex flex-col items-center justify-center h-full text-center p-10 text-slate-400">
+                      <Icons.Image className="w-16 h-16 mb-4 opacity-50" />
+                      <p>{lang === 'vi' ? 'Chọn một ảnh để xem chi tiết' : 'Select an image to view details'}</p>
+                  </div>
+              )}
+          </div>
+      </div>
     </div>
   );
 };

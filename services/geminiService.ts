@@ -502,7 +502,7 @@ const analyzeReferenceImage = async (base64Data: string): Promise<string> => {
                     contents: {
                         parts: [
                             { inlineData: { mimeType: 'image/jpeg', data: cleanOptimized } },
-                            { text: "Analyze this image. Describe the 'Framing' (e.g., close-up, portrait, half-body, full-body), 'Camera Angle', 'Skeleton Pose', 'Body Language', 'Facial Expression/Vibe', 'Background Vibe/Elements', and 'Character-Environment Interaction'. IGNORE the character's specific identity, clothes, hair. Output a detailed structural and atmospheric description to be used as a prompt for a new 3D render. Be extremely precise about the framing, pose, and expression." }
+                            { text: "Analyze this image. Describe the 'Framing' (e.g., close-up, portrait, half-body, full-body), 'Camera Angle', 'Skeleton Pose', 'Body Language', 'Background Vibe/Elements', and 'Character-Environment Interaction'. IGNORE the character's specific identity, clothes, hair, and facial expression. Output a detailed structural and atmospheric description to be used as a prompt for a new 3D render. Be extremely precise about the framing, pose, and background." }
                         ]
                     },
                     config: {
@@ -561,7 +561,8 @@ RULES:
 - IMPORTANT: Always refer to the subjects as "3D avatars", "stylized game characters", or "virtual models". NEVER use terms that imply real people.
 - ART STYLE (CRITICAL): The final image MUST be a stylized 3D game render (like a Korean MMO). It MUST NOT look like a real person or a photograph. The pose reference might be a real person, but you MUST TRANSLATE that pose into a 3D game character style. DO NOT copy the realism of the pose reference. The output MUST look like a 3D video game graphic.
 - ENHANCE the prompt with "Quality Boosters": masterpiece, best quality, ultra-detailed, stylized 3D render, 8k, ray tracing, hdr.
-- FRAMING, POSE & EXPRESSION (CRITICAL): Describe the framing (e.g., close-up, portrait, half-body, full-body), pose, and the EXACT facial expression (gaze, mood, attitude, "soul") exactly as provided in the POSE input. The framing MUST match the reference. If the reference is a close-up or half-body, you MUST explicitly state "close-up" or "half-body" in the prompt. You MUST capture the exact attitude and vibe of the character in the pose reference (e.g., confident, mysterious, aggressive, soft). CRITICAL: Ensure the character's core facial identity remains intact while adopting this deep expression and attitude.
+- FRAMING, POSE & BACKGROUND (CRITICAL): Describe the framing (e.g., close-up, portrait, half-body, full-body), pose, camera angle, and background exactly as provided in the POSE input. The framing MUST match the reference. If the reference is a close-up or half-body, you MUST explicitly state "close-up" or "half-body" in the prompt.
+- CHARACTER IDENTITY & EXPRESSION (CRITICAL): You MUST describe the character's exact facial features, makeup, hair, outfit, shoes, and accessories from the CHARACTER REFERENCE. You MUST also keep their exact facial expression from the CHARACTER REFERENCE. DO NOT copy the expression from the POSE REFERENCE. Ensure the character's core facial identity remains 100% intact. They must remain a stylized 3D game character, NOT a realistic human.
 - BACKGROUND: The background MUST be based on the user's COMMAND. If the user COMMAND specifies a background (e.g., "in a city", "in a forest"), you MUST use that. If a POSE image is provided, you can use its vibe, but the user's COMMAND takes priority. DO NOT describe a plain or grey background unless the user explicitly asked for it.
 - INTERACTION (CRITICAL): You MUST describe how the character interacts with this new background. Ensure their hands, feet, and body are grounded and touching logical surfaces (e.g., leaning on a railing, sitting on a step, holding a prop). Do not let the character float in the air.
 - Output ONLY the final prompt. No explanations.`
@@ -855,7 +856,7 @@ export const generateImage = async (
     
     // D. FINAL PROMPT (QUALITY INJECTION)
     const qualityBoosters = "masterpiece, best quality, ultra-detailed, 8k, stylized 3D game render, Korean MMO 3D style, stylized 3D skin texture, smooth 3D rendering, ray tracing, hdr, cinematic lighting, unreal engine 5 render";
-    const negativePrompt = "low quality, bad anatomy, worst quality, blur, grain, watermark, text, signature, bad hands, bad face, mixed backgrounds, conflicting styles, extra characters, unwanted people from style reference, real people, photorealistic humans, photograph, realistic photography, real life, anime, cartoon, 2d, flat shading, floating character, disconnected limbs, hands in the air, feet not touching the ground, floating objects, unnatural posture, floating in mid-air, levitating, hovering, disconnected from background, bad perspective, illogical physics";
+    const negativePrompt = "low quality, bad anatomy, worst quality, blur, grain, watermark, text, signature, bad hands, bad face, mixed backgrounds, conflicting styles, extra characters, unwanted people from style reference, real people, photorealistic humans, photograph, realistic photography, real life, anime, cartoon, 2d, flat shading, floating character, disconnected limbs, hands in the air, feet not touching the ground, floating objects, unnatural posture, floating in mid-air, levitating, hovering, disconnected from background, bad perspective, illogical physics, redrawn face, altered identity, realistic face";
     
     // DEFAULT INSTRUCTION (PRO & FLASH - STRICT SEPARATION)
     // This logic is critical to prevent the AI from mixing up the roles of the images.
@@ -864,7 +865,7 @@ export const generateImage = async (
     // If using Gemini 3.1 Flash Image Preview or Gemini 3 Pro Image Preview, simplify the prompt
     // because they are better at understanding simple, direct instructions and get confused by overly complex rules.
     if (model.includes('3.1-flash-image') || model.includes('3-pro-image')) {
-        finalInstruction = `Generate an image based on the following prompt: "${optimizedPrompt}, ${qualityBoosters}".\n\nCRITICAL INSTRUCTIONS:\n1. CHARACTER IDENTITY (IMAGE 1): You MUST use the exact character from the CHARACTER REFERENCE image(s). Keep their face, hair, clothing, shoes, makeup, and accessories 100% identical to the reference.\n2. POSE & BACKGROUND (IMAGE 2): Use the exact pose, body language, camera angle, and framing from the POSE & BACKGROUND REFERENCE image. Do NOT copy the person's face or clothes from it. Create a new background based on the text prompt, matching the vibe of the pose image.\n3. STYLE & QUALITY (IMAGE 3): The final image MUST match the 3D quality, skin texture, and rendering style of the STYLE REFERENCE image(s). It MUST be a highly detailed 3D game render (Korean MMO style), NOT a real person.\n\nNegative Prompt: ${negativePrompt}`;
+        finalInstruction = `Generate an image based on the following prompt: "${optimizedPrompt}, ${qualityBoosters}".\n\nCRITICAL INSTRUCTIONS:\n1. CHARACTER IDENTITY (IMAGE 1): You MUST EXTRACT and COPY-PASTE the exact character from the CHARACTER REFERENCE image(s). Keep their exact 3D face, facial structure, hair, clothing, shoes, makeup, and accessories 100% identical to the reference. DO NOT redraw or alter their facial identity. DO NOT make them look like a realistic human. They must remain a 3D game character.\n2. POSE & BACKGROUND (IMAGE 2): Copy the exact pose, body language, camera angle, and framing from the POSE & BACKGROUND REFERENCE image. Do NOT copy the person's face or clothes from it. Copy the background, lighting, and angle from the pose reference, but adapt it to fit the text prompt.\n3. STYLE & QUALITY (IMAGE 3): The final image MUST match the 3D quality, lighting, and rendering style of the STYLE REFERENCE image(s). It MUST be a highly detailed 3D game character, NOT a real person.\n\nNegative Prompt: ${negativePrompt}`;
     }
 
     finalParts.push({ text: finalInstruction });
@@ -887,13 +888,14 @@ export const generateImage = async (
     };
 
     if (useSearch) {
+        const searchTypes: any = { webSearch: {} };
+        if (geminiModel === 'gemini-3.1-flash-image-preview') {
+            searchTypes.imageSearch = {};
+        }
         params.config.tools = [
             {
                 googleSearch: {
-                    searchTypes: {
-                        webSearch: {},
-                        imageSearch: {}
-                    }
+                    searchTypes: searchTypes
                 }
             }
         ];

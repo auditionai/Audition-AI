@@ -5,14 +5,14 @@ import { signInWithGoogle, signInWithEmail, signUpWithEmail } from '../services/
 import { getPackages, getActivePromotion } from '../services/economyService';
 import { getShowcaseImages } from '../services/storageService'; 
 import { CreditPackage, PromotionCampaign } from '../types';
-import { useNotification } from '../components/NotificationSystem'; // Import Notification Hook
+import { useNotification } from '../components/NotificationSystem';
 
 interface LandingProps {
   onEnter: () => void;
 }
 
 export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
-  const { notify } = useNotification(); // Use Notification Hook
+  const { notify } = useNotification(); 
   const [showLogin, setShowLogin] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [beat, setBeat] = useState(false);
@@ -214,25 +214,6 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
       }
   };
 
-  const toggleFaq = (index: number) => {
-    setOpenFaq(openFaq === index ? null : index);
-  };
-
-  const formatNumber = (num: number) => {
-    return new Intl.NumberFormat('de-DE').format(num);
-  };
-
-  const smartDescription = useMemo(() => {
-      if (!activePromo) return "";
-      const { name, bonusPercent } = activePromo;
-      const isHugeSale = bonusPercent >= 50;
-      
-      if (isHugeSale) {
-          return `🔥 Cơ hội vàng từ sự kiện "${name}"! Hệ thống đang tặng thêm +${bonusPercent}% Vcoin cho mọi giao dịch. Đây là thời điểm tốt nhất để tích lũy tài nguyên và sáng tạo không giới hạn.`;
-      }
-      return `✨ Chào mừng sự kiện "${name}". Tận hưởng ưu đãi nạp +${bonusPercent}% Vcoin ngay hôm nay. Nạp càng nhiều, ưu đãi càng lớn. Sẵn sàng bùng nổ cùng các tính năng AI mới nhất!`;
-  }, [activePromo]);
-
   const getMarqueeText = () => {
       if (activePromo) {
           return `🔥 Sự kiện ${activePromo.name}: Khuyến mãi +${activePromo.bonusPercent}% Vcoin cho mọi giao dịch! 💎 Cơ hội nạp 1 nhận 2 đang diễn ra!`;
@@ -244,23 +225,61 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 DROP FUNCTION IF EXISTS public.handle_new_user();
 
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS diamonds numeric default 0;
+-- Drop existing policies to avoid "already exists" errors
+DO $$ 
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'users' AND policyname = 'Users can insert own profile') THEN
+        DROP POLICY "Users can insert own profile" ON public.users;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'users' AND policyname = 'Users can update own profile') THEN
+        DROP POLICY "Users can update own profile" ON public.users;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'users' AND policyname = 'Users can read own profile') THEN
+        DROP POLICY "Users can read own profile" ON public.users;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'users' AND policyname = 'Public read access') THEN
+        DROP POLICY "Public read access" ON public.users;
+    END IF;
+END $$;
+
+-- 1. Ensure table structure
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS vcoin_balance numeric default 0;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS photo_url text;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_admin boolean default false;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS display_name text;
 
+-- 2. Create Trigger Function
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.users (
+    id, email, display_name, photo_url, vcoin_balance, is_admin, created_at, updated_at
+  )
+  VALUES (
+    new.id,
+    new.email,
+    COALESCE(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
+    COALESCE(new.raw_user_meta_data->>'avatar_url', ''),
+    0, -- 0 Vcoin Default
+    false,
+    now(),
+    now()
+  )
+  ON CONFLICT (id) DO NOTHING;
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+
+-- 3. RLS
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Users can insert own profile" ON public.users;
 CREATE POLICY "Users can insert own profile" ON public.users FOR INSERT WITH CHECK (auth.uid() = id);
-
-DROP POLICY IF EXISTS "Users can update own profile" ON public.users;
 CREATE POLICY "Users can update own profile" ON public.users FOR UPDATE USING (auth.uid() = id);
-
-DROP POLICY IF EXISTS "Users can read own profile" ON public.users;
 CREATE POLICY "Users can read own profile" ON public.users FOR SELECT USING (auth.uid() = id);
-
-DROP POLICY IF EXISTS "Public read access" ON public.users;
 CREATE POLICY "Public read access" ON public.users FOR SELECT TO anon USING (true);`;
 
   return (
@@ -308,349 +327,11 @@ CREATE POLICY "Public read access" ON public.users FOR SELECT TO anon USING (tru
           </button>
       </div>
 
-      {/* --- HERO SECTION --- */}
-      <div className="relative min-h-screen flex flex-col items-center justify-center pt-20 md:pt-24 pb-20 px-4 z-10">
-          <div className={`absolute top-[12%] right-2 md:top-[25%] md:right-[15%] transform rotate-12 transition-all duration-100 origin-center z-0 opacity-80 md:opacity-100 ${beat ? 'scale-110 md:scale-125 rotate-6' : 'scale-90 md:scale-100 rotate-12'}`}>
-              <div className="relative scale-75 md:scale-100">
-                  <span className="font-game text-5xl md:text-8xl font-black italic text-transparent bg-clip-text bg-gradient-to-b from-[#ccff00] to-[#55aa00] drop-shadow-[0_0_15px_rgba(204,255,0,0.8)] z-10 block animate-neon-flash">PERFECT</span>
-                  <div className="absolute -bottom-6 right-0 bg-audi-pink text-white font-game font-bold text-xl px-4 py-1 rounded skew-x-[-10deg] shadow-[0_0_20px_#FF0099] animate-bounce">
-                      x99 Gen
-                  </div>
-              </div>
-          </div>
+      <div className="min-h-screen"></div> {/* Placeholder for main content */}
 
-          <div 
-            className="text-center relative mb-12 md:mb-16 z-20 w-full"
-            style={{ 
-                transform: window.innerWidth > 768 ? `perspective(1000px) rotateX(${mousePos.y * 0.5}deg) rotateY(${mousePos.x * 0.5}deg)` : 'none' 
-            }}
-          >
-              <div className={`transition-transform duration-75 ${beat ? 'scale-[1.01]' : 'scale-100'}`}>
-                <h1 className="leading-[1.1] flex flex-col items-center">
-                    <span className="block font-game text-3xl md:text-6xl font-bold tracking-wider text-audi-cyan mb-2 drop-shadow-[0_0_10px_rgba(33,212,253,0.8)]">
-                        THÀNH PHỐ
-                    </span>
-                    <span className="block font-sans text-5xl sm:text-7xl md:text-9xl font-black tracking-tighter text-outline-heavy uppercase transform -rotate-2 leading-none py-2">
-                        VŨ HỘI AI
-                    </span>
-                    <span className="block font-game text-sm md:text-3xl font-bold text-white mt-4 tracking-[0.3em] md:tracking-[0.5em] bg-black/30 backdrop-blur-sm inline-block px-4 py-2 rounded border border-white/10">
-                        PHOTO STUDIO
-                    </span>
-                </h1>
-              </div>
-              
-              <div className="mt-8 grid grid-cols-2 md:flex md:flex-wrap justify-center gap-2 md:gap-3 max-w-sm md:max-w-none mx-auto">
-                  {['TẠO ẢNH 4K', 'GHÉP MẶT', 'TÁCH NỀN', 'ANIME STYLE'].map((tag, i) => (
-                      <span key={i} className="px-3 py-2 border border-audi-cyan/50 rounded-lg text-[10px] md:text-xs font-bold tracking-[0.1em] text-audi-cyan uppercase bg-black/60 backdrop-blur-sm hover:bg-audi-cyan hover:text-black transition-colors cursor-default shadow-[0_0_10px_rgba(33,212,253,0.2)] text-center">
-                          {tag}
-                      </span>
-                  ))}
-              </div>
-          </div>
-
-          <div className="relative group cursor-pointer z-30 w-full max-w-md md:w-auto" onClick={handleStart}>
-              <div className="absolute -inset-1 bg-gradient-to-r from-audi-pink via-audi-purple to-audi-cyan rounded-2xl blur opacity-70 group-hover:opacity-100 group-hover:blur-xl transition-all duration-200 animate-pulse"></div>
-              <button className="relative w-full px-8 md:px-16 py-6 md:py-8 bg-[#090014] rounded-xl border-2 border-white/20 overflow-hidden flex items-center justify-center md:justify-start gap-4 md:gap-6 group-hover:translate-y-[-2px] transition-transform">
-                  <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20"></div>
-                  <div className="absolute inset-0 bg-gradient-to-r from-audi-pink/10 to-audi-cyan/10 group-hover:opacity-100 transition-opacity"></div>
-                  <div className="w-12 h-12 md:w-16 md:h-16 rounded-full bg-audi-lime flex items-center justify-center shadow-[0_0_20px_#ccff00] group-hover:scale-110 transition-transform shrink-0">
-                      <Icons.Play className="w-6 h-6 md:w-8 md:h-8 text-black fill-current ml-1" />
-                  </div>
-                  <div className="text-left">
-                      <span className="block text-xs md:text-sm font-bold text-audi-cyan uppercase tracking-[0.2em] mb-1">AUDITION STUDIO</span>
-                      <span className="block text-2xl md:text-4xl font-game font-black text-white italic whitespace-nowrap">VÀO STUDIO</span>
-                  </div>
-                  <div className="absolute top-0 -left-full w-1/2 h-full bg-gradient-to-r from-transparent via-white/20 to-transparent skew-x-[-20deg] animate-[shimmer_2s_infinite]"></div>
-              </button>
-          </div>
-      </div>
-
-      {/* ... STATS SECTION ... */}
-      <div className="relative z-20 max-w-6xl mx-auto px-4 -mt-10 md:-mt-20 mb-20 perspective-1000">
-         <div className="relative grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="group relative bg-[#13131f] border-b-4 border-audi-pink rounded-2xl p-6 shadow-[0_10px_30px_rgba(0,0,0,0.5)] transform hover:scale-105 transition-all duration-300 overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                <div className="absolute -right-4 -top-4 w-24 h-24 bg-audi-pink/20 blur-[40px] rounded-full group-hover:bg-audi-pink/40 transition-colors"></div>
-                <div className="relative z-10 flex flex-col items-center">
-                    <div className="w-12 h-12 mb-3 rounded-full bg-black border border-audi-pink/50 flex items-center justify-center shadow-[0_0_15px_#FF0099]">
-                        <Icons.User className="w-6 h-6 text-audi-pink animate-pulse" />
-                    </div>
-                    <div className="font-game text-5xl font-bold text-white mb-1 drop-shadow-[0_0_10px_rgba(255,0,153,0.5)]">{formatNumber(stats.users)}+</div>
-                    <div className="text-xs font-bold text-slate-400 uppercase tracking-[0.2em]">Tổng Người Dùng</div>
-                    <div className="mt-3 flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-green-500 animate-ping"></span>
-                        <span className="text-[10px] text-green-400">Live Updating</span>
-                    </div>
-                </div>
-            </div>
-            {/* ... other stats ... */}
-            <div className="group relative bg-[#13131f] border-b-4 border-audi-cyan rounded-2xl p-6 shadow-[0_10px_30px_rgba(0,0,0,0.5)] transform hover:scale-105 transition-all duration-300 overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                <div className="absolute -right-4 -top-4 w-24 h-24 bg-audi-cyan/20 blur-[40px] rounded-full group-hover:bg-audi-cyan/40 transition-colors"></div>
-                <div className="relative z-10 flex flex-col items-center">
-                    <div className="w-12 h-12 mb-3 rounded-full bg-black border border-audi-cyan/50 flex items-center justify-center shadow-[0_0_15px_#21D4FD]">
-                        <Icons.Image className="w-6 h-6 text-audi-cyan animate-pulse" />
-                    </div>
-                    <div className="font-game text-5xl font-bold text-white mb-1 drop-shadow-[0_0_10px_rgba(33,212,253,0.5)]">{formatNumber(stats.images)}+</div>
-                    <div className="text-xs font-bold text-slate-400 uppercase tracking-[0.2em]">Tổng Ảnh Đã Tạo</div>
-                    <div className="mt-3 flex items-center gap-2">
-                         <span className="w-2 h-2 rounded-full bg-green-500 animate-ping"></span>
-                         <span className="text-[10px] text-green-400">Processing...</span>
-                    </div>
-                </div>
-            </div>
-            <div className="group relative bg-[#13131f] border-b-4 border-audi-purple rounded-2xl p-6 shadow-[0_10px_30px_rgba(0,0,0,0.5)] transform hover:scale-105 transition-all duration-300 overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                <div className="absolute -right-4 -top-4 w-24 h-24 bg-audi-purple/20 blur-[40px] rounded-full group-hover:bg-audi-purple/40 transition-colors"></div>
-                <div className="relative z-10 flex flex-col items-center">
-                    <div className="w-12 h-12 mb-3 rounded-full bg-black border border-audi-purple/50 flex items-center justify-center shadow-[0_0_15px_#B721FF]">
-                        <Icons.Eye className="w-6 h-6 text-audi-purple animate-pulse" />
-                    </div>
-                    <div className="font-game text-5xl font-bold text-white mb-1 drop-shadow-[0_0_10px_rgba(183,33,255,0.5)]">{formatNumber(stats.visits)}+</div>
-                    <div className="text-xs font-bold text-slate-400 uppercase tracking-[0.2em]">Lượt Truy Cập</div>
-                    <div className="mt-3 flex items-center gap-2">
-                         <span className="w-2 h-2 rounded-full bg-green-500 animate-ping"></span>
-                         <span className="text-[10px] text-green-400">Online Now</span>
-                    </div>
-                </div>
-            </div>
-         </div>
-      </div>
-
-      {/* ... OTHER SECTIONS (Features, Steps, Showcase, Shop, Footer) ... */}
-      <div className="py-16 md:py-20 relative z-20 px-4">
-          <div className="max-w-7xl mx-auto md:px-6">
-              <div className="text-center mb-10 md:mb-16">
-                  <h2 className="font-game text-3xl md:text-6xl font-bold text-white mb-4">
-                      TÍNH NĂNG <span className="text-audi-pink">NỔI BẬT</span>
-                  </h2>
-                  <div className="w-16 md:w-24 h-1 bg-gradient-to-r from-audi-pink to-audi-cyan mx-auto rounded-full"></div>
-                  <p className="mt-4 text-slate-400 text-sm md:text-base">Nhanh – Đẹp – Giữ đúng nét nhân vật & phong cách Audition</p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                 {[
-                    { icon: Icons.Rocket, title: 'AI Hàng Đầu', desc: 'Mô hình AI tạo ảnh mới nhất của Google, chất lượng vượt trội', color: 'text-audi-pink', bg: 'bg-audi-pink/10' },
-                    { icon: Icons.Palette, title: 'Đậm Chất Audition', desc: 'AI hiểu rõ phong cách Audition, từ quần áo đến biểu cảm', color: 'text-audi-cyan', bg: 'bg-audi-cyan/10' },
-                    { icon: Icons.Shield, title: 'Giữ Nguyên Gương Mặt', desc: 'Công nghệ Face Lock giữ lại nét đặc trưng trên gương mặt', color: 'text-audi-lime', bg: 'bg-audi-lime/10' },
-                    { icon: Icons.Zap, title: 'Tốc Độ Tên Lửa', desc: 'Chỉ 15-30 giây để tạo một bức ảnh 3D hoàn chỉnh', color: 'text-audi-yellow', bg: 'bg-audi-yellow/10' },
-                 ].map((item, i) => (
-                    <div key={i} className="glass-panel p-6 rounded-3xl border border-white/5 hover:border-white/20 hover:-translate-y-2 transition-transform duration-300">
-                         <div className={`w-14 h-14 rounded-2xl ${item.bg} flex items-center justify-center mb-4`}>
-                             <item.icon className={`w-7 h-7 ${item.color}`} />
-                         </div>
-                         <h3 className="font-game text-xl font-bold text-white mb-2">{item.title}</h3>
-                         <p className="text-slate-400 text-sm leading-relaxed">{item.desc}</p>
-                    </div>
-                 ))}
-              </div>
-          </div>
-      </div>
-
-      <div className="py-16 md:py-24 relative z-20 px-4 bg-white/[0.02]">
-         <div className="max-w-7xl mx-auto md:px-6">
-            <div className="text-center mb-10 md:mb-16">
-                 <h2 className="font-game text-3xl md:text-5xl font-bold text-white mb-4">
-                     4 BƯỚC <span className="text-audi-purple">ĐƠN GIẢN</span>
-                 </h2>
-                 <p className="text-slate-400 text-sm md:text-base">Chỉ vài cú nhấp chuột, bạn đã có ngay một tác phẩm nghệ thuật</p>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                {[
-                    { step: 1, icon: Icons.Upload, title: 'Tải Ảnh Gốc', desc: 'Chọn ảnh chân dung rõ mặt, chất lượng cao để AI nhận diện tốt nhất' },
-                    { step: 2, icon: Icons.MessageCircle, title: 'Nhập Mô Tả', desc: 'Mô tả chi tiết bối cảnh, trang phục, hành động bạn muốn' },
-                    { step: 3, icon: Icons.Palette, title: 'Chọn Phong Cách', desc: 'Lựa chọn phong cách Audition có sẵn hoặc để AI sáng tạo' },
-                    { step: 4, icon: Icons.Download, title: 'Nhận Ảnh & Tỏa Sáng', desc: 'Nhấn tạo ảnh, chờ giây lát và nhận tác phẩm nghệ thuật' },
-                ].map((item, i) => (
-                    <div key={i} className="relative glass-panel p-8 rounded-[2rem] text-center group hover:bg-white/5 transition-colors">
-                         <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-audi-pink text-white font-bold flex items-center justify-center shadow-[0_0_15px_#FF0099] text-sm z-10 border-4 border-[#090014]">
-                             {item.step}
-                         </div>
-                         <div className="w-20 h-20 rounded-[2rem] bg-white/5 mx-auto mb-6 flex items-center justify-center group-hover:scale-110 transition-transform">
-                             <item.icon className="w-8 h-8 text-audi-pink" />
-                         </div>
-                         <h3 className="font-game text-xl font-bold text-white mb-3">{item.title}</h3>
-                         <p className="text-slate-400 text-sm leading-relaxed">{item.desc}</p>
-                         {i < 3 && <div className="hidden md:block absolute top-1/2 -right-3 w-6 h-0.5 bg-white/10 z-0"></div>}
-                    </div>
-                ))}
-            </div>
-         </div>
-      </div>
-
-      <div className="py-16 md:py-24 relative z-20 bg-gradient-to-b from-[#090014] to-[#120024] overflow-hidden">
-          <div className="max-w-7xl mx-auto px-6 mb-8 md:mb-12">
-              <div className="flex flex-col md:flex-row items-end justify-between gap-4">
-                  <div>
-                      <h2 className="font-game text-3xl md:text-6xl font-bold text-white flex items-center gap-3">
-                         <Icons.Image className="w-8 h-8 md:w-10 md:h-10 text-audi-yellow" />
-                         AI SHOWCASE
-                      </h2>
-                      <p className="text-audi-cyan font-bold mt-2 text-sm md:text-base">Thư viện ảnh đẹp tạo bởi cộng đồng</p>
-                  </div>
-              </div>
-          </div>
-          <div className="w-full overflow-hidden relative group">
-              <div className="absolute top-0 left-0 bottom-0 w-12 md:w-32 bg-gradient-to-r from-[#090014] to-transparent z-10 pointer-events-none"></div>
-              <div className="absolute top-0 right-0 bottom-0 w-12 md:w-32 bg-gradient-to-l from-[#090014] to-transparent z-10 pointer-events-none"></div>
-              <div className="flex w-max animate-marquee pause-on-hover gap-6 px-6">
-                   {displayShowcase.map((item, i) => <ShowcaseCard key={`s1-${i}`} item={item} />)}
-                   {displayShowcase.map((item, i) => <ShowcaseCard key={`s2-${i}`} item={item} />)}
-              </div>
-          </div>
-      </div>
-
-      <div className="py-16 md:py-24 px-4 relative z-20">
-          <div className="max-w-6xl mx-auto">
-              
-              <div className="text-center mb-10 md:mb-16 relative z-10">
-                  <h2 className="font-game text-3xl md:text-5xl font-bold text-white mb-4">VCOIN SHOP</h2>
-                  <p className="text-slate-300 text-sm md:text-base">Nạp lượt tạo ảnh - Mở khóa tính năng VIP</p>
-              </div>
-
-              {/* --- ACTIVE PROMOTION BANNER (CONDITIONAL) --- */}
-              {activePromo && (
-                  <div className="relative rounded-[2.5rem] overflow-hidden mb-12 border-2 border-audi-pink/50 shadow-[0_0_50px_rgba(255,0,153,0.3)] group mx-auto max-w-5xl">
-                        <div className="absolute inset-0 bg-gradient-to-r from-[#2a0b36] via-[#4a0e44] to-[#0c0c14] z-0"></div>
-                        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-30 z-0"></div>
-                        <div className="absolute top-[-50%] left-[-20%] w-[500px] h-[500px] bg-audi-pink/20 rounded-full blur-[100px] animate-pulse"></div>
-                        <div className="absolute bottom-[-50%] right-[-20%] w-[500px] h-[500px] bg-audi-cyan/20 rounded-full blur-[100px] animate-pulse delay-1000"></div>
-
-                        <div className="relative z-10 p-8 md:p-12 flex flex-col md:flex-row items-center justify-between gap-8">
-                            <div className="flex-1 text-center md:text-left space-y-4">
-                                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-black/40 border border-audi-yellow/50 backdrop-blur-md shadow-[0_0_15px_rgba(251,218,97,0.4)] animate-bounce-slow">
-                                    <Icons.Zap className="w-4 h-4 text-audi-yellow fill-current" />
-                                    <span className="text-xs font-bold text-audi-yellow uppercase tracking-widest">{activePromo.name}</span>
-                                </div>
-                                
-                                <h1 className="text-4xl md:text-6xl font-game font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-slate-400 drop-shadow-[0_4px_0_rgba(0,0,0,0.5)] leading-tight">
-                                    BONUS <span className="text-audi-pink">+{activePromo.bonusPercent}%</span> <span className="text-audi-cyan">VCOIN</span>
-                                </h1>
-                                <p className="text-slate-300 text-sm md:text-base max-w-lg leading-relaxed border-l-4 border-audi-purple pl-4 italic">
-                                    "{smartDescription}"
-                                </p>
-                            </div>
-
-                            <div className="flex gap-2 md:gap-4 p-4 md:p-6 bg-black/20 rounded-3xl border border-white/10 backdrop-blur-sm shadow-xl transform group-hover:scale-105 transition-transform duration-500">
-                                {['d', 'h', 'm', 's'].map((unit) => (
-                                    <div key={unit} className="flex flex-col items-center gap-2">
-                                        <div className="w-12 h-14 md:w-16 md:h-20 bg-[#12121a] rounded-xl border-t border-white/20 border-b-4 border-black flex items-center justify-center relative overflow-hidden shadow-inner">
-                                            <div className="absolute top-1/2 w-full h-px bg-black/50"></div>
-                                            <span className="font-mono text-2xl md:text-4xl font-bold text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]">
-                                                {String(timeLeft[unit as keyof typeof timeLeft]).padStart(2, '0')}
-                                            </span>
-                                        </div>
-                                        <span className="text-[9px] md:text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                                            {unit === 'd' ? 'DAYS' : unit === 'h' ? 'HOURS' : unit === 'm' ? 'MINS' : 'SECS'}
-                                        </span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                  </div>
-              )}
-
-              {/* --- PACKAGE GRID --- */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 relative z-10">
-                  {packages.map((pkg) => {
-                      const activeBonusPercent = activePromo ? activePromo.bonusPercent : pkg.bonusPercent;
-                      const hasBonus = activeBonusPercent > 0;
-                      const finalCoins = Math.floor(pkg.coin + (pkg.coin * activeBonusPercent / 100));
-
-                      return (
-                      <div key={pkg.id} onClick={handleStart} className={`group relative bg-[#12121a] rounded-[2rem] p-6 border transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_10px_40px_rgba(0,0,0,0.5)] flex flex-col cursor-pointer ${pkg.isPopular ? 'border-audi-pink shadow-[0_0_20px_rgba(255,0,153,0.1)]' : 'border-white/10 hover:border-white/30'}`}>
-                          {pkg.isPopular && (
-                              <div className="absolute top-0 right-0 bg-gradient-to-bl from-audi-pink to-audi-purple text-white text-[10px] font-bold px-4 py-1.5 rounded-tr-[1.8rem] rounded-bl-xl shadow-lg z-10 flex items-center gap-1">
-                                  <Icons.Flame className="w-3 h-3 fill-white" /> HOT
-                              </div>
-                          )}
-                          {hasBonus && (
-                              <div className="absolute top-0 left-0 bg-audi-lime text-black text-[10px] font-bold px-4 py-1.5 rounded-tl-[1.8rem] rounded-br-xl shadow-lg z-10">
-                                  BONUS +{activeBonusPercent}%
-                              </div>
-                          )}
-                          
-                          <div className="flex flex-col items-center justify-center py-6 border-b border-white/5 border-dashed relative">
-                              <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-4 transition-transform group-hover:scale-110 duration-500 bg-gradient-to-b ${pkg.isPopular ? 'from-audi-pink/20 to-transparent' : 'from-audi-cyan/20 to-transparent'}`}>
-                                  <Icons.Gem className={`w-10 h-10 ${pkg.isPopular ? 'text-audi-pink' : 'text-audi-cyan'} drop-shadow-[0_0_10px_currentColor]`} />
-                              </div>
-                              <div className="text-center">
-                                  <div className="text-4xl font-game font-black text-white mb-1 group-hover:text-audi-yellow transition-colors">{finalCoins}</div>
-                                  <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">VCOIN</div>
-                                  {hasBonus && <div className="text-[10px] text-slate-400 line-through mt-1">{pkg.coin}</div>}
-                              </div>
-                          </div>
-                          
-                          <div className="flex-1 py-6 space-y-3">
-                              <div className="flex justify-between items-center text-sm">
-                                  <span className="text-slate-400">Giá trị thực</span>
-                                  <span className="text-white font-bold">1 Vcoin = 1.000đ</span>
-                              </div>
-                              <div className="flex justify-between items-center text-sm">
-                                  <span className="text-slate-400">Bonus Event</span>
-                                  <span className="text-audi-lime font-bold">+{Math.floor(pkg.coin * activeBonusPercent / 100)} VC</span>
-                              </div>
-                              <div className="w-full h-px bg-white/5 my-2"></div>
-                              <div className="flex justify-between items-center">
-                                  <span className="text-slate-400 font-bold uppercase text-xs">Thành tiền</span>
-                                  <span className="text-xl font-bold text-white">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(pkg.price)}</span>
-                              </div>
-                          </div>
-                          
-                          <button className={`w-full py-4 rounded-xl font-bold text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all relative overflow-hidden ${pkg.isPopular ? 'bg-gradient-to-r from-audi-pink to-audi-purple text-white shadow-[0_5px_20px_rgba(255,0,153,0.3)] hover:shadow-[0_5px_30px_rgba(255,0,153,0.5)]' : 'bg-white text-black hover:bg-slate-200'}`}>
-                              <span className="relative z-10">MUA NGAY</span>
-                              <Icons.ChevronRight className="w-4 h-4 relative z-10 group-hover:translate-x-1 transition-transform" />
-                          </button>
-                      </div>
-                  )})}
-              </div>
-          </div>
-      </div>
-
-      <footer className="relative z-20 bg-[#020005] border-t border-white/10 pt-16 pb-8">
-           <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-audi-pink to-transparent opacity-50"></div>
-           <div className="max-w-7xl mx-auto px-6">
-               <div className="grid grid-cols-1 md:grid-cols-3 gap-12 mb-12">
-                   <div className="text-center md:text-left space-y-4">
-                       <h3 className="font-game text-3xl font-bold text-white tracking-widest flex items-center justify-center md:justify-start gap-2">
-                           <Icons.Sparkles className="w-6 h-6 text-audi-pink" />
-                           AUDITION AI
-                       </h3>
-                       <p className="text-slate-400 text-sm leading-relaxed max-w-xs mx-auto md:mx-0">
-                           Nền tảng sáng tạo hình ảnh không giới hạn, kết nối cộng đồng đam mê nghệ thuật và công nghệ.
-                       </p>
-                   </div>
-                   <div className="flex flex-col items-center md:items-start space-y-4">
-                       <h4 className="font-bold text-audi-cyan uppercase tracking-wider text-sm mb-2">Thông Tin</h4>
-                       <a href="#" className="text-slate-400 hover:text-white transition-colors text-sm">Điều khoản sử dụng</a>
-                       <a href="#" className="text-slate-400 hover:text-white transition-colors text-sm">Chính sách bảo mật</a>
-                       <a href="#" className="text-slate-400 hover:text-white transition-colors text-sm">Chính sách hoàn tiền</a>
-                       <a href="#" className="text-slate-400 hover:text-white transition-colors text-sm">Hướng dẫn thanh toán</a>
-                   </div>
-                   <div className="flex flex-col items-center md:items-end space-y-4">
-                       <h4 className="font-bold text-audi-lime uppercase tracking-wider text-sm mb-2">Liên Hệ & Hỗ Trợ</h4>
-                       <span className="text-slate-400 text-sm">Email: support@auditionai.io.vn</span>
-                       <span className="text-slate-400 text-sm">Hotline: 0824.280.497</span>
-                       <button className="px-6 py-2 border border-white/20 rounded-full text-xs font-bold uppercase hover:bg-white hover:text-black transition-all">
-                           Gửi phản hồi
-                       </button>
-                   </div>
-               </div>
-               <div className="border-t border-white/5 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
-                   <p className="text-xs text-slate-600">
-                       © 2026 AUDITION AI Photo Studio. All rights reserved.
-                   </p>
-                   <div className="flex items-center gap-2">
-                       <span className="text-xs text-slate-500 font-game uppercase tracking-widest">Designed by</span>
-                       <span className="text-sm font-bold bg-clip-text text-transparent bg-gradient-to-r from-audi-pink to-audi-cyan">CodyCN</span>
-                   </div>
-               </div>
-           </div>
-      </footer>
-
-      {/* --- LOGIN MODAL (UPDATED) --- */}
+      {/* --- LOGIN MODAL (UPDATED OVERLAY) --- */}
       {showLogin && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-fade-in">
               <div className="w-full max-w-md bg-[#090014] border-2 border-audi-pink rounded-3xl p-8 relative shadow-[0_0_50px_rgba(255,0,153,0.3)]">
                   <button onClick={() => setShowLogin(false)} className="absolute top-4 right-4 text-slate-500 hover:text-white">
                       <Icons.X className="w-6 h-6" />
@@ -665,6 +346,7 @@ CREATE POLICY "Public read access" ON public.users FOR SELECT TO anon USING (tru
                   </div>
 
                   <div className="space-y-4">
+                      {/* ... form fields ... */}
                       <div>
                           <label className="text-xs font-bold text-audi-cyan uppercase mb-1 block">Email</label>
                           <input 
@@ -750,9 +432,9 @@ CREATE POLICY "Public read access" ON public.users FOR SELECT TO anon USING (tru
           </div>
       )}
 
-      {/* --- SQL FIX MODAL (NEW) --- */}
+      {/* --- SQL FIX MODAL (NEW OVERLAY) --- */}
       {showSqlFix && (
-          <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-fade-in">
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 animate-fade-in">
               <div className="bg-[#12121a] w-full max-w-2xl p-6 rounded-2xl border border-red-500/50 shadow-[0_0_50px_rgba(255,0,0,0.2)] flex flex-col max-h-[90vh]">
                   <div className="flex items-center gap-4 mb-4">
                       <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center text-red-500 animate-pulse">
@@ -767,7 +449,7 @@ CREATE POLICY "Public read access" ON public.users FOR SELECT TO anon USING (tru
                   <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl mb-4">
                       <p className="text-sm text-red-300 font-bold mb-1">Nguyên nhân:</p>
                       <p className="text-xs text-slate-300 leading-relaxed">
-                          Trigger <code>handle_new_user</code> đang cố gắng ghi vào các cột không tồn tại (balance, role, avatar_url) thay vì (diamonds, is_admin, photo_url). Điều này làm hỏng quá trình đăng ký.
+                          Trigger <code>handle_new_user</code> đang cố gắng ghi vào các cột không tồn tại (balance, role, avatar_url) thay vì (vcoin_balance, is_admin, photo_url). Điều này làm hỏng quá trình đăng ký.
                       </p>
                   </div>
 
@@ -809,25 +491,3 @@ CREATE POLICY "Public read access" ON public.users FOR SELECT TO anon USING (tru
     </div>
   );
 };
-
-const ShowcaseCard = ({ item }: { item: any }) => (
-    <div className="group relative w-64 h-96 md:w-80 md:h-[500px] shrink-0 cursor-pointer overflow-hidden rounded-[2rem] border-2 border-transparent hover:border-white/50 transition-all duration-300">
-        <div className={`absolute inset-0 bg-black rounded-[2rem] border-2 ${item.border} transition-transform duration-500 z-10 overflow-hidden`}>
-            <img src={item.img} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-opacity duration-500 scale-110 group-hover:scale-100" alt={item.author} />
-            <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-90"></div>
-            
-            <div className="absolute bottom-0 left-0 right-0 p-6 transform translate-y-2 group-hover:translate-y-0 transition-transform duration-300">
-                <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-slate-800 to-slate-900 border border-white/20 flex items-center justify-center shadow-lg">
-                         <Icons.User className="w-4 h-4 text-slate-400" />
-                    </div>
-                    <div className="flex flex-col">
-                        <span className="text-lg font-game font-bold text-white italic tracking-wider drop-shadow-md">{item.author}</span>
-                        <span className="text-[9px] text-audi-cyan font-bold uppercase tracking-[0.2em]">Creator</span>
-                    </div>
-                </div>
-            </div>
-             <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
-        </div>
-    </div>
-);

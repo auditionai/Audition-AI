@@ -165,7 +165,7 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
             {packages.map((pkg) => {
                 const activeBonusPercent = activeCampaign ? activeCampaign.bonusPercent : pkg.bonusPercent;
                 const hasBonus = activeBonusPercent > 0;
-                const finalCoins = Math.floor(pkg.coin + (pkg.coin * activeBonusPercent / 100));
+                const finalCoins = Math.floor(pkg.vcoin + (pkg.vcoin * activeBonusPercent / 100));
 
                 return (
                     <div 
@@ -192,7 +192,7 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
                             <div className="text-center">
                                 <div className="text-4xl font-game font-black text-white mb-1 group-hover:text-audi-yellow transition-colors">{finalCoins}</div>
                                 <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">VCOIN</div>
-                                {hasBonus && <div className="text-[10px] text-slate-400 line-through mt-1">{pkg.coin}</div>}
+                                {hasBonus && <div className="text-[10px] text-slate-400 line-through mt-1">{pkg.vcoin}</div>}
                             </div>
                         </div>
 
@@ -204,7 +204,7 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
                             </div>
                             <div className="flex justify-between items-center text-sm">
                                 <span className="text-slate-400">Bonus Event</span>
-                                <span className="text-audi-lime font-bold">+{Math.floor(pkg.coin * activeBonusPercent / 100)} VC</span>
+                                <span className="text-audi-lime font-bold">+{Math.floor(pkg.vcoin * activeBonusPercent / 100)} VC</span>
                             </div>
                             <div className="w-full h-px bg-white/5 my-2"></div>
                             <div className="flex justify-between items-center">

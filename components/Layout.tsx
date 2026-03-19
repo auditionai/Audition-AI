@@ -154,7 +154,7 @@ export const Layout: React.FC<LayoutProps> = ({
                   >
                        <Icons.Gem className="w-3 h-3 text-audi-yellow group-hover:animate-spin" />
                        <div className="flex flex-col leading-none">
-                           <span className="text-sm font-bold text-audi-yellow font-game">{user?.balance || 0}</span>
+                           <span className="text-sm font-bold text-audi-yellow font-game">{user?.vcoin_balance || 0}</span>
                            <span className="text-[8px] text-audi-yellow/50 font-bold uppercase">VCOIN</span>
                        </div>
                        <div className="w-4 h-4 rounded-full bg-audi-yellow text-black flex items-center justify-center ml-1">

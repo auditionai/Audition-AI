@@ -37,7 +37,7 @@ BEGIN
     email, 
     display_name, 
     photo_url, 
-    diamonds, 
+    vcoin_balance, 
     is_admin, 
     created_at,
     updated_at
@@ -70,19 +70,19 @@ CREATE POLICY "Users can update own profile" ON public.users FOR UPDATE USING (a
 CREATE POLICY "Users can insert own profile" ON public.users FOR INSERT WITH CHECK (auth.uid() = id);
 
 -- 6. MISSING TABLES FIX (Transactions, Checkins, Milestones)
-CREATE TABLE IF NOT EXISTS public.diamond_transactions_log (
+CREATE TABLE IF NOT EXISTS public.vcoin_transactions (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     user_id uuid REFERENCES public.users(id),
     amount numeric NOT NULL,
-    reason text,
+    description text,
     type text,
     created_at timestamptz DEFAULT now()
 );
-ALTER TABLE public.diamond_transactions_log ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "User read own logs" ON public.diamond_transactions_log;
-CREATE POLICY "User read own logs" ON public.diamond_transactions_log FOR SELECT TO authenticated USING (auth.uid() = user_id);
-DROP POLICY IF EXISTS "Admin read all logs" ON public.diamond_transactions_log;
-CREATE POLICY "Admin read all logs" ON public.diamond_transactions_log FOR ALL TO authenticated USING (true);
+ALTER TABLE public.vcoin_transactions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "User read own logs" ON public.vcoin_transactions;
+CREATE POLICY "User read own logs" ON public.vcoin_transactions FOR SELECT TO authenticated USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Admin read all logs" ON public.vcoin_transactions;
+CREATE POLICY "Admin read all logs" ON public.vcoin_transactions FOR ALL TO authenticated USING (true);
 
 CREATE TABLE IF NOT EXISTS public.daily_check_ins (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -143,7 +143,7 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
       try {
           const res = await performCheckin();
           if (res.success) {
-              setStreak(res.newStreak);
+              setStreak(res.newStreak || 0);
               setCheckedIn(true);
               setHistory(prev => [...prev, new Date().toLocaleDateString('sv-SE')]);
               

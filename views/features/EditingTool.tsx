@@ -105,7 +105,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
      const user = await getUserProfile();
      if (!user) return;
      
-     if ((user.balance || 0) < cost) {
+     if ((user.vcoin_balance || 0) < cost) {
          notify(lang === 'vi' ? `Số dư không đủ (Cần ${cost} Vcoin)` : `Insufficient balance (Need ${cost} Vcoin)`, 'error');
          return;
      }

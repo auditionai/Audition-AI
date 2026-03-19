@@ -26,7 +26,7 @@ if (supabaseUrl && supabaseAnonKey) {
 }
 
 // Export as any to bypass strict type checks in legacy code, but ensure it's not null for the compiler if possible
-export const supabase: any = client;
+export const supabase = client as any;
 
 // --- SECONDARY CLIENT: CAULENHAU.IO.VN ---
 const clhUrl = metaEnv.VITE_CAULENHAU_SUPABASE_URL || process.env.CAULENHAU_SUPABASE_URL;
@@ -87,7 +87,7 @@ export const signUpWithEmail = async (email: string, password: string) => {
     if (error) return { data, error };
 
     // 2. MANUAL INSERT (FAIL-SAFE)
-    // We try to insert using the schema that matches economyService.ts (diamonds, photo_url)
+    // We try to insert using the schema that matches economyService.ts (vcoin_balance, photo_url)
     // This allows the app to work even if the Server Trigger fails or is missing.
     if (data.user) {
         console.log("Auth User created. Attempting manual profile creation...");
@@ -106,7 +106,7 @@ export const signUpWithEmail = async (email: string, password: string) => {
                 id: data.user.id,
                 email: email,
                 display_name: displayName,
-                diamonds: 0,        // Updated: Set default to 0
+                vcoin_balance: 0,        // Updated: Set default to 0
                 photo_url: '',      // Correct: photo_url, not avatar_url
                 is_admin: false,    // Correct: is_admin, not role
                 created_at: new Date().toISOString()

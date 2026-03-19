@@ -66,33 +66,6 @@ interface ConfirmState {
     onConfirm: () => void;
 }
 
-const CooldownTimer = ({ lastUsedAt }: { lastUsedAt: string }) => {
-    const [timeLeft, setTimeLeft] = useState<number>(0);
-
-    useEffect(() => {
-        const calculateTimeLeft = () => {
-            const lastUsed = new Date(lastUsedAt).getTime();
-            const now = Date.now();
-            const diff = now - lastUsed;
-            const remaining = Math.max(0, 60000 - diff);
-            setTimeLeft(remaining);
-        };
-
-        calculateTimeLeft();
-        const interval = setInterval(calculateTimeLeft, 1000);
-        return () => clearInterval(interval);
-    }, [lastUsedAt]);
-
-    if (timeLeft <= 0) return <span className="text-[10px] text-green-400 font-mono">Sẵn sàng</span>;
-
-    return (
-        <span className="text-[10px] text-amber-400 font-mono flex items-center gap-1">
-            <Icons.Clock className="w-3 h-3" />
-            Đang chờ: {Math.ceil(timeLeft / 1000)}s
-        </span>
-    );
-};
-
 // SQL Code for fixing Giftcode table issues
 const GIFTCODE_FIX_SQL = `-- FIX DATABASE STRUCTURE (GIFTCODES & SETTINGS)
 
@@ -132,12 +105,12 @@ CREATE TABLE IF NOT EXISTS public.system_settings (
     value jsonb
 );
 
--- 4. DIAMOND TRANSACTIONS LOG (For Usage Stats)
-CREATE TABLE IF NOT EXISTS public.diamond_transactions_log (
+-- 4. VCOIN TRANSACTIONS LOG (For Usage Stats)
+CREATE TABLE IF NOT EXISTS public.vcoin_transactions (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     user_id uuid REFERENCES public.users(id),
     amount numeric NOT NULL,
-    reason text,
+    description text,
     type text, -- 'usage', 'topup', 'reward', etc.
     created_at timestamptz DEFAULT now()
 );
@@ -145,7 +118,7 @@ CREATE TABLE IF NOT EXISTS public.diamond_transactions_log (
 -- 5. ENABLE RLS & POLICIES
 ALTER TABLE public.gift_codes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.system_settings ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.diamond_transactions_log ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.vcoin_transactions ENABLE ROW LEVEL SECURITY;
 
 -- Policies for Giftcodes
 DROP POLICY IF EXISTS "Public read giftcodes" ON public.gift_codes;
@@ -182,14 +155,14 @@ DROP POLICY IF EXISTS "Admin manage styles" ON public.style_presets;
 CREATE POLICY "Admin manage styles" ON public.style_presets FOR ALL TO authenticated USING (true);
 
 -- Policies for Logs
-DROP POLICY IF EXISTS "User read own logs" ON public.diamond_transactions_log;
-CREATE POLICY "User read own logs" ON public.diamond_transactions_log FOR SELECT TO authenticated USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "User read own logs" ON public.vcoin_transactions;
+CREATE POLICY "User read own logs" ON public.vcoin_transactions FOR SELECT TO authenticated USING (auth.uid() = user_id);
 
-DROP POLICY IF EXISTS "User insert own logs" ON public.diamond_transactions_log;
-CREATE POLICY "User insert own logs" ON public.diamond_transactions_log FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+DROP POLICY IF EXISTS "User insert own logs" ON public.vcoin_transactions;
+CREATE POLICY "User insert own logs" ON public.vcoin_transactions FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
 
-DROP POLICY IF EXISTS "Admin read all logs" ON public.diamond_transactions_log;
-CREATE POLICY "Admin read all logs" ON public.diamond_transactions_log FOR ALL TO authenticated USING (true); -- Ideally check is_admin
+DROP POLICY IF EXISTS "Admin read all logs" ON public.vcoin_transactions;
+CREATE POLICY "Admin read all logs" ON public.vcoin_transactions FOR ALL TO authenticated USING (true); -- Ideally check is_admin
 
 -- 8. RPC FOR ATOMIC INCREMENT (Fixes concurrency issues)
 CREATE OR REPLACE FUNCTION public.increment_giftcode_usage(code_id uuid)
@@ -249,7 +222,7 @@ $$;
 -- 3. Ensure columns exist (Fixes missing data)
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS display_name text;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS photo_url text;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS diamonds numeric DEFAULT 0;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS vcoin_balance numeric DEFAULT 0;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS last_active TIMESTAMPTZ;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_vip BOOLEAN DEFAULT false;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false;
@@ -281,13 +254,13 @@ ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 -- Policy: Everyone can read basic info
 CREATE POLICY "Public read access" ON public.users FOR SELECT USING (true);
 
--- Policy: Users can update their own data (EXCLUDING diamonds and is_admin)
+-- Policy: Users can update their own data (EXCLUDING vcoin_balance and is_admin)
 -- Note: This policy allows updating display_name and photo_url
 CREATE POLICY "Self update" ON public.users FOR UPDATE USING (auth.uid() = id)
 WITH CHECK (
   auth.uid() = id AND 
   (is_admin = (SELECT is_admin FROM public.users WHERE id = auth.uid())) AND
-  (diamonds = (SELECT diamonds FROM public.users WHERE id = auth.uid()))
+  (vcoin_balance = (SELECT vcoin_balance FROM public.users WHERE id = auth.uid()))
 );
 
 -- Policy: Admins can do everything (Uses SECURITY DEFINER function to avoid recursion)
@@ -304,11 +277,11 @@ AS $$
 BEGIN
   -- Update balance
   UPDATE public.users 
-  SET diamonds = diamonds + amount
+  SET vcoin_balance = vcoin_balance + amount
   WHERE id = auth.uid();
 
   -- Log transaction
-  INSERT INTO public.diamond_transactions_log (user_id, amount, reason, type)
+  INSERT INTO public.vcoin_transactions (user_id, amount, description, type)
   VALUES (auth.uid(), amount, reason, log_type);
 END;
 $$;
@@ -319,10 +292,10 @@ NOTIFY pgrst, 'reload config';
 
 const BALANCE_FIX_SQL = `
 -- 1. RESET NEGATIVE BALANCES
-UPDATE public.users SET diamonds = 0 WHERE diamonds < 0;
+UPDATE public.users SET vcoin_balance = 0 WHERE vcoin_balance < 0;
 
 -- 2. RECONSTRUCT BALANCES FROM TRANSACTION LOGS (CRITICAL RECOVERY)
--- Use this to restore accurate balances if the 'diamonds' column was corrupted.
+-- Use this to restore accurate balances if the 'vcoin_balance' column was corrupted.
 -- This script sums up all paid transactions + all usage/reward logs.
 
 DO $$
@@ -334,21 +307,21 @@ DECLARE
 BEGIN
     FOR user_record IN SELECT id, email FROM public.users LOOP
         -- Sum from paid transactions (Topups)
-        SELECT COALESCE(SUM(diamonds_received), 0) INTO total_from_transactions
-        FROM public.transactions
+        SELECT COALESCE(SUM(vcoin_received), 0) INTO total_from_transactions
+        FROM public.payment_transactions
         WHERE user_id = user_record.id AND status = 'paid';
 
         -- Sum from logs (Rewards, Usage, Giftcodes)
         -- Note: Usage amounts are stored as negative numbers (e.g., -1)
         SELECT COALESCE(SUM(amount), 0) INTO total_from_logs
-        FROM public.diamond_transactions_log
+        FROM public.vcoin_transactions
         WHERE user_id = user_record.id;
 
         final_balance := total_from_transactions + total_from_logs;
 
         -- Update user balance with the calculated total
         UPDATE public.users
-        SET diamonds = GREATEST(0, final_balance)
+        SET vcoin_balance = GREATEST(0, final_balance)
         WHERE id = user_record.id;
         
         RAISE NOTICE 'Restored %: % (From Tx: %, From Logs: %)', 
@@ -358,12 +331,12 @@ END $$;
 
 -- 3. AUDIT SUSPICIOUS BALANCES
 /*
-SELECT u.email, u.diamonds, u.display_name
+SELECT u.email, u.vcoin_balance, u.display_name
 FROM public.users u
-LEFT JOIN public.transactions t ON u.id = t.user_id AND t.status = 'paid'
+LEFT JOIN public.payment_transactions t ON u.id = t.user_id AND t.status = 'paid'
 WHERE u.is_admin = false
-GROUP BY u.email, u.diamonds, u.display_name
-HAVING u.diamonds > 500 AND COUNT(t.id) = 0;
+GROUP BY u.email, u.vcoin_balance, u.display_name
+HAVING u.vcoin_balance > 500 AND COUNT(t.id) = 0;
 */
 `;
 
@@ -1179,7 +1152,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               </div>
                                           </div>
                                       </td>
-                                      <td className="px-6 py-4 text-audi-pink font-bold">+{tx.coins} Vcoin</td>
+                                      <td className="px-6 py-4 text-audi-pink font-bold">+{tx.vcoin_received} Vcoin</td>
                                       <td className="px-6 py-4 text-right font-bold text-white">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(tx.amount || tx.price || 0)}</td>
                                       <td className="px-6 py-4">
                                           <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
@@ -1237,7 +1210,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       </div>
                                       <div>
                                           <div className="text-[10px] text-slate-500 uppercase font-bold">Gói nạp</div>
-                                          <div className="text-audi-pink font-bold">+{tx.coins} Vcoin</div>
+                                          <div className="text-audi-pink font-bold">+{tx.vcoin_received} Vcoin</div>
                                       </div>
                                   </div>
                                   <div className="flex gap-2 border-t border-white/5 pt-3">
@@ -1315,7 +1288,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                       </span>
                                                   </div>
                                               </td>
-                                              <td className="px-6 py-4 text-audi-yellow font-bold font-mono">{u.balance}</td>
+                                              <td className="px-6 py-4 text-audi-yellow font-bold font-mono">{u.vcoin_balance}</td>
                                               <td className="px-6 py-4">
                                                   <span className="text-white font-bold">{u.usageCount || 0}</span>
                                                   <span className="text-xs text-slate-500 ml-1">lượt</span>
@@ -1378,7 +1351,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           </div>
                                           <div className="text-center border-l border-white/10">
                                               <div className="text-[10px] text-slate-500 uppercase font-bold">Số dư</div>
-                                              <div className="text-xs font-bold text-audi-yellow">{u.balance} VC</div>
+                                              <div className="text-xs font-bold text-audi-yellow">{u.vcoin_balance} VC</div>
                                           </div>
                                           <div className="text-center border-l border-white/10">
                                               <div className="text-[10px] text-slate-500 uppercase font-bold">Hoạt động</div>
@@ -1402,7 +1375,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex justify-between items-center">
                       <h2 className="text-lg md:text-2xl font-bold text-white">Gói Nạp</h2>
-                      <button onClick={() => setEditingPackage({id: `temp_${Date.now()}`, name: 'Gói Mới', coin: 100, price: 50000, currency: 'VND', bonusText: '', bonusPercent: 0, isPopular: false, isActive: true, displayOrder: packages.length, colorTheme: 'border-slate-600', transferContent: 'NAP 50K'})} className="px-3 py-1.5 md:px-4 md:py-2 bg-audi-pink text-white rounded-lg font-bold flex items-center gap-2 hover:bg-pink-600 text-xs md:text-sm"><Icons.Plus className="w-4 h-4" /> Thêm Gói</button>
+                      <button onClick={() => setEditingPackage({id: `temp_${Date.now()}`, name: 'Gói Mới', vcoin: 100, price: 50000, currency: 'VND', bonusText: '', bonusPercent: 0, isPopular: false, isActive: true, displayOrder: packages.length, colorTheme: 'border-slate-600', transferContent: 'NAP 50K'})} className="px-3 py-1.5 md:px-4 md:py-2 bg-audi-pink text-white rounded-lg font-bold flex items-center gap-2 hover:bg-pink-600 text-xs md:text-sm"><Icons.Plus className="w-4 h-4" /> Thêm Gói</button>
                   </div>
                   <div className="grid grid-cols-1 gap-4">
                       {packages.map((pkg, idx) => (
@@ -1415,10 +1388,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   <div className={`w-10 h-10 rounded-full border-2 ${pkg.colorTheme} flex items-center justify-center bg-black/50 shrink-0`}><Icons.Gem className="w-5 h-5 text-white" /></div>
                                   <div>
                                       <h4 className="font-bold text-white flex items-center gap-2 text-sm md:text-base">{pkg.name} {!pkg.isActive && <span className="text-[9px] bg-red-500 text-white px-1.5 py-0.5 rounded">HIDDEN</span>} {pkg.isPopular && <span className="text-[9px] bg-audi-pink text-white px-1.5 py-0.5 rounded">HOT</span>}</h4>
-                                      <div className="flex gap-3 text-xs text-slate-400 mt-1"><span><b className="text-green-400">{(pkg.price || 0).toLocaleString()}đ</b></span><span><b className="text-audi-yellow">{pkg.coin || 0} VC</b></span>{pkg.bonusPercent > 0 && <span className="text-audi-pink">+{pkg.bonusPercent}%</span>}</div>
+                                      <div className="flex gap-3 text-xs text-slate-400 mt-1"><span><b className="text-green-400">{(pkg.price || 0).toLocaleString()}đ</b></span><span><b className="text-audi-yellow">{pkg.vcoin || 0} VC</b></span>{pkg.bonusPercent > 0 && <span className="text-audi-pink">+{pkg.bonusPercent}%</span>}</div>
                                   </div>
                               </div>
-                              <div className="flex gap-2"><button onClick={() => setEditingPackage({ id: pkg.id || '', name: pkg.name || '', price: pkg.price || 0, coin: pkg.coin || 0, bonusPercent: pkg.bonusPercent || 0, bonusText: pkg.bonusText || '', transferContent: pkg.transferContent || '', isPopular: !!pkg.isPopular, isActive: pkg.isActive !== false, colorTheme: pkg.colorTheme || 'border-slate-600', displayOrder: pkg.displayOrder || 0, currency: pkg.currency || 'VND' })} className="p-2 bg-blue-500/20 text-blue-500 rounded hover:bg-blue-500 hover:text-white"><Icons.Settings className="w-4 h-4" /></button><button onClick={() => handleDeletePackage(pkg.id)} className="p-2 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white"><Icons.Trash className="w-4 h-4" /></button></div>
+                              <div className="flex gap-2"><button onClick={() => setEditingPackage({ id: pkg.id || '', name: pkg.name || '', price: pkg.price || 0, vcoin: pkg.vcoin || 0, bonusPercent: pkg.bonusPercent || 0, bonusText: pkg.bonusText || '', transferContent: pkg.transferContent || '', isPopular: !!pkg.isPopular, isActive: pkg.isActive !== false, colorTheme: pkg.colorTheme || 'border-slate-600', displayOrder: pkg.displayOrder || 0, currency: pkg.currency || 'VND' })} className="p-2 bg-blue-500/20 text-blue-500 rounded hover:bg-blue-500 hover:text-white"><Icons.Settings className="w-4 h-4" /></button><button onClick={() => handleDeletePackage(pkg.id)} className="p-2 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white"><Icons.Trash className="w-4 h-4" /></button></div>
                           </div>
                       ))}
                   </div>
@@ -1800,23 +1773,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
                   {/* List of Keys in DB */}
                   <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
-                      <div className="flex justify-between items-center mb-4">
-                          <h3 className="font-bold text-lg text-white flex items-center gap-2">
-                              <Icons.Database className="w-5 h-5 text-audi-cyan" />
-                              Danh sách Service Account trong Database
-                          </h3>
-                          <button 
-                              onClick={async () => {
-                                  const keys = await getApiKeysList();
-                                  setDbKeys(keys);
-                                  showToast('Đã làm mới danh sách key', 'success');
-                              }}
-                              className="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-slate-300 transition-colors"
-                              title="Làm mới danh sách"
-                          >
-                              <Icons.RefreshCw className="w-4 h-4" />
-                          </button>
-                      </div>
+                      <h3 className="font-bold text-lg text-white mb-4 flex items-center gap-2">
+                          <Icons.Database className="w-5 h-5 text-audi-cyan" />
+                          Danh sách Service Account trong Database
+                      </h3>
                       
                       <div className="hidden md:block overflow-x-auto">
                           <table className="w-full text-left text-sm text-slate-400">
@@ -1858,14 +1818,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               {k.key_value ? `${k.key_value.substring(0, 8)}...${k.key_value.substring(k.key_value.length - 6)}` : 'N/A'}
                                           </td>
                                           <td className="px-4 py-3">
-                                              <div className="flex flex-col gap-1">
-                                                  <span className={`text-[10px] font-bold px-2 py-1 rounded border w-fit ${k.status === 'active' ? 'bg-green-500/20 text-green-500 border-green-500/50' : 'bg-slate-500/20 text-slate-500 border-slate-500/50'}`}>
-                                                      {k.status?.toUpperCase() || 'UNKNOWN'}
-                                                  </span>
-                                                  {k.last_used_at && (
-                                                      <CooldownTimer lastUsedAt={k.last_used_at} />
-                                                  )}
-                                              </div>
+                                              <span className={`text-[10px] font-bold px-2 py-1 rounded border ${k.status === 'active' ? 'bg-green-500/20 text-green-500 border-green-500/50' : 'bg-slate-500/20 text-slate-500 border-slate-500/50'}`}>
+                                                  {k.status?.toUpperCase() || 'UNKNOWN'}
+                                              </span>
                                           </td>
                                           <td className="px-4 py-3 text-xs">{new Date(k.created_at).toLocaleString()}</td>
                                           <td className="px-4 py-3 text-right flex justify-end gap-2">
@@ -1901,14 +1856,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           <div className="font-bold text-white text-sm">{displayName}</div>
                                           <div className="font-mono text-[10px] text-slate-500">{k.id}</div>
                                       </div>
-                                      <div className="flex flex-col items-end gap-1">
-                                          <span className={`text-[10px] font-bold px-2 py-1 rounded border ${k.status === 'active' ? 'bg-green-500/20 text-green-500 border-green-500/50' : 'bg-slate-500/20 text-slate-500 border-slate-500/50'}`}>
-                                              {k.status?.toUpperCase()}
-                                          </span>
-                                          {k.last_used_at && (
-                                              <CooldownTimer lastUsedAt={k.last_used_at} />
-                                          )}
-                                      </div>
+                                      <span className={`text-[10px] font-bold px-2 py-1 rounded border ${k.status === 'active' ? 'bg-green-500/20 text-green-500 border-green-500/50' : 'bg-slate-500/20 text-slate-500 border-slate-500/50'}`}>
+                                          {k.status?.toUpperCase()}
+                                      </span>
                                   </div>
                                   <div className="font-mono text-xs text-slate-300 break-all mb-3 bg-black/30 p-2 rounded">
                                       {k.key_value ? `${k.key_value.substring(0, 15)}...` : 'N/A'}
@@ -2181,7 +2131,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                               <h3 className="text-2xl font-bold text-white">{viewingUser.username}</h3>
                               <p className="text-slate-400 text-sm">{viewingUser.email}</p>
                               <div className="flex gap-2 mt-1">
-                                  <span className="text-audi-yellow font-bold text-xs bg-audi-yellow/10 px-2 py-0.5 rounded">{viewingUser.balance} Vcoin</span>
+                                  <span className="text-audi-yellow font-bold text-xs bg-audi-yellow/10 px-2 py-0.5 rounded">{viewingUser.vcoin_balance} Vcoin</span>
                                   <span className="text-blue-400 font-bold text-xs bg-blue-400/10 px-2 py-0.5 rounded uppercase">{viewingUser.role}</span>
                               </div>
                           </div>
@@ -2299,7 +2249,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       </div>
                       <div>
                           <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Số dư Vcoin</label>
-                          <input type="number" value={editingUser.balance || 0} onChange={e => setEditingUser({...editingUser, balance: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-yellow font-bold focus:border-audi-pink outline-none" />
+                          <input type="number" value={editingUser.vcoin_balance || 0} onChange={e => setEditingUser({...editingUser, vcoin_balance: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-yellow font-bold focus:border-audi-pink outline-none" />
                       </div>
                       <div>
                           <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Ảnh đại diện URL</label>
@@ -2317,7 +2267,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   <h3 className="text-xl font-bold text-white mb-6">{editingPackage.id.startsWith('temp_') ? 'Thêm Gói Mới' : 'Sửa Gói Nạp'}</h3>
                   <div className="space-y-4 mb-6">
                       <div className="grid grid-cols-2 gap-4"><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Tên gói</label><input value={editingPackage.name} onChange={e => setEditingPackage({...editingPackage, name: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" /></div><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Tag (VD: Mới)</label><input value={editingPackage.bonusText} onChange={e => setEditingPackage({...editingPackage, bonusText: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" /></div></div>
-                      <div className="grid grid-cols-2 gap-4"><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Giá (VND)</label><input type="number" value={editingPackage.price} onChange={e => setEditingPackage({...editingPackage, price: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-green-400 font-bold" /></div><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Vcoin nhận</label><input type="number" value={editingPackage.coin} onChange={e => setEditingPackage({...editingPackage, coin: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-yellow font-bold" /></div></div>
+                      <div className="grid grid-cols-2 gap-4"><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Giá (VND)</label><input type="number" value={editingPackage.price} onChange={e => setEditingPackage({...editingPackage, price: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-green-400 font-bold" /></div><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Vcoin nhận</label><input type="number" value={editingPackage.vcoin} onChange={e => setEditingPackage({...editingPackage, vcoin: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-yellow font-bold" /></div></div>
                       <div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">% Bonus thêm (Mặc định)</label><div className="relative"><input type="number" value={editingPackage.bonusPercent} onChange={e => setEditingPackage({...editingPackage, bonusPercent: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-pink font-bold pl-3" /><span className="absolute right-3 top-3.5 text-xs text-slate-500 font-bold">%</span></div></div>
                       <div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Cú pháp chuyển khoản</label><input value={editingPackage.transferContent} onChange={e => setEditingPackage({...editingPackage, transferContent: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono" /></div>
                       <div className="flex gap-4 pt-2"><label className="flex items-center gap-2 cursor-pointer bg-white/5 p-3 rounded-xl border border-white/10 flex-1 hover:bg-white/10 transition-colors"><input type="checkbox" checked={editingPackage.isPopular} onChange={e => setEditingPackage({...editingPackage, isPopular: e.target.checked})} className="accent-audi-pink w-4 h-4" /><span className="text-sm font-bold text-white">Gói HOT (Nổi bật)</span></label><label className="flex items-center gap-2 cursor-pointer bg-white/5 p-3 rounded-xl border border-white/10 flex-1 hover:bg-white/10 transition-colors"><input type="checkbox" checked={editingPackage.isActive} onChange={e => setEditingPackage({...editingPackage, isActive: e.target.checked})} className="accent-green-500 w-4 h-4" /><span className="text-sm font-bold text-white">Đang bán (Active)</span></label></div>

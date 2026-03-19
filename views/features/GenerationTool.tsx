@@ -483,7 +483,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
     const cost = calculateCost();
     const user = await getUserProfile();
 
-    if ((user.balance || 0) < cost) {
+    if ((user.vcoin_balance || 0) < cost) {
         notify(lang === 'vi' ? 'Số dư không đủ!' : 'Insufficient balance!', 'error');
         return;
     }

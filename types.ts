@@ -87,7 +87,7 @@ export interface UserProfile {
   username: string;
   email: string;
   avatar: string;
-  balance: number;
+  vcoin_balance: number;
   role: 'user' | 'admin';
   isVip: boolean;
   streak: number;
@@ -102,7 +102,7 @@ export interface UserProfile {
 export interface CreditPackage {
   id: string;
   name: string;
-  coin: number;
+  vcoin: number;
   price: number;
   currency: string;
   bonusText: string; // Visual tag like "Best Seller"
@@ -138,7 +138,7 @@ export interface Transaction {
   packageId: string;
   amount?: number;
   price?: number;
-  coins: number;
+  vcoin_received: number;
   status: TransactionStatus;
   createdAt: string;
   paymentMethod: 'payos' | 'manual';
@@ -147,7 +147,7 @@ export interface Transaction {
   checkoutUrl?: string; // URL thanh toán PayOS
 }
 
-export interface DiamondLog {
+export interface VcoinLog {
   id: string;
   userId: string;
   amount: number; // Positive for topup/reward, negative for usage

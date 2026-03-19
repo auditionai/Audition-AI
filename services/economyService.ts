@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, HistoryItem, DiamondLog } from '../types';
+import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, HistoryItem, VcoinLog } from '../types';
 
 // --- USER & PROFILE ---
 
@@ -22,7 +22,7 @@ export const getUserProfile = async (): Promise<UserProfile> => {
             email: user.email || data?.email || '',
             display_name: user.user_metadata?.full_name || user.email?.split('@')[0] || data?.display_name || 'User',
             photo_url: user.user_metadata?.avatar_url || data?.photo_url || 'https://picsum.photos/100/100',
-            diamonds: data?.diamonds ?? 0,
+            vcoin_balance: data?.vcoin_balance ?? 0,
             is_admin: data?.is_admin ?? false,
             last_active: new Date().toISOString()
         };
@@ -38,7 +38,7 @@ export const getUserProfile = async (): Promise<UserProfile> => {
             username: newProfile.display_name,
             email: newProfile.email,
             avatar: newProfile.photo_url,
-            balance: newProfile.diamonds,
+            vcoin_balance: newProfile.vcoin_balance,
             role: newProfile.is_admin ? 'admin' : 'user',
             isVip: false,
             streak: 0,
@@ -53,7 +53,7 @@ export const getUserProfile = async (): Promise<UserProfile> => {
         username: data.display_name || 'User',
         email: data.email,
         avatar: data.photo_url || 'https://picsum.photos/100/100',
-        balance: data.diamonds || 0,
+        vcoin_balance: data.vcoin_balance || 0,
         role: data.is_admin ? 'admin' : 'user',
         isVip: false, // Logic for VIP could be added later
         streak: 0, // Need separate checkin table query if needed
@@ -83,7 +83,7 @@ export const updateAdminUserProfile = async (profile: UserProfile): Promise<{suc
             .from('users')
             .update({
                 display_name: profile.username,
-                diamonds: profile.balance,
+                vcoin_balance: profile.vcoin_balance,
                 photo_url: profile.avatar
             })
             .eq('id', profile.id);
@@ -112,32 +112,14 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
         };
         
         // Try to detect column name or just try both silently
-        const { error } = await supabase.from('diamond_transactions').insert({
+        const { error } = await supabase.from('vcoin_transactions').insert({
             ...transactionData,
             user_id: userId
         });
         
         if (error && error.message.includes('column "user_id" does not exist')) {
-             await supabase.from('diamond_transactions').insert({
+             await supabase.from('vcoin_transactions').insert({
                 ...transactionData,
-                uid: userId
-            });
-        }
-        
-        // ALWAYS log to diamond_transactions_log
-        const logData: any = {
-            amount,
-            note: reason, 
-            type
-        };
-        const { error: logError } = await supabase.from('diamond_transactions_log').insert({
-            ...logData,
-            user_id: userId
-        });
-        
-        if (logError && logError.message.includes('column "user_id" does not exist')) {
-            await supabase.from('diamond_transactions_log').insert({
-                ...logData,
                 uid: userId
             });
         }
@@ -156,10 +138,10 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
         if (error) {
             // Fallback for legacy systems without RPC
             console.warn("[Economy] RPC failed, falling back to direct update (Legacy Mode)", error);
-            const { data: latestUser } = await supabase.from('users').select('diamonds').eq('id', userId).maybeSingle();
-            const currentBalance = latestUser?.diamonds || 0;
+            const { data: latestUser } = await supabase.from('users').select('vcoin_balance').eq('id', userId).maybeSingle();
+            const currentBalance = latestUser?.vcoin_balance || 0;
             const newBalance = currentBalance + amount;
-            const { error: directError } = await supabase.from('users').update({ diamonds: newBalance }).eq('id', userId);
+            const { error: directError } = await supabase.from('users').update({ vcoin_balance: newBalance }).eq('id', userId);
             if (directError) throw directError;
         }
     } catch (e: any) {
@@ -204,7 +186,7 @@ export const getPackages = async (): Promise<CreditPackage[]> => {
     return data.map((p: any) => ({
         id: p.id,
         name: p.name,
-        coin: p.credits_amount,
+        vcoin: p.credits_amount,
         price: p.price_vnd,
         currency: 'VND',
         bonusText: p.tag || '',
@@ -222,7 +204,7 @@ export const savePackage = async (pkg: CreditPackage): Promise<{success: boolean
     try {
         const payload = {
             name: pkg.name,
-            credits_amount: pkg.coin,
+            credits_amount: pkg.vcoin,
             price_vnd: pkg.price,
             tag: pkg.bonusText,
             bonus_credits: pkg.bonusPercent,
@@ -644,20 +626,19 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
 
     const promo = await getActivePromotion();
     const activeBonusPercent = promo ? promo.bonusPercent : (pkg.bonusPercent || 0);
-    const bonus = Math.floor(pkg.coin * activeBonusPercent / 100);
-    const totalCoins = pkg.coin + bonus;
+    const bonus = Math.floor(pkg.vcoin * activeBonusPercent / 100);
+    const totalCoins = pkg.vcoin + bonus;
 
     const orderCode = `${Date.now()}`;
     
     // Create Pending Transaction
-    const { data, error } = await supabase.from('transactions').insert({
+    const { data, error } = await supabase.from('payment_transactions').insert({
         user_id: user.id,
         package_id: packageId,
-        amount_vnd: pkg.price, // Changed from price to amount_vnd
-        diamonds_received: totalCoins, // Changed from coins_received to diamonds_received
+        amount_vnd: pkg.price,
+        vcoin_received: totalCoins,
         status: 'pending',
         order_code: orderCode,
-        // payment_method: 'payos' // Removed as it's not in schema
     }).select().single();
 
     if (error) throw error;
@@ -668,7 +649,7 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
             method: 'POST',
             body: JSON.stringify({
                 amount: pkg.price,
-                description: `Mua ${pkg.coin} VC`,
+                description: `Mua ${pkg.vcoin} VC`,
                 orderCode: parseInt(orderCode.slice(-9)), // PayOS requires int32/int64
                 returnUrl: window.location.href,
                 cancelUrl: window.location.href
@@ -682,7 +663,7 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
             userId: user.id,
             packageId,
             amount: pkg.price,
-            coins: totalCoins,
+            vcoin_received: totalCoins,
             status: 'pending',
             createdAt: data.created_at,
             paymentMethod: 'payos',
@@ -696,7 +677,7 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
             userId: user.id,
             packageId,
             amount: pkg.price,
-            coins: totalCoins,
+            vcoin_received: totalCoins,
             status: 'pending',
             createdAt: data.created_at,
             paymentMethod: 'manual',
@@ -713,21 +694,21 @@ export const mockPayOSSuccess = async (txId: string) => {
 export const adminApproveTransaction = async (txId: string): Promise<{success: boolean, error?: string}> => {
     if (!supabase) return { success: false, error: "No Database" };
     try {
-        const { data: tx, error: fetchError } = await supabase.from('transactions').select('*').eq('id', txId).single();
+        const { data: tx, error: fetchError } = await supabase.from('payment_transactions').select('*').eq('id', txId).single();
         if (fetchError || !tx) throw new Error("Tx not found");
 
         if (tx.status === 'paid') return { success: true };
 
         // 1. Update Tx
         const { error: updateError } = await supabase
-            .from('transactions')
+            .from('payment_transactions')
             .update({ status: 'paid' })
             .eq('id', txId);
             
         if (updateError) throw updateError;
 
         // 2. Add Coins
-        await updateUserBalance(tx.diamonds_received, `Topup: ${tx.order_code || tx.code || tx.id}`, 'topup', tx.user_id);
+        await updateUserBalance(tx.vcoin_received, `Topup: ${tx.order_code || tx.code || tx.id}`, 'topup', tx.user_id);
         
         return { success: true };
     } catch (e: any) {
@@ -739,7 +720,7 @@ export const adminRejectTransaction = async (txId: string): Promise<{success: bo
      if (!supabase) return { success: false, error: "No Database" };
      try {
         const { error } = await supabase
-            .from('transactions')
+            .from('payment_transactions')
             .update({ status: 'failed' })
             .eq('id', txId);
         if (error) throw error;
@@ -767,7 +748,7 @@ export const adminBulkRejectTransactions = async (txIds: string[]): Promise<{suc
     if (!supabase) return { success: false, error: "No Database" };
     try {
         const { error, count } = await supabase
-            .from('transactions')
+            .from('payment_transactions')
             .update({ status: 'failed' })
             .in('id', txIds);
             
@@ -781,7 +762,7 @@ export const adminBulkRejectTransactions = async (txIds: string[]): Promise<{suc
 export const deleteTransaction = async (txId: string): Promise<{success: boolean, error?: string}> => {
     if (!supabase) return { success: false, error: "No Database" };
     try {
-        const { error } = await supabase.from('transactions').delete().eq('id', txId);
+        const { error } = await supabase.from('payment_transactions').delete().eq('id', txId);
         if (error) throw error;
         return { success: true };
     } catch (e: any) {
@@ -799,14 +780,14 @@ export const getUnifiedHistory = async (targetUserId?: string): Promise<HistoryI
     
     // 1. Get Topup History
     const { data: txs } = await supabase
-        .from('transactions')
+        .from('payment_transactions')
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
     // 2. Get Usage/Reward Logs
     const { data: logs } = await supabase
-        .from('diamond_transactions_log')
+        .from('vcoin_transactions')
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
@@ -818,7 +799,7 @@ export const getUnifiedHistory = async (targetUserId?: string): Promise<HistoryI
             id: t.id,
             createdAt: t.created_at,
             description: `Nạp Vcoin (${t.order_code})`,
-            vcoinChange: t.diamonds_received,
+            vcoinChange: t.vcoin_received,
             amountVnd: t.amount_vnd,
             type: t.status === 'paid' ? 'topup' : 'pending_topup',
             status: t.status === 'paid' ? 'success' : t.status === 'pending' ? 'pending' : 'failed',
@@ -1232,10 +1213,10 @@ export const getAdminStats = async () => {
         .from('gift_codes')
         .select('*, gift_code_usages(count)');
 
-    let { data: txs, error: txError } = await supabase.from('transactions').select('*, users(email, display_name, photo_url)').order('created_at', { ascending: false }).limit(5000);
+    let { data: txs, error: txError } = await supabase.from('payment_transactions').select('*, users(email, display_name, photo_url)').order('created_at', { ascending: false }).limit(5000);
     if (txError) {
         console.warn("Failed to join users on transactions, falling back to select *", txError);
-        const fallback = await supabase.from('transactions').select('*').order('created_at', { ascending: false }).limit(5000);
+        const fallback = await supabase.from('payment_transactions').select('*').order('created_at', { ascending: false }).limit(5000);
         txs = fallback.data;
     }
     console.log("Admin Stats - Transactions fetched:", txs?.length);
@@ -1246,13 +1227,9 @@ export const getAdminStats = async () => {
     // Try to fetch logs from both potential table names
     let usageLogs: any[] = [];
     
-    // Attempt 1: diamond_transactions_log (Fetch up to 10000)
-    const { data: logs1, error: err1 } = await supabase.from('diamond_transactions_log').select('*').order('created_at', { ascending: false }).limit(10000);
+    // Attempt 1: vcoin_transactions (Fetch up to 10000)
+    const { data: logs1, error: err1 } = await supabase.from('vcoin_transactions').select('*').order('created_at', { ascending: false }).limit(10000);
     if (logs1) usageLogs = [...usageLogs, ...logs1];
-    
-    // Attempt 2: diamond_transactions (Fetch up to 10000)
-    const { data: logs2, error: err2 } = await supabase.from('diamond_transactions').select('*').order('created_at', { ascending: false }).limit(10000);
-    if (logs2) usageLogs = [...usageLogs, ...logs2];
 
     // Filter for usage: type 'usage' OR negative amount
     usageLogs = usageLogs.filter((l: any) => l.type === 'usage' || (l.amount && Number(l.amount) < 0));
@@ -1347,7 +1324,7 @@ export const getAdminStats = async () => {
     
     const transactions = txs?.map((t: any) => {
          // Fallback for coins: Check DB columns -> Check Package Info -> Estimate from Amount
-         let coins = t.diamonds_received ? Number(t.diamonds_received) : (t.coins_received ? Number(t.coins_received) : (t.coins ? Number(t.coins) : (t.diamonds ? Number(t.diamonds) : (t.credits ? Number(t.credits) : 0))));
+         let coins = t.vcoin_received ? Number(t.vcoin_received) : (t.diamonds_received ? Number(t.diamonds_received) : (t.coins_received ? Number(t.coins_received) : (t.coins ? Number(t.coins) : (t.diamonds ? Number(t.diamonds) : (t.credits ? Number(t.credits) : 0)))));
          
          if (coins === 0) {
              // Try to get from Package
@@ -1383,7 +1360,7 @@ export const getAdminStats = async () => {
              userAvatar: txUser?.photo_url || t.user_avatar || t.userAvatar,
              packageId: t.package_id,
              amount: t.amount ? Number(t.amount) : (t.price ? Number(t.price) : (t.amount_vnd ? Number(t.amount_vnd) : 0)),
-             coins: coins,
+             vcoin_received: coins,
              status: t.status,
              createdAt: t.created_at,
              code: t.code,
@@ -1396,7 +1373,7 @@ export const getAdminStats = async () => {
         username: u.display_name,
         email: u.email,
         avatar: u.photo_url,
-        balance: u.diamonds,
+        vcoin_balance: u.vcoin_balance,
         role: u.is_admin ? 'admin' : 'user',
         created_at: u.created_at,
         isVip: false,
@@ -1418,7 +1395,7 @@ export const getAdminStats = async () => {
         packages: pkgs?.map((p:any) => ({
             id: p.id,
             name: p.name,
-            coin: p.credits_amount,
+            vcoin: p.credits_amount,
             price: p.price_vnd,
             currency: 'VND',
             bonusText: p.tag,

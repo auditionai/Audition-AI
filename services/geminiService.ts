@@ -643,7 +643,7 @@ ACKNOWLEDGE AND EXECUTE.`;
 
 export const generateImage = async (
     prompt: string,
-    aspectRatio: string,
+    aspectRatio: string | undefined,
     refImageBase64: string | undefined,
     characters: any[],
     resolution: '1K' | '2K' | '4K' = '1K',
@@ -877,78 +877,58 @@ export const generateImage = async (
 
     const tstModel = modelType === 'flash' ? 'nano-banana-2' : 'nano-banana-pro';
     
-    let imgUrl = undefined;
+    const imgUrls: string[] = [];
     
-    // If we have a reference image (pose), upload it to Tramsangtao CDN
+    // Upload reference image (pose)
     if (cleanRefImage) {
-        onLog("Uploading reference image to Tramsangtao CDN...");
+        onLog("Uploading reference image (pose) to Tramsangtao CDN...");
         try {
-            const formData = new FormData();
-            const byteCharacters = atob(cleanRefImage);
-            const byteNumbers = new Array(byteCharacters.length);
-            for (let i = 0; i < byteCharacters.length; i++) {
-                byteNumbers[i] = byteCharacters.charCodeAt(i);
-            }
-            const byteArray = new Uint8Array(byteNumbers);
-            const blob = new Blob([byteArray], { type: 'image/jpeg' });
-            formData.append('file', blob, 'ref.jpg');
-
-            const uploadRes = await fetch('/api/tst-upload', {
-                method: 'POST',
-                body: formData
-            });
-            
-            if (!uploadRes.ok) {
-                throw new Error("Failed to upload reference image");
-            }
-            
-            const uploadData = await uploadRes.json();
-            imgUrl = uploadData.url;
-            onLog("Reference image uploaded successfully.");
+            const url = await uploadBase64ToTramsangtao(cleanRefImage, 'image/jpeg', onLog);
+            imgUrls.push(url);
         } catch (e) {
-            console.warn("Failed to upload reference image to Tramsangtao", e);
+            console.warn("Failed to upload reference image", e);
         }
-    } else if (charBase64List.length > 0) {
-        // Fallback: use the first character image if no pose reference
-        onLog("Uploading character image to Tramsangtao CDN...");
-        try {
-            const formData = new FormData();
-            const byteCharacters = atob(charBase64List[0]);
-            const byteNumbers = new Array(byteCharacters.length);
-            for (let i = 0; i < byteCharacters.length; i++) {
-                byteNumbers[i] = byteCharacters.charCodeAt(i);
-            }
-            const byteArray = new Uint8Array(byteNumbers);
-            const blob = new Blob([byteArray], { type: 'image/jpeg' });
-            formData.append('file', blob, 'char.jpg');
+    }
 
-            const uploadRes = await fetch('/api/tst-upload', {
-                method: 'POST',
-                body: formData
-            });
-            
-            if (uploadRes.ok) {
-                const uploadData = await uploadRes.json();
-                imgUrl = uploadData.url;
-                onLog("Character image uploaded successfully.");
-            }
+    // Upload character images
+    for (let i = 0; i < charBase64List.length; i++) {
+        onLog(`Uploading character image ${i + 1} to Tramsangtao CDN...`);
+        try {
+            const url = await uploadBase64ToTramsangtao(charBase64List[i], 'image/jpeg', onLog);
+            imgUrls.push(url);
         } catch (e) {
-            console.warn("Failed to upload character image to Tramsangtao", e);
+            console.warn(`Failed to upload character image ${i + 1}`, e);
+        }
+    }
+
+    // Upload style images
+    for (let i = 0; i < cleanStyleImages.length; i++) {
+        onLog(`Uploading style image ${i + 1} to Tramsangtao CDN...`);
+        try {
+            const url = await uploadBase64ToTramsangtao(cleanStyleImages[i], 'image/jpeg', onLog);
+            imgUrls.push(url);
+        } catch (e) {
+            console.warn(`Failed to upload style image ${i + 1}`, e);
         }
     }
 
     const payload: any = {
         prompt: finalInstruction,
         model: tstModel,
-        aspect_ratio: aspectRatio,
         resolution: resolution.toLowerCase() // "1k", "2k", "4k"
     };
 
-    if (imgUrl) {
-        payload.img_url = imgUrl;
+    if (aspectRatio) {
+        payload.aspect_ratio = aspectRatio;
     }
 
-    onLog(`Sending request to Tramsangtao API (Model: ${tstModel})...`);
+    if (imgUrls.length > 0) {
+        payload.image_urls = imgUrls;
+        payload.img_urls = imgUrls;
+        payload.img_url = imgUrls; // To be safe, pass array to all possible fields
+    }
+
+    onLog(`Sending request to Tramsangtao API (Model: ${tstModel}) with ${imgUrls.length} images...`);
 
     const generateRes = await fetch('/api/tst-generate', {
         method: 'POST',
@@ -1010,6 +990,109 @@ export const generateImage = async (
     return resultUrl;
 };
 
+const uploadBase64ToTramsangtao = async (base64Data: string, mimeType: string, onLog: (msg: string) => void): Promise<string> => {
+    onLog("Uploading image to Tramsangtao CDN...");
+    const base64Content = base64Data.split(',')[1] || base64Data;
+    const byteCharacters = atob(base64Content);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    const blob = new Blob([byteArray], { type: mimeType || 'image/png' });
+
+    const formData = new FormData();
+    formData.append('file', blob, 'image.png');
+
+    const uploadRes = await fetch('/api/tst-upload', {
+        method: 'POST',
+        body: formData
+    });
+
+    if (!uploadRes.ok) {
+        const err = await uploadRes.json();
+        throw new Error(`Failed to upload image to Tramsangtao: ${err.error || uploadRes.statusText}`);
+    }
+
+    const uploadData = await uploadRes.json();
+    return uploadData.url;
+};
+
+const runTramsangtaoI2I = async (
+    base64Data: string,
+    prompt: string,
+    mimeType: string,
+    modelType: 'flash' | 'pro' = 'flash',
+    resolution?: string,
+    onLog: (msg: string) => void = () => {}
+): Promise<string> => {
+    const imgUrl = await uploadBase64ToTramsangtao(base64Data, mimeType, onLog);
+    const model = modelType === 'flash' ? 'nano-banana-2' : 'nano-banana-pro';
+    
+    onLog(`Calling Tramsangtao API (Model: ${model})...`);
+    const payload: any = {
+        prompt: prompt,
+        model: model,
+        img_url: imgUrl
+    };
+    if (resolution) {
+        payload.resolution = resolution;
+    }
+
+    const genRes = await fetch('/api/tst-generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+
+    if (!genRes.ok) {
+        const err = await genRes.json();
+        throw new Error(`Tramsangtao API error: ${err.error || genRes.statusText}`);
+    }
+
+    const genData = await genRes.json();
+    const jobId = genData.job_id;
+
+    if (!jobId) {
+        throw new Error("Tramsangtao API did not return a job_id");
+    }
+
+    onLog(`Job created (ID: ${jobId}). Polling every 8 seconds...`);
+
+    let resultUrl = null;
+    let pollAttempts = 0;
+    const maxPollAttempts = 150; // 20 minutes
+
+    while (pollAttempts < maxPollAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 8000));
+        pollAttempts++;
+        
+        try {
+            const pollRes = await fetch(`/api/tst-poll?jobId=${jobId}`);
+            if (!pollRes.ok) continue;
+            
+            const pollData = await pollRes.json();
+            onLog(`Job status: ${pollData.status} (${pollData.progress || 0}%)...`);
+            
+            if (pollData.status === 'completed') {
+                resultUrl = pollData.result;
+                break;
+            } else if (pollData.status === 'failed' || pollData.status === 'error') {
+                throw new Error(`Tramsangtao job failed: ${pollData.error || 'Unknown error'}`);
+            }
+        } catch (e: any) {
+            if (e.message.includes('Tramsangtao job failed')) throw e;
+        }
+    }
+
+    if (!resultUrl) {
+        throw new Error("Generation failed: Timeout waiting for Tramsangtao job to complete");
+    }
+
+    onLog("Image processed successfully!");
+    return resultUrl;
+};
+
 export const editImageWithInstructions = async (
     base64Data: string, 
     instruction: string, 
@@ -1017,97 +1100,7 @@ export const editImageWithInstructions = async (
     modelType: 'flash' | 'pro' = 'flash',
     onLog: (msg: string) => void = () => {}
 ): Promise<string> => {
-    const model = modelType === 'flash' ? 'gemini-3.1-flash-image-preview' : 'gemini-3-pro-image-preview'; 
-
-    let response: any = null;
-    let attempts = 0;
-    const MAX_KEY_SWITCHES = 2;
-
-    while (attempts < MAX_KEY_SWITCHES) {
-        attempts++;
-        const freshAi = await getAiClient(modelType);
-        const currentKey = (freshAi as any)._internalApiKey;
-        const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
-        const keyName = currentKey ? await getApiKeyName(currentKey) : 'Default';
-        
-        onLog(`> Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
-        console.log(`[API CALL START] Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
-        
-        try {
-            response = await retryWithBackoff(
-                async () => {
-                    const specificAi = await getAiClient(modelType, currentKey);
-                    try {
-                        const config: any = {
-                            imageConfig: {}
-                        };
-                        
-                        if (model.includes('3.1-flash-image') || model.includes('3-pro-image')) {
-                            config.imageConfig.imageSize = "2K";
-                        }
-
-                        if (Object.keys(config.imageConfig).length === 0) {
-                            delete config.imageConfig;
-                        }
-
-                        const res = await runWithTimeout(
-                            specificAi.models.generateContent({
-                                model: model,
-                                contents: {
-                                    parts: [
-                                        {
-                                            inlineData: {
-                                                mimeType: mimeType || 'image/png',
-                                                data: cleanBase64(base64Data)
-                                            }
-                                        },
-                                        {
-                                            text: instruction
-                                        }
-                                    ]
-                                },
-                                config: config
-                            }),
-                            300000, // 5 Minutes
-                            "Image Editing"
-                        );
-                        console.log(`[API CALL SUCCESS] Ảnh được chỉnh sửa thành công bởi API Key: ${keyName} (${shortKey})`);
-                        return res;
-                    } catch (e: any) {
-                        // Removed redundant console.warn to prevent spam
-                        throw e;
-                    }
-                },
-                5, // 5 retries (wait and retry on same key)
-                120000,
-                "Image Editing",
-                onLog
-            );
-            break;
-        } catch (error: any) {
-            const isRateLimit = error?.status === 429 || error?.message?.includes('429') || error?.message?.includes('quota');
-            const isOverload = error?.status === 503 || error?.message?.includes('503') || error?.message?.includes('Overloaded') || error?.message?.includes('timed out') || error?.message?.includes('Timeout');
-            const isAuthError = error?.status === 403 || error?.message?.includes('403') || error?.message?.includes('PERMISSION_DENIED');
-
-            if (!isRateLimit && !isOverload && !isAuthError) {
-                // If it's a 400 Bad Request (e.g., safety violation), don't ban the key, just throw the error to the user
-                throw error;
-            }
-
-            console.warn(`Key ${shortKey} completely failed after retries. Banning it.`);
-            if (currentKey) reportKeyFailure(currentKey);
-            
-            if (attempts < MAX_KEY_SWITCHES) {
-                onLog(`❌ Key ${keyName} thất bại. Đang tự động đổi sang Key khác và thử lại...`);
-            } else {
-                throw error;
-            }
-        }
-    }
-
-    const result = extractImage(response);
-    if (!result) throw new Error("Editing failed: No image output");
-    return result;
+    return runTramsangtaoI2I(base64Data, instruction, mimeType, modelType, undefined, onLog);
 }
 
 export const removeBackgroundImage = async (
@@ -1116,83 +1109,8 @@ export const removeBackgroundImage = async (
     mimeType: string,
     onLog: (msg: string) => void = () => {}
 ): Promise<string> => {
-    const model = 'gemini-2.5-flash-image';
-
-    let response: any = null;
-    let attempts = 0;
-    const MAX_KEY_SWITCHES = 2;
-
-    while (attempts < MAX_KEY_SWITCHES) {
-        attempts++;
-        const freshAi = await getAiClient('flash');
-        const currentKey = (freshAi as any)._internalApiKey;
-        const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
-        const keyName = currentKey ? await getApiKeyName(currentKey) : 'Default';
-        
-        onLog(`> Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
-        console.log(`[API CALL START] Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
-
-        try {
-            response = await retryWithBackoff(
-                async () => {
-                    const specificAi = await getAiClient('flash', currentKey);
-                    try {
-                        const finalParts = [
-                            { text: "🔴 PRIORITY 1: REFERENCE IMAGE\nINSTRUCTION: Remove the background of this image and make it solid black. Keep the main subject exactly the same." },
-                            {
-                                inlineData: {
-                                    mimeType: mimeType || 'image/png',
-                                    data: cleanBase64(base64Data)
-                                }
-                            },
-                            { text: `🔴 FINAL EXECUTION COMMAND:\n${instruction}` }
-                        ];
-
-                        const res = await runWithTimeout(
-                            specificAi.models.generateContent({
-                                model: model,
-                                contents: { parts: finalParts }
-                            }),
-                            300000, // 5 Minutes
-                            "Remove Background"
-                        );
-                        console.log(`[API CALL SUCCESS] Ảnh được tách nền thành công bởi API Key: ${keyName} (${shortKey})`);
-                        return res;
-                    } catch (e: any) {
-                        // Removed redundant console.warn to prevent spam
-                        throw e;
-                    }
-                },
-                5, // 5 retries (wait and retry on same key)
-                120000,
-                "Remove Background",
-                onLog
-            );
-            break;
-        } catch (error: any) {
-            const isRateLimit = error?.status === 429 || error?.message?.includes('429') || error?.message?.includes('quota');
-            const isOverload = error?.status === 503 || error?.message?.includes('503') || error?.message?.includes('Overloaded') || error?.message?.includes('timed out') || error?.message?.includes('Timeout');
-            const isAuthError = error?.status === 403 || error?.message?.includes('403') || error?.message?.includes('PERMISSION_DENIED');
-
-            if (!isRateLimit && !isOverload && !isAuthError) {
-                // If it's a 400 Bad Request (e.g., safety violation), don't ban the key, just throw the error to the user
-                throw error;
-            }
-
-            console.warn(`Key ${shortKey} completely failed after retries. Banning it.`);
-            if (currentKey) reportKeyFailure(currentKey);
-            
-            if (attempts < MAX_KEY_SWITCHES) {
-                onLog(`❌ Key ${keyName} thất bại. Đang tự động đổi sang Key khác và thử lại...`);
-            } else {
-                throw error;
-            }
-        }
-    }
-
-    const result = extractImage(response);
-    if (!result) throw new Error("Remove Background failed: No image output");
-    return result;
+    const prompt = `Remove the background of this image and make it solid black. Keep the main subject exactly the same. ${instruction}`;
+    return runTramsangtaoI2I(base64Data, prompt, mimeType, 'flash', undefined, onLog);
 }
 
 export const upscaleImage = async (
@@ -1201,81 +1119,6 @@ export const upscaleImage = async (
     mimeType: string,
     onLog: (msg: string) => void = () => {}
 ): Promise<string> => {
-    const model = 'gemini-2.5-flash-image';
-
-    let response: any = null;
-    let attempts = 0;
-    const MAX_KEY_SWITCHES = 2;
-
-    while (attempts < MAX_KEY_SWITCHES) {
-        attempts++;
-        const freshAi = await getAiClient('flash');
-        const currentKey = (freshAi as any)._internalApiKey;
-        const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
-        const keyName = currentKey ? await getApiKeyName(currentKey) : 'Default';
-        
-        onLog(`> Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
-        console.log(`[API CALL START] Đang dùng API Key: ${keyName} (${shortKey}) | Model: ${model}`);
-
-        try {
-            response = await retryWithBackoff(
-                async () => {
-                    const specificAi = await getAiClient('flash', currentKey);
-                    try {
-                        const finalParts = [
-                            { text: "🔴 PRIORITY 1: REFERENCE IMAGE\nINSTRUCTION: Upscale this image to 2K resolution. Enhance the details and make it sharper while keeping the original content exactly the same." },
-                            {
-                                inlineData: {
-                                    mimeType: mimeType || 'image/png',
-                                    data: cleanBase64(base64Data)
-                                }
-                            },
-                            { text: `🔴 FINAL EXECUTION COMMAND:\n${instruction}` }
-                        ];
-
-                        const res = await runWithTimeout(
-                            specificAi.models.generateContent({
-                                model: model,
-                                contents: { parts: finalParts }
-                            }),
-                            300000, // 5 Minutes
-                            "Upscale Image"
-                        );
-                        console.log(`[API CALL SUCCESS] Ảnh được làm nét thành công bởi API Key: ${keyName} (${shortKey})`);
-                        return res;
-                    } catch (e: any) {
-                        // Removed redundant console.warn to prevent spam
-                        throw e;
-                    }
-                },
-                5, // 5 retries (wait and retry on same key)
-                120000,
-                "Upscale Image",
-                onLog
-            );
-            break;
-        } catch (error: any) {
-            const isRateLimit = error?.status === 429 || error?.message?.includes('429') || error?.message?.includes('quota');
-            const isOverload = error?.status === 503 || error?.message?.includes('503') || error?.message?.includes('Overloaded') || error?.message?.includes('timed out') || error?.message?.includes('Timeout');
-            const isAuthError = error?.status === 403 || error?.message?.includes('403') || error?.message?.includes('PERMISSION_DENIED');
-
-            if (!isRateLimit && !isOverload && !isAuthError) {
-                // If it's a 400 Bad Request (e.g., safety violation), don't ban the key, just throw the error to the user
-                throw error;
-            }
-
-            console.warn(`Key ${shortKey} completely failed after retries. Banning it.`);
-            if (currentKey) reportKeyFailure(currentKey);
-            
-            if (attempts < MAX_KEY_SWITCHES) {
-                onLog(`❌ Key ${keyName} thất bại. Đang tự động đổi sang Key khác và thử lại...`);
-            } else {
-                throw error;
-            }
-        }
-    }
-
-    const result = extractImage(response);
-    if (!result) throw new Error("Upscale failed: No image output");
-    return result;
+    const prompt = `Upscale this image to 2K resolution. Enhance the details and make it sharper while keeping the original content exactly the same. ${instruction}`;
+    return runTramsangtaoI2I(base64Data, prompt, mimeType, 'flash', '2k', onLog);
 }

@@ -124,37 +124,44 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
             });
         }
         
-        if (error) {
-            const logData: any = {
-                amount,
-                note: reason, 
-                type
-            };
-            const { error: logError } = await supabase.from('diamond_transactions_log').insert({
+        // ALWAYS log to diamond_transactions_log
+        const logData: any = {
+            amount,
+            note: reason, 
+            type
+        };
+        const { error: logError } = await supabase.from('diamond_transactions_log').insert({
+            ...logData,
+            user_id: userId
+        });
+        
+        if (logError && logError.message.includes('column "user_id" does not exist')) {
+            await supabase.from('diamond_transactions_log').insert({
                 ...logData,
-                user_id: userId
+                uid: userId
             });
-            
-            if (logError && logError.message.includes('column "user_id" does not exist')) {
-                await supabase.from('diamond_transactions_log').insert({
-                    ...logData,
-                    uid: userId
-                });
-            }
         }
     } catch (e) {
         // Completely silent
     }
     
-    // 2. Update balance directly (skip RPC to avoid 404)
+    // 2. Update balance using SECURE RPC (Atomicity & Security)
     try {
-        // Fetch latest balance first to minimize race condition
-        const { data: latestUser } = await supabase.from('users').select('diamonds').eq('id', userId).maybeSingle();
-        const currentBalance = latestUser?.diamonds || 0;
-        const newBalance = currentBalance + amount;
+        const { error } = await supabase.rpc('secure_update_balance', {
+            amount: amount,
+            reason: reason,
+            log_type: type
+        });
         
-        const { error } = await supabase.from('users').update({ diamonds: newBalance }).eq('id', userId);
-        if (error) throw error;
+        if (error) {
+            // Fallback for legacy systems without RPC
+            console.warn("[Economy] RPC failed, falling back to direct update (Legacy Mode)", error);
+            const { data: latestUser } = await supabase.from('users').select('diamonds').eq('id', userId).maybeSingle();
+            const currentBalance = latestUser?.diamonds || 0;
+            const newBalance = currentBalance + amount;
+            const { error: directError } = await supabase.from('users').update({ diamonds: newBalance }).eq('id', userId);
+            if (directError) throw directError;
+        }
     } catch (e: any) {
         console.error("[Economy] Critical: Failed to update balance", e);
         throw new Error("Failed to update balance: " + e.message);
@@ -474,6 +481,21 @@ export const reportKeyFailure = (key: string) => {
 };
 
 let lastUsedKey: string | null = null;
+
+export const getApiKeyName = async (key: string): Promise<string> => {
+    if (!supabase) return 'Unknown Key';
+    try {
+        const { data, error } = await supabase
+            .from('api_keys')
+            .select('name')
+            .eq('key_value', key)
+            .single();
+        if (error || !data) return 'Unknown Key';
+        return data.name || 'Unknown Key';
+    } catch (e) {
+        return 'Unknown Key';
+    }
+};
 
 export const getSystemApiKey = async (tier: 'flash' | 'pro' = 'flash', excludedKeys: string[] = []): Promise<string | null> => {
     if (!supabase) return process.env.API_KEY || null;
@@ -1165,8 +1187,31 @@ export const getAdminStats = async () => {
         dashboard: { visitsToday: 0, visitsTotal: 0, newUsersToday: 0, usersTotal: 0, imagesToday: 0, imagesTotal: 0, aiUsage: [] },
         usersList: [], packages: [], promotions: [], giftcodes: [], transactions: []
     };
-    // Fetch Users
-    const { data: users, error: userError } = await supabase.from('users').select('*');
+    // Fetch Users (Handling > 1000 rows limit)
+    let users: any[] = [];
+    let userError = null;
+    let page = 0;
+    const pageSize = 1000;
+    
+    while (true) {
+        const { data, error } = await supabase
+            .from('users')
+            .select('*')
+            .range(page * pageSize, (page + 1) * pageSize - 1);
+            
+        if (error) {
+            userError = error;
+            break;
+        }
+        
+        if (data && data.length > 0) {
+            users = [...users, ...data];
+            if (data.length < pageSize) break;
+            page++;
+        } else {
+            break;
+        }
+    }
     console.log("Admin Stats - Users fetched:", users?.length, userError);
 
     if (userError) {
@@ -1187,10 +1232,10 @@ export const getAdminStats = async () => {
         .from('gift_codes')
         .select('*, gift_code_usages(count)');
 
-    let { data: txs, error: txError } = await supabase.from('transactions').select('*, users(email, display_name, photo_url)').order('created_at', { ascending: false });
+    let { data: txs, error: txError } = await supabase.from('transactions').select('*, users(email, display_name, photo_url)').order('created_at', { ascending: false }).limit(5000);
     if (txError) {
         console.warn("Failed to join users on transactions, falling back to select *", txError);
-        const fallback = await supabase.from('transactions').select('*').order('created_at', { ascending: false });
+        const fallback = await supabase.from('transactions').select('*').order('created_at', { ascending: false }).limit(5000);
         txs = fallback.data;
     }
     console.log("Admin Stats - Transactions fetched:", txs?.length);
@@ -1201,12 +1246,12 @@ export const getAdminStats = async () => {
     // Try to fetch logs from both potential table names
     let usageLogs: any[] = [];
     
-    // Attempt 1: diamond_transactions_log
-    const { data: logs1, error: err1 } = await supabase.from('diamond_transactions_log').select('*');
+    // Attempt 1: diamond_transactions_log (Fetch up to 10000)
+    const { data: logs1, error: err1 } = await supabase.from('diamond_transactions_log').select('*').order('created_at', { ascending: false }).limit(10000);
     if (logs1) usageLogs = [...usageLogs, ...logs1];
     
-    // Attempt 2: diamond_transactions
-    const { data: logs2, error: err2 } = await supabase.from('diamond_transactions').select('*');
+    // Attempt 2: diamond_transactions (Fetch up to 10000)
+    const { data: logs2, error: err2 } = await supabase.from('diamond_transactions').select('*').order('created_at', { ascending: false }).limit(10000);
     if (logs2) usageLogs = [...usageLogs, ...logs2];
 
     // Filter for usage: type 'usage' OR negative amount

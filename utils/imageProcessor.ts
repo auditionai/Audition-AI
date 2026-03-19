@@ -92,6 +92,41 @@ export const createSolidFence = async (base64Str: string, targetAspectRatio: str
     }
 };
   
+export const getClosestAspectRatio = async (base64Str: string): Promise<string> => {
+    try {
+        const img = await loadImageWithTimeout(base64Str);
+        const ratio = img.width / img.height;
+        
+        const supportedRatios = [
+            { str: "1:1", val: 1 },
+            { str: "4:3", val: 4/3 },
+            { str: "3:4", val: 3/4 },
+            { str: "16:9", val: 16/9 },
+            { str: "9:16", val: 9/16 },
+            { str: "4:1", val: 4/1 },
+            { str: "1:4", val: 1/4 },
+            { str: "8:1", val: 8/1 },
+            { str: "1:8", val: 1/8 }
+        ];
+        
+        let closest = supportedRatios[0];
+        let minDiff = Math.abs(ratio - closest.val);
+        
+        for (let i = 1; i < supportedRatios.length; i++) {
+            const diff = Math.abs(ratio - supportedRatios[i].val);
+            if (diff < minDiff) {
+                minDiff = diff;
+                closest = supportedRatios[i];
+            }
+        }
+        
+        return closest.str;
+    } catch (e) {
+        console.warn("Failed to calculate aspect ratio, defaulting to 1:1", e);
+        return "1:1";
+    }
+};
+
 export const optimizePayload = async (base64Str: string, maxWidth = 768): Promise<string> => {
     try {
         const img = await loadImageWithTimeout(base64Str);

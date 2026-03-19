@@ -63,7 +63,8 @@ import {
   Users,
   ExternalLink,
   MessageSquare,
-  AlertTriangle
+  AlertTriangle,
+  RefreshCw
 } from 'lucide-react';
 
 export const Icons = {
@@ -130,5 +131,6 @@ export const Icons = {
   Users,
   ExternalLink,
   MessageSquare,
-  AlertTriangle
+  AlertTriangle,
+  RefreshCw
 };

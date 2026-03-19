@@ -2,10 +2,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Feature, Language, GeneratedImage } from '../../types';
 import { Icons } from '../../components/Icons';
-import { editImageWithInstructions } from '../../services/geminiService';
-import { saveImageToStorage } from '../../services/storageService';
+import { editImageWithInstructions, removeBackgroundImage, upscaleImage } from '../../services/geminiService';
+import { saveImageToStorage, uploadFileToR2 } from '../../services/storageService';
 import { getUserProfile, updateUserBalance } from '../../services/economyService';
 import { useNotification } from '../../components/NotificationSystem';
+import { optimizePayload } from '../../utils/imageProcessor';
 
 interface EditingToolProps {
   feature: Feature;
@@ -31,6 +32,8 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [resultImage, setResultImage] = useState<string | null>(null);
   const [isComparing, setIsComparing] = useState(false);
+  const [aiModel, setAiModel] = useState<'flash' | 'pro'>('flash');
+  const [progressLogs, setProgressLogs] = useState<string[]>([]);
   
   // Specific States
   const isUpscaler = feature.id === 'sharpen_upscale';
@@ -80,7 +83,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
 
       // 3. Background Remover Logic (Force Black & High Quality)
       if (isRemover) {
-          return "Remove the background completely and place the subject on a pure BLACK background (#000000). CRITICAL: Maintain the original image resolution (4K) and subject details exactly. Do NOT downscale, do NOT blur edges, do NOT alter the subject's lighting.";
+          return "Remove the background completely and place the subject on a pure BLACK background (#000000). CRITICAL: Maintain the original image resolution and subject details exactly. Do NOT downscale, do NOT blur edges, do NOT alter the subject's lighting.";
       }
 
       return feature.defaultPrompt || "";
@@ -98,8 +101,9 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
      }
 
      // Cost Calculation: Photo Editor is more expensive (Premium)
-     const cost = isMagicEditor ? 3 : (isUpscaler ? 2 : 1); 
+     const cost = isMagicEditor ? 3 : 2; 
      const user = await getUserProfile();
+     if (!user) return;
      
      if ((user.balance || 0) < cost) {
          notify(lang === 'vi' ? `Số dư không đủ (Cần ${cost} Vcoin)` : `Insufficient balance (Need ${cost} Vcoin)`, 'error');
@@ -108,6 +112,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
 
      setLoading(true);
      setResultImage(null);
+     setProgressLogs([]);
 
      try {
          // Deduct cost and log usage
@@ -115,10 +120,46 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
 
          const instruction = constructPrompt();
          
-         const base64Data = uploadedImage.split(',')[1];
-         const mimeType = uploadedImage.substring(uploadedImage.indexOf(':') + 1, uploadedImage.indexOf(';'));
+         // Optimize the image before sending to reduce payload size and avoid 429/Resource Exhausted
+         // Using 2048 to keep high quality for editing and background removal
+         const optimizedImage = await optimizePayload(uploadedImage, 2048);
+         const base64Data = optimizedImage.split(',')[1];
+         const mimeType = optimizedImage.substring(optimizedImage.indexOf(':') + 1, optimizedImage.indexOf(';'));
 
-         const result = await editImageWithInstructions(base64Data, instruction, mimeType);
+         // --- NEW: UPLOAD TO R2 CLOUD (INPUTS - LOGGING ONLY) ---
+         // We upload to R2 for persistent storage/logging, but we pass the ORIGINAL BASE64 to editImageWithInstructions
+         // to avoid CORS issues when the browser tries to fetch the R2 URL to send to Google.
+         if (uploadedImage && uploadedImage.startsWith('data:')) {
+             setProgressLogs(prev => [...prev, "Đang tải ảnh gốc lên R2 Cloud (Backup)..."]);
+             uploadFileToR2(uploadedImage, 'inputs').then(url => {
+                 console.log("R2 Edit Backup URL:", url);
+             }).catch(e => console.warn("R2 Edit Backup Failed", e));
+         }
+
+         let result;
+         if (isRemover) {
+             result = await removeBackgroundImage(
+                 base64Data, 
+                 instruction, 
+                 mimeType, 
+                 (msg) => setProgressLogs(prev => [...prev, msg])
+             );
+         } else if (isUpscaler) {
+             result = await upscaleImage(
+                 base64Data, 
+                 instruction, 
+                 mimeType, 
+                 (msg) => setProgressLogs(prev => [...prev, msg])
+             );
+         } else {
+             result = await editImageWithInstructions(
+                 base64Data, 
+                 instruction, 
+                 mimeType, 
+                 aiModel,
+                 (msg) => setProgressLogs(prev => [...prev, msg])
+             );
+         }
 
          if (result) {
             setResultImage(result);
@@ -291,10 +332,53 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
              )}
          </div>
 
+         {/* MODEL SELECTOR */}
+         {isMagicEditor && (
+             <div className="space-y-2">
+                 <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1">
+                     <Icons.Cpu className="w-3 h-3" />
+                     {lang === 'vi' ? 'AI Model' : 'AI Model'}
+                 </label>
+                 <div className="flex bg-white/5 p-1 rounded-xl border border-white/10">
+                     <button 
+                         onClick={() => setAiModel('flash')}
+                         className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1 ${aiModel === 'flash' ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                     >
+                         <Icons.Zap className="w-3 h-3" />
+                         Flash (Fast)
+                     </button>
+                     <button 
+                         onClick={() => setAiModel('pro')}
+                         className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1 ${aiModel === 'pro' ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                     >
+                         <Icons.Sparkles className="w-3 h-3" />
+                         Pro (High Quality)
+                     </button>
+                 </div>
+             </div>
+         )}
+
+         {/* HQ Cloud Link (Always On) */}
+         <div className="pt-4 border-t border-white/10 space-y-3">
+             <label className="text-[10px] font-bold text-slate-400 uppercase">Tính năng mặc định (Included)</label>
+             <div className="flex items-center justify-between p-3 rounded-xl bg-audi-cyan/10 border border-audi-cyan/30">
+                 <div className="flex items-center gap-3">
+                     <div className="w-8 h-8 rounded-full bg-audi-cyan/20 flex items-center justify-center text-audi-cyan">
+                         <Icons.Cloud className="w-4 h-4" />
+                     </div>
+                     <div>
+                         <div className="text-xs font-bold text-white">HQ Cloud Link (R2)</div>
+                         <div className="text-[9px] text-audi-cyan font-bold">ACTIVE • FREE</div>
+                     </div>
+                 </div>
+                 <Icons.Lock className="w-4 h-4 text-audi-cyan opacity-50" />
+             </div>
+         </div>
+
          {/* COST & ACTION */}
          <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/10">
              <span className="text-xs text-slate-400 font-bold uppercase">{lang === 'vi' ? 'Chi phí' : 'Cost'}</span>
-             <span className="text-sm font-bold text-audi-yellow">{isMagicEditor ? 3 : (isUpscaler ? 2 : 1)} Vcoin</span>
+             <span className="text-sm font-bold text-audi-yellow">{isMagicEditor ? 3 : 2} Vcoin</span>
          </div>
 
          <button 
@@ -310,13 +394,35 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
       {/* RESULT AREA */}
       <div className="flex-1 glass-panel rounded-3xl p-6 flex flex-col items-center justify-center bg-slate-100/50 dark:bg-black/20 min-h-[400px] relative overflow-hidden">
           {loading ? (
-               <div className="text-center animate-pulse z-10">
+               <div className="text-center animate-pulse z-10 w-full max-w-md">
                    <div className="relative w-24 h-24 mx-auto mb-6">
                        <div className={`absolute inset-0 rounded-full border-4 border-t-transparent animate-spin ${isUpscaler ? 'border-audi-cyan' : isMagicEditor ? 'border-audi-purple' : 'border-audi-pink'}`}></div>
                        <Icons.Sparkles className={`w-10 h-10 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 ${isUpscaler ? 'text-audi-cyan' : isMagicEditor ? 'text-audi-purple' : 'text-audi-pink'}`} />
                    </div>
                    <p className="text-white font-bold text-lg font-game tracking-widest">{lang === 'vi' ? 'AI ĐANG SUY NGHĨ...' : 'AI THINKING...'}</p>
-                   <p className="text-slate-500 text-sm mt-2">{isMagicEditor ? (lang === 'vi' ? 'Đang thực hiện chỉnh sửa...' : 'Editing...') : (lang === 'vi' ? 'Đang xử lý...' : 'Processing...')}</p>
+                   
+                   {/* Progress Logs */}
+                   <div className="mt-6 text-left bg-black/40 rounded-xl p-4 border border-white/5 h-32 overflow-y-auto custom-scrollbar flex flex-col gap-2">
+                       {progressLogs.length === 0 ? (
+                           <div className="text-xs text-slate-500 italic flex items-center gap-2">
+                               <Icons.Loader className="w-3 h-3 animate-spin" />
+                               {lang === 'vi' ? 'Đang khởi tạo...' : 'Initializing...'}
+                           </div>
+                       ) : (
+                           progressLogs.map((log, idx) => (
+                               <div key={idx} className="text-xs text-slate-300 font-mono animate-fade-in flex items-start gap-2">
+                                   <span className="text-audi-cyan mt-0.5">›</span>
+                                   <span>{log}</span>
+                               </div>
+                           ))
+                       )}
+                   </div>
+                   <div className="mt-6 w-full bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3 flex items-start gap-3 animate-pulse text-left">
+                       <Icons.AlertTriangle className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" />
+                       <p className="text-xs text-yellow-400 font-bold leading-relaxed">
+                           {lang === 'vi' ? 'Quá trình xử lý thường mất từ 5-10 phút. Vui lòng chờ đợi quá trình hoàn tất, không tải lại trang!' : 'Processing usually takes 5-10 minutes. Please wait for the process to complete, do not reload the page!'}
+                       </p>
+                   </div>
                </div>
           ) : resultImage ? (
               <div className="w-full h-full flex flex-col items-center justify-center gap-4 z-10">

@@ -130,13 +130,14 @@ function AppContent() {
       if (!supabase) return;
       
       try {
+          const { data: { user } } = await supabase.auth.getUser();
           const { data, error } = await supabase
             .from('users')
             .select('is_admin')
             .eq('id', userId)
-            .single();
+            .maybeSingle();
 
-          if (!error && data && data.is_admin === true) {
+          if (user?.email === 'khoknightyb97@gmail.com' || (data && data.is_admin === true)) {
               console.log("Admin privileges granted.");
               setUserRole('admin');
           } else {

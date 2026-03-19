@@ -66,6 +66,33 @@ interface ConfirmState {
     onConfirm: () => void;
 }
 
+const CooldownTimer = ({ lastUsedAt }: { lastUsedAt: string }) => {
+    const [timeLeft, setTimeLeft] = useState<number>(0);
+
+    useEffect(() => {
+        const calculateTimeLeft = () => {
+            const lastUsed = new Date(lastUsedAt).getTime();
+            const now = Date.now();
+            const diff = now - lastUsed;
+            const remaining = Math.max(0, 60000 - diff);
+            setTimeLeft(remaining);
+        };
+
+        calculateTimeLeft();
+        const interval = setInterval(calculateTimeLeft, 1000);
+        return () => clearInterval(interval);
+    }, [lastUsedAt]);
+
+    if (timeLeft <= 0) return <span className="text-[10px] text-green-400 font-mono">Sẵn sàng</span>;
+
+    return (
+        <span className="text-[10px] text-amber-400 font-mono flex items-center gap-1">
+            <Icons.Clock className="w-3 h-3" />
+            Đang chờ: {Math.ceil(timeLeft / 1000)}s
+        </span>
+    );
+};
+
 // SQL Code for fixing Giftcode table issues
 const GIFTCODE_FIX_SQL = `-- FIX DATABASE STRUCTURE (GIFTCODES & SETTINGS)
 
@@ -125,14 +152,14 @@ DROP POLICY IF EXISTS "Public read giftcodes" ON public.gift_codes;
 CREATE POLICY "Public read giftcodes" ON public.gift_codes FOR SELECT TO anon, authenticated USING (true);
 
 DROP POLICY IF EXISTS "Admin manage giftcodes" ON public.gift_codes;
-CREATE POLICY "Admin manage giftcodes" ON public.gift_codes FOR ALL TO authenticated USING (true);
+CREATE POLICY "Admin manage giftcodes" ON public.gift_codes FOR ALL TO authenticated USING (public.check_is_admin());
 
 -- Policies for System Settings
 DROP POLICY IF EXISTS "Public read settings" ON public.system_settings;
 CREATE POLICY "Public read settings" ON public.system_settings FOR SELECT TO anon, authenticated USING (true);
 
 DROP POLICY IF EXISTS "Admin manage settings" ON public.system_settings;
-CREATE POLICY "Admin manage settings" ON public.system_settings FOR ALL TO authenticated USING (true);
+CREATE POLICY "Admin manage settings" ON public.system_settings FOR ALL TO authenticated USING (public.check_is_admin());
 
 -- 6. API KEYS ROTATION SUPPORT
 ALTER TABLE public.api_keys ADD COLUMN IF NOT EXISTS last_used_at timestamptz DEFAULT now();
@@ -246,7 +273,7 @@ ON CONFLICT (id) DO UPDATE SET
 -- 5. Restore Admin Rights (Replace email if needed)
 UPDATE public.users 
 SET is_admin = true 
-WHERE email = 'codycn2804@gmail.com';
+WHERE email = 'khoknightyb97@gmail.com';
 
 -- 6. Re-enable RLS with SAFE policies
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
@@ -254,28 +281,90 @@ ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 -- Policy: Everyone can read basic info
 CREATE POLICY "Public read access" ON public.users FOR SELECT USING (true);
 
--- Policy: Users can update their own data
-CREATE POLICY "Self update" ON public.users FOR UPDATE USING (auth.uid() = id);
+-- Policy: Users can update their own data (EXCLUDING diamonds and is_admin)
+-- Note: This policy allows updating display_name and photo_url
+CREATE POLICY "Self update" ON public.users FOR UPDATE USING (auth.uid() = id)
+WITH CHECK (
+  auth.uid() = id AND 
+  (is_admin = (SELECT is_admin FROM public.users WHERE id = auth.uid())) AND
+  (diamonds = (SELECT diamonds FROM public.users WHERE id = auth.uid()))
+);
 
 -- Policy: Admins can do everything (Uses SECURITY DEFINER function to avoid recursion)
 CREATE POLICY "Admin full access" ON public.users FOR ALL USING (
   public.check_is_admin() = true
 );
 
--- 7. Refresh Schema Cache (Fixes "column does not exist" errors)
+-- 7. RPC FOR SECURE BALANCE UPDATES (Prevents client-side manipulation)
+CREATE OR REPLACE FUNCTION public.secure_update_balance(amount numeric, reason text, log_type text)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  -- Update balance
+  UPDATE public.users 
+  SET diamonds = diamonds + amount
+  WHERE id = auth.uid();
+
+  -- Log transaction
+  INSERT INTO public.diamond_transactions_log (user_id, amount, reason, type)
+  VALUES (auth.uid(), amount, reason, log_type);
+END;
+$$;
+
+-- 8. Refresh Schema Cache (Fixes "column does not exist" errors)
 NOTIFY pgrst, 'reload config';
 `;
 
 const BALANCE_FIX_SQL = `
--- FIX NEGATIVE BALANCES SCRIPT
+-- 1. RESET NEGATIVE BALANCES
+UPDATE public.users SET diamonds = 0 WHERE diamonds < 0;
 
--- 1. Reset negative balances to 0
-UPDATE public.users 
-SET diamonds = 0 
-WHERE diamonds < 0;
+-- 2. RECONSTRUCT BALANCES FROM TRANSACTION LOGS (CRITICAL RECOVERY)
+-- Use this to restore accurate balances if the 'diamonds' column was corrupted.
+-- This script sums up all paid transactions + all usage/reward logs.
 
--- 2. (Optional) Manually set balance for specific user (Uncomment to use)
--- UPDATE public.users SET diamonds = 2000 WHERE email = 'codycn2804@gmail.com';
+DO $$
+DECLARE
+    user_record RECORD;
+    total_from_transactions NUMERIC;
+    total_from_logs NUMERIC;
+    final_balance NUMERIC;
+BEGIN
+    FOR user_record IN SELECT id, email FROM public.users LOOP
+        -- Sum from paid transactions (Topups)
+        SELECT COALESCE(SUM(diamonds_received), 0) INTO total_from_transactions
+        FROM public.transactions
+        WHERE user_id = user_record.id AND status = 'paid';
+
+        -- Sum from logs (Rewards, Usage, Giftcodes)
+        -- Note: Usage amounts are stored as negative numbers (e.g., -1)
+        SELECT COALESCE(SUM(amount), 0) INTO total_from_logs
+        FROM public.diamond_transactions_log
+        WHERE user_id = user_record.id;
+
+        final_balance := total_from_transactions + total_from_logs;
+
+        -- Update user balance with the calculated total
+        UPDATE public.users
+        SET diamonds = GREATEST(0, final_balance)
+        WHERE id = user_record.id;
+        
+        RAISE NOTICE 'Restored %: % (From Tx: %, From Logs: %)', 
+            user_record.email, final_balance, total_from_transactions, total_from_logs;
+    END LOOP;
+END $$;
+
+-- 3. AUDIT SUSPICIOUS BALANCES
+/*
+SELECT u.email, u.diamonds, u.display_name
+FROM public.users u
+LEFT JOIN public.transactions t ON u.id = t.user_id AND t.status = 'paid'
+WHERE u.is_admin = false
+GROUP BY u.email, u.diamonds, u.display_name
+HAVING u.diamonds > 500 AND COUNT(t.id) = 0;
+*/
 `;
 
 // Helper for time ago
@@ -1192,7 +1281,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           </thead>
                           <tbody className="divide-y divide-white/5">
                               {(stats?.usersList || [])
-                                  .filter((u: any) => u.email.toLowerCase().includes(userSearchEmail.toLowerCase()))
+                                  .filter((u: any) => (u.email || '').toLowerCase().includes(userSearchEmail.toLowerCase()))
                                   .sort((a: UserProfile, b: UserProfile) => {
                                       const aOnline = isUserOnline(a.lastActive);
                                       const bOnline = isUserOnline(b.lastActive);
@@ -1250,7 +1339,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   {/* Mobile View */}
                   <div className="md:hidden space-y-4">
                       {(stats?.usersList || [])
-                          .filter((u: any) => u.email.toLowerCase().includes(userSearchEmail.toLowerCase()))
+                          .filter((u: any) => (u.email || '').toLowerCase().includes(userSearchEmail.toLowerCase()))
                           .sort((a: UserProfile, b: UserProfile) => {
                               const aOnline = isUserOnline(a.lastActive);
                               const bOnline = isUserOnline(b.lastActive);
@@ -1711,10 +1800,23 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
                   {/* List of Keys in DB */}
                   <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
-                      <h3 className="font-bold text-lg text-white mb-4 flex items-center gap-2">
-                          <Icons.Database className="w-5 h-5 text-audi-cyan" />
-                          Danh sách Service Account trong Database
-                      </h3>
+                      <div className="flex justify-between items-center mb-4">
+                          <h3 className="font-bold text-lg text-white flex items-center gap-2">
+                              <Icons.Database className="w-5 h-5 text-audi-cyan" />
+                              Danh sách Service Account trong Database
+                          </h3>
+                          <button 
+                              onClick={async () => {
+                                  const keys = await getApiKeysList();
+                                  setDbKeys(keys);
+                                  showToast('Đã làm mới danh sách key', 'success');
+                              }}
+                              className="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-slate-300 transition-colors"
+                              title="Làm mới danh sách"
+                          >
+                              <Icons.RefreshCw className="w-4 h-4" />
+                          </button>
+                      </div>
                       
                       <div className="hidden md:block overflow-x-auto">
                           <table className="w-full text-left text-sm text-slate-400">
@@ -1756,9 +1858,14 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               {k.key_value ? `${k.key_value.substring(0, 8)}...${k.key_value.substring(k.key_value.length - 6)}` : 'N/A'}
                                           </td>
                                           <td className="px-4 py-3">
-                                              <span className={`text-[10px] font-bold px-2 py-1 rounded border ${k.status === 'active' ? 'bg-green-500/20 text-green-500 border-green-500/50' : 'bg-slate-500/20 text-slate-500 border-slate-500/50'}`}>
-                                                  {k.status?.toUpperCase() || 'UNKNOWN'}
-                                              </span>
+                                              <div className="flex flex-col gap-1">
+                                                  <span className={`text-[10px] font-bold px-2 py-1 rounded border w-fit ${k.status === 'active' ? 'bg-green-500/20 text-green-500 border-green-500/50' : 'bg-slate-500/20 text-slate-500 border-slate-500/50'}`}>
+                                                      {k.status?.toUpperCase() || 'UNKNOWN'}
+                                                  </span>
+                                                  {k.last_used_at && (
+                                                      <CooldownTimer lastUsedAt={k.last_used_at} />
+                                                  )}
+                                              </div>
                                           </td>
                                           <td className="px-4 py-3 text-xs">{new Date(k.created_at).toLocaleString()}</td>
                                           <td className="px-4 py-3 text-right flex justify-end gap-2">
@@ -1794,9 +1901,14 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           <div className="font-bold text-white text-sm">{displayName}</div>
                                           <div className="font-mono text-[10px] text-slate-500">{k.id}</div>
                                       </div>
-                                      <span className={`text-[10px] font-bold px-2 py-1 rounded border ${k.status === 'active' ? 'bg-green-500/20 text-green-500 border-green-500/50' : 'bg-slate-500/20 text-slate-500 border-slate-500/50'}`}>
-                                          {k.status?.toUpperCase()}
-                                      </span>
+                                      <div className="flex flex-col items-end gap-1">
+                                          <span className={`text-[10px] font-bold px-2 py-1 rounded border ${k.status === 'active' ? 'bg-green-500/20 text-green-500 border-green-500/50' : 'bg-slate-500/20 text-slate-500 border-slate-500/50'}`}>
+                                              {k.status?.toUpperCase()}
+                                          </span>
+                                          {k.last_used_at && (
+                                              <CooldownTimer lastUsedAt={k.last_used_at} />
+                                          )}
+                                      </div>
                                   </div>
                                   <div className="font-mono text-xs text-slate-300 break-all mb-3 bg-black/30 p-2 rounded">
                                       {k.key_value ? `${k.key_value.substring(0, 15)}...` : 'N/A'}

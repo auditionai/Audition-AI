@@ -20,9 +20,9 @@ export const ToolWorkspace: React.FC<ToolWorkspaceProps> = ({ feature, lang, onB
   const renderTool = () => {
     switch (feature.toolType) {
         case 'generation':
-            return <GenerationTool feature={feature} lang={lang} onNavigateToFeature={onNavigateToFeature} />;
+            return <GenerationTool key={feature.id} feature={feature} lang={lang} onNavigateToFeature={onNavigateToFeature} />;
         case 'editing':
-            return <EditingTool feature={feature} lang={lang} />;
+            return <EditingTool key={feature.id} feature={feature} lang={lang} />;
         default:
             return <div className="p-10 text-center">Unknown tool type</div>;
     }

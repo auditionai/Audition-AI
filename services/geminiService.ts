@@ -924,8 +924,14 @@ export const generateWithTramsangtao = async (
     });
 
     if (!genRes.ok) {
-        const err = await genRes.json();
-        throw new Error(`Image API error: ${err.error || genRes.statusText}`);
+        let errMessage = genRes.statusText;
+        try {
+            const err = await genRes.json();
+            errMessage = err.error || errMessage;
+        } catch (e) {
+            errMessage = `Server returned ${genRes.status} ${genRes.statusText}`;
+        }
+        throw new Error(`Image API error: ${errMessage}`);
     }
 
     const genData = await genRes.json();
@@ -979,8 +985,14 @@ export const runTramsangtaoGenerate = async (
     });
 
     if (!genRes.ok) {
-        const err = await genRes.json();
-        throw new Error(`Image API error: ${err.error || genRes.statusText}`);
+        let errMessage = genRes.statusText;
+        try {
+            const err = await genRes.json();
+            errMessage = err.error || errMessage;
+        } catch (e) {
+            errMessage = `Server returned ${genRes.status} ${genRes.statusText}`;
+        }
+        throw new Error(`Image API error: ${errMessage}`);
     }
 
     const genData = await genRes.json();

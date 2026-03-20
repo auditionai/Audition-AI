@@ -162,11 +162,17 @@ function AppContent() {
   };
 
   const handleNavigate = (view: ViewId, data?: any) => {
+    if (view === 'tools') {
+      if (!selectedFeature) {
+        setSelectedFeature(APP_CONFIG.main_features[0]);
+      }
+      setCurrentView('tool_workspace');
+      return;
+    }
+
     setCurrentView(view);
     if (view === 'payment_gateway' && data?.transaction) {
         setPendingTransaction(data.transaction);
-    } else if (view !== 'tool_workspace') {
-      setSelectedFeature(null);
     }
   };
 
@@ -190,17 +196,6 @@ function AppContent() {
   const renderContent = () => {
     switch (currentView) {
       case 'home':
-        return <Home lang={lang} onSelectFeature={handleSelectFeature} onNavigate={handleNavigate} onOpenCheckin={() => setShowCheckin(true)} isMaintenance={maintenanceMode.isActive && userRole !== 'admin'} maintenanceMessage={maintenanceMode.message} />;
-      case 'tool_workspace':
-        return selectedFeature ? (
-          <ToolWorkspace 
-            feature={selectedFeature} 
-            lang={lang} 
-            onBack={() => handleNavigate('home')} 
-            onNavigateToFeature={handleNavigateToFeature}
-          />
-        ) : <Home lang={lang} onSelectFeature={handleSelectFeature} onNavigate={handleNavigate} onOpenCheckin={() => setShowCheckin(true)} isMaintenance={maintenanceMode.isActive && userRole !== 'admin'} maintenanceMessage={maintenanceMode.message} />;
-      case 'tools':
         return <Home lang={lang} onSelectFeature={handleSelectFeature} onNavigate={handleNavigate} onOpenCheckin={() => setShowCheckin(true)} isMaintenance={maintenanceMode.isActive && userRole !== 'admin'} maintenanceMessage={maintenanceMode.message} />;
       case 'admin':
         return <Admin lang={lang} isAdmin={userRole === 'admin'} />;
@@ -228,7 +223,7 @@ function AppContent() {
             />
         ) : <TopUp lang={lang} onNavigate={handleNavigate} />;
       default:
-        return <Home lang={lang} onSelectFeature={handleSelectFeature} onNavigate={handleNavigate} onOpenCheckin={() => setShowCheckin(true)} isMaintenance={maintenanceMode.isActive && userRole !== 'admin'} maintenanceMessage={maintenanceMode.message} />;
+        return null;
     }
   };
 
@@ -267,7 +262,22 @@ function AppContent() {
               </div>
           </div>
       )}
-      {renderContent()}
+      
+      {/* Tool Workspace - Kept mounted to preserve state */}
+      <div style={{ display: currentView === 'tool_workspace' ? 'block' : 'none', height: '100%' }}>
+        {selectedFeature ? (
+          <ToolWorkspace 
+            feature={selectedFeature} 
+            lang={lang} 
+            onBack={() => handleNavigate('home')} 
+            onNavigateToFeature={handleNavigateToFeature}
+          />
+        ) : (
+          currentView === 'tool_workspace' && <Home lang={lang} onSelectFeature={handleSelectFeature} onNavigate={handleNavigate} onOpenCheckin={() => setShowCheckin(true)} isMaintenance={maintenanceMode.isActive && userRole !== 'admin'} maintenanceMessage={maintenanceMode.message} />
+        )}
+      </div>
+
+      {currentView !== 'tool_workspace' && renderContent()}
     </Layout>
   );
 }

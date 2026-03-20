@@ -67,7 +67,9 @@ import {
   Globe,
   Video,
   Activity,
-  RefreshCw
+  RefreshCw,
+  ChevronUp,
+  ChevronDown
 } from 'lucide-react';
 
 export const Icons = {
@@ -138,5 +140,7 @@ export const Icons = {
   Globe,
   Video,
   Activity,
-  RefreshCw
+  RefreshCw,
+  ChevronUp,
+  ChevronDown
 };

@@ -107,7 +107,8 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
     try {
         const transactionData: any = {
             amount,
-            reason: reason, 
+            reason: reason,
+            description: reason, // Add description as well since some schemas use it
             type
         };
         
@@ -117,11 +118,24 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
             user_id: userId
         });
         
-        if (error && error.message.includes('column "user_id" does not exist')) {
-             await supabase.from('vcoin_transactions').insert({
-                ...transactionData,
-                uid: userId
-            });
+        if (error) {
+            // If it fails, try with just description and amount
+            const fallbackData = {
+                amount,
+                description: reason,
+                type,
+                user_id: userId
+            };
+            const { error: err2 } = await supabase.from('vcoin_transactions').insert(fallbackData);
+            
+            if (err2 && err2.message.includes('column "user_id" does not exist')) {
+                 await supabase.from('vcoin_transactions').insert({
+                    amount,
+                    description: reason,
+                    type,
+                    uid: userId
+                });
+            }
         }
     } catch (e) {
         // Completely silent
@@ -811,7 +825,7 @@ export const getUnifiedHistory = async (targetUserId?: string): Promise<HistoryI
         history.push({
             id: l.id,
             createdAt: l.created_at,
-            description: l.reason || l.note || 'Giao dịch hệ thống', // Fallback to note or default
+            description: l.description || l.reason || l.note || l.action || l.details || 'Giao dịch hệ thống', // Fallback to note or default
             vcoinChange: l.amount, // Amount is already signed (negative for usage)
             type: l.type || 'usage', // Fallback to usage if type is missing (for legacy logs)
             status: 'success'

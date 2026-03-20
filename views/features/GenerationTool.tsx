@@ -536,36 +536,17 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
         addLog("Xác thực thành công. Bắt đầu quá trình tạo ảnh...");
 
       // 3. Deduct Balance
-      await updateUserBalance(-cost, `Gen: ${feature.name['en']}`, 'usage');
+      const txDesc = lang === 'vi' ? `Tạo ảnh: ${feature.name['vi']}` : `Gen: ${feature.name['en']}`;
+      await updateUserBalance(-cost, txDesc, 'usage');
       
       let structureRefData: string | undefined = undefined;
       let sourceForStructure = refImage || feature.preview_image;
       
-      // --- NEW: UPLOAD TO R2 CLOUD (INPUTS - LOGGING ONLY) ---
-      // We upload to R2 for persistent storage/logging, but we pass the ORIGINAL BASE64 to generateImage
-      // to avoid CORS issues when the browser tries to fetch the R2 URL to send to Google.
-      
-      // Upload Reference Image
-      if (sourceForStructure && sourceForStructure.startsWith('data:')) {
-          addLog("Đang tải ảnh mẫu lên R2 Cloud (Backup)...");
-          uploadFileToR2(sourceForStructure, 'inputs').then(url => {
-              console.log("R2 Ref Backup URL:", url);
-          }).catch(e => console.warn("R2 Ref Backup Failed", e));
-          
-          // CRITICAL FIX: DO NOT OVERWRITE sourceForStructure with URL.
-          // Keep it as Base64 so generateImage can process it directly without CORS errors.
-      }
-
-      // Upload Character Images
+      // Character Images
       const characterDataList = [];
       for (const char of characters) {
           let bodyData = char.bodyImage;
           let faceData = char.bodyImage; // Automatically use bodyImage as faceImage
-
-          if (bodyData && bodyData.startsWith('data:')) {
-              addLog(`Đang tải ảnh NV ${char.id} lên Cloud (Backup)...`);
-              uploadFileToR2(bodyData, 'inputs').catch(e => console.warn("R2 Body Backup Failed", e));
-          }
 
           characterDataList.push({
               id: char.id,
@@ -575,7 +556,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
               shoesImage: null
           });
       }
-      
+
       // 4. STRUCTURE PROCESSING (Heavy Operation)
       // Note: createSolidFence handles URLs internally via loadImageWithTimeout
       if (refImage) {
@@ -599,7 +580,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
       // Create a temporary job ID to track concurrency
       tempJobId = crypto.randomUUID();
-      try {
+      
       tempImage = {
           id: tempJobId,
           url: '', // Empty URL means it's processing
@@ -612,86 +593,66 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       };
       await saveImageToStorage(tempImage);
       triggerPoll();
-          const result = await Promise.race([
-              generateImage(
-                  finalPrompt, 
-                  aspectRatio, 
-                  structureRefData, 
-                  characterDataList, 
-                  resolution,
-                  aiModel, // Use selected AI Model
-                  useSearch,
-                  useCloudRef, 
-                  (msg) => addLog(msg),
-                  activeStylePreset, // Pass the style reference
-                  availableStyles, // Pass the pool for auto-selection
-                  timeoutMs // Pass Dynamic Timeout
-              ),
-              new Promise<null>((_, reject) => setTimeout(() => reject(new Error(`Timeout: Limit reached (${timeoutMs/60000} mins)`)), timeoutMs))
-          ]);
+      const { jobId, resultPromise } = await generateImage(
+          finalPrompt, 
+          aspectRatio, 
+          structureRefData, 
+          characterDataList, 
+          resolution,
+          aiModel, // Use selected AI Model
+          useSearch,
+          useCloudRef, 
+          (msg) => addLog(msg),
+          activeStylePreset, // Pass the style reference
+          availableStyles, // Pass the pool for auto-selection
+          timeoutMs // Pass Dynamic Timeout
+      );
 
-          if (result) {
-            addLog(lang === 'vi' ? 'Hoàn tất!' : 'Finalizing...');
-            setResultImage(result); 
-            
-            const newImage: GeneratedImage = {
-              ...tempImage,
-              url: result,
-              status: 'completed'
-            };
-            setGeneratedData(newImage);
-            
-            saveImageToStorage(newImage).then(() => triggerPoll()).catch(console.error);
-            setStage('result');
-            notify(lang === 'vi' ? 'Tạo ảnh thành công!' : 'Generation successful!', 'success');
-            
-            // Bắt đầu đếm ngược 60s sau khi tạo thành công
-            startCooldown(60);
-          } else {
-              throw new Error("No result returned (Empty)");
-          }
-      } catch (error: any) {
-          const is429 = error.message.includes('429') || error.message.includes('Resource has been exhausted') || error.message.includes('Quota exceeded');
-          const isTimeout = error.message.includes('Timeout');
-          
-          if (is429 || isTimeout) {
-              addLog(lang === 'vi' ? "Vertex AI quá tải hoặc hết thời gian. Đang chuyển sang Trạm Sáng Tạo (Chạy ngầm)..." : "Vertex AI overloaded/timeout. Switching to Trạm Sáng Tạo (Background)...");
-              
-              // Determine reference image for TST (TST only takes 1 image)
-              let tstRefImage: string | null | undefined = structureRefData;
-              if (!tstRefImage && characterDataList.length > 0) {
-                  tstRefImage = characterDataList[0].image;
-              }
-              
-              const jobId = await generateWithTramsangtao(
-                  finalPrompt,
-                  aiModel,
-                  resolution,
-                  aspectRatio,
-                  tstRefImage || undefined,
-                  'image/jpeg', // assuming jpeg
-                  addLog
-              );
-              
-              // Save job to local storage for Gallery to poll
-              if (tempImage) {
-                  const newImage: GeneratedImage = {
-                      ...tempImage,
-                      engine: aiModel === 'flash' ? `TST Flash ${resolution}` : `TST Pro ${resolution}`,
-                      status: 'queued',
-                      jobId: jobId
-                  };
-                  saveImageToStorage(newImage).then(() => triggerPoll()).catch(console.error);
-              }
-              
-              notify(lang === 'vi' ? 'Quá trình tạo ảnh được chuyển sang chế độ chạy ngầm, kết quả sẽ được hiển thị trong lịch sử, bạn có thể quay lại và bắt đầu tạo ảnh mới trong lúc chờ đợi.' : 'Generation moved to background. Check History later.', 'info');
-              setStage('input'); // Reset UI so user can generate again
-              return; // Exit successfully
-          } else {
-              throw error; // Rethrow other errors to be caught by the outer catch block
-          }
+      // Save the jobId to the tempImage so the background poller can track it
+      const queuedImage: GeneratedImage = {
+          ...tempImage,
+          jobId: jobId,
+          status: 'processing'
+      };
+      await saveImageToStorage(queuedImage);
+      triggerPoll();
+
+      // Wait for the result or timeout
+      const result = await Promise.race([
+          resultPromise,
+          new Promise<null>((_, reject) => setTimeout(() => reject(new Error(`Timeout: Limit reached (${timeoutMs/60000} mins)`)), timeoutMs))
+      ]);
+
+      if (result) {
+        addLog(lang === 'vi' ? 'Hoàn tất!' : 'Finalizing...');
+        setResultImage(result); 
+        
+        const newImage: GeneratedImage = {
+          ...queuedImage,
+          url: result,
+          status: 'completed'
+        };
+        setGeneratedData(newImage);
+        
+        saveImageToStorage(newImage).then(() => triggerPoll()).catch(console.error);
+        setStage('result');
+        notify(lang === 'vi' ? 'Tạo ảnh thành công!' : 'Generation successful!', 'success');
+        
+        // Bắt đầu đếm ngược 60s sau khi tạo thành công
+        startCooldown(60);
+      } else {
+          throw new Error("No result returned (Empty)");
       }
     } catch (error: any) {
+      const isTimeout = error.message.includes('Timeout');
+      
+      if (isTimeout) {
+          addLog(lang === 'vi' ? "Quá trình tạo ảnh đang chạy ngầm, kết quả sẽ được hiển thị trong lịch sử." : "Generation moved to background. Check History later.");
+          notify(lang === 'vi' ? 'Quá trình tạo ảnh được chuyển sang chế độ chạy ngầm, kết quả sẽ được hiển thị trong lịch sử, bạn có thể quay lại và bắt đầu tạo ảnh mới trong lúc chờ đợi.' : 'Generation moved to background. Check History later.', 'info');
+          setStage('input'); // Reset UI so user can generate again
+          return; // Exit successfully, do not refund
+      }
+      
       console.error(error);
       const errorMsg = error.message || (lang === 'vi' ? 'Lỗi không xác định' : 'Unknown Error');
       addLog(`❌ LỖI: ${errorMsg}`);
@@ -701,7 +662,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       deleteImageFromStorage(tempJobId).then(() => triggerPoll()).catch(console.error);
       
       try {
-          await updateUserBalance(cost, `Refund: ${feature.name['en']} Failed`, 'refund');
+          const refundDesc = lang === 'vi' ? `Hoàn tiền: ${feature.name['vi']} (Lỗi)` : `Refund: ${feature.name['en']} Failed`;
+          await updateUserBalance(cost, refundDesc, 'refund');
           notify(lang === 'vi' ? `Lỗi: ${errorMsg}. Đã hoàn tiền.` : `Error: ${errorMsg}. Refunded.`, 'error');
       } catch (refundError) {
           console.error("Refund failed", refundError);

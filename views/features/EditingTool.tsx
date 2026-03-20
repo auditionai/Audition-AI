@@ -116,7 +116,8 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
 
      try {
          // Deduct cost and log usage
-         await updateUserBalance(-cost, `Edit: ${feature.name['en']}`, 'usage');
+         const txDesc = lang === 'vi' ? `Chỉnh sửa: ${feature.name['vi']}` : `Edit: ${feature.name['en']}`;
+         await updateUserBalance(-cost, txDesc, 'usage');
 
          const instruction = constructPrompt();
          
@@ -146,8 +147,10 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
          }
 
          let result;
+         let jobResult: { jobId: string, resultPromise: Promise<string> } | null = null;
+         
          if (isRemover) {
-             result = await removeBackgroundImage(
+             jobResult = await removeBackgroundImage(
                  base64Data, 
                  instruction, 
                  mimeType, 
@@ -155,7 +158,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
                  (msg) => setProgressLogs(prev => [...prev, msg])
              );
          } else if (isUpscaler) {
-             result = await upscaleImage(
+             jobResult = await upscaleImage(
                  base64Data, 
                  instruction, 
                  mimeType, 
@@ -163,7 +166,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
                  (msg) => setProgressLogs(prev => [...prev, msg])
              );
          } else {
-             result = await editImageWithInstructions(
+             jobResult = await editImageWithInstructions(
                  base64Data, 
                  instruction, 
                  mimeType, 
@@ -173,26 +176,42 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
              );
          }
 
-         if (result) {
-            setResultImage(result);
-            const newImage: GeneratedImage = {
+         if (jobResult) {
+            const tempImage: GeneratedImage = {
                 id: crypto.randomUUID(),
-                url: result,
+                url: '',
                 prompt: instruction,
                 timestamp: Date.now(),
                 toolId: feature.id,
                 toolName: feature.name['en'],
-                engine: feature.engine
+                engine: feature.engine,
+                jobId: jobResult.jobId,
+                status: 'processing'
             };
-            await saveImageToStorage(newImage);
-            notify(lang === 'vi' ? 'Xử lý thành công!' : 'Processing successful!', 'success');
+            await saveImageToStorage(tempImage);
+            
+            const result = await jobResult.resultPromise;
+            
+            if (result) {
+                setResultImage(result);
+                const newImage: GeneratedImage = {
+                    ...tempImage,
+                    url: result,
+                    status: 'completed'
+                };
+                await saveImageToStorage(newImage);
+                notify(lang === 'vi' ? 'Xử lý thành công!' : 'Processing successful!', 'success');
+            } else {
+                throw new Error("Processing failed");
+            }
          } else {
-             throw new Error("Processing failed");
+             throw new Error("Job initiation failed");
          }
      } catch (error) {
          console.error(error);
          // Refund on fail
-         await updateUserBalance(cost, `Refund: ${feature.name['en']} Failed`, 'refund');
+         const refundDesc = lang === 'vi' ? `Hoàn tiền: ${feature.name['vi']} (Lỗi)` : `Refund: ${feature.name['en']} Failed`;
+         await updateUserBalance(cost, refundDesc, 'refund');
          notify(lang === 'vi' ? 'Xử lý thất bại' : 'Processing failed', 'error');
      } finally {
          setLoading(false);

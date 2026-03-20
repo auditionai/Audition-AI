@@ -147,8 +147,31 @@ export const saveImageToStorage = async (image: GeneratedImage): Promise<void> =
   const user = await getUserProfile();
   const imageWithUser = { ...image, userName: user.username, isShared: false };
 
-  // 1. CLOUDFLARE R2 + SUPABASE METADATA (PRIMARY)
-  if (r2Client && supabase && user.id.length > 20) {
+  // 0. DIRECT URL (TRẠM SÁNG TẠO API)
+  if (image.url && image.url.startsWith('http') && supabase && user.id.length > 20) {
+      console.log("[Storage] Image is already a URL. Saving metadata only...");
+      try {
+          const { error: dbError } = await supabase
+              .from(TABLE_NAME)
+              .insert({
+                  id: image.id,
+                  user_id: user.id, 
+                  image_url: image.url, // Direct URL
+                  prompt: image.prompt,
+                  model_used: image.engine,
+                  created_at: new Date(image.timestamp).toISOString(),
+                  is_public: false
+              });
+
+          if (dbError) throw dbError;
+          return;
+      } catch (error) {
+          console.error("Supabase DB Error (Direct URL):", error);
+          // Fallback to IndexedDB
+      }
+  }
+  // 1. CLOUDFLARE R2 + SUPABASE METADATA (PRIMARY - For Base64)
+  else if (image.url && image.url.startsWith('data:') && r2Client && supabase && user.id.length > 20) {
     console.log("[Storage] Attempting R2 Upload...");
     try {
         const { blob, type, buffer } = processBase64Data(image.url);
@@ -195,8 +218,8 @@ export const saveImageToStorage = async (image: GeneratedImage): Promise<void> =
     }
   } 
   
-  // 2. SUPABASE STORAGE (LEGACY BACKUP)
-  else if (supabase && user.id.length > 20 && !r2Client) {
+  // 2. SUPABASE STORAGE (LEGACY BACKUP - For Base64)
+  else if (image.url && image.url.startsWith('data:') && supabase && user.id.length > 20 && !r2Client) {
     try {
       const { blob } = processBase64Data(image.url);
       const fileName = `${image.id}.png`;
@@ -234,7 +257,7 @@ export const saveImageToStorage = async (image: GeneratedImage): Promise<void> =
   return new Promise((resolve, reject) => {
     const transaction = db.transaction([STORE_NAME], 'readwrite');
     const store = transaction.objectStore(STORE_NAME);
-    const request = store.add(imageWithUser);
+    const request = store.put(imageWithUser);
 
     request.onsuccess = () => resolve();
     request.onerror = () => reject(request.error);

@@ -654,7 +654,7 @@ export const generateImage = async (
     styleReferenceUrl: string | null = null, // Manual override
     availableStyles: any[] = [], // New: Pool of styles for auto-selection
     timeoutMs: number = 900000 // Default 15 mins
-): Promise<string> => {
+): Promise<{ jobId: string, resultPromise: Promise<string> }> => {
     // Use nano-banana-2 for FLASH Tier
     // Use nano-banana-pro for PRO Tier
     const model = modelType === 'flash' ? 'nano-banana-2' : 'nano-banana-pro'; 
@@ -841,7 +841,7 @@ export const generateImage = async (
     // --- IMAGE GENERATION API INTEGRATION ---
     onLog("Step 5: Sending payload to Image Generation API...");
 
-    const resultUrl = await runTramsangtaoGenerate(
+    const { jobId, resultPromise } = await runTramsangtaoGenerate(
         finalInstruction,
         modelType,
         referenceImages.length > 0 ? referenceImages : null,
@@ -851,8 +851,7 @@ export const generateImage = async (
         aspectRatio
     );
 
-    onLog("Image generated successfully!");
-    return resultUrl;
+    return { jobId, resultPromise };
 };
 
 const uploadBase64ToTramsangtao = async (base64Data: string, mimeType: string, onLog: (msg: string) => void): Promise<string> => {
@@ -952,7 +951,7 @@ export const runTramsangtaoGenerate = async (
     resolution?: string,
     onLog: (msg: string) => void = () => {},
     aspectRatio?: string
-): Promise<string> => {
+): Promise<{ jobId: string, resultPromise: Promise<string> }> => {
     let imgUrls: string[] = [];
     if (base64Data) {
         const dataArray = Array.isArray(base64Data) ? base64Data : [base64Data];
@@ -1004,38 +1003,42 @@ export const runTramsangtaoGenerate = async (
 
     onLog(`Job created (ID: ${jobId}). Polling every 8 seconds...`);
 
-    let resultUrl = null;
-    let pollAttempts = 0;
-    const maxPollAttempts = 150; // 20 minutes
+    const resultPromise = (async () => {
+        let resultUrl = null;
+        let pollAttempts = 0;
+        const maxPollAttempts = 150; // 20 minutes
 
-    while (pollAttempts < maxPollAttempts) {
-        await new Promise(resolve => setTimeout(resolve, 8000));
-        pollAttempts++;
-        
-        try {
-            const pollRes = await fetch(`/api/tst-poll?jobId=${jobId}`);
-            if (!pollRes.ok) continue;
+        while (pollAttempts < maxPollAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 8000));
+            pollAttempts++;
             
-            const pollData = await pollRes.json();
-            onLog(`Job status: ${pollData.status} (${pollData.progress || 0}%)...`);
-            
-            if (pollData.status === 'completed') {
-                resultUrl = pollData.result;
-                break;
-            } else if (pollData.status === 'failed' || pollData.status === 'error') {
-                throw new Error(`Job failed: ${pollData.error || 'Unknown error'}`);
+            try {
+                const pollRes = await fetch(`/api/tst-poll?jobId=${jobId}`);
+                if (!pollRes.ok) continue;
+                
+                const pollData = await pollRes.json();
+                onLog(`Job status: ${pollData.status} (${pollData.progress || 0}%)...`);
+                
+                if (pollData.status === 'completed') {
+                    resultUrl = pollData.result;
+                    break;
+                } else if (pollData.status === 'failed' || pollData.status === 'error') {
+                    throw new Error(`Job failed: ${pollData.error || 'Unknown error'}`);
+                }
+            } catch (e: any) {
+                if (e.message.includes('Job failed')) throw e;
             }
-        } catch (e: any) {
-            if (e.message.includes('Job failed')) throw e;
         }
-    }
 
-    if (!resultUrl) {
-        throw new Error("Generation failed: Timeout waiting for job to complete");
-    }
+        if (!resultUrl) {
+            throw new Error("Generation failed: Timeout waiting for job to complete");
+        }
 
-    onLog("Image processed successfully!");
-    return resultUrl;
+        onLog("Image processed successfully!");
+        return resultUrl;
+    })();
+
+    return { jobId, resultPromise };
 };
 
 export const editImageWithInstructions = async (
@@ -1045,7 +1048,7 @@ export const editImageWithInstructions = async (
     modelType: 'flash' | 'pro' = 'flash',
     aspectRatio?: string,
     onLog: (msg: string) => void = () => {}
-): Promise<string> => {
+): Promise<{ jobId: string, resultPromise: Promise<string> }> => {
     return runTramsangtaoGenerate(instruction, modelType, base64Data, mimeType, undefined, onLog, aspectRatio);
 }
 
@@ -1055,7 +1058,7 @@ export const removeBackgroundImage = async (
     mimeType: string,
     aspectRatio?: string,
     onLog: (msg: string) => void = () => {}
-): Promise<string> => {
+): Promise<{ jobId: string, resultPromise: Promise<string> }> => {
     const prompt = `Remove the background of this image and make it solid black. Keep the main subject exactly the same. ${instruction}`;
     return runTramsangtaoGenerate(prompt, 'flash', base64Data, mimeType, undefined, onLog, aspectRatio);
 }
@@ -1066,7 +1069,7 @@ export const upscaleImage = async (
     mimeType: string,
     aspectRatio?: string,
     onLog: (msg: string) => void = () => {}
-): Promise<string> => {
+): Promise<{ jobId: string, resultPromise: Promise<string> }> => {
     const prompt = `Upscale this image to 1K resolution. Enhance the details and make it sharper while keeping the original content exactly the same. ${instruction}`;
     return runTramsangtaoGenerate(prompt, 'flash', base64Data, mimeType, '1k', onLog, aspectRatio);
 }

@@ -1368,113 +1368,130 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                     {/* NEW CONCURRENCY UI */}
                     <div className="space-y-3 pt-4 border-t border-white/10">
                         <div 
-                            className="flex items-center justify-between cursor-pointer hover:bg-white/5 p-2 rounded-lg transition-colors border border-white/5"
+                            className="cursor-pointer hover:bg-white/5 p-3 rounded-xl transition-colors border border-white/5 bg-[#0a0a0f]"
                             onClick={() => setIsConcurrencyExpanded(!isConcurrencyExpanded)}
                         >
-                            <div className="flex items-center gap-2 text-xs text-slate-400">
-                                <Icons.Activity className="w-3 h-3 text-audi-cyan" />
-                                <span>Luồng</span>
-                                <span className="font-bold text-white">{activeJobs.filter(j => j.type === 'image' && j.status === 'processing').length}/2</span>
-                                <span>Ảnh ·</span>
-                                <span className="font-bold text-white">{activeJobs.filter(j => j.type === 'video' && j.status === 'processing').length}/2</span>
-                                <span>Video ·</span>
-                                <span className="font-bold text-white">{activeJobs.filter(j => j.status === 'queued').length}/5</span>
-                                <span>Queue</span>
+                            <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase">
+                                    <Icons.Activity className="w-3 h-3 text-audi-cyan" />
+                                    Luồng xử lý
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button onClick={(e) => { e.stopPropagation(); triggerPoll(); }} className="text-slate-500 hover:text-white transition-colors">
+                                        <Icons.RefreshCw className="w-3 h-3" />
+                                    </button>
+                                    {isConcurrencyExpanded ? <Icons.ChevronUp className="w-4 h-4 text-slate-500" /> : <Icons.ChevronDown className="w-4 h-4 text-slate-500" />}
+                                </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                                <button onClick={(e) => { e.stopPropagation(); triggerPoll(); }} className="text-slate-500 hover:text-white transition-colors">
-                                    <Icons.RefreshCw className="w-3 h-3" />
-                                </button>
-                                {isConcurrencyExpanded ? <Icons.ChevronUp className="w-4 h-4 text-slate-500" /> : <Icons.ChevronDown className="w-4 h-4 text-slate-500" />}
-                            </div>
+                            
+                            {!isConcurrencyExpanded && (
+                                <div className="space-y-3 text-[10px] text-slate-400 mt-2">
+                                    <div>
+                                        <div className="font-bold text-audi-cyan mb-1">Luồng Của Bạn</div>
+                                        <div className="flex gap-1.5">
+                                            <span>Ảnh <span className="text-white font-mono">{activeJobs.filter(j => j.userId === userId && j.type === 'image' && j.status === 'processing').length}/1</span></span>
+                                            <span>- Video <span className="text-white font-mono">{activeJobs.filter(j => j.userId === userId && j.type === 'video' && j.status === 'processing').length}/1</span></span>
+                                            <span>- Hàng Chờ <span className="text-white font-mono">{activeJobs.filter(j => j.userId === userId && j.status === 'queued').length}/1</span></span>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div className="font-bold text-slate-300 mb-1">Luồng Hệ Thống</div>
+                                        <div className="flex gap-1.5">
+                                            <span>Ảnh <span className="text-white font-mono">{activeJobs.filter(j => j.type === 'image' && j.status === 'processing').length}/2</span></span>
+                                            <span>- Video <span className="text-white font-mono">{activeJobs.filter(j => j.type === 'video' && j.status === 'processing').length}/2</span></span>
+                                            <span>- Hàng Chờ <span className="text-white font-mono">{activeJobs.filter(j => j.status === 'queued').length}/5</span></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                            
+                            {isConcurrencyExpanded && (
+                                <div className="pt-3 mt-2 border-t border-white/5 space-y-4 animate-fade-in">
+                                    {/* User Concurrency */}
+                                    <div className="space-y-2">
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Của bạn</span>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <div className="flex items-center justify-between text-xs">
+                                                <span className="text-slate-300">Đang xử lý</span>
+                                                <span className="font-mono text-audi-cyan bg-audi-cyan/10 px-2 py-0.5 rounded-md">
+                                                    {activeJobs.filter(j => j.userId === userId && j.status === 'processing').length}/1
+                                                </span>
+                                            </div>
+                                            <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
+                                                <div 
+                                                    className="bg-audi-cyan h-full transition-all duration-500 ease-out" 
+                                                    style={{ width: `${(activeJobs.filter(j => j.userId === userId && j.status === 'processing').length / 1) * 100}%` }}
+                                                />
+                                            </div>
+                                            
+                                            <div className="flex items-center justify-between text-xs pt-1">
+                                                <span className="text-slate-300">Hàng chờ</span>
+                                                <span className="font-mono text-audi-yellow bg-audi-yellow/10 px-2 py-0.5 rounded-md">
+                                                    {activeJobs.filter(j => j.userId === userId && j.status === 'queued').length}/1
+                                                </span>
+                                            </div>
+                                            <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
+                                                <div 
+                                                    className="bg-audi-yellow h-full transition-all duration-500 ease-out" 
+                                                    style={{ width: `${(activeJobs.filter(j => j.userId === userId && j.status === 'queued').length / 1) * 100}%` }}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="h-px bg-white/5 w-full" />
+
+                                    {/* System Concurrency */}
+                                    <div className="space-y-2">
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Hệ thống</span>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <div className="flex items-center justify-between text-xs">
+                                                <span className="text-slate-300">Ảnh</span>
+                                                <span className="font-mono text-slate-400 bg-white/5 px-2 py-0.5 rounded-md">
+                                                    {activeJobs.filter(j => j.type === 'image' && j.status === 'processing').length}/2
+                                                </span>
+                                            </div>
+                                            <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
+                                                <div 
+                                                    className="bg-slate-400 h-full transition-all duration-500 ease-out" 
+                                                    style={{ width: `${(activeJobs.filter(j => j.type === 'image' && j.status === 'processing').length / 2) * 100}%` }}
+                                                />
+                                            </div>
+
+                                            <div className="flex items-center justify-between text-xs pt-1">
+                                                <span className="text-slate-300">Video</span>
+                                                <span className="font-mono text-slate-400 bg-white/5 px-2 py-0.5 rounded-md">
+                                                    {activeJobs.filter(j => j.type === 'video' && j.status === 'processing').length}/2
+                                                </span>
+                                            </div>
+                                            <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
+                                                <div 
+                                                    className="bg-slate-400 h-full transition-all duration-500 ease-out" 
+                                                    style={{ width: `${(activeJobs.filter(j => j.type === 'video' && j.status === 'processing').length / 2) * 100}%` }}
+                                                />
+                                            </div>
+
+                                            <div className="flex items-center justify-between text-xs pt-1">
+                                                <span className="text-slate-300">Hàng chờ chung</span>
+                                                <span className="font-mono text-orange-400 bg-orange-400/10 px-2 py-0.5 rounded-md">
+                                                    {activeJobs.filter(j => j.status === 'queued').length}/5
+                                                </span>
+                                            </div>
+                                            <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
+                                                <div 
+                                                    className="bg-orange-400 h-full transition-all duration-500 ease-out" 
+                                                    style={{ width: `${(activeJobs.filter(j => j.status === 'queued').length / 5) * 100}%` }}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
-                        
-                        {isConcurrencyExpanded && (
-                            <div className="bg-[#0a0a0f] rounded-xl border border-white/5 p-3 space-y-4 animate-fade-in">
-                                {/* User Concurrency */}
-                                <div className="space-y-2">
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Của bạn</span>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <div className="flex items-center justify-between text-xs">
-                                            <span className="text-slate-300">Đang xử lý</span>
-                                            <span className="font-mono text-audi-cyan bg-audi-cyan/10 px-2 py-0.5 rounded-md">
-                                                {activeJobs.filter(j => j.userId === userId && j.status === 'processing').length}/1
-                                            </span>
-                                        </div>
-                                        <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
-                                            <div 
-                                                className="bg-audi-cyan h-full transition-all duration-500 ease-out" 
-                                                style={{ width: `${(activeJobs.filter(j => j.userId === userId && j.status === 'processing').length / 1) * 100}%` }}
-                                            />
-                                        </div>
-                                        
-                                        <div className="flex items-center justify-between text-xs pt-1">
-                                            <span className="text-slate-300">Hàng chờ</span>
-                                            <span className="font-mono text-audi-yellow bg-audi-yellow/10 px-2 py-0.5 rounded-md">
-                                                {activeJobs.filter(j => j.userId === userId && j.status === 'queued').length}/1
-                                            </span>
-                                        </div>
-                                        <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
-                                            <div 
-                                                className="bg-audi-yellow h-full transition-all duration-500 ease-out" 
-                                                style={{ width: `${(activeJobs.filter(j => j.userId === userId && j.status === 'queued').length / 1) * 100}%` }}
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="h-px bg-white/5 w-full" />
-
-                                {/* System Concurrency */}
-                                <div className="space-y-2">
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Hệ thống</span>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <div className="flex items-center justify-between text-xs">
-                                            <span className="text-slate-300">Ảnh</span>
-                                            <span className="font-mono text-slate-400 bg-white/5 px-2 py-0.5 rounded-md">
-                                                {activeJobs.filter(j => j.type === 'image' && j.status === 'processing').length}/2
-                                            </span>
-                                        </div>
-                                        <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
-                                            <div 
-                                                className="bg-slate-400 h-full transition-all duration-500 ease-out" 
-                                                style={{ width: `${(activeJobs.filter(j => j.type === 'image' && j.status === 'processing').length / 2) * 100}%` }}
-                                            />
-                                        </div>
-
-                                        <div className="flex items-center justify-between text-xs pt-1">
-                                            <span className="text-slate-300">Video</span>
-                                            <span className="font-mono text-slate-400 bg-white/5 px-2 py-0.5 rounded-md">
-                                                {activeJobs.filter(j => j.type === 'video' && j.status === 'processing').length}/2
-                                            </span>
-                                        </div>
-                                        <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
-                                            <div 
-                                                className="bg-slate-400 h-full transition-all duration-500 ease-out" 
-                                                style={{ width: `${(activeJobs.filter(j => j.type === 'video' && j.status === 'processing').length / 2) * 100}%` }}
-                                            />
-                                        </div>
-
-                                        <div className="flex items-center justify-between text-xs pt-1">
-                                            <span className="text-slate-300">Hàng chờ chung</span>
-                                            <span className="font-mono text-orange-400 bg-orange-400/10 px-2 py-0.5 rounded-md">
-                                                {activeJobs.filter(j => j.status === 'queued').length}/5
-                                            </span>
-                                        </div>
-                                        <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
-                                            <div 
-                                                className="bg-orange-400 h-full transition-all duration-500 ease-out" 
-                                                style={{ width: `${(activeJobs.filter(j => j.status === 'queued').length / 5) * 100}%` }}
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
                     </div>
                         
                     {/* Redesigned Pricing Display */}
@@ -1508,11 +1525,11 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
         </div>
 
-        <div className="fixed bottom-24 left-[50%] -translate-x-1/2 p-2 bg-[#090014]/90 backdrop-blur-md border border-white/10 rounded-2xl z-50 shadow-2xl flex items-center justify-center">
+        <div className="fixed bottom-24 left-[50%] -translate-x-1/2 p-1 bg-[#090014]/90 backdrop-blur-md border border-white/10 rounded-[14px] z-50 shadow-2xl flex items-center justify-center w-fit">
             <button 
                 onClick={handleGenerate}
                 disabled={cooldownRemaining > 0}
-                className={`px-12 py-3 rounded-xl font-bold text-white shadow-[0_0_20px_rgba(255,0,153,0.4)] transition-all flex items-center gap-2 ${
+                className={`px-10 py-3 rounded-xl font-bold text-white shadow-[0_0_20px_rgba(255,0,153,0.4)] transition-all flex items-center gap-2 ${
                     cooldownRemaining > 0 
                     ? 'bg-slate-600 cursor-not-allowed opacity-70 shadow-none' 
                     : 'bg-gradient-to-r from-audi-pink to-audi-purple hover:scale-105'

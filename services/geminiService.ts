@@ -14,6 +14,7 @@ export interface CharacterData {
 // --- HELPER: CLEAN BASE64 ---
 const cleanBase64 = (b64: string) => b64.replace(/^data:image\/\w+;base64,/, "");
 
+
 // --- HELPER: RETRY WITH BACKOFF ---
 const retryWithBackoff = async <T>(
     operation: () => Promise<T>,
@@ -714,7 +715,7 @@ export const generateWithTramsangtao = async (
         model: model,
     };
     if (imgUrls.length > 0) {
-        payload.img_url = imgUrls.length === 1 ? imgUrls[0] : imgUrls;
+        payload.img_url = imgUrls;
     }
     if (resolution) {
         payload.resolution = resolution;
@@ -775,7 +776,7 @@ export const runTramsangtaoGenerate = async (
         model: model,
     };
     if (imgUrls.length > 0) {
-        payload.img_url = imgUrls.length === 1 ? imgUrls[0] : imgUrls;
+        payload.img_url = imgUrls;
     }
     if (resolution) {
         payload.resolution = resolution;

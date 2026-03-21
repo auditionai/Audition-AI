@@ -483,165 +483,6 @@ export const checkConnection = async (key?: string): Promise<{ success: boolean;
     }
 };
 
-// --- NEW: ANALYZE REFERENCE IMAGE (POSE/BG) ---
-const analyzeCharacterImage = async (base64Data: string): Promise<string> => {
-    const model = 'gemini-3.1-pro-preview'; 
-    try {
-        const optimizedImage = await optimizePayload(`data:image/jpeg;base64,${cleanBase64(base64Data)}`, 768);
-        const cleanOptimized = cleanBase64(optimizedImage);
-        const freshAi = await getAiClient('pro');
-        const result: any = await runWithTimeout(
-            freshAi.models.generateContent({
-                model: model,
-                contents: {
-                    parts: [
-                        { inlineData: { mimeType: 'image/jpeg', data: cleanOptimized } },
-                        { text: "Analyze this reference character image. Describe in extreme detail: clothing design, clothing colors, hairstyle, facial features, makeup, facial expression, accessories, shoes, and gender. The goal is to keep these elements 100% identical in a new generation. Output a concise but comprehensive list of these features." }
-                    ]
-                }
-            }),
-            30000,
-            "Character Analysis"
-        );
-        return result.text || "";
-    } catch (e) {
-        console.warn("Character Analysis Failed", e);
-        return "";
-    }
-};
-
-const analyzeSampleImage = async (base64Data: string): Promise<string> => {
-    const model = 'gemini-3.1-pro-preview'; 
-    try {
-        const optimizedImage = await optimizePayload(`data:image/jpeg;base64,${cleanBase64(base64Data)}`, 768);
-        const cleanOptimized = cleanBase64(optimizedImage);
-        const freshAi = await getAiClient('pro');
-        const result: any = await runWithTimeout(
-            freshAi.models.generateContent({
-                model: model,
-                contents: {
-                    parts: [
-                        { inlineData: { mimeType: 'image/jpeg', data: cleanOptimized } },
-                        { text: "Analyze this sample image. Describe the pose, background, lighting, perspective, camera angle, and depth of field. IGNORE the character's specific identity, clothes, and hair. Output a detailed technical description to copy these exact technical and compositional elements." }
-                    ]
-                }
-            }),
-            30000,
-            "Sample Analysis"
-        );
-        return result.text || "";
-    } catch (e) {
-        console.warn("Sample Analysis Failed", e);
-        return "";
-    }
-};
-
-const analyzeStyleImageForGeneration = async (base64Data: string): Promise<string> => {
-    const model = 'gemini-3.1-pro-preview'; 
-    try {
-        const optimizedImage = await optimizePayload(`data:image/jpeg;base64,${cleanBase64(base64Data)}`, 768);
-        const cleanOptimized = cleanBase64(optimizedImage);
-        const freshAi = await getAiClient('pro');
-        const result: any = await runWithTimeout(
-            freshAi.models.generateContent({
-                model: model,
-                contents: {
-                    parts: [
-                        { inlineData: { mimeType: 'image/jpeg', data: cleanOptimized } },
-                        { text: "Analyze this style image. Describe the body structure, bone structure, skin quality, height, body shape, and limb length of the character. Also describe the overall 3D rendering style and texture quality. Output a description to copy this exact character quality and style." }
-                    ]
-                }
-            }),
-            30000,
-            "Style Analysis"
-        );
-        return result.text || "";
-    } catch (e) {
-        console.warn("Style Analysis Failed", e);
-        return "";
-    }
-};
-
-// --- PROMPT REASONING ENGINE (STEEL DISCIPLINE) ---
-const synthesizePrompt = async (
-    rawPrompt: string, 
-    characterContext: string,
-    sampleContext: string,
-    styleContext: string
-): Promise<string> => {
-    const model = 'gemini-3.1-pro-preview'; 
-    try {
-        const freshAi = await getAiClient('pro');
-        const result: any = await runWithTimeout(
-            freshAi.models.generateContent({
-                model: model,
-                contents: {
-                    parts: [
-                        { text: `You are an expert AI image generation prompt engineer. Synthesize a highly detailed prompt based on the following inputs:\n\n1. User Prompt: ${rawPrompt}\n2. Character Details (MUST KEEP 100%): ${characterContext}\n3. Pose & Composition (MUST COPY): ${sampleContext}\n4. 3D Style & Body Structure (MUST COPY): ${styleContext}\n\nWrite a single, cohesive, highly detailed prompt that combines all these elements perfectly for a 3D game character render. Do not include conversational text, just the prompt.` }
-                    ]
-                }
-            }),
-            60000,
-            "Prompt Synthesis"
-        );
-        return result.text?.trim() || rawPrompt;
-    } catch (e) {
-        console.warn("Prompt Synthesis Failed", e);
-        return rawPrompt;
-    }
-}
-
-// --- INTELLIGENCE CORE (ABSOLUTE COMMAND) ---
-const processDigitalTwinMode = (
-    prompt: string, 
-    masterSheetPart: any | null
-): { parts: any[] } => {
-    
-    let combinedText = `** SYSTEM OVERRIDE: PROTOCOL 3D-GEN-ALPHA **
-    
-YOU ARE A NON-CREATIVE RENDERING ENGINE. YOU DO NOT "IMAGINE". YOU "EXECUTE".
-
-** SEPARATION OF CONCERNS (STRICT COMPARTMENTALIZATION) **
-The attached image is a MASTER REFERENCE SHEET containing multiple labeled sections.
-
-1. **STYLE REFERENCE**: 
-   - TAKE: Lighting, Texture, Render Quality, Art Style.
-   - IGNORE: The subject, their clothes, their face, their makeup.
-
-2. **POSE REFERENCE**:
-   - TAKE: Bone structure, Camera Angle, Composition.
-   - IGNORE: The outfit, the hair, the face, the background colors.
-
-3. **CHARACTER REFERENCE(S)**:
-   - WARNING: This is the SOURCE OF TRUTH for the Character's visual design (Hairstyle, Outfit). You should use the facial features and outfit details from these images as strong references.
-   - TAKE: The Character's visual design (Face), The Outfit (Clothes), The Hair, The Accessories.
-   - THIS IS THE PRIMARY SOURCE FOR "WHAT" IS IN THE IMAGE.
-
-** CRITICAL FAILURE CONDITIONS **
-- FAILURE: If the output character wears the clothes from the POSE REFERENCE.
-- FAILURE: If the output character has the eye color/makeup of the STYLE REFERENCE.
-- FAILURE: If the output is a painting/drawing when Style Ref is 3D.
-- FAILURE: If the user prompt says "use clothes from reference" and you use clothes from STYLE or POSE. You MUST use clothes from CHARACTER REFERENCE.
-
-** EXECUTION LOGIC **
-- Step 1: Extract the SKELETON from POSE REFERENCE.
-- Step 2: Skin the skeleton with the CHARACTER from CHARACTER REFERENCE.
-- Step 3: Dress the character as seen in CHARACTER REFERENCE unless [COMMAND] explicitly specifies a different outfit.
-- Step 4: Render the scene using the ENGINE from STYLE REFERENCE.
-
-[[EXECUTION_COMMAND]]: ${prompt}
-
-ACKNOWLEDGE AND EXECUTE.`;
-
-    const parts = [];
-    if (masterSheetPart) {
-        parts.push(masterSheetPart);
-    }
-    parts.push({ text: combinedText });
-
-    return { parts };
-};
-
 export const generateImage = async (
     prompt: string,
     aspectRatio: string | undefined,
@@ -660,10 +501,9 @@ export const generateImage = async (
     
     // 1. PROCESS SAMPLE IMAGE (Ảnh Mẫu)
     let cleanRefImage: string | null = null;
-    let sampleContext = "";
     
     if (refImageBase64) {
-        onLog("Step 1: Analyzing Sample Image (Pose & BG)...");
+        onLog("Step 1: Preparing Sample Image...");
         try {
             if (refImageBase64.startsWith('http')) {
                 const resp = await fetch(refImageBase64);
@@ -676,22 +516,16 @@ export const generateImage = async (
             } else if (refImageBase64.startsWith('data:') || refImageBase64.length > 100) {
                 cleanRefImage = cleanBase64(refImageBase64);
             }
-
-            if (cleanRefImage) {
-                sampleContext = await analyzeSampleImage(cleanRefImage);
-                onLog(`> Sample Analyzed: ${sampleContext.substring(0, 50)}...`);
-            }
         } catch (e) {
             console.warn("Sample Image Processing Failed", e);
         }
     }
 
     // 2. PROCESS STYLE IMAGE (Ảnh Style)
-    let styleContext = "";
     const cleanStyleImages: string[] = [];
     
     if (styleReferenceUrl) {
-        onLog("Step 2: Analyzing Style Image...");
+        onLog("Step 2: Preparing Style Image...");
         try {
             let styleData = styleReferenceUrl;
             if (styleReferenceUrl.startsWith('http')) {
@@ -706,8 +540,6 @@ export const generateImage = async (
             const clean = cleanBase64(styleData);
             if (clean) {
                 cleanStyleImages.push(clean);
-                styleContext = await analyzeStyleImageForGeneration(clean);
-                onLog(`> Style Analyzed: ${styleContext.substring(0, 50)}...`);
             }
         } catch (e) {
             console.warn("Style Image Processing Failed", e);
@@ -716,10 +548,9 @@ export const generateImage = async (
 
     // 3. PROCESS CHARACTER IMAGES (Ảnh Nhân Vật)
     const charBase64List: string[] = [];
-    let characterContext = "";
     
     if (characters.length > 0) {
-        onLog("Step 3: Analyzing Character Images...");
+        onLog("Step 3: Preparing Character Images...");
         for (const char of characters) {
             let finalCharBase64 = "";
             if (char.image) {
@@ -732,19 +563,70 @@ export const generateImage = async (
             
             if (finalCharBase64) {
                 charBase64List.push(finalCharBase64);
-                const charAnalysis = await analyzeCharacterImage(finalCharBase64);
-                characterContext += `\nCharacter (${char.gender}): ${charAnalysis}`;
             }
         }
-        onLog(`> Characters Analyzed: ${characterContext.substring(0, 50)}...`);
     }
 
-    // 4. SYNTHESIZE PROMPT
-    onLog("Step 4: Synthesizing Final Prompt...");
-    const optimizedPrompt = await synthesizePrompt(prompt, characterContext, sampleContext, styleContext);
+    // 4. SYNTHESIZE PROMPT WITH ALL IMAGES IN ONE PAYLOAD
+    onLog("Step 4: Analyzing all images and synthesizing Final Prompt via Vertex AI...");
+    
+    const parts: any[] = [];
+    let promptInstructions = `You are a master AI image generation director. Your task is to analyze the provided reference images step-by-step and synthesize a highly detailed prompt for an image generation model.
+You must act as a strict investigator for each step.
+
+`;
+
+    if (charBase64List.length > 0) {
+        promptInstructions += `Step 1: Analyze the Character Reference Image(s). Describe the character's facial features, hair, clothing, and gender in extreme detail. This is the SOURCE OF TRUTH for the character's identity.\n`;
+        for (const charBase64 of charBase64List) {
+            parts.push({ inlineData: { data: charBase64, mimeType: "image/jpeg" } });
+        }
+    }
+
+    if (cleanRefImage) {
+        promptInstructions += `Step 2: Analyze the Sample Image (Pose/Background). Describe the character's pose, the camera angle, the lighting, and the background environment. DO NOT copy the character's facial features or clothing from this image.\n`;
+        parts.push({ inlineData: { data: cleanRefImage, mimeType: "image/jpeg" } });
+    }
+
+    if (cleanStyleImages.length > 0) {
+        promptInstructions += `Step 3: Analyze the Style Reference Image. Describe the artistic style, color palette, medium (e.g., 3D render, anime, oil painting), and visual mood. DO NOT copy the character or subject from this image.\n`;
+        parts.push({ inlineData: { data: cleanStyleImages[0], mimeType: "image/jpeg" } });
+    }
+
+    promptInstructions += `Step 4: Synthesize the Final Command Prompt.
+Based on the user's base prompt: "${prompt}"
+The final image generation AI WILL receive these exact images. Your task is to write a STRICT COMMAND PROMPT for that AI.
+Your prompt must COMMAND the AI to:
+1. EXACTLY COPY AND PASTE the character's face, hair, and clothing from the provided character reference images. DO NOT invent new features.
+2. EXACTLY COPY the pose, camera angle, and background from the provided pose reference image.
+3. EXACTLY COPY the artistic style, rendering quality, and lighting from the provided style reference image.
+
+Do not just describe the image. Write it as a set of strict instructions and constraints for the rendering engine.
+Output ONLY the final command prompt. Do not include the step-by-step analysis in your final output, just the prompt itself.`;
+
+    parts.push({ text: promptInstructions });
+
+    let optimizedPrompt = prompt;
+    try {
+        const freshAi = await getAiClient('pro');
+        const response = await freshAi.models.generateContent({
+            model: 'gemini-3.1-pro-preview',
+            contents: { parts },
+            config: {
+                temperature: 0.4,
+            }
+        });
+        if (response.text) {
+            optimizedPrompt = response.text.trim();
+            onLog(`> Final Command Prompt Synthesized: ${optimizedPrompt.substring(0, 100)}...`);
+        }
+    } catch (e) {
+        console.error("Failed to synthesize prompt with all images", e);
+        onLog("Failed to synthesize prompt, using base prompt.");
+    }
     
     // 5. FINAL ASSEMBLY
-    onLog("Step 5: Finalizing Data Payload...");
+    onLog("Step 5: Finalizing Data Payload for Image Generation...");
     
     if (refImageBase64 && !cleanRefImage) {
          throw new Error("CRITICAL FAILURE: Sample Image failed to process.");
@@ -754,9 +636,10 @@ export const generateImage = async (
     }
 
     const referenceImages: string[] = [];
-    if (cleanStyleImages.length > 0) referenceImages.push(cleanStyleImages[0]);
-    if (cleanRefImage) referenceImages.push(cleanRefImage);
+    // The user explicitly wants ALL images sent to the final API so it can SEE them and COPY from them.
     if (charBase64List.length > 0) referenceImages.push(...charBase64List);
+    if (cleanRefImage) referenceImages.push(cleanRefImage);
+    if (cleanStyleImages.length > 0) referenceImages.push(cleanStyleImages[0]);
 
     const qualityBoosters = "masterpiece, best quality, ultra-detailed, 8k, stylized 3D game render, Korean MMO 3D style, stylized 3D skin texture, smooth 3D rendering, ray tracing, hdr, cinematic lighting, unreal engine 5 render";
     const negativePrompt = "low quality, bad anatomy, worst quality, blur, grain, watermark, text, signature, bad hands, bad face, mixed backgrounds, conflicting styles, extra characters, unwanted people from style reference, real people, photorealistic humans, photograph, realistic photography, real life, anime, cartoon, 2d, flat shading, floating character, disconnected limbs, hands in the air, feet not touching the ground, floating objects, unnatural posture, floating in mid-air, levitating, hovering, disconnected from background, bad perspective, illogical physics";

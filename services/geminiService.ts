@@ -715,10 +715,10 @@ export const generateWithTramsangtao = async (
         model: model,
     };
     if (imgUrls.length > 0) {
-        payload.img_url = imgUrls;
+        payload.img_url = imgUrls.join(','); // Send as comma-separated string
     }
     if (resolution) {
-        payload.resolution = resolution;
+        payload.resolution = resolution.toLowerCase();
     }
     if (aspectRatio) {
         payload.aspect_ratio = aspectRatio;
@@ -734,7 +734,7 @@ export const generateWithTramsangtao = async (
         let errMessage = genRes.statusText;
         try {
             const err = await genRes.json();
-            errMessage = err.error || errMessage;
+            errMessage = err.error || (typeof err === 'object' ? JSON.stringify(err) : err) || errMessage;
         } catch (e) {
             errMessage = `Server returned ${genRes.status} ${genRes.statusText}`;
         }
@@ -776,10 +776,10 @@ export const runTramsangtaoGenerate = async (
         model: model,
     };
     if (imgUrls.length > 0) {
-        payload.img_url = imgUrls;
+        payload.img_url = imgUrls.join(','); // Send as comma-separated string
     }
     if (resolution) {
-        payload.resolution = resolution;
+        payload.resolution = resolution.toLowerCase();
     }
     if (aspectRatio) {
         payload.aspect_ratio = aspectRatio;
@@ -795,7 +795,7 @@ export const runTramsangtaoGenerate = async (
         let errMessage = genRes.statusText;
         try {
             const err = await genRes.json();
-            errMessage = err.error || errMessage;
+            errMessage = err.error || (typeof err === 'object' ? JSON.stringify(err) : err) || errMessage;
         } catch (e) {
             errMessage = `Server returned ${genRes.status} ${genRes.statusText}`;
         }

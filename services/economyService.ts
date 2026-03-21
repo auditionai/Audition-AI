@@ -15,7 +15,12 @@ export const getUserProfile = async (): Promise<UserProfile> => {
         .eq('id', user.id)
         .maybeSingle();
 
-    if (error || !data || !data.email || !data.display_name) {
+    if (error) {
+        console.error("Error fetching user profile:", error);
+        throw new Error("Failed to fetch user profile: " + error.message);
+    }
+
+    if (!data || !data.email || !data.display_name) {
         // Create or update profile if missing or incomplete (fallback for missing trigger)
         const newProfile = {
             id: user.id,
@@ -73,6 +78,24 @@ export const updateLastActive = async () => {
         }
     } catch (e) {
         console.warn("Failed to update last active", e);
+    }
+};
+
+export const updateMyProfile = async (profile: UserProfile): Promise<{success: boolean, error?: string}> => {
+    if (!supabase) return { success: false, error: "No Database" };
+    try {
+        const { error } = await supabase
+            .from('users')
+            .update({
+                display_name: profile.username,
+                photo_url: profile.avatar
+            })
+            .eq('id', profile.id);
+        
+        if (error) throw error;
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
     }
 };
 
@@ -152,7 +175,8 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
         if (error) {
             // Fallback for legacy systems without RPC
             console.warn("[Economy] RPC failed, falling back to direct update (Legacy Mode)", error);
-            const { data: latestUser } = await supabase.from('users').select('vcoin_balance').eq('id', userId).maybeSingle();
+            const { data: latestUser, error: fetchError } = await supabase.from('users').select('vcoin_balance').eq('id', userId).maybeSingle();
+            if (fetchError) throw fetchError;
             const currentBalance = latestUser?.vcoin_balance || 0;
             const newBalance = currentBalance + amount;
             const { error: directError } = await supabase.from('users').update({ vcoin_balance: newBalance }).eq('id', userId);

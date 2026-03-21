@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Language, ViewId, UserProfile } from '../types';
 import { Icons } from '../components/Icons';
-import { redeemGiftcode, getUserProfile, updateAdminUserProfile, getGiftcodePromoConfig } from '../services/economyService';
+import { redeemGiftcode, getUserProfile, updateMyProfile, getGiftcodePromoConfig } from '../services/economyService';
 import { useNotification } from '../components/NotificationSystem';
 
 interface SettingsProps {
@@ -33,6 +33,10 @@ export const Settings: React.FC<SettingsProps> = ({ lang, onLogout, onNavigate, 
       const loadUser = async () => {
           setIsLoading(true);
           const profile = await getUserProfile();
+          if (!profile) {
+              setIsLoading(false);
+              return;
+          }
           setUserProfile(profile);
           setFormName(profile.username);
           setFormAvatar(profile.avatar);
@@ -56,7 +60,7 @@ export const Settings: React.FC<SettingsProps> = ({ lang, onLogout, onNavigate, 
 
       try {
           // Reuse the generic update function from service
-          await updateAdminUserProfile(updatedProfile);
+          await updateMyProfile(updatedProfile);
           
           // Update local state
           setUserProfile(updatedProfile);

@@ -715,7 +715,7 @@ export const generateWithTramsangtao = async (
         model: model,
     };
     if (imgUrls.length > 0) {
-        payload.img_url = imgUrls.join(','); // Send as comma-separated string
+        payload.img_url = imgUrls; // Send as array
     }
     if (resolution) {
         payload.resolution = resolution.toLowerCase();
@@ -776,7 +776,7 @@ export const runTramsangtaoGenerate = async (
         model: model,
     };
     if (imgUrls.length > 0) {
-        payload.img_url = imgUrls.join(','); // Send as comma-separated string
+        payload.img_url = imgUrls; // Send as array
     }
     if (resolution) {
         payload.resolution = resolution.toLowerCase();

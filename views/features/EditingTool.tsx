@@ -1,505 +1,900 @@
-
-import React, { useState, useRef, useEffect } from 'react';
-import { Feature, Language, GeneratedImage } from '../../types';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Feature, GeneratedImage, Language, ViewId } from '../../types';
 import { Icons } from '../../components/Icons';
-import { editImageWithInstructions, removeBackgroundImage, upscaleImage } from '../../services/geminiService';
-import { saveImageToStorage, uploadFileToR2 } from '../../services/storageService';
-import { getUserProfile, updateUserBalance } from '../../services/economyService';
 import { useNotification } from '../../components/NotificationSystem';
-import { optimizePayload, loadImageWithTimeout, calculateAspectRatioString } from '../../utils/imageProcessor';
+import {
+  getModelPricing,
+  getTstServerAvailabilityConfig,
+  getUserProfile,
+  type ModelPricing,
+} from '../../services/economyService';
+import { CONCURRENCY_LIMITS, useConcurrency } from '../../services/concurrencyService';
+import { enqueueServerJob } from '../../services/serverQueueService';
+import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
+import {
+  applyServerAvailabilityToRuntimeModels,
+  fetchTstModels,
+  fetchTstPricing,
+  getCompatibleGenerationResolutions,
+  getCompatibleGenerationServers,
+  getCompatibleGenerationSpeeds,
+  getGenerationCostBreakdown,
+  getGenerationModelId,
+  getResolutionCostMap,
+  sanitizePricingEntriesWithRuntimeModels,
+  TST_CATALOG_CACHE_TTL_MS,
+  tstServerToUi,
+  uiServerToTst,
+  uiSpeedToTst,
+  type AuditionPricingOverride,
+  type TstPricingEntry,
+  type TstRuntimeModel,
+} from '../../services/tstCatalog';
+import type { ImageEditRecipePayload } from '../../shared/queueRecipes';
+import { calculateAspectRatioString, loadImageWithTimeout, optimizePayload } from '../../utils/imageProcessor';
 
 interface EditingToolProps {
   feature: Feature;
   lang: Language;
+  onNavigateToFeature?: (featureId: string) => void;
+  onNavigateView?: (view: ViewId, data?: any) => void;
 }
 
-// Suggestions for Photo Editor
 const SUGGESTIONS = [
-    { label: { vi: 'Thay đổi background sang biển', en: 'Change background to beach' }, icon: Icons.Image },
-    { label: { vi: 'Mặc vest đen sang trọng', en: 'Wear luxury black suit' }, icon: Icons.User },
-    { label: { vi: 'Thêm hiệu ứng tuyết rơi', en: 'Add snowing effect' }, icon: Icons.Cloud },
-    { label: { vi: 'Biến thành tranh sơn dầu', en: 'Turn into oil painting' }, icon: Icons.Palette },
-    { label: { vi: 'Đổi màu tóc sang đỏ', en: 'Change hair color to red' }, icon: Icons.Scissors },
-    { label: { vi: 'Thêm kính râm cool ngầu', en: 'Add cool sunglasses' }, icon: Icons.Monitor },
-    { label: { vi: 'Chuyển sang phong cách Cyberpunk', en: 'Make it Cyberpunk style' }, icon: Icons.Zap },
-    { label: { vi: 'Xóa người thừa phía sau', en: 'Remove background people' }, icon: Icons.Trash },
+  { label: { vi: 'Thay đổi background sang biển', en: 'Change background to beach' }, icon: Icons.Image },
+  { label: { vi: 'Mặc vest đen sang trọng', en: 'Wear luxury black suit' }, icon: Icons.User },
+  { label: { vi: 'Thêm hiệu ứng tuyết rơi', en: 'Add snowing effect' }, icon: Icons.Cloud },
+  { label: { vi: 'Biến thành tranh sơn dầu', en: 'Turn into oil painting' }, icon: Icons.Palette },
+  { label: { vi: 'Đổi màu tóc sang đỏ', en: 'Change hair color to red' }, icon: Icons.Scissors },
+  { label: { vi: 'Thêm kính râm cool ngầu', en: 'Add cool sunglasses' }, icon: Icons.Monitor },
+  { label: { vi: 'Chuyển sang phong cách Cyberpunk', en: 'Make it Cyberpunk style' }, icon: Icons.Zap },
+  { label: { vi: 'Xóa người thừa phía sau', en: 'Remove background people' }, icon: Icons.Trash },
 ];
 
-export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
+const SMART_TIPS = [
+  { icon: Icons.Wand, text: 'Magic Editor giúp thay đổi trang phục, bối cảnh hoặc thêm chi tiết vào ảnh gốc.' },
+  { icon: Icons.Scissors, text: 'Tách Nền dùng AI để nhận diện chủ thể và xóa phông nền chính xác.' },
+  { icon: Icons.Zap, text: 'Làm Nét giúp khôi phục chi tiết ảnh mờ, vỡ nét mà không vẽ lại khuôn mặt.' },
+  { icon: Icons.Image, text: 'Hãy viết yêu cầu càng rõ càng tốt để AI hiểu đúng ý bạn.' },
+  { icon: Icons.Crown, text: 'Model Pro cho chất lượng chỉnh sửa đẹp và chi tiết hơn Flash.' },
+  { icon: Icons.ExternalLink, text: 'Bạn có thể dùng AuMix3D.com để chuẩn bị ảnh nhân vật tách nền cực nét.' },
+];
+
+const EDITING_TABS = [
+  { id: 'magic_editor_pro', label: { vi: 'Chỉnh sửa ảnh', en: 'Photo Editor' }, icon: Icons.Wand },
+  { id: 'remove_bg_pro', label: { vi: 'Tách nền', en: 'Remove BG' }, icon: Icons.Scissors },
+  { id: 'sharpen_upscale', label: { vi: 'Làm nét', en: 'Upscale' }, icon: Icons.Zap },
+];
+
+type GenerationTier = 'flash' | 'pro';
+type Resolution = '1K' | '2K' | '4K';
+
+const extractMimeType = (input: string) =>
+  input.startsWith('data:') ? input.substring(input.indexOf(':') + 1, input.indexOf(';')) : undefined;
+
+const buildDisplayPrompt = (featureId: string, userPrompt: string, resolution: Resolution, lang: Language) => {
+  if (featureId === 'remove_bg_pro') {
+    return lang === 'vi' ? 'Tách nền khỏi ảnh này' : 'Remove the background of this image';
+  }
+
+  if (featureId === 'sharpen_upscale') {
+    return lang === 'vi' ? `Làm nét và nâng cấp ảnh lên ${resolution}` : `Upscale and restore this image to ${resolution}`;
+  }
+
+  return userPrompt.trim();
+};
+
+const buildInstructionPrompt = (featureId: string, userPrompt: string, resolution: Resolution) => {
+  if (featureId === 'magic_editor_pro') {
+    return `Act as a professional photo editor. Perform the following edit on the image: "${userPrompt.trim()}".
+CRITICAL RULES:
+1. KEEP ORIGINAL IMAGE QUALITY AND SIZE. DO NOT DOWNSCALE.
+2. Maintain the original identity, face, and outfit fidelity unless explicitly requested otherwise.
+3. Preserve character stylization and do not humanize or photorealize the subject.
+4. Ensure clean compositing, coherent lighting, and high-detail render quality.
+5. Output a polished high-fidelity result without inventing unrelated elements.`;
+  }
+
+  if (featureId === 'sharpen_upscale') {
+    return `Upscale this image to ${resolution}. CRITICAL: restore detail, sharpen edges, and preserve the original face, body, outfit, and stylized character structure. Do not redesign, reimagine, or add new elements.`;
+  }
+
+  return 'Remove the background completely and place the subject on a pure BLACK background (#000000). CRITICAL: preserve the exact subject identity, image resolution, edges, and details. Do not blur, crop, downscale, or alter the subject.';
+};
+
+const getGradient = (featureId: string) => {
+  if (featureId === 'magic_editor_pro') return 'from-audi-purple to-pink-500';
+  if (featureId === 'sharpen_upscale') return 'from-audi-cyan to-blue-500';
+  if (featureId === 'remove_bg_pro') return 'from-audi-pink to-purple-600';
+  return 'from-audi-purple to-pink-500';
+};
+
+const tryStageInputToStorage = async (source: string, folder: string) => {
+  try {
+    return await uploadFileToR2(source, folder);
+  } catch (error) {
+    console.warn('[EditingTool] Failed to stage source image to storage, falling back to inline payload.', error);
+    return null;
+  }
+};
+
+export const EditingTool: React.FC<EditingToolProps> = ({
+  feature,
+  lang,
+  onNavigateToFeature,
+  onNavigateView,
+}) => {
   const { notify } = useNotification();
+  const { queueStats, triggerPoll } = useConcurrency();
+
   const [prompt, setPrompt] = useState('');
-  const [loading, setLoading] = useState(false);
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
-  const [resultImage, setResultImage] = useState<string | null>(null);
-  const [isComparing, setIsComparing] = useState(false);
-  const [aiModel, setAiModel] = useState<'flash' | 'pro'>('flash');
-  const [progressLogs, setProgressLogs] = useState<string[]>([]);
-  
-  // Specific States
+  const [aiModel, setAiModel] = useState<GenerationTier>('flash');
+  const [resolution, setResolution] = useState<Resolution>('1K');
+  const [speed, setSpeed] = useState('Nhanh');
+  const [server, setServer] = useState('FAST');
+  const [currentTipIdx, setCurrentTipIdx] = useState(0);
+  const [guideTopic, setGuideTopic] = useState<'guide' | null>(null);
+  const [pricingEntries, setPricingEntries] = useState<TstPricingEntry[]>([]);
+  const [auditionPricing, setAuditionPricing] = useState<ModelPricing[]>([]);
+  const [runtimeModels, setRuntimeModels] = useState<TstRuntimeModel[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const isUpscaler = feature.id === 'sharpen_upscale';
   const isRemover = feature.id === 'remove_bg_pro';
   const isMagicEditor = feature.id === 'magic_editor_pro';
-  
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const activeTier: GenerationTier = isMagicEditor ? aiModel : 'flash';
 
-  // Reset state when feature changes
+  const pricingOverrides: AuditionPricingOverride[] = auditionPricing.map((row) => ({
+    modelId: row.model_id,
+    optionId: row.option_id,
+    auditionPriceVcoin: row.audition_price_vcoin,
+  }));
+
+  const speedId = uiSpeedToTst(speed) || 'fast';
+  const serverId = uiServerToTst(server) || 'fast';
+
+  const availableResolutions = getCompatibleGenerationResolutions({
+    tier: activeTier,
+    pricingEntries,
+    serverId,
+    speed: speedId,
+  });
+
+  const availableServers = getCompatibleGenerationServers({
+    tier: activeTier,
+    pricingEntries,
+    resolution,
+    speed: speedId,
+  });
+
+  const availableSpeeds = getCompatibleGenerationSpeeds({
+    tier: activeTier,
+    pricingEntries,
+    resolution,
+    serverId,
+  });
+
+  const selectedGenerationCost = getGenerationCostBreakdown({
+    tier: activeTier,
+    resolution,
+    speed: speedId,
+    serverId,
+    pricingEntries,
+    pricingOverrides,
+  });
+
+  const resolutionCostMap = getResolutionCostMap({
+    tier: activeTier,
+    speed: speedId,
+    serverId,
+    pricingEntries,
+    pricingOverrides,
+  });
+
+  const runtimeImageModelIds = useMemo(
+    () =>
+      new Set(
+        runtimeModels
+          .filter((model) => model.type === 'image')
+          .map((model) => model.model.trim().toLowerCase()),
+      ),
+    [runtimeModels],
+  );
+
+  const isFlashAvailable =
+    runtimeImageModelIds.has(getGenerationModelId('flash')) &&
+    pricingEntries.some((entry) => entry.model.trim().toLowerCase() === getGenerationModelId('flash'));
+  const isProAvailable =
+    runtimeImageModelIds.has(getGenerationModelId('pro')) &&
+    pricingEntries.some((entry) => entry.model.trim().toLowerCase() === getGenerationModelId('pro'));
+
+  const availableSpeedLabels = availableSpeeds.map((value) => (value === 'slow' ? 'Tiết Kiệm' : 'Nhanh'));
+  const availableServerLabels = availableServers.map((value) => tstServerToUi(value));
+  const isCatalogReady =
+    !catalogLoading &&
+    !catalogError &&
+    pricingEntries.length > 0 &&
+    runtimeModels.length > 0 &&
+    (isMagicEditor ? isFlashAvailable || isProAvailable : isFlashAvailable);
+
   useEffect(() => {
-      setResultImage(null);
-      setUploadedImage(null);
-      setPrompt('');
+    setUploadedImage(null);
+    setPrompt('');
+    setResolution('1K');
+    setSpeed('Nhanh');
+    setServer('FAST');
+    setAiModel('flash');
+    setIsSubmitting(false);
   }, [feature.id]);
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-          setUploadedImage(reader.result as string);
-          setResultImage(null); // Clear previous result
-      };
-      reader.readAsDataURL(file);
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setCurrentTipIdx((prev) => (prev + 1) % SMART_TIPS.length);
+    }, 5000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const loadCatalog = async (forceRefresh = false) => {
+      try {
+        const [pricing, models, pricingConfig, serverAvailabilityConfig] = await Promise.all([
+          fetchTstPricing(forceRefresh),
+          fetchTstModels(forceRefresh),
+          getModelPricing(),
+          getTstServerAvailabilityConfig(),
+        ]);
+
+        const filteredModels = applyServerAvailabilityToRuntimeModels(models, serverAvailabilityConfig);
+        const livePricing = sanitizePricingEntriesWithRuntimeModels(pricing, filteredModels, serverAvailabilityConfig);
+
+        setPricingEntries(livePricing);
+        setRuntimeModels(filteredModels);
+        setAuditionPricing(pricingConfig || []);
+        setCatalogError(null);
+      } catch (error) {
+        console.warn('[EditingTool] Failed to load live TST catalog', error);
+        setPricingEntries([]);
+        setRuntimeModels([]);
+        setCatalogError(lang === 'vi' ? 'TST đang bảo trì hoặc không sẵn sàng.' : 'TST is unavailable.');
+      } finally {
+        setCatalogLoading(false);
+      }
+    };
+
+    loadCatalog();
+    const refreshTimer = window.setInterval(() => {
+      loadCatalog(true);
+    }, TST_CATALOG_CACHE_TTL_MS);
+
+    return () => window.clearInterval(refreshTimer);
+  }, [lang]);
+
+  useEffect(() => {
+    if (isMagicEditor) {
+      if (aiModel === 'flash' && !isFlashAvailable && isProAvailable) {
+        setAiModel('pro');
+      } else if (aiModel === 'pro' && !isProAvailable && isFlashAvailable) {
+        setAiModel('flash');
+      }
     }
-    // Reset value to allow re-uploading same file
-    e.target.value = '';
-  };
+  }, [aiModel, isFlashAvailable, isMagicEditor, isProAvailable]);
 
-  const constructPrompt = () => {
-      // 1. Photo Editor Logic (Professional Instructions)
-      if (isMagicEditor) {
-          if (!prompt.trim()) return "";
-          return `Act as a professional photo editor. Perform the following edit on the image: "${prompt}". 
-          CRITICAL RULES:
-          1. KEEP ORIGINAL IMAGE QUALITY AND SIZE. DO NOT DOWNSCALE.
-          2. Maintain the original identity, face, and high resolution of the subject unless explicitly asked to change.
-          3. Ensure realistic lighting, shadows, and perspective blending.
-          4. If changing background, ensure the subject is perfectly integrated.
-          5. Output highly detailed, photorealistic result with high fidelity.`;
+  useEffect(() => {
+    if (availableResolutions.length > 0 && !availableResolutions.includes(resolution)) {
+      setResolution(availableResolutions[0] as Resolution);
+    }
+  }, [availableResolutions, resolution]);
+
+  useEffect(() => {
+    const requestedServerId = uiServerToTst(server) || 'fast';
+    const requestedSpeedId = uiSpeedToTst(speed) || 'fast';
+    const compatibleServers = getCompatibleGenerationServers({
+      tier: activeTier,
+      pricingEntries,
+      resolution,
+      speed: requestedSpeedId,
+    });
+    const effectiveServerId = compatibleServers.includes(requestedServerId)
+      ? requestedServerId
+      : compatibleServers[0];
+
+    if (effectiveServerId && effectiveServerId !== requestedServerId) {
+      const nextServerLabel = tstServerToUi(effectiveServerId);
+      if (nextServerLabel !== server) {
+        setServer(nextServerLabel);
+        return;
       }
+    }
 
-      // 2. Upscaler Logic (High Fidelity 4K)
-      if (isUpscaler) {
-          return `Upscale this image to 4K resolution. CRITICAL: Do NOT alter facial features, eyes, or clothing details. Maintain exact fidelity to the original. Apply intelligent sharpening, de-blurring, and texture restoration only. Do NOT reimagine or hallucinate new elements. Goal: Pure Image Restoration.`;
+    const compatibleSpeeds = getCompatibleGenerationSpeeds({
+      tier: activeTier,
+      pricingEntries,
+      resolution,
+      serverId: effectiveServerId || requestedServerId,
+    });
+    const effectiveSpeedId = compatibleSpeeds.includes(requestedSpeedId)
+      ? requestedSpeedId
+      : compatibleSpeeds[0];
+
+    if (effectiveSpeedId) {
+      const nextSpeedLabel = effectiveSpeedId === 'slow' ? 'Tiết Kiệm' : 'Nhanh';
+      if (nextSpeedLabel !== speed) {
+        setSpeed(nextSpeedLabel);
       }
+    }
+  }, [activeTier, pricingEntries, resolution, server, speed]);
 
-      // 3. Background Remover Logic (Force Black & High Quality)
-      if (isRemover) {
-          return "Remove the background completely and place the subject on a pure BLACK background (#000000). CRITICAL: Maintain the original image resolution and subject details exactly. Do NOT downscale, do NOT blur edges, do NOT alter the subject's lighting.";
-      }
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
 
-      return feature.defaultPrompt || "";
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setUploadedImage(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+    event.target.value = '';
   };
 
   const handleExecute = async () => {
-     if (!uploadedImage) {
-         notify(lang === 'vi' ? 'Vui lòng tải ảnh lên' : 'Please upload an image', 'warning');
-         return;
-     }
+    if (isSubmitting) return;
+    if (!uploadedImage) {
+      notify(lang === 'vi' ? 'Vui lòng tải ảnh lên.' : 'Please upload an image.', 'warning');
+      return;
+    }
+    if (isMagicEditor && !prompt.trim()) {
+      notify(lang === 'vi' ? 'Vui lòng nhập yêu cầu chỉnh sửa.' : 'Please enter your edit request.', 'warning');
+      return;
+    }
+    if (!isCatalogReady) {
+      notify(lang === 'vi' ? 'TST đang bảo trì hoặc không sẵn sàng.' : 'TST is unavailable.', 'error');
+      return;
+    }
+    if (!selectedGenerationCost.available) {
+      notify(
+        lang === 'vi'
+          ? 'Cấu hình đang chọn không còn khả dụng trên TST.'
+          : 'Selected configuration is not available on TST.',
+        'error',
+      );
+      return;
+    }
+    if (
+      queueStats.myImageProcessing >= CONCURRENCY_LIMITS.user.imageProcessing &&
+      queueStats.myQueued >= CONCURRENCY_LIMITS.user.queued
+    ) {
+      notify(
+        lang === 'vi'
+          ? 'Bạn đã đạt giới hạn 1 luồng xử lý ảnh và 1 hàng chờ. Vui lòng đợi.'
+          : 'You have reached the limit of 1 image slot and 1 queued job.',
+        'warning',
+      );
+      return;
+    }
+    if (queueStats.systemQueued >= CONCURRENCY_LIMITS.system.queued) {
+      notify(
+        lang === 'vi' ? 'Hệ thống đang quá tải (hàng chờ đầy). Vui lòng thử lại sau.' : 'System queue is full. Please try again later.',
+        'error',
+      );
+      return;
+    }
 
-     if (isMagicEditor && !prompt.trim()) {
-         notify(lang === 'vi' ? 'Vui lòng nhập yêu cầu chỉnh sửa' : 'Please enter edit prompt', 'warning');
-         return;
-     }
+    const user = await getUserProfile();
+    if ((user.vcoin_balance || 0) < selectedGenerationCost.vcoin) {
+      notify(
+        lang === 'vi'
+          ? `Số dư không đủ (cần ${selectedGenerationCost.vcoin} Vcoin).`
+          : `Insufficient balance (need ${selectedGenerationCost.vcoin} Vcoin).`,
+        'error',
+      );
+      return;
+    }
 
-     // Cost Calculation: Photo Editor is more expensive (Premium)
-     const cost = isMagicEditor ? 3 : 2; 
-     const user = await getUserProfile();
-     if (!user) return;
-     
-     if ((user.vcoin_balance || 0) < cost) {
-         notify(lang === 'vi' ? `Số dư không đủ (Cần ${cost} Vcoin)` : `Insufficient balance (Need ${cost} Vcoin)`, 'error');
-         return;
-     }
+    setIsSubmitting(true);
+    const queuedJobId = crypto.randomUUID();
 
-     setLoading(true);
-     setResultImage(null);
-     setProgressLogs([]);
+    const requestedSpeedId = uiSpeedToTst(speed) || 'fast';
+    const requestedServerId = uiServerToTst(server) || 'fast';
+    const compatibleServers = getCompatibleGenerationServers({
+      tier: activeTier,
+      pricingEntries,
+      resolution,
+      speed: requestedSpeedId,
+    });
+    const effectiveServerId = compatibleServers.includes(requestedServerId)
+      ? requestedServerId
+      : compatibleServers[0] || requestedServerId;
+    const compatibleSpeeds = getCompatibleGenerationSpeeds({
+      tier: activeTier,
+      pricingEntries,
+      resolution,
+      serverId: effectiveServerId,
+    });
+    const effectiveSpeedId = compatibleSpeeds.includes(requestedSpeedId)
+      ? requestedSpeedId
+      : compatibleSpeeds[0] || requestedSpeedId;
 
-     try {
-         // Deduct cost and log usage
-         const txDesc = lang === 'vi' ? `Chỉnh sửa: ${feature.name['vi']}` : `Edit: ${feature.name['en']}`;
-         await updateUserBalance(-cost, txDesc, 'usage');
+    const displayPrompt = buildDisplayPrompt(feature.id, prompt, resolution, lang);
+    const engineLabel = activeTier === 'flash' ? `Flash Engine ${resolution}` : `Pro Engine ${resolution}`;
 
-         const instruction = constructPrompt();
-         
-         // Optimize the image before sending to reduce payload size and avoid 429/Resource Exhausted
-         // Using 2048 to keep high quality for editing and background removal
-         const optimizedImage = await optimizePayload(uploadedImage, 2048);
-         const base64Data = optimizedImage.split(',')[1];
-         const mimeType = optimizedImage.substring(optimizedImage.indexOf(':') + 1, optimizedImage.indexOf(';'));
+    const queuedImage: GeneratedImage = {
+      id: queuedJobId,
+      url: '',
+      prompt: displayPrompt,
+      timestamp: Date.now(),
+      updatedAt: Date.now(),
+      assetType: 'image',
+      toolId: feature.id,
+      toolName: feature.name.en,
+      engine: engineLabel,
+      status: 'queued',
+      jobId: queuedJobId,
+      progress: 0,
+      cost: selectedGenerationCost.vcoin,
+    };
 
-         // Calculate aspect ratio
-         let aspectRatio = "1:1";
-         try {
-             const img = await loadImageWithTimeout(uploadedImage);
-             aspectRatio = calculateAspectRatioString(img.width, img.height);
-         } catch (e) {
-             console.warn("Failed to calculate aspect ratio", e);
-         }
+    try {
+      await saveImageToLocalCache(queuedImage);
+    } catch (error) {
+      console.warn('[EditingTool] Failed to persist queued placeholder', error);
+    }
 
-         // --- NEW: UPLOAD TO R2 CLOUD (INPUTS - LOGGING ONLY) ---
-         // We upload to R2 for persistent storage/logging, but we pass the ORIGINAL BASE64 to editImageWithInstructions
-         // to avoid CORS issues when the browser tries to fetch the R2 URL to send to Google.
-         if (uploadedImage && uploadedImage.startsWith('data:')) {
-             setProgressLogs(prev => [...prev, "Đang tải ảnh gốc lên R2 Cloud (Backup)..."]);
-             uploadFileToR2(uploadedImage, 'inputs').then(url => {
-                 console.log("R2 Edit Backup URL:", url);
-             }).catch(e => console.warn("R2 Edit Backup Failed", e));
-         }
+    triggerPoll();
+    onNavigateView?.('gallery');
 
-         let result;
-         let jobResult: { jobId: string, resultPromise: Promise<string> } | null = null;
-         
-         if (isRemover) {
-             jobResult = await removeBackgroundImage(
-                 base64Data, 
-                 instruction, 
-                 mimeType, 
-                 aspectRatio,
-                 (msg) => setProgressLogs(prev => [...prev, msg])
-             );
-         } else if (isUpscaler) {
-             jobResult = await upscaleImage(
-                 base64Data, 
-                 instruction, 
-                 mimeType, 
-                 aspectRatio,
-                 (msg) => setProgressLogs(prev => [...prev, msg])
-             );
-         } else {
-             jobResult = await editImageWithInstructions(
-                 base64Data, 
-                 instruction, 
-                 mimeType, 
-                 aiModel,
-                 aspectRatio,
-                 (msg) => setProgressLogs(prev => [...prev, msg])
-             );
-         }
+    void (async () => {
+      try {
+        const stagedSourceImage =
+          (await tryStageInputToStorage(uploadedImage, `inputs/editing/${feature.id}`)) ||
+          (await optimizePayload(uploadedImage, 1536));
 
-         if (jobResult) {
-            const tempImage: GeneratedImage = {
-                id: crypto.randomUUID(),
-                url: '',
-                prompt: instruction,
-                timestamp: Date.now(),
-                toolId: feature.id,
-                toolName: feature.name['en'],
-                engine: feature.engine,
-                jobId: jobResult.jobId,
-                status: 'processing'
-            };
-            await saveImageToStorage(tempImage);
-            
-            const result = await jobResult.resultPromise;
-            
-            if (result) {
-                setResultImage(result);
-                const newImage: GeneratedImage = {
-                    ...tempImage,
-                    url: result,
-                    status: 'completed'
-                };
-                await saveImageToStorage(newImage);
-                notify(lang === 'vi' ? 'Xử lý thành công!' : 'Processing successful!', 'success');
-            } else {
-                throw new Error("Processing failed");
-            }
-         } else {
-             throw new Error("Job initiation failed");
-         }
-     } catch (error) {
-         console.error(error);
-         // Refund on fail
-         const refundDesc = lang === 'vi' ? `Hoàn tiền: ${feature.name['vi']} (Lỗi)` : `Refund: ${feature.name['en']} Failed`;
-         await updateUserBalance(cost, refundDesc, 'refund');
-         notify(lang === 'vi' ? 'Xử lý thất bại' : 'Processing failed', 'error');
-     } finally {
-         setLoading(false);
-     }
+        let aspectRatio = '1:1';
+        try {
+          const image = await loadImageWithTimeout(uploadedImage);
+          aspectRatio = calculateAspectRatioString(image.width, image.height);
+        } catch (error) {
+          console.warn('[EditingTool] Failed to calculate aspect ratio', error);
+        }
+
+        const queuePayload: ImageEditRecipePayload = {
+          recipeType: 'image_edit_recipe_v1',
+          modelId: getGenerationModelId(activeTier),
+          prompt: buildInstructionPrompt(feature.id, prompt, resolution),
+          sourceImage: stagedSourceImage,
+          mimeType: extractMimeType(stagedSourceImage) || extractMimeType(uploadedImage),
+          resolution,
+          aspectRatio,
+          speed: effectiveSpeedId,
+          serverId: effectiveServerId,
+        };
+
+        await enqueueServerJob({
+          id: queuedJobId,
+          prompt: displayPrompt,
+          toolId: feature.id,
+          toolName: feature.name.en,
+          engine: engineLabel,
+          assetType: 'image',
+          costVcoin: selectedGenerationCost.vcoin,
+          queueKind: 'image_generate',
+          queuePayload,
+        });
+
+        window.dispatchEvent(new Event('balance_updated'));
+        triggerPoll();
+        notify(
+          lang === 'vi'
+            ? 'Đã tạo job. Tiến trình sẽ được cập nhật realtime trong Lịch sử.'
+            : 'Job submitted. Progress will update in History in realtime.',
+          'success',
+        );
+      } catch (error) {
+        console.error('[EditingTool] Failed to enqueue edit job', error);
+        const errorMessage =
+          error instanceof Error
+            ? error.message
+            : lang === 'vi'
+              ? 'Không thể tạo job chỉnh sửa.'
+              : 'Failed to create edit job.';
+
+        try {
+          await saveImageToLocalCache({
+            ...queuedImage,
+            status: 'failed',
+            error: errorMessage,
+            updatedAt: Date.now(),
+            progress: 0,
+          });
+        } catch (persistError) {
+          console.warn('[EditingTool] Failed to persist failed placeholder', persistError);
+        }
+        triggerPoll();
+        notify(errorMessage, 'error');
+      } finally {
+        setIsSubmitting(false);
+      }
+    })();
   };
 
-  const getBorderColor = () => {
-      if (isMagicEditor) return 'border-audi-purple';
-      if (isUpscaler) return 'border-audi-cyan';
-      if (isRemover) return 'border-audi-pink';
-      return 'border-purple-500';
-  };
+  const renderGuideContent = () => (
+    <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar">
+      <h3 className="text-xl font-bold text-audi-yellow flex items-center gap-2 border-b border-white/10 pb-2 sticky top-0 bg-[#12121a] z-10">
+        <Icons.BookOpen className="w-6 h-6" /> Hướng Dẫn Sử Dụng
+      </h3>
 
-  const getGradient = () => {
-      if (isMagicEditor) return 'from-audi-purple to-pink-500';
-      if (isUpscaler) return 'from-audi-cyan to-blue-500';
-      if (isRemover) return 'from-audi-pink to-purple-600';
-      return 'from-purple-500 to-pink-600';
-  };
-
-  return (
-    <div className="flex flex-col md:flex-row gap-6 h-full pb-20 md:pb-0">
-      <div className="w-full md:w-1/3 flex flex-col gap-6">
-          <div className={`glass-panel p-6 rounded-3xl border-l-4 ${getBorderColor()}`}>
-             <h2 className={`text-xl font-bold mb-1 text-slate-800 dark:text-white flex items-center gap-2`}>
-                 {isMagicEditor ? <Icons.Wand className="w-5 h-5 text-audi-purple" /> : isUpscaler ? <Icons.Zap className="w-5 h-5 text-audi-cyan" /> : isRemover ? <Icons.Scissors className="w-5 h-5 text-audi-pink" /> : <Icons.Wand className="w-5 h-5 text-purple-500" />}
-                 {feature.name[lang]}
-             </h2>
-             <p className="text-sm text-slate-500 dark:text-slate-400">{feature.description[lang]}</p>
-         </div>
-
-         {/* Upload Area */}
-         <div 
-            onClick={() => fileInputRef.current?.click()}
-            className={`border-2 border-dashed rounded-2xl h-48 flex flex-col items-center justify-center cursor-pointer transition-all overflow-hidden relative group
-                ${uploadedImage 
-                    ? getBorderColor()
-                    : 'border-slate-300 dark:border-slate-700 hover:border-white hover:bg-white/5'}`}
-         >
-             {uploadedImage ? (
-                 <>
-                    <img src={uploadedImage} alt="Source" className="w-full h-full object-contain p-2 opacity-80 group-hover:opacity-100 transition-opacity" />
-                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <span className="text-xs font-bold text-white uppercase"><Icons.Upload className="w-6 h-6 mb-1 mx-auto"/>Đổi Ảnh</span>
-                    </div>
-                 </>
-             ) : (
-                 <div className="text-center p-4">
-                     <div className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-2 ${isMagicEditor ? 'bg-audi-purple/20 text-audi-purple' : isUpscaler ? 'bg-audi-cyan/20 text-audi-cyan' : 'bg-audi-pink/20 text-audi-pink'}`}>
-                         <Icons.Upload className="w-6 h-6" />
-                     </div>
-                     <span className="text-sm font-bold text-slate-600 dark:text-slate-300">{lang === 'vi' ? 'Tải ảnh gốc lên' : 'Upload Source Image'}</span>
-                 </div>
-             )}
-             <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept="image/*" />
-         </div>
-
-         {/* --- CONTROLS SECTION --- */}
-         <div className="space-y-4">
-             
-             {/* 1. PHOTO EDITOR (FORMERLY MAGIC) */}
-             {isMagicEditor && (
-                 <div className="animate-fade-in space-y-4">
-                     <div className="relative">
-                         <div className="absolute top-0 right-0 -mt-2 -mr-2 w-3 h-3 bg-red-500 rounded-full animate-ping"></div>
-                         <div className="bg-[#1a1a24] p-4 rounded-2xl border border-audi-purple/30 shadow-[0_0_15px_rgba(183,33,255,0.1)]">
-                             <label className="text-xs font-bold text-audi-purple uppercase mb-2 flex items-center gap-2">
-                                 <Icons.Sparkles className="w-3 h-3" />
-                                 {lang === 'vi' ? 'Nhập yêu cầu chỉnh sửa' : 'Enter Edit Request'}
-                             </label>
-                             <textarea 
-                                value={prompt}
-                                onChange={(e) => setPrompt(e.target.value)}
-                                className="w-full bg-black/30 border border-white/10 rounded-xl p-3 text-white text-sm focus:border-audi-purple outline-none min-h-[80px] resize-none placeholder:text-slate-600"
-                                placeholder={lang === 'vi' ? "Ví dụ: Thêm nơ hồng vào tóc, đổi background sang rừng rậm..." : "Ex: Add pink bow to hair, change background to jungle..."}
-                             />
-                         </div>
-                     </div>
-
-                     {/* Suggestion Chips */}
-                     <div className="space-y-2">
-                         <span className="text-[10px] font-bold text-slate-500 uppercase">Gợi ý nhanh</span>
-                         <div className="flex flex-wrap gap-2 max-h-[100px] overflow-y-auto custom-scrollbar">
-                             {SUGGESTIONS.map((s, idx) => (
-                                 <button
-                                    key={idx}
-                                    onClick={() => setPrompt(s.label[lang === 'vi' ? 'vi' : 'en'])}
-                                    className="flex items-center gap-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded-lg px-2 py-1.5 text-[10px] text-slate-300 transition-colors"
-                                 >
-                                     <s.icon className="w-3 h-3 text-audi-purple" />
-                                     {s.label[lang === 'vi' ? 'vi' : 'en']}
-                                 </button>
-                             ))}
-                         </div>
-                     </div>
-                 </div>
-             )}
-
-             {/* 2. UPSCALER CONTROLS */}
-             {isUpscaler && (
-                 <div className="animate-fade-in space-y-4 bg-white/5 p-4 rounded-2xl border border-white/10">
-                     <div className="flex items-center gap-3">
-                         <div className="p-2 bg-audi-cyan/20 rounded-lg text-audi-cyan">
-                             <Icons.Zap className="w-5 h-5" />
-                         </div>
-                         <div>
-                             <h4 className="text-sm font-bold text-white">Làm Nét 4K (High Fidelity)</h4>
-                             <p className="text-xs text-slate-400 mt-1">
-                                 Tự động khôi phục chi tiết, làm nét ảnh.
-                                 <br/>
-                                 <span className="text-audi-cyan">Cam kết không biến dạng mặt & trang phục.</span>
-                             </p>
-                         </div>
-                     </div>
-                 </div>
-             )}
-
-             {/* 3. REMOVER CONTROLS */}
-             {isRemover && (
-                 <div className="animate-fade-in space-y-4 bg-white/5 p-4 rounded-2xl border border-white/10">
-                     <div className="flex items-center gap-3">
-                         <div className="p-2 bg-audi-pink/20 rounded-lg text-audi-pink">
-                             <Icons.Scissors className="w-5 h-5" />
-                         </div>
-                         <div>
-                             <h4 className="text-sm font-bold text-white">Chế độ Tách Nền (HQ)</h4>
-                             <p className="text-xs text-slate-400 mt-1">
-                                 Tự động tách nền và chuyển sang nền đen (Black).
-                                 <br/>
-                                 <span className="text-audi-cyan">Giữ nguyên độ phân giải gốc (4K Supported).</span>
-                             </p>
-                         </div>
-                     </div>
-                 </div>
-             )}
-
-             {/* 4. GENERIC PROMPT (Legacy Fallback) */}
-             {!isUpscaler && !isRemover && !isMagicEditor && (
-                 <div className="space-y-2">
-                     <label className="text-sm font-bold text-slate-700 dark:text-slate-300">{lang === 'vi' ? 'Yêu cầu thêm' : 'Extra Instructions'}</label>
-                     <input 
-                        type="text" 
-                        value={prompt}
-                        onChange={(e) => setPrompt(e.target.value)}
-                        className="w-full p-3 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-sm focus:ring-2 focus:ring-purple-500 outline-none dark:text-white"
-                        placeholder={lang === 'vi' ? 'Ví dụ: Làm sáng hơn...' : 'Ex: Make it brighter...'}
-                     />
-                 </div>
-             )}
-         </div>
-
-         {/* MODEL SELECTOR */}
-         {isMagicEditor && (
-             <div className="space-y-2">
-                 <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1">
-                     <Icons.Cpu className="w-3 h-3" />
-                     {lang === 'vi' ? 'AI Model' : 'AI Model'}
-                 </label>
-                 <div className="flex bg-white/5 p-1 rounded-xl border border-white/10">
-                     <button 
-                         onClick={() => setAiModel('flash')}
-                         className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1 ${aiModel === 'flash' ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
-                     >
-                         <Icons.Zap className="w-3 h-3" />
-                         Flash (Fast)
-                     </button>
-                     <button 
-                         onClick={() => setAiModel('pro')}
-                         className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1 ${aiModel === 'pro' ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
-                     >
-                         <Icons.Sparkles className="w-3 h-3" />
-                         Pro (High Quality)
-                     </button>
-                 </div>
-             </div>
-         )}
-
-         {/* HQ Cloud Link (Always On) */}
-         <div className="pt-4 border-t border-white/10 space-y-3">
-             <label className="text-[10px] font-bold text-slate-400 uppercase">Tính năng mặc định (Included)</label>
-             <div className="flex items-center justify-between p-3 rounded-xl bg-audi-cyan/10 border border-audi-cyan/30">
-                 <div className="flex items-center gap-3">
-                     <div className="w-8 h-8 rounded-full bg-audi-cyan/20 flex items-center justify-center text-audi-cyan">
-                         <Icons.Cloud className="w-4 h-4" />
-                     </div>
-                     <div>
-                         <div className="text-xs font-bold text-white">HQ Cloud Link (R2)</div>
-                         <div className="text-[9px] text-audi-cyan font-bold">ACTIVE • FREE</div>
-                     </div>
-                 </div>
-                 <Icons.Lock className="w-4 h-4 text-audi-cyan opacity-50" />
-             </div>
-         </div>
-
-         {/* COST & ACTION */}
-         <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/10">
-             <span className="text-xs text-slate-400 font-bold uppercase">{lang === 'vi' ? 'Chi phí' : 'Cost'}</span>
-             <span className="text-sm font-bold text-audi-yellow">{isMagicEditor ? 3 : 2} Vcoin</span>
-         </div>
-
-         <button 
-            onClick={handleExecute}
-            disabled={loading || !uploadedImage}
-            className={`w-full py-4 bg-gradient-to-r ${getGradient()} text-white rounded-xl font-bold shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed hover:scale-[1.02] shadow-[0_5px_20px_rgba(0,0,0,0.3)]`}
-         >
-             {loading ? <Icons.Loader className="animate-spin" /> : <Icons.Wand />}
-             {loading ? (lang === 'vi' ? 'Đang xử lý...' : 'Processing...') : (lang === 'vi' ? 'THỰC HIỆN NGAY' : 'EXECUTE')}
-         </button>
+      <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-3">
+        <h4 className="text-sm font-bold text-audi-cyan flex items-center gap-2">
+          <Icons.Wand className="w-4 h-4" /> Chỉnh Sửa Ảnh
+        </h4>
+        <p className="text-xs text-slate-300 leading-relaxed">
+          Dùng prompt để thay đổi trang phục, bối cảnh hoặc thêm chi tiết mới vào ảnh gốc.
+        </p>
       </div>
 
-      {/* RESULT AREA */}
-      <div className="flex-1 glass-panel rounded-3xl p-6 flex flex-col items-center justify-center bg-slate-100/50 dark:bg-black/20 min-h-[400px] relative overflow-hidden">
-          {loading ? (
-               <div className="text-center animate-pulse z-10 w-full max-w-md">
-                   <div className="relative w-24 h-24 mx-auto mb-6">
-                       <div className={`absolute inset-0 rounded-full border-4 border-t-transparent animate-spin ${isUpscaler ? 'border-audi-cyan' : isMagicEditor ? 'border-audi-purple' : 'border-audi-pink'}`}></div>
-                       <Icons.Sparkles className={`w-10 h-10 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 ${isUpscaler ? 'text-audi-cyan' : isMagicEditor ? 'text-audi-purple' : 'text-audi-pink'}`} />
-                   </div>
-                   <p className="text-white font-bold text-lg font-game tracking-widest">{lang === 'vi' ? 'AI ĐANG SUY NGHĨ...' : 'AI THINKING...'}</p>
-                   
-                   {/* Progress Logs */}
-                   <div className="mt-6 text-left bg-black/40 rounded-xl p-4 border border-white/5 h-32 overflow-y-auto custom-scrollbar flex flex-col gap-2">
-                       {progressLogs.length === 0 ? (
-                           <div className="text-xs text-slate-500 italic flex items-center gap-2">
-                               <Icons.Loader className="w-3 h-3 animate-spin" />
-                               {lang === 'vi' ? 'Đang khởi tạo...' : 'Initializing...'}
-                           </div>
-                       ) : (
-                           progressLogs.map((log, idx) => (
-                               <div key={idx} className="text-xs text-slate-300 font-mono animate-fade-in flex items-start gap-2">
-                                   <span className="text-audi-cyan mt-0.5">›</span>
-                                   <span>{log}</span>
-                               </div>
-                           ))
-                       )}
-                   </div>
-                   <div className="mt-6 w-full bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3 flex items-start gap-3 animate-pulse text-left">
-                       <Icons.AlertTriangle className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" />
-                       <p className="text-xs text-yellow-400 font-bold leading-relaxed">
-                           {lang === 'vi' ? 'Quá trình xử lý thường mất từ 5-10 phút. Vui lòng chờ đợi quá trình hoàn tất, không tải lại trang!' : 'Processing usually takes 5-10 minutes. Please wait for the process to complete, do not reload the page!'}
-                       </p>
-                   </div>
-               </div>
-          ) : resultImage ? (
-              <div className="w-full h-full flex flex-col items-center justify-center gap-4 z-10">
-                   <div className="relative w-full h-full max-h-[60vh] flex items-center justify-center group select-none">
-                       {/* Result Image */}
-                       <img 
-                            src={isComparing ? uploadedImage! : resultImage} 
-                            alt="Result" 
-                            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl border border-white/10"
-                            onMouseDown={() => setIsComparing(true)}
-                            onMouseUp={() => setIsComparing(false)}
-                            onTouchStart={() => setIsComparing(true)}
-                            onTouchEnd={() => setIsComparing(false)}
-                        />
-                       
-                       {/* Compare Badge */}
-                       <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1 rounded-full border border-white/20 pointer-events-none">
-                           {isComparing ? 'ORIGINAL' : 'RESULT (Hold to Compare)'}
-                       </div>
-                   </div>
+      <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-3">
+        <h4 className="text-sm font-bold text-audi-pink flex items-center gap-2">
+          <Icons.Scissors className="w-4 h-4" /> Tách Nền
+        </h4>
+        <p className="text-xs text-slate-300 leading-relaxed">
+          AI sẽ tách chủ thể và đưa ảnh về nền đen sạch, giữ nguyên nhân vật và chi tiết.
+        </p>
+      </div>
 
-                   <div className="flex gap-3">
-                       <a 
-                        href={resultImage} 
-                        download={`dmp-edit-${feature.id}-${Date.now()}.png`}
-                        className="px-6 py-3 bg-white text-black hover:bg-audi-cyan transition-colors rounded-xl font-bold flex items-center gap-2 shadow-lg"
-                      >
-                          <Icons.Download className="w-4 h-4" />
-                          {lang === 'vi' ? 'Tải Về' : 'Download'}
-                      </a>
-                      <button onClick={() => setIsComparing(!isComparing)} className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold border border-white/10">
-                          {isComparing ? 'Xem Kết Quả' : 'Xem Ảnh Gốc'}
-                      </button>
-                   </div>
-              </div>
-          ) : (
-              <div className="text-center text-slate-500 z-10">
-                  <div className="w-24 h-24 bg-white/5 rounded-[2rem] flex items-center justify-center mx-auto mb-4 border border-white/5 shadow-inner">
-                      <Icons.Image className="w-10 h-10 opacity-30" />
+      <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-3">
+        <h4 className="text-sm font-bold text-audi-yellow flex items-center gap-2">
+          <Icons.Zap className="w-4 h-4" /> Làm Nét
+        </h4>
+        <p className="text-xs text-slate-300 leading-relaxed">
+          Khôi phục và nâng chất lượng ảnh mà không làm vẽ lại khuôn mặt hoặc trang phục.
+        </p>
+      </div>
+    </div>
+  );
+
+  const TipIcon = SMART_TIPS[currentTipIdx].icon;
+
+  return (
+    <div className="flex flex-col items-center w-full max-w-5xl mx-auto pb-12 animate-fade-in relative">
+      {guideTopic && (
+        <div
+          className="fixed inset-0 z-[100] flex items-start justify-center p-4 pt-32 animate-fade-in"
+          onClick={() => setGuideTopic(null)}
+        >
+          <div
+            className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-audi-yellow/50 shadow-[0_0_30px_rgba(251,218,97,0.2)] relative"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button onClick={() => setGuideTopic(null)} className="absolute top-4 right-4 text-slate-500 hover:text-white">
+              <Icons.X className="w-6 h-6" />
+            </button>
+            {renderGuideContent()}
+            <div className="mt-6 pt-4 border-t border-white/10 text-center">
+              <button
+                onClick={() => setGuideTopic(null)}
+                className="px-6 py-2 bg-white/10 hover:bg-white/20 rounded-full text-xs font-bold text-white transition-colors"
+              >
+                Đã Hiểu
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="w-full flex justify-center mb-4">
+        <div className="bg-[#12121a] p-1.5 rounded-2xl border border-white/10 flex gap-1 shadow-lg overflow-x-auto no-scrollbar max-w-full">
+          {EDITING_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => onNavigateToFeature?.(tab.id)}
+              className={`px-4 py-2.5 rounded-xl flex items-center gap-2 text-xs md:text-sm font-bold transition-all whitespace-nowrap ${
+                feature.id === tab.id
+                  ? 'bg-white text-black shadow-md'
+                  : 'text-slate-500 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <tab.icon className="w-3 h-3 md:w-4 md:h-4" />
+              {tab.label[lang]}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="w-full mb-4 bg-[#1a1500] border border-audi-yellow/20 rounded-xl p-2 md:p-3 flex items-center gap-2 md:gap-3 overflow-hidden relative shadow-[0_0_15px_rgba(251,218,97,0.05)]">
+        <div className="shrink-0 p-1 md:p-1.5 bg-audi-yellow/10 rounded-lg border border-audi-yellow/20">
+          <TipIcon className="w-3 h-3 md:w-4 md:h-4 text-audi-yellow animate-pulse" />
+        </div>
+        <div className="flex-1 overflow-hidden relative h-4 md:h-5">
+          <span key={currentTipIdx} className="absolute inset-0 text-[9px] md:text-[11px] text-audi-yellow/80 font-medium whitespace-nowrap overflow-hidden text-ellipsis animate-slide-up">
+            {SMART_TIPS[currentTipIdx].text}
+          </span>
+        </div>
+      </div>
+
+      <div className="w-full mb-4 bg-yellow-500/5 border border-yellow-500/20 rounded-xl p-3 flex items-center gap-3">
+        <div className="shrink-0 p-1.5 bg-yellow-500/10 rounded-full">
+          <Icons.Flame className="w-4 h-4 text-yellow-500 animate-pulse" />
+        </div>
+        <p className="text-[10px] md:text-xs text-yellow-200/80 font-medium leading-relaxed">
+          <strong className="text-yellow-500">Lưu ý:</strong> Luồng chỉnh sửa giờ chạy ẩn theo hàng chờ.
+          Sau khi bấm tạo, tiến trình sẽ được cập nhật realtime trong Lịch sử.
+        </p>
+      </div>
+
+      <a
+        href="https://aumix3d.com/"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="w-full mb-4 md:mb-6 bg-gradient-to-r from-[#001a2c] to-[#000a14] border border-audi-cyan/30 rounded-xl p-3 md:p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 md:gap-4 hover:border-audi-cyan transition-all shadow-[0_0_20px_rgba(33,212,253,0.1)] group relative overflow-hidden"
+      >
+        <div className="absolute top-0 right-0 w-32 h-32 bg-audi-cyan/10 blur-[40px] rounded-full group-hover:bg-audi-cyan/20 transition-all" />
+        <div className="relative z-10 flex items-center gap-3 md:gap-4 w-full md:w-auto">
+          <div className="shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-full bg-audi-cyan/10 flex items-center justify-center border border-audi-cyan/30">
+            <Icons.Sparkles className="w-5 h-5 md:w-6 md:h-6 text-audi-cyan" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded uppercase">MỚI</span>
+              <h4 className="text-white font-bold text-xs md:text-sm uppercase tracking-wider group-hover:text-audi-cyan transition-colors">
+                Mix Đồ 3D Audition
+              </h4>
+            </div>
+            <p className="text-[10px] md:text-xs text-slate-400 leading-relaxed">
+              Bạn chưa có ảnh nhân vật? Mix đồ và chụp ảnh tách nền cực nét ngay trên web.
+            </p>
+          </div>
+        </div>
+        <div className="relative z-10 shrink-0 w-full md:w-auto mt-1 md:mt-0">
+          <div className="w-full md:w-auto px-4 py-2 bg-audi-cyan/20 hover:bg-audi-cyan/30 border border-audi-cyan/50 rounded-lg flex items-center justify-center gap-2 transition-all">
+            <span className="text-[10px] md:text-xs font-bold text-audi-cyan uppercase">Mở AuMix3D</span>
+            <Icons.ExternalLink className="w-3 h-3 md:w-4 md:h-4 text-audi-cyan" />
+          </div>
+        </div>
+      </a>
+
+      <div className="w-full grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4 md:mt-0">
+        <div className="lg:col-span-2 space-y-4">
+          <div className="flex items-center justify-between px-2">
+            <h3 className="font-bold text-white text-sm uppercase flex items-center gap-2">
+              <Icons.Image className="w-4 h-4 text-audi-pink" /> 1. Upload Ảnh Cần Xử Lý
+            </h3>
+            <button
+              onClick={() => setGuideTopic('guide')}
+              className="text-xs text-audi-cyan hover:text-white flex items-center gap-1 transition-colors bg-audi-cyan/10 px-2 py-1 rounded-lg border border-audi-cyan/20"
+            >
+              <Icons.Info className="w-3 h-3" /> Hướng dẫn
+            </button>
+          </div>
+
+          <div className="flex flex-col gap-4 w-full">
+            <div className="flex justify-center w-full">
+              <div className="w-full md:w-[220px] bg-[#12121a] border border-white/10 rounded-2xl p-4 hover:border-white/20 transition-colors relative group shrink-0 shadow-lg">
+                <div className="flex justify-between items-center mb-3">
+                  <span className="text-xs font-bold text-white bg-white/10 px-2 py-1 rounded">ẢNH GỐC</span>
+                </div>
+                <div className="space-y-3">
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full h-64 bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-pink cursor-pointer relative overflow-hidden transition-all flex flex-col items-center justify-center"
+                  >
+                    {uploadedImage ? (
+                      <img src={uploadedImage} className="w-full h-full object-contain" alt="Source" />
+                    ) : (
+                      <div className="flex flex-col items-center text-slate-500 transition-colors">
+                        <Icons.Upload className="w-8 h-8 mb-1" />
+                        <span className="text-[10px] uppercase font-bold">Tải Ảnh Lên</span>
+                      </div>
+                    )}
                   </div>
-                  <p className="text-sm font-bold uppercase tracking-widest opacity-50">{lang === 'vi' ? 'KẾT QUẢ SẼ HIỆN Ở ĐÂY' : 'RESULT WILL APPEAR HERE'}</p>
+                </div>
+                <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept="image/*" />
               </div>
-          )}
-          
-          {/* Decorative Grid Background */}
-          <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none"></div>
+            </div>
+
+            {isMagicEditor && (
+              <div className="w-full bg-[#12121a] border border-white/10 rounded-2xl p-4 shadow-lg">
+                <div className="flex justify-between items-center mb-3">
+                  <label className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
+                    <Icons.MessageCircle className="w-4 h-4" /> 2. Yêu cầu chỉnh sửa
+                  </label>
+                </div>
+
+                <div className="flex flex-col gap-4">
+                  <textarea
+                    value={prompt}
+                    onChange={(event) => setPrompt(event.target.value)}
+                    placeholder={lang === 'vi' ? 'Mô tả chi tiết yêu cầu chỉnh sửa...' : 'Describe the edit request...'}
+                    className="w-full bg-black/20 border border-white/5 rounded-xl p-3 text-sm text-white focus:border-audi-purple outline-none resize-none min-h-[150px]"
+                  />
+
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase">Gợi ý nhanh</span>
+                    <div className="flex flex-wrap gap-2 max-h-[100px] overflow-y-auto custom-scrollbar">
+                      {SUGGESTIONS.map((suggestion, index) => (
+                        <button
+                          key={index}
+                          onClick={() => setPrompt(suggestion.label[lang])}
+                          className="flex items-center gap-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded-lg px-2 py-1.5 text-[10px] text-slate-300 transition-colors"
+                        >
+                          <suggestion.icon className="w-3 h-3 text-audi-purple" />
+                          {suggestion.label[lang]}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="lg:col-span-1 space-y-6">
+          <div className="bg-[#12121a] border border-white/10 rounded-2xl p-5 flex flex-col gap-5 shadow-lg h-full">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <h3 className="font-bold text-white flex items-center gap-2">
+                <Icons.Settings className="w-5 h-5 text-slate-400" />
+                {isMagicEditor ? '3. Cấu Hình' : '2. Cấu Hình'}
+              </h3>
+            </div>
+
+            {isUpscaler && (
+              <div className="space-y-4 bg-white/5 p-4 rounded-2xl border border-white/10">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-audi-cyan/20 rounded-lg text-audi-cyan">
+                    <Icons.Zap className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-white">Làm Nét 4K</h4>
+                    <p className="text-xs text-slate-400 mt-1">Khôi phục chi tiết ảnh và giữ nguyên khuôn mặt, trang phục.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {isRemover && (
+              <div className="space-y-4 bg-white/5 p-4 rounded-2xl border border-white/10">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-audi-pink/20 rounded-lg text-audi-pink">
+                    <Icons.Scissors className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-white">Chế Độ Tách Nền</h4>
+                    <p className="text-xs text-slate-400 mt-1">Tách chủ thể và chuyển nền về đen sạch, vẫn giữ nguyên ảnh gốc.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {isMagicEditor && (
+              <div className="space-y-3">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Mô hình AI</label>
+                <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
+                  <button
+                    onClick={() => isFlashAvailable && setAiModel('flash')}
+                    disabled={!isFlashAvailable}
+                    className={`flex-1 py-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                      aiModel === 'flash'
+                        ? 'bg-audi-purple text-white shadow-lg'
+                        : 'text-slate-500 hover:text-white hover:bg-white/5'
+                    } ${!isFlashAvailable ? 'opacity-40 cursor-not-allowed' : ''}`}
+                  >
+                    <Icons.Zap className={`w-4 h-4 ${aiModel === 'flash' ? 'text-white' : 'text-slate-400'}`} />
+                    Flash
+                  </button>
+                  <button
+                    onClick={() => isProAvailable && setAiModel('pro')}
+                    disabled={!isProAvailable}
+                    className={`flex-1 py-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                      aiModel === 'pro'
+                        ? 'bg-audi-purple text-white shadow-lg'
+                        : 'text-slate-500 hover:text-white hover:bg-white/5'
+                    } ${!isProAvailable ? 'opacity-40 cursor-not-allowed' : ''}`}
+                  >
+                    <Icons.Crown className={`w-4 h-4 ${aiModel === 'pro' ? 'text-white' : 'text-slate-400'}`} />
+                    Pro
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Độ phân giải</label>
+              <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
+                {(['1K', '2K', '4K'] as Resolution[]).map((value) => {
+                  const disabled = !availableResolutions.includes(value);
+                  return (
+                    <button
+                      key={value}
+                      onClick={() => !disabled && setResolution(value)}
+                      disabled={disabled}
+                      className={`flex-1 py-3 rounded-lg text-xs font-bold transition-all ${
+                        resolution === value
+                          ? 'bg-audi-purple text-white shadow-lg'
+                          : 'text-slate-500 hover:text-white hover:bg-white/5'
+                      } ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                    >
+                      {value}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
+                <Icons.Zap className="w-3 h-3" />
+                Tốc độ xử lý
+              </label>
+              <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
+                {availableSpeedLabels.map((label) => (
+                  <button
+                    key={label}
+                    onClick={() => setSpeed(label)}
+                    className={`flex-1 py-3 rounded-lg text-xs font-bold transition-all ${
+                      speed === label
+                        ? 'bg-audi-purple text-white shadow-lg'
+                        : 'text-slate-500 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
+                <Icons.Database className="w-3 h-3" />
+                Server
+              </label>
+              <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
+                {availableServerLabels.map((label) => (
+                  <button
+                    key={label}
+                    onClick={() => setServer(label)}
+                    className={`flex-1 py-3 rounded-lg text-xs font-bold transition-all ${
+                      server === label
+                        ? 'bg-audi-cyan text-black shadow-lg'
+                        : 'text-slate-500 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-audi-purple/20 to-audi-pink/20 border border-white/10 p-3 mt-2">
+              <div className="flex justify-between items-center relative z-10">
+                <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Giá hiện tại</span>
+                <div className="flex items-end gap-1">
+                  <span className="text-xl font-black text-white font-game drop-shadow-md">
+                    {selectedGenerationCost.available ? selectedGenerationCost.vcoin : '--'}
+                  </span>
+                  <span className="text-[10px] font-bold text-audi-yellow mb-1">VCOIN</span>
+                </div>
+              </div>
+              <div className="flex justify-between text-[9px] text-slate-500 mt-2 font-mono border-t border-white/5 pt-2">
+                <span className={resolution === '1K' ? 'text-white font-bold' : ''}>1K: {resolutionCostMap['1K'].vcoin}VC</span>
+                <span className={resolution === '2K' ? 'text-white font-bold' : ''}>2K: {resolutionCostMap['2K'].vcoin}VC</span>
+                <span className={resolution === '4K' ? 'text-white font-bold' : ''}>4K: {resolutionCostMap['4K'].vcoin}VC</span>
+              </div>
+            </div>
+
+            <button
+              onClick={handleExecute}
+              disabled={isSubmitting || !uploadedImage || !isCatalogReady || !selectedGenerationCost.available}
+              className={`w-full py-3.5 mt-auto rounded-xl font-bold text-white shadow-[0_0_20px_rgba(255,0,153,0.4)] transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed hover:scale-[1.02] bg-gradient-to-r ${getGradient(feature.id)}`}
+            >
+              {isSubmitting ? <Icons.Loader className="animate-spin" /> : <Icons.Wand />}
+              {isSubmitting ? 'ĐANG GỬI JOB...' : 'THỰC HIỆN NGAY'}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

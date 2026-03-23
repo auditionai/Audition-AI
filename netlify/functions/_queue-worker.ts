@@ -1,0 +1,545 @@
+import { getServiceRoleClient } from './_supabase';
+import { validateQueuePayloadAgainstLiveCatalog } from './_tst-live-catalog';
+import { prepareProviderPayloadFromQueueRecipe } from './_queue-recipes';
+import { runVertexImageEdit } from './_vertex-image-edit';
+import { getRecipeValidationPayload, isQueueRecipePayload, type ImageEditRecipePayload } from '../../shared/queueRecipes';
+
+type QueueJobRow = {
+  id: string;
+  user_id: string;
+  asset_type: 'image' | 'video';
+  queue_kind: string;
+  queue_payload: Record<string, unknown> | null;
+  prompt: string;
+  tool_id: string | null;
+  tool_name: string | null;
+  model_used: string | null;
+  cost_vcoin: number | null;
+  job_id?: string | null;
+};
+
+type QueueWorkerSummary = {
+  claimedForDispatch: number;
+  submitted: number;
+  claimedForPoll: number;
+  completed: number;
+  failed: number;
+  requeued: number;
+};
+
+let activeWorkerRun: Promise<QueueWorkerSummary> | null = null;
+
+const TST_API_KEY = process.env.TST_API_KEY || '';
+const TST_API_BASE = 'https://api.tramsangtao.com/v1';
+const POLL_INTERVAL_SECONDS = 10;
+const MAX_DISPATCH_RETRIES = 6;
+const MAX_POLL_FAILURES = 8;
+const MAX_PROCESSING_AGE_MS = 45 * 60 * 1000;
+const MAX_PROVIDER_GENERIC_RETRIES = 2;
+
+const isTransientError = (message: string) => {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes('tst_unavailable') ||
+    normalized.includes('maintenance') ||
+    normalized.includes('not available') ||
+    normalized.includes('unavailable') ||
+    normalized.includes('429') ||
+    normalized.includes('rate limit') ||
+    normalized.includes('timeout') ||
+    normalized.includes('timed out') ||
+    normalized.includes('overloaded') ||
+    normalized.includes('503') ||
+    normalized.includes('502') ||
+    normalized.includes('504') ||
+    normalized.includes('network')
+  );
+};
+
+const parseErrorMessage = async (response: Response) => {
+  try {
+    const data = await response.json();
+    return data?.error || data?.message || data?.detail || `${response.status} ${response.statusText}`;
+  } catch {
+    return `${response.status} ${response.statusText}`;
+  }
+};
+
+const extractJobId = (data: any): string | null => {
+  const value = data?.job_id || data?.jobId || data?.id || data?.data?.job_id || data?.data?.jobId || data?.data?.id;
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+};
+
+const extractResultUrl = (data: any): string | null => {
+  if (typeof data?.result === 'string' && data.result.trim()) return data.result.trim();
+  if (Array.isArray(data?.result) && typeof data.result[0] === 'string' && data.result[0].trim()) return data.result[0].trim();
+  if (typeof data?.output === 'string' && data.output.trim()) return data.output.trim();
+  if (typeof data?.data?.result === 'string' && data.data.result.trim()) return data.data.result.trim();
+  return null;
+};
+
+const getRetryDelaySeconds = (attemptCount: number) => {
+  if (attemptCount <= 0) return POLL_INTERVAL_SECONDS;
+  return Math.min(300, 15 * 2 ** Math.min(attemptCount - 1, 4));
+};
+
+const isGenericProviderFailure = (message: string) => {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes('job failed, change prompt or input and try again') ||
+    normalized.includes('change prompt or input and try again')
+  );
+};
+
+const getJobRuntimeState = async (jobId: string) => {
+  const admin = getServiceRoleClient();
+  const { data, error } = await admin
+    .from('generated_images')
+    .select('id, status, attempt_count, processing_started_at, created_at, job_id')
+    .eq('id', jobId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+};
+
+const getGenerateEndpoint = (queueKind: string) => {
+  switch (queueKind) {
+    case 'image_generate':
+      return `${TST_API_BASE}/image/generate`;
+    case 'video_generate':
+      return `${TST_API_BASE}/video/generate`;
+    case 'motion_generate':
+      return `${TST_API_BASE}/motion/generate`;
+    default:
+      throw new Error(`Unsupported queue kind: ${queueKind}`);
+  }
+};
+
+const submitProviderJob = async (queueKind: string, providerPayload: Record<string, unknown>) => {
+  if (!TST_API_KEY) {
+    throw new Error('Missing TST_API_KEY environment variable');
+  }
+  if (!providerPayload || typeof providerPayload !== 'object') {
+    throw new Error('Queue payload is missing');
+  }
+
+  const response = await fetch(getGenerateEndpoint(queueKind), {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${TST_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(providerPayload),
+    signal: AbortSignal.timeout(295000),
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response));
+  }
+
+  const data = await response.json();
+  const providerJobId = extractJobId(data);
+  if (!providerJobId) {
+    throw new Error(`Provider did not return job_id: ${JSON.stringify(data)}`);
+  }
+
+  return providerJobId;
+};
+
+const pollProviderJob = async (providerJobId: string) => {
+  if (!TST_API_KEY) {
+    throw new Error('Missing TST_API_KEY environment variable');
+  }
+
+  const response = await fetch(`${TST_API_BASE}/jobs/${encodeURIComponent(providerJobId)}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${TST_API_KEY}`,
+    },
+    signal: AbortSignal.timeout(30000),
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response));
+  }
+
+  return response.json();
+};
+
+const releaseLease = async (jobId: string) => {
+  const admin = getServiceRoleClient();
+  await admin
+    .from('generated_images')
+    .update({
+      lease_token: null,
+      lease_expires_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', jobId);
+};
+
+const markFailedAndRefund = async (job: QueueJobRow, errorMessage: string) => {
+  const admin = getServiceRoleClient();
+  await admin
+    .from('generated_images')
+    .update({
+      status: 'failed',
+      error_message: errorMessage,
+      progress: 0,
+      finished_at: new Date().toISOString(),
+      lease_token: null,
+      lease_expires_at: null,
+      next_poll_at: null,
+      last_error_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', job.id);
+
+  await admin.rpc('refund_generated_job', {
+    p_generated_image_id: job.id,
+    p_reason: `Refund: ${job.tool_name || job.queue_kind} failed`,
+  });
+};
+
+const requeueJob = async (job: QueueJobRow, errorMessage: string) => {
+  const admin = getServiceRoleClient();
+  const state = await getJobRuntimeState(job.id);
+  const nextAttemptCount = Number(state?.attempt_count || 0) + 1;
+
+  if (nextAttemptCount >= MAX_DISPATCH_RETRIES) {
+    await markFailedAndRefund(job, errorMessage);
+    return 'failed';
+  }
+
+  const nextPollAt = new Date(Date.now() + getRetryDelaySeconds(nextAttemptCount) * 1000).toISOString();
+
+  await admin
+    .from('generated_images')
+    .update({
+      status: 'queued',
+      job_id: null,
+      processing_started_at: null,
+      error_message: errorMessage,
+      lease_token: null,
+      lease_expires_at: null,
+      next_poll_at: nextPollAt,
+      attempt_count: nextAttemptCount,
+      last_error_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', job.id);
+
+  return 'requeued';
+};
+
+const markPreparing = async (job: QueueJobRow) => {
+  const admin = getServiceRoleClient();
+  await admin
+    .from('generated_images')
+    .update({
+      status: 'processing',
+      progress: 1,
+      error_message: null,
+      processing_started_at: new Date().toISOString(),
+      next_poll_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', job.id);
+};
+
+const shouldSkipDispatch = async (job: QueueJobRow) => {
+  const state = await getJobRuntimeState(job.id);
+  if (!state) {
+    return true;
+  }
+
+  const currentStatus = String(state.status || '').toLowerCase();
+  const providerJobId = typeof state.job_id === 'string' ? state.job_id.trim() : '';
+
+  if (providerJobId) {
+    return true;
+  }
+
+  if (currentStatus === 'completed' || currentStatus === 'failed') {
+    return true;
+  }
+
+  return false;
+};
+
+const markSubmitted = async (job: QueueJobRow, providerJobId: string) => {
+  const admin = getServiceRoleClient();
+  await admin
+    .from('generated_images')
+    .update({
+      status: 'processing',
+      job_id: providerJobId,
+      progress: 0,
+      error_message: null,
+      processing_started_at: new Date().toISOString(),
+      next_poll_at: new Date(Date.now() + POLL_INTERVAL_SECONDS * 1000).toISOString(),
+      lease_token: null,
+      lease_expires_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', job.id);
+};
+
+const persistPreparedPayload = async (jobId: string, providerPayload: Record<string, unknown>) => {
+  const admin = getServiceRoleClient();
+  await admin
+    .from('generated_images')
+    .update({
+      queue_payload: providerPayload,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', jobId);
+};
+
+const markCompletedWithAssetUrl = async (job: QueueJobRow, assetUrl: string) => {
+  const admin = getServiceRoleClient();
+  await admin
+    .from('generated_images')
+    .update({
+      status: 'completed',
+      image_url: assetUrl,
+      progress: 100,
+      error_message: null,
+      attempt_count: 0,
+      finished_at: new Date().toISOString(),
+      next_poll_at: null,
+      lease_token: null,
+      lease_expires_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', job.id);
+};
+
+const markPolledState = async (job: QueueJobRow, providerData: any) => {
+  const admin = getServiceRoleClient();
+  const providerStatus = String(providerData?.status || '').toLowerCase();
+  const progress = typeof providerData?.progress === 'number' ? providerData.progress : 0;
+
+  if (providerStatus === 'completed') {
+    const resultUrl = extractResultUrl(providerData);
+    if (!resultUrl) {
+      throw new Error(`Job completed but no result URL returned: ${JSON.stringify(providerData)}`);
+    }
+
+    await admin
+      .from('generated_images')
+      .update({
+        status: 'completed',
+        image_url: resultUrl,
+        progress: 100,
+        error_message: null,
+        attempt_count: 0,
+        finished_at: new Date().toISOString(),
+        next_poll_at: null,
+        lease_token: null,
+        lease_expires_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', job.id);
+    return 'completed';
+  }
+
+  if (providerStatus === 'failed' || providerStatus === 'error' || providerStatus === 'cancelled' || providerStatus === 'canceled') {
+    const failureMessage = providerData?.error || providerData?.message || 'Provider job failed';
+    const currentState = await getJobRuntimeState(job.id);
+    const currentAttempts = Number(currentState?.attempt_count || 0);
+
+    if (
+      job.queue_kind === 'motion_generate' &&
+      isGenericProviderFailure(failureMessage) &&
+      currentAttempts < MAX_PROVIDER_GENERIC_RETRIES
+    ) {
+      await requeueJob(job, failureMessage);
+      return 'requeued';
+    }
+
+    await markFailedAndRefund(job, failureMessage);
+    return 'failed';
+  }
+
+  await admin
+    .from('generated_images')
+    .update({
+      status: 'processing',
+      progress,
+      error_message: null,
+      next_poll_at: new Date(Date.now() + POLL_INTERVAL_SECONDS * 1000).toISOString(),
+      lease_token: null,
+      lease_expires_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', job.id);
+
+  return 'processing';
+};
+
+const handlePollFailure = async (job: QueueJobRow, errorMessage: string) => {
+  const admin = getServiceRoleClient();
+  const state = await getJobRuntimeState(job.id);
+  const nextAttemptCount = Number(state?.attempt_count || 0) + 1;
+  const startedAt = state?.processing_started_at || state?.created_at || new Date().toISOString();
+  const processingAgeMs = Date.now() - new Date(startedAt).getTime();
+
+  if (nextAttemptCount >= MAX_POLL_FAILURES || processingAgeMs >= MAX_PROCESSING_AGE_MS) {
+    await markFailedAndRefund(job, errorMessage);
+    return 'failed';
+  }
+
+  await admin
+    .from('generated_images')
+    .update({
+      status: 'processing',
+      error_message: errorMessage,
+      attempt_count: nextAttemptCount,
+      next_poll_at: new Date(Date.now() + getRetryDelaySeconds(nextAttemptCount) * 1000).toISOString(),
+      lease_token: null,
+      lease_expires_at: null,
+      last_error_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', job.id);
+
+  return 'requeued';
+};
+
+const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
+  const admin = getServiceRoleClient();
+  const summary: QueueWorkerSummary = {
+    claimedForDispatch: 0,
+    submitted: 0,
+    claimedForPoll: 0,
+    completed: 0,
+    failed: 0,
+    requeued: 0,
+  };
+
+  const { data: dispatchJobs, error: dispatchError } = await admin.rpc('claim_dispatchable_generated_jobs', {
+    p_limit: 8,
+    p_lease_seconds: 120,
+  });
+
+  if (dispatchError) {
+    throw dispatchError;
+  }
+
+  const jobsToDispatch = (dispatchJobs || []) as QueueJobRow[];
+  summary.claimedForDispatch = jobsToDispatch.length;
+
+  for (const job of jobsToDispatch) {
+    try {
+      if (await shouldSkipDispatch(job)) {
+        await releaseLease(job.id);
+        continue;
+      }
+
+      const currentPayload = job.queue_payload || {};
+      const validationPayload = isQueueRecipePayload(currentPayload)
+        ? getRecipeValidationPayload(currentPayload)
+        : currentPayload;
+
+      await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, validationPayload);
+      await markPreparing(job);
+
+      if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'image_edit_recipe_v1') {
+        const editPayload = currentPayload as ImageEditRecipePayload;
+        const resultUrl = await runVertexImageEdit({
+          sourceImage: editPayload.sourceImage,
+          instruction: editPayload.prompt,
+          modelId: editPayload.modelId,
+          mimeType: editPayload.mimeType,
+        });
+
+        await markCompletedWithAssetUrl(job, resultUrl);
+        summary.completed += 1;
+        continue;
+      }
+
+      const providerPayload = isQueueRecipePayload(currentPayload)
+        ? await prepareProviderPayloadFromQueueRecipe(currentPayload)
+        : currentPayload;
+
+      if (isQueueRecipePayload(currentPayload)) {
+        await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, providerPayload);
+        await persistPreparedPayload(job.id, providerPayload);
+        job.queue_payload = providerPayload;
+      }
+
+      const providerJobId = await submitProviderJob(job.queue_kind, providerPayload);
+      await markSubmitted(job, providerJobId);
+      summary.submitted += 1;
+    } catch (error: any) {
+      const message = error?.message || 'Queue dispatch failed';
+      if (message.startsWith('INVALID_TST_CONFIG:')) {
+        await markFailedAndRefund(job, message.replace('INVALID_TST_CONFIG:', '').trim());
+        summary.failed += 1;
+      } else if (isTransientError(message)) {
+        const result = await requeueJob(job, message);
+        if (result === 'failed') {
+          summary.failed += 1;
+        } else {
+          summary.requeued += 1;
+        }
+      } else {
+        await markFailedAndRefund(job, message);
+        summary.failed += 1;
+      }
+    }
+  }
+
+  const { data: pollJobs, error: pollError } = await admin.rpc('claim_pollable_generated_jobs', {
+    p_limit: 8,
+    p_lease_seconds: 60,
+  });
+
+  if (pollError) {
+    throw pollError;
+  }
+
+  const jobsToPoll = (pollJobs || []) as QueueJobRow[];
+  summary.claimedForPoll = jobsToPoll.length;
+
+  for (const job of jobsToPoll) {
+    try {
+      const providerData = await pollProviderJob(String(job.job_id || ''));
+      const state = await markPolledState(job, providerData);
+      if (state === 'completed') summary.completed += 1;
+      if (state === 'failed') summary.failed += 1;
+    } catch (error: any) {
+      const message = error?.message || 'Queue poll failed';
+      console.error('[queue-worker] Poll failed:', job.id, message);
+      const result = await handlePollFailure(job, message);
+      if (result === 'failed') {
+        summary.failed += 1;
+      } else {
+        summary.requeued += 1;
+      }
+    }
+  }
+
+  return summary;
+};
+
+export const runQueueWorker = async (): Promise<QueueWorkerSummary> => {
+  if (activeWorkerRun) {
+    return activeWorkerRun;
+  }
+
+  activeWorkerRun = (async () => {
+    try {
+      return await runQueueWorkerInternal();
+    } finally {
+      activeWorkerRun = null;
+    }
+  })();
+
+  return activeWorkerRun;
+};

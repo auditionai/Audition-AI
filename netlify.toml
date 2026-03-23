@@ -5,6 +5,12 @@
 
 [functions]
   node_bundler = "esbuild"
+[dev]
+  command = "npm run dev:vite"
+  targetPort = 5173
+  port = 8888
+  publish = "dist"
+  functions = "netlify/functions"
 
 # Chuyển hướng các request API vào Netlify Functions
 [[redirects]]
@@ -25,6 +31,66 @@
 [[redirects]]
   from = "/api/tst-upload"
   to = "/.netlify/functions/tst-upload"
+  status = 200
+
+[[redirects]]
+  from = "/api/tst-models-pricing"
+  to = "/.netlify/functions/tst-models-pricing"
+  status = 200
+
+[[redirects]]
+  from = "/api/tst-models"
+  to = "/.netlify/functions/tst-models"
+  status = 200
+
+[[redirects]]
+  from = "/api/tst-video-generate"
+  to = "/.netlify/functions/tst-video-generate"
+  status = 200
+
+[[redirects]]
+  from = "/api/tst-motion-generate"
+  to = "/.netlify/functions/tst-motion-generate"
+  status = 200
+
+[[redirects]]
+  from = "/api/tst-upload-video"
+  to = "/.netlify/functions/tst-upload-video"
+  status = 200
+
+[[redirects]]
+  from = "/api/queue-enqueue"
+  to = "/.netlify/functions/queue-enqueue"
+  status = 200
+
+[[redirects]]
+  from = "/api/queue-submit"
+  to = "/.netlify/functions/queue-submit"
+  status = 200
+
+[[redirects]]
+  from = "/api/queue-tick"
+  to = "/.netlify/functions/queue-tick"
+  status = 200
+
+[[redirects]]
+  from = "/api/payos-sync-transaction"
+  to = "/.netlify/functions/payos-sync-transaction"
+  status = 200
+
+[[redirects]]
+  from = "/api/payos-webhook"
+  to = "/.netlify/functions/payos-webhook"
+  status = 200
+
+[[redirects]]
+  from = "/api/payment-webhook"
+  to = "/.netlify/functions/payos-webhook"
+  status = 200
+
+[[redirects]]
+  from = "/api/create-payment"
+  to = "/.netlify/functions/create_payment"
   status = 200
 
 # Fallback cho React Router (SPA)

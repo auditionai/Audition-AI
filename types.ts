@@ -14,7 +14,7 @@ export interface LocalizedString {
   en: string;
 }
 
-export type FeatureType = 'generation' | 'editing';
+export type FeatureType = 'generation' | 'editing' | 'video';
 
 export interface Feature {
   id: string;
@@ -24,7 +24,7 @@ export interface Feature {
   preview_image: string;
   toolType: FeatureType;
   defaultPrompt?: string;
-  category?: 'generation' | 'editing' | 'style' | 'professional' | 'art';
+  category?: 'generation' | 'editing' | 'style' | 'professional' | 'art' | 'video';
   supportsStyleReference?: boolean;
   isPremium?: boolean;
   tag?: string;
@@ -67,6 +67,8 @@ export interface GeneratedImage {
   url: string; // Base64 data or Public URL
   prompt: string;
   timestamp: number;
+  updatedAt?: number;
+  assetType?: 'image' | 'video';
   toolId: string;
   toolName: string;
   engine: string;

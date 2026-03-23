@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from './supabaseClient';
 import { getUserProfile } from './economyService';
-import { getAllImagesFromStorage, saveImageToStorage } from './storageService';
+import { getAllImagesFromStorage } from './storageService';
 
 export interface JobState {
   jobId: string;
@@ -9,7 +9,39 @@ export interface JobState {
   type: 'image' | 'video';
   status: 'processing' | 'queued';
   timestamp: number;
+  progress?: number;
 }
+
+export interface QueueStats {
+  myImageProcessing: number;
+  myVideoProcessing: number;
+  myQueued: number;
+  systemImageProcessing: number;
+  systemVideoProcessing: number;
+  systemQueued: number;
+}
+
+export const CONCURRENCY_LIMITS = {
+  user: {
+    imageProcessing: 1,
+    videoProcessing: 1,
+    queued: 1,
+  },
+  system: {
+    imageProcessing: 4,
+    videoProcessing: 4,
+    queued: 10,
+  },
+} as const;
+
+const EMPTY_QUEUE_STATS: QueueStats = {
+  myImageProcessing: 0,
+  myVideoProcessing: 0,
+  myQueued: 0,
+  systemImageProcessing: 0,
+  systemVideoProcessing: 0,
+  systemQueued: 0,
+};
 
 let globalChannel: any = null;
 let currentJobs: JobState[] = [];
@@ -53,6 +85,7 @@ export const useConcurrency = () => {
   const [activeJobs, setActiveJobs] = useState<JobState[]>(currentJobs);
   const [userId, setUserId] = useState<string | null>(null);
   const [lastPollTime, setLastPollTime] = useState<number>(0);
+  const [queueStats, setQueueStats] = useState<QueueStats>(EMPTY_QUEUE_STATS);
 
   useEffect(() => {
     getUserProfile().then(user => {
@@ -80,70 +113,67 @@ export const useConcurrency = () => {
     setLastPollTime(Date.now());
   }, []);
 
-  // Poll local storage to automatically broadcast my jobs and check TST API for queued jobs
+  // Poll storage + queue stats
   useEffect(() => {
     if (!userId || !globalChannel) return;
 
     const pollStorage = async () => {
       try {
-        const images = await getAllImagesFromStorage();
-        let stateChanged = false;
-
-        // Check TST API for any queued or processing jobs
-        const now = Date.now();
-        for (const img of images) {
-          if ((img.status === 'queued' || img.status === 'processing') && img.jobId) {
-            try {
-              const pollRes = await fetch(`/api/tst-poll?jobId=${img.jobId}`);
-              if (pollRes.ok) {
-                const pollData = await pollRes.json();
-                if (pollData.status === 'completed' && pollData.result) {
-                  img.status = 'completed';
-                  img.url = pollData.result;
-                  await saveImageToStorage(img);
-                  stateChanged = true;
-                } else if (pollData.status === 'failed' || pollData.status === 'error') {
-                  img.status = 'failed';
-                  img.url = ''; // Or some error indicator
-                  await saveImageToStorage(img);
-                  stateChanged = true;
-                } else if (pollData.status === 'processing') {
-                  img.status = 'processing';
-                  await saveImageToStorage(img);
-                  stateChanged = true;
-                }
-              }
-            } catch (err) {
-              console.error(`Failed to poll TST API for job ${img.jobId}`, err);
-            }
-          }
-        }
-
-        // Re-fetch images if state changed
-        const finalImages = stateChanged ? await getAllImagesFromStorage() : images;
+        const finalImages = await getAllImagesFromStorage();
 
         const myActiveJobs: JobState[] = finalImages
-          .filter(img => (img.status === 'processing' || img.status === 'queued') && img.jobId)
+          .filter(img => (img.status === 'processing' || img.status === 'queued'))
           .map(img => ({
-            jobId: img.id,
+            jobId: img.jobId || img.id,
             userId: userId,
-            type: 'image',
+            type: img.toolId?.includes('video') || img.toolId?.includes('motion') ? 'video' : 'image',
             status: img.status as 'processing' | 'queued',
-            timestamp: img.timestamp
+            timestamp: img.timestamp,
+            progress: img.progress || 0,
           }));
 
-        // We could also check for video jobs here if they are stored similarly
-        
+        const fallbackStats: QueueStats = {
+          myImageProcessing: myActiveJobs.filter(job => job.userId === userId && job.type === 'image' && job.status === 'processing').length,
+          myVideoProcessing: myActiveJobs.filter(job => job.userId === userId && job.type === 'video' && job.status === 'processing').length,
+          myQueued: myActiveJobs.filter(job => job.userId === userId && job.status === 'queued').length,
+          systemImageProcessing: currentJobs.filter(job => job.type === 'image' && job.status === 'processing').length,
+          systemVideoProcessing: currentJobs.filter(job => job.type === 'video' && job.status === 'processing').length,
+          systemQueued: currentJobs.filter(job => job.status === 'queued').length,
+        };
+
         await globalChannel.track({ jobs: myActiveJobs });
+
+        if (supabase) {
+          try {
+            const { data, error } = await supabase.rpc('get_generation_queue_stats');
+            if (!error) {
+              const row = Array.isArray(data) ? data[0] : data;
+              setQueueStats({
+                myImageProcessing: Number(row?.my_image_processing || 0),
+                myVideoProcessing: Number(row?.my_video_processing || 0),
+                myQueued: Number(row?.my_queued || 0),
+                systemImageProcessing: Number(row?.system_image_processing || 0),
+                systemVideoProcessing: Number(row?.system_video_processing || 0),
+                systemQueued: Number(row?.system_queued || 0),
+              });
+            } else {
+              setQueueStats(fallbackStats);
+            }
+          } catch {
+            setQueueStats(fallbackStats);
+          }
+        } else {
+          setQueueStats(fallbackStats);
+        }
       } catch (error) {
         console.error("Failed to poll storage for concurrency:", error);
       }
     };
 
     pollStorage();
-    const interval = setInterval(pollStorage, 5000); // Poll every 5 seconds
+    const interval = setInterval(pollStorage, 10000);
     return () => clearInterval(interval);
   }, [userId, lastPollTime]);
 
-  return { activeJobs, userId, updateMyJobs, triggerPoll };
+  return { activeJobs, userId, queueStats, updateMyJobs, triggerPoll };
 };

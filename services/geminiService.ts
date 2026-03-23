@@ -13,6 +13,8 @@ export interface CharacterData {
 
 // --- HELPER: CLEAN BASE64 ---
 const cleanBase64 = (b64: string) => b64.replace(/^data:image\/\w+;base64,/, "");
+const estimateBase64Bytes = (b64: string) => Math.floor((cleanBase64(b64).length * 3) / 4);
+const TST_UPLOAD_MAX_WIDTH = 1280;
 
 
 // --- HELPER: RETRY WITH BACKOFF ---
@@ -496,6 +498,8 @@ export const generateImage = async (
     onLog: (msg: string) => void = () => {},
     styleReferenceUrl: string | null = null, // Manual override
     availableStyles: any[] = [], // New: Pool of styles for auto-selection
+    speed: 'fast' | 'slow' = 'fast',
+    serverId?: string,
     timeoutMs: number = 900000 // Default 15 mins
 ): Promise<{ jobId: string, resultPromise: Promise<string> }> => {
     onLog(`Initializing Generation Pipeline...`);
@@ -656,7 +660,10 @@ Output ONLY the final command prompt. Do not include the step-by-step analysis i
         'image/jpeg',
         resolution,
         onLog,
-        aspectRatio
+        aspectRatio,
+        speed,
+        serverId,
+        timeoutMs
     );
 
     return { jobId, resultPromise };
@@ -664,17 +671,33 @@ Output ONLY the final command prompt. Do not include the step-by-step analysis i
 
 const uploadBase64ToTramsangtao = async (base64Data: string, mimeType: string, onLog: (msg: string) => void): Promise<string> => {
     onLog("Uploading image to CDN...");
-    const base64Content = base64Data.split(',')[1] || base64Data;
+    const normalizedMimeType = mimeType || 'image/jpeg';
+    const normalizedDataUrl = base64Data.startsWith('data:')
+        ? base64Data
+        : `data:${normalizedMimeType};base64,${cleanBase64(base64Data)}`;
+
+    let optimizedDataUrl = normalizedDataUrl;
+    try {
+        optimizedDataUrl = await optimizePayload(normalizedDataUrl, TST_UPLOAD_MAX_WIDTH);
+    } catch (error) {
+        console.warn("TST upload optimization failed, using original payload:", error);
+    }
+
+    const originalSize = estimateBase64Bytes(normalizedDataUrl);
+    const optimizedSize = estimateBase64Bytes(optimizedDataUrl);
+    onLog(`Optimized ref image: ${(originalSize / 1024 / 1024).toFixed(2)}MB -> ${(optimizedSize / 1024 / 1024).toFixed(2)}MB`);
+
+    const base64Content = cleanBase64(optimizedDataUrl);
     const byteCharacters = atob(base64Content);
     const byteNumbers = new Array(byteCharacters.length);
     for (let i = 0; i < byteCharacters.length; i++) {
         byteNumbers[i] = byteCharacters.charCodeAt(i);
     }
     const byteArray = new Uint8Array(byteNumbers);
-    const blob = new Blob([byteArray], { type: mimeType || 'image/png' });
+    const blob = new Blob([byteArray], { type: normalizedMimeType });
 
     const formData = new FormData();
-    formData.append('file', blob, 'image.png');
+    formData.append('file', blob, 'image.jpg');
 
     const uploadRes = await fetch('/api/tst-upload', {
         method: 'POST',
@@ -690,15 +713,63 @@ const uploadBase64ToTramsangtao = async (base64Data: string, mimeType: string, o
     return uploadData.url;
 };
 
-export const generateWithTramsangtao = async (
+const TST_POLL_INTERVAL_MS = 10000;
+const TST_DEFAULT_TIMEOUT_MS = 30 * 60 * 1000;
+
+type TramsangtaoGeneratePayload = {
+    prompt: string;
+    model: string;
+    img_url?: string[];
+    resolution?: string;
+    aspect_ratio?: string;
+    speed?: string;
+    server_id?: string;
+};
+
+const buildTramsangtaoPayload = (
     prompt: string,
-    modelType: 'flash' | 'pro' = 'flash',
+    modelType: 'flash' | 'pro',
+    imgUrls: string[],
     resolution?: string,
     aspectRatio?: string,
+    speed: 'fast' | 'slow' = 'fast',
+    serverId?: string
+): TramsangtaoGeneratePayload => {
+    const payload: TramsangtaoGeneratePayload = {
+        prompt,
+        model: modelType === 'flash' ? 'nano-banana-2' : 'nano-banana-pro',
+    };
+
+    if (imgUrls.length > 0) {
+        payload.img_url = imgUrls;
+    }
+    if (resolution) {
+        payload.resolution = resolution.toLowerCase();
+    }
+    if (aspectRatio) {
+        payload.aspect_ratio = aspectRatio;
+    }
+    if (speed) {
+        payload.speed = speed;
+    }
+    if (serverId) {
+        payload.server_id = serverId;
+    }
+
+    return payload;
+};
+
+export const prepareTramsangtaoGeneratePayload = async (
+    prompt: string,
+    modelType: 'flash' | 'pro' = 'flash',
     base64Data?: string | string[] | null,
     mimeType: string = 'image/jpeg',
-    onLog: (msg: string) => void = () => {}
-): Promise<string> => {
+    resolution?: string,
+    onLog: (msg: string) => void = () => {},
+    aspectRatio?: string,
+    speed: 'fast' | 'slow' = 'fast',
+    serverId?: string,
+): Promise<TramsangtaoGeneratePayload> => {
     let imgUrls: string[] = [];
     if (base64Data) {
         const dataArray = Array.isArray(base64Data) ? base64Data : [base64Data];
@@ -707,22 +778,48 @@ export const generateWithTramsangtao = async (
             imgUrls.push(url);
         }
     }
-    const model = modelType === 'flash' ? 'nano-banana-2' : 'nano-banana-pro';
-    
-    onLog(`Calling Image API (Model: ${model})...`);
-    const payload: any = {
-        prompt: prompt,
-        model: model,
-    };
-    if (imgUrls.length > 0) {
-        payload.img_url = imgUrls; // Send as array
+    return buildTramsangtaoPayload(prompt, modelType, imgUrls, resolution, aspectRatio, speed, serverId);
+};
+
+const parseTramsangtaoError = async (response: Response): Promise<string> => {
+    try {
+        const data = await response.json();
+        return data?.error || data?.message || (typeof data === 'object' ? JSON.stringify(data) : String(data));
+    } catch {
+        return `Server returned ${response.status} ${response.statusText}`;
     }
-    if (resolution) {
-        payload.resolution = resolution.toLowerCase();
+};
+
+const extractTramsangtaoJobId = (data: any): string | null => {
+    const jobId = data?.job_id || data?.jobId || data?.id || data?.data?.job_id || data?.data?.jobId || data?.data?.id;
+    return typeof jobId === 'string' && jobId.trim() ? jobId.trim() : null;
+};
+
+const extractTramsangtaoResultUrl = (data: any): string | null => {
+    if (typeof data?.result === 'string' && data.result.trim()) {
+        return data.result.trim();
     }
-    if (aspectRatio) {
-        payload.aspect_ratio = aspectRatio;
+
+    if (Array.isArray(data?.result) && typeof data.result[0] === 'string' && data.result[0].trim()) {
+        return data.result[0].trim();
     }
+
+    if (typeof data?.output === 'string' && data.output.trim()) {
+        return data.output.trim();
+    }
+
+    if (typeof data?.data?.result === 'string' && data.data.result.trim()) {
+        return data.data.result.trim();
+    }
+
+    return null;
+};
+
+const submitTramsangtaoJob = async (
+    payload: TramsangtaoGeneratePayload,
+    onLog: (msg: string) => void
+): Promise<string> => {
+    onLog(`Calling Image API (Model: ${payload.model})...`);
 
     const genRes = await fetch('/api/tst-generate', {
         method: 'POST',
@@ -731,25 +828,86 @@ export const generateWithTramsangtao = async (
     });
 
     if (!genRes.ok) {
-        let errMessage = genRes.statusText;
-        try {
-            const err = await genRes.json();
-            errMessage = err.error || (typeof err === 'object' ? JSON.stringify(err) : err) || errMessage;
-        } catch (e) {
-            errMessage = `Server returned ${genRes.status} ${genRes.statusText}`;
-        }
+        const errMessage = await parseTramsangtaoError(genRes);
         throw new Error(`Image API error: ${errMessage}`);
     }
 
     const genData = await genRes.json();
-    const jobId = genData.job_id;
+    const jobId = extractTramsangtaoJobId(genData);
 
     if (!jobId) {
-        throw new Error("Image API did not return a job_id");
+        throw new Error(`Image API did not return a job_id: ${JSON.stringify(genData)}`);
     }
 
     onLog(`Job created (ID: ${jobId}).`);
     return jobId;
+};
+
+const pollTramsangtaoJob = async (
+    jobId: string,
+    onLog: (msg: string) => void,
+    timeoutMs: number = TST_DEFAULT_TIMEOUT_MS
+): Promise<string> => {
+    const startedAt = Date.now();
+    const timeoutMinutes = Math.ceil(timeoutMs / 60000);
+
+    onLog(`Polling job every ${TST_POLL_INTERVAL_MS / 1000} seconds (timeout ${timeoutMinutes} minutes)...`);
+
+    while (Date.now() - startedAt < timeoutMs) {
+        await new Promise(resolve => setTimeout(resolve, TST_POLL_INTERVAL_MS));
+
+        const pollRes = await fetch(`/api/tst-poll?jobId=${encodeURIComponent(jobId)}`);
+        if (!pollRes.ok) {
+            const errMessage = await parseTramsangtaoError(pollRes);
+            onLog(`Polling retry: ${errMessage}`);
+            continue;
+        }
+
+        const pollData = await pollRes.json();
+        const status = typeof pollData?.status === 'string' ? pollData.status.toLowerCase() : 'unknown';
+        onLog(`Job status: ${pollData?.status || 'unknown'} (${pollData?.progress || 0}%)...`);
+
+        if (status === 'completed') {
+            const resultUrl = extractTramsangtaoResultUrl(pollData);
+            if (!resultUrl) {
+                throw new Error(`Job completed but no result URL returned: ${JSON.stringify(pollData)}`);
+            }
+
+            onLog("Image processed successfully!");
+            return resultUrl;
+        }
+
+        if (status === 'failed' || status === 'error' || status === 'cancelled' || status === 'canceled') {
+            throw new Error(`Job failed: ${pollData?.error || pollData?.message || 'Unknown error'}`);
+        }
+    }
+
+    throw new Error(`Generation failed: Timeout waiting for job to complete after ${Math.ceil(timeoutMs / 1000)} seconds`);
+};
+
+export const generateWithTramsangtao = async (
+    prompt: string,
+    modelType: 'flash' | 'pro' = 'flash',
+    resolution?: string,
+    aspectRatio?: string,
+    base64Data?: string | string[] | null,
+    mimeType: string = 'image/jpeg',
+    onLog: (msg: string) => void = () => {},
+    speed: 'fast' | 'slow' = 'fast',
+    serverId?: string
+): Promise<string> => {
+    const payload = await prepareTramsangtaoGeneratePayload(
+        prompt,
+        modelType,
+        base64Data,
+        mimeType,
+        resolution,
+        onLog,
+        aspectRatio,
+        speed,
+        serverId
+    );
+    return submitTramsangtaoJob(payload, onLog);
 };
 export const runTramsangtaoGenerate = async (
     prompt: string,
@@ -758,95 +916,194 @@ export const runTramsangtaoGenerate = async (
     mimeType: string = 'image/jpeg',
     resolution?: string,
     onLog: (msg: string) => void = () => {},
-    aspectRatio?: string
+    aspectRatio?: string,
+    speed: 'fast' | 'slow' = 'fast',
+    serverId?: string,
+    timeoutMs: number = TST_DEFAULT_TIMEOUT_MS
 ): Promise<{ jobId: string, resultPromise: Promise<string> }> => {
-    let imgUrls: string[] = [];
-    if (base64Data) {
-        const dataArray = Array.isArray(base64Data) ? base64Data : [base64Data];
-        for (let i = 0; i < dataArray.length; i++) {
-            const url = await uploadBase64ToTramsangtao(dataArray[i], mimeType, onLog);
-            imgUrls.push(url);
-        }
-    }
-    const model = modelType === 'flash' ? 'nano-banana-2' : 'nano-banana-pro';
-    
-    onLog(`Calling Image API (Model: ${model})...`);
-    const payload: any = {
-        prompt: prompt,
-        model: model,
-    };
-    if (imgUrls.length > 0) {
-        payload.img_url = imgUrls; // Send as array
-    }
-    if (resolution) {
-        payload.resolution = resolution.toLowerCase();
-    }
-    if (aspectRatio) {
-        payload.aspect_ratio = aspectRatio;
-    }
-
-    const genRes = await fetch('/api/tst-generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-    });
-
-    if (!genRes.ok) {
-        let errMessage = genRes.statusText;
-        try {
-            const err = await genRes.json();
-            errMessage = err.error || (typeof err === 'object' ? JSON.stringify(err) : err) || errMessage;
-        } catch (e) {
-            errMessage = `Server returned ${genRes.status} ${genRes.statusText}`;
-        }
-        throw new Error(`Image API error: ${errMessage}`);
-    }
-
-    const genData = await genRes.json();
-    const jobId = genData.job_id;
-
-    if (!jobId) {
-        throw new Error("Image API did not return a job_id");
-    }
-
-    onLog(`Job created (ID: ${jobId}). Polling every 8 seconds...`);
-
-    const resultPromise = (async () => {
-        let resultUrl = null;
-        let pollAttempts = 0;
-        const maxPollAttempts = 150; // 20 minutes
-
-        while (pollAttempts < maxPollAttempts) {
-            await new Promise(resolve => setTimeout(resolve, 8000));
-            pollAttempts++;
-            
-            try {
-                const pollRes = await fetch(`/api/tst-poll?jobId=${jobId}`);
-                if (!pollRes.ok) continue;
-                
-                const pollData = await pollRes.json();
-                onLog(`Job status: ${pollData.status} (${pollData.progress || 0}%)...`);
-                
-                if (pollData.status === 'completed') {
-                    resultUrl = pollData.result;
-                    break;
-                } else if (pollData.status === 'failed' || pollData.status === 'error') {
-                    throw new Error(`Job failed: ${pollData.error || 'Unknown error'}`);
-                }
-            } catch (e: any) {
-                if (e.message.includes('Job failed')) throw e;
-            }
-        }
-
-        if (!resultUrl) {
-            throw new Error("Generation failed: Timeout waiting for job to complete");
-        }
-
-        onLog("Image processed successfully!");
-        return resultUrl;
-    })();
+    const payload = await prepareTramsangtaoGeneratePayload(
+        prompt,
+        modelType,
+        base64Data,
+        mimeType,
+        resolution,
+        onLog,
+        aspectRatio,
+        speed,
+        serverId
+    );
+    const jobId = await submitTramsangtaoJob(payload, onLog);
+    const resultPromise = pollTramsangtaoJob(jobId, onLog, timeoutMs);
 
     return { jobId, resultPromise };
+};
+
+export const prepareImageGenerationJob = async (
+    prompt: string,
+    aspectRatio: string | undefined,
+    refImageBase64: string | undefined,
+    characters: any[],
+    resolution: '1K' | '2K' | '4K' = '1K',
+    modelType: 'flash' | 'pro' = 'pro',
+    useSearch: boolean = false,
+    useCloudRef: boolean = false,
+    onLog: (msg: string) => void = () => {},
+    styleReferenceUrl: string | null = null,
+    availableStyles: any[] = [],
+    speed: 'fast' | 'slow' = 'fast',
+    serverId?: string,
+): Promise<{ payload: TramsangtaoGeneratePayload; finalPrompt: string }> => {
+    onLog(`Initializing Generation Pipeline...`);
+    
+    let cleanRefImage: string | null = null;
+    if (refImageBase64) {
+        onLog("Step 1: Preparing Sample Image...");
+        try {
+            if (refImageBase64.startsWith('http')) {
+                const resp = await fetch(refImageBase64);
+                const blob = await resp.blob();
+                const reader = new FileReader();
+                cleanRefImage = await new Promise((resolve) => {
+                    reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+                    reader.readAsDataURL(blob);
+                });
+            } else if (refImageBase64.startsWith('data:') || refImageBase64.length > 100) {
+                cleanRefImage = cleanBase64(refImageBase64);
+            }
+        } catch (e) {
+            console.warn("Sample Image Processing Failed", e);
+        }
+    }
+
+    const cleanStyleImages: string[] = [];
+    if (styleReferenceUrl) {
+        onLog("Step 2: Preparing Style Image...");
+        try {
+            let styleData = styleReferenceUrl;
+            if (styleReferenceUrl.startsWith('http')) {
+                const resp = await fetch(styleReferenceUrl);
+                const blob = await resp.blob();
+                const reader = new FileReader();
+                styleData = await new Promise((resolve) => {
+                    reader.onloadend = () => resolve(reader.result as string);
+                    reader.readAsDataURL(blob);
+                });
+            }
+            const clean = cleanBase64(styleData);
+            if (clean) cleanStyleImages.push(clean);
+        } catch (e) {
+            console.warn("Style Image Processing Failed", e);
+        }
+    }
+
+    const charBase64List: string[] = [];
+    if (characters.length > 0) {
+        onLog("Step 3: Preparing Character Images...");
+        for (const char of characters) {
+            let finalCharBase64 = "";
+            if (char.image) {
+                const optimized = await optimizePayload(char.image, 2048);
+                finalCharBase64 = cleanBase64(optimized);
+            } else if (char.faceImage) {
+                const optimized = await optimizePayload(char.faceImage, 2048);
+                finalCharBase64 = cleanBase64(optimized);
+            }
+
+            if (finalCharBase64) {
+                charBase64List.push(finalCharBase64);
+            }
+        }
+    }
+
+    onLog("Step 4: Analyzing all images and synthesizing Final Prompt via Vertex AI...");
+
+    const parts: any[] = [];
+    let promptInstructions = `You are a master AI image generation director. Your task is to analyze the provided reference images step-by-step and synthesize a highly detailed prompt for an image generation model.
+You must act as a strict investigator for each step.
+
+`;
+
+    if (charBase64List.length > 0) {
+        promptInstructions += `Step 1: Analyze the Character Reference Image(s). Describe the character's facial features, hair, clothing, and gender in extreme detail. This is the SOURCE OF TRUTH for the character's identity.\n`;
+        for (const charBase64 of charBase64List) {
+            parts.push({ inlineData: { data: charBase64, mimeType: "image/jpeg" } });
+        }
+    }
+
+    if (cleanRefImage) {
+        promptInstructions += `Step 2: Analyze the Sample Image (Pose/Background). Describe the character's pose, the camera angle, the lighting, and the background environment. DO NOT copy the character's facial features or clothing from this image.\n`;
+        parts.push({ inlineData: { data: cleanRefImage, mimeType: "image/jpeg" } });
+    }
+
+    if (cleanStyleImages.length > 0) {
+        promptInstructions += `Step 3: Analyze the Style Reference Image. Describe the artistic style, color palette, medium (e.g., 3D render, anime, oil painting), and visual mood. DO NOT copy the character or subject from this image.\n`;
+        parts.push({ inlineData: { data: cleanStyleImages[0], mimeType: "image/jpeg" } });
+    }
+
+    promptInstructions += `Step 4: Synthesize the Final Command Prompt.
+Based on the user's base prompt: "${prompt}"
+The final image generation AI WILL receive these exact images. Your task is to write a STRICT COMMAND PROMPT for that AI.
+Your prompt must COMMAND the AI to:
+1. EXACTLY COPY AND PASTE the character's face, hair, and clothing from the provided character reference images. DO NOT invent new features.
+2. EXACTLY COPY the pose, camera angle, and background from the provided pose reference image.
+3. EXACTLY COPY the artistic style, rendering quality, and lighting from the provided style reference image.
+
+Do not just describe the image. Write it as a set of strict instructions and constraints for the rendering engine.
+Output ONLY the final command prompt. Do not include the step-by-step analysis in your final output, just the prompt itself.`;
+
+    parts.push({ text: promptInstructions });
+
+    let optimizedPrompt = prompt;
+    try {
+        const freshAi = await getAiClient('pro');
+        const response = await freshAi.models.generateContent({
+            model: 'gemini-3.1-pro-preview',
+            contents: { parts },
+            config: {
+                temperature: 0.4,
+            }
+        });
+        if (response.text) {
+            optimizedPrompt = response.text.trim();
+            onLog(`> Final Command Prompt Synthesized: ${optimizedPrompt.substring(0, 100)}...`);
+        }
+    } catch (e) {
+        console.error("Failed to synthesize prompt with all images", e);
+        onLog("Failed to synthesize prompt, using base prompt.");
+    }
+
+    onLog("Step 5: Finalizing Data Payload for Image Generation...");
+
+    if (refImageBase64 && !cleanRefImage) {
+        throw new Error("CRITICAL FAILURE: Sample Image failed to process.");
+    }
+    if (characters.length > 0 && charBase64List.length === 0) {
+        throw new Error("CRITICAL FAILURE: Character assets failed to process.");
+    }
+
+    const referenceImages: string[] = [];
+    if (charBase64List.length > 0) referenceImages.push(...charBase64List);
+    if (cleanRefImage) referenceImages.push(cleanRefImage);
+    if (cleanStyleImages.length > 0) referenceImages.push(cleanStyleImages[0]);
+
+    const qualityBoosters = "masterpiece, best quality, ultra-detailed, 8k, stylized 3D game render, Korean MMO 3D style, stylized 3D skin texture, smooth 3D rendering, ray tracing, hdr, cinematic lighting, unreal engine 5 render";
+    const negativePrompt = "low quality, bad anatomy, worst quality, blur, grain, watermark, text, signature, bad hands, bad face, mixed backgrounds, conflicting styles, extra characters, unwanted people from style reference, real people, photorealistic humans, photograph, realistic photography, real life, anime, cartoon, 2d, flat shading, floating character, disconnected limbs, hands in the air, feet not touching the ground, floating objects, unnatural posture, floating in mid-air, levitating, hovering, disconnected from background, bad perspective, illogical physics";
+    const finalInstruction = `Generate an image based on the following prompt: "${optimizedPrompt}, ${qualityBoosters}".\n\nNegative Prompt: ${negativePrompt}`;
+
+    onLog("Step 6: Preparing payload for Trạm Sáng Tạo API...");
+    const payload = await prepareTramsangtaoGeneratePayload(
+        finalInstruction,
+        modelType,
+        referenceImages.length > 0 ? referenceImages : null,
+        'image/jpeg',
+        resolution,
+        onLog,
+        aspectRatio,
+        speed,
+        serverId
+    );
+
+    return { payload, finalPrompt: finalInstruction };
 };
 
 export const editImageWithInstructions = async (
@@ -855,7 +1112,11 @@ export const editImageWithInstructions = async (
     mimeType: string,
     modelType: 'flash' | 'pro' = 'flash',
     aspectRatio?: string,
-    onLog: (msg: string) => void = () => {}
+    onLog: (msg: string) => void = () => {},
+    resolution: '1K' | '2K' | '4K' = '1K',
+    speed: 'fast' | 'slow' = 'fast',
+    serverId?: string,
+    allowTramsangtaoFallback: boolean = false
 ): Promise<{ jobId: string, resultPromise: Promise<string> }> => {
     const model = modelType === 'flash' ? 'gemini-3.1-flash-image-preview' : 'gemini-3-pro-image-preview';
     onLog(`Initializing ${model} Pipeline for Editing...`);
@@ -865,52 +1126,64 @@ export const editImageWithInstructions = async (
     let vertexAiError: any = null;
 
     try {
-        const ai = await getAiClient(modelType);
         const cleanBase64Data = cleanBase64(base64Data);
-        
-        // Use runWithTimeout to enforce a timeout on Vertex AI
-        const response: any = await runWithTimeout(
-            ai.models.generateContent({
-                model: model,
-                contents: {
-                    parts: [
-                        {
-                            inlineData: {
-                                data: cleanBase64Data,
-                                mimeType: mimeType,
-                            },
-                        },
-                        {
-                            text: instruction,
-                        },
-                    ],
-                },
-            }),
-            30000, // 30s timeout for Vertex AI
-            "Vertex AI Editing"
-        );
+        let lastVertexError: any = null;
 
-        let imageUrl = "";
-        for (const part of response.candidates?.[0]?.content?.parts || []) {
-            if (part.inlineData) {
-                imageUrl = `data:image/png;base64,${part.inlineData.data}`;
-                break;
+        for (let attempt = 1; attempt <= 2; attempt++) {
+            try {
+                if (attempt > 1) {
+                    onLog(`Retrying Vertex AI editing (attempt ${attempt}/2)...`);
+                }
+
+                const ai = await getAiClient(modelType);
+                const response: any = await runWithTimeout(
+                    ai.models.generateContent({
+                        model: model,
+                        contents: {
+                            parts: [
+                                {
+                                    inlineData: {
+                                        data: cleanBase64Data,
+                                        mimeType: mimeType,
+                                    },
+                                },
+                                {
+                                    text: instruction,
+                                },
+                            ],
+                        },
+                    }),
+                    45000,
+                    "Vertex AI Editing"
+                );
+
+                let imageUrl = "";
+                for (const part of response.candidates?.[0]?.content?.parts || []) {
+                    if (part.inlineData) {
+                        imageUrl = `data:image/png;base64,${part.inlineData.data}`;
+                        break;
+                    }
+                }
+
+                if (imageUrl) {
+                    onLog("Image edited successfully via Vertex AI!");
+                    return { jobId: `gemini-edit-${Date.now()}`, resultPromise: Promise.resolve(imageUrl) };
+                }
+
+                throw new Error("No image data returned from Gemini API.");
+            } catch (attemptError) {
+                lastVertexError = attemptError;
             }
         }
 
-        if (imageUrl) {
-            onLog("Image edited successfully via Vertex AI!");
-            return { jobId: `gemini-edit-${Date.now()}`, resultPromise: Promise.resolve(imageUrl) };
-        } else {
-            throw new Error("No image data returned from Gemini API.");
-        }
+        throw lastVertexError || new Error("Vertex AI editing failed.");
     } catch (error) {
         console.warn("Vertex AI Editing Failed or Timed Out, falling back to Trạm Sáng Tạo:", error);
         vertexAiFailed = true;
         vertexAiError = error;
     }
 
-    if (vertexAiFailed) {
+    if (vertexAiFailed && allowTramsangtaoFallback) {
         onLog("Vertex AI overloaded/timeout. Falling back to Trạm Sáng Tạo (Background Processing)...");
         // Fallback to Trạm Sáng Tạo
         return runTramsangtaoGenerate(
@@ -918,14 +1191,17 @@ export const editImageWithInstructions = async (
             modelType,
             [cleanBase64(base64Data)],
             mimeType,
-            undefined, // resolution
+            resolution,
             onLog,
-            aspectRatio
+            aspectRatio,
+            speed,
+            serverId
         );
     }
 
-    // This should never be reached due to the fallback
-    return { jobId: `failed-${Date.now()}`, resultPromise: Promise.reject(vertexAiError) };
+    const message = vertexAiError instanceof Error ? vertexAiError.message : 'Vertex AI image editing is currently unavailable.';
+    onLog(`Vertex AI editing failed: ${message}`);
+    return { jobId: `failed-${Date.now()}`, resultPromise: Promise.reject(new Error(message)) };
 }
 
 export const removeBackgroundImage = async (
@@ -933,10 +1209,12 @@ export const removeBackgroundImage = async (
     instruction: string, 
     mimeType: string,
     aspectRatio?: string,
-    onLog: (msg: string) => void = () => {}
+    onLog: (msg: string) => void = () => {},
+    speed: 'fast' | 'slow' = 'fast',
+    serverId?: string
 ): Promise<{ jobId: string, resultPromise: Promise<string> }> => {
     const prompt = `Remove the background of this image and make it solid transparent or black. Keep the main subject exactly the same. ${instruction}`;
-    return editImageWithInstructions(base64Data, prompt, mimeType, 'flash', aspectRatio, onLog);
+    return editImageWithInstructions(base64Data, prompt, mimeType, 'flash', aspectRatio, onLog, '1K', speed, serverId);
 }
 
 export const upscaleImage = async (
@@ -944,8 +1222,34 @@ export const upscaleImage = async (
     instruction: string, 
     mimeType: string,
     aspectRatio?: string,
-    onLog: (msg: string) => void = () => {}
+    onLog: (msg: string) => void = () => {},
+    speed: 'fast' | 'slow' = 'fast',
+    serverId?: string
 ): Promise<{ jobId: string, resultPromise: Promise<string> }> => {
     const prompt = `Upscale this image to 1K resolution. Enhance the details and make it sharper while keeping the original content exactly the same. ${instruction}`;
-    return editImageWithInstructions(base64Data, prompt, mimeType, 'flash', aspectRatio, onLog);
+    return editImageWithInstructions(base64Data, prompt, mimeType, 'flash', aspectRatio, onLog, '1K', speed, serverId);
 }
+
+export const prepareImageEditJob = async (
+    base64Data: string,
+    instruction: string,
+    mimeType: string,
+    modelType: 'flash' | 'pro' = 'flash',
+    aspectRatio?: string,
+    onLog: (msg: string) => void = () => {},
+    resolution: '1K' | '2K' | '4K' = '1K',
+    speed: 'fast' | 'slow' = 'fast',
+    serverId?: string
+): Promise<TramsangtaoGeneratePayload> => {
+    return prepareTramsangtaoGeneratePayload(
+        instruction,
+        modelType,
+        [cleanBase64(base64Data)],
+        mimeType,
+        resolution,
+        onLog,
+        aspectRatio,
+        speed,
+        serverId
+    );
+};

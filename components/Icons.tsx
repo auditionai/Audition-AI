@@ -69,7 +69,10 @@ import {
   Activity,
   RefreshCw,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  Volume2,
+  VolumeX,
+  Edit2
 } from 'lucide-react';
 
 export const Icons = {
@@ -142,5 +145,8 @@ export const Icons = {
   Activity,
   RefreshCw,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  Volume2,
+  VolumeX,
+  Edit2
 };

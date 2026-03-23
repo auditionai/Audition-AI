@@ -1,5 +1,27 @@
 import { supabase } from './supabaseClient';
 import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, HistoryItem, VcoinLog } from '../types';
+import {
+  creditsToVcoin,
+  fetchTstModels,
+  fetchTstPricing,
+  filterAdminManagedPricingEntries,
+  isAdminManagedPricingModel,
+  sanitizePricingEntriesWithRuntimeModels,
+  type TstServerAvailabilityConfig,
+  DEFAULT_TST_SERVER_AVAILABILITY_CONFIG,
+} from './tstCatalog';
+
+const DEFAULT_GENERATION_PRICES = {
+    flash_1k: 1,
+    flash_2k: 2,
+    flash_4k: 4,
+    pro_1k: 5,
+    pro_2k: 10,
+    pro_4k: 15,
+    couple: 2,
+    group3: 4,
+    group4: 6,
+};
 
 // --- USER & PROFILE ---
 
@@ -69,6 +91,151 @@ export const getUserProfile = async (): Promise<UserProfile> => {
     };
 };
 
+export interface ModelPricing {
+  id: string;
+  model_id: string;
+  option_id: string;
+  tst_price_credits: number;
+  audition_price_vcoin: number;
+  updated_at: string;
+}
+
+const parseSettingValue = <T,>(value: any, fallback: T): T => {
+  if (value == null) return fallback;
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value) as T;
+    } catch {
+      return fallback;
+    }
+  }
+  return value as T;
+};
+
+export const getModelPricing = async (): Promise<ModelPricing[]> => {
+  if (!supabase) return [];
+  const { data, error } = await supabase.from('model_pricing').select('*');
+  if (error) {
+    console.error('Error fetching model pricing:', error);
+    return [];
+  }
+  return data || [];
+};
+
+export const saveModelPricing = async (pricing: ModelPricing): Promise<{success: boolean, error?: string}> => {
+  if (!supabase) return { success: false, error: "No Database" };
+  const { error } = await supabase.from('model_pricing').upsert({
+    id: pricing.id,
+    model_id: pricing.model_id,
+    option_id: pricing.option_id,
+    tst_price_credits: pricing.tst_price_credits,
+    audition_price_vcoin: pricing.audition_price_vcoin,
+    updated_at: new Date().toISOString()
+  }, { onConflict: 'model_id, option_id' });
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+};
+
+export const getTstServerAvailabilityConfig = async (): Promise<TstServerAvailabilityConfig> => {
+  if (!supabase) return DEFAULT_TST_SERVER_AVAILABILITY_CONFIG;
+  const { data, error } = await supabase
+    .from('system_settings')
+    .select('value')
+    .eq('key', 'tst_server_availability')
+    .maybeSingle();
+
+  if (error) {
+    console.error('Error fetching TST server availability config:', error);
+    return DEFAULT_TST_SERVER_AVAILABILITY_CONFIG;
+  }
+
+  const parsed = parseSettingValue<TstServerAvailabilityConfig>(data?.value, DEFAULT_TST_SERVER_AVAILABILITY_CONFIG);
+  return {
+    disabledByModel: parsed?.disabledByModel || {},
+    updatedAt: parsed?.updatedAt,
+  };
+};
+
+export const saveTstServerAvailabilityConfig = async (
+  config: TstServerAvailabilityConfig,
+): Promise<{ success: boolean; error?: string }> => {
+  if (!supabase) return { success: false, error: 'No Database' };
+
+  const payload: TstServerAvailabilityConfig = {
+    disabledByModel: config?.disabledByModel || {},
+    updatedAt: new Date().toISOString(),
+  };
+
+  const { error } = await supabase.from('system_settings').upsert(
+    {
+      key: 'tst_server_availability',
+      value: payload,
+    },
+    { onConflict: 'key' },
+  );
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  return { success: true };
+};
+
+export const syncTSTPrices = async (): Promise<{success: boolean, error?: string, data?: any[]}> => {
+  if (!supabase) return { success: false, error: "No Database" };
+
+  try {
+    const [rawPricing, runtimeModels] = await Promise.all([fetchTstPricing(true), fetchTstModels(true)]);
+    const livePricing = filterAdminManagedPricingEntries(
+      sanitizePricingEntriesWithRuntimeModels(rawPricing, runtimeModels),
+    );
+    const currentPricing = await getModelPricing();
+    const currentPricingMap = new Map(
+      currentPricing.map((row) => [`${row.model_id}::${row.option_id}`, row]),
+    );
+
+    const rows = livePricing.map((entry) => {
+      const optionId = entry.config_key || [
+        entry.server,
+        entry.resolution,
+        entry.duration,
+        entry.speed,
+        entry.audio ? 'audio' : ''
+      ].filter(Boolean).join('|');
+
+      return {
+        model_id: entry.model,
+        option_id: optionId,
+        tst_price_credits: entry.credits,
+        audition_price_vcoin:
+          currentPricingMap.get(`${entry.model}::${optionId}`)?.audition_price_vcoin ??
+          creditsToVcoin(entry.credits),
+        updated_at: new Date().toISOString()
+      };
+    });
+
+    const validKeys = new Set(rows.map((row) => row.model_id + '::' + row.option_id));
+    const staleIds = currentPricing
+      .filter((row) => !isAdminManagedPricingModel(row.model_id) || !validKeys.has(row.model_id + '::' + row.option_id))
+      .map((row) => row.id)
+      .filter(Boolean);
+
+    if (staleIds.length > 0) {
+      const { error: deleteError } = await supabase.from('model_pricing').delete().in('id', staleIds);
+      if (deleteError) throw deleteError;
+    }
+
+    for (const row of rows) {
+      const { error } = await supabase.from('model_pricing').upsert(row, { onConflict: 'model_id, option_id' });
+      if (error) throw error;
+    }
+
+    return { success: true, data: await getModelPricing() };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+};
+
 export const updateLastActive = async () => {
     if (!supabase) return;
     try {
@@ -79,6 +246,41 @@ export const updateLastActive = async () => {
     } catch (e) {
         console.warn("Failed to update last active", e);
     }
+};
+
+// Compatibility shim for legacy GenerationTool consumers.
+// New pricing is sourced from TST pricing services, but the old UI still
+// imports this function while the migration is in progress.
+export const getAllPrices = async (): Promise<Record<string, number>> => {
+    if (!supabase) {
+        return DEFAULT_GENERATION_PRICES;
+    }
+
+    try {
+        const { data, error } = await supabase.from('model_pricing').select('*');
+
+        if (error) {
+            throw error;
+        }
+
+        if (data && data.length > 0) {
+            const prices: Record<string, number> = {};
+            data.forEach((item: any) => {
+                // Create a key like "gen_model_flash"
+                const normalizedOption = item.option_id.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/ /g, '_');
+                const key = `${item.model_id}_${normalizedOption}`;
+                prices[key] = item.audition_price_vcoin;
+            });
+            return {
+                ...DEFAULT_GENERATION_PRICES,
+                ...prices
+            };
+        }
+    } catch (error) {
+        console.warn('Failed to load prices, using defaults.', error);
+    }
+
+    return DEFAULT_GENERATION_PRICES;
 };
 
 export const updateMyProfile = async (profile: UserProfile): Promise<{success: boolean, error?: string}> => {
@@ -118,31 +320,74 @@ export const updateAdminUserProfile = async (profile: UserProfile): Promise<{suc
     }
 };
 
-export const updateUserBalance = async (amount: number, reason: string, type: string, targetUserId?: string) => {
+type UpdateUserBalanceOptions = {
+    targetUserId?: string;
+    referenceType?: string;
+    referenceId?: string;
+    metadata?: Record<string, any>;
+};
+
+export const updateUserBalance = async (
+    amount: number,
+    reason: string,
+    type: string,
+    targetUserIdOrOptions?: string | UpdateUserBalanceOptions
+) => {
     if (!supabase) return;
-    let userId = targetUserId;
+
+    const options: UpdateUserBalanceOptions =
+        typeof targetUserIdOrOptions === 'string'
+            ? { targetUserId: targetUserIdOrOptions }
+            : (targetUserIdOrOptions || {});
+
+    let userId = options.targetUserId;
     if (!userId) {
         const user = await getUserProfile();
         userId = user.id;
     }
+
+    // 1. Preferred path: atomic RPC with reference support
+    try {
+        const { error } = await supabase.rpc('apply_balance_transaction', {
+            p_target_user_id: userId,
+            p_amount: amount,
+            p_reason: reason,
+            p_log_type: type,
+            p_reference_type: options.referenceType ?? null,
+            p_reference_id: options.referenceId ?? null,
+            p_metadata: options.metadata ?? {},
+        });
+
+        if (!error) {
+            if (!options.targetUserId) {
+                window.dispatchEvent(new Event('balance_updated'));
+            }
+            return;
+        }
+
+        console.warn("[Economy] apply_balance_transaction RPC failed, falling back to legacy flow", error);
+    } catch (rpcError) {
+        console.warn("[Economy] apply_balance_transaction RPC unavailable, falling back to legacy flow", rpcError);
+    }
     
-    // 1. Log transaction (Silent Fail Safe)
+    // 2. Legacy fallback: log transaction first
     try {
         const transactionData: any = {
             amount,
-            reason: reason,
-            description: reason, // Add description as well since some schemas use it
-            type
+            reason,
+            description: reason,
+            type,
+            ...(options.referenceType ? { reference_type: options.referenceType } : {}),
+            ...(options.referenceId ? { reference_id: options.referenceId } : {}),
+            ...(options.metadata ? { metadata: options.metadata } : {}),
         };
         
-        // Try to detect column name or just try both silently
         const { error } = await supabase.from('vcoin_transactions').insert({
             ...transactionData,
             user_id: userId
         });
         
         if (error) {
-            // If it fails, try with just description and amount
             const fallbackData = {
                 amount,
                 description: reason,
@@ -164,7 +409,7 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
         // Completely silent
     }
     
-    // 2. Update balance using SECURE RPC (Atomicity & Security)
+    // 3. Legacy balance update
     try {
         const { error } = await supabase.rpc('secure_update_balance', {
             amount: amount,
@@ -173,8 +418,7 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
         });
         
         if (error) {
-            // Fallback for legacy systems without RPC
-            console.warn("[Economy] RPC failed, falling back to direct update (Legacy Mode)", error);
+            console.warn("[Economy] secure_update_balance RPC failed, falling back to direct update (Legacy Mode)", error);
             const { data: latestUser, error: fetchError } = await supabase.from('users').select('vcoin_balance').eq('id', userId).maybeSingle();
             if (fetchError) throw fetchError;
             const currentBalance = latestUser?.vcoin_balance || 0;
@@ -187,8 +431,7 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
         throw new Error("Failed to update balance: " + e.message);
     }
     
-    // Dispatch event for UI update
-    if (!targetUserId) {
+    if (!options.targetUserId) {
         window.dispatchEvent(new Event('balance_updated'));
     }
 };
@@ -196,9 +439,18 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
 export const logVisit = async () => {
     if (!supabase) return;
     try {
-        // We only log the visit without user_id to avoid 400 Foreign Key errors
-        // if the user row hasn't been created in the users table yet.
-        const visitData = { user_id: null };
+        let userId: string | null = null;
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            userId = user?.id || null;
+        } catch {}
+
+        const visitData = {
+            user_id: userId,
+            visit_date: new Date().toISOString().slice(0, 10),
+            route: window.location.pathname + window.location.hash,
+            user_agent: navigator.userAgent || null
+        };
         const { error } = await supabase.from('app_visits').insert(visitData);
         
         if (error && error.message.includes('column "user_id" does not exist')) {
@@ -303,7 +555,7 @@ export const getActivePromotion = async (): Promise<PromotionCampaign | null> =>
             .eq('is_active', true)
             .lt('start_time', now)
             .gt('end_time', now)
-            .single();
+            .maybeSingle();
             
         if (error || !data) return null;
         
@@ -667,7 +919,8 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
     const bonus = Math.floor(pkg.vcoin * activeBonusPercent / 100);
     const totalCoins = pkg.vcoin + bonus;
 
-    const orderCode = `${Date.now()}`;
+    const providerOrderCode = Date.now();
+    const orderCode = `${providerOrderCode}`;
     
     // Create Pending Transaction
     const { data, error } = await supabase.from('payment_transactions').insert({
@@ -677,23 +930,47 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
         vcoin_received: totalCoins,
         status: 'pending',
         order_code: orderCode,
+        provider_order_code: providerOrderCode,
     }).select().single();
 
     if (error) throw error;
 
     // Call Cloud Function to get PayOS Link
     try {
-        const res = await fetch('/.netlify/functions/create_payment', {
+        const res = await fetch('/api/create-payment', {
             method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 amount: pkg.price,
-                description: `Mua ${pkg.vcoin} VC`,
-                orderCode: parseInt(orderCode.slice(-9)), // PayOS requires int32/int64
-                returnUrl: window.location.href,
-                cancelUrl: window.location.href
+                description: `AI${String(providerOrderCode).slice(-7)}`,
+                orderCode: providerOrderCode,
+                returnUrl: window.location.origin,
+                cancelUrl: window.location.origin,
+                buyerName: user.username,
+                buyerEmail: user.email,
+                items: [
+                    {
+                        name: pkg.name,
+                        quantity: 1,
+                        price: pkg.price,
+                    }
+                ],
+                expiredAt: Math.floor(Date.now() / 1000) + (15 * 60)
             })
         });
         const payOsData = await res.json();
+
+        if (!res.ok || !payOsData?.checkoutUrl) {
+            throw new Error(payOsData?.error || 'Failed to create PayOS checkout URL');
+        }
+
+        await supabase
+            .from('payment_transactions')
+            .update({
+                checkout_url: payOsData.checkoutUrl,
+                provider_payment_link_id: payOsData.paymentLinkId || null,
+            })
+            .eq('id', data.id);
         
         // Update transaction with checkoutUrl if needed, or just return it
         return {
@@ -706,6 +983,7 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
             createdAt: data.created_at,
             paymentMethod: 'payos',
             code: orderCode,
+            order_code: orderCode,
             checkoutUrl: payOsData.checkoutUrl
         };
     } catch (e) {
@@ -732,21 +1010,12 @@ export const mockPayOSSuccess = async (txId: string) => {
 export const adminApproveTransaction = async (txId: string): Promise<{success: boolean, error?: string}> => {
     if (!supabase) return { success: false, error: "No Database" };
     try {
-        const { data: tx, error: fetchError } = await supabase.from('payment_transactions').select('*').eq('id', txId).single();
-        if (fetchError || !tx) throw new Error("Tx not found");
-
-        if (tx.status === 'paid') return { success: true };
-
-        // 1. Update Tx
-        const { error: updateError } = await supabase
-            .from('payment_transactions')
-            .update({ status: 'paid' })
-            .eq('id', txId);
-            
-        if (updateError) throw updateError;
-
-        // 2. Add Coins
-        await updateUserBalance(tx.vcoin_received, `Topup: ${tx.order_code || tx.code || tx.id}`, 'topup', tx.user_id);
+        const { error } = await supabase.rpc('settle_payment_transaction_by_id', {
+            p_transaction_id: txId,
+            p_provider_status: 'PAID',
+            p_provider_payload: { source: 'admin_manual_approval' }
+        });
+        if (error) throw error;
         
         return { success: true };
     } catch (e: any) {
@@ -865,14 +1134,13 @@ export const getMaintenanceMode = async () => {
     if (!supabase) return { isActive: false, message: "Hệ thống đang bảo trì, vui lòng quay lại sau." };
     try {
         const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'maintenance_mode').maybeSingle();
-        
-        if (data && data.value) {
-            let parsedValue = data.value;
-            if (typeof parsedValue === 'string') {
-                try {
-                    parsedValue = JSON.parse(parsedValue);
-                } catch (e) {}
-            }
+        if (error) throw error;
+
+        if (data?.value) {
+            const parsedValue = parseSettingValue(data.value, {
+                isActive: false,
+                message: "Hệ thống đang bảo trì, vui lòng quay lại sau."
+            });
             return {
                 isActive: !!parsedValue.isActive,
                 message: parsedValue.message || "Hệ thống đang bảo trì, vui lòng quay lại sau."
@@ -888,96 +1156,16 @@ export const getMaintenanceMode = async () => {
 export const saveMaintenanceMode = async (isActive: boolean, message: string) => {
     if (!supabase) return { success: false, error: "No Database" };
     try {
-        const valueToSave = JSON.stringify({ isActive, message });
         const { data, error } = await supabase.from('system_settings').upsert(
-            { key: 'maintenance_mode', value: valueToSave },
+            { key: 'maintenance_mode', value: { isActive, message } },
             { onConflict: 'key' }
         ).select();
-        
+
         if (error) throw error;
         return { success: true };
     } catch (e) {
         console.error("Save Maintenance Mode Error", e);
         return { success: false, error: e };
-    }
-};
-
-// --- GENERATION PRICES ---
-
-export const getGenerationPrices = async () => {
-    if (!supabase) return { flash_1k: 1, flash_2k: 2, flash_4k: 4, pro_1k: 5, pro_2k: 10, pro_4k: 15, couple: 2, group3: 4, group4: 6 };
-    try {
-        const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'generation_prices').maybeSingle();
-        
-        if (data && data.value) {
-            let parsedValue = data.value;
-            if (typeof parsedValue === 'string') {
-                try {
-                    parsedValue = JSON.parse(parsedValue);
-                    if (typeof parsedValue === 'string') {
-                        parsedValue = JSON.parse(parsedValue);
-                    }
-                } catch (e) {
-                    console.error("Failed to parse generation_prices JSON string", e);
-                }
-            }
-            return {
-                flash_1k: parsedValue.flash_1k ?? 1,
-                flash_2k: parsedValue.flash_2k ?? 2,
-                flash_4k: parsedValue.flash_4k ?? 4,
-                pro_1k: parsedValue.pro_1k ?? 5,
-                pro_2k: parsedValue.pro_2k ?? 10,
-                pro_4k: parsedValue.pro_4k ?? 15,
-                couple: parsedValue.couple ?? 2,
-                group3: parsedValue.group3 ?? 4,
-                group4: parsedValue.group4 ?? 6,
-            };
-        }
-        
-        return { 
-            flash_1k: 1, flash_2k: 2, flash_4k: 4,
-            pro_1k: 5, pro_2k: 10, pro_4k: 15,
-            couple: 2, group3: 4, group4: 6
-        };
-    } catch (e) {
-        console.error("getGenerationPrices error:", e);
-        return { 
-            flash_1k: 1, flash_2k: 2, flash_4k: 4,
-            pro_1k: 5, pro_2k: 10, pro_4k: 15,
-            couple: 2, group3: 4, group4: 6
-        };
-    }
-};
-
-export const saveGenerationPrices = async (prices: any) => {
-    if (!supabase) return { success: false, error: "No Database" };
-    try {
-        const sanitizedPrices = {
-            flash_1k: Number(prices.flash_1k) || 1,
-            flash_2k: Number(prices.flash_2k) || 2,
-            flash_4k: Number(prices.flash_4k) || 4,
-            pro_1k: Number(prices.pro_1k) || 5,
-            pro_2k: Number(prices.pro_2k) || 10,
-            pro_4k: Number(prices.pro_4k) || 15,
-            couple: Number(prices.couple) || 2,
-            group3: Number(prices.group3) || 4,
-            group4: Number(prices.group4) || 6,
-        };
-        // Explicitly stringify to avoid [object Object] if the column is text
-        const valueToSave = JSON.stringify(sanitizedPrices);
-        const { data, error } = await supabase.from('system_settings').upsert(
-            { key: 'generation_prices', value: valueToSave },
-            { onConflict: 'key' }
-        ).select();
-        
-        if (error) throw error;
-        if (!data || data.length === 0) {
-            throw new Error("Không thể lưu vào database (Có thể do lỗi phân quyền RLS). Vui lòng chạy mã SQL cấp quyền.");
-        }
-        return { success: true };
-    } catch (e: any) {
-        console.error("saveGenerationPrices error:", e);
-        return { success: false, error: e.message };
     }
 };
 
@@ -987,14 +1175,19 @@ export const getTutorialVideo = async () => {
     if (!supabase) return { url: "https://www.youtube.com/watch?v=ba2WR8txe_c", isActive: true };
     try {
         const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'tutorial_video').maybeSingle();
-        
-        if (data && data.value) {
+        if (error) throw error;
+
+        if (data?.value) {
+            const parsedValue = parseSettingValue(data.value, {
+                url: "https://www.youtube.com/watch?v=ba2WR8txe_c",
+                isActive: true
+            });
             return {
-                url: data.value.url || "https://www.youtube.com/watch?v=ba2WR8txe_c",
-                isActive: data.value.isActive !== undefined ? data.value.isActive : true
+                url: parsedValue.url || "https://www.youtube.com/watch?v=ba2WR8txe_c",
+                isActive: parsedValue.isActive !== undefined ? parsedValue.isActive : true
             };
         }
-        
+
         return { url: "https://www.youtube.com/watch?v=ba2WR8txe_c", isActive: true };
     } catch (e) {
         return { url: "https://www.youtube.com/watch?v=ba2WR8txe_c", isActive: true };
@@ -1026,26 +1219,27 @@ export const getGiftcodePromoConfig = async () => {
     if (!supabase) return { text: "Nhập CODE \"HELLO2026\" để nhận 20 Vcoin miễn phí !!!", isActive: true };
     try {
         const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'giftcode_promo').maybeSingle();
-        
-        // If DB has config, return it, but ensure text is not empty
-        if (data && data.value) {
+        if (error) throw error;
+
+        if (data?.value) {
+            const parsedValue = parseSettingValue(data.value, {
+                text: "Nhập CODE \"HELLO2026\" để nhận 20 Vcoin miễn phí !!!",
+                isActive: true
+            });
             return {
-                text: data.value.text || "Nhập CODE \"HELLO2026\" để nhận 20 Vcoin miễn phí !!!",
-                isActive: data.value.isActive !== undefined ? data.value.isActive : true
+                text: parsedValue.text || "Nhập CODE \"HELLO2026\" để nhận 20 Vcoin miễn phí !!!",
+                isActive: parsedValue.isActive !== undefined ? parsedValue.isActive : true
             };
         }
-        
-        // If DB is empty or table missing (error), return DEFAULT PROMO to match UI screenshot
-        // This ensures the user sees the feature even before configuring it
-        return { 
-            text: "Nhập CODE \"HELLO2026\" để nhận 20 Vcoin miễn phí !!!", 
-            isActive: true 
+
+        return {
+            text: "Nhập CODE \"HELLO2026\" để nhận 20 Vcoin miễn phí !!!",
+            isActive: true
         };
     } catch (e) {
-        // Fallback for any other errors
-        return { 
-            text: "Nhập CODE \"HELLO2026\" để nhận 20 Vcoin miễn phí !!!", 
-            isActive: true 
+        return {
+            text: "Nhập CODE \"HELLO2026\" để nhận 20 Vcoin miễn phí !!!",
+            isActive: true
         };
     }
 };
@@ -1280,9 +1474,6 @@ export const getAdminStats = async () => {
     }
     console.log("Usage Logs:", usageLogs);
 
-    const { data: generatedImages } = await supabase.from('generated_images').select('created_at');
-    const { data: visits } = await supabase.from('app_visits').select('created_at');
-
     // Calculate dashboard
     const now = new Date();
     const todayStr = getLocalTodayStr();
@@ -1292,13 +1483,33 @@ export const getAdminStats = async () => {
     // 1. Users
     const newUsersToday = users?.filter((u: any) => u.created_at && new Date(u.created_at) >= startOfToday).length || 0;
     
-    // 2. Images (Use count for performance and to bypass limit)
-    const { count: imagesTotal } = await supabase.from('generated_images').select('*', { count: 'exact', head: true });
-    const { count: imagesToday } = await supabase.from('generated_images').select('*', { count: 'exact', head: true }).gte('created_at', startOfTodayISO);
+    const countRows = async (tableName: string, since?: string): Promise<number> => {
+        try {
+            let query = supabase.from(tableName).select('*', { count: 'exact', head: true });
+            if (since) {
+                query = query.gte('created_at', since);
+            }
 
-    // 3. Visits (Use count for performance)
-    const { count: visitsTotal } = await supabase.from('app_visits').select('*', { count: 'exact', head: true });
-    const { count: visitsToday } = await supabase.from('app_visits').select('*', { count: 'exact', head: true }).gte('created_at', startOfTodayISO);
+            const { count, error } = await query;
+            if (error) {
+                console.warn(`[Admin Stats] Count failed for ${tableName}:`, error.message);
+                return 0;
+            }
+
+            return count || 0;
+        } catch (error) {
+            console.warn(`[Admin Stats] Count failed for ${tableName}:`, error);
+            return 0;
+        }
+    };
+
+    // 2. Images (Use count for performance and to bypass limit)
+    const imagesTotal = await countRows('generated_images');
+    const imagesToday = await countRows('generated_images', startOfTodayISO);
+
+    // 3. Visits (Degrade gracefully if the table is missing in the current schema)
+    const visitsTotal = await countRows('app_visits');
+    const visitsToday = await countRows('app_visits', startOfTodayISO);
 
     // Calculate AI Usage Stats
     const usageStats: Record<string, { count: number, vcoins: number }> = {};

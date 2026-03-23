@@ -96,13 +96,13 @@ export const signUpWithEmail = async (email: string, password: string) => {
         await new Promise(r => setTimeout(r, 500));
 
         // Check if profile exists
-        const { data: profile } = await supabase.from('users').select('id').eq('id', data.user.id).single();
+        const { data: profile } = await supabase.from('users').select('id').eq('id', data.user.id).maybeSingle();
 
         if (!profile) {
             console.warn("Profile missing. Executing Manual Insert with Legacy Schema...");
             
             // USING CORRECT COLUMN NAMES BASED ON YOUR ECONOMY SERVICE
-            const { error: insertError } = await supabase.from('users').insert({
+            const { error: insertError } = await supabase.from('users').upsert({
                 id: data.user.id,
                 email: email,
                 display_name: displayName,
@@ -110,7 +110,7 @@ export const signUpWithEmail = async (email: string, password: string) => {
                 photo_url: '',      // Correct: photo_url, not avatar_url
                 is_admin: false,    // Correct: is_admin, not role
                 created_at: new Date().toISOString()
-            });
+            }, { onConflict: 'id' });
 
             if (insertError) {
                 // If this fails with 23505, it means the Trigger actually worked -> Good

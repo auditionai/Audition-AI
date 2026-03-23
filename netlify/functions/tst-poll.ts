@@ -1,6 +1,23 @@
-import { Handler } from '@netlify/functions';
+import type { Handler } from '@netlify/functions';
 
-export const handler: Handler = async (event, context) => {
+const jsonHeaders = {
+  'Content-Type': 'application/json',
+  'Access-Control-Allow-Origin': '*',
+};
+
+export const handler: Handler = async (event) => {
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 204,
+      headers: {
+        ...jsonHeaders,
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      },
+      body: '',
+    };
+  }
+
   if (event.httpMethod !== 'GET') {
     return { statusCode: 405, body: 'Method Not Allowed' };
   }
@@ -26,17 +43,24 @@ export const handler: Handler = async (event, context) => {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${TST_API_KEY}`
-      }
+      },
+      signal: AbortSignal.timeout(30000)
     });
 
-    const data = await response.json();
+    const rawBody = await response.text();
+    let data: unknown = {};
+
+    try {
+      data = rawBody ? JSON.parse(rawBody) : {};
+    } catch {
+      data = {
+        raw: rawBody,
+      };
+    }
 
     return {
       statusCode: response.status,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
+      headers: jsonHeaders,
       body: JSON.stringify(data)
     };
 
@@ -44,6 +68,7 @@ export const handler: Handler = async (event, context) => {
     console.error("TST API Proxy Error:", error);
     return {
       statusCode: 500,
+      headers: jsonHeaders,
       body: JSON.stringify({ error: error.message || 'Internal Server Error' })
     };
   }

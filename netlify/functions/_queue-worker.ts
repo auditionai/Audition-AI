@@ -443,6 +443,17 @@ const recoverStalePreparingJobs = async () => {
 
   let recovered = 0;
   for (const job of ((data || []) as QueueJobRow[])) {
+    const payload = job.queue_payload || {};
+    const isRecipePayload = isQueueRecipePayload(payload);
+
+    if (!isRecipePayload) {
+      await markFailedAndRefund(
+        job,
+        'Ambiguous dispatch state detected after provider preparation. Job stopped to prevent duplicate submissions.',
+      );
+      continue;
+    }
+
     const result = await requeueJob(job, 'Queue preparation timed out before dispatching to provider.');
     if (result === 'requeued') recovered += 1;
   }
@@ -486,12 +497,13 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
       const validationPayload = isQueueRecipePayload(currentPayload)
         ? getRecipeValidationPayload(currentPayload)
         : currentPayload;
+      let preparedPayloadPersisted = false;
 
       await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, validationPayload);
-      await markPreparing(job);
 
       if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'image_edit_recipe_v1') {
         const editPayload = currentPayload as ImageEditRecipePayload;
+        await markPreparing(job);
         const resultUrl = await withTimeout(
           runVertexImageEdit({
             sourceImage: editPayload.sourceImage,
@@ -519,6 +531,7 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
       if (isQueueRecipePayload(currentPayload)) {
         await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, providerPayload);
         await persistPreparedPayload(job.id, providerPayload);
+        preparedPayloadPersisted = true;
         job.queue_payload = providerPayload;
       }
 
@@ -529,6 +542,12 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
       const message = error?.message || 'Queue dispatch failed';
       if (message.startsWith('INVALID_TST_CONFIG:')) {
         await markFailedAndRefund(job, message.replace('INVALID_TST_CONFIG:', '').trim());
+        summary.failed += 1;
+      } else if (preparedPayloadPersisted) {
+        await markFailedAndRefund(
+          job,
+          `Provider dispatch became ambiguous after payload preparation: ${message}. Job was stopped to prevent duplicate submissions.`,
+        );
         summary.failed += 1;
       } else if (isTransientError(message)) {
         const result = await requeueJob(job, message);

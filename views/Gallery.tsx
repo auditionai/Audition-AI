@@ -501,7 +501,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                                             <div className={`h-full rounded-full transition-all duration-500 ${img.status === 'queued' ? 'bg-yellow-400' : 'bg-audi-cyan'}`} style={{ width: `${Math.max(0, Math.min(100, img.progress || 0))}%` }} />
                                                         </div>
                                                         <div className="text-[10px] text-slate-500 mt-1">
-                                                            {getProcessingStageLabel(img)} â€¢ {Math.max(0, Math.min(100, img.progress || 0))}% {img.jobId ? `â€¢ ${img.jobId.slice(0, 10)}` : ''}
+                                                            {getProcessingStageLabel(img)} · {Math.max(0, Math.min(100, img.progress || 0))}% {img.jobId ? `· ${img.jobId.slice(0, 10)}` : ''}
                                                         </div>
                                                     </div>
                                                 </div>

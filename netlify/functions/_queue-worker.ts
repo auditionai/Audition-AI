@@ -36,6 +36,7 @@ const MAX_DISPATCH_RETRIES = 6;
 const MAX_POLL_FAILURES = 8;
 const MAX_PROCESSING_AGE_MS = 45 * 60 * 1000;
 const MAX_PROVIDER_GENERIC_RETRIES = 2;
+const PREPARE_PHASE_TIMEOUT_MS = 25_000;
 
 const isTransientError = (message: string) => {
   const normalized = message.toLowerCase();
@@ -89,6 +90,21 @@ const isGenericProviderFailure = (message: string) => {
     normalized.includes('job failed, change prompt or input and try again') ||
     normalized.includes('change prompt or input and try again')
   );
+};
+
+const withTimeout = async <T>(task: Promise<T>, timeoutMs: number, message: string): Promise<T> => {
+  let timeoutId: NodeJS.Timeout | null = null;
+
+  try {
+    return await Promise.race([
+      task,
+      new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
 };
 
 const getJobRuntimeState = async (jobId: string) => {
@@ -411,6 +427,29 @@ const handlePollFailure = async (job: QueueJobRow, errorMessage: string) => {
   return 'requeued';
 };
 
+const recoverStalePreparingJobs = async () => {
+  const admin = getServiceRoleClient();
+  const nowIso = new Date().toISOString();
+  const { data, error } = await admin
+    .from('generated_images')
+    .select('id, user_id, asset_type, queue_kind, queue_payload, prompt, tool_id, tool_name, model_used, cost_vcoin')
+    .eq('status', 'processing')
+    .is('job_id', null)
+    .lt('lease_expires_at', nowIso);
+
+  if (error) {
+    throw error;
+  }
+
+  let recovered = 0;
+  for (const job of ((data || []) as QueueJobRow[])) {
+    const result = await requeueJob(job, 'Queue preparation timed out before dispatching to provider.');
+    if (result === 'requeued') recovered += 1;
+  }
+
+  return recovered;
+};
+
 const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
   const admin = getServiceRoleClient();
   const summary: QueueWorkerSummary = {
@@ -421,6 +460,8 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
     failed: 0,
     requeued: 0,
   };
+
+  summary.requeued += await recoverStalePreparingJobs();
 
   const { data: dispatchJobs, error: dispatchError } = await admin.rpc('claim_dispatchable_generated_jobs', {
     p_limit: 8,
@@ -451,12 +492,16 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
 
       if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'image_edit_recipe_v1') {
         const editPayload = currentPayload as ImageEditRecipePayload;
-        const resultUrl = await runVertexImageEdit({
-          sourceImage: editPayload.sourceImage,
-          instruction: editPayload.prompt,
-          modelId: editPayload.modelId,
-          mimeType: editPayload.mimeType,
-        });
+        const resultUrl = await withTimeout(
+          runVertexImageEdit({
+            sourceImage: editPayload.sourceImage,
+            instruction: editPayload.prompt,
+            modelId: editPayload.modelId,
+            mimeType: editPayload.mimeType,
+          }),
+          PREPARE_PHASE_TIMEOUT_MS,
+          'Queue preparation timed out before image edit dispatch.',
+        );
 
         await markCompletedWithAssetUrl(job, resultUrl);
         summary.completed += 1;
@@ -464,7 +509,11 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
       }
 
       const providerPayload = isQueueRecipePayload(currentPayload)
-        ? await prepareProviderPayloadFromQueueRecipe(currentPayload)
+        ? await withTimeout(
+            prepareProviderPayloadFromQueueRecipe(currentPayload),
+            PREPARE_PHASE_TIMEOUT_MS,
+            'Queue preparation timed out before dispatching to provider.',
+          )
         : currentPayload;
 
       if (isQueueRecipePayload(currentPayload)) {

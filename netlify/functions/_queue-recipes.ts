@@ -114,16 +114,16 @@ export const prepareProviderPayloadFromQueueRecipe = async (payload: QueueRecipe
         throw new Error('CRITICAL FAILURE: No valid image references were prepared for the generation payload.');
       }
 
-      const uploadedUrls: string[] = [];
-      for (const source of uploadSources) {
-        if (!source) continue;
-        uploadedUrls.push(await uploadMediaToTst(source, 'image'));
-      }
-
-      const synthesizedPrompt =
+      const [uploadedUrls, synthesizedPrompt] = await Promise.all([
+        Promise.all(
+          uploadSources
+            .filter((value): value is string => Boolean(value))
+            .map((source) => uploadMediaToTst(source, 'image')),
+        ),
         roleAwareSources.length > 0
-          ? await synthesizeStrictImagePrompt(structuredPayload)
-          : payload.prompt;
+          ? synthesizeStrictImagePrompt(structuredPayload)
+          : Promise.resolve(payload.prompt),
+      ]);
 
       const providerPayload: Record<string, unknown> = {
         prompt: buildImageProviderPrompt(synthesizedPrompt, structuredPayload.negativePrompt),

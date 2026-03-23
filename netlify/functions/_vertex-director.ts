@@ -168,19 +168,13 @@ export const synthesizeStrictImagePrompt = async (payload: ImageGenerateRecipePa
     throw new Error('CRITICAL FAILURE: Character reference images are missing.');
   }
 
-  const parts: Array<Record<string, unknown>> = [];
+  const orderedSources = [
+    ...characterImages,
+    ...(payload.sampleImage ? [payload.sampleImage] : []),
+    ...(payload.styleImage ? [payload.styleImage] : []),
+  ];
 
-  for (const image of characterImages) {
-    parts.push(await toInlineImagePart(image));
-  }
-
-  if (payload.sampleImage) {
-    parts.push(await toInlineImagePart(payload.sampleImage));
-  }
-
-  if (payload.styleImage) {
-    parts.push(await toInlineImagePart(payload.styleImage));
-  }
+  const parts: Array<Record<string, unknown>> = await Promise.all(orderedSources.map((image) => toInlineImagePart(image)));
 
   parts.push({
     text: buildStrictImageDirectorInstruction(payload, hasCharacters, hasSample, hasStyle),

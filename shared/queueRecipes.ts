@@ -20,6 +20,28 @@ export interface ImageGenerateRecipePayload {
   referenceImages?: string[];
 }
 
+const normalizeValue = (value?: string | null) => (value || '').trim().toLowerCase();
+
+export const getEffectiveImageGenerationResolution = (
+  modelId?: string | null,
+  speed?: string | null,
+  resolution?: string | null,
+) => {
+  const normalizedModelId = normalizeValue(modelId);
+  const normalizedSpeed = normalizeValue(speed);
+  const normalizedResolution = normalizeValue(resolution);
+
+  if (
+    normalizedModelId === 'nano-banana-pro' &&
+    normalizedSpeed === 'slow' &&
+    normalizedResolution === '4k'
+  ) {
+    return '2K';
+  }
+
+  return resolution || undefined;
+};
+
 export interface ImageEditRecipePayload {
   recipeType: 'image_edit_recipe_v1';
   modelId: string;
@@ -98,7 +120,7 @@ export const getRecipeValidationPayload = (payload: QueueRecipePayload) => {
     case 'image_generate_recipe_v1':
       return {
         model: payload.modelId,
-        resolution: payload.resolution?.toLowerCase(),
+        resolution: getEffectiveImageGenerationResolution(payload.modelId, payload.speed, payload.resolution)?.toLowerCase(),
         aspect_ratio: payload.aspectRatio,
         speed: payload.speed,
         server_id: payload.serverId,

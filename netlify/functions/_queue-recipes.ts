@@ -1,4 +1,9 @@
-import { buildImageProviderPrompt, type ImageGenerateRecipePayload, type QueueRecipePayload } from '../../shared/queueRecipes';
+import {
+  buildImageProviderPrompt,
+  getEffectiveImageGenerationResolution,
+  type ImageGenerateRecipePayload,
+  type QueueRecipePayload,
+} from '../../shared/queueRecipes';
 import { synthesizeStrictImagePrompt } from './_vertex-director';
 
 const TST_API_BASE = 'https://api.tramsangtao.com/v1';
@@ -101,6 +106,11 @@ export const prepareProviderPayloadFromQueueRecipe = async (payload: QueueRecipe
   switch (payload.recipeType) {
     case 'image_generate_recipe_v1': {
       const structuredPayload = payload as ImageGenerateRecipePayload;
+      const effectiveResolution = getEffectiveImageGenerationResolution(
+        payload.modelId,
+        payload.speed,
+        payload.resolution,
+      );
       const roleAwareSources = [
         ...(structuredPayload.characterImages || []),
         ...(structuredPayload.sampleImage ? [structuredPayload.sampleImage] : []),
@@ -131,7 +141,7 @@ export const prepareProviderPayloadFromQueueRecipe = async (payload: QueueRecipe
       };
 
       if (uploadedUrls.length > 0) providerPayload.img_url = uploadedUrls;
-      if (payload.resolution) providerPayload.resolution = payload.resolution.toLowerCase();
+      if (effectiveResolution) providerPayload.resolution = effectiveResolution.toLowerCase();
       if (payload.aspectRatio) providerPayload.aspect_ratio = payload.aspectRatio;
       if (payload.speed) providerPayload.speed = payload.speed;
       if (payload.serverId) providerPayload.server_id = payload.serverId;

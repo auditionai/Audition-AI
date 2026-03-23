@@ -1,8 +1,20 @@
 import { getServiceRoleClient } from './_supabase';
 import { validateQueuePayloadAgainstLiveCatalog } from './_tst-live-catalog';
-import { prepareProviderPayloadFromQueueRecipe } from './_queue-recipes';
+import {
+  buildImageGenerateProviderPayload,
+  prepareProviderPayloadFromQueueRecipe,
+  synthesizeImageGeneratePrompt,
+  uploadImageToTst,
+} from './_queue-recipes';
 import { runVertexImageEdit } from './_vertex-image-edit';
-import { getRecipeValidationPayload, isQueueRecipePayload, type ImageEditRecipePayload } from '../../shared/queueRecipes';
+import {
+  getImageDirectorSources,
+  getImageRenderReferenceSources,
+  getRecipeValidationPayload,
+  isQueueRecipePayload,
+  type ImageEditRecipePayload,
+  type ImageGenerateRecipePayload,
+} from '../../shared/queueRecipes';
 
 type QueueJobRow = {
   id: string;
@@ -38,6 +50,9 @@ const MAX_PROCESSING_AGE_MS = 45 * 60 * 1000;
 const MAX_PROVIDER_GENERIC_RETRIES = 2;
 const PRE_PROVIDER_STAGE_TIMEOUT_MS = 10 * 60 * 1000;
 const PREPARE_PHASE_TIMEOUT_MS = PRE_PROVIDER_STAGE_TIMEOUT_MS;
+const IMAGE_REFERENCE_UPLOAD_CHUNK_SIZE = 2;
+const DISPATCH_CLAIM_LIMIT = 2;
+const POLL_CLAIM_LIMIT = 6;
 
 const isTransientError = (message: string) => {
   const normalized = message.toLowerCase();
@@ -283,12 +298,16 @@ const markPreparing = async (job: QueueJobRow) => {
 };
 
 const markPreparedForDispatch = async (jobId: string) => {
+  return markQueuedStage(jobId, 45);
+};
+
+const markQueuedStage = async (jobId: string, progress: number) => {
   const admin = getServiceRoleClient();
   await admin
     .from('generated_images')
     .update({
       status: 'queued',
-      progress: 45,
+      progress,
       error_message: null,
       next_poll_at: new Date().toISOString(),
       lease_token: null,
@@ -359,6 +378,78 @@ const persistPreparedPayload = async (jobId: string, providerPayload: Record<str
       updated_at: new Date().toISOString(),
     })
     .eq('id', jobId);
+};
+
+const persistRecipePayload = async (jobId: string, recipePayload: ImageGenerateRecipePayload) => {
+  const admin = getServiceRoleClient();
+  await admin
+    .from('generated_images')
+    .update({
+      queue_payload: recipePayload,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', jobId);
+};
+
+const prepareImageRecipeInStages = async (job: QueueJobRow, recipePayload: ImageGenerateRecipePayload) => {
+  const renderSources =
+    (recipePayload.__uploadSources || []).filter((value): value is string => Boolean(value)).length > 0
+      ? (recipePayload.__uploadSources || []).filter((value): value is string => Boolean(value))
+      : getImageRenderReferenceSources(recipePayload);
+  const directorSources =
+    (recipePayload.__directorSources || []).filter((value): value is string => Boolean(value)).length > 0
+      ? (recipePayload.__directorSources || []).filter((value): value is string => Boolean(value))
+      : getImageDirectorSources(recipePayload);
+
+  if (renderSources.length === 0) {
+    throw new Error('CRITICAL FAILURE: No valid image references were prepared for the generation payload.');
+  }
+
+  const currentStage = recipePayload.__stage || 'uploading_refs';
+  const uploadedUrls = [...(recipePayload.__uploadedUrls || [])];
+
+  if (currentStage === 'uploading_refs') {
+    const uploadCursor = Math.max(0, Number(recipePayload.__uploadCursor || uploadedUrls.length || 0));
+    const chunk = renderSources.slice(uploadCursor, uploadCursor + IMAGE_REFERENCE_UPLOAD_CHUNK_SIZE);
+
+    if (chunk.length > 0) {
+      const chunkUrls = await Promise.all(chunk.map((source) => uploadImageToTst(source)));
+      uploadedUrls.push(...chunkUrls);
+    }
+
+    const nextCursor = uploadCursor + chunk.length;
+    const hasMoreUploads = nextCursor < renderSources.length;
+    const nextPayload: ImageGenerateRecipePayload = {
+      ...recipePayload,
+      __stage: hasMoreUploads ? 'uploading_refs' : 'synthesizing_prompt',
+      __uploadSources: renderSources,
+      __directorSources: directorSources,
+      __uploadCursor: nextCursor,
+      __uploadedUrls: uploadedUrls,
+    };
+
+    await persistRecipePayload(job.id, nextPayload);
+
+    if (hasMoreUploads) {
+      const uploadProgress = Math.min(35, 20 + Math.round((nextCursor / renderSources.length) * 15));
+      await markQueuedStage(job.id, uploadProgress);
+      return { type: 'requeue' as const };
+    }
+
+    await markQueuedStage(job.id, 40);
+    return { type: 'requeue' as const };
+  }
+
+  const synthesizedPrompt = recipePayload.__synthesizedPrompt?.trim()
+    ? recipePayload.__synthesizedPrompt.trim()
+    : await synthesizeImageGeneratePrompt(recipePayload);
+  const providerPayload = buildImageGenerateProviderPayload(recipePayload, uploadedUrls, synthesizedPrompt);
+
+  await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, providerPayload);
+  await persistPreparedPayload(job.id, providerPayload);
+  await markPreparedForDispatch(job.id);
+
+  return { type: 'prepared' as const, providerPayload };
 };
 
 const markCompletedWithAssetUrl = async (job: QueueJobRow, assetUrl: string) => {
@@ -535,7 +626,7 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
   summary.requeued += await recoverStalePreparingJobs();
 
   const { data: dispatchJobs, error: dispatchError } = await admin.rpc('claim_dispatchable_generated_jobs', {
-    p_limit: 8,
+    p_limit: DISPATCH_CLAIM_LIMIT,
     p_lease_seconds: 120,
   });
 
@@ -583,7 +674,21 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
         continue;
       }
 
-      if (isQueueRecipePayload(currentPayload)) {
+      if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'image_generate_recipe_v1') {
+        await updatePreProviderStage(job.id, 20);
+        const stagedResult = await withTimeout(
+          prepareImageRecipeInStages(job, currentPayload as ImageGenerateRecipePayload),
+          PREPARE_PHASE_TIMEOUT_MS,
+          'Queue preparation timed out before dispatching to provider.',
+        );
+
+        if (stagedResult.type === 'requeue') {
+          summary.requeued += 1;
+          continue;
+        }
+      }
+
+      if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType !== 'image_generate_recipe_v1') {
         await updatePreProviderStage(job.id, 20);
         const providerPayload = await withTimeout(
           prepareProviderPayloadFromQueueRecipe(currentPayload),
@@ -625,7 +730,7 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
   }
 
   const { data: pollJobs, error: pollError } = await admin.rpc('claim_pollable_generated_jobs', {
-    p_limit: 8,
+    p_limit: POLL_CLAIM_LIMIT,
     p_lease_seconds: 60,
   });
 

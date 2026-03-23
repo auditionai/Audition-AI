@@ -26,11 +26,13 @@ export const handler: Handler = async (event) => {
   }
 
   try {
-    const summary = await runQueueWorker();
+    runQueueWorker().catch((error) => {
+      console.error('[queue-tick] Worker failed:', error);
+    });
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify({ success: true, summary }),
+      body: JSON.stringify({ success: true, accepted: true }),
     };
   } catch (error: any) {
     const message = error?.message || 'Internal Server Error';

@@ -1,6 +1,6 @@
 import { GoogleAuth } from 'google-auth-library';
 import { getServiceRoleClient } from './_supabase';
-import type { ImageGenerateRecipePayload } from '../../shared/queueRecipes';
+import { getImageDirectorSources, type ImageGenerateRecipePayload } from '../../shared/queueRecipes';
 
 type VertexCredentialRow = {
   id: string;
@@ -131,7 +131,7 @@ const buildStrictImageDirectorInstruction = (
   }
 
   if (hasSample) {
-    sections.push(`- Image ${imageIndex}: SAMPLE / POSE / BACKGROUND reference. COPY EXACTLY the pose, camera angle, framing, environment layout, and scene composition from this image. DO NOT steal identity, outfit, skin texture, facial anatomy, hair texture, or realism from it. If this sample is a real human photo, use it only as composition choreography.`);
+    sections.push(`- Image ${imageIndex}: SAMPLE / POSE / BACKGROUND reference. COPY EXACTLY the pose, camera angle, framing, environment layout, and scene composition from this image. If multiple subjects appear in this image, COPY EXACTLY their left-to-right order, spacing, overlap, body lean, hand placement, leg placement, relative heights, and camera perspective. DO NOT steal identity, outfit, skin texture, facial anatomy, hair texture, or realism from it. If this sample is a real human photo, use it only as composition choreography.`);
     imageIndex += 1;
   }
 
@@ -146,11 +146,12 @@ const buildStrictImageDirectorInstruction = (
     '2. The final command prompt must explicitly command the renderer to COPY AND PASTE the character identity from the character references, including face shape, eyes, hair silhouette, body structure, skin tone, outfit, shoes, and accessories.',
     '3. The final command prompt must explicitly state that the subject must remain a stylized 3D game character / MMO avatar and must NOT become photorealistic, semi-realistic, or humanized.',
     '4. If a sample image is provided, the final command prompt must explicitly command the renderer to COPY the exact pose, framing, camera angle, and background from it, while forbidding any borrowing of real-human realism or identity from it.',
-    '5. If a style image is provided, the final command prompt must explicitly command the renderer to COPY the exact render style, lighting, material quality, color grading, stylized skin shading, and stylized facial/hand treatment from it.',
-    '6. The prompt must state that the renderer is FORBIDDEN from inventing extra characters, replacing the face, changing the hair, changing the outfit, improvising the composition, or blending the roles of the references.',
-    '7. If multiple character references are provided, reconcile them into the same identity, prioritizing face fidelity, body fidelity, and outfit accuracy.',
-    '8. Mention that the reference images will be provided again to the renderer in the same order.',
-    '9. Explicitly forbid realistic human skin pores, realistic human facial anatomy, realistic photographic shading, and live-action body proportions if they conflict with the game-avatar look.',
+    '5. If the sample image contains multiple people, the final command prompt must explicitly map the final characters into those exact sample positions and preserve the exact left-to-right arrangement, spacing, overlap, body lean, hand placement, leg placement, and camera perspective. The renderer must NOT collapse them into a straight lineup unless the sample itself is a straight lineup.',
+    '6. If a style image is provided, the final command prompt must explicitly command the renderer to COPY the exact render style, lighting, material quality, color grading, stylized skin shading, and stylized facial/hand treatment from it.',
+    '7. The prompt must state that the renderer is FORBIDDEN from inventing extra characters, replacing the face, changing the hair, changing the outfit, improvising the composition, or blending the roles of the references.',
+    '8. If multiple character references are provided, map each final character into a distinct sample position. Do not merge them into one combined pose and do not default to standing shoulder-to-shoulder unless the sample says so.',
+    '9. Mention that the reference images will be provided again to the renderer in the same order.',
+    '10. Explicitly forbid realistic human skin pores, realistic human facial anatomy, realistic photographic shading, and live-action body proportions if they conflict with the game-avatar look.',
     '',
     'Do not explain your reasoning. Output only the final command prompt.',
   );
@@ -168,11 +169,7 @@ export const synthesizeStrictImagePrompt = async (payload: ImageGenerateRecipePa
     throw new Error('CRITICAL FAILURE: Character reference images are missing.');
   }
 
-  const orderedSources = [
-    ...characterImages,
-    ...(payload.sampleImage ? [payload.sampleImage] : []),
-    ...(payload.styleImage ? [payload.styleImage] : []),
-  ];
+  const orderedSources = getImageDirectorSources(payload);
 
   const parts: Array<Record<string, unknown>> = await Promise.all(orderedSources.map((image) => toInlineImagePart(image)));
 

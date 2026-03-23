@@ -272,20 +272,19 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
       if (!img.status || img.status === 'completed') return lang === 'vi' ? 'Hoàn thành' : 'Completed';
       if (img.jobId) return lang === 'vi' ? 'Đang tạo ảnh' : 'Generating';
 
-      if (img.status === 'queued' && queueProgress >= 45) {
+      if (queueProgress >= 40) {
           return lang === 'vi' ? 'Đang tổng hợp' : 'Synthesizing';
+      }
+
+      if (queueProgress >= 10) {
+          return lang === 'vi' ? 'Đang xử lý' : 'Processing';
       }
 
       if (img.status === 'queued') {
           return lang === 'vi' ? 'Đang chuẩn bị' : 'Preparing';
       }
 
-      const progress = Math.max(0, Math.min(100, img.progress || 0));
-      if (progress >= 20) {
-          return lang === 'vi' ? 'Đang tổng hợp' : 'Synthesizing';
-      }
-
-      return lang === 'vi' ? 'Đang xử lý' : 'Processing';
+      return lang === 'vi' ? 'Đang chuẩn bị' : 'Preparing';
   }; 
 
   const handlePublish = async (image: GeneratedImage) => {

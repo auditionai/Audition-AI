@@ -487,6 +487,8 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
   summary.claimedForDispatch = jobsToDispatch.length;
 
   for (const job of jobsToDispatch) {
+    let preparedPayloadPersisted = false;
+
     try {
       if (await shouldSkipDispatch(job)) {
         await releaseLease(job.id);
@@ -497,7 +499,6 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
       const validationPayload = isQueueRecipePayload(currentPayload)
         ? getRecipeValidationPayload(currentPayload)
         : currentPayload;
-      let preparedPayloadPersisted = false;
 
       await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, validationPayload);
 

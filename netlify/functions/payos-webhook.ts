@@ -27,8 +27,22 @@ export const handler: Handler = async (event) => {
   }
 
   try {
-    const payload = JSON.parse(event.body || '{}');
-    const { checksumKey } = getPayOSEnv();
+    const rawBody = typeof event.body === 'string' ? event.body.trim() : '';
+    let payload: any = {};
+
+    if (rawBody) {
+      try {
+        payload = JSON.parse(rawBody);
+      } catch {
+        // PayOS dashboard can probe webhook URLs with non-JSON payloads.
+        // Treat those as health checks instead of failing the validation.
+        return {
+          statusCode: 200,
+          headers,
+          body: JSON.stringify({ success: true, message: 'PayOS webhook endpoint is ready' }),
+        };
+      }
+    }
 
     const hasWebhookData =
       payload &&
@@ -39,7 +53,7 @@ export const handler: Handler = async (event) => {
     const hasOrderCode = Number.isFinite(Number(payload?.data?.orderCode));
     const hasSignature = typeof payload?.signature === 'string' && payload.signature.trim().length > 0;
 
-    // PayOS dashboard may send a lightweight POST probe when validating the webhook URL.
+    // PayOS dashboard may send lightweight POST probes when validating the webhook URL.
     // We should acknowledge the endpoint is alive without trying to settle a payment.
     if (!hasWebhookData && !hasOrderCode && !hasSignature) {
       return {
@@ -48,6 +62,8 @@ export const handler: Handler = async (event) => {
         body: JSON.stringify({ success: true, message: 'PayOS webhook endpoint is ready' }),
       };
     }
+
+    const { checksumKey } = getPayOSEnv();
 
     if (!verifyPayOSWebhook(payload, checksumKey)) {
       return {

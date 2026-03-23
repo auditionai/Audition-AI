@@ -247,6 +247,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
       pricingEntries.length > 0 &&
       runtimeModels.length > 0 &&
       (activeMode === 'video_ai' ? videoModelOptions.length > 0 : motionModelOptions.length > 0);
+  const lastAutoSelectedVideoModelRef = useRef<string | null>(null);
 
   const currentCostBreakdown = activeMode === 'motion_control'
       ? getMotionCostBreakdown({
@@ -285,13 +286,92 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
       }
 
       const videoSpec = getVideoModelSpecs(pricingEntries, runtimeModels).find((spec) => spec.modelId === videoModel);
+      const compatibleResolutions = getVideoCompatibleResolutions({
+          modelId: videoModel,
+          pricingEntries,
+          serverId: uiServerToTst(server),
+          duration: duration.toLowerCase(),
+          speed: uiSpeedToTst(speed) || 'fast',
+          audio: sound
+      });
+      const compatibleDurations = getVideoCompatibleDurations({
+          modelId: videoModel,
+          pricingEntries,
+          serverId: uiServerToTst(server),
+          resolution: quality.toLowerCase(),
+          speed: uiSpeedToTst(speed) || 'fast',
+          audio: sound
+      });
       return {
           showAspectRatio: (videoSpec?.aspectRatios || []).length > 0,
           aspectRatios: (videoSpec?.aspectRatios || []).map((value) => value.toUpperCase()),
-          qualities: (videoSpec?.resolutions || []).map((value) => value.toUpperCase()),
-          durations: (videoSpec?.durations || []).map((value) => value.toUpperCase()),
+          qualities:
+              (compatibleResolutions.length > 0 ? compatibleResolutions : (videoSpec?.resolutions || []))
+                  .map((value) => value.toUpperCase()),
+          durations:
+              (compatibleDurations.length > 0 ? compatibleDurations : (videoSpec?.durations || []))
+                  .map((value) => value.toUpperCase()),
           supportsAudio: Boolean(videoSpec?.supportsAudio)
       };
+  };
+
+  const pickPreferredVideoServer = () => {
+      const compatibleServers = getVideoCompatibleServers({
+          modelId: videoModel,
+          pricingEntries,
+          duration: duration.toLowerCase(),
+          speed: uiSpeedToTst(speed) || 'fast',
+          audio: sound
+      });
+
+      if (compatibleServers.length === 0) return null;
+
+      const preferredServerOrder = ['fast', 'vip1', 'vip2', 'cheap'];
+      const rankedServers = [...compatibleServers].sort((a, b) => {
+          const resolutionsA = getVideoCompatibleResolutions({
+              modelId: videoModel,
+              pricingEntries,
+              serverId: a,
+              duration: duration.toLowerCase(),
+              speed: uiSpeedToTst(speed) || 'fast',
+              audio: sound
+          }).length;
+          const resolutionsB = getVideoCompatibleResolutions({
+              modelId: videoModel,
+              pricingEntries,
+              serverId: b,
+              duration: duration.toLowerCase(),
+              speed: uiSpeedToTst(speed) || 'fast',
+              audio: sound
+          }).length;
+
+          if (resolutionsA !== resolutionsB) {
+              return resolutionsB - resolutionsA;
+          }
+
+          const durationsA = getVideoCompatibleDurations({
+              modelId: videoModel,
+              pricingEntries,
+              serverId: a,
+              speed: uiSpeedToTst(speed) || 'fast',
+              audio: sound
+          }).length;
+          const durationsB = getVideoCompatibleDurations({
+              modelId: videoModel,
+              pricingEntries,
+              serverId: b,
+              speed: uiSpeedToTst(speed) || 'fast',
+              audio: sound
+          }).length;
+
+          if (durationsA !== durationsB) {
+              return durationsB - durationsA;
+          }
+
+          return preferredServerOrder.indexOf(a) - preferredServerOrder.indexOf(b);
+      });
+
+      return rankedServers[0] || compatibleServers[0];
   };
 
   const modelOptions = getModelOptions();
@@ -325,6 +405,23 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
           pricingEntries,
           resolution: quality.toLowerCase()
         }).map((speedId) => ({ label: tstSpeedToUi(speedId), value: tstSpeedToUi(speedId) }));
+
+  useEffect(() => {
+      if (activeMode !== 'video_ai' || !videoModel) return;
+
+      const preferredServer = pickPreferredVideoServer();
+      if (!preferredServer) return;
+
+      const preferredServerUi = tstServerToUi(preferredServer);
+      const serverStillValid = serverOptions.some((option) => option.value === server);
+      const shouldAutoSelect =
+          lastAutoSelectedVideoModelRef.current !== videoModel || !serverStillValid || !server;
+
+      if (shouldAutoSelect && preferredServerUi && preferredServerUi !== server) {
+          setServer(preferredServerUi);
+      }
+      lastAutoSelectedVideoModelRef.current = videoModel;
+  }, [activeMode, videoModel, pricingEntries, server, serverOptions]);
 
   useEffect(() => {
       if (modelOptions.showAspectRatio && modelOptions.aspectRatios?.length > 0 && !modelOptions.aspectRatios.includes(aspectRatio)) {

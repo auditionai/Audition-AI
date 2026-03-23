@@ -7,6 +7,8 @@ import { S3Client, PutObjectCommand, DeleteObjectCommand, DeleteObjectsCommand, 
 const DB_NAME = 'DMP_AI_Studio_DB';
 const STORE_NAME = 'images';
 const TABLE_NAME = 'generated_images';
+const HISTORY_RETENTION_DAYS = 7;
+const HISTORY_RETENTION_MS = HISTORY_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 
 // --- CLOUDFLARE R2 CONFIGURATION ---
 // Helper to get Env Var from either Vite's import.meta.env or process.env shim
@@ -79,6 +81,234 @@ const openDB = (): Promise<IDBDatabase> => {
   });
 };
 
+const readLocalImages = async (): Promise<GeneratedImage[]> => {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([STORE_NAME], 'readonly');
+    const store = transaction.objectStore(STORE_NAME);
+    const request = store.getAll();
+
+    request.onsuccess = () => {
+      const results = request.result as GeneratedImage[];
+      const mappedResults = results.map(img => ({
+        ...img,
+        toolName: mapEngineName(img.toolName),
+        engine: mapEngineName(img.engine)
+      }));
+      resolve(mappedResults.sort((a, b) => b.timestamp - a.timestamp));
+    };
+    request.onerror = () => reject(request.error);
+  });
+};
+
+const saveLocalImage = async (image: GeneratedImage): Promise<void> => {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([STORE_NAME], 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+    const request = store.put(image);
+
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+};
+
+export const saveImageToLocalCache = async (image: GeneratedImage): Promise<void> => {
+  const user = await getUserProfile();
+  const imageWithUser = {
+    ...image,
+    updatedAt: image.updatedAt || Date.now(),
+    userName: image.userName || user.username,
+    userId: image.userId || user.id,
+    isShared: image.isShared ?? false,
+  };
+  await saveLocalImage(imageWithUser);
+};
+
+const getVersionTimestamp = (image: GeneratedImage): number => image.updatedAt || image.timestamp || 0;
+const isTerminalStatus = (status?: GeneratedImage['status']) => status === 'completed' || status === 'failed';
+
+const mergeImageVersions = (cloudImage: GeneratedImage, localImage: GeneratedImage): GeneratedImage => {
+  const cloudVersion = getVersionTimestamp(cloudImage);
+  const localVersion = getVersionTimestamp(localImage);
+
+  const cloudLooksMoreComplete =
+    (!!cloudImage.url && !localImage.url) ||
+    (cloudImage.status === 'completed' && localImage.status !== 'completed') ||
+    (cloudImage.status === 'failed' && !isTerminalStatus(localImage.status));
+
+  const preferCloud = cloudLooksMoreComplete || cloudVersion >= localVersion;
+  const primary = preferCloud ? cloudImage : localImage;
+  const secondary = preferCloud ? localImage : cloudImage;
+
+  return {
+    ...secondary,
+    ...primary,
+    assetType: primary.assetType || secondary.assetType,
+    url: primary.url || secondary.url,
+    prompt: primary.prompt || secondary.prompt,
+    toolId: primary.toolId || secondary.toolId,
+    toolName: primary.toolName || secondary.toolName,
+    engine: primary.engine || secondary.engine,
+    userName: primary.userName || secondary.userName,
+    userId: primary.userId || secondary.userId,
+    isShared: primary.isShared ?? secondary.isShared,
+    cost: primary.cost ?? secondary.cost,
+    progress: primary.progress ?? secondary.progress,
+    error: primary.error || secondary.error,
+    status: primary.status || secondary.status,
+    jobId: primary.jobId ?? secondary.jobId,
+    timestamp: primary.timestamp || secondary.timestamp,
+    updatedAt: Math.max(cloudVersion, localVersion)
+  };
+};
+
+const mergeCloudAndLocalImages = (cloudImages: GeneratedImage[], localImages: GeneratedImage[]): GeneratedImage[] => {
+  const merged = new Map<string, GeneratedImage>();
+
+  for (const image of cloudImages) {
+    merged.set(image.id, image);
+  }
+
+  for (const localImage of localImages) {
+    const existing = merged.get(localImage.id);
+    if (!existing) {
+      merged.set(localImage.id, localImage);
+      continue;
+    }
+
+    merged.set(localImage.id, mergeImageVersions(existing, localImage));
+  }
+
+  return Array.from(merged.values()).sort((a, b) => b.timestamp - a.timestamp);
+};
+
+const inferAssetType = (toolId?: string, modelUsed?: string, assetUrl?: string): 'image' | 'video' => {
+  if (toolId?.includes('video') || toolId?.includes('motion')) return 'video';
+  const normalizedModel = (modelUsed || '').toLowerCase();
+  const normalizedUrl = (assetUrl || '').toLowerCase();
+  if (
+    normalizedModel.includes('kling') ||
+    normalizedModel.includes('motion') ||
+    normalizedUrl.endsWith('.mp4') ||
+    normalizedUrl.includes('.mp4?')
+  ) {
+    return 'video';
+  }
+  return 'image';
+};
+
+const isR2Url = (assetUrl?: string | null) => {
+  if (!assetUrl || !R2_PUBLIC_URL) return false;
+  return assetUrl.startsWith(R2_PUBLIC_URL);
+};
+
+const extractR2KeyFromUrl = (assetUrl?: string | null) => {
+  if (!assetUrl || !isR2Url(assetUrl)) return null;
+  return assetUrl.replace(`${R2_PUBLIC_URL}/`, '');
+};
+
+const buildMetadataPayload = (image: GeneratedImage, user: { id: string; username?: string }, imageUrl: string | null) => ({
+  id: image.id,
+  user_id: user.id,
+  image_url: imageUrl || '',
+  prompt: image.prompt,
+  model_used: image.engine,
+  created_at: new Date(image.timestamp).toISOString(),
+  is_public: image.isShared ?? false,
+  tool_id: image.toolId || inferToolId(image.engine, imageUrl || undefined),
+  tool_name: image.toolName || image.engine || 'AI Gen',
+  status: image.status || (imageUrl ? 'completed' : 'processing'),
+  job_id: image.jobId || null,
+  progress: image.progress ?? (imageUrl ? 100 : 0),
+  error_message: image.error || null,
+  cost_vcoin: image.cost ?? null,
+  asset_type: image.assetType || inferAssetType(image.toolId, image.engine, imageUrl || undefined),
+  updated_at: new Date(image.updatedAt || Date.now()).toISOString(),
+});
+
+const upsertImageMetadata = async (image: GeneratedImage, user: { id: string; username?: string }, imageUrl: string | null) => {
+  if (!supabase) return;
+
+  const extendedPayload = buildMetadataPayload(image, user, imageUrl);
+  const { error } = await supabase.from(TABLE_NAME).upsert(extendedPayload, { onConflict: 'id' });
+
+  if (!error) {
+    return;
+  }
+
+  // Fallback for legacy schemas that still only have the minimal columns.
+  const legacyPayload = {
+    id: image.id,
+    user_id: user.id,
+    image_url: imageUrl || '',
+    prompt: image.prompt,
+    model_used: image.engine,
+    created_at: new Date(image.timestamp).toISOString(),
+    is_public: image.isShared ?? false,
+  };
+
+  const { error: legacyError } = await supabase.from(TABLE_NAME).upsert(legacyPayload, { onConflict: 'id' });
+  if (legacyError) {
+    throw legacyError;
+  }
+};
+
+const mapGeneratedImageRow = (row: any, fallbackUserName: string, fallbackCost?: number): GeneratedImage => ({
+  id: row.id,
+  url: row.image_url || '',
+  prompt: row.prompt,
+  timestamp: new Date(row.created_at).getTime(),
+  updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : new Date(row.created_at).getTime(),
+  assetType: row.asset_type || inferAssetType(row.tool_id, row.model_used, row.image_url),
+  toolId: row.tool_id || inferToolId(row.model_used, row.image_url),
+  toolName: row.tool_name || mapEngineName(row.model_used),
+  engine: mapEngineName(row.model_used),
+  isShared: row.is_public,
+  userId: row.user_id,
+  userName: row.user_name || fallbackUserName,
+  status: row.status || (row.image_url ? 'completed' : 'processing'),
+  jobId: row.job_id || undefined,
+  progress: typeof row.progress === 'number' ? row.progress : undefined,
+  error: row.error_message || undefined,
+  cost: Number.isFinite(Number(row.cost_vcoin)) ? Number(row.cost_vcoin) : fallbackCost,
+});
+
+const getGeneratedImageChargeMap = async (userId: string, imageIds: string[]): Promise<Map<string, number>> => {
+  if (!supabase || imageIds.length === 0) {
+    return new Map();
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('vcoin_transactions')
+      .select('reference_id, amount')
+      .eq('user_id', userId)
+      .eq('reference_type', 'generated_image_charge')
+      .in('reference_id', imageIds);
+
+    if (error || !data) {
+      return new Map();
+    }
+
+    return new Map(
+      data
+        .map((row: any) => {
+          const referenceId = typeof row.reference_id === 'string' ? row.reference_id : '';
+          const amount = Math.abs(Number(row.amount) || 0);
+          if (!referenceId || !Number.isFinite(amount) || amount <= 0) {
+            return null;
+          }
+          return [referenceId, amount] as const;
+        })
+        .filter((entry: readonly [string, number] | null): entry is readonly [string, number] => entry !== null)
+    );
+  } catch (error) {
+    console.warn('[Storage] Failed to load generated image charge map', error);
+    return new Map();
+  }
+};
+
 // Modified to return Uint8Array for AWS SDK compatibility
 const processBase64Data = (base64: string): { blob: Blob, type: string, buffer: Uint8Array } => {
   const parts = base64.split(';base64,');
@@ -98,12 +328,9 @@ const processBase64Data = (base64: string): { blob: Blob, type: string, buffer: 
 
 // --- NEW: UPLOAD INPUT FILE TO R2 ---
 export const uploadFileToR2 = async (file: File | Blob | string, folder: string = 'inputs'): Promise<string> => {
-    if (!r2Client) {
-        throw new Error("R2 Client not initialized");
-    }
-
     try {
         let buffer: Uint8Array;
+        let blob: Blob;
         let contentType: string;
         let extension = 'png';
 
@@ -111,6 +338,7 @@ export const uploadFileToR2 = async (file: File | Blob | string, folder: string 
             // Base64
             const processed = processBase64Data(file);
             buffer = processed.buffer;
+            blob = processed.blob;
             contentType = processed.type;
             extension = contentType.split('/')[1] || 'png';
         } else {
@@ -118,22 +346,38 @@ export const uploadFileToR2 = async (file: File | Blob | string, folder: string 
             const arrayBuffer = await file.arrayBuffer();
             buffer = new Uint8Array(arrayBuffer);
             contentType = file.type || 'image/png';
+            blob = new Blob([arrayBuffer], { type: contentType });
             extension = contentType.split('/')[1] || 'png';
         }
 
         const fileName = `${folder}/${Date.now()}_${Math.random().toString(36).substring(7)}.${extension}`;
 
-        const command = new PutObjectCommand({
-            Bucket: R2_BUCKET_NAME,
-            Key: fileName,
-            Body: buffer,
-            ContentType: contentType,
-        });
+        if (r2Client) {
+            const command = new PutObjectCommand({
+                Bucket: R2_BUCKET_NAME,
+                Key: fileName,
+                Body: buffer,
+                ContentType: contentType,
+            });
 
-        await r2Client.send(command);
-        
-        // Return Public URL
-        return `${R2_PUBLIC_URL}/${fileName}`;
+            await r2Client.send(command);
+            return `${R2_PUBLIC_URL}/${fileName}`;
+        }
+
+        if (supabase) {
+            const { error: uploadError } = await supabase.storage
+                .from('images')
+                .upload(fileName, blob, { upsert: true, contentType });
+
+            if (uploadError) throw uploadError;
+
+            const { data } = supabase.storage.from('images').getPublicUrl(fileName);
+            if (data?.publicUrl) {
+                return data.publicUrl;
+            }
+        }
+
+        throw new Error("R2 Client not initialized");
 
     } catch (error) {
         console.error("R2 Upload Input Error:", error);
@@ -141,14 +385,54 @@ export const uploadFileToR2 = async (file: File | Blob | string, folder: string 
     }
 };
 
+const fetchAssetBlobForPersistence = async (assetUrl: string): Promise<Blob> => {
+    if (assetUrl.startsWith('data:')) {
+        return processBase64Data(assetUrl).blob;
+    }
+
+    try {
+        const response = await fetch(assetUrl, { mode: 'cors' });
+        if (!response.ok) throw new Error(`Direct fetch failed: ${response.status}`);
+        return await response.blob();
+    } catch (directError) {
+        const proxyUrl = `/.netlify/functions/download_proxy?url=${encodeURIComponent(assetUrl)}`;
+        const proxyResponse = await fetch(proxyUrl);
+        if (!proxyResponse.ok) {
+            throw directError instanceof Error ? directError : new Error('Failed to fetch asset for publish');
+        }
+        return await proxyResponse.blob();
+    }
+};
+
 // --- MAIN SERVICE FUNCTIONS ---
 
 export const saveImageToStorage = async (image: GeneratedImage): Promise<void> => {
   const user = await getUserProfile();
-  const imageWithUser = { ...image, userName: user.username, isShared: false };
+  const imageWithUser = {
+    ...image,
+    updatedAt: image.updatedAt || Date.now(),
+    userName: image.userName || user.username,
+    userId: image.userId || user.id,
+    isShared: image.isShared ?? false
+  };
+  const persistLocal = async () => {
+    await saveLocalImage(imageWithUser);
+  };
 
-  // 1. CLOUDFLARE R2 + SUPABASE METADATA (PRIMARY)
-  if (r2Client && supabase && user.id.length > 20) {
+  // 0. DIRECT URL (TRẠM SÁNG TẠO API)
+  if (image.url && image.url.startsWith('http') && supabase && user.id.length > 20) {
+      console.log("[Storage] Image is already a URL. Saving metadata only...");
+      try {
+          await upsertImageMetadata(imageWithUser, user, image.url);
+          await persistLocal();
+          return;
+      } catch (error) {
+          console.error("Supabase DB Error (Direct URL):", error);
+          // Fallback to IndexedDB
+      }
+  }
+  // 1. CLOUDFLARE R2 + SUPABASE METADATA (PRIMARY - For Base64)
+  else if (image.url && image.url.startsWith('data:') && r2Client && supabase && user.id.length > 20) {
     console.log("[Storage] Attempting R2 Upload...");
     try {
         const { blob, type, buffer } = processBase64Data(image.url);
@@ -171,19 +455,8 @@ export const saveImageToStorage = async (image: GeneratedImage): Promise<void> =
         const publicUrl = `${R2_PUBLIC_URL}/${fileName}`;
 
         // C. Save Metadata to Supabase DB
-        const { error: dbError } = await supabase
-            .from(TABLE_NAME)
-            .insert({
-                id: image.id,
-                user_id: user.id, 
-                image_url: publicUrl, // R2 URL
-                prompt: image.prompt,
-                model_used: image.engine,
-                created_at: new Date(image.timestamp).toISOString(),
-                is_public: false
-            });
-
-        if (dbError) throw dbError;
+        await upsertImageMetadata({ ...imageWithUser, url: publicUrl }, user, publicUrl);
+        await persistLocal();
         return;
 
     } catch (error: any) {
@@ -195,8 +468,8 @@ export const saveImageToStorage = async (image: GeneratedImage): Promise<void> =
     }
   } 
   
-  // 2. SUPABASE STORAGE (LEGACY BACKUP)
-  else if (supabase && user.id.length > 20 && !r2Client) {
+  // 2. SUPABASE STORAGE (LEGACY BACKUP - For Base64)
+  else if (image.url && image.url.startsWith('data:') && supabase && user.id.length > 20 && !r2Client) {
     try {
       const { blob } = processBase64Data(image.url);
       const fileName = `${image.id}.png`;
@@ -209,36 +482,25 @@ export const saveImageToStorage = async (image: GeneratedImage): Promise<void> =
 
       const { data: { publicUrl } } = supabase.storage.from('images').getPublicUrl(fileName);
 
-      const { error: dbError } = await supabase
-        .from(TABLE_NAME)
-        .insert({
-          id: image.id,
-          user_id: user.id,
-          image_url: publicUrl,
-          prompt: image.prompt,
-          model_used: image.engine,
-          created_at: new Date(image.timestamp).toISOString(),
-          is_public: false
-        });
-
-      if (dbError) throw dbError;
+      await upsertImageMetadata({ ...imageWithUser, url: publicUrl }, user, publicUrl);
+      await persistLocal();
       return; 
     } catch (error) {
       console.error("Supabase Storage Error (Fallback to Local):", error);
     }
   }
 
+  if (supabase && user.id.length > 20) {
+    try {
+      await upsertImageMetadata(imageWithUser, user, image.url || null);
+    } catch (error) {
+      console.error("Supabase Metadata Save Error (Fallback to Local):", error);
+    }
+  }
+
   // 3. INDEXED DB (OFFLINE/LOCAL FALLBACK)
   console.log("[Storage] Saving to Local (Fallback)");
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([STORE_NAME], 'readwrite');
-    const store = transaction.objectStore(STORE_NAME);
-    const request = store.add(imageWithUser);
-
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
-  });
+  await persistLocal();
 };
 
 export const shareImageToShowcase = async (id: string, isShared: boolean): Promise<boolean> => {
@@ -278,9 +540,79 @@ export const shareImageToShowcase = async (id: string, isShared: boolean): Promi
     });
 };
 
+export const publishImageToShowcase = async (image: GeneratedImage): Promise<GeneratedImage> => {
+    if (!image.url) {
+        throw new Error('Image URL is missing');
+    }
+    if ((image.assetType || inferAssetType(image.toolId, image.engine, image.url)) === 'video') {
+        throw new Error('Only images can be published to the showcase');
+    }
+    if (!supabase) {
+        throw new Error('No Database');
+    }
+    if (!r2Client || !R2_PUBLIC_URL || !R2_BUCKET_NAME) {
+        throw new Error('R2 storage is not configured for publishing');
+    }
+
+    const user = await getUserProfile();
+    const ownerId = image.userId || user.id;
+    const blob = await fetchAssetBlobForPersistence(image.url);
+    const contentType = blob.type || 'image/png';
+    const extension = contentType.includes('jpeg') ? 'jpg' : (contentType.split('/')[1] || 'png');
+    const fileName = `published/${ownerId}/${image.id}.${extension}`;
+
+    const buffer = new Uint8Array(await blob.arrayBuffer());
+    await r2Client.send(new PutObjectCommand({
+        Bucket: R2_BUCKET_NAME,
+        Key: fileName,
+        Body: buffer,
+        ContentType: contentType,
+    }));
+
+    const persistentUrl = `${R2_PUBLIC_URL}/${fileName}`;
+    const updatedImage: GeneratedImage = {
+        ...image,
+        url: persistentUrl,
+        isShared: true,
+        updatedAt: Date.now(),
+    };
+
+    const { error } = await supabase
+        .from(TABLE_NAME)
+        .update({
+            is_public: true,
+            image_url: persistentUrl,
+            updated_at: new Date().toISOString(),
+        })
+        .eq('id', image.id);
+
+    if (error) {
+        throw error;
+    }
+
+    await saveLocalImage(updatedImage);
+    return updatedImage;
+};
+
 const mapEngineName = (engine: string) => {
     if (!engine) return 'AI Gen';
     return engine.replace('Gemini 2.5 Flash', 'Gemini 3.1 Flash').replace('Gemini 2.5 Pro', 'Gemini 3 Pro');
+};
+
+const inferToolId = (modelUsed?: string, assetUrl?: string) => {
+    const normalizedModel = (modelUsed || '').toLowerCase();
+    const normalizedUrl = (assetUrl || '').toLowerCase();
+
+    if (
+        normalizedModel.includes('kling') ||
+        normalizedModel.includes('motion') ||
+        normalizedUrl.endsWith('.mp4') ||
+        normalizedUrl.includes('.mp4?')
+    ) {
+        return normalizedModel.includes('motion') ? 'motion_control_gen' : 'video_gen';
+    }
+
+    return 'gen_tool';
 };
 
 export const getShowcaseImages = async (): Promise<GeneratedImage[]> => {
@@ -296,17 +628,9 @@ export const getShowcaseImages = async (): Promise<GeneratedImage[]> => {
                 .limit(20);
             
             if (!simpleError && simpleData) {
-                return simpleData.map((row: any) => ({
-                    id: row.id,
-                    url: row.image_url, 
-                    prompt: row.prompt,
-                    timestamp: new Date(row.created_at).getTime(),
-                    toolId: 'gen_tool', 
-                    toolName: mapEngineName(row.model_used),
-                    engine: mapEngineName(row.model_used),
-                    isShared: row.is_public,
-                    userName: 'Artist' // Fallback name
-                }));
+                return simpleData
+                    .map((row: any) => mapGeneratedImageRow(row, 'Artist'))
+                    .filter((img: GeneratedImage) => (img.assetType || inferAssetType(img.toolId, img.engine, img.url)) === 'image');
             }
         } catch (e) {
             console.warn("Fetch showcase cloud error", e);
@@ -327,7 +651,7 @@ export const getShowcaseImages = async (): Promise<GeneratedImage[]> => {
                 toolName: mapEngineName(img.toolName),
                 engine: mapEngineName(img.engine)
             }));
-            const shared = mappedResults.filter(img => img.isShared);
+            const shared = mappedResults.filter(img => img.isShared && (img.assetType || inferAssetType(img.toolId, img.engine, img.url)) === 'image');
             resolve(shared.sort((a, b) => b.timestamp - a.timestamp).slice(0, 20));
         };
         request.onerror = () => reject(request.error);
@@ -345,18 +669,7 @@ export const getAllImagesSystemWide = async (): Promise<GeneratedImage[]> => {
 
         if (error || !data) return [];
 
-        return data.map((row: any) => ({
-            id: row.id,
-            url: row.image_url,
-            prompt: row.prompt,
-            timestamp: new Date(row.created_at).getTime(),
-            toolId: 'gen_tool',
-            toolName: mapEngineName(row.model_used),
-            engine: mapEngineName(row.model_used),
-            isShared: row.is_public,
-            userId: row.user_id,
-            userName: 'User'
-        }));
+        return data.map((row: any) => mapGeneratedImageRow(row, 'User'));
     } catch (e) {
         console.error("System Wide Fetch Error", e);
         return [];
@@ -364,6 +677,11 @@ export const getAllImagesSystemWide = async (): Promise<GeneratedImage[]> => {
 };
 
 export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
+  const localImages = await readLocalImages().catch((error) => {
+    console.warn("Local image cache load failed", error);
+    return [] as GeneratedImage[];
+  });
+
   // 1. SUPABASE (Fetches metadata, URL points to R2 or Supabase Storage)
   if (supabase) {
     try {
@@ -376,18 +694,13 @@ export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
                 .order('created_at', { ascending: false });
 
             if (!error && data) {
-                return data.map((row: any) => ({
-                    id: row.id,
-                    url: row.image_url,
-                    prompt: row.prompt,
-                    timestamp: new Date(row.created_at).getTime(),
-                    toolId: 'gen_tool',
-                    toolName: mapEngineName(row.model_used),
-                    engine: mapEngineName(row.model_used),
-                    isShared: row.is_public,
-                    userName: 'Me',
-                    userId: row.user_id
-                }));
+                const missingCostIds = data
+                    .filter((row: any) => !Number.isFinite(Number(row.cost_vcoin)))
+                    .map((row: any) => row.id)
+                    .filter((value: any): value is string => typeof value === 'string' && value.length > 0);
+                const chargeMap = await getGeneratedImageChargeMap(user.id, missingCostIds);
+                const cloudImages = data.map((row: any) => mapGeneratedImageRow(row, 'Me', chargeMap.get(row.id)));
+                return mergeCloudAndLocalImages(cloudImages, localImages);
             }
         }
     } catch (error) {
@@ -396,23 +709,7 @@ export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
   }
 
   // 2. INDEXED DB
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([STORE_NAME], 'readonly');
-    const store = transaction.objectStore(STORE_NAME);
-    const request = store.getAll();
-
-    request.onsuccess = () => {
-      const results = request.result as GeneratedImage[];
-      const mappedResults = results.map(img => ({
-          ...img,
-          toolName: mapEngineName(img.toolName),
-          engine: mapEngineName(img.engine)
-      }));
-      resolve(mappedResults.sort((a, b) => b.timestamp - a.timestamp));
-    };
-    request.onerror = () => reject(request.error);
-  });
+  return localImages;
 };
 
 export const getUserImagesFromStorage = async (userId: string): Promise<GeneratedImage[]> => {
@@ -427,18 +724,12 @@ export const getUserImagesFromStorage = async (userId: string): Promise<Generate
 
         if (error || !data) return [];
 
-        return data.map((row: any) => ({
-            id: row.id,
-            url: row.image_url,
-            prompt: row.prompt,
-            timestamp: new Date(row.created_at).getTime(),
-            toolId: 'gen_tool',
-            toolName: mapEngineName(row.model_used),
-            engine: mapEngineName(row.model_used),
-            isShared: row.is_public,
-            userId: row.user_id,
-            userName: 'User'
-        }));
+        const missingCostIds = data
+            .filter((row: any) => !Number.isFinite(Number(row.cost_vcoin)))
+            .map((row: any) => row.id)
+            .filter((value: any): value is string => typeof value === 'string' && value.length > 0);
+        const chargeMap = await getGeneratedImageChargeMap(userId, missingCostIds);
+        return data.map((row: any) => mapGeneratedImageRow(row, 'User', chargeMap.get(row.id)));
     } catch (e) {
         console.error("User Images Fetch Error", e);
         return [];
@@ -453,7 +744,7 @@ export const deleteImageFromStorage = async (id: string, targetUserId?: string, 
 
   if (supabase && userId) {
     // A. Delete from R2 (if configured)
-    if (r2Client) {
+    if (r2Client && (!imageUrl || isR2Url(imageUrl))) {
         try {
             let fileName = `${userId}/${id}.png`; // Default fallback
             
@@ -462,7 +753,7 @@ export const deleteImageFromStorage = async (id: string, targetUserId?: string, 
                 // Strategy 1: Remove R2_PUBLIC_URL prefix (Handles custom domains/paths)
                 if (R2_PUBLIC_URL && imageUrl.startsWith(R2_PUBLIC_URL)) {
                     fileName = imageUrl.replace(`${R2_PUBLIC_URL}/`, '');
-                } 
+                }
                 // Strategy 2: Use Pathname (Handles domain changes)
                 else {
                     try {
@@ -519,7 +810,7 @@ export const cleanupR2Directly = async (): Promise<number> => {
     
     let deletedCount = 0;
     const now = Date.now();
-    const EXPIRATION_MS = 1 * 24 * 60 * 60 * 1000; // 1 Day
+    const EXPIRATION_MS = HISTORY_RETENTION_MS;
 
     try {
         // Get all public images from DB to protect them
@@ -603,7 +894,7 @@ export const cleanupExpiredImages = async (isSystemWide: boolean = false): Promi
     }
 
     const now = Date.now();
-    const EXPIRATION_MS = 1 * 24 * 60 * 60 * 1000; // 1 Day
+    const EXPIRATION_MS = HISTORY_RETENTION_MS;
     
     // Filter Expired Images
     const expiredImages = images.filter(img => {
@@ -621,20 +912,10 @@ export const cleanupExpiredImages = async (isSystemWide: boolean = false): Promi
     if (r2Client) {
         try {
             // Prepare Keys
-            const objectsToDelete = expiredImages.map(img => {
-                let key = `${img.userId || 'unknown'}/${img.id}.png`;
-                if (img.url && img.url.startsWith('http')) {
-                    if (R2_PUBLIC_URL && img.url.startsWith(R2_PUBLIC_URL)) {
-                        key = img.url.replace(`${R2_PUBLIC_URL}/`, '');
-                    } else {
-                        try {
-                            const path = decodeURIComponent(new URL(img.url).pathname);
-                            key = path.startsWith('/') ? path.substring(1) : path;
-                        } catch(e) {}
-                    }
-                }
-                return { Key: key };
-            });
+            const objectsToDelete = expiredImages
+                .map(img => extractR2KeyFromUrl(img.url))
+                .filter((key): key is string => !!key)
+                .map((key) => ({ Key: key }));
 
             // Split into chunks of 50 (Safe size for Browser & CORS)
             const chunkSize = 50;
@@ -694,3 +975,5 @@ export const cleanupExpiredImages = async (isSystemWide: boolean = false): Promi
 
     return expiredImages.length;
 };
+
+export const getHistoryRetentionDays = () => HISTORY_RETENTION_DAYS;

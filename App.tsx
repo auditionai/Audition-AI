@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Layout } from './components/Layout';
 import { Home } from './views/Home';
 import { ToolWorkspace } from './views/ToolWorkspace';
@@ -18,8 +18,13 @@ import { supabase } from './services/supabaseClient';
 import { logVisit, updateLastActive, getMaintenanceMode } from './services/economyService';
 import { NotificationProvider, useNotification } from './components/NotificationSystem';
 import { Icons } from './components/Icons';
+import { syncPayOSTransaction, triggerServerQueueTick } from './services/serverQueueService';
 
 function AppContent() {
+  const queueHeartbeatLeaseKey = 'auditionai:queue-heartbeat:leader';
+  const queueHeartbeatIntervalMs = 15000;
+  const queueHeartbeatLeaseMs = 20000;
+  const heartbeatInstanceIdRef = useRef(typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `tab-${Date.now()}`);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userRole, setUserRole] = useState<'user' | 'admin'>('user');
   const [lang, setLang] = useState<Language>(APP_CONFIG.ui.default_language);
@@ -105,26 +110,115 @@ function AppContent() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const status = params.get('status');
-    
+    const orderCode = params.get('orderCode');
+
     if (status) {
-        // Clear params to avoid loop/dirty URL
         window.history.replaceState({}, '', window.location.pathname);
-        
+
         if (status === 'PAID') {
-             notify(
-                 lang === 'vi' ? 'Thanh toán thành công! Vcoin sẽ được cộng trong giây lát.' : 'Payment successful! Vcoin will be added shortly.',
-                 'success'
-             );
+             if (orderCode) {
+                 syncPayOSTransaction(orderCode)
+                    .then(() => {
+                        window.dispatchEvent(new Event('balance_updated'));
+                        notify(
+                            lang === 'vi' ? 'Thanh to\u00e1n th\u00e0nh c\u00f4ng! Vcoin \u0111\u00e3 \u0111\u01b0\u1ee3c c\u1ed9ng t\u1ef1 \u0111\u1ed9ng.' : 'Payment successful! Vcoin has been added automatically.',
+                            'success'
+                        );
+                    })
+                    .catch((error) => {
+                        console.error('Failed to sync PayOS transaction on return:', error);
+                        notify(
+                            lang === 'vi' ? 'Thanh to\u00e1n \u0111\u00e3 ghi nh\u1eadn. H\u1ec7 th\u1ed1ng \u0111ang \u0111\u1ed3ng b\u1ed9 giao d\u1ecbch...' : 'Payment recorded. Syncing transaction...',
+                            'info'
+                        );
+                    });
+             } else {
+                 notify(
+                     lang === 'vi' ? 'Thanh to\u00e1n th\u00e0nh c\u00f4ng! Vcoin s\u1ebd \u0111\u01b0\u1ee3c c\u1ed9ng trong gi\u00e2y l\u00e1t.' : 'Payment successful! Vcoin will be added shortly.',
+                     'success'
+                 );
+             }
              setCurrentView('topup');
         } else if (status === 'CANCELLED') {
              notify(
-                 lang === 'vi' ? 'Đã hủy thanh toán.' : 'Payment cancelled.',
+                 lang === 'vi' ? '\u0110\u00e3 h\u1ee7y thanh to\u00e1n.' : 'Payment cancelled.',
                  'error'
              );
              setCurrentView('topup');
         }
     }
-  }, [lang, notify]); 
+  }, [lang, notify]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const heartbeatInstanceId = heartbeatInstanceIdRef.current;
+
+    const releaseLease = () => {
+      try {
+        const raw = window.localStorage.getItem(queueHeartbeatLeaseKey);
+        if (!raw) return;
+        const current = JSON.parse(raw);
+        if (current?.id === heartbeatInstanceId) {
+          window.localStorage.removeItem(queueHeartbeatLeaseKey);
+        }
+      } catch (error) {
+        console.warn('[App] Failed to release queue heartbeat lease:', error);
+      }
+    };
+
+    const tryBecomeHeartbeatLeader = () => {
+      try {
+        const now = Date.now();
+        const raw = window.localStorage.getItem(queueHeartbeatLeaseKey);
+        const current = raw ? JSON.parse(raw) : null;
+        if (!current || !current.id || Number(current.expiresAt || 0) <= now || current.id === heartbeatInstanceId) {
+          window.localStorage.setItem(
+            queueHeartbeatLeaseKey,
+            JSON.stringify({
+              id: heartbeatInstanceId,
+              expiresAt: now + queueHeartbeatLeaseMs,
+            }),
+          );
+          return true;
+        }
+        return false;
+      } catch (error) {
+        console.warn('[App] Failed to acquire queue heartbeat lease:', error);
+        return true;
+      }
+    };
+
+    const runHeartbeat = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        return;
+      }
+      if (!tryBecomeHeartbeatLeader()) {
+        return;
+      }
+      triggerServerQueueTick().catch((error) => {
+        console.warn('[App] Queue heartbeat failed:', error);
+      });
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        runHeartbeat();
+      }
+    };
+
+    runHeartbeat();
+    const interval = setInterval(runHeartbeat, queueHeartbeatIntervalMs);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('beforeunload', releaseLease);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('beforeunload', releaseLease);
+      releaseLease();
+    };
+  }, [isAuthenticated]);
 
   const checkAdminRole = async (userId: string) => {
       if (!supabase) return;
@@ -162,11 +256,17 @@ function AppContent() {
   };
 
   const handleNavigate = (view: ViewId, data?: any) => {
+    if (view === 'tools') {
+      if (!selectedFeature) {
+        setSelectedFeature(APP_CONFIG.main_features[0]);
+      }
+      setCurrentView('tool_workspace');
+      return;
+    }
+
     setCurrentView(view);
     if (view === 'payment_gateway' && data?.transaction) {
         setPendingTransaction(data.transaction);
-    } else if (view !== 'tool_workspace') {
-      setSelectedFeature(null);
     }
   };
 
@@ -190,17 +290,6 @@ function AppContent() {
   const renderContent = () => {
     switch (currentView) {
       case 'home':
-        return <Home lang={lang} onSelectFeature={handleSelectFeature} onNavigate={handleNavigate} onOpenCheckin={() => setShowCheckin(true)} isMaintenance={maintenanceMode.isActive && userRole !== 'admin'} maintenanceMessage={maintenanceMode.message} />;
-      case 'tool_workspace':
-        return selectedFeature ? (
-          <ToolWorkspace 
-            feature={selectedFeature} 
-            lang={lang} 
-            onBack={() => handleNavigate('home')} 
-            onNavigateToFeature={handleNavigateToFeature}
-          />
-        ) : <Home lang={lang} onSelectFeature={handleSelectFeature} onNavigate={handleNavigate} onOpenCheckin={() => setShowCheckin(true)} isMaintenance={maintenanceMode.isActive && userRole !== 'admin'} maintenanceMessage={maintenanceMode.message} />;
-      case 'tools':
         return <Home lang={lang} onSelectFeature={handleSelectFeature} onNavigate={handleNavigate} onOpenCheckin={() => setShowCheckin(true)} isMaintenance={maintenanceMode.isActive && userRole !== 'admin'} maintenanceMessage={maintenanceMode.message} />;
       case 'admin':
         return <Admin lang={lang} isAdmin={userRole === 'admin'} />;
@@ -228,7 +317,7 @@ function AppContent() {
             />
         ) : <TopUp lang={lang} onNavigate={handleNavigate} />;
       default:
-        return <Home lang={lang} onSelectFeature={handleSelectFeature} onNavigate={handleNavigate} onOpenCheckin={() => setShowCheckin(true)} isMaintenance={maintenanceMode.isActive && userRole !== 'admin'} maintenanceMessage={maintenanceMode.message} />;
+        return null;
     }
   };
 
@@ -267,7 +356,23 @@ function AppContent() {
               </div>
           </div>
       )}
-      {renderContent()}
+      
+      {/* Tool Workspace - Kept mounted to preserve state */}
+      <div style={{ display: currentView === 'tool_workspace' ? 'block' : 'none', height: '100%' }}>
+        {selectedFeature ? (
+          <ToolWorkspace 
+            feature={selectedFeature} 
+            lang={lang} 
+            onBack={() => handleNavigate('home')} 
+            onNavigateToFeature={handleNavigateToFeature}
+            onNavigateView={handleNavigate}
+          />
+        ) : (
+          currentView === 'tool_workspace' && <Home lang={lang} onSelectFeature={handleSelectFeature} onNavigate={handleNavigate} onOpenCheckin={() => setShowCheckin(true)} isMaintenance={maintenanceMode.isActive && userRole !== 'admin'} maintenanceMessage={maintenanceMode.message} />
+        )}
+      </div>
+
+      {currentView !== 'tool_workspace' && renderContent()}
     </Layout>
   );
 }

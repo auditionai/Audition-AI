@@ -1,5 +1,6 @@
-
+﻿
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { supabase } from '../services/supabaseClient';
 import { 
     getAdminStats, 
@@ -30,14 +31,31 @@ import {
     deleteStylePreset,
     getUnifiedHistory,
     getGiftcodeUsages,
-    getGenerationPrices,
-    saveGenerationPrices,
     getMaintenanceMode,
-    saveMaintenanceMode
+    saveMaintenanceMode,
+    getModelPricing,
+    saveModelPricing,
+    syncTSTPrices,
+    ModelPricing,
+    getTstServerAvailabilityConfig,
+    saveTstServerAvailabilityConfig
 } from '../services/economyService';
 import { getAllImagesFromStorage, deleteImageFromStorage, checkR2Connection, getUserImagesFromStorage, cleanupExpiredImages, cleanupR2Directly } from '../services/storageService';
+import { useConcurrency } from '../services/concurrencyService';
 import { checkConnection, analyzeStyleImage } from '../services/geminiService';
 import { checkSupabaseConnection } from '../services/supabaseClient';
+import {
+    clearTstCatalogCache,
+    filterAdminManagedPricingRows,
+    getPricingRows,
+    isAdminManagedPricingModel,
+    TST_CATALOG_CACHE_TTL_MS,
+    tstServerToUi,
+    tstSpeedToUi,
+    isServerEnabledForModel,
+    type TstPricingRow,
+    type TstServerAvailabilityConfig
+} from '../services/tstCatalog';
 import { Icons } from '../components/Icons';
 import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, GeneratedImage, Language, StylePreset, HistoryItem } from '../types';
 
@@ -65,33 +83,6 @@ interface ConfirmState {
     isAlertOnly?: boolean;
     onConfirm: () => void;
 }
-
-const CooldownTimer = ({ lastUsedAt }: { lastUsedAt: string }) => {
-    const [timeLeft, setTimeLeft] = useState<number>(0);
-
-    useEffect(() => {
-        const calculateTimeLeft = () => {
-            const lastUsed = new Date(lastUsedAt).getTime();
-            const now = Date.now();
-            const diff = now - lastUsed;
-            const remaining = Math.max(0, 60000 - diff);
-            setTimeLeft(remaining);
-        };
-
-        calculateTimeLeft();
-        const interval = setInterval(calculateTimeLeft, 1000);
-        return () => clearInterval(interval);
-    }, [lastUsedAt]);
-
-    if (timeLeft <= 0) return <span className="text-[10px] text-green-400 font-mono">Sẵn sàng</span>;
-
-    return (
-        <span className="text-[10px] text-amber-400 font-mono flex items-center gap-1">
-            <Icons.Clock className="w-3 h-3" />
-            Đang chờ: {Math.ceil(timeLeft / 1000)}s
-        </span>
-    );
-};
 
 // SQL Code for fixing Giftcode table issues
 const GIFTCODE_FIX_SQL = `-- FIX DATABASE STRUCTURE (GIFTCODES & SETTINGS)
@@ -132,12 +123,12 @@ CREATE TABLE IF NOT EXISTS public.system_settings (
     value jsonb
 );
 
--- 4. DIAMOND TRANSACTIONS LOG (For Usage Stats)
-CREATE TABLE IF NOT EXISTS public.diamond_transactions_log (
+-- 4. VCOIN TRANSACTIONS LOG (For Usage Stats)
+CREATE TABLE IF NOT EXISTS public.vcoin_transactions (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     user_id uuid REFERENCES public.users(id),
     amount numeric NOT NULL,
-    reason text,
+    description text,
     type text, -- 'usage', 'topup', 'reward', etc.
     created_at timestamptz DEFAULT now()
 );
@@ -145,7 +136,7 @@ CREATE TABLE IF NOT EXISTS public.diamond_transactions_log (
 -- 5. ENABLE RLS & POLICIES
 ALTER TABLE public.gift_codes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.system_settings ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.diamond_transactions_log ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.vcoin_transactions ENABLE ROW LEVEL SECURITY;
 
 -- Policies for Giftcodes
 DROP POLICY IF EXISTS "Public read giftcodes" ON public.gift_codes;
@@ -182,14 +173,14 @@ DROP POLICY IF EXISTS "Admin manage styles" ON public.style_presets;
 CREATE POLICY "Admin manage styles" ON public.style_presets FOR ALL TO authenticated USING (true);
 
 -- Policies for Logs
-DROP POLICY IF EXISTS "User read own logs" ON public.diamond_transactions_log;
-CREATE POLICY "User read own logs" ON public.diamond_transactions_log FOR SELECT TO authenticated USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "User read own logs" ON public.vcoin_transactions;
+CREATE POLICY "User read own logs" ON public.vcoin_transactions FOR SELECT TO authenticated USING (auth.uid() = user_id);
 
-DROP POLICY IF EXISTS "User insert own logs" ON public.diamond_transactions_log;
-CREATE POLICY "User insert own logs" ON public.diamond_transactions_log FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+DROP POLICY IF EXISTS "User insert own logs" ON public.vcoin_transactions;
+CREATE POLICY "User insert own logs" ON public.vcoin_transactions FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
 
-DROP POLICY IF EXISTS "Admin read all logs" ON public.diamond_transactions_log;
-CREATE POLICY "Admin read all logs" ON public.diamond_transactions_log FOR ALL TO authenticated USING (true); -- Ideally check is_admin
+DROP POLICY IF EXISTS "Admin read all logs" ON public.vcoin_transactions;
+CREATE POLICY "Admin read all logs" ON public.vcoin_transactions FOR ALL TO authenticated USING (true); -- Ideally check is_admin
 
 -- 8. RPC FOR ATOMIC INCREMENT (Fixes concurrency issues)
 CREATE OR REPLACE FUNCTION public.increment_giftcode_usage(code_id uuid)
@@ -249,7 +240,7 @@ $$;
 -- 3. Ensure columns exist (Fixes missing data)
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS display_name text;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS photo_url text;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS diamonds numeric DEFAULT 0;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS vcoin_balance numeric DEFAULT 0;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS last_active TIMESTAMPTZ;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_vip BOOLEAN DEFAULT false;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false;
@@ -281,13 +272,13 @@ ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 -- Policy: Everyone can read basic info
 CREATE POLICY "Public read access" ON public.users FOR SELECT USING (true);
 
--- Policy: Users can update their own data (EXCLUDING diamonds and is_admin)
+-- Policy: Users can update their own data (EXCLUDING vcoin_balance and is_admin)
 -- Note: This policy allows updating display_name and photo_url
 CREATE POLICY "Self update" ON public.users FOR UPDATE USING (auth.uid() = id)
 WITH CHECK (
   auth.uid() = id AND 
   (is_admin = (SELECT is_admin FROM public.users WHERE id = auth.uid())) AND
-  (diamonds = (SELECT diamonds FROM public.users WHERE id = auth.uid()))
+  (vcoin_balance = (SELECT vcoin_balance FROM public.users WHERE id = auth.uid()))
 );
 
 -- Policy: Admins can do everything (Uses SECURITY DEFINER function to avoid recursion)
@@ -304,11 +295,11 @@ AS $$
 BEGIN
   -- Update balance
   UPDATE public.users 
-  SET diamonds = diamonds + amount
+  SET vcoin_balance = vcoin_balance + amount
   WHERE id = auth.uid();
 
   -- Log transaction
-  INSERT INTO public.diamond_transactions_log (user_id, amount, reason, type)
+  INSERT INTO public.vcoin_transactions (user_id, amount, description, type)
   VALUES (auth.uid(), amount, reason, log_type);
 END;
 $$;
@@ -319,10 +310,10 @@ NOTIFY pgrst, 'reload config';
 
 const BALANCE_FIX_SQL = `
 -- 1. RESET NEGATIVE BALANCES
-UPDATE public.users SET diamonds = 0 WHERE diamonds < 0;
+UPDATE public.users SET vcoin_balance = 0 WHERE vcoin_balance < 0;
 
 -- 2. RECONSTRUCT BALANCES FROM TRANSACTION LOGS (CRITICAL RECOVERY)
--- Use this to restore accurate balances if the 'diamonds' column was corrupted.
+-- Use this to restore accurate balances if the 'vcoin_balance' column was corrupted.
 -- This script sums up all paid transactions + all usage/reward logs.
 
 DO $$
@@ -334,21 +325,21 @@ DECLARE
 BEGIN
     FOR user_record IN SELECT id, email FROM public.users LOOP
         -- Sum from paid transactions (Topups)
-        SELECT COALESCE(SUM(diamonds_received), 0) INTO total_from_transactions
-        FROM public.transactions
+        SELECT COALESCE(SUM(vcoin_received), 0) INTO total_from_transactions
+        FROM public.payment_transactions
         WHERE user_id = user_record.id AND status = 'paid';
 
         -- Sum from logs (Rewards, Usage, Giftcodes)
         -- Note: Usage amounts are stored as negative numbers (e.g., -1)
         SELECT COALESCE(SUM(amount), 0) INTO total_from_logs
-        FROM public.diamond_transactions_log
+        FROM public.vcoin_transactions
         WHERE user_id = user_record.id;
 
         final_balance := total_from_transactions + total_from_logs;
 
         -- Update user balance with the calculated total
         UPDATE public.users
-        SET diamonds = GREATEST(0, final_balance)
+        SET vcoin_balance = GREATEST(0, final_balance)
         WHERE id = user_record.id;
         
         RAISE NOTICE 'Restored %: % (From Tx: %, From Logs: %)', 
@@ -358,12 +349,12 @@ END $$;
 
 -- 3. AUDIT SUSPICIOUS BALANCES
 /*
-SELECT u.email, u.diamonds, u.display_name
+SELECT u.email, u.vcoin_balance, u.display_name
 FROM public.users u
-LEFT JOIN public.transactions t ON u.id = t.user_id AND t.status = 'paid'
+LEFT JOIN public.payment_transactions t ON u.id = t.user_id AND t.status = 'paid'
 WHERE u.is_admin = false
-GROUP BY u.email, u.diamonds, u.display_name
-HAVING u.diamonds > 500 AND COUNT(t.id) = 0;
+GROUP BY u.email, u.vcoin_balance, u.display_name
+HAVING u.vcoin_balance > 500 AND COUNT(t.id) = 0;
 */
 `;
 
@@ -391,8 +382,24 @@ const isUserOnline = (dateString?: string) => {
     return diffMs < 5 * 60 * 1000; // Online if active within last 5 mins
 };
 
+const getInactiveDays = (dateString?: string) => {
+    if (!dateString) return Number.POSITIVE_INFINITY;
+    const date = new Date(dateString);
+    if (Number.isNaN(date.getTime())) return Number.POSITIVE_INFINITY;
+    const now = new Date();
+    return Math.floor((now.getTime() - date.getTime()) / (24 * 60 * 60 * 1000));
+};
+
+const AdminModalPortal: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    if (typeof document === 'undefined') return null;
+    return createPortal(children, document.body);
+};
+
+const ADMIN_PRICING_DRAFTS_STORAGE_KEY = 'admin_pricing_drafts_v1';
+
 export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
-  const [activeView, setActiveView] = useState<'overview' | 'transactions' | 'users' | 'packages' | 'promotion' | 'giftcodes' | 'system' | 'styles'>('overview');
+  const { triggerPoll } = useConcurrency();
+  const [activeView, setActiveView] = useState<'overview' | 'transactions' | 'users' | 'packages' | 'marketing' | 'pricing' | 'system' | 'styles'>('overview');
   const [stats, setStats] = useState<any>(null);
   const [allImages, setAllImages] = useState<GeneratedImage[]>([]);
   const [packages, setPackages] = useState<CreditPackage[]>([]);
@@ -400,14 +407,13 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [promotions, setPromotions] = useState<PromotionCampaign[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [stylePresets, setStylePresets] = useState<StylePreset[]>([]);
+  const [modelPricing, setModelPricing] = useState<ModelPricing[]>([]);
+  const [pricingRows, setPricingRows] = useState<TstPricingRow[]>([]);
+  const [pricingDrafts, setPricingDrafts] = useState<Record<string, string>>({});
+  const [savingAllPricing, setSavingAllPricing] = useState(false);
+  const [serverAvailabilityConfig, setServerAvailabilityConfig] = useState<TstServerAvailabilityConfig>({ disabledByModel: {} });
   const [editingStyle, setEditingStyle] = useState<StylePreset | null>(null);
   
-  // --- NEW: GENERATION PRICES ---
-  const [generationPrices, setGenerationPrices] = useState<any>({
-      flash_1k: 1, flash_2k: 2, flash_4k: 4,
-      pro_1k: 5, pro_2k: 10, pro_4k: 15,
-      couple: 2, group3: 4, group4: 6
-  });
   const [maintenanceMode, setMaintenanceMode] = useState({ isActive: false, message: "Hệ thống đang bảo trì, vui lòng quay lại sau." });
 
   // API Key States
@@ -425,6 +431,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
   // Search States
   const [userSearchEmail, setUserSearchEmail] = useState('');
+  const [userActivityFilter, setUserActivityFilter] = useState<'all' | 'online' | 'inactive_60' | 'inactive_90'>('all');
+  const [userSortMode, setUserSortMode] = useState<'last_active_desc' | 'vcoin_desc' | 'usage_desc' | 'name_asc'>('last_active_desc');
+  const [userListLimit, setUserListLimit] = useState(30);
   const [currentUserEmail, setCurrentUserEmail] = useState('');
 
   // Health State
@@ -501,6 +510,45 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
     }
   }, [isAdmin]);
 
+  useEffect(() => {
+      if (typeof window === 'undefined') return;
+      try {
+          const raw = window.localStorage.getItem(ADMIN_PRICING_DRAFTS_STORAGE_KEY);
+          if (!raw) return;
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object') {
+              setPricingDrafts(parsed);
+          }
+      } catch (error) {
+          console.warn('Failed to restore pricing drafts from localStorage', error);
+      }
+  }, []);
+
+  useEffect(() => {
+      if (!isAdmin || activeView !== 'pricing') return;
+
+      const refreshPricingView = async () => {
+          try {
+              clearTstCatalogCache();
+              const [pricing, livePricingRows, serverConfig] = await Promise.all([
+                  getModelPricing(),
+                  getPricingRows(true),
+                  getTstServerAvailabilityConfig()
+              ]);
+              setModelPricing((pricing || []).filter((row) => isAdminManagedPricingModel(row.model_id)));
+              setPricingRows(filterAdminManagedPricingRows(livePricingRows));
+              setServerAvailabilityConfig(serverConfig);
+          } catch (error) {
+              console.warn('Failed to auto-refresh pricing view', error);
+              setPricingRows([]);
+          }
+      };
+
+      refreshPricingView();
+      const refreshTimer = window.setInterval(refreshPricingView, TST_CATALOG_CACHE_TTL_MS);
+      return () => window.clearInterval(refreshTimer);
+  }, [activeView, isAdmin]);
+
   const refreshData = async () => {
       const s = await getAdminStats();
       if (s) {
@@ -525,11 +573,286 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       const styles = await getStylePresets();
       setStylePresets(styles || []);
 
-      const prices = await getGenerationPrices();
-      setGenerationPrices(prices);
-
       const maintenance = await getMaintenanceMode();
       setMaintenanceMode(maintenance);
+
+      const pricing = await getModelPricing();
+      setModelPricing((pricing || []).filter((row) => isAdminManagedPricingModel(row.model_id)));
+      const serverConfig = await getTstServerAvailabilityConfig();
+      setServerAvailabilityConfig(serverConfig);
+
+      try {
+          const livePricingRows = await getPricingRows();
+          setPricingRows(filterAdminManagedPricingRows(livePricingRows));
+      } catch (error) {
+          console.warn('Failed to load live TST pricing rows', error);
+          setPricingRows([]);
+      }
+  };
+
+  useEffect(() => {
+      if (pricingRows.length === 0) return;
+
+      setPricingDrafts((prev) => {
+          const next = { ...prev };
+          for (const row of pricingRows) {
+              const key = `${row.modelId}::${row.configKey}`;
+              const saved = modelPricing.find((item) => item.model_id === row.modelId && item.option_id === row.configKey);
+              next[key] = prev[key] ?? String(saved?.audition_price_vcoin ?? row.defaultAuditionVcoin ?? row.vcoin);
+          }
+          return next;
+      });
+  }, [modelPricing, pricingRows]);
+
+  useEffect(() => {
+      if (typeof window === 'undefined') return;
+      try {
+          window.localStorage.setItem(ADMIN_PRICING_DRAFTS_STORAGE_KEY, JSON.stringify(pricingDrafts));
+      } catch (error) {
+          console.warn('Failed to persist pricing drafts', error);
+      }
+  }, [pricingDrafts]);
+
+  const getPricingLookupKey = (modelId: string, configKey: string) => `${modelId}::${configKey}`;
+
+  const getSavedAuditionPrice = (row: TstPricingRow) =>
+      modelPricing.find((item) => item.model_id === row.modelId && item.option_id === row.configKey);
+
+  const getDraftAuditionPrice = (row: TstPricingRow) => {
+      const draftKey = getPricingLookupKey(row.modelId, row.configKey);
+      const savedPricing = getSavedAuditionPrice(row);
+      const fallbackValue = savedPricing?.audition_price_vcoin ?? row.defaultAuditionVcoin ?? row.vcoin;
+      const rawDraft = pricingDrafts[draftKey];
+      const parsedDraft = Number(rawDraft);
+      return Number.isFinite(parsedDraft) && parsedDraft > 0 ? parsedDraft : fallbackValue;
+  };
+
+  const isPricingRowDirty = (row: TstPricingRow) => {
+      const draftKey = getPricingLookupKey(row.modelId, row.configKey);
+      const rawDraft = pricingDrafts[draftKey];
+      if (rawDraft === undefined) return false;
+      const savedPricing = getSavedAuditionPrice(row);
+      const baseline = savedPricing?.audition_price_vcoin ?? row.defaultAuditionVcoin ?? row.vcoin;
+      const parsedDraft = Number(rawDraft);
+
+      if (!Number.isFinite(parsedDraft) || parsedDraft <= 0) {
+          return rawDraft !== '' && rawDraft !== String(baseline);
+      }
+
+      return parsedDraft !== baseline;
+  };
+
+  const dirtyPricingRows = pricingRows.filter(isPricingRowDirty);
+  const dirtyPricingCount = dirtyPricingRows.length;
+
+  useEffect(() => {
+      if (typeof window === 'undefined' || dirtyPricingCount === 0) return;
+
+      const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+          event.preventDefault();
+          event.returnValue = '';
+      };
+
+      window.addEventListener('beforeunload', handleBeforeUnload);
+      return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [dirtyPricingCount]);
+
+  const pricingServerGroups = Array.from(
+      pricingRows
+      .filter((row) => row.type !== 'edit' && !!row.server)
+      .reduce((map, row) => {
+          const existing = map.get(row.modelId) || {
+              modelId: row.modelId,
+              modelName: row.modelName,
+              type: row.type,
+              servers: new Set<string>(),
+          };
+          if (row.server) {
+              existing.servers.add(row.server);
+          }
+          map.set(row.modelId, existing);
+          return map;
+      }, new Map<string, { modelId: string; modelName: string; type: string; servers: Set<string> }>())
+      .values()
+  ).map((group) => ({
+      ...group,
+      servers: Array.from(group.servers).sort((a, b) => a.localeCompare(b)),
+  }));
+
+  const persistPricingRow = async (
+      row: TstPricingRow,
+      nextValue: number,
+      options?: { silent?: boolean; refreshAfterSave?: boolean }
+  ) => {
+      if (!Number.isFinite(nextValue) || nextValue <= 0) {
+          return { success: false, error: 'Vui lòng nhập giá Vcoin hợp lệ lớn hơn 0.' };
+      }
+
+      const existing = getSavedAuditionPrice(row);
+      const result = await saveModelPricing({
+          id: existing?.id || crypto.randomUUID(),
+          model_id: row.modelId,
+          option_id: row.configKey,
+          tst_price_credits: row.credits,
+          audition_price_vcoin: nextValue,
+          updated_at: new Date().toISOString()
+      });
+
+      if (!result.success) {
+          return result;
+      }
+
+      if (options?.refreshAfterSave !== false) {
+          await refreshData();
+      }
+
+      return { success: true };
+  };
+
+  const handleSavePricingRow = async (row: TstPricingRow) => {
+      const draftKey = getPricingLookupKey(row.modelId, row.configKey);
+      const nextValue = Number(pricingDrafts[draftKey]);
+
+      const result = await persistPricingRow(row, nextValue);
+
+      if (result.success) {
+          showToast('Đã lưu giá AUDITION AI.', 'success');
+      } else {
+          showToast(`Lỗi lưu giá: ${result.error}`, 'error');
+      }
+  };
+
+  const handleSaveAllPricing = async () => {
+      if (dirtyPricingRows.length === 0) {
+          showToast('Không có thay đổi nào cần lưu.', 'info');
+          return;
+      }
+
+      setSavingAllPricing(true);
+      let successCount = 0;
+      let failedCount = 0;
+
+      for (const row of dirtyPricingRows) {
+          const draftKey = getPricingLookupKey(row.modelId, row.configKey);
+          const nextValue = Number(pricingDrafts[draftKey]);
+          const result = await persistPricingRow(row, nextValue, { refreshAfterSave: false });
+
+          if (result.success) {
+              successCount += 1;
+          } else {
+              failedCount += 1;
+          }
+      }
+
+      await refreshData();
+      setSavingAllPricing(false);
+
+      if (failedCount === 0) {
+          showToast(`Đã lưu ${successCount} cấu hình giá.`, 'success');
+      } else if (successCount > 0) {
+          showToast(`Đã lưu ${successCount}/${dirtyPricingRows.length} cấu hình giá.`, 'info');
+      } else {
+          showToast('Không lưu được thay đổi nào trong bảng giá.', 'error');
+      }
+  };
+
+  const handleTogglePricingServer = async (modelId: string, serverId: string) => {
+      const normalizedModelId = modelId.trim().toLowerCase();
+      const normalizedServerId = serverId.trim().toLowerCase();
+      const currentDisabled = new Set(serverAvailabilityConfig.disabledByModel?.[normalizedModelId] || []);
+
+      if (currentDisabled.has(normalizedServerId)) {
+          currentDisabled.delete(normalizedServerId);
+      } else {
+          currentDisabled.add(normalizedServerId);
+      }
+
+      const nextDisabledByModel = {
+          ...(serverAvailabilityConfig.disabledByModel || {}),
+          [normalizedModelId]: Array.from(currentDisabled),
+      };
+
+      if (nextDisabledByModel[normalizedModelId].length === 0) {
+          delete nextDisabledByModel[normalizedModelId];
+      }
+
+      const nextConfig: TstServerAvailabilityConfig = {
+          disabledByModel: nextDisabledByModel,
+          updatedAt: new Date().toISOString(),
+      };
+
+      const result = await saveTstServerAvailabilityConfig(nextConfig);
+      if (!result.success) {
+          showToast(`Lỗi lưu cấu hình server: ${result.error}`, 'error');
+          return;
+      }
+
+      setServerAvailabilityConfig(nextConfig);
+      showToast('Đã cập nhật trạng thái server.', 'success');
+  };
+
+  const handleEnableAllPricingServers = async () => {
+      const nextConfig: TstServerAvailabilityConfig = {
+          disabledByModel: {},
+          updatedAt: new Date().toISOString(),
+      };
+
+      const result = await saveTstServerAvailabilityConfig(nextConfig);
+      if (!result.success) {
+          showToast(`L\u1ed7i l\u01b0u c\u1ea5u h\u00ecnh server: ${result.error}`, 'error');
+          return;
+      }
+
+      setServerAvailabilityConfig(nextConfig);
+      showToast('\u0110\u00e3 b\u1eadt t\u1ea5t c\u1ea3 server.', 'success');
+  };
+
+  const handleFastOnlyPricingServers = async () => {
+      const nextDisabledByModel: Record<string, string[]> = {};
+
+      pricingServerGroups.forEach((group) => {
+          const normalizedModelId = group.modelId.trim().toLowerCase();
+          const normalizedServers = group.servers.map((serverId) => serverId.trim().toLowerCase());
+
+          if (!normalizedServers.includes('fast')) {
+              return;
+          }
+
+          const disabledServers = normalizedServers.filter((serverId) => serverId !== 'fast');
+          if (disabledServers.length > 0) {
+              nextDisabledByModel[normalizedModelId] = disabledServers;
+          }
+      });
+
+      const nextConfig: TstServerAvailabilityConfig = {
+          disabledByModel: nextDisabledByModel,
+          updatedAt: new Date().toISOString(),
+      };
+
+      const result = await saveTstServerAvailabilityConfig(nextConfig);
+      if (!result.success) {
+          showToast(`L\u1ed7i l\u01b0u c\u1ea5u h\u00ecnh server: ${result.error}`, 'error');
+          return;
+      }
+
+      setServerAvailabilityConfig(nextConfig);
+      showToast('\u0110\u00e3 chuy\u1ec3n sang ch\u1ebf \u0111\u1ed9 ch\u1ec9 d\u00f9ng FAST.', 'success');
+  };
+
+  const handleRestorePricingServersFromLive = async () => {
+      const nextConfig: TstServerAvailabilityConfig = {
+          disabledByModel: {},
+          updatedAt: new Date().toISOString(),
+      };
+
+      const result = await saveTstServerAvailabilityConfig(nextConfig);
+      if (!result.success) {
+          showToast(`L\u1ed7i l\u01b0u c\u1ea5u h\u00ecnh server: ${result.error}`, 'error');
+          return;
+      }
+
+      setServerAvailabilityConfig(nextConfig);
+      showToast('\u0110\u00e3 kh\u00f4i ph\u1ee5c c\u1ea5u h\u00ecnh server theo TST live.', 'success');
   };
 
   const runSystemChecks = async (specificKey?: string) => {
@@ -624,19 +947,61 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           const history = await getUnifiedHistory(user.id);
           setUserHistory(history);
           
-          // Calculate total images created from history (type === 'usage')
-          const totalCreated = history.filter(h => h.type === 'usage').length;
-          setTotalImagesCreated(totalCreated);
-
           // Fetch images for this user
           const images = await getUserImagesFromStorage(user.id);
           setUserImages(images);
+          setTotalImagesCreated(images.length);
       } catch (e) {
           showToast('Lỗi tải dữ liệu người dùng', 'error');
       } finally {
           setLoadingUserDetails(false);
       }
   };
+
+  const filteredUsers = (stats?.usersList || [])
+      .filter((u: any) => (u.email || '').toLowerCase().includes(userSearchEmail.toLowerCase()))
+      .filter((u: UserProfile) => {
+          if (userActivityFilter === 'all') return true;
+          if (userActivityFilter === 'online') return isUserOnline(u.lastActive);
+
+          const inactiveDays = getInactiveDays(u.lastActive);
+          if (userActivityFilter === 'inactive_60') return inactiveDays >= 60;
+          if (userActivityFilter === 'inactive_90') return inactiveDays >= 90;
+          return true;
+      })
+      .sort((a: UserProfile, b: UserProfile) => {
+          if (userSortMode === 'vcoin_desc') {
+              return Number(b.vcoin_balance || 0) - Number(a.vcoin_balance || 0);
+          }
+          if (userSortMode === 'usage_desc') {
+              return Number(b.usageCount || 0) - Number(a.usageCount || 0);
+          }
+          if (userSortMode === 'name_asc') {
+              return (a.username || '').localeCompare(b.username || '', 'vi');
+          }
+
+          const aOnline = isUserOnline(a.lastActive);
+          const bOnline = isUserOnline(b.lastActive);
+          if (aOnline && !bOnline) return -1;
+          if (!aOnline && bOnline) return 1;
+          const timeA = a.lastActive ? new Date(a.lastActive).getTime() : 0;
+          const timeB = b.lastActive ? new Date(b.lastActive).getTime() : 0;
+          return timeB - timeA;
+      });
+
+  const visibleUsers = filteredUsers.slice(0, userListLimit);
+
+  const getAssetKind = (asset: GeneratedImage) => {
+      if (asset.assetType) return asset.assetType;
+      if (asset.toolId?.includes('video') || asset.toolId?.includes('motion')) return 'video';
+      if ((asset.engine || '').toLowerCase().includes('kling') || (asset.engine || '').toLowerCase().includes('motion')) return 'video';
+      if ((asset.url || '').toLowerCase().endsWith('.mp4') || (asset.url || '').toLowerCase().includes('.mp4?')) return 'video';
+      return 'image';
+  };
+
+  useEffect(() => {
+      setUserListLimit(30);
+  }, [userSearchEmail, userActivityFilter, userSortMode]);
 
   const handleViewGiftcodeUsage = async (code: Giftcode) => {
       setViewingGiftcodeUsage(code);
@@ -787,7 +1152,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
   const handleDeleteContent = async (id: string) => {
       showConfirm('Xóa vĩnh viễn hình ảnh này?', async () => {
-          await deleteImageFromStorage(id);
+          const targetImage = allImages.find((img) => img.id === id);
+          await deleteImageFromStorage(id, targetImage?.userId, targetImage?.url);
+          triggerPoll();
           setAllImages(prev => prev.filter(img => img.id !== id));
           showToast('Đã xóa ảnh');
       });
@@ -849,12 +1216,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   }
 
   const handleCleanupImages = async () => {
-      showConfirm('Xóa toàn bộ ảnh trên R2 Cloud cũ hơn 1 ngày (không bao gồm ảnh đã public)?', async () => {
+      showConfirm('Xóa toàn bộ asset chưa publish đã quá 7 ngày trong lịch sử tạo (giữ lại ảnh đã public)?', async () => {
           showToast('Đang tiến hành xóa ảnh cũ...', 'info');
           try {
               const countDB = await cleanupExpiredImages(true);
               const countR2 = await cleanupR2Directly();
-              showToast(`Đã xóa thành công ${countDB} ảnh từ DB và ${countR2} ảnh trực tiếp từ R2 Cloud.`);
+              showToast(`Đã dọn ${countDB} asset hết hạn khỏi lịch sử tạo và ${countR2} file legacy trên R2 Cloud.`);
               await refreshData();
           } catch (e: any) {
               showToast(`Lỗi khi xóa ảnh: ${e.message}`, 'error');
@@ -965,7 +1332,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           </button>
                       )}
                       <button onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(prev => ({...prev, show: false})) }} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold transition-colors shadow-lg">
-                          {confirmDialog.isAlertOnly ? 'Đã Hiểu' : 'Đồng ý'}
+                          {confirmDialog.isAlertOnly ? 'Đã hiểu' : 'Đồng ý'}
                       </button>
                   </div>
               </div>
@@ -1000,8 +1367,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   { id: 'transactions', icon: Icons.Gem, label: 'Giao Dịch' },
                   { id: 'users', icon: Icons.User, label: 'Người Dùng' },
                   { id: 'packages', icon: Icons.ShoppingBag, label: 'Gói Nạp' },
-                  { id: 'giftcodes', icon: Icons.Gift, label: 'Code' },
-                  { id: 'promotion', icon: Icons.Zap, label: 'Sự Kiện' },
+                  { id: 'marketing', icon: Icons.Zap, label: 'Sự Kiện & Code' },
+                  { id: 'pricing', icon: Icons.Gem, label: 'Bảng Giá' },
                   { id: 'styles', icon: Icons.Palette, label: 'Style Mẫu' },
                   { id: 'system', icon: Icons.Cpu, label: 'Hệ Thống' },
               ].map(tab => (
@@ -1179,7 +1546,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               </div>
                                           </div>
                                       </td>
-                                      <td className="px-6 py-4 text-audi-pink font-bold">+{tx.coins} Vcoin</td>
+                                      <td className="px-6 py-4 text-audi-pink font-bold">+{tx.vcoin_received} Vcoin</td>
                                       <td className="px-6 py-4 text-right font-bold text-white">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(tx.amount || tx.price || 0)}</td>
                                       <td className="px-6 py-4">
                                           <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
@@ -1237,7 +1604,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       </div>
                                       <div>
                                           <div className="text-[10px] text-slate-500 uppercase font-bold">Gói nạp</div>
-                                          <div className="text-audi-pink font-bold">+{tx.coins} Vcoin</div>
+                                          <div className="text-audi-pink font-bold">+{tx.vcoin_received} Vcoin</div>
                                       </div>
                                   </div>
                                   <div className="flex gap-2 border-t border-white/5 pt-3">
@@ -1261,9 +1628,31 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                       <h2 className="text-lg md:text-2xl font-bold text-white">Người Dùng</h2>
-                      <div className="flex items-center gap-2 bg-white/5 rounded-xl border border-white/10 px-3 py-2 w-full md:w-64">
-                          <Icons.Search className="w-4 h-4 text-slate-500" />
-                          <input type="text" placeholder="Tìm email..." value={userSearchEmail} onChange={(e) => setUserSearchEmail(e.target.value)} className="bg-transparent border-none outline-none text-sm text-white w-full placeholder-slate-500" />
+                      <div className="w-full md:w-auto flex flex-col md:flex-row gap-3">
+                          <div className="flex items-center gap-2 bg-white/5 rounded-xl border border-white/10 px-3 py-2 w-full md:w-64">
+                              <Icons.Search className="w-4 h-4 text-slate-500" />
+                              <input type="text" placeholder="Tìm email..." value={userSearchEmail} onChange={(e) => setUserSearchEmail(e.target.value)} className="bg-transparent border-none outline-none text-sm text-white w-full placeholder-slate-500" />
+                          </div>
+                          <select
+                              value={userActivityFilter}
+                              onChange={(e) => setUserActivityFilter(e.target.value as typeof userActivityFilter)}
+                              className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none min-w-[210px]"
+                          >
+                              <option value="all" className="bg-[#12121a]">Tất cả người dùng</option>
+                              <option value="online" className="bg-[#12121a]">Đang online</option>
+                              <option value="inactive_60" className="bg-[#12121a]">Không online từ 60 ngày</option>
+                              <option value="inactive_90" className="bg-[#12121a]">Không online từ 90 ngày</option>
+                          </select>
+                          <select
+                              value={userSortMode}
+                              onChange={(e) => setUserSortMode(e.target.value as typeof userSortMode)}
+                              className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none min-w-[190px]"
+                          >
+                              <option value="last_active_desc" className="bg-[#12121a]">Mới hoạt động gần đây</option>
+                              <option value="vcoin_desc" className="bg-[#12121a]">Nhiều Vcoin nhất</option>
+                              <option value="usage_desc" className="bg-[#12121a]">Hoạt động nhiều nhất</option>
+                              <option value="name_asc" className="bg-[#12121a]">Tên A-Z</option>
+                          </select>
                       </div>
                   </div>
                   
@@ -1280,17 +1669,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                               </tr>
                           </thead>
                           <tbody className="divide-y divide-white/5">
-                              {(stats?.usersList || [])
-                                  .filter((u: any) => (u.email || '').toLowerCase().includes(userSearchEmail.toLowerCase()))
-                                  .sort((a: UserProfile, b: UserProfile) => {
-                                      const aOnline = isUserOnline(a.lastActive);
-                                      const bOnline = isUserOnline(b.lastActive);
-                                      if (aOnline && !bOnline) return -1;
-                                      if (!aOnline && bOnline) return 1;
-                                      const timeA = a.lastActive ? new Date(a.lastActive).getTime() : 0;
-                                      const timeB = b.lastActive ? new Date(b.lastActive).getTime() : 0;
-                                      return timeB - timeA;
-                                  })
+                              {visibleUsers
                                   .map((u: UserProfile) => {
                                       const online = isUserOnline(u.lastActive);
                                       return (
@@ -1315,7 +1694,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                       </span>
                                                   </div>
                                               </td>
-                                              <td className="px-6 py-4 text-audi-yellow font-bold font-mono">{u.balance}</td>
+                                              <td className="px-6 py-4 text-audi-yellow font-bold font-mono">{u.vcoin_balance}</td>
                                               <td className="px-6 py-4">
                                                   <span className="text-white font-bold">{u.usageCount || 0}</span>
                                                   <span className="text-xs text-slate-500 ml-1">lượt</span>
@@ -1338,17 +1717,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   
                   {/* Mobile View */}
                   <div className="md:hidden space-y-4">
-                      {(stats?.usersList || [])
-                          .filter((u: any) => (u.email || '').toLowerCase().includes(userSearchEmail.toLowerCase()))
-                          .sort((a: UserProfile, b: UserProfile) => {
-                              const aOnline = isUserOnline(a.lastActive);
-                              const bOnline = isUserOnline(b.lastActive);
-                              if (aOnline && !bOnline) return -1;
-                              if (!aOnline && bOnline) return 1;
-                              const timeA = a.lastActive ? new Date(a.lastActive).getTime() : 0;
-                              const timeB = b.lastActive ? new Date(b.lastActive).getTime() : 0;
-                              return timeB - timeA;
-                          })
+                      {visibleUsers
                           .map((u: UserProfile) => {
                               const online = isUserOnline(u.lastActive);
                               return (
@@ -1378,7 +1747,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           </div>
                                           <div className="text-center border-l border-white/10">
                                               <div className="text-[10px] text-slate-500 uppercase font-bold">Số dư</div>
-                                              <div className="text-xs font-bold text-audi-yellow">{u.balance} VC</div>
+                                              <div className="text-xs font-bold text-audi-yellow">{u.vcoin_balance} VC</div>
                                           </div>
                                           <div className="text-center border-l border-white/10">
                                               <div className="text-[10px] text-slate-500 uppercase font-bold">Hoạt động</div>
@@ -1394,6 +1763,17 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                               );
                           })}
                   </div>
+
+                  {filteredUsers.length > userListLimit && (
+                      <div className="flex justify-center pt-2">
+                          <button
+                              onClick={() => setUserListLimit(prev => prev + 30)}
+                              className="px-5 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-bold text-white transition-colors"
+                          >
+                              Xem thêm 30 người dùng
+                          </button>
+                      </div>
+                  )}
               </div>
           )}
 
@@ -1402,7 +1782,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex justify-between items-center">
                       <h2 className="text-lg md:text-2xl font-bold text-white">Gói Nạp</h2>
-                      <button onClick={() => setEditingPackage({id: `temp_${Date.now()}`, name: 'Gói Mới', coin: 100, price: 50000, currency: 'VND', bonusText: '', bonusPercent: 0, isPopular: false, isActive: true, displayOrder: packages.length, colorTheme: 'border-slate-600', transferContent: 'NAP 50K'})} className="px-3 py-1.5 md:px-4 md:py-2 bg-audi-pink text-white rounded-lg font-bold flex items-center gap-2 hover:bg-pink-600 text-xs md:text-sm"><Icons.Plus className="w-4 h-4" /> Thêm Gói</button>
+                      <button onClick={() => setEditingPackage({id: `temp_${Date.now()}`, name: 'Gói Mới', vcoin: 100, price: 50000, currency: 'VND', bonusText: '', bonusPercent: 0, isPopular: false, isActive: true, displayOrder: packages.length, colorTheme: 'border-slate-600', transferContent: 'NAP 50K'})} className="px-3 py-1.5 md:px-4 md:py-2 bg-audi-pink text-white rounded-lg font-bold flex items-center gap-2 hover:bg-pink-600 text-xs md:text-sm"><Icons.Plus className="w-4 h-4" /> Thêm Gói</button>
                   </div>
                   <div className="grid grid-cols-1 gap-4">
                       {packages.map((pkg, idx) => (
@@ -1415,76 +1795,331 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   <div className={`w-10 h-10 rounded-full border-2 ${pkg.colorTheme} flex items-center justify-center bg-black/50 shrink-0`}><Icons.Gem className="w-5 h-5 text-white" /></div>
                                   <div>
                                       <h4 className="font-bold text-white flex items-center gap-2 text-sm md:text-base">{pkg.name} {!pkg.isActive && <span className="text-[9px] bg-red-500 text-white px-1.5 py-0.5 rounded">HIDDEN</span>} {pkg.isPopular && <span className="text-[9px] bg-audi-pink text-white px-1.5 py-0.5 rounded">HOT</span>}</h4>
-                                      <div className="flex gap-3 text-xs text-slate-400 mt-1"><span><b className="text-green-400">{(pkg.price || 0).toLocaleString()}đ</b></span><span><b className="text-audi-yellow">{pkg.coin || 0} VC</b></span>{pkg.bonusPercent > 0 && <span className="text-audi-pink">+{pkg.bonusPercent}%</span>}</div>
+                                      <div className="flex gap-3 text-xs text-slate-400 mt-1"><span><b className="text-green-400">{(pkg.price || 0).toLocaleString()}đ</b></span><span><b className="text-audi-yellow">{pkg.vcoin || 0} VC</b></span>{pkg.bonusPercent > 0 && <span className="text-audi-pink">+{pkg.bonusPercent}%</span>}</div>
                                   </div>
                               </div>
-                              <div className="flex gap-2"><button onClick={() => setEditingPackage({ id: pkg.id || '', name: pkg.name || '', price: pkg.price || 0, coin: pkg.coin || 0, bonusPercent: pkg.bonusPercent || 0, bonusText: pkg.bonusText || '', transferContent: pkg.transferContent || '', isPopular: !!pkg.isPopular, isActive: pkg.isActive !== false, colorTheme: pkg.colorTheme || 'border-slate-600', displayOrder: pkg.displayOrder || 0, currency: pkg.currency || 'VND' })} className="p-2 bg-blue-500/20 text-blue-500 rounded hover:bg-blue-500 hover:text-white"><Icons.Settings className="w-4 h-4" /></button><button onClick={() => handleDeletePackage(pkg.id)} className="p-2 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white"><Icons.Trash className="w-4 h-4" /></button></div>
+                              <div className="flex gap-2"><button onClick={() => setEditingPackage({ id: pkg.id || '', name: pkg.name || '', price: pkg.price || 0, vcoin: pkg.vcoin || 0, bonusPercent: pkg.bonusPercent || 0, bonusText: pkg.bonusText || '', transferContent: pkg.transferContent || '', isPopular: !!pkg.isPopular, isActive: pkg.isActive !== false, colorTheme: pkg.colorTheme || 'border-slate-600', displayOrder: pkg.displayOrder || 0, currency: pkg.currency || 'VND' })} className="p-2 bg-blue-500/20 text-blue-500 rounded hover:bg-blue-500 hover:text-white"><Icons.Settings className="w-4 h-4" /></button><button onClick={() => handleDeletePackage(pkg.id)} className="p-2 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white"><Icons.Trash className="w-4 h-4" /></button></div>
                           </div>
                       ))}
                   </div>
               </div>
           )}
 
-          {activeView === 'giftcodes' && (
-              // ... existing giftcodes view ...
-              <div className="space-y-6 animate-slide-in-right">
-                  <div className="flex justify-between items-center">
-                      <h2 className="text-lg md:text-2xl font-bold text-white">Quản Lý Giftcode</h2>
-                      <div className="flex gap-2">
-                          <button onClick={refreshData} className="px-3 py-2 bg-white/10 text-white rounded-lg font-bold hover:bg-white/20" title="Làm mới dữ liệu"><Icons.Clock className="w-4 h-4" /></button>
-                          <button onClick={() => setEditingGiftcode({id: `temp_${Date.now()}`, code: '', reward: 10, totalLimit: 100, usedCount: 0, maxPerUser: 1, isActive: true})} className="px-3 py-2 bg-audi-pink text-white rounded-lg font-bold flex items-center gap-2 hover:bg-pink-600 text-xs md:text-sm"><Icons.Plus className="w-4 h-4" /> <span className="hidden md:inline">Tạo Code</span><span className="md:hidden">Tạo</span></button>
+          {activeView === 'marketing' && (
+              <div className="space-y-10 animate-slide-in-right">
+                  {/* Promotion Section */}
+                  <div className="space-y-6">
+                      <div className="flex justify-between items-center">
+                          <h2 className="text-lg md:text-2xl font-bold text-white">Chiến Dịch Khuyến Mãi</h2>
+                          <div className="flex gap-2"><button onClick={refreshData} className="px-3 py-2 bg-white/10 text-white rounded-lg font-bold hover:bg-white/20" title="Làm mới danh sách"><Icons.Clock className="w-4 h-4" /></button><button onClick={() => setEditingPromotion({id: `temp_${Date.now()}`, name: '', marqueeText: '', bonusPercent: 10, startTime: new Date().toISOString(), endTime: new Date(Date.now() + 86400000).toISOString(), isActive: true})} className="px-3 py-2 md:px-4 bg-audi-pink text-white rounded-lg font-bold flex items-center gap-2 hover:bg-pink-600 text-xs md:text-sm"><Icons.Plus className="w-4 h-4" /> <span className="hidden md:inline">Tạo Chiến Dịch Mới</span><span className="md:hidden">Mới</span></button></div>
+                      </div>
+                      <div className="grid grid-cols-1 gap-4">
+                          {promotions.map(p => {
+                              const now = new Date().getTime(); const start = new Date(p.startTime).getTime(); const end = new Date(p.endTime).getTime();
+                              let statusBadge = <span className="text-slate-500 text-xs font-bold border border-slate-500/20 px-2 py-1 rounded">Stopped</span>;
+                              if (p.isActive) { if (now < start) statusBadge = <span className="text-yellow-500 text-xs font-bold border border-yellow-500/20 px-2 py-1 rounded flex items-center gap-1"><Icons.Clock className="w-3 h-3" /> Scheduled</span>; else if (now > end) statusBadge = <span className="text-slate-500 text-xs font-bold border border-slate-500/20 px-2 py-1 rounded">Expired</span>; else statusBadge = <span className="text-green-500 text-xs font-bold border border-green-500/20 px-2 py-1 rounded flex items-center gap-1 animate-pulse"><Icons.Zap className="w-3 h-3" /> Running</span>; } else { statusBadge = <span className="text-red-500 text-xs font-bold border border-red-500/20 px-2 py-1 rounded">Disabled</span>; }
+                              return (<div key={p.id} className="bg-[#12121a] border border-white/10 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm"><div className="flex-1"><div className="flex justify-between items-start"><div><div className="font-bold text-white text-lg">{p.name}</div><div className="text-audi-pink font-bold text-sm">+{p.bonusPercent}% Vcoin Bonus</div></div><div className="md:hidden">{statusBadge}</div></div><div className="text-xs font-mono mt-2 space-y-1 bg-black/20 p-2 rounded-lg border border-white/5"><div className="text-green-400 flex items-center gap-2"><Icons.Calendar className="w-3 h-3"/> Start: {new Date(p.startTime).toLocaleString()}</div><div className="text-red-400 flex items-center gap-2"><Icons.Calendar className="w-3 h-3"/> End: {new Date(p.endTime).toLocaleString()}</div></div></div><div className="flex items-center justify-between md:justify-end gap-4 border-t md:border-t-0 border-white/5 pt-3 md:pt-0"><div className="hidden md:block">{statusBadge}</div><div className="flex gap-2"><button onClick={() => setEditingPromotion(p)} className="px-3 py-2 bg-blue-500/20 text-blue-500 rounded-lg hover:bg-blue-500 hover:text-white font-bold text-xs"><Icons.Settings className="w-4 h-4" /></button><button onClick={() => handleDeletePromotion(p.id)} className="px-3 py-2 bg-red-500/20 text-red-500 rounded-lg hover:bg-red-500 hover:text-white font-bold text-xs"><Icons.Trash className="w-4 h-4" /></button></div></div></div>);
+                          })}
                       </div>
                   </div>
-                  {/* ... same ... */}
-                  <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 md:p-6 mb-6">
-                      <h3 className="font-bold text-white mb-4 flex items-center gap-2"><Icons.Bell className="w-5 h-5 text-audi-yellow" /> Cấu Hình Thông Báo Sự Kiện (Nổi bật)</h3>
-                      <div className="space-y-4">
-                          <input type="text" value={giftcodePromo.text} onChange={(e) => setGiftcodePromo({...giftcodePromo, text: e.target.value})} placeholder="Ví dụ: Nhập CODE 'HELLO2026' để nhận 20Vcoin miễn phí" className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white focus:border-audi-cyan outline-none" />
-                          <div className="flex items-center justify-between">
-                              <label className="flex items-center gap-2 cursor-pointer bg-white/5 px-4 py-2 rounded-lg border border-white/5 hover:bg-white/10 transition-colors"><input type="checkbox" checked={giftcodePromo.isActive} onChange={(e) => setGiftcodePromo({...giftcodePromo, isActive: e.target.checked})} className="accent-audi-cyan w-4 h-4" /><span className="text-sm font-bold text-white">Hiển thị thông báo này</span></label>
-                              <button onClick={handleSaveGiftcodePromo} className="px-4 py-2 bg-audi-cyan/20 text-audi-cyan hover:bg-audi-cyan hover:text-black font-bold rounded-lg transition-colors border border-audi-cyan/30 text-xs md:text-sm">Lưu Cấu Hình</button>
+
+                  {/* Giftcode Section */}
+                  <div className="space-y-6 pt-6 border-t border-white/10">
+                      <div className="flex justify-between items-center">
+                          <h2 className="text-lg md:text-2xl font-bold text-white">Quản Lý Giftcode</h2>
+                          <div className="flex gap-2">
+                              <button onClick={() => setEditingGiftcode({id: `temp_${Date.now()}`, code: '', reward: 10, totalLimit: 100, usedCount: 0, maxPerUser: 1, isActive: true})} className="px-3 py-2 bg-audi-pink text-white rounded-lg font-bold flex items-center gap-2 hover:bg-pink-600 text-xs md:text-sm"><Icons.Plus className="w-4 h-4" /> <span className="hidden md:inline">Tạo Code</span><span className="md:hidden">Tạo</span></button>
                           </div>
                       </div>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {giftcodes.map(code => (
-                          <div key={code.id} className="bg-[#12121a] border border-white/10 rounded-xl p-4 shadow-sm relative overflow-hidden">
-                              <div className="flex justify-between items-start mb-3"><div><div className="font-mono font-bold text-white text-lg tracking-wider">{code.code}</div><div className="text-audi-yellow font-bold text-sm">+{code.reward} Vcoin</div></div>{code.isActive ? <span className="text-green-500 text-[10px] font-bold border border-green-500/20 px-2 py-1 rounded bg-green-500/10">ACTIVE</span> : <span className="text-red-500 text-[10px] font-bold border border-red-500/20 px-2 py-1 rounded bg-red-500/10">INACTIVE</span>}</div>
-                              <div className="mb-3"><div className="flex justify-between text-[10px] text-slate-500 mb-1 font-bold uppercase"><span>Sử dụng</span><span>{code.usedCount}/{code.totalLimit}</span></div><div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden"><div className="h-full bg-green-500" style={{ width: `${Math.min(100, (code.usedCount / code.totalLimit) * 100)}%` }}></div></div></div>
-                              <div className="flex justify-between items-center border-t border-white/5 pt-3">
-                                  <span className="text-[10px] text-slate-500">Max: {code.maxPerUser}/người</span>
-                                  <div className="flex gap-2">
-                                      <button onClick={() => handleViewGiftcodeUsage(code)} className="p-1.5 bg-green-500/20 text-green-500 rounded hover:bg-green-500 hover:text-white transition-colors" title="Xem người dùng"><Icons.Users className="w-4 h-4" /></button>
-                                      <button onClick={() => setEditingGiftcode(code)} className="p-1.5 bg-blue-500/20 text-blue-500 rounded hover:bg-blue-500 hover:text-white transition-colors"><Icons.Settings className="w-4 h-4" /></button>
-                                      <button onClick={() => handleDeleteGiftcode(code.id)} className="p-1.5 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white transition-colors"><Icons.Trash className="w-4 h-4" /></button>
-                                  </div>
+                      <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 md:p-6 mb-6">
+                          <h3 className="font-bold text-white mb-4 flex items-center gap-2"><Icons.Bell className="w-5 h-5 text-audi-yellow" /> Cấu Hình Thông Báo Sự Kiện (Nổi bật)</h3>
+                          <div className="space-y-4">
+                              <input type="text" value={giftcodePromo.text} onChange={(e) => setGiftcodePromo({...giftcodePromo, text: e.target.value})} placeholder="Ví dụ: Nhập CODE 'HELLO2026' để nhận 20 Vcoin miễn phí" className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white focus:border-audi-cyan outline-none" />
+                              <div className="flex items-center justify-between">
+                                  <label className="flex items-center gap-2 cursor-pointer bg-white/5 px-4 py-2 rounded-lg border border-white/5 hover:bg-white/10 transition-colors"><input type="checkbox" checked={giftcodePromo.isActive} onChange={(e) => setGiftcodePromo({...giftcodePromo, isActive: e.target.checked})} className="accent-audi-cyan w-4 h-4" /><span className="text-sm font-bold text-white">Hiển thị thông báo này</span></label>
+                                  <button onClick={handleSaveGiftcodePromo} className="px-4 py-2 bg-audi-cyan/20 text-audi-cyan hover:bg-audi-cyan hover:text-black font-bold rounded-lg transition-colors border border-audi-cyan/30 text-xs md:text-sm">Lưu Cấu Hình</button>
                               </div>
                           </div>
-                      ))}
-                  </div>
-              </div>
-          )}
-
-          {activeView === 'promotion' && (
-              // ... existing promotion view ...
-              <div className="space-y-6 animate-slide-in-right">
-                  <div className="flex justify-between items-center">
-                      <h2 className="text-lg md:text-2xl font-bold text-white">Chiến Dịch Khuyến Mãi</h2>
-                      <div className="flex gap-2"><button onClick={refreshData} className="px-3 py-2 bg-white/10 text-white rounded-lg font-bold hover:bg-white/20" title="Làm mới danh sách"><Icons.Clock className="w-4 h-4" /></button><button onClick={() => setEditingPromotion({id: `temp_${Date.now()}`, name: '', marqueeText: '', bonusPercent: 10, startTime: new Date().toISOString(), endTime: new Date(Date.now() + 86400000).toISOString(), isActive: true})} className="px-3 py-2 md:px-4 bg-audi-pink text-white rounded-lg font-bold flex items-center gap-2 hover:bg-pink-600 text-xs md:text-sm"><Icons.Plus className="w-4 h-4" /> <span className="hidden md:inline">Tạo Chiến Dịch Mới</span><span className="md:hidden">Mới</span></button></div>
-                  </div>
-                  <div className="grid grid-cols-1 gap-4">
-                      {promotions.map(p => {
-                          const now = new Date().getTime(); const start = new Date(p.startTime).getTime(); const end = new Date(p.endTime).getTime();
-                          let statusBadge = <span className="text-slate-500 text-xs font-bold border border-slate-500/20 px-2 py-1 rounded">Stopped</span>;
-                          if (p.isActive) { if (now < start) statusBadge = <span className="text-yellow-500 text-xs font-bold border border-yellow-500/20 px-2 py-1 rounded flex items-center gap-1"><Icons.Clock className="w-3 h-3" /> Scheduled</span>; else if (now > end) statusBadge = <span className="text-slate-500 text-xs font-bold border border-slate-500/20 px-2 py-1 rounded">Expired</span>; else statusBadge = <span className="text-green-500 text-xs font-bold border border-green-500/20 px-2 py-1 rounded flex items-center gap-1 animate-pulse"><Icons.Zap className="w-3 h-3" /> Running</span>; } else { statusBadge = <span className="text-red-500 text-xs font-bold border border-red-500/20 px-2 py-1 rounded">Disabled</span>; }
-                          return (<div key={p.id} className="bg-[#12121a] border border-white/10 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm"><div className="flex-1"><div className="flex justify-between items-start"><div><div className="font-bold text-white text-lg">{p.name}</div><div className="text-audi-pink font-bold text-sm">+{p.bonusPercent}% Vcoin Bonus</div></div><div className="md:hidden">{statusBadge}</div></div><div className="text-xs font-mono mt-2 space-y-1 bg-black/20 p-2 rounded-lg border border-white/5"><div className="text-green-400 flex items-center gap-2"><Icons.Calendar className="w-3 h-3"/> Start: {new Date(p.startTime).toLocaleString()}</div><div className="text-red-400 flex items-center gap-2"><Icons.Calendar className="w-3 h-3"/> End: {new Date(p.endTime).toLocaleString()}</div></div></div><div className="flex items-center justify-between md:justify-end gap-4 border-t md:border-t-0 border-white/5 pt-3 md:pt-0"><div className="hidden md:block">{statusBadge}</div><div className="flex gap-2"><button onClick={() => setEditingPromotion(p)} className="px-3 py-2 bg-blue-500/20 text-blue-500 rounded-lg hover:bg-blue-500 hover:text-white font-bold text-xs"><Icons.Settings className="w-4 h-4" /></button><button onClick={() => handleDeletePromotion(p.id)} className="px-3 py-2 bg-red-500/20 text-red-500 rounded-lg hover:bg-red-500 hover:text-white font-bold text-xs"><Icons.Trash className="w-4 h-4" /></button></div></div></div>);
-                      })}
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {giftcodes.map(code => (
+                              <div key={code.id} className="bg-[#12121a] border border-white/10 rounded-xl p-4 shadow-sm relative overflow-hidden">
+                                  <div className="flex justify-between items-start mb-3"><div><div className="font-mono font-bold text-white text-lg tracking-wider">{code.code}</div><div className="text-audi-yellow font-bold text-sm">+{code.reward} Vcoin</div></div>{code.isActive ? <span className="text-green-500 text-[10px] font-bold border border-green-500/20 px-2 py-1 rounded bg-green-500/10">ACTIVE</span> : <span className="text-red-500 text-[10px] font-bold border border-red-500/20 px-2 py-1 rounded bg-red-500/10">INACTIVE</span>}</div>
+                                  <div className="mb-3"><div className="flex justify-between text-[10px] text-slate-500 mb-1 font-bold uppercase"><span>Sử dụng</span><span>{code.usedCount}/{code.totalLimit}</span></div><div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden"><div className="h-full bg-green-500" style={{ width: `${Math.min(100, (code.usedCount / code.totalLimit) * 100)}%` }}></div></div></div>
+                                  <div className="flex justify-between items-center border-t border-white/5 pt-3">
+                                      <span className="text-[10px] text-slate-500">Max: {code.maxPerUser}/người</span>
+                                      <div className="flex gap-2">
+                                          <button onClick={() => handleViewGiftcodeUsage(code)} className="p-1.5 bg-green-500/20 text-green-500 rounded hover:bg-green-500 hover:text-white transition-colors" title="Xem người dùng"><Icons.Users className="w-4 h-4" /></button>
+                                          <button onClick={() => setEditingGiftcode(code)} className="p-1.5 bg-blue-500/20 text-blue-500 rounded hover:bg-blue-500 hover:text-white transition-colors"><Icons.Settings className="w-4 h-4" /></button>
+                                          <button onClick={() => handleDeleteGiftcode(code.id)} className="p-1.5 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white transition-colors"><Icons.Trash className="w-4 h-4" /></button>
+                                      </div>
+                                  </div>
+                              </div>
+                          ))}
+                      </div>
                   </div>
               </div>
           )}
 
            {/* ================= VIEW: STYLES ================= */}
-           {activeView === 'styles' && (
+           {activeView === 'pricing' && (
+              <div className="space-y-6 animate-slide-in-right">
+                  <div className="flex justify-between items-center">
+                      <div>
+                          <h2 className="text-lg md:text-2xl font-bold text-white">Bảng Giá Dịch Vụ AI</h2>
+                          <p className="text-sm text-slate-400 mt-1">
+                              TST là chi phí gốc live theo Trạm Sáng Tạo. 3 tool chỉnh sửa ảnh đang dùng giá riêng trên Vertex/AUDITION AI để bạn chỉnh độc lập.
+                          </p>
+                      </div>
+                      <div className="flex gap-2">
+                          <button
+                              onClick={async () => {
+                                  try {
+                                      clearTstCatalogCache();
+                                      await syncTSTPrices();
+                                      await refreshData();
+                                      showToast('Đã làm mới giá TST live.', 'success');
+                                  } catch (error) {
+                                      showToast('Lỗi khi làm mới bảng giá TST.', 'error');
+                                  }
+                              }}
+                              className="px-3 py-2 bg-audi-cyan/20 text-audi-cyan rounded-lg font-bold flex items-center gap-2 hover:bg-audi-cyan hover:text-black text-xs md:text-sm transition-colors"
+                          >
+                              <Icons.RefreshCw className="w-4 h-4" />
+                              <span className="hidden md:inline">Làm Mới TST</span>
+                              <span className="md:hidden">Làm mới</span>
+                          </button>
+                      </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4">
+                          <div className="text-xs uppercase tracking-wider text-slate-500 font-bold">Cấu hình live</div>
+                          <div className="mt-2 text-3xl font-bold text-white">{pricingRows.length}</div>
+                          <div className="text-xs text-slate-400 mt-1">Bao gồm image, video, motion control và 3 tool Vertex.</div>
+                      </div>
+                      <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4">
+                          <div className="text-xs uppercase tracking-wider text-slate-500 font-bold">Models</div>
+                          <div className="mt-2 text-3xl font-bold text-audi-cyan">{new Set(pricingRows.map(row => row.modelId)).size}</div>
+                          <div className="text-xs text-slate-400 mt-1">Nguồn live lấy trực tiếp từ catalog runtime của TST.</div>
+                      </div>
+                      <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4">
+                          <div className="text-xs uppercase tracking-wider text-slate-500 font-bold">Quy đổi gốc</div>
+                          <div className="mt-2 text-sm text-slate-300 leading-relaxed">
+                              1 Credit = 40đ. 1 Vcoin = 1000đ. Bạn có thể chỉnh giá AUDITION AI cao hơn hoặc thấp hơn tùy chiến lược lợi nhuận.
+                          </div>
+                      </div>
+                  </div>
+
+                  <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 md:p-5">
+                      <div className="flex items-center justify-between gap-3 mb-4">
+                          <div>
+                              <h3 className="text-sm md:text-base font-bold text-white">Điều khiển Server</h3>
+                              <p className="text-xs text-slate-400 mt-1">
+                                  Bật hoặc khóa từng server theo từng model. UI và backend sẽ cùng chặn các server đang khóa.
+                              </p>
+                          </div>
+                          <div className="flex flex-wrap justify-end gap-2">
+                              <button
+                                  onClick={handleEnableAllPricingServers}
+                                  className="px-3 py-2 rounded-xl border border-emerald-400/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 text-xs font-bold transition-colors"
+                              >
+                                  {'B\u1eadt t\u1ea5t c\u1ea3 server'}
+                              </button>
+                              <button
+                                  onClick={handleFastOnlyPricingServers}
+                                  className="px-3 py-2 rounded-xl border border-audi-cyan/30 bg-audi-cyan/10 text-audi-cyan hover:bg-audi-cyan/20 text-xs font-bold transition-colors"
+                              >
+                                  {'Ch\u1ec9 d\u00f9ng FAST'}
+                              </button>
+                              <button
+                                  onClick={handleRestorePricingServersFromLive}
+                                  className="px-3 py-2 rounded-xl border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10 text-xs font-bold transition-colors"
+                              >
+                                  {'Kh\u00f4i ph\u1ee5c theo TST live'}
+                              </button>
+                          </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {pricingServerGroups.map((group) => (
+                              <div key={group.modelId} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                                  <div className="flex items-start justify-between gap-3">
+                                      <div>
+                                          <div className="text-sm font-bold text-white">{group.modelName}</div>
+                                          <div className="text-[10px] mt-1 font-mono text-slate-500">{group.modelId}</div>
+                                      </div>
+                                      <span className="px-2 py-1 rounded-full border border-white/10 bg-white/5 text-[10px] font-bold uppercase tracking-wider text-slate-300">
+                                          {group.type === 'motion-control' ? 'Motion' : group.type}
+                                      </span>
+                                  </div>
+                                  <div className="mt-4 flex flex-wrap gap-2">
+                                      {group.servers.map((serverId) => {
+                                          const enabled = isServerEnabledForModel(serverAvailabilityConfig, group.modelId, serverId);
+                                          return (
+                                              <button
+                                                  key={`${group.modelId}_${serverId}`}
+                                                  onClick={() => handleTogglePricingServer(group.modelId, serverId)}
+                                                  className={`px-3 py-2 rounded-xl border text-xs font-bold transition-colors ${
+                                                      enabled
+                                                          ? 'border-audi-cyan/40 bg-audi-cyan/15 text-audi-cyan hover:bg-audi-cyan hover:text-black'
+                                                          : 'border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20'
+                                                  }`}
+                                              >
+                                                  <span>{tstServerToUi(serverId)}</span>
+                                                  <span className="ml-2 text-[10px] uppercase tracking-wider opacity-80">
+                                                      {enabled ? 'Bật' : 'Khóa'}
+                                                  </span>
+                                              </button>
+                                          );
+                                      })}
+                                  </div>
+                              </div>
+                          ))}
+                      </div>
+                  </div>
+
+                  <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 md:p-5">
+                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                          <div>
+                              <h3 className="text-sm md:text-base font-bold text-white">Lưu giá AUDITION AI</h3>
+                              <p className="text-xs text-slate-400 mt-1">
+                                  Mỗi thay đổi giá sẽ được giữ tạm ngay trên máy của bạn. Nếu chưa bấm lưu, F5 vẫn giữ lại bản nháp nhưng sẽ chưa cập nhật vào database.
+                              </p>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                              <span className={`px-3 py-2 rounded-xl border text-xs font-bold ${
+                                  dirtyPricingCount > 0
+                                      ? 'border-yellow-500/30 bg-yellow-500/10 text-yellow-300'
+                                      : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                              }`}>
+                                  {dirtyPricingCount > 0 ? `${dirtyPricingCount} thay đổi chưa lưu` : 'Tất cả thay đổi đã được lưu'}
+                              </span>
+                              <button
+                                  onClick={handleSaveAllPricing}
+                                  disabled={dirtyPricingCount === 0 || savingAllPricing}
+                                  className="px-4 py-2 rounded-xl bg-audi-pink/20 text-audi-pink font-bold hover:bg-audi-pink hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                              >
+                                  {savingAllPricing ? 'Đang lưu...' : 'Lưu tất cả thay đổi'}
+                              </button>
+                          </div>
+                      </div>
+                  </div>
+
+                  <div className="bg-[#12121a] border border-white/10 rounded-2xl overflow-hidden">
+                      <div className="overflow-x-auto">
+                          <table className="w-full text-left text-sm text-slate-300">
+                              <thead className="text-xs text-slate-400 uppercase bg-black/40 border-b border-white/10">
+                                  <tr>
+                                      <th className="px-4 py-3 font-bold">Loại</th>
+                                      <th className="px-4 py-3 font-bold">Model</th>
+                                      <th className="px-4 py-3 font-bold">Server</th>
+                                      <th className="px-4 py-3 font-bold">Độ phân giải</th>
+                                      <th className="px-4 py-3 font-bold">Thời lượng</th>
+                                      <th className="px-4 py-3 font-bold">Tốc độ</th>
+                                      <th className="px-4 py-3 font-bold text-center">Audio</th>
+                                      <th className="px-4 py-3 font-bold text-right">TST Credits</th>
+                                      <th className="px-4 py-3 font-bold text-right">TST Quy Đổi</th>
+                                      <th className="px-4 py-3 font-bold text-right">AUDITION AI</th>
+                                      <th className="px-4 py-3 font-bold text-right">Lãi Gộp</th>
+                                      <th className="px-4 py-3 font-bold">Config Key</th>
+                                  </tr>
+                              </thead>
+                              <tbody className="divide-y divide-white/5">
+                                  {pricingRows.length === 0 ? (
+                                      <tr>
+                                          <td colSpan={12} className="px-4 py-8 text-center text-slate-500">
+                                              Chưa tải được bảng giá live từ Trạm Sáng Tạo.
+                                          </td>
+                                      </tr>
+                                  ) : (
+                                      pricingRows.map((row) => {
+                                          const typeLabel = row.type === 'image'
+                                              ? 'Ảnh'
+                                              : row.type === 'video'
+                                                  ? 'Video'
+                                                  : row.type === 'motion-control'
+                                                      ? 'Motion'
+                                                      : 'Edit';
+                                          const draftKey = getPricingLookupKey(row.modelId, row.configKey);
+                                          const savedPricing = getSavedAuditionPrice(row);
+                                          const rowIsDirty = isPricingRowDirty(row);
+                                          const auditionPrice = getDraftAuditionPrice(row);
+                                          const grossProfit = Number.isFinite(auditionPrice) ? auditionPrice - row.vcoin : 0;
+
+                                          return (
+                                              <tr key={`${row.modelId}_${row.configKey}`} className="hover:bg-white/5 transition-colors">
+                                                  <td className="px-4 py-3">
+                                                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-[10px] font-bold uppercase tracking-wider">
+                                                          {typeLabel}
+                                                      </span>
+                                                  </td>
+                                                  <td className="px-4 py-3">
+                                                      <div className="font-bold text-white">{row.modelName}</div>
+                                                      <div className="text-[10px] text-slate-500 font-mono mt-1">{row.modelId}</div>
+                                                  </td>
+                                                  <td className="px-4 py-3 text-white">
+                                                      <div className="flex items-center gap-2">
+                                                          <span>{tstServerToUi(row.server) || '-'}</span>
+                                                          {!isServerEnabledForModel(serverAvailabilityConfig, row.modelId, row.server) && (
+                                                              <span className="px-2 py-0.5 rounded-full border border-red-500/30 bg-red-500/10 text-[10px] font-bold uppercase tracking-wider text-red-300">
+                                                                  Khóa
+                                                              </span>
+                                                          )}
+                                                      </div>
+                                                  </td>
+                                                  <td className="px-4 py-3 text-white uppercase">{row.resolution || '-'}</td>
+                                                  <td className="px-4 py-3 text-white uppercase">{row.duration || '-'}</td>
+                                                  <td className="px-4 py-3 text-white">{tstSpeedToUi(row.speed) || '-'}</td>
+                                                  <td className="px-4 py-3 text-center text-white">{row.audio ? 'Có' : '-'}</td>
+                                                  <td className="px-4 py-3 text-right font-mono text-audi-cyan">{row.type === 'edit' ? '-' : row.credits}</td>
+                                                  <td className="px-4 py-3 text-right font-mono text-slate-200">{row.type === 'edit' ? '-' : `${row.vcoin} VC`}</td>
+                                                  <td className="px-4 py-3">
+                                                      <div className="flex items-center justify-end gap-2">
+                                                          <input
+                                                              type="number"
+                                                              min="1"
+                                                              value={pricingDrafts[draftKey] ?? savedPricing?.audition_price_vcoin ?? row.defaultAuditionVcoin ?? row.vcoin}
+                                                              onChange={(e) =>
+                                                                  setPricingDrafts((prev) => ({
+                                                                      ...prev,
+                                                                      [draftKey]: e.target.value
+                                                                  }))
+                                                              }
+                                                              className={`w-24 bg-black/40 border rounded-lg px-3 py-2 text-right text-white font-mono focus:outline-none focus:ring-2 ${
+                                                                  rowIsDirty
+                                                                      ? 'border-yellow-500/40 focus:ring-yellow-500/30'
+                                                                      : 'border-white/10 focus:ring-audi-cyan/40'
+                                                              }`}
+                                                          />
+                                                          <span className="text-xs font-bold text-audi-yellow">VC</span>
+                                                          <button
+                                                              onClick={() => handleSavePricingRow(row)}
+                                                              disabled={!rowIsDirty}
+                                                              className="px-3 py-2 rounded-lg bg-audi-pink/20 text-audi-pink font-bold hover:bg-audi-pink hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                                          >
+                                                               Lưu
+                                                          </button>
+                                                      </div>
+                                                  </td>
+                                                  <td className={`px-4 py-3 text-right font-mono font-bold ${grossProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                                      {grossProfit >= 0 ? '+' : ''}{grossProfit} VC
+                                                  </td>
+                                                  <td className="px-4 py-3">
+                                                      <span className="px-2 py-1 bg-white/10 rounded text-[10px] font-mono break-all">{row.configKey}</span>
+                                                  </td>
+                                              </tr>
+                                          );
+                                      })
+                                  )}
+                              </tbody>
+                          </table>
+                      </div>
+                  </div>
+              </div>
+          )}
+
+{activeView === 'styles' && (
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex justify-between items-center">
                       <h2 className="text-lg md:text-2xl font-bold text-white">Quản Lý Style Mẫu</h2>
@@ -1663,79 +2298,6 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       </div>
                   </div>
 
-                  {/* Generation Prices Configuration */}
-                  <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
-                      <div className="flex justify-between items-center mb-4">
-                          <h3 className="font-bold text-lg text-white flex items-center gap-2">
-                              <Icons.Gem className="w-5 h-5 text-audi-yellow" />
-                              Cấu hình giá tạo ảnh (VCOIN)
-                          </h3>
-                          <button 
-                              onClick={async () => {
-                                  const res = await saveGenerationPrices(generationPrices);
-                                  if (res.success) showToast("Đã lưu cấu hình giá thành công!", "success");
-                                  else showToast(`Lỗi khi lưu cấu hình giá: ${res.error}`, "error");
-                              }}
-                              className="px-4 py-2 bg-audi-yellow text-black font-bold rounded-lg text-sm hover:bg-yellow-400 transition-colors"
-                          >
-                              Lưu Cấu Hình Giá
-                          </button>
-                      </div>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                          {/* Flash Prices */}
-                          <div className="space-y-4 bg-black/30 p-4 rounded-xl border border-white/5">
-                              <h4 className="text-audi-cyan font-bold uppercase text-sm mb-2">Flash Model</h4>
-                              <div>
-                                  <label className="text-xs text-slate-400 mb-1 block">1K Resolution</label>
-                                  <input type="number" value={generationPrices.flash_1k} onChange={e => setGenerationPrices({...generationPrices, flash_1k: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-white" />
-                              </div>
-                              <div>
-                                  <label className="text-xs text-slate-400 mb-1 block">2K Resolution</label>
-                                  <input type="number" value={generationPrices.flash_2k} onChange={e => setGenerationPrices({...generationPrices, flash_2k: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-white" />
-                              </div>
-                              <div>
-                                  <label className="text-xs text-slate-400 mb-1 block">4K Resolution</label>
-                                  <input type="number" value={generationPrices.flash_4k} onChange={e => setGenerationPrices({...generationPrices, flash_4k: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-white" />
-                              </div>
-                          </div>
-
-                          {/* Pro Prices */}
-                          <div className="space-y-4 bg-black/30 p-4 rounded-xl border border-white/5">
-                              <h4 className="text-audi-pink font-bold uppercase text-sm mb-2">Pro Model</h4>
-                              <div>
-                                  <label className="text-xs text-slate-400 mb-1 block">1K Resolution</label>
-                                  <input type="number" value={generationPrices.pro_1k} onChange={e => setGenerationPrices({...generationPrices, pro_1k: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-white" />
-                              </div>
-                              <div>
-                                  <label className="text-xs text-slate-400 mb-1 block">2K Resolution</label>
-                                  <input type="number" value={generationPrices.pro_2k} onChange={e => setGenerationPrices({...generationPrices, pro_2k: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-white" />
-                              </div>
-                              <div>
-                                  <label className="text-xs text-slate-400 mb-1 block">4K Resolution</label>
-                                  <input type="number" value={generationPrices.pro_4k} onChange={e => setGenerationPrices({...generationPrices, pro_4k: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-white" />
-                              </div>
-                          </div>
-
-                          {/* Multiplier Prices */}
-                          <div className="space-y-4 bg-black/30 p-4 rounded-xl border border-white/5">
-                              <h4 className="text-audi-purple font-bold uppercase text-sm mb-2">Phụ phí chế độ</h4>
-                              <div>
-                                  <label className="text-xs text-slate-400 mb-1 block">Couple (2 người)</label>
-                                  <input type="number" value={generationPrices.couple} onChange={e => setGenerationPrices({...generationPrices, couple: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-white" />
-                              </div>
-                              <div>
-                                  <label className="text-xs text-slate-400 mb-1 block">Group 3 (3 người)</label>
-                                  <input type="number" value={generationPrices.group3} onChange={e => setGenerationPrices({...generationPrices, group3: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-white" />
-                              </div>
-                              <div>
-                                  <label className="text-xs text-slate-400 mb-1 block">Group 4 (4 người)</label>
-                                  <input type="number" value={generationPrices.group4} onChange={e => setGenerationPrices({...generationPrices, group4: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-white" />
-                              </div>
-                          </div>
-                      </div>
-                  </div>
-
                   {/* API Key Configuration */}
                   <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
                       <h3 className="font-bold text-lg text-white mb-4 flex items-center gap-2">
@@ -1800,23 +2362,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
                   {/* List of Keys in DB */}
                   <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
-                      <div className="flex justify-between items-center mb-4">
-                          <h3 className="font-bold text-lg text-white flex items-center gap-2">
-                              <Icons.Database className="w-5 h-5 text-audi-cyan" />
-                              Danh sách Service Account trong Database
-                          </h3>
-                          <button 
-                              onClick={async () => {
-                                  const keys = await getApiKeysList();
-                                  setDbKeys(keys);
-                                  showToast('Đã làm mới danh sách key', 'success');
-                              }}
-                              className="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-slate-300 transition-colors"
-                              title="Làm mới danh sách"
-                          >
-                              <Icons.RefreshCw className="w-4 h-4" />
-                          </button>
-                      </div>
+                      <h3 className="font-bold text-lg text-white mb-4 flex items-center gap-2">
+                          <Icons.Database className="w-5 h-5 text-audi-cyan" />
+                          Danh sách Service Account trong Database
+                      </h3>
                       
                       <div className="hidden md:block overflow-x-auto">
                           <table className="w-full text-left text-sm text-slate-400">
@@ -1858,14 +2407,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               {k.key_value ? `${k.key_value.substring(0, 8)}...${k.key_value.substring(k.key_value.length - 6)}` : 'N/A'}
                                           </td>
                                           <td className="px-4 py-3">
-                                              <div className="flex flex-col gap-1">
-                                                  <span className={`text-[10px] font-bold px-2 py-1 rounded border w-fit ${k.status === 'active' ? 'bg-green-500/20 text-green-500 border-green-500/50' : 'bg-slate-500/20 text-slate-500 border-slate-500/50'}`}>
-                                                      {k.status?.toUpperCase() || 'UNKNOWN'}
-                                                  </span>
-                                                  {k.last_used_at && (
-                                                      <CooldownTimer lastUsedAt={k.last_used_at} />
-                                                  )}
-                                              </div>
+                                              <span className={`text-[10px] font-bold px-2 py-1 rounded border ${k.status === 'active' ? 'bg-green-500/20 text-green-500 border-green-500/50' : 'bg-slate-500/20 text-slate-500 border-slate-500/50'}`}>
+                                                  {k.status?.toUpperCase() || 'UNKNOWN'}
+                                              </span>
                                           </td>
                                           <td className="px-4 py-3 text-xs">{new Date(k.created_at).toLocaleString()}</td>
                                           <td className="px-4 py-3 text-right flex justify-end gap-2">
@@ -1901,14 +2445,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           <div className="font-bold text-white text-sm">{displayName}</div>
                                           <div className="font-mono text-[10px] text-slate-500">{k.id}</div>
                                       </div>
-                                      <div className="flex flex-col items-end gap-1">
-                                          <span className={`text-[10px] font-bold px-2 py-1 rounded border ${k.status === 'active' ? 'bg-green-500/20 text-green-500 border-green-500/50' : 'bg-slate-500/20 text-slate-500 border-slate-500/50'}`}>
-                                              {k.status?.toUpperCase()}
-                                          </span>
-                                          {k.last_used_at && (
-                                              <CooldownTimer lastUsedAt={k.last_used_at} />
-                                          )}
-                                      </div>
+                                      <span className={`text-[10px] font-bold px-2 py-1 rounded border ${k.status === 'active' ? 'bg-green-500/20 text-green-500 border-green-500/50' : 'bg-slate-500/20 text-slate-500 border-slate-500/50'}`}>
+                                          {k.status?.toUpperCase()}
+                                      </span>
                                   </div>
                                   <div className="font-mono text-xs text-slate-300 break-all mb-3 bg-black/30 p-2 rounded">
                                       {k.key_value ? `${k.key_value.substring(0, 15)}...` : 'N/A'}
@@ -1980,9 +2519,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center text-red-500 group-hover:scale-110 transition-transform">
                                       <Icons.Trash className="w-5 h-5" />
                                   </div>
-                                  <span className="font-bold text-white">Xóa ảnh cũ (R2 Cloud)</span>
+                                  <span className="font-bold text-white">Dọn asset hết hạn</span>
                               </div>
-                              <p className="text-xs text-slate-400">Xóa toàn bộ ảnh trên R2 Cloud cũ hơn 1 ngày (giữ lại ảnh public).</p>
+                              <p className="text-xs text-slate-400">Xóa toàn bộ asset chưa publish đã quá 7 ngày trong lịch sử tạo (giữ lại ảnh public).</p>
                           </button>
                       </div>
                   </div>
@@ -2172,7 +2711,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       )}
 
       {viewingUser && (
-          <div className="fixed inset-0 z-[2000] flex justify-center items-start p-4 pt-24 animate-fade-in overflow-y-auto">
+          <AdminModalPortal>
+          <div className="fixed inset-0 z-[2000] bg-black/70 backdrop-blur-sm flex justify-center items-center p-4 md:p-6 animate-fade-in overflow-y-auto">
               <div className="bg-[#12121a] w-full max-w-4xl p-6 rounded-2xl border border-white/20 shadow-2xl relative max-h-[90vh] overflow-y-auto custom-scrollbar flex flex-col">
                   <div className="flex justify-between items-center mb-6">
                       <div className="flex items-center gap-4">
@@ -2181,7 +2721,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                               <h3 className="text-2xl font-bold text-white">{viewingUser.username}</h3>
                               <p className="text-slate-400 text-sm">{viewingUser.email}</p>
                               <div className="flex gap-2 mt-1">
-                                  <span className="text-audi-yellow font-bold text-xs bg-audi-yellow/10 px-2 py-0.5 rounded">{viewingUser.balance} Vcoin</span>
+                                  <span className="text-audi-yellow font-bold text-xs bg-audi-yellow/10 px-2 py-0.5 rounded">{viewingUser.vcoin_balance} Vcoin</span>
                                   <span className="text-blue-400 font-bold text-xs bg-blue-400/10 px-2 py-0.5 rounded uppercase">{viewingUser.role}</span>
                               </div>
                           </div>
@@ -2241,15 +2781,15 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                               </div>
                           </div>
 
-                          {/* Lịch sử tạo ảnh */}
+                          {/* Lịch sử tài sản đã tạo */}
                           <div>
                               <h4 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
                                   <Icons.Image className="w-5 h-5 text-audi-pink" />
-                                  Ảnh đã tạo ({userImages.length} tổng cộng)
+                                  Tài sản đã tạo ({userImages.length} tổng cộng)
                               </h4>
                               {userImages.length === 0 ? (
                                   <div className="text-center py-8 text-slate-500 italic bg-black/30 rounded-xl border border-white/5">
-                                      Chưa có ảnh nào được tạo.
+                                      Chưa có ảnh hoặc video nào được tạo.
                                   </div>
                               ) : (
                                   <>
@@ -2257,7 +2797,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           {userImages.slice(0, imagesLimit).map(img => (
                                               <div key={img.id} className="bg-black/30 rounded-xl border border-white/5 overflow-hidden group">
                                                   <div className="aspect-square relative">
-                                                      <img src={img.url} className="w-full h-full object-cover" />
+                                                      {getAssetKind(img) === 'video' ? (
+                                                          <video src={img.url} className="w-full h-full object-cover" muted playsInline />
+                                                      ) : (
+                                                          <img src={img.url} className="w-full h-full object-cover" />
+                                                      )}
                                                       <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center p-2">
                                                           <p className="text-[10px] text-white text-center line-clamp-4">{img.prompt}</p>
                                                       </div>
@@ -2265,6 +2809,16 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                   <div className="p-2">
                                                       <div className="text-[10px] text-slate-400 font-mono truncate">{new Date(img.timestamp).toLocaleDateString()}</div>
                                                       <div className="text-xs font-bold text-audi-cyan truncate">{img.toolName}</div>
+                                                      <div className="mt-1">
+                                                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${
+                                                              getAssetKind(img) === 'video'
+                                                                  ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'
+                                                                  : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                                                          }`}>
+                                                              {getAssetKind(img) === 'video' ? <Icons.Video className="w-3 h-3" /> : <Icons.Image className="w-3 h-3" />}
+                                                              {getAssetKind(img) === 'video' ? 'VIDEO' : 'IMAGE'}
+                                                          </span>
+                                                      </div>
                                                   </div>
                                               </div>
                                           ))}
@@ -2275,7 +2829,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                   onClick={() => setImagesLimit(prev => prev + 20)}
                                                   className="text-sm font-bold text-audi-pink hover:text-white transition-colors py-2 px-6 rounded-xl border border-audi-pink/30 hover:bg-audi-pink/20"
                                               >
-                                                  Xem thêm ({userImages.length - imagesLimit} ảnh)
+                                                  Xem thêm ({userImages.length - imagesLimit} tài sản)
                                               </button>
                                           </div>
                                       )}
@@ -2286,10 +2840,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   )}
               </div>
           </div>
+          </AdminModalPortal>
       )}
 
       {editingUser && (
-          <div className="fixed inset-0 z-[2000] flex justify-center items-start p-4 pt-24 animate-fade-in overflow-y-auto">
+          <AdminModalPortal>
+          <div className="fixed inset-0 z-[2000] bg-black/70 backdrop-blur-sm flex justify-center items-center p-4 md:p-6 animate-fade-in overflow-y-auto">
               <div className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-white/20 shadow-2xl relative max-h-[90vh] overflow-y-auto custom-scrollbar">
                   <h3 className="text-xl font-bold text-white mb-4">Sửa Người Dùng</h3>
                   <div className="space-y-4 mb-6">
@@ -2299,7 +2855,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       </div>
                       <div>
                           <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Số dư Vcoin</label>
-                          <input type="number" value={editingUser.balance || 0} onChange={e => setEditingUser({...editingUser, balance: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-yellow font-bold focus:border-audi-pink outline-none" />
+                          <input type="number" value={editingUser.vcoin_balance || 0} onChange={e => setEditingUser({...editingUser, vcoin_balance: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-yellow font-bold focus:border-audi-pink outline-none" />
                       </div>
                       <div>
                           <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Ảnh đại diện URL</label>
@@ -2309,6 +2865,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   <div className="flex gap-3"><button onClick={() => setEditingUser(null)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold">Hủy</button><button onClick={handleSaveUser} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold">Lưu</button></div>
               </div>
           </div>
+          </AdminModalPortal>
       )}
       {/* ... Other modals ... */}
       {editingPackage && (
@@ -2317,7 +2874,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   <h3 className="text-xl font-bold text-white mb-6">{editingPackage.id.startsWith('temp_') ? 'Thêm Gói Mới' : 'Sửa Gói Nạp'}</h3>
                   <div className="space-y-4 mb-6">
                       <div className="grid grid-cols-2 gap-4"><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Tên gói</label><input value={editingPackage.name} onChange={e => setEditingPackage({...editingPackage, name: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" /></div><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Tag (VD: Mới)</label><input value={editingPackage.bonusText} onChange={e => setEditingPackage({...editingPackage, bonusText: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" /></div></div>
-                      <div className="grid grid-cols-2 gap-4"><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Giá (VND)</label><input type="number" value={editingPackage.price} onChange={e => setEditingPackage({...editingPackage, price: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-green-400 font-bold" /></div><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Vcoin nhận</label><input type="number" value={editingPackage.coin} onChange={e => setEditingPackage({...editingPackage, coin: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-yellow font-bold" /></div></div>
+                      <div className="grid grid-cols-2 gap-4"><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Giá (VND)</label><input type="number" value={editingPackage.price} onChange={e => setEditingPackage({...editingPackage, price: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-green-400 font-bold" /></div><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Vcoin nhận</label><input type="number" value={editingPackage.vcoin} onChange={e => setEditingPackage({...editingPackage, vcoin: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-yellow font-bold" /></div></div>
                       <div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">% Bonus thêm (Mặc định)</label><div className="relative"><input type="number" value={editingPackage.bonusPercent} onChange={e => setEditingPackage({...editingPackage, bonusPercent: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-pink font-bold pl-3" /><span className="absolute right-3 top-3.5 text-xs text-slate-500 font-bold">%</span></div></div>
                       <div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Cú pháp chuyển khoản</label><input value={editingPackage.transferContent} onChange={e => setEditingPackage({...editingPackage, transferContent: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono" /></div>
                       <div className="flex gap-4 pt-2"><label className="flex items-center gap-2 cursor-pointer bg-white/5 p-3 rounded-xl border border-white/10 flex-1 hover:bg-white/10 transition-colors"><input type="checkbox" checked={editingPackage.isPopular} onChange={e => setEditingPackage({...editingPackage, isPopular: e.target.checked})} className="accent-audi-pink w-4 h-4" /><span className="text-sm font-bold text-white">Gói HOT (Nổi bật)</span></label><label className="flex items-center gap-2 cursor-pointer bg-white/5 p-3 rounded-xl border border-white/10 flex-1 hover:bg-white/10 transition-colors"><input type="checkbox" checked={editingPackage.isActive} onChange={e => setEditingPackage({...editingPackage, isActive: e.target.checked})} className="accent-green-500 w-4 h-4" /><span className="text-sm font-bold text-white">Đang bán (Active)</span></label></div>
@@ -2327,7 +2884,49 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           </div>
       )}
       {editingPromotion && (
-          <div className="fixed inset-0 z-[2000] flex justify-center items-start p-4 pt-24 overflow-y-auto"><div className="bg-[#12121a] w-full max-w-lg p-6 rounded-2xl border border-white/20 shadow-2xl flex flex-col max-h-[90vh]"><h3 className="text-xl font-bold text-white mb-6 sticky top-0 bg-[#12121a] z-10 py-2 border-b border-white/10 shrink-0">{editingPromotion.id.startsWith('temp_') ? 'Tạo Chiến Dịch Mới' : 'Sửa Chiến Dịch'}</h3><div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar"><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Tên chiến dịch (Nội bộ)</label><input value={editingPromotion.name} onChange={e => setEditingPromotion({...editingPromotion, name: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-bold" placeholder="Ví dụ: Sale 8/3"/></div><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Thông báo chạy (Marquee)</label><input value={editingPromotion.marqueeText} onChange={e => setEditingPromotion({...editingPromotion, marqueeText: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" placeholder="Khuyến mãi đặc biệt..."/></div><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">% Bonus Vcoin</label><div className="relative"><input type="number" value={editingPromotion.bonusPercent} onChange={e => setEditingPromotion({...editingPromotion, bonusPercent: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-pink font-bold pl-3" /><span className="absolute right-3 top-3.5 text-xs text-slate-500 font-bold">%</span></div></div><div className="grid grid-cols-2 gap-4"><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Bắt đầu</label><input type="datetime-local" value={editingPromotion.startTime ? new Date(editingPromotion.startTime).toISOString().slice(0, 16) : ''} onChange={e => setEditingPromotion({...editingPromotion, startTime: new Date(e.target.value).toISOString()})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono text-xs" /></div><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Kết thúc</label><input type="datetime-local" value={editingPromotion.endTime ? new Date(editingPromotion.endTime).toISOString().slice(0, 16) : ''} onChange={e => setEditingPromotion({...editingPromotion, endTime: new Date(e.target.value).toISOString()})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono text-xs" /></div></div><div className="bg-white/5 rounded-xl p-3 flex items-center gap-3 border border-white/10 cursor-pointer hover:bg-white/10 transition-colors" onClick={() => setEditingPromotion({...editingPromotion, isActive: !editingPromotion.isActive})}><div className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${editingPromotion.isActive ? 'bg-audi-lime border-audi-lime' : 'border-slate-500'}`}>{editingPromotion.isActive && <Icons.Check className="w-3 h-3 text-black" />}</div><label className="text-sm font-bold text-white cursor-pointer select-none">Kích hoạt (Manual Switch)</label></div><p className="text-[10px] text-slate-500 italic">Chiến dịch chỉ chạy khi BẬT và trong khoảng thời gian quy định.</p></div><div className="flex gap-3 pt-6 mt-2 border-t border-white/10 shrink-0"><button onClick={() => setEditingPromotion(null)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold transition-colors">Hủy</button><button onClick={handleSavePromotion} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold shadow-lg transition-all">Lưu Chiến Dịch</button></div></div></div>
+          <div className="fixed inset-0 z-[2000] flex justify-center items-start p-4 pt-24 overflow-y-auto">
+              <div className="bg-[#12121a] w-full max-w-lg p-6 rounded-2xl border border-white/20 shadow-2xl flex flex-col max-h-[90vh]">
+                  <h3 className="text-xl font-bold text-white mb-6 sticky top-0 bg-[#12121a] z-10 py-2 border-b border-white/10 shrink-0">
+                      {editingPromotion.id.startsWith('temp_') ? 'Tạo Chiến Dịch Mới' : 'Sửa Chiến Dịch'}
+                  </h3>
+                  <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar">
+                      <div>
+                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Tên chiến dịch (Nội bộ)</label>
+                          <input value={editingPromotion.name} onChange={e => setEditingPromotion({...editingPromotion, name: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-bold" placeholder="Ví dụ: Sale 8/3"/>
+                      </div>
+                      <div>
+                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Thông báo chạy (Marquee)</label>
+                          <input value={editingPromotion.marqueeText} onChange={e => setEditingPromotion({...editingPromotion, marqueeText: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" placeholder="Khuyến mãi đặc biệt..."/>
+                      </div>
+                      <div>
+                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">% Bonus Vcoin</label>
+                          <div className="relative">
+                              <input type="number" value={editingPromotion.bonusPercent} onChange={e => setEditingPromotion({...editingPromotion, bonusPercent: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-pink font-bold pl-3" />
+                              <span className="absolute right-3 top-3.5 text-xs text-slate-500 font-bold">%</span>
+                          </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                          <div>
+                              <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Bắt đầu</label>
+                              <input type="datetime-local" value={editingPromotion.startTime ? new Date(editingPromotion.startTime).toISOString().slice(0, 16) : ''} onChange={e => setEditingPromotion({...editingPromotion, startTime: new Date(e.target.value).toISOString()})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono text-xs" />
+                          </div>
+                          <div>
+                              <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Kết thúc</label>
+                              <input type="datetime-local" value={editingPromotion.endTime ? new Date(editingPromotion.endTime).toISOString().slice(0, 16) : ''} onChange={e => setEditingPromotion({...editingPromotion, endTime: new Date(e.target.value).toISOString()})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono text-xs" />
+                          </div>
+                      </div>
+                      <div className="bg-white/5 rounded-xl p-3 flex items-center gap-3 border border-white/10 cursor-pointer hover:bg-white/10 transition-colors" onClick={() => setEditingPromotion({...editingPromotion, isActive: !editingPromotion.isActive})}>
+                          <div className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${editingPromotion.isActive ? 'bg-audi-lime border-audi-lime' : 'border-slate-500'}`}>{editingPromotion.isActive && <Icons.Check className="w-3 h-3 text-black" />}</div>
+                          <label className="text-sm font-bold text-white cursor-pointer select-none">Kích hoạt (Manual Switch)</label>
+                      </div>
+                      <p className="text-[10px] text-slate-500 italic">Chiến dịch chỉ chạy khi BẬT và trong khoảng thời gian quy định.</p>
+                  </div>
+                  <div className="flex gap-3 pt-6 mt-2 border-t border-white/10 shrink-0">
+                      <button onClick={() => setEditingPromotion(null)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold transition-colors">Hủy</button>
+                      <button onClick={handleSavePromotion} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold shadow-lg transition-all">Lưu Chiến Dịch</button>
+                  </div>
+              </div>
+          </div>
       )}
       {editingGiftcode && (
           <div className="fixed inset-0 z-[2000] flex justify-center items-start p-4 pt-24 overflow-y-auto">

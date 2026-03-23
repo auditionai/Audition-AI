@@ -1,3 +1,4 @@
+import type { Handler } from '@netlify/functions';
 import { createClient } from '@supabase/supabase-js';
 import { GoogleAuth } from 'google-auth-library';
 
@@ -5,7 +6,7 @@ const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
 const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-export const handler = async (event: any, context: any) => {
+export const handler: Handler = async (event) => {
   // Chỉ cho phép POST request
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' };
@@ -37,9 +38,21 @@ export const handler = async (event: any, context: any) => {
         };
       }
       
-      // Pick a random active credential
-      const randomIndex = Math.floor(Math.random() * credentialsList.length);
-      const credentials = credentialsList[randomIndex];
+      const validServiceAccounts = credentialsList.filter((row: any) => {
+        const value = typeof row?.key_value === 'string' ? row.key_value : '';
+        return value.includes('project_id') && value.includes('private_key') && value.includes('client_email');
+      });
+
+      if (validServiceAccounts.length === 0) {
+        return {
+          statusCode: 500,
+          body: JSON.stringify({ error: 'Không tìm thấy Service Account JSON hợp lệ trong bảng api_keys.' })
+        };
+      }
+
+      // Pick a random active service account credential
+      const randomIndex = Math.floor(Math.random() * validServiceAccounts.length);
+      const credentials = validServiceAccounts[randomIndex];
       service_account_json = credentials.key_value;
     }
 

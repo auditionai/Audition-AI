@@ -10,6 +10,18 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    server: {
+      proxy: {
+        // In local dev, keep the frontend on Vite and forward pseudo Netlify routes
+        // like /api/tst-generate to the local functions server route
+        // /.netlify/functions/tst-generate.
+        '/api': {
+          target: 'http://127.0.0.1:9999',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/([^/?]+)(.*)$/, '/.netlify/functions/$1$2'),
+        },
+      },
+    },
     define: {
       // Expose non-VITE prefixed variables explicitly
       'process.env.CAULENHAU_SUPABASE_URL': JSON.stringify(env.CAULENHAU_SUPABASE_URL),

@@ -7,7 +7,18 @@ export const handler = async (event, context) => {
   }
 
   try {
-    const { amount, description, orderCode, returnUrl: clientReturnUrl, cancelUrl: clientCancelUrl } = JSON.parse(event.body);
+    const {
+      amount,
+      description,
+      orderCode,
+      returnUrl: clientReturnUrl,
+      cancelUrl: clientCancelUrl,
+      buyerName,
+      buyerEmail,
+      buyerPhone,
+      items,
+      expiredAt
+    } = JSON.parse(event.body);
     
     // Lấy Env Vars từ Netlify
     const PAYOS_CLIENT_ID = process.env.PAYOS_CLIENT_ID;
@@ -64,7 +75,15 @@ export const handler = async (event, context) => {
       .digest('hex');
 
     // Body gửi sang PayOS
-    const requestBody = { ...signatureData, signature };
+    const requestBody = {
+      ...signatureData,
+      signature,
+      buyerName,
+      buyerEmail,
+      buyerPhone,
+      items,
+      expiredAt
+    };
 
     console.log("Creating PayOS Link with returnUrl:", finalReturnUrl);
 

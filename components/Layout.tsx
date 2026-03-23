@@ -26,8 +26,10 @@ export const Layout: React.FC<LayoutProps> = ({
   const [promoConfig, setPromoConfig] = useState<PromotionCampaign | null>(null);
 
   useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 20);
-    window.addEventListener('scroll', handleScroll);
+    const root = document.getElementById('root');
+    const handleScroll = () => setScrolled((root?.scrollTop || 0) > 20);
+    
+    root?.addEventListener('scroll', handleScroll);
     
     // Initial User Load
     const refreshUser = () => getUserProfile().then(setUser);
@@ -45,7 +47,7 @@ export const Layout: React.FC<LayoutProps> = ({
     const interval = setInterval(refreshUser, 5000); // Relaxed to 5s since we have events
 
     return () => {
-        window.removeEventListener('scroll', handleScroll);
+        root?.removeEventListener('scroll', handleScroll);
         window.removeEventListener('balance_updated', refreshUser);
         clearInterval(interval);
     };
@@ -152,7 +154,7 @@ export const Layout: React.FC<LayoutProps> = ({
                   >
                        <Icons.Gem className="w-3 h-3 text-audi-yellow group-hover:animate-spin" />
                        <div className="flex flex-col leading-none">
-                           <span className="text-sm font-bold text-audi-yellow font-game">{user?.balance || 0}</span>
+                           <span className="text-sm font-bold text-audi-yellow font-game">{user?.vcoin_balance || 0}</span>
                            <span className="text-[8px] text-audi-yellow/50 font-bold uppercase">VCOIN</span>
                        </div>
                        <div className="w-4 h-4 rounded-full bg-audi-yellow text-black flex items-center justify-center ml-1">

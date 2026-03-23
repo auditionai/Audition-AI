@@ -64,7 +64,15 @@ import {
   ExternalLink,
   MessageSquare,
   AlertTriangle,
-  RefreshCw
+  Globe,
+  Video,
+  Activity,
+  RefreshCw,
+  ChevronUp,
+  ChevronDown,
+  Volume2,
+  VolumeX,
+  Edit2
 } from 'lucide-react';
 
 export const Icons = {
@@ -132,5 +140,13 @@ export const Icons = {
   ExternalLink,
   MessageSquare,
   AlertTriangle,
-  RefreshCw
+  Globe,
+  Video,
+  Activity,
+  RefreshCw,
+  ChevronUp,
+  ChevronDown,
+  Volume2,
+  VolumeX,
+  Edit2
 };

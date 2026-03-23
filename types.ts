@@ -14,7 +14,7 @@ export interface LocalizedString {
   en: string;
 }
 
-export type FeatureType = 'generation' | 'editing';
+export type FeatureType = 'generation' | 'editing' | 'video';
 
 export interface Feature {
   id: string;
@@ -24,7 +24,7 @@ export interface Feature {
   preview_image: string;
   toolType: FeatureType;
   defaultPrompt?: string;
-  category?: 'generation' | 'editing' | 'style' | 'professional' | 'art';
+  category?: 'generation' | 'editing' | 'style' | 'professional' | 'art' | 'video';
   supportsStyleReference?: boolean;
   isPremium?: boolean;
   tag?: string;
@@ -67,12 +67,19 @@ export interface GeneratedImage {
   url: string; // Base64 data or Public URL
   prompt: string;
   timestamp: number;
+  updatedAt?: number;
+  assetType?: 'image' | 'video';
   toolId: string;
   toolName: string;
   engine: string;
   isShared?: boolean; // New: Status for Showcase
   userName?: string;  // New: Author name
   userId?: string; // New: User ID for storage organization
+  status?: 'processing' | 'queued' | 'completed' | 'failed';
+  jobId?: string;
+  progress?: number;
+  error?: string;
+  cost?: number; // Keep track of cost for refunds
 }
 
 // --- NEW ECONOMY & USER TYPES ---
@@ -82,7 +89,7 @@ export interface UserProfile {
   username: string;
   email: string;
   avatar: string;
-  balance: number;
+  vcoin_balance: number;
   role: 'user' | 'admin';
   isVip: boolean;
   streak: number;
@@ -97,7 +104,7 @@ export interface UserProfile {
 export interface CreditPackage {
   id: string;
   name: string;
-  coin: number;
+  vcoin: number;
   price: number;
   currency: string;
   bonusText: string; // Visual tag like "Best Seller"
@@ -133,7 +140,7 @@ export interface Transaction {
   packageId: string;
   amount?: number;
   price?: number;
-  coins: number;
+  vcoin_received: number;
   status: TransactionStatus;
   createdAt: string;
   paymentMethod: 'payos' | 'manual';
@@ -142,7 +149,7 @@ export interface Transaction {
   checkoutUrl?: string; // URL thanh toán PayOS
 }
 
-export interface DiamondLog {
+export interface VcoinLog {
   id: string;
   userId: string;
   amount: number; // Positive for topup/reward, negative for usage
@@ -178,4 +185,16 @@ export interface PromotionCampaign {
     isActive: boolean; // Manual Kill Switch
 }
 
-export type PromotionConfig = PromotionCampaign;
+export type PromotionConfig = Promotion;
+export interface Promotion { 
+    id: string; 
+    name: string; 
+    bonus_percent: number; 
+    status: 'active' | 'inactive'; 
+    created_at: string; 
+    isActive?: boolean;
+    marqueeText?: string;
+}
+export interface DailyCheckin { user_id: string; last_checkin: string; streak: number; }
+export interface SystemSettings { id: string; maintenance_mode: boolean; announcement: string; min_topup: number; support_email: string; version: string; pricing_config?: any; giftcode_promo_config?: any; }
+export interface ApiKey { id: string; key: string; name: string; tier: 'flash' | 'pro'; status: 'active' | 'inactive' | 'error'; last_used?: string; created_at: string; }

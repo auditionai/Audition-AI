@@ -1,18 +1,40 @@
-
+﻿
 import React, { useState, useRef, useEffect } from 'react';
-import { Feature, Language, GeneratedImage } from '../../types';
+import { Feature, Language, GeneratedImage, ViewId } from '../../types';
 import { Icons } from '../../components/Icons';
-import { generateImage, testApiKey } from '../../services/geminiService';
-import { saveImageToStorage, uploadFileToR2 } from '../../services/storageService';
-import { createSolidFence, optimizePayload, urlToBase64 } from '../../utils/imageProcessor';
-import { getUserProfile, updateUserBalance, getStylePresets, getGenerationPrices, getTutorialVideo } from '../../services/economyService';
+import { prepareImageGenerationJob, testApiKey } from '../../services/geminiService';
+import { getUserProfile, getStylePresets, getTutorialVideo, getModelPricing, getTstServerAvailabilityConfig, type ModelPricing } from '../../services/economyService';
 import { useNotification } from '../../components/NotificationSystem';
 import { caulenhauClient } from '../../services/supabaseClient';
+import { CONCURRENCY_LIMITS, useConcurrency } from '../../services/concurrencyService';
+import { enqueueServerJob } from '../../services/serverQueueService';
+import { saveImageToLocalCache } from '../../services/storageService';
+import {
+  type AuditionPricingOverride,
+  fetchTstModels,
+  fetchTstPricing,
+  getCompatibleGenerationServers,
+  getCompatibleGenerationResolutions,
+  getCompatibleGenerationSpeeds,
+  getGenerationCostBreakdown,
+  getGenerationModelId,
+  getResolutionCostMap,
+  applyServerAvailabilityToRuntimeModels,
+  sanitizePricingEntriesWithRuntimeModels,
+  TST_CATALOG_CACHE_TTL_MS,
+  tstServerToUi,
+  uiServerToTst,
+  uiSpeedToTst,
+  type TstPricingEntry,
+  type TstRuntimeModel,
+} from '../../services/tstCatalog';
+import type { ImageGenerateRecipePayload } from '../../shared/queueRecipes';
 
 interface GenerationToolProps {
   feature: Feature;
   lang: Language;
   onNavigateToFeature?: (featureId: string) => void;
+  onNavigateView?: (view: ViewId, data?: any) => void;
 }
 
 type GenMode = 'single' | 'couple' | 'group3' | 'group4';
@@ -22,24 +44,24 @@ type Resolution = '1K' | '2K' | '4K';
 interface CharacterInput {
   id: number;
   bodyImage: string | null;
-  faceImage: string | null; 
+  faceImage: string | null;
   gender: 'female' | 'male';
   isFaceLocked: boolean;
 }
 
 const SMART_TIPS = [
-    { icon: Icons.Sparkles, text: "✨ MỚI: Chế độ 'Deep Scan' sẽ quét toàn bộ makeup, khuyên mũi/môi và phụ kiện trên mặt để tái tạo chính xác 99%." },
-    { icon: Icons.Zap, text: "⚡ Tip: Để khuôn mặt sắc nét, hãy dùng ảnh chụp cận mặt từ Patch hoặc đã qua làm nét (Remini)." },
-    { icon: Icons.Crown, text: "👑 Lưu ý: Model Pro 4K mang lại độ chi tiết trang phục chân thực nhất." },
-    { icon: Icons.Palette, text: "🎨 Mẹo: Nhập mô tả màu sắc trang phục cụ thể (ví dụ: váy đỏ, giày trắng) để AI vẽ đúng ý." },
-    { icon: Icons.Unlock, text: "🔓 Tip: Tắt 'Khóa Mặt' nếu bạn muốn AI tự sáng tạo khuôn mặt mới ngẫu nhiên." },
-    { icon: Icons.Image, text: "📸 Mẹo: Ảnh mẫu (Ref) nên có góc chụp tương đồng với ý tưởng bạn muốn tạo." },
-    { icon: Icons.MessageCircle, text: "✍️ Tip: Bí ý tưởng? Dùng nút 'Sử dụng Prompt Mẫu' để lấy ý tưởng từ cộng đồng." },
-    { icon: Icons.Monitor, text: "🖥️ Lưu ý: Độ phân giải 4K rất nét, thích hợp in ấn nhưng sẽ tốn thời gian xử lý hơn." },
-    { icon: Icons.ExternalLink, text: "👗 Mẹo: Truy cập AuMix3D.com để mix đồ và chụp ảnh nhân vật tách nền cực nét làm nguyên liệu cho AI!" }
+    { icon: Icons.Sparkles, text: "MỚI: Chế độ 'Deep Scan' sẽ quét toàn bộ makeup, khuyên mũi/môi và phụ kiện trên mặt để tái tạo chính xác 99%." },
+    { icon: Icons.Zap, text: "Tip: Để khuôn mặt sắc nét, hãy dùng ảnh chụp cận mặt từ Patch hoặc đã qua làm nét (Remini)." },
+    { icon: Icons.Crown, text: "Lưu ý: Model Pro 4K mang lại độ chi tiết trang phục chân thực nhất." },
+    { icon: Icons.Palette, text: "Mẹo: Nhập mô tả màu sắc trang phục cụ thể, ví dụ váy đỏ hoặc giày trắng, để AI vẽ đúng ý." },
+    { icon: Icons.Unlock, text: "Tip: Tắt 'Khóa Mặt' nếu bạn muốn AI tự sáng tạo khuôn mặt mới ngẫu nhiên." },
+    { icon: Icons.Image, text: "Mẹo: Ảnh mẫu (Ref) nên có góc chụp tương đồng với ý tưởng bạn muốn tạo." },
+    { icon: Icons.MessageCircle, text: "Tip: Bí ý tưởng? Dùng nút 'Sử dụng Prompt Mẫu' để lấy ý tưởng từ cộng đồng." },
+    { icon: Icons.Monitor, text: "Lưu ý: Độ phân giải 4K rất nét, thích hợp in ấn nhưng sẽ tốn thời gian xử lý hơn." },
+    { icon: Icons.ExternalLink, text: "Mẹo: Truy cập AuMix3D.com để mix đồ và chụp ảnh nhân vật tách nền cực nét làm nguyên liệu cho AI." }
 ];
 
-const TUTORIAL_VIDEO_ID = "ba2WR8txe_c"; 
+const TUTORIAL_VIDEO_ID = "ba2WR8txe_c";
 
 interface SamplePrompt {
     id: string;
@@ -48,8 +70,9 @@ interface SamplePrompt {
     category?: string;
 }
 
-export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, onNavigateToFeature }) => {
+export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, onNavigateToFeature, onNavigateView }) => {
   const { notify } = useNotification();
+  const { userId, queueStats, triggerPoll } = useConcurrency();
   const [stage, setStage] = useState<Stage>('input');
   const [progressMsg, setProgressMsg] = useState('');
   const [progressLogs, setProgressLogs] = useState<string[]>([]);
@@ -59,28 +82,30 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const [activeMode, setActiveMode] = useState<GenMode>('single');
   const [characters, setCharacters] = useState<CharacterInput[]>([{ id: 1, bodyImage: null, faceImage: null, gender: 'female', isFaceLocked: true }]);
   const [activeCharTab, setActiveCharTab] = useState<number>(1);
-  
+
   const [refImage, setRefImage] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
   const [negativePrompt, setNegativePrompt] = useState('crowd, extra people, audience, bystanders, deformed, bad anatomy, disfigured, poorly drawn face, mutation, mutated, extra limb, ugly, disgusting, poorly drawn hands, missing limb, floating limbs, disconnected limbs, malformed hands, blur, out of focus, long neck, long body, mutated hands and fingers, out of frame, blender, doll, cropped, low-res, close-up, poorly-drawn face, out of frame double, two heads, blurred, ugly, disfigured, too many fingers, deformed, repetitive, black and white, grainy, extra limbs, bad anatomy, duplicate, photorealistic, realistic photo, sketch, cartoon, drawing, art, 2d');
-  
+
   const [showSampleModal, setShowSampleModal] = useState(false);
   const [samplePrompts, setSamplePrompts] = useState<SamplePrompt[]>([]);
   const [loadingSamples, setLoadingSamples] = useState(false);
   const [currentCategoryName, setCurrentCategoryName] = useState('');
-  
+
   // Pagination State
   const SAMPLES_PER_PAGE = 20;
   const [samplePage, setSamplePage] = useState(0);
   const [hasMoreSamples, setHasMoreSamples] = useState(true);
 
   // Default Resolution 1K
-  const [aspectRatio, setAspectRatio] = useState('3:4'); 
-  const [resolution, setResolution] = useState<Resolution>('1K'); 
+  const [aspectRatio, setAspectRatio] = useState('3:4');
+  const [resolution, setResolution] = useState<Resolution>('1K');
+  const [speed, setSpeed] = useState('Nhanh');
+  const [server, setServer] = useState('VIP 1');
   const [aiModel, setAiModel] = useState<'flash' | 'pro'>('flash');
-  
+
   // Features always ON
-  const useSearch = true; 
+  const useSearch = true;
   const useCloudRef = true;
 
   const [guideTopic, setGuideTopic] = useState<'chars' | 'settings' | null>(null);
@@ -111,19 +136,97 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const [activeStylePreset, setActiveStylePreset] = useState<string | null>(null);
   const [availableStyles, setAvailableStyles] = useState<any[]>([]);
 
-  // --- NEW: PRICES STATE ---
-  const [prices, setPrices] = useState<any>({
-      flash_1k: 1, flash_2k: 2, flash_4k: 4,
-      pro_1k: 5, pro_2k: 10, pro_4k: 15,
-      couple: 2, group3: 4, group4: 6
+  const [pricingEntries, setPricingEntries] = useState<TstPricingEntry[]>([]);
+  const [auditionPricing, setAuditionPricing] = useState<ModelPricing[]>([]);
+  const [runtimeModels, setRuntimeModels] = useState<TstRuntimeModel[]>([]);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [isConcurrencyExpanded, setIsConcurrencyExpanded] = useState(false);
+
+  const pricingOverrides: AuditionPricingOverride[] = auditionPricing.map((row) => ({
+      modelId: row.model_id,
+      optionId: row.option_id,
+      auditionPriceVcoin: row.audition_price_vcoin,
+  }));
+
+  const generationSpeedId = uiSpeedToTst(speed) || 'fast';
+  const generationServerId = uiServerToTst(server) || 'fast';
+  const generationTier = aiModel === 'flash' ? 'flash' : 'pro';
+  const availableResolutions = getCompatibleGenerationResolutions({
+      tier: generationTier,
+      pricingEntries,
+      serverId: generationServerId,
+      speed: generationSpeedId
   });
+  const availableSpeeds = getCompatibleGenerationSpeeds({
+      tier: generationTier,
+      pricingEntries,
+      resolution
+  });
+  const availableServers = getCompatibleGenerationServers({
+      tier: generationTier,
+      pricingEntries,
+      speed: generationSpeedId,
+      resolution
+  });
+  const selectedGenerationCost = getGenerationCostBreakdown({
+      tier: generationTier,
+      resolution,
+      speed: generationSpeedId,
+      serverId: generationServerId,
+      pricingEntries,
+      pricingOverrides
+  });
+  const flashResolutionCosts = getResolutionCostMap({
+      tier: 'flash',
+      speed: generationSpeedId,
+      serverId: generationServerId,
+      pricingEntries,
+      pricingOverrides
+  });
+  const proResolutionCosts = getResolutionCostMap({
+      tier: 'pro',
+      speed: generationSpeedId,
+      serverId: generationServerId,
+      pricingEntries,
+      pricingOverrides
+  });
+  const prices = {
+      flash_1k: flashResolutionCosts['1K'].vcoin,
+      flash_2k: flashResolutionCosts['2K'].vcoin,
+      flash_4k: flashResolutionCosts['4K'].vcoin,
+      pro_1k: proResolutionCosts['1K'].vcoin,
+      pro_2k: proResolutionCosts['2K'].vcoin,
+      pro_4k: proResolutionCosts['4K'].vcoin,
+  };
+  const runtimeImageModelIds = new Set(
+      runtimeModels
+          .filter((model) => model.type === 'image')
+          .map((model) => model.model.trim().toLowerCase())
+  );
+  const isFlashAvailable =
+      runtimeImageModelIds.has(getGenerationModelId('flash')) &&
+      pricingEntries.some((entry) => entry.model.trim().toLowerCase() === getGenerationModelId('flash'));
+  const isProAvailable =
+      runtimeImageModelIds.has(getGenerationModelId('pro')) &&
+      pricingEntries.some((entry) => entry.model.trim().toLowerCase() === getGenerationModelId('pro'));
+  const isCatalogReady = !catalogLoading && !catalogError && pricingEntries.length > 0 && runtimeModels.length > 0;
+  const isGenerateDisabled =
+      cooldownRemaining > 0 ||
+      !isCatalogReady ||
+      !selectedGenerationCost.available ||
+      (aiModel === 'flash' ? !isFlashAvailable : !isProAvailable);
+  const availableSpeedLabels = availableSpeeds.map((speedId) => speedId === 'slow' ? 'Tiết Kiệm' : 'Nhanh');
+  const availableServerLabels = availableServers.map((serverId) => tstServerToUi(serverId));
 
   useEffect(() => {
       // Load Default Style Preset
       const loadStyle = async () => {
           const presets = await getStylePresets();
           setAvailableStyles(presets || []);
-          
+
           const def = presets.find((p: any) => p.is_default);
           if (def) {
               setActiveStylePreset(def.image_url);
@@ -132,11 +235,32 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       };
       loadStyle();
 
-      const loadPrices = async () => {
-          const p = await getGenerationPrices();
-          setPrices(p);
+      const loadCatalog = async (forceRefresh = false) => {
+          try {
+              const [entries, models, pricingConfig, serverAvailabilityConfig] = await Promise.all([
+                  fetchTstPricing(forceRefresh),
+                  fetchTstModels(forceRefresh),
+                  getModelPricing(),
+                  getTstServerAvailabilityConfig()
+              ]);
+              const filteredModels = applyServerAvailabilityToRuntimeModels(models, serverAvailabilityConfig);
+              setPricingEntries(sanitizePricingEntriesWithRuntimeModels(entries, filteredModels, serverAvailabilityConfig));
+              setRuntimeModels(filteredModels);
+              setAuditionPricing(pricingConfig || []);
+              setCatalogError(null);
+          } catch (error) {
+              console.warn("Failed to load live TST catalog for generation tool", error);
+              setPricingEntries([]);
+              setRuntimeModels([]);
+              setCatalogError(lang === 'vi' ? 'TST đang bảo trì hoặc không sẵn sàng.' : 'TST is unavailable.');
+          } finally {
+              setCatalogLoading(false);
+          }
       };
-      loadPrices();
+      loadCatalog();
+      const refreshTimer = window.setInterval(() => {
+          loadCatalog(true);
+      }, TST_CATALOG_CACHE_TTL_MS);
 
       const loadTutorialVideo = async () => {
           const videoConfig = await getTutorialVideo();
@@ -163,6 +287,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           }
       };
       loadTutorialVideo();
+      return () => window.clearInterval(refreshTimer);
   }, []);
   // -------------------------------
 
@@ -214,6 +339,60 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       return () => clearInterval(interval);
   }, [stage]);
 
+  useEffect(() => {
+      if (aiModel === 'flash' && !isFlashAvailable && isProAvailable) {
+          setAiModel('pro');
+      } else if (aiModel === 'pro' && !isProAvailable && isFlashAvailable) {
+          setAiModel('flash');
+      }
+  }, [aiModel, isFlashAvailable, isProAvailable]);
+
+  useEffect(() => {
+      if (availableResolutions.length > 0 && !availableResolutions.includes(resolution)) {
+          setResolution(availableResolutions[0]);
+      }
+  }, [availableResolutions, resolution]);
+
+  useEffect(() => {
+      const tier = aiModel === 'flash' ? 'flash' : 'pro';
+      const requestedSpeedId = uiSpeedToTst(speed) || 'fast';
+      const requestedServerId = uiServerToTst(server) || 'fast';
+      const compatibleServers = getCompatibleGenerationServers({
+          tier,
+          pricingEntries,
+          speed: requestedSpeedId,
+          resolution
+      });
+      const nextServerId = compatibleServers.includes(requestedServerId)
+          ? requestedServerId
+          : compatibleServers[0];
+
+      if (nextServerId && nextServerId !== requestedServerId) {
+          const nextServerLabel = tstServerToUi(nextServerId);
+          if (nextServerLabel !== server) {
+              setServer(nextServerLabel);
+              return;
+          }
+      }
+
+      const compatibleSpeeds = getCompatibleGenerationSpeeds({
+          tier,
+          pricingEntries,
+          serverId: nextServerId || requestedServerId,
+          resolution
+      });
+      const nextSpeedId = compatibleSpeeds.includes(requestedSpeedId)
+          ? requestedSpeedId
+          : compatibleSpeeds[0];
+
+      if (nextSpeedId) {
+          const nextSpeedLabel = nextSpeedId === 'slow' ? 'Tiết Kiệm' : 'Nhanh';
+          if (nextSpeedLabel !== speed) {
+              setSpeed(nextSpeedLabel);
+          }
+      }
+  }, [aiModel, pricingEntries, resolution, server, speed]);
+
   const formatTime = (seconds: number) => {
       const mins = Math.floor(seconds / 60);
       const secs = seconds % 60;
@@ -244,7 +423,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           return;
       }
       setLoadingSamples(true);
-      
+
       try {
           let targetCategoryId = 2;
           let catName = "Ảnh Nam Nữ";
@@ -273,7 +452,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
               .range(from, to);
 
           if (error) throw error;
-          
+
           if (data) {
               const newSamples = data.map((item: any) => ({
                   id: item.id,
@@ -289,7 +468,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                   setSamplePrompts(newSamples);
                   setSamplePage(0);
               }
-              
+
               setHasMoreSamples(data.length === SAMPLES_PER_PAGE);
           } else {
               if (!isLoadMore) setSamplePrompts([]);
@@ -365,7 +544,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const handleForceDownload = async (url: string, filename: string) => {
       if (!url) return;
       notify(lang === 'vi' ? 'Đang tải xuống...' : 'Downloading...', 'info');
-      
+
       try {
           let blob: Blob;
 
@@ -380,7 +559,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                   u8arr[n] = bstr.charCodeAt(n);
               }
               blob = new Blob([u8arr], { type: mime });
-          } 
+          }
           // 2. Remote URL with Proxy Fallback
           else {
               try {
@@ -420,29 +599,17 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   };
 
   const calculateCost = () => {
-      let cost = 0;
-      
-      if (aiModel === 'flash') {
-          if (resolution === '1K') cost = prices.flash_1k;
-          if (resolution === '2K') cost = prices.flash_2k;
-          if (resolution === '4K') cost = prices.flash_4k;
-      } else {
-          // Resolution Based Pricing (High Quality 3.0 Pro)
-          if (resolution === '1K') cost = prices.pro_1k;
-          if (resolution === '2K') cost = prices.pro_2k;
-          if (resolution === '4K') cost = prices.pro_4k;
-      }
+      const baseCost = selectedGenerationCost.vcoin;
 
-      // Add-ons (Search & CloudRef are now FREE/INCLUDED)
-      // if (useSearch) cost += 0; 
-      // if (useCloudRef) cost += 0;
-      
-      // Mode Multipliers (More characters = more processing)
-      if (activeMode === 'couple') cost += prices.couple;
-      if (activeMode === 'group3') cost += prices.group3;
-      if (activeMode === 'group4') cost += prices.group4;
-      
-      return cost;
+      const modeMultiplier = activeMode === 'single'
+          ? 1
+          : activeMode === 'couple'
+              ? 2
+              : activeMode === 'group3'
+                  ? 3
+                  : 4;
+
+      return baseCost * modeMultiplier;
   };
 
   const addLog = (msg: string) => {
@@ -451,183 +618,280 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   };
 
   const handleGenerate = async () => {
-    // 1. Validation
+    if (isSubmitting) {
+        return;
+    }
+
     if (cooldownRemaining > 0) {
         notify(`Vui lòng đợi ${cooldownRemaining} giây trước khi tạo ảnh tiếp theo.`, 'warning');
         return;
     }
 
+    if (!isCatalogReady) {
+        notify(lang === 'vi' ? 'TST đang bảo trì hoặc không sẵn sàng.' : 'TST is unavailable.', 'error');
+        return;
+    }
+
+    if (!selectedGenerationCost.available) {
+        notify(lang === 'vi' ? 'Cấu hình đang chọn không còn khả dụng trên TST.' : 'Selected configuration is not available on TST.', 'error');
+        return;
+    }
+
+    try {
+        if (queueStats.myImageProcessing >= CONCURRENCY_LIMITS.user.imageProcessing && queueStats.myQueued >= CONCURRENCY_LIMITS.user.queued) {
+            notify(lang === 'vi' ? 'Bạn đã đạt giới hạn 1 luồng tạo ảnh và 1 hàng chờ. Vui lòng đợi.' : 'You have reached the limit of 1 image processing slot and 1 queued job. Please wait.', 'warning');
+            return;
+        }
+
+        if (queueStats.systemQueued >= CONCURRENCY_LIMITS.system.queued) {
+            notify(lang === 'vi' ? 'Hệ thống đang quá tải (Hàng chờ đầy). Vui lòng thử lại sau ít phút.' : 'System is overloaded (Queue full). Please try again later.', 'error');
+            return;
+        }
+    } catch (error) {
+        console.error('Failed to check concurrency limit', error);
+    }
+
     if (!prompt.trim()) {
-         notify(lang === 'vi' ? 'Vui lòng nhập mô tả' : 'Please enter a prompt', 'warning');
-         return;
+        notify(lang === 'vi' ? 'Vui lòng nhập mô tả' : 'Please enter a prompt', 'warning');
+        return;
     }
 
     const cost = calculateCost();
     const user = await getUserProfile();
 
-    if ((user.balance || 0) < cost) {
+    if ((user.vcoin_balance || 0) < cost) {
         notify(lang === 'vi' ? 'Số dư không đủ!' : 'Insufficient balance!', 'error');
         return;
     }
-    
-    // 2. UI UPDATE IMMEDIATELY
-    setStage('processing');
-    setProgressLogs([]);
+
     addLog(lang === 'vi' ? 'Hệ thống đang khởi động...' : 'System starting...');
-    
-    // Force a small delay to allow React to render the Loading UI before blocking logic starts
-    await new Promise(r => setTimeout(r, 100));
+    setIsSubmitting(true);
+    const queuedJobId = crypto.randomUUID();
+
+    const basePrompt = `${feature.defaultPrompt || ''}${prompt}`.trim();
+    const styleMetadata = availableStyles.find((style: any) => style.image_url === activeStylePreset);
+    const requestedSpeedId = uiSpeedToTst(speed) || 'fast';
+    const requestedServerId = uiServerToTst(server) || 'fast';
+    const compatibleServers = getCompatibleGenerationServers({
+        tier: aiModel === 'flash' ? 'flash' : 'pro',
+        pricingEntries,
+        speed: requestedSpeedId,
+        resolution,
+    });
+    const effectiveServerId = compatibleServers.includes(requestedServerId)
+        ? requestedServerId
+        : (compatibleServers[0] || requestedServerId);
+    const compatibleSpeeds = getCompatibleGenerationSpeeds({
+        tier: aiModel === 'flash' ? 'flash' : 'pro',
+        pricingEntries,
+        serverId: effectiveServerId,
+        resolution,
+    });
+    const effectiveSpeedId = compatibleSpeeds.includes(requestedSpeedId)
+        ? requestedSpeedId
+        : (compatibleSpeeds[0] || requestedSpeedId);
+    const characterReferenceImages = characters.flatMap((char) => {
+        const refs: string[] = [];
+        if (char.bodyImage) refs.push(char.bodyImage);
+        if (char.isFaceLocked && char.faceImage && char.faceImage !== char.bodyImage) {
+            refs.push(char.faceImage);
+        } else if (!char.bodyImage && char.faceImage) {
+            refs.push(char.faceImage);
+        }
+        return refs;
+    });
+
+    const queuePayload: ImageGenerateRecipePayload = {
+        recipeType: 'image_generate_recipe_v1',
+        modelId: getGenerationModelId(aiModel),
+        prompt: basePrompt,
+        resolution,
+        aspectRatio,
+        speed: effectiveSpeedId,
+        serverId: effectiveServerId,
+        negativePrompt: negativePrompt.trim() || undefined,
+        characterImages: characterReferenceImages,
+        sampleImage: refImage || null,
+        styleImage: activeStylePreset || null,
+        stylePrompt: styleMetadata?.trigger_prompt || styleMetadata?.name || null,
+    };
+    const queuedImage: GeneratedImage = {
+        id: queuedJobId,
+        url: '',
+        prompt: basePrompt,
+        timestamp: Date.now(),
+        updatedAt: Date.now(),
+        assetType: 'image',
+        toolId: feature.id,
+        toolName: feature.name['en'],
+        engine: aiModel === 'flash' ? `Flash Engine ${resolution}` : `Pro Engine ${resolution}`,
+        status: 'queued',
+        jobId: queuedJobId,
+        progress: 0,
+        cost,
+    };
 
     try {
-        // --- NEW: API KEY PRE-FLIGHT TEST (120s Timeout / 15s Retry) ---
-        let isKeyValid = false;
-        const startTime = Date.now();
-        const TIMEOUT_LIMIT = 300000; // 5 mins
-        const RETRY_INTERVAL = 15000; // 15s
-        let attempt = 0;
+        await saveImageToLocalCache(queuedImage);
+    } catch (placeholderError) {
+        console.warn('[GenerationTool] Failed to persist queued placeholder', placeholderError);
+    }
 
-        while (Date.now() - startTime < TIMEOUT_LIMIT) {
-            attempt++;
-            addLog(`Đang kết nối đến máy chủ đồ họa Google (Lần ${attempt})...`);
-            
-            const stepStart = Date.now();
-            isKeyValid = await testApiKey(aiModel, attempt);
-            
-            if (isKeyValid) break;
-            
-            const elapsed = Date.now() - stepStart;
-            const waitTime = Math.max(0, RETRY_INTERVAL - elapsed);
-            
-            if (Date.now() - startTime + waitTime < TIMEOUT_LIMIT) {
-                await new Promise(r => setTimeout(r, waitTime));
+    triggerPoll();
+    onNavigateView?.('gallery');
+
+    void (async () => {
+        try {
+            await enqueueServerJob({
+                id: queuedJobId,
+                prompt: basePrompt,
+                toolId: feature.id,
+                toolName: feature.name['en'],
+                engine: aiModel === 'flash' ? `Flash Engine ${resolution}` : `Pro Engine ${resolution}`,
+                assetType: 'image',
+                costVcoin: cost,
+                queueKind: 'image_generate',
+                queuePayload,
+            });
+
+            window.dispatchEvent(new Event('balance_updated'));
+            triggerPoll();
+            notify(
+                lang === 'vi'
+                    ? 'Đã tạo job. Kết quả sẽ được cập nhật realtime trong Lịch sử.'
+                    : 'Job submitted. Progress will update in History in realtime.',
+                'success'
+            );
+            startCooldown(60);
+        } catch (error) {
+            console.error(error);
+            const errorMsg = error instanceof Error ? error.message : (lang === 'vi' ? 'Lỗi không xác định' : 'Unknown Error');
+            try {
+                await saveImageToLocalCache({
+                    ...queuedImage,
+                    status: 'failed',
+                    error: errorMsg,
+                    updatedAt: Date.now(),
+                    progress: 0,
+                });
+            } catch (persistError) {
+                console.warn('[GenerationTool] Failed to persist failed queued placeholder', persistError);
             }
+            triggerPoll();
+            notify(errorMsg, 'error');
+            setIsSubmitting(false);
+        }
+    })();
+
+    return;
+
+    try {
+        addLog('Đang kiỒm tra máy chủ phân tích Google...');
+        const isKeyValid = await testApiKey(aiModel, 1);
+        if (isKeyValid) {
+            addLog('Xác thực máy chủ phân tích thành công. Bắt đầu quá trình tạo ảnh...');
+        } else {
+            addLog('Máy chủ phân tích Google đang bận. Tiếp tục với prompt gốc và gọi job sang Trạm Sáng Tạo...');
         }
 
-        if (!isKeyValid) {
-            throw new Error(`Máy chủ Google hiện đang quá tải (Timeout ${TIMEOUT_LIMIT/1000}s). Vui lòng ấn Tạo lại ảnh.`);
+        let structureRefData: string | undefined = undefined;
+        const characterDataList = [];
+        for (const char of characters) {
+            characterDataList.push({
+                id: char.id,
+                gender: char.gender,
+                image: char.bodyImage,
+                faceImage: char.isFaceLocked ? char.bodyImage : null,
+                shoesImage: null,
+            });
         }
-        addLog("Xác thực thành công. Bắt đầu quá trình tạo ảnh...");
 
-      // 3. Deduct Balance
-      await updateUserBalance(-cost, `Gen: ${feature.name['en']}`, 'usage');
-      
-      let structureRefData: string | undefined = undefined;
-      let sourceForStructure = refImage || feature.preview_image;
-      
-      // --- NEW: UPLOAD TO R2 CLOUD (INPUTS - LOGGING ONLY) ---
-      // We upload to R2 for persistent storage/logging, but we pass the ORIGINAL BASE64 to generateImage
-      // to avoid CORS issues when the browser tries to fetch the R2 URL to send to Google.
-      
-      // Upload Reference Image
-      if (sourceForStructure && sourceForStructure.startsWith('data:')) {
-          addLog("Đang tải ảnh mẫu lên R2 Cloud (Backup)...");
-          uploadFileToR2(sourceForStructure, 'inputs').then(url => {
-              console.log("R2 Ref Backup URL:", url);
-          }).catch(e => console.warn("R2 Ref Backup Failed", e));
-          
-          // CRITICAL FIX: DO NOT OVERWRITE sourceForStructure with URL.
-          // Keep it as Base64 so generateImage can process it directly without CORS errors.
-      }
+        if (refImage) {
+            addLog('Đang trích xuất cấu trúc (Wireframe)...');
+            structureRefData = refImage || undefined;
+        }
 
-      // Upload Character Images
-      const characterDataList = [];
-      for (const char of characters) {
-          let bodyData = char.bodyImage;
-          let faceData = char.bodyImage; // Automatically use bodyImage as faceImage
+        let finalPrompt = (feature.defaultPrompt || '') + prompt;
+        if (negativePrompt) finalPrompt += ` --no ${negativePrompt}`;
 
-          if (bodyData && bodyData.startsWith('data:')) {
-              addLog(`Đang tải ảnh NV ${char.id} lên Cloud (Backup)...`);
-              uploadFileToR2(bodyData, 'inputs').catch(e => console.warn("R2 Body Backup Failed", e));
-          }
+        addLog('Gửi lệnh đến Image Generation Engine...');
 
-          characterDataList.push({
-              id: char.id,
-              gender: char.gender,
-              image: bodyData, // Pass Base64
-              faceImage: char.isFaceLocked ? faceData : null, // Pass Base64
-              shoesImage: null
-          });
-      }
-      
-      // 4. STRUCTURE PROCESSING (Heavy Operation)
-      // Note: createSolidFence handles URLs internally via loadImageWithTimeout
-      if (refImage) {
-          addLog("Đang trích xuất cấu trúc (Wireframe)...");
-          // Only use the USER UPLOADED reference image.
-          // NEVER use feature.preview_image as a fallback, as it forces unwanted compositions (e.g. wooden tables).
-          structureRefData = refImage; 
-      }
-      
-      let finalPrompt = (feature.defaultPrompt || "") + prompt;
-      if (negativePrompt) finalPrompt += ` --no ${negativePrompt}`;
-      
-      addLog("Gửi lệnh đến Gemini Intelligence Grid...");
+        const requestedSpeedId = uiSpeedToTst(speed) || 'fast';
+        const requestedServerId = uiServerToTst(server) || 'fast';
+        const compatibleServers = getCompatibleGenerationServers({
+            tier: aiModel === 'flash' ? 'flash' : 'pro',
+            pricingEntries,
+            speed: requestedSpeedId,
+            resolution,
+        });
+        const effectiveServerId = compatibleServers.includes(requestedServerId)
+            ? requestedServerId
+            : (compatibleServers[0] || requestedServerId);
+        const compatibleSpeeds = getCompatibleGenerationSpeeds({
+            tier: aiModel === 'flash' ? 'flash' : 'pro',
+            pricingEntries,
+            serverId: effectiveServerId,
+            resolution,
+        });
+        const effectiveSpeedId = compatibleSpeeds.includes(requestedSpeedId)
+            ? requestedSpeedId
+            : (compatibleSpeeds[0] || requestedSpeedId);
 
-      // 5. EXECUTE WITH DYNAMIC TIMEOUT
-      let timeoutMs = 900000; // 15 mins (Single)
-      if (activeMode === 'couple') timeoutMs = 1200000; // 20 mins
-      if (activeMode.startsWith('group')) timeoutMs = 1800000; // 30 mins
-      
-      setEstimatedSeconds(timeoutMs / 1000);
+        const { payload, finalPrompt: providerPrompt } = await prepareImageGenerationJob(
+            finalPrompt,
+            aspectRatio,
+            structureRefData,
+            characterDataList,
+            resolution,
+            aiModel,
+            useSearch,
+            useCloudRef,
+            (msg) => addLog(msg),
+            activeStylePreset,
+            availableStyles,
+            effectiveSpeedId,
+            effectiveServerId,
+        );
 
-      const result = await Promise.race([
-          generateImage(
-              finalPrompt, 
-              aspectRatio, 
-              structureRefData, 
-              characterDataList, 
-              resolution,
-              aiModel, // Use selected AI Model
-              useSearch,
-              useCloudRef, 
-              (msg) => addLog(msg),
-              activeStylePreset, // Pass the style reference
-              availableStyles, // Pass the pool for auto-selection
-              timeoutMs // Pass Dynamic Timeout
-          ),
-          new Promise<null>((_, reject) => setTimeout(() => reject(new Error(`Timeout: Limit reached (${timeoutMs/60000} mins)`)), timeoutMs))
-      ]);
+        await enqueueServerJob({
+            id: queuedJobId,
+            prompt: providerPrompt,
+            toolId: feature.id,
+            toolName: feature.name['en'],
+            engine: aiModel === 'flash' ? `Flash Engine ${resolution}` : `Pro Engine ${resolution}`,
+            assetType: 'image',
+            costVcoin: cost,
+            queueKind: 'image_generate',
+            queuePayload: payload,
+        });
 
-      if (result) {
-        addLog(lang === 'vi' ? 'Hoàn tất!' : 'Finalizing...');
-        setResultImage(result); 
-        
-        const newImage: GeneratedImage = {
-          id: crypto.randomUUID(),
-          url: result,
-          prompt: finalPrompt,
-          timestamp: Date.now(),
-          toolId: feature.id,
-          toolName: feature.name['en'],
-          engine: aiModel === 'flash' ? `Gemini 3.1 Flash ${resolution}` : `Gemini 3 Pro ${resolution}`
-        };
-        setGeneratedData(newImage);
-        
-        saveImageToStorage(newImage).catch(console.error);
-        setStage('result');
-        notify(lang === 'vi' ? 'Tạo ảnh thành công!' : 'Generation successful!', 'success');
-        
-        // Bắt đầu đếm ngược 60s sau khi tạo thành công
+        window.dispatchEvent(new Event('balance_updated'));
+        triggerPoll();
+        addLog(lang === 'vi' ? 'Job đã được đưa vào hàng đợi xử lý.' : 'Job submitted to the server queue.');
+        notify(
+            lang === 'vi'
+                ? 'Đã tạo job. Kết quả sẽ được cập nhật realtime trong Lịch sử.'
+                : 'Job submitted. Progress will update in History in realtime.',
+            'success'
+        );
+        onNavigateView?.('gallery');
+        setStage('input');
+        setResultImage(null);
+        setGeneratedData(null);
         startCooldown(60);
-      } else {
-          throw new Error("No result returned (Empty)");
-      }
     } catch (error: any) {
-      console.error(error);
-      const errorMsg = error.message || (lang === 'vi' ? 'Lỗi không xác định' : 'Unknown Error');
-      addLog(`❌ LỖI: ${errorMsg}`);
-      addLog(`💸 Đang thực hiện hoàn tiền...`);
-      
-      try {
-          await updateUserBalance(cost, `Refund: ${feature.name['en']} Failed`, 'refund');
-          notify(lang === 'vi' ? `Lỗi: ${errorMsg}. Đã hoàn tiền.` : `Error: ${errorMsg}. Refunded.`, 'error');
-      } catch (refundError) {
-          console.error("Refund failed", refundError);
-          notify("Lỗi hoàn tiền! Vui lòng liên hệ Admin.", "error");
-      } finally {
-          // ALWAYS RESET UI
-          setTimeout(() => setStage('input'), 2000);
-      }
+        console.error(error);
+        const errorMsg = error instanceof Error ? error.message : (lang === 'vi' ? 'Lỗi không xác định' : 'Unknown Error');
+        addLog(`ERROR: ${errorMsg}`);
+        notify(errorMsg, 'error');
+
+        try {
+            addLog(lang === 'vi' ? 'Đã ghi nhận lỗi enqueue phía server.' : 'Server-side enqueue error recorded.');
+        } catch (refundError) {
+            console.error('Refund log failed', refundError);
+        } finally {
+            setTimeout(() => setStage('input'), 2000);
+        }
     }
   };
 
@@ -647,7 +911,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                       <h3 className="text-xl font-bold text-audi-yellow flex items-center gap-2 border-b border-white/10 pb-2 sticky top-0 bg-[#12121a] z-10">
                           <Icons.BookOpen className="w-6 h-6" /> Hướng Dẫn Tạo Ảnh Chi Tiết
                       </h3>
-                      
+
                       {/* Chuẩn bị nguyên liệu */}
                       <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-3">
                           <div className="flex items-center gap-2 mb-2">
@@ -659,7 +923,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                           </p>
                           <ul className="text-xs text-slate-300 space-y-2 list-disc pl-4">
                               <li>
-                                  <b>Phải tách nền:</b> Ảnh nhân vật cần được tách nền sạch sẽ (phông nền trong suốt hoặc đen/trắng trơn). 
+                                  <b>Phải tách nền:</b> Ảnh nhân vật cần được tách nền sạch sẽ (phông nền trong suốt hoặc đen/trắng trơn).
                                   <br/><span className="text-slate-400 italic">Nếu ảnh chưa tách nền, hãy dùng công cụ <b className="text-audi-cyan">Tách Nền</b> trước.</span>
                               </li>
                               <li>
@@ -667,7 +931,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                   <br/><span className="text-slate-400 italic">Nếu ảnh mờ, hãy dùng công cụ <b className="text-audi-pink">Làm Nét</b> để nâng cấp chất lượng.</span>
                               </li>
                           </ul>
-                          
+
                           <div className="mt-3 p-3 bg-audi-cyan/10 border border-audi-cyan/30 rounded-lg flex items-start gap-3">
                               <Icons.Sparkles className="w-5 h-5 text-audi-cyan shrink-0 mt-0.5" />
                               <div>
@@ -685,7 +949,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                               <span className="bg-audi-pink text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase">Bước 2</span>
                               <span className="text-sm font-bold text-audi-pink">Thiết Lập Tạo Ảnh</span>
                           </div>
-                          
+
                           <div className="space-y-3">
                               <div className="bg-black/30 p-3 rounded-lg border border-white/5">
                                   <h4 className="text-xs font-bold text-white mb-1 flex items-center gap-1"><Icons.User className="w-3 h-3 text-audi-cyan"/> 1. Tải Ảnh Nhân Vật</h4>
@@ -732,7 +996,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                       <h3 className="text-xl font-bold text-audi-yellow flex items-center gap-2 border-b border-white/10 pb-2">
                           <Icons.Settings className="w-6 h-6" /> Cấu hình Nâng cao
                       </h3>
-                      
+
                       <div className="space-y-3">
                           <div className="flex items-start gap-3 p-3 bg-white/5 rounded-xl border border-white/5">
                               <div className="p-2 bg-audi-cyan/20 rounded-lg text-audi-cyan">
@@ -740,17 +1004,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                               </div>
                               <div>
                                   <h4 className="text-sm font-bold text-white">Model 3 Pro</h4>
-                                  <p className="text-xs text-slate-400 mt-1">Sử dụng mô hình Gemini 3 Pro mới nhất. Hiểu lệnh tốt hơn, chi tiết trang phục sắc nét hơn bản Flash.</p>
-                              </div>
-                          </div>
-
-                          <div className="flex items-start gap-3 p-3 bg-white/5 rounded-xl border border-white/5">
-                              <div className="p-2 bg-audi-pink/20 rounded-lg text-audi-pink">
-                                  <Icons.Cloud className="w-5 h-5" />
-                              </div>
-                              <div>
-                                  <h4 className="text-sm font-bold text-white">HQ Cloud Link</h4>
-                                  <p className="text-xs text-slate-400 mt-1">Ảnh gốc được upload lên Cloud để phân tích sâu (Deep Analysis). Giúp kết quả giống ảnh mẫu hơn 30%.</p>
+                                  <p className="text-xs text-slate-400 mt-1">Sử dụng mô hình Pro mới nhất. Hiểu lệnh tốt hơn, chi tiết trang phục sắc nét hơn bản Flash.</p>
                               </div>
                           </div>
 
@@ -806,7 +1060,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                       </div>
                   ))}
               </div>
-              <button 
+              <button
                   onClick={() => {
                       setStage('input');
                       notify("Đã hủy tạo ảnh.", "info");
@@ -826,7 +1080,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                   <div className="flex justify-between items-center p-3 border-b border-white/10 bg-white/5">
                       <div className="flex items-center gap-2">
                           <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                          <span className="font-bold text-xs text-white">Kết quả (Gemini 3 Pro)</span>
+                          <span className="font-bold text-xs text-white">Kết quả (Pro Engine)</span>
                       </div>
                       <button onClick={() => setStage('input')} className="text-[10px] font-bold text-slate-400 hover:text-white px-2 py-1 rounded bg-white/5 hover:bg-white/10">X</button>
                   </div>
@@ -835,7 +1089,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                   </div>
                   <div className="p-4 bg-[#12121a] flex flex-col gap-3">
                       <div className="flex gap-2">
-                          <button 
+                          <button
                             onClick={() => handleForceDownload(resultImage, `auditionai-image-${Date.now()}.png`)}
                             className="flex-1 px-4 py-2.5 bg-white text-black rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-audi-cyan transition-colors text-sm"
                           >
@@ -848,7 +1102,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                       <div className="mt-2 p-3 bg-red-500/10 border border-red-500/30 rounded-xl flex items-start gap-3 animate-pulse">
                           <Icons.AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
                           <p className="text-xs text-red-400 font-bold leading-relaxed">
-                              LƯU Ý QUAN TRỌNG: Ảnh sẽ tự động bị xóa sau 1 ngày hoặc khi bạn tắt trình duyệt/ứng dụng. Vui lòng ấn nút "Tải Về" để lưu ảnh xuống máy tính ngay bây giờ để tránh mất dữ liệu!
+                              LƯU Ý QUAN TRỌNG: Ảnh trong lịch sử tạo sẽ tự động bị xóa sau 7 ngày nếu chưa publish. Vui lòng ấn nút "Tải Về" để lưu ảnh xuống máy tính ngay bây giờ để tránh mất dữ liệu!
                           </p>
                       </div>
                   </div>
@@ -860,19 +1114,19 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const TipIcon = SMART_TIPS[currentTipIdx].icon;
 
   return (
-    <div className="flex flex-col items-center w-full max-w-5xl mx-auto pb-48 animate-fade-in relative">
+    <div className="flex flex-col items-center w-full max-w-5xl mx-auto pb-12 animate-fade-in relative">
         <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
 
         {showVideo && (
             <div className="fixed inset-0 z-[200] flex items-start justify-center p-4 pt-24 animate-fade-in" onClick={() => setShowVideo(false)}>
                 <div className="relative w-full max-w-2xl aspect-video bg-black rounded-2xl overflow-hidden border border-white/20 shadow-[0_0_50px_rgba(255,255,255,0.1)]" onClick={e => e.stopPropagation()}>
-                    <button 
-                        onClick={() => setShowVideo(false)} 
+                    <button
+                        onClick={() => setShowVideo(false)}
                         className="absolute -top-10 right-0 md:top-4 md:right-4 bg-white/10 hover:bg-red-600 text-white p-2 rounded-full transition-colors z-50 backdrop-blur-md"
                     >
                         <Icons.X className="w-6 h-6" />
                     </button>
-                    <iframe 
+                    <iframe
                         className="w-full h-full"
                         src={tutorialVideoUrl || `https://www.youtube.com/embed/${TUTORIAL_VIDEO_ID}?autoplay=1&rel=0&playsinline=1`}
                         title="Hướng dẫn sử dụng"
@@ -893,7 +1147,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                     {renderGuideContent()}
                     <div className="mt-6 pt-4 border-t border-white/10 text-center">
                         <button onClick={() => setGuideTopic(null)} className="px-6 py-2 bg-white/10 hover:bg-white/20 rounded-full text-xs font-bold text-white transition-colors">
-                            Đã Hiểu
+                            Đã HiỒu
                         </button>
                     </div>
                 </div>
@@ -915,7 +1169,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                             <Icons.X className="w-6 h-6" />
                         </button>
                     </div>
-                    
+
                     <div className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-black/10">
                         {loadingSamples ? (
                             <div className="flex flex-col items-center justify-center h-full gap-4">
@@ -928,7 +1182,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                     <Icons.Image className="w-12 h-12 opacity-30" />
                                 </div>
                                 <p>Chưa có mẫu nào cho chế độ này.</p>
-                                <button 
+                                <button
                                     onClick={() => fetchSamplePrompts(false)}
                                     className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-full text-xs font-bold text-white transition-colors"
                                 >
@@ -938,8 +1192,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                         ) : (
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                                 {samplePrompts.map((sample) => (
-                                    <div 
-                                        key={sample.id} 
+                                    <div
+                                        key={sample.id}
                                         onClick={() => handleSelectSample(sample)}
                                         className="group relative aspect-[3/4] rounded-xl overflow-hidden cursor-pointer border border-white/10 hover:border-audi-purple transition-all hover:scale-[1.02]"
                                     >
@@ -953,7 +1207,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                 ))}
                             </div>
                         )}
-                        
+
                         {hasMoreSamples && !loadingSamples && samplePrompts.length > 0 && (
                             <div className="w-full flex justify-center mt-6 pb-4">
                                 <button
@@ -965,7 +1219,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                 </button>
                             </div>
                         )}
-                        
+
                         {loadingSamples && samplePrompts.length > 0 && (
                             <div className="w-full flex justify-center mt-6 pb-4">
                                 <div className="px-6 py-2 bg-audi-purple/20 border border-audi-purple/50 rounded-full text-sm font-bold text-white flex items-center gap-2 opacity-70">
@@ -1027,9 +1281,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
         </div>
 
         {/* NEW HORIZONTAL AUMIX3D PROMO BANNER */}
-        <a 
-            href="https://aumix3d.com/" 
-            target="_blank" 
+        <a
+            href="https://aumix3d.com/"
+            target="_blank"
             rel="noopener noreferrer"
             className="w-full mb-4 md:mb-6 bg-gradient-to-r from-[#001a2c] to-[#000a14] border border-audi-cyan/30 rounded-xl p-3 md:p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 md:gap-4 animate-fade-in hover:border-audi-cyan transition-all shadow-[0_0_20px_rgba(33,212,253,0.1)] group relative overflow-hidden"
         >
@@ -1065,13 +1319,13 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                     <div className="flex gap-2 flex-wrap justify-end">
                         {onNavigateToFeature && (
                             <>
-                                <button 
+                                <button
                                     onClick={() => onNavigateToFeature('remove_bg_pro')}
                                     className="flex items-center gap-1 text-[10px] font-bold text-white hover:scale-105 transition-transform bg-audi-cyan/20 px-3 py-1 rounded-full border border-audi-cyan/50"
                                 >
                                     <Icons.Scissors className="w-3 h-3 text-audi-cyan" /> Tách Nền
                                 </button>
-                                <button 
+                                <button
                                     onClick={() => onNavigateToFeature('sharpen_upscale')}
                                     className="flex items-center gap-1 text-[10px] font-bold text-white hover:scale-105 transition-transform bg-audi-pink/20 px-3 py-1 rounded-full border border-audi-pink/50"
                                 >
@@ -1080,7 +1334,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                             </>
                         )}
                         {tutorialVideoUrl && (
-                            <button 
+                            <button
                                 onClick={() => setShowVideo(true)}
                                 className="flex items-center gap-1 text-[10px] font-bold text-white hover:scale-105 transition-transform bg-red-600 px-3 py-1 rounded-full shadow-[0_0_10px_rgba(220,38,38,0.5)] border border-red-400 group"
                             >
@@ -1088,7 +1342,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                 Video HD
                             </button>
                         )}
-                        <button 
+                        <button
                             onClick={() => setGuideTopic('chars')}
                             className="flex items-center gap-1 text-[10px] font-bold text-audi-yellow hover:text-white transition-colors bg-audi-yellow/10 px-2 py-1 rounded-full border border-audi-yellow/30"
                         >
@@ -1104,8 +1358,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                 key={char.id}
                                 onClick={() => setActiveCharTab(char.id)}
                                 className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${
-                                    activeCharTab === char.id 
-                                    ? 'bg-audi-pink text-white border-audi-pink shadow-lg' 
+                                    activeCharTab === char.id
+                                    ? 'bg-audi-pink text-white border-audi-pink shadow-lg'
                                     : 'bg-[#12121a] text-slate-400 border-white/10 hover:border-white/30'
                                 }`}
                             >
@@ -1118,8 +1372,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
                 <div className="flex flex-wrap justify-center gap-4 w-full">
                     {characters.map((char) => (
-                        <div 
-                            key={char.id} 
+                        <div
+                            key={char.id}
                             className={`w-full md:w-[220px] bg-[#12121a] border border-white/10 rounded-2xl p-4 hover:border-white/20 transition-colors relative group shrink-0 shadow-lg ${
                                 char.id === activeCharTab ? 'block' : 'hidden md:block'
                             }`}
@@ -1131,7 +1385,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                     <button onClick={() => toggleGender(char.id, 'male')} className={`px-2 py-0.5 rounded text-[9px] font-bold ${char.gender === 'male' ? 'bg-blue-500 text-white' : 'text-slate-500'}`}>Nam</button>
                                 </div>
                             </div>
-                            
+
                             <div className="space-y-3">
                                 <div onClick={() => handleUploadClick(char.id, 'body')} className="w-full h-64 bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-pink cursor-pointer relative overflow-hidden group/item transition-all flex flex-col items-center justify-center">
                                     {char.bodyImage ? (
@@ -1143,9 +1397,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                         </div>
                                     )}
                                 </div>
-                                
+
                                 <div className="flex justify-center">
-                                    <div 
+                                    <div
                                         onClick={(e) => { e.stopPropagation(); toggleFaceLock(char.id); }}
                                         className={`px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1.5 shadow-xl transition-all cursor-pointer border ${char.isFaceLocked ? 'bg-audi-cyan text-black border-white' : 'bg-red-500/90 text-white border-red-400'}`}
                                     >
@@ -1164,7 +1418,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                             <Icons.MessageCircle className="w-4 h-4" /> 2. Mô tả & Ảnh mẫu
                         </label>
                         <div className="flex gap-2">
-                            <button 
+                            <button
                                 onClick={handleOpenSamples}
                                 className="text-[10px] font-bold text-audi-yellow hover:text-white flex items-center gap-1 bg-audi-yellow/10 px-3 py-1.5 rounded-full border border-audi-yellow/30 animate-pulse transition-all hover:bg-audi-yellow/20"
                             >
@@ -1172,9 +1426,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                             </button>
                         </div>
                     </div>
-                    
+
                     <div className="flex flex-col md:flex-row gap-4">
-                        <div 
+                        <div
                             onClick={handleRefUploadClick}
                             className="w-full md:w-32 aspect-[3/4] md:aspect-square bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-purple cursor-pointer relative overflow-hidden group shrink-0 flex items-center justify-center transition-all"
                         >
@@ -1197,7 +1451,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                             )}
                         </div>
 
-                        <textarea 
+                        <textarea
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
                             placeholder={lang === 'vi' ? "Mô tả chi tiết: trang phục, bối cảnh, ánh sáng..." : "Detailed prompt: clothes, scene, lighting..."}
@@ -1205,17 +1459,18 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                         />
                     </div>
                 </div>
+
             </div>
 
             <div className="lg:col-span-1 space-y-6">
-                
-                <div className="bg-[#12121a] border border-white/10 rounded-2xl p-5 space-y-5 shadow-lg h-full">
+
+                <div className="bg-[#12121a] border border-white/10 rounded-2xl p-5 flex flex-col gap-5 shadow-lg h-full">
                     <div className="flex items-center justify-between border-b border-white/10 pb-3">
                         <h3 className="font-bold text-white flex items-center gap-2">
                             <Icons.Settings className="w-5 h-5 text-slate-400" />
                             3. Cấu Hình
                         </h3>
-                        <button 
+                        <button
                             onClick={() => setGuideTopic('settings')}
                             className="text-audi-yellow hover:text-white transition-colors animate-pulse"
                         >
@@ -1223,43 +1478,53 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                         </button>
                     </div>
 
+                    {!isCatalogReady && (
+                        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-3 text-xs text-red-200">
+                            {catalogLoading
+                                ? 'Đang đồng bộ catalog live từ TST...'
+                                : (catalogError || 'TST đang bảo trì hoặc không sẵn sàng.')}
+                        </div>
+                    )}
+
                     <div className="space-y-3">
                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Mô hình AI</label>
-                        <div className="grid grid-cols-2 gap-3">
-                            <button 
-                                onClick={() => setAiModel('flash')} 
-                                className={`relative group overflow-hidden rounded-xl border transition-all duration-300 h-12 flex items-center justify-center gap-2 ${
-                                    aiModel === 'flash' 
-                                    ? 'bg-gradient-to-br from-cyan-500 to-blue-600 text-white border-transparent shadow-lg shadow-cyan-500/25 scale-[1.02]' 
-                                    : 'bg-[#1a1a24] border-white/10 text-slate-400 hover:text-white hover:border-white/20 hover:bg-[#252532]'
-                                }`}
+                        <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
+                            <button
+                                onClick={() => setAiModel('flash')}
+                                disabled={!isFlashAvailable}
+                                className={`flex-1 py-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                                    aiModel === 'flash'
+                                    ? 'bg-audi-purple text-white shadow-lg'
+                                    : 'text-slate-500 hover:text-white hover:bg-white/5'
+                                } ${!isFlashAvailable ? 'opacity-40 cursor-not-allowed hover:bg-transparent hover:text-slate-500' : ''}`}
                             >
-                                <Icons.Zap className={`w-4 h-4 ${aiModel === 'flash' ? 'text-white fill-current' : 'text-cyan-400'}`} />
-                                <span className="font-bold text-sm">Flash</span>
+                                <Icons.Zap className={`w-4 h-4 ${aiModel === 'flash' ? 'text-white' : 'text-slate-400'}`} />
+                                Flash
                             </button>
 
-                            <button 
-                                onClick={() => setAiModel('pro')} 
-                                className={`relative group overflow-hidden rounded-xl border transition-all duration-300 h-12 flex items-center justify-center gap-2 ${
-                                    aiModel === 'pro' 
-                                    ? 'bg-gradient-to-br from-purple-500 to-pink-600 text-white border-transparent shadow-lg shadow-purple-500/25 scale-[1.02]' 
-                                    : 'bg-[#1a1a24] border-white/10 text-slate-400 hover:text-white hover:border-white/20 hover:bg-[#252532]'
-                                }`}
+                            <button
+                                onClick={() => setAiModel('pro')}
+                                disabled={!isProAvailable}
+                                className={`flex-1 py-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                                    aiModel === 'pro'
+                                    ? 'bg-audi-purple text-white shadow-lg'
+                                    : 'text-slate-500 hover:text-white hover:bg-white/5'
+                                } ${!isProAvailable ? 'opacity-40 cursor-not-allowed hover:bg-transparent hover:text-slate-500' : ''}`}
                             >
-                                <Icons.Crown className={`w-4 h-4 ${aiModel === 'pro' ? 'text-white fill-current' : 'text-purple-400'}`} />
-                                <span className="font-bold text-sm">Pro</span>
+                                <Icons.Crown className={`w-4 h-4 ${aiModel === 'pro' ? 'text-white' : 'text-slate-400'}`} />
+                                Pro
                             </button>
                         </div>
                     </div>
 
-                    <div className="space-y-2">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase">Tỉ lệ khung hình</label>
-                        <div className="grid grid-cols-5 gap-2">
+                    <div className="space-y-3">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Tỷ lệ khung hình</label>
+                        <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
                             {ratios.map(r => (
-                                <button 
-                                    key={r.id} 
-                                    onClick={() => setAspectRatio(r.id)} 
-                                    className={`py-2 rounded-lg border text-[10px] font-bold transition-all flex items-center justify-center ${aspectRatio === r.id ? 'bg-white text-black border-white shadow-md scale-105' : 'border-white/10 text-slate-500 hover:bg-white/5 hover:text-white'}`}
+                                <button
+                                    key={r.id}
+                                    onClick={() => setAspectRatio(r.id)}
+                                    className={`flex-1 py-3 rounded-lg text-[10px] font-bold transition-all flex items-center justify-center ${aspectRatio === r.id ? 'bg-audi-purple text-white shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}
                                 >
                                     {r.label}
                                 </button>
@@ -1267,110 +1532,250 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                         </div>
                     </div>
 
-                    <div className="space-y-3 animate-fade-in">
+                    <div className={`${availableResolutions.length === 0 ? 'hidden ' : ''}space-y-3 animate-fade-in`}>
                         <label className="text-[10px] font-bold text-slate-400 uppercase">Độ phân giải</label>
                         <div className={`flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5`}>
-                            {['1K', '2K', '4K'].map(r => (
-                                <button 
-                                    key={r} 
-                                    onClick={() => setResolution(r as any)} 
+                            {availableResolutions.map(r => (
+                                <button
+                                    key={r}
+                                    onClick={() => setResolution(r as any)}
                                     className={`flex-1 py-3 rounded-lg text-xs font-bold transition-all ${resolution === r ? 'bg-audi-purple text-white shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}
                                 >
                                     {r}
                                 </button>
                             ))}
                         </div>
-                        
-                        {/* Redesigned Pricing Display */}
-                        <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-audi-purple/20 to-audi-pink/20 border border-white/10 p-3">
-                            <div className="flex justify-between items-center relative z-10">
-                                <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Giá hiện tại</span>
-                                <div className="flex items-end gap-1">
-                                    <span className="text-xl font-black text-white font-game drop-shadow-md">
-                                        {calculateCost()}
-                                    </span>
-                                    <span className="text-[10px] font-bold text-audi-yellow mb-1">VCOIN</span>
+                    </div>
+
+                    <div className={`${availableSpeedLabels.length === 0 ? 'hidden ' : ''}space-y-3 animate-fade-in`}>
+                        <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
+                            <Icons.Zap className="w-3 h-3" />
+                            Tốc độ xử lý
+                        </label>
+                        <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
+                            {availableSpeedLabels.map(s => (
+                                <button
+                                    key={s}
+                                    onClick={() => setSpeed(s)}
+                                    className={`flex-1 py-3 rounded-lg text-xs font-bold transition-all ${
+                                        speed === s
+                                            ? 'bg-audi-purple text-white shadow-lg'
+                                            : 'text-slate-500 hover:text-white hover:bg-white/5'
+                                    }`}
+                                >
+                                    {s}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className={`${availableServerLabels.length === 0 ? 'hidden ' : ''}space-y-3 animate-fade-in`}>
+                        <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
+                            <Icons.Database className="w-3 h-3" />
+                            Server
+                        </label>
+                        <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
+                            {availableServerLabels.map(s => (
+                                <button
+                                    key={s}
+                                    onClick={() => setServer(s)}
+                                    className={`flex-1 py-3 rounded-lg text-xs font-bold transition-all ${
+                                        server === s
+                                            ? 'bg-audi-cyan text-black shadow-lg'
+                                            : 'text-slate-500 hover:text-white hover:bg-white/5'
+                                    }`}
+                                >
+                                    {s}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* NEW CONCURRENCY UI */}
+                    <div className="space-y-3 pt-4 border-t border-white/10">
+                        <div
+                            className="cursor-pointer hover:bg-white/5 p-3 rounded-xl transition-colors border border-white/5 bg-[#0a0a0f]"
+                            onClick={() => setIsConcurrencyExpanded(!isConcurrencyExpanded)}
+                        >
+                            <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase">
+                                    <Icons.Activity className="w-3 h-3 text-audi-cyan" />
+                                    Luồng xử lý
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button onClick={(e) => { e.stopPropagation(); triggerPoll(); }} className="text-slate-500 hover:text-white transition-colors">
+                                        <Icons.RefreshCw className="w-3 h-3" />
+                                    </button>
+                                    {isConcurrencyExpanded ? <Icons.ChevronUp className="w-4 h-4 text-slate-500" /> : <Icons.ChevronDown className="w-4 h-4 text-slate-500" />}
                                 </div>
                             </div>
-                            {aiModel === 'pro' ? (
-                                <div className="flex justify-between text-[9px] text-slate-500 mt-2 font-mono border-t border-white/5 pt-2">
-                                    <span className={resolution === '1K' ? 'text-white font-bold' : ''}>1K: {prices.pro_1k}VC</span>
-                                    <span className={resolution === '2K' ? 'text-white font-bold' : ''}>2K: {prices.pro_2k}VC</span>
-                                    <span className={resolution === '4K' ? 'text-white font-bold' : ''}>4K: {prices.pro_4k}VC</span>
+
+                            {!isConcurrencyExpanded && (
+                                <div className="space-y-3 text-[10px] text-slate-400 mt-2">
+                                    <div>
+                                        <div className="font-bold text-audi-cyan mb-1">Luồng Của Bạn</div>
+                                        <div className="flex gap-1.5">
+                                            <span>Ảnh <span className="text-white font-mono">{queueStats.myImageProcessing}/{CONCURRENCY_LIMITS.user.imageProcessing}</span></span>
+                                            <span>- Video <span className="text-white font-mono">{queueStats.myVideoProcessing}/{CONCURRENCY_LIMITS.user.videoProcessing}</span></span>
+                                            <span>- Hàng Chờ <span className="text-white font-mono">{queueStats.myQueued}/{CONCURRENCY_LIMITS.user.queued}</span></span>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div className="font-bold text-slate-300 mb-1">Luồng Hệ Thống</div>
+                                        <div className="flex gap-1.5">
+                                            <span>Ảnh <span className="text-white font-mono">{queueStats.systemImageProcessing}/{CONCURRENCY_LIMITS.system.imageProcessing}</span></span>
+                                            <span>- Video <span className="text-white font-mono">{queueStats.systemVideoProcessing}/{CONCURRENCY_LIMITS.system.videoProcessing}</span></span>
+                                            <span>- Hàng Chờ <span className="text-white font-mono">{queueStats.systemQueued}/{CONCURRENCY_LIMITS.system.queued}</span></span>
+                                        </div>
+                                    </div>
                                 </div>
-                            ) : (
-                                <div className="flex justify-between text-[9px] text-slate-500 mt-2 font-mono border-t border-white/5 pt-2">
-                                    <span className={resolution === '1K' ? 'text-white font-bold' : ''}>1K: {prices.flash_1k}VC</span>
-                                    <span className={resolution === '2K' ? 'text-white font-bold' : ''}>2K: {prices.flash_2k}VC</span>
-                                    <span className={resolution === '4K' ? 'text-white font-bold' : ''}>4K: {prices.flash_4k}VC</span>
+                            )}
+
+                            {isConcurrencyExpanded && (
+                                <div className="pt-3 mt-2 border-t border-white/5 space-y-4 animate-fade-in">
+                                    {/* User Concurrency */}
+                                    <div className="space-y-2">
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Của bạn</span>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <div className="flex items-center justify-between text-xs">
+                                                <span className="text-slate-300">Đang xử lý</span>
+                                                <span className="font-mono text-audi-cyan bg-audi-cyan/10 px-2 py-0.5 rounded-md">
+                                                    {queueStats.myImageProcessing}/{CONCURRENCY_LIMITS.user.imageProcessing}
+                                                </span>
+                                            </div>
+                                            <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
+                                                <div
+                                                    className="bg-audi-cyan h-full transition-all duration-500 ease-out"
+                                                    style={{ width: `${Math.min(100, (queueStats.myImageProcessing / CONCURRENCY_LIMITS.user.imageProcessing) * 100)}%` }}
+                                                />
+                                            </div>
+
+                                            <div className="flex items-center justify-between text-xs pt-1">
+                                                <span className="text-slate-300">Hàng chờ</span>
+                                                <span className="font-mono text-audi-yellow bg-audi-yellow/10 px-2 py-0.5 rounded-md">
+                                                    {queueStats.myQueued}/{CONCURRENCY_LIMITS.user.queued}
+                                                </span>
+                                            </div>
+                                            <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
+                                                <div
+                                                    className="bg-audi-yellow h-full transition-all duration-500 ease-out"
+                                                    style={{ width: `${Math.min(100, (queueStats.myQueued / CONCURRENCY_LIMITS.user.queued) * 100)}%` }}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="h-px bg-white/5 w-full" />
+
+                                    {/* System Concurrency */}
+                                    <div className="space-y-2">
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Hệ thống</span>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <div className="flex items-center justify-between text-xs">
+                                                <span className="text-slate-300">Ảnh</span>
+                                                <span className="font-mono text-slate-400 bg-white/5 px-2 py-0.5 rounded-md">
+                                                    {queueStats.systemImageProcessing}/{CONCURRENCY_LIMITS.system.imageProcessing}
+                                                </span>
+                                            </div>
+                                            <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
+                                                <div
+                                                    className="bg-slate-400 h-full transition-all duration-500 ease-out"
+                                                    style={{ width: `${Math.min(100, (queueStats.systemImageProcessing / CONCURRENCY_LIMITS.system.imageProcessing) * 100)}%` }}
+                                                />
+                                            </div>
+
+                                            <div className="flex items-center justify-between text-xs pt-1">
+                                                <span className="text-slate-300">Video</span>
+                                                <span className="font-mono text-slate-400 bg-white/5 px-2 py-0.5 rounded-md">
+                                                    {queueStats.systemVideoProcessing}/{CONCURRENCY_LIMITS.system.videoProcessing}
+                                                </span>
+                                            </div>
+                                            <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
+                                                <div
+                                                    className="bg-slate-400 h-full transition-all duration-500 ease-out"
+                                                    style={{ width: `${Math.min(100, (queueStats.systemVideoProcessing / CONCURRENCY_LIMITS.system.videoProcessing) * 100)}%` }}
+                                                />
+                                            </div>
+
+                                            <div className="flex items-center justify-between text-xs pt-1">
+                                                <span className="text-slate-300">Hàng chờ chung</span>
+                                                <span className="font-mono text-orange-400 bg-orange-400/10 px-2 py-0.5 rounded-md">
+                                                    {queueStats.systemQueued}/{CONCURRENCY_LIMITS.system.queued}
+                                                </span>
+                                            </div>
+                                            <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
+                                                <div
+                                                    className="bg-orange-400 h-full transition-all duration-500 ease-out"
+                                                    style={{ width: `${Math.min(100, (queueStats.systemQueued / CONCURRENCY_LIMITS.system.queued) * 100)}%` }}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             )}
                         </div>
                     </div>
 
-                    <div className="pt-4 border-t border-white/10 space-y-3">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase">Tính năng mặc định (Included)</label>
-                        
-                        {/* HQ Cloud Link (Always On) */}
-                        <div className="flex items-center justify-between p-3 rounded-xl bg-audi-cyan/10 border border-audi-cyan/30">
-                            <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-full bg-audi-cyan/20 flex items-center justify-center text-audi-cyan">
-                                    <Icons.Cloud className="w-4 h-4" />
-                                </div>
-                                <div>
-                                    <div className="text-xs font-bold text-white">HQ Cloud Link (R2)</div>
-                                    <div className="text-[9px] text-audi-cyan font-bold">ACTIVE • FREE</div>
-                                </div>
+                    {/* Redesigned Pricing Display */}
+                    <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-audi-purple/20 to-audi-pink/20 border border-white/10 p-3 mt-4">
+                        <div className="flex justify-between items-center relative z-10">
+                            <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Giá hiện tại</span>
+                            <div className="flex items-end gap-1">
+                                <span className="text-xl font-black text-white font-game drop-shadow-md">
+                                    {calculateCost()}
+                                </span>
+                                <span className="text-[10px] font-bold text-audi-yellow mb-1">VCOIN</span>
                             </div>
-                            <Icons.Lock className="w-4 h-4 text-audi-cyan opacity-50" />
                         </div>
-
-                        {/* Google Search (Always On) */}
-                        <div className="flex items-center justify-between p-3 rounded-xl bg-blue-500/10 border border-blue-500/30">
-                            <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400">
-                                    <Icons.Search className="w-4 h-4" />
-                                </div>
-                                <div>
-                                    <div className="text-xs font-bold text-white">Google Search (Grounding)</div>
-                                    <div className="text-[9px] text-blue-400 font-bold">ACTIVE • FREE</div>
-                                </div>
+                        {aiModel === 'pro' ? (
+                            <div className="flex justify-between text-[9px] text-slate-500 mt-2 font-mono border-t border-white/5 pt-2">
+                                <span className={resolution === '1K' ? 'text-white font-bold' : ''}>1K: {prices.pro_1k}VC</span>
+                                <span className={resolution === '2K' ? 'text-white font-bold' : ''}>2K: {prices.pro_2k}VC</span>
+                                <span className={resolution === '4K' ? 'text-white font-bold' : ''}>4K: {prices.pro_4k}VC</span>
                             </div>
-                            <Icons.Lock className="w-4 h-4 text-blue-400 opacity-50" />
-                        </div>
+                        ) : (
+                            <div className="flex justify-between text-[9px] text-slate-500 mt-2 font-mono border-t border-white/5 pt-2">
+                                <span className={resolution === '1K' ? 'text-white font-bold' : ''}>1K: {prices.flash_1k}VC</span>
+                                <span className={resolution === '2K' ? 'text-white font-bold' : ''}>2K: {prices.flash_2k}VC</span>
+                                <span className={resolution === '4K' ? 'text-white font-bold' : ''}>4K: {prices.flash_4k}VC</span>
+                            </div>
+                        )}
                     </div>
+
+                    <button
+                        onClick={handleGenerate}
+                        disabled={isGenerateDisabled || isSubmitting}
+                        className={`w-full py-3.5 mt-auto rounded-xl font-bold text-white shadow-[0_0_20px_rgba(255,0,153,0.4)] transition-all flex items-center justify-center gap-2 ${
+                            (isGenerateDisabled || isSubmitting)
+                            ? 'bg-slate-600 cursor-not-allowed opacity-70 shadow-none'
+                            : 'bg-gradient-to-r from-audi-pink to-audi-purple hover:scale-[1.02]'
+                        }`}
+                    >
+                        {isSubmitting ? (
+                            <>
+                                <Icons.Loader className="w-5 h-5 animate-spin" />
+                                <span>{lang === 'vi' ? 'ĐANG GỬI JOB...' : 'SUBMITTING...'}</span>
+                            </>
+                        ) : cooldownRemaining > 0 ? (
+                            <>
+                                <Icons.Clock className="w-5 h-5 animate-spin-slow" />
+                                <span>{lang === 'vi' ? `ĐỢI ${cooldownRemaining}s` : `WAIT ${cooldownRemaining}s`}</span>
+                            </>
+                        ) : (
+                            <>
+                                <Icons.Wand className="w-5 h-5" />
+                                <span>{lang === 'vi' ? 'TẠO ẢNH NGAY' : 'GENERATE'}</span>
+                            </>
+                        )}
+                    </button>
 
                 </div>
             </div>
 
-        </div>
-
-        <div className="fixed bottom-24 left-4 right-4 md:left-[50%] md:-translate-x-1/2 md:w-[900px] p-4 bg-[#090014]/90 backdrop-blur-md border border-white/10 rounded-2xl z-50 shadow-2xl flex items-center justify-between">
-            <div className="flex flex-col">
-                <span className="text-[10px] text-slate-400 font-bold uppercase">Chi phí ước tính</span>
-                <span className="text-xl font-black text-white">{calculateCost()} <span className="text-audi-yellow text-sm">VCOIN</span></span>
-            </div>
-            <button 
-                onClick={handleGenerate}
-                disabled={cooldownRemaining > 0}
-                className={`px-8 py-3 rounded-xl font-bold text-white shadow-[0_0_20px_rgba(255,0,153,0.4)] transition-all flex items-center gap-2 ${
-                    cooldownRemaining > 0 
-                    ? 'bg-slate-600 cursor-not-allowed opacity-70' 
-                    : 'bg-gradient-to-r from-audi-pink to-audi-purple hover:scale-105'
-                }`}
-            >
-                {cooldownRemaining > 0 ? (
-                    <>
-                        <Icons.Clock className="w-5 h-5 animate-spin-slow" />
-                        <span>{lang === 'vi' ? `ĐỢI ${cooldownRemaining}s` : `WAIT ${cooldownRemaining}s`}</span>
-                    </>
-                ) : (
-                    <>
-                        <Icons.Wand className="w-5 h-5" />
-                        <span>{lang === 'vi' ? 'TẠO ẢNH NGAY' : 'GENERATE'}</span>
-                    </>
-                )}
-            </button>
         </div>
     </div>
   );

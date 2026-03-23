@@ -1,18 +1,20 @@
 
 import React from 'react';
-import { Language, Feature } from '../types';
+import { Language, Feature, ViewId } from '../types';
 import { Icons } from '../components/Icons';
 import { GenerationTool } from './features/GenerationTool';
 import { EditingTool } from './features/EditingTool';
+import { VideoTool } from './features/VideoTool';
 
 interface ToolWorkspaceProps {
   feature: Feature;
   lang: Language;
   onBack: () => void;
   onNavigateToFeature?: (featureId: string) => void;
+  onNavigateView?: (view: ViewId, data?: any) => void;
 }
 
-export const ToolWorkspace: React.FC<ToolWorkspaceProps> = ({ feature, lang, onBack, onNavigateToFeature }) => {
+export const ToolWorkspace: React.FC<ToolWorkspaceProps> = ({ feature, lang, onBack, onNavigateToFeature, onNavigateView }) => {
   
   // This component now acts as a Controller/Router for tools
   // ensuring separation of concerns.
@@ -20,9 +22,11 @@ export const ToolWorkspace: React.FC<ToolWorkspaceProps> = ({ feature, lang, onB
   const renderTool = () => {
     switch (feature.toolType) {
         case 'generation':
-            return <GenerationTool feature={feature} lang={lang} onNavigateToFeature={onNavigateToFeature} />;
+            return <GenerationTool key={feature.id} feature={feature} lang={lang} onNavigateToFeature={onNavigateToFeature} onNavigateView={onNavigateView} />;
         case 'editing':
-            return <EditingTool feature={feature} lang={lang} />;
+            return <EditingTool key={feature.id} feature={feature} lang={lang} onNavigateToFeature={onNavigateToFeature} onNavigateView={onNavigateView} />;
+        case 'video':
+            return <VideoTool key={feature.id} feature={feature} lang={lang} onNavigateToFeature={onNavigateToFeature} onNavigateView={onNavigateView} />;
         default:
             return <div className="p-10 text-center">Unknown tool type</div>;
     }

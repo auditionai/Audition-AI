@@ -21,7 +21,7 @@ export const urlToBase64 = async (url: string): Promise<string | null> => {
 };
 
 // Helper: Load Image with Timeout
-const loadImageWithTimeout = (src: string, timeoutMs = 5000): Promise<HTMLImageElement> => {
+export const loadImageWithTimeout = (src: string, timeoutMs = 5000): Promise<HTMLImageElement> => {
     return new Promise((resolve, reject) => {
         const img = new Image();
         img.crossOrigin = "Anonymous";
@@ -126,6 +126,16 @@ export const getClosestAspectRatio = async (base64Str: string): Promise<string> 
         return "1:1";
     }
 };
+
+export const calculateAspectRatioString = (width: number, height: number): string => {
+    const ratio = width / height;
+    if (ratio >= 1.7) return "16:9";
+    if (ratio >= 1.3) return "4:3";
+    if (ratio >= 0.9 && ratio <= 1.1) return "1:1";
+    if (ratio <= 0.6) return "9:16";
+    if (ratio <= 0.8) return "3:4";
+    return "1:1"; // default
+}
 
 export const optimizePayload = async (base64Str: string, maxWidth = 768): Promise<string> => {
     try {

@@ -12,7 +12,7 @@ export const APP_CONFIG: AppConfig = {
     menu: [
       {id: "home", label: {vi: "Trang chủ", en: "Dashboard"}, icon: "Home"},
       {id: "tools", label: {vi: "Công cụ", en: "Tools"}, icon: "Wand"},
-      {id: "gallery", label: {vi: "Thư viện", en: "Gallery"}, icon: "Image"},
+      {id: "gallery", label: {vi: "Lịch sử", en: "History"}, icon: "Image"},
       {id: "support", label: {vi: "Hỗ trợ", en: "Support"}, icon: "Heart"},
       {id: "guide", label: {vi: "Hướng dẫn", en: "Guide"}, icon: "BookOpen"},
       {id: "about", label: {vi: "Giới thiệu", en: "About"}, icon: "Info"},
@@ -110,7 +110,7 @@ export const APP_CONFIG: AppConfig = {
         vi: "Xóa phông nền tự động, tách chủ thể chính xác.",
         en: "Automatically remove background, isolate subject accurately."
       },
-      engine: "Gemini 2.5 Flash",
+      engine: "Gemini 3.1 Flash",
       preview_image: "https://picsum.photos/400/305?grayscale",
       toolType: 'editing',
       defaultPrompt: "Remove the background of this image, keeping the main subject isolated on a pure white background. Ensure clean edges.",
@@ -123,11 +123,39 @@ export const APP_CONFIG: AppConfig = {
         vi: "Tăng độ nét, khử nhiễu và nâng cao chất lượng ảnh.",
         en: "Enhance sharpness, denoise and improve image quality."
       },
-      engine: "Gemini 2.5 Flash",
+      engine: "Gemini 3.1 Flash",
       preview_image: "https://picsum.photos/400/306?grayscale",
       toolType: 'editing',
       defaultPrompt: "Upscale this image to high resolution 4K, sharpen details, improve clarity, de-noise, maintain original content and colors. Make it look professional.",
       category: 'editing'
+    },
+    // --- VIDEO LAB (Tạo Video) ---
+    {
+      id: "video_ai_gen",
+      name: {vi: "Tạo Video AI", en: "AI Video Generation"},
+      description: {
+        vi: "Tạo video từ prompt hoặc ảnh keyframe với các model Kling, Veo và...",
+        en: "Generate video from prompt or keyframe image with Kling, Veo models..."
+      },
+      engine: "Kling",
+      preview_image: "https://picsum.photos/400/310?grayscale",
+      toolType: 'video',
+      category: 'video',
+      tag: "HOT",
+      isPremium: true
+    },
+    {
+      id: "motion_control_gen",
+      name: {vi: "Motion Control", en: "Motion Control"},
+      description: {
+        vi: "Upload ảnh nhân vật và video chuyển động để render video Motion Control...",
+        en: "Upload character image and motion video to render Motion Control video..."
+      },
+      engine: "Motion",
+      preview_image: "https://picsum.photos/400/311?grayscale",
+      toolType: 'video',
+      category: 'video',
+      isPremium: true
     }
   ]
 };

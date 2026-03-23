@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { GeneratedImage, Language, HistoryItem } from '../types';
 import { getAllImagesFromStorage, deleteImageFromStorage, cleanupExpiredImages, getHistoryRetentionDays, publishImageToShowcase } from '../services/storageService';
@@ -28,6 +28,19 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
   const [transactions, setTransactions] = useState<HistoryItem[]>([]);
   const [loadingTransactions, setLoadingTransactions] = useState(false);
   const retentionDays = getHistoryRetentionDays();
+  const hasActiveJobs = useMemo(
+    () => images.some((img) => img.status === 'processing' || img.status === 'queued'),
+    [images],
+  );
+
+  const loadImages = useCallback(async (silent = false) => {
+    try {
+      const storedImages = await getAllImagesFromStorage();
+      setImages(storedImages);
+    } catch (error) {
+      console.error("Failed to load gallery", error);
+    }
+  }, []);
 
   useEffect(() => {
     const init = async () => {
@@ -45,12 +58,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
         }
     };
     init();
-
-    const interval = setInterval(() => {
-        loadImages(true);
-    }, 5000);
-    return () => clearInterval(interval);
-  }, []);
+  }, [loadImages]);
 
   useEffect(() => {
       if (!supabase) return;
@@ -92,6 +100,14 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
   }, []);
 
   useEffect(() => {
+      if (!hasActiveJobs) return;
+      const interval = setInterval(() => {
+          loadImages(true);
+      }, 15000);
+      return () => clearInterval(interval);
+  }, [hasActiveJobs, loadImages]);
+
+  useEffect(() => {
       if (activeTab === 'transactions') {
           const fetchHistory = async () => {
               setLoadingTransactions(true);
@@ -107,15 +123,6 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
           fetchHistory();
       }
   }, [activeTab]);
-
-  const loadImages = async (silent = false) => {
-    try {
-      const storedImages = await getAllImagesFromStorage();
-      setImages(storedImages);
-    } catch (error) {
-      console.error("Failed to load gallery", error);
-    }
-  };
 
   const handleDelete = (e: React.MouseEvent, id: string, imageUrl?: string, userId?: string) => {
     e.stopPropagation();

@@ -22,7 +22,6 @@ import {
   getResolutionCostMap,
   applyServerAvailabilityToRuntimeModels,
   sanitizePricingEntriesWithRuntimeModels,
-  TST_CATALOG_CACHE_TTL_MS,
   tstServerToUi,
   uiServerToTst,
   uiSpeedToTst,
@@ -272,9 +271,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           }
       };
       loadCatalog();
-      const refreshTimer = window.setInterval(() => {
-          loadCatalog(true);
-      }, TST_CATALOG_CACHE_TTL_MS);
 
       const loadTutorialVideo = async () => {
           const videoConfig = await getTutorialVideo();
@@ -301,7 +297,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           }
       };
       loadTutorialVideo();
-      return () => window.clearInterval(refreshTimer);
   }, []);
   // -------------------------------
 

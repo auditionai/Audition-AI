@@ -25,7 +25,6 @@ import {
   getVideoCostBreakdown,
   getVideoModelSpecs,
   sanitizePricingEntriesWithRuntimeModels,
-  TST_CATALOG_CACHE_TTL_MS,
   tstServerToUi,
   tstSpeedToUi,
   uiServerToTst,
@@ -233,10 +232,6 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
           }
       };
       loadCatalog();
-      const refreshTimer = window.setInterval(() => {
-          loadCatalog(true);
-      }, TST_CATALOG_CACHE_TTL_MS);
-      return () => window.clearInterval(refreshTimer);
   }, [lang]);
 
   const [isConcurrencyExpanded, setIsConcurrencyExpanded] = useState(false);

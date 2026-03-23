@@ -49,7 +49,6 @@ import {
     filterAdminManagedPricingRows,
     getPricingRows,
     isAdminManagedPricingModel,
-    TST_CATALOG_CACHE_TTL_MS,
     tstServerToUi,
     tstSpeedToUi,
     isServerEnabledForModel,
@@ -545,8 +544,6 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       };
 
       refreshPricingView();
-      const refreshTimer = window.setInterval(refreshPricingView, TST_CATALOG_CACHE_TTL_MS);
-      return () => window.clearInterval(refreshTimer);
   }, [activeView, isAdmin]);
 
   const refreshData = async () => {

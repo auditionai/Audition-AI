@@ -116,13 +116,22 @@ export const Home: React.FC<HomeProps> = ({ lang, onSelectFeature, onNavigate, o
   const [isCheckedIn, setIsCheckedIn] = useState(true);
 
   useEffect(() => {
-    // Check status periodically to update UI if user checks in
     const checkStatus = () => {
-        getCheckinStatus().then(status => setIsCheckedIn(status.isCheckedInToday));
+        getCheckinStatus().then(status => setIsCheckedIn(status.isCheckedInToday)).catch(() => setIsCheckedIn(true));
     };
+    const handleVisibility = () => {
+        if (document.visibilityState === 'visible') {
+            checkStatus();
+        }
+    };
+
     checkStatus();
-    const interval = setInterval(checkStatus, 2000);
-    return () => clearInterval(interval);
+    window.addEventListener('focus', checkStatus);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+        window.removeEventListener('focus', checkStatus);
+        document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, []);
 
   return (

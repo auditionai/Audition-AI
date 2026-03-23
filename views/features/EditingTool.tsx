@@ -181,11 +181,14 @@ export const EditingTool: React.FC<EditingToolProps> = ({
 
   const selectedGenerationCost = getVertexEditToolCostBreakdown({
     toolId: feature.id,
+    tier: activeTier,
+    resolution,
     pricingOverrides,
   });
 
   const resolutionCostMap = getVertexEditResolutionCostMap({
     toolId: feature.id,
+    tier: activeTier,
     pricingOverrides,
   });
 

@@ -285,26 +285,41 @@ const ADMIN_MANAGED_MODEL_IDS = [
   'sharpen_upscale',
 ] as const;
 
-const VERTEX_EDIT_PRICING_ROWS = [
+const VERTEX_EDIT_PRICING_CONFIG = [
   {
     modelId: 'magic_editor_pro',
-    modelName: 'Chỉnh sửa ảnh',
-    defaultAuditionVcoin: 2,
-    configKey: 'default',
+    toolName: 'Chỉnh sửa ảnh',
+    tiers: {
+      flash: { '1K': 2, '2K': 3, '4K': 4 },
+      pro: { '1K': 4, '2K': 5, '4K': 6 },
+    },
   },
   {
     modelId: 'remove_bg_pro',
-    modelName: 'Tách nền',
-    defaultAuditionVcoin: 1,
-    configKey: 'default',
+    toolName: 'Tách nền',
+    tiers: {
+      flash: { '1K': 1, '2K': 1, '4K': 1 },
+    },
   },
   {
     modelId: 'sharpen_upscale',
-    modelName: 'Làm nét',
-    defaultAuditionVcoin: 1,
-    configKey: 'default',
+    toolName: 'Làm nét',
+    tiers: {
+      flash: { '1K': 1, '2K': 2, '4K': 3 },
+    },
   },
 ] as const;
+
+const buildVertexEditPricingKey = (tier: string, resolution: TstResolution) =>
+  `${tier}|${resolution.toLowerCase()}`;
+
+const parseVertexEditPricingKey = (configKey: string) => {
+  const [tier, resolution] = configKey.split('|');
+  return {
+    tier: normalizeModelId(tier || 'flash'),
+    resolution: ((resolution || '1k').toUpperCase()) as TstResolution,
+  };
+};
 
 export const isAdminManagedPricingModel = (modelId: string) => {
   const normalized = normalizeModelId(modelId);
@@ -321,30 +336,43 @@ export const filterAdminManagedRuntimeModels = <T extends { model: string }>(mod
   models.filter((model) => isAdminManagedPricingModel(model.model));
 
 export const getVertexEditPricingRows = (): TstPricingRow[] =>
-  VERTEX_EDIT_PRICING_ROWS.map((row) => ({
-    type: 'edit',
-    modelId: row.modelId,
-    modelName: row.modelName,
-    server: '',
-    resolution: undefined,
-    duration: undefined,
-    speed: undefined,
-    audio: false,
-    credits: 0,
-    vcoin: 0,
-    configKey: row.configKey,
-    defaultAuditionVcoin: row.defaultAuditionVcoin,
-  }));
+  VERTEX_EDIT_PRICING_CONFIG.flatMap((tool) =>
+    Object.entries(tool.tiers).flatMap(([tier, resolutions]) =>
+      (Object.entries(resolutions) as Array<[TstResolution, number]>).map(([resolution, defaultAuditionVcoin]) => ({
+        type: 'edit' as const,
+        modelId: tool.modelId,
+        modelName: `${tool.toolName} • ${tier === 'pro' ? 'Pro' : 'Flash'}`,
+        server: '',
+        resolution,
+        duration: undefined,
+        speed: undefined,
+        audio: false,
+        credits: 0,
+        vcoin: 0,
+        configKey: buildVertexEditPricingKey(tier, resolution),
+        defaultAuditionVcoin,
+      })),
+    ),
+  );
 
 export const getVertexEditToolCostBreakdown = ({
   toolId,
+  tier,
+  resolution,
   pricingOverrides = [],
 }: {
   toolId: string;
+  tier: TstGenerationTier;
+  resolution: TstResolution;
   pricingOverrides?: AuditionPricingOverride[];
 }): TstGenerationCostBreakdown => {
-  const manualRow = VERTEX_EDIT_PRICING_ROWS.find(
-    (row) => normalizeModelId(row.modelId) === normalizeModelId(toolId),
+  const normalizedToolId = normalizeModelId(toolId);
+  const normalizedTier = normalizeModelId(tier);
+  const configKey = buildVertexEditPricingKey(normalizedTier, resolution);
+  const manualRow = getVertexEditPricingRows().find(
+    (row) =>
+      normalizeModelId(row.modelId) === normalizedToolId &&
+      row.configKey === configKey,
   );
 
   if (!manualRow) {
@@ -353,31 +381,38 @@ export const getVertexEditToolCostBreakdown = ({
 
   const override = pricingOverrides.find(
     (item) =>
-      normalizeModelId(item.modelId) === normalizeModelId(toolId) &&
-      item.optionId === manualRow.configKey,
+      normalizeModelId(item.modelId) === normalizedToolId &&
+      item.optionId === configKey,
   );
 
   return {
     available: true,
     credits: 0,
-    vcoin: override?.auditionPriceVcoin ?? manualRow.defaultAuditionVcoin,
-    configKey: manualRow.configKey,
+    vcoin: override?.auditionPriceVcoin ?? manualRow.defaultAuditionVcoin ?? manualRow.vcoin ?? 0,
+    configKey,
     modelId: manualRow.modelId,
   };
 };
 
 export const getVertexEditResolutionCostMap = ({
   toolId,
+  tier,
   pricingOverrides = [],
 }: {
   toolId: string;
+  tier: TstGenerationTier;
   pricingOverrides?: AuditionPricingOverride[];
 }) => {
-  const breakdown = getVertexEditToolCostBreakdown({ toolId, pricingOverrides });
   return {
-    '1K': { vcoin: breakdown.vcoin },
-    '2K': { vcoin: breakdown.vcoin },
-    '4K': { vcoin: breakdown.vcoin },
+    '1K': {
+      vcoin: getVertexEditToolCostBreakdown({ toolId, tier, resolution: '1K', pricingOverrides }).vcoin,
+    },
+    '2K': {
+      vcoin: getVertexEditToolCostBreakdown({ toolId, tier, resolution: '2K', pricingOverrides }).vcoin,
+    },
+    '4K': {
+      vcoin: getVertexEditToolCostBreakdown({ toolId, tier, resolution: '4K', pricingOverrides }).vcoin,
+    },
   } as Record<TstResolution, { vcoin: number }>;
 };
 

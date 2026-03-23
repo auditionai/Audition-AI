@@ -5,6 +5,7 @@ import {
   fetchTstModels,
   fetchTstPricing,
   filterAdminManagedPricingEntries,
+  getVertexEditPricingRows,
   isAdminManagedPricingModel,
   sanitizePricingEntriesWithRuntimeModels,
   type TstServerAvailabilityConfig,
@@ -214,7 +215,20 @@ export const syncTSTPrices = async (): Promise<{success: boolean, error?: string
       };
     });
 
-    const validKeys = new Set(rows.map((row) => row.model_id + '::' + row.option_id));
+    const manualVertexRows = getVertexEditPricingRows().map((row) => ({
+      model_id: row.modelId,
+      option_id: row.configKey,
+      tst_price_credits: row.credits,
+      audition_price_vcoin:
+        currentPricingMap.get(`${row.modelId}::${row.configKey}`)?.audition_price_vcoin ??
+        row.defaultAuditionVcoin ??
+        row.vcoin,
+      updated_at: new Date().toISOString(),
+    }));
+
+    const allRows = [...rows, ...manualVertexRows];
+
+    const validKeys = new Set(allRows.map((row) => row.model_id + '::' + row.option_id));
     const staleIds = currentPricing
       .filter((row) => !isAdminManagedPricingModel(row.model_id) || !validKeys.has(row.model_id + '::' + row.option_id))
       .map((row) => row.id)
@@ -225,7 +239,7 @@ export const syncTSTPrices = async (): Promise<{success: boolean, error?: string
       if (deleteError) throw deleteError;
     }
 
-    for (const row of rows) {
+    for (const row of allRows) {
       const { error } = await supabase.from('model_pricing').upsert(row, { onConflict: 'model_id, option_id' });
       if (error) throw error;
     }

@@ -3,7 +3,7 @@ import modelsMarkdown from '../models.md?raw';
 export type TstGenerationTier = 'flash' | 'pro';
 export type TstGenerationSpeed = 'fast' | 'slow';
 export type TstResolution = '1K' | '2K' | '4K';
-export type TstMediaType = 'image' | 'video' | 'motion-control';
+export type TstMediaType = 'image' | 'video' | 'motion-control' | 'edit';
 
 export interface TstPricingEntry {
   model: string;
@@ -97,6 +97,7 @@ export interface TstPricingRow {
   credits: number;
   vcoin: number;
   configKey: string;
+  defaultAuditionVcoin?: number;
 }
 
 type ParsedMarkdownModel = {
@@ -266,6 +267,9 @@ export const ADMIN_MANAGED_MODEL_LABELS = [
   'Kling 3.0',
   'Motion Control 2.6',
   'Motion Control 3.0',
+  'Chỉnh sửa ảnh',
+  'Tách nền',
+  'Làm nét',
 ] as const;
 
 const ADMIN_MANAGED_MODEL_IDS = [
@@ -276,6 +280,30 @@ const ADMIN_MANAGED_MODEL_IDS = [
   'kling-3.0-video',
   'motion-control-2.6',
   'motion-control-3.0',
+  'magic_editor_pro',
+  'remove_bg_pro',
+  'sharpen_upscale',
+] as const;
+
+const VERTEX_EDIT_PRICING_ROWS = [
+  {
+    modelId: 'magic_editor_pro',
+    modelName: 'Chỉnh sửa ảnh',
+    defaultAuditionVcoin: 2,
+    configKey: 'default',
+  },
+  {
+    modelId: 'remove_bg_pro',
+    modelName: 'Tách nền',
+    defaultAuditionVcoin: 1,
+    configKey: 'default',
+  },
+  {
+    modelId: 'sharpen_upscale',
+    modelName: 'Làm nét',
+    defaultAuditionVcoin: 1,
+    configKey: 'default',
+  },
 ] as const;
 
 export const isAdminManagedPricingModel = (modelId: string) => {
@@ -291,6 +319,67 @@ export const filterAdminManagedPricingRows = <T extends { modelId: string }>(row
 
 export const filterAdminManagedRuntimeModels = <T extends { model: string }>(models: T[]) =>
   models.filter((model) => isAdminManagedPricingModel(model.model));
+
+export const getVertexEditPricingRows = (): TstPricingRow[] =>
+  VERTEX_EDIT_PRICING_ROWS.map((row) => ({
+    type: 'edit',
+    modelId: row.modelId,
+    modelName: row.modelName,
+    server: '',
+    resolution: undefined,
+    duration: undefined,
+    speed: undefined,
+    audio: false,
+    credits: 0,
+    vcoin: 0,
+    configKey: row.configKey,
+    defaultAuditionVcoin: row.defaultAuditionVcoin,
+  }));
+
+export const getVertexEditToolCostBreakdown = ({
+  toolId,
+  pricingOverrides = [],
+}: {
+  toolId: string;
+  pricingOverrides?: AuditionPricingOverride[];
+}): TstGenerationCostBreakdown => {
+  const manualRow = VERTEX_EDIT_PRICING_ROWS.find(
+    (row) => normalizeModelId(row.modelId) === normalizeModelId(toolId),
+  );
+
+  if (!manualRow) {
+    return { available: false, credits: 0, vcoin: 0, modelId: toolId };
+  }
+
+  const override = pricingOverrides.find(
+    (item) =>
+      normalizeModelId(item.modelId) === normalizeModelId(toolId) &&
+      item.optionId === manualRow.configKey,
+  );
+
+  return {
+    available: true,
+    credits: 0,
+    vcoin: override?.auditionPriceVcoin ?? manualRow.defaultAuditionVcoin,
+    configKey: manualRow.configKey,
+    modelId: manualRow.modelId,
+  };
+};
+
+export const getVertexEditResolutionCostMap = ({
+  toolId,
+  pricingOverrides = [],
+}: {
+  toolId: string;
+  pricingOverrides?: AuditionPricingOverride[];
+}) => {
+  const breakdown = getVertexEditToolCostBreakdown({ toolId, pricingOverrides });
+  return {
+    '1K': { vcoin: breakdown.vcoin },
+    '2K': { vcoin: breakdown.vcoin },
+    '4K': { vcoin: breakdown.vcoin },
+  } as Record<TstResolution, { vcoin: number }>;
+};
 
 export const sanitizePricingEntriesWithRuntimeModels = (
   pricingEntries: TstPricingEntry[] = [],
@@ -1222,8 +1311,7 @@ export const getPricingRows = async (forceRefresh = false): Promise<TstPricingRo
     };
   });
 
-  return rows
-    .filter((row): row is TstPricingRow => row !== null)
+  return [...rows.filter((row): row is TstPricingRow => row !== null), ...getVertexEditPricingRows()]
     .sort((a, b) => {
       if (a.type !== b.type) return a.type.localeCompare(b.type);
       if (a.modelName !== b.modelName) return a.modelName.localeCompare(b.modelName);

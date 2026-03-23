@@ -598,7 +598,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           for (const row of pricingRows) {
               const key = `${row.modelId}::${row.configKey}`;
               const saved = modelPricing.find((item) => item.model_id === row.modelId && item.option_id === row.configKey);
-              next[key] = prev[key] ?? String(saved?.audition_price_vcoin ?? row.vcoin);
+              next[key] = prev[key] ?? String(saved?.audition_price_vcoin ?? row.defaultAuditionVcoin ?? row.vcoin);
           }
           return next;
       });
@@ -621,7 +621,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const getDraftAuditionPrice = (row: TstPricingRow) => {
       const draftKey = getPricingLookupKey(row.modelId, row.configKey);
       const savedPricing = getSavedAuditionPrice(row);
-      const fallbackValue = savedPricing?.audition_price_vcoin ?? row.vcoin;
+      const fallbackValue = savedPricing?.audition_price_vcoin ?? row.defaultAuditionVcoin ?? row.vcoin;
       const rawDraft = pricingDrafts[draftKey];
       const parsedDraft = Number(rawDraft);
       return Number.isFinite(parsedDraft) && parsedDraft > 0 ? parsedDraft : fallbackValue;
@@ -632,7 +632,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       const rawDraft = pricingDrafts[draftKey];
       if (rawDraft === undefined) return false;
       const savedPricing = getSavedAuditionPrice(row);
-      const baseline = savedPricing?.audition_price_vcoin ?? row.vcoin;
+      const baseline = savedPricing?.audition_price_vcoin ?? row.defaultAuditionVcoin ?? row.vcoin;
       const parsedDraft = Number(rawDraft);
 
       if (!Number.isFinite(parsedDraft) || parsedDraft <= 0) {
@@ -658,7 +658,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   }, [dirtyPricingCount]);
 
   const pricingServerGroups = Array.from(
-      pricingRows.reduce((map, row) => {
+      pricingRows
+      .filter((row) => row.type !== 'edit' && !!row.server)
+      .reduce((map, row) => {
           const existing = map.get(row.modelId) || {
               modelId: row.modelId,
               modelName: row.modelName,
@@ -1866,7 +1868,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       <div>
                           <h2 className="text-lg md:text-2xl font-bold text-white">Bảng Giá Dịch Vụ AI</h2>
                           <p className="text-sm text-slate-400 mt-1">
-                              TST là chi phí gốc live theo Trạm Sáng Tạo. AUDITION AI là giá bán bạn tự chỉnh để tạo lợi nhuận.
+                              TST là chi phí gốc live theo Trạm Sáng Tạo. 3 tool chỉnh sửa ảnh đang dùng giá riêng trên Vertex/AUDITION AI để bạn chỉnh độc lập.
                           </p>
                       </div>
                       <div className="flex gap-2">
@@ -1894,7 +1896,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4">
                           <div className="text-xs uppercase tracking-wider text-slate-500 font-bold">Cấu hình live</div>
                           <div className="mt-2 text-3xl font-bold text-white">{pricingRows.length}</div>
-                          <div className="text-xs text-slate-400 mt-1">Bao gồm image, video và motion control.</div>
+                          <div className="text-xs text-slate-400 mt-1">Bao gồm image, video, motion control và 3 tool Vertex.</div>
                       </div>
                       <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4">
                           <div className="text-xs uppercase tracking-wider text-slate-500 font-bold">Models</div>
@@ -2036,7 +2038,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               ? 'Ảnh'
                                               : row.type === 'video'
                                                   ? 'Video'
-                                                  : 'Motion';
+                                                  : row.type === 'motion-control'
+                                                      ? 'Motion'
+                                                      : 'Edit';
                                           const draftKey = getPricingLookupKey(row.modelId, row.configKey);
                                           const savedPricing = getSavedAuditionPrice(row);
                                           const rowIsDirty = isPricingRowDirty(row);
@@ -2068,14 +2072,14 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                   <td className="px-4 py-3 text-white uppercase">{row.duration || '-'}</td>
                                                   <td className="px-4 py-3 text-white">{tstSpeedToUi(row.speed) || '-'}</td>
                                                   <td className="px-4 py-3 text-center text-white">{row.audio ? 'Có' : '-'}</td>
-                                                  <td className="px-4 py-3 text-right font-mono text-audi-cyan">{row.credits}</td>
-                                                  <td className="px-4 py-3 text-right font-mono text-slate-200">{row.vcoin} VC</td>
+                                                  <td className="px-4 py-3 text-right font-mono text-audi-cyan">{row.type === 'edit' ? '-' : row.credits}</td>
+                                                  <td className="px-4 py-3 text-right font-mono text-slate-200">{row.type === 'edit' ? '-' : `${row.vcoin} VC`}</td>
                                                   <td className="px-4 py-3">
                                                       <div className="flex items-center justify-end gap-2">
                                                           <input
                                                               type="number"
                                                               min="1"
-                                                              value={pricingDrafts[draftKey] ?? savedPricing?.audition_price_vcoin ?? row.vcoin}
+                                                              value={pricingDrafts[draftKey] ?? savedPricing?.audition_price_vcoin ?? row.defaultAuditionVcoin ?? row.vcoin}
                                                               onChange={(e) =>
                                                                   setPricingDrafts((prev) => ({
                                                                       ...prev,

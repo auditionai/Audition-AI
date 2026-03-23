@@ -18,9 +18,9 @@ import {
   getCompatibleGenerationResolutions,
   getCompatibleGenerationServers,
   getCompatibleGenerationSpeeds,
-  getGenerationCostBreakdown,
   getGenerationModelId,
-  getResolutionCostMap,
+  getVertexEditResolutionCostMap,
+  getVertexEditToolCostBreakdown,
   sanitizePricingEntriesWithRuntimeModels,
   TST_CATALOG_CACHE_TTL_MS,
   tstServerToUi,
@@ -179,20 +179,13 @@ export const EditingTool: React.FC<EditingToolProps> = ({
     serverId,
   });
 
-  const selectedGenerationCost = getGenerationCostBreakdown({
-    tier: activeTier,
-    resolution,
-    speed: speedId,
-    serverId,
-    pricingEntries,
+  const selectedGenerationCost = getVertexEditToolCostBreakdown({
+    toolId: feature.id,
     pricingOverrides,
   });
 
-  const resolutionCostMap = getResolutionCostMap({
-    tier: activeTier,
-    speed: speedId,
-    serverId,
-    pricingEntries,
+  const resolutionCostMap = getVertexEditResolutionCostMap({
+    toolId: feature.id,
     pricingOverrides,
   });
 

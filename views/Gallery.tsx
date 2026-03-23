@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+﻿import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { GeneratedImage, Language, HistoryItem } from '../types';
 import { getAllImagesFromStorage, deleteImageFromStorage, cleanupExpiredImages, getHistoryRetentionDays, publishImageToShowcase } from '../services/storageService';
@@ -127,10 +127,10 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
   const handleDelete = (e: React.MouseEvent, id: string, imageUrl?: string, userId?: string) => {
     e.stopPropagation();
     confirm({
-        title: lang === 'vi' ? 'Xóa ảnh?' : 'Delete Image?',
-        message: lang === 'vi' ? 'Bạn có chắc chắn muốn xóa vĩnh viễn hình ảnh này không?' : 'Are you sure you want to permanently delete this image?',
-        confirmText: lang === 'vi' ? 'Xóa ngay' : 'Delete',
-        cancelText: lang === 'vi' ? 'Hủy' : 'Cancel',
+        title: lang === 'vi' ? 'XÃ³a áº£nh?' : 'Delete Image?',
+        message: lang === 'vi' ? 'Báº¡n cÃ³ cháº¯c cháº¯n muá»‘n xÃ³a vÄ©nh viá»…n hÃ¬nh áº£nh nÃ y khÃ´ng?' : 'Are you sure you want to permanently delete this image?',
+        confirmText: lang === 'vi' ? 'XÃ³a ngay' : 'Delete',
+        cancelText: lang === 'vi' ? 'Há»§y' : 'Cancel',
         isDanger: true,
         onConfirm: async () => {
             await deleteImageFromStorage(id, userId, imageUrl);
@@ -141,7 +141,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                 newSet.delete(id);
                 return newSet;
             });
-            notify(lang === 'vi' ? 'Đã xóa ảnh.' : 'Image deleted.', 'info');
+            notify(lang === 'vi' ? 'ÄÃ£ xÃ³a áº£nh.' : 'Image deleted.', 'info');
         }
     });
   };
@@ -149,10 +149,10 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
   const handleDeleteSelected = () => {
       if (selectedIds.size === 0) return;
       confirm({
-          title: lang === 'vi' ? 'Xóa các mục đã chọn?' : 'Delete selected items?',
-          message: lang === 'vi' ? `Bạn có chắc chắn muốn xóa ${selectedIds.size} mục này không?` : `Are you sure you want to delete these ${selectedIds.size} items?`,
-          confirmText: lang === 'vi' ? 'Xóa ngay' : 'Delete',
-          cancelText: lang === 'vi' ? 'Hủy' : 'Cancel',
+          title: lang === 'vi' ? 'XÃ³a cÃ¡c má»¥c Ä‘Ã£ chá»n?' : 'Delete selected items?',
+          message: lang === 'vi' ? `Báº¡n cÃ³ cháº¯c cháº¯n muá»‘n xÃ³a ${selectedIds.size} má»¥c nÃ y khÃ´ng?` : `Are you sure you want to delete these ${selectedIds.size} items?`,
+          confirmText: lang === 'vi' ? 'XÃ³a ngay' : 'Delete',
+          cancelText: lang === 'vi' ? 'Há»§y' : 'Cancel',
           isDanger: true,
           onConfirm: async () => {
               for (const id of Array.from(selectedIds)) {
@@ -162,14 +162,14 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
               triggerPoll();
               setImages(prev => prev.filter(img => !selectedIds.has(img.id)));
               setSelectedIds(new Set());
-              notify(lang === 'vi' ? 'Đã xóa các mục đã chọn.' : 'Selected items deleted.', 'info');
+              notify(lang === 'vi' ? 'ÄÃ£ xÃ³a cÃ¡c má»¥c Ä‘Ã£ chá»n.' : 'Selected items deleted.', 'info');
           }
       });
   };
 
   const handleDownload = async (imageUrl: string, filename: string, assetKind: 'image' | 'video' = 'image') => {
       if (!imageUrl || imageUrl.startsWith('blob:')) return;
-      notify(lang === 'vi' ? 'Đang xử lý tải xuống...' : 'Processing download...', 'info');
+      notify(lang === 'vi' ? 'Äang xá»­ lÃ½ táº£i xuá»‘ng...' : 'Processing download...', 'info');
 
       try {
           let blob: Blob;
@@ -213,11 +213,11 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
           document.body.removeChild(link);
           window.URL.revokeObjectURL(url);
 
-          notify(lang === 'vi' ? 'Đã lưu ảnh thành công!' : 'Download successful!', 'success');
+          notify(lang === 'vi' ? 'ÄÃ£ lÆ°u áº£nh thÃ nh cÃ´ng!' : 'Download successful!', 'success');
       } catch (e) {
           console.error("Download failed completely", e);
           window.open(imageUrl, '_blank');
-          notify(lang === 'vi' ? 'Lỗi tải file. Đã mở ảnh trong tab mới.' : 'Download failed. Image opened in new tab.', 'warning');
+          notify(lang === 'vi' ? 'Lá»—i táº£i file. ÄÃ£ má»Ÿ áº£nh trong tab má»›i.' : 'Download failed. Image opened in new tab.', 'warning');
       }
   };
 
@@ -252,24 +252,33 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
 
   const getFailedAssetTitle = (img: GeneratedImage) =>
       getAssetKind(img) === 'video'
-          ? (lang === 'vi' ? 'Tạo video thất bại' : 'Video generation failed')
-          : (lang === 'vi' ? 'Tạo ảnh thất bại' : 'Image generation failed');
+          ? (lang === 'vi' ? 'Táº¡o video tháº¥t báº¡i' : 'Video generation failed')
+          : (lang === 'vi' ? 'Táº¡o áº£nh tháº¥t báº¡i' : 'Image generation failed');
 
   const getProcessingAssetTitle = (img: GeneratedImage) =>
       getAssetKind(img) === 'video'
-          ? (lang === 'vi' ? 'Đang tạo video...' : 'Video is generating...')
-          : (lang === 'vi' ? 'Đang tạo ảnh...' : 'Image is generating...');
+          ? (lang === 'vi' ? 'Äang táº¡o video...' : 'Video is generating...')
+          : (lang === 'vi' ? 'Äang táº¡o áº£nh...' : 'Image is generating...');
 
   const getFailedAssetMessage = (img: GeneratedImage) =>
       img.error?.trim() || (lang === 'vi'
-          ? 'Tiến trình đã thất bại nhưng chưa có mô tả lỗi chi tiết.'
+          ? 'Tiáº¿n trÃ¬nh Ä‘Ã£ tháº¥t báº¡i nhÆ°ng chÆ°a cÃ³ mÃ´ táº£ lá»—i chi tiáº¿t.'
           : 'The generation failed without a detailed error message.');
 
   const getProcessingStageLabel = (img: GeneratedImage) => {
+      const queueProgress = Math.max(0, Math.min(100, img.progress || 0));
+
       if (img.status === 'failed') return lang === 'vi' ? 'Thất bại' : 'Failed';
       if (!img.status || img.status === 'completed') return lang === 'vi' ? 'Hoàn thành' : 'Completed';
       if (img.jobId) return lang === 'vi' ? 'Đang tạo ảnh' : 'Generating';
-      if (img.status === 'queued') return lang === 'vi' ? 'Đang chuẩn bị' : 'Preparing';
+
+      if (img.status === 'queued' && queueProgress >= 45) {
+          return lang === 'vi' ? 'Đang tổng hợp' : 'Synthesizing';
+      }
+
+      if (img.status === 'queued') {
+          return lang === 'vi' ? 'Đang chuẩn bị' : 'Preparing';
+      }
 
       const progress = Math.max(0, Math.min(100, img.progress || 0));
       if (progress >= 20) {
@@ -277,17 +286,17 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
       }
 
       return lang === 'vi' ? 'Đang xử lý' : 'Processing';
-  };
+  }; 
 
   const handlePublish = async (image: GeneratedImage) => {
       try {
           const updatedImage = await publishImageToShowcase(image);
           setImages((prev) => prev.map((item) => item.id === updatedImage.id ? updatedImage : item));
           setViewingImage(updatedImage);
-          notify(lang === 'vi' ? 'Đã chia sẻ ảnh lên trang chủ và lưu trữ lâu dài.' : 'Image published to showcase and stored long-term.', 'success');
+          notify(lang === 'vi' ? 'ÄÃ£ chia sáº» áº£nh lÃªn trang chá»§ vÃ  lÆ°u trá»¯ lÃ¢u dÃ i.' : 'Image published to showcase and stored long-term.', 'success');
       } catch (error) {
           console.error('Publish failed', error);
-          notify(error instanceof Error ? error.message : (lang === 'vi' ? 'Chia sẻ ảnh thất bại.' : 'Failed to publish image.'), 'error');
+          notify(error instanceof Error ? error.message : (lang === 'vi' ? 'Chia sáº» áº£nh tháº¥t báº¡i.' : 'Failed to publish image.'), 'error');
       }
   };
 
@@ -323,13 +332,13 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
 
   const getBadgeLabel = (type: string) => {
       switch(type) {
-          case 'usage': return 'SỬ DỤNG';
-          case 'topup': return 'NẠP TIỀN';
-          case 'pending_topup': return 'CHỜ DUYỆT';
-          case 'reward': return 'THƯỞNG';
+          case 'usage': return 'Sá»¬ Dá»¤NG';
+          case 'topup': return 'Náº P TIá»€N';
+          case 'pending_topup': return 'CHá»œ DUYá»†T';
+          case 'reward': return 'THÆ¯á»žNG';
           case 'giftcode': return 'GIFTCODE';
-          case 'refund': return 'HOÀN TIỀN';
-          default: return 'KHÁC';
+          case 'refund': return 'HOÃ€N TIá»€N';
+          default: return 'KHÃC';
       }
   }
 
@@ -340,10 +349,10 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
         <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 flex items-start gap-3 mb-6 shrink-0">
             <Icons.AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
             <div className="space-y-1">
-                <h4 className="text-sm font-bold text-red-400">LƯU Ý QUAN TRỌNG: Chính sách lưu trữ lịch sử tạo</h4>
+                <h4 className="text-sm font-bold text-red-400">LÆ¯U Ã QUAN TRá»ŒNG: ChÃ­nh sÃ¡ch lÆ°u trá»¯ lá»‹ch sá»­ táº¡o</h4>
                 <p className="text-xs text-red-400/80 leading-relaxed">
-                    Ảnh và video trong lịch sử tạo sẽ tự động bị xóa sau <b className="text-red-500">{retentionDays} ngày</b> nếu chưa publish.
-                    Giao dịch Vcoin vẫn được giữ lại. Ảnh đã publish sẽ được lưu trữ lâu dài và không bị xóa theo mốc này.
+                    áº¢nh vÃ  video trong lá»‹ch sá»­ táº¡o sáº½ tá»± Ä‘á»™ng bá»‹ xÃ³a sau <b className="text-red-500">{retentionDays} ngÃ y</b> náº¿u chÆ°a publish.
+                    Giao dá»‹ch Vcoin váº«n Ä‘Æ°á»£c giá»¯ láº¡i. áº¢nh Ä‘Ã£ publish sáº½ Ä‘Æ°á»£c lÆ°u trá»¯ lÃ¢u dÃ i vÃ  khÃ´ng bá»‹ xÃ³a theo má»‘c nÃ y.
                 </p>
             </div>
         </div>
@@ -356,24 +365,24 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                         onClick={() => setActiveTab('generation')}
                         className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'generation' ? 'bg-white/10 text-white shadow-sm' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
                     >
-                        {lang === 'vi' ? 'Lịch sử tạo' : 'Generation History'}
+                        {lang === 'vi' ? 'Lá»‹ch sá»­ táº¡o' : 'Generation History'}
                     </button>
                     <button
                         onClick={() => setActiveTab('transactions')}
                         className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'transactions' ? 'bg-white/10 text-white shadow-sm' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
                     >
-                        {lang === 'vi' ? 'Giao dịch Vcoin' : 'Vcoin Transactions'}
+                        {lang === 'vi' ? 'Giao dá»‹ch Vcoin' : 'Vcoin Transactions'}
                     </button>
                 </div>
 
                 {activeTab === 'generation' && (
                     <div className="flex items-center gap-4 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 custom-scrollbar">
-                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">LỌC THEO:</span>
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Lá»ŒC THEO:</span>
                         <div className="flex gap-2">
-                            <button onClick={() => setFilter('all')} className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-colors whitespace-nowrap ${filter === 'all' ? 'bg-audi-cyan/20 border-audi-cyan/50 text-audi-cyan' : 'border-white/10 text-slate-400 hover:bg-white/5'}`}>Tất cả</button>
-                            <button onClick={() => setFilter('completed')} className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-colors whitespace-nowrap ${filter === 'completed' ? 'bg-green-500/20 border-green-500/50 text-green-400' : 'border-white/10 text-slate-400 hover:bg-white/5'}`}>Hoàn thành</button>
-                            <button onClick={() => setFilter('failed')} className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-colors whitespace-nowrap ${filter === 'failed' ? 'bg-red-500/20 border-red-500/50 text-red-400' : 'border-white/10 text-slate-400 hover:bg-white/5'}`}>Thất bại</button>
-                            <button onClick={() => setFilter('processing')} className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-colors whitespace-nowrap ${filter === 'processing' || filter === 'queued' ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-400' : 'border-white/10 text-slate-400 hover:bg-white/5'}`}>Đang chờ</button>
+                            <button onClick={() => setFilter('all')} className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-colors whitespace-nowrap ${filter === 'all' ? 'bg-audi-cyan/20 border-audi-cyan/50 text-audi-cyan' : 'border-white/10 text-slate-400 hover:bg-white/5'}`}>Táº¥t cáº£</button>
+                            <button onClick={() => setFilter('completed')} className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-colors whitespace-nowrap ${filter === 'completed' ? 'bg-green-500/20 border-green-500/50 text-green-400' : 'border-white/10 text-slate-400 hover:bg-white/5'}`}>HoÃ n thÃ nh</button>
+                            <button onClick={() => setFilter('failed')} className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-colors whitespace-nowrap ${filter === 'failed' ? 'bg-red-500/20 border-red-500/50 text-red-400' : 'border-white/10 text-slate-400 hover:bg-white/5'}`}>Tháº¥t báº¡i</button>
+                            <button onClick={() => setFilter('processing')} className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-colors whitespace-nowrap ${filter === 'processing' || filter === 'queued' ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-400' : 'border-white/10 text-slate-400 hover:bg-white/5'}`}>Äang chá»</button>
                         </div>
                         <div className="w-px h-6 bg-white/10 mx-2 hidden md:block"></div>
                         <button
@@ -382,7 +391,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                             className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold transition-colors whitespace-nowrap ${selectedIds.size > 0 ? 'text-red-400 hover:bg-red-500/10' : 'text-slate-600 cursor-not-allowed'}`}
                         >
                             <Icons.Trash className="w-4 h-4" />
-                            {lang === 'vi' ? 'Xóa trang này' : 'Delete selected'}
+                            {lang === 'vi' ? 'XÃ³a trang nÃ y' : 'Delete selected'}
                         </button>
                     </div>
                 )}
@@ -403,18 +412,18 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                     />
                                 </th>
                                 <th className="px-6 py-4">ASSET PREVIEW</th>
-                                <th className="px-6 py-4">LOẠI</th>
-                                <th className="px-6 py-4">THỜI GIAN</th>
-                                <th className="px-6 py-4">CHI PHÍ</th>
-                                <th className="px-6 py-4">TRẠNG THÁI</th>
-                                <th className="px-6 py-4 text-right">HÀNH ĐỘNG</th>
+                                <th className="px-6 py-4">LOáº I</th>
+                                <th className="px-6 py-4">THá»œI GIAN</th>
+                                <th className="px-6 py-4">CHI PHÃ</th>
+                                <th className="px-6 py-4">TRáº NG THÃI</th>
+                                <th className="px-6 py-4 text-right">HÃ€NH Äá»˜NG</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-white/5">
                             {loadingImages ? (
                                 <tr><td colSpan={7} className="text-center py-12"><Icons.Loader className="w-6 h-6 animate-spin mx-auto text-audi-cyan" /></td></tr>
                             ) : filteredImages.length === 0 ? (
-                                <tr><td colSpan={7} className="text-center py-12 text-slate-500 italic">Không có dữ liệu</td></tr>
+                                <tr><td colSpan={7} className="text-center py-12 text-slate-500 italic">KhÃ´ng cÃ³ dá»¯ liá»‡u</td></tr>
                             ) : filteredImages.map(img => {
                                 const isCompleted = !img.status || img.status === 'completed';
                                 const isFailed = img.status === 'failed';
@@ -474,12 +483,12 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                         <td className="px-6 py-4">
                                             {isCompleted && (
                                                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/20 text-[10px] font-bold uppercase tracking-wider">
-                                                    <div className="w-1.5 h-1.5 rounded-full bg-green-500"></div> Hoàn thành
+                                                    <div className="w-1.5 h-1.5 rounded-full bg-green-500"></div> HoÃ n thÃ nh
                                                 </span>
                                             )}
                                             {isFailed && (
                                                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 text-[10px] font-bold uppercase tracking-wider">
-                                                    <div className="w-1.5 h-1.5 rounded-full bg-red-500"></div> Thất bại
+                                                    <div className="w-1.5 h-1.5 rounded-full bg-red-500"></div> Tháº¥t báº¡i
                                                 </span>
                                             )}
                                             {isProcessing && (
@@ -493,7 +502,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                                             <div className={`h-full rounded-full transition-all duration-500 ${img.status === 'queued' ? 'bg-yellow-400' : 'bg-audi-cyan'}`} style={{ width: `${Math.max(0, Math.min(100, img.progress || 0))}%` }} />
                                                         </div>
                                                         <div className="text-[10px] text-slate-500 mt-1">
-                                                            {getProcessingStageLabel(img)} • {Math.max(0, Math.min(100, img.progress || 0))}% {img.jobId ? `• ${img.jobId.slice(0, 10)}` : ''}
+                                                            {getProcessingStageLabel(img)} â€¢ {Math.max(0, Math.min(100, img.progress || 0))}% {img.jobId ? `â€¢ ${img.jobId.slice(0, 10)}` : ''}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -505,7 +514,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                                     <button
                                                         onClick={() => handleDownload(img.url, getDownloadFilename(img), getAssetKind(img))}
                                                         className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
-                                                        title="Tải xuống"
+                                                        title="Táº£i xuá»‘ng"
                                                     >
                                                         <Icons.Download className="w-4 h-4" />
                                                     </button>
@@ -513,7 +522,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                                 <button
                                                     onClick={(e) => handleDelete(e, img.id, img.url, img.userId)}
                                                     className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                                                    title="Xóa"
+                                                    title="XÃ³a"
                                                 >
                                                     <Icons.Trash className="w-4 h-4" />
                                                 </button>
@@ -528,18 +537,18 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                     <table className="w-full text-left text-sm text-slate-400">
                         <thead className="text-xs uppercase bg-black/20 text-slate-500 font-bold tracking-wider border-b border-white/5">
                             <tr>
-                                <th className="px-6 py-4">THỜI GIAN</th>
-                                <th className="px-6 py-4">NỘI DUNG</th>
-                                <th className="px-6 py-4">LOẠI GD</th>
+                                <th className="px-6 py-4">THá»œI GIAN</th>
+                                <th className="px-6 py-4">Ná»˜I DUNG</th>
+                                <th className="px-6 py-4">LOáº I GD</th>
                                 <th className="px-6 py-4">VCOIN</th>
-                                <th className="px-6 py-4 text-right">TRẠNG THÁI</th>
+                                <th className="px-6 py-4 text-right">TRáº NG THÃI</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-white/5">
                             {loadingTransactions ? (
                                 <tr><td colSpan={5} className="text-center py-12"><Icons.Loader className="w-6 h-6 animate-spin mx-auto text-audi-cyan" /></td></tr>
                             ) : transactions.length === 0 ? (
-                                <tr><td colSpan={5} className="text-center py-12 text-slate-500 italic">Chưa có giao dịch nào</td></tr>
+                                <tr><td colSpan={5} className="text-center py-12 text-slate-500 italic">ChÆ°a cÃ³ giao dá»‹ch nÃ o</td></tr>
                             ) : transactions.map(item => (
                                 <tr key={item.id} className="hover:bg-white/[0.02] transition-colors group">
                                     <td className="px-6 py-4 font-mono text-xs">{new Date(item.createdAt).toLocaleString()}</td>
@@ -559,15 +568,15 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                         <div className="flex items-center justify-end">
                                             {item.status === 'success' ? (
                                                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/20 text-[10px] font-bold uppercase tracking-wider">
-                                                    <Icons.Check className="w-3 h-3" /> Thành công
+                                                    <Icons.Check className="w-3 h-3" /> ThÃ nh cÃ´ng
                                                 </span>
                                             ) : item.status === 'pending' ? (
                                                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 text-[10px] font-bold uppercase tracking-wider">
-                                                    <Icons.Loader className="w-3 h-3 animate-spin" /> Đang chờ
+                                                    <Icons.Loader className="w-3 h-3 animate-spin" /> Äang chá»
                                                 </span>
                                             ) : (
                                                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 text-[10px] font-bold uppercase tracking-wider">
-                                                    <Icons.X className="w-3 h-3" /> Thất bại
+                                                    <Icons.X className="w-3 h-3" /> Tháº¥t báº¡i
                                                 </span>
                                             )}
                                         </div>
@@ -582,7 +591,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
             {/* Footer / Pagination info */}
             <div className="p-4 border-t border-white/10 flex items-center justify-between text-xs text-slate-500">
                 <div>
-                    Hiển thị <span className="font-bold text-white">1-{activeTab === 'generation' ? filteredImages.length : transactions.length}</span> trong <span className="font-bold text-white">{activeTab === 'generation' ? filteredImages.length : transactions.length}</span> kết quả
+                    Hiá»ƒn thá»‹ <span className="font-bold text-white">1-{activeTab === 'generation' ? filteredImages.length : transactions.length}</span> trong <span className="font-bold text-white">{activeTab === 'generation' ? filteredImages.length : transactions.length}</span> káº¿t quáº£
                 </div>
             </div>
         </div>
@@ -613,7 +622,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                 ) : (
                                     <Icons.Image className="w-16 h-16 mb-4 opacity-50" />
                                 )}
-                                <p>{viewingImage.status === 'failed' ? (lang === 'vi' ? 'Tạo ảnh thất bại' : 'Image generation failed') : viewingImage.status === 'processing' || viewingImage.status === 'queued' ? getProcessingStageLabel(viewingImage) : (lang === 'vi' ? 'Không có ảnh' : 'No image available')}</p>
+                                <p>{viewingImage.status === 'failed' ? (lang === 'vi' ? 'Táº¡o áº£nh tháº¥t báº¡i' : 'Image generation failed') : viewingImage.status === 'processing' || viewingImage.status === 'queued' ? getProcessingStageLabel(viewingImage) : (lang === 'vi' ? 'KhÃ´ng cÃ³ áº£nh' : 'No image available')}</p>
                                 {viewingImage.status === 'failed' && (
                                     <p className="mt-2 max-w-[320px] text-center text-sm text-red-300 leading-relaxed">
                                         {getFailedAssetMessage(viewingImage)}
@@ -636,7 +645,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                     className="bg-black/70 backdrop-blur-md border border-white/20 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-white/20 transition-colors shadow-lg"
                                 >
                                     <Icons.Download className="w-4 h-4" />
-                                    {lang === 'vi' ? 'Tải xuống' : 'Download'}
+                                    {lang === 'vi' ? 'Táº£i xuá»‘ng' : 'Download'}
                                 </button>
                             </div>
                         )}
@@ -650,7 +659,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                             ) : (
                                 <Icons.Image className="w-6 h-6 text-audi-cyan" />
                             )}
-                            {getAssetKind(viewingImage) === 'video' ? (lang === 'vi' ? 'Chi tiết video' : 'Video Details') : (lang === 'vi' ? 'Chi tiết ảnh' : 'Image Details')}
+                            {getAssetKind(viewingImage) === 'video' ? (lang === 'vi' ? 'Chi tiáº¿t video' : 'Video Details') : (lang === 'vi' ? 'Chi tiáº¿t áº£nh' : 'Image Details')}
                         </h3>
 
                         <div className="space-y-6">
@@ -662,12 +671,12 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                         <button
                                             onClick={() => {
                                                 navigator.clipboard.writeText(viewingImage.prompt);
-                                                notify(lang === 'vi' ? 'Đã sao chép prompt!' : 'Prompt copied!', 'success');
+                                                notify(lang === 'vi' ? 'ÄÃ£ sao chÃ©p prompt!' : 'Prompt copied!', 'success');
                                             }}
                                             className="text-[10px] font-bold text-audi-cyan uppercase tracking-wider hover:text-white transition-colors flex items-center gap-1"
                                         >
                                             <Icons.Copy className="w-3 h-3" />
-                                            {lang === 'vi' ? 'Sao chép' : 'Copy'}
+                                            {lang === 'vi' ? 'Sao chÃ©p' : 'Copy'}
                                         </button>
                                     )}
                                 </div>
@@ -683,15 +692,15 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                     <div className="font-mono text-xs text-white truncate">#{viewingImage.id.substring(0, 8)}</div>
                                 </div>
                                 <div className="bg-black/20 border border-white/5 rounded-xl p-4">
-                                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{lang === 'vi' ? 'Thời gian' : 'Time'}</div>
+                                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{lang === 'vi' ? 'Thá»i gian' : 'Time'}</div>
                                     <div className="font-mono text-xs text-white">{formatDate(viewingImage.timestamp)}</div>
                                 </div>
                                 <div className="bg-black/20 border border-white/5 rounded-xl p-4">
-                                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{lang === 'vi' ? 'Công cụ' : 'Tool'}</div>
+                                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{lang === 'vi' ? 'CÃ´ng cá»¥' : 'Tool'}</div>
                                     <div className="text-sm font-bold text-audi-cyan truncate" title={viewingImage.toolName}>{viewingImage.toolName}</div>
                                 </div>
                                 <div className="bg-black/20 border border-white/5 rounded-xl p-4">
-                                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{lang === 'vi' ? 'Chi phí' : 'Cost'}</div>
+                                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{lang === 'vi' ? 'Chi phÃ­' : 'Cost'}</div>
                                     <div className="text-sm font-bold text-audi-pink">
                                         {typeof viewingImage.cost === 'number' ? `${viewingImage.cost} Vcoin` : 'N/A'}
                                     </div>
@@ -700,16 +709,16 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
 
                             {/* Status */}
                             <div className="bg-black/20 border border-white/5 rounded-xl p-4 flex items-center justify-between">
-                                <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">{lang === 'vi' ? 'Trạng thái' : 'Status'}</div>
+                                <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">{lang === 'vi' ? 'Tráº¡ng thÃ¡i' : 'Status'}</div>
                                 <div>
                                     {(!viewingImage.status || viewingImage.status === 'completed') && (
                                         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/20 text-xs font-bold uppercase tracking-wider">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-green-500"></div> Hoàn thành
+                                            <div className="w-1.5 h-1.5 rounded-full bg-green-500"></div> HoÃ n thÃ nh
                                         </span>
                                     )}
                                     {viewingImage.status === 'failed' && (
                                         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 text-xs font-bold uppercase tracking-wider">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-red-500"></div> Thất bại
+                                            <div className="w-1.5 h-1.5 rounded-full bg-red-500"></div> Tháº¥t báº¡i
                                         </span>
                                     )}
                                     {(viewingImage.status === 'processing' || viewingImage.status === 'queued') && (
@@ -724,7 +733,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                             {viewingImage.status === 'failed' && viewingImage.error && (
                                 <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4">
                                     <div className="text-xs font-bold text-red-400 uppercase tracking-wider mb-1">
-                                        {lang === 'vi' ? 'Lý do thất bại' : 'Failure reason'}
+                                        {lang === 'vi' ? 'LÃ½ do tháº¥t báº¡i' : 'Failure reason'}
                                     </div>
                                     <div className="text-sm text-red-300 leading-relaxed">{getFailedAssetMessage(viewingImage)}</div>
                                 </div>
@@ -742,8 +751,8 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                                 <Icons.Download className="w-4 h-4" />
                                             </span>
                                             <span className="min-w-0">
-                                                <span className="block text-sm font-extrabold tracking-wide">{lang === 'vi' ? 'Tải xuống' : 'Download'}</span>
-                                                <span className="block text-[10px] text-audi-cyan/70">{lang === 'vi' ? 'Lưu file gốc về thiết bị' : 'Save original file to your device'}</span>
+                                                <span className="block text-sm font-extrabold tracking-wide">{lang === 'vi' ? 'Táº£i xuá»‘ng' : 'Download'}</span>
+                                                <span className="block text-[10px] text-audi-cyan/70">{lang === 'vi' ? 'LÆ°u file gá»‘c vá» thiáº¿t bá»‹' : 'Save original file to your device'}</span>
                                             </span>
                                         </span>
                                         <Icons.ChevronRight className="w-4 h-4 text-audi-cyan/70 shrink-0" />
@@ -765,10 +774,10 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                             </span>
                                             <span className="min-w-0">
                                                 <span className="block text-sm font-extrabold tracking-wide">
-                                                    {viewingImage.isShared ? (lang === 'vi' ? 'Đã publish' : 'Published') : (lang === 'vi' ? 'Chia sẻ' : 'Share')}
+                                                    {viewingImage.isShared ? (lang === 'vi' ? 'ÄÃ£ publish' : 'Published') : (lang === 'vi' ? 'Chia sáº»' : 'Share')}
                                                 </span>
                                                 <span className={`block text-[10px] ${viewingImage.isShared ? 'text-emerald-300/70' : 'text-audi-pink/70'}`}>
-                                                    {viewingImage.isShared ? (lang === 'vi' ? 'Hiển thị trên trang chủ và lưu dài hạn' : 'Visible on home and stored long-term') : (lang === 'vi' ? 'Đưa ảnh lên trang chủ và lưu lâu dài' : 'Publish to home and store long-term')}
+                                                    {viewingImage.isShared ? (lang === 'vi' ? 'Hiá»ƒn thá»‹ trÃªn trang chá»§ vÃ  lÆ°u dÃ i háº¡n' : 'Visible on home and stored long-term') : (lang === 'vi' ? 'ÄÆ°a áº£nh lÃªn trang chá»§ vÃ  lÆ°u lÃ¢u dÃ i' : 'Publish to home and store long-term')}
                                                 </span>
                                             </span>
                                         </span>
@@ -787,8 +796,8 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                             <Icons.Trash className="w-4 h-4" />
                                         </span>
                                         <span className="min-w-0">
-                                            <span className="block text-sm font-extrabold tracking-wide">{lang === 'vi' ? (getAssetKind(viewingImage) === 'video' ? 'Xóa video' : 'Xóa ảnh') : 'Delete'}</span>
-                                            <span className="block text-[10px] text-red-300/70">{lang === 'vi' ? 'Gỡ khỏi lịch sử tạo của bạn' : 'Remove this item from your history'}</span>
+                                            <span className="block text-sm font-extrabold tracking-wide">{lang === 'vi' ? (getAssetKind(viewingImage) === 'video' ? 'XÃ³a video' : 'XÃ³a áº£nh') : 'Delete'}</span>
+                                            <span className="block text-[10px] text-red-300/70">{lang === 'vi' ? 'Gá»¡ khá»i lá»‹ch sá»­ táº¡o cá»§a báº¡n' : 'Remove this item from your history'}</span>
                                         </span>
                                     </span>
                                     <Icons.ChevronRight className="w-4 h-4 text-red-300/70 shrink-0" />
@@ -803,3 +812,4 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
     </div>
   );
 };
+

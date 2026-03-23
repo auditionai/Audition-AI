@@ -282,6 +282,36 @@ const markPreparing = async (job: QueueJobRow) => {
     .eq('id', job.id);
 };
 
+const markPreparedForDispatch = async (jobId: string) => {
+  const admin = getServiceRoleClient();
+  await admin
+    .from('generated_images')
+    .update({
+      status: 'queued',
+      progress: 45,
+      error_message: null,
+      next_poll_at: new Date().toISOString(),
+      lease_token: null,
+      lease_expires_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', jobId);
+};
+
+const markSubmittingPreparedPayload = async (jobId: string) => {
+  const admin = getServiceRoleClient();
+  await admin
+    .from('generated_images')
+    .update({
+      status: 'processing',
+      progress: 50,
+      error_message: null,
+      next_poll_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', jobId);
+};
+
 const shouldSkipDispatch = async (job: QueueJobRow) => {
   const state = await getJobRuntimeState(job.id);
   if (!state) {
@@ -479,10 +509,8 @@ const recoverStalePreparingJobs = async () => {
     const isRecipePayload = isQueueRecipePayload(payload);
 
     if (!isRecipePayload) {
-      await markFailedAndRefund(
-        job,
-        'Ambiguous dispatch state detected after provider preparation. Job stopped to prevent duplicate submissions.',
-      );
+      await markPreparedForDispatch(job.id);
+      recovered += 1;
       continue;
     }
 
@@ -519,8 +547,6 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
   summary.claimedForDispatch = jobsToDispatch.length;
 
   for (const job of jobsToDispatch) {
-    let preparedPayloadPersisted = false;
-
     try {
       if (await shouldSkipDispatch(job)) {
         await releaseLease(job.id);
@@ -559,25 +585,21 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
 
       if (isQueueRecipePayload(currentPayload)) {
         await updatePreProviderStage(job.id, 20);
-      }
-
-      const providerPayload = isQueueRecipePayload(currentPayload)
-        ? await withTimeout(
-            prepareProviderPayloadFromQueueRecipe(currentPayload),
-            PREPARE_PHASE_TIMEOUT_MS,
-            'Queue preparation timed out before dispatching to provider.',
-          )
-        : currentPayload;
-
-      if (isQueueRecipePayload(currentPayload)) {
+        const providerPayload = await withTimeout(
+          prepareProviderPayloadFromQueueRecipe(currentPayload),
+          PREPARE_PHASE_TIMEOUT_MS,
+          'Queue preparation timed out before dispatching to provider.',
+        );
         await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, providerPayload);
         await persistPreparedPayload(job.id, providerPayload);
-        preparedPayloadPersisted = true;
         job.queue_payload = providerPayload;
-        await updatePreProviderStage(job.id, 45);
+        await markPreparedForDispatch(job.id);
+        summary.requeued += 1;
+        continue;
       }
 
-      const providerJobId = await submitProviderJob(job.queue_kind, providerPayload);
+      await markSubmittingPreparedPayload(job.id);
+      const providerJobId = await submitProviderJob(job.queue_kind, currentPayload);
       await markSubmitted(job, providerJobId);
       summary.submitted += 1;
     } catch (error: any) {
@@ -587,12 +609,6 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
         summary.failed += 1;
       } else if (message.includes('Queue preparation timed out before')) {
         await markFailedAndRefund(job, 'Tiến trình chuẩn bị/tổng hợp đã vượt quá 10 phút. Vui lòng tạo lại.');
-        summary.failed += 1;
-      } else if (preparedPayloadPersisted) {
-        await markFailedAndRefund(
-          job,
-          `Provider dispatch became ambiguous after payload preparation: ${message}. Job was stopped to prevent duplicate submissions.`,
-        );
         summary.failed += 1;
       } else if (isTransientError(message)) {
         const result = await requeueJob(job, message);

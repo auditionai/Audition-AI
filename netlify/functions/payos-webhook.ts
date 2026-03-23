@@ -88,6 +88,34 @@ export const handler: Handler = async (event) => {
       : String(payload?.data?.desc || payload?.desc || payload?.data?.status || 'FAILED').toUpperCase();
 
     const admin = getServiceRoleClient();
+    const orderCodeText = String(orderCode);
+    const { data: existingTransaction, error: existingTransactionError } = await admin
+      .from('payment_transactions')
+      .select('id, status')
+      .or(`provider_order_code.eq.${orderCode},order_code.eq.${orderCodeText}`)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existingTransactionError) {
+      throw existingTransactionError;
+    }
+
+    // PayOS may send a signed validation/test webhook with an order code that does not
+    // belong to this app. Treat it as a successful healthcheck so the URL can be saved.
+    if (!existingTransaction) {
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          success: true,
+          ignored: true,
+          reason: 'Unknown orderCode',
+          orderCode,
+        }),
+      };
+    }
+
     const { data, error } = await admin.rpc('settle_payment_transaction_by_order_code', {
       p_provider_order_code: orderCode,
       p_provider_status: providerStatus,

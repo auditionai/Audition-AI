@@ -8,7 +8,8 @@ import { useNotification } from '../../components/NotificationSystem';
 import { caulenhauClient } from '../../services/supabaseClient';
 import { CONCURRENCY_LIMITS, useConcurrency } from '../../services/concurrencyService';
 import { enqueueServerJob } from '../../services/serverQueueService';
-import { saveImageToLocalCache } from '../../services/storageService';
+import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
+import { optimizePayload } from '../../utils/imageProcessor';
 import {
   type AuditionPricingOverride,
   fetchTstModels,
@@ -69,6 +70,19 @@ interface SamplePrompt {
     prompt: string;
     category?: string;
 }
+
+const tryStageGenerationInput = async (source: string, folder: string) => {
+    if (!source) return null;
+    if (source.startsWith('http')) return source;
+
+    try {
+        const optimizedSource = await optimizePayload(source, 2048);
+        return await uploadFileToR2(optimizedSource, folder);
+    } catch (error) {
+        console.warn('[GenerationTool] Failed to stage generation input, falling back to optimized inline payload.', error);
+        return await optimizePayload(source, 1600);
+    }
+};
 
 export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, onNavigateToFeature, onNavigateView }) => {
   const { notify } = useNotification();
@@ -690,31 +704,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
     const effectiveSpeedId = compatibleSpeeds.includes(requestedSpeedId)
         ? requestedSpeedId
         : (compatibleSpeeds[0] || requestedSpeedId);
-    const characterReferenceImages = characters.flatMap((char) => {
-        const refs: string[] = [];
-        if (char.bodyImage) refs.push(char.bodyImage);
-        if (char.isFaceLocked && char.faceImage && char.faceImage !== char.bodyImage) {
-            refs.push(char.faceImage);
-        } else if (!char.bodyImage && char.faceImage) {
-            refs.push(char.faceImage);
-        }
-        return refs;
-    });
-
-    const queuePayload: ImageGenerateRecipePayload = {
-        recipeType: 'image_generate_recipe_v1',
-        modelId: getGenerationModelId(aiModel),
-        prompt: basePrompt,
-        resolution,
-        aspectRatio,
-        speed: effectiveSpeedId,
-        serverId: effectiveServerId,
-        negativePrompt: negativePrompt.trim() || undefined,
-        characterImages: characterReferenceImages,
-        sampleImage: refImage || null,
-        styleImage: activeStylePreset || null,
-        stylePrompt: styleMetadata?.trigger_prompt || styleMetadata?.name || null,
-    };
     const queuedImage: GeneratedImage = {
         id: queuedJobId,
         url: '',
@@ -742,6 +731,48 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
     void (async () => {
         try {
+            const stagedCharacterImages = (
+                await Promise.all(
+                    characters.flatMap((char, charIndex) => {
+                        const stagedTasks: Promise<string | null>[] = [];
+                        if (char.bodyImage) {
+                            stagedTasks.push(
+                                tryStageGenerationInput(char.bodyImage, `inputs/generation/${activeMode}/character-${charIndex + 1}/body`)
+                            );
+                        }
+                        if (char.isFaceLocked && char.faceImage && char.faceImage !== char.bodyImage) {
+                            stagedTasks.push(
+                                tryStageGenerationInput(char.faceImage, `inputs/generation/${activeMode}/character-${charIndex + 1}/face`)
+                            );
+                        } else if (!char.bodyImage && char.faceImage) {
+                            stagedTasks.push(
+                                tryStageGenerationInput(char.faceImage, `inputs/generation/${activeMode}/character-${charIndex + 1}/face`)
+                            );
+                        }
+                        return stagedTasks;
+                    })
+                )
+            ).filter((value): value is string => Boolean(value));
+
+            const stagedSampleImage = refImage
+                ? await tryStageGenerationInput(refImage, `inputs/generation/${activeMode}/sample`)
+                : null;
+
+            const queuePayload: ImageGenerateRecipePayload = {
+                recipeType: 'image_generate_recipe_v1',
+                modelId: getGenerationModelId(aiModel),
+                prompt: basePrompt,
+                resolution,
+                aspectRatio,
+                speed: effectiveSpeedId,
+                serverId: effectiveServerId,
+                negativePrompt: negativePrompt.trim() || undefined,
+                characterImages: stagedCharacterImages,
+                sampleImage: stagedSampleImage || null,
+                styleImage: activeStylePreset || null,
+                stylePrompt: styleMetadata?.trigger_prompt || styleMetadata?.name || null,
+            };
+
             await enqueueServerJob({
                 id: queuedJobId,
                 prompt: basePrompt,

@@ -198,7 +198,7 @@ begin
         v_applied := public.apply_balance_transaction(
             v_tx.user_id,
             v_tx.vcoin_received,
-            'Topup: ' || coalesce(v_tx.order_code, v_tx.provider_order_code::text, v_tx.id::text),
+            'Topup: ' || coalesce(v_tx.order_code::text, v_tx.provider_order_code::text, v_tx.id::text),
             'topup',
             'payment_transaction',
             v_tx.id::text,
@@ -257,8 +257,8 @@ begin
     select id
     into v_tx_id
     from public.payment_transactions
-    where provider_order_code = p_provider_order_code
-       or order_code = p_provider_order_code::text
+    where coalesce(provider_order_code::text, '') = p_provider_order_code::text
+       or coalesce(order_code::text, '') = p_provider_order_code::text
     order by created_at desc
     limit 1;
 

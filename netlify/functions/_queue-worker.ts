@@ -36,7 +36,8 @@ const MAX_DISPATCH_RETRIES = 6;
 const MAX_POLL_FAILURES = 8;
 const MAX_PROCESSING_AGE_MS = 45 * 60 * 1000;
 const MAX_PROVIDER_GENERIC_RETRIES = 2;
-const PREPARE_PHASE_TIMEOUT_MS = 25_000;
+const PRE_PROVIDER_STAGE_TIMEOUT_MS = 10 * 60 * 1000;
+const PREPARE_PHASE_TIMEOUT_MS = PRE_PROVIDER_STAGE_TIMEOUT_MS;
 
 const isTransientError = (message: string) => {
   const normalized = message.toLowerCase();
@@ -252,13 +253,27 @@ const requeueJob = async (job: QueueJobRow, errorMessage: string) => {
   return 'requeued';
 };
 
+const updatePreProviderStage = async (jobId: string, progress: number) => {
+  const admin = getServiceRoleClient();
+  await admin
+    .from('generated_images')
+    .update({
+      status: 'processing',
+      progress,
+      error_message: null,
+      next_poll_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', jobId);
+};
+
 const markPreparing = async (job: QueueJobRow) => {
   const admin = getServiceRoleClient();
   await admin
     .from('generated_images')
     .update({
       status: 'processing',
-      progress: 1,
+      progress: 5,
       error_message: null,
       processing_started_at: new Date().toISOString(),
       next_poll_at: null,
@@ -294,7 +309,7 @@ const markSubmitted = async (job: QueueJobRow, providerJobId: string) => {
     .update({
       status: 'processing',
       job_id: providerJobId,
-      progress: 0,
+      progress: 60,
       error_message: null,
       processing_started_at: new Date().toISOString(),
       next_poll_at: new Date(Date.now() + POLL_INTERVAL_SECONDS * 1000).toISOString(),
@@ -338,7 +353,8 @@ const markCompletedWithAssetUrl = async (job: QueueJobRow, assetUrl: string) => 
 const markPolledState = async (job: QueueJobRow, providerData: any) => {
   const admin = getServiceRoleClient();
   const providerStatus = String(providerData?.status || '').toLowerCase();
-  const progress = typeof providerData?.progress === 'number' ? providerData.progress : 0;
+  const providerProgress = typeof providerData?.progress === 'number' ? providerData.progress : 0;
+  const progress = Math.max(60, providerProgress);
 
   if (providerStatus === 'completed') {
     const resultUrl = extractResultUrl(providerData);
@@ -432,10 +448,9 @@ const recoverStalePreparingJobs = async () => {
   const nowIso = new Date().toISOString();
   const { data, error } = await admin
     .from('generated_images')
-    .select('id, user_id, asset_type, queue_kind, queue_payload, prompt, tool_id, tool_name, model_used, cost_vcoin')
+    .select('id, user_id, asset_type, queue_kind, queue_payload, prompt, tool_id, tool_name, model_used, cost_vcoin, processing_started_at, created_at, lease_expires_at')
     .eq('status', 'processing')
-    .is('job_id', null)
-    .lt('lease_expires_at', nowIso);
+    .is('job_id', null);
 
   if (error) {
     throw error;
@@ -443,6 +458,23 @@ const recoverStalePreparingJobs = async () => {
 
   let recovered = 0;
   for (const job of ((data || []) as QueueJobRow[])) {
+    const startedAt = (job as any).processing_started_at || (job as any).created_at || nowIso;
+    const ageMs = Date.now() - new Date(startedAt).getTime();
+    const leaseExpired =
+      !(job as any).lease_expires_at || String((job as any).lease_expires_at) < nowIso;
+
+    if (ageMs >= PRE_PROVIDER_STAGE_TIMEOUT_MS) {
+      await markFailedAndRefund(
+        job,
+        'Tiến trình chuẩn bị/tổng hợp đã vượt quá 10 phút. Vui lòng tạo lại.',
+      );
+      continue;
+    }
+
+    if (!leaseExpired) {
+      continue;
+    }
+
     const payload = job.queue_payload || {};
     const isRecipePayload = isQueueRecipePayload(payload);
 
@@ -500,11 +532,15 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
         ? getRecipeValidationPayload(currentPayload)
         : currentPayload;
 
+      if (isQueueRecipePayload(currentPayload)) {
+        await markPreparing(job);
+      }
+
       await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, validationPayload);
 
       if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'image_edit_recipe_v1') {
         const editPayload = currentPayload as ImageEditRecipePayload;
-        await markPreparing(job);
+        await updatePreProviderStage(job.id, 20);
         const resultUrl = await withTimeout(
           runVertexImageEdit({
             sourceImage: editPayload.sourceImage,
@@ -521,6 +557,10 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
         continue;
       }
 
+      if (isQueueRecipePayload(currentPayload)) {
+        await updatePreProviderStage(job.id, 20);
+      }
+
       const providerPayload = isQueueRecipePayload(currentPayload)
         ? await withTimeout(
             prepareProviderPayloadFromQueueRecipe(currentPayload),
@@ -534,6 +574,7 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
         await persistPreparedPayload(job.id, providerPayload);
         preparedPayloadPersisted = true;
         job.queue_payload = providerPayload;
+        await updatePreProviderStage(job.id, 45);
       }
 
       const providerJobId = await submitProviderJob(job.queue_kind, providerPayload);
@@ -543,6 +584,9 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
       const message = error?.message || 'Queue dispatch failed';
       if (message.startsWith('INVALID_TST_CONFIG:')) {
         await markFailedAndRefund(job, message.replace('INVALID_TST_CONFIG:', '').trim());
+        summary.failed += 1;
+      } else if (message.includes('Queue preparation timed out before')) {
+        await markFailedAndRefund(job, 'Tiến trình chuẩn bị/tổng hợp đã vượt quá 10 phút. Vui lòng tạo lại.');
         summary.failed += 1;
       } else if (preparedPayloadPersisted) {
         await markFailedAndRefund(

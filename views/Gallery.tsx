@@ -265,6 +265,20 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
           ? 'Tiến trình đã thất bại nhưng chưa có mô tả lỗi chi tiết.'
           : 'The generation failed without a detailed error message.');
 
+  const getProcessingStageLabel = (img: GeneratedImage) => {
+      if (img.status === 'failed') return lang === 'vi' ? 'Thất bại' : 'Failed';
+      if (!img.status || img.status === 'completed') return lang === 'vi' ? 'Hoàn thành' : 'Completed';
+      if (img.jobId) return lang === 'vi' ? 'Đang tạo ảnh' : 'Generating';
+      if (img.status === 'queued') return lang === 'vi' ? 'Đang chuẩn bị' : 'Preparing';
+
+      const progress = Math.max(0, Math.min(100, img.progress || 0));
+      if (progress >= 20) {
+          return lang === 'vi' ? 'Đang tổng hợp' : 'Synthesizing';
+      }
+
+      return lang === 'vi' ? 'Đang xử lý' : 'Processing';
+  };
+
   const handlePublish = async (image: GeneratedImage) => {
       try {
           const updatedImage = await publishImageToShowcase(image);
@@ -472,14 +486,14 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                                 <div className="min-w-[160px]">
                                                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 text-[10px] font-bold uppercase tracking-wider">
                                                         <Icons.Loader className="w-3 h-3 animate-spin" />
-                                                        {img.status === 'queued' ? (lang === 'vi' ? 'Đang chờ' : 'Queued') : (lang === 'vi' ? 'Đang xử lý' : 'Processing')}
+                                                        {getProcessingStageLabel(img)}
                                                     </span>
                                                     <div className="mt-2">
                                                         <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
                                                             <div className={`h-full rounded-full transition-all duration-500 ${img.status === 'queued' ? 'bg-yellow-400' : 'bg-audi-cyan'}`} style={{ width: `${Math.max(0, Math.min(100, img.progress || 0))}%` }} />
                                                         </div>
                                                         <div className="text-[10px] text-slate-500 mt-1">
-                                                            {Math.max(0, Math.min(100, img.progress || 0))}% {img.jobId ? `• ${img.jobId.slice(0, 10)}` : ''}
+                                                            {getProcessingStageLabel(img)} • {Math.max(0, Math.min(100, img.progress || 0))}% {img.jobId ? `• ${img.jobId.slice(0, 10)}` : ''}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -599,7 +613,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                 ) : (
                                     <Icons.Image className="w-16 h-16 mb-4 opacity-50" />
                                 )}
-                                <p>{viewingImage.status === 'failed' ? (lang === 'vi' ? 'Tạo ảnh thất bại' : 'Image generation failed') : viewingImage.status === 'processing' || viewingImage.status === 'queued' ? (lang === 'vi' ? 'Đang tạo ảnh...' : 'Image is generating...') : (lang === 'vi' ? 'Không có ảnh' : 'No image available')}</p>
+                                <p>{viewingImage.status === 'failed' ? (lang === 'vi' ? 'Tạo ảnh thất bại' : 'Image generation failed') : viewingImage.status === 'processing' || viewingImage.status === 'queued' ? getProcessingStageLabel(viewingImage) : (lang === 'vi' ? 'Không có ảnh' : 'No image available')}</p>
                                 {viewingImage.status === 'failed' && (
                                     <p className="mt-2 max-w-[320px] text-center text-sm text-red-300 leading-relaxed">
                                         {getFailedAssetMessage(viewingImage)}
@@ -700,7 +714,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                     )}
                                     {(viewingImage.status === 'processing' || viewingImage.status === 'queued') && (
                                         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 text-xs font-bold uppercase tracking-wider">
-                                            <Icons.Loader className="w-3 h-3 animate-spin" /> Đang chờ
+                                            <Icons.Loader className="w-3 h-3 animate-spin" /> {getProcessingStageLabel(viewingImage)}
                                         </span>
                                     )}
                                 </div>

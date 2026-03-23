@@ -30,6 +30,25 @@ export const handler: Handler = async (event) => {
     const payload = JSON.parse(event.body || '{}');
     const { checksumKey } = getPayOSEnv();
 
+    const hasWebhookData =
+      payload &&
+      typeof payload === 'object' &&
+      payload.data &&
+      typeof payload.data === 'object' &&
+      Object.keys(payload.data).length > 0;
+    const hasOrderCode = Number.isFinite(Number(payload?.data?.orderCode));
+    const hasSignature = typeof payload?.signature === 'string' && payload.signature.trim().length > 0;
+
+    // PayOS dashboard may send a lightweight POST probe when validating the webhook URL.
+    // We should acknowledge the endpoint is alive without trying to settle a payment.
+    if (!hasWebhookData && !hasOrderCode && !hasSignature) {
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({ success: true, message: 'PayOS webhook endpoint is ready' }),
+      };
+    }
+
     if (!verifyPayOSWebhook(payload, checksumKey)) {
       return {
         statusCode: 400,

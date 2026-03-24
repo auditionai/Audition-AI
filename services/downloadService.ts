@@ -20,6 +20,15 @@ const downloadBlob = (blob: Blob, filename: string) => {
   window.URL.revokeObjectURL(objectUrl);
 };
 
+const triggerBrowserDownload = (href: string, filename: string) => {
+  const link = document.createElement('a');
+  link.href = href;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
 export const downloadAssetToBrowser = async (url: string, filename: string) => {
   if (!url) {
     throw new Error('Missing asset URL');
@@ -36,12 +45,9 @@ export const downloadAssetToBrowser = async (url: string, filename: string) => {
     }
     blob = await response.blob();
   } else {
-    const proxyUrl = `/.netlify/functions/download_proxy?url=${encodeURIComponent(url)}`;
-    const response = await fetch(proxyUrl);
-    if (!response.ok) {
-      throw new Error(`Download proxy failed: ${response.status}`);
-    }
-    blob = await response.blob();
+    const proxyUrl = `/.netlify/functions/download_proxy?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`;
+    triggerBrowserDownload(proxyUrl, filename);
+    return;
   }
 
   downloadBlob(blob, filename);

@@ -186,9 +186,19 @@ const submitProviderJob = async (queueKind: string, providerPayload: Record<stri
 };
 
 const applyLivePricingConfigToPayload = (
+  queueKind: string,
   providerPayload: Record<string, unknown>,
   validationResult?: { pricingMatch?: { config_key?: string } | null } | null,
 ) => {
+  if (queueKind === 'image_generate') {
+    if (!Object.prototype.hasOwnProperty.call(providerPayload, 'config_key')) {
+      return providerPayload;
+    }
+
+    const { config_key: _ignoredConfigKey, ...rest } = providerPayload;
+    return rest;
+  }
+
   const configKey = String(validationResult?.pricingMatch?.config_key || '').trim();
   if (!configKey) {
     return providerPayload;
@@ -484,7 +494,7 @@ const prepareImageRecipeInStages = async (job: QueueJobRow, recipePayload: Image
   const providerPayload = buildImageGenerateProviderPayload(recipePayload, uploadedUrls, synthesizedPrompt);
 
   const validationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, providerPayload);
-  const validatedProviderPayload = applyLivePricingConfigToPayload(providerPayload, validationResult);
+  const validatedProviderPayload = applyLivePricingConfigToPayload(job.queue_kind, providerPayload, validationResult);
   await persistPreparedPayload(job.id, validatedProviderPayload);
   await markPreparedForDispatch(job.id);
 
@@ -753,7 +763,11 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
           'Queue preparation timed out before dispatching to provider.',
         );
         const preparedValidationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, providerPayload);
-        const validatedProviderPayload = applyLivePricingConfigToPayload(providerPayload, preparedValidationResult);
+        const validatedProviderPayload = applyLivePricingConfigToPayload(
+          job.queue_kind,
+          providerPayload,
+          preparedValidationResult,
+        );
         await persistPreparedPayload(job.id, validatedProviderPayload);
         job.queue_payload = validatedProviderPayload;
         await markPreparedForDispatch(job.id);
@@ -761,7 +775,11 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
         continue;
       }
 
-      const providerPayloadForSubmit = applyLivePricingConfigToPayload(currentPayload, validationResult);
+      const providerPayloadForSubmit = applyLivePricingConfigToPayload(
+        job.queue_kind,
+        currentPayload,
+        validationResult,
+      );
       if (providerPayloadForSubmit !== currentPayload) {
         await persistPreparedPayload(job.id, providerPayloadForSubmit);
         job.queue_payload = providerPayloadForSubmit;

@@ -169,15 +169,11 @@ const persistQueueLog = async (
   message: string,
   level: QueueProgressLogEntry['level'] = 'info',
 ) => {
-  const admin = getServiceRoleClient();
   const nextPayload = withQueueLog(payload, stage, message, level);
-  await admin
-    .from('generated_images')
-    .update({
-      queue_payload: nextPayload,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', jobId);
+  await updateGeneratedImageRecord(jobId, {
+    queue_payload: nextPayload,
+    updated_at: new Date().toISOString(),
+  });
 
   return nextPayload;
 };
@@ -224,6 +220,69 @@ const withTimeout = async <T>(task: Promise<T>, timeoutMs: number, message: stri
 };
 
 const hasWorkerTickBudgetRemaining = (startedAt: number) => Date.now() - startedAt < WORKER_TICK_BUDGET_MS;
+
+const updateGeneratedImageRecord = async (jobId: string, updates: Record<string, unknown>) => {
+  const admin = getServiceRoleClient();
+  const { error } = await admin
+    .from('generated_images')
+    .update(updates)
+    .eq('id', jobId);
+
+  if (error) {
+    throw error;
+  }
+};
+
+const getQueueStage = (payload?: Record<string, unknown> | null): QueueProcessingStage | null => {
+  const rawStage = toQueuePayloadObject(payload).__stage;
+  if (typeof rawStage !== 'string' || !rawStage.trim()) {
+    return null;
+  }
+
+  return rawStage as QueueProcessingStage;
+};
+
+const humanizeQueueStage = (stage: QueueProcessingStage | null) => {
+  switch (stage) {
+    case 'uploading_refs':
+      return 'tai anh tham chieu';
+    case 'synthesizing_prompt':
+      return 'tong hop prompt';
+    case 'building_payload':
+      return 'dung payload';
+    case 'dispatching':
+      return 'gui provider';
+    case 'polling':
+      return 'cho provider xu ly';
+    default:
+      return 'chuan bi du lieu';
+  }
+};
+
+const resolveImageGenerateStage = (
+  recipePayload: ImageGenerateRecipePayload,
+  renderSources: string[],
+): 'uploading_refs' | 'synthesizing_prompt' | 'building_payload' => {
+  const rawStage = getQueueStage(recipePayload);
+  if (
+    rawStage === 'uploading_refs' ||
+    rawStage === 'synthesizing_prompt' ||
+    rawStage === 'building_payload'
+  ) {
+    return rawStage;
+  }
+
+  const uploadedUrls = (recipePayload.__uploadedUrls || []).filter((value): value is string => Boolean(value));
+  if (typeof recipePayload.__synthesizedPrompt === 'string' && recipePayload.__synthesizedPrompt.trim()) {
+    return 'building_payload';
+  }
+
+  if (renderSources.length > 0 && uploadedUrls.length >= renderSources.length) {
+    return 'synthesizing_prompt';
+  }
+
+  return 'uploading_refs';
+};
 
 const getCharacterCountFromToolId = (toolId?: string | null) => {
   const normalizedToolId = String(toolId || '').trim().toLowerCase();
@@ -369,35 +428,28 @@ const pollProviderJob = async (providerJobId: string) => {
 };
 
 const releaseLease = async (jobId: string) => {
-  const admin = getServiceRoleClient();
-  await admin
-    .from('generated_images')
-    .update({
-      lease_token: null,
-      lease_expires_at: null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', jobId);
+  await updateGeneratedImageRecord(jobId, {
+    lease_token: null,
+    lease_expires_at: null,
+    updated_at: new Date().toISOString(),
+  });
 };
 
 const markFailedAndRefund = async (job: QueueJobRow, errorMessage: string) => {
   const admin = getServiceRoleClient();
   const nextPayload = withQueueLog(job.queue_payload, 'failed', errorMessage, 'error');
-  await admin
-    .from('generated_images')
-    .update({
-      status: 'failed',
-      error_message: errorMessage,
-      queue_payload: nextPayload,
-      progress: 0,
-      finished_at: new Date().toISOString(),
-      lease_token: null,
-      lease_expires_at: null,
-      next_poll_at: null,
-      last_error_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', job.id);
+  await updateGeneratedImageRecord(job.id, {
+    status: 'failed',
+    error_message: errorMessage,
+    queue_payload: nextPayload,
+    progress: 0,
+    finished_at: new Date().toISOString(),
+    lease_token: null,
+    lease_expires_at: null,
+    next_poll_at: null,
+    last_error_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  });
 
   await admin.rpc('refund_generated_job', {
     p_generated_image_id: job.id,
@@ -417,55 +469,55 @@ const requeueJob = async (job: QueueJobRow, errorMessage: string) => {
 
   const nextPollAt = new Date(Date.now() + getRetryDelaySeconds(nextAttemptCount) * 1000).toISOString();
 
-  await admin
-    .from('generated_images')
-    .update({
-      status: 'queued',
-      job_id: null,
-      processing_started_at: null,
-      error_message: errorMessage,
-      queue_payload: withQueueLog(job.queue_payload, 'queued', `Tam hoan va xep lai hang doi: ${errorMessage}`, 'warning'),
-      lease_token: null,
-      lease_expires_at: null,
-      next_poll_at: nextPollAt,
-      attempt_count: nextAttemptCount,
-      last_error_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', job.id);
+  await updateGeneratedImageRecord(job.id, {
+    status: 'queued',
+    job_id: null,
+    processing_started_at: null,
+    error_message: errorMessage,
+    queue_payload: withQueueLog(job.queue_payload, 'queued', `Tam hoan va xep lai hang doi: ${errorMessage}`, 'warning'),
+    lease_token: null,
+    lease_expires_at: null,
+    next_poll_at: nextPollAt,
+    attempt_count: nextAttemptCount,
+    last_error_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  });
 
   return 'requeued';
 };
 
 const updatePreProviderStage = async (jobId: string, progress: number) => {
-  const admin = getServiceRoleClient();
-  await admin
-    .from('generated_images')
-    .update({
-      status: 'processing',
-      progress,
-      error_message: null,
-      next_poll_at: null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', jobId);
+  await updateGeneratedImageRecord(jobId, {
+    status: 'processing',
+    progress,
+    error_message: null,
+    next_poll_at: null,
+    updated_at: new Date().toISOString(),
+  });
 };
 
 const markPreparing = async (job: QueueJobRow) => {
-  const admin = getServiceRoleClient();
-  const nextPayload = withQueueLog(job.queue_payload, 'preparing', 'Worker da nhan job. Bat dau chuan bi du lieu.');
-  await admin
-    .from('generated_images')
-    .update({
-      status: 'processing',
-      progress: 5,
-      error_message: null,
-      queue_payload: nextPayload,
-      processing_started_at: new Date().toISOString(),
-      next_poll_at: null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', job.id);
+  const previousStage = getQueueStage(job.queue_payload);
+  const resumeStage =
+    isQueueRecipePayload(job.queue_payload) && previousStage && previousStage !== 'queued'
+      ? previousStage
+      : 'preparing';
+  const nextPayload = withQueueLog(
+    job.queue_payload,
+    resumeStage,
+    resumeStage === 'preparing'
+      ? 'Worker da nhan job. Bat dau chuan bi du lieu.'
+      : `Worker da nhan job. Tiep tuc xu ly o buoc ${humanizeQueueStage(resumeStage)}.`,
+  );
+  await updateGeneratedImageRecord(job.id, {
+    status: 'processing',
+    progress: 5,
+    error_message: null,
+    queue_payload: nextPayload,
+    processing_started_at: new Date().toISOString(),
+    next_poll_at: null,
+    updated_at: new Date().toISOString(),
+  });
 
   return nextPayload;
 };
@@ -475,35 +527,27 @@ const markPreparedForDispatch = async (jobId: string) => {
 };
 
 const markQueuedStage = async (jobId: string, progress: number) => {
-  const admin = getServiceRoleClient();
-  await admin
-    .from('generated_images')
-    .update({
-      status: 'queued',
-      progress,
-      error_message: null,
-      next_poll_at: new Date().toISOString(),
-      lease_token: null,
-      lease_expires_at: null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', jobId);
+  await updateGeneratedImageRecord(jobId, {
+    status: 'queued',
+    progress,
+    error_message: null,
+    next_poll_at: new Date().toISOString(),
+    lease_token: null,
+    lease_expires_at: null,
+    updated_at: new Date().toISOString(),
+  });
 };
 
 const markSubmittingPreparedPayload = async (jobId: string, payload?: Record<string, unknown> | null) => {
-  const admin = getServiceRoleClient();
   const nextPayload = withQueueLog(payload, 'dispatching', 'Dang gui request toi provider TST.');
-  await admin
-    .from('generated_images')
-    .update({
-      status: 'processing',
-      progress: 50,
-      error_message: null,
-      queue_payload: nextPayload,
-      next_poll_at: null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', jobId);
+  await updateGeneratedImageRecord(jobId, {
+    status: 'processing',
+    progress: 50,
+    error_message: null,
+    queue_payload: nextPayload,
+    next_poll_at: null,
+    updated_at: new Date().toISOString(),
+  });
 
   return nextPayload;
 };
@@ -529,22 +573,18 @@ const shouldSkipDispatch = async (job: QueueJobRow) => {
 };
 
 const markSubmitted = async (job: QueueJobRow, providerJobId: string) => {
-  const admin = getServiceRoleClient();
-  await admin
-    .from('generated_images')
-    .update({
-      status: 'processing',
-      job_id: providerJobId,
-      queue_payload: withQueueLog(job.queue_payload, 'submitted', `Provider da nhan job: ${providerJobId}. Dang cho ket qua.`, 'success'),
-      progress: 60,
-      error_message: null,
-      processing_started_at: new Date().toISOString(),
-      next_poll_at: new Date(Date.now() + POLL_INTERVAL_SECONDS * 1000).toISOString(),
-      lease_token: null,
-      lease_expires_at: null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', job.id);
+  await updateGeneratedImageRecord(job.id, {
+    status: 'processing',
+    job_id: providerJobId,
+    queue_payload: withQueueLog(job.queue_payload, 'submitted', `Provider da nhan job: ${providerJobId}. Dang cho ket qua.`, 'success'),
+    progress: 60,
+    error_message: null,
+    processing_started_at: new Date().toISOString(),
+    next_poll_at: new Date(Date.now() + POLL_INTERVAL_SECONDS * 1000).toISOString(),
+    lease_token: null,
+    lease_expires_at: null,
+    updated_at: new Date().toISOString(),
+  });
 };
 
 const persistPreparedPayload = async (
@@ -552,28 +592,20 @@ const persistPreparedPayload = async (
   providerPayload: Record<string, unknown>,
   previousPayload?: Record<string, unknown> | null,
 ) => {
-  const admin = getServiceRoleClient();
   const storedPayload = withQueueMeta(providerPayload, previousPayload, 'dispatching');
-  await admin
-    .from('generated_images')
-    .update({
-      queue_payload: storedPayload,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', jobId);
+  await updateGeneratedImageRecord(jobId, {
+    queue_payload: storedPayload,
+    updated_at: new Date().toISOString(),
+  });
 
   return storedPayload;
 };
 
 const persistRecipePayload = async (jobId: string, recipePayload: ImageGenerateRecipePayload) => {
-  const admin = getServiceRoleClient();
-  await admin
-    .from('generated_images')
-    .update({
-      queue_payload: recipePayload,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', jobId);
+  await updateGeneratedImageRecord(jobId, {
+    queue_payload: recipePayload,
+    updated_at: new Date().toISOString(),
+  });
 
   return recipePayload;
 };
@@ -592,7 +624,7 @@ const prepareImageRecipeInStages = async (job: QueueJobRow, recipePayload: Image
     throw new Error('CRITICAL FAILURE: No valid image references were prepared for the generation payload.');
   }
 
-  const currentStage = recipePayload.__stage || 'uploading_refs';
+  const currentStage = resolveImageGenerateStage(recipePayload, renderSources);
   const uploadedUrls = [...(recipePayload.__uploadedUrls || [])];
 
   if (currentStage === 'uploading_refs') {
@@ -840,6 +872,7 @@ const recoverStalePreparingJobs = async () => {
     const isRecipePayload = isQueueRecipePayload(payload);
     const isStagedRecipe =
       isRecipePayload && ['uploading_refs', 'synthesizing_prompt', 'building_payload'].includes(recipeStage);
+    const missingProviderJobId = !String((job as any).job_id || '').trim();
     const logCount = getQueueLogs(payload).length;
     const isOrphanedClaim =
       currentStatus === 'processing' &&
@@ -847,8 +880,16 @@ const recoverStalePreparingJobs = async () => {
       !isStagedRecipe &&
       !recipeStage.startsWith('submitted') &&
       !recipeStage.startsWith('dispatching') &&
+      missingProviderJobId &&
       ageMs >= ORPHAN_CLAIM_GRACE_MS &&
       logCount <= 1;
+    const isAbandonedPreDispatchStage =
+      currentStatus === 'processing' &&
+      isRecipePayload &&
+      missingProviderJobId &&
+      isStagedRecipe &&
+      leaseExpired &&
+      ageMs >= ORPHAN_CLAIM_GRACE_MS;
 
     const preparationTimeoutMs = getPreparationTimeoutMs(job, payload);
 
@@ -877,6 +918,38 @@ const recoverStalePreparingJobs = async () => {
           updated_at: new Date().toISOString(),
         })
         .eq('id', job.id);
+      recovered += 1;
+      continue;
+    }
+
+    if (isAbandonedPreDispatchStage) {
+      const resumedStage =
+        payload.recipeType === 'image_generate_recipe_v1'
+          ? resolveImageGenerateStage(
+              payload,
+              getImageRenderReferenceSources(payload),
+            )
+          : (getQueueStage(payload) || 'queued');
+      const resetPayload = withQueueLog(
+        {
+          ...payload,
+          __stage: resumedStage,
+        },
+        resumedStage,
+        `Worker mat lease khi dang o buoc ${humanizeQueueStage(resumedStage)}. Dua job tro lai hang doi de tiep tuc.`,
+        'warning',
+      );
+      await updateGeneratedImageRecord(job.id, {
+        status: 'queued',
+        progress: Math.max(5, Number((job as any).progress || 0)),
+        queue_payload: resetPayload,
+        error_message: null,
+        job_id: null,
+        lease_token: null,
+        lease_expires_at: null,
+        next_poll_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
       recovered += 1;
       continue;
     }

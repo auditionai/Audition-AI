@@ -36,8 +36,8 @@ const buildInitialQueueLogs = (queueKind: string): QueueProgressLogEntry[] => {
   const stage: QueueProcessingStage = 'queued';
   const message =
     queueKind === 'image_generate'
-      ? 'Job da vao hang doi. Dang cho worker bat dau chuan bi va tong hop anh.'
-      : 'Job da vao hang doi. Dang cho worker xu ly.';
+      ? 'Đã vào hàng đợi. Chờ worker chuẩn bị.'
+      : 'Đã vào hàng đợi. Chờ worker xử lý.';
 
   return [
     {

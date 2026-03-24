@@ -245,17 +245,17 @@ const getQueueStage = (payload?: Record<string, unknown> | null): QueueProcessin
 const humanizeQueueStage = (stage: QueueProcessingStage | null) => {
   switch (stage) {
     case 'uploading_refs':
-      return 'tai anh tham chieu';
+      return 'tải ảnh tham chiếu';
     case 'synthesizing_prompt':
-      return 'tong hop prompt';
+      return 'tổng hợp prompt';
     case 'building_payload':
-      return 'dung payload';
+      return 'dựng payload';
     case 'dispatching':
-      return 'gui provider';
+      return 'gửi provider';
     case 'polling':
-      return 'cho provider xu ly';
+      return 'chờ provider xử lý';
     default:
-      return 'chuan bi du lieu';
+      return 'chuẩn bị dữ liệu';
   }
 };
 
@@ -323,7 +323,7 @@ const getPreparationTimeoutMs = (job: Pick<QueueJobRow, 'tool_id'>, payload?: Qu
 
 const getPreparationTimeoutUserMessage = (job: Pick<QueueJobRow, 'tool_id'>, payload?: QueueJobRow['queue_payload']) => {
   const timeoutMinutes = Math.ceil(getPreparationTimeoutMs(job, payload) / 60000);
-  return `Tien trinh chuan bi/tong hop da vuot qua ${timeoutMinutes} phut. Vui long tao lai.`;
+  return `Quá thời gian chuẩn bị trong ${timeoutMinutes} phút. Vui lòng tạo lại.`;
 };
 
 const getJobRuntimeState = async (jobId: string) => {
@@ -474,7 +474,7 @@ const requeueJob = async (job: QueueJobRow, errorMessage: string) => {
     job_id: null,
     processing_started_at: null,
     error_message: errorMessage,
-    queue_payload: withQueueLog(job.queue_payload, 'queued', `Tam hoan va xep lai hang doi: ${errorMessage}`, 'warning'),
+    queue_payload: withQueueLog(job.queue_payload, 'queued', `Tạm hoãn và xếp lại hàng đợi: ${errorMessage}`, 'warning'),
     lease_token: null,
     lease_expires_at: null,
     next_poll_at: nextPollAt,
@@ -506,8 +506,8 @@ const markPreparing = async (job: QueueJobRow) => {
     job.queue_payload,
     resumeStage,
     resumeStage === 'preparing'
-      ? 'Worker da nhan job. Bat dau chuan bi du lieu.'
-      : `Worker da nhan job. Tiep tuc xu ly o buoc ${humanizeQueueStage(resumeStage)}.`,
+      ? 'Worker đã nhận job. Bắt đầu chuẩn bị.'
+      : `Worker đã nhận job. Tiếp tục ở bước ${humanizeQueueStage(resumeStage)}.`,
   );
   await updateGeneratedImageRecord(job.id, {
     status: 'processing',
@@ -539,7 +539,7 @@ const markQueuedStage = async (jobId: string, progress: number) => {
 };
 
 const markSubmittingPreparedPayload = async (jobId: string, payload?: Record<string, unknown> | null) => {
-  const nextPayload = withQueueLog(payload, 'dispatching', 'Dang gui request toi provider TST.');
+  const nextPayload = withQueueLog(payload, 'dispatching', 'Đang gửi yêu cầu tới provider TST.');
   await updateGeneratedImageRecord(jobId, {
     status: 'processing',
     progress: 50,
@@ -576,7 +576,7 @@ const markSubmitted = async (job: QueueJobRow, providerJobId: string) => {
   await updateGeneratedImageRecord(job.id, {
     status: 'processing',
     job_id: providerJobId,
-    queue_payload: withQueueLog(job.queue_payload, 'submitted', `Provider da nhan job: ${providerJobId}. Dang cho ket qua.`, 'success'),
+    queue_payload: withQueueLog(job.queue_payload, 'submitted', `Provider đã nhận job: ${providerJobId}.`, 'success'),
     progress: 60,
     error_message: null,
     processing_started_at: new Date().toISOString(),
@@ -636,7 +636,7 @@ const prepareImageRecipeInStages = async (job: QueueJobRow, recipePayload: Image
         job.id,
         recipePayload,
         'uploading_refs',
-        `Dang tai ${chunk.length} anh tham chieu (${uploadCursor + 1}-${uploadCursor + chunk.length}/${renderSources.length}).`,
+        `Đang tải ${chunk.length} ảnh tham chiếu (${uploadCursor + 1}-${uploadCursor + chunk.length}/${renderSources.length}).`,
       ) as ImageGenerateRecipePayload;
       const chunkUrls = await Promise.all(chunk.map((source) => uploadImageToTst(source)));
       uploadedUrls.push(...chunkUrls);
@@ -660,8 +660,8 @@ const prepareImageRecipeInStages = async (job: QueueJobRow, recipePayload: Image
       recipePayload,
       hasMoreUploads ? 'uploading_refs' : 'synthesizing_prompt',
       hasMoreUploads
-        ? `Da tai len ${nextCursor}/${renderSources.length} anh tham chieu.`
-        : `Da tai xong ${uploadedUrls.length}/${renderSources.length} anh tham chieu. Chuyen sang tong hop prompt.`,
+        ? `Đã tải ${nextCursor}/${renderSources.length} ảnh tham chiếu.`
+        : `Đã tải xong ${uploadedUrls.length}/${renderSources.length} ảnh tham chiếu.`,
       hasMoreUploads ? 'info' : 'success',
     ) as ImageGenerateRecipePayload;
 
@@ -680,7 +680,7 @@ const prepareImageRecipeInStages = async (job: QueueJobRow, recipePayload: Image
       job.id,
       recipePayload,
       'synthesizing_prompt',
-      `Dang phan tich ${directorSources.length} anh de tong hop prompt cuoi cung.`,
+      `Đang phân tích ${directorSources.length} ảnh để tổng hợp prompt.`,
     ) as ImageGenerateRecipePayload;
     const synthesizedPrompt = await synthesizeImageGeneratePrompt(recipePayload);
     const nextPayload: ImageGenerateRecipePayload = {
@@ -697,7 +697,7 @@ const prepareImageRecipeInStages = async (job: QueueJobRow, recipePayload: Image
       job.id,
       recipePayload,
       'building_payload',
-      'Da tong hop xong prompt. Dang lap payload gui sang provider.',
+      'Đã tổng hợp prompt. Đang dựng payload.',
       'success',
     ) as ImageGenerateRecipePayload;
     await markQueuedStage(job.id, 45);
@@ -708,7 +708,7 @@ const prepareImageRecipeInStages = async (job: QueueJobRow, recipePayload: Image
     job.id,
     recipePayload,
     'building_payload',
-    'Dang xay dung va kiem tra payload cuoi cung truoc khi dispatch.',
+    'Đang dựng và kiểm tra payload cuối.',
   ) as ImageGenerateRecipePayload;
   const synthesizedPrompt = recipePayload.__synthesizedPrompt?.trim()
     ? recipePayload.__synthesizedPrompt.trim()
@@ -718,7 +718,7 @@ const prepareImageRecipeInStages = async (job: QueueJobRow, recipePayload: Image
   const validationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, stripInternalQueueMeta(providerPayload));
   const validatedProviderPayload = applyLivePricingConfigToPayload(job.queue_kind, providerPayload, validationResult);
   const storedPayload = await persistPreparedPayload(job.id, validatedProviderPayload, recipePayload);
-  await persistQueueLog(job.id, storedPayload, 'dispatching', 'Payload san sang. Dang xep hang gui sang provider.', 'success');
+  await persistQueueLog(job.id, storedPayload, 'dispatching', 'Payload đã sẵn sàng. Chờ gửi provider.', 'success');
   await markPreparedForDispatch(job.id);
 
   return { type: 'prepared' as const, providerPayload: validatedProviderPayload };
@@ -731,7 +731,7 @@ const markCompletedWithAssetUrl = async (job: QueueJobRow, assetUrl: string) => 
     .update({
       status: 'completed',
       image_url: assetUrl,
-      queue_payload: withQueueLog(job.queue_payload, 'completed', 'Job da hoan thanh va da nhan duoc file ket qua.', 'success'),
+      queue_payload: withQueueLog(job.queue_payload, 'completed', 'Đã hoàn thành và nhận kết quả.', 'success'),
       progress: 100,
       error_message: null,
       attempt_count: 0,
@@ -761,7 +761,7 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
       .update({
         status: 'completed',
         image_url: resultUrl,
-        queue_payload: withQueueLog(job.queue_payload, 'completed', 'Provider bao completed. Da luu asset ket qua.', 'success'),
+        queue_payload: withQueueLog(job.queue_payload, 'completed', 'Provider đã hoàn tất. Đã lưu kết quả.', 'success'),
         progress: 100,
         error_message: null,
         attempt_count: 0,
@@ -800,7 +800,7 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
       queue_payload: withQueueLog(
         job.queue_payload,
         'polling',
-        `Provider dang xu ly${providerProgress > 0 ? ` (${providerProgress}%)` : ''}.`,
+        `Provider đang xử lý${providerProgress > 0 ? ` (${providerProgress}%)` : ''}.`,
       ),
       progress,
       error_message: null,
@@ -831,7 +831,7 @@ const handlePollFailure = async (job: QueueJobRow, errorMessage: string) => {
     .update({
       status: 'processing',
       error_message: errorMessage,
-      queue_payload: withQueueLog(job.queue_payload, 'polling', `Poll loi, se thu lai: ${errorMessage}`, 'warning'),
+      queue_payload: withQueueLog(job.queue_payload, 'polling', `Lỗi khi hỏi provider, sẽ thử lại: ${errorMessage}`, 'warning'),
       attempt_count: nextAttemptCount,
       next_poll_at: new Date(Date.now() + getRetryDelaySeconds(nextAttemptCount) * 1000).toISOString(),
       lease_token: null,
@@ -902,7 +902,7 @@ const recoverStalePreparingJobs = async () => {
       const resetPayload = withQueueLog(
         payload,
         'queued',
-        'Phat hien job bi claim som nhung worker chua bat dau. Dua lai vao hang doi de thu lai.',
+        'Phát hiện job bị claim sớm. Đưa lại vào hàng đợi.',
         'warning',
       );
       await admin
@@ -936,7 +936,7 @@ const recoverStalePreparingJobs = async () => {
           __stage: resumedStage,
         },
         resumedStage,
-        `Worker mat lease khi dang o buoc ${humanizeQueueStage(resumedStage)}. Dua job tro lai hang doi de tiep tuc.`,
+        `Worker mất lease ở bước ${humanizeQueueStage(resumedStage)}. Đưa job lại vào hàng đợi.`,
         'warning',
       );
       await updateGeneratedImageRecord(job.id, {
@@ -1037,7 +1037,7 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
           job.id,
           job.queue_payload || currentPayload,
           'preparing',
-          'Dang chuan bi goi Vertex AI de chinh sua anh.',
+          'Đang gửi yêu cầu chỉnh sửa ảnh.',
         );
         const resultUrl = await withTimeout(
           runVertexImageEdit({
@@ -1079,6 +1079,21 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
 
       if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType !== 'image_generate_recipe_v1') {
         await updatePreProviderStage(job.id, 20);
+        if (currentPayload.recipeType === 'video_generate_recipe_v1') {
+          job.queue_payload = await persistQueueLog(
+            job.id,
+            job.queue_payload || currentPayload,
+            'building_payload',
+            'Đang chuẩn bị payload video.',
+          );
+        } else if (currentPayload.recipeType === 'motion_generate_recipe_v1') {
+          job.queue_payload = await persistQueueLog(
+            job.id,
+            job.queue_payload || currentPayload,
+            'building_payload',
+            'Đang chuẩn bị payload motion.',
+          );
+        }
         const providerPayload = await withTimeout(
           prepareProviderPayloadFromQueueRecipe((job.queue_payload || currentPayload) as typeof currentPayload),
           preparationTimeoutMs,
@@ -1095,7 +1110,7 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
           job.id,
           job.queue_payload,
           'dispatching',
-          'Payload da duoc chuan bi xong va dang cho tick tiep theo de gui provider.',
+          'Payload đã sẵn sàng. Chờ gửi provider.',
           'success',
         );
         await markPreparedForDispatch(job.id);

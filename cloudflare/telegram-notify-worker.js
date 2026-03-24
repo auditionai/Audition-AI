@@ -1,4 +1,5 @@
 const TELEGRAM_API_BASE = 'https://api.telegram.org';
+const MAX_TELEGRAM_MEDIA_BYTES = 5 * 1024 * 1024;
 
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data, null, 2), {
@@ -28,6 +29,10 @@ const isVideoUrl = (value) =>
   /\.(mp4|mov|webm|m4v)(\?.*)?$/i.test(String(value || '')) ||
   /\/video\//i.test(String(value || ''));
 
+const isImageUrl = (value) =>
+  /\.(jpg|jpeg|png|webp|gif)(\?.*)?$/i.test(String(value || '')) ||
+  /\/image\//i.test(String(value || ''));
+
 const normalizeUrls = (values) => {
   if (!Array.isArray(values)) return [];
   return [...new Set(values.filter(isHttpUrl).map((value) => value.trim()))];
@@ -38,47 +43,185 @@ const getThreadId = (env) => {
   return raw ? raw : null;
 };
 
+const displayValue = (value, fallback = 'N/A') => {
+  if (value === null || value === undefined) return fallback;
+  const normalized = String(value).trim();
+  return normalized ? normalized : fallback;
+};
+
+const formatIso = (value) => {
+  if (!value) return 'N/A';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return displayValue(value);
+  }
+
+  return date.toISOString().replace('T', ' ').replace('.000Z', ' UTC');
+};
+
+const formatBytes = (bytes) => {
+  const size = Number(bytes);
+  if (!Number.isFinite(size) || size <= 0) return 'unknown';
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(2)} MB`;
+};
+
+const buildHeader = (appName, eventType) => {
+  switch (String(eventType || '').toLowerCase()) {
+    case 'completed':
+      return `<b>${escapeHtml(appName)} | THÀNH CÔNG</b>`;
+    case 'failed':
+      return `<b>${escapeHtml(appName)} | THẤT BẠI</b>`;
+    default:
+      return `<b>${escapeHtml(appName)} | JOB MỚI</b>`;
+  }
+};
+
+const buildMediaLinks = (payload, labelPrefix = '') => {
+  const inputUrls = normalizeUrls(payload?.media?.inputUrls);
+  const outputUrl = isHttpUrl(payload?.media?.outputUrl) ? payload.media.outputUrl.trim() : null;
+  const lines = [];
+  const prefix = labelPrefix ? `${labelPrefix} ` : '';
+
+  if (inputUrls.length > 0) {
+    lines.push(`- ${prefix}Input: <a href="${escapeHtml(inputUrls[0])}">open</a>`);
+  }
+
+  if (outputUrl) {
+    lines.push(`- ${prefix}Output: <a href="${escapeHtml(outputUrl)}">open</a>`);
+  }
+
+  return lines;
+};
+
+const getEventLabel = (eventType) => {
+  switch (String(eventType || '').toLowerCase()) {
+    case 'completed':
+      return 'THÀNH CÔNG';
+    case 'failed':
+      return 'THẤT BẠI';
+    default:
+      return 'JOB MỚI';
+  }
+};
+
+const getPromptMeta = (payload) => {
+  const prompt = String(payload?.job?.prompt || '').trim();
+  return {
+    text: prompt,
+    length: prompt.length,
+  };
+};
+
+const buildEventSummary = (payload) => {
+  const eventType = String(payload?.eventType || 'queued').toLowerCase();
+  const job = payload?.job || {};
+  const config = job?.config || {};
+  const promptMeta = getPromptMeta(payload);
+  const eventLabel = getEventLabel(eventType);
+
+  if (eventType === 'completed') {
+    return [
+      buildHeader(payload?.app || 'App', eventType),
+      `<b>${eventLabel}</b> | ${escapeHtml(displayValue(job?.toolName || job?.queueKind))}`,
+      `Người dùng: ${escapeHtml(displayValue(job?.displayName, 'Unknown'))} | Vcoin: ${escapeHtml(displayValue(job?.costVcoin ?? 0, '0'))}`,
+      `Model: ${escapeHtml(displayValue(config?.modelId || job?.engine))}`,
+      `Độ phân giải/Tốc độ: ${escapeHtml(displayValue(config?.resolution))} | ${escapeHtml(displayValue(config?.speed))}`,
+      `Server: ${escapeHtml(displayValue(config?.serverId))}`,
+      `Hoàn tất lúc: ${escapeHtml(formatIso(job?.finishedAt))}`,
+      `Prompt: đã ẩn (${escapeHtml(String(promptMeta.length))} ký tự)`,
+    ].filter(Boolean);
+  }
+
+  if (eventType === 'failed') {
+    return [
+      buildHeader(payload?.app || 'App', eventType),
+      `<b>${eventLabel}</b> | ${escapeHtml(displayValue(job?.toolName || job?.queueKind))}`,
+      `Người dùng: ${escapeHtml(displayValue(job?.displayName, 'Unknown'))} | Vcoin: ${escapeHtml(displayValue(job?.costVcoin ?? 0, '0'))}`,
+      `Chế độ: ${escapeHtml(displayValue(config?.mode))} | Model: ${escapeHtml(displayValue(config?.modelId || job?.engine))}`,
+      `Tạo lúc: ${escapeHtml(formatIso(job?.createdAt))}`,
+      job?.errorMessage ? `Lỗi: ${escapeHtml(truncate(job.errorMessage, 220))}` : '',
+      `Prompt: đã ẩn (${escapeHtml(String(promptMeta.length))} ký tự)`,
+    ].filter(Boolean);
+  }
+
+  return [
+    buildHeader(payload?.app || 'App', eventType),
+    `<b>${eventLabel}</b> | ${escapeHtml(displayValue(job?.toolName || job?.queueKind))}`,
+    `Người dùng: ${escapeHtml(displayValue(job?.displayName, 'Unknown'))} | Vcoin: ${escapeHtml(displayValue(job?.costVcoin ?? 0, '0'))}`,
+    `Chế độ: ${escapeHtml(displayValue(config?.mode))} | Loại: ${escapeHtml(displayValue(job?.assetType, 'image'))}`,
+    `Model: ${escapeHtml(displayValue(config?.modelId || job?.engine))}`,
+    `Độ phân giải/Tốc độ: ${escapeHtml(displayValue(config?.resolution))} | ${escapeHtml(displayValue(config?.speed))}`,
+    `Server: ${escapeHtml(displayValue(config?.serverId))}`,
+    `Tạo lúc: ${escapeHtml(formatIso(job?.createdAt))}`,
+    `Prompt: đã ẩn (${escapeHtml(String(promptMeta.length))} ký tự)`,
+  ].filter(Boolean);
+};
+
 const buildTextMessage = (payload) => {
-  const eventType = String(payload?.eventType || 'queued').toUpperCase();
+  const eventType = String(payload?.eventType || 'queued').toLowerCase();
   const job = payload?.job || {};
   const media = payload?.media || {};
   const config = job?.config || {};
-  const prompt = truncate(job?.prompt || '', 500);
+  const promptMeta = getPromptMeta(payload);
+  const inputCount = normalizeUrls(media?.inputUrls).length;
   const lines = [
-    `<b>${escapeHtml(payload?.app || 'App')} | ${escapeHtml(eventType)}</b>`,
+    buildHeader(payload?.app || 'App', eventType),
     '',
-    `<b>User:</b> ${escapeHtml(job?.displayName || 'Unknown')}`,
-    `<b>Email:</b> ${escapeHtml(job?.email || 'N/A')}`,
-    `<b>User ID:</b> <code>${escapeHtml(job?.userId || '')}</code>`,
-    `<b>Job ID:</b> <code>${escapeHtml(job?.id || '')}</code>`,
-    `<b>Feature:</b> ${escapeHtml(job?.toolName || job?.queueKind || 'N/A')}`,
-    `<b>Asset:</b> ${escapeHtml(job?.assetType || 'image')}`,
-    `<b>Mode:</b> ${escapeHtml(config?.mode || 'N/A')}`,
-    `<b>Model:</b> ${escapeHtml(config?.modelId || job?.engine || 'N/A')}`,
-    `<b>Resolution:</b> ${escapeHtml(config?.resolution || 'N/A')}`,
-    `<b>Speed:</b> ${escapeHtml(config?.speed || 'N/A')}`,
-    `<b>Server:</b> ${escapeHtml(config?.serverId || 'N/A')}`,
-    `<b>Duration:</b> ${escapeHtml(config?.duration || 'N/A')}`,
-    `<b>Aspect Ratio:</b> ${escapeHtml(config?.aspectRatio || 'N/A')}`,
-    `<b>Audio:</b> ${config?.audio === true ? 'on' : config?.audio === false ? 'off' : 'N/A'}`,
-    `<b>Characters:</b> ${escapeHtml(config?.characterCount || 'N/A')}`,
-    `<b>Vcoin:</b> ${escapeHtml(job?.costVcoin ?? 0)}`,
-    `<b>Status:</b> ${escapeHtml(job?.status || payload?.eventType || 'N/A')}`,
-    `<b>Created:</b> ${escapeHtml(job?.createdAt || 'N/A')}`,
-    `<b>Finished:</b> ${escapeHtml(job?.finishedAt || 'N/A')}`,
-    `<b>Input Media:</b> ${normalizeUrls(media?.inputUrls).length}`,
-    `<b>Output:</b> ${isHttpUrl(media?.outputUrl) ? 'attached below' : 'N/A'}`,
+    `<b>Tóm tắt</b>`,
+    ...buildEventSummary(payload).slice(1).map((line) => `- ${line.replace(/<[^>]+>/g, '')}`),
+    '',
+    `<b>Người dùng</b>`,
+    `- Tên: ${escapeHtml(displayValue(job?.displayName, 'Unknown'))}`,
+    `- Email: ${escapeHtml(displayValue(job?.email))}`,
+    `- User ID: <code>${escapeHtml(displayValue(job?.userId, '-'))}</code>`,
+    '',
+    `<b>Job</b>`,
+    `- Trạng thái: <b>${escapeHtml(displayValue(job?.status || eventType).toUpperCase())}</b>`,
+    `- Tính năng: ${escapeHtml(displayValue(job?.toolName || job?.queueKind))}`,
+    `- Loại nội dung: ${escapeHtml(displayValue(job?.assetType, 'image'))}`,
+    `- Vcoin: ${escapeHtml(displayValue(job?.costVcoin ?? 0, '0'))}`,
+    `- Job ID: <code>${escapeHtml(displayValue(job?.id, '-'))}</code>`,
+    '',
+    `<b>Cấu hình</b>`,
+    `- Chế độ: ${escapeHtml(displayValue(config?.mode))}`,
+    `- Model: ${escapeHtml(displayValue(config?.modelId || job?.engine))}`,
+    `- Độ phân giải: ${escapeHtml(displayValue(config?.resolution))} | Tốc độ: ${escapeHtml(displayValue(config?.speed))}`,
+    `- Server: ${escapeHtml(displayValue(config?.serverId))} | Tỷ lệ: ${escapeHtml(displayValue(config?.aspectRatio))}`,
+    `- Thời lượng: ${escapeHtml(displayValue(config?.duration))} | Âm thanh: ${escapeHtml(config?.audio === true ? 'bật' : config?.audio === false ? 'tắt' : 'N/A')}`,
+    `- Số nhân vật: ${escapeHtml(displayValue(config?.characterCount))}`,
+    '',
+    `<b>Thời gian</b>`,
+    `- Tạo lúc: ${escapeHtml(formatIso(job?.createdAt))}`,
+    `- Hoàn tất lúc: ${escapeHtml(formatIso(job?.finishedAt))}`,
+    '',
+    `<b>Media</b>`,
+    `- Số ảnh input: ${escapeHtml(displayValue(inputCount, '0'))}`,
+    `- Kết quả: ${isHttpUrl(media?.outputUrl) ? 'có link bên dưới' : 'N/A'}`,
   ];
 
-  if (prompt) {
-    lines.push('', `<b>Prompt:</b>\n${escapeHtml(prompt)}`);
+  const mediaLinks = buildMediaLinks(payload);
+  if (mediaLinks.length > 0) {
+    lines.push(...mediaLinks);
   }
 
+  lines.push('', `<b>Prompt</b>`, `- Đã ẩn | độ dài: ${escapeHtml(String(promptMeta.length))} ký tự`);
+
   if (job?.errorMessage) {
-    lines.push('', `<b>Error:</b>\n${escapeHtml(truncate(job.errorMessage, 500))}`);
+    lines.push('', `<b>Lỗi</b>`, `<pre>${escapeHtml(truncate(job.errorMessage, 500))}</pre>`);
   }
 
   return lines.join('\n');
+};
+
+const buildMediaCaption = (payload) => {
+  const lines = buildEventSummary(payload);
+  const links = buildMediaLinks(payload);
+  if (links.length > 0) {
+    lines.push(...links);
+  }
+  return truncate(lines.join('\n'), 900);
 };
 
 const telegramUrl = (env, method) => `${TELEGRAM_API_BASE}/bot${env.TELEGRAM_BOT_TOKEN}/${method}`;
@@ -110,10 +253,52 @@ async function sendText(env, text) {
   return sendTelegramRequest(env, 'sendMessage', body);
 }
 
+async function probeMedia(url) {
+  try {
+    const response = await fetch(url, {
+      method: 'HEAD',
+      redirect: 'follow',
+      signal: AbortSignal.timeout(8000),
+    });
+
+    if (!response.ok) {
+      return {
+        ok: false,
+        sizeBytes: null,
+        contentType: null,
+      };
+    }
+
+    const contentLength = response.headers.get('content-length');
+    const contentType = response.headers.get('content-type');
+
+    return {
+      ok: true,
+      sizeBytes: contentLength ? Number(contentLength) : null,
+      contentType: contentType || null,
+    };
+  } catch {
+    return {
+      ok: false,
+      sizeBytes: null,
+      contentType: null,
+    };
+  }
+}
+
+const isVideoByContentType = (contentType) => /^video\//i.test(String(contentType || '').trim());
+const isImageByContentType = (contentType) => /^image\//i.test(String(contentType || '').trim());
+
+const getTelegramMediaType = (url, mediaInfo) => {
+  if (isVideoUrl(url) || isVideoByContentType(mediaInfo?.contentType)) {
+    return 'video';
+  }
+  return 'photo';
+};
+
 async function sendMedia(env, url, caption = '') {
-  const isVideo = isVideoUrl(url);
-  const method = isVideo ? 'sendVideo' : 'sendPhoto';
-  const mediaField = isVideo ? 'video' : 'photo';
+  const method = isVideoUrl(url) ? 'sendVideo' : 'sendPhoto';
+  const mediaField = method === 'sendVideo' ? 'video' : 'photo';
   const body = new URLSearchParams();
 
   body.set('chat_id', env.TELEGRAM_CHAT_ID);
@@ -121,6 +306,7 @@ async function sendMedia(env, url, caption = '') {
   if (caption) {
     body.set('caption', truncate(caption, 900));
   }
+  body.set('parse_mode', 'HTML');
 
   const threadId = getThreadId(env);
   if (threadId) body.set('message_thread_id', threadId);
@@ -128,35 +314,109 @@ async function sendMedia(env, url, caption = '') {
   try {
     return await sendTelegramRequest(env, method, body);
   } catch (error) {
-    await sendText(env, `<b>Media fallback:</b>\n${escapeHtml(url)}`);
+    await sendText(env, `<b>Không gửi được media trực tiếp</b>\n${escapeHtml(url)}`);
     return { ok: false, fallback: true, error: String(error) };
   }
 }
 
-async function handleNotification(env, payload) {
-  const eventType = String(payload?.eventType || 'queued').toLowerCase();
+const collectCandidateMedia = (payload) => {
   const inputUrls = normalizeUrls(payload?.media?.inputUrls);
+  return inputUrls.slice(0, 6);
+};
+
+async function sendMediaGroup(env, mediaItems) {
+  const body = new URLSearchParams();
+  body.set('chat_id', env.TELEGRAM_CHAT_ID);
+  body.set('media', JSON.stringify(mediaItems));
+
+  const threadId = getThreadId(env);
+  if (threadId) body.set('message_thread_id', threadId);
+
+  return sendTelegramRequest(env, 'sendMediaGroup', body);
+}
+
+async function sendSingleJobMessage(env, payload) {
+  const candidateUrls = collectCandidateMedia(payload);
+  const inspected = [];
+
+  for (const url of candidateUrls) {
+    const mediaInfo = await probeMedia(url);
+    const sizeBytes = mediaInfo?.sizeBytes;
+    const tooLarge = Number.isFinite(sizeBytes) && sizeBytes > MAX_TELEGRAM_MEDIA_BYTES;
+
+    inspected.push({
+      url,
+      mediaInfo,
+      sizeBytes,
+      tooLarge,
+      type: getTelegramMediaType(url, mediaInfo),
+    });
+  }
+
+  const eligibleMedia = inspected.filter(
+    (item) =>
+      !item.tooLarge &&
+      item.type === 'photo' &&
+      (isImageUrl(item.url) || isImageByContentType(item.mediaInfo?.contentType)),
+  );
+  const overflowLinks = inspected.filter((item) => item.tooLarge);
   const outputUrl = isHttpUrl(payload?.media?.outputUrl) ? payload.media.outputUrl.trim() : null;
+  const extraLinks = [
+    ...(outputUrl ? [`- Output: <a href="${escapeHtml(outputUrl)}">open</a>`] : []),
+    ...overflowLinks.map(
+      (item, index) => `- Input ${index + 1}: <a href="${escapeHtml(item.url)}">open</a> (${escapeHtml(formatBytes(item.sizeBytes))})`,
+    ),
+  ];
 
-  await sendText(env, buildTextMessage(payload));
+  if (eligibleMedia.length >= 2) {
+    const mediaItems = eligibleMedia.slice(0, 4).map((item, index) => ({
+      type: item.type,
+      media: item.url,
+      ...(index === 0
+        ? {
+            caption: buildMediaCaption(payload),
+            parse_mode: 'HTML',
+          }
+        : {}),
+    }));
 
-  if (eventType === 'queued') {
-    for (const url of inputUrls.slice(0, 3)) {
-      await sendMedia(env, url, 'Input media');
+    await sendMediaGroup(env, mediaItems);
+
+    if (extraLinks.length > 0) {
+      const extraText = [
+        `<b>Link media</b>`,
+        ...extraLinks,
+      ].join('\n');
+      await sendText(env, extraText);
     }
     return;
   }
 
-  if (eventType === 'failed') {
-    for (const url of inputUrls.slice(0, 1)) {
-      await sendMedia(env, url, 'Failed job input');
+  if (eligibleMedia.length === 1) {
+    await sendMedia(env, eligibleMedia[0].url, buildMediaCaption(payload));
+
+    if (extraLinks.length > 0) {
+      await sendText(env, [`<b>Link media</b>`, ...extraLinks].join('\n'));
     }
     return;
   }
 
-  if (eventType === 'completed' && outputUrl) {
-    await sendMedia(env, outputUrl, 'Output result');
-  }
+  const fallbackText = [
+    buildTextMessage(payload),
+    ...(extraLinks.length > 0
+      ? [
+          '',
+          `<b>Link media</b>`,
+          ...extraLinks,
+        ]
+      : []),
+  ].join('\n');
+
+  await sendText(env, fallbackText);
+}
+
+async function handleNotification(env, payload) {
+  await sendSingleJobMessage(env, payload);
 }
 
 export default {

@@ -58,6 +58,7 @@ const DISPATCH_CLAIM_LIMIT = 1;
 const POLL_CLAIM_LIMIT = 2;
 const WORKER_TICK_BUDGET_MS = 22_000;
 const MAX_QUEUE_LOG_ENTRIES = 80;
+const ORPHAN_CLAIM_GRACE_MS = 30_000;
 
 const isTransientError = (message: string) => {
   const normalized = message.toLowerCase();
@@ -839,11 +840,44 @@ const recoverStalePreparingJobs = async () => {
     const isRecipePayload = isQueueRecipePayload(payload);
     const isStagedRecipe =
       isRecipePayload && ['uploading_refs', 'synthesizing_prompt', 'building_payload'].includes(recipeStage);
+    const logCount = getQueueLogs(payload).length;
+    const isOrphanedClaim =
+      currentStatus === 'processing' &&
+      isRecipePayload &&
+      !isStagedRecipe &&
+      !recipeStage.startsWith('submitted') &&
+      !recipeStage.startsWith('dispatching') &&
+      ageMs >= ORPHAN_CLAIM_GRACE_MS &&
+      logCount <= 1;
 
     const preparationTimeoutMs = getPreparationTimeoutMs(job, payload);
 
     if (ageMs >= preparationTimeoutMs) {
       await markFailedAndRefund(job, getPreparationTimeoutUserMessage(job, payload));
+      continue;
+    }
+
+    if (isOrphanedClaim) {
+      const resetPayload = withQueueLog(
+        payload,
+        'queued',
+        'Phat hien job bi claim som nhung worker chua bat dau. Dua lai vao hang doi de thu lai.',
+        'warning',
+      );
+      await admin
+        .from('generated_images')
+        .update({
+          status: 'queued',
+          progress: 0,
+          queue_payload: resetPayload,
+          processing_started_at: null,
+          lease_token: null,
+          lease_expires_at: null,
+          next_poll_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', job.id);
+      recovered += 1;
       continue;
     }
 

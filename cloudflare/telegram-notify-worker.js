@@ -106,6 +106,20 @@ const getEventLabel = (eventType) => {
   }
 };
 
+const LABELS = {
+  user: '[USER]',
+  job: '[JOB]',
+  config: '[CFG]',
+  time: '[TIME]',
+  media: '[MEDIA]',
+  prompt: '[PROMPT]',
+  input: '[IN]',
+  output: '[OUT]',
+  error: '[ERR]',
+  vcoin: '[VC]',
+  id: '[#]',
+};
+
 const getPromptMeta = (payload) => {
   const prompt = String(payload?.job?.prompt || '').trim();
   return {
@@ -172,19 +186,19 @@ const buildTextMessage = (payload) => {
     `<b>Tóm tắt</b>`,
     ...buildEventSummary(payload).slice(1).map((line) => `- ${line.replace(/<[^>]+>/g, '')}`),
     '',
-    `<b>Người dùng</b>`,
+    `<b>${LABELS.user} Người dùng</b>`,
     `- Tên: ${escapeHtml(displayValue(job?.displayName, 'Unknown'))}`,
     `- Email: ${escapeHtml(displayValue(job?.email))}`,
-    `- User ID: <code>${escapeHtml(displayValue(job?.userId, '-'))}</code>`,
+    `- ${LABELS.id} User ID: <code>${escapeHtml(displayValue(job?.userId, '-'))}</code>`,
     '',
-    `<b>Job</b>`,
+    `<b>${LABELS.job} Job</b>`,
     `- Trạng thái: <b>${escapeHtml(displayValue(job?.status || eventType).toUpperCase())}</b>`,
     `- Tính năng: ${escapeHtml(displayValue(job?.toolName || job?.queueKind))}`,
     `- Loại nội dung: ${escapeHtml(displayValue(job?.assetType, 'image'))}`,
-    `- Vcoin: ${escapeHtml(displayValue(job?.costVcoin ?? 0, '0'))}`,
-    `- Job ID: <code>${escapeHtml(displayValue(job?.id, '-'))}</code>`,
+    `- ${LABELS.vcoin} Vcoin: ${escapeHtml(displayValue(job?.costVcoin ?? 0, '0'))}`,
+    `- ${LABELS.id} Job ID: <code>${escapeHtml(displayValue(job?.id, '-'))}</code>`,
     '',
-    `<b>Cấu hình</b>`,
+    `<b>${LABELS.config} Cấu hình</b>`,
     `- Chế độ: ${escapeHtml(displayValue(config?.mode))}`,
     `- Model: ${escapeHtml(displayValue(config?.modelId || job?.engine))}`,
     `- Độ phân giải: ${escapeHtml(displayValue(config?.resolution))} | Tốc độ: ${escapeHtml(displayValue(config?.speed))}`,
@@ -192,13 +206,13 @@ const buildTextMessage = (payload) => {
     `- Thời lượng: ${escapeHtml(displayValue(config?.duration))} | Âm thanh: ${escapeHtml(config?.audio === true ? 'bật' : config?.audio === false ? 'tắt' : 'N/A')}`,
     `- Số nhân vật: ${escapeHtml(displayValue(config?.characterCount))}`,
     '',
-    `<b>Thời gian</b>`,
+    `<b>${LABELS.time} Thời gian</b>`,
     `- Tạo lúc: ${escapeHtml(formatIso(job?.createdAt))}`,
     `- Hoàn tất lúc: ${escapeHtml(formatIso(job?.finishedAt))}`,
     '',
-    `<b>Media</b>`,
-    `- Số ảnh input: ${escapeHtml(displayValue(inputCount, '0'))}`,
-    `- Kết quả: ${isHttpUrl(media?.outputUrl) ? 'có link bên dưới' : 'N/A'}`,
+    `<b>${LABELS.media} Media</b>`,
+    `- ${LABELS.input} Số ảnh input: ${escapeHtml(displayValue(inputCount, '0'))}`,
+    `- ${LABELS.output} Kết quả: ${isHttpUrl(media?.outputUrl) ? 'có link bên dưới' : 'N/A'}`,
   ];
 
   const mediaLinks = buildMediaLinks(payload);
@@ -206,10 +220,10 @@ const buildTextMessage = (payload) => {
     lines.push(...mediaLinks);
   }
 
-  lines.push('', `<b>Prompt</b>`, `- Đã ẩn | độ dài: ${escapeHtml(String(promptMeta.length))} ký tự`);
+  lines.push('', `<b>${LABELS.prompt} Prompt</b>`, `- Đã ẩn | độ dài: ${escapeHtml(String(promptMeta.length))} ký tự`);
 
   if (job?.errorMessage) {
-    lines.push('', `<b>Lỗi</b>`, `<pre>${escapeHtml(truncate(job.errorMessage, 500))}</pre>`);
+    lines.push('', `<b>${LABELS.error} Lỗi</b>`, `<pre>${escapeHtml(truncate(job.errorMessage, 500))}</pre>`);
   }
 
   return lines.join('\n');
@@ -314,7 +328,7 @@ async function sendMedia(env, url, caption = '') {
   try {
     return await sendTelegramRequest(env, method, body);
   } catch (error) {
-    await sendText(env, `<b>Không gửi được media trực tiếp</b>\n${escapeHtml(url)}`);
+    await sendText(env, `<b>${LABELS.media} Không gửi được media trực tiếp</b>\n${escapeHtml(url)}`);
     return { ok: false, fallback: true, error: String(error) };
   }
 }
@@ -362,9 +376,9 @@ async function sendSingleJobMessage(env, payload) {
   const overflowLinks = inspected.filter((item) => item.tooLarge);
   const outputUrl = isHttpUrl(payload?.media?.outputUrl) ? payload.media.outputUrl.trim() : null;
   const extraLinks = [
-    ...(outputUrl ? [`- Output: <a href="${escapeHtml(outputUrl)}">open</a>`] : []),
+    ...(outputUrl ? [`- ${LABELS.output} Output: <a href="${escapeHtml(outputUrl)}">mở</a>`] : []),
     ...overflowLinks.map(
-      (item, index) => `- Input ${index + 1}: <a href="${escapeHtml(item.url)}">open</a> (${escapeHtml(formatBytes(item.sizeBytes))})`,
+      (item, index) => `- ${LABELS.input} Input ${index + 1}: <a href="${escapeHtml(item.url)}">mở</a> (${escapeHtml(formatBytes(item.sizeBytes))})`,
     ),
   ];
 
@@ -384,7 +398,7 @@ async function sendSingleJobMessage(env, payload) {
 
     if (extraLinks.length > 0) {
       const extraText = [
-        `<b>Link media</b>`,
+        `<b>${LABELS.media} Link media</b>`,
         ...extraLinks,
       ].join('\n');
       await sendText(env, extraText);
@@ -396,7 +410,7 @@ async function sendSingleJobMessage(env, payload) {
     await sendMedia(env, eligibleMedia[0].url, buildMediaCaption(payload));
 
     if (extraLinks.length > 0) {
-      await sendText(env, [`<b>Link media</b>`, ...extraLinks].join('\n'));
+      await sendText(env, [`<b>${LABELS.media} Link media</b>`, ...extraLinks].join('\n'));
     }
     return;
   }
@@ -406,7 +420,7 @@ async function sendSingleJobMessage(env, payload) {
     ...(extraLinks.length > 0
       ? [
           '',
-          `<b>Link media</b>`,
+          `<b>${LABELS.media} Link media</b>`,
           ...extraLinks,
         ]
       : []),

@@ -1,4 +1,4 @@
-import type { Handler, HandlerContext } from '@netlify/functions';
+import type { Handler } from '@netlify/functions';
 import { runQueueWorker } from './_queue-worker';
 
 const headers = {
@@ -8,7 +8,7 @@ const headers = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-export const handler: Handler = async (event, context: HandlerContext) => {
+export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return {
       statusCode: 204,
@@ -26,12 +26,13 @@ export const handler: Handler = async (event, context: HandlerContext) => {
   }
 
   try {
-    context.callbackWaitsForEmptyEventLoop = false;
-    const summary = await runQueueWorker();
+    runQueueWorker().catch((error) => {
+      console.error('[queue-tick] Worker failed:', error);
+    });
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify({ success: true, accepted: true, summary }),
+      body: JSON.stringify({ success: true, accepted: true }),
     };
   } catch (error: any) {
     const message = error?.message || 'Internal Server Error';

@@ -108,8 +108,43 @@ export const uploadImageToTst = async (input: string) => uploadMediaToTst(input,
 export const uploadVideoToTst = async (input: string, fallbackMimeType?: string) =>
   uploadMediaToTst(input, 'video', fallbackMimeType);
 
-export const synthesizeImageGeneratePrompt = async (payload: ImageGenerateRecipePayload) =>
-  synthesizeStrictImagePrompt(payload);
+const isRecoverablePromptSynthesisError = (error: unknown) => {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error || '').toLowerCase();
+
+  return (
+    message.includes('resource has been exhausted') ||
+    message.includes('quota') ||
+    message.includes('rate limit') ||
+    message.includes('429') ||
+    message.includes('overloaded') ||
+    message.includes('deadline exceeded') ||
+    message.includes('failed to initialize vertex ai credentials')
+  );
+};
+
+const buildFallbackSynthesizedPrompt = (payload: ImageGenerateRecipePayload) => {
+  const basePrompt = payload.prompt?.trim() || '';
+  const stylePrompt = payload.stylePrompt?.trim() || '';
+
+  if (basePrompt && stylePrompt) {
+    return `${basePrompt}\nStyle reference keywords: ${stylePrompt}`;
+  }
+
+  return basePrompt || stylePrompt || 'Generate the image using the provided references exactly.';
+};
+
+export const synthesizeImageGeneratePrompt = async (payload: ImageGenerateRecipePayload) => {
+  try {
+    return await synthesizeStrictImagePrompt(payload);
+  } catch (error) {
+    if (!isRecoverablePromptSynthesisError(error)) {
+      throw error;
+    }
+
+    console.warn('[queue-recipes] Vertex prompt synthesis unavailable, falling back to base prompt:', error);
+    return buildFallbackSynthesizedPrompt(payload);
+  }
+};
 
 export const buildImageGenerateProviderPayload = (
   payload: ImageGenerateRecipePayload,

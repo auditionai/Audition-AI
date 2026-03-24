@@ -261,16 +261,7 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
   };
 };
 
-const runSafeWorkerTick = async (awaitCompletion = false) => {
-  if (awaitCompletion) {
-    try {
-      await runQueueWorker();
-    } catch (workerError) {
-      console.error('[queue-submit] Immediate worker tick failed:', workerError);
-    }
-    return;
-  }
-
+const runSafeWorkerTick = () => {
   runQueueWorker().catch((workerError) => {
     console.error('[queue-submit] Immediate worker tick failed:', workerError);
   });
@@ -342,7 +333,7 @@ export const handler: Handler = async (event) => {
       row = Array.isArray(rpcResult.data) ? rpcResult.data[0] : rpcResult.data;
     }
 
-    await runSafeWorkerTick(body.queueKind === 'image_generate');
+    runSafeWorkerTick();
 
     return {
       statusCode: 200,

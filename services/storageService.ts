@@ -602,7 +602,10 @@ export const publishImageToShowcase = async (image: GeneratedImage): Promise<Gen
 
 const mapEngineName = (engine: string) => {
     if (!engine) return 'AI Gen';
-    return engine.replace('Gemini 2.5 Flash', 'Gemini 3.1 Flash').replace('Gemini 2.5 Pro', 'Gemini 3 Pro');
+    return engine
+        .replace('Gemini 2.5 Flash', 'Gemini 3.1 Flash')
+        .replace('Gemini 2.5 Pro', 'Gemini 3 Pro')
+        .replace('Gemini 3.0 Pro', 'Gemini 3 Pro');
 };
 
 const inferToolId = (modelUsed?: string, assetUrl?: string) => {

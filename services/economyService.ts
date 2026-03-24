@@ -896,6 +896,10 @@ interface KeyStats {
     resetAt: number;
 }
 const keyUsageStats = new Map<string, KeyStats>();
+const SERVICE_ACCOUNT_SOFT_COOLDOWN_MS = 2 * 60 * 1000;
+
+const isServiceAccountJson = (value: string) =>
+    value.includes('project_id') && value.includes('private_key') && value.includes('client_email');
 
 export const isKeyDisabled = (key: string): boolean => {
     return temporarilyDisabledKeys.has(key);
@@ -955,6 +959,44 @@ export const getSystemApiKey = async (tier: 'flash' | 'pro' = 'flash', excludedK
         
         if (error || !allKeys || allKeys.length === 0) {
             return process.env.API_KEY || null;
+        }
+
+        const serviceAccountKeys = allKeys.filter((k: any) =>
+            typeof k.key_value === 'string' &&
+            isServiceAccountJson(k.key_value) &&
+            !temporarilyDisabledKeys.has(k.key_value) &&
+            !excludedKeys.includes(k.key_value)
+        );
+
+        if (serviceAccountKeys.length > 0) {
+            const sortedServiceAccounts = [...serviceAccountKeys].sort((a: any, b: any) => {
+                const aLastUsed = a.last_used_at ? new Date(a.last_used_at).getTime() : 0;
+                const bLastUsed = b.last_used_at ? new Date(b.last_used_at).getTime() : 0;
+                const aIsCoolingAfterFailure = aLastUsed > now;
+                const bIsCoolingAfterFailure = bLastUsed > now;
+                const aIsWarm = !aIsCoolingAfterFailure && aLastUsed > 0 && now - aLastUsed < SERVICE_ACCOUNT_SOFT_COOLDOWN_MS;
+                const bIsWarm = !bIsCoolingAfterFailure && bLastUsed > 0 && now - bLastUsed < SERVICE_ACCOUNT_SOFT_COOLDOWN_MS;
+
+                if (aIsCoolingAfterFailure !== bIsCoolingAfterFailure) {
+                    return aIsCoolingAfterFailure ? 1 : -1;
+                }
+
+                if (aIsWarm !== bIsWarm) {
+                    return aIsWarm ? 1 : -1;
+                }
+
+                return aLastUsed - bLastUsed;
+            });
+
+            const selectedServiceAccount = sortedServiceAccounts[0];
+            lastUsedKey = selectedServiceAccount.key_value;
+            supabase
+                .from('api_keys')
+                .update({ last_used_at: new Date().toISOString() })
+                .eq('id', selectedServiceAccount.id)
+                .then(() => {});
+
+            return selectedServiceAccount.key_value;
         }
 
         // 3. Filter by tier

@@ -1,13 +1,5 @@
-import { GoogleAuth } from 'google-auth-library';
-import { getServiceRoleClient } from './_supabase';
 import { getImageDirectorSources, type ImageGenerateRecipePayload } from '../../shared/queueRecipes';
-
-type VertexCredentialRow = {
-  id: string;
-  name: string | null;
-  key_value: string | null;
-  last_used_at?: string | null;
-};
+import { runWithVertexCredentialFailover } from './_vertex-credentials';
 
 const VERTEX_MODEL = 'gemini-3.1-pro-preview';
 
@@ -18,48 +10,6 @@ const parseErrorMessage = async (response: Response) => {
   } catch {
     return `${response.status} ${response.statusText}`;
   }
-};
-
-const isServiceAccountJson = (value: string) =>
-  value.includes('project_id') && value.includes('private_key') && value.includes('client_email');
-
-const getPreferredVertexCredential = async () => {
-  const admin = getServiceRoleClient();
-  const { data, error } = await admin
-    .from('api_keys')
-    .select('id, name, key_value, last_used_at')
-    .eq('status', 'active');
-
-  if (error) {
-    throw error;
-  }
-
-  const validCredentials = ((data || []) as VertexCredentialRow[]).filter((row) =>
-    typeof row.key_value === 'string' && isServiceAccountJson(row.key_value),
-  );
-
-  if (validCredentials.length === 0) {
-    throw new Error('Không tìm thấy Service Account JSON [PRO] hợp lệ để phân tích ảnh.');
-  }
-
-  const sorted = [...validCredentials].sort((a, b) => {
-    const aPro = a.name?.includes('[PRO]') ? 1 : 0;
-    const bPro = b.name?.includes('[PRO]') ? 1 : 0;
-    if (aPro !== bPro) return bPro - aPro;
-    return new Date(a.last_used_at || 0).getTime() - new Date(b.last_used_at || 0).getTime();
-  });
-
-  const selected = sorted[0];
-  const credentials = JSON.parse(selected.key_value || '{}');
-
-  admin
-    .from('api_keys')
-    .update({ last_used_at: new Date().toISOString() })
-    .eq('id', selected.id)
-    .then(() => {})
-    .catch(() => {});
-
-  return credentials;
 };
 
 const toInlineImagePart = async (source: string) => {
@@ -170,59 +120,47 @@ export const synthesizeStrictImagePrompt = async (payload: ImageGenerateRecipePa
   }
 
   const orderedSources = getImageDirectorSources(payload);
-
   const parts: Array<Record<string, unknown>> = await Promise.all(orderedSources.map((image) => toInlineImagePart(image)));
 
   parts.push({
     text: buildStrictImageDirectorInstruction(payload, hasCharacters, hasSample, hasStyle),
   });
 
-  const credentials = await getPreferredVertexCredential();
-  const projectId = credentials.project_id;
-
-  const auth = new GoogleAuth({
-    credentials,
-    scopes: ['https://www.googleapis.com/auth/cloud-platform'],
-  });
-
-  const client = await auth.getClient();
-  const accessToken = await client.getAccessToken();
-  const token = accessToken.token;
-
-  if (!projectId || !token) {
-    throw new Error('Failed to initialize Vertex AI credentials for image analysis.');
-  }
-
-  const response = await fetch(
-    `https://aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/global/publishers/google/models/${VERTEX_MODEL}:generateContent`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts }],
-        generationConfig: {
-          temperature: 0.2,
-          topP: 0.8,
-          maxOutputTokens: 2048,
+  return runWithVertexCredentialFailover({
+    taskName: 'image prompt synthesis',
+    operation: async ({ projectId, accessToken }) => {
+      const response = await fetch(
+        `https://aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/global/publishers/google/models/${VERTEX_MODEL}:generateContent`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts }],
+            generationConfig: {
+              temperature: 0.2,
+              topP: 0.8,
+              maxOutputTokens: 2048,
+            },
+          }),
+          signal: AbortSignal.timeout(180000),
         },
-      }),
-      signal: AbortSignal.timeout(180000),
+      );
+
+      if (!response.ok) {
+        throw new Error(await parseErrorMessage(response));
+      }
+
+      const data = await response.json();
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+
+      if (!text) {
+        throw new Error('Vertex AI did not return a synthesized image prompt.');
+      }
+
+      return text;
     },
-  );
-
-  if (!response.ok) {
-    throw new Error(await parseErrorMessage(response));
-  }
-
-  const data = await response.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-
-  if (!text) {
-    throw new Error('Vertex AI did not return a synthesized image prompt.');
-  }
-
-  return text;
+  });
 };

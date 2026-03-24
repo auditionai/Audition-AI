@@ -63,7 +63,7 @@ export const triggerServerQueueTick = async (force = false) => {
   if (!force && queueTickUnavailableUntil > now) {
     return null;
   }
-  if (!force && now - lastTickAt < 2500) {
+  if (!force && now - lastTickAt < 1500) {
     return null;
   }
 

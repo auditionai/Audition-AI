@@ -307,7 +307,7 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
 const runSafeWorkerTick = async (awaitCompletion = false) => {
   if (awaitCompletion) {
     try {
-      await withTimeout(runQueueWorker(), 8000);
+      await withTimeout(runQueueWorker(), 9000);
     } catch (workerError) {
       console.error('[queue-submit] Immediate worker tick failed:', workerError);
     }

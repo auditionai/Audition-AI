@@ -55,8 +55,8 @@ const GROUP_OF_THREE_PREPARE_TIMEOUT_MS = 15 * 60 * 1000;
 const GROUP_OF_FOUR_PREPARE_TIMEOUT_MS = 20 * 60 * 1000;
 const IMAGE_REFERENCE_UPLOAD_CHUNK_SIZE = 2;
 const DISPATCH_CLAIM_LIMIT = 1;
-const POLL_CLAIM_LIMIT = 2;
-const WORKER_TICK_BUDGET_MS = 22_000;
+const POLL_CLAIM_LIMIT = 1;
+const WORKER_TICK_BUDGET_MS = 8_000;
 const MAX_QUEUE_LOG_ENTRIES = 80;
 const ORPHAN_CLAIM_GRACE_MS = 30_000;
 
@@ -1126,6 +1126,15 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
         summary.failed += 1;
       }
     }
+  }
+
+  if (
+    summary.claimedForDispatch > 0 ||
+    summary.submitted > 0 ||
+    summary.requeued > 0 ||
+    summary.failed > 0
+  ) {
+    return summary;
   }
 
   const { data: pollJobs, error: pollError } = await admin.rpc('claim_pollable_generated_jobs', {

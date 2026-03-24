@@ -185,6 +185,25 @@ const submitProviderJob = async (queueKind: string, providerPayload: Record<stri
   return providerJobId;
 };
 
+const applyLivePricingConfigToPayload = (
+  providerPayload: Record<string, unknown>,
+  validationResult?: { pricingMatch?: { config_key?: string } | null } | null,
+) => {
+  const configKey = String(validationResult?.pricingMatch?.config_key || '').trim();
+  if (!configKey) {
+    return providerPayload;
+  }
+
+  if (String(providerPayload.config_key || '').trim() === configKey) {
+    return providerPayload;
+  }
+
+  return {
+    ...providerPayload,
+    config_key: configKey,
+  };
+};
+
 const pollProviderJob = async (providerJobId: string) => {
   if (!TST_API_KEY) {
     throw new Error('Missing TST_API_KEY environment variable');
@@ -464,11 +483,12 @@ const prepareImageRecipeInStages = async (job: QueueJobRow, recipePayload: Image
     : await synthesizeImageGeneratePrompt(recipePayload);
   const providerPayload = buildImageGenerateProviderPayload(recipePayload, uploadedUrls, synthesizedPrompt);
 
-  await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, providerPayload);
-  await persistPreparedPayload(job.id, providerPayload);
+  const validationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, providerPayload);
+  const validatedProviderPayload = applyLivePricingConfigToPayload(providerPayload, validationResult);
+  await persistPreparedPayload(job.id, validatedProviderPayload);
   await markPreparedForDispatch(job.id);
 
-  return { type: 'prepared' as const, providerPayload };
+  return { type: 'prepared' as const, providerPayload: validatedProviderPayload };
 };
 
 const markCompletedWithAssetUrl = async (job: QueueJobRow, assetUrl: string) => {
@@ -690,7 +710,7 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
         await markPreparing(job);
       }
 
-      await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, validationPayload);
+      const validationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, validationPayload);
 
       if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'image_edit_recipe_v1') {
         const editPayload = currentPayload as ImageEditRecipePayload;
@@ -732,16 +752,23 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
           PREPARE_PHASE_TIMEOUT_MS,
           'Queue preparation timed out before dispatching to provider.',
         );
-        await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, providerPayload);
-        await persistPreparedPayload(job.id, providerPayload);
-        job.queue_payload = providerPayload;
+        const preparedValidationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, providerPayload);
+        const validatedProviderPayload = applyLivePricingConfigToPayload(providerPayload, preparedValidationResult);
+        await persistPreparedPayload(job.id, validatedProviderPayload);
+        job.queue_payload = validatedProviderPayload;
         await markPreparedForDispatch(job.id);
         summary.requeued += 1;
         continue;
       }
 
+      const providerPayloadForSubmit = applyLivePricingConfigToPayload(currentPayload, validationResult);
+      if (providerPayloadForSubmit !== currentPayload) {
+        await persistPreparedPayload(job.id, providerPayloadForSubmit);
+        job.queue_payload = providerPayloadForSubmit;
+      }
+
       await markSubmittingPreparedPayload(job.id);
-      const providerJobId = await submitProviderJob(job.queue_kind, currentPayload);
+      const providerJobId = await submitProviderJob(job.queue_kind, providerPayloadForSubmit);
       await markSubmitted(job, providerJobId);
       summary.submitted += 1;
     } catch (error: any) {

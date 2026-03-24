@@ -1,4 +1,5 @@
 import { getServiceRoleClient } from './_supabase';
+import { fireTelegramJobNotification } from './_telegram-notify';
 import { validateQueuePayloadAgainstLiveCatalog } from './_tst-live-catalog';
 import { normalizeTstOutboundPayload } from './_tst-payload-normalizer';
 import {
@@ -469,12 +470,13 @@ const releaseLease = async (jobId: string) => {
 const markFailedAndRefund = async (job: QueueJobRow, errorMessage: string) => {
   const admin = getServiceRoleClient();
   const nextPayload = withQueueLog(job.queue_payload, 'failed', errorMessage, 'error');
+  const finishedAt = new Date().toISOString();
   await updateGeneratedImageRecord(job.id, {
     status: 'failed',
     error_message: errorMessage,
     queue_payload: nextPayload,
     progress: 0,
-    finished_at: new Date().toISOString(),
+    finished_at: finishedAt,
     lease_token: null,
     lease_expires_at: null,
     next_poll_at: null,
@@ -485,6 +487,21 @@ const markFailedAndRefund = async (job: QueueJobRow, errorMessage: string) => {
   await admin.rpc('refund_generated_job', {
     p_generated_image_id: job.id,
     p_reason: `Refund: ${job.tool_name || job.queue_kind} failed`,
+  });
+
+  fireTelegramJobNotification('failed', {
+    id: job.id,
+    userId: job.user_id,
+    prompt: job.prompt,
+    assetType: job.asset_type,
+    toolId: job.tool_id,
+    toolName: job.tool_name,
+    engine: job.model_used,
+    queueKind: job.queue_kind,
+    costVcoin: job.cost_vcoin,
+    errorMessage,
+    finishedAt,
+    queuePayload: nextPayload,
   });
 };
 
@@ -803,6 +820,20 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
         updated_at: new Date().toISOString(),
       })
       .eq('id', job.id);
+    fireTelegramJobNotification('completed', {
+      id: job.id,
+      userId: job.user_id,
+      prompt: job.prompt,
+      assetType: job.asset_type,
+      toolId: job.tool_id,
+      toolName: job.tool_name,
+      engine: job.model_used,
+      queueKind: job.queue_kind,
+      costVcoin: job.cost_vcoin,
+      resultUrl,
+      finishedAt: new Date().toISOString(),
+      queuePayload: job.queue_payload,
+    });
     return 'completed';
   }
 
@@ -1085,6 +1116,20 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
         );
 
         await markCompletedWithAssetUrl(job, resultUrl);
+        fireTelegramJobNotification('completed', {
+          id: job.id,
+          userId: job.user_id,
+          prompt: job.prompt,
+          assetType: job.asset_type,
+          toolId: job.tool_id,
+          toolName: job.tool_name,
+          engine: job.model_used,
+          queueKind: job.queue_kind,
+          costVcoin: job.cost_vcoin,
+          resultUrl,
+          finishedAt: new Date().toISOString(),
+          queuePayload: job.queue_payload,
+        });
         summary.completed += 1;
         continue;
       }

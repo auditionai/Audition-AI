@@ -77,6 +77,88 @@ const getCurrentSessionUser = async () => {
     return session?.user ?? null;
 };
 
+const getSessionAuthHeader = async () => {
+    if (!supabase) throw new Error("No Database");
+    const {
+        data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+        throw new Error("Unauthorized");
+    }
+
+    return {
+        Authorization: `Bearer ${session.access_token}`,
+    };
+};
+
+const normalizeHistoryDescription = (entry: any): string => {
+    const directDescription =
+        entry?.description ||
+        entry?.reason ||
+        entry?.note ||
+        entry?.action ||
+        entry?.details;
+
+    if (typeof directDescription === 'string' && directDescription.trim()) {
+        return directDescription;
+    }
+
+    const metadata = entry?.metadata && typeof entry.metadata === 'object' ? entry.metadata : {};
+    if (typeof metadata.tool_name === 'string' && metadata.tool_name.trim()) {
+        return metadata.tool_name;
+    }
+
+    if (typeof metadata.tool_id === 'string' && metadata.tool_id.trim()) {
+        return metadata.tool_id;
+    }
+
+    if (entry?.reference_type === 'generated_image_charge') {
+        return 'Su dung AI';
+    }
+
+    if (entry?.reference_type === 'generated_image_refund') {
+        return 'Hoan Vcoin';
+    }
+
+    return 'Giao dich he thong';
+};
+
+const normalizeHistoryType = (value: any): HistoryItem['type'] => {
+    switch (value) {
+        case 'topup':
+        case 'usage':
+        case 'reward':
+        case 'giftcode':
+        case 'refund':
+        case 'pending_topup':
+        case 'admin_adjustment':
+            return value;
+        default:
+            return 'usage';
+    }
+};
+
+const mapPaymentTransactionToHistoryItem = (tx: any): HistoryItem => ({
+    id: tx.id,
+    createdAt: tx.created_at,
+    description: `Nap Vcoin (${tx.order_code})`,
+    vcoinChange: Number(tx.vcoin_received || 0),
+    amountVnd: Number(tx.amount_vnd || 0),
+    type: tx.status === 'paid' ? 'topup' : 'pending_topup',
+    status: tx.status === 'paid' ? 'success' : tx.status === 'pending' ? 'pending' : 'failed',
+    code: tx.order_code
+});
+
+const mapVcoinTransactionToHistoryItem = (log: any): HistoryItem => ({
+    id: log.id,
+    createdAt: log.created_at,
+    description: normalizeHistoryDescription(log),
+    vcoinChange: Number(log.amount || 0),
+    type: normalizeHistoryType(log.type),
+    status: 'success'
+});
+
 // --- USER & PROFILE ---
 
 export const getUserProfile = async (options?: { force?: boolean }): Promise<UserProfile> => {
@@ -1335,6 +1417,23 @@ export const getUnifiedHistory = async (targetUserId?: string): Promise<HistoryI
     });
 
     return history.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+};
+
+export const getAdminUserHistory = async (targetUserId: string): Promise<HistoryItem[]> => {
+    if (!targetUserId) return [];
+
+    const authHeader = await getSessionAuthHeader();
+    const response = await fetch(`/api/admin-user-history?userId=${encodeURIComponent(targetUserId)}`, {
+        method: 'GET',
+        headers: authHeader,
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        throw new Error(payload?.error || 'Khong the tai lich su nguoi dung');
+    }
+
+    return Array.isArray(payload?.history) ? payload.history : [];
 };
 
 // --- MAINTENANCE MODE ---

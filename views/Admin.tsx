@@ -29,7 +29,7 @@ import {
     getStylePresets,
     saveStylePreset,
     deleteStylePreset,
-    getUnifiedHistory,
+    getAdminUserHistory,
     getGiftcodeUsages,
     getMaintenanceMode,
     saveMaintenanceMode,
@@ -941,7 +941,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       setHistoryLimit(20);
       setImagesLimit(20);
       try {
-          const history = await getUnifiedHistory(user.id);
+          const history = await getAdminUserHistory(user.id);
           setUserHistory(history);
           
           // Fetch images for this user

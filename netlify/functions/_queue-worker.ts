@@ -1,5 +1,6 @@
 import { getServiceRoleClient } from './_supabase';
 import { validateQueuePayloadAgainstLiveCatalog } from './_tst-live-catalog';
+import { normalizeTstOutboundPayload } from './_tst-payload-normalizer';
 import {
   buildImageGenerateProviderPayload,
   prepareProviderPayloadFromQueueRecipe,
@@ -362,7 +363,7 @@ const submitProviderJob = async (queueKind: string, providerPayload: Record<stri
     throw new Error('Queue payload is missing');
   }
 
-  const outboundPayload = stripInternalQueueMeta(providerPayload);
+  const outboundPayload = normalizeTstOutboundPayload(stripInternalQueueMeta(providerPayload));
 
   const response = await fetch(getGenerateEndpoint(queueKind), {
     method: 'POST',

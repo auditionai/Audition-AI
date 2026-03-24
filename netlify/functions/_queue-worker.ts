@@ -1020,12 +1020,15 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
       const validationPayload = isQueueRecipePayload(currentPayload)
         ? getRecipeValidationPayload(currentPayload)
         : stripInternalQueueMeta(currentPayload);
+      let submitPayload: Record<string, unknown> = currentPayload;
+      let submitValidationResult: { pricingMatch?: { config_key?: string } | null } | null = null;
 
       if (isQueueRecipePayload(currentPayload)) {
         job.queue_payload = await markPreparing(job);
       }
 
       const validationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, validationPayload);
+      submitValidationResult = validationResult;
 
       if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'image_edit_recipe_v1') {
         const editPayload = (job.queue_payload || currentPayload) as ImageEditRecipePayload;
@@ -1064,6 +1067,14 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
           summary.requeued += 1;
           continue;
         }
+
+        submitPayload = stagedResult.providerPayload;
+        submitValidationResult = { pricingMatch: { config_key: String(stagedResult.providerPayload.config_key || '') || undefined } };
+        job.queue_payload = withQueueMeta(
+          stagedResult.providerPayload,
+          job.queue_payload || currentPayload,
+          'dispatching',
+        );
       }
 
       if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType !== 'image_generate_recipe_v1') {
@@ -1094,11 +1105,11 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
 
       const providerPayloadForSubmit = applyLivePricingConfigToPayload(
         job.queue_kind,
-        currentPayload,
-        validationResult,
+        submitPayload,
+        submitValidationResult,
       );
-      if (providerPayloadForSubmit !== currentPayload) {
-        job.queue_payload = await persistPreparedPayload(job.id, providerPayloadForSubmit, currentPayload);
+      if (providerPayloadForSubmit !== submitPayload) {
+        job.queue_payload = await persistPreparedPayload(job.id, providerPayloadForSubmit, job.queue_payload || currentPayload);
       }
 
       job.queue_payload = await markSubmittingPreparedPayload(job.id, job.queue_payload);

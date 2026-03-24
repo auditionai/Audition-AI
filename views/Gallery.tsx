@@ -287,11 +287,15 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
           : 'The generation failed without a detailed error message.');
 
   const getProcessingStageLabel = (img: GeneratedImage) => {
+      const assetKind = getAssetKind(img);
+      const generatingLabel = assetKind === 'video'
+          ? (lang === 'vi' ? 'Đang tạo video' : 'Generating video')
+          : (lang === 'vi' ? 'Đang tạo ảnh' : 'Generating image');
       const queueProgress = Math.max(0, Math.min(100, img.progress || 0));
 
       if (img.status === 'failed') return lang === 'vi' ? 'Thất bại' : 'Failed';
       if (!img.status || img.status === 'completed') return lang === 'vi' ? 'Hoàn thành' : 'Completed';
-      if (img.jobId) return lang === 'vi' ? 'Đang tạo ảnh' : 'Generating';
+      if (img.jobId) return generatingLabel;
       if (img.queueStage === 'uploading_refs') return lang === 'vi' ? 'Đang xử lý' : 'Processing';
       if (img.queueStage === 'synthesizing_prompt' || img.queueStage === 'building_payload') {
           return lang === 'vi' ? 'Đang tổng hợp' : 'Synthesizing';

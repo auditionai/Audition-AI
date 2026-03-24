@@ -62,6 +62,8 @@ export interface AppConfig {
   };
 }
 
+import type { QueueProgressLogEntry } from './shared/queueRecipes';
+
 export interface GeneratedImage {
   id: string;
   url: string; // Base64 data or Public URL
@@ -79,6 +81,7 @@ export interface GeneratedImage {
   jobId?: string;
   progress?: number;
   queueStage?: string;
+  queueLogs?: QueueProgressLogEntry[];
   error?: string;
   cost?: number; // Keep track of cost for refunds
 }

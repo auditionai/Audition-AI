@@ -12,6 +12,8 @@ import {
   getImageRenderReferenceSources,
   getRecipeValidationPayload,
   isQueueRecipePayload,
+  type QueueProcessingStage,
+  type QueueProgressLogEntry,
   type ImageEditRecipePayload,
   type ImageGenerateRecipePayload,
 } from '../../shared/queueRecipes';
@@ -55,6 +57,7 @@ const IMAGE_REFERENCE_UPLOAD_CHUNK_SIZE = 2;
 const DISPATCH_CLAIM_LIMIT = 1;
 const POLL_CLAIM_LIMIT = 2;
 const WORKER_TICK_BUDGET_MS = 22_000;
+const MAX_QUEUE_LOG_ENTRIES = 80;
 
 const isTransientError = (message: string) => {
   const normalized = message.toLowerCase();
@@ -82,6 +85,100 @@ const parseErrorMessage = async (response: Response) => {
   } catch {
     return `${response.status} ${response.statusText}`;
   }
+};
+
+const toQueuePayloadObject = (payload?: Record<string, unknown> | null) =>
+  payload && typeof payload === 'object' ? { ...payload } : {};
+
+const stripInternalQueueMeta = (payload: Record<string, unknown>) =>
+  Object.fromEntries(Object.entries(payload).filter(([key]) => !key.startsWith('__')));
+
+const getQueueLogs = (payload?: Record<string, unknown> | null): QueueProgressLogEntry[] => {
+  const rawLogs = toQueuePayloadObject(payload).__logs;
+  if (!Array.isArray(rawLogs)) {
+    return [];
+  }
+
+  return rawLogs.filter(
+    (entry): entry is QueueProgressLogEntry =>
+      Boolean(entry) &&
+      typeof entry === 'object' &&
+      typeof (entry as QueueProgressLogEntry).at === 'string' &&
+      typeof (entry as QueueProgressLogEntry).stage === 'string' &&
+      typeof (entry as QueueProgressLogEntry).level === 'string' &&
+      typeof (entry as QueueProgressLogEntry).message === 'string',
+  );
+};
+
+const buildQueueLogEntry = (
+  stage: QueueProcessingStage,
+  message: string,
+  level: QueueProgressLogEntry['level'] = 'info',
+): QueueProgressLogEntry => ({
+  at: new Date().toISOString(),
+  stage,
+  level,
+  message,
+});
+
+const withQueueLog = (
+  payload: Record<string, unknown> | null | undefined,
+  stage: QueueProcessingStage,
+  message: string,
+  level: QueueProgressLogEntry['level'] = 'info',
+) => {
+  const nextLogs = [...getQueueLogs(payload), buildQueueLogEntry(stage, message, level)].slice(-MAX_QUEUE_LOG_ENTRIES);
+  return {
+    ...toQueuePayloadObject(payload),
+    __stage: stage,
+    __logs: nextLogs,
+  };
+};
+
+const withQueueMeta = (
+  providerPayload: Record<string, unknown>,
+  previousPayload?: Record<string, unknown> | null,
+  stage?: QueueProcessingStage,
+) => {
+  const nextPayload = {
+    ...stripInternalQueueMeta(providerPayload),
+  } as Record<string, unknown>;
+
+  const previousLogs = getQueueLogs(previousPayload);
+  if (previousLogs.length > 0) {
+    nextPayload.__logs = previousLogs;
+  }
+
+  if (stage) {
+    nextPayload.__stage = stage;
+  } else {
+    const previousStage = toQueuePayloadObject(previousPayload).__stage;
+    if (typeof previousStage === 'string' && previousStage) {
+      nextPayload.__stage = previousStage;
+    }
+  }
+
+  return nextPayload;
+};
+
+const persistQueueLog = async (
+  jobId: string,
+  payload: Record<string, unknown> | null | undefined,
+  stage: QueueProcessingStage,
+  message: string,
+  level: QueueProgressLogEntry['level'] = 'info',
+) => {
+  const admin = getServiceRoleClient();
+  const nextPayload = withQueueLog(payload, stage, message, level);
+  await admin
+    .from('generated_images')
+    .update({
+      queue_payload: nextPayload,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', jobId);
+
+  return nextPayload;
 };
 
 const extractJobId = (data: any): string | null => {
@@ -205,13 +302,15 @@ const submitProviderJob = async (queueKind: string, providerPayload: Record<stri
     throw new Error('Queue payload is missing');
   }
 
+  const outboundPayload = stripInternalQueueMeta(providerPayload);
+
   const response = await fetch(getGenerateEndpoint(queueKind), {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${TST_API_KEY}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(providerPayload),
+    body: JSON.stringify(outboundPayload),
     signal: AbortSignal.timeout(295000),
   });
 
@@ -282,11 +381,13 @@ const releaseLease = async (jobId: string) => {
 
 const markFailedAndRefund = async (job: QueueJobRow, errorMessage: string) => {
   const admin = getServiceRoleClient();
+  const nextPayload = withQueueLog(job.queue_payload, 'failed', errorMessage, 'error');
   await admin
     .from('generated_images')
     .update({
       status: 'failed',
       error_message: errorMessage,
+      queue_payload: nextPayload,
       progress: 0,
       finished_at: new Date().toISOString(),
       lease_token: null,
@@ -322,6 +423,7 @@ const requeueJob = async (job: QueueJobRow, errorMessage: string) => {
       job_id: null,
       processing_started_at: null,
       error_message: errorMessage,
+      queue_payload: withQueueLog(job.queue_payload, 'queued', `Tam hoan va xep lai hang doi: ${errorMessage}`, 'warning'),
       lease_token: null,
       lease_expires_at: null,
       next_poll_at: nextPollAt,
@@ -350,17 +452,21 @@ const updatePreProviderStage = async (jobId: string, progress: number) => {
 
 const markPreparing = async (job: QueueJobRow) => {
   const admin = getServiceRoleClient();
+  const nextPayload = withQueueLog(job.queue_payload, 'preparing', 'Worker da nhan job. Bat dau chuan bi du lieu.');
   await admin
     .from('generated_images')
     .update({
       status: 'processing',
       progress: 5,
       error_message: null,
+      queue_payload: nextPayload,
       processing_started_at: new Date().toISOString(),
       next_poll_at: null,
       updated_at: new Date().toISOString(),
     })
     .eq('id', job.id);
+
+  return nextPayload;
 };
 
 const markPreparedForDispatch = async (jobId: string) => {
@@ -383,18 +489,22 @@ const markQueuedStage = async (jobId: string, progress: number) => {
     .eq('id', jobId);
 };
 
-const markSubmittingPreparedPayload = async (jobId: string) => {
+const markSubmittingPreparedPayload = async (jobId: string, payload?: Record<string, unknown> | null) => {
   const admin = getServiceRoleClient();
+  const nextPayload = withQueueLog(payload, 'dispatching', 'Dang gui request toi provider TST.');
   await admin
     .from('generated_images')
     .update({
       status: 'processing',
       progress: 50,
       error_message: null,
+      queue_payload: nextPayload,
       next_poll_at: null,
       updated_at: new Date().toISOString(),
     })
     .eq('id', jobId);
+
+  return nextPayload;
 };
 
 const shouldSkipDispatch = async (job: QueueJobRow) => {
@@ -424,6 +534,7 @@ const markSubmitted = async (job: QueueJobRow, providerJobId: string) => {
     .update({
       status: 'processing',
       job_id: providerJobId,
+      queue_payload: withQueueLog(job.queue_payload, 'submitted', `Provider da nhan job: ${providerJobId}. Dang cho ket qua.`, 'success'),
       progress: 60,
       error_message: null,
       processing_started_at: new Date().toISOString(),
@@ -435,15 +546,22 @@ const markSubmitted = async (job: QueueJobRow, providerJobId: string) => {
     .eq('id', job.id);
 };
 
-const persistPreparedPayload = async (jobId: string, providerPayload: Record<string, unknown>) => {
+const persistPreparedPayload = async (
+  jobId: string,
+  providerPayload: Record<string, unknown>,
+  previousPayload?: Record<string, unknown> | null,
+) => {
   const admin = getServiceRoleClient();
+  const storedPayload = withQueueMeta(providerPayload, previousPayload, 'dispatching');
   await admin
     .from('generated_images')
     .update({
-      queue_payload: providerPayload,
+      queue_payload: storedPayload,
       updated_at: new Date().toISOString(),
     })
     .eq('id', jobId);
+
+  return storedPayload;
 };
 
 const persistRecipePayload = async (jobId: string, recipePayload: ImageGenerateRecipePayload) => {
@@ -455,6 +573,8 @@ const persistRecipePayload = async (jobId: string, recipePayload: ImageGenerateR
       updated_at: new Date().toISOString(),
     })
     .eq('id', jobId);
+
+  return recipePayload;
 };
 
 const prepareImageRecipeInStages = async (job: QueueJobRow, recipePayload: ImageGenerateRecipePayload) => {
@@ -479,6 +599,12 @@ const prepareImageRecipeInStages = async (job: QueueJobRow, recipePayload: Image
     const chunk = renderSources.slice(uploadCursor, uploadCursor + IMAGE_REFERENCE_UPLOAD_CHUNK_SIZE);
 
     if (chunk.length > 0) {
+      recipePayload = await persistQueueLog(
+        job.id,
+        recipePayload,
+        'uploading_refs',
+        `Dang tai ${chunk.length} anh tham chieu (${uploadCursor + 1}-${uploadCursor + chunk.length}/${renderSources.length}).`,
+      ) as ImageGenerateRecipePayload;
       const chunkUrls = await Promise.all(chunk.map((source) => uploadImageToTst(source)));
       uploadedUrls.push(...chunkUrls);
     }
@@ -494,7 +620,17 @@ const prepareImageRecipeInStages = async (job: QueueJobRow, recipePayload: Image
       __uploadedUrls: uploadedUrls,
     };
 
-    await persistRecipePayload(job.id, nextPayload);
+    recipePayload = await persistRecipePayload(job.id, nextPayload);
+
+    recipePayload = await persistQueueLog(
+      job.id,
+      recipePayload,
+      hasMoreUploads ? 'uploading_refs' : 'synthesizing_prompt',
+      hasMoreUploads
+        ? `Da tai len ${nextCursor}/${renderSources.length} anh tham chieu.`
+        : `Da tai xong ${uploadedUrls.length}/${renderSources.length} anh tham chieu. Chuyen sang tong hop prompt.`,
+      hasMoreUploads ? 'info' : 'success',
+    ) as ImageGenerateRecipePayload;
 
     if (hasMoreUploads) {
       const uploadProgress = Math.min(35, 20 + Math.round((nextCursor / renderSources.length) * 15));
@@ -507,6 +643,12 @@ const prepareImageRecipeInStages = async (job: QueueJobRow, recipePayload: Image
   }
 
   if (currentStage === 'synthesizing_prompt') {
+    recipePayload = await persistQueueLog(
+      job.id,
+      recipePayload,
+      'synthesizing_prompt',
+      `Dang phan tich ${directorSources.length} anh de tong hop prompt cuoi cung.`,
+    ) as ImageGenerateRecipePayload;
     const synthesizedPrompt = await synthesizeImageGeneratePrompt(recipePayload);
     const nextPayload: ImageGenerateRecipePayload = {
       ...recipePayload,
@@ -517,19 +659,33 @@ const prepareImageRecipeInStages = async (job: QueueJobRow, recipePayload: Image
       __uploadedUrls: uploadedUrls,
     };
 
-    await persistRecipePayload(job.id, nextPayload);
+    recipePayload = await persistRecipePayload(job.id, nextPayload);
+    recipePayload = await persistQueueLog(
+      job.id,
+      recipePayload,
+      'building_payload',
+      'Da tong hop xong prompt. Dang lap payload gui sang provider.',
+      'success',
+    ) as ImageGenerateRecipePayload;
     await markQueuedStage(job.id, 45);
     return { type: 'requeue' as const };
   }
 
+  recipePayload = await persistQueueLog(
+    job.id,
+    recipePayload,
+    'building_payload',
+    'Dang xay dung va kiem tra payload cuoi cung truoc khi dispatch.',
+  ) as ImageGenerateRecipePayload;
   const synthesizedPrompt = recipePayload.__synthesizedPrompt?.trim()
     ? recipePayload.__synthesizedPrompt.trim()
     : await synthesizeImageGeneratePrompt(recipePayload);
   const providerPayload = buildImageGenerateProviderPayload(recipePayload, uploadedUrls, synthesizedPrompt);
 
-  const validationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, providerPayload);
+  const validationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, stripInternalQueueMeta(providerPayload));
   const validatedProviderPayload = applyLivePricingConfigToPayload(job.queue_kind, providerPayload, validationResult);
-  await persistPreparedPayload(job.id, validatedProviderPayload);
+  const storedPayload = await persistPreparedPayload(job.id, validatedProviderPayload, recipePayload);
+  await persistQueueLog(job.id, storedPayload, 'dispatching', 'Payload san sang. Dang xep hang gui sang provider.', 'success');
   await markPreparedForDispatch(job.id);
 
   return { type: 'prepared' as const, providerPayload: validatedProviderPayload };
@@ -542,6 +698,7 @@ const markCompletedWithAssetUrl = async (job: QueueJobRow, assetUrl: string) => 
     .update({
       status: 'completed',
       image_url: assetUrl,
+      queue_payload: withQueueLog(job.queue_payload, 'completed', 'Job da hoan thanh va da nhan duoc file ket qua.', 'success'),
       progress: 100,
       error_message: null,
       attempt_count: 0,
@@ -571,6 +728,7 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
       .update({
         status: 'completed',
         image_url: resultUrl,
+        queue_payload: withQueueLog(job.queue_payload, 'completed', 'Provider bao completed. Da luu asset ket qua.', 'success'),
         progress: 100,
         error_message: null,
         attempt_count: 0,
@@ -606,6 +764,11 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
     .from('generated_images')
     .update({
       status: 'processing',
+      queue_payload: withQueueLog(
+        job.queue_payload,
+        'polling',
+        `Provider dang xu ly${providerProgress > 0 ? ` (${providerProgress}%)` : ''}.`,
+      ),
       progress,
       error_message: null,
       next_poll_at: new Date(Date.now() + POLL_INTERVAL_SECONDS * 1000).toISOString(),
@@ -635,6 +798,7 @@ const handlePollFailure = async (job: QueueJobRow, errorMessage: string) => {
     .update({
       status: 'processing',
       error_message: errorMessage,
+      queue_payload: withQueueLog(job.queue_payload, 'polling', `Poll loi, se thu lai: ${errorMessage}`, 'warning'),
       attempt_count: nextAttemptCount,
       next_poll_at: new Date(Date.now() + getRetryDelaySeconds(nextAttemptCount) * 1000).toISOString(),
       lease_token: null,
@@ -748,17 +912,23 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
       const preparationTimeoutMs = getPreparationTimeoutMs(job, currentPayload);
       const validationPayload = isQueueRecipePayload(currentPayload)
         ? getRecipeValidationPayload(currentPayload)
-        : currentPayload;
+        : stripInternalQueueMeta(currentPayload);
 
       if (isQueueRecipePayload(currentPayload)) {
-        await markPreparing(job);
+        job.queue_payload = await markPreparing(job);
       }
 
       const validationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, validationPayload);
 
       if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'image_edit_recipe_v1') {
-        const editPayload = currentPayload as ImageEditRecipePayload;
+        const editPayload = (job.queue_payload || currentPayload) as ImageEditRecipePayload;
         await updatePreProviderStage(job.id, 20);
+        job.queue_payload = await persistQueueLog(
+          job.id,
+          job.queue_payload || currentPayload,
+          'preparing',
+          'Dang chuan bi goi Vertex AI de chinh sua anh.',
+        );
         const resultUrl = await withTimeout(
           runVertexImageEdit({
             sourceImage: editPayload.sourceImage,
@@ -778,7 +948,7 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
       if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'image_generate_recipe_v1') {
         await updatePreProviderStage(job.id, 20);
         const stagedResult = await withTimeout(
-          prepareImageRecipeInStages(job, currentPayload as ImageGenerateRecipePayload),
+          prepareImageRecipeInStages(job, (job.queue_payload || currentPayload) as ImageGenerateRecipePayload),
           preparationTimeoutMs,
           'Queue preparation timed out before dispatching to provider.',
         );
@@ -792,7 +962,7 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
       if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType !== 'image_generate_recipe_v1') {
         await updatePreProviderStage(job.id, 20);
         const providerPayload = await withTimeout(
-          prepareProviderPayloadFromQueueRecipe(currentPayload),
+          prepareProviderPayloadFromQueueRecipe((job.queue_payload || currentPayload) as typeof currentPayload),
           preparationTimeoutMs,
           'Queue preparation timed out before dispatching to provider.',
         );
@@ -802,8 +972,14 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
           providerPayload,
           preparedValidationResult,
         );
-        await persistPreparedPayload(job.id, validatedProviderPayload);
-        job.queue_payload = validatedProviderPayload;
+        job.queue_payload = await persistPreparedPayload(job.id, validatedProviderPayload, job.queue_payload || currentPayload);
+        job.queue_payload = await persistQueueLog(
+          job.id,
+          job.queue_payload,
+          'dispatching',
+          'Payload da duoc chuan bi xong va dang cho tick tiep theo de gui provider.',
+          'success',
+        );
         await markPreparedForDispatch(job.id);
         summary.requeued += 1;
         continue;
@@ -815,11 +991,10 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
         validationResult,
       );
       if (providerPayloadForSubmit !== currentPayload) {
-        await persistPreparedPayload(job.id, providerPayloadForSubmit);
-        job.queue_payload = providerPayloadForSubmit;
+        job.queue_payload = await persistPreparedPayload(job.id, providerPayloadForSubmit, currentPayload);
       }
 
-      await markSubmittingPreparedPayload(job.id);
+      job.queue_payload = await markSubmittingPreparedPayload(job.id, job.queue_payload);
       const providerJobId = await submitProviderJob(job.queue_kind, providerPayloadForSubmit);
       await markSubmitted(job, providerJobId);
       summary.submitted += 1;

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Handler } from '@netlify/functions';
 import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 import { runQueueWorker } from './_queue-worker';
+import type { QueueProcessingStage, QueueProgressLogEntry } from '../../shared/queueRecipes';
 
 const headers = {
   'Content-Type': 'application/json',
@@ -29,6 +30,23 @@ type QueueBody = {
   costVcoin?: number;
   queueKind?: string;
   queuePayload?: Record<string, unknown>;
+};
+
+const buildInitialQueueLogs = (queueKind: string): QueueProgressLogEntry[] => {
+  const stage: QueueProcessingStage = 'queued';
+  const message =
+    queueKind === 'image_generate'
+      ? 'Job da vao hang doi. Dang cho worker bat dau chuan bi va tong hop anh.'
+      : 'Job da vao hang doi. Dang cho worker xu ly.';
+
+  return [
+    {
+      at: new Date().toISOString(),
+      stage,
+      level: 'info',
+      message,
+    },
+  ];
 };
 
 const mapQueueError = (message: string) => {
@@ -204,6 +222,14 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
   }
 
   const now = new Date().toISOString();
+  const queuePayloadWithLogs =
+    queuePayload && typeof queuePayload === 'object'
+      ? {
+          ...queuePayload,
+          __stage: 'queued',
+          __logs: buildInitialQueueLogs(queueKind),
+        }
+      : queuePayload;
   const { error: insertError } = await admin.from('generated_images').insert({
     id: jobId,
     user_id: userId,
@@ -220,7 +246,7 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
     asset_type: assetType,
     updated_at: now,
     queue_kind: queueKind,
-    queue_payload: queuePayload,
+    queue_payload: queuePayloadWithLogs,
     provider: 'tst',
     job_id: null,
     lease_token: null,

@@ -4,6 +4,25 @@ export type QueueRecipeKind =
   | 'video_generate_recipe_v1'
   | 'motion_generate_recipe_v1';
 
+export type QueueProcessingStage =
+  | 'queued'
+  | 'preparing'
+  | 'uploading_refs'
+  | 'synthesizing_prompt'
+  | 'building_payload'
+  | 'dispatching'
+  | 'submitted'
+  | 'polling'
+  | 'completed'
+  | 'failed';
+
+export interface QueueProgressLogEntry {
+  at: string;
+  stage: QueueProcessingStage;
+  level: 'info' | 'success' | 'warning' | 'error';
+  message: string;
+}
+
 export interface ImageGenerateRecipePayload {
   recipeType: 'image_generate_recipe_v1';
   modelId: string;
@@ -19,7 +38,8 @@ export interface ImageGenerateRecipePayload {
   styleImage?: string | null;
   stylePrompt?: string | null;
   referenceImages?: string[];
-  __stage?: 'uploading_refs' | 'synthesizing_prompt' | 'building_payload';
+  __stage?: QueueProcessingStage;
+  __logs?: QueueProgressLogEntry[];
   __uploadCursor?: number;
   __uploadSources?: string[];
   __uploadedUrls?: string[];

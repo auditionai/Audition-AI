@@ -1,5 +1,6 @@
 
 import { GeneratedImage } from '../types';
+import type { QueueProgressLogEntry } from '../shared/queueRecipes';
 import { supabase } from './supabaseClient';
 import { getUserProfile } from './economyService';
 import { S3Client, PutObjectCommand, DeleteObjectCommand, DeleteObjectsCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
@@ -270,6 +271,25 @@ const mapGeneratedImageRow = (row: any, fallbackUserName: string, fallbackCost?:
   status: row.status || (row.image_url ? 'completed' : 'processing'),
   jobId: row.job_id || undefined,
   progress: typeof row.progress === 'number' ? row.progress : undefined,
+  queueStage:
+    row.queue_payload &&
+    typeof row.queue_payload === 'object' &&
+    typeof row.queue_payload.__stage === 'string'
+      ? row.queue_payload.__stage
+      : undefined,
+  queueLogs:
+    row.queue_payload &&
+    typeof row.queue_payload === 'object' &&
+    Array.isArray(row.queue_payload.__logs)
+      ? row.queue_payload.__logs.filter((entry: any): entry is QueueProgressLogEntry =>
+          entry &&
+          typeof entry === 'object' &&
+          typeof entry.at === 'string' &&
+          typeof entry.stage === 'string' &&
+          typeof entry.level === 'string' &&
+          typeof entry.message === 'string'
+        )
+      : undefined,
   error: row.error_message || undefined,
   cost: Number.isFinite(Number(row.cost_vcoin)) ? Number(row.cost_vcoin) : fallbackCost,
 });
@@ -596,7 +616,10 @@ export const publishImageToShowcase = async (image: GeneratedImage): Promise<Gen
 
 const mapEngineName = (engine: string) => {
     if (!engine) return 'AI Gen';
-    return engine.replace('Gemini 2.5 Flash', 'Gemini 3.1 Flash').replace('Gemini 2.5 Pro', 'Gemini 3 Pro');
+    return engine
+        .replace('Gemini 2.5 Flash', 'Gemini 3.1 Flash')
+        .replace('Gemini 2.5 Pro', 'Gemini 3 Pro')
+        .replace('Gemini 3.0 Pro', 'Gemini 3 Pro');
 };
 
 const inferToolId = (modelUsed?: string, assetUrl?: string) => {

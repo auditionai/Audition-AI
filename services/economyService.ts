@@ -24,72 +24,152 @@ const DEFAULT_GENERATION_PRICES = {
     group4: 6,
 };
 
+const USER_PROFILE_CACHE_TTL_MS = 30_000;
+const PACKAGE_CACHE_TTL_MS = 5 * 60_000;
+const PROMOTION_CACHE_TTL_MS = 5 * 60_000;
+const CHECKIN_STATUS_CACHE_TTL_MS = 30_000;
+const MODEL_PRICING_CACHE_TTL_MS = 60_000;
+const TST_SERVER_AVAILABILITY_CACHE_TTL_MS = 60_000;
+
+type TimedCache<T> = {
+    value: T;
+    expiresAt: number;
+};
+
+let userProfileCache: (TimedCache<UserProfile> & { userId: string }) | null = null;
+let userProfilePromise: Promise<UserProfile> | null = null;
+let packageCache: TimedCache<CreditPackage[]> | null = null;
+let promotionCache: TimedCache<PromotionCampaign | null> | null = null;
+let checkinStatusCache: (TimedCache<{ streak: number; isCheckedInToday: boolean; history: string[]; claimedMilestones: number[]; }> & { userId: string }) | null = null;
+let modelPricingCache: TimedCache<ModelPricing[]> | null = null;
+let tstServerAvailabilityCache: TimedCache<TstServerAvailabilityConfig> | null = null;
+
+export const invalidateUserProfileCache = () => {
+    userProfileCache = null;
+    userProfilePromise = null;
+};
+
+export const invalidatePackageCache = () => {
+    packageCache = null;
+};
+
+export const invalidatePromotionCache = () => {
+    promotionCache = null;
+};
+
+export const invalidateCheckinStatusCache = () => {
+    checkinStatusCache = null;
+};
+
+export const invalidateModelPricingCache = () => {
+    modelPricingCache = null;
+};
+
+export const invalidateTstServerAvailabilityCache = () => {
+    tstServerAvailabilityCache = null;
+};
+
+const getCurrentSessionUser = async () => {
+    if (!supabase) return null;
+    const {
+        data: { session },
+    } = await supabase.auth.getSession();
+    return session?.user ?? null;
+};
+
 // --- USER & PROFILE ---
 
-export const getUserProfile = async (): Promise<UserProfile> => {
+export const getUserProfile = async (options?: { force?: boolean }): Promise<UserProfile> => {
     if (!supabase) throw new Error("No Database");
-    
-    const { data: { user } } = await supabase.auth.getUser();
+
+    const forceRefresh = options?.force === true;
+    const user = await getCurrentSessionUser();
     if (!user) throw new Error("Not logged in");
 
-    const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', user.id)
-        .maybeSingle();
-
-    if (error) {
-        console.error("Error fetching user profile:", error);
-        throw new Error("Failed to fetch user profile: " + error.message);
+    if (!forceRefresh && userProfileCache && userProfileCache.userId === user.id && userProfileCache.expiresAt > Date.now()) {
+        return userProfileCache.value;
     }
 
-    if (!data || !data.email || !data.display_name) {
-        // Create or update profile if missing or incomplete (fallback for missing trigger)
-        const newProfile = {
-            id: user.id,
-            email: user.email || data?.email || '',
-            display_name: user.user_metadata?.full_name || user.email?.split('@')[0] || data?.display_name || 'User',
-            photo_url: user.user_metadata?.avatar_url || data?.photo_url || 'https://picsum.photos/100/100',
-            vcoin_balance: data?.vcoin_balance ?? 0,
-            is_admin: data?.is_admin ?? false,
-            last_active: new Date().toISOString()
-        };
-        
-        try {
-            await supabase.from('users').upsert(newProfile);
-        } catch (e) {
-            console.warn("Failed to auto-create/update user profile", e);
+    if (!forceRefresh && userProfilePromise) {
+        return userProfilePromise;
+    }
+
+    userProfilePromise = (async () => {
+        const { data, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', user.id)
+            .maybeSingle();
+
+        if (error) {
+            console.error("Error fetching user profile:", error);
+            throw new Error("Failed to fetch user profile: " + error.message);
         }
 
-        return {
-            id: newProfile.id,
-            username: newProfile.display_name,
-            email: newProfile.email,
-            avatar: newProfile.photo_url,
-            vcoin_balance: newProfile.vcoin_balance,
-            role: newProfile.is_admin ? 'admin' : 'user',
-            isVip: false,
-            streak: 0,
-            lastCheckin: null,
-            checkinHistory: [],
-            usedGiftcodes: []
-        };
-    }
+        let profile: UserProfile;
 
-    return {
-        id: data.id,
-        username: data.display_name || 'User',
-        email: data.email,
-        avatar: data.photo_url || 'https://picsum.photos/100/100',
-        vcoin_balance: data.vcoin_balance || 0,
-        role: data.is_admin ? 'admin' : 'user',
-        isVip: false, // Logic for VIP could be added later
-        streak: 0, // Need separate checkin table query if needed
-        lastCheckin: null,
-        checkinHistory: [],
-        usedGiftcodes: [],
-        lastActive: data.last_active || null
-    };
+        if (!data || !data.email || !data.display_name) {
+            // Create or update profile if missing or incomplete (fallback for missing trigger)
+            const newProfile = {
+                id: user.id,
+                email: user.email || data?.email || '',
+                display_name: user.user_metadata?.full_name || user.email?.split('@')[0] || data?.display_name || 'User',
+                photo_url: user.user_metadata?.avatar_url || data?.photo_url || 'https://picsum.photos/100/100',
+                vcoin_balance: data?.vcoin_balance ?? 0,
+                is_admin: data?.is_admin ?? false,
+                last_active: new Date().toISOString()
+            };
+
+            try {
+                await supabase.from('users').upsert(newProfile);
+            } catch (e) {
+                console.warn("Failed to auto-create/update user profile", e);
+            }
+
+            profile = {
+                id: newProfile.id,
+                username: newProfile.display_name,
+                email: newProfile.email,
+                avatar: newProfile.photo_url,
+                vcoin_balance: newProfile.vcoin_balance,
+                role: newProfile.is_admin ? 'admin' : 'user',
+                isVip: false,
+                streak: 0,
+                lastCheckin: null,
+                checkinHistory: [],
+                usedGiftcodes: []
+            };
+        } else {
+            profile = {
+                id: data.id,
+                username: data.display_name || 'User',
+                email: data.email,
+                avatar: data.photo_url || 'https://picsum.photos/100/100',
+                vcoin_balance: data.vcoin_balance || 0,
+                role: data.is_admin ? 'admin' : 'user',
+                isVip: false, // Logic for VIP could be added later
+                streak: 0, // Need separate checkin table query if needed
+                lastCheckin: null,
+                checkinHistory: [],
+                usedGiftcodes: [],
+                lastActive: data.last_active || null
+            };
+        }
+
+        userProfileCache = {
+            userId: user.id,
+            value: profile,
+            expiresAt: Date.now() + USER_PROFILE_CACHE_TTL_MS,
+        };
+
+        return profile;
+    })();
+
+    try {
+        return await userProfilePromise;
+    } finally {
+        userProfilePromise = null;
+    }
 };
 
 export interface ModelPricing {
@@ -113,14 +193,22 @@ const parseSettingValue = <T,>(value: any, fallback: T): T => {
   return value as T;
 };
 
-export const getModelPricing = async (): Promise<ModelPricing[]> => {
+export const getModelPricing = async (options?: { force?: boolean }): Promise<ModelPricing[]> => {
   if (!supabase) return [];
+  if (!options?.force && modelPricingCache && modelPricingCache.expiresAt > Date.now()) {
+    return modelPricingCache.value;
+  }
   const { data, error } = await supabase.from('model_pricing').select('*');
   if (error) {
     console.error('Error fetching model pricing:', error);
     return [];
   }
-  return data || [];
+  const value = data || [];
+  modelPricingCache = {
+    value,
+    expiresAt: Date.now() + MODEL_PRICING_CACHE_TTL_MS,
+  };
+  return value;
 };
 
 export const saveModelPricing = async (pricing: ModelPricing): Promise<{success: boolean, error?: string}> => {
@@ -134,11 +222,15 @@ export const saveModelPricing = async (pricing: ModelPricing): Promise<{success:
     updated_at: new Date().toISOString()
   }, { onConflict: 'model_id, option_id' });
   if (error) return { success: false, error: error.message };
+  invalidateModelPricingCache();
   return { success: true };
 };
 
-export const getTstServerAvailabilityConfig = async (): Promise<TstServerAvailabilityConfig> => {
+export const getTstServerAvailabilityConfig = async (options?: { force?: boolean }): Promise<TstServerAvailabilityConfig> => {
   if (!supabase) return DEFAULT_TST_SERVER_AVAILABILITY_CONFIG;
+  if (!options?.force && tstServerAvailabilityCache && tstServerAvailabilityCache.expiresAt > Date.now()) {
+    return tstServerAvailabilityCache.value;
+  }
   const { data, error } = await supabase
     .from('system_settings')
     .select('value')
@@ -151,10 +243,15 @@ export const getTstServerAvailabilityConfig = async (): Promise<TstServerAvailab
   }
 
   const parsed = parseSettingValue<TstServerAvailabilityConfig>(data?.value, DEFAULT_TST_SERVER_AVAILABILITY_CONFIG);
-  return {
+  const value = {
     disabledByModel: parsed?.disabledByModel || {},
     updatedAt: parsed?.updatedAt,
   };
+  tstServerAvailabilityCache = {
+    value,
+    expiresAt: Date.now() + TST_SERVER_AVAILABILITY_CACHE_TTL_MS,
+  };
+  return value;
 };
 
 export const saveTstServerAvailabilityConfig = async (
@@ -179,6 +276,7 @@ export const saveTstServerAvailabilityConfig = async (
     return { success: false, error: error.message };
   }
 
+  invalidateTstServerAvailabilityCache();
   return { success: true };
 };
 
@@ -190,7 +288,7 @@ export const syncTSTPrices = async (): Promise<{success: boolean, error?: string
     const livePricing = filterAdminManagedPricingEntries(
       sanitizePricingEntriesWithRuntimeModels(rawPricing, runtimeModels),
     );
-    const currentPricing = await getModelPricing();
+    const currentPricing = await getModelPricing({ force: true });
     const currentPricingMap = new Map(
       currentPricing.map((row) => [`${row.model_id}::${row.option_id}`, row]),
     );
@@ -244,7 +342,8 @@ export const syncTSTPrices = async (): Promise<{success: boolean, error?: string
       if (error) throw error;
     }
 
-    return { success: true, data: await getModelPricing() };
+    invalidateModelPricingCache();
+    return { success: true, data: await getModelPricing({ force: true }) };
   } catch (error: any) {
     return { success: false, error: error.message };
   }
@@ -253,9 +352,20 @@ export const syncTSTPrices = async (): Promise<{success: boolean, error?: string
 export const updateLastActive = async () => {
     if (!supabase) return;
     try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const user = await getCurrentSessionUser();
         if (user) {
             await supabase.from('users').update({ last_active: new Date().toISOString() }).eq('id', user.id);
+            const cachedProfile = userProfileCache;
+            if (cachedProfile && cachedProfile.userId === user.id) {
+                userProfileCache = {
+                    userId: cachedProfile.userId,
+                    value: {
+                        ...cachedProfile.value,
+                        lastActive: new Date().toISOString(),
+                    },
+                    expiresAt: Date.now() + USER_PROFILE_CACHE_TTL_MS,
+                };
+            }
         }
     } catch (e) {
         console.warn("Failed to update last active", e);
@@ -309,6 +419,7 @@ export const updateMyProfile = async (profile: UserProfile): Promise<{success: b
             .eq('id', profile.id);
         
         if (error) throw error;
+        invalidateUserProfileCache();
         return { success: true };
     } catch (e: any) {
         return { success: false, error: e.message };
@@ -328,6 +439,7 @@ export const updateAdminUserProfile = async (profile: UserProfile): Promise<{suc
             .eq('id', profile.id);
         
         if (error) throw error;
+        invalidateUserProfileCache();
         return { success: true };
     } catch (e: any) {
         return { success: false, error: e.message };
@@ -446,6 +558,7 @@ export const updateUserBalance = async (
     }
     
     if (!options.targetUserId) {
+        invalidateUserProfileCache();
         window.dispatchEvent(new Event('balance_updated'));
     }
 };
@@ -455,8 +568,7 @@ export const logVisit = async () => {
     try {
         let userId: string | null = null;
         try {
-            const { data: { user } } = await supabase.auth.getUser();
-            userId = user?.id || null;
+            userId = (await getCurrentSessionUser())?.id || null;
         } catch {}
 
         const visitData = {
@@ -479,6 +591,9 @@ export const logVisit = async () => {
 
 export const getPackages = async (): Promise<CreditPackage[]> => {
     if (!supabase) return [];
+    if (packageCache && packageCache.expiresAt > Date.now()) {
+        return packageCache.value;
+    }
     const { data } = await supabase
         .from('credit_packages')
         .select('*')
@@ -487,7 +602,7 @@ export const getPackages = async (): Promise<CreditPackage[]> => {
         
     if (!data) return [];
     
-    return data.map((p: any) => ({
+    const value = data.map((p: any) => ({
         id: p.id,
         name: p.name,
         vcoin: p.credits_amount,
@@ -501,6 +616,11 @@ export const getPackages = async (): Promise<CreditPackage[]> => {
         colorTheme: 'border-slate-600',
         transferContent: p.transfer_syntax || ''
     }));
+    packageCache = {
+        value,
+        expiresAt: Date.now() + PACKAGE_CACHE_TTL_MS,
+    };
+    return value;
 };
 
 export const savePackage = async (pkg: CreditPackage): Promise<{success: boolean, error?: string}> => {
@@ -526,6 +646,7 @@ export const savePackage = async (pkg: CreditPackage): Promise<{success: boolean
         }
         
         if (error) throw error;
+        invalidatePackageCache();
         return { success: true };
     } catch (e: any) {
         return { success: false, error: e.message };
@@ -539,8 +660,10 @@ export const deletePackage = async (id: string): Promise<{success: boolean, erro
         if (error) {
             // Soft delete if FK constraint fails
             await supabase.from('credit_packages').update({ is_active: false }).eq('id', id);
+            invalidatePackageCache();
             return { success: true, action: 'hidden' };
         }
+        invalidatePackageCache();
         return { success: true, action: 'deleted' };
     } catch (e: any) {
         return { success: false, error: e.message };
@@ -553,6 +676,7 @@ export const updatePackageOrder = async (packages: CreditPackage[]): Promise<{su
         for (let i = 0; i < packages.length; i++) {
             await supabase.from('credit_packages').update({ display_order: i }).eq('id', packages[i].id);
         }
+        invalidatePackageCache();
         return { success: true };
     } catch (e: any) {
         return { success: false, error: e.message };
@@ -561,6 +685,9 @@ export const updatePackageOrder = async (packages: CreditPackage[]): Promise<{su
 
 export const getActivePromotion = async (): Promise<PromotionCampaign | null> => {
     if (!supabase) return null;
+    if (promotionCache && promotionCache.expiresAt > Date.now()) {
+        return promotionCache.value;
+    }
     const now = new Date().toISOString();
     try {
         const { data, error } = await supabase
@@ -571,9 +698,15 @@ export const getActivePromotion = async (): Promise<PromotionCampaign | null> =>
             .gt('end_time', now)
             .maybeSingle();
             
-        if (error || !data) return null;
-        
-        return {
+        if (error || !data) {
+            promotionCache = {
+                value: null,
+                expiresAt: Date.now() + PROMOTION_CACHE_TTL_MS,
+            };
+            return null;
+        }
+
+        const value = {
             id: data.id,
             name: data.title || 'Event',
             marqueeText: data.description || '',
@@ -582,6 +715,11 @@ export const getActivePromotion = async (): Promise<PromotionCampaign | null> =>
             endTime: data.end_time,
             isActive: data.is_active
         };
+        promotionCache = {
+            value,
+            expiresAt: Date.now() + PROMOTION_CACHE_TTL_MS,
+        };
+        return value;
     } catch (e) {
         return null;
     }
@@ -607,6 +745,7 @@ export const savePromotion = async (promo: PromotionCampaign): Promise<{success:
         }
 
         if (error) throw error;
+        invalidatePromotionCache();
         return { success: true };
     } catch (e: any) {
         return { success: false, error: e.message };
@@ -618,6 +757,7 @@ export const deletePromotion = async (id: string): Promise<{success: boolean, er
     try {
         const { error } = await supabase.from('promotions').delete().eq('id', id);
         if (error) throw error;
+        invalidatePromotionCache();
         return { success: true };
     } catch (e: any) {
         return { success: false, error: e.message };
@@ -634,8 +774,11 @@ export const getLocalTodayStr = () => {
 
 export const getCheckinStatus = async () => {
     if (!supabase) return { streak: 0, isCheckedInToday: false, history: [], claimedMilestones: [] };
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getCurrentSessionUser();
     if (!user) return { streak: 0, isCheckedInToday: false, history: [], claimedMilestones: [] };
+    if (checkinStatusCache && checkinStatusCache.userId === user.id && checkinStatusCache.expiresAt > Date.now()) {
+        return checkinStatusCache.value;
+    }
 
     // Get basic stats from user table or dedicated checkin table
     // Simplified: check `daily_check_ins` table
@@ -660,12 +803,18 @@ export const getCheckinStatus = async () => {
         .eq('user_id', user.id)
         .gte('created_at', startOfMonth);
         
-    return {
+    const value = {
         streak,
         isCheckedInToday,
         history,
         claimedMilestones: milestones?.map((m: any) => m.day_milestone) || []
     };
+    checkinStatusCache = {
+        userId: user.id,
+        value,
+        expiresAt: Date.now() + CHECKIN_STATUS_CACHE_TTL_MS,
+    };
+    return value;
 };
 
 export const performCheckin = async (): Promise<{success: boolean, reward: number, newStreak: number, message?: string}> => {
@@ -684,6 +833,8 @@ export const performCheckin = async (): Promise<{success: boolean, reward: numbe
 
         // Update balance directly
         await updateUserBalance(reward, 'Daily Checkin', 'reward');
+        invalidateCheckinStatusCache();
+        invalidateUserProfileCache();
         
         const status = await getCheckinStatus();
         return { success: true, reward, newStreak: status.streak };
@@ -725,6 +876,8 @@ export const claimMilestoneReward = async (day: number): Promise<{success: boole
         if (error) throw error;
 
         await updateUserBalance(amount, `Milestone ${day} Days`, 'reward');
+        invalidateCheckinStatusCache();
+        invalidateUserProfileCache();
         return { success: true, message: `Nhận thưởng mốc ${day} ngày thành công!` };
     } catch (e: any) {
         return { success: false, message: e.message };
@@ -743,6 +896,10 @@ interface KeyStats {
     resetAt: number;
 }
 const keyUsageStats = new Map<string, KeyStats>();
+const SERVICE_ACCOUNT_SOFT_COOLDOWN_MS = 2 * 60 * 1000;
+
+const isServiceAccountJson = (value: string) =>
+    value.includes('project_id') && value.includes('private_key') && value.includes('client_email');
 
 export const isKeyDisabled = (key: string): boolean => {
     return temporarilyDisabledKeys.has(key);
@@ -802,6 +959,44 @@ export const getSystemApiKey = async (tier: 'flash' | 'pro' = 'flash', excludedK
         
         if (error || !allKeys || allKeys.length === 0) {
             return process.env.API_KEY || null;
+        }
+
+        const serviceAccountKeys = allKeys.filter((k: any) =>
+            typeof k.key_value === 'string' &&
+            isServiceAccountJson(k.key_value) &&
+            !temporarilyDisabledKeys.has(k.key_value) &&
+            !excludedKeys.includes(k.key_value)
+        );
+
+        if (serviceAccountKeys.length > 0) {
+            const sortedServiceAccounts = [...serviceAccountKeys].sort((a: any, b: any) => {
+                const aLastUsed = a.last_used_at ? new Date(a.last_used_at).getTime() : 0;
+                const bLastUsed = b.last_used_at ? new Date(b.last_used_at).getTime() : 0;
+                const aIsCoolingAfterFailure = aLastUsed > now;
+                const bIsCoolingAfterFailure = bLastUsed > now;
+                const aIsWarm = !aIsCoolingAfterFailure && aLastUsed > 0 && now - aLastUsed < SERVICE_ACCOUNT_SOFT_COOLDOWN_MS;
+                const bIsWarm = !bIsCoolingAfterFailure && bLastUsed > 0 && now - bLastUsed < SERVICE_ACCOUNT_SOFT_COOLDOWN_MS;
+
+                if (aIsCoolingAfterFailure !== bIsCoolingAfterFailure) {
+                    return aIsCoolingAfterFailure ? 1 : -1;
+                }
+
+                if (aIsWarm !== bIsWarm) {
+                    return aIsWarm ? 1 : -1;
+                }
+
+                return aLastUsed - bLastUsed;
+            });
+
+            const selectedServiceAccount = sortedServiceAccounts[0];
+            lastUsedKey = selectedServiceAccount.key_value;
+            supabase
+                .from('api_keys')
+                .update({ last_used_at: new Date().toISOString() })
+                .eq('id', selectedServiceAccount.id)
+                .then(() => {});
+
+            return selectedServiceAccount.key_value;
         }
 
         // 3. Filter by tier

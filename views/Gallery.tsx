@@ -1,10 +1,12 @@
-import React, { useEffect, useState, useMemo } from 'react';
+﻿import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { GeneratedImage, Language, HistoryItem } from '../types';
+import type { QueueProgressLogEntry } from '../shared/queueRecipes';
 import { getAllImagesFromStorage, deleteImageFromStorage, cleanupExpiredImages, getHistoryRetentionDays, publishImageToShowcase } from '../services/storageService';
 import { getUnifiedHistory } from '../services/economyService';
 import { useConcurrency } from '../services/concurrencyService';
 import { supabase } from '../services/supabaseClient';
+import { downloadAssetToBrowser } from '../services/downloadService';
 import { Icons } from '../components/Icons';
 import { useNotification } from '../components/NotificationSystem';
 
@@ -23,11 +25,25 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
   const [filter, setFilter] = useState<'all' | 'completed' | 'failed' | 'processing' | 'queued'>('all');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [viewingImage, setViewingImage] = useState<GeneratedImage | null>(null);
+  const [showLogViewer, setShowLogViewer] = useState(false);
 
   // Transaction History State
   const [transactions, setTransactions] = useState<HistoryItem[]>([]);
   const [loadingTransactions, setLoadingTransactions] = useState(false);
   const retentionDays = getHistoryRetentionDays();
+  const hasActiveJobs = useMemo(
+    () => images.some((img) => img.status === 'processing' || img.status === 'queued'),
+    [images],
+  );
+
+  const loadImages = useCallback(async (silent = false) => {
+    try {
+      const storedImages = await getAllImagesFromStorage();
+      setImages(storedImages);
+    } catch (error) {
+      console.error("Failed to load gallery", error);
+    }
+  }, []);
 
   useEffect(() => {
     const init = async () => {
@@ -45,12 +61,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
         }
     };
     init();
-
-    const interval = setInterval(() => {
-        loadImages(true);
-    }, 5000);
-    return () => clearInterval(interval);
-  }, []);
+  }, [loadImages]);
 
   useEffect(() => {
       if (!supabase) return;
@@ -92,6 +103,33 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
   }, []);
 
   useEffect(() => {
+      if (!hasActiveJobs) return;
+      const interval = setInterval(() => {
+          loadImages(true);
+      }, 15000);
+      return () => clearInterval(interval);
+  }, [hasActiveJobs, loadImages]);
+
+  useEffect(() => {
+      if (!viewingImage) return;
+      const updatedImage = images.find((img) => img.id === viewingImage.id);
+      if (!updatedImage) {
+          setViewingImage(null);
+          setShowLogViewer(false);
+          return;
+      }
+      if (
+          updatedImage.updatedAt !== viewingImage.updatedAt ||
+          updatedImage.status !== viewingImage.status ||
+          updatedImage.progress !== viewingImage.progress ||
+          updatedImage.error !== viewingImage.error ||
+          (updatedImage.queueLogs?.length || 0) !== (viewingImage.queueLogs?.length || 0)
+      ) {
+          setViewingImage(updatedImage);
+      }
+  }, [images, viewingImage]);
+
+  useEffect(() => {
       if (activeTab === 'transactions') {
           const fetchHistory = async () => {
               setLoadingTransactions(true);
@@ -107,15 +145,6 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
           fetchHistory();
       }
   }, [activeTab]);
-
-  const loadImages = async (silent = false) => {
-    try {
-      const storedImages = await getAllImagesFromStorage();
-      setImages(storedImages);
-    } catch (error) {
-      console.error("Failed to load gallery", error);
-    }
-  };
 
   const handleDelete = (e: React.MouseEvent, id: string, imageUrl?: string, userId?: string) => {
     e.stopPropagation();
@@ -161,56 +190,25 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
   };
 
   const handleDownload = async (imageUrl: string, filename: string, assetKind: 'image' | 'video' = 'image') => {
-      if (!imageUrl || imageUrl.startsWith('blob:')) return;
+      if (!imageUrl) return;
       notify(lang === 'vi' ? 'Đang xử lý tải xuống...' : 'Processing download...', 'info');
 
       try {
-          let blob: Blob;
-          if (imageUrl.startsWith('data:')) {
-              const arr = imageUrl.split(',');
-              const mime = arr[0].match(/:(.*?);/)?.[1];
-              const bstr = atob(arr[1]);
-              let n = bstr.length;
-              const u8arr = new Uint8Array(n);
-              while (n--) u8arr[n] = bstr.charCodeAt(n);
-              blob = new Blob([u8arr], { type: mime });
-          } else {
-              try {
-                  const response = await fetch(imageUrl, { mode: 'cors' });
-                  if (!response.ok) throw new Error('Direct fetch failed');
-                  blob = await response.blob();
-              } catch (directError) {
-                  if (assetKind === 'video') {
-                      throw directError;
-                  }
-                  try {
-                      const proxyUrl = `https://wsrv.nl/?url=${encodeURIComponent(imageUrl)}&output=png`;
-                      const proxyResponse = await fetch(proxyUrl);
-                      if (!proxyResponse.ok) throw new Error('Proxy download failed');
-                      blob = await proxyResponse.blob();
-                  } catch (proxyError) {
-                      const proxyUrl2 = `https://corsproxy.io/?${encodeURIComponent(imageUrl)}`;
-                      const proxyResponse2 = await fetch(proxyUrl2);
-                      if (!proxyResponse2.ok) throw new Error('All proxies failed');
-                      blob = await proxyResponse2.blob();
-                  }
-              }
-          }
-
-          const url = window.URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = filename;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          window.URL.revokeObjectURL(url);
-
-          notify(lang === 'vi' ? 'Đã lưu ảnh thành công!' : 'Download successful!', 'success');
+          await downloadAssetToBrowser(imageUrl, filename);
+          notify(
+              assetKind === 'video'
+                  ? (lang === 'vi' ? 'Đã lưu video thành công!' : 'Video downloaded successfully!')
+                  : (lang === 'vi' ? 'Đã lưu ảnh thành công!' : 'Image downloaded successfully!'),
+              'success'
+          );
       } catch (e) {
           console.error("Download failed completely", e);
-          window.open(imageUrl, '_blank');
-          notify(lang === 'vi' ? 'Lỗi tải file. Đã mở ảnh trong tab mới.' : 'Download failed. Image opened in new tab.', 'warning');
+          notify(
+              assetKind === 'video'
+                  ? (lang === 'vi' ? 'Tải video thất bại.' : 'Video download failed.')
+                  : (lang === 'vi' ? 'Tải ảnh thất bại.' : 'Image download failed.'),
+              'error'
+          );
       }
   };
 
@@ -257,6 +255,68 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
       img.error?.trim() || (lang === 'vi'
           ? 'Tiến trình đã thất bại nhưng chưa có mô tả lỗi chi tiết.'
           : 'The generation failed without a detailed error message.');
+
+  const getProcessingStageLabel = (img: GeneratedImage) => {
+      const assetKind = getAssetKind(img);
+      const generatingLabel = assetKind === 'video'
+          ? (lang === 'vi' ? 'Đang tạo video' : 'Generating video')
+          : (lang === 'vi' ? 'Đang tạo ảnh' : 'Generating image');
+      const queueProgress = Math.max(0, Math.min(100, img.progress || 0));
+
+      if (img.status === 'failed') return lang === 'vi' ? 'Thất bại' : 'Failed';
+      if (!img.status || img.status === 'completed') return lang === 'vi' ? 'Hoàn thành' : 'Completed';
+      if (img.jobId) return generatingLabel;
+      if (img.queueStage === 'uploading_refs') return lang === 'vi' ? 'Đang xử lý' : 'Processing';
+      if (img.queueStage === 'synthesizing_prompt' || img.queueStage === 'building_payload') {
+          return lang === 'vi' ? 'Đang tổng hợp' : 'Synthesizing';
+      }
+
+      if (queueProgress >= 40) {
+          return lang === 'vi' ? 'Đang tổng hợp' : 'Synthesizing';
+      }
+
+      if (queueProgress >= 10) {
+          return lang === 'vi' ? 'Đang xử lý' : 'Processing';
+      }
+
+      if (img.status === 'queued') {
+          return lang === 'vi' ? 'Đang chuẩn bị' : 'Preparing';
+      }
+
+      return lang === 'vi' ? 'Đang chuẩn bị' : 'Preparing';
+  }; 
+
+  const getQueueLogs = (img: GeneratedImage | null | undefined) => img?.queueLogs || [];
+
+  const getLatestQueueLog = (img: GeneratedImage | null | undefined): QueueProgressLogEntry | null => {
+      const logs = getQueueLogs(img);
+      return logs.length > 0 ? logs[logs.length - 1] : null;
+  };
+
+  const getQueueStageDisplay = (stage?: string) => {
+      switch (stage) {
+          case 'queued': return lang === 'vi' ? 'Đã vào hàng đợi' : 'Queued';
+          case 'preparing': return lang === 'vi' ? 'Đang chuẩn bị' : 'Preparing';
+          case 'uploading_refs': return lang === 'vi' ? 'Đang tải ảnh tham chiếu' : 'Uploading references';
+          case 'synthesizing_prompt': return lang === 'vi' ? 'Đang tổng hợp prompt' : 'Synthesizing prompt';
+          case 'building_payload': return lang === 'vi' ? 'Đang dựng payload' : 'Building payload';
+          case 'dispatching': return lang === 'vi' ? 'Đang gửi provider' : 'Dispatching';
+          case 'submitted': return lang === 'vi' ? 'Provider đã nhận job' : 'Submitted';
+          case 'polling': return lang === 'vi' ? 'Đang chờ provider' : 'Polling provider';
+          case 'completed': return lang === 'vi' ? 'Hoàn thành' : 'Completed';
+          case 'failed': return lang === 'vi' ? 'Thất bại' : 'Failed';
+          default: return lang === 'vi' ? 'Tiến trình' : 'Progress';
+      }
+  };
+
+  const getQueueLogLevelStyle = (level?: string) => {
+      switch (level) {
+          case 'success': return 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20';
+          case 'warning': return 'bg-yellow-500/10 text-yellow-300 border-yellow-500/20';
+          case 'error': return 'bg-red-500/10 text-red-300 border-red-500/20';
+          default: return 'bg-white/5 text-slate-300 border-white/10';
+      }
+  };
 
   const handlePublish = async (image: GeneratedImage) => {
       try {
@@ -403,7 +463,10 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                     <tr
                                         key={img.id}
                                         className="hover:bg-white/[0.05] transition-colors group cursor-pointer"
-                                        onClick={() => setViewingImage(img)}
+                                        onClick={() => {
+                                            setViewingImage(img);
+                                            setShowLogViewer(false);
+                                        }}
                                     >
                                         <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                                             <input
@@ -437,6 +500,14 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                                             </span>
                                                         </div>
                                                     )}
+                                                    {isProcessing && getLatestQueueLog(img) && (
+                                                        <div className="mt-1.5 flex items-start gap-1.5 text-[11px] text-audi-cyan/80 leading-relaxed max-w-[220px] md:max-w-[320px]">
+                                                            <Icons.Activity className="w-3.5 h-3.5 mt-0.5 shrink-0 text-audi-cyan" />
+                                                            <span className="line-clamp-2" title={getLatestQueueLog(img)?.message}>
+                                                                {getLatestQueueLog(img)?.message}
+                                                            </span>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         </td>
@@ -465,14 +536,14 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                                 <div className="min-w-[160px]">
                                                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 text-[10px] font-bold uppercase tracking-wider">
                                                         <Icons.Loader className="w-3 h-3 animate-spin" />
-                                                        {img.status === 'queued' ? (lang === 'vi' ? 'Đang chờ' : 'Queued') : (lang === 'vi' ? 'Đang xử lý' : 'Processing')}
+                                                        {getProcessingStageLabel(img)}
                                                     </span>
                                                     <div className="mt-2">
                                                         <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
                                                             <div className={`h-full rounded-full transition-all duration-500 ${img.status === 'queued' ? 'bg-yellow-400' : 'bg-audi-cyan'}`} style={{ width: `${Math.max(0, Math.min(100, img.progress || 0))}%` }} />
                                                         </div>
                                                         <div className="text-[10px] text-slate-500 mt-1">
-                                                            {Math.max(0, Math.min(100, img.progress || 0))}% {img.jobId ? `• ${img.jobId.slice(0, 10)}` : ''}
+                                                            {getProcessingStageLabel(img)} · {Math.max(0, Math.min(100, img.progress || 0))}% {img.jobId ? `· ${img.jobId.slice(0, 10)}` : ''}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -487,6 +558,18 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                                         title="Tải xuống"
                                                     >
                                                         <Icons.Download className="w-4 h-4" />
+                                                    </button>
+                                                )}
+                                                {(img.queueLogs?.length || 0) > 0 && (
+                                                    <button
+                                                        onClick={() => {
+                                                            setViewingImage(img);
+                                                            setShowLogViewer(true);
+                                                        }}
+                                                        className="p-2 text-slate-400 hover:text-audi-cyan hover:bg-audi-cyan/10 rounded-lg transition-colors"
+                                                        title={lang === 'vi' ? 'Xem log tiến trình' : 'View progress log'}
+                                                    >
+                                                        <Icons.Activity className="w-4 h-4" />
                                                     </button>
                                                 )}
                                                 <button
@@ -569,11 +652,11 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
         {/* Image Details Modal */}
         {viewingImage && createPortal(
             <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 animate-fade-in">
-                <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setViewingImage(null)}></div>
+                <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => { setViewingImage(null); setShowLogViewer(false); }}></div>
                 <div className="relative w-full max-w-4xl bg-[#12121a] rounded-3xl border border-white/10 shadow-2xl overflow-hidden flex flex-col md:flex-row max-h-[90vh]">
                     {/* Close Button */}
                     <button
-                        onClick={() => setViewingImage(null)}
+                        onClick={() => { setViewingImage(null); setShowLogViewer(false); }}
                         className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-black/50 border border-white/10 flex items-center justify-center text-white hover:bg-white/10 transition-colors"
                     >
                         <Icons.X className="w-5 h-5" />
@@ -592,7 +675,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                 ) : (
                                     <Icons.Image className="w-16 h-16 mb-4 opacity-50" />
                                 )}
-                                <p>{viewingImage.status === 'failed' ? (lang === 'vi' ? 'Tạo ảnh thất bại' : 'Image generation failed') : viewingImage.status === 'processing' || viewingImage.status === 'queued' ? (lang === 'vi' ? 'Đang tạo ảnh...' : 'Image is generating...') : (lang === 'vi' ? 'Không có ảnh' : 'No image available')}</p>
+                                <p>{viewingImage.status === 'failed' ? (lang === 'vi' ? 'Tạo ảnh thất bại' : 'Image generation failed') : viewingImage.status === 'processing' || viewingImage.status === 'queued' ? getProcessingStageLabel(viewingImage) : (lang === 'vi' ? 'Không có ảnh' : 'No image available')}</p>
                                 {viewingImage.status === 'failed' && (
                                     <p className="mt-2 max-w-[320px] text-center text-sm text-red-300 leading-relaxed">
                                         {getFailedAssetMessage(viewingImage)}
@@ -693,7 +776,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                     )}
                                     {(viewingImage.status === 'processing' || viewingImage.status === 'queued') && (
                                         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 text-xs font-bold uppercase tracking-wider">
-                                            <Icons.Loader className="w-3 h-3 animate-spin" /> Đang chờ
+                                            <Icons.Loader className="w-3 h-3 animate-spin" /> {getProcessingStageLabel(viewingImage)}
                                         </span>
                                     )}
                                 </div>
@@ -706,6 +789,25 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                         {lang === 'vi' ? 'Lý do thất bại' : 'Failure reason'}
                                     </div>
                                     <div className="text-sm text-red-300 leading-relaxed">{getFailedAssetMessage(viewingImage)}</div>
+                                </div>
+                            )}
+
+                            {getLatestQueueLog(viewingImage) && (
+                                <div className={`rounded-xl p-4 border ${getQueueLogLevelStyle(getLatestQueueLog(viewingImage)?.level)}`}>
+                                    <div className="flex items-center justify-between gap-3 mb-2">
+                                        <div className="text-xs font-bold uppercase tracking-wider">
+                                            {lang === 'vi' ? 'Bước gần nhất' : 'Latest step'}
+                                        </div>
+                                        <div className="text-[10px] font-mono opacity-70">
+                                            {formatDate(new Date(getLatestQueueLog(viewingImage)!.at).getTime())}
+                                        </div>
+                                    </div>
+                                    <div className="text-[11px] font-bold uppercase tracking-wider mb-1 opacity-80">
+                                        {getQueueStageDisplay(getLatestQueueLog(viewingImage)?.stage)}
+                                    </div>
+                                    <div className="text-sm leading-relaxed">
+                                        {getLatestQueueLog(viewingImage)?.message}
+                                    </div>
                                 </div>
                             )}
 
@@ -754,9 +856,27 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                         <Icons.ChevronRight className={`w-4 h-4 shrink-0 ${viewingImage.isShared ? 'text-emerald-300/70' : 'text-audi-pink/70'}`} />
                                     </button>
                                 )}
+                                {(viewingImage.queueLogs?.length || 0) > 0 && (
+                                    <button
+                                        onClick={() => setShowLogViewer(true)}
+                                        className="w-full px-4 py-3 rounded-2xl bg-gradient-to-br from-white/10 via-white/5 to-transparent text-white border border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_10px_24px_rgba(255,255,255,0.06)] hover:from-white/15 hover:via-white/8 hover:to-white/5 transition-all flex items-center justify-between text-left"
+                                    >
+                                        <span className="flex items-center gap-3">
+                                            <span className="w-9 h-9 rounded-xl bg-black/25 border border-white/10 flex items-center justify-center shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+                                                <Icons.Activity className="w-4 h-4" />
+                                            </span>
+                                            <span className="min-w-0">
+                                                <span className="block text-sm font-extrabold tracking-wide">{lang === 'vi' ? 'Xem log tiến trình' : 'View progress log'}</span>
+                                                <span className="block text-[10px] text-slate-300/70">{lang === 'vi' ? 'Kiểm tra job đang chạy tới đâu hoặc dừng ở bước nào' : 'Inspect the current step and where the job stopped'}</span>
+                                            </span>
+                                        </span>
+                                        <Icons.ChevronRight className="w-4 h-4 text-slate-300/70 shrink-0" />
+                                    </button>
+                                )}
                                 <button
                                     onClick={(e) => {
                                         setViewingImage(null);
+                                        setShowLogViewer(false);
                                         handleDelete(e, viewingImage.id, viewingImage.url, viewingImage.userId);
                                     }}
                                     className="w-full px-4 py-3 rounded-2xl bg-gradient-to-br from-red-500/16 via-red-500/10 to-transparent text-red-400 border border-red-500/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_10px_24px_rgba(239,68,68,0.1)] hover:from-red-500/22 hover:via-red-500/14 hover:to-red-500/5 transition-all flex items-center justify-between text-left"
@@ -779,6 +899,49 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
             </div>,
             document.body
         )}
+        {viewingImage && showLogViewer && createPortal(
+            <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6 animate-fade-in">
+                <div className="absolute inset-0 bg-black/85 backdrop-blur-sm" onClick={() => setShowLogViewer(false)}></div>
+                <div className="relative w-full max-w-2xl bg-[#12121a] rounded-3xl border border-white/10 shadow-2xl overflow-hidden max-h-[85vh] flex flex-col">
+                    <div className="flex items-center justify-between px-6 py-5 border-b border-white/10">
+                        <div>
+                            <h3 className="text-xl font-game font-bold text-white flex items-center gap-3">
+                                <Icons.Activity className="w-5 h-5 text-audi-cyan" />
+                                {lang === 'vi' ? 'Nhật ký tiến trình' : 'Progress log'}
+                            </h3>
+                            <div className="mt-1 text-xs text-slate-400 font-mono">#{viewingImage.id.substring(0, 8)}</div>
+                        </div>
+                        <button
+                            onClick={() => setShowLogViewer(false)}
+                            className="w-10 h-10 rounded-full bg-black/50 border border-white/10 flex items-center justify-center text-white hover:bg-white/10 transition-colors"
+                        >
+                            <Icons.X className="w-5 h-5" />
+                        </button>
+                    </div>
+                    <div className="p-6 overflow-y-auto custom-scrollbar space-y-3">
+                        {getQueueLogs(viewingImage).length === 0 ? (
+                            <div className="text-sm text-slate-400 italic">
+                                {lang === 'vi' ? 'Chưa có log tiến trình cho job này.' : 'No progress logs available for this job yet.'}
+                            </div>
+                        ) : getQueueLogs(viewingImage).map((entry, index) => (
+                            <div key={`${entry.at}-${index}`} className={`rounded-2xl border p-4 ${getQueueLogLevelStyle(entry.level)}`}>
+                                <div className="flex items-center justify-between gap-3 mb-2">
+                                    <div className="text-[11px] font-bold uppercase tracking-wider">
+                                        {getQueueStageDisplay(entry.stage)}
+                                    </div>
+                                    <div className="text-[10px] font-mono opacity-70">
+                                        {formatDate(new Date(entry.at).getTime())}
+                                    </div>
+                                </div>
+                                <div className="text-sm leading-relaxed">{entry.message}</div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>,
+            document.body
+        )}
     </div>
   );
 };
+

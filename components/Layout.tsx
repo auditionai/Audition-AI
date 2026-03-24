@@ -28,28 +28,30 @@ export const Layout: React.FC<LayoutProps> = ({
   useEffect(() => {
     const root = document.getElementById('root');
     const handleScroll = () => setScrolled((root?.scrollTop || 0) > 20);
+    const refreshUser = () => getUserProfile().then(setUser).catch(() => setUser(null));
+    const refreshPromotion = () => getActivePromotion().then(setPromoConfig).catch(() => setPromoConfig(null));
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        refreshUser();
+        refreshPromotion();
+      }
+    };
     
     root?.addEventListener('scroll', handleScroll);
     
-    // Initial User Load
-    const refreshUser = () => getUserProfile().then(setUser);
     refreshUser();
-    
-    // Load Marquee
-    getActivePromotion().then(config => {
-        setPromoConfig(config);
-    });
+    refreshPromotion();
     
     // Listen for instant balance updates
     window.addEventListener('balance_updated', refreshUser);
-
-    // Interval to refresh user balance (fallback)
-    const interval = setInterval(refreshUser, 5000); // Relaxed to 5s since we have events
+    window.addEventListener('focus', refreshUser);
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
         root?.removeEventListener('scroll', handleScroll);
         window.removeEventListener('balance_updated', refreshUser);
-        clearInterval(interval);
+        window.removeEventListener('focus', refreshUser);
+        document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, []);
 
@@ -63,7 +65,7 @@ export const Layout: React.FC<LayoutProps> = ({
     <div className="min-h-screen bg-[#05050A] text-white font-sans selection:bg-audi-pink selection:text-white relative overflow-x-hidden">
       
       {/* Checkin Modal */}
-      {showCheckin && <DailyCheckin onClose={() => setShowCheckin(false)} onSuccess={() => getUserProfile().then(setUser)} lang={lang === 'vi' ? 'vi' : 'en'} />}
+      {showCheckin && <DailyCheckin onClose={() => setShowCheckin(false)} onSuccess={() => getUserProfile({ force: true }).then(setUser)} lang={lang === 'vi' ? 'vi' : 'en'} />}
 
       {/* --- PROMOTION MARQUEE --- */}
       {showMarquee && (

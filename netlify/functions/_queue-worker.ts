@@ -1,8 +1,23 @@
 import { getServiceRoleClient } from './_supabase';
 import { validateQueuePayloadAgainstLiveCatalog } from './_tst-live-catalog';
-import { prepareProviderPayloadFromQueueRecipe } from './_queue-recipes';
+import { normalizeTstOutboundPayload } from './_tst-payload-normalizer';
+import {
+  buildImageGenerateProviderPayload,
+  prepareProviderPayloadFromQueueRecipe,
+  synthesizeImageGeneratePrompt,
+  uploadImageToTst,
+} from './_queue-recipes';
 import { runVertexImageEdit } from './_vertex-image-edit';
-import { getRecipeValidationPayload, isQueueRecipePayload, type ImageEditRecipePayload } from '../../shared/queueRecipes';
+import {
+  getImageDirectorSources,
+  getImageRenderReferenceSources,
+  getRecipeValidationPayload,
+  isQueueRecipePayload,
+  type QueueProcessingStage,
+  type QueueProgressLogEntry,
+  type ImageEditRecipePayload,
+  type ImageGenerateRecipePayload,
+} from '../../shared/queueRecipes';
 
 type QueueJobRow = {
   id: string;
@@ -36,6 +51,17 @@ const MAX_DISPATCH_RETRIES = 6;
 const MAX_POLL_FAILURES = 8;
 const MAX_PROCESSING_AGE_MS = 45 * 60 * 1000;
 const MAX_PROVIDER_GENERIC_RETRIES = 2;
+const SINGLE_AND_COUPLE_PREPARE_TIMEOUT_MS = 10 * 60 * 1000;
+const GROUP_OF_THREE_PREPARE_TIMEOUT_MS = 15 * 60 * 1000;
+const GROUP_OF_FOUR_PREPARE_TIMEOUT_MS = 20 * 60 * 1000;
+const IMAGE_REFERENCE_UPLOAD_CHUNK_SIZE = 2;
+const DISPATCH_CLAIM_LIMIT = 1;
+const POLL_CLAIM_LIMIT = 1;
+const WORKER_TICK_BUDGET_MS = 8_000;
+const MAX_QUEUE_LOG_ENTRIES = 80;
+const ORPHAN_CLAIM_GRACE_MS = 30_000;
+const LEASE_HEARTBEAT_INTERVAL_MS = 30_000;
+const DISPATCH_LEASE_SECONDS = 120;
 
 const isTransientError = (message: string) => {
   const normalized = message.toLowerCase();
@@ -65,6 +91,96 @@ const parseErrorMessage = async (response: Response) => {
   }
 };
 
+const toQueuePayloadObject = (payload?: Record<string, unknown> | null) =>
+  payload && typeof payload === 'object' ? { ...payload } : {};
+
+const stripInternalQueueMeta = (payload: Record<string, unknown>) =>
+  Object.fromEntries(Object.entries(payload).filter(([key]) => !key.startsWith('__')));
+
+const getQueueLogs = (payload?: Record<string, unknown> | null): QueueProgressLogEntry[] => {
+  const rawLogs = toQueuePayloadObject(payload).__logs;
+  if (!Array.isArray(rawLogs)) {
+    return [];
+  }
+
+  return rawLogs.filter(
+    (entry): entry is QueueProgressLogEntry =>
+      Boolean(entry) &&
+      typeof entry === 'object' &&
+      typeof (entry as QueueProgressLogEntry).at === 'string' &&
+      typeof (entry as QueueProgressLogEntry).stage === 'string' &&
+      typeof (entry as QueueProgressLogEntry).level === 'string' &&
+      typeof (entry as QueueProgressLogEntry).message === 'string',
+  );
+};
+
+const buildQueueLogEntry = (
+  stage: QueueProcessingStage,
+  message: string,
+  level: QueueProgressLogEntry['level'] = 'info',
+): QueueProgressLogEntry => ({
+  at: new Date().toISOString(),
+  stage,
+  level,
+  message,
+});
+
+const withQueueLog = (
+  payload: Record<string, unknown> | null | undefined,
+  stage: QueueProcessingStage,
+  message: string,
+  level: QueueProgressLogEntry['level'] = 'info',
+) => {
+  const nextLogs = [...getQueueLogs(payload), buildQueueLogEntry(stage, message, level)].slice(-MAX_QUEUE_LOG_ENTRIES);
+  return {
+    ...toQueuePayloadObject(payload),
+    __stage: stage,
+    __logs: nextLogs,
+  };
+};
+
+const withQueueMeta = (
+  providerPayload: Record<string, unknown>,
+  previousPayload?: Record<string, unknown> | null,
+  stage?: QueueProcessingStage,
+) => {
+  const nextPayload = {
+    ...stripInternalQueueMeta(providerPayload),
+  } as Record<string, unknown>;
+
+  const previousLogs = getQueueLogs(previousPayload);
+  if (previousLogs.length > 0) {
+    nextPayload.__logs = previousLogs;
+  }
+
+  if (stage) {
+    nextPayload.__stage = stage;
+  } else {
+    const previousStage = toQueuePayloadObject(previousPayload).__stage;
+    if (typeof previousStage === 'string' && previousStage) {
+      nextPayload.__stage = previousStage;
+    }
+  }
+
+  return nextPayload;
+};
+
+const persistQueueLog = async (
+  jobId: string,
+  payload: Record<string, unknown> | null | undefined,
+  stage: QueueProcessingStage,
+  message: string,
+  level: QueueProgressLogEntry['level'] = 'info',
+) => {
+  const nextPayload = withQueueLog(payload, stage, message, level);
+  await updateGeneratedImageRecord(jobId, {
+    queue_payload: nextPayload,
+    updated_at: new Date().toISOString(),
+  });
+
+  return nextPayload;
+};
+
 const extractJobId = (data: any): string | null => {
   const value = data?.job_id || data?.jobId || data?.id || data?.data?.job_id || data?.data?.jobId || data?.data?.id;
   return typeof value === 'string' && value.trim() ? value.trim() : null;
@@ -89,6 +205,156 @@ const isGenericProviderFailure = (message: string) => {
     normalized.includes('job failed, change prompt or input and try again') ||
     normalized.includes('change prompt or input and try again')
   );
+};
+
+const withTimeout = async <T>(task: Promise<T>, timeoutMs: number, message: string): Promise<T> => {
+  let timeoutId: NodeJS.Timeout | null = null;
+
+  try {
+    return await Promise.race([
+      task,
+      new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+};
+
+const hasWorkerTickBudgetRemaining = (startedAt: number) => Date.now() - startedAt < WORKER_TICK_BUDGET_MS;
+
+const updateGeneratedImageRecord = async (jobId: string, updates: Record<string, unknown>) => {
+  const admin = getServiceRoleClient();
+  const { error } = await admin
+    .from('generated_images')
+    .update(updates)
+    .eq('id', jobId);
+
+  if (error) {
+    throw error;
+  }
+};
+
+const extendJobLease = async (jobId: string, leaseSeconds = DISPATCH_LEASE_SECONDS) => {
+  await updateGeneratedImageRecord(jobId, {
+    lease_expires_at: new Date(Date.now() + leaseSeconds * 1000).toISOString(),
+    updated_at: new Date().toISOString(),
+  });
+};
+
+const withLeaseHeartbeat = async <T>(
+  jobId: string,
+  task: Promise<T>,
+  leaseSeconds = DISPATCH_LEASE_SECONDS,
+  intervalMs = LEASE_HEARTBEAT_INTERVAL_MS,
+) => {
+  await extendJobLease(jobId, leaseSeconds);
+
+  const heartbeat = setInterval(() => {
+    void extendJobLease(jobId, leaseSeconds).catch((error) => {
+      console.warn('[queue-worker] Failed to extend lease:', jobId, error);
+    });
+  }, intervalMs);
+
+  try {
+    return await task;
+  } finally {
+    clearInterval(heartbeat);
+  }
+};
+
+const getQueueStage = (payload?: Record<string, unknown> | null): QueueProcessingStage | null => {
+  const rawStage = toQueuePayloadObject(payload).__stage;
+  if (typeof rawStage !== 'string' || !rawStage.trim()) {
+    return null;
+  }
+
+  return rawStage as QueueProcessingStage;
+};
+
+const humanizeQueueStage = (stage: QueueProcessingStage | null) => {
+  switch (stage) {
+    case 'uploading_refs':
+      return 'tải ảnh tham chiếu';
+    case 'synthesizing_prompt':
+      return 'tổng hợp prompt';
+    case 'building_payload':
+      return 'dựng payload';
+    case 'dispatching':
+      return 'gửi provider';
+    case 'polling':
+      return 'chờ provider xử lý';
+    default:
+      return 'chuẩn bị dữ liệu';
+  }
+};
+
+const resolveImageGenerateStage = (
+  recipePayload: ImageGenerateRecipePayload,
+  renderSources: string[],
+): 'uploading_refs' | 'synthesizing_prompt' | 'building_payload' => {
+  const rawStage = getQueueStage(recipePayload);
+  if (
+    rawStage === 'uploading_refs' ||
+    rawStage === 'synthesizing_prompt' ||
+    rawStage === 'building_payload'
+  ) {
+    return rawStage;
+  }
+
+  const uploadedUrls = (recipePayload.__uploadedUrls || []).filter((value): value is string => Boolean(value));
+  if (typeof recipePayload.__synthesizedPrompt === 'string' && recipePayload.__synthesizedPrompt.trim()) {
+    return 'building_payload';
+  }
+
+  if (renderSources.length > 0 && uploadedUrls.length >= renderSources.length) {
+    return 'synthesizing_prompt';
+  }
+
+  return 'uploading_refs';
+};
+
+const getCharacterCountFromToolId = (toolId?: string | null) => {
+  const normalizedToolId = String(toolId || '').trim().toLowerCase();
+
+  if (normalizedToolId.includes('group_4')) return 4;
+  if (normalizedToolId.includes('group_3')) return 3;
+  if (normalizedToolId.includes('couple')) return 2;
+  if (normalizedToolId.includes('single')) return 1;
+
+  return null;
+};
+
+const getImageRecipeCharacterCount = (
+  job: Pick<QueueJobRow, 'tool_id'>,
+  payload?: Pick<ImageGenerateRecipePayload, 'characterCount'> | null,
+) => {
+  const payloadCharacterCount = Number(payload?.characterCount);
+  if (Number.isFinite(payloadCharacterCount) && payloadCharacterCount > 0) {
+    return Math.floor(payloadCharacterCount);
+  }
+
+  return getCharacterCountFromToolId(job.tool_id);
+};
+
+const getPreparationTimeoutMs = (job: Pick<QueueJobRow, 'tool_id'>, payload?: QueueJobRow['queue_payload']) => {
+  if (isQueueRecipePayload(payload) && payload.recipeType === 'image_generate_recipe_v1') {
+    const characterCount = getImageRecipeCharacterCount(job, payload);
+    if (characterCount && characterCount >= 4) {
+      return GROUP_OF_FOUR_PREPARE_TIMEOUT_MS;
+    }
+    if (characterCount === 3) {
+      return GROUP_OF_THREE_PREPARE_TIMEOUT_MS;
+    }
+  }
+
+  return SINGLE_AND_COUPLE_PREPARE_TIMEOUT_MS;
+};
+
+const getPreparationTimeoutUserMessage = (job: Pick<QueueJobRow, 'tool_id'>, payload?: QueueJobRow['queue_payload']) => {
+  const timeoutMinutes = Math.ceil(getPreparationTimeoutMs(job, payload) / 60000);
+  return `Quá thời gian chuẩn bị trong ${timeoutMinutes} phút. Vui lòng tạo lại.`;
 };
 
 const getJobRuntimeState = async (jobId: string) => {
@@ -127,13 +393,15 @@ const submitProviderJob = async (queueKind: string, providerPayload: Record<stri
     throw new Error('Queue payload is missing');
   }
 
+  const outboundPayload = normalizeTstOutboundPayload(stripInternalQueueMeta(providerPayload));
+
   const response = await fetch(getGenerateEndpoint(queueKind), {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${TST_API_KEY}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(providerPayload),
+    body: JSON.stringify(outboundPayload),
     signal: AbortSignal.timeout(295000),
   });
 
@@ -148,6 +416,26 @@ const submitProviderJob = async (queueKind: string, providerPayload: Record<stri
   }
 
   return providerJobId;
+};
+
+const applyLivePricingConfigToPayload = (
+  queueKind: string,
+  providerPayload: Record<string, unknown>,
+  validationResult?: { pricingMatch?: { config_key?: string } | null } | null,
+) => {
+  const configKey = String(validationResult?.pricingMatch?.config_key || '').trim();
+  if (!configKey) {
+    return providerPayload;
+  }
+
+  if (String(providerPayload.config_key || '').trim() === configKey) {
+    return providerPayload;
+  }
+
+  return {
+    ...providerPayload,
+    config_key: configKey,
+  };
 };
 
 const pollProviderJob = async (providerJobId: string) => {
@@ -171,33 +459,28 @@ const pollProviderJob = async (providerJobId: string) => {
 };
 
 const releaseLease = async (jobId: string) => {
-  const admin = getServiceRoleClient();
-  await admin
-    .from('generated_images')
-    .update({
-      lease_token: null,
-      lease_expires_at: null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', jobId);
+  await updateGeneratedImageRecord(jobId, {
+    lease_token: null,
+    lease_expires_at: null,
+    updated_at: new Date().toISOString(),
+  });
 };
 
 const markFailedAndRefund = async (job: QueueJobRow, errorMessage: string) => {
   const admin = getServiceRoleClient();
-  await admin
-    .from('generated_images')
-    .update({
-      status: 'failed',
-      error_message: errorMessage,
-      progress: 0,
-      finished_at: new Date().toISOString(),
-      lease_token: null,
-      lease_expires_at: null,
-      next_poll_at: null,
-      last_error_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', job.id);
+  const nextPayload = withQueueLog(job.queue_payload, 'failed', errorMessage, 'error');
+  await updateGeneratedImageRecord(job.id, {
+    status: 'failed',
+    error_message: errorMessage,
+    queue_payload: nextPayload,
+    progress: 0,
+    finished_at: new Date().toISOString(),
+    lease_token: null,
+    lease_expires_at: null,
+    next_poll_at: null,
+    last_error_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  });
 
   await admin.rpc('refund_generated_job', {
     p_generated_image_id: job.id,
@@ -217,38 +500,87 @@ const requeueJob = async (job: QueueJobRow, errorMessage: string) => {
 
   const nextPollAt = new Date(Date.now() + getRetryDelaySeconds(nextAttemptCount) * 1000).toISOString();
 
-  await admin
-    .from('generated_images')
-    .update({
-      status: 'queued',
-      job_id: null,
-      processing_started_at: null,
-      error_message: errorMessage,
-      lease_token: null,
-      lease_expires_at: null,
-      next_poll_at: nextPollAt,
-      attempt_count: nextAttemptCount,
-      last_error_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', job.id);
+  await updateGeneratedImageRecord(job.id, {
+    status: 'queued',
+    job_id: null,
+    processing_started_at: null,
+    error_message: errorMessage,
+    queue_payload: withQueueLog(job.queue_payload, 'queued', `Tạm hoãn và xếp lại hàng đợi: ${errorMessage}`, 'warning'),
+    lease_token: null,
+    lease_expires_at: null,
+    next_poll_at: nextPollAt,
+    attempt_count: nextAttemptCount,
+    last_error_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  });
 
   return 'requeued';
 };
 
+const updatePreProviderStage = async (jobId: string, progress: number) => {
+  await updateGeneratedImageRecord(jobId, {
+    status: 'processing',
+    progress,
+    error_message: null,
+    next_poll_at: null,
+    updated_at: new Date().toISOString(),
+  });
+};
+
 const markPreparing = async (job: QueueJobRow) => {
-  const admin = getServiceRoleClient();
-  await admin
-    .from('generated_images')
-    .update({
-      status: 'processing',
-      progress: 1,
-      error_message: null,
-      processing_started_at: new Date().toISOString(),
-      next_poll_at: null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', job.id);
+  const previousStage = getQueueStage(job.queue_payload);
+  const resumeStage =
+    isQueueRecipePayload(job.queue_payload) && previousStage && previousStage !== 'queued'
+      ? previousStage
+      : 'preparing';
+  const nextPayload = withQueueLog(
+    job.queue_payload,
+    resumeStage,
+    resumeStage === 'preparing'
+      ? 'Worker đã nhận job. Bắt đầu chuẩn bị.'
+      : `Worker đã nhận job. Tiếp tục ở bước ${humanizeQueueStage(resumeStage)}.`,
+  );
+  await updateGeneratedImageRecord(job.id, {
+    status: 'processing',
+    progress: 5,
+    error_message: null,
+    queue_payload: nextPayload,
+    processing_started_at: new Date().toISOString(),
+    next_poll_at: null,
+    updated_at: new Date().toISOString(),
+  });
+
+  return nextPayload;
+};
+
+const markPreparedForDispatch = async (jobId: string) => {
+  return markQueuedStage(jobId, 55);
+};
+
+const markQueuedStage = async (jobId: string, progress: number) => {
+  await updateGeneratedImageRecord(jobId, {
+    status: 'queued',
+    progress,
+    error_message: null,
+    next_poll_at: new Date().toISOString(),
+    lease_token: null,
+    lease_expires_at: null,
+    updated_at: new Date().toISOString(),
+  });
+};
+
+const markSubmittingPreparedPayload = async (jobId: string, payload?: Record<string, unknown> | null) => {
+  const nextPayload = withQueueLog(payload, 'dispatching', 'Đang gửi yêu cầu tới provider TST.');
+  await updateGeneratedImageRecord(jobId, {
+    status: 'processing',
+    progress: 50,
+    error_message: null,
+    queue_payload: nextPayload,
+    next_poll_at: null,
+    updated_at: new Date().toISOString(),
+  });
+
+  return nextPayload;
 };
 
 const shouldSkipDispatch = async (job: QueueJobRow) => {
@@ -272,32 +604,155 @@ const shouldSkipDispatch = async (job: QueueJobRow) => {
 };
 
 const markSubmitted = async (job: QueueJobRow, providerJobId: string) => {
-  const admin = getServiceRoleClient();
-  await admin
-    .from('generated_images')
-    .update({
-      status: 'processing',
-      job_id: providerJobId,
-      progress: 0,
-      error_message: null,
-      processing_started_at: new Date().toISOString(),
-      next_poll_at: new Date(Date.now() + POLL_INTERVAL_SECONDS * 1000).toISOString(),
-      lease_token: null,
-      lease_expires_at: null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', job.id);
+  await updateGeneratedImageRecord(job.id, {
+    status: 'processing',
+    job_id: providerJobId,
+    queue_payload: withQueueLog(job.queue_payload, 'submitted', `Provider đã nhận job: ${providerJobId}.`, 'success'),
+    progress: 60,
+    error_message: null,
+    processing_started_at: new Date().toISOString(),
+    next_poll_at: new Date(Date.now() + POLL_INTERVAL_SECONDS * 1000).toISOString(),
+    lease_token: null,
+    lease_expires_at: null,
+    updated_at: new Date().toISOString(),
+  });
 };
 
-const persistPreparedPayload = async (jobId: string, providerPayload: Record<string, unknown>) => {
-  const admin = getServiceRoleClient();
-  await admin
-    .from('generated_images')
-    .update({
-      queue_payload: providerPayload,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', jobId);
+const persistPreparedPayload = async (
+  jobId: string,
+  providerPayload: Record<string, unknown>,
+  previousPayload?: Record<string, unknown> | null,
+) => {
+  const storedPayload = withQueueMeta(providerPayload, previousPayload, 'dispatching');
+  await updateGeneratedImageRecord(jobId, {
+    queue_payload: storedPayload,
+    updated_at: new Date().toISOString(),
+  });
+
+  return storedPayload;
+};
+
+const persistRecipePayload = async (jobId: string, recipePayload: ImageGenerateRecipePayload) => {
+  await updateGeneratedImageRecord(jobId, {
+    queue_payload: recipePayload,
+    updated_at: new Date().toISOString(),
+  });
+
+  return recipePayload;
+};
+
+const prepareImageRecipeInStages = async (job: QueueJobRow, recipePayload: ImageGenerateRecipePayload) => {
+  const renderSources =
+    (recipePayload.__uploadSources || []).filter((value): value is string => Boolean(value)).length > 0
+      ? (recipePayload.__uploadSources || []).filter((value): value is string => Boolean(value))
+      : getImageRenderReferenceSources(recipePayload);
+  const directorSources =
+    (recipePayload.__directorSources || []).filter((value): value is string => Boolean(value)).length > 0
+      ? (recipePayload.__directorSources || []).filter((value): value is string => Boolean(value))
+      : getImageDirectorSources(recipePayload);
+
+  if (renderSources.length === 0) {
+    throw new Error('CRITICAL FAILURE: No valid image references were prepared for the generation payload.');
+  }
+
+  const currentStage = resolveImageGenerateStage(recipePayload, renderSources);
+  const uploadedUrls = [...(recipePayload.__uploadedUrls || [])];
+
+  if (currentStage === 'uploading_refs') {
+    const uploadCursor = Math.max(0, Number(recipePayload.__uploadCursor || uploadedUrls.length || 0));
+    const chunk = renderSources.slice(uploadCursor, uploadCursor + IMAGE_REFERENCE_UPLOAD_CHUNK_SIZE);
+
+    if (chunk.length > 0) {
+      recipePayload = await persistQueueLog(
+        job.id,
+        recipePayload,
+        'uploading_refs',
+        `Đang tải ${chunk.length} ảnh tham chiếu (${uploadCursor + 1}-${uploadCursor + chunk.length}/${renderSources.length}).`,
+      ) as ImageGenerateRecipePayload;
+      const chunkUrls = await Promise.all(chunk.map((source) => uploadImageToTst(source)));
+      uploadedUrls.push(...chunkUrls);
+    }
+
+    const nextCursor = uploadCursor + chunk.length;
+    const hasMoreUploads = nextCursor < renderSources.length;
+    const nextPayload: ImageGenerateRecipePayload = {
+      ...recipePayload,
+      __stage: hasMoreUploads ? 'uploading_refs' : 'synthesizing_prompt',
+      __uploadSources: renderSources,
+      __directorSources: directorSources,
+      __uploadCursor: nextCursor,
+      __uploadedUrls: uploadedUrls,
+    };
+
+    recipePayload = await persistRecipePayload(job.id, nextPayload);
+
+    recipePayload = await persistQueueLog(
+      job.id,
+      recipePayload,
+      hasMoreUploads ? 'uploading_refs' : 'synthesizing_prompt',
+      hasMoreUploads
+        ? `Đã tải ${nextCursor}/${renderSources.length} ảnh tham chiếu.`
+        : `Đã tải xong ${uploadedUrls.length}/${renderSources.length} ảnh tham chiếu.`,
+      hasMoreUploads ? 'info' : 'success',
+    ) as ImageGenerateRecipePayload;
+
+    if (hasMoreUploads) {
+      const uploadProgress = Math.min(35, 20 + Math.round((nextCursor / renderSources.length) * 15));
+      await markQueuedStage(job.id, uploadProgress);
+      return { type: 'requeue' as const };
+    }
+
+    await markQueuedStage(job.id, 40);
+    return { type: 'requeue' as const };
+  }
+
+  if (currentStage === 'synthesizing_prompt') {
+    recipePayload = await persistQueueLog(
+      job.id,
+      recipePayload,
+      'synthesizing_prompt',
+      `Đang phân tích ${directorSources.length} ảnh để tổng hợp prompt.`,
+    ) as ImageGenerateRecipePayload;
+    const synthesizedPrompt = await synthesizeImageGeneratePrompt(recipePayload);
+    const nextPayload: ImageGenerateRecipePayload = {
+      ...recipePayload,
+      __synthesizedPrompt: synthesizedPrompt,
+      __stage: 'building_payload',
+      __uploadSources: renderSources,
+      __directorSources: directorSources,
+      __uploadedUrls: uploadedUrls,
+    };
+
+    recipePayload = await persistRecipePayload(job.id, nextPayload);
+    recipePayload = await persistQueueLog(
+      job.id,
+      recipePayload,
+      'building_payload',
+      'Đã tổng hợp prompt. Đang dựng payload.',
+      'success',
+    ) as ImageGenerateRecipePayload;
+    await markQueuedStage(job.id, 45);
+    return { type: 'requeue' as const };
+  }
+
+  recipePayload = await persistQueueLog(
+    job.id,
+    recipePayload,
+    'building_payload',
+    'Đang dựng và kiểm tra payload cuối.',
+  ) as ImageGenerateRecipePayload;
+  const synthesizedPrompt = recipePayload.__synthesizedPrompt?.trim()
+    ? recipePayload.__synthesizedPrompt.trim()
+    : await synthesizeImageGeneratePrompt(recipePayload);
+  const providerPayload = buildImageGenerateProviderPayload(recipePayload, uploadedUrls, synthesizedPrompt);
+
+  const validationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, stripInternalQueueMeta(providerPayload));
+  const validatedProviderPayload = applyLivePricingConfigToPayload(job.queue_kind, providerPayload, validationResult);
+  const storedPayload = await persistPreparedPayload(job.id, validatedProviderPayload, recipePayload);
+  await persistQueueLog(job.id, storedPayload, 'dispatching', 'Payload đã sẵn sàng. Chờ gửi provider.', 'success');
+  await markPreparedForDispatch(job.id);
+
+  return { type: 'prepared' as const, providerPayload: validatedProviderPayload };
 };
 
 const markCompletedWithAssetUrl = async (job: QueueJobRow, assetUrl: string) => {
@@ -307,6 +762,7 @@ const markCompletedWithAssetUrl = async (job: QueueJobRow, assetUrl: string) => 
     .update({
       status: 'completed',
       image_url: assetUrl,
+      queue_payload: withQueueLog(job.queue_payload, 'completed', 'Đã hoàn thành và nhận kết quả.', 'success'),
       progress: 100,
       error_message: null,
       attempt_count: 0,
@@ -322,7 +778,8 @@ const markCompletedWithAssetUrl = async (job: QueueJobRow, assetUrl: string) => 
 const markPolledState = async (job: QueueJobRow, providerData: any) => {
   const admin = getServiceRoleClient();
   const providerStatus = String(providerData?.status || '').toLowerCase();
-  const progress = typeof providerData?.progress === 'number' ? providerData.progress : 0;
+  const providerProgress = typeof providerData?.progress === 'number' ? providerData.progress : 0;
+  const progress = Math.max(60, providerProgress);
 
   if (providerStatus === 'completed') {
     const resultUrl = extractResultUrl(providerData);
@@ -335,6 +792,7 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
       .update({
         status: 'completed',
         image_url: resultUrl,
+        queue_payload: withQueueLog(job.queue_payload, 'completed', 'Provider đã hoàn tất. Đã lưu kết quả.', 'success'),
         progress: 100,
         error_message: null,
         attempt_count: 0,
@@ -370,6 +828,11 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
     .from('generated_images')
     .update({
       status: 'processing',
+      queue_payload: withQueueLog(
+        job.queue_payload,
+        'polling',
+        `Provider đang xử lý${providerProgress > 0 ? ` (${providerProgress}%)` : ''}.`,
+      ),
       progress,
       error_message: null,
       next_poll_at: new Date(Date.now() + POLL_INTERVAL_SECONDS * 1000).toISOString(),
@@ -399,6 +862,7 @@ const handlePollFailure = async (job: QueueJobRow, errorMessage: string) => {
     .update({
       status: 'processing',
       error_message: errorMessage,
+      queue_payload: withQueueLog(job.queue_payload, 'polling', `Lỗi khi hỏi provider, sẽ thử lại: ${errorMessage}`, 'warning'),
       attempt_count: nextAttemptCount,
       next_poll_at: new Date(Date.now() + getRetryDelaySeconds(nextAttemptCount) * 1000).toISOString(),
       lease_token: null,
@@ -411,8 +875,143 @@ const handlePollFailure = async (job: QueueJobRow, errorMessage: string) => {
   return 'requeued';
 };
 
+const recoverStalePreparingJobs = async () => {
+  const admin = getServiceRoleClient();
+  const nowIso = new Date().toISOString();
+  const { data, error } = await admin
+    .from('generated_images')
+    .select('id, user_id, asset_type, queue_kind, queue_payload, prompt, tool_id, tool_name, model_used, cost_vcoin, processing_started_at, created_at, lease_expires_at, status')
+    .in('status', ['processing', 'queued'])
+    .is('job_id', null);
+
+  if (error) {
+    throw error;
+  }
+
+  let recovered = 0;
+  for (const job of ((data || []) as QueueJobRow[])) {
+    const startedAt = (job as any).processing_started_at || (job as any).created_at || nowIso;
+    const ageMs = Date.now() - new Date(startedAt).getTime();
+    const leaseExpired =
+      !(job as any).lease_expires_at || String((job as any).lease_expires_at) < nowIso;
+    const currentStatus = String((job as any).status || '').toLowerCase();
+    const payload = job.queue_payload || {};
+    const recipeStage =
+      payload && typeof payload === 'object' && typeof (payload as any).__stage === 'string'
+        ? String((payload as any).__stage)
+        : '';
+    const isRecipePayload = isQueueRecipePayload(payload);
+    const isStagedRecipe =
+      isRecipePayload && ['uploading_refs', 'synthesizing_prompt', 'building_payload'].includes(recipeStage);
+    const missingProviderJobId = !String((job as any).job_id || '').trim();
+    const logCount = getQueueLogs(payload).length;
+    const isOrphanedClaim =
+      currentStatus === 'processing' &&
+      isRecipePayload &&
+      !isStagedRecipe &&
+      !recipeStage.startsWith('submitted') &&
+      !recipeStage.startsWith('dispatching') &&
+      missingProviderJobId &&
+      ageMs >= ORPHAN_CLAIM_GRACE_MS &&
+      logCount <= 1;
+    const isAbandonedPreDispatchStage =
+      currentStatus === 'processing' &&
+      isRecipePayload &&
+      missingProviderJobId &&
+      isStagedRecipe &&
+      leaseExpired &&
+      ageMs >= ORPHAN_CLAIM_GRACE_MS;
+
+    const preparationTimeoutMs = getPreparationTimeoutMs(job, payload);
+
+    if (ageMs >= preparationTimeoutMs) {
+      await markFailedAndRefund(job, getPreparationTimeoutUserMessage(job, payload));
+      continue;
+    }
+
+    if (isOrphanedClaim) {
+      const resetPayload = withQueueLog(
+        payload,
+        'queued',
+        'Phát hiện job bị claim sớm. Đưa lại vào hàng đợi.',
+        'warning',
+      );
+      await admin
+        .from('generated_images')
+        .update({
+          status: 'queued',
+          progress: 0,
+          queue_payload: resetPayload,
+          processing_started_at: null,
+          lease_token: null,
+          lease_expires_at: null,
+          next_poll_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', job.id);
+      recovered += 1;
+      continue;
+    }
+
+    if (isAbandonedPreDispatchStage) {
+      const resumedStage =
+        payload.recipeType === 'image_generate_recipe_v1'
+          ? resolveImageGenerateStage(
+              payload,
+              getImageRenderReferenceSources(payload),
+            )
+          : (getQueueStage(payload) || 'queued');
+      const resetPayload = withQueueLog(
+        {
+          ...payload,
+          __stage: resumedStage,
+        },
+        resumedStage,
+        `Worker mất lease ở bước ${humanizeQueueStage(resumedStage)}. Đưa job lại vào hàng đợi.`,
+        'warning',
+      );
+      await updateGeneratedImageRecord(job.id, {
+        status: 'queued',
+        progress: Math.max(5, Number((job as any).progress || 0)),
+        queue_payload: resetPayload,
+        error_message: null,
+        job_id: null,
+        lease_token: null,
+        lease_expires_at: null,
+        next_poll_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+      recovered += 1;
+      continue;
+    }
+
+    if (!leaseExpired) {
+      continue;
+    }
+
+    if (currentStatus === 'processing' && !isRecipePayload) {
+      await markPreparedForDispatch(job.id);
+      recovered += 1;
+      continue;
+    }
+
+    if (currentStatus === 'processing' && isRecipePayload) {
+      const result = await requeueJob(job, 'Queue preparation timed out before dispatching to provider.');
+      if (result === 'requeued') recovered += 1;
+      continue;
+    }
+
+    if (currentStatus === 'queued' && isStagedRecipe) {
+      recovered += 1;
+    }
+  }
+
+  return recovered;
+};
+
 const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
   const admin = getServiceRoleClient();
+  const workerStartedAt = Date.now();
   const summary: QueueWorkerSummary = {
     claimedForDispatch: 0,
     submitted: 0,
@@ -422,9 +1021,11 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
     requeued: 0,
   };
 
+  summary.requeued += await recoverStalePreparingJobs();
+
   const { data: dispatchJobs, error: dispatchError } = await admin.rpc('claim_dispatchable_generated_jobs', {
-    p_limit: 8,
-    p_lease_seconds: 120,
+    p_limit: DISPATCH_CLAIM_LIMIT,
+    p_lease_seconds: DISPATCH_LEASE_SECONDS,
   });
 
   if (dispatchError) {
@@ -435,6 +1036,10 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
   summary.claimedForDispatch = jobsToDispatch.length;
 
   for (const job of jobsToDispatch) {
+    if (!hasWorkerTickBudgetRemaining(workerStartedAt)) {
+      break;
+    }
+
     try {
       if (await shouldSkipDispatch(job)) {
         await releaseLease(job.id);
@@ -442,38 +1047,122 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
       }
 
       const currentPayload = job.queue_payload || {};
+      const preparationTimeoutMs = getPreparationTimeoutMs(job, currentPayload);
       const validationPayload = isQueueRecipePayload(currentPayload)
         ? getRecipeValidationPayload(currentPayload)
-        : currentPayload;
+        : stripInternalQueueMeta(currentPayload);
+      let submitPayload: Record<string, unknown> = currentPayload;
+      let submitValidationResult: { pricingMatch?: { config_key?: string } | null } | null = null;
 
-      await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, validationPayload);
-      await markPreparing(job);
+      if (isQueueRecipePayload(currentPayload)) {
+        job.queue_payload = await markPreparing(job);
+      }
+
+      const validationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, validationPayload);
+      submitValidationResult = validationResult;
 
       if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'image_edit_recipe_v1') {
-        const editPayload = currentPayload as ImageEditRecipePayload;
-        const resultUrl = await runVertexImageEdit({
-          sourceImage: editPayload.sourceImage,
-          instruction: editPayload.prompt,
-          modelId: editPayload.modelId,
-          mimeType: editPayload.mimeType,
-        });
+        const editPayload = (job.queue_payload || currentPayload) as ImageEditRecipePayload;
+        await updatePreProviderStage(job.id, 20);
+        job.queue_payload = await persistQueueLog(
+          job.id,
+          job.queue_payload || currentPayload,
+          'preparing',
+          'Đang gửi yêu cầu chỉnh sửa ảnh.',
+        );
+        const resultUrl = await withTimeout(
+          withLeaseHeartbeat(
+            job.id,
+            runVertexImageEdit({
+              sourceImage: editPayload.sourceImage,
+              instruction: editPayload.prompt,
+              modelId: editPayload.modelId,
+              mimeType: editPayload.mimeType,
+            }),
+          ),
+          preparationTimeoutMs,
+          'Queue preparation timed out before image edit dispatch.',
+        );
 
         await markCompletedWithAssetUrl(job, resultUrl);
         summary.completed += 1;
         continue;
       }
 
-      const providerPayload = isQueueRecipePayload(currentPayload)
-        ? await prepareProviderPayloadFromQueueRecipe(currentPayload)
-        : currentPayload;
+      if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'image_generate_recipe_v1') {
+        await updatePreProviderStage(job.id, 20);
+        const stagedResult = await withTimeout(
+          prepareImageRecipeInStages(job, (job.queue_payload || currentPayload) as ImageGenerateRecipePayload),
+          preparationTimeoutMs,
+          'Queue preparation timed out before dispatching to provider.',
+        );
 
-      if (isQueueRecipePayload(currentPayload)) {
-        await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, providerPayload);
-        await persistPreparedPayload(job.id, providerPayload);
-        job.queue_payload = providerPayload;
+        if (stagedResult.type === 'requeue') {
+          summary.requeued += 1;
+          continue;
+        }
+
+        submitPayload = stagedResult.providerPayload;
+        submitValidationResult = { pricingMatch: { config_key: String(stagedResult.providerPayload.config_key || '') || undefined } };
+        job.queue_payload = withQueueMeta(
+          stagedResult.providerPayload,
+          job.queue_payload || currentPayload,
+          'dispatching',
+        );
       }
 
-      const providerJobId = await submitProviderJob(job.queue_kind, providerPayload);
+      if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType !== 'image_generate_recipe_v1') {
+        await updatePreProviderStage(job.id, 20);
+        if (currentPayload.recipeType === 'video_generate_recipe_v1') {
+          job.queue_payload = await persistQueueLog(
+            job.id,
+            job.queue_payload || currentPayload,
+            'building_payload',
+            'Đang chuẩn bị payload video.',
+          );
+        } else if (currentPayload.recipeType === 'motion_generate_recipe_v1') {
+          job.queue_payload = await persistQueueLog(
+            job.id,
+            job.queue_payload || currentPayload,
+            'building_payload',
+            'Đang chuẩn bị payload motion.',
+          );
+        }
+        const providerPayload = await withTimeout(
+          prepareProviderPayloadFromQueueRecipe((job.queue_payload || currentPayload) as typeof currentPayload),
+          preparationTimeoutMs,
+          'Queue preparation timed out before dispatching to provider.',
+        );
+        const preparedValidationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, providerPayload);
+        const validatedProviderPayload = applyLivePricingConfigToPayload(
+          job.queue_kind,
+          providerPayload,
+          preparedValidationResult,
+        );
+        job.queue_payload = await persistPreparedPayload(job.id, validatedProviderPayload, job.queue_payload || currentPayload);
+        job.queue_payload = await persistQueueLog(
+          job.id,
+          job.queue_payload,
+          'dispatching',
+          'Payload đã sẵn sàng. Chờ gửi provider.',
+          'success',
+        );
+        await markPreparedForDispatch(job.id);
+        summary.requeued += 1;
+        continue;
+      }
+
+      const providerPayloadForSubmit = applyLivePricingConfigToPayload(
+        job.queue_kind,
+        submitPayload,
+        submitValidationResult,
+      );
+      if (providerPayloadForSubmit !== submitPayload) {
+        job.queue_payload = await persistPreparedPayload(job.id, providerPayloadForSubmit, job.queue_payload || currentPayload);
+      }
+
+      job.queue_payload = await markSubmittingPreparedPayload(job.id, job.queue_payload);
+      const providerJobId = await submitProviderJob(job.queue_kind, providerPayloadForSubmit);
       await markSubmitted(job, providerJobId);
       summary.submitted += 1;
     } catch (error: any) {
@@ -481,6 +1170,10 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
       if (message.startsWith('INVALID_TST_CONFIG:')) {
         await markFailedAndRefund(job, message.replace('INVALID_TST_CONFIG:', '').trim());
         summary.failed += 1;
+      } else if (message.includes('Queue preparation timed out before')) {
+        await markFailedAndRefund(job, getPreparationTimeoutUserMessage(job, job.queue_payload));
+        summary.failed += 1;
+        continue;
       } else if (isTransientError(message)) {
         const result = await requeueJob(job, message);
         if (result === 'failed') {
@@ -495,8 +1188,17 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
     }
   }
 
+  if (
+    summary.claimedForDispatch > 0 ||
+    summary.submitted > 0 ||
+    summary.requeued > 0 ||
+    summary.failed > 0
+  ) {
+    return summary;
+  }
+
   const { data: pollJobs, error: pollError } = await admin.rpc('claim_pollable_generated_jobs', {
-    p_limit: 8,
+    p_limit: POLL_CLAIM_LIMIT,
     p_lease_seconds: 60,
   });
 
@@ -508,6 +1210,10 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
   summary.claimedForPoll = jobsToPoll.length;
 
   for (const job of jobsToPoll) {
+    if (!hasWorkerTickBudgetRemaining(workerStartedAt)) {
+      break;
+    }
+
     try {
       const providerData = await pollProviderJob(String(job.job_id || ''));
       const state = await markPolledState(job, providerData);

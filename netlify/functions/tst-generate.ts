@@ -1,4 +1,5 @@
 import type { Handler } from '@netlify/functions';
+import { normalizeTstOutboundPayload } from './_tst-payload-normalizer';
 
 const jsonHeaders = {
   'Content-Type': 'application/json',
@@ -31,7 +32,7 @@ export const handler: Handler = async (event) => {
       };
     }
 
-    const payload = JSON.parse(event.body || '{}');
+    const payload = normalizeTstOutboundPayload(JSON.parse(event.body || '{}'));
     const startedAt = Date.now();
 
     const response = await fetch('https://api.tramsangtao.com/v1/image/generate', {

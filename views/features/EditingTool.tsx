@@ -22,7 +22,6 @@ import {
   getVertexEditResolutionCostMap,
   getVertexEditToolCostBreakdown,
   sanitizePricingEntriesWithRuntimeModels,
-  TST_CATALOG_CACHE_TTL_MS,
   tstServerToUi,
   uiServerToTst,
   uiSpeedToTst,
@@ -263,11 +262,6 @@ export const EditingTool: React.FC<EditingToolProps> = ({
     };
 
     loadCatalog();
-    const refreshTimer = window.setInterval(() => {
-      loadCatalog(true);
-    }, TST_CATALOG_CACHE_TTL_MS);
-
-    return () => window.clearInterval(refreshTimer);
   }, [lang]);
 
   useEffect(() => {

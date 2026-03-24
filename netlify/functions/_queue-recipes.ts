@@ -1,4 +1,11 @@
-import { buildImageProviderPrompt, type ImageGenerateRecipePayload, type QueueRecipePayload } from '../../shared/queueRecipes';
+import {
+  buildImageProviderPrompt,
+  getImageDirectorSources,
+  getEffectiveImageGenerationResolution,
+  getImageRenderReferenceSources,
+  type ImageGenerateRecipePayload,
+  type QueueRecipePayload,
+} from '../../shared/queueRecipes';
 import { synthesizeStrictImagePrompt } from './_vertex-director';
 
 const TST_API_BASE = 'https://api.tramsangtao.com/v1';
@@ -97,50 +104,102 @@ const uploadMediaToTst = async (
   return String(url);
 };
 
+export const uploadImageToTst = async (input: string) => uploadMediaToTst(input, 'image');
+export const uploadVideoToTst = async (input: string, fallbackMimeType?: string) =>
+  uploadMediaToTst(input, 'video', fallbackMimeType);
+
+const isRecoverablePromptSynthesisError = (error: unknown) => {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error || '').toLowerCase();
+
+  return (
+    message.includes('resource has been exhausted') ||
+    message.includes('quota') ||
+    message.includes('rate limit') ||
+    message.includes('429') ||
+    message.includes('overloaded') ||
+    message.includes('deadline exceeded') ||
+    message.includes('failed to initialize vertex ai credentials')
+  );
+};
+
+const buildFallbackSynthesizedPrompt = (payload: ImageGenerateRecipePayload) => {
+  const basePrompt = payload.prompt?.trim() || '';
+  const stylePrompt = payload.stylePrompt?.trim() || '';
+
+  if (basePrompt && stylePrompt) {
+    return `${basePrompt}\nStyle reference keywords: ${stylePrompt}`;
+  }
+
+  return basePrompt || stylePrompt || 'Generate the image using the provided references exactly.';
+};
+
+export const synthesizeImageGeneratePrompt = async (payload: ImageGenerateRecipePayload) => {
+  try {
+    return await synthesizeStrictImagePrompt(payload);
+  } catch (error) {
+    if (!isRecoverablePromptSynthesisError(error)) {
+      throw error;
+    }
+
+    console.warn('[queue-recipes] Vertex prompt synthesis unavailable, falling back to base prompt:', error);
+    return buildFallbackSynthesizedPrompt(payload);
+  }
+};
+
+export const buildImageGenerateProviderPayload = (
+  payload: ImageGenerateRecipePayload,
+  uploadedUrls: string[],
+  synthesizedPrompt: string,
+) => {
+  const effectiveResolution = getEffectiveImageGenerationResolution(
+    payload.modelId,
+    payload.speed,
+    payload.resolution,
+  );
+
+  const providerPayload: Record<string, unknown> = {
+    prompt: buildImageProviderPrompt(synthesizedPrompt, payload.negativePrompt),
+    model: payload.modelId,
+  };
+
+  if (uploadedUrls.length > 0) providerPayload.img_url = uploadedUrls;
+  if (effectiveResolution) providerPayload.resolution = effectiveResolution.toLowerCase();
+  if (payload.aspectRatio) providerPayload.aspect_ratio = payload.aspectRatio;
+  if (payload.speed) providerPayload.speed = payload.speed;
+  if (payload.serverId) providerPayload.server_id = payload.serverId;
+
+  return providerPayload;
+};
+
 export const prepareProviderPayloadFromQueueRecipe = async (payload: QueueRecipePayload): Promise<Record<string, unknown>> => {
   switch (payload.recipeType) {
     case 'image_generate_recipe_v1': {
       const structuredPayload = payload as ImageGenerateRecipePayload;
-      const roleAwareSources = [
-        ...(structuredPayload.characterImages || []),
-        ...(structuredPayload.sampleImage ? [structuredPayload.sampleImage] : []),
-        ...(structuredPayload.styleImage ? [structuredPayload.styleImage] : []),
-      ].filter((value): value is string => Boolean(value));
-
+      const directorSources = getImageDirectorSources(structuredPayload);
+      const renderSources = getImageRenderReferenceSources(structuredPayload);
       const fallbackSources = payload.referenceImages || [];
-      const uploadSources = roleAwareSources.length > 0 ? roleAwareSources : fallbackSources;
+      const uploadSources = renderSources.length > 0 ? renderSources : fallbackSources;
 
       if (uploadSources.length === 0) {
         throw new Error('CRITICAL FAILURE: No valid image references were prepared for the generation payload.');
       }
 
-      const uploadedUrls: string[] = [];
-      for (const source of uploadSources) {
-        if (!source) continue;
-        uploadedUrls.push(await uploadMediaToTst(source, 'image'));
-      }
+      const [uploadedUrls, synthesizedPrompt] = await Promise.all([
+        Promise.all(
+          uploadSources
+            .filter((value): value is string => Boolean(value))
+            .map((source) => uploadImageToTst(source)),
+        ),
+        directorSources.length > 0
+          ? synthesizeImageGeneratePrompt(structuredPayload)
+          : Promise.resolve(payload.prompt),
+      ]);
 
-      const synthesizedPrompt =
-        roleAwareSources.length > 0
-          ? await synthesizeStrictImagePrompt(structuredPayload)
-          : payload.prompt;
-
-      const providerPayload: Record<string, unknown> = {
-        prompt: buildImageProviderPrompt(synthesizedPrompt, structuredPayload.negativePrompt),
-        model: payload.modelId,
-      };
-
-      if (uploadedUrls.length > 0) providerPayload.img_url = uploadedUrls;
-      if (payload.resolution) providerPayload.resolution = payload.resolution.toLowerCase();
-      if (payload.aspectRatio) providerPayload.aspect_ratio = payload.aspectRatio;
-      if (payload.speed) providerPayload.speed = payload.speed;
-      if (payload.serverId) providerPayload.server_id = payload.serverId;
-
-      return providerPayload;
+      return buildImageGenerateProviderPayload(structuredPayload, uploadedUrls, synthesizedPrompt);
     }
 
     case 'image_edit_recipe_v1': {
-      const uploadedUrl = await uploadMediaToTst(payload.sourceImage, 'image', payload.mimeType);
+      const uploadedUrl = await uploadImageToTst(payload.sourceImage);
       const providerPayload: Record<string, unknown> = {
         prompt: payload.prompt,
         model: payload.modelId,
@@ -168,7 +227,7 @@ export const prepareProviderPayloadFromQueueRecipe = async (payload: QueueRecipe
       if (payload.serverId) providerPayload.server_id = payload.serverId;
       if (typeof payload.audio === 'boolean') providerPayload.audio = payload.audio;
       if (payload.keyframeImage) {
-        const uploadedKeyframeUrl = await uploadMediaToTst(payload.keyframeImage, 'image');
+        const uploadedKeyframeUrl = await uploadImageToTst(payload.keyframeImage);
         providerPayload.img_url = uploadedKeyframeUrl;
         providerPayload.image_url = uploadedKeyframeUrl;
         if (payload.modelId === 'kling-2.5-turbo') {
@@ -181,8 +240,8 @@ export const prepareProviderPayloadFromQueueRecipe = async (payload: QueueRecipe
 
     case 'motion_generate_recipe_v1': {
       const [characterImageUrl, motionVideoUrl] = await Promise.all([
-        uploadMediaToTst(payload.characterImage, 'image'),
-        uploadMediaToTst(payload.motionVideoDataUrl, 'video'),
+        uploadImageToTst(payload.characterImage),
+        uploadVideoToTst(payload.motionVideoDataUrl),
       ]);
 
       const providerPayload: Record<string, unknown> = {

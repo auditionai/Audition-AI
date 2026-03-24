@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Handler } from '@netlify/functions';
 import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 import { runQueueWorker } from './_queue-worker';
+import type { QueueProcessingStage, QueueProgressLogEntry } from '../../shared/queueRecipes';
 
 const headers = {
   'Content-Type': 'application/json',
@@ -29,6 +30,40 @@ type QueueBody = {
   costVcoin?: number;
   queueKind?: string;
   queuePayload?: Record<string, unknown>;
+};
+
+const buildInitialQueueLogs = (queueKind: string): QueueProgressLogEntry[] => {
+  const stage: QueueProcessingStage = 'queued';
+  const message =
+    queueKind === 'image_generate'
+      ? 'Đã vào hàng đợi. Chờ worker chuẩn bị.'
+      : 'Đã vào hàng đợi. Chờ worker xử lý.';
+
+  return [
+    {
+      at: new Date().toISOString(),
+      stage,
+      level: 'info',
+      message,
+    },
+  ];
+};
+
+const isImmediateStartCandidate = (row: any) => Number(row?.queue_position ?? 1) === 0;
+
+const withTimeout = async <T>(task: Promise<T>, timeoutMs: number): Promise<T> => {
+  let timeoutId: NodeJS.Timeout | null = null;
+
+  try {
+    return await Promise.race([
+      task,
+      new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(`QUEUE_SUBMIT_TICK_TIMEOUT_${timeoutMs}`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
 };
 
 const mapQueueError = (message: string) => {
@@ -204,6 +239,14 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
   }
 
   const now = new Date().toISOString();
+  const queuePayloadWithLogs =
+    queuePayload && typeof queuePayload === 'object'
+      ? {
+          ...queuePayload,
+          __stage: 'queued',
+          __logs: buildInitialQueueLogs(queueKind),
+        }
+      : queuePayload;
   const { error: insertError } = await admin.from('generated_images').insert({
     id: jobId,
     user_id: userId,
@@ -220,7 +263,7 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
     asset_type: assetType,
     updated_at: now,
     queue_kind: queueKind,
-    queue_payload: queuePayload,
+    queue_payload: queuePayloadWithLogs,
     provider: 'tst',
     job_id: null,
     lease_token: null,
@@ -261,7 +304,16 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
   };
 };
 
-const runSafeWorkerTick = () => {
+const runSafeWorkerTick = async (awaitCompletion = false) => {
+  if (awaitCompletion) {
+    try {
+      await withTimeout(runQueueWorker(), 9000);
+    } catch (workerError) {
+      console.error('[queue-submit] Immediate worker tick failed:', workerError);
+    }
+    return;
+  }
+
   runQueueWorker().catch((workerError) => {
     console.error('[queue-submit] Immediate worker tick failed:', workerError);
   });
@@ -298,6 +350,15 @@ export const handler: Handler = async (event) => {
     }
 
     let row: any;
+    const queuePayloadWithLogs =
+      body.queuePayload && typeof body.queuePayload === 'object'
+        ? {
+            ...body.queuePayload,
+            __stage: 'queued',
+            __logs: buildInitialQueueLogs(body.queueKind),
+          }
+        : body.queuePayload;
+
     const rpcResult = await admin.rpc('server_enqueue_generated_job', {
       p_id: normalizeJobId(body.id),
       p_user_id: user.id,
@@ -308,7 +369,7 @@ export const handler: Handler = async (event) => {
       p_asset_type: asQueueAssetType(body.assetType),
       p_cost_vcoin: Number(body.costVcoin || 0),
       p_queue_kind: body.queueKind,
-      p_queue_payload: body.queuePayload,
+      p_queue_payload: queuePayloadWithLogs,
     });
 
     if (rpcResult.error) {
@@ -333,7 +394,7 @@ export const handler: Handler = async (event) => {
       row = Array.isArray(rpcResult.data) ? rpcResult.data[0] : rpcResult.data;
     }
 
-    runSafeWorkerTick();
+    await runSafeWorkerTick(isImmediateStartCandidate(row));
 
     return {
       statusCode: 200,

@@ -2,6 +2,11 @@ import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import { createTextureSheet, optimizePayload, createSolidFence } from "../utils/imageProcessor";
 import { getSystemApiKey, reportKeyFailure, getApiKeyName } from "./economyService";
 
+const VERTEX_TEXT_FLASH_MODEL = 'gemini-3-flash-preview';
+const VERTEX_TEXT_PRO_MODEL = 'gemini-3.1-pro-preview';
+const VERTEX_IMAGE_FLASH_MODEL = 'gemini-3.1-flash-image-preview';
+const VERTEX_IMAGE_PRO_MODEL = 'gemini-3-pro-image-preview';
+
 export interface CharacterData {
   id: number;
   gender: 'male' | 'female';
@@ -70,7 +75,7 @@ const retryWithBackoff = async <T>(
 
 // --- NEW: ANALYZE STYLE IMAGE (For Admin) ---
 export const analyzeStyleImage = async (imageBase64: string): Promise<string> => {
-    const model = 'gemini-3.1-pro-preview'; // Use 3.1 pro for analysis
+    const model = VERTEX_TEXT_PRO_MODEL;
 
     const result: any = await retryWithBackoff(
         async () => {
@@ -104,7 +109,7 @@ const selectBestStyle = async (prompt: string, styles: any[]): Promise<any | nul
     if (styles.length === 1) return styles[0]; // Only one choice
 
     // Use latest Flash for fast routing
-    const model = 'gemini-3-flash-preview'; 
+    const model = VERTEX_TEXT_FLASH_MODEL; 
 
     const styleList = styles.map(s => `- ID: ${s.id} | Name: ${s.name} | Keywords: ${s.trigger_prompt}`).join('\n');
 
@@ -198,10 +203,13 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
             generateContent: async (params: any) => {
                 try {
                     // Xin Access Token từ Netlify Function
+                    const tokenRequestBody = specificKey
+                        ? { service_account_json: apiKey, useProvidedCredential: true }
+                        : {};
                     const tokenRes = await fetch('/api/get-vertex-token', { 
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ service_account_json: apiKey })
+                        body: JSON.stringify(tokenRequestBody)
                     });
                     if (!tokenRes.ok) {
                         const err = await tokenRes.json().catch(() => ({}));
@@ -218,26 +226,27 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     // --- STANDARD PIPELINE ---
                     // Map models to stable versions for Vertex AI
                     if (vertexModel.includes('image')) {
-                        if (vertexModel === 'gemini-2.5-flash-image') {
-                            // Keep it as gemini-2.5-flash-image
+                        if (vertexModel.includes('flash')) {
+                            vertexModel = VERTEX_IMAGE_FLASH_MODEL;
                             apiVersion = 'v1beta1';
-                        } else if (vertexModel.includes('flash')) {
-                            vertexModel = 'gemini-3.1-flash-image-preview';
-                            apiVersion = 'v1beta1'; // Gemini 3.1 Image uses v1beta1
                         } else if (vertexModel.includes('pro')) {
-                            vertexModel = 'gemini-3-pro-image-preview';
-                            apiVersion = 'v1beta1'; // Gemini 3 Pro Image uses v1beta1
+                            vertexModel = VERTEX_IMAGE_PRO_MODEL;
+                            apiVersion = 'v1beta1';
+                        } else {
+                            vertexModel = VERTEX_IMAGE_FLASH_MODEL;
+                            apiVersion = 'v1beta1';
                         }
                         isGlobalImageModel = true; // Both use global location
                     } else {
                         if (vertexModel.includes('flash')) {
-                            // On Vertex AI, use 3 Flash
-                            vertexModel = 'gemini-3-flash-preview';
+                            vertexModel = VERTEX_TEXT_FLASH_MODEL;
                             apiVersion = 'v1beta1'; 
                         } else if (vertexModel.includes('pro')) {
-                            // On Vertex AI, use 3.1 Pro
-                            vertexModel = 'gemini-3.1-pro-preview';
+                            vertexModel = VERTEX_TEXT_PRO_MODEL;
                             apiVersion = 'v1beta1'; 
+                        } else {
+                            vertexModel = VERTEX_TEXT_FLASH_MODEL;
+                            apiVersion = 'v1beta1';
                         }
                     }
 
@@ -284,8 +293,7 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                             delete payload.generationConfig.imageConfig;
                         }
                         
-                        // Gemini 3.1 Image Preview requires response_modalities
-                        if (isGlobalImageModel && vertexModel !== 'gemini-2.5-flash-image') {
+                        if (isGlobalImageModel) {
                             payload.generationConfig.response_modalities = ["IMAGE"];
                         }
                     }
@@ -323,7 +331,7 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                 } catch (error: any) {
                     const isRateLimit = error?.status === 429 || error?.message?.includes('429') || error?.message?.includes('quota');
                     const isAuthError = error?.status === 403 || error?.message?.includes('403') || error?.message?.includes('PERMISSION_DENIED');
-                    if (isAuthError) {
+                    if (isAuthError && specificKey) {
                         reportKeyFailure(apiKey!);
                     }
                     throw error;
@@ -379,7 +387,7 @@ const extractImage = (response: any): string | null => {
 export const testApiKey = async (tier: 'flash' | 'pro' = 'flash', attempt: number = 0): Promise<boolean> => {
     try {
         const freshAi = await getAiClient(tier);
-        const testModel = tier === 'pro' ? 'gemini-3.1-pro-preview' : 'gemini-3-flash-preview';
+        const testModel = tier === 'pro' ? VERTEX_TEXT_PRO_MODEL : VERTEX_TEXT_FLASH_MODEL;
 
         await runWithTimeout(
             freshAi.models.generateContent({
@@ -462,7 +470,7 @@ export const checkConnection = async (key?: string): Promise<{ success: boolean;
         // Sử dụng Flash cho checkConnection (Admin) để ping nhanh và ổn định nhất
         await runWithTimeout(
             ai.models.generateContent({
-                model: 'gemini-3-flash-preview',
+                model: VERTEX_TEXT_FLASH_MODEL,
                 contents: { parts: [{ text: "Ping" }] }
             }),
             15000,
@@ -615,7 +623,7 @@ Output ONLY the final command prompt. Do not include the step-by-step analysis i
     try {
         const freshAi = await getAiClient('pro');
         const response = await freshAi.models.generateContent({
-            model: 'gemini-3.1-pro-preview',
+            model: VERTEX_TEXT_PRO_MODEL,
             contents: { parts },
             config: {
                 temperature: 0.4,
@@ -1057,7 +1065,7 @@ Output ONLY the final command prompt. Do not include the step-by-step analysis i
     try {
         const freshAi = await getAiClient('pro');
         const response = await freshAi.models.generateContent({
-            model: 'gemini-3.1-pro-preview',
+            model: VERTEX_TEXT_PRO_MODEL,
             contents: { parts },
             config: {
                 temperature: 0.4,
@@ -1118,7 +1126,7 @@ export const editImageWithInstructions = async (
     serverId?: string,
     allowTramsangtaoFallback: boolean = false
 ): Promise<{ jobId: string, resultPromise: Promise<string> }> => {
-    const model = modelType === 'flash' ? 'gemini-3.1-flash-image-preview' : 'gemini-3-pro-image-preview';
+    const model = modelType === 'flash' ? VERTEX_IMAGE_FLASH_MODEL : VERTEX_IMAGE_PRO_MODEL;
     onLog(`Initializing ${model} Pipeline for Editing...`);
     
     // We will attempt Vertex AI first

@@ -63,7 +63,7 @@ export const triggerServerQueueTick = async (force = false) => {
   if (!force && queueTickUnavailableUntil > now) {
     return null;
   }
-  if (!force && now - lastTickAt < 2500) {
+  if (!force && now - lastTickAt < 1500) {
     return null;
   }
 
@@ -97,6 +97,12 @@ export const triggerServerQueueTick = async (force = false) => {
       queueTickDisabledLogged = true;
       console.warn('[Queue] Server worker disabled:', errorMessage);
     }
+    return payload;
+  }
+
+  if (payload?.timedOut) {
+    queueTickDisabledLogged = false;
+    queueTickUnavailableUntil = 0;
     return payload;
   }
 

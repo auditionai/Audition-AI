@@ -1,13 +1,5 @@
-import { GoogleAuth } from 'google-auth-library';
-import { getServiceRoleClient } from './_supabase';
-import type { ImageGenerateRecipePayload } from '../../shared/queueRecipes';
-
-type VertexCredentialRow = {
-  id: string;
-  name: string | null;
-  key_value: string | null;
-  last_used_at?: string | null;
-};
+import { getImageDirectorSources, type ImageGenerateRecipePayload } from '../../shared/queueRecipes';
+import { runWithVertexCredentialFailover } from './_vertex-credentials';
 
 const VERTEX_MODEL = 'gemini-3.1-pro-preview';
 
@@ -18,48 +10,6 @@ const parseErrorMessage = async (response: Response) => {
   } catch {
     return `${response.status} ${response.statusText}`;
   }
-};
-
-const isServiceAccountJson = (value: string) =>
-  value.includes('project_id') && value.includes('private_key') && value.includes('client_email');
-
-const getPreferredVertexCredential = async () => {
-  const admin = getServiceRoleClient();
-  const { data, error } = await admin
-    .from('api_keys')
-    .select('id, name, key_value, last_used_at')
-    .eq('status', 'active');
-
-  if (error) {
-    throw error;
-  }
-
-  const validCredentials = ((data || []) as VertexCredentialRow[]).filter((row) =>
-    typeof row.key_value === 'string' && isServiceAccountJson(row.key_value),
-  );
-
-  if (validCredentials.length === 0) {
-    throw new Error('Không tìm thấy Service Account JSON [PRO] hợp lệ để phân tích ảnh.');
-  }
-
-  const sorted = [...validCredentials].sort((a, b) => {
-    const aPro = a.name?.includes('[PRO]') ? 1 : 0;
-    const bPro = b.name?.includes('[PRO]') ? 1 : 0;
-    if (aPro !== bPro) return bPro - aPro;
-    return new Date(a.last_used_at || 0).getTime() - new Date(b.last_used_at || 0).getTime();
-  });
-
-  const selected = sorted[0];
-  const credentials = JSON.parse(selected.key_value || '{}');
-
-  admin
-    .from('api_keys')
-    .update({ last_used_at: new Date().toISOString() })
-    .eq('id', selected.id)
-    .then(() => {})
-    .catch(() => {});
-
-  return credentials;
 };
 
 const toInlineImagePart = async (source: string) => {
@@ -131,7 +81,7 @@ const buildStrictImageDirectorInstruction = (
   }
 
   if (hasSample) {
-    sections.push(`- Image ${imageIndex}: SAMPLE / POSE / BACKGROUND reference. COPY EXACTLY the pose, camera angle, framing, environment layout, and scene composition from this image. DO NOT steal identity, outfit, skin texture, facial anatomy, hair texture, or realism from it. If this sample is a real human photo, use it only as composition choreography.`);
+    sections.push(`- Image ${imageIndex}: SAMPLE / POSE / BACKGROUND reference. COPY EXACTLY the pose, camera angle, framing, environment layout, and scene composition from this image. If multiple subjects appear in this image, COPY EXACTLY their left-to-right order, spacing, overlap, body lean, hand placement, leg placement, relative heights, and camera perspective. DO NOT steal identity, outfit, skin texture, facial anatomy, hair texture, or realism from it. If this sample is a real human photo, use it only as composition choreography.`);
     imageIndex += 1;
   }
 
@@ -146,11 +96,12 @@ const buildStrictImageDirectorInstruction = (
     '2. The final command prompt must explicitly command the renderer to COPY AND PASTE the character identity from the character references, including face shape, eyes, hair silhouette, body structure, skin tone, outfit, shoes, and accessories.',
     '3. The final command prompt must explicitly state that the subject must remain a stylized 3D game character / MMO avatar and must NOT become photorealistic, semi-realistic, or humanized.',
     '4. If a sample image is provided, the final command prompt must explicitly command the renderer to COPY the exact pose, framing, camera angle, and background from it, while forbidding any borrowing of real-human realism or identity from it.',
-    '5. If a style image is provided, the final command prompt must explicitly command the renderer to COPY the exact render style, lighting, material quality, color grading, stylized skin shading, and stylized facial/hand treatment from it.',
-    '6. The prompt must state that the renderer is FORBIDDEN from inventing extra characters, replacing the face, changing the hair, changing the outfit, improvising the composition, or blending the roles of the references.',
-    '7. If multiple character references are provided, reconcile them into the same identity, prioritizing face fidelity, body fidelity, and outfit accuracy.',
-    '8. Mention that the reference images will be provided again to the renderer in the same order.',
-    '9. Explicitly forbid realistic human skin pores, realistic human facial anatomy, realistic photographic shading, and live-action body proportions if they conflict with the game-avatar look.',
+    '5. If the sample image contains multiple people, the final command prompt must explicitly map the final characters into those exact sample positions and preserve the exact left-to-right arrangement, spacing, overlap, body lean, hand placement, leg placement, and camera perspective. The renderer must NOT collapse them into a straight lineup unless the sample itself is a straight lineup.',
+    '6. If a style image is provided, the final command prompt must explicitly command the renderer to COPY the exact render style, lighting, material quality, color grading, stylized skin shading, and stylized facial/hand treatment from it.',
+    '7. The prompt must state that the renderer is FORBIDDEN from inventing extra characters, replacing the face, changing the hair, changing the outfit, improvising the composition, or blending the roles of the references.',
+    '8. If multiple character references are provided, map each final character into a distinct sample position. Do not merge them into one combined pose and do not default to standing shoulder-to-shoulder unless the sample says so.',
+    '9. Mention that the reference images will be provided again to the renderer in the same order.',
+    '10. Explicitly forbid realistic human skin pores, realistic human facial anatomy, realistic photographic shading, and live-action body proportions if they conflict with the game-avatar look.',
     '',
     'Do not explain your reasoning. Output only the final command prompt.',
   );
@@ -168,70 +119,48 @@ export const synthesizeStrictImagePrompt = async (payload: ImageGenerateRecipePa
     throw new Error('CRITICAL FAILURE: Character reference images are missing.');
   }
 
-  const parts: Array<Record<string, unknown>> = [];
-
-  for (const image of characterImages) {
-    parts.push(await toInlineImagePart(image));
-  }
-
-  if (payload.sampleImage) {
-    parts.push(await toInlineImagePart(payload.sampleImage));
-  }
-
-  if (payload.styleImage) {
-    parts.push(await toInlineImagePart(payload.styleImage));
-  }
+  const orderedSources = getImageDirectorSources(payload);
+  const parts: Array<Record<string, unknown>> = await Promise.all(orderedSources.map((image) => toInlineImagePart(image)));
 
   parts.push({
     text: buildStrictImageDirectorInstruction(payload, hasCharacters, hasSample, hasStyle),
   });
 
-  const credentials = await getPreferredVertexCredential();
-  const projectId = credentials.project_id;
-
-  const auth = new GoogleAuth({
-    credentials,
-    scopes: ['https://www.googleapis.com/auth/cloud-platform'],
-  });
-
-  const client = await auth.getClient();
-  const accessToken = await client.getAccessToken();
-  const token = accessToken.token;
-
-  if (!projectId || !token) {
-    throw new Error('Failed to initialize Vertex AI credentials for image analysis.');
-  }
-
-  const response = await fetch(
-    `https://aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/global/publishers/google/models/${VERTEX_MODEL}:generateContent`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts }],
-        generationConfig: {
-          temperature: 0.2,
-          topP: 0.8,
-          maxOutputTokens: 2048,
+  return runWithVertexCredentialFailover({
+    taskName: 'image prompt synthesis',
+    operation: async ({ projectId, accessToken }) => {
+      const response = await fetch(
+        `https://aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/global/publishers/google/models/${VERTEX_MODEL}:generateContent`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts }],
+            generationConfig: {
+              temperature: 0.2,
+              topP: 0.8,
+              maxOutputTokens: 2048,
+            },
+          }),
+          signal: AbortSignal.timeout(180000),
         },
-      }),
-      signal: AbortSignal.timeout(180000),
+      );
+
+      if (!response.ok) {
+        throw new Error(await parseErrorMessage(response));
+      }
+
+      const data = await response.json();
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+
+      if (!text) {
+        throw new Error('Vertex AI did not return a synthesized image prompt.');
+      }
+
+      return text;
     },
-  );
-
-  if (!response.ok) {
-    throw new Error(await parseErrorMessage(response));
-  }
-
-  const data = await response.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-
-  if (!text) {
-    throw new Error('Vertex AI did not return a synthesized image prompt.');
-  }
-
-  return text;
+  });
 };

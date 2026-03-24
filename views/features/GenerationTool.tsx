@@ -8,7 +8,9 @@ import { useNotification } from '../../components/NotificationSystem';
 import { caulenhauClient } from '../../services/supabaseClient';
 import { CONCURRENCY_LIMITS, useConcurrency } from '../../services/concurrencyService';
 import { enqueueServerJob } from '../../services/serverQueueService';
-import { saveImageToLocalCache } from '../../services/storageService';
+import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
+import { downloadAssetToBrowser } from '../../services/downloadService';
+import { optimizePayload } from '../../utils/imageProcessor';
 import {
   type AuditionPricingOverride,
   fetchTstModels,
@@ -21,7 +23,6 @@ import {
   getResolutionCostMap,
   applyServerAvailabilityToRuntimeModels,
   sanitizePricingEntriesWithRuntimeModels,
-  TST_CATALOG_CACHE_TTL_MS,
   tstServerToUi,
   uiServerToTst,
   uiSpeedToTst,
@@ -69,6 +70,19 @@ interface SamplePrompt {
     prompt: string;
     category?: string;
 }
+
+const tryStageGenerationInput = async (source: string, folder: string) => {
+    if (!source) return null;
+    if (source.startsWith('http')) return source;
+
+    try {
+        const optimizedSource = await optimizePayload(source, 2048);
+        return await uploadFileToR2(optimizedSource, folder);
+    } catch (error) {
+        console.warn('[GenerationTool] Failed to stage generation input, falling back to optimized inline payload.', error);
+        return await optimizePayload(source, 1600);
+    }
+};
 
 export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, onNavigateToFeature, onNavigateView }) => {
   const { notify } = useNotification();
@@ -258,9 +272,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           }
       };
       loadCatalog();
-      const refreshTimer = window.setInterval(() => {
-          loadCatalog(true);
-      }, TST_CATALOG_CACHE_TTL_MS);
 
       const loadTutorialVideo = async () => {
           const videoConfig = await getTutorialVideo();
@@ -287,7 +298,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           }
       };
       loadTutorialVideo();
-      return () => window.clearInterval(refreshTimer);
   }, []);
   // -------------------------------
 
@@ -546,55 +556,11 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       notify(lang === 'vi' ? 'Đang tải xuống...' : 'Downloading...', 'info');
 
       try {
-          let blob: Blob;
-
-          // 1. Base64
-          if (url.startsWith('data:')) {
-              const arr = url.split(',');
-              const mime = arr[0].match(/:(.*?);/)?.[1];
-              const bstr = atob(arr[1]);
-              let n = bstr.length;
-              const u8arr = new Uint8Array(n);
-              while (n--) {
-                  u8arr[n] = bstr.charCodeAt(n);
-              }
-              blob = new Blob([u8arr], { type: mime });
-          }
-          // 2. Remote URL with Proxy Fallback
-          else {
-              try {
-                  const response = await fetch(url, { mode: 'cors' });
-                  if (!response.ok) throw new Error("Direct fetch failed");
-                  blob = await response.blob();
-              } catch (directError) {
-                  // Fallback to WSRV.NL Proxy (Adds CORS headers)
-                  try {
-                      const proxyUrl = `https://wsrv.nl/?url=${encodeURIComponent(url)}&output=png`;
-                      const proxyResponse = await fetch(proxyUrl);
-                      if (!proxyResponse.ok) throw new Error("Proxy download failed");
-                      blob = await proxyResponse.blob();
-                  } catch (proxyError) {
-                      // Fallback to CorsProxy.io
-                      const proxyUrl2 = `https://corsproxy.io/?${encodeURIComponent(url)}`;
-                      const proxyResponse2 = await fetch(proxyUrl2);
-                      if (!proxyResponse2.ok) throw new Error("All proxies failed");
-                      blob = await proxyResponse2.blob();
-                  }
-              }
-          }
-
-          const blobUrl = window.URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = blobUrl;
-          link.download = filename;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          window.URL.revokeObjectURL(blobUrl);
+          await downloadAssetToBrowser(url, filename);
           notify('Đã lưu ảnh về máy!', 'success');
       } catch (e) {
           console.error("Download failed", e);
-          window.open(url, '_blank'); // Last resort
+          notify(lang === 'vi' ? 'Tải ảnh thất bại.' : 'Image download failed.', 'error');
       }
   };
 
@@ -690,31 +656,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
     const effectiveSpeedId = compatibleSpeeds.includes(requestedSpeedId)
         ? requestedSpeedId
         : (compatibleSpeeds[0] || requestedSpeedId);
-    const characterReferenceImages = characters.flatMap((char) => {
-        const refs: string[] = [];
-        if (char.bodyImage) refs.push(char.bodyImage);
-        if (char.isFaceLocked && char.faceImage && char.faceImage !== char.bodyImage) {
-            refs.push(char.faceImage);
-        } else if (!char.bodyImage && char.faceImage) {
-            refs.push(char.faceImage);
-        }
-        return refs;
-    });
-
-    const queuePayload: ImageGenerateRecipePayload = {
-        recipeType: 'image_generate_recipe_v1',
-        modelId: getGenerationModelId(aiModel),
-        prompt: basePrompt,
-        resolution,
-        aspectRatio,
-        speed: effectiveSpeedId,
-        serverId: effectiveServerId,
-        negativePrompt: negativePrompt.trim() || undefined,
-        characterImages: characterReferenceImages,
-        sampleImage: refImage || null,
-        styleImage: activeStylePreset || null,
-        stylePrompt: styleMetadata?.trigger_prompt || styleMetadata?.name || null,
-    };
     const queuedImage: GeneratedImage = {
         id: queuedJobId,
         url: '',
@@ -742,6 +683,49 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
     void (async () => {
         try {
+            const stagedCharacterImages = (
+                await Promise.all(
+                    characters.flatMap((char, charIndex) => {
+                        const stagedTasks: Promise<string | null>[] = [];
+                        if (char.bodyImage) {
+                            stagedTasks.push(
+                                tryStageGenerationInput(char.bodyImage, `inputs/generation/${activeMode}/character-${charIndex + 1}/body`)
+                            );
+                        }
+                        if (char.isFaceLocked && char.faceImage && char.faceImage !== char.bodyImage) {
+                            stagedTasks.push(
+                                tryStageGenerationInput(char.faceImage, `inputs/generation/${activeMode}/character-${charIndex + 1}/face`)
+                            );
+                        } else if (!char.bodyImage && char.faceImage) {
+                            stagedTasks.push(
+                                tryStageGenerationInput(char.faceImage, `inputs/generation/${activeMode}/character-${charIndex + 1}/face`)
+                            );
+                        }
+                        return stagedTasks;
+                    })
+                )
+            ).filter((value): value is string => Boolean(value));
+
+            const stagedSampleImage = refImage
+                ? await tryStageGenerationInput(refImage, `inputs/generation/${activeMode}/sample`)
+                : null;
+
+            const queuePayload: ImageGenerateRecipePayload = {
+                recipeType: 'image_generate_recipe_v1',
+                modelId: getGenerationModelId(aiModel),
+                prompt: basePrompt,
+                characterCount: characters.length,
+                resolution,
+                aspectRatio,
+                speed: effectiveSpeedId,
+                serverId: effectiveServerId,
+                negativePrompt: negativePrompt.trim() || undefined,
+                characterImages: stagedCharacterImages,
+                sampleImage: stagedSampleImage || null,
+                styleImage: activeStylePreset || null,
+                stylePrompt: styleMetadata?.trigger_prompt || styleMetadata?.name || null,
+            };
+
             await enqueueServerJob({
                 id: queuedJobId,
                 prompt: basePrompt,

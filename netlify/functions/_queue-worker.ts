@@ -60,6 +60,8 @@ const POLL_CLAIM_LIMIT = 1;
 const WORKER_TICK_BUDGET_MS = 8_000;
 const MAX_QUEUE_LOG_ENTRIES = 80;
 const ORPHAN_CLAIM_GRACE_MS = 30_000;
+const LEASE_HEARTBEAT_INTERVAL_MS = 30_000;
+const DISPATCH_LEASE_SECONDS = 120;
 
 const isTransientError = (message: string) => {
   const normalized = message.toLowerCase();
@@ -231,6 +233,34 @@ const updateGeneratedImageRecord = async (jobId: string, updates: Record<string,
 
   if (error) {
     throw error;
+  }
+};
+
+const extendJobLease = async (jobId: string, leaseSeconds = DISPATCH_LEASE_SECONDS) => {
+  await updateGeneratedImageRecord(jobId, {
+    lease_expires_at: new Date(Date.now() + leaseSeconds * 1000).toISOString(),
+    updated_at: new Date().toISOString(),
+  });
+};
+
+const withLeaseHeartbeat = async <T>(
+  jobId: string,
+  task: Promise<T>,
+  leaseSeconds = DISPATCH_LEASE_SECONDS,
+  intervalMs = LEASE_HEARTBEAT_INTERVAL_MS,
+) => {
+  await extendJobLease(jobId, leaseSeconds);
+
+  const heartbeat = setInterval(() => {
+    void extendJobLease(jobId, leaseSeconds).catch((error) => {
+      console.warn('[queue-worker] Failed to extend lease:', jobId, error);
+    });
+  }, intervalMs);
+
+  try {
+    return await task;
+  } finally {
+    clearInterval(heartbeat);
   }
 };
 
@@ -995,7 +1025,7 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
 
   const { data: dispatchJobs, error: dispatchError } = await admin.rpc('claim_dispatchable_generated_jobs', {
     p_limit: DISPATCH_CLAIM_LIMIT,
-    p_lease_seconds: 120,
+    p_lease_seconds: DISPATCH_LEASE_SECONDS,
   });
 
   if (dispatchError) {
@@ -1041,12 +1071,15 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
           'Đang gửi yêu cầu chỉnh sửa ảnh.',
         );
         const resultUrl = await withTimeout(
-          runVertexImageEdit({
-            sourceImage: editPayload.sourceImage,
-            instruction: editPayload.prompt,
-            modelId: editPayload.modelId,
-            mimeType: editPayload.mimeType,
-          }),
+          withLeaseHeartbeat(
+            job.id,
+            runVertexImageEdit({
+              sourceImage: editPayload.sourceImage,
+              instruction: editPayload.prompt,
+              modelId: editPayload.modelId,
+              mimeType: editPayload.mimeType,
+            }),
+          ),
           preparationTimeoutMs,
           'Queue preparation timed out before image edit dispatch.',
         );

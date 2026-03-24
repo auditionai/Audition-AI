@@ -49,6 +49,23 @@ const buildInitialQueueLogs = (queueKind: string): QueueProgressLogEntry[] => {
   ];
 };
 
+const isImmediateStartCandidate = (row: any) => Number(row?.queue_position ?? 1) === 0;
+
+const withTimeout = async <T>(task: Promise<T>, timeoutMs: number): Promise<T> => {
+  let timeoutId: NodeJS.Timeout | null = null;
+
+  try {
+    return await Promise.race([
+      task,
+      new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(`QUEUE_SUBMIT_TICK_TIMEOUT_${timeoutMs}`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+};
+
 const mapQueueError = (message: string) => {
   if (/SYSTEM_QUEUE_FULL|USER_QUEUE_LIMIT_REACHED|IMAGE_USER_LIMIT_REACHED|VIDEO_USER_LIMIT_REACHED/i.test(message)) {
     return { statusCode: 409, error: message };
@@ -287,7 +304,16 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
   };
 };
 
-const runSafeWorkerTick = () => {
+const runSafeWorkerTick = async (awaitCompletion = false) => {
+  if (awaitCompletion) {
+    try {
+      await withTimeout(runQueueWorker(), 8000);
+    } catch (workerError) {
+      console.error('[queue-submit] Immediate worker tick failed:', workerError);
+    }
+    return;
+  }
+
   runQueueWorker().catch((workerError) => {
     console.error('[queue-submit] Immediate worker tick failed:', workerError);
   });
@@ -324,6 +350,15 @@ export const handler: Handler = async (event) => {
     }
 
     let row: any;
+    const queuePayloadWithLogs =
+      body.queuePayload && typeof body.queuePayload === 'object'
+        ? {
+            ...body.queuePayload,
+            __stage: 'queued',
+            __logs: buildInitialQueueLogs(body.queueKind),
+          }
+        : body.queuePayload;
+
     const rpcResult = await admin.rpc('server_enqueue_generated_job', {
       p_id: normalizeJobId(body.id),
       p_user_id: user.id,
@@ -334,7 +369,7 @@ export const handler: Handler = async (event) => {
       p_asset_type: asQueueAssetType(body.assetType),
       p_cost_vcoin: Number(body.costVcoin || 0),
       p_queue_kind: body.queueKind,
-      p_queue_payload: body.queuePayload,
+      p_queue_payload: queuePayloadWithLogs,
     });
 
     if (rpcResult.error) {
@@ -359,7 +394,7 @@ export const handler: Handler = async (event) => {
       row = Array.isArray(rpcResult.data) ? rpcResult.data[0] : rpcResult.data;
     }
 
-    runSafeWorkerTick();
+    await runSafeWorkerTick(isImmediateStartCandidate(row));
 
     return {
       statusCode: 200,

@@ -78,6 +78,7 @@ export interface GeneratedImage {
   status?: 'processing' | 'queued' | 'completed' | 'failed';
   jobId?: string;
   progress?: number;
+  queueStage?: string;
   error?: string;
   cost?: number; // Keep track of cost for refunds
 }

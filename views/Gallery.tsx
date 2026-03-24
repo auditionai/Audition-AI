@@ -271,6 +271,10 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
       if (img.status === 'failed') return lang === 'vi' ? 'Thất bại' : 'Failed';
       if (!img.status || img.status === 'completed') return lang === 'vi' ? 'Hoàn thành' : 'Completed';
       if (img.jobId) return lang === 'vi' ? 'Đang tạo ảnh' : 'Generating';
+      if (img.queueStage === 'uploading_refs') return lang === 'vi' ? 'Đang xử lý' : 'Processing';
+      if (img.queueStage === 'synthesizing_prompt' || img.queueStage === 'building_payload') {
+          return lang === 'vi' ? 'Đang tổng hợp' : 'Synthesizing';
+      }
 
       if (queueProgress >= 40) {
           return lang === 'vi' ? 'Đang tổng hợp' : 'Synthesizing';

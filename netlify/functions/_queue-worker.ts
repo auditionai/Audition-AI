@@ -50,9 +50,10 @@ const MAX_PROCESSING_AGE_MS = 45 * 60 * 1000;
 const MAX_PROVIDER_GENERIC_RETRIES = 2;
 const PRE_PROVIDER_STAGE_TIMEOUT_MS = 10 * 60 * 1000;
 const PREPARE_PHASE_TIMEOUT_MS = PRE_PROVIDER_STAGE_TIMEOUT_MS;
-const IMAGE_REFERENCE_UPLOAD_CHUNK_SIZE = 2;
-const DISPATCH_CLAIM_LIMIT = 2;
-const POLL_CLAIM_LIMIT = 6;
+const IMAGE_REFERENCE_UPLOAD_CHUNK_SIZE = 1;
+const DISPATCH_CLAIM_LIMIT = 1;
+const POLL_CLAIM_LIMIT = 2;
+const WORKER_TICK_BUDGET_MS = 22_000;
 
 const isTransientError = (message: string) => {
   const normalized = message.toLowerCase();
@@ -122,6 +123,8 @@ const withTimeout = async <T>(task: Promise<T>, timeoutMs: number, message: stri
     if (timeoutId) clearTimeout(timeoutId);
   }
 };
+
+const hasWorkerTickBudgetRemaining = (startedAt: number) => Date.now() - startedAt < WORKER_TICK_BUDGET_MS;
 
 const getJobRuntimeState = async (jobId: string) => {
   const admin = getServiceRoleClient();
@@ -298,7 +301,7 @@ const markPreparing = async (job: QueueJobRow) => {
 };
 
 const markPreparedForDispatch = async (jobId: string) => {
-  return markQueuedStage(jobId, 45);
+  return markQueuedStage(jobId, 55);
 };
 
 const markQueuedStage = async (jobId: string, progress: number) => {
@@ -440,6 +443,22 @@ const prepareImageRecipeInStages = async (job: QueueJobRow, recipePayload: Image
     return { type: 'requeue' as const };
   }
 
+  if (currentStage === 'synthesizing_prompt') {
+    const synthesizedPrompt = await synthesizeImageGeneratePrompt(recipePayload);
+    const nextPayload: ImageGenerateRecipePayload = {
+      ...recipePayload,
+      __synthesizedPrompt: synthesizedPrompt,
+      __stage: 'building_payload',
+      __uploadSources: renderSources,
+      __directorSources: directorSources,
+      __uploadedUrls: uploadedUrls,
+    };
+
+    await persistRecipePayload(job.id, nextPayload);
+    await markQueuedStage(job.id, 45);
+    return { type: 'requeue' as const };
+  }
+
   const synthesizedPrompt = recipePayload.__synthesizedPrompt?.trim()
     ? recipePayload.__synthesizedPrompt.trim()
     : await synthesizeImageGeneratePrompt(recipePayload);
@@ -569,8 +588,8 @@ const recoverStalePreparingJobs = async () => {
   const nowIso = new Date().toISOString();
   const { data, error } = await admin
     .from('generated_images')
-    .select('id, user_id, asset_type, queue_kind, queue_payload, prompt, tool_id, tool_name, model_used, cost_vcoin, processing_started_at, created_at, lease_expires_at')
-    .eq('status', 'processing')
+    .select('id, user_id, asset_type, queue_kind, queue_payload, prompt, tool_id, tool_name, model_used, cost_vcoin, processing_started_at, created_at, lease_expires_at, status')
+    .in('status', ['processing', 'queued'])
     .is('job_id', null);
 
   if (error) {
@@ -583,6 +602,15 @@ const recoverStalePreparingJobs = async () => {
     const ageMs = Date.now() - new Date(startedAt).getTime();
     const leaseExpired =
       !(job as any).lease_expires_at || String((job as any).lease_expires_at) < nowIso;
+    const currentStatus = String((job as any).status || '').toLowerCase();
+    const payload = job.queue_payload || {};
+    const recipeStage =
+      payload && typeof payload === 'object' && typeof (payload as any).__stage === 'string'
+        ? String((payload as any).__stage)
+        : '';
+    const isRecipePayload = isQueueRecipePayload(payload);
+    const isStagedRecipe =
+      isRecipePayload && ['uploading_refs', 'synthesizing_prompt', 'building_payload'].includes(recipeStage);
 
     if (ageMs >= PRE_PROVIDER_STAGE_TIMEOUT_MS) {
       await markFailedAndRefund(
@@ -596,17 +624,21 @@ const recoverStalePreparingJobs = async () => {
       continue;
     }
 
-    const payload = job.queue_payload || {};
-    const isRecipePayload = isQueueRecipePayload(payload);
-
-    if (!isRecipePayload) {
+    if (currentStatus === 'processing' && !isRecipePayload) {
       await markPreparedForDispatch(job.id);
       recovered += 1;
       continue;
     }
 
-    const result = await requeueJob(job, 'Queue preparation timed out before dispatching to provider.');
-    if (result === 'requeued') recovered += 1;
+    if (currentStatus === 'processing' && isRecipePayload) {
+      const result = await requeueJob(job, 'Queue preparation timed out before dispatching to provider.');
+      if (result === 'requeued') recovered += 1;
+      continue;
+    }
+
+    if (currentStatus === 'queued' && isStagedRecipe) {
+      recovered += 1;
+    }
   }
 
   return recovered;
@@ -614,6 +646,7 @@ const recoverStalePreparingJobs = async () => {
 
 const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
   const admin = getServiceRoleClient();
+  const workerStartedAt = Date.now();
   const summary: QueueWorkerSummary = {
     claimedForDispatch: 0,
     submitted: 0,
@@ -638,6 +671,10 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
   summary.claimedForDispatch = jobsToDispatch.length;
 
   for (const job of jobsToDispatch) {
+    if (!hasWorkerTickBudgetRemaining(workerStartedAt)) {
+      break;
+    }
+
     try {
       if (await shouldSkipDispatch(job)) {
         await releaseLease(job.id);
@@ -742,6 +779,10 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
   summary.claimedForPoll = jobsToPoll.length;
 
   for (const job of jobsToPoll) {
+    if (!hasWorkerTickBudgetRemaining(workerStartedAt)) {
+      break;
+    }
+
     try {
       const providerData = await pollProviderJob(String(job.job_id || ''));
       const state = await markPolledState(job, providerData);

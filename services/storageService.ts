@@ -270,6 +270,12 @@ const mapGeneratedImageRow = (row: any, fallbackUserName: string, fallbackCost?:
   status: row.status || (row.image_url ? 'completed' : 'processing'),
   jobId: row.job_id || undefined,
   progress: typeof row.progress === 'number' ? row.progress : undefined,
+  queueStage:
+    row.queue_payload &&
+    typeof row.queue_payload === 'object' &&
+    typeof row.queue_payload.__stage === 'string'
+      ? row.queue_payload.__stage
+      : undefined,
   error: row.error_message || undefined,
   cost: Number.isFinite(Number(row.cost_vcoin)) ? Number(row.cost_vcoin) : fallbackCost,
 });

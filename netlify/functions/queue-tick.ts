@@ -49,6 +49,18 @@ export const handler: Handler = async (event) => {
     };
   } catch (error: any) {
     const message = error?.message || 'Internal Server Error';
+    if (message === 'Queue tick exceeded safe execution window') {
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          success: true,
+          accepted: true,
+          timedOut: true,
+          message: 'Queue worker is still progressing in the background.',
+        }),
+      };
+    }
     if (
       message.includes('Missing SUPABASE_SERVICE_ROLE_KEY') ||
       message.includes('Missing SUPABASE_URL')

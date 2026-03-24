@@ -100,6 +100,12 @@ export const triggerServerQueueTick = async (force = false) => {
     return payload;
   }
 
+  if (payload?.timedOut) {
+    queueTickDisabledLogged = false;
+    queueTickUnavailableUntil = 0;
+    return payload;
+  }
+
   queueTickDisabledLogged = false;
   queueTickUnavailableUntil = 0;
   return payload;

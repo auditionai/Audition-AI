@@ -9,6 +9,7 @@ import { caulenhauClient } from '../../services/supabaseClient';
 import { CONCURRENCY_LIMITS, useConcurrency } from '../../services/concurrencyService';
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
+import { downloadAssetToBrowser } from '../../services/downloadService';
 import { optimizePayload } from '../../utils/imageProcessor';
 import {
   type AuditionPricingOverride,
@@ -555,55 +556,11 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       notify(lang === 'vi' ? 'Đang tải xuống...' : 'Downloading...', 'info');
 
       try {
-          let blob: Blob;
-
-          // 1. Base64
-          if (url.startsWith('data:')) {
-              const arr = url.split(',');
-              const mime = arr[0].match(/:(.*?);/)?.[1];
-              const bstr = atob(arr[1]);
-              let n = bstr.length;
-              const u8arr = new Uint8Array(n);
-              while (n--) {
-                  u8arr[n] = bstr.charCodeAt(n);
-              }
-              blob = new Blob([u8arr], { type: mime });
-          }
-          // 2. Remote URL with Proxy Fallback
-          else {
-              try {
-                  const response = await fetch(url, { mode: 'cors' });
-                  if (!response.ok) throw new Error("Direct fetch failed");
-                  blob = await response.blob();
-              } catch (directError) {
-                  // Fallback to WSRV.NL Proxy (Adds CORS headers)
-                  try {
-                      const proxyUrl = `https://wsrv.nl/?url=${encodeURIComponent(url)}&output=png`;
-                      const proxyResponse = await fetch(proxyUrl);
-                      if (!proxyResponse.ok) throw new Error("Proxy download failed");
-                      blob = await proxyResponse.blob();
-                  } catch (proxyError) {
-                      // Fallback to CorsProxy.io
-                      const proxyUrl2 = `https://corsproxy.io/?${encodeURIComponent(url)}`;
-                      const proxyResponse2 = await fetch(proxyUrl2);
-                      if (!proxyResponse2.ok) throw new Error("All proxies failed");
-                      blob = await proxyResponse2.blob();
-                  }
-              }
-          }
-
-          const blobUrl = window.URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = blobUrl;
-          link.download = filename;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          window.URL.revokeObjectURL(blobUrl);
+          await downloadAssetToBrowser(url, filename);
           notify('Đã lưu ảnh về máy!', 'success');
       } catch (e) {
           console.error("Download failed", e);
-          window.open(url, '_blank'); // Last resort
+          notify(lang === 'vi' ? 'Tải ảnh thất bại.' : 'Image download failed.', 'error');
       }
   };
 

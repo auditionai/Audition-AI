@@ -6,6 +6,7 @@ import { getAllImagesFromStorage, deleteImageFromStorage, cleanupExpiredImages, 
 import { getUnifiedHistory } from '../services/economyService';
 import { useConcurrency } from '../services/concurrencyService';
 import { supabase } from '../services/supabaseClient';
+import { downloadAssetToBrowser } from '../services/downloadService';
 import { Icons } from '../components/Icons';
 import { useNotification } from '../components/NotificationSystem';
 
@@ -189,56 +190,25 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
   };
 
   const handleDownload = async (imageUrl: string, filename: string, assetKind: 'image' | 'video' = 'image') => {
-      if (!imageUrl || imageUrl.startsWith('blob:')) return;
+      if (!imageUrl) return;
       notify(lang === 'vi' ? 'Đang xử lý tải xuống...' : 'Processing download...', 'info');
 
       try {
-          let blob: Blob;
-          if (imageUrl.startsWith('data:')) {
-              const arr = imageUrl.split(',');
-              const mime = arr[0].match(/:(.*?);/)?.[1];
-              const bstr = atob(arr[1]);
-              let n = bstr.length;
-              const u8arr = new Uint8Array(n);
-              while (n--) u8arr[n] = bstr.charCodeAt(n);
-              blob = new Blob([u8arr], { type: mime });
-          } else {
-              try {
-                  const response = await fetch(imageUrl, { mode: 'cors' });
-                  if (!response.ok) throw new Error('Direct fetch failed');
-                  blob = await response.blob();
-              } catch (directError) {
-                  if (assetKind === 'video') {
-                      throw directError;
-                  }
-                  try {
-                      const proxyUrl = `https://wsrv.nl/?url=${encodeURIComponent(imageUrl)}&output=png`;
-                      const proxyResponse = await fetch(proxyUrl);
-                      if (!proxyResponse.ok) throw new Error('Proxy download failed');
-                      blob = await proxyResponse.blob();
-                  } catch (proxyError) {
-                      const proxyUrl2 = `https://corsproxy.io/?${encodeURIComponent(imageUrl)}`;
-                      const proxyResponse2 = await fetch(proxyUrl2);
-                      if (!proxyResponse2.ok) throw new Error('All proxies failed');
-                      blob = await proxyResponse2.blob();
-                  }
-              }
-          }
-
-          const url = window.URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = filename;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          window.URL.revokeObjectURL(url);
-
-          notify(lang === 'vi' ? 'Đã lưu ảnh thành công!' : 'Download successful!', 'success');
+          await downloadAssetToBrowser(imageUrl, filename);
+          notify(
+              assetKind === 'video'
+                  ? (lang === 'vi' ? 'Đã lưu video thành công!' : 'Video downloaded successfully!')
+                  : (lang === 'vi' ? 'Đã lưu ảnh thành công!' : 'Image downloaded successfully!'),
+              'success'
+          );
       } catch (e) {
           console.error("Download failed completely", e);
-          window.open(imageUrl, '_blank');
-          notify(lang === 'vi' ? 'Lỗi tải file. Đã mở ảnh trong tab mới.' : 'Download failed. Image opened in new tab.', 'warning');
+          notify(
+              assetKind === 'video'
+                  ? (lang === 'vi' ? 'Tải video thất bại.' : 'Video download failed.')
+                  : (lang === 'vi' ? 'Tải ảnh thất bại.' : 'Image download failed.'),
+              'error'
+          );
       }
   };
 

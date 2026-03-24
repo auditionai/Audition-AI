@@ -7,6 +7,7 @@ import { CONCURRENCY_LIMITS, useConcurrency } from '../../services/concurrencySe
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { prepareTramsangtaoMotionJob, prepareTramsangtaoVideoJob } from '../../services/tstVideoService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
+import { downloadAssetToBrowser } from '../../services/downloadService';
 import type { MotionGenerateRecipePayload, VideoGenerateRecipePayload } from '../../shared/queueRecipes';
 import {
   type AuditionPricingOverride,
@@ -455,6 +456,19 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
     } finally {
       URL.revokeObjectURL(objectUrl);
     }
+  };
+
+  const handleVideoDownload = async (url: string, filename: string) => {
+      if (!url) return;
+      notify(lang === 'vi' ? 'Đang tải video...' : 'Downloading video...', 'info');
+
+      try {
+          await downloadAssetToBrowser(url, filename);
+          notify(lang === 'vi' ? 'Đã lưu video về máy!' : 'Video downloaded successfully!', 'success');
+      } catch (error) {
+          console.error('Video download failed', error);
+          notify(lang === 'vi' ? 'Tải video thất bại.' : 'Video download failed.', 'error');
+      }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1348,9 +1362,10 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                   </div>
                   <div className="p-4 bg-[#12121a] flex flex-col gap-3 shrink-0">
                       <div className="flex gap-3">
-                          <button 
-                            className="flex-1 px-4 py-3 bg-white text-black rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-audi-cyan transition-colors text-sm"
-                          >
+                            <button
+                              onClick={() => handleVideoDownload(resultVideo, `auditionai-video-${Date.now()}.mp4`)}
+                              className="flex-1 px-4 py-3 bg-white text-black rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-audi-cyan transition-colors text-sm"
+                            >
                               <Icons.Download className="w-5 h-5" /> Tải Về
                           </button>
                           <button onClick={() => setStage('input')} className="flex-1 px-4 py-3 bg-audi-yellow text-black rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-yellow-400 transition-colors shadow-[0_0_15px_rgba(251,218,97,0.3)] text-sm">

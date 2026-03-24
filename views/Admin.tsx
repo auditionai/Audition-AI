@@ -935,19 +935,44 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       });
   }
 
+  const buildAssetFallbackHistory = (images: GeneratedImage[]): HistoryItem[] => {
+      return images
+          .filter((image) => Number(image.cost || 0) > 0)
+          .map((image) => ({
+              id: `asset-charge-${image.id}`,
+              createdAt: new Date(image.updatedAt || image.timestamp).toISOString(),
+              description: image.toolName || image.toolId || (image.assetType === 'video' ? 'Tạo video AI' : 'Tạo ảnh AI'),
+              vcoinChange: -Math.abs(Number(image.cost || 0)),
+              type: 'usage' as const,
+              status: 'success' as const,
+          }))
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  };
+
   const handleViewUser = async (user: UserProfile) => {
       setViewingUser(user);
       setLoadingUserDetails(true);
       setHistoryLimit(20);
       setImagesLimit(20);
+      setUserHistory([]);
+      setUserImages([]);
       try {
-          const history = await getAdminUserHistory(user.id);
-          setUserHistory(history);
-          
-          // Fetch images for this user
-          const images = await getUserImagesFromStorage(user.id);
+          const [historyResult, imagesResult] = await Promise.allSettled([
+              getAdminUserHistory(user.id),
+              getUserImagesFromStorage(user.id),
+          ]);
+
+          const history = historyResult.status === 'fulfilled' ? historyResult.value : [];
+          const images = imagesResult.status === 'fulfilled' ? imagesResult.value : [];
+          const fallbackHistory = history.length === 0 ? buildAssetFallbackHistory(images) : [];
+
+          setUserHistory(history.length > 0 ? history : fallbackHistory);
           setUserImages(images);
           setTotalImagesCreated(images.length);
+
+          if (historyResult.status === 'rejected' && imagesResult.status === 'rejected') {
+              throw historyResult.reason || imagesResult.reason;
+          }
       } catch (e) {
           showToast('Lỗi tải dữ liệu người dùng', 'error');
       } finally {

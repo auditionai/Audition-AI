@@ -48,8 +48,9 @@ const MAX_DISPATCH_RETRIES = 6;
 const MAX_POLL_FAILURES = 8;
 const MAX_PROCESSING_AGE_MS = 45 * 60 * 1000;
 const MAX_PROVIDER_GENERIC_RETRIES = 2;
-const PRE_PROVIDER_STAGE_TIMEOUT_MS = 10 * 60 * 1000;
-const PREPARE_PHASE_TIMEOUT_MS = PRE_PROVIDER_STAGE_TIMEOUT_MS;
+const SINGLE_AND_COUPLE_PREPARE_TIMEOUT_MS = 10 * 60 * 1000;
+const GROUP_OF_THREE_PREPARE_TIMEOUT_MS = 15 * 60 * 1000;
+const GROUP_OF_FOUR_PREPARE_TIMEOUT_MS = 20 * 60 * 1000;
 const IMAGE_REFERENCE_UPLOAD_CHUNK_SIZE = 1;
 const DISPATCH_CLAIM_LIMIT = 1;
 const POLL_CLAIM_LIMIT = 2;
@@ -126,6 +127,48 @@ const withTimeout = async <T>(task: Promise<T>, timeoutMs: number, message: stri
 
 const hasWorkerTickBudgetRemaining = (startedAt: number) => Date.now() - startedAt < WORKER_TICK_BUDGET_MS;
 
+const getCharacterCountFromToolId = (toolId?: string | null) => {
+  const normalizedToolId = String(toolId || '').trim().toLowerCase();
+
+  if (normalizedToolId.includes('group_4')) return 4;
+  if (normalizedToolId.includes('group_3')) return 3;
+  if (normalizedToolId.includes('couple')) return 2;
+  if (normalizedToolId.includes('single')) return 1;
+
+  return null;
+};
+
+const getImageRecipeCharacterCount = (
+  job: Pick<QueueJobRow, 'tool_id'>,
+  payload?: Pick<ImageGenerateRecipePayload, 'characterCount'> | null,
+) => {
+  const payloadCharacterCount = Number(payload?.characterCount);
+  if (Number.isFinite(payloadCharacterCount) && payloadCharacterCount > 0) {
+    return Math.floor(payloadCharacterCount);
+  }
+
+  return getCharacterCountFromToolId(job.tool_id);
+};
+
+const getPreparationTimeoutMs = (job: Pick<QueueJobRow, 'tool_id'>, payload?: QueueJobRow['queue_payload']) => {
+  if (isQueueRecipePayload(payload) && payload.recipeType === 'image_generate_recipe_v1') {
+    const characterCount = getImageRecipeCharacterCount(job, payload);
+    if (characterCount && characterCount >= 4) {
+      return GROUP_OF_FOUR_PREPARE_TIMEOUT_MS;
+    }
+    if (characterCount === 3) {
+      return GROUP_OF_THREE_PREPARE_TIMEOUT_MS;
+    }
+  }
+
+  return SINGLE_AND_COUPLE_PREPARE_TIMEOUT_MS;
+};
+
+const getPreparationTimeoutUserMessage = (job: Pick<QueueJobRow, 'tool_id'>, payload?: QueueJobRow['queue_payload']) => {
+  const timeoutMinutes = Math.ceil(getPreparationTimeoutMs(job, payload) / 60000);
+  return `Tien trinh chuan bi/tong hop da vuot qua ${timeoutMinutes} phut. Vui long tao lai.`;
+};
+
 const getJobRuntimeState = async (jobId: string) => {
   const admin = getServiceRoleClient();
   const { data, error } = await admin
@@ -190,15 +233,6 @@ const applyLivePricingConfigToPayload = (
   providerPayload: Record<string, unknown>,
   validationResult?: { pricingMatch?: { config_key?: string } | null } | null,
 ) => {
-  if (queueKind === 'image_generate') {
-    if (!Object.prototype.hasOwnProperty.call(providerPayload, 'config_key')) {
-      return providerPayload;
-    }
-
-    const { config_key: _ignoredConfigKey, ...rest } = providerPayload;
-    return rest;
-  }
-
   const configKey = String(validationResult?.pricingMatch?.config_key || '').trim();
   if (!configKey) {
     return providerPayload;
@@ -642,11 +676,10 @@ const recoverStalePreparingJobs = async () => {
     const isStagedRecipe =
       isRecipePayload && ['uploading_refs', 'synthesizing_prompt', 'building_payload'].includes(recipeStage);
 
-    if (ageMs >= PRE_PROVIDER_STAGE_TIMEOUT_MS) {
-      await markFailedAndRefund(
-        job,
-        'Tiến trình chuẩn bị/tổng hợp đã vượt quá 10 phút. Vui lòng tạo lại.',
-      );
+    const preparationTimeoutMs = getPreparationTimeoutMs(job, payload);
+
+    if (ageMs >= preparationTimeoutMs) {
+      await markFailedAndRefund(job, getPreparationTimeoutUserMessage(job, payload));
       continue;
     }
 
@@ -712,6 +745,7 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
       }
 
       const currentPayload = job.queue_payload || {};
+      const preparationTimeoutMs = getPreparationTimeoutMs(job, currentPayload);
       const validationPayload = isQueueRecipePayload(currentPayload)
         ? getRecipeValidationPayload(currentPayload)
         : currentPayload;
@@ -732,7 +766,7 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
             modelId: editPayload.modelId,
             mimeType: editPayload.mimeType,
           }),
-          PREPARE_PHASE_TIMEOUT_MS,
+          preparationTimeoutMs,
           'Queue preparation timed out before image edit dispatch.',
         );
 
@@ -745,7 +779,7 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
         await updatePreProviderStage(job.id, 20);
         const stagedResult = await withTimeout(
           prepareImageRecipeInStages(job, currentPayload as ImageGenerateRecipePayload),
-          PREPARE_PHASE_TIMEOUT_MS,
+          preparationTimeoutMs,
           'Queue preparation timed out before dispatching to provider.',
         );
 
@@ -759,7 +793,7 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
         await updatePreProviderStage(job.id, 20);
         const providerPayload = await withTimeout(
           prepareProviderPayloadFromQueueRecipe(currentPayload),
-          PREPARE_PHASE_TIMEOUT_MS,
+          preparationTimeoutMs,
           'Queue preparation timed out before dispatching to provider.',
         );
         const preparedValidationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, providerPayload);
@@ -795,8 +829,9 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
         await markFailedAndRefund(job, message.replace('INVALID_TST_CONFIG:', '').trim());
         summary.failed += 1;
       } else if (message.includes('Queue preparation timed out before')) {
-        await markFailedAndRefund(job, 'Tiến trình chuẩn bị/tổng hợp đã vượt quá 10 phút. Vui lòng tạo lại.');
+        await markFailedAndRefund(job, getPreparationTimeoutUserMessage(job, job.queue_payload));
         summary.failed += 1;
+        continue;
       } else if (isTransientError(message)) {
         const result = await requeueJob(job, message);
         if (result === 'failed') {

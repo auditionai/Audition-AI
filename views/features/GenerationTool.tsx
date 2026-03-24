@@ -757,6 +757,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                 recipeType: 'image_generate_recipe_v1',
                 modelId: getGenerationModelId(aiModel),
                 prompt: basePrompt,
+                characterCount: characters.length,
                 resolution,
                 aspectRatio,
                 speed: effectiveSpeedId,

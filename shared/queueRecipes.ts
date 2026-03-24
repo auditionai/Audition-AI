@@ -8,6 +8,7 @@ export interface ImageGenerateRecipePayload {
   recipeType: 'image_generate_recipe_v1';
   modelId: string;
   prompt: string;
+  characterCount?: number;
   resolution?: string;
   aspectRatio?: string;
   speed?: string;
@@ -18,7 +19,7 @@ export interface ImageGenerateRecipePayload {
   styleImage?: string | null;
   stylePrompt?: string | null;
   referenceImages?: string[];
-  __stage?: 'uploading_refs' | 'synthesizing_prompt';
+  __stage?: 'uploading_refs' | 'synthesizing_prompt' | 'building_payload';
   __uploadCursor?: number;
   __uploadSources?: string[];
   __uploadedUrls?: string[];

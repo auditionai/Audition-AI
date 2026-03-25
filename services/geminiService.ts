@@ -590,14 +590,14 @@ You must act as a strict investigator for each step.
 `;
 
     if (charBase64List.length > 0) {
-        promptInstructions += `Step 1: Analyze the Character Reference Image(s). Describe the character's facial features, hair, clothing, and gender in extreme detail. This is the SOURCE OF TRUTH for the character's identity.\n`;
+        promptInstructions += `Step 1: Analyze the Character Reference Image(s). Describe the character's facial features, hair, clothing, and gender in extreme detail. This is the SOURCE OF TRUTH for the character's identity. These images are NOT pose references.\n`;
         for (const charBase64 of charBase64List) {
             parts.push({ inlineData: { data: charBase64, mimeType: "image/jpeg" } });
         }
     }
 
     if (cleanRefImage) {
-        promptInstructions += `Step 2: Analyze the Sample Image (Pose/Background). Describe the character's pose, the camera angle, the lighting, and the background environment. DO NOT copy the character's facial features or clothing from this image.\n`;
+        promptInstructions += `Step 2: Analyze the Sample Image (Pose/Background). Describe the character's pose, the camera angle, the lighting, and the background environment. DO NOT copy the character's facial features or clothing from this image. The final character must be re-posed into this sample composition.\n`;
         parts.push({ inlineData: { data: cleanRefImage, mimeType: "image/jpeg" } });
     }
 
@@ -610,9 +610,10 @@ You must act as a strict investigator for each step.
 Based on the user's base prompt: "${prompt}"
 The final image generation AI WILL receive these exact images. Your task is to write a STRICT COMMAND PROMPT for that AI.
 Your prompt must COMMAND the AI to:
-1. EXACTLY COPY AND PASTE the character's face, hair, and clothing from the provided character reference images. DO NOT invent new features.
-2. EXACTLY COPY the pose, camera angle, and background from the provided pose reference image.
-3. EXACTLY COPY the artistic style, rendering quality, and lighting from the provided style reference image.
+1. EXACTLY COPY AND PASTE the character's face, hair, clothing, tattoos, and identity from the provided character reference images. DO NOT invent new features.
+2. Treat the character reference images as IDENTITY ONLY, not pose references. Ignore their original standing pose, framing, and background.
+3. EXACTLY COPY the pose, camera angle, and background from the provided pose reference image, and re-pose the final character into that composition.
+4. EXACTLY COPY the artistic style, rendering quality, and lighting from the provided style reference image, but do not copy its pose, outfit, or character identity.
 
 Do not just describe the image. Write it as a set of strict instructions and constraints for the rendering engine.
 Output ONLY the final command prompt. Do not include the step-by-step analysis in your final output, just the prompt itself.`;
@@ -650,8 +651,8 @@ Output ONLY the final command prompt. Do not include the step-by-step analysis i
 
     const referenceImages: string[] = [];
     // The user explicitly wants ALL images sent to the final API so it can SEE them and COPY from them.
-    if (charBase64List.length > 0) referenceImages.push(...charBase64List);
     if (cleanRefImage) referenceImages.push(cleanRefImage);
+    if (charBase64List.length > 0) referenceImages.push(...charBase64List);
     if (cleanStyleImages.length > 0) referenceImages.push(cleanStyleImages[0]);
 
     const qualityBoosters = "masterpiece, best quality, ultra-detailed, 8k, stylized 3D game render, Korean MMO 3D style, stylized 3D skin texture, smooth 3D rendering, ray tracing, hdr, cinematic lighting, unreal engine 5 render";

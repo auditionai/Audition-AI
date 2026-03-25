@@ -2,10 +2,8 @@
 import { createPortal } from 'react-dom';
 import { GeneratedImage, Language, HistoryItem } from '../types';
 import type { QueueProgressLogEntry } from '../shared/queueRecipes';
-import { getAllImagesFromStorage, deleteImageFromStorage, cleanupExpiredImages, getHistoryRetentionDays, publishImageToShowcase } from '../services/storageService';
+import { checkR2Connection, getAllImagesFromStorage, deleteImageFromStorage, cleanupExpiredImages, getHistoryRetentionDays, publishImageToShowcase } from '../services/storageService';
 import { getUnifiedHistory } from '../services/economyService';
-import { useConcurrency } from '../services/concurrencyService';
-import { supabase } from '../services/supabaseClient';
 import { downloadAssetToBrowser } from '../services/downloadService';
 import { Icons } from '../components/Icons';
 import { useNotification } from '../components/NotificationSystem';
@@ -16,7 +14,6 @@ interface GalleryProps {
 
 export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
   const { notify, confirm } = useNotification();
-  const { triggerPoll } = useConcurrency();
   const [activeTab, setActiveTab] = useState<'generation' | 'transactions'>('generation');
 
   // Generation History State
@@ -64,49 +61,10 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
   }, [loadImages]);
 
   useEffect(() => {
-      if (!supabase) return;
-
-      let channel: any = null;
-      let cancelled = false;
-
-      const subscribe = async () => {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (!user || cancelled) return;
-
-          channel = supabase
-              .channel(`gallery_generated_images_${user.id}`)
-              .on(
-                  'postgres_changes',
-                  {
-                      event: '*',
-                      schema: 'public',
-                      table: 'generated_images',
-                      filter: `user_id=eq.${user.id}`
-                  },
-                  () => {
-                      loadImages(true);
-                  }
-              )
-              .subscribe();
-      };
-
-      subscribe().catch((error) => {
-          console.warn('[Gallery] Failed to subscribe generated_images realtime:', error);
-      });
-
-      return () => {
-          cancelled = true;
-          if (channel) {
-              supabase.removeChannel(channel);
-          }
-      };
-  }, []);
-
-  useEffect(() => {
       if (!hasActiveJobs) return;
       const interval = setInterval(() => {
           loadImages(true);
-      }, 15000);
+      }, 30000);
       return () => clearInterval(interval);
   }, [hasActiveJobs, loadImages]);
 
@@ -156,7 +114,6 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
         isDanger: true,
         onConfirm: async () => {
             await deleteImageFromStorage(id, userId, imageUrl);
-            triggerPoll();
             setImages(prev => prev.filter(img => img.id !== id));
             setSelectedIds(prev => {
                 const newSet = new Set(prev);
@@ -181,7 +138,6 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                   const image = images.find((img) => img.id === id);
                   await deleteImageFromStorage(id, image?.userId, image?.url);
               }
-              triggerPoll();
               setImages(prev => prev.filter(img => !selectedIds.has(img.id)));
               setSelectedIds(new Set());
               notify(lang === 'vi' ? 'Đã xóa các mục đã chọn.' : 'Selected items deleted.', 'info');
@@ -320,6 +276,16 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
 
   const handlePublish = async (image: GeneratedImage) => {
       try {
+          const r2Ready = await checkR2Connection();
+          if (!r2Ready) {
+              notify(
+                  lang === 'vi'
+                      ? 'R2 Cloudflare chưa được cấu hình nên chưa thể publish ảnh công khai.'
+                      : 'Cloudflare R2 is not configured, so the image cannot be published yet.',
+                  'error',
+              );
+              return;
+          }
           const updatedImage = await publishImageToShowcase(image);
           setImages((prev) => prev.map((item) => item.id === updatedImage.id ? updatedImage : item));
           setViewingImage(updatedImage);

@@ -42,8 +42,9 @@ const EMPTY_QUEUE_STATS: QueueStats = {
   systemQueued: 0,
 };
 
-const BUSY_QUEUE_POLL_MS = 15_000;
-const IDLE_QUEUE_POLL_MS = 60_000;
+const BUSY_QUEUE_POLL_MS = 30_000;
+const IDLE_QUEUE_POLL_MS = 120_000;
+const MANUAL_QUEUE_POLL_MIN_INTERVAL_MS = 5_000;
 
 let globalChannel: any = null;
 let currentJobs: JobState[] = [];
@@ -53,6 +54,7 @@ let sharedQueueStats: QueueStats = EMPTY_QUEUE_STATS;
 const queueStatsSubscribers = new Set<(stats: QueueStats) => void>();
 let queueStatsPollTimer: ReturnType<typeof setTimeout> | null = null;
 let queueStatsPollPromise: Promise<void> | null = null;
+let lastQueueStatsFetchAt = 0;
 let queueStatsConsumerCount = 0;
 let sharedUserId: string | null = null;
 let sharedUserIdPromise: Promise<string | null> | null = null;
@@ -121,12 +123,17 @@ const fetchSharedQueueStats = async (force = false) => {
     return;
   }
 
-  if (!force && queueStatsPollPromise) {
+  if (queueStatsPollPromise) {
     return queueStatsPollPromise;
+  }
+
+  if (force && Date.now() - lastQueueStatsFetchAt < MANUAL_QUEUE_POLL_MIN_INTERVAL_MS) {
+    return;
   }
 
   queueStatsPollPromise = (async () => {
     try {
+      lastQueueStatsFetchAt = Date.now();
       const { data, error } = await supabase.rpc('get_generation_queue_stats');
       if (error) {
         throw error;
@@ -154,33 +161,7 @@ const fetchSharedQueueStats = async (force = false) => {
 };
 
 export const initConcurrencyTracker = async () => {
-  if (!supabase || globalChannel) return;
-
-  const userId = await getSharedUserId();
-
-  globalChannel = supabase.channel('concurrency_tracker', {
-    config: {
-      presence: {
-        key: userId || 'anonymous',
-      },
-    },
-  });
-
-  globalChannel
-    .on('presence', { event: 'sync' }, () => {
-      const state = globalChannel.presenceState();
-      const jobs: JobState[] = [];
-      for (const id in state) {
-        state[id].forEach((presence: any) => {
-          if (presence.jobs) {
-            jobs.push(...presence.jobs);
-          }
-        });
-      }
-      currentJobs = Array.from(new Map(jobs.map((job) => [job.jobId, job])).values());
-      notifyJobSubscribers();
-    })
-    .subscribe();
+  return;
 };
 
 export const useConcurrency = () => {
@@ -229,12 +210,8 @@ export const useConcurrency = () => {
     };
   }, []);
 
-  const updateMyJobs = useCallback(async (jobs: JobState[]) => {
-    if (!globalChannel) return;
-    await globalChannel.track({ jobs });
-    if (jobs.length > 0) {
-      fetchSharedQueueStats(true).catch(() => undefined);
-    }
+  const updateMyJobs = useCallback(async (_jobs: JobState[]) => {
+    return;
   }, []);
 
   const triggerPoll = useCallback(() => {

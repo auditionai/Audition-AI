@@ -1,7 +1,7 @@
 
 import { GeneratedImage } from '../types';
 import type { QueueProgressLogEntry } from '../shared/queueRecipes';
-import { supabase } from './supabaseClient';
+import { getSupabaseAuthHeader, getSupabaseUser, supabase } from './supabaseClient';
 import { getUserProfile } from './economyService';
 import { S3Client, PutObjectCommand, DeleteObjectCommand, DeleteObjectsCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 
@@ -10,6 +10,9 @@ const STORE_NAME = 'images';
 const TABLE_NAME = 'generated_images';
 const HISTORY_RETENTION_DAYS = 7;
 const HISTORY_RETENTION_MS = HISTORY_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+const ACTIVE_GALLERY_CLIENT_CACHE_TTL_MS = 10_000;
+const IDLE_GALLERY_CLIENT_CACHE_TTL_MS = 30_000;
+const GENERATED_IMAGE_ROW_SELECT = 'id, image_url, prompt, created_at, updated_at, asset_type, tool_id, tool_name, model_used, is_public, user_id, user_name, status, job_id, progress, queue_payload, error_message, cost_vcoin';
 
 // --- CLOUDFLARE R2 CONFIGURATION ---
 // Helper to get Env Var from either Vite's import.meta.env or process.env shim
@@ -33,6 +36,8 @@ const R2_BUCKET_NAME = getEnv('VITE_R2_BUCKET_NAME');
 const R2_PUBLIC_URL = getEnv('VITE_R2_PUBLIC_URL'); 
 
 let r2Client: S3Client | null = null;
+let galleryFetchPromise: Promise<GeneratedImage[]> | null = null;
+let galleryFetchCache: { userId: string; expiresAt: number; images: GeneratedImage[] } | null = null;
 
 // Debug Log on Init
 console.log("[System] R2 Config Check:", {
@@ -111,6 +116,38 @@ const saveLocalImage = async (image: GeneratedImage): Promise<void> => {
 
     request.onsuccess = () => resolve();
     request.onerror = () => reject(request.error);
+  });
+};
+
+const getSessionAuthHeader = async () => {
+  return getSupabaseAuthHeader();
+};
+
+const replaceLocalImagesForUser = async (userId: string, images: GeneratedImage[]): Promise<void> => {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([STORE_NAME], 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+    const getAllRequest = store.getAll();
+
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+    transaction.onabort = () => reject(transaction.error);
+
+    getAllRequest.onsuccess = () => {
+      const existingImages = getAllRequest.result as GeneratedImage[];
+      existingImages
+        .filter((image) => image?.userId === userId)
+        .forEach((image) => {
+          store.delete(image.id);
+        });
+
+      images.forEach((image) => {
+        store.put(image);
+      });
+    };
+
+    getAllRequest.onerror = () => reject(getAllRequest.error);
   });
 };
 
@@ -645,7 +682,7 @@ export const getShowcaseImages = async (): Promise<GeneratedImage[]> => {
             // Fetch images ONLY to avoid 400 errors from missing relationships in schema cache
             const { data: simpleData, error: simpleError } = await supabase
                 .from(TABLE_NAME)
-                .select('*')
+                .select(GENERATED_IMAGE_ROW_SELECT)
                 .eq('is_public', true)
                 .order('created_at', { ascending: false })
                 .limit(20);
@@ -687,7 +724,7 @@ export const getAllImagesSystemWide = async (): Promise<GeneratedImage[]> => {
     try {
         const { data, error } = await supabase
             .from(TABLE_NAME)
-            .select('*')
+            .select(GENERATED_IMAGE_ROW_SELECT)
             .order('created_at', { ascending: false });
 
         if (error || !data) return [];
@@ -708,22 +745,62 @@ export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
   // 1. SUPABASE (Fetches metadata, URL points to R2 or Supabase Storage)
   if (supabase) {
     try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const user = await getSupabaseUser();
         if(user) {
-            const { data, error } = await supabase
-                .from(TABLE_NAME)
-                .select('*')
-                .eq('user_id', user.id)
-                .order('created_at', { ascending: false });
+            const localImagesForUser = localImages.filter((image) => image.userId === user.id);
+            if (galleryFetchCache && galleryFetchCache.userId === user.id && galleryFetchCache.expiresAt > Date.now()) {
+              return mergeCloudAndLocalImages(galleryFetchCache.images, localImagesForUser);
+            }
 
-            if (!error && data) {
-                const missingCostIds = data
-                    .filter((row: any) => !Number.isFinite(Number(row.cost_vcoin)))
-                    .map((row: any) => row.id)
-                    .filter((value: any): value is string => typeof value === 'string' && value.length > 0);
-                const chargeMap = await getGeneratedImageChargeMap(user.id, missingCostIds);
-                const cloudImages = data.map((row: any) => mapGeneratedImageRow(row, 'Me', chargeMap.get(row.id)));
-                return mergeCloudAndLocalImages(cloudImages, localImages);
+            if (galleryFetchPromise) {
+              const pendingImages = await galleryFetchPromise.catch(() => null);
+              if (pendingImages) {
+                return mergeCloudAndLocalImages(pendingImages, localImagesForUser);
+              }
+            }
+
+            const authHeader = await getSessionAuthHeader();
+            galleryFetchPromise = (async () => {
+              const response = await fetch('/api/gallery-images', {
+                method: 'GET',
+                headers: authHeader,
+              });
+              const payload = await response.json().catch(() => ({}));
+
+              if (response.ok && Array.isArray(payload?.images)) {
+                  const cloudImages = payload.images.map((row: any) => mapGeneratedImageRow(row, 'Me'));
+                  const mergedImages = mergeCloudAndLocalImages(cloudImages, localImagesForUser);
+                  galleryFetchCache = {
+                    userId: user.id,
+                    expiresAt:
+                      Date.now() +
+                      (mergedImages.some((image) => image.status === 'queued' || image.status === 'processing')
+                        ? ACTIVE_GALLERY_CLIENT_CACHE_TTL_MS
+                        : IDLE_GALLERY_CLIENT_CACHE_TTL_MS),
+                    images: mergedImages,
+                  };
+                  void replaceLocalImagesForUser(user.id, mergedImages).catch((syncError) => {
+                    console.warn('[Storage] Failed to sync local cache from cloud', syncError);
+                  });
+                  return mergedImages;
+              }
+
+              if (!response.ok) {
+                console.warn('[Storage] Gallery API failed, using local cache only', payload?.error || response.statusText);
+              }
+
+              galleryFetchCache = {
+                userId: user.id,
+                expiresAt: Date.now() + ACTIVE_GALLERY_CLIENT_CACHE_TTL_MS,
+                images: localImagesForUser,
+              };
+              return localImagesForUser;
+            })();
+
+            try {
+              return await galleryFetchPromise;
+            } finally {
+              galleryFetchPromise = null;
             }
         }
     } catch (error) {
@@ -741,7 +818,7 @@ export const getUserImagesFromStorage = async (userId: string): Promise<Generate
     try {
         const { data, error } = await supabase
             .from(TABLE_NAME)
-            .select('*')
+            .select(GENERATED_IMAGE_ROW_SELECT)
             .eq('user_id', userId)
             .order('created_at', { ascending: false });
 
@@ -913,7 +990,7 @@ export const cleanupExpiredImages = async (isSystemWide: boolean = false): Promi
     if (isSystemWide) {
         images = await getAllImagesSystemWide();
     } else {
-        images = await getAllImagesFromStorage();
+        images = await readLocalImages();
     }
 
     const now = Date.now();

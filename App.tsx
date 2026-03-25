@@ -14,16 +14,16 @@ import { TopUp } from './views/TopUp';
 import { PayOSGateway } from './views/PayOSGateway'; 
 import { Language, Theme, ViewId, Feature } from './types';
 import { APP_CONFIG } from './constants';
-import { supabase } from './services/supabaseClient';
-import { logVisit, updateLastActive, getMaintenanceMode } from './services/economyService';
+import { getSupabaseSession, getSupabaseUser, supabase } from './services/supabaseClient';
+import { getUserProfile, logVisit, updateLastActive, getMaintenanceMode } from './services/economyService';
 import { NotificationProvider, useNotification } from './components/NotificationSystem';
 import { Icons } from './components/Icons';
 import { syncPayOSTransaction, triggerServerQueueTick } from './services/serverQueueService';
 
 function AppContent() {
   const queueHeartbeatLeaseKey = 'auditionai:queue-heartbeat:leader';
-  const queueHeartbeatIntervalMs = 15000;
-  const queueHeartbeatLeaseMs = 20000;
+  const queueHeartbeatIntervalMs = 30000;
+  const queueHeartbeatLeaseMs = 35000;
   const heartbeatInstanceIdRef = useRef(typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `tab-${Date.now()}`);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userRole, setUserRole] = useState<'user' | 'admin'>('user');
@@ -77,9 +77,9 @@ function AppContent() {
             });
         };
         fetchMaintenance();
-        const maintenanceInterval = setInterval(fetchMaintenance, 60000); // Check every minute
+        const maintenanceInterval = setInterval(fetchMaintenance, 300000); // Check every 5 minutes
 
-        supabase.auth.getSession().then(({ data: { session } }: any) => {
+        getSupabaseSession().then((session: any) => {
             if (session) {
                 setIsAuthenticated(true);
                 checkAdminRole(session.user.id);
@@ -87,11 +87,13 @@ function AppContent() {
         });
 
         // Listen for auth changes (login/logout/oauth redirect)
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: any, session: any) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event: any, session: any) => {
             if (session) {
                 setIsAuthenticated(true);
-                checkAdminRole(session.user.id);
-                updateLastActive(); // Update on login/session refresh
+                if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
+                    checkAdminRole(session.user.id);
+                    updateLastActive();
+                }
             } else {
                 setIsAuthenticated(false);
             }
@@ -224,14 +226,10 @@ function AppContent() {
       if (!supabase) return;
       
       try {
-          const { data: { user } } = await supabase.auth.getUser();
-          const { data, error } = await supabase
-            .from('users')
-            .select('is_admin')
-            .eq('id', userId)
-            .maybeSingle();
+          const user = await getSupabaseUser();
+          const profile = await getUserProfile();
 
-          if (user?.email === 'khoknightyb97@gmail.com' || (data && data.is_admin === true)) {
+          if (user?.email === 'khoknightyb97@gmail.com' || (profile?.id === userId && profile?.role === 'admin')) {
               console.log("Admin privileges granted.");
               setUserRole('admin');
           } else {

@@ -1,4 +1,4 @@
-import { supabase } from './supabaseClient';
+import { getSupabaseAuthHeader } from './supabaseClient';
 import type { QueueRecipePayload } from '../shared/queueRecipes';
 
 export type QueueAssetType = 'image' | 'video';
@@ -17,21 +17,7 @@ export interface QueueEnqueueRequest {
 }
 
 const getAuthHeader = async () => {
-  if (!supabase) {
-    throw new Error('No Database');
-  }
-
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session?.access_token) {
-    throw new Error('Unauthorized');
-  }
-
-  return {
-    Authorization: `Bearer ${session.access_token}`,
-  };
+  return getSupabaseAuthHeader();
 };
 
 export const enqueueServerJob = async (request: QueueEnqueueRequest) => {
@@ -63,7 +49,7 @@ export const triggerServerQueueTick = async (force = false) => {
   if (!force && queueTickUnavailableUntil > now) {
     return null;
   }
-  if (!force && now - lastTickAt < 1500) {
+  if (!force && now - lastTickAt < 3000) {
     return null;
   }
 

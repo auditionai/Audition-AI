@@ -1,10 +1,9 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useEffect, useRef, useState } from 'react';
 import { Feature, GeneratedImage, Language, ViewId } from '../../types';
 import { Icons } from '../../components/Icons';
 import { useNotification } from '../../components/NotificationSystem';
 import {
   getModelPricing,
-  getTstServerAvailabilityConfig,
   getUserProfile,
   type ModelPricing,
 } from '../../services/economyService';
@@ -12,25 +11,12 @@ import { CONCURRENCY_LIMITS, useConcurrency } from '../../services/concurrencySe
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import {
-  applyServerAvailabilityToRuntimeModels,
-  fetchTstModels,
-  fetchTstPricing,
-  getCompatibleGenerationResolutions,
-  getCompatibleGenerationServers,
-  getCompatibleGenerationSpeeds,
-  getGenerationModelId,
   getVertexEditResolutionCostMap,
   getVertexEditToolCostBreakdown,
-  sanitizePricingEntriesWithRuntimeModels,
-  tstServerToUi,
-  uiServerToTst,
-  uiSpeedToTst,
   type AuditionPricingOverride,
-  type TstPricingEntry,
-  type TstRuntimeModel,
 } from '../../services/tstCatalog';
 import type { ImageEditRecipePayload } from '../../shared/queueRecipes';
-import { calculateAspectRatioString, loadImageWithTimeout, optimizePayload } from '../../utils/imageProcessor';
+import { calculateAspectRatioString, loadImageWithTimeout } from '../../utils/imageProcessor';
 
 interface EditingToolProps {
   feature: Feature;
@@ -67,6 +53,11 @@ const EDITING_TABS = [
 
 type GenerationTier = 'flash' | 'pro';
 type Resolution = '1K' | '2K' | '4K';
+
+const VERTEX_EDIT_MODEL_ID_BY_TIER: Record<GenerationTier, string> = {
+  flash: 'vertex-flash',
+  pro: 'vertex-pro',
+};
 
 const extractMimeType = (input: string) =>
   input.startsWith('data:') ? input.substring(input.indexOf(':') + 1, input.indexOf(';')) : undefined;
@@ -112,8 +103,8 @@ const tryStageInputToStorage = async (source: string, folder: string) => {
   try {
     return await uploadFileToR2(source, folder);
   } catch (error) {
-    console.warn('[EditingTool] Failed to stage source image to storage, falling back to inline payload.', error);
-    return null;
+    console.warn('[EditingTool] Failed to stage source image to storage.', error);
+    throw new Error('Không thể tải ảnh gốc lên vùng đệm. Vui lòng thử lại.');
   }
 };
 
@@ -124,21 +115,18 @@ export const EditingTool: React.FC<EditingToolProps> = ({
   onNavigateView,
 }) => {
   const { notify } = useNotification();
-  const { queueStats, triggerPoll } = useConcurrency();
+  const { queueStats } = useConcurrency();
 
   const [prompt, setPrompt] = useState('');
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [aiModel, setAiModel] = useState<GenerationTier>('flash');
   const [resolution, setResolution] = useState<Resolution>('1K');
   const [speed, setSpeed] = useState('Nhanh');
-  const [server, setServer] = useState('FAST');
+  const [server, setServer] = useState('Vertex AI');
   const [currentTipIdx, setCurrentTipIdx] = useState(0);
   const [guideTopic, setGuideTopic] = useState<'guide' | null>(null);
-  const [pricingEntries, setPricingEntries] = useState<TstPricingEntry[]>([]);
   const [auditionPricing, setAuditionPricing] = useState<ModelPricing[]>([]);
-  const [runtimeModels, setRuntimeModels] = useState<TstRuntimeModel[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
-  const [catalogError, setCatalogError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -154,75 +142,32 @@ export const EditingTool: React.FC<EditingToolProps> = ({
     auditionPriceVcoin: row.audition_price_vcoin,
   }));
 
-  const speedId = uiSpeedToTst(speed) || 'fast';
-  const serverId = uiServerToTst(server) || 'fast';
-
-  const availableResolutions = getCompatibleGenerationResolutions({
-    tier: activeTier,
-    pricingEntries,
-    serverId,
-    speed: speedId,
-  });
-
-  const availableServers = getCompatibleGenerationServers({
-    tier: activeTier,
-    pricingEntries,
-    resolution,
-    speed: speedId,
-  });
-
-  const availableSpeeds = getCompatibleGenerationSpeeds({
-    tier: activeTier,
-    pricingEntries,
-    resolution,
-    serverId,
-  });
-
   const selectedGenerationCost = getVertexEditToolCostBreakdown({
     toolId: feature.id,
     tier: activeTier,
     resolution,
     pricingOverrides,
   });
-
   const resolutionCostMap = getVertexEditResolutionCostMap({
     toolId: feature.id,
     tier: activeTier,
     pricingOverrides,
   });
-
-  const runtimeImageModelIds = useMemo(
-    () =>
-      new Set(
-        runtimeModels
-          .filter((model) => model.type === 'image')
-          .map((model) => model.model.trim().toLowerCase()),
-      ),
-    [runtimeModels],
+  const availableResolutions = (['1K', '2K', '4K'] as Resolution[]).filter(
+    (value) => resolutionCostMap[value].vcoin >= 0,
   );
-
-  const isFlashAvailable =
-    runtimeImageModelIds.has(getGenerationModelId('flash')) &&
-    pricingEntries.some((entry) => entry.model.trim().toLowerCase() === getGenerationModelId('flash'));
-  const isProAvailable =
-    runtimeImageModelIds.has(getGenerationModelId('pro')) &&
-    pricingEntries.some((entry) => entry.model.trim().toLowerCase() === getGenerationModelId('pro'));
-
-  const availableSpeedLabels = availableSpeeds.map((value) => (value === 'slow' ? 'Tiết Kiệm' : 'Nhanh'));
-  const availableServerLabels = availableServers.map((value) => tstServerToUi(value));
-  const isCatalogReady =
-    !catalogLoading &&
-    !catalogError &&
-    pricingEntries.length > 0 &&
-    runtimeModels.length > 0 &&
-    (isMagicEditor ? isFlashAvailable || isProAvailable : isFlashAvailable);
+  const availableSpeedLabels = ['Nhanh'];
+  const availableServerLabels = ['Vertex AI'];
+  const isFlashAvailable = true;
+  const isProAvailable = isMagicEditor;
+  const isCatalogReady = !catalogLoading;
 
   useEffect(() => {
     setUploadedImage(null);
     setPrompt('');
     setResolution('1K');
     setSpeed('Nhanh');
-    setServer('FAST');
+    setServer('Vertex AI');
     setAiModel('flash');
     setIsSubmitting(false);
   }, [feature.id]);
@@ -235,34 +180,19 @@ export const EditingTool: React.FC<EditingToolProps> = ({
   }, []);
 
   useEffect(() => {
-    const loadCatalog = async (forceRefresh = false) => {
+    const loadCatalog = async () => {
       try {
-        const [pricing, models, pricingConfig, serverAvailabilityConfig] = await Promise.all([
-          fetchTstPricing(forceRefresh),
-          fetchTstModels(forceRefresh),
-          getModelPricing(),
-          getTstServerAvailabilityConfig(),
-        ]);
-
-        const filteredModels = applyServerAvailabilityToRuntimeModels(models, serverAvailabilityConfig);
-        const livePricing = sanitizePricingEntriesWithRuntimeModels(pricing, filteredModels, serverAvailabilityConfig);
-
-        setPricingEntries(livePricing);
-        setRuntimeModels(filteredModels);
+        const pricingConfig = await getModelPricing();
         setAuditionPricing(pricingConfig || []);
-        setCatalogError(null);
       } catch (error) {
-        console.warn('[EditingTool] Failed to load live TST catalog', error);
-        setPricingEntries([]);
-        setRuntimeModels([]);
-        setCatalogError(lang === 'vi' ? 'TST đang bảo trì hoặc không sẵn sàng.' : 'TST is unavailable.');
+        console.warn('[EditingTool] Failed to load Vertex edit pricing overrides', error);
+        setAuditionPricing([]);
       } finally {
         setCatalogLoading(false);
       }
     };
-
     loadCatalog();
-  }, [lang]);
+  }, []);
 
   useEffect(() => {
     if (isMagicEditor) {
@@ -279,45 +209,6 @@ export const EditingTool: React.FC<EditingToolProps> = ({
       setResolution(availableResolutions[0] as Resolution);
     }
   }, [availableResolutions, resolution]);
-
-  useEffect(() => {
-    const requestedServerId = uiServerToTst(server) || 'fast';
-    const requestedSpeedId = uiSpeedToTst(speed) || 'fast';
-    const compatibleServers = getCompatibleGenerationServers({
-      tier: activeTier,
-      pricingEntries,
-      resolution,
-      speed: requestedSpeedId,
-    });
-    const effectiveServerId = compatibleServers.includes(requestedServerId)
-      ? requestedServerId
-      : compatibleServers[0];
-
-    if (effectiveServerId && effectiveServerId !== requestedServerId) {
-      const nextServerLabel = tstServerToUi(effectiveServerId);
-      if (nextServerLabel !== server) {
-        setServer(nextServerLabel);
-        return;
-      }
-    }
-
-    const compatibleSpeeds = getCompatibleGenerationSpeeds({
-      tier: activeTier,
-      pricingEntries,
-      resolution,
-      serverId: effectiveServerId || requestedServerId,
-    });
-    const effectiveSpeedId = compatibleSpeeds.includes(requestedSpeedId)
-      ? requestedSpeedId
-      : compatibleSpeeds[0];
-
-    if (effectiveSpeedId) {
-      const nextSpeedLabel = effectiveSpeedId === 'slow' ? 'Tiết Kiệm' : 'Nhanh';
-      if (nextSpeedLabel !== speed) {
-        setSpeed(nextSpeedLabel);
-      }
-    }
-  }, [activeTier, pricingEntries, resolution, server, speed]);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -342,14 +233,19 @@ export const EditingTool: React.FC<EditingToolProps> = ({
       return;
     }
     if (!isCatalogReady) {
-      notify(lang === 'vi' ? 'TST đang bảo trì hoặc không sẵn sàng.' : 'TST is unavailable.', 'error');
+      notify(
+        lang === 'vi'
+          ? 'Dịch vụ Vertex AI đang khởi tạo. Vui lòng thử lại sau ít giây.'
+          : 'Vertex AI is still initializing. Please try again in a few seconds.',
+        'error',
+      );
       return;
     }
     if (!selectedGenerationCost.available) {
       notify(
         lang === 'vi'
-          ? 'Cấu hình đang chọn không còn khả dụng trên TST.'
-          : 'Selected configuration is not available on TST.',
+          ? 'Cấu hình Vertex AI hiện không khả dụng cho tool này.'
+          : 'This Vertex AI configuration is not available for the selected tool.',
         'error',
       );
       return;
@@ -388,29 +284,9 @@ export const EditingTool: React.FC<EditingToolProps> = ({
     setIsSubmitting(true);
     const queuedJobId = crypto.randomUUID();
 
-    const requestedSpeedId = uiSpeedToTst(speed) || 'fast';
-    const requestedServerId = uiServerToTst(server) || 'fast';
-    const compatibleServers = getCompatibleGenerationServers({
-      tier: activeTier,
-      pricingEntries,
-      resolution,
-      speed: requestedSpeedId,
-    });
-    const effectiveServerId = compatibleServers.includes(requestedServerId)
-      ? requestedServerId
-      : compatibleServers[0] || requestedServerId;
-    const compatibleSpeeds = getCompatibleGenerationSpeeds({
-      tier: activeTier,
-      pricingEntries,
-      resolution,
-      serverId: effectiveServerId,
-    });
-    const effectiveSpeedId = compatibleSpeeds.includes(requestedSpeedId)
-      ? requestedSpeedId
-      : compatibleSpeeds[0] || requestedSpeedId;
-
+    const vertexModelId = VERTEX_EDIT_MODEL_ID_BY_TIER[activeTier];
     const displayPrompt = buildDisplayPrompt(feature.id, prompt, resolution, lang);
-    const engineLabel = activeTier === 'flash' ? `Flash Engine ${resolution}` : `Pro Engine ${resolution}`;
+    const engineLabel = activeTier === 'flash' ? `Vertex Flash ${resolution}` : `Vertex Pro ${resolution}`;
 
     const queuedImage: GeneratedImage = {
       id: queuedJobId,
@@ -434,14 +310,11 @@ export const EditingTool: React.FC<EditingToolProps> = ({
       console.warn('[EditingTool] Failed to persist queued placeholder', error);
     }
 
-    triggerPoll();
     onNavigateView?.('gallery');
 
     void (async () => {
       try {
-        const stagedSourceImage =
-          (await tryStageInputToStorage(uploadedImage, `inputs/editing/${feature.id}`)) ||
-          (await optimizePayload(uploadedImage, 1536));
+        const stagedSourceImage = await tryStageInputToStorage(uploadedImage, `inputs/editing/${feature.id}`);
 
         let aspectRatio = '1:1';
         try {
@@ -453,14 +326,12 @@ export const EditingTool: React.FC<EditingToolProps> = ({
 
         const queuePayload: ImageEditRecipePayload = {
           recipeType: 'image_edit_recipe_v1',
-          modelId: getGenerationModelId(activeTier),
+          modelId: vertexModelId,
           prompt: buildInstructionPrompt(feature.id, prompt, resolution),
           sourceImage: stagedSourceImage,
           mimeType: extractMimeType(stagedSourceImage) || extractMimeType(uploadedImage),
           resolution,
           aspectRatio,
-          speed: effectiveSpeedId,
-          serverId: effectiveServerId,
         };
 
         await enqueueServerJob({
@@ -476,7 +347,6 @@ export const EditingTool: React.FC<EditingToolProps> = ({
         });
 
         window.dispatchEvent(new Event('balance_updated'));
-        triggerPoll();
         notify(
           lang === 'vi'
             ? 'Đã tạo job. Tiến trình sẽ được cập nhật realtime trong Lịch sử.'
@@ -503,7 +373,6 @@ export const EditingTool: React.FC<EditingToolProps> = ({
         } catch (persistError) {
           console.warn('[EditingTool] Failed to persist failed placeholder', persistError);
         }
-        triggerPoll();
         notify(errorMessage, 'error');
       } finally {
         setIsSubmitting(false);
@@ -889,3 +758,6 @@ export const EditingTool: React.FC<EditingToolProps> = ({
     </div>
   );
 };
+
+
+

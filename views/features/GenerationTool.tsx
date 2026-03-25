@@ -10,7 +10,7 @@ import { CONCURRENCY_LIMITS, useConcurrency } from '../../services/concurrencySe
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import { downloadAssetToBrowser } from '../../services/downloadService';
-import { optimizePayload } from '../../utils/imageProcessor';
+import { createSolidFence, createStyleOnlyReference, optimizePayload } from '../../utils/imageProcessor';
 import {
   type AuditionPricingOverride,
   fetchTstModels,
@@ -29,7 +29,7 @@ import {
   type TstPricingEntry,
   type TstRuntimeModel,
 } from '../../services/tstCatalog';
-import type { ImageGenerateRecipePayload } from '../../shared/queueRecipes';
+import type { CharacterReferenceGroup, ImageGenerateRecipePayload } from '../../shared/queueRecipes';
 
 interface GenerationToolProps {
   feature: Feature;
@@ -79,8 +79,34 @@ const tryStageGenerationInput = async (source: string, folder: string) => {
         const optimizedSource = await optimizePayload(source, 2048);
         return await uploadFileToR2(optimizedSource, folder);
     } catch (error) {
-        console.warn('[GenerationTool] Failed to stage generation input, falling back to optimized inline payload.', error);
-        return await optimizePayload(source, 1600);
+        console.warn('[GenerationTool] Failed to stage generation input to storage.', error);
+        throw new Error('Không thể tải ảnh tham chiếu lên vùng đệm. Vui lòng thử lại.');
+    }
+};
+
+const tryStageSampleReferenceInput = async (source: string, folder: string, aspectRatio: string) => {
+    if (!source) return null;
+
+    try {
+        const poseOnlyReference = await createSolidFence(source, aspectRatio, true);
+        const optimizedSource = await optimizePayload(poseOnlyReference, 2048);
+        return await uploadFileToR2(optimizedSource, folder);
+    } catch (error) {
+        console.warn('[GenerationTool] Failed to stage sample reference through pose-only fence.', error);
+        throw new Error('Không thể chuẩn hóa ảnh mẫu trước khi tạo ảnh. Vui lòng thử lại.');
+    }
+};
+
+const tryStageStyleReferenceInput = async (source: string, folder: string) => {
+    if (!source) return null;
+
+    try {
+        const styleOnlyReference = await createStyleOnlyReference(source);
+        const optimizedSource = await optimizePayload(styleOnlyReference, 1536);
+        return await uploadFileToR2(optimizedSource, folder);
+    } catch (error) {
+        console.warn('[GenerationTool] Failed to stage style reference through style-only sheet.', error);
+        throw new Error('Không thể chuẩn hóa ảnh style trước khi tạo ảnh. Vui lòng thử lại.');
     }
 };
 
@@ -622,6 +648,20 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
         return;
     }
 
+    const missingCharacterSlots = characters
+        .filter((char) => !char.bodyImage && !char.faceImage)
+        .map((char) => char.id);
+
+    if (missingCharacterSlots.length > 0) {
+        notify(
+            lang === 'vi'
+                ? `Thiếu ảnh tham chiếu cho nhân vật ${missingCharacterSlots.join(', ')}. Vui lòng tải đủ tất cả nhân vật trước khi tạo ảnh.`
+                : `Missing reference images for character slot(s): ${missingCharacterSlots.join(', ')}.`,
+            'warning',
+        );
+        return;
+    }
+
     const cost = calculateCost();
     const user = await getUserProfile();
 
@@ -678,36 +718,63 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
         console.warn('[GenerationTool] Failed to persist queued placeholder', placeholderError);
     }
 
-    triggerPoll();
     onNavigateView?.('gallery');
 
     void (async () => {
         try {
-            const stagedCharacterImages = (
+            const stagedCharacterGroups = (
                 await Promise.all(
-                    characters.flatMap((char, charIndex) => {
-                        const stagedTasks: Promise<string | null>[] = [];
+                    characters.map(async (char, charIndex) => {
+                        const references: CharacterReferenceGroup['references'] = [];
+
                         if (char.bodyImage) {
-                            stagedTasks.push(
-                                tryStageGenerationInput(char.bodyImage, `inputs/generation/${activeMode}/character-${charIndex + 1}/body`)
+                            const stagedBody = await tryStageGenerationInput(
+                                char.bodyImage,
+                                `inputs/generation/${activeMode}/character-${charIndex + 1}/body`,
                             );
+                            if (stagedBody) {
+                                references.push({ source: stagedBody, kind: 'body' });
+                            }
                         }
+
                         if (char.isFaceLocked && char.faceImage && char.faceImage !== char.bodyImage) {
-                            stagedTasks.push(
-                                tryStageGenerationInput(char.faceImage, `inputs/generation/${activeMode}/character-${charIndex + 1}/face`)
+                            const stagedFace = await tryStageGenerationInput(
+                                char.faceImage,
+                                `inputs/generation/${activeMode}/character-${charIndex + 1}/face`,
                             );
+                            if (stagedFace) {
+                                references.push({ source: stagedFace, kind: 'face' });
+                            }
                         } else if (!char.bodyImage && char.faceImage) {
-                            stagedTasks.push(
-                                tryStageGenerationInput(char.faceImage, `inputs/generation/${activeMode}/character-${charIndex + 1}/face`)
+                            const stagedFace = await tryStageGenerationInput(
+                                char.faceImage,
+                                `inputs/generation/${activeMode}/character-${charIndex + 1}/face`,
                             );
+                            if (stagedFace) {
+                                references.push({ source: stagedFace, kind: 'face' });
+                            }
                         }
-                        return stagedTasks;
+
+                        return {
+                            characterIndex: charIndex + 1,
+                            gender: char.gender,
+                            references,
+                        } satisfies CharacterReferenceGroup;
                     })
                 )
-            ).filter((value): value is string => Boolean(value));
+            ).filter((group) => group.references.length > 0);
+
+            if (stagedCharacterGroups.length !== characters.length) {
+                throw new Error(`CRITICAL FAILURE: Expected ${characters.length} character reference groups but only prepared ${stagedCharacterGroups.length}.`);
+            }
+
+            const stagedCharacterImages = stagedCharacterGroups.flatMap((group) => group.references.map((reference) => reference.source));
 
             const stagedSampleImage = refImage
-                ? await tryStageGenerationInput(refImage, `inputs/generation/${activeMode}/sample`)
+                ? await tryStageSampleReferenceInput(refImage, `inputs/generation/${activeMode}/sample`, aspectRatio)
+                : null;
+            const stagedStyleImage = activeStylePreset
+                ? await tryStageStyleReferenceInput(activeStylePreset, `inputs/generation/${activeMode}/style`)
                 : null;
 
             const queuePayload: ImageGenerateRecipePayload = {
@@ -720,9 +787,10 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                 speed: effectiveSpeedId,
                 serverId: effectiveServerId,
                 negativePrompt: negativePrompt.trim() || undefined,
+                characterReferenceGroups: stagedCharacterGroups,
                 characterImages: stagedCharacterImages,
                 sampleImage: stagedSampleImage || null,
-                styleImage: activeStylePreset || null,
+                styleImage: stagedStyleImage || null,
                 stylePrompt: styleMetadata?.trigger_prompt || styleMetadata?.name || null,
             };
 
@@ -739,7 +807,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
             });
 
             window.dispatchEvent(new Event('balance_updated'));
-            triggerPoll();
             notify(
                 lang === 'vi'
                     ? 'Đã tạo job. Kết quả sẽ được cập nhật realtime trong Lịch sử.'
@@ -761,7 +828,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
             } catch (persistError) {
                 console.warn('[GenerationTool] Failed to persist failed queued placeholder', persistError);
             }
-            triggerPoll();
             notify(errorMsg, 'error');
             setIsSubmitting(false);
         }
@@ -770,7 +836,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
     return;
 
     try {
-        addLog('Đang kiỒm tra máy chủ phân tích Google...');
+        addLog('Đang kiểm tra máy chủ phân tích Google...');
         const isKeyValid = await testApiKey(aiModel, 1);
         if (isKeyValid) {
             addLog('Xác thực máy chủ phân tích thành công. Bắt đầu quá trình tạo ảnh...');
@@ -850,7 +916,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
         });
 
         window.dispatchEvent(new Event('balance_updated'));
-        triggerPoll();
         addLog(lang === 'vi' ? 'Job đã được đưa vào hàng đợi xử lý.' : 'Job submitted to the server queue.');
         notify(
             lang === 'vi'
@@ -1131,7 +1196,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                     {renderGuideContent()}
                     <div className="mt-6 pt-4 border-t border-white/10 text-center">
                         <button onClick={() => setGuideTopic(null)} className="px-6 py-2 bg-white/10 hover:bg-white/20 rounded-full text-xs font-bold text-white transition-colors">
-                            Đã HiỒu
+                            Đã Hiểu
                         </button>
                     </div>
                 </div>

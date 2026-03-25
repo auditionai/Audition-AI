@@ -125,12 +125,34 @@ const isRecoverablePromptSynthesisError = (error: unknown) => {
 const buildFallbackSynthesizedPrompt = (payload: ImageGenerateRecipePayload) => {
   const basePrompt = payload.prompt?.trim() || '';
   const stylePrompt = payload.stylePrompt?.trim() || '';
+  const characterCount = Math.max(1, Math.floor(Number(payload.characterCount || 0)) || (payload.characterReferenceGroups?.length || 0) || 1);
+  const fallbackRoleLock = [
+    'ROLE LOCK:',
+    `0. Final image must contain exactly ${characterCount} character(s). Never add or remove subjects.`,
+    '0b. Each uploaded character slot is mandatory and must appear exactly once. No missing slots, no duplicated slots, no substitutions.',
+    '1. Character reference images define identity only: face, hair, body structure, skin tone, outfit, shoes, accessories, and gender. They are NOT pose references.',
+    '1b. If multiple reference images belong to the same character slot, they all describe the same subject and must be merged into one identity.',
+    '1c. Never replace any missing character slot with a duplicated uploaded character, a sample person, a style person, or an invented blended identity.',
+    '2. Sample image is a processed pose/composition reference. It defines pose, framing, camera angle, spacing, and background only.',
+    '3. Style image is a processed style-only visual reference for the renderer. It may control only render quality, lighting, shader response, material quality, color grading, and broad adult 3D body-proportion language.',
+    '4. Do not copy pose, outfit, hairstyle, accessories, face, gender presentation, number of characters, or composition from the style image.',
+    '5. Re-pose the character from the character reference into the sample composition exactly. Never return a near-unchanged copy of the standing character reference unless the sample itself is also standing.',
+    '6. Keep the final result as a stylized Audition-like 3D game character, not photorealistic, not childlike, and not chibi unless the user explicitly asks for that.',
+  ].join('\n');
 
   if (basePrompt && stylePrompt) {
-    return `${basePrompt}\nStyle reference keywords: ${stylePrompt}`;
+    return `${fallbackRoleLock}\n\nUSER REQUEST:\n${basePrompt}\n\nSTYLE KEYWORDS:\n${stylePrompt}`;
   }
 
-  return basePrompt || stylePrompt || 'Generate the image using the provided references exactly.';
+  if (basePrompt) {
+    return `${fallbackRoleLock}\n\nUSER REQUEST:\n${basePrompt}`;
+  }
+
+  if (stylePrompt) {
+    return `${fallbackRoleLock}\n\nSTYLE KEYWORDS:\n${stylePrompt}`;
+  }
+
+  return `${fallbackRoleLock}\n\nGenerate the image using the provided references exactly.`;
 };
 
 export const synthesizeImageGeneratePrompt = async (payload: ImageGenerateRecipePayload) => {
@@ -158,7 +180,7 @@ export const buildImageGenerateProviderPayload = (
   );
 
   const providerPayload: Record<string, unknown> = {
-    prompt: buildImageProviderPrompt(synthesizedPrompt, payload.negativePrompt),
+    prompt: buildImageProviderPrompt(synthesizedPrompt, payload, payload.negativePrompt),
     model: payload.modelId,
   };
 

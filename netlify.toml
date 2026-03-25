@@ -74,6 +74,16 @@
   status = 200
 
 [[redirects]]
+  from = "/api/gallery-images"
+  to = "/.netlify/functions/gallery-images"
+  status = 200
+
+[[redirects]]
+  from = "/api/redeem-giftcode"
+  to = "/.netlify/functions/redeem-giftcode"
+  status = 200
+
+[[redirects]]
   from = "/api/payos-sync-transaction"
   to = "/.netlify/functions/payos-sync-transaction"
   status = 200

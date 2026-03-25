@@ -1,4 +1,5 @@
 import { getServiceRoleClient } from './_supabase';
+import { fireTelegramJobNotification } from './_telegram-notify';
 import { validateQueuePayloadAgainstLiveCatalog } from './_tst-live-catalog';
 import { normalizeTstOutboundPayload } from './_tst-payload-normalizer';
 import {
@@ -8,13 +9,16 @@ import {
   uploadImageToTst,
 } from './_queue-recipes';
 import { runVertexImageEdit } from './_vertex-image-edit';
+import { verifyGeneratedImageOutput } from './_vertex-image-verify';
 import {
   getImageDirectorSources,
+  validateImageGenerateReferenceIntegrity,
   getImageRenderReferenceSources,
   getRecipeValidationPayload,
   isQueueRecipePayload,
   type QueueProcessingStage,
   type QueueProgressLogEntry,
+  type QueueNotificationMediaEntry,
   type ImageEditRecipePayload,
   type ImageGenerateRecipePayload,
 } from '../../shared/queueRecipes';
@@ -51,6 +55,7 @@ const MAX_DISPATCH_RETRIES = 6;
 const MAX_POLL_FAILURES = 8;
 const MAX_PROCESSING_AGE_MS = 45 * 60 * 1000;
 const MAX_PROVIDER_GENERIC_RETRIES = 2;
+const MAX_OUTPUT_VERIFICATION_RETRIES = 2;
 const SINGLE_AND_COUPLE_PREPARE_TIMEOUT_MS = 10 * 60 * 1000;
 const GROUP_OF_THREE_PREPARE_TIMEOUT_MS = 15 * 60 * 1000;
 const GROUP_OF_FOUR_PREPARE_TIMEOUT_MS = 20 * 60 * 1000;
@@ -61,7 +66,9 @@ const WORKER_TICK_BUDGET_MS = 8_000;
 const MAX_QUEUE_LOG_ENTRIES = 80;
 const ORPHAN_CLAIM_GRACE_MS = 30_000;
 const LEASE_HEARTBEAT_INTERVAL_MS = 30_000;
-const DISPATCH_LEASE_SECONDS = 120;
+const DISPATCH_LEASE_SECONDS = 300;
+const STALE_RECOVERY_SCAN_LIMIT = 50;
+const STALE_RECOVERY_MIN_AGE_MS = 45_000;
 
 const isTransientError = (message: string) => {
   const normalized = message.toLowerCase();
@@ -91,13 +98,130 @@ const parseErrorMessage = async (response: Response) => {
   }
 };
 
-const toQueuePayloadObject = (payload?: Record<string, unknown> | null) =>
+const toQueuePayloadObject = (
+  payload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
+): Record<string, unknown> =>
   payload && typeof payload === 'object' ? { ...payload } : {};
 
-const stripInternalQueueMeta = (payload: Record<string, unknown>) =>
+const stripInternalQueueMeta = (payload: Record<string, unknown> | ImageGenerateRecipePayload) =>
   Object.fromEntries(Object.entries(payload).filter(([key]) => !key.startsWith('__')));
 
-const getQueueLogs = (payload?: Record<string, unknown> | null): QueueProgressLogEntry[] => {
+const normalizeNotificationMediaEntry = (
+  entry: unknown,
+): QueueNotificationMediaEntry | null => {
+  if (!entry || typeof entry !== 'object') {
+    return null;
+  }
+
+  const url = typeof (entry as QueueNotificationMediaEntry).url === 'string'
+    ? (entry as QueueNotificationMediaEntry).url.trim()
+    : '';
+  if (!url) {
+    return null;
+  }
+
+  const role = typeof (entry as QueueNotificationMediaEntry).role === 'string'
+    ? (entry as QueueNotificationMediaEntry).role
+    : 'reference';
+  const kind = (entry as QueueNotificationMediaEntry).kind === 'video' ? 'video' : 'image';
+  const userProvided = (entry as QueueNotificationMediaEntry).userProvided !== false;
+
+  return {
+    url,
+    role: role as QueueNotificationMediaEntry['role'],
+    kind,
+    userProvided,
+  };
+};
+
+const buildNotificationMediaEntries = (
+  payload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
+): QueueNotificationMediaEntry[] => {
+  const raw = toQueuePayloadObject(payload);
+  const explicit = Array.isArray(raw.__notifyInputMedia)
+    ? raw.__notifyInputMedia
+        .map((entry) => normalizeNotificationMediaEntry(entry))
+        .filter((entry): entry is QueueNotificationMediaEntry => Boolean(entry))
+    : [];
+
+  if (explicit.length > 0) {
+    return explicit;
+  }
+
+  const entries: QueueNotificationMediaEntry[] = [];
+  const push = (
+    value: unknown,
+    role: QueueNotificationMediaEntry['role'],
+    kind: QueueNotificationMediaEntry['kind'] = 'image',
+    userProvided = true,
+  ) => {
+    if (typeof value !== 'string' || !value.trim()) {
+      return;
+    }
+    entries.push({
+      url: value.trim(),
+      role,
+      kind,
+      userProvided,
+    });
+  };
+
+  if (isQueueRecipePayload(raw)) {
+    switch (raw.recipeType) {
+      case 'image_generate_recipe_v1':
+        (raw.characterImages || []).forEach((value) => push(value, 'character', 'image', true));
+        push(raw.sampleImage, 'sample', 'image', true);
+        push(raw.styleImage, 'style', 'image', false);
+        (raw.referenceImages || []).forEach((value) => push(value, 'reference', 'image', true));
+        break;
+      case 'image_edit_recipe_v1':
+        push(raw.sourceImage, 'source', 'image', true);
+        break;
+      case 'video_generate_recipe_v1':
+        push(raw.keyframeImage, 'keyframe', 'image', true);
+        break;
+      case 'motion_generate_recipe_v1':
+        push(raw.characterImage, 'character', 'image', true);
+        push(raw.motionVideoDataUrl, 'motion', 'video', true);
+        break;
+      default:
+        break;
+    }
+  }
+
+  return entries.filter(
+    (entry, index, all) => all.findIndex((candidate) => candidate.url === entry.url) === index,
+  );
+};
+
+const getStoredImageGenerateRecipePayload = (
+  payload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
+): ImageGenerateRecipePayload | null => {
+  const raw = toQueuePayloadObject(payload);
+
+  if (isQueueRecipePayload(raw) && raw.recipeType === 'image_generate_recipe_v1') {
+    return raw as ImageGenerateRecipePayload;
+  }
+
+  const embeddedRecipe = raw.__recipePayload;
+  if (
+    embeddedRecipe &&
+    typeof embeddedRecipe === 'object' &&
+    isQueueRecipePayload(embeddedRecipe) &&
+    embeddedRecipe.recipeType === 'image_generate_recipe_v1'
+  ) {
+    return embeddedRecipe as ImageGenerateRecipePayload;
+  }
+
+  return null;
+};
+
+const getOutputVerificationRetryCount = (payload?: Record<string, unknown> | ImageGenerateRecipePayload | null) => {
+  const recipePayload = getStoredImageGenerateRecipePayload(payload);
+  return Math.max(0, Number(recipePayload?.__outputVerificationRetryCount || 0));
+};
+
+const getQueueLogs = (payload?: Record<string, unknown> | ImageGenerateRecipePayload | null): QueueProgressLogEntry[] => {
   const rawLogs = toQueuePayloadObject(payload).__logs;
   if (!Array.isArray(rawLogs)) {
     return [];
@@ -126,7 +250,7 @@ const buildQueueLogEntry = (
 });
 
 const withQueueLog = (
-  payload: Record<string, unknown> | null | undefined,
+  payload: Record<string, unknown> | ImageGenerateRecipePayload | null | undefined,
   stage: QueueProcessingStage,
   message: string,
   level: QueueProgressLogEntry['level'] = 'info',
@@ -141,7 +265,7 @@ const withQueueLog = (
 
 const withQueueMeta = (
   providerPayload: Record<string, unknown>,
-  previousPayload?: Record<string, unknown> | null,
+  previousPayload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
   stage?: QueueProcessingStage,
 ) => {
   const nextPayload = {
@@ -151,6 +275,16 @@ const withQueueMeta = (
   const previousLogs = getQueueLogs(previousPayload);
   if (previousLogs.length > 0) {
     nextPayload.__logs = previousLogs;
+  }
+
+  const previousNotifyInputMedia = buildNotificationMediaEntries(previousPayload);
+  if (previousNotifyInputMedia.length > 0) {
+    nextPayload.__notifyInputMedia = previousNotifyInputMedia;
+  }
+
+  const previousRecipePayload = getStoredImageGenerateRecipePayload(previousPayload);
+  if (previousRecipePayload) {
+    nextPayload.__recipePayload = previousRecipePayload;
   }
 
   if (stage) {
@@ -167,7 +301,7 @@ const withQueueMeta = (
 
 const persistQueueLog = async (
   jobId: string,
-  payload: Record<string, unknown> | null | undefined,
+  payload: Record<string, unknown> | ImageGenerateRecipePayload | null | undefined,
   stage: QueueProcessingStage,
   message: string,
   level: QueueProgressLogEntry['level'] = 'info',
@@ -264,7 +398,7 @@ const withLeaseHeartbeat = async <T>(
   }
 };
 
-const getQueueStage = (payload?: Record<string, unknown> | null): QueueProcessingStage | null => {
+const getQueueStage = (payload?: Record<string, unknown> | ImageGenerateRecipePayload | null): QueueProcessingStage | null => {
   const rawStage = toQueuePayloadObject(payload).__stage;
   if (typeof rawStage !== 'string' || !rawStage.trim()) {
     return null;
@@ -285,6 +419,8 @@ const humanizeQueueStage = (stage: QueueProcessingStage | null) => {
       return 'gửi provider';
     case 'polling':
       return 'chờ provider xử lý';
+    case 'verifying_output':
+      return 'hau kiem ket qua';
     default:
       return 'chuẩn bị dữ liệu';
   }
@@ -350,6 +486,24 @@ const getPreparationTimeoutMs = (job: Pick<QueueJobRow, 'tool_id'>, payload?: Qu
   }
 
   return SINGLE_AND_COUPLE_PREPARE_TIMEOUT_MS;
+};
+
+const getPreparationLeaseSeconds = (job: Pick<QueueJobRow, 'tool_id' | 'queue_kind'>, payload?: QueueJobRow['queue_payload']) => {
+  if (job.queue_kind === 'motion_generate' || job.queue_kind === 'video_generate') {
+    return 300;
+  }
+
+  if (isQueueRecipePayload(payload) && payload.recipeType === 'image_generate_recipe_v1') {
+    const characterCount = getImageRecipeCharacterCount(job, payload);
+    if (characterCount && characterCount >= 4) {
+      return 480;
+    }
+    if (characterCount === 3) {
+      return 360;
+    }
+  }
+
+  return DISPATCH_LEASE_SECONDS;
 };
 
 const getPreparationTimeoutUserMessage = (job: Pick<QueueJobRow, 'tool_id'>, payload?: QueueJobRow['queue_payload']) => {
@@ -469,12 +623,13 @@ const releaseLease = async (jobId: string) => {
 const markFailedAndRefund = async (job: QueueJobRow, errorMessage: string) => {
   const admin = getServiceRoleClient();
   const nextPayload = withQueueLog(job.queue_payload, 'failed', errorMessage, 'error');
+  const finishedAt = new Date().toISOString();
   await updateGeneratedImageRecord(job.id, {
     status: 'failed',
     error_message: errorMessage,
     queue_payload: nextPayload,
     progress: 0,
-    finished_at: new Date().toISOString(),
+    finished_at: finishedAt,
     lease_token: null,
     lease_expires_at: null,
     next_poll_at: null,
@@ -485,6 +640,21 @@ const markFailedAndRefund = async (job: QueueJobRow, errorMessage: string) => {
   await admin.rpc('refund_generated_job', {
     p_generated_image_id: job.id,
     p_reason: `Refund: ${job.tool_name || job.queue_kind} failed`,
+  });
+
+  fireTelegramJobNotification('failed', {
+    id: job.id,
+    userId: job.user_id,
+    prompt: job.prompt,
+    assetType: job.asset_type,
+    toolId: job.tool_id,
+    toolName: job.tool_name,
+    engine: job.model_used,
+    queueKind: job.queue_kind,
+    costVcoin: job.cost_vcoin,
+    errorMessage,
+    finishedAt,
+    queuePayload: nextPayload,
   });
 };
 
@@ -499,13 +669,18 @@ const requeueJob = async (job: QueueJobRow, errorMessage: string) => {
   }
 
   const nextPollAt = new Date(Date.now() + getRetryDelaySeconds(nextAttemptCount) * 1000).toISOString();
+  const restoredRecipePayload = getStoredImageGenerateRecipePayload(job.queue_payload);
+  const requeuePayload =
+    job.queue_kind === 'image_generate' && restoredRecipePayload
+      ? restoredRecipePayload
+      : toQueuePayloadObject(job.queue_payload);
 
   await updateGeneratedImageRecord(job.id, {
     status: 'queued',
     job_id: null,
     processing_started_at: null,
     error_message: errorMessage,
-    queue_payload: withQueueLog(job.queue_payload, 'queued', `Tạm hoãn và xếp lại hàng đợi: ${errorMessage}`, 'warning'),
+    queue_payload: withQueueLog(requeuePayload, 'queued', `Tam hoan va xep lai hang doi: ${errorMessage}`, 'warning'),
     lease_token: null,
     lease_expires_at: null,
     next_poll_at: nextPollAt,
@@ -621,7 +796,7 @@ const markSubmitted = async (job: QueueJobRow, providerJobId: string) => {
 const persistPreparedPayload = async (
   jobId: string,
   providerPayload: Record<string, unknown>,
-  previousPayload?: Record<string, unknown> | null,
+  previousPayload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
 ) => {
   const storedPayload = withQueueMeta(providerPayload, previousPayload, 'dispatching');
   await updateGeneratedImageRecord(jobId, {
@@ -641,7 +816,57 @@ const persistRecipePayload = async (jobId: string, recipePayload: ImageGenerateR
   return recipePayload;
 };
 
+const queueRecipeStageTransition = async (
+  jobId: string,
+  recipePayload: ImageGenerateRecipePayload,
+  stage: 'uploading_refs' | 'synthesizing_prompt' | 'building_payload',
+  message: string,
+  progress: number,
+  level: QueueProgressLogEntry['level'] = 'info',
+) => {
+  const nextPayload = withQueueLog(recipePayload, stage, message, level) as ImageGenerateRecipePayload;
+  await updateGeneratedImageRecord(jobId, {
+    status: 'queued',
+    progress,
+    error_message: null,
+    queue_payload: nextPayload,
+    next_poll_at: new Date().toISOString(),
+    lease_token: null,
+    lease_expires_at: null,
+    updated_at: new Date().toISOString(),
+  });
+
+  return nextPayload;
+};
+
+const markRecipePreparedForDispatch = async (
+  jobId: string,
+  providerPayload: Record<string, unknown>,
+  previousPayload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
+) => {
+  const storedPayload = withQueueLog(
+    withQueueMeta(providerPayload, previousPayload, 'dispatching'),
+    'dispatching',
+    'Payload đã sẵn sàng. Chờ gửi provider.',
+    'success',
+  );
+
+  await updateGeneratedImageRecord(jobId, {
+    status: 'queued',
+    progress: 55,
+    error_message: null,
+    queue_payload: storedPayload,
+    next_poll_at: new Date().toISOString(),
+    lease_token: null,
+    lease_expires_at: null,
+    updated_at: new Date().toISOString(),
+  });
+
+  return storedPayload;
+};
+
 const prepareImageRecipeInStages = async (job: QueueJobRow, recipePayload: ImageGenerateRecipePayload) => {
+  validateImageGenerateReferenceIntegrity(recipePayload);
   const renderSources =
     (recipePayload.__uploadSources || []).filter((value): value is string => Boolean(value)).length > 0
       ? (recipePayload.__uploadSources || []).filter((value): value is string => Boolean(value))
@@ -684,25 +909,16 @@ const prepareImageRecipeInStages = async (job: QueueJobRow, recipePayload: Image
       __uploadedUrls: uploadedUrls,
     };
 
-    recipePayload = await persistRecipePayload(job.id, nextPayload);
-
-    recipePayload = await persistQueueLog(
+    recipePayload = await queueRecipeStageTransition(
       job.id,
-      recipePayload,
+      nextPayload,
       hasMoreUploads ? 'uploading_refs' : 'synthesizing_prompt',
       hasMoreUploads
         ? `Đã tải ${nextCursor}/${renderSources.length} ảnh tham chiếu.`
-        : `Đã tải xong ${uploadedUrls.length}/${renderSources.length} ảnh tham chiếu.`,
+        : `Đã tải xong ${uploadedUrls.length}/${renderSources.length} ảnh tham chiếu. Chuyển sang tổng hợp prompt.`,
+      hasMoreUploads ? Math.min(35, 20 + Math.round((nextCursor / renderSources.length) * 15)) : 40,
       hasMoreUploads ? 'info' : 'success',
     ) as ImageGenerateRecipePayload;
-
-    if (hasMoreUploads) {
-      const uploadProgress = Math.min(35, 20 + Math.round((nextCursor / renderSources.length) * 15));
-      await markQueuedStage(job.id, uploadProgress);
-      return { type: 'requeue' as const };
-    }
-
-    await markQueuedStage(job.id, 40);
     return { type: 'requeue' as const };
   }
 
@@ -723,15 +939,14 @@ const prepareImageRecipeInStages = async (job: QueueJobRow, recipePayload: Image
       __uploadedUrls: uploadedUrls,
     };
 
-    recipePayload = await persistRecipePayload(job.id, nextPayload);
-    recipePayload = await persistQueueLog(
+    recipePayload = await queueRecipeStageTransition(
       job.id,
-      recipePayload,
+      nextPayload,
       'building_payload',
       'Đã tổng hợp prompt. Đang dựng payload.',
+      45,
       'success',
     ) as ImageGenerateRecipePayload;
-    await markQueuedStage(job.id, 45);
     return { type: 'requeue' as const };
   }
 
@@ -748,9 +963,7 @@ const prepareImageRecipeInStages = async (job: QueueJobRow, recipePayload: Image
 
   const validationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, stripInternalQueueMeta(providerPayload));
   const validatedProviderPayload = applyLivePricingConfigToPayload(job.queue_kind, providerPayload, validationResult);
-  const storedPayload = await persistPreparedPayload(job.id, validatedProviderPayload, recipePayload);
-  await persistQueueLog(job.id, storedPayload, 'dispatching', 'Payload đã sẵn sàng. Chờ gửi provider.', 'success');
-  await markPreparedForDispatch(job.id);
+  await markRecipePreparedForDispatch(job.id, validatedProviderPayload, recipePayload);
 
   return { type: 'prepared' as const, providerPayload: validatedProviderPayload };
 };
@@ -787,12 +1000,83 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
       throw new Error(`Job completed but no result URL returned: ${JSON.stringify(providerData)}`);
     }
 
+    let completionPayload = job.queue_payload;
+    const storedImageRecipe =
+      job.queue_kind === 'image_generate'
+        ? getStoredImageGenerateRecipePayload(job.queue_payload)
+        : null;
+
+    if (storedImageRecipe) {
+      const verifyingPayload = await persistQueueLog(
+        job.id,
+        completionPayload,
+        'verifying_output',
+        'Dang hau kiem ket qua AI de bao toan identity.',
+      );
+
+      try {
+        const verificationResult = await verifyGeneratedImageOutput(storedImageRecipe, resultUrl);
+        const verificationSummary =
+          verificationResult.summary ||
+          verificationResult.issues.join('; ') ||
+          'Identity guard completed.';
+
+        if (!verificationResult.pass) {
+          const nextVerifyRetryCount = getOutputVerificationRetryCount(storedImageRecipe) + 1;
+          const retryPayload = {
+            ...storedImageRecipe,
+            __stage: 'verifying_output',
+            __logs: getQueueLogs(verifyingPayload),
+            __notifyInputMedia: buildNotificationMediaEntries(verifyingPayload),
+            __outputVerificationRetryCount: nextVerifyRetryCount,
+            __lastOutputVerificationSummary: verificationSummary,
+          } as ImageGenerateRecipePayload & Record<string, unknown>;
+          const retryMessage = `Identity guard failed: ${verificationSummary}`;
+
+          if (nextVerifyRetryCount >= MAX_OUTPUT_VERIFICATION_RETRIES) {
+            await markFailedAndRefund(
+              {
+                ...job,
+                queue_payload: retryPayload,
+              },
+              `${retryMessage}. Retry limit reached.`,
+            );
+            return 'failed';
+          }
+
+          return requeueJob(
+            {
+              ...job,
+              queue_payload: retryPayload,
+            },
+            retryMessage,
+          );
+        }
+
+        completionPayload = withQueueLog(
+          verifyingPayload,
+          'verifying_output',
+          `Identity guard passed: ${verificationSummary}`,
+          'success',
+        );
+      } catch (verificationError) {
+        const verificationMessage =
+          verificationError instanceof Error ? verificationError.message : String(verificationError || 'Unknown verification error');
+        completionPayload = withQueueLog(
+          verifyingPayload,
+          'verifying_output',
+          `Identity guard unavailable, completing without auto-retry: ${verificationMessage}`,
+          'warning',
+        );
+      }
+    }
+
     await admin
       .from('generated_images')
       .update({
         status: 'completed',
         image_url: resultUrl,
-        queue_payload: withQueueLog(job.queue_payload, 'completed', 'Provider đã hoàn tất. Đã lưu kết quả.', 'success'),
+        queue_payload: withQueueLog(completionPayload, 'completed', 'Provider da hoan tat. Da luu ket qua.', 'success'),
         progress: 100,
         error_message: null,
         attempt_count: 0,
@@ -803,6 +1087,20 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
         updated_at: new Date().toISOString(),
       })
       .eq('id', job.id);
+    fireTelegramJobNotification('completed', {
+      id: job.id,
+      userId: job.user_id,
+      prompt: job.prompt,
+      assetType: job.asset_type,
+      toolId: job.tool_id,
+      toolName: job.tool_name,
+      engine: job.model_used,
+      queueKind: job.queue_kind,
+      costVcoin: job.cost_vcoin,
+      resultUrl,
+      finishedAt: new Date().toISOString(),
+      queuePayload: completionPayload,
+    });
     return 'completed';
   }
 
@@ -878,11 +1176,15 @@ const handlePollFailure = async (job: QueueJobRow, errorMessage: string) => {
 const recoverStalePreparingJobs = async () => {
   const admin = getServiceRoleClient();
   const nowIso = new Date().toISOString();
+  const staleBeforeIso = new Date(Date.now() - STALE_RECOVERY_MIN_AGE_MS).toISOString();
   const { data, error } = await admin
     .from('generated_images')
-    .select('id, user_id, asset_type, queue_kind, queue_payload, prompt, tool_id, tool_name, model_used, cost_vcoin, processing_started_at, created_at, lease_expires_at, status')
+    .select('id, user_id, asset_type, queue_kind, queue_payload, prompt, tool_id, tool_name, model_used, cost_vcoin, processing_started_at, created_at, updated_at, lease_expires_at, status')
     .in('status', ['processing', 'queued'])
-    .is('job_id', null);
+    .is('job_id', null)
+    .lt('updated_at', staleBeforeIso)
+    .order('updated_at', { ascending: true })
+    .limit(STALE_RECOVERY_SCAN_LIMIT);
 
   if (error) {
     throw error;
@@ -1048,9 +1350,7 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
 
       const currentPayload = job.queue_payload || {};
       const preparationTimeoutMs = getPreparationTimeoutMs(job, currentPayload);
-      const validationPayload = isQueueRecipePayload(currentPayload)
-        ? getRecipeValidationPayload(currentPayload)
-        : stripInternalQueueMeta(currentPayload);
+      const preparationLeaseSeconds = getPreparationLeaseSeconds(job, currentPayload);
       let submitPayload: Record<string, unknown> = currentPayload;
       let submitValidationResult: { pricingMatch?: { config_key?: string } | null } | null = null;
 
@@ -1058,11 +1358,8 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
         job.queue_payload = await markPreparing(job);
       }
 
-      const validationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, validationPayload);
-      submitValidationResult = validationResult;
-
       if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'image_edit_recipe_v1') {
-        const editPayload = (job.queue_payload || currentPayload) as ImageEditRecipePayload;
+        const editPayload = (job.queue_payload || currentPayload) as unknown as ImageEditRecipePayload;
         await updatePreProviderStage(job.id, 20);
         job.queue_payload = await persistQueueLog(
           job.id,
@@ -1085,14 +1382,38 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
         );
 
         await markCompletedWithAssetUrl(job, resultUrl);
+        fireTelegramJobNotification('completed', {
+          id: job.id,
+          userId: job.user_id,
+          prompt: job.prompt,
+          assetType: job.asset_type,
+          toolId: job.tool_id,
+          toolName: job.tool_name,
+          engine: job.model_used,
+          queueKind: job.queue_kind,
+          costVcoin: job.cost_vcoin,
+          resultUrl,
+          finishedAt: new Date().toISOString(),
+          queuePayload: job.queue_payload,
+        });
         summary.completed += 1;
         continue;
       }
 
+      const validationPayload = isQueueRecipePayload(currentPayload)
+        ? getRecipeValidationPayload(currentPayload)
+        : stripInternalQueueMeta(currentPayload);
+      const validationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, validationPayload);
+      submitValidationResult = validationResult;
+
       if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'image_generate_recipe_v1') {
         await updatePreProviderStage(job.id, 20);
         const stagedResult = await withTimeout(
-          prepareImageRecipeInStages(job, (job.queue_payload || currentPayload) as ImageGenerateRecipePayload),
+          withLeaseHeartbeat(
+            job.id,
+            prepareImageRecipeInStages(job, (job.queue_payload || currentPayload) as unknown as ImageGenerateRecipePayload),
+            preparationLeaseSeconds,
+          ),
           preparationTimeoutMs,
           'Queue preparation timed out before dispatching to provider.',
         );
@@ -1129,7 +1450,11 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
           );
         }
         const providerPayload = await withTimeout(
-          prepareProviderPayloadFromQueueRecipe((job.queue_payload || currentPayload) as typeof currentPayload),
+          withLeaseHeartbeat(
+            job.id,
+            prepareProviderPayloadFromQueueRecipe((job.queue_payload || currentPayload) as typeof currentPayload),
+            preparationLeaseSeconds,
+          ),
           preparationTimeoutMs,
           'Queue preparation timed out before dispatching to provider.',
         );

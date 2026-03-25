@@ -1,7 +1,7 @@
 ﻿
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { supabase } from '../services/supabaseClient';
+import { getSupabaseUser, supabase } from '../services/supabaseClient';
 import { 
     getAdminStats, 
     getApiKeysList, 
@@ -29,7 +29,7 @@ import {
     getStylePresets,
     saveStylePreset,
     deleteStylePreset,
-    getUnifiedHistory,
+    getAdminUserHistory,
     getGiftcodeUsages,
     getMaintenanceMode,
     saveMaintenanceMode,
@@ -41,7 +41,6 @@ import {
     saveTstServerAvailabilityConfig
 } from '../services/economyService';
 import { getAllImagesFromStorage, deleteImageFromStorage, checkR2Connection, getUserImagesFromStorage, cleanupExpiredImages, cleanupR2Directly } from '../services/storageService';
-import { useConcurrency } from '../services/concurrencyService';
 import { checkConnection, analyzeStyleImage } from '../services/geminiService';
 import { checkSupabaseConnection } from '../services/supabaseClient';
 import {
@@ -397,7 +396,6 @@ const AdminModalPortal: React.FC<{ children: React.ReactNode }> = ({ children })
 const ADMIN_PRICING_DRAFTS_STORAGE_KEY = 'admin_pricing_drafts_v1';
 
 export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
-  const { triggerPoll } = useConcurrency();
   const [activeView, setActiveView] = useState<'overview' | 'transactions' | 'users' | 'packages' | 'marketing' | 'pricing' | 'system' | 'styles'>('overview');
   const [stats, setStats] = useState<any>(null);
   const [allImages, setAllImages] = useState<GeneratedImage[]>([]);
@@ -502,9 +500,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
     }
     // Get current user email for recovery instructions
     if (supabase) {
-      supabase.auth.getUser().then((response: any) => {
-          const data = response.data;
-          if (data?.user?.email) setCurrentUserEmail(data.user.email);
+      getSupabaseUser().then((user: any) => {
+          if (user?.email) setCurrentUserEmail(user.email);
       });
     }
   }, [isAdmin]);
@@ -935,19 +932,44 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       });
   }
 
+  const buildAssetFallbackHistory = (images: GeneratedImage[]): HistoryItem[] => {
+      return images
+          .filter((image) => Number(image.cost || 0) > 0)
+          .map((image) => ({
+              id: `asset-charge-${image.id}`,
+              createdAt: new Date(image.updatedAt || image.timestamp).toISOString(),
+              description: image.toolName || image.toolId || (image.assetType === 'video' ? 'Tạo video AI' : 'Tạo ảnh AI'),
+              vcoinChange: -Math.abs(Number(image.cost || 0)),
+              type: 'usage' as const,
+              status: 'success' as const,
+          }))
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  };
+
   const handleViewUser = async (user: UserProfile) => {
       setViewingUser(user);
       setLoadingUserDetails(true);
       setHistoryLimit(20);
       setImagesLimit(20);
+      setUserHistory([]);
+      setUserImages([]);
       try {
-          const history = await getUnifiedHistory(user.id);
-          setUserHistory(history);
-          
-          // Fetch images for this user
-          const images = await getUserImagesFromStorage(user.id);
+          const [historyResult, imagesResult] = await Promise.allSettled([
+              getAdminUserHistory(user.id),
+              getUserImagesFromStorage(user.id),
+          ]);
+
+          const history = historyResult.status === 'fulfilled' ? historyResult.value : [];
+          const images = imagesResult.status === 'fulfilled' ? imagesResult.value : [];
+          const fallbackHistory = history.length === 0 ? buildAssetFallbackHistory(images) : [];
+
+          setUserHistory(history.length > 0 ? history : fallbackHistory);
           setUserImages(images);
           setTotalImagesCreated(images.length);
+
+          if (historyResult.status === 'rejected' && imagesResult.status === 'rejected') {
+              throw historyResult.reason || imagesResult.reason;
+          }
       } catch (e) {
           showToast('Lỗi tải dữ liệu người dùng', 'error');
       } finally {
@@ -1151,7 +1173,6 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       showConfirm('Xóa vĩnh viễn hình ảnh này?', async () => {
           const targetImage = allImages.find((img) => img.id === id);
           await deleteImageFromStorage(id, targetImage?.userId, targetImage?.url);
-          triggerPoll();
           setAllImages(prev => prev.filter(img => img.id !== id));
           showToast('Đã xóa ảnh');
       });
@@ -3087,6 +3108,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   <tr>
                                       <th className="px-6 py-3">Người dùng</th>
                                       <th className="px-6 py-3">Email</th>
+                                      <th className="px-6 py-3">IP</th>
                                       <th className="px-6 py-3 text-right">Thời gian</th>
                                   </tr>
                               </thead>
@@ -3098,6 +3120,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               <span className="font-bold text-white">{u.userName}</span>
                                           </td>
                                           <td className="px-6 py-3">{u.userEmail}</td>
+                                          <td className="px-6 py-3 font-mono text-xs">{u.ipAddress || 'Ẩn / cũ'}</td>
                                           <td className="px-6 py-3 text-right font-mono text-xs">{new Date(u.usedAt).toLocaleString()}</td>
                                       </tr>
                                   ))}

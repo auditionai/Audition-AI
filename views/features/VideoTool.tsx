@@ -98,26 +98,18 @@ const OptionDropdown = ({ label, value, options, onChange, icon: Icon }: any) =>
     );
 };
 
-const readFileAsDataUrl = (file: File) =>
-    new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result || ''));
-        reader.onerror = () => reject(new Error('Failed to read file'));
-        reader.readAsDataURL(file);
-    });
-
 const tryStageInputToR2 = async (source: File | Blob | string, folder: string) => {
     try {
         return await uploadFileToR2(source, folder);
     } catch (error) {
-        console.warn('[VideoTool] Failed to stage input to R2, falling back to inline payload.', error);
-        return null;
+        console.warn('[VideoTool] Failed to stage input to R2.', error);
+        throw new Error('Không thể tải tệp tham chiếu lên vùng đệm. Vui lòng thử lại.');
     }
 };
 
 export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateToFeature, onNavigateView }) => {
   const { notify } = useNotification();
-  const { queueStats, triggerPoll } = useConcurrency();
+  const { queueStats } = useConcurrency();
   const [stage, setStage] = useState<Stage>('input');
   const [activeMode, setActiveMode] = useState<VideoMode>(feature.id === 'motion_control_gen' ? 'motion_control' : 'video_ai');
   
@@ -593,7 +585,6 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
         console.warn('[VideoTool] Failed to persist queued placeholder', placeholderError);
     }
 
-    triggerPoll();
     onNavigateView?.('gallery');
 
     void (async () => {
@@ -643,6 +634,10 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                 return compatibleSpeeds.includes(requestedSpeedId) ? requestedSpeedId : (compatibleSpeeds[0] || requestedSpeedId);
             })();
 
+        const stagedKeyframeImage =
+            activeMode === 'video_ai' && keyframeImage
+                ? await tryStageInputToR2(keyframeImage, 'inputs/video-generate/keyframe')
+                : null;
         const stagedCharacterImage =
             activeMode === 'motion_control'
                 ? await tryStageInputToR2(characterImage!, 'inputs/motion-control')
@@ -662,7 +657,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                 aspectRatio,
                 speed: effectiveSpeedId || 'fast',
                 serverId: effectiveServerId,
-                keyframeImage,
+                keyframeImage: stagedKeyframeImage,
                 audio: sound,
             }
             : {
@@ -672,8 +667,8 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                 resolution: quality.toLowerCase(),
                 speed: effectiveSpeedId || 'fast',
                 serverId: effectiveServerId,
-                characterImage: stagedCharacterImage || characterImage!,
-                motionVideoDataUrl: stagedMotionVideo || await readFileAsDataUrl(motionVideoFile!),
+                characterImage: stagedCharacterImage!,
+                motionVideoDataUrl: stagedMotionVideo!,
             };
 
         await enqueueServerJob({
@@ -689,7 +684,6 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
         });
 
         window.dispatchEvent(new Event('balance_updated'));
-        triggerPoll();
         notify(lang === 'vi' ? 'Đã gửi job. Theo dõi tiến trình trong Lịch sử tạo.' : 'Job submitted. Track progress in History.', 'success');
       } catch (error) {
         console.error(error);
@@ -705,7 +699,6 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
         } catch (persistError) {
           console.warn('[VideoTool] Failed to persist failed queued placeholder', persistError);
         }
-        triggerPoll();
         notify(errorMsg, 'error');
       } finally {
         setIsProcessing(false);
@@ -797,7 +790,6 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
         });
 
         window.dispatchEvent(new Event('balance_updated'));
-        triggerPoll();
         setStage('input');
         setResultVideo(null);
         notify(lang === 'vi' ? 'Đã gửi job. Theo dõi tiến trình trong Lịch sử tạo.' : 'Job submitted. Track progress in History.', 'success');

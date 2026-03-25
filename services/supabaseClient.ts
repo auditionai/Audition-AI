@@ -7,6 +7,11 @@ const supabaseUrl = metaEnv.VITE_SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = metaEnv.VITE_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
 
 let client = null;
+const SESSION_CACHE_TTL_MS = 5000;
+let cachedSession: any = null;
+let cachedUser: any = null;
+let sessionFetchedAt = 0;
+let inFlightSessionPromise: Promise<any> | null = null;
 
 if (supabaseUrl && supabaseAnonKey) {
   try {
@@ -15,6 +20,12 @@ if (supabaseUrl && supabaseAnonKey) {
             persistSession: true,
             autoRefreshToken: true,
         }
+    });
+    client.auth.onAuthStateChange((_event: any, session: any) => {
+        cachedSession = session || null;
+        cachedUser = session?.user || null;
+        sessionFetchedAt = Date.now();
+        inFlightSessionPromise = null;
     });
     const projectId = supabaseUrl.split('//')[1]?.split('.')[0] || 'Unknown';
     console.log(`[System] Supabase Initialized. Project ID: ${projectId}`);
@@ -27,6 +38,68 @@ if (supabaseUrl && supabaseAnonKey) {
 
 // Export as any to bypass strict type checks in legacy code, but ensure it's not null for the compiler if possible
 export const supabase = client as any;
+
+const hasFreshSessionCache = () => sessionFetchedAt > 0 && Date.now() - sessionFetchedAt < SESSION_CACHE_TTL_MS;
+
+export const getSupabaseSession = async (force = false) => {
+    if (!supabase) return null;
+
+    if (!force && inFlightSessionPromise) {
+        return inFlightSessionPromise;
+    }
+
+    if (!force && hasFreshSessionCache()) {
+        return cachedSession;
+    }
+
+    inFlightSessionPromise = supabase.auth
+        .getSession()
+        .then(({ data }: any) => {
+            cachedSession = data?.session || null;
+            cachedUser = cachedSession?.user || null;
+            sessionFetchedAt = Date.now();
+            return cachedSession;
+        })
+        .finally(() => {
+            inFlightSessionPromise = null;
+        });
+
+    return inFlightSessionPromise;
+};
+
+export const getSupabaseUser = async (force = false) => {
+    if (!supabase) return null;
+
+    if (!force && hasFreshSessionCache()) {
+        return cachedUser;
+    }
+
+    const session = await getSupabaseSession(force);
+    return session?.user || null;
+};
+
+export const getSupabaseAccessToken = async (force = false) => {
+    const session = await getSupabaseSession(force);
+    return session?.access_token || null;
+};
+
+export const getSupabaseAuthHeader = async (force = false) => {
+    const accessToken = await getSupabaseAccessToken(force);
+    if (!accessToken) {
+        throw new Error("Unauthorized");
+    }
+
+    return {
+        Authorization: `Bearer ${accessToken}`,
+    };
+};
+
+export const clearSupabaseSessionCache = () => {
+    cachedSession = null;
+    cachedUser = null;
+    sessionFetchedAt = 0;
+    inFlightSessionPromise = null;
+};
 
 // --- SECONDARY CLIENT: CAULENHAU.IO.VN ---
 const clhUrl = metaEnv.VITE_CAULENHAU_SUPABASE_URL || process.env.CAULENHAU_SUPABASE_URL;

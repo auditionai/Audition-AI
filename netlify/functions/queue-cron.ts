@@ -1,5 +1,5 @@
 import type { Handler } from '@netlify/functions';
-import { runQueueWorker } from './_queue-worker';
+import { runQueueDaemon } from './_queue-daemon';
 
 export const config = {
   schedule: '*/1 * * * *',
@@ -7,7 +7,7 @@ export const config = {
 
 export const handler: Handler = async () => {
   try {
-    const summary = await runQueueWorker();
+    const summary = await runQueueDaemon({ maxRuntimeMs: 50_000, idleIterationsToStop: 1 });
     return {
       statusCode: 200,
       body: JSON.stringify({ success: true, summary }),

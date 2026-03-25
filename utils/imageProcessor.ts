@@ -170,6 +170,65 @@ export const optimizePayload = async (base64Str: string, maxWidth = 768): Promis
     }
 }
 
+export const createStyleOnlyReference = async (source: string): Promise<string> => {
+    try {
+        const img = await loadImageWithTimeout(source, 10000);
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return source;
+
+        const canvasSize = 1024;
+        const padding = 28;
+        const gap = 20;
+        const cellSize = Math.floor((canvasSize - padding * 2 - gap) / 2);
+
+        canvas.width = canvasSize;
+        canvas.height = canvasSize;
+
+        ctx.fillStyle = '#050505';
+        ctx.fillRect(0, 0, canvasSize, canvasSize);
+
+        const cropSpecs = [
+            { sx: 0.02, sy: 0.02, sw: 0.46, sh: 0.46 },
+            { sx: 0.52, sy: 0.02, sw: 0.46, sh: 0.46 },
+            { sx: 0.08, sy: 0.28, sw: 0.34, sh: 0.50 },
+            { sx: 0.58, sy: 0.28, sw: 0.34, sh: 0.50 },
+        ];
+
+        cropSpecs.forEach((crop, index) => {
+            const col = index % 2;
+            const row = Math.floor(index / 2);
+            const dx = padding + col * (cellSize + gap);
+            const dy = padding + row * (cellSize + gap);
+
+            const sx = Math.max(0, Math.floor(img.width * crop.sx));
+            const sy = Math.max(0, Math.floor(img.height * crop.sy));
+            const sw = Math.max(1, Math.floor(img.width * crop.sw));
+            const sh = Math.max(1, Math.floor(img.height * crop.sh));
+
+            ctx.save();
+            ctx.fillStyle = '#111111';
+            ctx.fillRect(dx, dy, cellSize, cellSize);
+            ctx.filter = 'saturate(1.08) contrast(1.04)';
+            ctx.drawImage(img, sx, sy, sw, sh, dx, dy, cellSize, cellSize);
+            ctx.restore();
+
+            ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(dx, dy, cellSize, cellSize);
+        });
+
+        ctx.fillStyle = 'rgba(255,255,255,0.04)';
+        ctx.fillRect(0, 0, canvasSize, 64);
+        ctx.fillRect(0, canvasSize - 64, canvasSize, 64);
+
+        return canvas.toDataURL('image/jpeg', 0.9);
+    } catch (error) {
+        console.warn('Style-only reference generation failed:', error);
+        return source;
+    }
+}
+
 // --- MASTER REFERENCE SHEET GENERATOR ---
 export const createMasterReferenceSheet = async (
     styleBase64: string | null,

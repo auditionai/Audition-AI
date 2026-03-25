@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { Handler } from '@netlify/functions';
 import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
-import { runQueueWorker } from './_queue-worker';
+import { triggerBackgroundQueueWorker } from './_queue-launcher';
+import { fireTelegramJobNotification } from './_telegram-notify';
 import type { QueueProcessingStage, QueueProgressLogEntry } from '../../shared/queueRecipes';
 
 const headers = {
@@ -47,23 +48,6 @@ const buildInitialQueueLogs = (queueKind: string): QueueProgressLogEntry[] => {
       message,
     },
   ];
-};
-
-const isImmediateStartCandidate = (row: any) => Number(row?.queue_position ?? 1) === 0;
-
-const withTimeout = async <T>(task: Promise<T>, timeoutMs: number): Promise<T> => {
-  let timeoutId: NodeJS.Timeout | null = null;
-
-  try {
-    return await Promise.race([
-      task,
-      new Promise<T>((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error(`QUEUE_SUBMIT_TICK_TIMEOUT_${timeoutMs}`)), timeoutMs);
-      }),
-    ]);
-  } finally {
-    if (timeoutId) clearTimeout(timeoutId);
-  }
 };
 
 const mapQueueError = (message: string) => {
@@ -304,19 +288,12 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
   };
 };
 
-const runSafeWorkerTick = async (awaitCompletion = false) => {
-  if (awaitCompletion) {
-    try {
-      await withTimeout(runQueueWorker(), 9000);
-    } catch (workerError) {
-      console.error('[queue-submit] Immediate worker tick failed:', workerError);
-    }
-    return;
+const runSafeWorkerTick = async (rawUrl?: string | null) => {
+  try {
+    await triggerBackgroundQueueWorker(rawUrl);
+  } catch (workerError) {
+    console.error('[queue-submit] Failed to launch background queue worker:', workerError);
   }
-
-  runQueueWorker().catch((workerError) => {
-    console.error('[queue-submit] Immediate worker tick failed:', workerError);
-  });
 };
 
 export const handler: Handler = async (event) => {
@@ -394,7 +371,20 @@ export const handler: Handler = async (event) => {
       row = Array.isArray(rpcResult.data) ? rpcResult.data[0] : rpcResult.data;
     }
 
-    await runSafeWorkerTick(isImmediateStartCandidate(row));
+    await runSafeWorkerTick(event.rawUrl);
+    fireTelegramJobNotification('queued', {
+      id: String(row?.id || body.id || ''),
+      userId: user.id,
+      prompt: body.prompt || '',
+      assetType: asQueueAssetType(body.assetType),
+      toolId: body.toolId || body.queueKind,
+      toolName: body.toolName || body.queueKind,
+      engine: body.engine || body.toolName || body.queueKind,
+      queueKind: body.queueKind,
+      costVcoin: Number(body.costVcoin || 0),
+      createdAt: new Date().toISOString(),
+      queuePayload: queuePayloadWithLogs,
+    });
 
     return {
       statusCode: 200,

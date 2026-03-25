@@ -684,7 +684,7 @@ export const getPackages = async (): Promise<CreditPackage[]> => {
     }
     const { data } = await supabase
         .from('credit_packages')
-        .select('id, created_at, order_code, vcoin_received, amount_vnd, status')
+        .select('id, name, credits_amount, price_vnd, tag, bonus_credits, is_featured, is_active, display_order, transfer_syntax')
         .eq('is_active', true)
         .order('display_order', { ascending: true });
         

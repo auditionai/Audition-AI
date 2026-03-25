@@ -5,7 +5,6 @@ import type { QueueProgressLogEntry } from '../shared/queueRecipes';
 import { getAllImagesFromStorage, deleteImageFromStorage, cleanupExpiredImages, getHistoryRetentionDays, publishImageToShowcase } from '../services/storageService';
 import { getUnifiedHistory } from '../services/economyService';
 import { useConcurrency } from '../services/concurrencyService';
-import { getSupabaseUser, supabase } from '../services/supabaseClient';
 import { downloadAssetToBrowser } from '../services/downloadService';
 import { Icons } from '../components/Icons';
 import { useNotification } from '../components/NotificationSystem';
@@ -64,49 +63,10 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
   }, [loadImages]);
 
   useEffect(() => {
-      if (!supabase) return;
-
-      let channel: any = null;
-      let cancelled = false;
-
-      const subscribe = async () => {
-          const user = await getSupabaseUser();
-          if (!user || cancelled) return;
-
-          channel = supabase
-              .channel(`gallery_generated_images_${user.id}`)
-              .on(
-                  'postgres_changes',
-                  {
-                      event: '*',
-                      schema: 'public',
-                      table: 'generated_images',
-                      filter: `user_id=eq.${user.id}`
-                  },
-                  () => {
-                      loadImages(true);
-                  }
-              )
-              .subscribe();
-      };
-
-      subscribe().catch((error) => {
-          console.warn('[Gallery] Failed to subscribe generated_images realtime:', error);
-      });
-
-      return () => {
-          cancelled = true;
-          if (channel) {
-              supabase.removeChannel(channel);
-          }
-      };
-  }, []);
-
-  useEffect(() => {
       if (!hasActiveJobs) return;
       const interval = setInterval(() => {
           loadImages(true);
-      }, 15000);
+      }, 30000);
       return () => clearInterval(interval);
   }, [hasActiveJobs, loadImages]);
 

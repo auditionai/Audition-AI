@@ -43,6 +43,7 @@ let promotionCache: TimedCache<PromotionCampaign | null> | null = null;
 let checkinStatusCache: (TimedCache<{ streak: number; isCheckedInToday: boolean; history: string[]; claimedMilestones: number[]; }> & { userId: string }) | null = null;
 let modelPricingCache: TimedCache<ModelPricing[]> | null = null;
 let tstServerAvailabilityCache: TimedCache<TstServerAvailabilityConfig> | null = null;
+let lastActiveUpdateAt = 0;
 
 export const invalidateUserProfileCache = () => {
     userProfileCache = null;
@@ -419,9 +420,11 @@ export const syncTSTPrices = async (): Promise<{success: boolean, error?: string
 
 export const updateLastActive = async () => {
     if (!supabase) return;
+    if (Date.now() - lastActiveUpdateAt < 60_000) return;
     try {
         const user = await getCurrentSessionUser();
         if (user) {
+            lastActiveUpdateAt = Date.now();
             await supabase.from('users').update({ last_active: new Date().toISOString() }).eq('id', user.id);
             const cachedProfile = userProfileCache;
             if (cachedProfile && cachedProfile.userId === user.id) {

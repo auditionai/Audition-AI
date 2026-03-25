@@ -22,8 +22,8 @@ import { syncPayOSTransaction, triggerServerQueueTick } from './services/serverQ
 
 function AppContent() {
   const queueHeartbeatLeaseKey = 'auditionai:queue-heartbeat:leader';
-  const queueHeartbeatIntervalMs = 15000;
-  const queueHeartbeatLeaseMs = 20000;
+  const queueHeartbeatIntervalMs = 30000;
+  const queueHeartbeatLeaseMs = 35000;
   const heartbeatInstanceIdRef = useRef(typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `tab-${Date.now()}`);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userRole, setUserRole] = useState<'user' | 'admin'>('user');

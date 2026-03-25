@@ -760,28 +760,7 @@ export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
             }
 
             if (!response.ok) {
-              console.warn('[Storage] Gallery API failed, falling back to direct Supabase query', payload?.error || response.statusText);
-            }
-
-            const { data, error } = await supabase
-                .from(TABLE_NAME)
-                .select('id,image_url,prompt,created_at,updated_at,asset_type,tool_id,tool_name,model_used,user_id,user_name,is_public,status,job_id,progress,error_message,cost_vcoin,queue_payload')
-                .eq('user_id', user.id)
-                .order('created_at', { ascending: false })
-                .limit(200);
-
-            if (!error && data) {
-                const missingCostIds = data
-                    .filter((row: any) => !Number.isFinite(Number(row.cost_vcoin)))
-                    .map((row: any) => row.id)
-                    .filter((value: any): value is string => typeof value === 'string' && value.length > 0);
-                const chargeMap = await getGeneratedImageChargeMap(user.id, missingCostIds);
-                const cloudImages = data.map((row: any) => mapGeneratedImageRow(row, 'Me', chargeMap.get(row.id)));
-                const mergedImages = mergeCloudAndLocalImages(cloudImages, localImagesForUser);
-                void replaceLocalImagesForUser(user.id, mergedImages).catch((syncError) => {
-                  console.warn('[Storage] Failed to sync local cache from cloud', syncError);
-                });
-                return mergedImages;
+              console.warn('[Storage] Gallery API failed, using local cache only', payload?.error || response.statusText);
             }
 
             return localImagesForUser;

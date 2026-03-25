@@ -8,7 +8,7 @@ const headers = {
   'Access-Control-Allow-Methods': 'GET, OPTIONS',
 };
 
-const GALLERY_PAGE_LIMIT = 200;
+const GALLERY_PAGE_LIMIT = 100;
 
 export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {

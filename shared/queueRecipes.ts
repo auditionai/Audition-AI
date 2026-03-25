@@ -137,6 +137,7 @@ export interface MotionGenerateRecipePayload {
   serverId?: string;
   characterImage: string;
   motionVideoDataUrl: string;
+  motionVideoDurationSeconds?: number | null;
 }
 
 export type QueueRecipePayload =

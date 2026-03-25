@@ -1,4 +1,4 @@
-import { getSupabaseAuthHeader, getSupabaseUser, supabase } from './supabaseClient';
+﻿import { getSupabaseAuthHeader, getSupabaseUser, supabase } from './supabaseClient';
 import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, HistoryItem, VcoinLog } from '../types';
 import {
   creditsToVcoin,
@@ -529,6 +529,80 @@ type UpdateUserBalanceOptions = {
     metadata?: Record<string, any>;
 };
 
+const reconcileCurrentUserBalanceFromLedger = async () => {
+    if (!supabase) return { repaired: false, delta: 0, ledgerBalance: 0, currentBalance: 0 };
+
+    const sessionUser = await getCurrentSessionUser();
+    if (!sessionUser?.id) {
+        return { repaired: false, delta: 0, ledgerBalance: 0, currentBalance: 0 };
+    }
+
+    const pageSize = 1000;
+    let from = 0;
+    let ledgerBalance = 0;
+
+    while (true) {
+        const { data, error } = await supabase
+            .from('vcoin_transactions')
+            .select('amount')
+            .eq('user_id', sessionUser.id)
+            .range(from, from + pageSize - 1);
+
+        if (error) {
+            throw error;
+        }
+
+        const rows = data || [];
+        ledgerBalance += rows.reduce((sum: number, row: any) => sum + Number(row?.amount || 0), 0);
+
+        if (rows.length < pageSize) {
+            break;
+        }
+
+        from += pageSize;
+    }
+
+    const { data: userRow, error: userError } = await supabase
+        .from('users')
+        .select('vcoin_balance')
+        .eq('id', sessionUser.id)
+        .maybeSingle();
+
+    if (userError) {
+        throw userError;
+    }
+
+    const currentBalance = Number(userRow?.vcoin_balance || 0);
+    const delta = ledgerBalance - currentBalance;
+
+    if (delta > 0.0001) {
+        const { error: updateError } = await supabase
+            .from('users')
+            .update({ vcoin_balance: ledgerBalance })
+            .eq('id', sessionUser.id);
+
+        if (updateError) {
+            throw updateError;
+        }
+
+        invalidateUserProfileCache();
+        window.dispatchEvent(new Event('balance_updated'));
+
+        return {
+            repaired: true,
+            delta,
+            ledgerBalance,
+            currentBalance,
+        };
+    }
+
+    return {
+        repaired: false,
+        delta,
+        ledgerBalance,
+        currentBalance,
+    };
+};
 export const updateUserBalance = async (
     amount: number,
     reason: string,
@@ -550,7 +624,7 @@ export const updateUserBalance = async (
 
     // 1. Preferred path: atomic RPC with reference support
     try {
-        const { error } = await supabase.rpc('apply_balance_transaction', {
+        const { data, error } = await supabase.rpc('apply_balance_transaction', {
             p_target_user_id: userId,
             p_amount: amount,
             p_reason: reason,
@@ -561,13 +635,18 @@ export const updateUserBalance = async (
         });
 
         if (!error) {
-            if (!options.targetUserId) {
+            const sessionUser = await getCurrentSessionUser().catch(() => null);
+            if (!options.targetUserId || sessionUser?.id === userId) {
+                await reconcileCurrentUserBalanceFromLedger().catch((reconcileError) => {
+                    console.warn('[Economy] Failed to reconcile balance after RPC update', reconcileError);
+                });
+                invalidateUserProfileCache();
                 window.dispatchEvent(new Event('balance_updated'));
             }
             return;
         }
 
-        console.warn("[Economy] apply_balance_transaction RPC failed, falling back to legacy flow", error);
+        console.warn("[Economy] apply_balance_transaction RPC failed, falling back to legacy flow", error, data);
     } catch (rpcError) {
         console.warn("[Economy] apply_balance_transaction RPC unavailable, falling back to legacy flow", rpcError);
     }
@@ -613,27 +692,35 @@ export const updateUserBalance = async (
     
     // 3. Legacy balance update
     try {
-        const { error } = await supabase.rpc('secure_update_balance', {
-            amount: amount,
-            reason: reason,
-            log_type: type
-        });
-        
-        if (error) {
-            console.warn("[Economy] secure_update_balance RPC failed, falling back to direct update (Legacy Mode)", error);
+        const sessionUser = await getCurrentSessionUser().catch(() => null);
+        const canDirectlyRepairCurrentUser = sessionUser?.id === userId;
+
+        if (canDirectlyRepairCurrentUser) {
             const { data: latestUser, error: fetchError } = await supabase.from('users').select('vcoin_balance').eq('id', userId).maybeSingle();
             if (fetchError) throw fetchError;
-            const currentBalance = latestUser?.vcoin_balance || 0;
+            const currentBalance = Number(latestUser?.vcoin_balance || 0);
             const newBalance = currentBalance + amount;
             const { error: directError } = await supabase.from('users').update({ vcoin_balance: newBalance }).eq('id', userId);
             if (directError) throw directError;
+        } else {
+            const { error } = await supabase.rpc('secure_update_balance', {
+                amount: amount,
+                reason: reason,
+                log_type: type
+            });
+
+            if (error) throw error;
         }
     } catch (e: any) {
         console.error("[Economy] Critical: Failed to update balance", e);
         throw new Error("Failed to update balance: " + e.message);
     }
     
-    if (!options.targetUserId) {
+    const sessionUser = await getCurrentSessionUser().catch(() => null);
+    if (!options.targetUserId || sessionUser?.id === userId) {
+        await reconcileCurrentUserBalanceFromLedger().catch((reconcileError) => {
+            console.warn('[Economy] Failed to reconcile balance after legacy update', reconcileError);
+        });
         invalidateUserProfileCache();
         window.dispatchEvent(new Event('balance_updated'));
     }
@@ -858,6 +945,109 @@ export const getLocalTodayStr = () => {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 };
 
+const getLocalDayBoundaryIso = (dateStr: string, boundary: 'start' | 'end') => {
+    const suffix = boundary === 'start' ? 'T00:00:00.000' : 'T23:59:59.999';
+    return new Date(`${dateStr}${suffix}`).toISOString();
+};
+
+const getNextMonthStartIso = (monthStr: string) => {
+    const [year, month] = monthStr.split('-').map((value) => Number(value));
+    return new Date(year, month, 1, 0, 0, 0, 0).toISOString();
+};
+
+type RewardRepairWindow = {
+    startAt: string;
+    endAt?: string;
+};
+
+const hasRewardLog = async (
+    userId: string,
+    referenceType: string,
+    referenceId: string,
+    legacyDescription: string,
+    window: RewardRepairWindow,
+) => {
+    if (!supabase) return false;
+
+    try {
+        const { data, error } = await supabase
+            .from('vcoin_transactions')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('reference_type', referenceType)
+            .eq('reference_id', referenceId)
+            .limit(1);
+
+        if (!error && (data?.length || 0) > 0) {
+            return true;
+        }
+    } catch (error) {
+        console.warn('[Checkin] Failed to verify reward log by reference', error);
+    }
+
+    try {
+        let query = supabase
+            .from('vcoin_transactions')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('type', 'reward')
+            .eq('description', legacyDescription)
+            .gte('created_at', window.startAt);
+
+        if (window.endAt) {
+            query = query.lt('created_at', window.endAt);
+        }
+
+        const { data, error } = await query.limit(1);
+        if (error) {
+            throw error;
+        }
+
+        return (data?.length || 0) > 0;
+    } catch (error) {
+        console.warn('[Checkin] Failed to verify legacy reward log', error);
+        return false;
+    }
+};
+
+const ensureRewardApplied = async ({
+    userId,
+    amount,
+    reason,
+    referenceType,
+    referenceId,
+    metadata,
+    repairWindow,
+}: {
+    userId: string;
+    amount: number;
+    reason: string;
+    referenceType: string;
+    referenceId: string;
+    metadata?: Record<string, any>;
+    repairWindow: RewardRepairWindow;
+}) => {
+    const alreadyApplied = await hasRewardLog(userId, referenceType, referenceId, reason, repairWindow);
+    if (alreadyApplied) {
+        const sessionUser = await getCurrentSessionUser().catch(() => null);
+        if (sessionUser?.id === userId) {
+            await reconcileCurrentUserBalanceFromLedger().catch((reconcileError) => {
+                console.warn('[Checkin] Failed to reconcile existing reward balance drift', reconcileError);
+            });
+        }
+        return false;
+    }
+
+    await updateUserBalance(amount, reason, 'reward', {
+        targetUserId: userId,
+        referenceType,
+        referenceId,
+        metadata,
+    });
+
+    return true;
+};
+
 // --- CHECKIN & REWARDS ---
 
 export const getCheckinStatus = async () => {
@@ -910,6 +1100,10 @@ export const performCheckin = async (): Promise<{success: boolean, reward: numbe
     const user = await getUserProfile();
     const today = getLocalTodayStr();
     const reward = 5;
+    const referenceId = `${user.id}:${today}`;
+    const startAt = getLocalDayBoundaryIso(today, 'start');
+    const endAt = getLocalDayBoundaryIso(today, 'end');
+    let checkinAlreadyExists = false;
 
     try {
         const { error } = await supabase.from('daily_check_ins').insert({
@@ -917,15 +1111,48 @@ export const performCheckin = async (): Promise<{success: boolean, reward: numbe
             check_in_date: today
         });
 
-        if (error) throw error;
+        if (error) {
+            if ((error as any)?.code === '23505' || /duplicate|already exists/i.test(error.message || '')) {
+                checkinAlreadyExists = true;
+            } else {
+                throw error;
+            }
+        }
 
-        // Update balance directly
-        await updateUserBalance(reward, 'Daily Checkin', 'reward');
+        const rewardApplied = await ensureRewardApplied({
+            userId: user.id,
+            amount: reward,
+            reason: 'Daily Checkin',
+            referenceType: 'daily_checkin_reward',
+            referenceId,
+            metadata: {
+                reward_type: 'daily_checkin',
+                check_in_date: today,
+            },
+            repairWindow: {
+                startAt,
+                endAt,
+            },
+        });
         invalidateCheckinStatusCache();
         invalidateUserProfileCache();
         
         const status = await getCheckinStatus();
-        return { success: true, reward, newStreak: status.streak };
+        if (checkinAlreadyExists && !rewardApplied) {
+            return {
+                success: false,
+                reward: 0,
+                newStreak: status.streak,
+                message: 'Bạn đã điểm danh hôm nay rồi!'
+            };
+        }
+
+        return {
+            success: true,
+            reward: rewardApplied ? reward : 0,
+            newStreak: status.streak,
+            message: checkinAlreadyExists ? 'Đã đồng bộ lại phần thưởng điểm danh hôm nay.' : undefined
+        };
     } catch (e: any) {
         return { success: false, reward: 0, newStreak: 0, message: e.message };
     }
@@ -936,37 +1163,80 @@ export const claimMilestoneReward = async (day: number): Promise<{success: boole
     const user = await getUserProfile();
     const rewards: Record<number, number> = { 7: 20, 14: 50, 30: 100 };
     const amount = rewards[day] || 0;
+    const currentMonth = getLocalTodayStr().substring(0, 7);
+    const referenceId = `${user.id}:${currentMonth}:${day}`;
+    let alreadyClaimed = false;
 
-    const today = getLocalTodayStr();
-    const startOfMonth = new Date(today.substring(0, 7) + '-01').toISOString();
+    if (amount <= 0) {
+        return { success: false, message: 'Mốc thưởng không hợp lệ.' };
+    }
+
+    const status = await getCheckinStatus();
+    if (status.streak < day) {
+        return { success: false, message: `Bạn chưa đủ ${day} ngày điểm danh trong tháng này.` };
+    }
+
+    const startOfMonth = new Date(`${currentMonth}-01T00:00:00.000`).toISOString();
+    const endOfMonth = getNextMonthStartIso(currentMonth);
 
     try {
         // Double check if already claimed THIS MONTH to prevent race conditions
-        const { data: existing } = await supabase
+        const { data: existing, error: existingError } = await supabase
             .from('milestone_claims')
             .select('id')
             .eq('user_id', user.id)
             .eq('day_milestone', day)
             .gte('created_at', startOfMonth)
-            .single();
+            .maybeSingle();
 
-        if (existing) {
-            throw new Error(`Bạn đã nhận mốc ${day} ngày trong tháng này rồi!`);
+        if (existingError) {
+            throw existingError;
         }
 
-        const { error } = await supabase.from('milestone_claims').insert({
-            user_id: user.id,
-            day_milestone: day,
-            reward_amount: amount,
-            claim_month: today.substring(0, 7)
+        if (existing) {
+            alreadyClaimed = true;
+        }
+
+        if (!alreadyClaimed) {
+            const { error } = await supabase.from('milestone_claims').insert({
+                user_id: user.id,
+                day_milestone: day,
+                reward_amount: amount,
+                claim_month: currentMonth
+            });
+
+            if (error) throw error;
+        }
+
+        const rewardApplied = await ensureRewardApplied({
+            userId: user.id,
+            amount,
+            reason: `Milestone ${day} Days`,
+            referenceType: 'milestone_reward',
+            referenceId,
+            metadata: {
+                reward_type: 'milestone',
+                claim_month: currentMonth,
+                milestone_day: day,
+            },
+            repairWindow: {
+                startAt: startOfMonth,
+                endAt: endOfMonth,
+            },
         });
-
-        if (error) throw error;
-
-        await updateUserBalance(amount, `Milestone ${day} Days`, 'reward');
         invalidateCheckinStatusCache();
         invalidateUserProfileCache();
-        return { success: true, message: `Nhận thưởng mốc ${day} ngày thành công!` };
+
+        if (alreadyClaimed && !rewardApplied) {
+            return { success: false, message: `Bạn đã nhận mốc ${day} ngày trong tháng này rồi!` };
+        }
+
+        return {
+            success: true,
+            message: alreadyClaimed
+                ? `Đã đồng bộ lại thưởng mốc ${day} ngày cho bạn.`
+                : `Nhận thưởng mốc ${day} ngày thành công!`
+        };
     } catch (e: any) {
         return { success: false, message: e.message };
     }
@@ -996,7 +1266,7 @@ export const isKeyDisabled = (key: string): boolean => {
 export const reportKeyFailure = (key: string) => {
     if (!key) return;
     const shortKey = key.substring(0, 4) + '...' + key.slice(-4);
-    console.warn(`[System] 🔴 API Key ${shortKey} failed (429/503). Temporarily disabling for 1 minute.`);
+    console.warn(`[System] ðŸ”´ API Key ${shortKey} failed (429/503). Temporarily disabling for 1 minute.`);
     temporarilyDisabledKeys.add(key);
     
     // Also max out its usage stats so it's deprioritized
@@ -1007,7 +1277,7 @@ export const reportKeyFailure = (key: string) => {
 
     setTimeout(() => {
         temporarilyDisabledKeys.delete(key);
-        console.log(`[System] 🟢 API Key ${shortKey} is back in rotation.`);
+        console.log(`[System] ðŸŸ¢ API Key ${shortKey} is back in rotation.`);
     }, KEY_COOLDOWN_MS);
 };
 
@@ -1404,7 +1674,7 @@ export const getUnifiedHistory = async (targetUserId?: string): Promise<HistoryI
         history.push({
             id: t.id,
             createdAt: t.created_at,
-            description: `Nạp Vcoin (${t.order_code})`,
+            description: `Náº¡p Vcoin (${t.order_code})`,
             vcoinChange: t.vcoin_received,
             amountVnd: t.amount_vnd,
             type: t.status === 'paid' ? 'topup' : 'pending_topup',
@@ -1417,7 +1687,7 @@ export const getUnifiedHistory = async (targetUserId?: string): Promise<HistoryI
         history.push({
             id: l.id,
             createdAt: l.created_at,
-            description: l.description || l.reason || l.note || l.action || l.details || 'Giao dịch hệ thống', // Fallback to note or default
+            description: l.description || l.reason || l.note || l.action || l.details || 'Giao dá»‹ch há»‡ thá»‘ng', // Fallback to note or default
             vcoinChange: l.amount, // Amount is already signed (negative for usage)
             type: l.type || 'usage', // Fallback to usage if type is missing (for legacy logs)
             status: 'success'
@@ -1447,7 +1717,7 @@ export const getAdminUserHistory = async (targetUserId: string): Promise<History
 // --- MAINTENANCE MODE ---
 
 export const getMaintenanceMode = async () => {
-    if (!supabase) return { isActive: false, message: "Hệ thống đang bảo trì, vui lòng quay lại sau." };
+    if (!supabase) return { isActive: false, message: "Há»‡ thá»‘ng Ä‘ang báº£o trÃ¬, vui lÃ²ng quay láº¡i sau." };
     try {
         const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'maintenance_mode').maybeSingle();
         if (error) throw error;
@@ -1455,17 +1725,17 @@ export const getMaintenanceMode = async () => {
         if (data?.value) {
             const parsedValue = parseSettingValue(data.value, {
                 isActive: false,
-                message: "Hệ thống đang bảo trì, vui lòng quay lại sau."
+                message: "Há»‡ thá»‘ng Ä‘ang báº£o trÃ¬, vui lÃ²ng quay láº¡i sau."
             });
             return {
                 isActive: !!parsedValue.isActive,
-                message: parsedValue.message || "Hệ thống đang bảo trì, vui lòng quay lại sau."
+                message: parsedValue.message || "Há»‡ thá»‘ng Ä‘ang báº£o trÃ¬, vui lÃ²ng quay láº¡i sau."
             };
         }
-        return { isActive: false, message: "Hệ thống đang bảo trì, vui lòng quay lại sau." };
+        return { isActive: false, message: "Há»‡ thá»‘ng Ä‘ang báº£o trÃ¬, vui lÃ²ng quay láº¡i sau." };
     } catch (e) {
         console.error("Get Maintenance Mode Error", e);
-        return { isActive: false, message: "Hệ thống đang bảo trì, vui lòng quay lại sau." };
+        return { isActive: false, message: "Há»‡ thá»‘ng Ä‘ang báº£o trÃ¬, vui lÃ²ng quay láº¡i sau." };
     }
 };
 
@@ -1532,29 +1802,29 @@ export const saveTutorialVideo = async (url: string, isActive: boolean) => {
 };
 
 export const getGiftcodePromoConfig = async () => {
-    if (!supabase) return { text: "Nhập CODE \"HELLO2026\" để nhận 20 Vcoin miễn phí !!!", isActive: true };
+    if (!supabase) return { text: "Nháº­p CODE \"HELLO2026\" Ä‘á»ƒ nháº­n 20 Vcoin miá»…n phÃ­ !!!", isActive: true };
     try {
         const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'giftcode_promo').maybeSingle();
         if (error) throw error;
 
         if (data?.value) {
             const parsedValue = parseSettingValue(data.value, {
-                text: "Nhập CODE \"HELLO2026\" để nhận 20 Vcoin miễn phí !!!",
+                text: "Nháº­p CODE \"HELLO2026\" Ä‘á»ƒ nháº­n 20 Vcoin miá»…n phÃ­ !!!",
                 isActive: true
             });
             return {
-                text: parsedValue.text || "Nhập CODE \"HELLO2026\" để nhận 20 Vcoin miễn phí !!!",
+                text: parsedValue.text || "Nháº­p CODE \"HELLO2026\" Ä‘á»ƒ nháº­n 20 Vcoin miá»…n phÃ­ !!!",
                 isActive: parsedValue.isActive !== undefined ? parsedValue.isActive : true
             };
         }
 
         return {
-            text: "Nhập CODE \"HELLO2026\" để nhận 20 Vcoin miễn phí !!!",
+            text: "Nháº­p CODE \"HELLO2026\" Ä‘á»ƒ nháº­n 20 Vcoin miá»…n phÃ­ !!!",
             isActive: true
         };
     } catch (e) {
         return {
-            text: "Nhập CODE \"HELLO2026\" để nhận 20 Vcoin miễn phí !!!",
+            text: "Nháº­p CODE \"HELLO2026\" Ä‘á»ƒ nháº­n 20 Vcoin miá»…n phÃ­ !!!",
             isActive: true
         };
     }
@@ -1584,8 +1854,11 @@ export const saveGiftcodePromoConfig = async (text: string, isActive: boolean) =
 export const saveGiftcode = async (code: Giftcode): Promise<{success: boolean, error?: string}> => {
     if (!supabase) return { success: false, error: "No Database" };
     try {
+        const normalizedCode = String(code.code || '').trim().toUpperCase();
+        const normalizedCampaignKey = String(code.campaignKey || normalizedCode).trim().toUpperCase();
         const payload = {
-            code: code.code,
+            code: normalizedCode,
+            campaign_key: normalizedCampaignKey,
             reward: code.reward,
             total_limit: code.totalLimit,
             max_per_user: code.maxPerUser,
@@ -1614,7 +1887,7 @@ export const deleteGiftcode = async (id: string) => {
 export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean, reward: number, message: string}> => {
     if (!supabase) return { success: false, reward: 0, message: "No Database" };
     const cleanCode = codeStr.trim().toUpperCase();
-    if (!cleanCode) return { success: false, reward: 0, message: "Vui lòng nhập giftcode." };
+    if (!cleanCode) return { success: false, reward: 0, message: "Vui lÃ²ng nháº­p giftcode." };
 
     try {
         const authHeader = await getSessionAuthHeader();
@@ -1632,7 +1905,7 @@ export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean
             return {
                 success: false,
                 reward: 0,
-                message: payload?.message || 'Không thể sử dụng giftcode.',
+                message: payload?.message || 'KhÃ´ng thá»ƒ sá»­ dá»¥ng giftcode.',
             };
         }
 
@@ -1762,21 +2035,15 @@ export const getAdminStats = async () => {
     // Fetch giftcodes with accurate usage count from relation
     const { data: codes } = await supabase
         .from('gift_codes')
-        .select('id, code, reward, total_limit, used_count, max_per_user, is_active, gift_code_usages(count)');
+        .select('id, code, campaign_key, reward, total_limit, used_count, max_per_user, is_active, gift_code_usages(count)');
 
-    let { data: txs, error: txError } = await supabase
+    const { data: txs, error: txError } = await supabase
         .from('payment_transactions')
-        .select('id, user_id, uid, package_id, amount, price, amount_vnd, vcoin_received, diamonds_received, coins_received, coins, diamonds, credits, status, created_at, code, payment_method, users(email, display_name, photo_url)')
+        .select('id, user_id, package_id, amount_vnd, vcoin_received, status, created_at, order_code, payment_method')
         .order('created_at', { ascending: false })
         .limit(ADMIN_STATS_TRANSACTION_LIMIT);
     if (txError) {
-        console.warn("Failed to join users on transactions, falling back to select *", txError);
-        const fallback = await supabase
-            .from('payment_transactions')
-            .select('id, user_id, uid, package_id, amount, price, amount_vnd, vcoin_received, diamonds_received, coins_received, coins, diamonds, credits, status, created_at, code, payment_method')
-            .order('created_at', { ascending: false })
-            .limit(ADMIN_STATS_TRANSACTION_LIMIT);
-        txs = fallback.data;
+        console.error('Error fetching payment transactions for Admin Stats:', txError);
     }
     
     // Try to fetch logs from both potential table names
@@ -1840,10 +2107,10 @@ export const getAdminStats = async () => {
         }
 
         // Try to find the reason field from various potential column names
-        let rawFeature = log.reason || log.description || log.note || log.action || log.activity || log.details || 'Khác';
+        let rawFeature = log.reason || log.description || log.note || log.action || log.activity || log.details || 'KhÃ¡c';
         
-        // If still 'Khác', try to find any property that looks like a feature name
-        if (rawFeature === 'Khác') {
+        // If still 'KhÃ¡c', try to find any property that looks like a feature name
+        if (rawFeature === 'KhÃ¡c') {
             for (const key in log) {
                 if (typeof log[key] === 'string' && (log[key].startsWith('Gen') || log[key].startsWith('Edit') || log[key].includes(':'))) {
                     rawFeature = log[key];
@@ -1853,23 +2120,23 @@ export const getAdminStats = async () => {
         }
 
         // Grouping Logic
-        let feature = 'Khác';
+        let feature = 'KhÃ¡c';
         const lower = rawFeature.toLowerCase();
 
-        if (lower.includes('nâng cấp') || lower.includes('upscale') || lower.includes('làm nét') || lower.includes('hd')) {
-            feature = 'Làm Nét Ảnh (Upscale)';
-        } else if (lower.includes('tách nền') || lower.includes('remove background') || lower.includes('background')) {
-            feature = 'Tách Nền (Remove BG)';
-        } else if (lower.includes('4 người') || lower.includes('group of 4') || lower.includes('squad of 4')) {
-            feature = 'Tạo Ảnh 4 Người';
-        } else if (lower.includes('3 người') || lower.includes('group of 3') || lower.includes('squad of 3')) {
-            feature = 'Tạo Ảnh 3 Người';
-        } else if (lower.includes('2 người') || lower.includes('couple') || lower.includes('đôi') || lower.includes('song ca')) {
-            feature = 'Tạo Ảnh Đôi (Couple)';
-        } else if (lower.includes('tạo ảnh') || lower.includes('gen:') || lower.includes('generate') || lower.includes('chân dung') || lower.includes('1 ảnh') || lower.includes('single')) {
-            feature = 'Tạo Ảnh Đơn (Single)';
-        } else if (lower.includes('xử lý') || lower.includes('edit') || lower.includes('face')) {
-             feature = 'Chỉnh Sửa / Xử Lý Ảnh';
+        if (lower.includes('nÃ¢ng cáº¥p') || lower.includes('upscale') || lower.includes('lÃ m nÃ©t') || lower.includes('hd')) {
+            feature = 'LÃ m NÃ©t áº¢nh (Upscale)';
+        } else if (lower.includes('tÃ¡ch ná»n') || lower.includes('remove background') || lower.includes('background')) {
+            feature = 'TÃ¡ch Ná»n (Remove BG)';
+        } else if (lower.includes('4 ngÆ°á»i') || lower.includes('group of 4') || lower.includes('squad of 4')) {
+            feature = 'Táº¡o áº¢nh 4 NgÆ°á»i';
+        } else if (lower.includes('3 ngÆ°á»i') || lower.includes('group of 3') || lower.includes('squad of 3')) {
+            feature = 'Táº¡o áº¢nh 3 NgÆ°á»i';
+        } else if (lower.includes('2 ngÆ°á»i') || lower.includes('couple') || lower.includes('Ä‘Ã´i') || lower.includes('song ca')) {
+            feature = 'Táº¡o áº¢nh ÄÃ´i (Couple)';
+        } else if (lower.includes('táº¡o áº£nh') || lower.includes('gen:') || lower.includes('generate') || lower.includes('chÃ¢n dung') || lower.includes('1 áº£nh') || lower.includes('single')) {
+            feature = 'Táº¡o áº¢nh ÄÆ¡n (Single)';
+        } else if (lower.includes('xá»­ lÃ½') || lower.includes('edit') || lower.includes('face')) {
+             feature = 'Chá»‰nh Sá»­a / Xá»­ LÃ½ áº¢nh';
         } else {
             feature = rawFeature.length > 50 ? rawFeature.substring(0, 50) + '...' : rawFeature;
         }
@@ -1890,48 +2157,39 @@ export const getAdminStats = async () => {
     }));
     
     const transactions = txs?.map((t: any) => {
-         // Fallback for coins: Check DB columns -> Check Package Info -> Estimate from Amount
-         let coins = t.vcoin_received ? Number(t.vcoin_received) : (t.diamonds_received ? Number(t.diamonds_received) : (t.coins_received ? Number(t.coins_received) : (t.coins ? Number(t.coins) : (t.diamonds ? Number(t.diamonds) : (t.credits ? Number(t.credits) : 0)))));
-         
-         if (coins === 0) {
-             // Try to get from Package
-             if (t.package_id) {
-                 const pkg = pkgs?.find((p: any) => p.id === t.package_id);
-                 if (pkg) {
-                     coins = pkg.credits_amount || 0;
-                     if (pkg.bonus_credits) {
-                         coins += Math.floor(coins * pkg.bonus_credits / 100);
-                     }
+         let coins = Number(t.vcoin_received) || 0;
+
+         if (coins === 0 && t.package_id) {
+             const pkg = pkgs?.find((p: any) => p.id === t.package_id);
+             if (pkg) {
+                 coins = Number(pkg.credits_amount) || 0;
+                 if (pkg.bonus_credits) {
+                     coins += Math.floor(coins * Number(pkg.bonus_credits) / 100);
                  }
-             }
-             
-             // Last resort: Estimate from Amount (1000 VND = 1 Vcoin)
-             if (coins === 0 && t.amount) {
-                 coins = Math.floor(Number(t.amount) / 1000);
              }
          }
 
-         const txUserId = t.user_id || t.userId || t.uid;
-         let txUser = null;
-         if (t.users) {
-             txUser = Array.isArray(t.users) ? t.users[0] : t.users;
-         } else {
-             txUser = users?.find((u: any) => u.id === txUserId);
+         if (coins === 0 && t.amount_vnd) {
+             coins = Math.floor(Number(t.amount_vnd) / 1000);
          }
+
+         const txUserId = t.user_id || t.userId;
+         const txUser = users?.find((u: any) => u.id === txUserId);
          
          return {
              id: t.id,
              userId: txUserId,
-             userName: txUser?.display_name || txUser?.email?.split('@')[0] || t.user_name || t.userName,
-             userEmail: txUser?.email || t.user_email || t.userEmail,
-             userAvatar: txUser?.photo_url || t.user_avatar || t.userAvatar,
+             userName: txUser?.display_name || txUser?.email?.split('@')[0] || 'Unknown',
+             userEmail: txUser?.email || 'No Email',
+             userAvatar: txUser?.photo_url,
              packageId: t.package_id,
-             amount: t.amount ? Number(t.amount) : (t.price ? Number(t.price) : (t.amount_vnd ? Number(t.amount_vnd) : 0)),
+             amount: Number(t.amount_vnd) || 0,
              vcoin_received: coins,
              status: t.status,
              createdAt: t.created_at,
-             code: t.code,
-             paymentMethod: t.payment_method
+             code: t.order_code,
+             order_code: t.order_code,
+             paymentMethod: t.payment_method || 'payos'
          };
     }) || [];
 
@@ -1989,6 +2247,7 @@ export const getAdminStats = async () => {
              return {
                  id: c.id,
                  code: c.code,
+                 campaignKey: c.campaign_key || c.code,
                  reward: c.reward,
                  totalLimit: c.total_limit,
                  usedCount: realCount,
@@ -1999,3 +2258,6 @@ export const getAdminStats = async () => {
         transactions
     };
 };
+
+
+

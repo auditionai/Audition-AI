@@ -123,6 +123,7 @@ export interface CreditPackage {
 export interface Giftcode {
     id: string;
     code: string;
+    campaignKey?: string;
     reward: number; // Amount of Vcoin
     totalLimit: number; // Total usages allowed (e.g., 100 people)
     usedCount: number;

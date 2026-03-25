@@ -28,11 +28,11 @@ export const Layout: React.FC<LayoutProps> = ({
   useEffect(() => {
     const root = document.getElementById('root');
     const handleScroll = () => setScrolled((root?.scrollTop || 0) > 20);
-    const refreshUser = () => getUserProfile().then(setUser).catch(() => setUser(null));
+    const refreshUser = (force = false) => getUserProfile(force ? { force: true } : undefined).then(setUser).catch(() => setUser(null));
     const refreshPromotion = () => getActivePromotion().then(setPromoConfig).catch(() => setPromoConfig(null));
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
-        refreshUser();
+        refreshUser(true);
         refreshPromotion();
       }
     };
@@ -43,14 +43,16 @@ export const Layout: React.FC<LayoutProps> = ({
     refreshPromotion();
     
     // Listen for instant balance updates
-    window.addEventListener('balance_updated', refreshUser);
-    window.addEventListener('focus', refreshUser);
+    const handleBalanceUpdated = () => refreshUser(true);
+    const handleWindowFocus = () => refreshUser(true);
+    window.addEventListener('balance_updated', handleBalanceUpdated);
+    window.addEventListener('focus', handleWindowFocus);
     document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
         root?.removeEventListener('scroll', handleScroll);
-        window.removeEventListener('balance_updated', refreshUser);
-        window.removeEventListener('focus', refreshUser);
+        window.removeEventListener('balance_updated', handleBalanceUpdated);
+        window.removeEventListener('focus', handleWindowFocus);
         document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, []);

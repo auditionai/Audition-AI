@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { isIP } from 'node:net';
 import type { Handler } from '@netlify/functions';
 import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 
@@ -11,28 +12,117 @@ const headers = {
 
 const normalizeIp = (value?: string | null) => String(value || '').trim();
 
-const getClientIp = (event: Parameters<Handler>[0]) => {
-  const direct =
-    normalizeIp(event.headers['x-nf-client-connection-ip']) ||
-    normalizeIp(event.headers['client-ip']) ||
-    normalizeIp(event.headers['cf-connecting-ip']) ||
-    normalizeIp(event.headers['x-real-ip']);
+const stripIpPort = (value: string) => {
+  const trimmed = normalizeIp(value);
+  if (!trimmed) return '';
 
-  if (direct) return direct;
-
-  const forwardedFor = normalizeIp(event.headers['x-forwarded-for']);
-  if (forwardedFor) {
-    return forwardedFor.split(',')[0]?.trim() || '';
+  const bracketedIpv6 = trimmed.match(/^\[([^\]]+)\](?::\d+)?$/);
+  if (bracketedIpv6?.[1]) {
+    return bracketedIpv6[1];
   }
 
-  return '';
+  const ipv4WithPort = trimmed.match(/^(\d{1,3}(?:\.\d{1,3}){3})(?::\d+)?$/);
+  if (ipv4WithPort?.[1]) {
+    return ipv4WithPort[1];
+  }
+
+  return trimmed;
+};
+
+const isBlockedProxyLikeIp = (ip: string) => {
+  const normalized = stripIpPort(ip).toLowerCase();
+  if (!normalized) return true;
+
+  if (normalized === '::1' || normalized === '127.0.0.1' || normalized === 'localhost') {
+    return true;
+  }
+
+  if (normalized.startsWith('10.')) return true;
+  if (normalized.startsWith('192.168.')) return true;
+  if (normalized.startsWith('172.16.') || normalized.startsWith('172.17.') || normalized.startsWith('172.18.') || normalized.startsWith('172.19.')) return true;
+  if (normalized.startsWith('172.2') || normalized.startsWith('172.30.') || normalized.startsWith('172.31.')) return true;
+  if (normalized.startsWith('fc') || normalized.startsWith('fd')) return true;
+
+  // Cloudflare/edge-private ranges that showed up in live giftcode logs.
+  if (normalized.startsWith('172.68.') || normalized.startsWith('172.69.') || normalized.startsWith('172.70.') || normalized.startsWith('172.71.')) {
+    return true;
+  }
+  if (normalized.startsWith('162.158.')) {
+    return true;
+  }
+
+  return false;
+};
+
+const getIpsFromHeader = (raw?: string | null) =>
+  normalizeIp(raw)
+    .split(',')
+    .map((entry) => stripIpPort(entry))
+    .filter((entry) => Boolean(entry) && isIP(entry));
+
+const normalizeIpv6Network = (ip: string) => {
+  const [head] = ip.split('%', 2);
+  const source = head.toLowerCase();
+  const hasCompression = source.includes('::');
+  const [leftRaw, rightRaw = ''] = source.split('::', 2);
+  const left = leftRaw ? leftRaw.split(':').filter(Boolean) : [];
+  const right = hasCompression ? (rightRaw ? rightRaw.split(':').filter(Boolean) : []) : [];
+  const missing = Math.max(0, 8 - (left.length + right.length));
+  const full = hasCompression
+    ? [...left, ...Array.from({ length: missing }, () => '0'), ...right]
+    : source.split(':').filter(Boolean);
+
+  if (full.length !== 8) {
+    return source;
+  }
+
+  const normalized = full.map((segment) => segment.padStart(4, '0'));
+  return `${normalized.slice(0, 4).join(':')}::/64`;
+};
+
+const toNetworkKey = (ip: string) => {
+  const family = isIP(ip);
+  if (family === 6) {
+    return `ipv6:${normalizeIpv6Network(ip)}`;
+  }
+  if (family === 4) {
+    return `ipv4:${ip}`;
+  }
+  return ip;
+};
+
+const getClientIp = (event: Parameters<Handler>[0]) => {
+  const candidates = [
+    event.headers['cf-connecting-ip'],
+    event.headers['x-real-ip'],
+    event.headers['x-forwarded-for'],
+    event.headers['x-nf-client-connection-ip'],
+    event.headers['client-ip'],
+  ];
+
+  const fallbackIps: string[] = [];
+  for (const candidate of candidates) {
+    const ips = getIpsFromHeader(candidate);
+    for (const ip of ips) {
+      if (!isBlockedProxyLikeIp(ip)) {
+        return ip;
+      }
+      fallbackIps.push(ip);
+    }
+  }
+
+  return fallbackIps[0] || '';
 };
 
 const hashIp = (ip: string) => createHash('sha256').update(ip).digest('hex');
+const normalizeCampaignKey = (value?: string | null, fallback = '') =>
+  String(value || fallback || '')
+    .trim()
+    .toUpperCase();
 
 const mapGiftcodeError = (message: string) => {
   if (/GIFT_CODE_ALREADY_USED_BY_IP/i.test(message)) {
-    return 'Giftcode đã được sử dụng bởi địa chỉ IP này rồi.';
+    return 'Địa chỉ IP này đã dùng giftcode trong chiến dịch này rồi.';
   }
   if (/GIFT_CODE_ALREADY_USED_BY_USER/i.test(message)) {
     return 'Bạn đã nhập mã này rồi.';
@@ -80,9 +170,94 @@ export const handler: Handler = async (event) => {
     const body = JSON.parse(event.body || '{}');
     const code = String(body?.code || '').trim().toUpperCase();
     const ipAddress = getClientIp(event);
-    const ipHash = ipAddress ? hashIp(ipAddress) : '';
+    const ipNetworkKey = ipAddress ? toNetworkKey(ipAddress) : '';
+    const ipHash = ipNetworkKey ? hashIp(ipNetworkKey) : '';
 
     const admin = getServiceRoleClient();
+    if (ipHash) {
+      let campaignKey = normalizeCampaignKey(code);
+      let campaignGiftCodeIds: string[] = [];
+
+      try {
+        const { data: giftCodeRow, error: giftCodeRowError } = await admin
+          .from('gift_codes')
+          .select('id, campaign_key')
+          .eq('code', code)
+          .maybeSingle();
+
+        if (giftCodeRowError) {
+          throw giftCodeRowError;
+        }
+
+        campaignKey = normalizeCampaignKey(giftCodeRow?.campaign_key, code);
+
+        const { data: campaignRows, error: campaignRowsError } = await admin
+          .from('gift_codes')
+          .select('id')
+          .eq('campaign_key', campaignKey);
+
+        if (campaignRowsError) {
+          throw campaignRowsError;
+        }
+
+        campaignGiftCodeIds = (campaignRows || [])
+          .map((row: any) => String(row?.id || '').trim())
+          .filter(Boolean);
+      } catch {
+        const { data: fallbackGiftCodeRow, error: fallbackGiftCodeError } = await admin
+          .from('gift_codes')
+          .select('id')
+          .eq('code', code)
+          .maybeSingle();
+
+        if (fallbackGiftCodeError) {
+          throw fallbackGiftCodeError;
+        }
+
+        campaignGiftCodeIds = fallbackGiftCodeRow?.id ? [String(fallbackGiftCodeRow.id)] : [];
+      }
+
+      if (campaignGiftCodeIds.length > 0) {
+        const { data: existingIpUsage, error: existingIpUsageError } = await admin
+          .from('gift_code_usages')
+          .select('id, ip_address, ip_hash')
+          .in('gift_code_id', campaignGiftCodeIds)
+          .limit(200);
+
+        if (existingIpUsageError) {
+          throw existingIpUsageError;
+        }
+
+        const hasMatchingCampaignIp = (existingIpUsage || []).some((row: any) => {
+          const existingHash = String(row?.ip_hash || '').trim();
+          const existingNetworkKey = row?.ip_address ? toNetworkKey(String(row.ip_address)) : '';
+          return existingHash === ipHash || (existingNetworkKey && existingNetworkKey === ipNetworkKey);
+        });
+
+        if (hasMatchingCampaignIp) {
+          return {
+            statusCode: 400,
+            headers,
+            body: JSON.stringify({
+              success: false,
+              reward: 0,
+              message: mapGiftcodeError('GIFT_CODE_ALREADY_USED_BY_IP'),
+            }),
+          };
+        }
+      } else if (!campaignKey) {
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({
+            success: false,
+            reward: 0,
+            message: mapGiftcodeError('GIFT_CODE_INVALID'),
+          }),
+        };
+      }
+    }
+
     const { data, error } = await admin.rpc('redeem_giftcode', {
       p_user_id: user.id,
       p_code: code,

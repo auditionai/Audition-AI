@@ -7,6 +7,7 @@ import { getUnifiedHistory } from '../services/economyService';
 import { downloadAssetToBrowser } from '../services/downloadService';
 import { Icons } from '../components/Icons';
 import { useNotification } from '../components/NotificationSystem';
+import { QUEUE_SUBMITTED_EVENT } from '../services/serverQueueService';
 
 interface GalleryProps {
   lang: Language;
@@ -64,9 +65,38 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
       if (!hasActiveJobs) return;
       const interval = setInterval(() => {
           loadImages(true);
-      }, 30000);
+      }, 10000);
       return () => clearInterval(interval);
   }, [hasActiveJobs, loadImages]);
+
+  useEffect(() => {
+      if (typeof window === 'undefined') return;
+
+      let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+      const handleQueueSubmitted = () => {
+          loadImages(true).catch((error) => {
+              console.warn('[Gallery] Immediate refresh after queue submit failed', error);
+          });
+
+          if (refreshTimer) {
+              clearTimeout(refreshTimer);
+          }
+
+          refreshTimer = setTimeout(() => {
+              loadImages(true).catch((error) => {
+                  console.warn('[Gallery] Delayed refresh after queue submit failed', error);
+              });
+          }, 4500);
+      };
+
+      window.addEventListener(QUEUE_SUBMITTED_EVENT, handleQueueSubmitted);
+      return () => {
+          if (refreshTimer) {
+              clearTimeout(refreshTimer);
+          }
+          window.removeEventListener(QUEUE_SUBMITTED_EVENT, handleQueueSubmitted);
+      };
+  }, [loadImages]);
 
   useEffect(() => {
       if (!viewingImage) return;

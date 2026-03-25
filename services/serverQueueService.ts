@@ -16,8 +16,34 @@ export interface QueueEnqueueRequest {
   queuePayload: Record<string, unknown> | QueueRecipePayload;
 }
 
+export const QUEUE_SUBMITTED_EVENT = 'audition:queue-submitted';
+
 const getAuthHeader = async () => {
   return getSupabaseAuthHeader();
+};
+
+const notifyQueueSubmitted = (payload: any) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.dispatchEvent(
+    new CustomEvent(QUEUE_SUBMITTED_EVENT, {
+      detail: payload,
+    }),
+  );
+};
+
+const scheduleQueueTickRetry = (delayMs: number) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.setTimeout(() => {
+    triggerServerQueueTick(true).catch((error) => {
+      console.warn('[Queue] Retry tick failed:', error);
+    });
+  }, delayMs);
 };
 
 export const enqueueServerJob = async (request: QueueEnqueueRequest) => {
@@ -36,6 +62,15 @@ export const enqueueServerJob = async (request: QueueEnqueueRequest) => {
   if (!response.ok) {
     throw new Error(payload?.error || 'Failed to enqueue job');
   }
+
+  notifyQueueSubmitted({
+    request,
+    response: payload,
+  });
+  triggerServerQueueTick(true).catch((error) => {
+    console.warn('[Queue] Immediate tick failed:', error);
+  });
+  scheduleQueueTickRetry(4_000);
 
   return payload;
 };

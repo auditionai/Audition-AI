@@ -267,6 +267,7 @@ $$;
 create table if not exists public.gift_codes (
   id uuid primary key default gen_random_uuid(),
   code text not null,
+  campaign_key text,
   reward numeric not null default 0,
   total_limit numeric not null default 100,
   used_count numeric not null default 0,
@@ -279,6 +280,9 @@ create table if not exists public.gift_codes (
 
 create unique index if not exists uq_gift_codes_code
   on public.gift_codes(upper(code));
+
+create index if not exists idx_gift_codes_campaign_key
+  on public.gift_codes(campaign_key);
 
 create table if not exists public.gift_code_usages (
   id uuid primary key default gen_random_uuid(),
@@ -295,10 +299,6 @@ alter table public.gift_code_usages
 
 create unique index if not exists uq_gift_code_usages_user_code
   on public.gift_code_usages(user_id, gift_code_id);
-
-create unique index if not exists uq_gift_code_usages_code_ip_hash
-  on public.gift_code_usages(gift_code_id, ip_hash)
-  where ip_hash is not null;
 
 create index if not exists idx_gift_code_usages_code_created
   on public.gift_code_usages(gift_code_id, created_at desc);
@@ -993,6 +993,7 @@ set search_path = public
 as $$
 declare
   v_code public.gift_codes%rowtype;
+  v_campaign_key text;
   v_usage_count integer := 0;
   v_ip_used boolean := false;
   v_usage_id uuid;
@@ -1022,6 +1023,10 @@ begin
     raise exception 'GIFT_CODE_INVALID';
   end if;
 
+  v_campaign_key := upper(btrim(coalesce(v_code.campaign_key, v_code.code, v_code_normalized)));
+
+  perform pg_advisory_xact_lock(hashtext(v_ip_hash || '|' || v_campaign_key));
+
   if v_code.expires_at is not null and v_code.expires_at <= now() then
     raise exception 'GIFT_CODE_EXPIRED';
   end if;
@@ -1043,8 +1048,9 @@ begin
   select exists(
     select 1
     from public.gift_code_usages gcu
-    where gcu.gift_code_id = v_code.id
-      and gcu.ip_hash = v_ip_hash
+    join public.gift_codes gc on gc.id = gcu.gift_code_id
+    where gcu.ip_hash = v_ip_hash
+      and upper(btrim(coalesce(gc.campaign_key, gc.code))) = v_campaign_key
   )
   into v_ip_used;
 
@@ -1081,6 +1087,7 @@ begin
     jsonb_build_object(
       'gift_code_id', v_code.id,
       'gift_code', v_code_normalized,
+      'campaign_key', v_campaign_key,
       'ip_hash', v_ip_hash
     )
   );
@@ -1096,8 +1103,9 @@ exception
     if exists (
       select 1
       from public.gift_code_usages gcu
-      where gcu.gift_code_id = coalesce(v_code.id, '00000000-0000-0000-0000-000000000000'::uuid)
-        and gcu.ip_hash = v_ip_hash
+      join public.gift_codes gc on gc.id = gcu.gift_code_id
+      where gcu.ip_hash = v_ip_hash
+        and upper(btrim(coalesce(gc.campaign_key, gc.code))) = v_campaign_key
     ) then
       raise exception 'GIFT_CODE_ALREADY_USED_BY_IP';
     end if;

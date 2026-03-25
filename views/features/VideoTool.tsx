@@ -508,21 +508,26 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
       return;
     }
 
-    if (activeMode === 'video_ai' && !prompt && !keyframeImage) {
-      notify(lang === 'vi' ? 'Vui lòng nhập prompt hoặc tải ảnh lên' : 'Please enter a prompt or upload an image', 'error');
-      return;
-    }
-    if (activeMode === 'video_ai' && videoModel === 'kling-2.5-turbo' && !keyframeImage) {
+    if (activeMode === 'video_ai' && !keyframeImage) {
       notify(
         lang === 'vi'
-          ? 'Kling 2.5 Turbo hiện yêu cầu ảnh keyframe đầu vào. Vui lòng tải ảnh mẫu trước khi tạo video.'
-          : 'Kling 2.5 Turbo currently requires a keyframe image. Please upload an image before generating.',
+          ? 'Video AI hiện yêu cầu ảnh keyframe rõ nét để hệ thống kiểm duyệt trước khi gửi lên TST.'
+          : 'Video AI now requires a clear keyframe image so the server can review it before sending to TST.',
         'error'
       );
       return;
     }
     if (activeMode === 'motion_control' && (!characterImage || !motionVideoFile)) {
       notify(lang === 'vi' ? 'Vui lòng tải lên cả ảnh nhân vật và video chuyển động' : 'Please upload both character image and motion video', 'error');
+      return;
+    }
+    if (activeMode === 'motion_control' && motionVideoDurationSeconds === null) {
+      notify(
+        lang === 'vi'
+          ? 'Không thể đọc thời lượng video chuyển động. Vui lòng dùng video từ 3 đến 30 giây.'
+          : 'Unable to read motion video duration. Please upload a video between 3 and 30 seconds.',
+        'error'
+      );
       return;
     }
     if (activeMode === 'motion_control' && motionVideoDurationSeconds !== null && (motionVideoDurationSeconds < 3 || motionVideoDurationSeconds > 30)) {
@@ -669,6 +674,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                 serverId: effectiveServerId,
                 characterImage: stagedCharacterImage!,
                 motionVideoDataUrl: stagedMotionVideo!,
+                motionVideoDurationSeconds,
             };
 
         await enqueueServerJob({

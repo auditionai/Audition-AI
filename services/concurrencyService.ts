@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from './supabaseClient';
 import { getUserProfile } from './economyService';
+import { QUEUE_SUBMITTED_EVENT } from './serverQueueService';
 
 export interface JobState {
   jobId: string;
@@ -42,7 +43,7 @@ const EMPTY_QUEUE_STATS: QueueStats = {
   systemQueued: 0,
 };
 
-const BUSY_QUEUE_POLL_MS = 30_000;
+const BUSY_QUEUE_POLL_MS = 10_000;
 const IDLE_QUEUE_POLL_MS = 120_000;
 const MANUAL_QUEUE_POLL_MIN_INTERVAL_MS = 5_000;
 
@@ -171,6 +172,7 @@ export const useConcurrency = () => {
 
   useEffect(() => {
     let mounted = true;
+    let queuedRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
     queueStatsConsumerCount += 1;
 
@@ -198,8 +200,34 @@ export const useConcurrency = () => {
       console.warn('[Concurrency] Initial queue stats load failed', error);
     });
 
+    const handleQueueSubmitted = () => {
+      fetchSharedQueueStats(true).catch((error) => {
+        console.warn('[Concurrency] Queue stats refresh after submit failed', error);
+      });
+
+      if (queuedRefreshTimer) {
+        clearTimeout(queuedRefreshTimer);
+      }
+
+      queuedRefreshTimer = setTimeout(() => {
+        fetchSharedQueueStats(true).catch((error) => {
+          console.warn('[Concurrency] Delayed queue stats refresh failed', error);
+        });
+      }, 4_500);
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener(QUEUE_SUBMITTED_EVENT, handleQueueSubmitted);
+    }
+
     return () => {
       mounted = false;
+      if (queuedRefreshTimer) {
+        clearTimeout(queuedRefreshTimer);
+      }
+      if (typeof window !== 'undefined') {
+        window.removeEventListener(QUEUE_SUBMITTED_EVENT, handleQueueSubmitted);
+      }
       jobSubscribers.delete(handleJobUpdate);
       queueStatsSubscribers.delete(handleQueueStatsUpdate);
       queueStatsConsumerCount = Math.max(0, queueStatsConsumerCount - 1);

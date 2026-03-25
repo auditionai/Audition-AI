@@ -562,6 +562,7 @@ export const updateUserBalance = async (
 
         if (!error) {
             if (!options.targetUserId) {
+                invalidateUserProfileCache();
                 window.dispatchEvent(new Event('balance_updated'));
             }
             return;
@@ -858,6 +859,102 @@ export const getLocalTodayStr = () => {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 };
 
+const getLocalDayBoundaryIso = (dateStr: string, boundary: 'start' | 'end') => {
+    const suffix = boundary === 'start' ? 'T00:00:00.000' : 'T23:59:59.999';
+    return new Date(`${dateStr}${suffix}`).toISOString();
+};
+
+const getNextMonthStartIso = (monthStr: string) => {
+    const [year, month] = monthStr.split('-').map((value) => Number(value));
+    return new Date(year, month, 1, 0, 0, 0, 0).toISOString();
+};
+
+type RewardRepairWindow = {
+    startAt: string;
+    endAt?: string;
+};
+
+const hasRewardLog = async (
+    userId: string,
+    referenceType: string,
+    referenceId: string,
+    legacyDescription: string,
+    window: RewardRepairWindow,
+) => {
+    if (!supabase) return false;
+
+    try {
+        const { data, error } = await supabase
+            .from('vcoin_transactions')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('reference_type', referenceType)
+            .eq('reference_id', referenceId)
+            .limit(1);
+
+        if (!error && (data?.length || 0) > 0) {
+            return true;
+        }
+    } catch (error) {
+        console.warn('[Checkin] Failed to verify reward log by reference', error);
+    }
+
+    try {
+        let query = supabase
+            .from('vcoin_transactions')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('type', 'reward')
+            .eq('description', legacyDescription)
+            .gte('created_at', window.startAt);
+
+        if (window.endAt) {
+            query = query.lt('created_at', window.endAt);
+        }
+
+        const { data, error } = await query.limit(1);
+        if (error) {
+            throw error;
+        }
+
+        return (data?.length || 0) > 0;
+    } catch (error) {
+        console.warn('[Checkin] Failed to verify legacy reward log', error);
+        return false;
+    }
+};
+
+const ensureRewardApplied = async ({
+    userId,
+    amount,
+    reason,
+    referenceType,
+    referenceId,
+    metadata,
+    repairWindow,
+}: {
+    userId: string;
+    amount: number;
+    reason: string;
+    referenceType: string;
+    referenceId: string;
+    metadata?: Record<string, any>;
+    repairWindow: RewardRepairWindow;
+}) => {
+    const alreadyApplied = await hasRewardLog(userId, referenceType, referenceId, reason, repairWindow);
+    if (alreadyApplied) {
+        return false;
+    }
+
+    await updateUserBalance(amount, reason, 'reward', {
+        referenceType,
+        referenceId,
+        metadata,
+    });
+
+    return true;
+};
+
 // --- CHECKIN & REWARDS ---
 
 export const getCheckinStatus = async () => {
@@ -910,6 +1007,10 @@ export const performCheckin = async (): Promise<{success: boolean, reward: numbe
     const user = await getUserProfile();
     const today = getLocalTodayStr();
     const reward = 5;
+    const referenceId = `${user.id}:${today}`;
+    const startAt = getLocalDayBoundaryIso(today, 'start');
+    const endAt = getLocalDayBoundaryIso(today, 'end');
+    let checkinAlreadyExists = false;
 
     try {
         const { error } = await supabase.from('daily_check_ins').insert({
@@ -917,15 +1018,48 @@ export const performCheckin = async (): Promise<{success: boolean, reward: numbe
             check_in_date: today
         });
 
-        if (error) throw error;
+        if (error) {
+            if ((error as any)?.code === '23505' || /duplicate|already exists/i.test(error.message || '')) {
+                checkinAlreadyExists = true;
+            } else {
+                throw error;
+            }
+        }
 
-        // Update balance directly
-        await updateUserBalance(reward, 'Daily Checkin', 'reward');
+        const rewardApplied = await ensureRewardApplied({
+            userId: user.id,
+            amount: reward,
+            reason: 'Daily Checkin',
+            referenceType: 'daily_checkin_reward',
+            referenceId,
+            metadata: {
+                reward_type: 'daily_checkin',
+                check_in_date: today,
+            },
+            repairWindow: {
+                startAt,
+                endAt,
+            },
+        });
         invalidateCheckinStatusCache();
         invalidateUserProfileCache();
         
         const status = await getCheckinStatus();
-        return { success: true, reward, newStreak: status.streak };
+        if (checkinAlreadyExists && !rewardApplied) {
+            return {
+                success: false,
+                reward: 0,
+                newStreak: status.streak,
+                message: 'Bạn đã điểm danh hôm nay rồi!'
+            };
+        }
+
+        return {
+            success: true,
+            reward: rewardApplied ? reward : 0,
+            newStreak: status.streak,
+            message: checkinAlreadyExists ? 'Đã đồng bộ lại phần thưởng điểm danh hôm nay.' : undefined
+        };
     } catch (e: any) {
         return { success: false, reward: 0, newStreak: 0, message: e.message };
     }
@@ -936,37 +1070,80 @@ export const claimMilestoneReward = async (day: number): Promise<{success: boole
     const user = await getUserProfile();
     const rewards: Record<number, number> = { 7: 20, 14: 50, 30: 100 };
     const amount = rewards[day] || 0;
+    const currentMonth = getLocalTodayStr().substring(0, 7);
+    const referenceId = `${user.id}:${currentMonth}:${day}`;
+    let alreadyClaimed = false;
 
-    const today = getLocalTodayStr();
-    const startOfMonth = new Date(today.substring(0, 7) + '-01').toISOString();
+    if (amount <= 0) {
+        return { success: false, message: 'Mốc thưởng không hợp lệ.' };
+    }
+
+    const status = await getCheckinStatus();
+    if (status.streak < day) {
+        return { success: false, message: `Bạn chưa đủ ${day} ngày điểm danh trong tháng này.` };
+    }
+
+    const startOfMonth = new Date(`${currentMonth}-01T00:00:00.000`).toISOString();
+    const endOfMonth = getNextMonthStartIso(currentMonth);
 
     try {
         // Double check if already claimed THIS MONTH to prevent race conditions
-        const { data: existing } = await supabase
+        const { data: existing, error: existingError } = await supabase
             .from('milestone_claims')
             .select('id')
             .eq('user_id', user.id)
             .eq('day_milestone', day)
             .gte('created_at', startOfMonth)
-            .single();
+            .maybeSingle();
 
-        if (existing) {
-            throw new Error(`Bạn đã nhận mốc ${day} ngày trong tháng này rồi!`);
+        if (existingError) {
+            throw existingError;
         }
 
-        const { error } = await supabase.from('milestone_claims').insert({
-            user_id: user.id,
-            day_milestone: day,
-            reward_amount: amount,
-            claim_month: today.substring(0, 7)
+        if (existing) {
+            alreadyClaimed = true;
+        }
+
+        if (!alreadyClaimed) {
+            const { error } = await supabase.from('milestone_claims').insert({
+                user_id: user.id,
+                day_milestone: day,
+                reward_amount: amount,
+                claim_month: currentMonth
+            });
+
+            if (error) throw error;
+        }
+
+        const rewardApplied = await ensureRewardApplied({
+            userId: user.id,
+            amount,
+            reason: `Milestone ${day} Days`,
+            referenceType: 'milestone_reward',
+            referenceId,
+            metadata: {
+                reward_type: 'milestone',
+                claim_month: currentMonth,
+                milestone_day: day,
+            },
+            repairWindow: {
+                startAt: startOfMonth,
+                endAt: endOfMonth,
+            },
         });
-
-        if (error) throw error;
-
-        await updateUserBalance(amount, `Milestone ${day} Days`, 'reward');
         invalidateCheckinStatusCache();
         invalidateUserProfileCache();
-        return { success: true, message: `Nhận thưởng mốc ${day} ngày thành công!` };
+
+        if (alreadyClaimed && !rewardApplied) {
+            return { success: false, message: `B?n d� nh?n m?c ${day} ng�y trong th�ng n�y r?i!` };
+        }
+
+        return {
+            success: true,
+            message: alreadyClaimed
+                ? `�� d?ng b? l?i thu?ng m?c ${day} ng�y cho b?n.`
+                : `Nh?n thu?ng m?c ${day} ng�y th�nh c�ng!`
+        };
     } catch (e: any) {
         return { success: false, message: e.message };
     }
@@ -1984,3 +2161,5 @@ export const getAdminStats = async () => {
         transactions
     };
 };
+
+

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Handler } from '@netlify/functions';
 import { runQueueDaemon } from './_queue-daemon';
+import { triggerBackgroundQueueWorker } from './_queue-launcher';
 import { getServiceRoleClient } from './_supabase';
 
 const WORKER_LOCK_LEASE_SECONDS = 90;
@@ -55,6 +56,7 @@ export const handler: Handler = async (event) => {
   }
 
   const lockOwner = `queue-worker:${randomUUID()}`;
+  let followUpLaunchNeeded = false;
   try {
     const acquired = await tryAcquireQueueWorkerLock(lockOwner);
     if (!acquired) {
@@ -65,9 +67,15 @@ export const handler: Handler = async (event) => {
     }
 
     const summary = await runQueueDaemon();
+    followUpLaunchNeeded =
+      Number(summary.claimedForDispatch || 0) > 0 ||
+      Number(summary.submitted || 0) > 0 ||
+      Number(summary.requeued || 0) > 0 ||
+      Number(summary.completed || 0) > 0 ||
+      Number(summary.failed || 0) > 0;
     return {
       statusCode: 200,
-      body: JSON.stringify({ success: true, summary }),
+      body: JSON.stringify({ success: true, summary, followUpLaunchNeeded }),
     };
   } catch (error: any) {
     console.error('[queue-worker-background] failed:', error);
@@ -77,5 +85,12 @@ export const handler: Handler = async (event) => {
     };
   } finally {
     await releaseQueueWorkerLock(lockOwner);
+    if (followUpLaunchNeeded) {
+      try {
+        await triggerBackgroundQueueWorker(event.rawUrl, 1_000);
+      } catch (error) {
+        console.warn('[queue-worker-background] Failed to launch follow-up worker:', error);
+      }
+    }
   }
 };

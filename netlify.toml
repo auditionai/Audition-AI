@@ -74,8 +74,23 @@
   status = 200
 
 [[redirects]]
+  from = "/api/queue-reconcile"
+  to = "/.netlify/functions/queue-reconcile"
+  status = 200
+
+[[redirects]]
+  from = "/api/force-rescue-failed-jobs"
+  to = "/.netlify/functions/force-rescue-failed-jobs"
+  status = 200
+
+[[redirects]]
   from = "/api/gallery-images"
   to = "/.netlify/functions/gallery-images"
+  status = 200
+
+[[redirects]]
+  from = "/api/checkin-reward"
+  to = "/.netlify/functions/checkin-reward"
   status = 200
 
 [[redirects]]

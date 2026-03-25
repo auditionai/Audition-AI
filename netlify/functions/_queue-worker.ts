@@ -44,6 +44,8 @@ type QueueJobRow = {
   model_used: string | null;
   cost_vcoin: number | null;
   job_id?: string | null;
+  error_message?: string | null;
+  image_url?: string | null;
 };
 
 type QueueWorkerSummary = {
@@ -64,8 +66,15 @@ const MAX_DISPATCH_RETRIES = 6;
 const MAX_POLL_FAILURES = 8;
 const MAX_PROCESSING_AGE_MS = 45 * 60 * 1000;
 const MAX_VIDEO_PROCESSING_AGE_MS = 30 * 60 * 1000;
+const MAX_SINGLE_IMAGE_PROCESSING_AGE_MS = 15 * 60 * 1000;
+const MAX_COUPLE_IMAGE_PROCESSING_AGE_MS = 20 * 60 * 1000;
+const MAX_GROUP3_IMAGE_PROCESSING_AGE_MS = 30 * 60 * 1000;
+const MAX_GROUP4_IMAGE_PROCESSING_AGE_MS = 30 * 60 * 1000;
 const MAX_PROVIDER_GENERIC_RETRIES = 2;
 const MAX_OUTPUT_VERIFICATION_RETRIES = 2;
+const FAILED_RESULT_RESCUE_SCAN_LIMIT = 10;
+const FAILED_RESULT_RESCUE_LOOKBACK_MS = 24 * 60 * 60 * 1000;
+const FAILED_RESULT_RESCUE_MAX_ATTEMPTS = 8;
 const SINGLE_AND_COUPLE_PREPARE_TIMEOUT_MS = 10 * 60 * 1000;
 const GROUP_OF_THREE_PREPARE_TIMEOUT_MS = 15 * 60 * 1000;
 const GROUP_OF_FOUR_PREPARE_TIMEOUT_MS = 20 * 60 * 1000;
@@ -96,6 +105,25 @@ const isTransientError = (message: string) => {
     normalized.includes('502') ||
     normalized.includes('504') ||
     normalized.includes('network')
+  );
+};
+
+const isAmbiguousDispatchError = (message: string) => {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes('the operation was aborted due to timeout') ||
+    normalized.includes('timeout') ||
+    normalized.includes('timed out') ||
+    normalized.includes('network') ||
+    normalized.includes('fetch failed') ||
+    normalized.includes('socket hang up') ||
+    normalized.includes('econnreset') ||
+    normalized.includes('etimedout') ||
+    normalized.includes('502') ||
+    normalized.includes('503') ||
+    normalized.includes('504') ||
+    normalized.includes('bad gateway') ||
+    normalized.includes('gateway timeout')
   );
 };
 
@@ -231,6 +259,19 @@ const getOutputVerificationRetryCount = (payload?: Record<string, unknown> | Ima
   return Math.max(0, Number(recipePayload?.__outputVerificationRetryCount || 0));
 };
 
+const getFailedRescueAttemptCount = (payload?: Record<string, unknown> | ImageGenerateRecipePayload | null) =>
+  Math.max(0, Number(toQueuePayloadObject(payload).__failedRescueAttemptCount || 0));
+
+const getFailedRescueNextAt = (payload?: Record<string, unknown> | ImageGenerateRecipePayload | null) => {
+  const raw = toQueuePayloadObject(payload).__nextFailedRescueAt;
+  if (typeof raw !== 'string' || !raw.trim()) {
+    return 0;
+  }
+
+  const timestamp = new Date(raw).getTime();
+  return Number.isFinite(timestamp) ? timestamp : 0;
+};
+
 const getQueueLogs = (payload?: Record<string, unknown> | ImageGenerateRecipePayload | null): QueueProgressLogEntry[] => {
   const rawLogs = toQueuePayloadObject(payload).__logs;
   if (!Array.isArray(rawLogs)) {
@@ -343,7 +384,11 @@ const extractResultUrl = (data: any): string | null => {
   if (typeof data?.result === 'string' && data.result.trim()) return data.result.trim();
   if (Array.isArray(data?.result) && typeof data.result[0] === 'string' && data.result[0].trim()) return data.result[0].trim();
   if (typeof data?.output === 'string' && data.output.trim()) return data.output.trim();
+  if (Array.isArray(data?.output) && typeof data.output[0] === 'string' && data.output[0].trim()) return data.output[0].trim();
   if (typeof data?.data?.result === 'string' && data.data.result.trim()) return data.data.result.trim();
+  if (Array.isArray(data?.data?.result) && typeof data.data.result[0] === 'string' && data.data.result[0].trim()) return data.data.result[0].trim();
+  if (typeof data?.data?.output === 'string' && data.data.output.trim()) return data.data.output.trim();
+  if (Array.isArray(data?.data?.output) && typeof data.data.output[0] === 'string' && data.data.output[0].trim()) return data.data.output[0].trim();
   return null;
 };
 
@@ -538,13 +583,64 @@ const getMaxProcessingAgeMs = (job: Pick<QueueJobRow, 'queue_kind'>) => {
   return MAX_PROCESSING_AGE_MS;
 };
 
-const getProcessingTimeoutUserMessage = (job: Pick<QueueJobRow, 'queue_kind'>) => {
-  const timeoutMinutes = Math.ceil(getMaxProcessingAgeMs(job) / 60000);
+const getImageProcessingAgeMs = (
+  job: Pick<QueueJobRow, 'tool_id'>,
+  payload?: QueueJobRow['queue_payload'],
+) => {
+  if (isQueueRecipePayload(payload) && payload.recipeType === 'image_generate_recipe_v1') {
+    const characterCount = getImageRecipeCharacterCount(job, payload);
+    if (characterCount && characterCount >= 4) {
+      return MAX_GROUP4_IMAGE_PROCESSING_AGE_MS;
+    }
+    if (characterCount === 3) {
+      return MAX_GROUP3_IMAGE_PROCESSING_AGE_MS;
+    }
+    if (characterCount === 2) {
+      return MAX_COUPLE_IMAGE_PROCESSING_AGE_MS;
+    }
+    if (characterCount === 1) {
+      return MAX_SINGLE_IMAGE_PROCESSING_AGE_MS;
+    }
+  }
+
+  const characterCount = getCharacterCountFromToolId(job.tool_id);
+  if (characterCount && characterCount >= 4) {
+    return MAX_GROUP4_IMAGE_PROCESSING_AGE_MS;
+  }
+  if (characterCount === 3) {
+    return MAX_GROUP3_IMAGE_PROCESSING_AGE_MS;
+  }
+  if (characterCount === 2) {
+    return MAX_COUPLE_IMAGE_PROCESSING_AGE_MS;
+  }
+  if (characterCount === 1) {
+    return MAX_SINGLE_IMAGE_PROCESSING_AGE_MS;
+  }
+
+  return MAX_PROCESSING_AGE_MS;
+};
+
+const getProviderProcessingTimeoutMs = (
+  job: Pick<QueueJobRow, 'queue_kind' | 'tool_id'>,
+  payload?: QueueJobRow['queue_payload'],
+) => {
+  if (job.queue_kind === 'video_generate' || job.queue_kind === 'motion_generate') {
+    return MAX_VIDEO_PROCESSING_AGE_MS;
+  }
+
+  return getImageProcessingAgeMs(job, payload);
+};
+
+const getProcessingTimeoutUserMessage = (
+  job: Pick<QueueJobRow, 'queue_kind' | 'tool_id'>,
+  payload?: QueueJobRow['queue_payload'],
+) => {
+  const timeoutMinutes = Math.ceil(getProviderProcessingTimeoutMs(job, payload) / 60000);
   if (job.queue_kind === 'video_generate' || job.queue_kind === 'motion_generate') {
     return `Video da qua thoi gian cho ${timeoutMinutes} phut. Vui long tao lai video moi.`;
   }
 
-  return `Tien trinh da qua thoi gian cho ${timeoutMinutes} phut. Vui long thu lai.`;
+  return `Anh da qua thoi gian cho ${timeoutMinutes} phut tu luc gui sang he thong tao anh. Vui long thu lai.`;
 };
 
 const shouldRefundFailure = (
@@ -907,6 +1003,7 @@ const markQueuedStage = async (jobId: string, progress: number) => {
     status: 'queued',
     progress,
     error_message: null,
+    processing_started_at: null,
     next_poll_at: new Date().toISOString(),
     lease_token: null,
     lease_expires_at: null,
@@ -915,7 +1012,15 @@ const markQueuedStage = async (jobId: string, progress: number) => {
 };
 
 const markSubmittingPreparedPayload = async (jobId: string, payload?: Record<string, unknown> | null) => {
-  const nextPayload = withQueueLog(payload, 'dispatching', 'Đang gửi yêu cầu tới provider TST.');
+  const nextPayload = withQueueLog(
+    {
+      ...toQueuePayloadObject(payload),
+      __tstTouched: true,
+      __dispatchConfirmationPending: true,
+    },
+    'dispatching',
+    'Đang gửi yêu cầu tới provider TST.',
+  );
   await updateGeneratedImageRecord(jobId, {
     status: 'processing',
     progress: 50,
@@ -926,6 +1031,37 @@ const markSubmittingPreparedPayload = async (jobId: string, payload?: Record<str
   });
 
   return nextPayload;
+};
+
+const markDispatchAwaitingProviderConfirmation = async (
+  job: QueueJobRow,
+  errorMessage: string,
+  payload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
+) => {
+  const nextPayload = withQueueLog(
+    {
+      ...toQueuePayloadObject(payload ?? job.queue_payload),
+      __tstTouched: true,
+      __dispatchConfirmationPending: true,
+      __lastDispatchError: errorMessage,
+    },
+    'dispatching',
+    `Khong tu dong gui lai lenh de tranh trung job. Dang cho xac nhan provider sau loi mang/timeout: ${errorMessage}`,
+    'warning',
+  );
+
+  await updateGeneratedImageRecord(job.id, {
+    status: 'processing',
+    progress: 55,
+    error_message: null,
+    queue_payload: nextPayload,
+    job_id: null,
+    next_poll_at: null,
+    lease_token: null,
+    lease_expires_at: null,
+    last_error_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  });
 };
 
 const shouldSkipDispatch = async (job: QueueJobRow) => {
@@ -1000,6 +1136,7 @@ const queueRecipeStageTransition = async (
     progress,
     error_message: null,
     queue_payload: nextPayload,
+    processing_started_at: null,
     next_poll_at: new Date().toISOString(),
     lease_token: null,
     lease_expires_at: null,
@@ -1026,6 +1163,7 @@ const markRecipePreparedForDispatch = async (
     progress: 55,
     error_message: null,
     queue_payload: storedPayload,
+    processing_started_at: null,
     next_poll_at: new Date().toISOString(),
     lease_token: null,
     lease_expires_at: null,
@@ -1089,7 +1227,7 @@ const prepareImageRecipeInStages = async (job: QueueJobRow, recipePayload: Image
       hasMoreUploads ? Math.min(35, 20 + Math.round((nextCursor / renderSources.length) * 15)) : 40,
       hasMoreUploads ? 'info' : 'success',
     ) as ImageGenerateRecipePayload;
-    return { type: 'requeue' as const };
+    return prepareImageRecipeInStages(job, recipePayload);
   }
 
   if (currentStage === 'synthesizing_prompt') {
@@ -1117,7 +1255,7 @@ const prepareImageRecipeInStages = async (job: QueueJobRow, recipePayload: Image
       45,
       'success',
     ) as ImageGenerateRecipePayload;
-    return { type: 'requeue' as const };
+    return prepareImageRecipeInStages(job, recipePayload);
   }
 
   recipePayload = await persistQueueLog(
@@ -1158,6 +1296,256 @@ const markCompletedWithAssetUrl = async (job: QueueJobRow, assetUrl: string) => 
     .eq('id', job.id);
 };
 
+const completePolledJobWithResultUrl = async (
+  job: QueueJobRow,
+  resultUrl: string,
+  options?: {
+    completionMessage?: string;
+    completionLevel?: QueueProgressLogEntry['level'];
+  },
+) => {
+  const admin = getServiceRoleClient();
+  let completionPayload = job.queue_payload;
+  const storedImageRecipe =
+    job.queue_kind === 'image_generate'
+      ? getStoredImageGenerateRecipePayload(job.queue_payload)
+      : null;
+
+  if (storedImageRecipe) {
+    const verifyingPayload = await persistQueueLog(
+      job.id,
+      completionPayload,
+      'verifying_output',
+      'Dang hau kiem ket qua AI de bao toan identity.',
+    );
+
+    try {
+      const verificationResult = await verifyGeneratedImageOutput(storedImageRecipe, resultUrl);
+      const verificationSummary =
+        verificationResult.summary ||
+        verificationResult.issues.join('; ') ||
+        'Identity guard completed.';
+
+      if (!verificationResult.pass) {
+        const nextVerifyRetryCount = getOutputVerificationRetryCount(storedImageRecipe) + 1;
+        const retryPayload = {
+          ...storedImageRecipe,
+          __stage: 'verifying_output',
+          __logs: getQueueLogs(verifyingPayload),
+          __notifyInputMedia: buildNotificationMediaEntries(verifyingPayload),
+          __outputVerificationRetryCount: nextVerifyRetryCount,
+          __lastOutputVerificationSummary: verificationSummary,
+        } as ImageGenerateRecipePayload & Record<string, unknown>;
+        const retryMessage = `Identity guard failed: ${verificationSummary}`;
+
+        if (nextVerifyRetryCount >= MAX_OUTPUT_VERIFICATION_RETRIES) {
+          await markFailedAndRefund(
+            {
+              ...job,
+              queue_payload: retryPayload,
+            },
+            `${retryMessage}. Retry limit reached.`,
+          );
+          return 'failed' as const;
+        }
+
+        return requeueJob(
+          {
+            ...job,
+            queue_payload: retryPayload,
+          },
+          retryMessage,
+        );
+      }
+
+      completionPayload = withQueueLog(
+        verifyingPayload,
+        'verifying_output',
+        `Identity guard passed: ${verificationSummary}`,
+        'success',
+      );
+    } catch (verificationError) {
+      const verificationMessage =
+        verificationError instanceof Error ? verificationError.message : String(verificationError || 'Unknown verification error');
+      completionPayload = withQueueLog(
+        verifyingPayload,
+        'verifying_output',
+        `Identity guard unavailable, completing without auto-retry: ${verificationMessage}`,
+        'warning',
+      );
+    }
+  }
+
+  await admin
+    .from('generated_images')
+    .update({
+      status: 'completed',
+      image_url: resultUrl,
+      queue_payload: withQueueLog(
+        completionPayload,
+        'completed',
+        options?.completionMessage || 'Provider da hoan tat. Da luu ket qua.',
+        options?.completionLevel || 'success',
+      ),
+      progress: 100,
+      error_message: null,
+      attempt_count: 0,
+      finished_at: new Date().toISOString(),
+      next_poll_at: null,
+      lease_token: null,
+      lease_expires_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', job.id);
+
+  fireTelegramJobNotification('completed', {
+    id: job.id,
+    userId: job.user_id,
+    prompt: job.prompt,
+    assetType: job.asset_type,
+    toolId: job.tool_id,
+    toolName: job.tool_name,
+    engine: job.model_used,
+    queueKind: job.queue_kind,
+    costVcoin: job.cost_vcoin,
+    resultUrl,
+    finishedAt: new Date().toISOString(),
+    queuePayload: completionPayload,
+  });
+  return 'completed' as const;
+};
+
+const getFailedRescueDelaySeconds = (attemptCount: number) => {
+  if (attemptCount <= 0) return 30;
+  return Math.min(60 * 60, 60 * 2 ** Math.min(attemptCount - 1, 5));
+};
+
+const scheduleFailedJobRescueRetry = async (
+  job: QueueJobRow,
+  message: string,
+  attemptCount: number,
+) => {
+  const nextAttempt = attemptCount + 1;
+  const nextRetryAt = new Date(Date.now() + getFailedRescueDelaySeconds(nextAttempt) * 1000).toISOString();
+  const nextPayload = withQueueLog(
+    {
+      ...toQueuePayloadObject(job.queue_payload),
+      __failedRescueAttemptCount: nextAttempt,
+      __nextFailedRescueAt: nextRetryAt,
+    },
+    'failed',
+    `Rescue TST chua tim thay ket qua hop le. Se thu lai sau: ${message}`,
+    'warning',
+  );
+
+  await updateGeneratedImageRecord(job.id, {
+    status: 'failed',
+    error_message: job.error_message || message,
+    queue_payload: nextPayload,
+    updated_at: new Date().toISOString(),
+  });
+};
+
+const reviveFailedJobToProcessing = async (
+  job: QueueJobRow,
+  providerData: any,
+) => {
+  const providerProgress = typeof providerData?.progress === 'number' ? providerData.progress : 0;
+  const progress = Math.max(60, providerProgress);
+  const nextPayload = withQueueLog(
+    {
+      ...toQueuePayloadObject(job.queue_payload),
+      __failedRescueAttemptCount: 0,
+      __nextFailedRescueAt: null,
+    },
+    'polling',
+    'Rescue TST: provider van dang xu ly. Chuyen job tro lai trang thai processing.',
+    'warning',
+  );
+
+  await updateGeneratedImageRecord(job.id, {
+    status: 'processing',
+    progress,
+    error_message: null,
+    queue_payload: nextPayload,
+    finished_at: null,
+    next_poll_at: new Date(Date.now() + POLL_INTERVAL_SECONDS * 1000).toISOString(),
+    lease_token: null,
+    lease_expires_at: null,
+    updated_at: new Date().toISOString(),
+  });
+};
+
+const rescueFailedJobsWithProviderResults = async () => {
+  const admin = getServiceRoleClient();
+  const lookbackIso = new Date(Date.now() - FAILED_RESULT_RESCUE_LOOKBACK_MS).toISOString();
+  const now = Date.now();
+  const { data, error } = await admin
+    .from('generated_images')
+    .select('id, user_id, asset_type, queue_kind, queue_payload, prompt, tool_id, tool_name, model_used, cost_vcoin, job_id, status, error_message, created_at, updated_at, finished_at, processing_started_at, next_poll_at, attempt_count, image_url')
+    .eq('status', 'failed')
+    .not('job_id', 'is', null)
+    .gte('created_at', lookbackIso)
+    .order('updated_at', { ascending: true })
+    .limit(FAILED_RESULT_RESCUE_SCAN_LIMIT * 4);
+
+  if (error) {
+    throw error;
+  }
+
+  let rescued = 0;
+  const candidates = ((data || []) as any[])
+    .filter((job) => !String(job?.image_url || '').trim())
+    .filter((job) => getFailedRescueAttemptCount(job?.queue_payload) < FAILED_RESULT_RESCUE_MAX_ATTEMPTS)
+    .filter((job) => {
+      const nextAt = getFailedRescueNextAt(job?.queue_payload);
+      return !nextAt || nextAt <= now;
+    })
+    .slice(0, FAILED_RESULT_RESCUE_SCAN_LIMIT);
+
+  for (const job of candidates as QueueJobRow[]) {
+    try {
+      const providerData = await pollProviderJob(String(job.job_id || ''));
+      const providerStatus = String(providerData?.status || '').toLowerCase();
+      const resultUrl = extractResultUrl(providerData);
+
+      if (resultUrl) {
+        const state = await completePolledJobWithResultUrl(job, resultUrl, {
+          completionMessage:
+            providerStatus === 'failed' || providerStatus === 'error' || providerStatus === 'cancelled' || providerStatus === 'canceled'
+              ? `Rescue TST: provider tung bao loi nhung van tra ve ket qua hop le. Da tu dong luu ket qua.`
+              : 'Rescue TST: da tim lai ket qua hop le va dong bo thanh cong.',
+          completionLevel: 'warning',
+        });
+        if (state === 'completed') {
+          rescued += 1;
+        }
+        continue;
+      }
+
+      if (providerStatus === 'processing' || providerStatus === 'queued' || providerStatus === 'pending' || providerStatus === 'submitted') {
+        await reviveFailedJobToProcessing(job, providerData);
+        rescued += 1;
+        continue;
+      }
+
+      await scheduleFailedJobRescueRetry(
+        job,
+        String(providerData?.error || providerData?.message || providerStatus || 'Khong co ket qua tu provider'),
+        getFailedRescueAttemptCount(job.queue_payload),
+      );
+    } catch (error: any) {
+      await scheduleFailedJobRescueRetry(
+        job,
+        String(error?.message || 'Queue rescue poll failed'),
+        getFailedRescueAttemptCount(job.queue_payload),
+      );
+    }
+  }
+
+  return rescued;
+};
+
 const markPolledState = async (job: QueueJobRow, providerData: any) => {
   const admin = getServiceRoleClient();
   const providerStatus = String(providerData?.status || '').toLowerCase();
@@ -1169,113 +1557,18 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
     if (!resultUrl) {
       throw new Error(`Job completed but no result URL returned: ${JSON.stringify(providerData)}`);
     }
-
-    let completionPayload = job.queue_payload;
-    const storedImageRecipe =
-      job.queue_kind === 'image_generate'
-        ? getStoredImageGenerateRecipePayload(job.queue_payload)
-        : null;
-
-    if (storedImageRecipe) {
-      const verifyingPayload = await persistQueueLog(
-        job.id,
-        completionPayload,
-        'verifying_output',
-        'Dang hau kiem ket qua AI de bao toan identity.',
-      );
-
-      try {
-        const verificationResult = await verifyGeneratedImageOutput(storedImageRecipe, resultUrl);
-        const verificationSummary =
-          verificationResult.summary ||
-          verificationResult.issues.join('; ') ||
-          'Identity guard completed.';
-
-        if (!verificationResult.pass) {
-          const nextVerifyRetryCount = getOutputVerificationRetryCount(storedImageRecipe) + 1;
-          const retryPayload = {
-            ...storedImageRecipe,
-            __stage: 'verifying_output',
-            __logs: getQueueLogs(verifyingPayload),
-            __notifyInputMedia: buildNotificationMediaEntries(verifyingPayload),
-            __outputVerificationRetryCount: nextVerifyRetryCount,
-            __lastOutputVerificationSummary: verificationSummary,
-          } as ImageGenerateRecipePayload & Record<string, unknown>;
-          const retryMessage = `Identity guard failed: ${verificationSummary}`;
-
-          if (nextVerifyRetryCount >= MAX_OUTPUT_VERIFICATION_RETRIES) {
-            await markFailedAndRefund(
-              {
-                ...job,
-                queue_payload: retryPayload,
-              },
-              `${retryMessage}. Retry limit reached.`,
-            );
-            return 'failed';
-          }
-
-          return requeueJob(
-            {
-              ...job,
-              queue_payload: retryPayload,
-            },
-            retryMessage,
-          );
-        }
-
-        completionPayload = withQueueLog(
-          verifyingPayload,
-          'verifying_output',
-          `Identity guard passed: ${verificationSummary}`,
-          'success',
-        );
-      } catch (verificationError) {
-        const verificationMessage =
-          verificationError instanceof Error ? verificationError.message : String(verificationError || 'Unknown verification error');
-        completionPayload = withQueueLog(
-          verifyingPayload,
-          'verifying_output',
-          `Identity guard unavailable, completing without auto-retry: ${verificationMessage}`,
-          'warning',
-        );
-      }
-    }
-
-    await admin
-      .from('generated_images')
-      .update({
-        status: 'completed',
-        image_url: resultUrl,
-        queue_payload: withQueueLog(completionPayload, 'completed', 'Provider da hoan tat. Da luu ket qua.', 'success'),
-        progress: 100,
-        error_message: null,
-        attempt_count: 0,
-        finished_at: new Date().toISOString(),
-        next_poll_at: null,
-        lease_token: null,
-        lease_expires_at: null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', job.id);
-    fireTelegramJobNotification('completed', {
-      id: job.id,
-      userId: job.user_id,
-      prompt: job.prompt,
-      assetType: job.asset_type,
-      toolId: job.tool_id,
-      toolName: job.tool_name,
-      engine: job.model_used,
-      queueKind: job.queue_kind,
-      costVcoin: job.cost_vcoin,
-      resultUrl,
-      finishedAt: new Date().toISOString(),
-      queuePayload: completionPayload,
-    });
-    return 'completed';
+    return completePolledJobWithResultUrl(job, resultUrl);
   }
 
   if (providerStatus === 'failed' || providerStatus === 'error' || providerStatus === 'cancelled' || providerStatus === 'canceled') {
     const failureMessage = providerData?.error || providerData?.message || 'Provider job failed';
+    const resultUrl = extractResultUrl(providerData);
+    if (resultUrl) {
+      return completePolledJobWithResultUrl(job, resultUrl, {
+        completionMessage: `Provider bao "${failureMessage}" nhung van tra ve ket qua hop le. Da luu ket qua thay vi danh that bai.`,
+        completionLevel: 'warning',
+      });
+    }
     const currentState = await getJobRuntimeState(job.id);
     const currentAttempts = Number(currentState?.attempt_count || 0);
 
@@ -1295,8 +1588,8 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
   const currentState = await getJobRuntimeState(job.id);
   const startedAt = currentState?.processing_started_at || currentState?.created_at || new Date().toISOString();
   const processingAgeMs = Date.now() - new Date(startedAt).getTime();
-  if (processingAgeMs >= getMaxProcessingAgeMs(job)) {
-    await markFailedRespectingRefundPolicy(job, getProcessingTimeoutUserMessage(job));
+  if (processingAgeMs >= getProviderProcessingTimeoutMs(job, job.queue_payload)) {
+    await markFailedRespectingRefundPolicy(job, getProcessingTimeoutUserMessage(job, job.queue_payload));
     return 'failed';
   }
 
@@ -1328,10 +1621,10 @@ const handlePollFailure = async (job: QueueJobRow, errorMessage: string) => {
   const startedAt = state?.processing_started_at || state?.created_at || new Date().toISOString();
   const processingAgeMs = Date.now() - new Date(startedAt).getTime();
 
-  if (nextAttemptCount >= MAX_POLL_FAILURES || processingAgeMs >= getMaxProcessingAgeMs(job)) {
+  if (nextAttemptCount >= MAX_POLL_FAILURES || processingAgeMs >= getProviderProcessingTimeoutMs(job, job.queue_payload)) {
     const finalMessage =
-      processingAgeMs >= getMaxProcessingAgeMs(job)
-        ? getProcessingTimeoutUserMessage(job)
+      processingAgeMs >= getProviderProcessingTimeoutMs(job, job.queue_payload)
+        ? getProcessingTimeoutUserMessage(job, job.queue_payload)
         : errorMessage;
     await markFailedRespectingRefundPolicy(job, finalMessage);
     return 'failed';
@@ -1406,13 +1699,6 @@ const recoverStalePreparingJobs = async () => {
       leaseExpired &&
       ageMs >= ORPHAN_CLAIM_GRACE_MS;
 
-    const preparationTimeoutMs = getPreparationTimeoutMs(job, payload);
-
-    if (ageMs >= preparationTimeoutMs) {
-      await markFailedRespectingRefundPolicy(job, getPreparationTimeoutUserMessage(job, payload), payload);
-      continue;
-    }
-
     if (isOrphanedClaim) {
       const resetPayload = withQueueLog(
         payload,
@@ -1480,7 +1766,7 @@ const recoverStalePreparingJobs = async () => {
     }
 
     if (currentStatus === 'processing' && isRecipePayload) {
-      const result = await requeueJob(job, 'Queue preparation timed out before dispatching to provider.');
+      const result = await requeueJob(job, 'Worker preparation lease expired before dispatching to provider.');
       if (result === 'requeued') recovered += 1;
       continue;
     }
@@ -1523,6 +1809,9 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
     if (!hasWorkerTickBudgetRemaining(workerStartedAt)) {
       break;
     }
+
+    let providerPayloadForSubmit: Record<string, unknown> | null = null;
+    let providerDispatchStarted = false;
 
     try {
       if (await shouldSkipDispatch(job)) {
@@ -1693,7 +1982,7 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
         continue;
       }
 
-      const providerPayloadForSubmit = applyLivePricingConfigToPayload(
+      providerPayloadForSubmit = applyLivePricingConfigToPayload(
         job.queue_kind,
         submitPayload,
         submitValidationResult,
@@ -1703,17 +1992,26 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
       }
 
       job.queue_payload = await markSubmittingPreparedPayload(job.id, job.queue_payload);
+      providerDispatchStarted = true;
       const providerJobId = await submitProviderJob(job.queue_kind, providerPayloadForSubmit);
       await markSubmitted(job, providerJobId);
       summary.submitted += 1;
     } catch (error: any) {
       const message = error?.message || 'Queue dispatch failed';
+      if (providerDispatchStarted && isAmbiguousDispatchError(message)) {
+        await markDispatchAwaitingProviderConfirmation(job, message, providerPayloadForSubmit || job.queue_payload);
+        continue;
+      }
       if (message.startsWith('INVALID_TST_CONFIG:')) {
         await markFailedRespectingRefundPolicy(job, message.replace('INVALID_TST_CONFIG:', '').trim());
         summary.failed += 1;
       } else if (message.includes('Queue preparation timed out before')) {
-        await markFailedRespectingRefundPolicy(job, getPreparationTimeoutUserMessage(job, job.queue_payload));
-        summary.failed += 1;
+        const result = await requeueJob(job, message);
+        if (result === 'failed') {
+          summary.failed += 1;
+        } else {
+          summary.requeued += 1;
+        }
         continue;
       } else if (isTransientError(message)) {
         const result = await requeueJob(job, message);
@@ -1727,15 +2025,6 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
         summary.failed += 1;
       }
     }
-  }
-
-  if (
-    summary.claimedForDispatch > 0 ||
-    summary.submitted > 0 ||
-    summary.requeued > 0 ||
-    summary.failed > 0
-  ) {
-    return summary;
   }
 
   const { data: pollJobs, error: pollError } = await admin.rpc('claim_pollable_generated_jobs', {
@@ -1770,6 +2059,10 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
         summary.requeued += 1;
       }
     }
+  }
+
+  if (hasWorkerTickBudgetRemaining(workerStartedAt)) {
+    summary.completed += await rescueFailedJobsWithProviderResults();
   }
 
   return summary;

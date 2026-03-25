@@ -79,6 +79,7 @@ async function main() {
   }
 
   const repairs = [];
+  const balanceAheadOfLedger = [];
   for (const userId of usersWithCheckinHistory) {
     const user = usersById.get(userId);
     if (!user) continue;
@@ -96,6 +97,15 @@ async function main() {
         ledgerBalance,
         delta,
       });
+    } else if (delta < -0.0001) {
+      balanceAheadOfLedger.push({
+        userId,
+        email: user.email,
+        name: user.display_name,
+        currentBalance,
+        ledgerBalance,
+        delta,
+      });
     }
   }
 
@@ -106,6 +116,8 @@ async function main() {
         usersWithCheckinHistory: usersWithCheckinHistory.size,
         repairsNeeded: repairs.length,
         totalDelta: repairs.reduce((sum, row) => sum + row.delta, 0),
+        balanceAheadOfLedgerCount: balanceAheadOfLedger.length,
+        balanceAheadOfLedger,
         repairs,
       },
       null,

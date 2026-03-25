@@ -11,6 +11,13 @@ import {
 import { runVertexImageEdit } from './_vertex-image-edit';
 import { verifyGeneratedImageOutput } from './_vertex-image-verify';
 import {
+  inspectMotionVideoDurationSeconds,
+  reviewMotionCharacterInput,
+  reviewVideoKeyframeInput,
+  type VideoInputReviewIssue,
+  type VideoInputReviewResult,
+} from './_vertex-video-input-review';
+import {
   getImageDirectorSources,
   validateImageGenerateReferenceIntegrity,
   getImageRenderReferenceSources,
@@ -21,6 +28,8 @@ import {
   type QueueNotificationMediaEntry,
   type ImageEditRecipePayload,
   type ImageGenerateRecipePayload,
+  type MotionGenerateRecipePayload,
+  type VideoGenerateRecipePayload,
 } from '../../shared/queueRecipes';
 
 type QueueJobRow = {
@@ -54,6 +63,7 @@ const POLL_INTERVAL_SECONDS = 10;
 const MAX_DISPATCH_RETRIES = 6;
 const MAX_POLL_FAILURES = 8;
 const MAX_PROCESSING_AGE_MS = 45 * 60 * 1000;
+const MAX_VIDEO_PROCESSING_AGE_MS = 30 * 60 * 1000;
 const MAX_PROVIDER_GENERIC_RETRIES = 2;
 const MAX_OUTPUT_VERIFICATION_RETRIES = 2;
 const SINGLE_AND_COUPLE_PREPARE_TIMEOUT_MS = 10 * 60 * 1000;
@@ -282,6 +292,11 @@ const withQueueMeta = (
     nextPayload.__notifyInputMedia = previousNotifyInputMedia;
   }
 
+  const previousTstTouched = toQueuePayloadObject(previousPayload).__tstTouched;
+  if (previousTstTouched === true) {
+    nextPayload.__tstTouched = true;
+  }
+
   const previousRecipePayload = getStoredImageGenerateRecipePayload(previousPayload);
   if (previousRecipePayload) {
     nextPayload.__recipePayload = previousRecipePayload;
@@ -298,6 +313,10 @@ const withQueueMeta = (
 
   return nextPayload;
 };
+
+const hasTstBeenTouched = (
+  payload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
+) => toQueuePayloadObject(payload).__tstTouched === true;
 
 const persistQueueLog = async (
   jobId: string,
@@ -511,6 +530,65 @@ const getPreparationTimeoutUserMessage = (job: Pick<QueueJobRow, 'tool_id'>, pay
   return `Quá thời gian chuẩn bị trong ${timeoutMinutes} phút. Vui lòng tạo lại.`;
 };
 
+const getMaxProcessingAgeMs = (job: Pick<QueueJobRow, 'queue_kind'>) => {
+  if (job.queue_kind === 'video_generate' || job.queue_kind === 'motion_generate') {
+    return MAX_VIDEO_PROCESSING_AGE_MS;
+  }
+
+  return MAX_PROCESSING_AGE_MS;
+};
+
+const getProcessingTimeoutUserMessage = (job: Pick<QueueJobRow, 'queue_kind'>) => {
+  const timeoutMinutes = Math.ceil(getMaxProcessingAgeMs(job) / 60000);
+  if (job.queue_kind === 'video_generate' || job.queue_kind === 'motion_generate') {
+    return `Video da qua thoi gian cho ${timeoutMinutes} phut. Vui long tao lai video moi.`;
+  }
+
+  return `Tien trinh da qua thoi gian cho ${timeoutMinutes} phut. Vui long thu lai.`;
+};
+
+const shouldRefundFailure = (
+  job: Pick<QueueJobRow, 'queue_kind' | 'queue_payload'>,
+  payloadOverride?: Record<string, unknown> | ImageGenerateRecipePayload | null,
+) => {
+  if (job.queue_kind !== 'video_generate' && job.queue_kind !== 'motion_generate') {
+    return true;
+  }
+
+  return !hasTstBeenTouched(payloadOverride ?? job.queue_payload);
+};
+
+const buildReviewIssueMessages = (issues: VideoInputReviewIssue[]) => {
+  const unique = [...new Set(issues)];
+  const messages: string[] = [];
+
+  if (unique.includes('no_character')) messages.push('khong tim thay nhan vat ro rang trong anh');
+  if (unique.includes('multiple_characters')) messages.push('anh co tu 2 nhan vat tro len');
+  if (unique.includes('blurry_subject')) messages.push('nhan vat bi mo, nhin khong du ro net');
+  if (unique.includes('small_subject')) messages.push('nhan vat qua nho trong khung hinh');
+  if (unique.includes('occluded_subject')) messages.push('nhan vat bi che khuat qua nhieu');
+  if (unique.includes('missing_character_details')) messages.push('khong tach duoc chi tiet nhan vat');
+  if (unique.includes('unclear_background')) messages.push('boi canh hau canh khong ro rang');
+  if (unique.includes('missing_scene_details')) messages.push('khong lay duoc chi tiet boi canh');
+  if (unique.includes('too_dark')) messages.push('anh qua toi');
+  if (unique.includes('too_bright')) messages.push('anh qua sang hoac chay sang');
+  if (unique.includes('uncertain')) messages.push('he thong khong du tu tin de phe duyet');
+
+  return messages;
+};
+
+const summarizeInputReviewFailure = (
+  prefix: string,
+  review: VideoInputReviewResult,
+) => {
+  const issueMessages = buildReviewIssueMessages(review.issues);
+  const detail = issueMessages.length > 0
+    ? issueMessages.join('; ')
+    : (review.summary || 'du lieu dau vao khong dat yeu cau');
+
+  return `${prefix}: ${detail}.`;
+};
+
 const getJobRuntimeState = async (jobId: string) => {
   const admin = getServiceRoleClient();
   const { data, error } = await admin
@@ -620,8 +698,15 @@ const releaseLease = async (jobId: string) => {
   });
 };
 
-const markFailedAndRefund = async (job: QueueJobRow, errorMessage: string) => {
+const markFailed = async (
+  job: QueueJobRow,
+  errorMessage: string,
+  options?: {
+    refund?: boolean;
+  },
+) => {
   const admin = getServiceRoleClient();
+  const shouldRefund = options?.refund !== false;
   const nextPayload = withQueueLog(job.queue_payload, 'failed', errorMessage, 'error');
   const finishedAt = new Date().toISOString();
   await updateGeneratedImageRecord(job.id, {
@@ -637,10 +722,12 @@ const markFailedAndRefund = async (job: QueueJobRow, errorMessage: string) => {
     updated_at: new Date().toISOString(),
   });
 
-  await admin.rpc('refund_generated_job', {
-    p_generated_image_id: job.id,
-    p_reason: `Refund: ${job.tool_name || job.queue_kind} failed`,
-  });
+  if (shouldRefund) {
+    await admin.rpc('refund_generated_job', {
+      p_generated_image_id: job.id,
+      p_reason: `Refund: ${job.tool_name || job.queue_kind} failed`,
+    });
+  }
 
   fireTelegramJobNotification('failed', {
     id: job.id,
@@ -658,13 +745,25 @@ const markFailedAndRefund = async (job: QueueJobRow, errorMessage: string) => {
   });
 };
 
+const markFailedRespectingRefundPolicy = async (
+  job: QueueJobRow,
+  errorMessage: string,
+  payloadOverride?: Record<string, unknown> | ImageGenerateRecipePayload | null,
+) =>
+  markFailed(job, errorMessage, {
+    refund: shouldRefundFailure(job, payloadOverride),
+  });
+
+const markFailedAndRefund = async (job: QueueJobRow, errorMessage: string) =>
+  markFailed(job, errorMessage, { refund: true });
+
 const requeueJob = async (job: QueueJobRow, errorMessage: string) => {
   const admin = getServiceRoleClient();
   const state = await getJobRuntimeState(job.id);
   const nextAttemptCount = Number(state?.attempt_count || 0) + 1;
 
   if (nextAttemptCount >= MAX_DISPATCH_RETRIES) {
-    await markFailedAndRefund(job, errorMessage);
+    await markFailedRespectingRefundPolicy(job, errorMessage);
     return 'failed';
   }
 
@@ -726,6 +825,77 @@ const markPreparing = async (job: QueueJobRow) => {
   });
 
   return nextPayload;
+};
+
+const markTstTouched = async (
+  jobId: string,
+  payload: Record<string, unknown> | ImageGenerateRecipePayload | null | undefined,
+  message: string,
+) => {
+  const nextPayload = withQueueLog(
+    {
+      ...toQueuePayloadObject(payload),
+      __tstTouched: true,
+    },
+    'building_payload',
+    message,
+  );
+
+  await updateGeneratedImageRecord(jobId, {
+    queue_payload: nextPayload,
+    updated_at: new Date().toISOString(),
+  });
+
+  return nextPayload;
+};
+
+const reviewVideoInputsBeforeTst = async (
+  job: QueueJobRow,
+  payload: VideoGenerateRecipePayload | MotionGenerateRecipePayload,
+) => {
+  if (payload.recipeType === 'video_generate_recipe_v1') {
+    if (!payload.keyframeImage) {
+      throw new Error(
+        'Khong duyet video: vui long tai len anh keyframe ro net co nhan vat va boi canh ro rang.',
+      );
+    }
+
+    const review = await reviewVideoKeyframeInput(payload.keyframeImage);
+    if (!review.approved) {
+      throw new Error(summarizeInputReviewFailure('Khong duyet video', review));
+    }
+
+    return {
+      successMessage:
+        review.detectedPersonCount && review.detectedPersonCount > 1
+          ? `Anh keyframe dat duyet. He thong nhan dien ${review.detectedPersonCount} nhan vat ro rang va tiep tuc tao payload video.`
+          : 'Anh keyframe dat duyet. Tiep tuc tao payload video.',
+    };
+  }
+
+  const durationSeconds = await inspectMotionVideoDurationSeconds(
+    payload.motionVideoDataUrl,
+    payload.motionVideoDurationSeconds,
+  );
+
+  if (!durationSeconds || durationSeconds < 3 || durationSeconds > 30) {
+    throw new Error(
+      'Khong duyet motion control: video chuyen dong phai dai tu 3 giay den 30 giay.',
+    );
+  }
+
+  const review = await reviewMotionCharacterInput(payload.characterImage);
+  if (!review.approved) {
+    throw new Error(summarizeInputReviewFailure('Khong duyet motion control', review));
+  }
+
+  if (review.detectedPersonCount !== null && review.detectedPersonCount !== 1) {
+    throw new Error('Khong duyet motion control: anh nhan vat phai chi co dung 1 nhan vat ro rang.');
+  }
+
+  return {
+    successMessage: `Anh motion control dat duyet va video tham chieu ${durationSeconds.toFixed(1)}s hop le. Tiep tuc tao payload motion.`,
+  };
 };
 
 const markPreparedForDispatch = async (jobId: string) => {
@@ -1118,7 +1288,15 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
       return 'requeued';
     }
 
-    await markFailedAndRefund(job, failureMessage);
+    await markFailedRespectingRefundPolicy(job, failureMessage);
+    return 'failed';
+  }
+
+  const currentState = await getJobRuntimeState(job.id);
+  const startedAt = currentState?.processing_started_at || currentState?.created_at || new Date().toISOString();
+  const processingAgeMs = Date.now() - new Date(startedAt).getTime();
+  if (processingAgeMs >= getMaxProcessingAgeMs(job)) {
+    await markFailedRespectingRefundPolicy(job, getProcessingTimeoutUserMessage(job));
     return 'failed';
   }
 
@@ -1150,8 +1328,12 @@ const handlePollFailure = async (job: QueueJobRow, errorMessage: string) => {
   const startedAt = state?.processing_started_at || state?.created_at || new Date().toISOString();
   const processingAgeMs = Date.now() - new Date(startedAt).getTime();
 
-  if (nextAttemptCount >= MAX_POLL_FAILURES || processingAgeMs >= MAX_PROCESSING_AGE_MS) {
-    await markFailedAndRefund(job, errorMessage);
+  if (nextAttemptCount >= MAX_POLL_FAILURES || processingAgeMs >= getMaxProcessingAgeMs(job)) {
+    const finalMessage =
+      processingAgeMs >= getMaxProcessingAgeMs(job)
+        ? getProcessingTimeoutUserMessage(job)
+        : errorMessage;
+    await markFailedRespectingRefundPolicy(job, finalMessage);
     return 'failed';
   }
 
@@ -1227,7 +1409,7 @@ const recoverStalePreparingJobs = async () => {
     const preparationTimeoutMs = getPreparationTimeoutMs(job, payload);
 
     if (ageMs >= preparationTimeoutMs) {
-      await markFailedAndRefund(job, getPreparationTimeoutUserMessage(job, payload));
+      await markFailedRespectingRefundPolicy(job, getPreparationTimeoutUserMessage(job, payload), payload);
       continue;
     }
 
@@ -1434,17 +1616,51 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
 
       if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType !== 'image_generate_recipe_v1') {
         await updatePreProviderStage(job.id, 20);
+        const reviewStartMessage =
+          currentPayload.recipeType === 'video_generate_recipe_v1'
+            ? 'Dang kiem duyet anh keyframe truoc khi gui du lieu len TST.'
+            : 'Dang kiem duyet anh nhan vat va video motion truoc khi gui du lieu len TST.';
+        job.queue_payload = await persistQueueLog(
+          job.id,
+          job.queue_payload || currentPayload,
+          'preparing',
+          reviewStartMessage,
+        );
+        const reviewResult = await withTimeout(
+          withLeaseHeartbeat(
+            job.id,
+            reviewVideoInputsBeforeTst(
+              job,
+              currentPayload as VideoGenerateRecipePayload | MotionGenerateRecipePayload,
+            ),
+            preparationLeaseSeconds,
+          ),
+          preparationTimeoutMs,
+          'Queue preparation timed out before dispatching to provider.',
+        );
+        job.queue_payload = await persistQueueLog(
+          job.id,
+          job.queue_payload,
+          'preparing',
+          reviewResult.successMessage,
+          'success',
+        );
+        job.queue_payload = await markTstTouched(
+          job.id,
+          job.queue_payload,
+          'Da bat dau chuan bi payload va gui du lieu len he thong TST.',
+        );
         if (currentPayload.recipeType === 'video_generate_recipe_v1') {
           job.queue_payload = await persistQueueLog(
             job.id,
-            job.queue_payload || currentPayload,
+            job.queue_payload,
             'building_payload',
             'Đang chuẩn bị payload video.',
           );
         } else if (currentPayload.recipeType === 'motion_generate_recipe_v1') {
           job.queue_payload = await persistQueueLog(
             job.id,
-            job.queue_payload || currentPayload,
+            job.queue_payload,
             'building_payload',
             'Đang chuẩn bị payload motion.',
           );
@@ -1493,10 +1709,10 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
     } catch (error: any) {
       const message = error?.message || 'Queue dispatch failed';
       if (message.startsWith('INVALID_TST_CONFIG:')) {
-        await markFailedAndRefund(job, message.replace('INVALID_TST_CONFIG:', '').trim());
+        await markFailedRespectingRefundPolicy(job, message.replace('INVALID_TST_CONFIG:', '').trim());
         summary.failed += 1;
       } else if (message.includes('Queue preparation timed out before')) {
-        await markFailedAndRefund(job, getPreparationTimeoutUserMessage(job, job.queue_payload));
+        await markFailedRespectingRefundPolicy(job, getPreparationTimeoutUserMessage(job, job.queue_payload));
         summary.failed += 1;
         continue;
       } else if (isTransientError(message)) {
@@ -1507,7 +1723,7 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
           summary.requeued += 1;
         }
       } else {
-        await markFailedAndRefund(job, message);
+        await markFailedRespectingRefundPolicy(job, message);
         summary.failed += 1;
       }
     }

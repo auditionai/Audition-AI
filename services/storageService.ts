@@ -114,6 +114,24 @@ const saveLocalImage = async (image: GeneratedImage): Promise<void> => {
   });
 };
 
+const getSessionAuthHeader = async () => {
+  if (!supabase) {
+    throw new Error('No Database');
+  }
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session?.access_token) {
+    throw new Error('Unauthorized');
+  }
+
+  return {
+    Authorization: `Bearer ${session.access_token}`,
+  };
+};
+
 const replaceLocalImagesForUser = async (userId: string, images: GeneratedImage[]): Promise<void> => {
   const db = await openDB();
   return new Promise((resolve, reject) => {
@@ -739,11 +757,32 @@ export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
         const { data: { user } } = await supabase.auth.getUser();
         if(user) {
             const localImagesForUser = localImages.filter((image) => image.userId === user.id);
+            const authHeader = await getSessionAuthHeader();
+            const response = await fetch('/api/gallery-images', {
+              method: 'GET',
+              headers: authHeader,
+            });
+            const payload = await response.json().catch(() => ({}));
+
+            if (response.ok && Array.isArray(payload?.images)) {
+                const cloudImages = payload.images.map((row: any) => mapGeneratedImageRow(row, 'Me'));
+                const mergedImages = mergeCloudAndLocalImages(cloudImages, localImagesForUser);
+                void replaceLocalImagesForUser(user.id, mergedImages).catch((syncError) => {
+                  console.warn('[Storage] Failed to sync local cache from cloud', syncError);
+                });
+                return mergedImages;
+            }
+
+            if (!response.ok) {
+              console.warn('[Storage] Gallery API failed, falling back to direct Supabase query', payload?.error || response.statusText);
+            }
+
             const { data, error } = await supabase
                 .from(TABLE_NAME)
-                .select('*')
+                .select('id,image_url,prompt,created_at,updated_at,asset_type,tool_id,tool_name,model_used,user_id,user_name,is_public,status,job_id,progress,error_message,cost_vcoin,queue_payload')
                 .eq('user_id', user.id)
-                .order('created_at', { ascending: false });
+                .order('created_at', { ascending: false })
+                .limit(200);
 
             if (!error && data) {
                 const missingCostIds = data

@@ -1,10 +1,9 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useEffect, useRef, useState } from 'react';
 import { Feature, GeneratedImage, Language, ViewId } from '../../types';
 import { Icons } from '../../components/Icons';
 import { useNotification } from '../../components/NotificationSystem';
 import {
   getModelPricing,
-  getTstServerAvailabilityConfig,
   getUserProfile,
   type ModelPricing,
 } from '../../services/economyService';
@@ -12,22 +11,9 @@ import { CONCURRENCY_LIMITS, useConcurrency } from '../../services/concurrencySe
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import {
-  applyServerAvailabilityToRuntimeModels,
-  fetchTstModels,
-  fetchTstPricing,
-  getCompatibleGenerationResolutions,
-  getCompatibleGenerationServers,
-  getCompatibleGenerationSpeeds,
-  getGenerationModelId,
   getVertexEditResolutionCostMap,
   getVertexEditToolCostBreakdown,
-  sanitizePricingEntriesWithRuntimeModels,
-  tstServerToUi,
-  uiServerToTst,
-  uiSpeedToTst,
   type AuditionPricingOverride,
-  type TstPricingEntry,
-  type TstRuntimeModel,
 } from '../../services/tstCatalog';
 import type { ImageEditRecipePayload } from '../../shared/queueRecipes';
 import { calculateAspectRatioString, loadImageWithTimeout } from '../../utils/imageProcessor';
@@ -40,44 +26,49 @@ interface EditingToolProps {
 }
 
 const SUGGESTIONS = [
-  { label: { vi: 'Thay đổi background sang biển', en: 'Change background to beach' }, icon: Icons.Image },
-  { label: { vi: 'Mặc vest đen sang trọng', en: 'Wear luxury black suit' }, icon: Icons.User },
-  { label: { vi: 'Thêm hiệu ứng tuyết rơi', en: 'Add snowing effect' }, icon: Icons.Cloud },
-  { label: { vi: 'Biến thành tranh sơn dầu', en: 'Turn into oil painting' }, icon: Icons.Palette },
-  { label: { vi: 'Đổi màu tóc sang đỏ', en: 'Change hair color to red' }, icon: Icons.Scissors },
-  { label: { vi: 'Thêm kính râm cool ngầu', en: 'Add cool sunglasses' }, icon: Icons.Monitor },
-  { label: { vi: 'Chuyển sang phong cách Cyberpunk', en: 'Make it Cyberpunk style' }, icon: Icons.Zap },
-  { label: { vi: 'Xóa người thừa phía sau', en: 'Remove background people' }, icon: Icons.Trash },
+  { label: { vi: 'Thay Ä‘á»•i background sang biá»ƒn', en: 'Change background to beach' }, icon: Icons.Image },
+  { label: { vi: 'Máº·c vest Ä‘en sang trá»ng', en: 'Wear luxury black suit' }, icon: Icons.User },
+  { label: { vi: 'ThÃªm hiá»‡u á»©ng tuyáº¿t rÆ¡i', en: 'Add snowing effect' }, icon: Icons.Cloud },
+  { label: { vi: 'Biáº¿n thÃ nh tranh sÆ¡n dáº§u', en: 'Turn into oil painting' }, icon: Icons.Palette },
+  { label: { vi: 'Äá»•i mÃ u tÃ³c sang Ä‘á»', en: 'Change hair color to red' }, icon: Icons.Scissors },
+  { label: { vi: 'ThÃªm kÃ­nh rÃ¢m cool ngáº§u', en: 'Add cool sunglasses' }, icon: Icons.Monitor },
+  { label: { vi: 'Chuyá»ƒn sang phong cÃ¡ch Cyberpunk', en: 'Make it Cyberpunk style' }, icon: Icons.Zap },
+  { label: { vi: 'XÃ³a ngÆ°á»i thá»«a phÃ­a sau', en: 'Remove background people' }, icon: Icons.Trash },
 ];
 
 const SMART_TIPS = [
-  { icon: Icons.Wand, text: 'Magic Editor giúp thay đổi trang phục, bối cảnh hoặc thêm chi tiết vào ảnh gốc.' },
-  { icon: Icons.Scissors, text: 'Tách Nền dùng AI để nhận diện chủ thể và xóa phông nền chính xác.' },
-  { icon: Icons.Zap, text: 'Làm Nét giúp khôi phục chi tiết ảnh mờ, vỡ nét mà không vẽ lại khuôn mặt.' },
-  { icon: Icons.Image, text: 'Hãy viết yêu cầu càng rõ càng tốt để AI hiểu đúng ý bạn.' },
-  { icon: Icons.Crown, text: 'Model Pro cho chất lượng chỉnh sửa đẹp và chi tiết hơn Flash.' },
-  { icon: Icons.ExternalLink, text: 'Bạn có thể dùng AuMix3D.com để chuẩn bị ảnh nhân vật tách nền cực nét.' },
+  { icon: Icons.Wand, text: 'Magic Editor giÃºp thay Ä‘á»•i trang phá»¥c, bá»‘i cáº£nh hoáº·c thÃªm chi tiáº¿t vÃ o áº£nh gá»‘c.' },
+  { icon: Icons.Scissors, text: 'TÃ¡ch Ná»n dÃ¹ng AI Ä‘á»ƒ nháº­n diá»‡n chá»§ thá»ƒ vÃ  xÃ³a phÃ´ng ná»n chÃ­nh xÃ¡c.' },
+  { icon: Icons.Zap, text: 'LÃ m NÃ©t giÃºp khÃ´i phá»¥c chi tiáº¿t áº£nh má», vá»¡ nÃ©t mÃ  khÃ´ng váº½ láº¡i khuÃ´n máº·t.' },
+  { icon: Icons.Image, text: 'HÃ£y viáº¿t yÃªu cáº§u cÃ ng rÃµ cÃ ng tá»‘t Ä‘á»ƒ AI hiá»ƒu Ä‘Ãºng Ã½ báº¡n.' },
+  { icon: Icons.Crown, text: 'Model Pro cho cháº¥t lÆ°á»£ng chá»‰nh sá»­a Ä‘áº¹p vÃ  chi tiáº¿t hÆ¡n Flash.' },
+  { icon: Icons.ExternalLink, text: 'Báº¡n cÃ³ thá»ƒ dÃ¹ng AuMix3D.com Ä‘á»ƒ chuáº©n bá»‹ áº£nh nhÃ¢n váº­t tÃ¡ch ná»n cá»±c nÃ©t.' },
 ];
 
 const EDITING_TABS = [
-  { id: 'magic_editor_pro', label: { vi: 'Chỉnh sửa ảnh', en: 'Photo Editor' }, icon: Icons.Wand },
-  { id: 'remove_bg_pro', label: { vi: 'Tách nền', en: 'Remove BG' }, icon: Icons.Scissors },
-  { id: 'sharpen_upscale', label: { vi: 'Làm nét', en: 'Upscale' }, icon: Icons.Zap },
+  { id: 'magic_editor_pro', label: { vi: 'Chá»‰nh sá»­a áº£nh', en: 'Photo Editor' }, icon: Icons.Wand },
+  { id: 'remove_bg_pro', label: { vi: 'TÃ¡ch ná»n', en: 'Remove BG' }, icon: Icons.Scissors },
+  { id: 'sharpen_upscale', label: { vi: 'LÃ m nÃ©t', en: 'Upscale' }, icon: Icons.Zap },
 ];
 
 type GenerationTier = 'flash' | 'pro';
 type Resolution = '1K' | '2K' | '4K';
+
+const VERTEX_EDIT_MODEL_ID_BY_TIER: Record<GenerationTier, string> = {
+  flash: 'vertex-flash',
+  pro: 'vertex-pro',
+};
 
 const extractMimeType = (input: string) =>
   input.startsWith('data:') ? input.substring(input.indexOf(':') + 1, input.indexOf(';')) : undefined;
 
 const buildDisplayPrompt = (featureId: string, userPrompt: string, resolution: Resolution, lang: Language) => {
   if (featureId === 'remove_bg_pro') {
-    return lang === 'vi' ? 'Tách nền khỏi ảnh này' : 'Remove the background of this image';
+    return lang === 'vi' ? 'TÃ¡ch ná»n khá»i áº£nh nÃ y' : 'Remove the background of this image';
   }
 
   if (featureId === 'sharpen_upscale') {
-    return lang === 'vi' ? `Làm nét và nâng cấp ảnh lên ${resolution}` : `Upscale and restore this image to ${resolution}`;
+    return lang === 'vi' ? `LÃ m nÃ©t vÃ  nÃ¢ng cáº¥p áº£nh lÃªn ${resolution}` : `Upscale and restore this image to ${resolution}`;
   }
 
   return userPrompt.trim();
@@ -113,7 +104,7 @@ const tryStageInputToStorage = async (source: string, folder: string) => {
     return await uploadFileToR2(source, folder);
   } catch (error) {
     console.warn('[EditingTool] Failed to stage source image to storage.', error);
-    throw new Error('Không thể tải ảnh gốc lên vùng đệm. Vui lòng thử lại.');
+    throw new Error('KhÃ´ng thá»ƒ táº£i áº£nh gá»‘c lÃªn vÃ¹ng Ä‘á»‡m. Vui lÃ²ng thá»­ láº¡i.');
   }
 };
 
@@ -131,14 +122,11 @@ export const EditingTool: React.FC<EditingToolProps> = ({
   const [aiModel, setAiModel] = useState<GenerationTier>('flash');
   const [resolution, setResolution] = useState<Resolution>('1K');
   const [speed, setSpeed] = useState('Nhanh');
-  const [server, setServer] = useState('FAST');
+  const [server, setServer] = useState('Vertex AI');
   const [currentTipIdx, setCurrentTipIdx] = useState(0);
   const [guideTopic, setGuideTopic] = useState<'guide' | null>(null);
-  const [pricingEntries, setPricingEntries] = useState<TstPricingEntry[]>([]);
   const [auditionPricing, setAuditionPricing] = useState<ModelPricing[]>([]);
-  const [runtimeModels, setRuntimeModels] = useState<TstRuntimeModel[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
-  const [catalogError, setCatalogError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -154,75 +142,32 @@ export const EditingTool: React.FC<EditingToolProps> = ({
     auditionPriceVcoin: row.audition_price_vcoin,
   }));
 
-  const speedId = uiSpeedToTst(speed) || 'fast';
-  const serverId = uiServerToTst(server) || 'fast';
-
-  const availableResolutions = getCompatibleGenerationResolutions({
-    tier: activeTier,
-    pricingEntries,
-    serverId,
-    speed: speedId,
-  });
-
-  const availableServers = getCompatibleGenerationServers({
-    tier: activeTier,
-    pricingEntries,
-    resolution,
-    speed: speedId,
-  });
-
-  const availableSpeeds = getCompatibleGenerationSpeeds({
-    tier: activeTier,
-    pricingEntries,
-    resolution,
-    serverId,
-  });
-
   const selectedGenerationCost = getVertexEditToolCostBreakdown({
     toolId: feature.id,
     tier: activeTier,
     resolution,
     pricingOverrides,
   });
-
   const resolutionCostMap = getVertexEditResolutionCostMap({
     toolId: feature.id,
     tier: activeTier,
     pricingOverrides,
   });
-
-  const runtimeImageModelIds = useMemo(
-    () =>
-      new Set(
-        runtimeModels
-          .filter((model) => model.type === 'image')
-          .map((model) => model.model.trim().toLowerCase()),
-      ),
-    [runtimeModels],
+  const availableResolutions = (['1K', '2K', '4K'] as Resolution[]).filter(
+    (value) => resolutionCostMap[value].vcoin >= 0,
   );
-
-  const isFlashAvailable =
-    runtimeImageModelIds.has(getGenerationModelId('flash')) &&
-    pricingEntries.some((entry) => entry.model.trim().toLowerCase() === getGenerationModelId('flash'));
-  const isProAvailable =
-    runtimeImageModelIds.has(getGenerationModelId('pro')) &&
-    pricingEntries.some((entry) => entry.model.trim().toLowerCase() === getGenerationModelId('pro'));
-
-  const availableSpeedLabels = availableSpeeds.map((value) => (value === 'slow' ? 'Tiết Kiệm' : 'Nhanh'));
-  const availableServerLabels = availableServers.map((value) => tstServerToUi(value));
-  const isCatalogReady =
-    !catalogLoading &&
-    !catalogError &&
-    pricingEntries.length > 0 &&
-    runtimeModels.length > 0 &&
-    (isMagicEditor ? isFlashAvailable || isProAvailable : isFlashAvailable);
+  const availableSpeedLabels = ['Nhanh'];
+  const availableServerLabels = ['Vertex AI'];
+  const isFlashAvailable = true;
+  const isProAvailable = isMagicEditor;
+  const isCatalogReady = !catalogLoading;
 
   useEffect(() => {
     setUploadedImage(null);
     setPrompt('');
     setResolution('1K');
     setSpeed('Nhanh');
-    setServer('FAST');
+    setServer('Vertex AI');
     setAiModel('flash');
     setIsSubmitting(false);
   }, [feature.id]);
@@ -235,34 +180,19 @@ export const EditingTool: React.FC<EditingToolProps> = ({
   }, []);
 
   useEffect(() => {
-    const loadCatalog = async (forceRefresh = false) => {
+    const loadCatalog = async () => {
       try {
-        const [pricing, models, pricingConfig, serverAvailabilityConfig] = await Promise.all([
-          fetchTstPricing(forceRefresh),
-          fetchTstModels(forceRefresh),
-          getModelPricing(),
-          getTstServerAvailabilityConfig(),
-        ]);
-
-        const filteredModels = applyServerAvailabilityToRuntimeModels(models, serverAvailabilityConfig);
-        const livePricing = sanitizePricingEntriesWithRuntimeModels(pricing, filteredModels, serverAvailabilityConfig);
-
-        setPricingEntries(livePricing);
-        setRuntimeModels(filteredModels);
+        const pricingConfig = await getModelPricing();
         setAuditionPricing(pricingConfig || []);
-        setCatalogError(null);
       } catch (error) {
-        console.warn('[EditingTool] Failed to load live TST catalog', error);
-        setPricingEntries([]);
-        setRuntimeModels([]);
-        setCatalogError(lang === 'vi' ? 'TST đang bảo trì hoặc không sẵn sàng.' : 'TST is unavailable.');
+        console.warn('[EditingTool] Failed to load Vertex edit pricing overrides', error);
+        setAuditionPricing([]);
       } finally {
         setCatalogLoading(false);
       }
     };
-
     loadCatalog();
-  }, [lang]);
+  }, []);
 
   useEffect(() => {
     if (isMagicEditor) {
@@ -280,45 +210,6 @@ export const EditingTool: React.FC<EditingToolProps> = ({
     }
   }, [availableResolutions, resolution]);
 
-  useEffect(() => {
-    const requestedServerId = uiServerToTst(server) || 'fast';
-    const requestedSpeedId = uiSpeedToTst(speed) || 'fast';
-    const compatibleServers = getCompatibleGenerationServers({
-      tier: activeTier,
-      pricingEntries,
-      resolution,
-      speed: requestedSpeedId,
-    });
-    const effectiveServerId = compatibleServers.includes(requestedServerId)
-      ? requestedServerId
-      : compatibleServers[0];
-
-    if (effectiveServerId && effectiveServerId !== requestedServerId) {
-      const nextServerLabel = tstServerToUi(effectiveServerId);
-      if (nextServerLabel !== server) {
-        setServer(nextServerLabel);
-        return;
-      }
-    }
-
-    const compatibleSpeeds = getCompatibleGenerationSpeeds({
-      tier: activeTier,
-      pricingEntries,
-      resolution,
-      serverId: effectiveServerId || requestedServerId,
-    });
-    const effectiveSpeedId = compatibleSpeeds.includes(requestedSpeedId)
-      ? requestedSpeedId
-      : compatibleSpeeds[0];
-
-    if (effectiveSpeedId) {
-      const nextSpeedLabel = effectiveSpeedId === 'slow' ? 'Tiết Kiệm' : 'Nhanh';
-      if (nextSpeedLabel !== speed) {
-        setSpeed(nextSpeedLabel);
-      }
-    }
-  }, [activeTier, pricingEntries, resolution, server, speed]);
-
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -334,22 +225,27 @@ export const EditingTool: React.FC<EditingToolProps> = ({
   const handleExecute = async () => {
     if (isSubmitting) return;
     if (!uploadedImage) {
-      notify(lang === 'vi' ? 'Vui lòng tải ảnh lên.' : 'Please upload an image.', 'warning');
+      notify(lang === 'vi' ? 'Vui lÃ²ng táº£i áº£nh lÃªn.' : 'Please upload an image.', 'warning');
       return;
     }
     if (isMagicEditor && !prompt.trim()) {
-      notify(lang === 'vi' ? 'Vui lòng nhập yêu cầu chỉnh sửa.' : 'Please enter your edit request.', 'warning');
+      notify(lang === 'vi' ? 'Vui lÃ²ng nháº­p yÃªu cáº§u chá»‰nh sá»­a.' : 'Please enter your edit request.', 'warning');
       return;
     }
     if (!isCatalogReady) {
-      notify(lang === 'vi' ? 'TST đang bảo trì hoặc không sẵn sàng.' : 'TST is unavailable.', 'error');
+      notify(
+        lang === 'vi'
+          ? 'Dá»‹ch vá»¥ Vertex AI Ä‘ang khá»Ÿi táº¡o. Vui lÃ²ng thá»­ láº¡i sau Ã­t giÃ¢y.'
+          : 'Vertex AI is still initializing. Please try again in a few seconds.',
+        'error',
+      );
       return;
     }
     if (!selectedGenerationCost.available) {
       notify(
         lang === 'vi'
-          ? 'Cấu hình đang chọn không còn khả dụng trên TST.'
-          : 'Selected configuration is not available on TST.',
+          ? 'Cáº¥u hÃ¬nh Vertex AI hiá»‡n khÃ´ng kháº£ dá»¥ng cho tool nÃ y.'
+          : 'This Vertex AI configuration is not available for the selected tool.',
         'error',
       );
       return;
@@ -360,7 +256,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
     ) {
       notify(
         lang === 'vi'
-          ? 'Bạn đã đạt giới hạn 1 luồng xử lý ảnh và 1 hàng chờ. Vui lòng đợi.'
+          ? 'Báº¡n Ä‘Ã£ Ä‘áº¡t giá»›i háº¡n 1 luá»“ng xá»­ lÃ½ áº£nh vÃ  1 hÃ ng chá». Vui lÃ²ng Ä‘á»£i.'
           : 'You have reached the limit of 1 image slot and 1 queued job.',
         'warning',
       );
@@ -368,7 +264,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
     }
     if (queueStats.systemQueued >= CONCURRENCY_LIMITS.system.queued) {
       notify(
-        lang === 'vi' ? 'Hệ thống đang quá tải (hàng chờ đầy). Vui lòng thử lại sau.' : 'System queue is full. Please try again later.',
+        lang === 'vi' ? 'Há»‡ thá»‘ng Ä‘ang quÃ¡ táº£i (hÃ ng chá» Ä‘áº§y). Vui lÃ²ng thá»­ láº¡i sau.' : 'System queue is full. Please try again later.',
         'error',
       );
       return;
@@ -378,7 +274,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
     if ((user.vcoin_balance || 0) < selectedGenerationCost.vcoin) {
       notify(
         lang === 'vi'
-          ? `Số dư không đủ (cần ${selectedGenerationCost.vcoin} Vcoin).`
+          ? `Sá»‘ dÆ° khÃ´ng Ä‘á»§ (cáº§n ${selectedGenerationCost.vcoin} Vcoin).`
           : `Insufficient balance (need ${selectedGenerationCost.vcoin} Vcoin).`,
         'error',
       );
@@ -388,29 +284,9 @@ export const EditingTool: React.FC<EditingToolProps> = ({
     setIsSubmitting(true);
     const queuedJobId = crypto.randomUUID();
 
-    const requestedSpeedId = uiSpeedToTst(speed) || 'fast';
-    const requestedServerId = uiServerToTst(server) || 'fast';
-    const compatibleServers = getCompatibleGenerationServers({
-      tier: activeTier,
-      pricingEntries,
-      resolution,
-      speed: requestedSpeedId,
-    });
-    const effectiveServerId = compatibleServers.includes(requestedServerId)
-      ? requestedServerId
-      : compatibleServers[0] || requestedServerId;
-    const compatibleSpeeds = getCompatibleGenerationSpeeds({
-      tier: activeTier,
-      pricingEntries,
-      resolution,
-      serverId: effectiveServerId,
-    });
-    const effectiveSpeedId = compatibleSpeeds.includes(requestedSpeedId)
-      ? requestedSpeedId
-      : compatibleSpeeds[0] || requestedSpeedId;
-
+    const vertexModelId = VERTEX_EDIT_MODEL_ID_BY_TIER[activeTier];
     const displayPrompt = buildDisplayPrompt(feature.id, prompt, resolution, lang);
-    const engineLabel = activeTier === 'flash' ? `Flash Engine ${resolution}` : `Pro Engine ${resolution}`;
+    const engineLabel = activeTier === 'flash' ? `Vertex Flash ${resolution}` : `Vertex Pro ${resolution}`;
 
     const queuedImage: GeneratedImage = {
       id: queuedJobId,
@@ -450,14 +326,12 @@ export const EditingTool: React.FC<EditingToolProps> = ({
 
         const queuePayload: ImageEditRecipePayload = {
           recipeType: 'image_edit_recipe_v1',
-          modelId: getGenerationModelId(activeTier),
+          modelId: vertexModelId,
           prompt: buildInstructionPrompt(feature.id, prompt, resolution),
           sourceImage: stagedSourceImage,
           mimeType: extractMimeType(stagedSourceImage) || extractMimeType(uploadedImage),
           resolution,
           aspectRatio,
-          speed: effectiveSpeedId,
-          serverId: effectiveServerId,
         };
 
         await enqueueServerJob({
@@ -475,7 +349,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
         window.dispatchEvent(new Event('balance_updated'));
         notify(
           lang === 'vi'
-            ? 'Đã tạo job. Tiến trình sẽ được cập nhật realtime trong Lịch sử.'
+            ? 'ÄÃ£ táº¡o job. Tiáº¿n trÃ¬nh sáº½ Ä‘Æ°á»£c cáº­p nháº­t realtime trong Lá»‹ch sá»­.'
             : 'Job submitted. Progress will update in History in realtime.',
           'success',
         );
@@ -485,7 +359,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
           error instanceof Error
             ? error.message
             : lang === 'vi'
-              ? 'Không thể tạo job chỉnh sửa.'
+              ? 'KhÃ´ng thá»ƒ táº¡o job chá»‰nh sá»­a.'
               : 'Failed to create edit job.';
 
         try {
@@ -509,33 +383,33 @@ export const EditingTool: React.FC<EditingToolProps> = ({
   const renderGuideContent = () => (
     <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar">
       <h3 className="text-xl font-bold text-audi-yellow flex items-center gap-2 border-b border-white/10 pb-2 sticky top-0 bg-[#12121a] z-10">
-        <Icons.BookOpen className="w-6 h-6" /> Hướng Dẫn Sử Dụng
+        <Icons.BookOpen className="w-6 h-6" /> HÆ°á»›ng Dáº«n Sá»­ Dá»¥ng
       </h3>
 
       <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-3">
         <h4 className="text-sm font-bold text-audi-cyan flex items-center gap-2">
-          <Icons.Wand className="w-4 h-4" /> Chỉnh Sửa Ảnh
+          <Icons.Wand className="w-4 h-4" /> Chá»‰nh Sá»­a áº¢nh
         </h4>
         <p className="text-xs text-slate-300 leading-relaxed">
-          Dùng prompt để thay đổi trang phục, bối cảnh hoặc thêm chi tiết mới vào ảnh gốc.
+          DÃ¹ng prompt Ä‘á»ƒ thay Ä‘á»•i trang phá»¥c, bá»‘i cáº£nh hoáº·c thÃªm chi tiáº¿t má»›i vÃ o áº£nh gá»‘c.
         </p>
       </div>
 
       <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-3">
         <h4 className="text-sm font-bold text-audi-pink flex items-center gap-2">
-          <Icons.Scissors className="w-4 h-4" /> Tách Nền
+          <Icons.Scissors className="w-4 h-4" /> TÃ¡ch Ná»n
         </h4>
         <p className="text-xs text-slate-300 leading-relaxed">
-          AI sẽ tách chủ thể và đưa ảnh về nền đen sạch, giữ nguyên nhân vật và chi tiết.
+          AI sáº½ tÃ¡ch chá»§ thá»ƒ vÃ  Ä‘Æ°a áº£nh vá» ná»n Ä‘en sáº¡ch, giá»¯ nguyÃªn nhÃ¢n váº­t vÃ  chi tiáº¿t.
         </p>
       </div>
 
       <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-3">
         <h4 className="text-sm font-bold text-audi-yellow flex items-center gap-2">
-          <Icons.Zap className="w-4 h-4" /> Làm Nét
+          <Icons.Zap className="w-4 h-4" /> LÃ m NÃ©t
         </h4>
         <p className="text-xs text-slate-300 leading-relaxed">
-          Khôi phục và nâng chất lượng ảnh mà không làm vẽ lại khuôn mặt hoặc trang phục.
+          KhÃ´i phá»¥c vÃ  nÃ¢ng cháº¥t lÆ°á»£ng áº£nh mÃ  khÃ´ng lÃ m váº½ láº¡i khuÃ´n máº·t hoáº·c trang phá»¥c.
         </p>
       </div>
     </div>
@@ -563,7 +437,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
                 onClick={() => setGuideTopic(null)}
                 className="px-6 py-2 bg-white/10 hover:bg-white/20 rounded-full text-xs font-bold text-white transition-colors"
               >
-                Đã Hiểu
+                ÄÃ£ Hiá»ƒu
               </button>
             </div>
           </div>
@@ -605,8 +479,8 @@ export const EditingTool: React.FC<EditingToolProps> = ({
           <Icons.Flame className="w-4 h-4 text-yellow-500 animate-pulse" />
         </div>
         <p className="text-[10px] md:text-xs text-yellow-200/80 font-medium leading-relaxed">
-          <strong className="text-yellow-500">Lưu ý:</strong> Luồng chỉnh sửa giờ chạy ẩn theo hàng chờ.
-          Sau khi bấm tạo, tiến trình sẽ được cập nhật realtime trong Lịch sử.
+          <strong className="text-yellow-500">LÆ°u Ã½:</strong> Luá»“ng chá»‰nh sá»­a giá» cháº¡y áº©n theo hÃ ng chá».
+          Sau khi báº¥m táº¡o, tiáº¿n trÃ¬nh sáº½ Ä‘Æ°á»£c cáº­p nháº­t realtime trong Lá»‹ch sá»­.
         </p>
       </div>
 
@@ -623,19 +497,19 @@ export const EditingTool: React.FC<EditingToolProps> = ({
           </div>
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded uppercase">MỚI</span>
+              <span className="bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded uppercase">Má»šI</span>
               <h4 className="text-white font-bold text-xs md:text-sm uppercase tracking-wider group-hover:text-audi-cyan transition-colors">
-                Mix Đồ 3D Audition
+                Mix Äá»“ 3D Audition
               </h4>
             </div>
             <p className="text-[10px] md:text-xs text-slate-400 leading-relaxed">
-              Bạn chưa có ảnh nhân vật? Mix đồ và chụp ảnh tách nền cực nét ngay trên web.
+              Báº¡n chÆ°a cÃ³ áº£nh nhÃ¢n váº­t? Mix Ä‘á»“ vÃ  chá»¥p áº£nh tÃ¡ch ná»n cá»±c nÃ©t ngay trÃªn web.
             </p>
           </div>
         </div>
         <div className="relative z-10 shrink-0 w-full md:w-auto mt-1 md:mt-0">
           <div className="w-full md:w-auto px-4 py-2 bg-audi-cyan/20 hover:bg-audi-cyan/30 border border-audi-cyan/50 rounded-lg flex items-center justify-center gap-2 transition-all">
-            <span className="text-[10px] md:text-xs font-bold text-audi-cyan uppercase">Mở AuMix3D</span>
+            <span className="text-[10px] md:text-xs font-bold text-audi-cyan uppercase">Má»Ÿ AuMix3D</span>
             <Icons.ExternalLink className="w-3 h-3 md:w-4 md:h-4 text-audi-cyan" />
           </div>
         </div>
@@ -645,13 +519,13 @@ export const EditingTool: React.FC<EditingToolProps> = ({
         <div className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between px-2">
             <h3 className="font-bold text-white text-sm uppercase flex items-center gap-2">
-              <Icons.Image className="w-4 h-4 text-audi-pink" /> 1. Upload Ảnh Cần Xử Lý
+              <Icons.Image className="w-4 h-4 text-audi-pink" /> 1. Upload áº¢nh Cáº§n Xá»­ LÃ½
             </h3>
             <button
               onClick={() => setGuideTopic('guide')}
               className="text-xs text-audi-cyan hover:text-white flex items-center gap-1 transition-colors bg-audi-cyan/10 px-2 py-1 rounded-lg border border-audi-cyan/20"
             >
-              <Icons.Info className="w-3 h-3" /> Hướng dẫn
+              <Icons.Info className="w-3 h-3" /> HÆ°á»›ng dáº«n
             </button>
           </div>
 
@@ -659,7 +533,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
             <div className="flex justify-center w-full">
               <div className="w-full md:w-[220px] bg-[#12121a] border border-white/10 rounded-2xl p-4 hover:border-white/20 transition-colors relative group shrink-0 shadow-lg">
                 <div className="flex justify-between items-center mb-3">
-                  <span className="text-xs font-bold text-white bg-white/10 px-2 py-1 rounded">ẢNH GỐC</span>
+                  <span className="text-xs font-bold text-white bg-white/10 px-2 py-1 rounded">áº¢NH Gá»C</span>
                 </div>
                 <div className="space-y-3">
                   <div
@@ -671,7 +545,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
                     ) : (
                       <div className="flex flex-col items-center text-slate-500 transition-colors">
                         <Icons.Upload className="w-8 h-8 mb-1" />
-                        <span className="text-[10px] uppercase font-bold">Tải Ảnh Lên</span>
+                        <span className="text-[10px] uppercase font-bold">Táº£i áº¢nh LÃªn</span>
                       </div>
                     )}
                   </div>
@@ -684,7 +558,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
               <div className="w-full bg-[#12121a] border border-white/10 rounded-2xl p-4 shadow-lg">
                 <div className="flex justify-between items-center mb-3">
                   <label className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
-                    <Icons.MessageCircle className="w-4 h-4" /> 2. Yêu cầu chỉnh sửa
+                    <Icons.MessageCircle className="w-4 h-4" /> 2. YÃªu cáº§u chá»‰nh sá»­a
                   </label>
                 </div>
 
@@ -692,12 +566,12 @@ export const EditingTool: React.FC<EditingToolProps> = ({
                   <textarea
                     value={prompt}
                     onChange={(event) => setPrompt(event.target.value)}
-                    placeholder={lang === 'vi' ? 'Mô tả chi tiết yêu cầu chỉnh sửa...' : 'Describe the edit request...'}
+                    placeholder={lang === 'vi' ? 'MÃ´ táº£ chi tiáº¿t yÃªu cáº§u chá»‰nh sá»­a...' : 'Describe the edit request...'}
                     className="w-full bg-black/20 border border-white/5 rounded-xl p-3 text-sm text-white focus:border-audi-purple outline-none resize-none min-h-[150px]"
                   />
 
                   <div className="space-y-2">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase">Gợi ý nhanh</span>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase">Gá»£i Ã½ nhanh</span>
                     <div className="flex flex-wrap gap-2 max-h-[100px] overflow-y-auto custom-scrollbar">
                       {SUGGESTIONS.map((suggestion, index) => (
                         <button
@@ -722,7 +596,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <h3 className="font-bold text-white flex items-center gap-2">
                 <Icons.Settings className="w-5 h-5 text-slate-400" />
-                {isMagicEditor ? '3. Cấu Hình' : '2. Cấu Hình'}
+                {isMagicEditor ? '3. Cáº¥u HÃ¬nh' : '2. Cáº¥u HÃ¬nh'}
               </h3>
             </div>
 
@@ -733,8 +607,8 @@ export const EditingTool: React.FC<EditingToolProps> = ({
                     <Icons.Zap className="w-5 h-5" />
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-white">Làm Nét 4K</h4>
-                    <p className="text-xs text-slate-400 mt-1">Khôi phục chi tiết ảnh và giữ nguyên khuôn mặt, trang phục.</p>
+                    <h4 className="text-sm font-bold text-white">LÃ m NÃ©t 4K</h4>
+                    <p className="text-xs text-slate-400 mt-1">KhÃ´i phá»¥c chi tiáº¿t áº£nh vÃ  giá»¯ nguyÃªn khuÃ´n máº·t, trang phá»¥c.</p>
                   </div>
                 </div>
               </div>
@@ -747,8 +621,8 @@ export const EditingTool: React.FC<EditingToolProps> = ({
                     <Icons.Scissors className="w-5 h-5" />
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-white">Chế Độ Tách Nền</h4>
-                    <p className="text-xs text-slate-400 mt-1">Tách chủ thể và chuyển nền về đen sạch, vẫn giữ nguyên ảnh gốc.</p>
+                    <h4 className="text-sm font-bold text-white">Cháº¿ Äá»™ TÃ¡ch Ná»n</h4>
+                    <p className="text-xs text-slate-400 mt-1">TÃ¡ch chá»§ thá»ƒ vÃ  chuyá»ƒn ná»n vá» Ä‘en sáº¡ch, váº«n giá»¯ nguyÃªn áº£nh gá»‘c.</p>
                   </div>
                 </div>
               </div>
@@ -756,7 +630,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
 
             {isMagicEditor && (
               <div className="space-y-3">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Mô hình AI</label>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">MÃ´ hÃ¬nh AI</label>
                 <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
                   <button
                     onClick={() => isFlashAvailable && setAiModel('flash')}
@@ -787,7 +661,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
             )}
 
             <div className="space-y-3">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Độ phân giải</label>
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Äá»™ phÃ¢n giáº£i</label>
               <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
                 {(['1K', '2K', '4K'] as Resolution[]).map((value) => {
                   const disabled = !availableResolutions.includes(value);
@@ -812,7 +686,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
             <div className="space-y-3">
               <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
                 <Icons.Zap className="w-3 h-3" />
-                Tốc độ xử lý
+                Tá»‘c Ä‘á»™ xá»­ lÃ½
               </label>
               <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
                 {availableSpeedLabels.map((label) => (
@@ -855,7 +729,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
 
             <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-audi-purple/20 to-audi-pink/20 border border-white/10 p-3 mt-2">
               <div className="flex justify-between items-center relative z-10">
-                <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Giá hiện tại</span>
+                <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">GiÃ¡ hiá»‡n táº¡i</span>
                 <div className="flex items-end gap-1">
                   <span className="text-xl font-black text-white font-game drop-shadow-md">
                     {selectedGenerationCost.available ? selectedGenerationCost.vcoin : '--'}
@@ -876,7 +750,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
               className={`w-full py-3.5 mt-auto rounded-xl font-bold text-white shadow-[0_0_20px_rgba(255,0,153,0.4)] transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed hover:scale-[1.02] bg-gradient-to-r ${getGradient(feature.id)}`}
             >
               {isSubmitting ? <Icons.Loader className="animate-spin" /> : <Icons.Wand />}
-              {isSubmitting ? 'ĐANG GỬI JOB...' : 'THỰC HIỆN NGAY'}
+              {isSubmitting ? 'ÄANG Gá»¬I JOB...' : 'THá»°C HIá»†N NGAY'}
             </button>
           </div>
         </div>
@@ -884,3 +758,6 @@ export const EditingTool: React.FC<EditingToolProps> = ({
     </div>
   );
 };
+
+
+

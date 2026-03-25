@@ -1235,18 +1235,12 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
       const currentPayload = job.queue_payload || {};
       const preparationTimeoutMs = getPreparationTimeoutMs(job, currentPayload);
       const preparationLeaseSeconds = getPreparationLeaseSeconds(job, currentPayload);
-      const validationPayload = isQueueRecipePayload(currentPayload)
-        ? getRecipeValidationPayload(currentPayload)
-        : stripInternalQueueMeta(currentPayload);
       let submitPayload: Record<string, unknown> = currentPayload;
       let submitValidationResult: { pricingMatch?: { config_key?: string } | null } | null = null;
 
       if (isQueueRecipePayload(currentPayload)) {
         job.queue_payload = await markPreparing(job);
       }
-
-      const validationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, validationPayload);
-      submitValidationResult = validationResult;
 
       if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'image_edit_recipe_v1') {
         const editPayload = (job.queue_payload || currentPayload) as ImageEditRecipePayload;
@@ -1289,6 +1283,12 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
         summary.completed += 1;
         continue;
       }
+
+      const validationPayload = isQueueRecipePayload(currentPayload)
+        ? getRecipeValidationPayload(currentPayload)
+        : stripInternalQueueMeta(currentPayload);
+      const validationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, validationPayload);
+      submitValidationResult = validationResult;
 
       if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'image_generate_recipe_v1') {
         await updatePreProviderStage(job.id, 20);

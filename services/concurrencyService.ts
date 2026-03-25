@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from './supabaseClient';
 import { getUserProfile } from './economyService';
-import { QUEUE_SUBMITTED_EVENT } from './serverQueueService';
+import { QUEUE_SUBMITTED_EVENT, triggerServerQueueTick } from './serverQueueService';
 
 export interface JobState {
   jobId: string;
@@ -43,9 +43,9 @@ const EMPTY_QUEUE_STATS: QueueStats = {
   systemQueued: 0,
 };
 
-const BUSY_QUEUE_POLL_MS = 10_000;
-const IDLE_QUEUE_POLL_MS = 120_000;
-const MANUAL_QUEUE_POLL_MIN_INTERVAL_MS = 5_000;
+const BUSY_QUEUE_POLL_MS = 5_000;
+const IDLE_QUEUE_POLL_MS = 30_000;
+const MANUAL_QUEUE_POLL_MIN_INTERVAL_MS = 2_000;
 
 let globalChannel: any = null;
 let currentJobs: JobState[] = [];
@@ -75,6 +75,13 @@ const hasQueueActivity = (stats: QueueStats) =>
   stats.systemImageProcessing > 0 ||
   stats.systemVideoProcessing > 0 ||
   stats.systemQueued > 0;
+
+const shouldNudgeQueueWorker = (stats: QueueStats) =>
+  stats.systemQueued > 0 &&
+  (
+    stats.systemImageProcessing < CONCURRENCY_LIMITS.system.imageProcessing ||
+    stats.systemVideoProcessing < CONCURRENCY_LIMITS.system.videoProcessing
+  );
 
 const scheduleQueueStatsPoll = () => {
   if (queueStatsPollTimer) {
@@ -150,6 +157,12 @@ const fetchSharedQueueStats = async (force = false) => {
         systemQueued: Number(row?.system_queued || 0),
       };
       notifyQueueStatsSubscribers();
+
+      if (shouldNudgeQueueWorker(sharedQueueStats)) {
+        triggerServerQueueTick().catch((error) => {
+          console.warn('[Concurrency] Failed to nudge queue worker after stats refresh', error);
+        });
+      }
     } catch (error) {
       console.warn('[Concurrency] Failed to load queue stats', error);
     } finally {

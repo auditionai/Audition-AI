@@ -79,6 +79,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/checkin-reward"
+  to = "/.netlify/functions/checkin-reward"
+  status = 200
+
+[[redirects]]
   from = "/api/redeem-giftcode"
   to = "/.netlify/functions/redeem-giftcode"
   status = 200

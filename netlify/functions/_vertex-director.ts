@@ -97,7 +97,7 @@ const buildStrictImageDirectorInstruction = (
   }
 
   if (hasStyle) {
-    sections.push(`- Image ${imageIndex}: STYLE reference. This image is a processed style-only visual reference and WILL be sent to the renderer after the sample image. It may control only render language: rendering quality, lighting behavior, material response, color grading, stylized skin shading, broad adult body proportions, stylized facial planes, stylized hand structure, and visual finish. DO NOT copy pose, clothing, hairstyle, accessories, face, gender presentation, number of characters, character identity, or composition from it.`);
+    sections.push(`- Image ${imageIndex}: STYLE reference. This image is a style-only visual reference and WILL be sent to the renderer after the sample image. It may control only render language: rendering quality, lighting behavior, material response, color grading, stylized skin shading, broad adult body proportions, stylized facial planes, stylized hand structure, and visual finish. DO NOT copy pose, clothing, hairstyle, accessories, face, gender presentation, number of characters, character identity, composition, panel layout, collage layout, or black studio background from it.`);
   }
 
   sections.push(
@@ -117,6 +117,7 @@ const buildStrictImageDirectorInstruction = (
     '8. If a style image is provided, the final command prompt must explicitly command the renderer to COPY ONLY the render style, lighting, material quality, color grading, stylized skin shading, stylized facial/hand treatment, and broad adult 3D body-proportion language from it.',
     '9. The final command prompt must explicitly state that the style image is NOT a pose reference, NOT an outfit reference, NOT a character reference, and must NOT affect character count, gender, camera framing, or composition.',
     '10. The prompt must state that the renderer is FORBIDDEN from inventing extra characters, replacing the face, changing the hair, changing the outfit, improvising the composition, or blending the roles of the references.',
+    '10b. The prompt must explicitly forbid split-screen layouts, grids, paneling, storyboards, quadrants, tiled compositions, duplicated crops, and collage-like framing.',
     '11. If multiple character references are provided, map each final character into a distinct sample position. Do not merge them into one combined pose and do not default to standing shoulder-to-shoulder unless the sample says so.',
     '12. Mention that the style image is provided as the LAST visual reference, but it is style-only and must never be used as a pose/outfit/identity source.',
     '13. Explicitly forbid realistic human skin pores, realistic human facial anatomy, realistic photographic shading, and live-action body proportions if they conflict with the game-avatar look.',

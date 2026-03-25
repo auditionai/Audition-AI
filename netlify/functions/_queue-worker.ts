@@ -64,6 +64,10 @@ const MAX_DISPATCH_RETRIES = 6;
 const MAX_POLL_FAILURES = 8;
 const MAX_PROCESSING_AGE_MS = 45 * 60 * 1000;
 const MAX_VIDEO_PROCESSING_AGE_MS = 30 * 60 * 1000;
+const MAX_SINGLE_IMAGE_PROCESSING_AGE_MS = 15 * 60 * 1000;
+const MAX_COUPLE_IMAGE_PROCESSING_AGE_MS = 20 * 60 * 1000;
+const MAX_GROUP3_IMAGE_PROCESSING_AGE_MS = 30 * 60 * 1000;
+const MAX_GROUP4_IMAGE_PROCESSING_AGE_MS = 30 * 60 * 1000;
 const MAX_PROVIDER_GENERIC_RETRIES = 2;
 const MAX_OUTPUT_VERIFICATION_RETRIES = 2;
 const SINGLE_AND_COUPLE_PREPARE_TIMEOUT_MS = 10 * 60 * 1000;
@@ -538,13 +542,64 @@ const getMaxProcessingAgeMs = (job: Pick<QueueJobRow, 'queue_kind'>) => {
   return MAX_PROCESSING_AGE_MS;
 };
 
-const getProcessingTimeoutUserMessage = (job: Pick<QueueJobRow, 'queue_kind'>) => {
-  const timeoutMinutes = Math.ceil(getMaxProcessingAgeMs(job) / 60000);
+const getImageProcessingAgeMs = (
+  job: Pick<QueueJobRow, 'tool_id'>,
+  payload?: QueueJobRow['queue_payload'],
+) => {
+  if (isQueueRecipePayload(payload) && payload.recipeType === 'image_generate_recipe_v1') {
+    const characterCount = getImageRecipeCharacterCount(job, payload);
+    if (characterCount && characterCount >= 4) {
+      return MAX_GROUP4_IMAGE_PROCESSING_AGE_MS;
+    }
+    if (characterCount === 3) {
+      return MAX_GROUP3_IMAGE_PROCESSING_AGE_MS;
+    }
+    if (characterCount === 2) {
+      return MAX_COUPLE_IMAGE_PROCESSING_AGE_MS;
+    }
+    if (characterCount === 1) {
+      return MAX_SINGLE_IMAGE_PROCESSING_AGE_MS;
+    }
+  }
+
+  const characterCount = getCharacterCountFromToolId(job.tool_id);
+  if (characterCount && characterCount >= 4) {
+    return MAX_GROUP4_IMAGE_PROCESSING_AGE_MS;
+  }
+  if (characterCount === 3) {
+    return MAX_GROUP3_IMAGE_PROCESSING_AGE_MS;
+  }
+  if (characterCount === 2) {
+    return MAX_COUPLE_IMAGE_PROCESSING_AGE_MS;
+  }
+  if (characterCount === 1) {
+    return MAX_SINGLE_IMAGE_PROCESSING_AGE_MS;
+  }
+
+  return MAX_PROCESSING_AGE_MS;
+};
+
+const getProviderProcessingTimeoutMs = (
+  job: Pick<QueueJobRow, 'queue_kind' | 'tool_id'>,
+  payload?: QueueJobRow['queue_payload'],
+) => {
+  if (job.queue_kind === 'video_generate' || job.queue_kind === 'motion_generate') {
+    return MAX_VIDEO_PROCESSING_AGE_MS;
+  }
+
+  return getImageProcessingAgeMs(job, payload);
+};
+
+const getProcessingTimeoutUserMessage = (
+  job: Pick<QueueJobRow, 'queue_kind' | 'tool_id'>,
+  payload?: QueueJobRow['queue_payload'],
+) => {
+  const timeoutMinutes = Math.ceil(getProviderProcessingTimeoutMs(job, payload) / 60000);
   if (job.queue_kind === 'video_generate' || job.queue_kind === 'motion_generate') {
     return `Video da qua thoi gian cho ${timeoutMinutes} phut. Vui long tao lai video moi.`;
   }
 
-  return `Tien trinh da qua thoi gian cho ${timeoutMinutes} phut. Vui long thu lai.`;
+  return `Anh da qua thoi gian cho ${timeoutMinutes} phut tu luc gui sang he thong tao anh. Vui long thu lai.`;
 };
 
 const shouldRefundFailure = (
@@ -907,6 +962,7 @@ const markQueuedStage = async (jobId: string, progress: number) => {
     status: 'queued',
     progress,
     error_message: null,
+    processing_started_at: null,
     next_poll_at: new Date().toISOString(),
     lease_token: null,
     lease_expires_at: null,
@@ -1000,6 +1056,7 @@ const queueRecipeStageTransition = async (
     progress,
     error_message: null,
     queue_payload: nextPayload,
+    processing_started_at: null,
     next_poll_at: new Date().toISOString(),
     lease_token: null,
     lease_expires_at: null,
@@ -1026,6 +1083,7 @@ const markRecipePreparedForDispatch = async (
     progress: 55,
     error_message: null,
     queue_payload: storedPayload,
+    processing_started_at: null,
     next_poll_at: new Date().toISOString(),
     lease_token: null,
     lease_expires_at: null,
@@ -1295,8 +1353,8 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
   const currentState = await getJobRuntimeState(job.id);
   const startedAt = currentState?.processing_started_at || currentState?.created_at || new Date().toISOString();
   const processingAgeMs = Date.now() - new Date(startedAt).getTime();
-  if (processingAgeMs >= getMaxProcessingAgeMs(job)) {
-    await markFailedRespectingRefundPolicy(job, getProcessingTimeoutUserMessage(job));
+  if (processingAgeMs >= getProviderProcessingTimeoutMs(job, job.queue_payload)) {
+    await markFailedRespectingRefundPolicy(job, getProcessingTimeoutUserMessage(job, job.queue_payload));
     return 'failed';
   }
 
@@ -1328,10 +1386,10 @@ const handlePollFailure = async (job: QueueJobRow, errorMessage: string) => {
   const startedAt = state?.processing_started_at || state?.created_at || new Date().toISOString();
   const processingAgeMs = Date.now() - new Date(startedAt).getTime();
 
-  if (nextAttemptCount >= MAX_POLL_FAILURES || processingAgeMs >= getMaxProcessingAgeMs(job)) {
+  if (nextAttemptCount >= MAX_POLL_FAILURES || processingAgeMs >= getProviderProcessingTimeoutMs(job, job.queue_payload)) {
     const finalMessage =
-      processingAgeMs >= getMaxProcessingAgeMs(job)
-        ? getProcessingTimeoutUserMessage(job)
+      processingAgeMs >= getProviderProcessingTimeoutMs(job, job.queue_payload)
+        ? getProcessingTimeoutUserMessage(job, job.queue_payload)
         : errorMessage;
     await markFailedRespectingRefundPolicy(job, finalMessage);
     return 'failed';
@@ -1406,13 +1464,6 @@ const recoverStalePreparingJobs = async () => {
       leaseExpired &&
       ageMs >= ORPHAN_CLAIM_GRACE_MS;
 
-    const preparationTimeoutMs = getPreparationTimeoutMs(job, payload);
-
-    if (ageMs >= preparationTimeoutMs) {
-      await markFailedRespectingRefundPolicy(job, getPreparationTimeoutUserMessage(job, payload), payload);
-      continue;
-    }
-
     if (isOrphanedClaim) {
       const resetPayload = withQueueLog(
         payload,
@@ -1480,7 +1531,7 @@ const recoverStalePreparingJobs = async () => {
     }
 
     if (currentStatus === 'processing' && isRecipePayload) {
-      const result = await requeueJob(job, 'Queue preparation timed out before dispatching to provider.');
+      const result = await requeueJob(job, 'Worker preparation lease expired before dispatching to provider.');
       if (result === 'requeued') recovered += 1;
       continue;
     }
@@ -1712,8 +1763,12 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
         await markFailedRespectingRefundPolicy(job, message.replace('INVALID_TST_CONFIG:', '').trim());
         summary.failed += 1;
       } else if (message.includes('Queue preparation timed out before')) {
-        await markFailedRespectingRefundPolicy(job, getPreparationTimeoutUserMessage(job, job.queue_payload));
-        summary.failed += 1;
+        const result = await requeueJob(job, message);
+        if (result === 'failed') {
+          summary.failed += 1;
+        } else {
+          summary.requeued += 1;
+        }
         continue;
       } else if (isTransientError(message)) {
         const result = await requeueJob(job, message);

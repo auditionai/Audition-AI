@@ -1097,61 +1097,31 @@ export const getCheckinStatus = async () => {
 
 export const performCheckin = async (): Promise<{success: boolean, reward: number, newStreak: number, message?: string}> => {
     if (!supabase) return { success: false, reward: 0, newStreak: 0, message: "No Database" };
-    const user = await getUserProfile();
-    const today = getLocalTodayStr();
-    const reward = 5;
-    const referenceId = `${user.id}:${today}`;
-    const startAt = getLocalDayBoundaryIso(today, 'start');
-    const endAt = getLocalDayBoundaryIso(today, 'end');
-    let checkinAlreadyExists = false;
 
     try {
-        const { error } = await supabase.from('daily_check_ins').insert({
-            user_id: user.id,
-            check_in_date: today
+        const response = await fetch('/api/checkin-reward', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(await getSessionAuthHeader()),
+            },
+            body: JSON.stringify({ action: 'daily' }),
         });
 
-        if (error) {
-            if ((error as any)?.code === '23505' || /duplicate|already exists/i.test(error.message || '')) {
-                checkinAlreadyExists = true;
-            } else {
-                throw error;
-            }
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(payload?.message || payload?.error || 'Check-in request failed');
         }
 
-        const rewardApplied = await ensureRewardApplied({
-            userId: user.id,
-            amount: reward,
-            reason: 'Daily Checkin',
-            referenceType: 'daily_checkin_reward',
-            referenceId,
-            metadata: {
-                reward_type: 'daily_checkin',
-                check_in_date: today,
-            },
-            repairWindow: {
-                startAt,
-                endAt,
-            },
-        });
         invalidateCheckinStatusCache();
         invalidateUserProfileCache();
-        
-        const status = await getCheckinStatus();
-        if (checkinAlreadyExists && !rewardApplied) {
-            return {
-                success: false,
-                reward: 0,
-                newStreak: status.streak,
-                message: 'Bạn đã điểm danh hôm nay rồi!'
-            };
-        }
+        window.dispatchEvent(new Event('balance_updated'));
 
         return {
-            success: true,
-            reward: rewardApplied ? reward : 0,
-            newStreak: status.streak,
-            message: checkinAlreadyExists ? 'Đã đồng bộ lại phần thưởng điểm danh hôm nay.' : undefined
+            success: Boolean(payload?.success),
+            reward: Number(payload?.reward || 0),
+            newStreak: Number(payload?.newStreak || 0),
+            message: payload?.message,
         };
     } catch (e: any) {
         return { success: false, reward: 0, newStreak: 0, message: e.message };
@@ -1160,82 +1130,28 @@ export const performCheckin = async (): Promise<{success: boolean, reward: numbe
 
 export const claimMilestoneReward = async (day: number): Promise<{success: boolean, message: string}> => {
     if (!supabase) return { success: false, message: "No Database" };
-    const user = await getUserProfile();
-    const rewards: Record<number, number> = { 7: 20, 14: 50, 30: 100 };
-    const amount = rewards[day] || 0;
-    const currentMonth = getLocalTodayStr().substring(0, 7);
-    const referenceId = `${user.id}:${currentMonth}:${day}`;
-    let alreadyClaimed = false;
-
-    if (amount <= 0) {
-        return { success: false, message: 'Mốc thưởng không hợp lệ.' };
-    }
-
-    const status = await getCheckinStatus();
-    if (status.streak < day) {
-        return { success: false, message: `Bạn chưa đủ ${day} ngày điểm danh trong tháng này.` };
-    }
-
-    const startOfMonth = new Date(`${currentMonth}-01T00:00:00.000`).toISOString();
-    const endOfMonth = getNextMonthStartIso(currentMonth);
-
     try {
-        // Double check if already claimed THIS MONTH to prevent race conditions
-        const { data: existing, error: existingError } = await supabase
-            .from('milestone_claims')
-            .select('id')
-            .eq('user_id', user.id)
-            .eq('day_milestone', day)
-            .gte('created_at', startOfMonth)
-            .maybeSingle();
-
-        if (existingError) {
-            throw existingError;
-        }
-
-        if (existing) {
-            alreadyClaimed = true;
-        }
-
-        if (!alreadyClaimed) {
-            const { error } = await supabase.from('milestone_claims').insert({
-                user_id: user.id,
-                day_milestone: day,
-                reward_amount: amount,
-                claim_month: currentMonth
-            });
-
-            if (error) throw error;
-        }
-
-        const rewardApplied = await ensureRewardApplied({
-            userId: user.id,
-            amount,
-            reason: `Milestone ${day} Days`,
-            referenceType: 'milestone_reward',
-            referenceId,
-            metadata: {
-                reward_type: 'milestone',
-                claim_month: currentMonth,
-                milestone_day: day,
+        const response = await fetch('/api/checkin-reward', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(await getSessionAuthHeader()),
             },
-            repairWindow: {
-                startAt: startOfMonth,
-                endAt: endOfMonth,
-            },
+            body: JSON.stringify({ action: 'milestone', day }),
         });
+
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(payload?.message || payload?.error || 'Milestone request failed');
+        }
+
         invalidateCheckinStatusCache();
         invalidateUserProfileCache();
-
-        if (alreadyClaimed && !rewardApplied) {
-            return { success: false, message: `Bạn đã nhận mốc ${day} ngày trong tháng này rồi!` };
-        }
+        window.dispatchEvent(new Event('balance_updated'));
 
         return {
-            success: true,
-            message: alreadyClaimed
-                ? `Đã đồng bộ lại thưởng mốc ${day} ngày cho bạn.`
-                : `Nhận thưởng mốc ${day} ngày thành công!`
+            success: Boolean(payload?.success),
+            message: payload?.message || ''
         };
     } catch (e: any) {
         return { success: false, message: e.message };

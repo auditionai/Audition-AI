@@ -67,7 +67,10 @@ export const handler: Handler = async (event) => {
     }
 
     const summary = await runQueueDaemon();
-    followUpLaunchNeeded = Number(summary.requeued || 0) > 0;
+    followUpLaunchNeeded =
+      Number(summary.requeued || 0) > 0 ||
+      Number(summary.completed || 0) > 0 ||
+      Number(summary.failed || 0) > 0;
     return {
       statusCode: 200,
       body: JSON.stringify({ success: true, summary, followUpLaunchNeeded }),

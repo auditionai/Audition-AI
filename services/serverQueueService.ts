@@ -70,7 +70,9 @@ export const enqueueServerJob = async (request: QueueEnqueueRequest) => {
   triggerServerQueueTick(true).catch((error) => {
     console.warn('[Queue] Immediate tick failed:', error);
   });
-  scheduleQueueTickRetry(4_000);
+  scheduleQueueTickRetry(1_000);
+  scheduleQueueTickRetry(2_500);
+  scheduleQueueTickRetry(5_000);
 
   return payload;
 };

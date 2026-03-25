@@ -86,7 +86,7 @@ const buildStrictImageDirectorInstruction = (
   }
 
   if (hasStyle) {
-    sections.push(`- Image ${imageIndex}: STYLE reference. This image WILL be sent again to the renderer as the final direct style reference. It is allowed to control only render language: rendering quality, lighting behavior, material response, color grading, stylized skin shading, broad adult body proportions, stylized facial planes, stylized hand structure, and visual finish. DO NOT copy pose, clothing, hairstyle, accessories, face, gender presentation, number of characters, character identity, or composition from it.`);
+    sections.push(`- Image ${imageIndex}: STYLE reference. This image is for analysis only. Convert it into text-only style instructions describing render language: rendering quality, lighting behavior, material response, color grading, stylized skin shading, broad adult body proportions, stylized facial planes, stylized hand structure, and visual finish. DO NOT copy pose, clothing, hairstyle, accessories, face, gender presentation, number of characters, character identity, or composition from it.`);
   }
 
   sections.push(
@@ -99,11 +99,11 @@ const buildStrictImageDirectorInstruction = (
     '5. If a sample image is provided, the final command prompt must explicitly command the renderer to COPY the exact pose, framing, camera angle, and background from it, while forbidding any borrowing of real-human realism or identity from it.',
     '6. If a sample image is provided, the final command prompt must explicitly say to transplant or re-pose the final character into the sample composition, not return an unchanged copy of the uploaded character reference image.',
     '7. If the sample image contains multiple people, the final command prompt must explicitly map the final characters into those exact sample positions and preserve the exact left-to-right arrangement, spacing, overlap, body lean, hand placement, leg placement, and camera perspective. The renderer must NOT collapse them into a straight lineup unless the sample itself is a straight lineup.',
-    '8. If a style image is provided, the final command prompt must explicitly command the renderer to COPY ONLY the render style, lighting, material quality, color grading, stylized skin shading, stylized facial/hand treatment, and broad adult 3D body-proportion language from it.',
+    '8. If a style image is provided, the final command prompt must explicitly command the renderer to apply ONLY the extracted render style, lighting, material quality, color grading, stylized skin shading, stylized facial/hand treatment, and broad adult 3D body-proportion language derived from it.',
     '9. The final command prompt must explicitly state that the style image is NOT a pose reference, NOT an outfit reference, NOT a character reference, and must NOT affect character count, gender, camera framing, or composition.',
     '10. The prompt must state that the renderer is FORBIDDEN from inventing extra characters, replacing the face, changing the hair, changing the outfit, improvising the composition, or blending the roles of the references.',
     '11. If multiple character references are provided, map each final character into a distinct sample position. Do not merge them into one combined pose and do not default to standing shoulder-to-shoulder unless the sample says so.',
-    '12. Mention that the style image will be provided again to the renderer as the LAST direct visual reference, but only as a style/body-render guide and never as a pose/outfit/identity guide.',
+    '12. Convert the style image into text-only render-language guidance. Do not rely on the renderer seeing the style image directly.',
     '13. Explicitly forbid realistic human skin pores, realistic human facial anatomy, realistic photographic shading, and live-action body proportions if they conflict with the game-avatar look.',
     '',
     'Do not explain your reasoning. Output only the final command prompt.',

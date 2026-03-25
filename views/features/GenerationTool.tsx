@@ -10,7 +10,7 @@ import { CONCURRENCY_LIMITS, useConcurrency } from '../../services/concurrencySe
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import { downloadAssetToBrowser } from '../../services/downloadService';
-import { createStyleOnlyReference, optimizePayload } from '../../utils/imageProcessor';
+import { createSolidFence, createStyleOnlyReference, optimizePayload } from '../../utils/imageProcessor';
 import {
   type AuditionPricingOverride,
   fetchTstModels,
@@ -81,6 +81,19 @@ const tryStageGenerationInput = async (source: string, folder: string) => {
     } catch (error) {
         console.warn('[GenerationTool] Failed to stage generation input to storage.', error);
         throw new Error('Không thể tải ảnh tham chiếu lên vùng đệm. Vui lòng thử lại.');
+    }
+};
+
+const tryStageSampleReferenceInput = async (source: string, folder: string, aspectRatio: string) => {
+    if (!source) return null;
+
+    try {
+        const poseOnlyReference = await createSolidFence(source, aspectRatio, true);
+        const optimizedSource = await optimizePayload(poseOnlyReference, 2048);
+        return await uploadFileToR2(optimizedSource, folder);
+    } catch (error) {
+        console.warn('[GenerationTool] Failed to stage sample reference through pose-only fence.', error);
+        throw new Error('Không thể chuẩn hóa ảnh mẫu trước khi tạo ảnh. Vui lòng thử lại.');
     }
 };
 
@@ -719,7 +732,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
             ).filter((value): value is string => Boolean(value));
 
             const stagedSampleImage = refImage
-                ? await tryStageGenerationInput(refImage, `inputs/generation/${activeMode}/sample`)
+                ? await tryStageSampleReferenceInput(refImage, `inputs/generation/${activeMode}/sample`, aspectRatio)
                 : null;
             const stagedStyleImage = activeStylePreset
                 ? await tryStageStyleReferenceInput(activeStylePreset, `inputs/generation/${activeMode}/style`)

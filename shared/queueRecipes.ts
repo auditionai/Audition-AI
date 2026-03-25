@@ -148,7 +148,7 @@ const IMAGE_QUALITY_BOOSTERS =
 const IMAGE_NEGATIVE_PROMPT =
   'low quality, bad anatomy, worst quality, blur, grain, watermark, text, signature, bad hands, bad face, mixed backgrounds, conflicting styles, extra characters, unwanted people from style reference, real people, photorealistic humans, photograph, realistic photography, real life, semi-realistic human, cinematic human portrait, live action, realistic skin pores, natural skin texture, DSLR, realistic male model, realistic female model, hyperreal face, realistic eyelashes, realistic fabric, anime, cartoon, 2d, flat shading, floating character, disconnected limbs, hands in the air, feet not touching the ground, floating objects, unnatural posture, floating in mid-air, levitating, hovering, disconnected from background, bad perspective, illogical physics';
 const IMAGE_ROLE_LOCK_CONSTRAINTS =
-  'STRICT ROLE LOCK: CHARACTER REFERENCES are the only source of truth for face, hair, skin tone, head shape, body structure, outfit, shoes, accessories, and overall identity. CHARACTER REFERENCES are NOT pose references and must never preserve their original standing pose, limb placement, framing, or background. SAMPLE IMAGE is the only source for pose, camera angle, framing, hand placement, spacing between subjects, left-to-right arrangement, relative heights, body lean, limb placement, and background composition. The renderer must transplant the exact character from the character references into the sample composition, rather than returning a near-unchanged copy of any uploaded character reference. STYLE IMAGE is a direct visual style reference sent to the renderer, but it may influence only render quality, lighting behavior, material response, color grading, stylized skin shading, broad adult 3D proportions, hand/face topology language, and final artistic finish. STYLE IMAGE must never transfer pose, clothing, hairstyle, accessories, face, character identity, gender presentation, number of characters, or composition. Treat STYLE IMAGE as style-only, not content-only. Ignore the content design of the style image and use it only as a render-language and body-proportion guide. If the sample image is a real human photo, translate only its composition into the stylized 3D game-avatar language from the character and style references. The final subject must stay a stylized 3D game character and must never drift toward a real human, semi-realistic portrait, or photographic anatomy. Preserve the game-avatar topology, stylized skin shading, stylized hands, stylized facial structure, and clean 3D render finish from the style reference. Do not humanize, beautify, reinterpret, invent facial structure, hair texture, skin texture, clothing details, or invent a new group arrangement. For multi-character scenes, preserve the exact sample choreography instead of collapsing everyone into a default straight lineup.';
+  'STRICT ROLE LOCK: CHARACTER REFERENCES are the only source of truth for face, hair, skin tone, head shape, body structure, outfit, shoes, accessories, and overall identity. CHARACTER REFERENCES are NOT pose references and must never preserve their original standing pose, limb placement, framing, or background. SAMPLE IMAGE is the only source for pose, camera angle, framing, hand placement, spacing between subjects, left-to-right arrangement, relative heights, body lean, limb placement, and background composition. The renderer must transplant the exact character from the character references into the sample composition, rather than returning a near-unchanged copy of any uploaded character reference. STYLE IMAGE has already been analyzed upstream and converted into style instructions only. Any style guidance derived from that image may influence only render quality, lighting behavior, material response, color grading, stylized skin shading, broad adult 3D proportions, hand/face topology language, and final artistic finish. Style guidance must never transfer pose, clothing, hairstyle, accessories, face, character identity, gender presentation, number of characters, or composition. If the sample image is a real human photo, translate only its composition into the stylized 3D game-avatar language from the character references plus the extracted style instructions. The final subject must stay a stylized 3D game character and must never drift toward a real human, semi-realistic portrait, or photographic anatomy. Preserve the game-avatar topology, stylized skin shading, stylized hands, stylized facial structure, and clean 3D render finish from the style guidance. Do not humanize, beautify, reinterpret, invent facial structure, hair texture, skin texture, clothing details, or invent a new group arrangement. For multi-character scenes, preserve the exact sample choreography instead of collapsing everyone into a default straight lineup.';
 
 export const shouldLockSampleCompositionForMultiCharacter = (payload: Pick<ImageGenerateRecipePayload, 'characterImages' | 'sampleImage'>) =>
   Boolean(payload.sampleImage) && (payload.characterImages?.length || 0) >= 2;
@@ -165,14 +165,6 @@ export const getImageRenderReferenceEntries = (
 ): ImageRenderReferenceEntry[] => {
   const entries: ImageRenderReferenceEntry[] = [];
 
-  if (payload.sampleImage) {
-    entries.push({
-      role: 'sample',
-      source: payload.sampleImage,
-      indexLabel: 'SAMPLE IMAGE',
-    });
-  }
-
   (payload.characterImages || [])
     .filter((value): value is string => Boolean(value))
     .forEach((source, index) => {
@@ -183,11 +175,14 @@ export const getImageRenderReferenceEntries = (
       });
     });
 
-  if (payload.styleImage) {
+  // Style images remain available to the director for prompt synthesis,
+  // but are intentionally excluded from direct renderer references because
+  // avatar-style presets can leak face, outfit, and pose into the result.
+  if (payload.sampleImage) {
     entries.push({
-      role: 'style',
-      source: payload.styleImage,
-      indexLabel: 'STYLE IMAGE',
+      role: 'sample',
+      source: payload.sampleImage,
+      indexLabel: 'SAMPLE IMAGE',
     });
   }
 
@@ -227,7 +222,7 @@ const buildImageReferenceOrderDirective = (
     'HARD CONFLICT RULES:',
     '- If CHARACTER REFERENCES conflict with the SAMPLE IMAGE, keep identity/outfit from CHARACTER REFERENCES but re-pose the final character to match the SAMPLE IMAGE exactly.',
     '- The final image must never be a near-unchanged copy of a standing CHARACTER REFERENCE unless the SAMPLE IMAGE itself is also a standing front-view pose.',
-    '- STYLE IMAGE may improve render quality only. It must not override pose, composition, identity, outfit, or subject count.',
+    '- Any extracted style guidance may improve render quality only. It must not override pose, composition, identity, outfit, or subject count.',
   ].join('\n');
 };
 

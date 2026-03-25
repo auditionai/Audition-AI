@@ -1,4 +1,4 @@
-import { getImageDirectorSources, type ImageGenerateRecipePayload } from '../../shared/queueRecipes';
+import { getImageCharacterReferenceGroups, getImageDirectorSources, type ImageGenerateRecipePayload } from '../../shared/queueRecipes';
 import { runWithVertexCredentialFailover } from './_vertex-credentials';
 
 const VERTEX_MODEL = 'gemini-3.1-pro-preview';
@@ -52,6 +52,7 @@ const buildStrictImageDirectorInstruction = (
   hasStyle: boolean,
 ) => {
   const sections: string[] = [];
+  const characterGroups = getImageCharacterReferenceGroups(payload);
 
   sections.push(
     'You are a master AI image generation director and forensic visual analyst.',
@@ -74,10 +75,20 @@ const buildStrictImageDirectorInstruction = (
 
   let imageIndex = 1;
   if (hasCharacters) {
-    sections.push(
-      `- Images 1 to ${payload.characterImages!.length}: CHARACTER REFERENCE. Source of truth for face, hair, head shape, ear shape, body proportions, skin tone, clothing, shoes, accessories, gender, and identity. COPY EXACTLY. DO NOT INVENT. The character is already a stylized 3D game avatar. Preserve that topology and do not humanize it. These images are NOT pose references. Ignore their current standing pose, limb placement, framing, and background.`,
-    );
-    imageIndex += payload.characterImages!.length;
+    sections.push(`- Final output character count must be EXACTLY ${payload.characterCount || characterGroups.length}. No more, no less.`);
+    characterGroups.forEach((group) => {
+      const startIndex = imageIndex;
+      const endIndex = imageIndex + group.references.length - 1;
+      const imageRange = startIndex === endIndex ? `Image ${startIndex}` : `Images ${startIndex} to ${endIndex}`;
+      const referenceKinds = group.references
+        .map((reference) => (reference.kind === 'face' ? 'FACE LOCK' : reference.kind === 'body' ? 'BODY' : 'REFERENCE'))
+        .join(', ');
+      const genderDirective = group.gender ? ` Gender for this slot is fixed as ${group.gender.toUpperCase()}.` : '';
+      sections.push(
+        `- ${imageRange}: CHARACTER ${group.characterIndex} reference set (${referenceKinds}). These image(s) all describe the SAME final character. Merge them into one identity. This slot is mandatory and must appear exactly once in the final image.${genderDirective} Source of truth for face, hair, head shape, ear shape, body proportions, skin tone, clothing, shoes, accessories, gender, and identity. COPY EXACTLY. DO NOT INVENT. The character is already a stylized 3D game avatar. Preserve that topology and do not humanize it. These images are NOT pose references. Ignore their current standing pose, limb placement, framing, and background.`,
+      );
+      imageIndex += group.references.length;
+    });
   }
 
   if (hasSample) {
@@ -93,7 +104,11 @@ const buildStrictImageDirectorInstruction = (
     '',
     'OUTPUT REQUIREMENTS:',
     '1. Return ONLY the final command prompt.',
+    `1b. The final command prompt must explicitly require EXACTLY ${payload.characterCount || characterGroups.length} final character(s), no more and no less.`,
+    '1c. The final command prompt must explicitly require one-to-one slot preservation: CHARACTER 1 appears once, CHARACTER 2 appears once, and so on. No missing slots, no duplicate slots, no substitutions.',
     '2. The final command prompt must explicitly command the renderer to COPY character identity from the character references only: face shape, eyes, hair silhouette, body topology, skin tone, outfit, shoes, accessories, and tattoos.',
+    '2b. If multiple character reference images belong to the same character slot, the final command prompt must explicitly state that they all describe the same subject and must be merged into one identity, not split into extra people.',
+    '2c. The final command prompt must explicitly forbid replacing any character slot with a duplicated uploaded character, a sample person, a style person, or an invented blended character.',
     '3. The final command prompt must explicitly state that character reference images are NOT pose references and their original standing pose must be ignored.',
     '4. The final command prompt must explicitly state that the subject must remain a stylized 3D game character / MMO avatar and must NOT become photorealistic, semi-realistic, or humanized.',
     '5. If a sample image is provided, the final command prompt must explicitly command the renderer to COPY the exact pose, framing, camera angle, and background from it, while forbidding any borrowing of real-human realism or identity from it.',

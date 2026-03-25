@@ -29,7 +29,7 @@ import {
   type TstPricingEntry,
   type TstRuntimeModel,
 } from '../../services/tstCatalog';
-import type { ImageGenerateRecipePayload } from '../../shared/queueRecipes';
+import type { CharacterReferenceGroup, ImageGenerateRecipePayload } from '../../shared/queueRecipes';
 
 interface GenerationToolProps {
   feature: Feature;
@@ -648,6 +648,20 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
         return;
     }
 
+    const missingCharacterSlots = characters
+        .filter((char) => !char.bodyImage && !char.faceImage)
+        .map((char) => char.id);
+
+    if (missingCharacterSlots.length > 0) {
+        notify(
+            lang === 'vi'
+                ? `Thiếu ảnh tham chiếu cho nhân vật ${missingCharacterSlots.join(', ')}. Vui lòng tải đủ tất cả nhân vật trước khi tạo ảnh.`
+                : `Missing reference images for character slot(s): ${missingCharacterSlots.join(', ')}.`,
+            'warning',
+        );
+        return;
+    }
+
     const cost = calculateCost();
     const user = await getUserProfile();
 
@@ -708,28 +722,53 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
     void (async () => {
         try {
-            const stagedCharacterImages = (
+            const stagedCharacterGroups = (
                 await Promise.all(
-                    characters.flatMap((char, charIndex) => {
-                        const stagedTasks: Promise<string | null>[] = [];
+                    characters.map(async (char, charIndex) => {
+                        const references: CharacterReferenceGroup['references'] = [];
+
                         if (char.bodyImage) {
-                            stagedTasks.push(
-                                tryStageGenerationInput(char.bodyImage, `inputs/generation/${activeMode}/character-${charIndex + 1}/body`)
+                            const stagedBody = await tryStageGenerationInput(
+                                char.bodyImage,
+                                `inputs/generation/${activeMode}/character-${charIndex + 1}/body`,
                             );
+                            if (stagedBody) {
+                                references.push({ source: stagedBody, kind: 'body' });
+                            }
                         }
+
                         if (char.isFaceLocked && char.faceImage && char.faceImage !== char.bodyImage) {
-                            stagedTasks.push(
-                                tryStageGenerationInput(char.faceImage, `inputs/generation/${activeMode}/character-${charIndex + 1}/face`)
+                            const stagedFace = await tryStageGenerationInput(
+                                char.faceImage,
+                                `inputs/generation/${activeMode}/character-${charIndex + 1}/face`,
                             );
+                            if (stagedFace) {
+                                references.push({ source: stagedFace, kind: 'face' });
+                            }
                         } else if (!char.bodyImage && char.faceImage) {
-                            stagedTasks.push(
-                                tryStageGenerationInput(char.faceImage, `inputs/generation/${activeMode}/character-${charIndex + 1}/face`)
+                            const stagedFace = await tryStageGenerationInput(
+                                char.faceImage,
+                                `inputs/generation/${activeMode}/character-${charIndex + 1}/face`,
                             );
+                            if (stagedFace) {
+                                references.push({ source: stagedFace, kind: 'face' });
+                            }
                         }
-                        return stagedTasks;
+
+                        return {
+                            characterIndex: charIndex + 1,
+                            gender: char.gender,
+                            references,
+                        } satisfies CharacterReferenceGroup;
                     })
                 )
-            ).filter((value): value is string => Boolean(value));
+            ).filter((group) => group.references.length > 0);
+
+            if (stagedCharacterGroups.length !== characters.length) {
+                throw new Error(`CRITICAL FAILURE: Expected ${characters.length} character reference groups but only prepared ${stagedCharacterGroups.length}.`);
+            }
+
+            const stagedCharacterImages = stagedCharacterGroups.flatMap((group) => group.references.map((reference) => reference.source));
 
             const stagedSampleImage = refImage
                 ? await tryStageSampleReferenceInput(refImage, `inputs/generation/${activeMode}/sample`, aspectRatio)
@@ -748,6 +787,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                 speed: effectiveSpeedId,
                 serverId: effectiveServerId,
                 negativePrompt: negativePrompt.trim() || undefined,
+                characterReferenceGroups: stagedCharacterGroups,
                 characterImages: stagedCharacterImages,
                 sampleImage: stagedSampleImage || null,
                 styleImage: stagedStyleImage || null,

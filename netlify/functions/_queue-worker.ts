@@ -9,8 +9,10 @@ import {
   uploadImageToTst,
 } from './_queue-recipes';
 import { runVertexImageEdit } from './_vertex-image-edit';
+import { verifyGeneratedImageOutput } from './_vertex-image-verify';
 import {
   getImageDirectorSources,
+  validateImageGenerateReferenceIntegrity,
   getImageRenderReferenceSources,
   getRecipeValidationPayload,
   isQueueRecipePayload,
@@ -53,6 +55,7 @@ const MAX_DISPATCH_RETRIES = 6;
 const MAX_POLL_FAILURES = 8;
 const MAX_PROCESSING_AGE_MS = 45 * 60 * 1000;
 const MAX_PROVIDER_GENERIC_RETRIES = 2;
+const MAX_OUTPUT_VERIFICATION_RETRIES = 2;
 const SINGLE_AND_COUPLE_PREPARE_TIMEOUT_MS = 10 * 60 * 1000;
 const GROUP_OF_THREE_PREPARE_TIMEOUT_MS = 15 * 60 * 1000;
 const GROUP_OF_FOUR_PREPARE_TIMEOUT_MS = 20 * 60 * 1000;
@@ -95,10 +98,12 @@ const parseErrorMessage = async (response: Response) => {
   }
 };
 
-const toQueuePayloadObject = (payload?: Record<string, unknown> | null) =>
+const toQueuePayloadObject = (
+  payload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
+): Record<string, unknown> =>
   payload && typeof payload === 'object' ? { ...payload } : {};
 
-const stripInternalQueueMeta = (payload: Record<string, unknown>) =>
+const stripInternalQueueMeta = (payload: Record<string, unknown> | ImageGenerateRecipePayload) =>
   Object.fromEntries(Object.entries(payload).filter(([key]) => !key.startsWith('__')));
 
 const normalizeNotificationMediaEntry = (
@@ -130,7 +135,7 @@ const normalizeNotificationMediaEntry = (
 };
 
 const buildNotificationMediaEntries = (
-  payload?: Record<string, unknown> | null,
+  payload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
 ): QueueNotificationMediaEntry[] => {
   const raw = toQueuePayloadObject(payload);
   const explicit = Array.isArray(raw.__notifyInputMedia)
@@ -189,7 +194,34 @@ const buildNotificationMediaEntries = (
   );
 };
 
-const getQueueLogs = (payload?: Record<string, unknown> | null): QueueProgressLogEntry[] => {
+const getStoredImageGenerateRecipePayload = (
+  payload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
+): ImageGenerateRecipePayload | null => {
+  const raw = toQueuePayloadObject(payload);
+
+  if (isQueueRecipePayload(raw) && raw.recipeType === 'image_generate_recipe_v1') {
+    return raw as ImageGenerateRecipePayload;
+  }
+
+  const embeddedRecipe = raw.__recipePayload;
+  if (
+    embeddedRecipe &&
+    typeof embeddedRecipe === 'object' &&
+    isQueueRecipePayload(embeddedRecipe) &&
+    embeddedRecipe.recipeType === 'image_generate_recipe_v1'
+  ) {
+    return embeddedRecipe as ImageGenerateRecipePayload;
+  }
+
+  return null;
+};
+
+const getOutputVerificationRetryCount = (payload?: Record<string, unknown> | ImageGenerateRecipePayload | null) => {
+  const recipePayload = getStoredImageGenerateRecipePayload(payload);
+  return Math.max(0, Number(recipePayload?.__outputVerificationRetryCount || 0));
+};
+
+const getQueueLogs = (payload?: Record<string, unknown> | ImageGenerateRecipePayload | null): QueueProgressLogEntry[] => {
   const rawLogs = toQueuePayloadObject(payload).__logs;
   if (!Array.isArray(rawLogs)) {
     return [];
@@ -218,7 +250,7 @@ const buildQueueLogEntry = (
 });
 
 const withQueueLog = (
-  payload: Record<string, unknown> | null | undefined,
+  payload: Record<string, unknown> | ImageGenerateRecipePayload | null | undefined,
   stage: QueueProcessingStage,
   message: string,
   level: QueueProgressLogEntry['level'] = 'info',
@@ -233,7 +265,7 @@ const withQueueLog = (
 
 const withQueueMeta = (
   providerPayload: Record<string, unknown>,
-  previousPayload?: Record<string, unknown> | null,
+  previousPayload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
   stage?: QueueProcessingStage,
 ) => {
   const nextPayload = {
@@ -250,6 +282,11 @@ const withQueueMeta = (
     nextPayload.__notifyInputMedia = previousNotifyInputMedia;
   }
 
+  const previousRecipePayload = getStoredImageGenerateRecipePayload(previousPayload);
+  if (previousRecipePayload) {
+    nextPayload.__recipePayload = previousRecipePayload;
+  }
+
   if (stage) {
     nextPayload.__stage = stage;
   } else {
@@ -264,7 +301,7 @@ const withQueueMeta = (
 
 const persistQueueLog = async (
   jobId: string,
-  payload: Record<string, unknown> | null | undefined,
+  payload: Record<string, unknown> | ImageGenerateRecipePayload | null | undefined,
   stage: QueueProcessingStage,
   message: string,
   level: QueueProgressLogEntry['level'] = 'info',
@@ -361,7 +398,7 @@ const withLeaseHeartbeat = async <T>(
   }
 };
 
-const getQueueStage = (payload?: Record<string, unknown> | null): QueueProcessingStage | null => {
+const getQueueStage = (payload?: Record<string, unknown> | ImageGenerateRecipePayload | null): QueueProcessingStage | null => {
   const rawStage = toQueuePayloadObject(payload).__stage;
   if (typeof rawStage !== 'string' || !rawStage.trim()) {
     return null;
@@ -382,6 +419,8 @@ const humanizeQueueStage = (stage: QueueProcessingStage | null) => {
       return 'gửi provider';
     case 'polling':
       return 'chờ provider xử lý';
+    case 'verifying_output':
+      return 'hau kiem ket qua';
     default:
       return 'chuẩn bị dữ liệu';
   }
@@ -630,13 +669,18 @@ const requeueJob = async (job: QueueJobRow, errorMessage: string) => {
   }
 
   const nextPollAt = new Date(Date.now() + getRetryDelaySeconds(nextAttemptCount) * 1000).toISOString();
+  const restoredRecipePayload = getStoredImageGenerateRecipePayload(job.queue_payload);
+  const requeuePayload =
+    job.queue_kind === 'image_generate' && restoredRecipePayload
+      ? restoredRecipePayload
+      : toQueuePayloadObject(job.queue_payload);
 
   await updateGeneratedImageRecord(job.id, {
     status: 'queued',
     job_id: null,
     processing_started_at: null,
     error_message: errorMessage,
-    queue_payload: withQueueLog(job.queue_payload, 'queued', `Tạm hoãn và xếp lại hàng đợi: ${errorMessage}`, 'warning'),
+    queue_payload: withQueueLog(requeuePayload, 'queued', `Tam hoan va xep lai hang doi: ${errorMessage}`, 'warning'),
     lease_token: null,
     lease_expires_at: null,
     next_poll_at: nextPollAt,
@@ -752,7 +796,7 @@ const markSubmitted = async (job: QueueJobRow, providerJobId: string) => {
 const persistPreparedPayload = async (
   jobId: string,
   providerPayload: Record<string, unknown>,
-  previousPayload?: Record<string, unknown> | null,
+  previousPayload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
 ) => {
   const storedPayload = withQueueMeta(providerPayload, previousPayload, 'dispatching');
   await updateGeneratedImageRecord(jobId, {
@@ -798,7 +842,7 @@ const queueRecipeStageTransition = async (
 const markRecipePreparedForDispatch = async (
   jobId: string,
   providerPayload: Record<string, unknown>,
-  previousPayload?: Record<string, unknown> | null,
+  previousPayload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
 ) => {
   const storedPayload = withQueueLog(
     withQueueMeta(providerPayload, previousPayload, 'dispatching'),
@@ -822,6 +866,7 @@ const markRecipePreparedForDispatch = async (
 };
 
 const prepareImageRecipeInStages = async (job: QueueJobRow, recipePayload: ImageGenerateRecipePayload) => {
+  validateImageGenerateReferenceIntegrity(recipePayload);
   const renderSources =
     (recipePayload.__uploadSources || []).filter((value): value is string => Boolean(value)).length > 0
       ? (recipePayload.__uploadSources || []).filter((value): value is string => Boolean(value))
@@ -955,12 +1000,83 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
       throw new Error(`Job completed but no result URL returned: ${JSON.stringify(providerData)}`);
     }
 
+    let completionPayload = job.queue_payload;
+    const storedImageRecipe =
+      job.queue_kind === 'image_generate'
+        ? getStoredImageGenerateRecipePayload(job.queue_payload)
+        : null;
+
+    if (storedImageRecipe) {
+      const verifyingPayload = await persistQueueLog(
+        job.id,
+        completionPayload,
+        'verifying_output',
+        'Dang hau kiem ket qua AI de bao toan identity.',
+      );
+
+      try {
+        const verificationResult = await verifyGeneratedImageOutput(storedImageRecipe, resultUrl);
+        const verificationSummary =
+          verificationResult.summary ||
+          verificationResult.issues.join('; ') ||
+          'Identity guard completed.';
+
+        if (!verificationResult.pass) {
+          const nextVerifyRetryCount = getOutputVerificationRetryCount(storedImageRecipe) + 1;
+          const retryPayload = {
+            ...storedImageRecipe,
+            __stage: 'verifying_output',
+            __logs: getQueueLogs(verifyingPayload),
+            __notifyInputMedia: buildNotificationMediaEntries(verifyingPayload),
+            __outputVerificationRetryCount: nextVerifyRetryCount,
+            __lastOutputVerificationSummary: verificationSummary,
+          } as ImageGenerateRecipePayload & Record<string, unknown>;
+          const retryMessage = `Identity guard failed: ${verificationSummary}`;
+
+          if (nextVerifyRetryCount >= MAX_OUTPUT_VERIFICATION_RETRIES) {
+            await markFailedAndRefund(
+              {
+                ...job,
+                queue_payload: retryPayload,
+              },
+              `${retryMessage}. Retry limit reached.`,
+            );
+            return 'failed';
+          }
+
+          return requeueJob(
+            {
+              ...job,
+              queue_payload: retryPayload,
+            },
+            retryMessage,
+          );
+        }
+
+        completionPayload = withQueueLog(
+          verifyingPayload,
+          'verifying_output',
+          `Identity guard passed: ${verificationSummary}`,
+          'success',
+        );
+      } catch (verificationError) {
+        const verificationMessage =
+          verificationError instanceof Error ? verificationError.message : String(verificationError || 'Unknown verification error');
+        completionPayload = withQueueLog(
+          verifyingPayload,
+          'verifying_output',
+          `Identity guard unavailable, completing without auto-retry: ${verificationMessage}`,
+          'warning',
+        );
+      }
+    }
+
     await admin
       .from('generated_images')
       .update({
         status: 'completed',
         image_url: resultUrl,
-        queue_payload: withQueueLog(job.queue_payload, 'completed', 'Provider đã hoàn tất. Đã lưu kết quả.', 'success'),
+        queue_payload: withQueueLog(completionPayload, 'completed', 'Provider da hoan tat. Da luu ket qua.', 'success'),
         progress: 100,
         error_message: null,
         attempt_count: 0,
@@ -983,7 +1099,7 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
       costVcoin: job.cost_vcoin,
       resultUrl,
       finishedAt: new Date().toISOString(),
-      queuePayload: job.queue_payload,
+      queuePayload: completionPayload,
     });
     return 'completed';
   }
@@ -1243,7 +1359,7 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
       }
 
       if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'image_edit_recipe_v1') {
-        const editPayload = (job.queue_payload || currentPayload) as ImageEditRecipePayload;
+        const editPayload = (job.queue_payload || currentPayload) as unknown as ImageEditRecipePayload;
         await updatePreProviderStage(job.id, 20);
         job.queue_payload = await persistQueueLog(
           job.id,
@@ -1295,7 +1411,7 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
         const stagedResult = await withTimeout(
           withLeaseHeartbeat(
             job.id,
-            prepareImageRecipeInStages(job, (job.queue_payload || currentPayload) as ImageGenerateRecipePayload),
+            prepareImageRecipeInStages(job, (job.queue_payload || currentPayload) as unknown as ImageGenerateRecipePayload),
             preparationLeaseSeconds,
           ),
           preparationTimeoutMs,

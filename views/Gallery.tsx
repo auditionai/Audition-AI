@@ -2,7 +2,7 @@
 import { createPortal } from 'react-dom';
 import { GeneratedImage, Language, HistoryItem } from '../types';
 import type { QueueProgressLogEntry } from '../shared/queueRecipes';
-import { getAllImagesFromStorage, deleteImageFromStorage, cleanupExpiredImages, getHistoryRetentionDays, publishImageToShowcase } from '../services/storageService';
+import { checkR2Connection, getAllImagesFromStorage, deleteImageFromStorage, cleanupExpiredImages, getHistoryRetentionDays, publishImageToShowcase } from '../services/storageService';
 import { getUnifiedHistory } from '../services/economyService';
 import { downloadAssetToBrowser } from '../services/downloadService';
 import { Icons } from '../components/Icons';
@@ -276,6 +276,16 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
 
   const handlePublish = async (image: GeneratedImage) => {
       try {
+          const r2Ready = await checkR2Connection();
+          if (!r2Ready) {
+              notify(
+                  lang === 'vi'
+                      ? 'R2 Cloudflare chưa được cấu hình nên chưa thể publish ảnh công khai.'
+                      : 'Cloudflare R2 is not configured, so the image cannot be published yet.',
+                  'error',
+              );
+              return;
+          }
           const updatedImage = await publishImageToShowcase(image);
           setImages((prev) => prev.map((item) => item.id === updatedImage.id ? updatedImage : item));
           setViewingImage(updatedImage);

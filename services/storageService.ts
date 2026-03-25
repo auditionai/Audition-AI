@@ -12,6 +12,7 @@ const HISTORY_RETENTION_DAYS = 7;
 const HISTORY_RETENTION_MS = HISTORY_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 const ACTIVE_GALLERY_CLIENT_CACHE_TTL_MS = 10_000;
 const IDLE_GALLERY_CLIENT_CACHE_TTL_MS = 30_000;
+const GENERATED_IMAGE_ROW_SELECT = 'id, image_url, prompt, created_at, updated_at, asset_type, tool_id, tool_name, model_used, is_public, user_id, user_name, status, job_id, progress, queue_payload, error_message, cost_vcoin';
 
 // --- CLOUDFLARE R2 CONFIGURATION ---
 // Helper to get Env Var from either Vite's import.meta.env or process.env shim
@@ -681,7 +682,7 @@ export const getShowcaseImages = async (): Promise<GeneratedImage[]> => {
             // Fetch images ONLY to avoid 400 errors from missing relationships in schema cache
             const { data: simpleData, error: simpleError } = await supabase
                 .from(TABLE_NAME)
-                .select('*')
+                .select(GENERATED_IMAGE_ROW_SELECT)
                 .eq('is_public', true)
                 .order('created_at', { ascending: false })
                 .limit(20);
@@ -723,7 +724,7 @@ export const getAllImagesSystemWide = async (): Promise<GeneratedImage[]> => {
     try {
         const { data, error } = await supabase
             .from(TABLE_NAME)
-            .select('*')
+            .select(GENERATED_IMAGE_ROW_SELECT)
             .order('created_at', { ascending: false });
 
         if (error || !data) return [];
@@ -817,7 +818,7 @@ export const getUserImagesFromStorage = async (userId: string): Promise<Generate
     try {
         const { data, error } = await supabase
             .from(TABLE_NAME)
-            .select('*')
+            .select(GENERATED_IMAGE_ROW_SELECT)
             .eq('user_id', userId)
             .order('created_at', { ascending: false });
 

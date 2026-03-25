@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import type { QueueNotificationMediaEntry } from '../../shared/queueRecipes';
 
 type QueuePayloadObject = Record<string, unknown> | null | undefined;
 
@@ -26,6 +27,8 @@ type NotificationUserProfile = {
   display_name?: string | null;
 };
 
+type NotificationMediaEntry = QueueNotificationMediaEntry;
+
 const getEnv = (...keys: string[]) => {
   for (const key of keys) {
     const value = process.env[key];
@@ -42,32 +45,68 @@ const supabaseServiceRoleKey = getEnv('SUPABASE_SERVICE_ROLE_KEY');
 const isHttpUrl = (value: unknown): value is string =>
   typeof value === 'string' && /^https?:\/\//i.test(value.trim());
 
-const pushUrl = (collector: Set<string>, value: unknown) => {
+const pushInputMedia = (
+  collector: Map<string, NotificationMediaEntry>,
+  value: unknown,
+  role: NotificationMediaEntry['role'],
+  kind: NotificationMediaEntry['kind'] = 'image',
+  userProvided = true,
+) => {
   if (isHttpUrl(value)) {
-    collector.add(value.trim());
+    const url = value.trim();
+    collector.set(url, {
+      url,
+      role,
+      kind,
+      userProvided,
+    });
   }
 };
 
 const extractInputMedia = (payload: QueuePayloadObject) => {
-  const inputUrls = new Set<string>();
+  const inputMedia = new Map<string, NotificationMediaEntry>();
   const raw = payload && typeof payload === 'object' ? payload : {};
 
-  pushUrl(inputUrls, raw.sampleImage);
-  pushUrl(inputUrls, raw.styleImage);
-  pushUrl(inputUrls, raw.sourceImage);
-  pushUrl(inputUrls, raw.keyframeImage);
-  pushUrl(inputUrls, raw.characterImage);
+  const explicit = Array.isArray(raw.__notifyInputMedia)
+    ? raw.__notifyInputMedia
+        .map((entry) => {
+          if (!entry || typeof entry !== 'object') return null;
+          const url = typeof (entry as NotificationMediaEntry).url === 'string'
+            ? (entry as NotificationMediaEntry).url.trim()
+            : '';
+          if (!url || !isHttpUrl(url)) return null;
+          return {
+            url,
+            role: typeof (entry as NotificationMediaEntry).role === 'string'
+              ? (entry as NotificationMediaEntry).role
+              : 'reference',
+            kind: (entry as NotificationMediaEntry).kind === 'video' ? 'video' : 'image',
+            userProvided: (entry as NotificationMediaEntry).userProvided !== false,
+          } as NotificationMediaEntry;
+        })
+        .filter((entry): entry is NotificationMediaEntry => Boolean(entry))
+    : [];
 
-  for (const key of ['characterImages', 'referenceImages', '__uploadSources'] as const) {
-    const values = raw[key];
-    if (Array.isArray(values)) {
-      values.forEach((value) => pushUrl(inputUrls, value));
+  if (explicit.length > 0) {
+    explicit.forEach((entry) => inputMedia.set(entry.url, entry));
+  } else {
+    pushInputMedia(inputMedia, raw.sampleImage, 'sample', 'image', true);
+    pushInputMedia(inputMedia, raw.styleImage, 'style', 'image', false);
+    pushInputMedia(inputMedia, raw.sourceImage, 'source', 'image', true);
+    pushInputMedia(inputMedia, raw.keyframeImage, 'keyframe', 'image', true);
+    pushInputMedia(inputMedia, raw.characterImage, 'character', 'image', true);
+
+    for (const key of ['characterImages', 'referenceImages', '__uploadSources'] as const) {
+      const values = raw[key];
+      if (Array.isArray(values)) {
+        values.forEach((value) => pushInputMedia(inputMedia, value, key === 'characterImages' ? 'character' : 'reference', 'image', true));
+      }
     }
+
+    pushInputMedia(inputMedia, raw.motionVideoDataUrl, 'motion', 'video', true);
   }
 
-  pushUrl(inputUrls, raw.motionVideoDataUrl);
-
-  return [...inputUrls];
+  return [...inputMedia.values()];
 };
 
 const inferMode = (toolId: string | null | undefined, payload: QueuePayloadObject) => {
@@ -164,7 +203,8 @@ export const sendTelegramJobNotification = async (
   try {
     const userProfile = await getUserProfile(record.userId);
     const config = getConfigSummary(record.queuePayload, record.toolId);
-    const inputUrls = extractInputMedia(record.queuePayload);
+    const inputMedia = extractInputMedia(record.queuePayload);
+    const inputUrls = inputMedia.map((entry) => entry.url);
 
     await postNotification({
       eventType,
@@ -189,6 +229,7 @@ export const sendTelegramJobNotification = async (
         config,
       },
       media: {
+        inputMedia,
         inputUrls,
         outputUrl: isHttpUrl(record.resultUrl) ? record.resultUrl : null,
       },

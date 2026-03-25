@@ -8,6 +8,7 @@ const headers = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   'Access-Control-Allow-Methods': 'GET, OPTIONS',
 };
+const ADMIN_HISTORY_FETCH_LIMIT = 200;
 
 const normalizeHistoryDescription = (entry: any): string => {
   const directDescription =
@@ -122,14 +123,16 @@ export const handler: Handler = async (event) => {
     const [txsResult, logsResult] = await Promise.all([
       admin
         .from('payment_transactions')
-        .select('*')
+        .select('id, created_at, order_code, vcoin_received, amount_vnd, status')
         .eq('user_id', targetUserId)
-        .order('created_at', { ascending: false }),
+        .order('created_at', { ascending: false })
+        .limit(ADMIN_HISTORY_FETCH_LIMIT),
       admin
         .from('vcoin_transactions')
-        .select('*')
+        .select('id, created_at, amount, type, description, metadata, reference_type')
         .eq('user_id', targetUserId)
-        .order('created_at', { ascending: false }),
+        .order('created_at', { ascending: false })
+        .limit(ADMIN_HISTORY_FETCH_LIMIT),
     ]);
 
     if (txsResult.error) {

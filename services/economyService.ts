@@ -30,6 +30,11 @@ const PROMOTION_CACHE_TTL_MS = 5 * 60_000;
 const CHECKIN_STATUS_CACHE_TTL_MS = 30_000;
 const MODEL_PRICING_CACHE_TTL_MS = 60_000;
 const TST_SERVER_AVAILABILITY_CACHE_TTL_MS = 60_000;
+const VISIT_LOG_THROTTLE_MS = 30 * 60_000;
+const USER_HISTORY_FETCH_LIMIT = 200;
+const ADMIN_STATS_TRANSACTION_LIMIT = 1000;
+const ADMIN_STATS_USAGE_LOG_LIMIT = 3000;
+const ADMIN_STATS_USER_PAGE_SIZE = 500;
 
 type TimedCache<T> = {
     value: T;
@@ -637,6 +642,14 @@ export const updateUserBalance = async (
 export const logVisit = async () => {
     if (!supabase) return;
     try {
+        const route = window.location.pathname + window.location.hash;
+        const visitThrottleKey = `auditionai:last-visit:${route}`;
+        const lastVisitAtRaw = window.localStorage.getItem(visitThrottleKey);
+        const lastVisitAt = lastVisitAtRaw ? Number(lastVisitAtRaw) : 0;
+        if (Number.isFinite(lastVisitAt) && lastVisitAt > 0 && Date.now() - lastVisitAt < VISIT_LOG_THROTTLE_MS) {
+            return;
+        }
+
         let userId: string | null = null;
         try {
             userId = (await getCurrentSessionUser())?.id || null;
@@ -645,13 +658,17 @@ export const logVisit = async () => {
         const visitData = {
             user_id: userId,
             visit_date: new Date().toISOString().slice(0, 10),
-            route: window.location.pathname + window.location.hash,
+            route,
             user_agent: navigator.userAgent || null
         };
         const { error } = await supabase.from('app_visits').insert(visitData);
         
         if (error && error.message.includes('column "user_id" does not exist')) {
             await supabase.from('app_visits').insert({ uid: null });
+        }
+
+        if (!error) {
+            window.localStorage.setItem(visitThrottleKey, String(Date.now()));
         }
     } catch(e) {
         // Silent
@@ -667,7 +684,7 @@ export const getPackages = async (): Promise<CreditPackage[]> => {
     }
     const { data } = await supabase
         .from('credit_packages')
-        .select('*')
+        .select('id, created_at, order_code, vcoin_received, amount_vnd, status')
         .eq('is_active', true)
         .order('display_order', { ascending: true });
         
@@ -1368,16 +1385,18 @@ export const getUnifiedHistory = async (targetUserId?: string): Promise<HistoryI
     // 1. Get Topup History
     const { data: txs } = await supabase
         .from('payment_transactions')
-        .select('*')
+        .select('id, created_at, order_code, vcoin_received, amount_vnd, status')
         .eq('user_id', userId)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(USER_HISTORY_FETCH_LIMIT);
 
     // 2. Get Usage/Reward Logs
     const { data: logs } = await supabase
         .from('vcoin_transactions')
-        .select('*')
+        .select('id, created_at, amount, type, description, metadata, reference_type')
         .eq('user_id', userId)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(USER_HISTORY_FETCH_LIMIT);
 
     const history: HistoryItem[] = [];
 
@@ -1701,12 +1720,12 @@ export const getAdminStats = async () => {
     let users: any[] = [];
     let userError = null;
     let page = 0;
-    const pageSize = 1000;
+    const pageSize = ADMIN_STATS_USER_PAGE_SIZE;
     
     while (true) {
         const { data, error } = await supabase
             .from('users')
-            .select('*')
+            .select('id, email, display_name, photo_url, vcoin_balance, is_admin, created_at, last_active')
             .range(page * pageSize, (page + 1) * pageSize - 1);
             
         if (error) {
@@ -1722,16 +1741,19 @@ export const getAdminStats = async () => {
             break;
         }
     }
-    console.log("Admin Stats - Users fetched:", users?.length, userError);
-
     if (userError) {
         console.error("Error fetching users for Admin Stats:", userError);
     }
-    const { data: pkgs } = await supabase.from('credit_packages').select('*').order('display_order');
+    const { data: pkgs } = await supabase
+        .from('credit_packages')
+        .select('id, name, credits_amount, price_vnd, tag, bonus_credits, is_featured, is_active, display_order, transfer_syntax')
+        .order('display_order');
     
     let promos = [];
     try {
-        const { data } = await supabase.from('promotions').select('*');
+        const { data } = await supabase
+            .from('promotions')
+            .select('id, title, description, bonus_percent, start_time, end_time, is_active');
         promos = data || [];
     } catch (e) {
         // Silent
@@ -1740,40 +1762,39 @@ export const getAdminStats = async () => {
     // Fetch giftcodes with accurate usage count from relation
     const { data: codes } = await supabase
         .from('gift_codes')
-        .select('*, gift_code_usages(count)');
+        .select('id, code, reward, total_limit, used_count, max_per_user, is_active, gift_code_usages(count)');
 
-    let { data: txs, error: txError } = await supabase.from('payment_transactions').select('*, users(email, display_name, photo_url)').order('created_at', { ascending: false }).limit(5000);
+    let { data: txs, error: txError } = await supabase
+        .from('payment_transactions')
+        .select('id, user_id, uid, package_id, amount, price, amount_vnd, vcoin_received, diamonds_received, coins_received, coins, diamonds, credits, status, created_at, code, payment_method, users(email, display_name, photo_url)')
+        .order('created_at', { ascending: false })
+        .limit(ADMIN_STATS_TRANSACTION_LIMIT);
     if (txError) {
         console.warn("Failed to join users on transactions, falling back to select *", txError);
-        const fallback = await supabase.from('payment_transactions').select('*').order('created_at', { ascending: false }).limit(5000);
+        const fallback = await supabase
+            .from('payment_transactions')
+            .select('id, user_id, uid, package_id, amount, price, amount_vnd, vcoin_received, diamonds_received, coins_received, coins, diamonds, credits, status, created_at, code, payment_method')
+            .order('created_at', { ascending: false })
+            .limit(ADMIN_STATS_TRANSACTION_LIMIT);
         txs = fallback.data;
-    }
-    console.log("Admin Stats - Transactions fetched:", txs?.length);
-    if (txs && txs.length > 0) {
-        console.log("First Tx user_id:", txs[0].user_id, "uid:", txs[0].uid, "users join:", txs[0].users);
     }
     
     // Try to fetch logs from both potential table names
     let usageLogs: any[] = [];
     
     // Attempt 1: vcoin_transactions (Fetch up to 10000)
-    const { data: logs1, error: err1 } = await supabase.from('vcoin_transactions').select('*').order('created_at', { ascending: false }).limit(10000);
+    const { data: logs1 } = await supabase
+        .from('vcoin_transactions')
+        .select('id, user_id, amount, type, description, metadata, reference_type, created_at')
+        .order('created_at', { ascending: false })
+        .limit(ADMIN_STATS_USAGE_LOG_LIMIT);
     if (logs1) usageLogs = [...usageLogs, ...logs1];
 
     // Filter for usage: type 'usage' OR negative amount
     usageLogs = usageLogs.filter((l: any) => l.type === 'usage' || (l.amount && Number(l.amount) < 0));
     
-    // Debug logs
-    console.log("Admin Stats - Usage Logs Found:", usageLogs.length);
-    if (txs && txs.length > 0) {
-        console.log("First Transaction Keys:", Object.keys(txs[0]));
-        console.log("First Transaction Data:", txs[0]);
-    }
-    console.log("Usage Logs:", usageLogs);
-
     // Calculate dashboard
     const now = new Date();
-    const todayStr = getLocalTodayStr();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const startOfTodayISO = startOfToday.toISOString();
     
@@ -1782,7 +1803,7 @@ export const getAdminStats = async () => {
     
     const countRows = async (tableName: string, since?: string): Promise<number> => {
         try {
-            let query = supabase.from(tableName).select('*', { count: 'exact', head: true });
+            let query = supabase.from(tableName).select('id', { count: 'exact', head: true });
             if (since) {
                 query = query.gte('created_at', since);
             }

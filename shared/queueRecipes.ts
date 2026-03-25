@@ -23,6 +23,13 @@ export interface QueueProgressLogEntry {
   message: string;
 }
 
+export interface QueueNotificationMediaEntry {
+  url: string;
+  role: 'character' | 'sample' | 'style' | 'source' | 'keyframe' | 'motion' | 'reference';
+  kind: 'image' | 'video';
+  userProvided?: boolean;
+}
+
 export interface ImageGenerateRecipePayload {
   recipeType: 'image_generate_recipe_v1';
   modelId: string;
@@ -45,6 +52,7 @@ export interface ImageGenerateRecipePayload {
   __uploadedUrls?: string[];
   __directorSources?: string[];
   __synthesizedPrompt?: string;
+  __notifyInputMedia?: QueueNotificationMediaEntry[];
 }
 
 const normalizeValue = (value?: string | null) => (value || '').trim().toLowerCase();

@@ -16,6 +16,7 @@ import {
   isQueueRecipePayload,
   type QueueProcessingStage,
   type QueueProgressLogEntry,
+  type QueueNotificationMediaEntry,
   type ImageEditRecipePayload,
   type ImageGenerateRecipePayload,
 } from '../../shared/queueRecipes';
@@ -100,6 +101,94 @@ const toQueuePayloadObject = (payload?: Record<string, unknown> | null) =>
 const stripInternalQueueMeta = (payload: Record<string, unknown>) =>
   Object.fromEntries(Object.entries(payload).filter(([key]) => !key.startsWith('__')));
 
+const normalizeNotificationMediaEntry = (
+  entry: unknown,
+): QueueNotificationMediaEntry | null => {
+  if (!entry || typeof entry !== 'object') {
+    return null;
+  }
+
+  const url = typeof (entry as QueueNotificationMediaEntry).url === 'string'
+    ? (entry as QueueNotificationMediaEntry).url.trim()
+    : '';
+  if (!url) {
+    return null;
+  }
+
+  const role = typeof (entry as QueueNotificationMediaEntry).role === 'string'
+    ? (entry as QueueNotificationMediaEntry).role
+    : 'reference';
+  const kind = (entry as QueueNotificationMediaEntry).kind === 'video' ? 'video' : 'image';
+  const userProvided = (entry as QueueNotificationMediaEntry).userProvided !== false;
+
+  return {
+    url,
+    role: role as QueueNotificationMediaEntry['role'],
+    kind,
+    userProvided,
+  };
+};
+
+const buildNotificationMediaEntries = (
+  payload?: Record<string, unknown> | null,
+): QueueNotificationMediaEntry[] => {
+  const raw = toQueuePayloadObject(payload);
+  const explicit = Array.isArray(raw.__notifyInputMedia)
+    ? raw.__notifyInputMedia
+        .map((entry) => normalizeNotificationMediaEntry(entry))
+        .filter((entry): entry is QueueNotificationMediaEntry => Boolean(entry))
+    : [];
+
+  if (explicit.length > 0) {
+    return explicit;
+  }
+
+  const entries: QueueNotificationMediaEntry[] = [];
+  const push = (
+    value: unknown,
+    role: QueueNotificationMediaEntry['role'],
+    kind: QueueNotificationMediaEntry['kind'] = 'image',
+    userProvided = true,
+  ) => {
+    if (typeof value !== 'string' || !value.trim()) {
+      return;
+    }
+    entries.push({
+      url: value.trim(),
+      role,
+      kind,
+      userProvided,
+    });
+  };
+
+  if (isQueueRecipePayload(raw)) {
+    switch (raw.recipeType) {
+      case 'image_generate_recipe_v1':
+        (raw.characterImages || []).forEach((value) => push(value, 'character', 'image', true));
+        push(raw.sampleImage, 'sample', 'image', true);
+        push(raw.styleImage, 'style', 'image', false);
+        (raw.referenceImages || []).forEach((value) => push(value, 'reference', 'image', true));
+        break;
+      case 'image_edit_recipe_v1':
+        push(raw.sourceImage, 'source', 'image', true);
+        break;
+      case 'video_generate_recipe_v1':
+        push(raw.keyframeImage, 'keyframe', 'image', true);
+        break;
+      case 'motion_generate_recipe_v1':
+        push(raw.characterImage, 'character', 'image', true);
+        push(raw.motionVideoDataUrl, 'motion', 'video', true);
+        break;
+      default:
+        break;
+    }
+  }
+
+  return entries.filter(
+    (entry, index, all) => all.findIndex((candidate) => candidate.url === entry.url) === index,
+  );
+};
+
 const getQueueLogs = (payload?: Record<string, unknown> | null): QueueProgressLogEntry[] => {
   const rawLogs = toQueuePayloadObject(payload).__logs;
   if (!Array.isArray(rawLogs)) {
@@ -154,6 +243,11 @@ const withQueueMeta = (
   const previousLogs = getQueueLogs(previousPayload);
   if (previousLogs.length > 0) {
     nextPayload.__logs = previousLogs;
+  }
+
+  const previousNotifyInputMedia = buildNotificationMediaEntries(previousPayload);
+  if (previousNotifyInputMedia.length > 0) {
+    nextPayload.__notifyInputMedia = previousNotifyInputMedia;
   }
 
   if (stage) {

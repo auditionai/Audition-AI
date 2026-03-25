@@ -52,10 +52,7 @@ const displayValue = (value, fallback = 'N/A') => {
 const formatIso = (value) => {
   if (!value) return 'N/A';
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return displayValue(value);
-  }
-
+  if (Number.isNaN(date.getTime())) return displayValue(value);
   return date.toISOString().replace('T', ' ').replace('.000Z', ' UTC');
 };
 
@@ -67,32 +64,12 @@ const formatBytes = (bytes) => {
   return `${(size / (1024 * 1024)).toFixed(2)} MB`;
 };
 
-const buildHeader = (appName, eventType) => {
-  switch (String(eventType || '').toLowerCase()) {
-    case 'completed':
-      return `<b>${escapeHtml(appName)} | THÀNH CÔNG</b>`;
-    case 'failed':
-      return `<b>${escapeHtml(appName)} | THẤT BẠI</b>`;
-    default:
-      return `<b>${escapeHtml(appName)} | JOB MỚI</b>`;
-  }
-};
-
-const buildMediaLinks = (payload, labelPrefix = '') => {
-  const inputUrls = normalizeUrls(payload?.media?.inputUrls);
-  const outputUrl = isHttpUrl(payload?.media?.outputUrl) ? payload.media.outputUrl.trim() : null;
-  const lines = [];
-  const prefix = labelPrefix ? `${labelPrefix} ` : '';
-
-  if (inputUrls.length > 0) {
-    lines.push(`- ${prefix}Input: <a href="${escapeHtml(inputUrls[0])}">open</a>`);
-  }
-
-  if (outputUrl) {
-    lines.push(`- ${prefix}Output: <a href="${escapeHtml(outputUrl)}">open</a>`);
-  }
-
-  return lines;
+const getPromptMeta = (payload) => {
+  const prompt = String(payload?.job?.prompt || '').trim();
+  return {
+    text: prompt,
+    length: prompt.length,
+  };
 };
 
 const getEventLabel = (eventType) => {
@@ -102,140 +79,171 @@ const getEventLabel = (eventType) => {
     case 'failed':
       return 'THẤT BẠI';
     default:
-      return 'JOB MỚI';
+      return 'ĐANG XỬ LÝ';
   }
 };
 
-const LABELS = {
-  user: '[USER]',
-  job: '[JOB]',
-  config: '[CFG]',
-  time: '[TIME]',
-  media: '[MEDIA]',
-  prompt: '[PROMPT]',
-  input: '[IN]',
-  output: '[OUT]',
-  error: '[ERR]',
-  vcoin: '[VC]',
-  id: '[#]',
-};
-
-const getPromptMeta = (payload) => {
-  const prompt = String(payload?.job?.prompt || '').trim();
-  return {
-    text: prompt,
-    length: prompt.length,
-  };
-};
-
-const buildEventSummary = (payload) => {
-  const eventType = String(payload?.eventType || 'queued').toLowerCase();
-  const job = payload?.job || {};
-  const config = job?.config || {};
-  const promptMeta = getPromptMeta(payload);
+const buildHeader = (appName, eventType) => {
   const eventLabel = getEventLabel(eventType);
-
-  if (eventType === 'completed') {
-    return [
-      buildHeader(payload?.app || 'App', eventType),
-      `<b>${eventLabel}</b> | ${escapeHtml(displayValue(job?.toolName || job?.queueKind))}`,
-      `Người dùng: ${escapeHtml(displayValue(job?.displayName, 'Unknown'))} | Vcoin: ${escapeHtml(displayValue(job?.costVcoin ?? 0, '0'))}`,
-      `Model: ${escapeHtml(displayValue(config?.modelId || job?.engine))}`,
-      `Độ phân giải/Tốc độ: ${escapeHtml(displayValue(config?.resolution))} | ${escapeHtml(displayValue(config?.speed))}`,
-      `Server: ${escapeHtml(displayValue(config?.serverId))}`,
-      `Hoàn tất lúc: ${escapeHtml(formatIso(job?.finishedAt))}`,
-      `Prompt: đã ẩn (${escapeHtml(String(promptMeta.length))} ký tự)`,
-    ].filter(Boolean);
-  }
-
-  if (eventType === 'failed') {
-    return [
-      buildHeader(payload?.app || 'App', eventType),
-      `<b>${eventLabel}</b> | ${escapeHtml(displayValue(job?.toolName || job?.queueKind))}`,
-      `Người dùng: ${escapeHtml(displayValue(job?.displayName, 'Unknown'))} | Vcoin: ${escapeHtml(displayValue(job?.costVcoin ?? 0, '0'))}`,
-      `Chế độ: ${escapeHtml(displayValue(config?.mode))} | Model: ${escapeHtml(displayValue(config?.modelId || job?.engine))}`,
-      `Tạo lúc: ${escapeHtml(formatIso(job?.createdAt))}`,
-      job?.errorMessage ? `Lỗi: ${escapeHtml(truncate(job.errorMessage, 220))}` : '',
-      `Prompt: đã ẩn (${escapeHtml(String(promptMeta.length))} ký tự)`,
-    ].filter(Boolean);
-  }
-
-  return [
-    buildHeader(payload?.app || 'App', eventType),
-    `<b>${eventLabel}</b> | ${escapeHtml(displayValue(job?.toolName || job?.queueKind))}`,
-    `Người dùng: ${escapeHtml(displayValue(job?.displayName, 'Unknown'))} | Vcoin: ${escapeHtml(displayValue(job?.costVcoin ?? 0, '0'))}`,
-    `Chế độ: ${escapeHtml(displayValue(config?.mode))} | Loại: ${escapeHtml(displayValue(job?.assetType, 'image'))}`,
-    `Model: ${escapeHtml(displayValue(config?.modelId || job?.engine))}`,
-    `Độ phân giải/Tốc độ: ${escapeHtml(displayValue(config?.resolution))} | ${escapeHtml(displayValue(config?.speed))}`,
-    `Server: ${escapeHtml(displayValue(config?.serverId))}`,
-    `Tạo lúc: ${escapeHtml(formatIso(job?.createdAt))}`,
-    `Prompt: đã ẩn (${escapeHtml(String(promptMeta.length))} ký tự)`,
-  ].filter(Boolean);
+  return `<b>${escapeHtml(appName)} | ${escapeHtml(eventLabel)}</b>`;
 };
 
-const buildTextMessage = (payload) => {
-  const eventType = String(payload?.eventType || 'queued').toLowerCase();
+const getRoleLabel = (role) => {
+  switch (role) {
+    case 'character':
+      return 'Nhân vật';
+    case 'sample':
+      return 'Mẫu pose';
+    case 'source':
+      return 'Ảnh gốc';
+    case 'keyframe':
+      return 'Keyframe';
+    case 'motion':
+      return 'Motion';
+    case 'reference':
+      return 'Tham chiếu';
+    case 'style':
+      return 'Style';
+    default:
+      return 'Input';
+  }
+};
+
+const getShortId = (value) => {
+  const normalized = String(value || '').trim();
+  return normalized ? normalized.slice(0, 8) : 'N/A';
+};
+
+const normalizeInputMediaEntries = (payload) => {
+  const inputMedia = Array.isArray(payload?.media?.inputMedia) ? payload.media.inputMedia : [];
+  const normalized = [];
+  const seen = new Set();
+
+  for (const entry of inputMedia) {
+    if (!entry || typeof entry !== 'object') continue;
+    const url = typeof entry.url === 'string' ? entry.url.trim() : '';
+    if (!isHttpUrl(url) || seen.has(url)) continue;
+    seen.add(url);
+    normalized.push({
+      url,
+      role: typeof entry.role === 'string' ? entry.role : 'reference',
+      kind: entry.kind === 'video' ? 'video' : 'image',
+      userProvided: entry.userProvided !== false,
+    });
+  }
+
+  if (normalized.length > 0) {
+    return normalized;
+  }
+
+  return normalizeUrls(payload?.media?.inputUrls).map((url) => ({
+    url,
+    role: 'reference',
+    kind: isVideoUrl(url) ? 'video' : 'image',
+    userProvided: true,
+  }));
+};
+
+const buildSummaryLines = (payload) => {
   const job = payload?.job || {};
-  const media = payload?.media || {};
   const config = job?.config || {};
   const promptMeta = getPromptMeta(payload);
-  const inputCount = normalizeUrls(media?.inputUrls).length;
   const lines = [
-    buildHeader(payload?.app || 'App', eventType),
+    buildHeader(payload?.app || 'App', payload?.eventType || 'queued'),
     '',
-    `<b>Tóm tắt</b>`,
-    ...buildEventSummary(payload).slice(1).map((line) => `- ${line.replace(/<[^>]+>/g, '')}`),
-    '',
-    `<b>${LABELS.user} Người dùng</b>`,
-    `- Tên: ${escapeHtml(displayValue(job?.displayName, 'Unknown'))}`,
-    `- Email: ${escapeHtml(displayValue(job?.email))}`,
-    `- ${LABELS.id} User ID: <code>${escapeHtml(displayValue(job?.userId, '-'))}</code>`,
-    '',
-    `<b>${LABELS.job} Job</b>`,
-    `- Trạng thái: <b>${escapeHtml(displayValue(job?.status || eventType).toUpperCase())}</b>`,
-    `- Tính năng: ${escapeHtml(displayValue(job?.toolName || job?.queueKind))}`,
-    `- Loại nội dung: ${escapeHtml(displayValue(job?.assetType, 'image'))}`,
-    `- ${LABELS.vcoin} Vcoin: ${escapeHtml(displayValue(job?.costVcoin ?? 0, '0'))}`,
-    `- ${LABELS.id} Job ID: <code>${escapeHtml(displayValue(job?.id, '-'))}</code>`,
-    '',
-    `<b>${LABELS.config} Cấu hình</b>`,
-    `- Chế độ: ${escapeHtml(displayValue(config?.mode))}`,
-    `- Model: ${escapeHtml(displayValue(config?.modelId || job?.engine))}`,
-    `- Độ phân giải: ${escapeHtml(displayValue(config?.resolution))} | Tốc độ: ${escapeHtml(displayValue(config?.speed))}`,
-    `- Server: ${escapeHtml(displayValue(config?.serverId))} | Tỷ lệ: ${escapeHtml(displayValue(config?.aspectRatio))}`,
-    `- Thời lượng: ${escapeHtml(displayValue(config?.duration))} | Âm thanh: ${escapeHtml(config?.audio === true ? 'bật' : config?.audio === false ? 'tắt' : 'N/A')}`,
-    `- Số nhân vật: ${escapeHtml(displayValue(config?.characterCount))}`,
-    '',
-    `<b>${LABELS.time} Thời gian</b>`,
-    `- Tạo lúc: ${escapeHtml(formatIso(job?.createdAt))}`,
-    `- Hoàn tất lúc: ${escapeHtml(formatIso(job?.finishedAt))}`,
-    '',
-    `<b>${LABELS.media} Media</b>`,
-    `- ${LABELS.input} Số ảnh input: ${escapeHtml(displayValue(inputCount, '0'))}`,
-    `- ${LABELS.output} Kết quả: ${isHttpUrl(media?.outputUrl) ? 'có link bên dưới' : 'N/A'}`,
+    `• Công cụ: <b>${escapeHtml(displayValue(job?.toolName || job?.queueKind))}</b>`,
+    `• Người dùng: ${escapeHtml(displayValue(job?.displayName, 'Unknown'))} | ${escapeHtml(displayValue(job?.costVcoin ?? 0, '0'))} VC`,
+    `• Model: ${escapeHtml(displayValue(config?.modelId || job?.engine))}`,
+    `• Chế độ: ${escapeHtml(displayValue(config?.mode))} | ${escapeHtml(displayValue(job?.assetType, 'image'))}`,
+    `• Cấu hình: ${escapeHtml(displayValue(config?.resolution))} | ${escapeHtml(displayValue(config?.speed))}`,
+    `• Job ID: <code>${escapeHtml(getShortId(job?.id))}</code>`,
+    `• Prompt: đã ẩn (${escapeHtml(String(promptMeta.length))} ký tự)`,
   ];
 
-  const mediaLinks = buildMediaLinks(payload);
-  if (mediaLinks.length > 0) {
-    lines.push(...mediaLinks);
+  if (payload?.eventType === 'completed') {
+    lines.push(`• Hoàn tất: ${escapeHtml(formatIso(job?.finishedAt))}`);
+  } else if (payload?.eventType === 'failed') {
+    lines.push(`• Lỗi: ${escapeHtml(truncate(job?.errorMessage || 'Không có chi tiết lỗi.', 220))}`);
+  } else {
+    lines.push(`• Tạo lúc: ${escapeHtml(formatIso(job?.createdAt))}`);
   }
 
-  lines.push('', `<b>${LABELS.prompt} Prompt</b>`, `- Đã ẩn | độ dài: ${escapeHtml(String(promptMeta.length))} ký tự`);
-
-  if (job?.errorMessage) {
-    lines.push('', `<b>${LABELS.error} Lỗi</b>`, `<pre>${escapeHtml(truncate(job.errorMessage, 500))}</pre>`);
-  }
-
-  return lines.join('\n');
+  return lines;
 };
 
-const buildMediaCaption = (payload) => {
-  const lines = buildEventSummary(payload);
-  const links = buildMediaLinks(payload);
-  if (links.length > 0) {
-    lines.push(...links);
+const buildTextMessage = (payload, extraLines = []) => {
+  return [...buildSummaryLines(payload), ...(extraLines.length > 0 ? ['', ...extraLines] : [])].join('\n');
+};
+
+const buildMediaCaption = (payload) =>
+  truncate(
+    [
+      buildHeader(payload?.app || 'App', payload?.eventType || 'queued').replace(/<\/?b>/g, ''),
+      `${getEventLabel(payload?.eventType)} | ${displayValue(payload?.job?.toolName || payload?.job?.queueKind)}`,
+      `${displayValue(payload?.job?.displayName, 'Unknown')} | ${displayValue(payload?.job?.costVcoin ?? 0, '0')} VC`,
+      `Model: ${displayValue(payload?.job?.config?.modelId || payload?.job?.engine)}`,
+      `Job: ${getShortId(payload?.job?.id)}`,
+    ].join('\n'),
+    900,
+  );
+
+const rolePriority = {
+  source: 0,
+  character: 1,
+  sample: 2,
+  keyframe: 3,
+  motion: 4,
+  reference: 5,
+  style: 9,
+};
+
+const collectCandidateMedia = (payload) => {
+  const candidates = [];
+  const outputUrl = isHttpUrl(payload?.media?.outputUrl) ? payload.media.outputUrl.trim() : null;
+  const inputMedia = normalizeInputMediaEntries(payload)
+    .filter((entry) => entry.userProvided !== false && entry.role !== 'style')
+    .sort((a, b) => (rolePriority[a.role] ?? 50) - (rolePriority[b.role] ?? 50));
+
+  if (payload?.eventType === 'completed' && outputUrl) {
+    candidates.push({
+      url: outputUrl,
+      role: 'output',
+      kind: isVideoUrl(outputUrl) ? 'video' : 'image',
+      primary: true,
+    });
   }
-  return truncate(lines.join('\n'), 900);
+
+  const maxInputPreviews = payload?.eventType === 'completed' ? 2 : 3;
+  for (const entry of inputMedia.slice(0, maxInputPreviews)) {
+    candidates.push({
+      url: entry.url,
+      role: entry.role,
+      kind: entry.kind,
+      primary: false,
+    });
+  }
+
+  return candidates;
+};
+
+const buildMediaLinks = (payload, shownUrls = []) => {
+  const shown = new Set(shownUrls);
+  const lines = [];
+  const inputMedia = normalizeInputMediaEntries(payload);
+  const outputUrl = isHttpUrl(payload?.media?.outputUrl) ? payload.media.outputUrl.trim() : null;
+
+  if (outputUrl && !shown.has(outputUrl)) {
+    lines.push(`• Kết quả: <a href="${escapeHtml(outputUrl)}">mở</a>`);
+  }
+
+  for (const entry of inputMedia) {
+    if (shown.has(entry.url)) continue;
+    if (entry.userProvided === false && entry.role === 'style') continue;
+    lines.push(`• ${getRoleLabel(entry.role)}: <a href="${escapeHtml(entry.url)}">mở</a>`);
+    if (lines.length >= 4) break;
+  }
+
+  return lines;
 };
 
 const telegramUrl = (env, method) => `${TELEGRAM_API_BASE}/bot${env.TELEGRAM_BOT_TOKEN}/${method}`;
@@ -276,50 +284,39 @@ async function probeMedia(url) {
     });
 
     if (!response.ok) {
-      return {
-        ok: false,
-        sizeBytes: null,
-        contentType: null,
-      };
+      return { ok: false, sizeBytes: null, contentType: null };
     }
 
     const contentLength = response.headers.get('content-length');
     const contentType = response.headers.get('content-type');
-
     return {
       ok: true,
       sizeBytes: contentLength ? Number(contentLength) : null,
       contentType: contentType || null,
     };
   } catch {
-    return {
-      ok: false,
-      sizeBytes: null,
-      contentType: null,
-    };
+    return { ok: false, sizeBytes: null, contentType: null };
   }
 }
 
 const isVideoByContentType = (contentType) => /^video\//i.test(String(contentType || '').trim());
 const isImageByContentType = (contentType) => /^image\//i.test(String(contentType || '').trim());
 
-const getTelegramMediaType = (url, mediaInfo) => {
-  if (isVideoUrl(url) || isVideoByContentType(mediaInfo?.contentType)) {
+const getTelegramMediaType = (url, mediaInfo, fallbackKind = 'image') => {
+  if (fallbackKind === 'video' || isVideoUrl(url) || isVideoByContentType(mediaInfo?.contentType)) {
     return 'video';
   }
   return 'photo';
 };
 
-async function sendMedia(env, url, caption = '') {
-  const method = isVideoUrl(url) ? 'sendVideo' : 'sendPhoto';
+async function sendMedia(env, item, caption = '') {
+  const method = item.type === 'video' ? 'sendVideo' : 'sendPhoto';
   const mediaField = method === 'sendVideo' ? 'video' : 'photo';
   const body = new URLSearchParams();
 
   body.set('chat_id', env.TELEGRAM_CHAT_ID);
-  body.set(mediaField, url);
-  if (caption) {
-    body.set('caption', truncate(caption, 900));
-  }
+  body.set(mediaField, item.url);
+  if (caption) body.set('caption', truncate(caption, 900));
   body.set('parse_mode', 'HTML');
 
   const threadId = getThreadId(env);
@@ -328,15 +325,10 @@ async function sendMedia(env, url, caption = '') {
   try {
     return await sendTelegramRequest(env, method, body);
   } catch (error) {
-    await sendText(env, `<b>${LABELS.media} Không gửi được media trực tiếp</b>\n${escapeHtml(url)}`);
+    await sendText(env, buildTextMessage(item.payload, [`• Không gửi được media trực tiếp: <a href="${escapeHtml(item.url)}">mở</a>`]));
     return { ok: false, fallback: true, error: String(error) };
   }
 }
-
-const collectCandidateMedia = (payload) => {
-  const inputUrls = normalizeUrls(payload?.media?.inputUrls);
-  return inputUrls.slice(0, 6);
-};
 
 async function sendMediaGroup(env, mediaItems) {
   const body = new URLSearchParams();
@@ -350,83 +342,58 @@ async function sendMediaGroup(env, mediaItems) {
 }
 
 async function sendSingleJobMessage(env, payload) {
-  const candidateUrls = collectCandidateMedia(payload);
+  const candidates = collectCandidateMedia(payload);
   const inspected = [];
 
-  for (const url of candidateUrls) {
-    const mediaInfo = await probeMedia(url);
+  for (const candidate of candidates) {
+    const mediaInfo = await probeMedia(candidate.url);
     const sizeBytes = mediaInfo?.sizeBytes;
-    const tooLarge = Number.isFinite(sizeBytes) && sizeBytes > MAX_TELEGRAM_MEDIA_BYTES;
-
     inspected.push({
-      url,
+      ...candidate,
       mediaInfo,
       sizeBytes,
-      tooLarge,
-      type: getTelegramMediaType(url, mediaInfo),
+      type: getTelegramMediaType(candidate.url, mediaInfo, candidate.kind),
+      tooLarge: Number.isFinite(sizeBytes) && sizeBytes > MAX_TELEGRAM_MEDIA_BYTES,
+      payload,
     });
   }
 
-  const eligibleMedia = inspected.filter(
-    (item) =>
-      !item.tooLarge &&
-      item.type === 'photo' &&
-      (isImageUrl(item.url) || isImageByContentType(item.mediaInfo?.contentType)),
-  );
-  const overflowLinks = inspected.filter((item) => item.tooLarge);
-  const outputUrl = isHttpUrl(payload?.media?.outputUrl) ? payload.media.outputUrl.trim() : null;
-  const extraLinks = [
-    ...(outputUrl ? [`- ${LABELS.output} Output: <a href="${escapeHtml(outputUrl)}">mở</a>`] : []),
-    ...overflowLinks.map(
-      (item, index) => `- ${LABELS.input} Input ${index + 1}: <a href="${escapeHtml(item.url)}">mở</a> (${escapeHtml(formatBytes(item.sizeBytes))})`,
-    ),
-  ];
+  const eligibleMedia = inspected.filter((item) => {
+    if (item.tooLarge) return false;
+    if (item.type === 'photo') {
+      return isImageUrl(item.url) || isImageByContentType(item.mediaInfo?.contentType);
+    }
+    return isVideoUrl(item.url) || isVideoByContentType(item.mediaInfo?.contentType);
+  });
+
+  const shownUrls = eligibleMedia.map((item) => item.url);
+  const extraLinks = buildMediaLinks(payload, shownUrls);
 
   if (eligibleMedia.length >= 2) {
     const mediaItems = eligibleMedia.slice(0, 4).map((item, index) => ({
       type: item.type,
       media: item.url,
-      ...(index === 0
-        ? {
-            caption: buildMediaCaption(payload),
-            parse_mode: 'HTML',
-          }
-        : {}),
+      ...(index === 0 ? { caption: buildMediaCaption(payload), parse_mode: 'HTML' } : {}),
     }));
 
     await sendMediaGroup(env, mediaItems);
 
     if (extraLinks.length > 0) {
-      const extraText = [
-        `<b>${LABELS.media} Link media</b>`,
-        ...extraLinks,
-      ].join('\n');
-      await sendText(env, extraText);
+      await sendText(env, buildTextMessage(payload, extraLinks));
     }
     return;
   }
 
   if (eligibleMedia.length === 1) {
-    await sendMedia(env, eligibleMedia[0].url, buildMediaCaption(payload));
+    await sendMedia(env, eligibleMedia[0], buildMediaCaption(payload));
 
     if (extraLinks.length > 0) {
-      await sendText(env, [`<b>${LABELS.media} Link media</b>`, ...extraLinks].join('\n'));
+      await sendText(env, buildTextMessage(payload, extraLinks));
     }
     return;
   }
 
-  const fallbackText = [
-    buildTextMessage(payload),
-    ...(extraLinks.length > 0
-      ? [
-          '',
-          `<b>${LABELS.media} Link media</b>`,
-          ...extraLinks,
-        ]
-      : []),
-  ].join('\n');
-
-  await sendText(env, fallbackText);
+  await sendText(env, buildTextMessage(payload, extraLinks));
 }
 
 async function handleNotification(env, payload) {

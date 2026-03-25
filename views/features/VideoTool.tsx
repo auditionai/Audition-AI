@@ -585,7 +585,6 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
         console.warn('[VideoTool] Failed to persist queued placeholder', placeholderError);
     }
 
-    triggerPoll();
     onNavigateView?.('gallery');
 
     void (async () => {
@@ -701,7 +700,6 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
         } catch (persistError) {
           console.warn('[VideoTool] Failed to persist failed queued placeholder', persistError);
         }
-        triggerPoll();
         notify(errorMsg, 'error');
       } finally {
         setIsProcessing(false);

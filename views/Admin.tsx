@@ -41,7 +41,6 @@ import {
     saveTstServerAvailabilityConfig
 } from '../services/economyService';
 import { getAllImagesFromStorage, deleteImageFromStorage, checkR2Connection, getUserImagesFromStorage, cleanupExpiredImages, cleanupR2Directly } from '../services/storageService';
-import { useConcurrency } from '../services/concurrencyService';
 import { checkConnection, analyzeStyleImage } from '../services/geminiService';
 import { checkSupabaseConnection } from '../services/supabaseClient';
 import {
@@ -397,7 +396,6 @@ const AdminModalPortal: React.FC<{ children: React.ReactNode }> = ({ children })
 const ADMIN_PRICING_DRAFTS_STORAGE_KEY = 'admin_pricing_drafts_v1';
 
 export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
-  const { triggerPoll } = useConcurrency();
   const [activeView, setActiveView] = useState<'overview' | 'transactions' | 'users' | 'packages' | 'marketing' | 'pricing' | 'system' | 'styles'>('overview');
   const [stats, setStats] = useState<any>(null);
   const [allImages, setAllImages] = useState<GeneratedImage[]>([]);
@@ -1175,7 +1173,6 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       showConfirm('Xóa vĩnh viễn hình ảnh này?', async () => {
           const targetImage = allImages.find((img) => img.id === id);
           await deleteImageFromStorage(id, targetImage?.userId, targetImage?.url);
-          triggerPoll();
           setAllImages(prev => prev.filter(img => img.id !== id));
           showToast('Đã xóa ảnh');
       });

@@ -4,7 +4,6 @@ import { GeneratedImage, Language, HistoryItem } from '../types';
 import type { QueueProgressLogEntry } from '../shared/queueRecipes';
 import { getAllImagesFromStorage, deleteImageFromStorage, cleanupExpiredImages, getHistoryRetentionDays, publishImageToShowcase } from '../services/storageService';
 import { getUnifiedHistory } from '../services/economyService';
-import { useConcurrency } from '../services/concurrencyService';
 import { downloadAssetToBrowser } from '../services/downloadService';
 import { Icons } from '../components/Icons';
 import { useNotification } from '../components/NotificationSystem';
@@ -15,7 +14,6 @@ interface GalleryProps {
 
 export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
   const { notify, confirm } = useNotification();
-  const { triggerPoll } = useConcurrency();
   const [activeTab, setActiveTab] = useState<'generation' | 'transactions'>('generation');
 
   // Generation History State
@@ -116,7 +114,6 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
         isDanger: true,
         onConfirm: async () => {
             await deleteImageFromStorage(id, userId, imageUrl);
-            triggerPoll();
             setImages(prev => prev.filter(img => img.id !== id));
             setSelectedIds(prev => {
                 const newSet = new Set(prev);
@@ -141,7 +138,6 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                   const image = images.find((img) => img.id === id);
                   await deleteImageFromStorage(id, image?.userId, image?.url);
               }
-              triggerPoll();
               setImages(prev => prev.filter(img => !selectedIds.has(img.id)));
               setSelectedIds(new Set());
               notify(lang === 'vi' ? 'Đã xóa các mục đã chọn.' : 'Selected items deleted.', 'info');

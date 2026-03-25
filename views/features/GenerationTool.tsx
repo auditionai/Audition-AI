@@ -678,7 +678,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
         console.warn('[GenerationTool] Failed to persist queued placeholder', placeholderError);
     }
 
-    triggerPoll();
     onNavigateView?.('gallery');
 
     void (async () => {
@@ -761,7 +760,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
             } catch (persistError) {
                 console.warn('[GenerationTool] Failed to persist failed queued placeholder', persistError);
             }
-            triggerPoll();
             notify(errorMsg, 'error');
             setIsSubmitting(false);
         }

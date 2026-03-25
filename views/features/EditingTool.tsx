@@ -434,7 +434,6 @@ export const EditingTool: React.FC<EditingToolProps> = ({
       console.warn('[EditingTool] Failed to persist queued placeholder', error);
     }
 
-    triggerPoll();
     onNavigateView?.('gallery');
 
     void (async () => {
@@ -501,7 +500,6 @@ export const EditingTool: React.FC<EditingToolProps> = ({
         } catch (persistError) {
           console.warn('[EditingTool] Failed to persist failed placeholder', persistError);
         }
-        triggerPoll();
         notify(errorMessage, 'error');
       } finally {
         setIsSubmitting(false);

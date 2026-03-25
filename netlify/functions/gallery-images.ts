@@ -9,6 +9,15 @@ const headers = {
 };
 
 const GALLERY_PAGE_LIMIT = 100;
+const ACTIVE_GALLERY_CACHE_TTL_MS = 3_000;
+const IDLE_GALLERY_CACHE_TTL_MS = 15_000;
+
+type GalleryCacheEntry = {
+  expiresAt: number;
+  body: string;
+};
+
+const galleryCache = new Map<string, GalleryCacheEntry>();
 
 export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
@@ -29,6 +38,15 @@ export const handler: Handler = async (event) => {
 
   try {
     const { user } = await requireAuthenticatedUser(event);
+    const cached = galleryCache.get(user.id);
+    if (cached && cached.expiresAt > Date.now()) {
+      return {
+        statusCode: 200,
+        headers,
+        body: cached.body,
+      };
+    }
+
     const admin = getServiceRoleClient();
 
     const { data, error } = await admin
@@ -104,10 +122,17 @@ export const handler: Handler = async (event) => {
       cost_vcoin: Number.isFinite(Number(row?.cost_vcoin)) ? Number(row.cost_vcoin) : chargeMap.get(row.id) ?? null,
     }));
 
+    const body = JSON.stringify({ images });
+    const hasActiveJobs = images.some((row: any) => row && (row.status === 'queued' || row.status === 'processing'));
+    galleryCache.set(user.id, {
+      expiresAt: Date.now() + (hasActiveJobs ? ACTIVE_GALLERY_CACHE_TTL_MS : IDLE_GALLERY_CACHE_TTL_MS),
+      body,
+    });
+
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify({ images }),
+      body,
     };
   } catch (error: any) {
     console.error('[gallery-images] failed:', error);

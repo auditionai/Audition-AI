@@ -10,6 +10,8 @@ const STORE_NAME = 'images';
 const TABLE_NAME = 'generated_images';
 const HISTORY_RETENTION_DAYS = 7;
 const HISTORY_RETENTION_MS = HISTORY_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+const ACTIVE_GALLERY_CLIENT_CACHE_TTL_MS = 10_000;
+const IDLE_GALLERY_CLIENT_CACHE_TTL_MS = 30_000;
 
 // --- CLOUDFLARE R2 CONFIGURATION ---
 // Helper to get Env Var from either Vite's import.meta.env or process.env shim
@@ -33,6 +35,8 @@ const R2_BUCKET_NAME = getEnv('VITE_R2_BUCKET_NAME');
 const R2_PUBLIC_URL = getEnv('VITE_R2_PUBLIC_URL'); 
 
 let r2Client: S3Client | null = null;
+let galleryFetchPromise: Promise<GeneratedImage[]> | null = null;
+let galleryFetchCache: { userId: string; expiresAt: number; images: GeneratedImage[] } | null = null;
 
 // Debug Log on Init
 console.log("[System] R2 Config Check:", {
@@ -743,27 +747,60 @@ export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
         const user = await getSupabaseUser();
         if(user) {
             const localImagesForUser = localImages.filter((image) => image.userId === user.id);
+            if (galleryFetchCache && galleryFetchCache.userId === user.id && galleryFetchCache.expiresAt > Date.now()) {
+              return mergeCloudAndLocalImages(galleryFetchCache.images, localImagesForUser);
+            }
+
+            if (galleryFetchPromise) {
+              const pendingImages = await galleryFetchPromise.catch(() => null);
+              if (pendingImages) {
+                return mergeCloudAndLocalImages(pendingImages, localImagesForUser);
+              }
+            }
+
             const authHeader = await getSessionAuthHeader();
-            const response = await fetch('/api/gallery-images', {
-              method: 'GET',
-              headers: authHeader,
-            });
-            const payload = await response.json().catch(() => ({}));
+            galleryFetchPromise = (async () => {
+              const response = await fetch('/api/gallery-images', {
+                method: 'GET',
+                headers: authHeader,
+              });
+              const payload = await response.json().catch(() => ({}));
 
-            if (response.ok && Array.isArray(payload?.images)) {
-                const cloudImages = payload.images.map((row: any) => mapGeneratedImageRow(row, 'Me'));
-                const mergedImages = mergeCloudAndLocalImages(cloudImages, localImagesForUser);
-                void replaceLocalImagesForUser(user.id, mergedImages).catch((syncError) => {
-                  console.warn('[Storage] Failed to sync local cache from cloud', syncError);
-                });
-                return mergedImages;
+              if (response.ok && Array.isArray(payload?.images)) {
+                  const cloudImages = payload.images.map((row: any) => mapGeneratedImageRow(row, 'Me'));
+                  const mergedImages = mergeCloudAndLocalImages(cloudImages, localImagesForUser);
+                  galleryFetchCache = {
+                    userId: user.id,
+                    expiresAt:
+                      Date.now() +
+                      (mergedImages.some((image) => image.status === 'queued' || image.status === 'processing')
+                        ? ACTIVE_GALLERY_CLIENT_CACHE_TTL_MS
+                        : IDLE_GALLERY_CLIENT_CACHE_TTL_MS),
+                    images: mergedImages,
+                  };
+                  void replaceLocalImagesForUser(user.id, mergedImages).catch((syncError) => {
+                    console.warn('[Storage] Failed to sync local cache from cloud', syncError);
+                  });
+                  return mergedImages;
+              }
+
+              if (!response.ok) {
+                console.warn('[Storage] Gallery API failed, using local cache only', payload?.error || response.statusText);
+              }
+
+              galleryFetchCache = {
+                userId: user.id,
+                expiresAt: Date.now() + ACTIVE_GALLERY_CLIENT_CACHE_TTL_MS,
+                images: localImagesForUser,
+              };
+              return localImagesForUser;
+            })();
+
+            try {
+              return await galleryFetchPromise;
+            } finally {
+              galleryFetchPromise = null;
             }
-
-            if (!response.ok) {
-              console.warn('[Storage] Gallery API failed, using local cache only', payload?.error || response.statusText);
-            }
-
-            return localImagesForUser;
         }
     } catch (error) {
       console.error("Supabase Load Error (Fallback to Local):", error);
@@ -952,7 +989,7 @@ export const cleanupExpiredImages = async (isSystemWide: boolean = false): Promi
     if (isSystemWide) {
         images = await getAllImagesSystemWide();
     } else {
-        images = await getAllImagesFromStorage();
+        images = await readLocalImages();
     }
 
     const now = Date.now();

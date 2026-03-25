@@ -124,7 +124,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
   onNavigateView,
 }) => {
   const { notify } = useNotification();
-  const { queueStats, triggerPoll } = useConcurrency();
+  const { queueStats } = useConcurrency();
 
   const [prompt, setPrompt] = useState('');
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
@@ -473,7 +473,6 @@ export const EditingTool: React.FC<EditingToolProps> = ({
         });
 
         window.dispatchEvent(new Event('balance_updated'));
-        triggerPoll();
         notify(
           lang === 'vi'
             ? 'Đã tạo job. Tiến trình sẽ được cập nhật realtime trong Lịch sử.'

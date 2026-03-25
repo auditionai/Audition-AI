@@ -161,33 +161,7 @@ const fetchSharedQueueStats = async (force = false) => {
 };
 
 export const initConcurrencyTracker = async () => {
-  if (!supabase || globalChannel) return;
-
-  const userId = await getSharedUserId();
-
-  globalChannel = supabase.channel('concurrency_tracker', {
-    config: {
-      presence: {
-        key: userId || 'anonymous',
-      },
-    },
-  });
-
-  globalChannel
-    .on('presence', { event: 'sync' }, () => {
-      const state = globalChannel.presenceState();
-      const jobs: JobState[] = [];
-      for (const id in state) {
-        state[id].forEach((presence: any) => {
-          if (presence.jobs) {
-            jobs.push(...presence.jobs);
-          }
-        });
-      }
-      currentJobs = Array.from(new Map(jobs.map((job) => [job.jobId, job])).values());
-      notifyJobSubscribers();
-    })
-    .subscribe();
+  return;
 };
 
 export const useConcurrency = () => {
@@ -236,12 +210,8 @@ export const useConcurrency = () => {
     };
   }, []);
 
-  const updateMyJobs = useCallback(async (jobs: JobState[]) => {
-    if (!globalChannel) return;
-    await globalChannel.track({ jobs });
-    if (jobs.length > 0) {
-      fetchSharedQueueStats(true).catch(() => undefined);
-    }
+  const updateMyJobs = useCallback(async (_jobs: JobState[]) => {
+    return;
   }, []);
 
   const triggerPoll = useCallback(() => {

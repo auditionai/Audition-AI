@@ -9,8 +9,8 @@ const headers = {
 };
 
 const GALLERY_PAGE_LIMIT = 100;
-const ACTIVE_GALLERY_CACHE_TTL_MS = 3_000;
-const IDLE_GALLERY_CACHE_TTL_MS = 15_000;
+const ACTIVE_GALLERY_CACHE_TTL_MS = 10_000;
+const IDLE_GALLERY_CACHE_TTL_MS = 30_000;
 
 type GalleryCacheEntry = {
   expiresAt: number;
@@ -136,6 +136,19 @@ export const handler: Handler = async (event) => {
     };
   } catch (error: any) {
     console.error('[gallery-images] failed:', error);
+    try {
+      const { user } = await requireAuthenticatedUser(event);
+      const cached = galleryCache.get(user.id);
+      if (cached?.body) {
+        return {
+          statusCode: 200,
+          headers,
+          body: cached.body,
+        };
+      }
+    } catch {
+      // ignore auth/cache fallback errors and return the original failure
+    }
     return {
       statusCode: 500,
       headers,

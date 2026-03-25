@@ -109,7 +109,7 @@ const tryStageInputToR2 = async (source: File | Blob | string, folder: string) =
 
 export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateToFeature, onNavigateView }) => {
   const { notify } = useNotification();
-  const { queueStats, triggerPoll } = useConcurrency();
+  const { queueStats } = useConcurrency();
   const [stage, setStage] = useState<Stage>('input');
   const [activeMode, setActiveMode] = useState<VideoMode>(feature.id === 'motion_control_gen' ? 'motion_control' : 'video_ai');
   
@@ -684,7 +684,6 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
         });
 
         window.dispatchEvent(new Event('balance_updated'));
-        triggerPoll();
         notify(lang === 'vi' ? 'Đã gửi job. Theo dõi tiến trình trong Lịch sử tạo.' : 'Job submitted. Track progress in History.', 'success');
       } catch (error) {
         console.error(error);
@@ -791,7 +790,6 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
         });
 
         window.dispatchEvent(new Event('balance_updated'));
-        triggerPoll();
         setStage('input');
         setResultVideo(null);
         notify(lang === 'vi' ? 'Đã gửi job. Theo dõi tiến trình trong Lịch sử tạo.' : 'Job submitted. Track progress in History.', 'success');

@@ -678,6 +678,55 @@ const persistRecipePayload = async (jobId: string, recipePayload: ImageGenerateR
   return recipePayload;
 };
 
+const queueRecipeStageTransition = async (
+  jobId: string,
+  recipePayload: ImageGenerateRecipePayload,
+  stage: 'uploading_refs' | 'synthesizing_prompt' | 'building_payload',
+  message: string,
+  progress: number,
+  level: QueueProgressLogEntry['level'] = 'info',
+) => {
+  const nextPayload = withQueueLog(recipePayload, stage, message, level) as ImageGenerateRecipePayload;
+  await updateGeneratedImageRecord(jobId, {
+    status: 'queued',
+    progress,
+    error_message: null,
+    queue_payload: nextPayload,
+    next_poll_at: new Date().toISOString(),
+    lease_token: null,
+    lease_expires_at: null,
+    updated_at: new Date().toISOString(),
+  });
+
+  return nextPayload;
+};
+
+const markRecipePreparedForDispatch = async (
+  jobId: string,
+  providerPayload: Record<string, unknown>,
+  previousPayload?: Record<string, unknown> | null,
+) => {
+  const storedPayload = withQueueLog(
+    withQueueMeta(providerPayload, previousPayload, 'dispatching'),
+    'dispatching',
+    'Payload đã sẵn sàng. Chờ gửi provider.',
+    'success',
+  );
+
+  await updateGeneratedImageRecord(jobId, {
+    status: 'queued',
+    progress: 55,
+    error_message: null,
+    queue_payload: storedPayload,
+    next_poll_at: new Date().toISOString(),
+    lease_token: null,
+    lease_expires_at: null,
+    updated_at: new Date().toISOString(),
+  });
+
+  return storedPayload;
+};
+
 const prepareImageRecipeInStages = async (job: QueueJobRow, recipePayload: ImageGenerateRecipePayload) => {
   const renderSources =
     (recipePayload.__uploadSources || []).filter((value): value is string => Boolean(value)).length > 0
@@ -721,25 +770,16 @@ const prepareImageRecipeInStages = async (job: QueueJobRow, recipePayload: Image
       __uploadedUrls: uploadedUrls,
     };
 
-    recipePayload = await persistRecipePayload(job.id, nextPayload);
-
-    recipePayload = await persistQueueLog(
+    recipePayload = await queueRecipeStageTransition(
       job.id,
-      recipePayload,
+      nextPayload,
       hasMoreUploads ? 'uploading_refs' : 'synthesizing_prompt',
       hasMoreUploads
         ? `Đã tải ${nextCursor}/${renderSources.length} ảnh tham chiếu.`
-        : `Đã tải xong ${uploadedUrls.length}/${renderSources.length} ảnh tham chiếu.`,
+        : `Đã tải xong ${uploadedUrls.length}/${renderSources.length} ảnh tham chiếu. Chuyển sang tổng hợp prompt.`,
+      hasMoreUploads ? Math.min(35, 20 + Math.round((nextCursor / renderSources.length) * 15)) : 40,
       hasMoreUploads ? 'info' : 'success',
     ) as ImageGenerateRecipePayload;
-
-    if (hasMoreUploads) {
-      const uploadProgress = Math.min(35, 20 + Math.round((nextCursor / renderSources.length) * 15));
-      await markQueuedStage(job.id, uploadProgress);
-      return { type: 'requeue' as const };
-    }
-
-    await markQueuedStage(job.id, 40);
     return { type: 'requeue' as const };
   }
 
@@ -760,15 +800,14 @@ const prepareImageRecipeInStages = async (job: QueueJobRow, recipePayload: Image
       __uploadedUrls: uploadedUrls,
     };
 
-    recipePayload = await persistRecipePayload(job.id, nextPayload);
-    recipePayload = await persistQueueLog(
+    recipePayload = await queueRecipeStageTransition(
       job.id,
-      recipePayload,
+      nextPayload,
       'building_payload',
       'Đã tổng hợp prompt. Đang dựng payload.',
+      45,
       'success',
     ) as ImageGenerateRecipePayload;
-    await markQueuedStage(job.id, 45);
     return { type: 'requeue' as const };
   }
 
@@ -785,9 +824,7 @@ const prepareImageRecipeInStages = async (job: QueueJobRow, recipePayload: Image
 
   const validationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, stripInternalQueueMeta(providerPayload));
   const validatedProviderPayload = applyLivePricingConfigToPayload(job.queue_kind, providerPayload, validationResult);
-  const storedPayload = await persistPreparedPayload(job.id, validatedProviderPayload, recipePayload);
-  await persistQueueLog(job.id, storedPayload, 'dispatching', 'Payload đã sẵn sàng. Chờ gửi provider.', 'success');
-  await markPreparedForDispatch(job.id);
+  await markRecipePreparedForDispatch(job.id, validatedProviderPayload, recipePayload);
 
   return { type: 'prepared' as const, providerPayload: validatedProviderPayload };
 };

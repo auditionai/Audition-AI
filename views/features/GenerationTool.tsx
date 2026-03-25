@@ -738,7 +738,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
             });
 
             window.dispatchEvent(new Event('balance_updated'));
-            triggerPoll();
             notify(
                 lang === 'vi'
                     ? 'Đã tạo job. Kết quả sẽ được cập nhật realtime trong Lịch sử.'
@@ -848,7 +847,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
         });
 
         window.dispatchEvent(new Event('balance_updated'));
-        triggerPoll();
         addLog(lang === 'vi' ? 'Job đã được đưa vào hàng đợi xử lý.' : 'Job submitted to the server queue.');
         notify(
             lang === 'vi'

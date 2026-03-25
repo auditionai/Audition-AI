@@ -55,6 +55,50 @@ const hasQueueActivity = (summary: Awaited<ReturnType<typeof runQueueDaemon>>) =
   Number(summary.failed || 0) > 0 ||
   Number(summary.requeued || 0) > 0;
 
+const resetStaleQueueStateForReconcile = async () => {
+  const admin = getServiceRoleClient();
+  const nowIso = new Date().toISOString();
+
+  const { data: processingRows, error: processingError } = await admin
+    .from('generated_images')
+    .update({
+      lease_token: null,
+      lease_expires_at: null,
+      next_poll_at: nowIso,
+      updated_at: nowIso,
+      error_message: null,
+    })
+    .eq('status', 'processing')
+    .not('job_id', 'is', null)
+    .select('id');
+
+  if (processingError) {
+    throw processingError;
+  }
+
+  const { data: queuedRows, error: queuedError } = await admin
+    .from('generated_images')
+    .update({
+      lease_token: null,
+      lease_expires_at: null,
+      next_poll_at: nowIso,
+      updated_at: nowIso,
+      error_message: null,
+    })
+    .eq('status', 'queued')
+    .not('queue_payload', 'is', null)
+    .select('id');
+
+  if (queuedError) {
+    throw queuedError;
+  }
+
+  return {
+    resetProcessing: Array.isArray(processingRows) ? processingRows.length : 0,
+    resetQueued: Array.isArray(queuedRows) ? queuedRows.length : 0,
+  };
+};
+
 export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers, body: '' };
@@ -101,6 +145,8 @@ export const handler: Handler = async (event) => {
       };
     }
 
+    const resetSummary = await resetStaleQueueStateForReconcile();
+
     const summary = await runQueueDaemon({
       maxRuntimeMs: 45_000,
       idleIterationsToStop: 3,
@@ -112,7 +158,7 @@ export const handler: Handler = async (event) => {
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify({ success: true, summary, followUpLaunchNeeded }),
+      body: JSON.stringify({ success: true, resetSummary, summary, followUpLaunchNeeded }),
     };
   } catch (error: any) {
     console.error('[queue-reconcile] failed:', error);

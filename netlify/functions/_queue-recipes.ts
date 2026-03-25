@@ -127,11 +127,12 @@ const buildFallbackSynthesizedPrompt = (payload: ImageGenerateRecipePayload) => 
   const stylePrompt = payload.stylePrompt?.trim() || '';
   const fallbackRoleLock = [
     'ROLE LOCK:',
-    '1. Character reference images define identity only: face, hair, body structure, skin tone, outfit, shoes, accessories, and gender.',
+    '1. Character reference images define identity only: face, hair, body structure, skin tone, outfit, shoes, accessories, and gender. They are NOT pose references.',
     '2. Sample image defines pose, framing, camera angle, spacing, and background only.',
     '3. Style image is a direct style reference for the renderer, but it only controls render quality, lighting, shader response, material quality, color grading, and broad adult 3D body-proportion language.',
     '4. Do not copy pose, outfit, hairstyle, accessories, face, gender presentation, number of characters, or composition from the style image.',
-    '5. Keep the final result as a stylized Audition-like 3D game character, not photorealistic, not childlike, and not chibi unless the user explicitly asks for that.',
+    '5. Re-pose the character from the character reference into the sample composition exactly. Never return a near-unchanged copy of the standing character reference unless the sample itself is also standing.',
+    '6. Keep the final result as a stylized Audition-like 3D game character, not photorealistic, not childlike, and not chibi unless the user explicitly asks for that.',
   ].join('\n');
 
   if (basePrompt && stylePrompt) {
@@ -174,7 +175,7 @@ export const buildImageGenerateProviderPayload = (
   );
 
   const providerPayload: Record<string, unknown> = {
-    prompt: buildImageProviderPrompt(synthesizedPrompt, payload.negativePrompt),
+    prompt: buildImageProviderPrompt(synthesizedPrompt, payload, payload.negativePrompt),
     model: payload.modelId,
   };
 

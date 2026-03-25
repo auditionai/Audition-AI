@@ -75,13 +75,13 @@ const buildStrictImageDirectorInstruction = (
   let imageIndex = 1;
   if (hasCharacters) {
     sections.push(
-      `- Images 1 to ${payload.characterImages!.length}: CHARACTER REFERENCE. Source of truth for face, hair, head shape, ear shape, body proportions, skin tone, clothing, shoes, accessories, gender, and identity. COPY EXACTLY. DO NOT INVENT. The character is already a stylized 3D game avatar. Preserve that topology and do not humanize it.`,
+      `- Images 1 to ${payload.characterImages!.length}: CHARACTER REFERENCE. Source of truth for face, hair, head shape, ear shape, body proportions, skin tone, clothing, shoes, accessories, gender, and identity. COPY EXACTLY. DO NOT INVENT. The character is already a stylized 3D game avatar. Preserve that topology and do not humanize it. These images are NOT pose references. Ignore their current standing pose, limb placement, framing, and background.`,
     );
     imageIndex += payload.characterImages!.length;
   }
 
   if (hasSample) {
-    sections.push(`- Image ${imageIndex}: SAMPLE / POSE / BACKGROUND reference. COPY EXACTLY the pose, camera angle, framing, environment layout, and scene composition from this image. If multiple subjects appear in this image, COPY EXACTLY their left-to-right order, spacing, overlap, body lean, hand placement, leg placement, relative heights, and camera perspective. DO NOT steal identity, outfit, skin texture, facial anatomy, hair texture, or realism from it. If this sample is a real human photo, use it only as composition choreography.`);
+    sections.push(`- Image ${imageIndex}: SAMPLE / POSE / BACKGROUND reference. COPY EXACTLY the pose, camera angle, framing, environment layout, and scene composition from this image. If multiple subjects appear in this image, COPY EXACTLY their left-to-right order, spacing, overlap, body lean, hand placement, leg placement, relative heights, and camera perspective. DO NOT steal identity, outfit, skin texture, facial anatomy, hair texture, or realism from it. If this sample is a real human photo, use it only as composition choreography. The final character must be re-posed into this sample choreography, not left in the original standing pose from the character reference image.`);
     imageIndex += 1;
   }
 
@@ -93,16 +93,18 @@ const buildStrictImageDirectorInstruction = (
     '',
     'OUTPUT REQUIREMENTS:',
     '1. Return ONLY the final command prompt.',
-    '2. The final command prompt must explicitly command the renderer to COPY AND PASTE the character identity from the character references, including face shape, eyes, hair silhouette, body structure, skin tone, outfit, shoes, and accessories.',
-    '3. The final command prompt must explicitly state that the subject must remain a stylized 3D game character / MMO avatar and must NOT become photorealistic, semi-realistic, or humanized.',
-    '4. If a sample image is provided, the final command prompt must explicitly command the renderer to COPY the exact pose, framing, camera angle, and background from it, while forbidding any borrowing of real-human realism or identity from it.',
-    '5. If the sample image contains multiple people, the final command prompt must explicitly map the final characters into those exact sample positions and preserve the exact left-to-right arrangement, spacing, overlap, body lean, hand placement, leg placement, and camera perspective. The renderer must NOT collapse them into a straight lineup unless the sample itself is a straight lineup.',
-    '6. If a style image is provided, the final command prompt must explicitly command the renderer to COPY ONLY the render style, lighting, material quality, color grading, stylized skin shading, stylized facial/hand treatment, and broad adult 3D body-proportion language from it.',
-    '7. The final command prompt must explicitly state that the style image is NOT a pose reference, NOT an outfit reference, NOT a character reference, and must NOT affect character count, gender, camera framing, or composition.',
-    '8. The prompt must state that the renderer is FORBIDDEN from inventing extra characters, replacing the face, changing the hair, changing the outfit, improvising the composition, or blending the roles of the references.',
-    '9. If multiple character references are provided, map each final character into a distinct sample position. Do not merge them into one combined pose and do not default to standing shoulder-to-shoulder unless the sample says so.',
-    '10. Mention that the style image will be provided again to the renderer as the LAST direct visual reference, but only as a style/body-render guide and never as a pose/outfit/identity guide.',
-    '11. Explicitly forbid realistic human skin pores, realistic human facial anatomy, realistic photographic shading, and live-action body proportions if they conflict with the game-avatar look.',
+    '2. The final command prompt must explicitly command the renderer to COPY character identity from the character references only: face shape, eyes, hair silhouette, body topology, skin tone, outfit, shoes, accessories, and tattoos.',
+    '3. The final command prompt must explicitly state that character reference images are NOT pose references and their original standing pose must be ignored.',
+    '4. The final command prompt must explicitly state that the subject must remain a stylized 3D game character / MMO avatar and must NOT become photorealistic, semi-realistic, or humanized.',
+    '5. If a sample image is provided, the final command prompt must explicitly command the renderer to COPY the exact pose, framing, camera angle, and background from it, while forbidding any borrowing of real-human realism or identity from it.',
+    '6. If a sample image is provided, the final command prompt must explicitly say to transplant or re-pose the final character into the sample composition, not return an unchanged copy of the uploaded character reference image.',
+    '7. If the sample image contains multiple people, the final command prompt must explicitly map the final characters into those exact sample positions and preserve the exact left-to-right arrangement, spacing, overlap, body lean, hand placement, leg placement, and camera perspective. The renderer must NOT collapse them into a straight lineup unless the sample itself is a straight lineup.',
+    '8. If a style image is provided, the final command prompt must explicitly command the renderer to COPY ONLY the render style, lighting, material quality, color grading, stylized skin shading, stylized facial/hand treatment, and broad adult 3D body-proportion language from it.',
+    '9. The final command prompt must explicitly state that the style image is NOT a pose reference, NOT an outfit reference, NOT a character reference, and must NOT affect character count, gender, camera framing, or composition.',
+    '10. The prompt must state that the renderer is FORBIDDEN from inventing extra characters, replacing the face, changing the hair, changing the outfit, improvising the composition, or blending the roles of the references.',
+    '11. If multiple character references are provided, map each final character into a distinct sample position. Do not merge them into one combined pose and do not default to standing shoulder-to-shoulder unless the sample says so.',
+    '12. Mention that the style image will be provided again to the renderer as the LAST direct visual reference, but only as a style/body-render guide and never as a pose/outfit/identity guide.',
+    '13. Explicitly forbid realistic human skin pores, realistic human facial anatomy, realistic photographic shading, and live-action body proportions if they conflict with the game-avatar look.',
     '',
     'Do not explain your reasoning. Output only the final command prompt.',
   );

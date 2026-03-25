@@ -1784,15 +1784,6 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
     }
   }
 
-  if (
-    summary.claimedForDispatch > 0 ||
-    summary.submitted > 0 ||
-    summary.requeued > 0 ||
-    summary.failed > 0
-  ) {
-    return summary;
-  }
-
   const { data: pollJobs, error: pollError } = await admin.rpc('claim_pollable_generated_jobs', {
     p_limit: POLL_CLAIM_LIMIT,
     p_lease_seconds: 60,

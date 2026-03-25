@@ -74,6 +74,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/queue-reconcile"
+  to = "/.netlify/functions/queue-reconcile"
+  status = 200
+
+[[redirects]]
   from = "/api/gallery-images"
   to = "/.netlify/functions/gallery-images"
   status = 200

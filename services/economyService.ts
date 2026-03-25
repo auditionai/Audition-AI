@@ -1764,19 +1764,13 @@ export const getAdminStats = async () => {
         .from('gift_codes')
         .select('id, code, reward, total_limit, used_count, max_per_user, is_active, gift_code_usages(count)');
 
-    let { data: txs, error: txError } = await supabase
+    const { data: txs, error: txError } = await supabase
         .from('payment_transactions')
-        .select('id, user_id, uid, package_id, amount, price, amount_vnd, vcoin_received, diamonds_received, coins_received, coins, diamonds, credits, status, created_at, code, payment_method, users(email, display_name, photo_url)')
+        .select('id, user_id, package_id, amount_vnd, vcoin_received, status, created_at, order_code, payment_method')
         .order('created_at', { ascending: false })
         .limit(ADMIN_STATS_TRANSACTION_LIMIT);
     if (txError) {
-        console.warn("Failed to join users on transactions, falling back to select *", txError);
-        const fallback = await supabase
-            .from('payment_transactions')
-            .select('id, user_id, uid, package_id, amount, price, amount_vnd, vcoin_received, diamonds_received, coins_received, coins, diamonds, credits, status, created_at, code, payment_method')
-            .order('created_at', { ascending: false })
-            .limit(ADMIN_STATS_TRANSACTION_LIMIT);
-        txs = fallback.data;
+        console.error('Error fetching payment transactions for Admin Stats:', txError);
     }
     
     // Try to fetch logs from both potential table names
@@ -1890,48 +1884,39 @@ export const getAdminStats = async () => {
     }));
     
     const transactions = txs?.map((t: any) => {
-         // Fallback for coins: Check DB columns -> Check Package Info -> Estimate from Amount
-         let coins = t.vcoin_received ? Number(t.vcoin_received) : (t.diamonds_received ? Number(t.diamonds_received) : (t.coins_received ? Number(t.coins_received) : (t.coins ? Number(t.coins) : (t.diamonds ? Number(t.diamonds) : (t.credits ? Number(t.credits) : 0)))));
-         
-         if (coins === 0) {
-             // Try to get from Package
-             if (t.package_id) {
-                 const pkg = pkgs?.find((p: any) => p.id === t.package_id);
-                 if (pkg) {
-                     coins = pkg.credits_amount || 0;
-                     if (pkg.bonus_credits) {
-                         coins += Math.floor(coins * pkg.bonus_credits / 100);
-                     }
+         let coins = Number(t.vcoin_received) || 0;
+
+         if (coins === 0 && t.package_id) {
+             const pkg = pkgs?.find((p: any) => p.id === t.package_id);
+             if (pkg) {
+                 coins = Number(pkg.credits_amount) || 0;
+                 if (pkg.bonus_credits) {
+                     coins += Math.floor(coins * Number(pkg.bonus_credits) / 100);
                  }
-             }
-             
-             // Last resort: Estimate from Amount (1000 VND = 1 Vcoin)
-             if (coins === 0 && t.amount) {
-                 coins = Math.floor(Number(t.amount) / 1000);
              }
          }
 
-         const txUserId = t.user_id || t.userId || t.uid;
-         let txUser = null;
-         if (t.users) {
-             txUser = Array.isArray(t.users) ? t.users[0] : t.users;
-         } else {
-             txUser = users?.find((u: any) => u.id === txUserId);
+         if (coins === 0 && t.amount_vnd) {
+             coins = Math.floor(Number(t.amount_vnd) / 1000);
          }
+
+         const txUserId = t.user_id || t.userId;
+         const txUser = users?.find((u: any) => u.id === txUserId);
          
          return {
              id: t.id,
              userId: txUserId,
-             userName: txUser?.display_name || txUser?.email?.split('@')[0] || t.user_name || t.userName,
-             userEmail: txUser?.email || t.user_email || t.userEmail,
-             userAvatar: txUser?.photo_url || t.user_avatar || t.userAvatar,
+             userName: txUser?.display_name || txUser?.email?.split('@')[0] || 'Unknown',
+             userEmail: txUser?.email || 'No Email',
+             userAvatar: txUser?.photo_url,
              packageId: t.package_id,
-             amount: t.amount ? Number(t.amount) : (t.price ? Number(t.price) : (t.amount_vnd ? Number(t.amount_vnd) : 0)),
+             amount: Number(t.amount_vnd) || 0,
              vcoin_received: coins,
              status: t.status,
              createdAt: t.created_at,
-             code: t.code,
-             paymentMethod: t.payment_method
+             code: t.order_code,
+             order_code: t.order_code,
+             paymentMethod: t.payment_method || 'payos'
          };
     }) || [];
 

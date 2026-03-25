@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { isIP } from 'node:net';
 import type { Handler } from '@netlify/functions';
 import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 
@@ -11,18 +12,83 @@ const headers = {
 
 const normalizeIp = (value?: string | null) => String(value || '').trim();
 
+const stripIpPort = (value: string) => {
+  const trimmed = normalizeIp(value);
+  if (!trimmed) return '';
+
+  const bracketedIpv6 = trimmed.match(/^\[([^\]]+)\](?::\d+)?$/);
+  if (bracketedIpv6?.[1]) {
+    return bracketedIpv6[1];
+  }
+
+  const ipv4WithPort = trimmed.match(/^(\d{1,3}(?:\.\d{1,3}){3})(?::\d+)?$/);
+  if (ipv4WithPort?.[1]) {
+    return ipv4WithPort[1];
+  }
+
+  return trimmed;
+};
+
+const isBlockedProxyLikeIp = (ip: string) => {
+  const normalized = stripIpPort(ip).toLowerCase();
+  if (!normalized) return true;
+
+  if (normalized === '::1' || normalized === '127.0.0.1' || normalized === 'localhost') {
+    return true;
+  }
+
+  if (normalized.startsWith('10.')) return true;
+  if (normalized.startsWith('192.168.')) return true;
+  if (normalized.startsWith('172.16.') || normalized.startsWith('172.17.') || normalized.startsWith('172.18.') || normalized.startsWith('172.19.')) return true;
+  if (normalized.startsWith('172.2') || normalized.startsWith('172.30.') || normalized.startsWith('172.31.')) return true;
+  if (normalized.startsWith('fc') || normalized.startsWith('fd')) return true;
+
+  // Cloudflare/edge-private ranges that showed up in live giftcode logs.
+  if (normalized.startsWith('172.68.') || normalized.startsWith('172.69.') || normalized.startsWith('172.70.') || normalized.startsWith('172.71.')) {
+    return true;
+  }
+  if (normalized.startsWith('162.158.')) {
+    return true;
+  }
+
+  return false;
+};
+
+const getFirstUsableIp = (raw?: string | null) => {
+  const parts = normalizeIp(raw)
+    .split(',')
+    .map((entry) => stripIpPort(entry))
+    .filter(Boolean);
+
+  for (const part of parts) {
+    if (isIP(part) && !isBlockedProxyLikeIp(part)) {
+      return part;
+    }
+  }
+
+  for (const part of parts) {
+    if (isIP(part)) {
+      return part;
+    }
+  }
+
+  return '';
+};
+
 const getClientIp = (event: Parameters<Handler>[0]) => {
-  const direct =
-    normalizeIp(event.headers['x-nf-client-connection-ip']) ||
-    normalizeIp(event.headers['client-ip']) ||
-    normalizeIp(event.headers['cf-connecting-ip']) ||
-    normalizeIp(event.headers['x-real-ip']);
+  const candidates = [
+    event.headers['x-forwarded-for'],
+    event.headers['x-real-ip'],
+    event.headers['cf-connecting-ip'],
+    event.headers['x-nf-client-connection-ip'],
+    event.headers['client-ip'],
+  ];
 
-  if (direct) return direct;
-
-  const forwardedFor = normalizeIp(event.headers['x-forwarded-for']);
-  if (forwardedFor) {
-    return forwardedFor.split(',')[0]?.trim() || '';
+  for (const candidate of candidates) {
+    const ip = getFirstUsableIp(candidate);
+    if (ip) {
+      return ip;
+    }
   }
 
   return '';
@@ -83,6 +149,30 @@ export const handler: Handler = async (event) => {
     const ipHash = ipAddress ? hashIp(ipAddress) : '';
 
     const admin = getServiceRoleClient();
+    if (ipHash) {
+      const { data: existingIpUsage, error: existingIpUsageError } = await admin
+        .from('gift_code_usages')
+        .select('id')
+        .eq('ip_hash', ipHash)
+        .limit(1);
+
+      if (existingIpUsageError) {
+        throw existingIpUsageError;
+      }
+
+      if ((existingIpUsage?.length || 0) > 0) {
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({
+            success: false,
+            reward: 0,
+            message: mapGiftcodeError('GIFT_CODE_ALREADY_USED_BY_IP'),
+          }),
+        };
+      }
+    }
+
     const { data, error } = await admin.rpc('redeem_giftcode', {
       p_user_id: user.id,
       p_code: code,

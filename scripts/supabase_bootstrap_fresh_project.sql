@@ -296,10 +296,6 @@ alter table public.gift_code_usages
 create unique index if not exists uq_gift_code_usages_user_code
   on public.gift_code_usages(user_id, gift_code_id);
 
-create unique index if not exists uq_gift_code_usages_code_ip_hash
-  on public.gift_code_usages(gift_code_id, ip_hash)
-  where ip_hash is not null;
-
 create index if not exists idx_gift_code_usages_code_created
   on public.gift_code_usages(gift_code_id, created_at desc);
 
@@ -1012,6 +1008,8 @@ begin
     raise exception 'IP_REQUIRED';
   end if;
 
+  perform pg_advisory_xact_lock(hashtext(v_ip_hash));
+
   select *
   into v_code
   from public.gift_codes gc
@@ -1043,8 +1041,7 @@ begin
   select exists(
     select 1
     from public.gift_code_usages gcu
-    where gcu.gift_code_id = v_code.id
-      and gcu.ip_hash = v_ip_hash
+    where gcu.ip_hash = v_ip_hash
   )
   into v_ip_used;
 
@@ -1096,8 +1093,7 @@ exception
     if exists (
       select 1
       from public.gift_code_usages gcu
-      where gcu.gift_code_id = coalesce(v_code.id, '00000000-0000-0000-0000-000000000000'::uuid)
-        and gcu.ip_hash = v_ip_hash
+      where gcu.ip_hash = v_ip_hash
     ) then
       raise exception 'GIFT_CODE_ALREADY_USED_BY_IP';
     end if;

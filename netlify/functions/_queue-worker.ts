@@ -62,7 +62,9 @@ const WORKER_TICK_BUDGET_MS = 8_000;
 const MAX_QUEUE_LOG_ENTRIES = 80;
 const ORPHAN_CLAIM_GRACE_MS = 30_000;
 const LEASE_HEARTBEAT_INTERVAL_MS = 30_000;
-const DISPATCH_LEASE_SECONDS = 120;
+const DISPATCH_LEASE_SECONDS = 300;
+const STALE_RECOVERY_SCAN_LIMIT = 50;
+const STALE_RECOVERY_MIN_AGE_MS = 45_000;
 
 const isTransientError = (message: string) => {
   const normalized = message.toLowerCase();
@@ -351,6 +353,24 @@ const getPreparationTimeoutMs = (job: Pick<QueueJobRow, 'tool_id'>, payload?: Qu
   }
 
   return SINGLE_AND_COUPLE_PREPARE_TIMEOUT_MS;
+};
+
+const getPreparationLeaseSeconds = (job: Pick<QueueJobRow, 'tool_id' | 'queue_kind'>, payload?: QueueJobRow['queue_payload']) => {
+  if (job.queue_kind === 'motion_generate' || job.queue_kind === 'video_generate') {
+    return 300;
+  }
+
+  if (isQueueRecipePayload(payload) && payload.recipeType === 'image_generate_recipe_v1') {
+    const characterCount = getImageRecipeCharacterCount(job, payload);
+    if (characterCount && characterCount >= 4) {
+      return 480;
+    }
+    if (characterCount === 3) {
+      return 360;
+    }
+  }
+
+  return DISPATCH_LEASE_SECONDS;
 };
 
 const getPreparationTimeoutUserMessage = (job: Pick<QueueJobRow, 'tool_id'>, payload?: QueueJobRow['queue_payload']) => {
@@ -909,11 +929,15 @@ const handlePollFailure = async (job: QueueJobRow, errorMessage: string) => {
 const recoverStalePreparingJobs = async () => {
   const admin = getServiceRoleClient();
   const nowIso = new Date().toISOString();
+  const staleBeforeIso = new Date(Date.now() - STALE_RECOVERY_MIN_AGE_MS).toISOString();
   const { data, error } = await admin
     .from('generated_images')
-    .select('id, user_id, asset_type, queue_kind, queue_payload, prompt, tool_id, tool_name, model_used, cost_vcoin, processing_started_at, created_at, lease_expires_at, status')
+    .select('id, user_id, asset_type, queue_kind, queue_payload, prompt, tool_id, tool_name, model_used, cost_vcoin, processing_started_at, created_at, updated_at, lease_expires_at, status')
     .in('status', ['processing', 'queued'])
-    .is('job_id', null);
+    .is('job_id', null)
+    .lt('updated_at', staleBeforeIso)
+    .order('updated_at', { ascending: true })
+    .limit(STALE_RECOVERY_SCAN_LIMIT);
 
   if (error) {
     throw error;
@@ -1079,6 +1103,7 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
 
       const currentPayload = job.queue_payload || {};
       const preparationTimeoutMs = getPreparationTimeoutMs(job, currentPayload);
+      const preparationLeaseSeconds = getPreparationLeaseSeconds(job, currentPayload);
       const validationPayload = isQueueRecipePayload(currentPayload)
         ? getRecipeValidationPayload(currentPayload)
         : stripInternalQueueMeta(currentPayload);
@@ -1137,7 +1162,11 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
       if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'image_generate_recipe_v1') {
         await updatePreProviderStage(job.id, 20);
         const stagedResult = await withTimeout(
-          prepareImageRecipeInStages(job, (job.queue_payload || currentPayload) as ImageGenerateRecipePayload),
+          withLeaseHeartbeat(
+            job.id,
+            prepareImageRecipeInStages(job, (job.queue_payload || currentPayload) as ImageGenerateRecipePayload),
+            preparationLeaseSeconds,
+          ),
           preparationTimeoutMs,
           'Queue preparation timed out before dispatching to provider.',
         );
@@ -1174,7 +1203,11 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
           );
         }
         const providerPayload = await withTimeout(
-          prepareProviderPayloadFromQueueRecipe((job.queue_payload || currentPayload) as typeof currentPayload),
+          withLeaseHeartbeat(
+            job.id,
+            prepareProviderPayloadFromQueueRecipe((job.queue_payload || currentPayload) as typeof currentPayload),
+            preparationLeaseSeconds,
+          ),
           preparationTimeoutMs,
           'Queue preparation timed out before dispatching to provider.',
         );

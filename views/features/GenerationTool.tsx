@@ -79,8 +79,8 @@ const tryStageGenerationInput = async (source: string, folder: string) => {
         const optimizedSource = await optimizePayload(source, 2048);
         return await uploadFileToR2(optimizedSource, folder);
     } catch (error) {
-        console.warn('[GenerationTool] Failed to stage generation input, falling back to optimized inline payload.', error);
-        return await optimizePayload(source, 1600);
+        console.warn('[GenerationTool] Failed to stage generation input to storage.', error);
+        throw new Error('Không thể tải ảnh tham chiếu lên vùng đệm. Vui lòng thử lại.');
     }
 };
 

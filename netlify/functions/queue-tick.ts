@@ -1,26 +1,11 @@
 import type { Handler } from '@netlify/functions';
-import { runQueueWorker } from './_queue-worker';
+import { triggerBackgroundQueueWorker } from './_queue-launcher';
 
 const headers = {
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
-
-const withTimeout = async <T>(task: Promise<T>, timeoutMs: number): Promise<T> => {
-  let timeoutId: NodeJS.Timeout | null = null;
-
-  try {
-    return await Promise.race([
-      task,
-      new Promise<T>((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error('Queue tick exceeded safe execution window')), timeoutMs);
-      }),
-    ]);
-  } finally {
-    if (timeoutId) clearTimeout(timeoutId);
-  }
 };
 
 export const handler: Handler = async (event) => {
@@ -41,26 +26,14 @@ export const handler: Handler = async (event) => {
   }
 
   try {
-    const summary = await withTimeout(runQueueWorker(), 9_000);
+    await triggerBackgroundQueueWorker(event.rawUrl);
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify({ success: true, accepted: true, summary }),
+      body: JSON.stringify({ success: true, accepted: true, background: true }),
     };
   } catch (error: any) {
     const message = error?.message || 'Internal Server Error';
-    if (message === 'Queue tick exceeded safe execution window') {
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify({
-          success: true,
-          accepted: true,
-          timedOut: true,
-          message: 'Queue worker is still progressing in the background.',
-        }),
-      };
-    }
     if (
       message.includes('Missing SUPABASE_SERVICE_ROLE_KEY') ||
       message.includes('Missing SUPABASE_URL')

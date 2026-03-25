@@ -30,7 +30,7 @@ import {
   type TstRuntimeModel,
 } from '../../services/tstCatalog';
 import type { ImageEditRecipePayload } from '../../shared/queueRecipes';
-import { calculateAspectRatioString, loadImageWithTimeout, optimizePayload } from '../../utils/imageProcessor';
+import { calculateAspectRatioString, loadImageWithTimeout } from '../../utils/imageProcessor';
 
 interface EditingToolProps {
   feature: Feature;
@@ -112,8 +112,8 @@ const tryStageInputToStorage = async (source: string, folder: string) => {
   try {
     return await uploadFileToR2(source, folder);
   } catch (error) {
-    console.warn('[EditingTool] Failed to stage source image to storage, falling back to inline payload.', error);
-    return null;
+    console.warn('[EditingTool] Failed to stage source image to storage.', error);
+    throw new Error('Không thể tải ảnh gốc lên vùng đệm. Vui lòng thử lại.');
   }
 };
 
@@ -439,9 +439,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
 
     void (async () => {
       try {
-        const stagedSourceImage =
-          (await tryStageInputToStorage(uploadedImage, `inputs/editing/${feature.id}`)) ||
-          (await optimizePayload(uploadedImage, 1536));
+        const stagedSourceImage = await tryStageInputToStorage(uploadedImage, `inputs/editing/${feature.id}`);
 
         let aspectRatio = '1:1';
         try {

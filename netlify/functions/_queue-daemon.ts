@@ -15,9 +15,9 @@ type QueueDaemonOptions = {
   idleDelayMs?: number;
 };
 
-const DEFAULT_MAX_RUNTIME_MS = 20_000;
+const DEFAULT_MAX_RUNTIME_MS = 60_000;
 const DEFAULT_IDLE_ITERATIONS_TO_STOP = 2;
-const DEFAULT_ACTIVE_DELAY_MS = 150;
+const DEFAULT_ACTIVE_DELAY_MS = 50;
 const DEFAULT_IDLE_DELAY_MS = 1_000;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

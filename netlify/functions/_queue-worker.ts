@@ -1147,7 +1147,7 @@ const prepareImageRecipeInStages = async (job: QueueJobRow, recipePayload: Image
       hasMoreUploads ? Math.min(35, 20 + Math.round((nextCursor / renderSources.length) * 15)) : 40,
       hasMoreUploads ? 'info' : 'success',
     ) as ImageGenerateRecipePayload;
-    return { type: 'requeue' as const };
+    return prepareImageRecipeInStages(job, recipePayload);
   }
 
   if (currentStage === 'synthesizing_prompt') {
@@ -1175,7 +1175,7 @@ const prepareImageRecipeInStages = async (job: QueueJobRow, recipePayload: Image
       45,
       'success',
     ) as ImageGenerateRecipePayload;
-    return { type: 'requeue' as const };
+    return prepareImageRecipeInStages(job, recipePayload);
   }
 
   recipePayload = await persistQueueLog(

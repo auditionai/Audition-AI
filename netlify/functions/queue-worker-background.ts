@@ -68,6 +68,8 @@ export const handler: Handler = async (event) => {
 
     const summary = await runQueueDaemon();
     followUpLaunchNeeded =
+      Number(summary.claimedForDispatch || 0) > 0 ||
+      Number(summary.submitted || 0) > 0 ||
       Number(summary.requeued || 0) > 0 ||
       Number(summary.completed || 0) > 0 ||
       Number(summary.failed || 0) > 0;
@@ -85,7 +87,7 @@ export const handler: Handler = async (event) => {
     await releaseQueueWorkerLock(lockOwner);
     if (followUpLaunchNeeded) {
       try {
-        await triggerBackgroundQueueWorker(event.rawUrl, 1_500);
+        await triggerBackgroundQueueWorker(event.rawUrl, 1_000);
       } catch (error) {
         console.warn('[queue-worker-background] Failed to launch follow-up worker:', error);
       }

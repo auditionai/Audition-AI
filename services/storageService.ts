@@ -1,7 +1,7 @@
 
 import { GeneratedImage } from '../types';
 import type { QueueProgressLogEntry } from '../shared/queueRecipes';
-import { supabase } from './supabaseClient';
+import { getSupabaseAuthHeader, getSupabaseUser, supabase } from './supabaseClient';
 import { getUserProfile } from './economyService';
 import { S3Client, PutObjectCommand, DeleteObjectCommand, DeleteObjectsCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 
@@ -115,21 +115,7 @@ const saveLocalImage = async (image: GeneratedImage): Promise<void> => {
 };
 
 const getSessionAuthHeader = async () => {
-  if (!supabase) {
-    throw new Error('No Database');
-  }
-
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session?.access_token) {
-    throw new Error('Unauthorized');
-  }
-
-  return {
-    Authorization: `Bearer ${session.access_token}`,
-  };
+  return getSupabaseAuthHeader();
 };
 
 const replaceLocalImagesForUser = async (userId: string, images: GeneratedImage[]): Promise<void> => {
@@ -754,7 +740,7 @@ export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
   // 1. SUPABASE (Fetches metadata, URL points to R2 or Supabase Storage)
   if (supabase) {
     try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const user = await getSupabaseUser();
         if(user) {
             const localImagesForUser = localImages.filter((image) => image.userId === user.id);
             const authHeader = await getSessionAuthHeader();

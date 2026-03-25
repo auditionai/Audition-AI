@@ -1,7 +1,7 @@
 ﻿
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { supabase } from '../services/supabaseClient';
+import { getSupabaseUser, supabase } from '../services/supabaseClient';
 import { 
     getAdminStats, 
     getApiKeysList, 
@@ -502,9 +502,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
     }
     // Get current user email for recovery instructions
     if (supabase) {
-      supabase.auth.getUser().then((response: any) => {
-          const data = response.data;
-          if (data?.user?.email) setCurrentUserEmail(data.user.email);
+      getSupabaseUser().then((user: any) => {
+          if (user?.email) setCurrentUserEmail(user.email);
       });
     }
   }, [isAdmin]);

@@ -1,4 +1,4 @@
-import { supabase } from './supabaseClient';
+import { getSupabaseAuthHeader, getSupabaseUser, supabase } from './supabaseClient';
 import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, HistoryItem, VcoinLog } from '../types';
 import {
   creditsToVcoin,
@@ -70,26 +70,12 @@ export const invalidateTstServerAvailabilityCache = () => {
 };
 
 const getCurrentSessionUser = async () => {
-    if (!supabase) return null;
-    const {
-        data: { session },
-    } = await supabase.auth.getSession();
-    return session?.user ?? null;
+    return getSupabaseUser();
 };
 
 const getSessionAuthHeader = async () => {
     if (!supabase) throw new Error("No Database");
-    const {
-        data: { session },
-    } = await supabase.auth.getSession();
-
-    if (!session?.access_token) {
-        throw new Error("Unauthorized");
-    }
-
-    return {
-        Authorization: `Bearer ${session.access_token}`,
-    };
+    return getSupabaseAuthHeader();
 };
 
 const normalizeHistoryDescription = (entry: any): string => {

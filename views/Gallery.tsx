@@ -5,7 +5,7 @@ import type { QueueProgressLogEntry } from '../shared/queueRecipes';
 import { getAllImagesFromStorage, deleteImageFromStorage, cleanupExpiredImages, getHistoryRetentionDays, publishImageToShowcase } from '../services/storageService';
 import { getUnifiedHistory } from '../services/economyService';
 import { useConcurrency } from '../services/concurrencyService';
-import { supabase } from '../services/supabaseClient';
+import { getSupabaseUser, supabase } from '../services/supabaseClient';
 import { downloadAssetToBrowser } from '../services/downloadService';
 import { Icons } from '../components/Icons';
 import { useNotification } from '../components/NotificationSystem';
@@ -70,7 +70,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
       let cancelled = false;
 
       const subscribe = async () => {
-          const { data: { user } } = await supabase.auth.getUser();
+          const user = await getSupabaseUser();
           if (!user || cancelled) return;
 
           channel = supabase

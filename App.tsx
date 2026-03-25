@@ -14,7 +14,7 @@ import { TopUp } from './views/TopUp';
 import { PayOSGateway } from './views/PayOSGateway'; 
 import { Language, Theme, ViewId, Feature } from './types';
 import { APP_CONFIG } from './constants';
-import { supabase } from './services/supabaseClient';
+import { getSupabaseSession, getSupabaseUser, supabase } from './services/supabaseClient';
 import { logVisit, updateLastActive, getMaintenanceMode } from './services/economyService';
 import { NotificationProvider, useNotification } from './components/NotificationSystem';
 import { Icons } from './components/Icons';
@@ -79,7 +79,7 @@ function AppContent() {
         fetchMaintenance();
         const maintenanceInterval = setInterval(fetchMaintenance, 60000); // Check every minute
 
-        supabase.auth.getSession().then(({ data: { session } }: any) => {
+        getSupabaseSession().then((session: any) => {
             if (session) {
                 setIsAuthenticated(true);
                 checkAdminRole(session.user.id);
@@ -224,7 +224,7 @@ function AppContent() {
       if (!supabase) return;
       
       try {
-          const { data: { user } } = await supabase.auth.getUser();
+          const user = await getSupabaseUser();
           const { data, error } = await supabase
             .from('users')
             .select('is_admin')

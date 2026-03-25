@@ -783,7 +783,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
     return;
 
     try {
-        addLog('Đang kiỒm tra máy chủ phân tích Google...');
+        addLog('Đang kiểm tra máy chủ phân tích Google...');
         const isKeyValid = await testApiKey(aiModel, 1);
         if (isKeyValid) {
             addLog('Xác thực máy chủ phân tích thành công. Bắt đầu quá trình tạo ảnh...');
@@ -1143,7 +1143,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                     {renderGuideContent()}
                     <div className="mt-6 pt-4 border-t border-white/10 text-center">
                         <button onClick={() => setGuideTopic(null)} className="px-6 py-2 bg-white/10 hover:bg-white/20 rounded-full text-xs font-bold text-white transition-colors">
-                            Đã HiỒu
+                            Đã Hiểu
                         </button>
                     </div>
                 </div>

@@ -1591,33 +1591,32 @@ export const deleteGiftcode = async (id: string) => {
 
 export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean, reward: number, message: string}> => {
     if (!supabase) return { success: false, reward: 0, message: "No Database" };
-    const user = await getUserProfile();
     const cleanCode = codeStr.trim().toUpperCase();
+    if (!cleanCode) return { success: false, reward: 0, message: "Vui lòng nhập giftcode." };
 
     try {
-        // 1. Get Code
-        const { data: code, error } = await supabase.from('gift_codes').select('*').eq('code', cleanCode).maybeSingle();
-        if (error || !code || !code.is_active) throw new Error("Mã không hợp lệ hoặc đã hết hạn");
-
-        // 2. Check Limits
-        if (code.used_count >= code.total_limit) throw new Error("Mã đã hết lượt sử dụng");
-
-        // 3. Check User Usage
-        const { data: usage } = await supabase.from('gift_code_usages').select('*').eq('gift_code_id', code.id).eq('user_id', user.id);
-        if (usage && usage.length >= code.max_per_user) throw new Error("Bạn đã nhập mã này rồi");
-
-        // 4. Record Usage
-        const { error: useError } = await supabase.from('gift_code_usages').insert({
-            user_id: user.id,
-            gift_code_id: code.id
+        const authHeader = await getSessionAuthHeader();
+        const response = await fetch('/api/redeem-giftcode', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...authHeader,
+            },
+            body: JSON.stringify({ code: cleanCode }),
         });
-        if (useError) throw useError;
 
-        // 5. Increment Count & Add Balance
-        await supabase.rpc('increment_giftcode_usage', { code_id: code.id });
-        await updateUserBalance(code.reward || 0, `Giftcode: ${cleanCode}`, 'giftcode');
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || !payload?.success) {
+            return {
+                success: false,
+                reward: 0,
+                message: payload?.message || 'Không thể sử dụng giftcode.',
+            };
+        }
 
-        return { success: true, reward: code.reward, message: 'Success' };
+        invalidateUserProfileCache();
+        window.dispatchEvent(new Event('balance_updated'));
+        return { success: true, reward: Number(payload?.reward || 0), message: 'Success' };
     } catch (e: any) {
         return { success: false, reward: 0, message: e.message };
     }
@@ -1627,7 +1626,7 @@ export const getGiftcodeUsages = async (codeId: string) => {
     if (!supabase) return [];
     const { data, error } = await supabase
         .from('gift_code_usages')
-        .select('user_id, created_at, users(display_name, email, photo_url)')
+        .select('user_id, created_at, ip_address, users(display_name, email, photo_url)')
         .eq('gift_code_id', codeId)
         .order('created_at', { ascending: false });
         
@@ -1638,6 +1637,7 @@ export const getGiftcodeUsages = async (codeId: string) => {
         return {
             userId: u.user_id,
             usedAt: u.created_at,
+            ipAddress: u.ip_address || null,
             userName: userObj?.display_name || userObj?.email?.split('@')[0] || 'Unknown',
             userEmail: userObj?.email || 'No Email',
             userAvatar: userObj?.photo_url || 'https://picsum.photos/50/50'

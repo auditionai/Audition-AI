@@ -78,6 +78,7 @@ where r.specific_schema = 'public'
   and r.routine_name in (
     'check_is_admin',
     'increment_giftcode_usage',
+    'redeem_giftcode',
     'apply_balance_transaction',
     'secure_update_balance',
     'refund_generated_job',
@@ -87,7 +88,9 @@ where r.specific_schema = 'public'
     'server_enqueue_generated_job',
     'claim_dispatchable_generated_jobs',
     'claim_pollable_generated_jobs',
-    'get_generation_queue_stats'
+    'get_generation_queue_stats',
+    'try_acquire_queue_worker_lock',
+    'release_queue_worker_lock'
   )
 order by r.routine_name, p.grantee;
 

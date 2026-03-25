@@ -3111,6 +3111,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   <tr>
                                       <th className="px-6 py-3">Người dùng</th>
                                       <th className="px-6 py-3">Email</th>
+                                      <th className="px-6 py-3">IP</th>
                                       <th className="px-6 py-3 text-right">Thời gian</th>
                                   </tr>
                               </thead>
@@ -3122,6 +3123,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               <span className="font-bold text-white">{u.userName}</span>
                                           </td>
                                           <td className="px-6 py-3">{u.userEmail}</td>
+                                          <td className="px-6 py-3 font-mono text-xs">{u.ipAddress || 'Ẩn / cũ'}</td>
                                           <td className="px-6 py-3 text-right font-mono text-xs">{new Date(u.usedAt).toLocaleString()}</td>
                                       </tr>
                                   ))}

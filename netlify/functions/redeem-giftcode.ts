@@ -54,44 +54,64 @@ const isBlockedProxyLikeIp = (ip: string) => {
   return false;
 };
 
-const getFirstUsableIp = (raw?: string | null) => {
-  const parts = normalizeIp(raw)
+const getIpsFromHeader = (raw?: string | null) =>
+  normalizeIp(raw)
     .split(',')
     .map((entry) => stripIpPort(entry))
-    .filter(Boolean);
+    .filter((entry) => Boolean(entry) && isIP(entry));
 
-  for (const part of parts) {
-    if (isIP(part) && !isBlockedProxyLikeIp(part)) {
-      return part;
-    }
+const normalizeIpv6Network = (ip: string) => {
+  const [head] = ip.split('%', 2);
+  const source = head.toLowerCase();
+  const hasCompression = source.includes('::');
+  const [leftRaw, rightRaw = ''] = source.split('::', 2);
+  const left = leftRaw ? leftRaw.split(':').filter(Boolean) : [];
+  const right = hasCompression ? (rightRaw ? rightRaw.split(':').filter(Boolean) : []) : [];
+  const missing = Math.max(0, 8 - (left.length + right.length));
+  const full = hasCompression
+    ? [...left, ...Array.from({ length: missing }, () => '0'), ...right]
+    : source.split(':').filter(Boolean);
+
+  if (full.length !== 8) {
+    return source;
   }
 
-  for (const part of parts) {
-    if (isIP(part)) {
-      return part;
-    }
-  }
+  const normalized = full.map((segment) => segment.padStart(4, '0'));
+  return `${normalized.slice(0, 4).join(':')}::/64`;
+};
 
-  return '';
+const toNetworkKey = (ip: string) => {
+  const family = isIP(ip);
+  if (family === 6) {
+    return `ipv6:${normalizeIpv6Network(ip)}`;
+  }
+  if (family === 4) {
+    return `ipv4:${ip}`;
+  }
+  return ip;
 };
 
 const getClientIp = (event: Parameters<Handler>[0]) => {
   const candidates = [
-    event.headers['x-forwarded-for'],
-    event.headers['x-real-ip'],
     event.headers['cf-connecting-ip'],
+    event.headers['x-real-ip'],
+    event.headers['x-forwarded-for'],
     event.headers['x-nf-client-connection-ip'],
     event.headers['client-ip'],
   ];
 
+  const fallbackIps: string[] = [];
   for (const candidate of candidates) {
-    const ip = getFirstUsableIp(candidate);
-    if (ip) {
-      return ip;
+    const ips = getIpsFromHeader(candidate);
+    for (const ip of ips) {
+      if (!isBlockedProxyLikeIp(ip)) {
+        return ip;
+      }
+      fallbackIps.push(ip);
     }
   }
 
-  return '';
+  return fallbackIps[0] || '';
 };
 
 const hashIp = (ip: string) => createHash('sha256').update(ip).digest('hex');
@@ -150,7 +170,8 @@ export const handler: Handler = async (event) => {
     const body = JSON.parse(event.body || '{}');
     const code = String(body?.code || '').trim().toUpperCase();
     const ipAddress = getClientIp(event);
-    const ipHash = ipAddress ? hashIp(ipAddress) : '';
+    const ipNetworkKey = ipAddress ? toNetworkKey(ipAddress) : '';
+    const ipHash = ipNetworkKey ? hashIp(ipNetworkKey) : '';
 
     const admin = getServiceRoleClient();
     if (ipHash) {
@@ -199,16 +220,21 @@ export const handler: Handler = async (event) => {
       if (campaignGiftCodeIds.length > 0) {
         const { data: existingIpUsage, error: existingIpUsageError } = await admin
           .from('gift_code_usages')
-          .select('id')
-          .eq('ip_hash', ipHash)
+          .select('id, ip_address, ip_hash')
           .in('gift_code_id', campaignGiftCodeIds)
-          .limit(1);
+          .limit(200);
 
         if (existingIpUsageError) {
           throw existingIpUsageError;
         }
 
-        if ((existingIpUsage?.length || 0) > 0) {
+        const hasMatchingCampaignIp = (existingIpUsage || []).some((row: any) => {
+          const existingHash = String(row?.ip_hash || '').trim();
+          const existingNetworkKey = row?.ip_address ? toNetworkKey(String(row.ip_address)) : '';
+          return existingHash === ipHash || (existingNetworkKey && existingNetworkKey === ipNetworkKey);
+        });
+
+        if (hasMatchingCampaignIp) {
           return {
             statusCode: 400,
             headers,

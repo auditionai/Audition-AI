@@ -86,7 +86,7 @@ const buildStrictImageDirectorInstruction = (
   }
 
   if (hasStyle) {
-    sections.push(`- Image ${imageIndex}: STYLE reference. COPY EXACTLY the rendering quality, artistic material, lighting behavior, color grading, atmosphere, stylized skin shading, stylized hand treatment, stylized facial planes, and visual finish from this image. DO NOT steal subject identity from it.`);
+    sections.push(`- Image ${imageIndex}: STYLE reference. This image WILL be sent again to the renderer as the final direct style reference. It is allowed to control only render language: rendering quality, lighting behavior, material response, color grading, stylized skin shading, broad adult body proportions, stylized facial planes, stylized hand structure, and visual finish. DO NOT copy pose, clothing, hairstyle, accessories, face, gender presentation, number of characters, character identity, or composition from it.`);
   }
 
   sections.push(
@@ -97,11 +97,12 @@ const buildStrictImageDirectorInstruction = (
     '3. The final command prompt must explicitly state that the subject must remain a stylized 3D game character / MMO avatar and must NOT become photorealistic, semi-realistic, or humanized.',
     '4. If a sample image is provided, the final command prompt must explicitly command the renderer to COPY the exact pose, framing, camera angle, and background from it, while forbidding any borrowing of real-human realism or identity from it.',
     '5. If the sample image contains multiple people, the final command prompt must explicitly map the final characters into those exact sample positions and preserve the exact left-to-right arrangement, spacing, overlap, body lean, hand placement, leg placement, and camera perspective. The renderer must NOT collapse them into a straight lineup unless the sample itself is a straight lineup.',
-    '6. If a style image is provided, the final command prompt must explicitly command the renderer to COPY the exact render style, lighting, material quality, color grading, stylized skin shading, and stylized facial/hand treatment from it.',
-    '7. The prompt must state that the renderer is FORBIDDEN from inventing extra characters, replacing the face, changing the hair, changing the outfit, improvising the composition, or blending the roles of the references.',
-    '8. If multiple character references are provided, map each final character into a distinct sample position. Do not merge them into one combined pose and do not default to standing shoulder-to-shoulder unless the sample says so.',
-    '9. Mention that the reference images will be provided again to the renderer in the same order.',
-    '10. Explicitly forbid realistic human skin pores, realistic human facial anatomy, realistic photographic shading, and live-action body proportions if they conflict with the game-avatar look.',
+    '6. If a style image is provided, the final command prompt must explicitly command the renderer to COPY ONLY the render style, lighting, material quality, color grading, stylized skin shading, stylized facial/hand treatment, and broad adult 3D body-proportion language from it.',
+    '7. The final command prompt must explicitly state that the style image is NOT a pose reference, NOT an outfit reference, NOT a character reference, and must NOT affect character count, gender, camera framing, or composition.',
+    '8. The prompt must state that the renderer is FORBIDDEN from inventing extra characters, replacing the face, changing the hair, changing the outfit, improvising the composition, or blending the roles of the references.',
+    '9. If multiple character references are provided, map each final character into a distinct sample position. Do not merge them into one combined pose and do not default to standing shoulder-to-shoulder unless the sample says so.',
+    '10. Mention that the style image will be provided again to the renderer as the LAST direct visual reference, but only as a style/body-render guide and never as a pose/outfit/identity guide.',
+    '11. Explicitly forbid realistic human skin pores, realistic human facial anatomy, realistic photographic shading, and live-action body proportions if they conflict with the game-avatar look.',
     '',
     'Do not explain your reasoning. Output only the final command prompt.',
   );

@@ -125,12 +125,28 @@ const isRecoverablePromptSynthesisError = (error: unknown) => {
 const buildFallbackSynthesizedPrompt = (payload: ImageGenerateRecipePayload) => {
   const basePrompt = payload.prompt?.trim() || '';
   const stylePrompt = payload.stylePrompt?.trim() || '';
+  const fallbackRoleLock = [
+    'ROLE LOCK:',
+    '1. Character reference images define identity only: face, hair, body structure, skin tone, outfit, shoes, accessories, and gender.',
+    '2. Sample image defines pose, framing, camera angle, spacing, and background only.',
+    '3. Style image is a direct style reference for the renderer, but it only controls render quality, lighting, shader response, material quality, color grading, and broad adult 3D body-proportion language.',
+    '4. Do not copy pose, outfit, hairstyle, accessories, face, gender presentation, number of characters, or composition from the style image.',
+    '5. Keep the final result as a stylized Audition-like 3D game character, not photorealistic, not childlike, and not chibi unless the user explicitly asks for that.',
+  ].join('\n');
 
   if (basePrompt && stylePrompt) {
-    return `${basePrompt}\nStyle reference keywords: ${stylePrompt}`;
+    return `${fallbackRoleLock}\n\nUSER REQUEST:\n${basePrompt}\n\nSTYLE KEYWORDS:\n${stylePrompt}`;
   }
 
-  return basePrompt || stylePrompt || 'Generate the image using the provided references exactly.';
+  if (basePrompt) {
+    return `${fallbackRoleLock}\n\nUSER REQUEST:\n${basePrompt}`;
+  }
+
+  if (stylePrompt) {
+    return `${fallbackRoleLock}\n\nSTYLE KEYWORDS:\n${stylePrompt}`;
+  }
+
+  return `${fallbackRoleLock}\n\nGenerate the image using the provided references exactly.`;
 };
 
 export const synthesizeImageGeneratePrompt = async (payload: ImageGenerateRecipePayload) => {

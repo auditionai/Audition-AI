@@ -79,6 +79,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/force-rescue-failed-jobs"
+  to = "/.netlify/functions/force-rescue-failed-jobs"
+  status = 200
+
+[[redirects]]
   from = "/api/gallery-images"
   to = "/.netlify/functions/gallery-images"
   status = 200

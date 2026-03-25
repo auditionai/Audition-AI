@@ -323,8 +323,17 @@ const buildImageReferenceOrderDirective = (
   payload: Pick<ImageGenerateRecipePayload, 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
 ) => {
   const entries = getImageRenderReferenceEntries(payload);
+  const hasSample = Boolean(payload.sampleImage);
   if (entries.length === 0) {
-    return '';
+    return hasSample
+      ? ''
+      : [
+          'COMPOSITION PRIORITY:',
+          '- No SAMPLE IMAGE is provided.',
+          '- Use the PRIMARY COMMAND PROMPT as the highest-priority source for pose, camera angle, framing, action, scene layout, and background details.',
+          '- CHARACTER REFERENCES still control identity only.',
+          '- STYLE IMAGE may affect render quality only and must never override prompt-driven composition.',
+        ].join('\n');
   }
 
   const roleLines = entries.map((entry, index) => {
@@ -345,13 +354,20 @@ const buildImageReferenceOrderDirective = (
   return [
     'DIRECT VISUAL REFERENCE ORDER (the renderer receives these reference images in this exact order):',
     ...roleLines,
+    hasSample
+      ? '- COMPOSITION PRIORITY: SAMPLE IMAGE first, then PRIMARY COMMAND PROMPT for secondary scene details that do not break the sample composition.'
+      : '- COMPOSITION PRIORITY: No SAMPLE IMAGE is present, so PRIMARY COMMAND PROMPT is the main source for pose, framing, action, scene layout, and background.',
     'HARD CONFLICT RULES:',
     `- The final image must contain exactly ${Math.max(1, Math.floor(Number(payload.characterCount || getImageCharacterReferenceGroups(payload).length || 1)))} character(s). Never add or remove subjects.`,
     '- Every uploaded CHARACTER slot is mandatory. Each slot must appear exactly once in the final image as its own subject.',
     '- If multiple CHARACTER REFERENCE images share the same CHARACTER number, they all belong to the same final subject and must be merged into one identity.',
     '- Never duplicate one uploaded character to fill another slot. Never omit a slot and replace it with a sample person, style person, or invented/blended subject.',
-    '- If CHARACTER REFERENCES conflict with the SAMPLE IMAGE, keep identity/outfit from CHARACTER REFERENCES but re-pose the final character to match the SAMPLE IMAGE exactly.',
-    '- The final image must never be a near-unchanged copy of a standing CHARACTER REFERENCE unless the SAMPLE IMAGE itself is also a standing front-view pose.',
+    hasSample
+      ? '- If CHARACTER REFERENCES conflict with the SAMPLE IMAGE, keep identity/outfit from CHARACTER REFERENCES but re-pose the final character to match the SAMPLE IMAGE exactly.'
+      : '- Without a SAMPLE IMAGE, never ignore the PRIMARY COMMAND PROMPT and fall back to a default standing pose or empty black background unless the prompt explicitly asks for that.',
+    hasSample
+      ? '- The final image must never be a near-unchanged copy of a standing CHARACTER REFERENCE unless the SAMPLE IMAGE itself is also a standing front-view pose.'
+      : '- The final image must never be a near-unchanged copy of a standing CHARACTER REFERENCE when the PRIMARY COMMAND PROMPT asks for a different pose, scene, framing, or background.',
     '- STYLE IMAGE may improve render quality only. It must not override pose, composition, identity, outfit, or subject count.',
     '- Never output a split-screen, image grid, collage, storyboard, or panel layout. Always render one single continuous final frame.',
   ].join('\n');

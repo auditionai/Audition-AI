@@ -125,6 +125,7 @@ const isRecoverablePromptSynthesisError = (error: unknown) => {
 const buildFallbackSynthesizedPrompt = (payload: ImageGenerateRecipePayload) => {
   const basePrompt = payload.prompt?.trim() || '';
   const stylePrompt = payload.stylePrompt?.trim() || '';
+  const hasSample = Boolean(payload.sampleImage);
   const characterCount = Math.max(1, Math.floor(Number(payload.characterCount || 0)) || (payload.characterReferenceGroups?.length || 0) || 1);
   const fallbackRoleLock = [
     'ROLE LOCK:',
@@ -133,10 +134,14 @@ const buildFallbackSynthesizedPrompt = (payload: ImageGenerateRecipePayload) => 
     '1. Character reference images define identity only: face, hair, body structure, skin tone, outfit, shoes, accessories, and gender. They are NOT pose references.',
     '1b. If multiple reference images belong to the same character slot, they all describe the same subject and must be merged into one identity.',
     '1c. Never replace any missing character slot with a duplicated uploaded character, a sample person, a style person, or an invented blended identity.',
-    '2. Sample image is a processed pose/composition reference. It defines pose, framing, camera angle, spacing, and background only.',
+    hasSample
+      ? '2. Sample image is a processed pose/composition reference. It defines pose, framing, camera angle, spacing, and background only.'
+      : '2. There is NO sample image. Therefore pose, camera angle, framing, scene action, and background must be derived from the USER REQUEST text, not from any character or style reference.',
     '3. Style image is a processed style-only visual reference for the renderer. It may control only render quality, lighting, shader response, material quality, color grading, and broad adult 3D body-proportion language.',
     '4. Do not copy pose, outfit, hairstyle, accessories, face, gender presentation, number of characters, or composition from the style image.',
-    '5. Re-pose the character from the character reference into the sample composition exactly. Never return a near-unchanged copy of the standing character reference unless the sample itself is also standing.',
+    hasSample
+      ? '5. Re-pose the character from the character reference into the sample composition exactly. Never return a near-unchanged copy of the standing character reference unless the sample itself is also standing.'
+      : '5. Without a sample image, follow the USER REQUEST text as the main source for composition, body pose, framing, environment, and background. Do not default to a plain black standing portrait unless the USER REQUEST explicitly asks for that.',
     '6. Keep the final result as a stylized Audition-like 3D game character, not photorealistic, not childlike, and not chibi unless the user explicitly asks for that.',
   ].join('\n');
 

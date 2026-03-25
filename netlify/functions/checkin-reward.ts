@@ -151,8 +151,13 @@ const reconcileBalanceToLedger = async (userId: string) => {
 
   const currentBalance = Number(userRow?.vcoin_balance || 0);
   const delta = ledgerBalance - currentBalance;
+  const repaired = delta > 0.0001;
+  const effectiveBalance = repaired ? ledgerBalance : currentBalance;
 
-  if (Math.abs(delta) > 0.0001) {
+  // Only repair upward when the transaction ledger is ahead of the stored balance.
+  // Never overwrite a higher current balance, because admins may have adjusted it
+  // directly before a matching ledger entry exists.
+  if (repaired) {
     const { error: updateError } = await admin
       .from('users')
       .update({
@@ -167,9 +172,11 @@ const reconcileBalanceToLedger = async (userId: string) => {
   }
 
   return {
-    balance: ledgerBalance,
-    repaired: Math.abs(delta) > 0.0001,
+    balance: effectiveBalance,
+    repaired,
     delta,
+    ledgerBalance,
+    currentBalance,
   };
 };
 

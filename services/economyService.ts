@@ -574,8 +574,13 @@ const reconcileCurrentUserBalanceFromLedger = async () => {
 
     const currentBalance = Number(userRow?.vcoin_balance || 0);
     const delta = ledgerBalance - currentBalance;
+    const repaired = delta > 0.0001;
+    const effectiveBalance = repaired ? ledgerBalance : currentBalance;
 
-    if (delta > 0.0001) {
+    // Only top up when the ledger is ahead of the stored balance.
+    // Do not lower a balance here, because admin/manual adjustments may not have
+    // been backfilled into vcoin_transactions yet.
+    if (repaired) {
         const { error: updateError } = await supabase
             .from('users')
             .update({ vcoin_balance: ledgerBalance })
@@ -593,6 +598,7 @@ const reconcileCurrentUserBalanceFromLedger = async () => {
             delta,
             ledgerBalance,
             currentBalance,
+            effectiveBalance,
         };
     }
 
@@ -601,6 +607,7 @@ const reconcileCurrentUserBalanceFromLedger = async () => {
         delta,
         ledgerBalance,
         currentBalance,
+        effectiveBalance,
     };
 };
 export const updateUserBalance = async (

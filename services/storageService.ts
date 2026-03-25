@@ -114,6 +114,34 @@ const saveLocalImage = async (image: GeneratedImage): Promise<void> => {
   });
 };
 
+const replaceLocalImagesForUser = async (userId: string, images: GeneratedImage[]): Promise<void> => {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([STORE_NAME], 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+    const getAllRequest = store.getAll();
+
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+    transaction.onabort = () => reject(transaction.error);
+
+    getAllRequest.onsuccess = () => {
+      const existingImages = getAllRequest.result as GeneratedImage[];
+      existingImages
+        .filter((image) => image?.userId === userId)
+        .forEach((image) => {
+          store.delete(image.id);
+        });
+
+      images.forEach((image) => {
+        store.put(image);
+      });
+    };
+
+    getAllRequest.onerror = () => reject(getAllRequest.error);
+  });
+};
+
 export const saveImageToLocalCache = async (image: GeneratedImage): Promise<void> => {
   const user = await getUserProfile();
   const imageWithUser = {
@@ -710,6 +738,7 @@ export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
     try {
         const { data: { user } } = await supabase.auth.getUser();
         if(user) {
+            const localImagesForUser = localImages.filter((image) => image.userId === user.id);
             const { data, error } = await supabase
                 .from(TABLE_NAME)
                 .select('*')
@@ -723,8 +752,14 @@ export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
                     .filter((value: any): value is string => typeof value === 'string' && value.length > 0);
                 const chargeMap = await getGeneratedImageChargeMap(user.id, missingCostIds);
                 const cloudImages = data.map((row: any) => mapGeneratedImageRow(row, 'Me', chargeMap.get(row.id)));
-                return mergeCloudAndLocalImages(cloudImages, localImages);
+                const mergedImages = mergeCloudAndLocalImages(cloudImages, localImagesForUser);
+                void replaceLocalImagesForUser(user.id, mergedImages).catch((syncError) => {
+                  console.warn('[Storage] Failed to sync local cache from cloud', syncError);
+                });
+                return mergedImages;
             }
+
+            return localImagesForUser;
         }
     } catch (error) {
       console.error("Supabase Load Error (Fallback to Local):", error);

@@ -95,10 +95,14 @@ const getClientIp = (event: Parameters<Handler>[0]) => {
 };
 
 const hashIp = (ip: string) => createHash('sha256').update(ip).digest('hex');
+const normalizeCampaignKey = (value?: string | null, fallback = '') =>
+  String(value || fallback || '')
+    .trim()
+    .toUpperCase();
 
 const mapGiftcodeError = (message: string) => {
   if (/GIFT_CODE_ALREADY_USED_BY_IP/i.test(message)) {
-    return 'Giftcode đã được sử dụng bởi địa chỉ IP này rồi.';
+    return 'Địa chỉ IP này đã dùng giftcode trong chiến dịch này rồi.';
   }
   if (/GIFT_CODE_ALREADY_USED_BY_USER/i.test(message)) {
     return 'Bạn đã nhập mã này rồi.';
@@ -150,24 +154,79 @@ export const handler: Handler = async (event) => {
 
     const admin = getServiceRoleClient();
     if (ipHash) {
-      const { data: existingIpUsage, error: existingIpUsageError } = await admin
-        .from('gift_code_usages')
-        .select('id')
-        .eq('ip_hash', ipHash)
-        .limit(1);
+      let campaignKey = normalizeCampaignKey(code);
+      let campaignGiftCodeIds: string[] = [];
 
-      if (existingIpUsageError) {
-        throw existingIpUsageError;
+      try {
+        const { data: giftCodeRow, error: giftCodeRowError } = await admin
+          .from('gift_codes')
+          .select('id, campaign_key')
+          .eq('code', code)
+          .maybeSingle();
+
+        if (giftCodeRowError) {
+          throw giftCodeRowError;
+        }
+
+        campaignKey = normalizeCampaignKey(giftCodeRow?.campaign_key, code);
+
+        const { data: campaignRows, error: campaignRowsError } = await admin
+          .from('gift_codes')
+          .select('id')
+          .eq('campaign_key', campaignKey);
+
+        if (campaignRowsError) {
+          throw campaignRowsError;
+        }
+
+        campaignGiftCodeIds = (campaignRows || [])
+          .map((row: any) => String(row?.id || '').trim())
+          .filter(Boolean);
+      } catch {
+        const { data: fallbackGiftCodeRow, error: fallbackGiftCodeError } = await admin
+          .from('gift_codes')
+          .select('id')
+          .eq('code', code)
+          .maybeSingle();
+
+        if (fallbackGiftCodeError) {
+          throw fallbackGiftCodeError;
+        }
+
+        campaignGiftCodeIds = fallbackGiftCodeRow?.id ? [String(fallbackGiftCodeRow.id)] : [];
       }
 
-      if ((existingIpUsage?.length || 0) > 0) {
+      if (campaignGiftCodeIds.length > 0) {
+        const { data: existingIpUsage, error: existingIpUsageError } = await admin
+          .from('gift_code_usages')
+          .select('id')
+          .eq('ip_hash', ipHash)
+          .in('gift_code_id', campaignGiftCodeIds)
+          .limit(1);
+
+        if (existingIpUsageError) {
+          throw existingIpUsageError;
+        }
+
+        if ((existingIpUsage?.length || 0) > 0) {
+          return {
+            statusCode: 400,
+            headers,
+            body: JSON.stringify({
+              success: false,
+              reward: 0,
+              message: mapGiftcodeError('GIFT_CODE_ALREADY_USED_BY_IP'),
+            }),
+          };
+        }
+      } else if (!campaignKey) {
         return {
           statusCode: 400,
           headers,
           body: JSON.stringify({
             success: false,
             reward: 0,
-            message: mapGiftcodeError('GIFT_CODE_ALREADY_USED_BY_IP'),
+            message: mapGiftcodeError('GIFT_CODE_INVALID'),
           }),
         };
       }

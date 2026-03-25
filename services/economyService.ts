@@ -1854,8 +1854,11 @@ export const saveGiftcodePromoConfig = async (text: string, isActive: boolean) =
 export const saveGiftcode = async (code: Giftcode): Promise<{success: boolean, error?: string}> => {
     if (!supabase) return { success: false, error: "No Database" };
     try {
+        const normalizedCode = String(code.code || '').trim().toUpperCase();
+        const normalizedCampaignKey = String(code.campaignKey || normalizedCode).trim().toUpperCase();
         const payload = {
-            code: code.code,
+            code: normalizedCode,
+            campaign_key: normalizedCampaignKey,
             reward: code.reward,
             total_limit: code.totalLimit,
             max_per_user: code.maxPerUser,
@@ -2032,7 +2035,7 @@ export const getAdminStats = async () => {
     // Fetch giftcodes with accurate usage count from relation
     const { data: codes } = await supabase
         .from('gift_codes')
-        .select('id, code, reward, total_limit, used_count, max_per_user, is_active, gift_code_usages(count)');
+        .select('id, code, campaign_key, reward, total_limit, used_count, max_per_user, is_active, gift_code_usages(count)');
 
     const { data: txs, error: txError } = await supabase
         .from('payment_transactions')
@@ -2244,6 +2247,7 @@ export const getAdminStats = async () => {
              return {
                  id: c.id,
                  code: c.code,
+                 campaignKey: c.campaign_key || c.code,
                  reward: c.reward,
                  totalLimit: c.total_limit,
                  usedCount: realCount,

@@ -81,6 +81,25 @@ export interface ImageGenerateRecipePayload {
   __notifyInputMedia?: QueueNotificationMediaEntry[];
 }
 
+const LAYERED_SINGLE_SUBJECT_PROMPT_PATTERNS = [
+  /\bdouble exposure\b/i,
+  /\bdouble-exposure\b/i,
+  /\bmultiple exposure\b/i,
+  /\bsuperimpos(?:e|ed|ing|ition)\b/i,
+  /\boverlay(?:ed|ing)?\b/i,
+  /\bghost(?:ly|ed)?\b/i,
+  /\bphantom\b/i,
+  /\becho(?:es)?\b/i,
+  /phơi sáng kép/i,
+  /đa phơi sáng/i,
+  /xếp chồng/i,
+  /chồng lớp/i,
+  /bóng ma/i,
+  /bóng chồng/i,
+  /hai tư thế/i,
+  /nhiều lớp hình/i,
+];
+
 const normalizeValue = (value?: string | null) => (value || '').trim().toLowerCase();
 
 export const getEffectiveImageGenerationResolution = (
@@ -245,6 +264,22 @@ export const getImageCharacterReferenceGroups = (
   return buildFallbackCharacterReferenceGroups(payload);
 };
 
+export const allowsLayeredSingleSubjectComposition = (
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'characterImages' | 'characterCount' | 'characterReferenceGroups'>,
+) => {
+  const expectedCount = Math.max(1, Math.floor(Number(payload.characterCount || getImageCharacterReferenceGroups(payload).length || 1)));
+  if (expectedCount !== 1) {
+    return false;
+  }
+
+  const prompt = collapsePromptWhitespace(payload.prompt || '');
+  if (!prompt) {
+    return false;
+  }
+
+  return LAYERED_SINGLE_SUBJECT_PROMPT_PATTERNS.some((pattern) => pattern.test(prompt));
+};
+
 export const validateImageGenerateReferenceIntegrity = (
   payload: Pick<ImageGenerateRecipePayload, 'characterImages' | 'characterCount' | 'characterReferenceGroups'>,
 ) => {
@@ -336,10 +371,11 @@ export const getImageRenderReferenceSources = (
 ) => getImageRenderReferenceEntries(payload).map((entry) => entry.source);
 
 const buildImageReferenceOrderDirective = (
-  payload: Pick<ImageGenerateRecipePayload, 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
 ) => {
   const entries = getImageRenderReferenceEntries(payload);
   const hasSample = Boolean(payload.sampleImage);
+  const layeredSingleSubjectAllowed = allowsLayeredSingleSubjectComposition(payload);
   if (entries.length === 0) {
     return hasSample
       ? ''
@@ -374,8 +410,12 @@ const buildImageReferenceOrderDirective = (
       ? '- COMPOSITION PRIORITY: SAMPLE IMAGE first, then PRIMARY COMMAND PROMPT for secondary scene details that do not break the sample composition.'
       : '- COMPOSITION PRIORITY: No SAMPLE IMAGE is present, so PRIMARY COMMAND PROMPT is the main source for pose, framing, action, scene layout, and background.',
     'HARD CONFLICT RULES:',
-    `- The final image must contain exactly ${Math.max(1, Math.floor(Number(payload.characterCount || getImageCharacterReferenceGroups(payload).length || 1)))} character(s). Never add or remove subjects.`,
-    '- Every uploaded CHARACTER slot is mandatory. Each slot must appear exactly once in the final image as its own subject.',
+    layeredSingleSubjectAllowed
+      ? '- The final image must represent exactly 1 underlying uploaded character slot. Prompt-requested double exposure, ghost overlays, layered silhouettes, or superimposed echoes of that SAME character are allowed and do not count as extra characters.'
+      : `- The final image must contain exactly ${Math.max(1, Math.floor(Number(payload.characterCount || getImageCharacterReferenceGroups(payload).length || 1)))} character(s). Never add or remove subjects.`,
+    layeredSingleSubjectAllowed
+      ? '- The uploaded CHARACTER slot remains mandatory and must stay the only underlying identity source. Do not invent a second distinct person.'
+      : '- Every uploaded CHARACTER slot is mandatory. Each slot must appear exactly once in the final image as its own subject.',
     '- If multiple CHARACTER REFERENCE images share the same CHARACTER number, they all belong to the same final subject and must be merged into one identity.',
     '- Never duplicate one uploaded character to fill another slot. Never omit a slot and replace it with a sample person, style person, or invented/blended subject.',
     hasSample
@@ -400,12 +440,16 @@ export const buildImageProviderPrompt = (
   const referenceOrderDirective = buildImageReferenceOrderDirective(payload);
   const originalUserPrompt = payload.prompt?.trim() || '';
   const normalizedSynthesizedPrompt = synthesizedPrompt?.trim() || originalUserPrompt;
+  const layeredSingleSubjectAllowed = allowsLayeredSingleSubjectComposition(payload);
 
   return [
     'STRICT RENDER DIRECTIVE:',
     IMAGE_ROLE_LOCK_CONSTRAINTS,
     '',
     referenceOrderDirective,
+    layeredSingleSubjectAllowed
+      ? '\nLAYERED SINGLE-SUBJECT EXCEPTION:\n- The user intentionally requests a double-exposure / ghost-overlay / superimposed-self composition.\n- Keep exactly one underlying uploaded character identity, but layered echoes of that SAME person are allowed when they are part of the requested artistic effect.\n- Do not invent a second distinct person.'
+      : '',
     '',
     'USER ORIGINAL REQUEST (highest-priority scene/action/background intent, do not ignore):',
     originalUserPrompt || 'No additional user prompt provided.',

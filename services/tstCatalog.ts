@@ -136,6 +136,8 @@ const uiServerMap: Record<string, string> = {
 const uiSpeedMap: Record<string, TstGenerationSpeed> = {
   Nhanh: 'fast',
   'Tiết Kiệm': 'slow',
+  'Tiết kiệm': 'slow',
+  'Tiáº¿t Kiá»‡m': 'slow',
 };
 
 const sortByOrder = (values: string[], order: string[]) =>
@@ -687,7 +689,7 @@ export const uiSpeedToTst = (value?: string): TstGenerationSpeed | undefined => 
 
 export const tstSpeedToUi = (value?: string) => {
   const normalized = normalizeCatalogSpeed(value) || 'fast';
-  if (normalized === 'slow') return 'Tiết Kiệm';
+  if (normalized === 'slow') return 'Tiết kiệm';
   return 'Nhanh';
 };
 

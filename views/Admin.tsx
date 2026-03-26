@@ -31,6 +31,7 @@ import {
     deleteStylePreset,
     getAdminUserHistory,
     getAdminQueueJobs,
+    getAdminQueueJobDetail,
     getGiftcodeUsages,
     getMaintenanceMode,
     saveMaintenanceMode,
@@ -57,7 +58,7 @@ import {
     type TstServerAvailabilityConfig
 } from '../services/tstCatalog';
 import { Icons } from '../components/Icons';
-import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, GeneratedImage, Language, StylePreset, HistoryItem, AdminQueueJob, AdminQueueSummary } from '../types';
+import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, GeneratedImage, Language, StylePreset, HistoryItem, AdminQueueJob, AdminQueueSummary, AdminQueueJobDetail } from '../types';
 
 interface AdminProps {
   lang: Language;
@@ -458,6 +459,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   });
   const [loadingQueueJobs, setLoadingQueueJobs] = useState(false);
   const [reconcilingQueue, setReconcilingQueue] = useState(false);
+  const [selectedQueueJobId, setSelectedQueueJobId] = useState<string | null>(null);
+  const [selectedQueueJobDetail, setSelectedQueueJobDetail] = useState<AdminQueueJobDetail | null>(null);
+  const [loadingQueueJobDetail, setLoadingQueueJobDetail] = useState(false);
 
   // Health State
   const [health, setHealth] = useState<SystemHealth>({
@@ -1104,6 +1108,20 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           showToast(`Lỗi reconcile queue: ${error?.message || error}`, 'error');
       } finally {
           setReconcilingQueue(false);
+      }
+  };
+
+  const handleOpenQueueJobDetail = async (jobId: string) => {
+      setSelectedQueueJobId(jobId);
+      setSelectedQueueJobDetail(null);
+      setLoadingQueueJobDetail(true);
+      try {
+          const detail = await getAdminQueueJobDetail(jobId);
+          setSelectedQueueJobDetail(detail);
+      } catch (error: any) {
+          showToast(`Lỗi tải chi tiết job: ${error?.message || error}`, 'error');
+      } finally {
+          setLoadingQueueJobDetail(false);
       }
   };
 
@@ -1944,12 +1962,13 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       <th className="px-3 py-3">Tiến trình</th>
                                       <th className="px-3 py-3">Cập nhật</th>
                                       <th className="px-3 py-3">Lỗi / Log cuối</th>
+                                      <th className="px-3 py-3 text-right">Chi tiết</th>
                                   </tr>
                               </thead>
                               <tbody className="divide-y divide-white/5">
                                   {queueJobs.length === 0 ? (
                                       <tr>
-                                          <td colSpan={7} className="px-3 py-8 text-center text-slate-500">Không có job nào khớp bộ lọc.</td>
+                                          <td colSpan={8} className="px-3 py-8 text-center text-slate-500">Không có job nào khớp bộ lọc.</td>
                                       </tr>
                                   ) : queueJobs.map((job) => {
                                       const lastLog = job.queueLogs && job.queueLogs.length > 0 ? job.queueLogs[job.queueLogs.length - 1] : null;
@@ -1990,6 +2009,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                   <div className="text-red-300">{job.error || '-'}</div>
                                                   {lastLog && <div className="mt-2 text-slate-300">{lastLog.message}</div>}
                                               </td>
+                                              <td className="px-3 py-3 text-right">
+                                                  <button onClick={() => handleOpenQueueJobDetail(job.id)} className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white text-xs font-bold">
+                                                      Xem
+                                                  </button>
+                                              </td>
                                           </tr>
                                       );
                                   })}
@@ -2021,6 +2045,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           <div><span className="text-slate-500">Cập nhật</span><div className="text-white mt-1">{getTimeAgo(job.updatedAt)}</div></div>
                                       </div>
                                       <div className="mt-3 text-xs text-slate-300">{lastLog?.message || job.error || 'Chưa có log mới'}</div>
+                                      <button onClick={() => handleOpenQueueJobDetail(job.id)} className="mt-3 w-full py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white text-xs font-bold">
+                                          Xem chi tiết input
+                                      </button>
                                   </div>
                               );
                           })}
@@ -2960,6 +2987,121 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   </div>
               </div>
           </div>
+      )}
+
+      {selectedQueueJobId && (
+          <AdminModalPortal>
+          <div className="fixed inset-0 z-[2100] bg-black/70 backdrop-blur-sm flex justify-center items-center p-4 md:p-6 animate-fade-in">
+              <div className="bg-[#12121a] w-full max-w-6xl rounded-2xl border border-white/20 shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
+                  <div className="flex items-center justify-between gap-4 px-6 py-4 border-b border-white/10">
+                      <div>
+                          <h3 className="text-xl font-bold text-white">Chi tiết Queue Job</h3>
+                          <p className="text-xs text-slate-400 font-mono mt-1">{selectedQueueJobId}</p>
+                      </div>
+                      <button onClick={() => { setSelectedQueueJobId(null); setSelectedQueueJobDetail(null); }} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white">
+                          <Icons.X className="w-5 h-5" />
+                      </button>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
+                      {loadingQueueJobDetail ? (
+                          <div className="py-20 text-center text-slate-400">Đang tải chi tiết job...</div>
+                      ) : !selectedQueueJobDetail ? (
+                          <div className="py-20 text-center text-slate-400">Không tải được dữ liệu chi tiết cho job này.</div>
+                      ) : (
+                          <div className="space-y-6">
+                              <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
+                                  {[
+                                      { label: 'User', value: selectedQueueJobDetail.job.userName || 'Unknown' },
+                                      { label: 'Email', value: selectedQueueJobDetail.job.userEmail || '-' },
+                                      { label: 'Status', value: selectedQueueJobDetail.job.status },
+                                      { label: 'Stage', value: selectedQueueJobDetail.job.queueStage || '-' },
+                                      { label: 'Asset', value: selectedQueueJobDetail.job.assetType },
+                                      { label: 'Queue Kind', value: selectedQueueJobDetail.job.queueKind || '-' },
+                                      { label: 'Progress', value: `${selectedQueueJobDetail.job.progress || 0}%` },
+                                      { label: 'Provider Job', value: selectedQueueJobDetail.job.jobId || '-' },
+                                  ].map((item) => (
+                                      <div key={item.label} className="bg-black/30 border border-white/10 rounded-xl p-3">
+                                          <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">{item.label}</div>
+                                          <div className="text-sm text-white font-bold mt-2 break-words">{item.value}</div>
+                                      </div>
+                                  ))}
+                              </div>
+
+                              <div className="bg-black/20 border border-white/10 rounded-2xl p-4">
+                                  <div className="text-sm font-bold text-white mb-2">Prompt</div>
+                                  <div className="text-sm text-slate-300 whitespace-pre-wrap leading-relaxed">
+                                      {selectedQueueJobDetail.prompt || selectedQueueJobDetail.job.prompt || 'Không có prompt'}
+                                  </div>
+                              </div>
+
+                              <div className="bg-black/20 border border-white/10 rounded-2xl p-4">
+                                  <div className="flex items-center justify-between gap-3 mb-4">
+                                      <div className="text-sm font-bold text-white">Input Media</div>
+                                      <div className="text-xs text-slate-500">{selectedQueueJobDetail.inputMedia.length} mục</div>
+                                  </div>
+                                  {selectedQueueJobDetail.inputMedia.length === 0 ? (
+                                      <div className="text-sm text-slate-500">Không tìm thấy input media trong payload.</div>
+                                  ) : (
+                                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                                          {selectedQueueJobDetail.inputMedia.map((media, index) => (
+                                              <div key={`${media.role}-${index}`} className="bg-[#0f0f16] border border-white/10 rounded-xl overflow-hidden">
+                                                  <div className="px-3 py-2 border-b border-white/10">
+                                                      <div className="text-sm font-bold text-white">{media.label}</div>
+                                                      <div className="text-[11px] text-slate-500 mt-1">{media.role} · {media.kind} · {media.sourceType}</div>
+                                                  </div>
+                                                  <div className="p-3">
+                                                      {media.url ? (
+                                                          media.kind === 'video' ? (
+                                                              <video src={media.url} controls className="w-full rounded-lg bg-black max-h-72" />
+                                                          ) : (
+                                                              <img src={media.url} className="w-full rounded-lg bg-black max-h-72 object-contain" />
+                                                          )
+                                                      ) : (
+                                                          <div className="text-xs text-yellow-300 bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3">
+                                                              {media.note || 'Media quá lớn hoặc không thể render trực tiếp.'}
+                                                          </div>
+                                                      )}
+                                                  </div>
+                                              </div>
+                                          ))}
+                                      </div>
+                                  )}
+                              </div>
+
+                              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                                  <div className="bg-black/20 border border-white/10 rounded-2xl p-4">
+                                      <div className="text-sm font-bold text-white mb-3">Log tiến trình</div>
+                                      <div className="space-y-3 max-h-[420px] overflow-y-auto custom-scrollbar pr-2">
+                                          {(selectedQueueJobDetail.job.queueLogs || []).length === 0 ? (
+                                              <div className="text-sm text-slate-500">Chưa có log cho job này.</div>
+                                          ) : (
+                                              (selectedQueueJobDetail.job.queueLogs || []).map((log, index) => (
+                                                  <div key={`${log.at}-${index}`} className="border border-white/10 rounded-xl p-3 bg-[#0f0f16]">
+                                                      <div className="flex items-center justify-between gap-3">
+                                                          <div className="text-xs font-bold text-white uppercase">{log.stage}</div>
+                                                          <div className="text-[11px] text-slate-500">{new Date(log.at).toLocaleString()}</div>
+                                                      </div>
+                                                      <div className="text-sm text-slate-300 mt-2">{log.message}</div>
+                                                  </div>
+                                              ))
+                                          )}
+                                      </div>
+                                  </div>
+
+                                  <div className="bg-black/20 border border-white/10 rounded-2xl p-4">
+                                      <div className="text-sm font-bold text-white mb-3">Payload Preview</div>
+                                      <pre className="text-[11px] text-slate-300 bg-[#0f0f16] border border-white/10 rounded-xl p-4 overflow-auto max-h-[420px] whitespace-pre-wrap break-all">
+{JSON.stringify(selectedQueueJobDetail.queuePayloadPreview || {}, null, 2)}
+                                      </pre>
+                                  </div>
+                              </div>
+                          </div>
+                      )}
+                  </div>
+              </div>
+          </div>
+          </AdminModalPortal>
       )}
 
       {viewingUser && (

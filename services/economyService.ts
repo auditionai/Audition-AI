@@ -1,5 +1,5 @@
 ﻿import { getSupabaseAuthHeader, getSupabaseUser, supabase } from './supabaseClient';
-import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, HistoryItem, VcoinLog, AdminQueueJob, AdminQueueSummary } from '../types';
+import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, HistoryItem, VcoinLog, AdminQueueJob, AdminQueueSummary, AdminQueueJobDetail } from '../types';
 import {
   creditsToVcoin,
   fetchTstModels,
@@ -1698,6 +1698,21 @@ export const runAdminQueueReconcile = async () => {
     }
 
     return payload;
+};
+
+export const getAdminQueueJobDetail = async (jobId: string): Promise<AdminQueueJobDetail> => {
+    const authHeader = await getSessionAuthHeader();
+    const response = await fetch(`/api/admin-queue-job-detail?jobId=${encodeURIComponent(jobId)}`, {
+        method: 'GET',
+        headers: authHeader,
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        throw new Error(payload?.error || 'Khong the tai chi tiet queue job');
+    }
+
+    return payload as AdminQueueJobDetail;
 };
 
 // --- MAINTENANCE MODE ---

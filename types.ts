@@ -120,6 +120,23 @@ export interface AdminQueueSummary {
   stalledPreDispatch: number;
 }
 
+export interface AdminQueueInputMedia {
+  label: string;
+  role: string;
+  kind: 'image' | 'video';
+  url?: string;
+  sourceType: 'http' | 'data' | 'base64' | 'unknown';
+  note?: string;
+  userProvided?: boolean;
+}
+
+export interface AdminQueueJobDetail {
+  job: AdminQueueJob;
+  prompt?: string;
+  queuePayloadPreview?: Record<string, unknown>;
+  inputMedia: AdminQueueInputMedia[];
+}
+
 // --- NEW ECONOMY & USER TYPES ---
 
 export interface UserProfile {

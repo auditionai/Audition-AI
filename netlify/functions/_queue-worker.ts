@@ -1458,8 +1458,10 @@ const completePolledJobWithResultUrl = async (
     job.queue_kind === 'image_generate'
       ? getStoredImageGenerateRecipePayload(job.queue_payload)
       : null;
+  const shouldRunOutputVerification =
+    storedImageRecipe != null && getImageRecipeCharacterCount(job, storedImageRecipe) >= 2;
 
-  if (storedImageRecipe) {
+  if (storedImageRecipe && shouldRunOutputVerification) {
     const verifyingPayload = await persistQueueLog(
       job.id,
       completionPayload,
@@ -1522,6 +1524,13 @@ const completePolledJobWithResultUrl = async (
         'warning',
       );
     }
+  } else if (storedImageRecipe) {
+    completionPayload = withQueueLog(
+      completionPayload,
+      'verifying_output',
+      'Bo qua hau kiem identity cho anh don. Nhan ket qua truc tiep tu provider.',
+      'info',
+    );
   }
 
   await admin

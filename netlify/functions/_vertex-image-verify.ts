@@ -1,4 +1,8 @@
-import { getImageCharacterReferenceGroups, type ImageGenerateRecipePayload } from '../../shared/queueRecipes';
+import {
+  allowsLayeredSingleSubjectComposition,
+  getImageCharacterReferenceGroups,
+  type ImageGenerateRecipePayload,
+} from '../../shared/queueRecipes';
 import { runWithVertexCredentialFailover } from './_vertex-credentials';
 
 const VERTEX_MODEL = 'gemini-3.1-pro-preview';
@@ -127,6 +131,20 @@ const textSignalsStyleBorrow = (value: string) => {
   );
 };
 
+const textSignalsLayeredSingleSubject = (value: string) => {
+  const lower = value.toLowerCase();
+  return (
+    lower.includes('multiple instances') ||
+    lower.includes('appears more than once') ||
+    lower.includes('duplicate') ||
+    lower.includes('duplicated') ||
+    lower.includes('double exposure') ||
+    lower.includes('superimposed') ||
+    lower.includes('overlay') ||
+    lower.includes('ghost')
+  );
+};
+
 const normalizeVerificationResult = (raw: any): ImageOutputVerificationResult => {
   const summary = typeof raw?.summary === 'string' ? raw.summary.trim() : '';
   const missingCharacterSlots = normalizeNumberArray(raw?.missingCharacterSlots);
@@ -176,13 +194,18 @@ const normalizeVerificationResult = (raw: any): ImageOutputVerificationResult =>
 const buildVerificationInstruction = (payload: ImageGenerateRecipePayload) => {
   const characterGroups = getImageCharacterReferenceGroups(payload);
   const expectedCount = Math.max(1, Math.floor(Number(payload.characterCount || characterGroups.length || 1)));
+  const layeredSingleSubjectAllowed = allowsLayeredSingleSubjectComposition(payload);
   const sections: string[] = [
     'You are a strict identity verification auditor for AI image generation outputs.',
     'Your task is to verify whether the FINAL RESULT image preserves the uploaded character slots correctly.',
     'Fail closed: if you are unsure whether a slot is preserved correctly, mark the verification as pass=false.',
     '',
-    `FINAL RULE: the result must contain EXACTLY ${expectedCount} final subjects, no more and no less.`,
-    'Every uploaded character slot is mandatory and must appear exactly once.',
+    layeredSingleSubjectAllowed
+      ? 'FINAL RULE: the result must contain EXACTLY 1 distinct uploaded character identity. Prompt-requested double exposure, ghost overlays, layered silhouettes, reflections, or superimposed echoes of that SAME character are allowed and must NOT be treated as extra subjects or duplicated slots.'
+      : `FINAL RULE: the result must contain EXACTLY ${expectedCount} final subjects, no more and no less.`,
+    layeredSingleSubjectAllowed
+      ? 'The uploaded character slot is mandatory and must remain the only underlying identity source throughout the composition.'
+      : 'Every uploaded character slot is mandatory and must appear exactly once.',
     'Never accept a duplicated uploaded character filling another slot.',
     'Never accept a sample person, style person, or blended/invented subject replacing a character slot.',
     'Character references define identity. Sample image defines composition only. Style image defines render quality only.',
@@ -216,14 +239,21 @@ const buildVerificationInstruction = (payload: ImageGenerateRecipePayload) => {
   sections.push(
     '',
     'EVALUATION CHECKLIST:',
-    '1. Count the visible final subjects in Image 1.',
-    '2. For each uploaded character slot, decide whether that exact slot identity appears exactly once in Image 1.',
+    layeredSingleSubjectAllowed
+      ? '1. Count the distinct underlying character identities in Image 1, not the layered echoes of the same person.'
+      : '1. Count the visible final subjects in Image 1.',
+    layeredSingleSubjectAllowed
+      ? '2. For the uploaded character slot, decide whether that exact identity is clearly preserved as the only underlying character, even if the prompt intentionally creates layered echoes of the same person.'
+      : '2. For each uploaded character slot, decide whether that exact slot identity appears exactly once in Image 1.',
     '3. Detect if any slot is missing.',
     '4. Detect if any slot was duplicated to fill another slot.',
     '5. Detect if any visible subject looks borrowed from the sample image or style image instead of the uploaded character slots.',
     '6. Detect if any final subject looks like a blended identity instead of a clean slot match.',
     '7. If the final result adopts pose, outfit, hairstyle, clothing, or subject appearance from the STYLE IMAGE, mark pass=false.',
     '8. If the final result looks like a style-image clone with only the uploaded face/identity pasted on top, mark pass=false.',
+    layeredSingleSubjectAllowed
+      ? '9. If the prompt clearly requests double exposure, ghosting, or superimposed self-overlays, do not mark the result as duplicated merely because the same character appears in multiple layered silhouettes.'
+      : '9. Do not allow the same uploaded character to appear multiple times as separate final people.',
     '',
     'Return JSON only with this exact schema:',
     '{',
@@ -241,6 +271,36 @@ const buildVerificationInstruction = (payload: ImageGenerateRecipePayload) => {
   );
 
   return sections.join('\n');
+};
+
+const shouldAcceptLayeredSingleSubjectVerificationResult = (
+  payload: ImageGenerateRecipePayload,
+  result: ImageOutputVerificationResult,
+) => {
+  if (!allowsLayeredSingleSubjectComposition(payload)) {
+    return false;
+  }
+
+  if (result.substitutedFromSampleOrStyle || result.missingCharacterSlots.length > 0) {
+    return false;
+  }
+
+  if (result.duplicatedCharacterSlots.some((entry) => entry !== 1)) {
+    return false;
+  }
+
+  const hasUnsupportedSlotStatus = result.slotFindings.some(
+    (entry) => entry.characterIndex !== 1 || (entry.status !== 'matched' && entry.status !== 'duplicated'),
+  );
+  if (hasUnsupportedSlotStatus) {
+    return false;
+  }
+
+  const combinedText = [result.summary, ...result.issues, ...result.slotFindings.map((entry) => entry.notes)]
+    .join(' ')
+    .toLowerCase();
+
+  return textSignalsLayeredSingleSubject(combinedText);
 };
 
 export const verifyGeneratedImageOutput = async (
@@ -297,7 +357,18 @@ export const verifyGeneratedImageOutput = async (
         throw new Error('Vertex AI did not return an image verification result.');
       }
 
-      return normalizeVerificationResult(JSON.parse(extractJsonPayload(text)));
+      const normalized = normalizeVerificationResult(JSON.parse(extractJsonPayload(text)));
+      if (!normalized.pass && shouldAcceptLayeredSingleSubjectVerificationResult(payload, normalized)) {
+        return {
+          ...normalized,
+          pass: true,
+          summary:
+            normalized.summary ||
+            'Allowed layered single-subject composition: prompt-requested double-exposure style was preserved without introducing a second distinct person.',
+        };
+      }
+
+      return normalized;
     },
   });
 };

@@ -19,6 +19,24 @@ import { getUserProfile, logVisit, updateLastActive, getMaintenanceMode } from '
 import { NotificationProvider, useNotification } from './components/NotificationSystem';
 import { Icons } from './components/Icons';
 import { syncPayOSTransaction, triggerServerQueueTick } from './services/serverQueueService';
+import MobileApp from './mobile-app/src/App';
+
+const PHONE_USER_AGENT_PATTERN = /iphone|ipod|android.+mobile|windows phone|blackberry|opera mini|mobile safari/i;
+
+const shouldUseMobileShell = () => {
+  if (typeof window === 'undefined') return false;
+
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('desktop') === '1') return false;
+  if (params.get('mobile') === '1') return true;
+
+  const navigatorWithUAData = navigator as Navigator & { userAgentData?: { mobile?: boolean } };
+  if (typeof navigatorWithUAData.userAgentData?.mobile === 'boolean') {
+    return navigatorWithUAData.userAgentData.mobile;
+  }
+
+  return PHONE_USER_AGENT_PATTERN.test(navigator.userAgent.toLowerCase());
+};
 
 function AppContent() {
   const queueHeartbeatLeaseKey = 'auditionai:queue-heartbeat:leader';
@@ -375,11 +393,29 @@ function AppContent() {
   );
 }
 
-// Wrap App with Global Providers
-export default function App() {
+function DesktopApp() {
     return (
         <NotificationProvider>
             <AppContent />
         </NotificationProvider>
     );
+}
+
+export default function App() {
+    const [useMobileShell, setUseMobileShell] = useState(() => shouldUseMobileShell());
+
+    useEffect(() => {
+        const refreshShellMode = () => {
+            setUseMobileShell(shouldUseMobileShell());
+        };
+
+        refreshShellMode();
+        window.addEventListener('popstate', refreshShellMode);
+
+        return () => {
+            window.removeEventListener('popstate', refreshShellMode);
+        };
+    }, []);
+
+    return useMobileShell ? <MobileApp /> : <DesktopApp />;
 }

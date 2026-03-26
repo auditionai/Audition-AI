@@ -42,6 +42,11 @@ let r2Client: S3Client | null = null;
 let galleryFetchPromise: Promise<GeneratedImage[]> | null = null;
 let galleryFetchCache: { userId: string; expiresAt: number; images: GeneratedImage[] } | null = null;
 
+export const invalidateGalleryCache = () => {
+    galleryFetchPromise = null;
+    galleryFetchCache = null;
+};
+
 // Debug Log on Init
 console.log("[System] R2 Config Check:", {
     hasEndpoint: !!R2_ENDPOINT,

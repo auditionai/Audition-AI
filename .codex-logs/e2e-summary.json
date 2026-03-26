@@ -1,0 +1,67 @@
+{
+  "executedAt": "2026-03-26T15:01:44.601Z",
+  "testEmail": "codex.mobile.1774537271283@example.com",
+  "baseUrl": "http://127.0.0.1:5173",
+  "results": [
+    {
+      "step": "setup_user",
+      "status": "passed",
+      "detail": "Created test user codex.mobile.1774537271283@example.com",
+      "userId": "ab07e141-6cd1-44d3-a655-2d920c10acb0"
+    },
+    {
+      "step": "desktop_detect",
+      "status": "passed",
+      "detail": "Desktop browser stays on desktop landing page.",
+      "screenshot": "C:\\Users\\cuong\\OneDrive\\Documents\\GitHub\\Audition-AI\\.codex-logs\\screens\\desktop-root.png",
+      "url": "http://127.0.0.1:5173/"
+    },
+    {
+      "step": "mobile_detect",
+      "status": "passed",
+      "detail": "Mobile browser auto-loads the new mobile shell.",
+      "screenshot": "C:\\Users\\cuong\\OneDrive\\Documents\\GitHub\\Audition-AI\\.codex-logs\\screens\\mobile-root.png",
+      "url": "http://127.0.0.1:5173/"
+    },
+    {
+      "step": "login",
+      "status": "passed",
+      "detail": "Email/password login succeeds on the mobile shell.",
+      "screenshot": "C:\\Users\\cuong\\OneDrive\\Documents\\GitHub\\Audition-AI\\.codex-logs\\screens\\mobile-home-after-login.png",
+      "vcoin": 5000,
+      "isAdmin": false
+    },
+    {
+      "step": "topup",
+      "status": "passed",
+      "detail": "Top-up creates a pending transaction and falls back to the manual gateway when PayOS keys are absent.",
+      "screenshot": "C:\\Users\\cuong\\OneDrive\\Documents\\GitHub\\Audition-AI\\.codex-logs\\screens\\mobile-topup-manual-gateway.png",
+      "url": "http://127.0.0.1:5173/payment-gateway"
+    },
+    {
+      "step": "gallery",
+      "status": "passed",
+      "detail": "Gallery transaction tab shows the pending top-up created from the real flow.",
+      "screenshot": "C:\\Users\\cuong\\OneDrive\\Documents\\GitHub\\Audition-AI\\.codex-logs\\screens\\mobile-gallery-transactions.png"
+    },
+    {
+      "step": "generate_image",
+      "status": "blocked",
+      "detail": "Image generation UI loads, but real submission is blocked because local env is missing TST_API_KEY.",
+      "screenshot": "C:\\Users\\cuong\\OneDrive\\Documents\\GitHub\\Audition-AI\\.codex-logs\\screens\\mobile-image-generate-blocked.png"
+    },
+    {
+      "step": "generate_video",
+      "status": "blocked",
+      "detail": "Video generation UI loads, but real submission is blocked because local env is missing TST_API_KEY.",
+      "screenshot": "C:\\Users\\cuong\\OneDrive\\Documents\\GitHub\\Audition-AI\\.codex-logs\\screens\\mobile-video-generate-blocked.png"
+    },
+    {
+      "step": "admin",
+      "status": "passed",
+      "detail": "Admin route opens from the mobile settings screen after role promotion.",
+      "screenshot": "C:\\Users\\cuong\\OneDrive\\Documents\\GitHub\\Audition-AI\\.codex-logs\\screens\\mobile-admin-overview.png",
+      "isAdmin": true
+    }
+  ]
+}

@@ -51,7 +51,7 @@ export const handler: Handler = async (event) => {
 
     const { data, error } = await admin
       .from('generated_images')
-      .select('id,image_url,prompt,created_at,updated_at,asset_type,tool_id,tool_name,model_used,user_id,user_name,is_public,status,job_id,progress,error_message,cost_vcoin,queue_payload')
+      .select('id,image_url,prompt,created_at,updated_at,asset_type,queue_kind,tool_id,tool_name,model_used,user_id,user_name,is_public,status,job_id,progress,error_message,cost_vcoin,queue_payload')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(GALLERY_PAGE_LIMIT);

@@ -1,53 +1,107 @@
-/**
- * Gallery.tsx — Mobile Gallery (Lịch sử tạo + Giao dịch Vcoin)
- * Ported from desktop Gallery.tsx with mobile-first UX.
- */
-
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Image, Video, Loader, Trash2, Download, AlertTriangle, CheckCircle, Clock,
-  Filter, RefreshCw, Coins, ArrowUpCircle, ArrowDownCircle, Gift, Share2
+  AlertTriangle,
+  ArrowDownCircle,
+  ArrowUpCircle,
+  CheckCircle2,
+  Clock3,
+  Coins,
+  Download,
+  Filter,
+  Gift,
+  Image as ImageIcon,
+  Loader,
+  PlayCircle,
+  RefreshCw,
+  Share2,
+  Trash2,
+  Video,
+  X,
 } from 'lucide-react';
 import { useNotification } from '../components/NotificationSystem';
-import { getAllImagesFromStorage, deleteImageFromStorage, invalidateGalleryCache } from '../services/storageService';
 import { getUnifiedHistory } from '../services/economyService';
 import { QUEUE_SUBMITTED_EVENT } from '../services/serverQueueService';
+import { deleteImageFromStorage, getAllImagesFromStorage, invalidateGalleryCache } from '../services/storageService';
 import type { GeneratedImage, HistoryItem } from '../types';
 
 type GalleryFilter = 'all' | 'completed' | 'failed' | 'processing';
+type GalleryMediaFilter = 'all' | 'image' | 'video';
 type GalleryTab = 'generation' | 'transactions';
+
+const getImageStatus = (image: GeneratedImage) => image.displayStatus || image.status;
+
+const getAssetKind = (image: GeneratedImage): 'image' | 'video' => {
+  if (image.assetType) return image.assetType;
+  if (image.queueKind?.includes('video') || image.queueKind?.includes('motion')) return 'video';
+  if (image.toolId?.includes('video') || image.toolId?.includes('motion')) return 'video';
+
+  const normalizedEngine = (image.engine || '').toLowerCase();
+  const normalizedToolName = (image.toolName || '').toLowerCase();
+  const normalizedUrl = (image.url || '').toLowerCase();
+  if (
+    normalizedEngine.includes('kling') ||
+    normalizedEngine.includes('motion') ||
+    normalizedEngine.includes('video') ||
+    normalizedToolName.includes('video') ||
+    normalizedToolName.includes('motion') ||
+    normalizedUrl.endsWith('.mp4') ||
+    normalizedUrl.includes('.mp4?') ||
+    normalizedUrl.includes('/video/')
+  ) {
+    return 'video';
+  }
+
+  return 'image';
+};
+
+const formatDate = (timestamp: number | string) => {
+  const date = typeof timestamp === 'number' ? new Date(timestamp) : new Date(timestamp);
+  return date.toLocaleDateString('vi-VN', {
+    month: '2-digit',
+    day: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
 
 export const Gallery: React.FC = () => {
   const { notify, confirm } = useNotification();
   const [activeTab, setActiveTab] = useState<GalleryTab>('generation');
-
-  // Generation History
   const [images, setImages] = useState<GeneratedImage[]>([]);
   const [loadingImages, setLoadingImages] = useState(true);
   const [filter, setFilter] = useState<GalleryFilter>('all');
-
-  // Transaction History
+  const [mediaFilter, setMediaFilter] = useState<GalleryMediaFilter>('all');
   const [transactions, setTransactions] = useState<HistoryItem[]>([]);
   const [loadingTransactions, setLoadingTransactions] = useState(false);
-
-  // Detail view
   const [viewingImage, setViewingImage] = useState<GeneratedImage | null>(null);
 
   const hasActiveJobs = useMemo(
-    () => images.some((img) => img.status === 'processing' || img.status === 'queued'),
+    () =>
+      images.some((image) => {
+        const status = getImageStatus(image);
+        return status === 'processing' || status === 'queued' || status === 'rescuing';
+      }),
+    [images],
+  );
+
+  const mediaCounts = useMemo(
+    () => ({
+      image: images.filter((image) => getAssetKind(image) === 'image').length,
+      video: images.filter((image) => getAssetKind(image) === 'video').length,
+    }),
     [images],
   );
 
   const loadImages = useCallback(async () => {
     try {
-      const stored = await getAllImagesFromStorage();
-      setImages(stored);
-    } catch (e) {
-      console.error('[Gallery] Load failed', e);
+      const storedImages = await getAllImagesFromStorage();
+      setImages(storedImages);
+    } catch (error) {
+      console.error('[Gallery] Load failed', error);
     }
   }, []);
 
-  // Init
   useEffect(() => {
     (async () => {
       setLoadingImages(true);
@@ -56,25 +110,27 @@ export const Gallery: React.FC = () => {
     })();
   }, [loadImages]);
 
-  // Polling for active jobs
   useEffect(() => {
     if (!hasActiveJobs) return;
-    const interval = setInterval(() => loadImages(), 10_000);
+    const interval = setInterval(() => {
+      void loadImages();
+    }, 10_000);
     return () => clearInterval(interval);
   }, [hasActiveJobs, loadImages]);
 
-  // Listen for queue submissions → auto-refresh gallery (immediate + delayed)
   useEffect(() => {
     let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
     const handleQueueSubmitted = () => {
       invalidateGalleryCache();
-      loadImages().catch(console.warn);
+      void loadImages();
       if (refreshTimer) clearTimeout(refreshTimer);
       refreshTimer = setTimeout(() => {
         invalidateGalleryCache();
-        loadImages().catch(console.warn);
+        void loadImages();
       }, 4500);
     };
+
     window.addEventListener(QUEUE_SUBMITTED_EVENT, handleQueueSubmitted);
     return () => {
       if (refreshTimer) clearTimeout(refreshTimer);
@@ -82,98 +138,55 @@ export const Gallery: React.FC = () => {
     };
   }, [loadImages]);
 
-  // Load transactions when tab switches
   useEffect(() => {
     if (activeTab !== 'transactions') return;
+
     (async () => {
       setLoadingTransactions(true);
       try {
-        const txs = await getUnifiedHistory();
-        setTransactions(txs);
-      } catch (e) {
-        console.error(e);
+        const history = await getUnifiedHistory();
+        setTransactions(history);
+      } catch (error) {
+        console.error('[Gallery] Transaction load failed', error);
       } finally {
         setLoadingTransactions(false);
       }
     })();
   }, [activeTab]);
 
-  // Sync detail viewer
   useEffect(() => {
     if (!viewingImage) return;
-    const updated = images.find((img) => img.id === viewingImage.id);
-    if (!updated) { setViewingImage(null); return; }
-    if (updated.updatedAt !== viewingImage.updatedAt || updated.status !== viewingImage.status) {
+    const updated = images.find((image) => image.id === viewingImage.id);
+    if (!updated) {
+      setViewingImage(null);
+      return;
+    }
+    if (
+      updated.updatedAt !== viewingImage.updatedAt ||
+      updated.status !== viewingImage.status ||
+      updated.displayStatus !== viewingImage.displayStatus ||
+      updated.progress !== viewingImage.progress ||
+      updated.error !== viewingImage.error
+    ) {
       setViewingImage(updated);
     }
   }, [images, viewingImage]);
 
   const filteredImages = useMemo(() => {
-    return images.filter((img) => {
-      if (filter === 'all') return true;
-      if (filter === 'completed') return !img.status || img.status === 'completed';
-      if (filter === 'failed') return img.status === 'failed';
-      if (filter === 'processing') return img.status === 'processing' || img.status === 'queued';
-      return true;
-    }).sort((a, b) => b.timestamp - a.timestamp);
-  }, [images, filter]);
+    return images
+      .filter((image) => {
+        const status = getImageStatus(image);
+        const kind = getAssetKind(image);
 
-  const getAssetKind = (img: GeneratedImage): 'image' | 'video' => {
-    if (img.assetType) return img.assetType;
-    if (img.toolId?.includes('video') || img.toolId?.includes('motion')) return 'video';
-    if ((img.engine || '').toLowerCase().includes('kling') || (img.engine || '').toLowerCase().includes('motion')) return 'video';
-    if ((img.url || '').toLowerCase().endsWith('.mp4') || (img.url || '').toLowerCase().includes('.mp4?')) return 'video';
-    return 'image';
-  };
-
-  const handleDelete = async (img: GeneratedImage) => {
-    confirm({
-      title: 'Xóa mục này?',
-      message: 'Bạn có chắc muốn xóa vĩnh viễn?',
-      confirmText: 'Xóa',
-      cancelText: 'Hủy',
-      isDanger: true,
-      onConfirm: async () => {
-        await deleteImageFromStorage(img.id);
-        setImages((prev) => prev.filter((i) => i.id !== img.id));
-        if (viewingImage?.id === img.id) setViewingImage(null);
-        notify('Đã xóa.', 'info');
-      },
-    });
-  };
-
-  const handleDownload = async (img: GeneratedImage) => {
-    if (!img.url) return;
-    try {
-      const a = document.createElement('a');
-      a.href = img.url;
-      a.download = `auditionai-${img.id}.${getAssetKind(img) === 'video' ? 'mp4' : 'png'}`;
-      a.target = '_blank';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    } catch {
-      notify('Tải xuống thất bại.', 'error');
-    }
-  };
-
-  const handleShare = async (img: GeneratedImage) => {
-    if (!img.url) return;
-    try {
-      if (navigator.share) {
-        await navigator.share({
-          title: 'Audition AI',
-          text: img.prompt || 'Xem tác phẩm của tôi tạo bằng Audition AI!',
-          url: img.url,
-        });
-      } else {
-        await navigator.clipboard.writeText(img.url);
-        notify('Đã copy link!', 'success');
-      }
-    } catch (e) {
-      console.warn('Share failed', e);
-    }
-  };
+        if (mediaFilter !== 'all' && kind !== mediaFilter) return false;
+        if (filter === 'all') return true;
+        if (filter === 'completed') return !status || status === 'completed';
+        if (filter === 'failed') return status === 'failed';
+        if (filter === 'processing') return status === 'processing' || status === 'queued' || status === 'rescuing';
+        return true;
+      })
+      .sort((a, b) => b.timestamp - a.timestamp);
+  }, [filter, images, mediaFilter]);
 
   const handleRefresh = async () => {
     invalidateGalleryCache();
@@ -182,133 +195,238 @@ export const Gallery: React.FC = () => {
     setLoadingImages(false);
   };
 
-  const formatDate = (timestamp: number | string) => {
-    const d = typeof timestamp === 'number' ? new Date(timestamp) : new Date(timestamp);
-    return d.toLocaleDateString('vi-VN', { month: '2-digit', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const handleDelete = (image: GeneratedImage) => {
+    confirm({
+      title: 'Xoa muc nay?',
+      message: 'Ban co chac muon xoa vinh vien muc nay khoi lich su tao?',
+      confirmText: 'Xoa',
+      cancelText: 'Huy',
+      isDanger: true,
+      onConfirm: async () => {
+        await deleteImageFromStorage(image.id);
+        setImages((current) => current.filter((item) => item.id !== image.id));
+        if (viewingImage?.id === image.id) {
+          setViewingImage(null);
+        }
+        notify('Da xoa thanh cong.', 'info');
+      },
+    });
   };
 
-  const getStatusBadge = (img: GeneratedImage) => {
-    const isCompleted = !img.status || img.status === 'completed';
-    const isFailed = img.status === 'failed';
-    const isProcessing = img.status === 'processing' || img.status === 'queued';
-
-    if (isCompleted) return <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-green-50 dark:bg-green-500/10 text-green-600"><CheckCircle className="w-3 h-3" /> Xong</span>;
-    if (isFailed) return <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-red-50 dark:bg-red-500/10 text-red-500"><AlertTriangle className="w-3 h-3" /> Lỗi</span>;
-    if (isProcessing) return <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-yellow-50 dark:bg-yellow-500/10 text-yellow-600"><Loader className="w-3 h-3 animate-spin" /> {Math.round(img.progress || 0)}%</span>;
-    return null;
-  };
-
-  const getTxBadge = (type: string) => {
-    switch (type) {
-      case 'topup': return <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-green-50 dark:bg-green-500/10 text-green-600"><ArrowUpCircle className="w-3 h-3" /> NẠP</span>;
-      case 'pending_topup': return <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-yellow-50 dark:bg-yellow-500/10 text-yellow-600"><Clock className="w-3 h-3" /> CHỜ</span>;
-      case 'usage': return <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-blue-50 dark:bg-blue-500/10 text-blue-600"><ArrowDownCircle className="w-3 h-3" /> DÙNG</span>;
-      case 'reward': case 'giftcode': return <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-purple-50 dark:bg-purple-500/10 text-purple-600"><Gift className="w-3 h-3" /> THƯỞNG</span>;
-      case 'refund': return <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-cyan-50 dark:bg-cyan-500/10 text-cyan-600"><RefreshCw className="w-3 h-3" /> HOÀN</span>;
-      default: return <span className="text-[10px] text-gray-400 dark:text-zinc-500">KHÁC</span>;
+  const handleDownload = async (image: GeneratedImage) => {
+    if (!image.url) return;
+    try {
+      const anchor = document.createElement('a');
+      anchor.href = image.url;
+      anchor.download = `auditionai-${image.id}.${getAssetKind(image) === 'video' ? 'mp4' : 'png'}`;
+      anchor.target = '_blank';
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+    } catch (error) {
+      console.error('[Gallery] Download failed', error);
+      notify('Tai xuong that bai.', 'error');
     }
   };
 
-  // --- DETAIL MODAL ---
+  const handleShare = async (image: GeneratedImage) => {
+    if (!image.url) return;
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: 'Audition AI',
+          text: image.prompt || 'Tac pham duoc tao boi Audition AI',
+          url: image.url,
+        });
+        return;
+      }
+
+      await navigator.clipboard.writeText(image.url);
+      notify('Da copy link.', 'success');
+    } catch (error) {
+      console.warn('[Gallery] Share failed', error);
+    }
+  };
+
+  const getStatusBadge = (image: GeneratedImage) => {
+    const status = getImageStatus(image);
+    const isCompleted = !status || status === 'completed';
+    const isFailed = status === 'failed';
+    const isProcessing = status === 'processing' || status === 'queued' || status === 'rescuing';
+
+    if (isCompleted) {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300">
+          <CheckCircle2 className="h-3 w-3" />
+          Xong
+        </span>
+      );
+    }
+
+    if (isFailed) {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-500 dark:bg-red-500/10 dark:text-red-300">
+          <AlertTriangle className="h-3 w-3" />
+          Loi
+        </span>
+      );
+    }
+
+    if (isProcessing) {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:bg-amber-500/10 dark:text-amber-300">
+          <Loader className="h-3 w-3 animate-spin" />
+          {Math.round(image.progress || 0)}%
+        </span>
+      );
+    }
+
+    return null;
+  };
+
+  const getTransactionBadge = (type: string) => {
+    switch (type) {
+      case 'topup':
+        return <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300"><ArrowUpCircle className="h-3 w-3" /> Nap</span>;
+      case 'pending_topup':
+        return <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:bg-amber-500/10 dark:text-amber-300"><Clock3 className="h-3 w-3" /> Cho</span>;
+      case 'usage':
+        return <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-600 dark:bg-blue-500/10 dark:text-blue-300"><ArrowDownCircle className="h-3 w-3" /> Dung</span>;
+      case 'refund':
+        return <span className="inline-flex items-center gap-1 rounded-full bg-cyan-50 px-2 py-0.5 text-[10px] font-bold text-cyan-600 dark:bg-cyan-500/10 dark:text-cyan-300"><RefreshCw className="h-3 w-3" /> Hoan</span>;
+      case 'reward':
+      case 'giftcode':
+        return <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-bold text-purple-600 dark:bg-purple-500/10 dark:text-purple-300"><Gift className="h-3 w-3" /> Thuong</span>;
+      default:
+        return <span className="text-[10px] font-semibold text-gray-400 dark:text-zinc-500">Khac</span>;
+    }
+  };
+
   const DetailModal = () => {
     if (!viewingImage) return null;
-    const img = viewingImage;
-    const isVideo = getAssetKind(img) === 'video';
-    const isCompleted = !img.status || img.status === 'completed';
+
+    const image = viewingImage;
+    const assetKind = getAssetKind(image);
+    const status = getImageStatus(image);
+    const isVideo = assetKind === 'video';
+    const isCompleted = !status || status === 'completed';
 
     return (
-      <div className="fixed inset-0 z-[60] bg-white/95 dark:bg-black/95 backdrop-blur-sm flex flex-col" onClick={() => setViewingImage(null)}>
-        {/* Top bar with close */}
-        <div className="flex items-center justify-between p-4 shrink-0">
+      <div className="fixed inset-0 z-[60] flex flex-col bg-white/95 backdrop-blur-sm dark:bg-black/95" onClick={() => setViewingImage(null)}>
+        <div className="flex items-center justify-between p-4">
           <div className="flex items-center gap-2">
-            {isVideo ? <Video className="w-4 h-4 text-purple-500" /> : <Image className="w-4 h-4 text-blue-500" />}
-            <span className="text-xs font-bold text-gray-400 dark:text-zinc-500 uppercase">{isVideo ? 'Video' : 'Image'}</span>
+            {isVideo ? <Video className="h-4 w-4 text-purple-500" /> : <ImageIcon className="h-4 w-4 text-blue-500" />}
+            <span className="text-xs font-bold uppercase text-gray-400 dark:text-zinc-500">{isVideo ? 'Video' : 'Image'}</span>
           </div>
-          <button onClick={() => setViewingImage(null)} className="w-9 h-9 bg-gray-100 dark:bg-zinc-800 rounded-full flex items-center justify-center text-gray-500 dark:text-zinc-400 hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors">
-            ✕
+          <button
+            onClick={() => setViewingImage(null)}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-500 transition-colors hover:bg-gray-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+          >
+            <X className="h-4 w-4" />
           </button>
         </div>
 
-        {/* Scrollable content area */}
-        <div className="flex-1 overflow-y-auto min-h-0" onClick={(e) => e.stopPropagation()}>
-          {/* Preview */}
-          <div className="w-full max-w-lg mx-auto px-4">
-            <div className="relative bg-gray-100 dark:bg-zinc-900 rounded-2xl overflow-hidden aspect-[4/3]">
-              {img.url ? (
-                isVideo
-                  ? <video src={img.url} className="w-full h-full object-contain" controls autoPlay muted playsInline />
-                  : <img src={img.url} alt="" className="w-full h-full object-contain" />
+        <div className="min-h-0 flex-1 overflow-y-auto" onClick={(event) => event.stopPropagation()}>
+          <div className="mx-auto w-full max-w-lg px-4">
+            <div className="relative aspect-[4/3] overflow-hidden rounded-3xl bg-gray-100 dark:bg-zinc-900">
+              {image.url ? (
+                isVideo ? (
+                  <video src={image.url} className="h-full w-full object-contain" controls autoPlay muted playsInline preload="metadata" />
+                ) : (
+                  <img src={image.url} alt="" className="h-full w-full object-contain" />
+                )
               ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  {img.status === 'processing' || img.status === 'queued' ? (
+                <div className="flex h-full w-full items-center justify-center">
+                  {status === 'processing' || status === 'queued' || status === 'rescuing' ? (
                     <div className="text-center">
-                      <Loader className="w-10 h-10 text-purple-500 animate-spin mx-auto mb-3" />
-                      <p className="text-sm text-gray-500 dark:text-zinc-400">Đang tạo... {Math.round(img.progress || 0)}%</p>
-                      <div className="mt-2 w-48 h-1.5 bg-gray-200 dark:bg-zinc-700 rounded-full overflow-hidden mx-auto">
-                        <div className="h-full bg-purple-500 rounded-full transition-all" style={{ width: `${img.progress || 0}%` }} />
+                      <Loader className="mx-auto mb-3 h-10 w-10 animate-spin text-purple-500" />
+                      <p className="text-sm text-gray-500 dark:text-zinc-400">Dang tao... {Math.round(image.progress || 0)}%</p>
+                      <div className="mx-auto mt-2 h-1.5 w-48 overflow-hidden rounded-full bg-gray-200 dark:bg-zinc-700">
+                        <div className="h-full rounded-full bg-purple-500 transition-all" style={{ width: `${image.progress || 0}%` }} />
                       </div>
                     </div>
-                  ) : img.status === 'failed' ? (
-                    <div className="text-center px-6">
-                      <AlertTriangle className="w-10 h-10 text-red-400 mx-auto mb-3" />
-                      <p className="text-sm text-red-500 font-medium">Thất bại</p>
-                      <p className="text-xs text-gray-400 dark:text-zinc-500 mt-1">{img.error || 'Không có chi tiết lỗi'}</p>
+                  ) : status === 'failed' ? (
+                    <div className="px-6 text-center">
+                      <AlertTriangle className="mx-auto mb-3 h-10 w-10 text-red-400" />
+                      <p className="text-sm font-semibold text-red-500">That bai</p>
+                      <p className="mt-1 text-xs text-gray-400 dark:text-zinc-500">{image.error || 'Khong co chi tiet loi'}</p>
                     </div>
+                  ) : isVideo ? (
+                    <Video className="h-10 w-10 text-gray-300 dark:text-zinc-700" />
                   ) : (
-                    <Image className="w-10 h-10 text-gray-300 dark:text-zinc-600" />
+                    <ImageIcon className="h-10 w-10 text-gray-300 dark:text-zinc-700" />
                   )}
                 </div>
               )}
             </div>
           </div>
 
-          {/* Info */}
-          <div className="w-full max-w-lg mx-auto px-4 py-4 space-y-3">
+          <div className="mx-auto flex w-full max-w-lg flex-col gap-3 px-4 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                {isVideo ? <Video className="w-4 h-4 text-purple-500" /> : <Image className="w-4 h-4 text-blue-500" />}
-                <span className="text-xs font-bold text-gray-400 dark:text-zinc-500 uppercase">{isVideo ? 'Video' : 'Image'}</span>
+                {isVideo ? <Video className="h-4 w-4 text-purple-500" /> : <ImageIcon className="h-4 w-4 text-blue-500" />}
+                <span className="text-xs font-bold uppercase text-gray-400 dark:text-zinc-500">{isVideo ? 'Video' : 'Image'}</span>
               </div>
-              {getStatusBadge(img)}
+              {getStatusBadge(image)}
             </div>
 
-            {img.prompt && <p className="text-sm text-gray-700 dark:text-zinc-200 line-clamp-3">{img.prompt}</p>}
+            {image.prompt ? <p className="text-sm leading-relaxed text-gray-700 dark:text-zinc-200">{image.prompt}</p> : null}
 
             <div className="grid grid-cols-2 gap-3 text-xs">
-              <div className="bg-gray-50 dark:bg-zinc-800/80 rounded-xl p-3">
-                <span className="text-gray-400 dark:text-zinc-500">Thời gian</span>
-                <p className="font-medium text-gray-700 dark:text-zinc-200 mt-0.5">{formatDate(img.timestamp)}</p>
+              <div className="rounded-2xl bg-gray-50 p-3 dark:bg-zinc-800/80">
+                <span className="text-gray-400 dark:text-zinc-500">Thoi gian</span>
+                <p className="mt-0.5 font-medium text-gray-700 dark:text-zinc-200">{formatDate(image.timestamp)}</p>
               </div>
-              <div className="bg-gray-50 dark:bg-zinc-800/80 rounded-xl p-3">
-                <span className="text-gray-400 dark:text-zinc-500">Chi phí</span>
-                <p className="font-medium text-gray-700 dark:text-zinc-200 mt-0.5">{typeof img.cost === 'number' ? `${img.cost} Vcoin` : 'N/A'}</p>
+              <div className="rounded-2xl bg-gray-50 p-3 dark:bg-zinc-800/80">
+                <span className="text-gray-400 dark:text-zinc-500">Chi phi</span>
+                <p className="mt-0.5 font-medium text-gray-700 dark:text-zinc-200">{typeof image.cost === 'number' ? `${image.cost} Vcoin` : 'N/A'}</p>
               </div>
-              <div className="bg-gray-50 dark:bg-zinc-800/80 rounded-xl p-3">
-                <span className="text-gray-400 dark:text-zinc-500">Model</span>
-                <p className="font-medium text-gray-700 dark:text-zinc-200 mt-0.5 truncate">{img.engine || img.toolName}</p>
+              <div className="rounded-2xl bg-gray-50 p-3 dark:bg-zinc-800/80">
+                <span className="text-gray-400 dark:text-zinc-500">Cong cu</span>
+                <p className="mt-0.5 truncate font-medium text-gray-700 dark:text-zinc-200">{image.toolName || image.engine}</p>
               </div>
-              <div className="bg-gray-50 dark:bg-zinc-800/80 rounded-xl p-3">
+              <div className="rounded-2xl bg-gray-50 p-3 dark:bg-zinc-800/80">
                 <span className="text-gray-400 dark:text-zinc-500">ID</span>
-                <p className="font-mono text-gray-500 dark:text-zinc-400 mt-0.5 truncate">{img.id.substring(0, 12)}</p>
+                <p className="mt-0.5 truncate font-mono text-gray-500 dark:text-zinc-400">{image.id.substring(0, 12)}</p>
               </div>
             </div>
+
+            {status === 'failed' && image.error ? (
+              <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">
+                {image.error}
+              </div>
+            ) : null}
           </div>
         </div>
 
-        {/* Action Buttons — fixed at bottom */}
-        <div className="shrink-0 p-4 pb-6 bg-gradient-to-t from-white dark:from-black via-white/90 dark:via-black/90 to-transparent flex gap-2 max-w-lg mx-auto w-full" onClick={(e) => e.stopPropagation()}>
-          {isCompleted && img.url && (
+        <div className="mx-auto flex w-full max-w-lg gap-2 bg-gradient-to-t from-white via-white/95 to-transparent p-4 pb-6 dark:from-black dark:via-black/95" onClick={(event) => event.stopPropagation()}>
+          {isCompleted && image.url ? (
             <>
-              <button onClick={() => handleDownload(img)} className="flex-1 flex items-center justify-center gap-2 py-3.5 bg-gray-900 dark:bg-white text-white dark:text-black rounded-2xl text-sm font-bold active:scale-95 transition-transform">
-                <Download className="w-4 h-4" /> Tải xuống
+              <button
+                onClick={() => void handleDownload(image)}
+                className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-gray-900 px-4 py-3.5 text-sm font-bold text-white transition-transform active:scale-95 dark:bg-white dark:text-black"
+              >
+                <Download className="h-4 w-4" />
+                Tai xuong
               </button>
-              <button onClick={() => handleShare(img)} className="flex-1 flex items-center justify-center gap-2 py-3.5 bg-indigo-50 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 rounded-2xl text-sm font-bold active:scale-95 transition-transform">
-                <Share2 className="w-4 h-4" /> Chia sẻ
+              <button
+                onClick={() => void handleShare(image)}
+                className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-indigo-50 px-4 py-3.5 text-sm font-bold text-indigo-600 transition-transform active:scale-95 dark:bg-indigo-500/20 dark:text-indigo-300"
+              >
+                <Share2 className="h-4 w-4" />
+                Chia se
               </button>
             </>
-          )}
-          <button onClick={() => { setViewingImage(null); handleDelete(img); }} className="flex items-center justify-center gap-2 px-5 py-3.5 bg-red-50 dark:bg-red-500/20 text-red-500 dark:text-red-400 rounded-2xl text-sm font-bold active:scale-95 transition-transform shrink-0">
-            <Trash2 className="w-4 h-4" /> Xóa
+          ) : null}
+          <button
+            onClick={() => {
+              setViewingImage(null);
+              handleDelete(image);
+            }}
+            className="flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-red-50 px-5 py-3.5 text-sm font-bold text-red-500 transition-transform active:scale-95 dark:bg-red-500/20 dark:text-red-300"
+          >
+            <Trash2 className="h-4 w-4" />
+            Xoa
           </button>
         </div>
       </div>
@@ -316,154 +434,215 @@ export const Gallery: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA] dark:bg-[#09090B] pb-28">
-      {/* Tabs */}
-      <div className="sticky top-0 z-30 bg-white dark:bg-[#18181B]/80 backdrop-blur-xl border-b border-gray-100 dark:border-zinc-800 px-4 pt-3 pb-0">
-        <div className="flex bg-gray-100 dark:bg-zinc-800 rounded-2xl p-1 mb-3">
+    <div className="min-h-screen bg-[#FAFAFA] pb-28 dark:bg-[#09090B]">
+      <div className="sticky top-0 z-30 border-b border-gray-100 bg-white/90 px-4 pb-0 pt-3 backdrop-blur-xl dark:border-zinc-800 dark:bg-[#18181B]/85">
+        <div className="mb-3 flex rounded-2xl bg-gray-100 p-1 dark:bg-zinc-800">
           <button
             onClick={() => setActiveTab('generation')}
-            className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${activeTab === 'generation' ? 'bg-white dark:bg-[#18181B] text-gray-900 dark:text-white shadow-sm' : 'text-gray-400 dark:text-zinc-500'}`}
+            className={`flex-1 rounded-xl py-2.5 text-xs font-bold transition-all ${
+              activeTab === 'generation'
+                ? 'bg-white text-gray-900 shadow-sm dark:bg-[#18181B] dark:text-white'
+                : 'text-gray-400 dark:text-zinc-500'
+            }`}
           >
-            Lịch sử tạo
+            Lich su tao
           </button>
           <button
             onClick={() => setActiveTab('transactions')}
-            className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${activeTab === 'transactions' ? 'bg-white dark:bg-[#18181B] text-gray-900 dark:text-white shadow-sm' : 'text-gray-400 dark:text-zinc-500'}`}
+            className={`flex-1 rounded-xl py-2.5 text-xs font-bold transition-all ${
+              activeTab === 'transactions'
+                ? 'bg-white text-gray-900 shadow-sm dark:bg-[#18181B] dark:text-white'
+                : 'text-gray-400 dark:text-zinc-500'
+            }`}
           >
-            Giao dịch Vcoin
+            Giao dich Vcoin
           </button>
         </div>
 
-        {/* Filters (Generation tab only) */}
-        {activeTab === 'generation' && (
-          <div className="flex items-center gap-2 overflow-x-auto pb-3 no-scrollbar">
-            <Filter className="w-3.5 h-3.5 text-gray-400 dark:text-zinc-500 shrink-0" />
-            {([['all', 'Tất cả'], ['completed', 'Xong'], ['failed', 'Lỗi'], ['processing', 'Đang chờ']] as const).map(([key, label]) => (
-              <button
-                key={key}
-                onClick={() => setFilter(key)}
-                className={`px-3.5 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition-all ${filter === key ? 'bg-gray-900 text-white' : 'bg-gray-100 dark:bg-zinc-800 text-gray-400 dark:text-zinc-500'}`}
-              >
-                {label}
+        {activeTab === 'generation' ? (
+          <div className="space-y-2 pb-3">
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+              <Filter className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-zinc-500" />
+              {([
+                ['all', 'Tat ca'],
+                ['completed', 'Xong'],
+                ['failed', 'Loi'],
+                ['processing', 'Dang cho'],
+              ] as const).map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setFilter(key)}
+                  className={`whitespace-nowrap rounded-full px-3.5 py-1.5 text-[11px] font-bold transition-all ${
+                    filter === key
+                      ? 'bg-gray-900 text-white dark:bg-white dark:text-black'
+                      : 'bg-gray-100 text-gray-400 dark:bg-zinc-800 dark:text-zinc-500'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+              <button onClick={() => void handleRefresh()} className="ml-auto rounded-full p-1.5 transition hover:bg-gray-100 dark:bg-zinc-800">
+                <RefreshCw className={`h-4 w-4 text-gray-400 dark:text-zinc-500 ${loadingImages ? 'animate-spin' : ''}`} />
               </button>
-            ))}
-            <button onClick={handleRefresh} className="ml-auto p-1.5 rounded-full hover:bg-gray-100 dark:bg-zinc-800 transition">
-              <RefreshCw className={`w-4 h-4 text-gray-400 dark:text-zinc-500 ${loadingImages ? 'animate-spin' : ''}`} />
-            </button>
+            </div>
+
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+              {([
+                ['all', `All ${images.length}`],
+                ['image', `Image ${mediaCounts.image}`],
+                ['video', `Video ${mediaCounts.video}`],
+              ] as const).map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setMediaFilter(key)}
+                  className={`whitespace-nowrap rounded-full px-3 py-1.5 text-[11px] font-bold transition-all ${
+                    mediaFilter === key
+                      ? 'bg-indigo-500 text-white'
+                      : 'bg-gray-100 text-gray-400 dark:bg-zinc-800 dark:text-zinc-500'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
-        )}
+        ) : null}
       </div>
 
-      {/* Content */}
       <div className="px-4 py-4">
         {activeTab === 'generation' ? (
           loadingImages ? (
-            <div className="flex justify-center py-20"><Loader className="w-7 h-7 text-gray-300 animate-spin" /></div>
+            <div className="flex justify-center py-20">
+              <Loader className="h-7 w-7 animate-spin text-gray-300" />
+            </div>
           ) : filteredImages.length === 0 ? (
-            <div className="text-center py-20">
-              <Image className="w-12 h-12 text-gray-200 mx-auto mb-3" />
-              <p className="text-sm text-gray-400 dark:text-zinc-500">Không có dữ liệu</p>
+            <div className="py-20 text-center">
+              {mediaFilter === 'video' ? <Video className="mx-auto mb-3 h-12 w-12 text-gray-200" /> : <ImageIcon className="mx-auto mb-3 h-12 w-12 text-gray-200" />}
+              <p className="text-sm text-gray-400 dark:text-zinc-500">Khong co du lieu phu hop.</p>
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3">
-              {filteredImages.map((img) => {
-                const isVideo = getAssetKind(img) === 'video';
-                const isProcessing = img.status === 'processing' || img.status === 'queued';
-                const isFailed = img.status === 'failed';
+              {filteredImages.map((image) => {
+                const assetKind = getAssetKind(image);
+                const isVideo = assetKind === 'video';
+                const status = getImageStatus(image);
+                const isProcessing = status === 'processing' || status === 'queued' || status === 'rescuing';
+                const isFailed = status === 'failed';
 
                 return (
-                  <div
-                    key={img.id}
-                    onClick={() => setViewingImage(img)}
-                    className="bg-white dark:bg-[#18181B] rounded-2xl overflow-hidden shadow-sm border border-gray-100 dark:border-zinc-800 active:scale-[0.98] transition-transform cursor-pointer"
+                  <button
+                    key={image.id}
+                    onClick={() => setViewingImage(image)}
+                    className="overflow-hidden rounded-[26px] border border-gray-100 bg-white text-left shadow-sm transition-transform active:scale-[0.985] dark:border-zinc-800 dark:bg-[#18181B]"
                   >
-                    {/* Thumbnail */}
                     <div className="relative aspect-square bg-gray-100 dark:bg-zinc-800">
                       {isProcessing ? (
-                        <div className="w-full h-full flex flex-col items-center justify-center">
-                          <Loader className="w-6 h-6 text-purple-400 animate-spin mb-2" />
-                          <span className="text-[10px] text-gray-400 dark:text-zinc-500">{Math.round(img.progress || 0)}%</span>
-                          <div className="w-16 h-1 bg-gray-200 dark:bg-zinc-700 rounded-full mt-1 overflow-hidden">
-                            <div className="h-full bg-purple-400 rounded-full" style={{ width: `${img.progress || 0}%` }} />
+                        <div className="flex h-full w-full flex-col items-center justify-center">
+                          <Loader className="mb-2 h-6 w-6 animate-spin text-purple-400" />
+                          <span className="text-[10px] text-gray-400 dark:text-zinc-500">{Math.round(image.progress || 0)}%</span>
+                          <div className="mt-1 h-1 w-16 overflow-hidden rounded-full bg-gray-200 dark:bg-zinc-700">
+                            <div className="h-full rounded-full bg-purple-400" style={{ width: `${image.progress || 0}%` }} />
                           </div>
                         </div>
                       ) : isFailed ? (
-                        <div className="w-full h-full flex flex-col items-center justify-center">
-                          <AlertTriangle className="w-6 h-6 text-red-300 mb-1" />
-                          <span className="text-[10px] text-red-400">Thất bại</span>
+                        <div className="flex h-full w-full flex-col items-center justify-center">
+                          <AlertTriangle className="mb-1 h-6 w-6 text-red-300" />
+                          <span className="text-[10px] text-red-400">That bai</span>
                         </div>
-                      ) : img.url ? (
-                        isVideo
-                          ? <video src={img.url} className="w-full h-full object-cover" muted playsInline />
-                          : <img src={img.url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                      ) : image.url ? (
+                        isVideo ? (
+                          <>
+                            <video
+                              src={image.url}
+                              className="h-full w-full object-cover"
+                              muted
+                              playsInline
+                              preload="metadata"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent" />
+                            <div className="absolute bottom-2 right-2 rounded-full bg-white/90 p-1.5 text-purple-600 shadow-lg">
+                              <PlayCircle className="h-4 w-4" />
+                            </div>
+                          </>
+                        ) : (
+                          <img src={image.url} alt="" className="h-full w-full object-cover" loading="lazy" />
+                        )
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <Image className="w-6 h-6 text-gray-200" />
+                        <div className="flex h-full w-full items-center justify-center">
+                          {isVideo ? <Video className="h-6 w-6 text-gray-300 dark:text-zinc-600" /> : <ImageIcon className="h-6 w-6 text-gray-300 dark:text-zinc-600" />}
                         </div>
                       )}
 
-                      {/* Type badge */}
-                      <div className="absolute top-2 left-2">
-                        {isVideo
-                          ? <span className="flex items-center gap-0.5 px-1.5 py-0.5 bg-purple-500/90 text-white text-[9px] font-bold rounded-md"><Video className="w-2.5 h-2.5" /> Video</span>
-                          : <span className="flex items-center gap-0.5 px-1.5 py-0.5 bg-blue-500/90 text-white text-[9px] font-bold rounded-md"><Image className="w-2.5 h-2.5" /> Ảnh</span>
-                        }
+                      <div className="absolute left-2 top-2">
+                        {isVideo ? (
+                          <span className="flex items-center gap-1 rounded-md bg-purple-500/90 px-1.5 py-0.5 text-[9px] font-bold text-white">
+                            <Video className="h-2.5 w-2.5" />
+                            Video
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 rounded-md bg-blue-500/90 px-1.5 py-0.5 text-[9px] font-bold text-white">
+                            <ImageIcon className="h-2.5 w-2.5" />
+                            Anh
+                          </span>
+                        )}
                       </div>
                     </div>
 
-                    {/* Info */}
-                    <div className="p-2.5">
-                      <p className="text-[11px] text-gray-700 dark:text-zinc-200 font-medium line-clamp-1">{img.prompt || img.toolName}</p>
-                      <div className="flex items-center justify-between mt-1.5">
-                        <span className="text-[10px] text-gray-400 dark:text-zinc-500">{formatDate(img.timestamp).split(',')[0]}</span>
-                        {getStatusBadge(img)}
+                    <div className="space-y-1.5 p-2.5">
+                      <p className="line-clamp-2 min-h-[2.5rem] text-[11px] font-medium text-gray-700 dark:text-zinc-200">
+                        {image.prompt || image.toolName || (isVideo ? 'Video AI' : 'Image AI')}
+                      </p>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate text-[10px] text-gray-400 dark:text-zinc-500">{formatDate(image.timestamp).split(',')[0]}</span>
+                        {getStatusBadge(image)}
                       </div>
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
           )
+        ) : loadingTransactions ? (
+          <div className="flex justify-center py-20">
+            <Loader className="h-7 w-7 animate-spin text-gray-300" />
+          </div>
+        ) : transactions.length === 0 ? (
+          <div className="py-20 text-center">
+            <Coins className="mx-auto mb-3 h-12 w-12 text-gray-200" />
+            <p className="text-sm text-gray-400 dark:text-zinc-500">Chua co giao dich nao.</p>
+          </div>
         ) : (
-          // --- TRANSACTIONS TAB ---
-          loadingTransactions ? (
-            <div className="flex justify-center py-20"><Loader className="w-7 h-7 text-gray-300 animate-spin" /></div>
-          ) : transactions.length === 0 ? (
-            <div className="text-center py-20">
-              <Coins className="w-12 h-12 text-gray-200 mx-auto mb-3" />
-              <p className="text-sm text-gray-400 dark:text-zinc-500">Chưa có giao dịch nào</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {transactions.map((tx) => (
-                <div key={tx.id} className="bg-white dark:bg-[#18181B] rounded-2xl p-4 border border-gray-100 dark:border-zinc-800 shadow-sm">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        {getTxBadge(tx.type)}
-                        {tx.status === 'pending' && <span className="text-[10px] text-yellow-500 font-bold">PENDING</span>}
-                        {tx.status === 'failed' && <span className="text-[10px] text-red-500 font-bold">FAILED</span>}
-                      </div>
-                      <p className="text-sm text-gray-700 dark:text-zinc-200 line-clamp-1">{tx.description}</p>
-                      <p className="text-[10px] text-gray-400 dark:text-zinc-500 mt-1">{formatDate(tx.createdAt)}</p>
+          <div className="space-y-2.5">
+            {transactions.map((transaction) => (
+              <div key={transaction.id} className="rounded-[26px] border border-gray-100 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-[#18181B]">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-1 flex items-center gap-2">
+                      {getTransactionBadge(transaction.type)}
+                      {transaction.status === 'pending' ? <span className="text-[10px] font-bold text-amber-500">PENDING</span> : null}
+                      {transaction.status === 'failed' ? <span className="text-[10px] font-bold text-red-500">FAILED</span> : null}
                     </div>
-                    <div className="text-right shrink-0 ml-3">
-                      <p className={`text-sm font-bold ${tx.vcoinChange >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                        {tx.vcoinChange >= 0 ? '+' : ''}{tx.vcoinChange} VC
+                    <p className="line-clamp-1 text-sm text-gray-700 dark:text-zinc-200">{transaction.description}</p>
+                    <p className="mt-1 text-[10px] text-gray-400 dark:text-zinc-500">{formatDate(transaction.createdAt)}</p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className={`text-sm font-bold ${transaction.vcoinChange >= 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-red-500 dark:text-red-300'}`}>
+                      {transaction.vcoinChange >= 0 ? '+' : ''}
+                      {transaction.vcoinChange} VC
+                    </p>
+                    {transaction.amountVnd ? (
+                      <p className="text-[10px] text-gray-400 dark:text-zinc-500">
+                        {new Intl.NumberFormat('vi-VN').format(transaction.amountVnd)}d
                       </p>
-                      {tx.amountVnd && (
-                        <p className="text-[10px] text-gray-400 dark:text-zinc-500">{new Intl.NumberFormat('vi-VN').format(tx.amountVnd)}đ</p>
-                      )}
-                    </div>
+                    ) : null}
                   </div>
                 </div>
-              ))}
-            </div>
-          )
+              </div>
+            ))}
+          </div>
         )}
       </div>
 
-      {/* Detail Modal */}
       <DetailModal />
     </div>
   );

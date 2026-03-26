@@ -1,5 +1,5 @@
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Layout } from './components/Layout';
 import { Home } from './views/Home';
 import { ToolWorkspace } from './views/ToolWorkspace';
@@ -38,11 +38,100 @@ const shouldUseMobileShell = () => {
   return PHONE_USER_AGENT_PATTERN.test(navigator.userAgent.toLowerCase());
 };
 
+const DEFAULT_IMAGE_FEATURE = APP_CONFIG.main_features.find((feature) => feature.toolType === 'generation') || APP_CONFIG.main_features[0] || null;
+const DEFAULT_VIDEO_FEATURE = APP_CONFIG.main_features.find((feature) => feature.id === 'video_ai_gen' || feature.toolType === 'video') || DEFAULT_IMAGE_FEATURE;
+const DEFAULT_EDIT_FEATURE = APP_CONFIG.main_features.find((feature) => feature.toolType === 'editing') || DEFAULT_IMAGE_FEATURE;
+
+const findFeatureById = (featureId?: string | null) => {
+  if (!featureId) return null;
+  return APP_CONFIG.main_features.find((feature) => feature.id === featureId) || null;
+};
+
+const normalizeDesktopPathname = (pathname: string) => {
+  const trimmed = pathname.replace(/\/+$/, '');
+  return trimmed || '/';
+};
+
+const resolveDesktopRoute = () => {
+  if (typeof window === 'undefined') {
+    return { view: 'home' as ViewId, feature: DEFAULT_IMAGE_FEATURE };
+  }
+
+  const pathname = normalizeDesktopPathname(window.location.pathname);
+  const params = new URLSearchParams(window.location.search);
+
+  if (pathname === '/' || pathname === '/home') return { view: 'home' as ViewId, feature: null };
+  if (pathname === '/admin') return { view: 'admin' as ViewId, feature: null };
+  if (pathname === '/profile') return { view: 'settings' as ViewId, feature: null };
+  if (pathname === '/guide') return { view: 'guide' as ViewId, feature: null };
+  if (pathname === '/about') return { view: 'about' as ViewId, feature: null };
+  if (pathname === '/support') return { view: 'support' as ViewId, feature: null };
+  if (pathname === '/gallery') return { view: 'gallery' as ViewId, feature: null };
+  if (pathname === '/topup') return { view: 'topup' as ViewId, feature: null };
+  if (pathname === '/payment-gateway') return { view: 'payment_gateway' as ViewId, feature: null };
+  if (pathname === '/generate/image') {
+    return { view: 'tool_workspace' as ViewId, feature: findFeatureById(params.get('tool')) || DEFAULT_IMAGE_FEATURE };
+  }
+  if (pathname === '/generate/video') {
+    return { view: 'tool_workspace' as ViewId, feature: findFeatureById(params.get('tool')) || DEFAULT_VIDEO_FEATURE };
+  }
+  if (pathname === '/tools') {
+    return { view: 'tool_workspace' as ViewId, feature: DEFAULT_EDIT_FEATURE };
+  }
+
+  const toolMatch = pathname.match(/^\/tools\/([^/]+)$/);
+  if (toolMatch) {
+    return { view: 'tool_workspace' as ViewId, feature: findFeatureById(decodeURIComponent(toolMatch[1])) || DEFAULT_EDIT_FEATURE };
+  }
+
+  return { view: 'home' as ViewId, feature: null };
+};
+
+const buildDesktopPath = (view: ViewId, selectedFeature: Feature | null) => {
+  if (view === 'tool_workspace') {
+    const feature = selectedFeature || DEFAULT_IMAGE_FEATURE;
+    if (!feature) return '/home';
+
+    if (feature.toolType === 'video') {
+      return feature.id === DEFAULT_VIDEO_FEATURE?.id ? '/generate/video' : `/generate/video?tool=${encodeURIComponent(feature.id)}`;
+    }
+
+    if (feature.toolType === 'editing') {
+      return `/tools/${encodeURIComponent(feature.id)}`;
+    }
+
+    return feature.id === DEFAULT_IMAGE_FEATURE?.id ? '/generate/image' : `/generate/image?tool=${encodeURIComponent(feature.id)}`;
+  }
+
+  switch (view) {
+    case 'admin':
+      return '/admin';
+    case 'settings':
+      return '/profile';
+    case 'guide':
+      return '/guide';
+    case 'about':
+      return '/about';
+    case 'support':
+      return '/support';
+    case 'gallery':
+      return '/gallery';
+    case 'topup':
+      return '/topup';
+    case 'payment_gateway':
+      return '/payment-gateway';
+    case 'home':
+    default:
+      return '/home';
+  }
+};
+
 function AppContent() {
   const queueHeartbeatLeaseKey = 'auditionai:queue-heartbeat:leader';
   const queueHeartbeatIntervalMs = 30000;
   const queueHeartbeatLeaseMs = 35000;
   const heartbeatInstanceIdRef = useRef(typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `tab-${Date.now()}`);
+  const desktopHistoryModeRef = useRef<'replace' | 'push'>('replace');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userRole, setUserRole] = useState<'user' | 'admin'>('user');
   const [lang, setLang] = useState<Language>(APP_CONFIG.ui.default_language);
@@ -61,6 +150,14 @@ function AppContent() {
 
   // Custom Notification Hook
   const { notify } = useNotification();
+
+  const applyDesktopRouteFromLocation = useCallback(() => {
+    const resolved = resolveDesktopRoute();
+    setCurrentView(resolved.view);
+    if (resolved.feature) {
+      setSelectedFeature(resolved.feature);
+    }
+  }, []);
 
   useEffect(() => {
     // Initial theme setup
@@ -136,6 +233,7 @@ function AppContent() {
         window.history.replaceState({}, '', window.location.pathname);
 
         if (status === 'PAID') {
+             desktopHistoryModeRef.current = 'replace';
              if (orderCode) {
                  syncPayOSTransaction(orderCode)
                     .then(() => {
@@ -160,6 +258,7 @@ function AppContent() {
              }
              setCurrentView('topup');
         } else if (status === 'CANCELLED') {
+             desktopHistoryModeRef.current = 'replace';
              notify(
                  lang === 'vi' ? '\u0110\u00e3 h\u1ee7y thanh to\u00e1n.' : 'Payment cancelled.',
                  'error'
@@ -168,6 +267,36 @@ function AppContent() {
         }
     }
   }, [lang, notify]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    applyDesktopRouteFromLocation();
+    const handlePopState = () => {
+      desktopHistoryModeRef.current = 'replace';
+      applyDesktopRouteFromLocation();
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [applyDesktopRouteFromLocation, isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const targetPath = buildDesktopPath(currentView, selectedFeature);
+    const currentPath = `${window.location.pathname}${window.location.search}`;
+    if (currentPath === targetPath) return;
+
+    if (desktopHistoryModeRef.current === 'push') {
+      window.history.pushState({}, '', targetPath);
+    } else {
+      window.history.replaceState({}, '', targetPath);
+    }
+    desktopHistoryModeRef.current = 'replace';
+  }, [currentView, isAuthenticated, selectedFeature]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -259,6 +388,7 @@ function AppContent() {
   };
 
   const handleLogin = () => {
+    desktopHistoryModeRef.current = 'replace';
     setIsAuthenticated(true);
   };
 
@@ -266,15 +396,20 @@ function AppContent() {
       if (supabase) {
           await supabase.auth.signOut();
       }
+      desktopHistoryModeRef.current = 'replace';
       setIsAuthenticated(false);
       setCurrentView('home');
       setUserRole('user'); // Reset role
+      if (typeof window !== 'undefined') {
+        window.history.replaceState({}, '', '/');
+      }
   };
 
   const handleNavigate = (view: ViewId, data?: any) => {
+    desktopHistoryModeRef.current = 'push';
     if (view === 'tools') {
       if (!selectedFeature) {
-        setSelectedFeature(APP_CONFIG.main_features[0]);
+        setSelectedFeature(DEFAULT_IMAGE_FEATURE || APP_CONFIG.main_features[0]);
       }
       setCurrentView('tool_workspace');
       return;
@@ -291,6 +426,7 @@ function AppContent() {
         notify(maintenanceMode.message, 'warning');
         return;
     }
+    desktopHistoryModeRef.current = 'push';
     setSelectedFeature(feature);
     setCurrentView('tool_workspace');
   };

@@ -15,7 +15,7 @@ const HISTORY_RETENTION_DAYS = 7;
 const HISTORY_RETENTION_MS = HISTORY_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 const ACTIVE_GALLERY_CLIENT_CACHE_TTL_MS = 10_000;
 const IDLE_GALLERY_CLIENT_CACHE_TTL_MS = 30_000;
-const GENERATED_IMAGE_ROW_SELECT = 'id, image_url, prompt, created_at, updated_at, asset_type, tool_id, tool_name, model_used, is_public, user_id, user_name, status, job_id, progress, queue_payload, error_message, cost_vcoin';
+const GENERATED_IMAGE_ROW_SELECT = 'id, image_url, prompt, created_at, updated_at, asset_type, queue_kind, tool_id, tool_name, model_used, is_public, user_id, user_name, status, job_id, progress, queue_payload, error_message, cost_vcoin';
 
 // --- CLOUDFLARE R2 CONFIGURATION ---
 // Helper to get Env Var from either Vite's import.meta.env or process.env shim
@@ -191,6 +191,7 @@ const mergeImageVersions = (cloudImage: GeneratedImage, localImage: GeneratedIma
     ...secondary,
     ...primary,
     assetType: primary.assetType || secondary.assetType,
+    queueKind: primary.queueKind || secondary.queueKind,
     url: primary.url || secondary.url,
     prompt: primary.prompt || secondary.prompt,
     toolId: primary.toolId || secondary.toolId,
@@ -229,15 +230,35 @@ const mergeCloudAndLocalImages = (cloudImages: GeneratedImage[], localImages: Ge
   return Array.from(merged.values()).sort((a, b) => b.timestamp - a.timestamp);
 };
 
-const inferAssetType = (toolId?: string, modelUsed?: string, assetUrl?: string): 'image' | 'video' => {
-  if (toolId?.includes('video') || toolId?.includes('motion')) return 'video';
+const inferAssetType = (
+  toolId?: string,
+  modelUsed?: string,
+  assetUrl?: string,
+  queueKind?: string,
+  toolName?: string,
+): 'image' | 'video' => {
+  const normalizedToolId = (toolId || '').toLowerCase();
+  const normalizedQueueKind = (queueKind || '').toLowerCase();
+  const normalizedToolName = (toolName || '').toLowerCase();
+  if (
+    normalizedToolId.includes('video') ||
+    normalizedToolId.includes('motion') ||
+    normalizedQueueKind.includes('video') ||
+    normalizedQueueKind.includes('motion') ||
+    normalizedToolName.includes('video') ||
+    normalizedToolName.includes('motion')
+  ) {
+    return 'video';
+  }
   const normalizedModel = (modelUsed || '').toLowerCase();
   const normalizedUrl = (assetUrl || '').toLowerCase();
   if (
     normalizedModel.includes('kling') ||
     normalizedModel.includes('motion') ||
+    normalizedModel.includes('video') ||
     normalizedUrl.endsWith('.mp4') ||
-    normalizedUrl.includes('.mp4?')
+    normalizedUrl.includes('.mp4?') ||
+    normalizedUrl.includes('/video/')
   ) {
     return 'video';
   }
@@ -269,7 +290,8 @@ const buildMetadataPayload = (image: GeneratedImage, user: { id: string; usernam
   progress: image.progress ?? (imageUrl ? 100 : 0),
   error_message: image.error || null,
   cost_vcoin: image.cost ?? null,
-  asset_type: image.assetType || inferAssetType(image.toolId, image.engine, imageUrl || undefined),
+  asset_type: image.assetType || inferAssetType(image.toolId, image.engine, imageUrl || undefined, image.queueKind, image.toolName),
+  queue_kind: image.queueKind || null,
   updated_at: new Date(image.updatedAt || Date.now()).toISOString(),
 });
 
@@ -328,7 +350,8 @@ const mapGeneratedImageRow = (row: any, fallbackUserName: string, fallbackCost?:
   prompt: row.prompt,
   timestamp: new Date(row.created_at).getTime(),
   updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : new Date(row.created_at).getTime(),
-  assetType: row.asset_type || inferAssetType(row.tool_id, row.model_used, row.image_url),
+  assetType: row.asset_type || inferAssetType(row.tool_id, row.model_used, row.image_url, row.queue_kind, row.tool_name),
+  queueKind: row.queue_kind || undefined,
   toolId: row.tool_id || inferToolId(row.model_used, row.image_url),
   toolName: row.tool_name || mapEngineName(row.model_used),
   engine: mapEngineName(row.model_used),

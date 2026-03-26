@@ -71,6 +71,7 @@ export interface GeneratedImage {
   timestamp: number;
   updatedAt?: number;
   assetType?: 'image' | 'video';
+  queueKind?: string;
   toolId: string;
   toolName: string;
   engine: string;

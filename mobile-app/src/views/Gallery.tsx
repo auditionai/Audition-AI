@@ -65,6 +65,13 @@ const formatDate = (timestamp: number | string) => {
   });
 };
 
+const summarizePrompt = (prompt?: string | null, maxLength = 220) => {
+  if (!prompt) return '';
+  const normalized = prompt.replace(/\s+/g, ' ').trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, maxLength).trimEnd()}...`;
+};
+
 const getTransactionStatusLabel = (status: HistoryItem['status']) => {
   switch (status) {
     case 'pending':
@@ -378,7 +385,32 @@ export const Gallery: React.FC = () => {
               {getStatusBadge(image)}
             </div>
 
-            {image.prompt ? <p className="text-sm leading-relaxed text-gray-700 dark:text-zinc-200">{image.prompt}</p> : null}
+            {image.prompt ? (
+              <p className="line-clamp-5 text-sm leading-relaxed text-gray-700 dark:text-zinc-200">
+                {summarizePrompt(image.prompt)}
+              </p>
+            ) : null}
+
+            {image.queueStage || (image.queueLogs?.length || 0) > 0 ? (
+              <div className="rounded-2xl border border-purple-100 bg-purple-50 p-3 dark:border-purple-500/20 dark:bg-purple-500/10">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-purple-600 dark:text-purple-300">
+                  Luồng xử lý
+                </p>
+                {image.queueStage ? (
+                  <p className="mt-1 text-xs font-semibold text-gray-700 dark:text-zinc-200">{image.queueStage}</p>
+                ) : null}
+                {(image.queueLogs?.length || 0) > 0 ? (
+                  <div className="mt-2 space-y-1.5">
+                    {image.queueLogs!.slice(-3).map((entry, index) => (
+                      <div key={`${entry.at}-${index}`} className="flex items-start gap-2 text-[11px] text-gray-500 dark:text-zinc-400">
+                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-purple-400" />
+                        <span>{entry.message}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
 
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div className="rounded-2xl bg-gray-50 p-3 dark:bg-zinc-800/80"><span className="text-gray-400 dark:text-zinc-500">Thời gian</span><p className="mt-0.5 font-medium text-gray-700 dark:text-zinc-200">{formatDate(image.timestamp)}</p></div>

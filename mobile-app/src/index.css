@@ -1,0 +1,99 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-primary: #111111;
+  --color-primary-foreground: #FAFAFA;
+  --color-secondary: #F3F4F6;
+  --color-secondary-foreground: #111111;
+  --color-accent: #C7A97A;
+  --color-background: #FCFCFC;
+  --color-surface: #FFFFFF;
+  --color-muted: #8E8E93;
+  --color-border: #E5E5EA;
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+@layer base {
+  .dark {
+    --color-primary: #FAFAFA;
+    --color-primary-foreground: #111111;
+    --color-secondary: #1F2937;
+    --color-secondary-foreground: #FAFAFA;
+    --color-background: #09090B;
+    --color-surface: #18181B;
+    --color-muted: #A1A1AA;
+    --color-border: #27272A;
+  }
+}
+
+/* Base styles for premium feel */
+@layer base {
+  body {
+    background-color: var(--color-background);
+    color: var(--color-primary);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Safe area padding for notch devices */
+  .pb-safe {
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), 8px);
+  }
+}
+
+/* Custom utility classes */
+@layer utilities {
+  .glass {
+    @apply bg-white/80 dark:bg-[#18181B]/80 backdrop-blur-xl border-t border-white/40 dark:border-zinc-800/50 shadow-[0_-2px_16px_rgba(0,0,0,0.04)] dark:shadow-[0_-2px_16px_rgba(0,0,0,0.4)];
+  }
+  .glass-dark {
+    @apply bg-[#111111]/80 backdrop-blur-xl border border-white/10 shadow-sm text-white;
+  }
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  /* Fade-in animation */
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out forwards;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Slide-up animation */
+  .animate-slide-up {
+    animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Sweep shimmer animation */
+  .animate-shimmer {
+    animation: shimmer 2.5s infinite linear;
+  }
+
+  @keyframes shimmer {
+    0% { transform: translateX(-150%) skewX(-15deg); }
+    100% { transform: translateX(200%) skewX(-15deg); }
+  }
+}

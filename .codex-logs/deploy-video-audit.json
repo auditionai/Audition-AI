@@ -1,0 +1,43 @@
+{
+  "executedAt": "2026-03-26T15:58:49.269Z",
+  "totalRowsScanned": 65,
+  "videoRows": 3,
+  "videoCompleted": 0,
+  "videoFailed": 3,
+  "videoWithUrl": 0,
+  "recentVideoRows": [
+    {
+      "id": "94271eac-78ba-47e4-b030-a189f4723751",
+      "user_id": "9e0dae75-45cd-4bf2-9223-de7b5ba522e8",
+      "status": "failed",
+      "asset_type": "video",
+      "queue_kind": "motion_generate",
+      "tool_id": "motion_control_gen",
+      "tool_name": "Motion Control",
+      "image_url": "",
+      "created_at": "2026-03-26T06:42:42.61356+00:00"
+    },
+    {
+      "id": "cfad9b33-60df-43ec-b93f-fb34d76d615d",
+      "user_id": "9d07a0c0-bcb9-46d1-b223-c5e1c86af06b",
+      "status": "failed",
+      "asset_type": "video",
+      "queue_kind": "motion_generate",
+      "tool_id": "motion_control_gen",
+      "tool_name": "Motion Control",
+      "image_url": "",
+      "created_at": "2026-03-26T00:00:15.140809+00:00"
+    },
+    {
+      "id": "184dc91d-2119-476b-90c2-9077f60e70ab",
+      "user_id": "bc435dac-f028-4662-9551-4dc197037d98",
+      "status": "failed",
+      "asset_type": "video",
+      "queue_kind": "motion_generate",
+      "tool_id": "motion_control_gen",
+      "tool_name": "Motion Control",
+      "image_url": "",
+      "created_at": "2026-03-25T14:11:13.677666+00:00"
+    }
+  ]
+}

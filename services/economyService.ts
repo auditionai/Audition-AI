@@ -1398,6 +1398,41 @@ export const getApiKeysList = async () => {
 
 // --- TRANSACTIONS ---
 
+const SHELL_OVERRIDE_STORAGE_KEY = 'auditionai:shell-override';
+const PHONE_USER_AGENT_PATTERN = /iphone|ipod|android.+mobile|windows phone|blackberry|opera mini|mobile safari/i;
+
+const shouldPreferMobileShell = () => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('desktop') === '1') return false;
+    if (params.get('mobile') === '1') return true;
+
+    const savedOverride = window.localStorage.getItem(SHELL_OVERRIDE_STORAGE_KEY);
+    if (savedOverride === 'mobile') return true;
+    if (savedOverride === 'desktop') return false;
+
+    const navigatorWithUAData = navigator as Navigator & { userAgentData?: { mobile?: boolean } };
+    if (typeof navigatorWithUAData.userAgentData?.mobile === 'boolean') {
+        return navigatorWithUAData.userAgentData.mobile;
+    }
+
+    return PHONE_USER_AGENT_PATTERN.test(navigator.userAgent.toLowerCase());
+};
+
+const buildPayOSReturnUrls = () => {
+    const baseUrl = new URL('/topup', window.location.origin);
+    const cancelUrl = new URL('/topup', window.location.origin);
+
+    if (shouldPreferMobileShell()) {
+        baseUrl.searchParams.set('mobile', '1');
+        cancelUrl.searchParams.set('mobile', '1');
+    }
+
+    return {
+        returnUrl: baseUrl.toString(),
+        cancelUrl: cancelUrl.toString(),
+    };
+};
+
 export const createPaymentLink = async (packageId: string): Promise<Transaction> => {
     if (!supabase) throw new Error("No Database");
     const user = await getUserProfile();
@@ -1427,6 +1462,7 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
 
     // Call Cloud Function to get PayOS Link
     try {
+        const { returnUrl, cancelUrl } = buildPayOSReturnUrls();
         const res = await fetch('/api/create-payment', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1434,8 +1470,8 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
                 amount: pkg.price,
                 description: `AI${String(providerOrderCode).slice(-7)}`,
                 orderCode: providerOrderCode,
-                returnUrl: window.location.origin,
-                cancelUrl: window.location.origin,
+                returnUrl,
+                cancelUrl,
                 buyerName: user.username,
                 buyerEmail: user.email,
                 items: [
@@ -1888,7 +1924,7 @@ export const deleteGiftcode = async (id: string) => {
 export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean, reward: number, message: string}> => {
     if (!supabase) return { success: false, reward: 0, message: "No Database" };
     const cleanCode = codeStr.trim().toUpperCase();
-    if (!cleanCode) return { success: false, reward: 0, message: "Vui lÃ²ng nháº­p giftcode." };
+    if (!cleanCode) return { success: false, reward: 0, message: "Vui lòng nhập giftcode." };
 
     try {
         const authHeader = await getSessionAuthHeader();
@@ -1906,7 +1942,7 @@ export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean
             return {
                 success: false,
                 reward: 0,
-                message: payload?.message || 'KhÃ´ng thá»ƒ sá»­ dá»¥ng giftcode.',
+                message: payload?.message || 'Không thể sử dụng giftcode.',
             };
         }
 

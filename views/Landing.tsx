@@ -20,6 +20,7 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   // Auth Inputs
+  const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -173,6 +174,11 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
           return;
       }
       
+      if (authMode === 'register' && !displayName.trim()) {
+          notify('Vui lòng nhập tên người dùng.', 'warning');
+          return;
+      }
+
       setIsAuthLoading(true);
       try {
           if (authMode === 'login') {
@@ -193,7 +199,7 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
                   return;
               }
 
-              const { error } = await signUpWithEmail(email, password);
+              const { error } = await signUpWithEmail(email, password, displayName.trim());
               if (error) {
                   if (error.message.includes('Database error') || error.message.includes('saving new user')) {
                       setShowSqlFix(true); 
@@ -737,6 +743,18 @@ CREATE POLICY "Public read access" ON public.users FOR SELECT TO anon USING (tru
 
                   <div className="space-y-4">
                       {/* ... form fields ... */}
+                      {authMode === 'register' && (
+                        <div>
+                            <label className="text-xs font-bold text-audi-cyan uppercase mb-1 block">Tên người dùng</label>
+                            <input
+                              type="text"
+                              value={displayName}
+                              onChange={(e) => setDisplayName(e.target.value)}
+                              className="w-full bg-white/5 border border-white/20 rounded-xl p-3 text-white focus:border-audi-pink outline-none transition-colors"
+                              placeholder="Nhập tên người dùng..."
+                            />
+                        </div>
+                      )}
                       <div>
                           <label className="text-xs font-bold text-audi-cyan uppercase mb-1 block">Email</label>
                           <input 

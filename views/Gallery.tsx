@@ -218,8 +218,10 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
 
   const getAssetKind = (img: GeneratedImage) => {
       if (img.assetType) return img.assetType;
+      if (img.queueKind?.includes('video') || img.queueKind?.includes('motion')) return 'video';
       if (img.toolId?.includes('video') || img.toolId?.includes('motion')) return 'video';
-      if ((img.engine || '').toLowerCase().includes('kling') || (img.engine || '').toLowerCase().includes('motion')) return 'video';
+      if ((img.toolName || '').toLowerCase().includes('video') || (img.toolName || '').toLowerCase().includes('motion')) return 'video';
+      if ((img.engine || '').toLowerCase().includes('kling') || (img.engine || '').toLowerCase().includes('motion') || (img.engine || '').toLowerCase().includes('video')) return 'video';
       if ((img.url || '').toLowerCase().endsWith('.mp4') || (img.url || '').toLowerCase().includes('.mp4?')) return 'video';
       return 'image';
   };

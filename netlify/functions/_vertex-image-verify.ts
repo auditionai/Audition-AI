@@ -98,20 +98,44 @@ const normalizeSlotStatus = (value: unknown): ImageOutputSlotStatus => {
   return 'uncertain';
 };
 
-const normalizeVerificationResult = (raw: any): ImageOutputVerificationResult => ({
-  pass: raw?.pass === true,
-  summary: typeof raw?.summary === 'string' ? raw.summary.trim() : '',
-  detectedCharacterCount:
-    typeof raw?.detectedCharacterCount === 'number' && Number.isFinite(raw.detectedCharacterCount)
-      ? raw.detectedCharacterCount
-      : null,
-  missingCharacterSlots: normalizeNumberArray(raw?.missingCharacterSlots),
-  duplicatedCharacterSlots: normalizeNumberArray(raw?.duplicatedCharacterSlots),
-  substitutedFromSampleOrStyle: raw?.substitutedFromSampleOrStyle === true,
-  issues: Array.isArray(raw?.issues)
+const summarySignalsStyleBorrow = (summary: string) => {
+  const lower = summary.toLowerCase();
+  if (!lower.includes('style image')) return false;
+
+  return (
+    lower.includes('adopting') ||
+    lower.includes('borrow') ||
+    lower.includes('pose') ||
+    lower.includes('outfit') ||
+    lower.includes('clothing') ||
+    lower.includes('hairstyle')
+  );
+};
+
+const textSignalsStyleBorrow = (value: string) => {
+  const lower = value.toLowerCase();
+  if (!lower.includes('style')) return false;
+
+  return (
+    lower.includes('borrow') ||
+    lower.includes('pose') ||
+    lower.includes('outfit') ||
+    lower.includes('clothing') ||
+    lower.includes('hairstyle') ||
+    lower.includes('clone') ||
+    lower.includes('replace')
+  );
+};
+
+const normalizeVerificationResult = (raw: any): ImageOutputVerificationResult => {
+  const summary = typeof raw?.summary === 'string' ? raw.summary.trim() : '';
+  const missingCharacterSlots = normalizeNumberArray(raw?.missingCharacterSlots);
+  const duplicatedCharacterSlots = normalizeNumberArray(raw?.duplicatedCharacterSlots);
+  const substitutedFromSampleOrStyle = raw?.substitutedFromSampleOrStyle === true;
+  const issues = Array.isArray(raw?.issues)
     ? raw.issues.map((entry: unknown) => String(entry || '').trim()).filter(Boolean)
-    : [],
-  slotFindings: Array.isArray(raw?.slotFindings)
+    : [];
+  const slotFindings = Array.isArray(raw?.slotFindings)
     ? raw.slotFindings
         .map((entry: any) => ({
           characterIndex: Math.max(1, Math.floor(Number(entry?.characterIndex || 0))),
@@ -119,8 +143,35 @@ const normalizeVerificationResult = (raw: any): ImageOutputVerificationResult =>
           notes: typeof entry?.notes === 'string' ? entry.notes.trim() : '',
         }))
         .filter((entry: ImageOutputSlotFinding) => Number.isFinite(entry.characterIndex) && entry.characterIndex > 0)
-    : [],
-});
+    : [];
+  const hasBlockingSlotFinding = slotFindings.some((entry) => entry.status !== 'matched');
+  const borrowedStyleSignal = summarySignalsStyleBorrow(summary);
+  const issueSignalsStyleBorrow = issues.some((entry) => textSignalsStyleBorrow(entry));
+  const notesSignalStyleBorrow = slotFindings.some((entry) => textSignalsStyleBorrow(entry.notes));
+  const pass =
+    raw?.pass === true &&
+    !substitutedFromSampleOrStyle &&
+    missingCharacterSlots.length === 0 &&
+    duplicatedCharacterSlots.length === 0 &&
+    !hasBlockingSlotFinding &&
+    !borrowedStyleSignal &&
+    !issueSignalsStyleBorrow &&
+    !notesSignalStyleBorrow;
+
+  return {
+    pass,
+    summary,
+    detectedCharacterCount:
+      typeof raw?.detectedCharacterCount === 'number' && Number.isFinite(raw.detectedCharacterCount)
+        ? raw.detectedCharacterCount
+        : null,
+    missingCharacterSlots,
+    duplicatedCharacterSlots,
+    substitutedFromSampleOrStyle,
+    issues,
+    slotFindings,
+  };
+};
 
 const buildVerificationInstruction = (payload: ImageGenerateRecipePayload) => {
   const characterGroups = getImageCharacterReferenceGroups(payload);
@@ -171,6 +222,8 @@ const buildVerificationInstruction = (payload: ImageGenerateRecipePayload) => {
     '4. Detect if any slot was duplicated to fill another slot.',
     '5. Detect if any visible subject looks borrowed from the sample image or style image instead of the uploaded character slots.',
     '6. Detect if any final subject looks like a blended identity instead of a clean slot match.',
+    '7. If the final result adopts pose, outfit, hairstyle, clothing, or subject appearance from the STYLE IMAGE, mark pass=false.',
+    '8. If the final result looks like a style-image clone with only the uploaded face/identity pasted on top, mark pass=false.',
     '',
     'Return JSON only with this exact schema:',
     '{',

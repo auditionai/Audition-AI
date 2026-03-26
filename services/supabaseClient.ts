@@ -139,10 +139,10 @@ export const signInWithEmail = async (email: string, password: string) => {
     return await supabase.auth.signInWithPassword({ email, password });
 };
 
-export const signUpWithEmail = async (email: string, password: string) => {
+export const signUpWithEmail = async (email: string, password: string, preferredDisplayName?: string) => {
     if (!supabase) return { data: null, error: { message: "Chức năng yêu cầu kết nối Database." } };
     
-    const displayName = email.split('@')[0];
+    const displayName = preferredDisplayName?.trim() || email.split('@')[0];
 
     // 1. Create Auth User
     const { data, error } = await supabase.auth.signUp({ 

@@ -1,6 +1,7 @@
 
 import { GeneratedImage } from '../types';
 import type { QueueProgressLogEntry } from '../shared/queueRecipes';
+import { normalizeQueueProgressLogs, repairVietnameseMojibake } from '../shared/queueLogText';
 import { getSupabaseAuthHeader, getSupabaseUser, supabase } from './supabaseClient';
 import { getUserProfile } from './economyService';
 import { S3Client, PutObjectCommand, DeleteObjectCommand, DeleteObjectsCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
@@ -318,16 +319,16 @@ const mapGeneratedImageRow = (row: any, fallbackUserName: string, fallbackCost?:
     row.queue_payload &&
     typeof row.queue_payload === 'object' &&
     Array.isArray(row.queue_payload.__logs)
-      ? row.queue_payload.__logs.filter((entry: any): entry is QueueProgressLogEntry =>
+      ? normalizeQueueProgressLogs(row.queue_payload.__logs.filter((entry: any): entry is QueueProgressLogEntry =>
           entry &&
           typeof entry === 'object' &&
           typeof entry.at === 'string' &&
           typeof entry.stage === 'string' &&
           typeof entry.level === 'string' &&
           typeof entry.message === 'string'
-        )
+        ))
       : undefined,
-  error: row.error_message || undefined,
+  error: repairVietnameseMojibake(row.error_message || undefined) || undefined,
   cost: Number.isFinite(Number(row.cost_vcoin)) ? Number(row.cost_vcoin) : fallbackCost,
 });
 

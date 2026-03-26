@@ -1,6 +1,7 @@
 import type { Handler } from '@netlify/functions';
 import type { AdminQueueJob, AdminQueueSummary } from '../../types';
 import type { QueueProgressLogEntry } from '../../shared/queueRecipes';
+import { normalizeQueueProgressLogs, repairVietnameseMojibake } from '../../shared/queueLogText';
 import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 
 const headers = {
@@ -20,7 +21,7 @@ const normalizeQueueLogs = (payload: Record<string, unknown> | null | undefined)
     return [];
   }
 
-  return rawLogs.filter(
+  return normalizeQueueProgressLogs(rawLogs.filter(
     (entry): entry is QueueProgressLogEntry =>
       Boolean(entry) &&
       typeof entry === 'object' &&
@@ -28,7 +29,7 @@ const normalizeQueueLogs = (payload: Record<string, unknown> | null | undefined)
       typeof (entry as QueueProgressLogEntry).stage === 'string' &&
       typeof (entry as QueueProgressLogEntry).level === 'string' &&
       typeof (entry as QueueProgressLogEntry).message === 'string',
-  );
+  ));
 };
 
 const getQueueStage = (payload: Record<string, unknown> | null | undefined) => {
@@ -200,7 +201,7 @@ export const handler: Handler = async (event) => {
         progress: typeof row.progress === 'number' ? row.progress : undefined,
         queueStage: getQueueStage(payload),
         queueLogs,
-        error: row.error_message || undefined,
+        error: repairVietnameseMojibake(row.error_message || undefined) || undefined,
         createdAt: row.created_at || undefined,
         updatedAt: row.updated_at || undefined,
         nextPollAt: row.next_poll_at || undefined,

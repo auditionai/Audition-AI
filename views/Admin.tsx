@@ -1063,6 +1063,22 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
   const visibleUsers = filteredUsers.slice(0, userListLimit);
   const queueStageOptions = Array.from(new Set(queueJobs.map((job) => job.queueStage).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b));
+  const getQueueStageLabel = (stage?: string) => {
+      switch (stage) {
+          case 'queued': return 'Đã vào hàng đợi';
+          case 'preparing': return 'Đang chuẩn bị';
+          case 'uploading_refs': return 'Đang tải ảnh tham chiếu';
+          case 'synthesizing_prompt': return 'Đang tổng hợp prompt';
+          case 'building_payload': return 'Đang dựng payload';
+          case 'dispatching': return 'Đang gửi provider';
+          case 'submitted': return 'Provider đã nhận job';
+          case 'polling': return 'Đang chờ provider';
+          case 'verifying_output': return 'Đang hậu kiểm kết quả';
+          case 'completed': return 'Hoàn thành';
+          case 'failed': return 'Thất bại';
+          default: return stage || '-';
+      }
+  };
 
   const getAssetKind = (asset: GeneratedImage) => {
       if (asset.assetType) return asset.assetType;
@@ -1942,7 +1958,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           <select value={queueStageFilter} onChange={(e) => setQueueStageFilter(e.target.value)} className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none">
                               <option value="all" className="bg-[#12121a]">Tất cả stage</option>
                               {queueStageOptions.map((stage) => (
-                                  <option key={stage} value={stage} className="bg-[#12121a]">{stage}</option>
+                                  <option key={stage} value={stage} className="bg-[#12121a]">{getQueueStageLabel(stage)}</option>
                               ))}
                           </select>
                           <label className="flex items-center justify-between gap-3 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white">
@@ -1994,7 +2010,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                   </div>
                                                   {job.isStuck && <div className="text-[11px] text-orange-400 font-bold mt-2">STUCK</div>}
                                               </td>
-                                              <td className="px-3 py-3 text-xs text-slate-300">{job.queueStage || '-'}</td>
+                                              <td className="px-3 py-3 text-xs text-slate-300">{getQueueStageLabel(job.queueStage)}</td>
                                               <td className="px-3 py-3">
                                                   <div className="text-sm font-bold text-white">{job.progress || 0}%</div>
                                                   <div className="w-24 h-2 rounded-full bg-white/10 mt-2 overflow-hidden">
@@ -2040,7 +2056,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       </div>
                                       <div className="grid grid-cols-2 gap-3 mt-3 text-xs">
                                           <div><span className="text-slate-500">Job</span><div className="text-white font-mono mt-1">{job.id.slice(0, 12)}</div></div>
-                                          <div><span className="text-slate-500">Stage</span><div className="text-white mt-1">{job.queueStage || '-'}</div></div>
+                                          <div><span className="text-slate-500">Stage</span><div className="text-white mt-1">{getQueueStageLabel(job.queueStage)}</div></div>
                                           <div><span className="text-slate-500">Loại</span><div className="text-white mt-1">{job.assetType} · {job.queueKind || 'unknown'}</div></div>
                                           <div><span className="text-slate-500">Cập nhật</span><div className="text-white mt-1">{getTimeAgo(job.updatedAt)}</div></div>
                                       </div>
@@ -3079,7 +3095,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               (selectedQueueJobDetail.job.queueLogs || []).map((log, index) => (
                                                   <div key={`${log.at}-${index}`} className="border border-white/10 rounded-xl p-3 bg-[#0f0f16]">
                                                       <div className="flex items-center justify-between gap-3">
-                                                          <div className="text-xs font-bold text-white uppercase">{log.stage}</div>
+                                                          <div className="text-xs font-bold text-white uppercase">{getQueueStageLabel(log.stage)}</div>
                                                           <div className="text-[11px] text-slate-500">{new Date(log.at).toLocaleString()}</div>
                                                       </div>
                                                       <div className="text-sm text-slate-300 mt-2">{log.message}</div>

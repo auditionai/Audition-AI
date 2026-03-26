@@ -31,6 +31,7 @@ import {
   type MotionGenerateRecipePayload,
   type VideoGenerateRecipePayload,
 } from '../../shared/queueRecipes';
+import { repairVietnameseMojibake } from '../../shared/queueLogText';
 
 type QueueJobRow = {
   id: string;
@@ -299,7 +300,7 @@ const buildQueueLogEntry = (
   at: new Date().toISOString(),
   stage,
   level,
-  message,
+  message: repairVietnameseMojibake(message),
 });
 
 const withQueueLog = (
@@ -522,6 +523,25 @@ const humanizeQueueStage = (stage: QueueProcessingStage | null) => {
   }
 };
 
+const describeQueueStage = (stage: QueueProcessingStage | null) => {
+  switch (stage) {
+    case 'uploading_refs':
+      return 'tải ảnh tham chiếu';
+    case 'synthesizing_prompt':
+      return 'tổng hợp prompt';
+    case 'building_payload':
+      return 'dựng payload';
+    case 'dispatching':
+      return 'gửi provider';
+    case 'polling':
+      return 'chờ provider xử lý';
+    case 'verifying_output':
+      return 'hậu kiểm kết quả';
+    default:
+      return 'chuẩn bị dữ liệu';
+  }
+};
+
 const resolveImageGenerateStage = (
   recipePayload: ImageGenerateRecipePayload,
   renderSources: string[],
@@ -669,7 +689,7 @@ const getProcessingTimeoutUserMessage = (
 ) => {
   const timeoutMinutes = Math.ceil(getProviderProcessingTimeoutMs(job, payload) / 60000);
   if (job.queue_kind === 'video_generate' || job.queue_kind === 'motion_generate') {
-    return `Video da qua thoi gian cho ${timeoutMinutes} phut. Vui long tao lai video moi.`;
+    return `Video đã quá thời gian chờ ${timeoutMinutes} phút. Vui lòng tạo lại video mới.`;
   }
 
   return `Anh da qua thoi gian cho ${timeoutMinutes} phut tu luc gui sang he thong tao anh. Vui long thu lai.`;
@@ -690,17 +710,17 @@ const buildReviewIssueMessages = (issues: VideoInputReviewIssue[]) => {
   const unique = [...new Set(issues)];
   const messages: string[] = [];
 
-  if (unique.includes('no_character')) messages.push('khong tim thay nhan vat ro rang trong anh');
-  if (unique.includes('multiple_characters')) messages.push('anh co tu 2 nhan vat tro len');
-  if (unique.includes('blurry_subject')) messages.push('nhan vat bi mo, nhin khong du ro net');
-  if (unique.includes('small_subject')) messages.push('nhan vat qua nho trong khung hinh');
-  if (unique.includes('occluded_subject')) messages.push('nhan vat bi che khuat qua nhieu');
-  if (unique.includes('missing_character_details')) messages.push('khong tach duoc chi tiet nhan vat');
-  if (unique.includes('unclear_background')) messages.push('boi canh hau canh khong ro rang');
-  if (unique.includes('missing_scene_details')) messages.push('khong lay duoc chi tiet boi canh');
-  if (unique.includes('too_dark')) messages.push('anh qua toi');
-  if (unique.includes('too_bright')) messages.push('anh qua sang hoac chay sang');
-  if (unique.includes('uncertain')) messages.push('he thong khong du tu tin de phe duyet');
+  if (unique.includes('no_character')) messages.push('không tìm thấy nhân vật rõ ràng trong ảnh');
+  if (unique.includes('multiple_characters')) messages.push('ảnh có từ 2 nhân vật trở lên');
+  if (unique.includes('blurry_subject')) messages.push('nhân vật bị mờ, nhìn không đủ rõ nét');
+  if (unique.includes('small_subject')) messages.push('nhân vật quá nhỏ trong khung hình');
+  if (unique.includes('occluded_subject')) messages.push('nhân vật bị che khuất quá nhiều');
+  if (unique.includes('missing_character_details')) messages.push('không tách được chi tiết nhân vật');
+  if (unique.includes('unclear_background')) messages.push('bối cảnh hậu cảnh không rõ ràng');
+  if (unique.includes('missing_scene_details')) messages.push('không lấy được chi tiết bối cảnh');
+  if (unique.includes('too_dark')) messages.push('ảnh quá tối');
+  if (unique.includes('too_bright')) messages.push('ảnh quá sáng hoặc cháy sáng');
+  if (unique.includes('uncertain')) messages.push('hệ thống không đủ tự tin để phê duyệt');
 
   return messages;
 };
@@ -712,7 +732,7 @@ const summarizeInputReviewFailure = (
   const issueMessages = buildReviewIssueMessages(review.issues);
   const detail = issueMessages.length > 0
     ? issueMessages.join('; ')
-    : (review.summary || 'du lieu dau vao khong dat yeu cau');
+    : (review.summary || 'dữ liệu đầu vào không đạt yêu cầu');
 
   return `${prefix}: ${detail}.`;
 };
@@ -940,7 +960,7 @@ const markPreparing = async (job: QueueJobRow) => {
     resumeStage,
     resumeStage === 'preparing'
       ? 'Worker đã nhận job. Bắt đầu chuẩn bị.'
-      : `Worker đã nhận job. Tiếp tục ở bước ${humanizeQueueStage(resumeStage)}.`,
+      : `Worker đã nhận job. Tiếp tục ở bước ${describeQueueStage(resumeStage)}.`,
   );
   await updateGeneratedImageRecord(job.id, {
     status: 'processing',
@@ -984,20 +1004,20 @@ const reviewVideoInputsBeforeTst = async (
   if (payload.recipeType === 'video_generate_recipe_v1') {
     if (!payload.keyframeImage) {
       throw new Error(
-        'Khong duyet video: vui long tai len anh keyframe ro net co nhan vat va boi canh ro rang.',
+        'Không duyệt video: vui lòng tải lên ảnh keyframe rõ nét có nhân vật và bối cảnh rõ ràng.',
       );
     }
 
     const review = await reviewVideoKeyframeInput(payload.keyframeImage);
     if (!review.approved) {
-      throw new Error(summarizeInputReviewFailure('Khong duyet video', review));
+      throw new Error(summarizeInputReviewFailure('Không duyệt video', review));
     }
 
     return {
       successMessage:
         review.detectedPersonCount && review.detectedPersonCount > 1
-          ? `Anh keyframe dat duyet. He thong nhan dien ${review.detectedPersonCount} nhan vat ro rang va tiep tuc tao payload video.`
-          : 'Anh keyframe dat duyet. Tiep tuc tao payload video.',
+          ? `Ảnh keyframe đạt duyệt. Hệ thống nhận diện ${review.detectedPersonCount} nhân vật rõ ràng và tiếp tục tạo payload video.`
+          : 'Ảnh keyframe đạt duyệt. Tiếp tục tạo payload video.',
     };
   }
 
@@ -1008,21 +1028,21 @@ const reviewVideoInputsBeforeTst = async (
 
   if (!durationSeconds || durationSeconds < 3 || durationSeconds > 30) {
     throw new Error(
-      'Khong duyet motion control: video chuyen dong phai dai tu 3 giay den 30 giay.',
+      'Không duyệt motion control: video chuyển động phải dài từ 3 giây đến 30 giây.',
     );
   }
 
   const review = await reviewMotionCharacterInput(payload.characterImage);
   if (!review.approved) {
-    throw new Error(summarizeInputReviewFailure('Khong duyet motion control', review));
+    throw new Error(summarizeInputReviewFailure('Không duyệt motion control', review));
   }
 
   if (review.detectedPersonCount !== null && review.detectedPersonCount !== 1) {
-    throw new Error('Khong duyet motion control: anh nhan vat phai chi co dung 1 nhan vat ro rang.');
+    throw new Error('Không duyệt motion control: ảnh nhân vật phải chỉ có đúng 1 nhân vật rõ ràng.');
   }
 
   return {
-    successMessage: `Anh motion control dat duyet va video tham chieu ${durationSeconds.toFixed(1)}s hop le. Tiep tuc tao payload motion.`,
+    successMessage: `Ảnh motion control đạt duyệt và video tham chiếu ${durationSeconds.toFixed(1)}s hợp lệ. Tiếp tục tạo payload motion.`,
   };
 };
 
@@ -1466,7 +1486,7 @@ const scheduleFailedJobRescueRetry = async (
       __nextFailedRescueAt: nextRetryAt,
     },
     'failed',
-    `Rescue TST chua tim thay ket qua hop le. Se thu lai sau: ${message}`,
+    `Rescue TST chưa tìm thấy kết quả hợp lệ. Sẽ thử lại sau: ${message}`,
     'warning',
   );
 
@@ -1491,7 +1511,7 @@ const reviveFailedJobToProcessing = async (
       __nextFailedRescueAt: null,
     },
     'polling',
-    'Rescue TST: provider van dang xu ly. Chuyen job tro lai trang thai processing.',
+    'Rescue TST: provider vẫn đang xử lý. Chuyển job trở lại trạng thái processing.',
     'warning',
   );
 
@@ -1545,8 +1565,8 @@ const rescueFailedJobsWithProviderResults = async () => {
         const state = await completePolledJobWithResultUrl(job, resultUrl, {
           completionMessage:
             providerStatus === 'failed' || providerStatus === 'error' || providerStatus === 'cancelled' || providerStatus === 'canceled'
-              ? `Rescue TST: provider tung bao loi nhung van tra ve ket qua hop le. Da tu dong luu ket qua.`
-              : 'Rescue TST: da tim lai ket qua hop le va dong bo thanh cong.',
+              ? `Rescue TST: provider từng báo lỗi nhưng vẫn trả về kết quả hợp lệ. Đã tự động lưu kết quả.`
+              : 'Rescue TST: đã tìm lại kết quả hợp lệ và đồng bộ thành công.',
           completionLevel: 'warning',
         });
         if (state === 'completed') {
@@ -1563,7 +1583,7 @@ const rescueFailedJobsWithProviderResults = async () => {
 
       await scheduleFailedJobRescueRetry(
         job,
-        String(providerData?.error || providerData?.message || providerStatus || 'Khong co ket qua tu provider'),
+        String(providerData?.error || providerData?.message || providerStatus || 'Không có kết quả từ provider'),
         getFailedRescueAttemptCount(job.queue_payload),
       );
     } catch (error: any) {
@@ -1597,7 +1617,7 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
     const resultUrl = extractResultUrl(providerData);
     if (resultUrl) {
       return completePolledJobWithResultUrl(job, resultUrl, {
-        completionMessage: `Provider bao "${failureMessage}" nhung van tra ve ket qua hop le. Da luu ket qua thay vi danh that bai.`,
+        completionMessage: `Provider báo "${failureMessage}" nhưng vẫn trả về kết quả hợp lệ. Đã lưu kết quả thay vì đánh thất bại.`,
         completionLevel: 'warning',
       });
     }
@@ -1769,7 +1789,7 @@ const recoverStalePreparingJobs = async () => {
           __stage: resumedStage,
         },
         resumedStage,
-        `Worker mất lease ở bước ${humanizeQueueStage(resumedStage)}. Đưa job lại vào hàng đợi.`,
+        `Worker mất lease ở bước ${describeQueueStage(resumedStage)}. Đưa job lại vào hàng đợi.`,
         'warning',
       );
       await updateGeneratedImageRecord(job.id, {
@@ -1911,8 +1931,8 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
       await updatePreProviderStage(job.id, 20);
       const reviewStartMessage =
         currentPayload.recipeType === 'video_generate_recipe_v1'
-          ? 'Dang kiem duyet anh keyframe truoc khi gui du lieu len TST.'
-          : 'Dang kiem duyet anh nhan vat va video motion truoc khi gui du lieu len TST.';
+          ? 'Đang kiểm duyệt ảnh keyframe trước khi gửi dữ liệu lên TST.'
+          : 'Đang kiểm duyệt ảnh nhân vật và video motion trước khi gửi dữ liệu lên TST.';
       job.queue_payload = await persistQueueLog(
         job.id,
         job.queue_payload || currentPayload,
@@ -1941,7 +1961,7 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
       job.queue_payload = await markTstTouched(
         job.id,
         job.queue_payload,
-        'Da bat dau chuan bi payload va gui du lieu len he thong TST.',
+        'Đã bắt đầu chuẩn bị payload và gửi dữ liệu lên hệ thống TST.',
       );
       if (currentPayload.recipeType === 'video_generate_recipe_v1') {
         job.queue_payload = await persistQueueLog(
@@ -2224,8 +2244,8 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
         await updatePreProviderStage(job.id, 20);
         const reviewStartMessage =
           currentPayload.recipeType === 'video_generate_recipe_v1'
-            ? 'Dang kiem duyet anh keyframe truoc khi gui du lieu len TST.'
-            : 'Dang kiem duyet anh nhan vat va video motion truoc khi gui du lieu len TST.';
+            ? 'Đang kiểm duyệt ảnh keyframe trước khi gửi dữ liệu lên TST.'
+            : 'Đang kiểm duyệt ảnh nhân vật và video motion trước khi gửi dữ liệu lên TST.';
         job.queue_payload = await persistQueueLog(
           job.id,
           job.queue_payload || currentPayload,
@@ -2254,7 +2274,7 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
         job.queue_payload = await markTstTouched(
           job.id,
           job.queue_payload,
-          'Da bat dau chuan bi payload va gui du lieu len he thong TST.',
+          'Đã bắt đầu chuẩn bị payload và gửi dữ liệu lên hệ thống TST.',
         );
         if (currentPayload.recipeType === 'video_generate_recipe_v1') {
           job.queue_payload = await persistQueueLog(

@@ -10,7 +10,7 @@ import { CONCURRENCY_LIMITS, useConcurrency } from '../../services/concurrencySe
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import { downloadAssetToBrowser } from '../../services/downloadService';
-import { createSolidFence, optimizePayload } from '../../utils/imageProcessor';
+import { createSolidFence, createStyleOnlyReference, optimizePayload } from '../../utils/imageProcessor';
 import {
   type AuditionPricingOverride,
   fetchTstModels,
@@ -101,7 +101,8 @@ const tryStageStyleReferenceInput = async (source: string, folder: string) => {
     if (!source) return null;
 
     try {
-        const optimizedSource = await optimizePayload(source, 1536);
+        const styleOnlyReference = await createStyleOnlyReference(source);
+        const optimizedSource = await optimizePayload(styleOnlyReference, 1536);
         return await uploadFileToR2(optimizedSource, folder);
     } catch (error) {
         console.warn('[GenerationTool] Failed to stage style reference.', error);

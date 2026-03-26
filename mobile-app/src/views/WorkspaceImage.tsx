@@ -30,7 +30,7 @@ import type { ModelPricing } from '../services/economyService';
 import type { GeneratedImage } from '../types';
 import { caulenhauClient } from '../services/supabaseClient';
 import type { CharacterReferenceGroup, ImageGenerateRecipePayload } from '../../../shared/queueRecipes';
-import { createSolidFence, optimizePayload } from '../../../utils/imageProcessor';
+import { createSolidFence, createStyleOnlyReference, optimizePayload } from '../../../utils/imageProcessor';
 
 type GenMode = 'single' | 'couple' | 'trio' | 'squad';
 type Stage = 'input' | 'submitting';
@@ -107,10 +107,10 @@ const tryStageSampleReferenceInput = async (source: string, folder: string, aspe
 
 const tryStageStyleReferenceInput = async (source: string, folder: string) => {
   if (!source) return null;
-  if (source.startsWith('http')) return source;
 
   try {
-    const optimizedSource = await optimizePayload(source, 1536);
+    const styleOnlyReference = await createStyleOnlyReference(source);
+    const optimizedSource = await optimizePayload(styleOnlyReference, 1536);
     return await uploadFileToR2(optimizedSource, folder);
   } catch (error) {
     console.warn('[WorkspaceImage] Failed to stage style reference.', error);

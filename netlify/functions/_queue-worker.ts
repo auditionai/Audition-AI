@@ -79,8 +79,10 @@ const SINGLE_AND_COUPLE_PREPARE_TIMEOUT_MS = 10 * 60 * 1000;
 const GROUP_OF_THREE_PREPARE_TIMEOUT_MS = 15 * 60 * 1000;
 const GROUP_OF_FOUR_PREPARE_TIMEOUT_MS = 20 * 60 * 1000;
 const IMAGE_REFERENCE_UPLOAD_CHUNK_SIZE = 2;
-const DISPATCH_CLAIM_LIMIT = 1;
-const POLL_CLAIM_LIMIT = 1;
+const DISPATCH_CLAIM_LIMIT = 8;
+const POLL_CLAIM_LIMIT = 12;
+const DISPATCH_CONCURRENCY_LIMIT = 8;
+const POLL_CONCURRENCY_LIMIT = 12;
 const WORKER_TICK_BUDGET_MS = 8_000;
 const MAX_QUEUE_LOG_ENTRIES = 80;
 const ORPHAN_CLAIM_GRACE_MS = 30_000;
@@ -421,6 +423,36 @@ const withTimeout = async <T>(task: Promise<T>, timeoutMs: number, message: stri
 };
 
 const hasWorkerTickBudgetRemaining = (startedAt: number) => Date.now() - startedAt < WORKER_TICK_BUDGET_MS;
+
+const runWithConcurrency = async <T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> => {
+  if (items.length === 0) {
+    return [];
+  }
+
+  const concurrency = Math.max(1, Math.min(limit, items.length));
+  const results: R[] = new Array(items.length);
+  let cursor = 0;
+
+  const runners = Array.from({ length: concurrency }, async () => {
+    while (true) {
+      const index = cursor;
+      cursor += 1;
+
+      if (index >= items.length) {
+        return;
+      }
+
+      results[index] = await worker(items[index], index);
+    }
+  });
+
+  await Promise.all(runners);
+  return results;
+};
 
 const updateGeneratedImageRecord = async (jobId: string, updates: Record<string, unknown>) => {
   const admin = getServiceRoleClient();
@@ -1779,6 +1811,238 @@ const recoverStalePreparingJobs = async () => {
   return recovered;
 };
 
+const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Promise<Partial<QueueWorkerSummary>> => {
+  if (!hasWorkerTickBudgetRemaining(workerStartedAt)) {
+    return {};
+  }
+
+  let providerPayloadForSubmit: Record<string, unknown> | null = null;
+  let providerDispatchStarted = false;
+
+  try {
+    if (await shouldSkipDispatch(job)) {
+      await releaseLease(job.id);
+      return {};
+    }
+
+    const currentPayload = job.queue_payload || {};
+    const preparationTimeoutMs = getPreparationTimeoutMs(job, currentPayload);
+    const preparationLeaseSeconds = getPreparationLeaseSeconds(job, currentPayload);
+    let submitPayload: Record<string, unknown> = currentPayload;
+    let submitValidationResult: { pricingMatch?: { config_key?: string } | null } | null = null;
+
+    if (isQueueRecipePayload(currentPayload)) {
+      job.queue_payload = await markPreparing(job);
+    }
+
+    if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'image_edit_recipe_v1') {
+      const editPayload = (job.queue_payload || currentPayload) as unknown as ImageEditRecipePayload;
+      await updatePreProviderStage(job.id, 20);
+      job.queue_payload = await persistQueueLog(
+        job.id,
+        job.queue_payload || currentPayload,
+        'preparing',
+        'Äang gá»­i yÃªu cáº§u chá»‰nh sá»­a áº£nh.',
+      );
+      const resultUrl = await withTimeout(
+        withLeaseHeartbeat(
+          job.id,
+          runVertexImageEdit({
+            sourceImage: editPayload.sourceImage,
+            instruction: editPayload.prompt,
+            modelId: editPayload.modelId,
+            mimeType: editPayload.mimeType,
+          }),
+        ),
+        preparationTimeoutMs,
+        'Queue preparation timed out before image edit dispatch.',
+      );
+
+      await markCompletedWithAssetUrl(job, resultUrl);
+      fireTelegramJobNotification('completed', {
+        id: job.id,
+        userId: job.user_id,
+        prompt: job.prompt,
+        assetType: job.asset_type,
+        toolId: job.tool_id,
+        toolName: job.tool_name,
+        engine: job.model_used,
+        queueKind: job.queue_kind,
+        costVcoin: job.cost_vcoin,
+        resultUrl,
+        finishedAt: new Date().toISOString(),
+        queuePayload: job.queue_payload,
+      });
+      return { completed: 1 };
+    }
+
+    const validationPayload = isQueueRecipePayload(currentPayload)
+      ? getRecipeValidationPayload(currentPayload)
+      : stripInternalQueueMeta(currentPayload);
+    const validationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, validationPayload);
+    submitValidationResult = validationResult;
+
+    if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'image_generate_recipe_v1') {
+      await updatePreProviderStage(job.id, 20);
+      const stagedResult = await withTimeout(
+        withLeaseHeartbeat(
+          job.id,
+          prepareImageRecipeInStages(job, (job.queue_payload || currentPayload) as unknown as ImageGenerateRecipePayload),
+          preparationLeaseSeconds,
+        ),
+        preparationTimeoutMs,
+        'Queue preparation timed out before dispatching to provider.',
+      );
+
+      if (stagedResult.type === 'requeue') {
+        return { requeued: 1 };
+      }
+
+      submitPayload = stagedResult.providerPayload;
+      submitValidationResult = { pricingMatch: { config_key: String(stagedResult.providerPayload.config_key || '') || undefined } };
+      job.queue_payload = withQueueMeta(
+        stagedResult.providerPayload,
+        job.queue_payload || currentPayload,
+        'dispatching',
+      );
+    }
+
+    if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType !== 'image_generate_recipe_v1') {
+      await updatePreProviderStage(job.id, 20);
+      const reviewStartMessage =
+        currentPayload.recipeType === 'video_generate_recipe_v1'
+          ? 'Dang kiem duyet anh keyframe truoc khi gui du lieu len TST.'
+          : 'Dang kiem duyet anh nhan vat va video motion truoc khi gui du lieu len TST.';
+      job.queue_payload = await persistQueueLog(
+        job.id,
+        job.queue_payload || currentPayload,
+        'preparing',
+        reviewStartMessage,
+      );
+      const reviewResult = await withTimeout(
+        withLeaseHeartbeat(
+          job.id,
+          reviewVideoInputsBeforeTst(
+            job,
+            currentPayload as VideoGenerateRecipePayload | MotionGenerateRecipePayload,
+          ),
+          preparationLeaseSeconds,
+        ),
+        preparationTimeoutMs,
+        'Queue preparation timed out before dispatching to provider.',
+      );
+      job.queue_payload = await persistQueueLog(
+        job.id,
+        job.queue_payload,
+        'preparing',
+        reviewResult.successMessage,
+        'success',
+      );
+      job.queue_payload = await markTstTouched(
+        job.id,
+        job.queue_payload,
+        'Da bat dau chuan bi payload va gui du lieu len he thong TST.',
+      );
+      if (currentPayload.recipeType === 'video_generate_recipe_v1') {
+        job.queue_payload = await persistQueueLog(
+          job.id,
+          job.queue_payload,
+          'building_payload',
+          'Äang chuáº©n bá»‹ payload video.',
+        );
+      } else if (currentPayload.recipeType === 'motion_generate_recipe_v1') {
+        job.queue_payload = await persistQueueLog(
+          job.id,
+          job.queue_payload,
+          'building_payload',
+          'Äang chuáº©n bá»‹ payload motion.',
+        );
+      }
+      const providerPayload = await withTimeout(
+        withLeaseHeartbeat(
+          job.id,
+          prepareProviderPayloadFromQueueRecipe((job.queue_payload || currentPayload) as typeof currentPayload),
+          preparationLeaseSeconds,
+        ),
+        preparationTimeoutMs,
+        'Queue preparation timed out before dispatching to provider.',
+      );
+      const preparedValidationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, providerPayload);
+      const validatedProviderPayload = applyLivePricingConfigToPayload(
+        job.queue_kind,
+        providerPayload,
+        preparedValidationResult,
+      );
+      job.queue_payload = await persistPreparedPayload(job.id, validatedProviderPayload, job.queue_payload || currentPayload);
+      job.queue_payload = await persistQueueLog(
+        job.id,
+        job.queue_payload,
+        'dispatching',
+        'Payload Ä‘Ã£ sáºµn sÃ ng. Chá» gá»­i provider.',
+        'success',
+      );
+      await markPreparedForDispatch(job.id);
+      return { requeued: 1 };
+    }
+
+    providerPayloadForSubmit = applyLivePricingConfigToPayload(
+      job.queue_kind,
+      submitPayload,
+      submitValidationResult,
+    );
+    if (providerPayloadForSubmit !== submitPayload) {
+      job.queue_payload = await persistPreparedPayload(job.id, providerPayloadForSubmit, job.queue_payload || currentPayload);
+    }
+
+    job.queue_payload = await markSubmittingPreparedPayload(job.id, job.queue_payload);
+    providerDispatchStarted = true;
+    const providerJobId = await submitProviderJob(job.queue_kind, providerPayloadForSubmit);
+    await markSubmitted(job, providerJobId);
+    return { submitted: 1 };
+  } catch (error: any) {
+    const message = error?.message || 'Queue dispatch failed';
+    if (providerDispatchStarted && isAmbiguousDispatchError(message)) {
+      await markDispatchAwaitingProviderConfirmation(job, message, providerPayloadForSubmit || job.queue_payload);
+      return {};
+    }
+    if (message.startsWith('INVALID_TST_CONFIG:')) {
+      await markFailedRespectingRefundPolicy(job, message.replace('INVALID_TST_CONFIG:', '').trim());
+      return { failed: 1 };
+    }
+    if (message.includes('Queue preparation timed out before')) {
+      const result = await requeueJob(job, message);
+      return result === 'failed' ? { failed: 1 } : { requeued: 1 };
+    }
+    if (isTransientError(message)) {
+      const result = await requeueJob(job, message);
+      return result === 'failed' ? { failed: 1 } : { requeued: 1 };
+    }
+
+    await markFailedRespectingRefundPolicy(job, message);
+    return { failed: 1 };
+  }
+};
+
+const processPollJob = async (job: QueueJobRow, workerStartedAt: number): Promise<Partial<QueueWorkerSummary>> => {
+  if (!hasWorkerTickBudgetRemaining(workerStartedAt)) {
+    return {};
+  }
+
+  try {
+    const providerData = await pollProviderJob(String(job.job_id || ''));
+    const state = await markPolledState(job, providerData);
+    if (state === 'completed') return { completed: 1 };
+    if (state === 'failed') return { failed: 1 };
+    if (state === 'requeued') return { requeued: 1 };
+    return {};
+  } catch (error: any) {
+    const message = error?.message || 'Queue poll failed';
+    console.error('[queue-worker] Poll failed:', job.id, message);
+    const result = await handlePollFailure(job, message);
+    return result === 'failed' ? { failed: 1 } : { requeued: 1 };
+  }
+};
+
 const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
   const admin = getServiceRoleClient();
   const workerStartedAt = Date.now();
@@ -1792,6 +2056,59 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
   };
 
   summary.requeued += await recoverStalePreparingJobs();
+
+  const { data: claimedPollRows, error: prioritizedPollError } = await admin.rpc('claim_pollable_generated_jobs', {
+    p_limit: POLL_CLAIM_LIMIT,
+    p_lease_seconds: 60,
+  });
+
+  if (prioritizedPollError) {
+    throw prioritizedPollError;
+  }
+
+  const prioritizedPollJobs = (claimedPollRows || []) as QueueJobRow[];
+  summary.claimedForPoll = prioritizedPollJobs.length;
+
+  const pollResults = await runWithConcurrency(
+    prioritizedPollJobs,
+    POLL_CONCURRENCY_LIMIT,
+    (job) => processPollJob(job, workerStartedAt),
+  );
+  for (const result of pollResults) {
+    summary.completed += Number(result.completed || 0);
+    summary.failed += Number(result.failed || 0);
+    summary.requeued += Number(result.requeued || 0);
+  }
+
+  const { data: claimedDispatchRows, error: prioritizedDispatchError } = await admin.rpc('claim_dispatchable_generated_jobs', {
+    p_limit: DISPATCH_CLAIM_LIMIT,
+    p_lease_seconds: DISPATCH_LEASE_SECONDS,
+  });
+
+  if (prioritizedDispatchError) {
+    throw prioritizedDispatchError;
+  }
+
+  const prioritizedDispatchJobs = (claimedDispatchRows || []) as QueueJobRow[];
+  summary.claimedForDispatch = prioritizedDispatchJobs.length;
+
+  const dispatchResults = await runWithConcurrency(
+    prioritizedDispatchJobs,
+    DISPATCH_CONCURRENCY_LIMIT,
+    (job) => processDispatchJob(job, workerStartedAt),
+  );
+  for (const result of dispatchResults) {
+    summary.submitted += Number(result.submitted || 0);
+    summary.completed += Number(result.completed || 0);
+    summary.failed += Number(result.failed || 0);
+    summary.requeued += Number(result.requeued || 0);
+  }
+
+  if (hasWorkerTickBudgetRemaining(workerStartedAt)) {
+    summary.completed += await rescueFailedJobsWithProviderResults();
+  }
+
+  return summary;
 
   const { data: dispatchJobs, error: dispatchError } = await admin.rpc('claim_dispatchable_generated_jobs', {
     p_limit: DISPATCH_CLAIM_LIMIT,

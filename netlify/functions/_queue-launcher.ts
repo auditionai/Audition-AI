@@ -1,4 +1,4 @@
-const DEFAULT_LAUNCH_TIMEOUT_MS = 2_500;
+const DEFAULT_LAUNCH_TIMEOUT_MS = 10_000;
 const BACKGROUND_WORKER_PATH = '/.netlify/functions/queue-worker-background';
 
 const resolveBaseUrl = (rawUrl?: string | null) => {

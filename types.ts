@@ -86,6 +86,40 @@ export interface GeneratedImage {
   cost?: number; // Keep track of cost for refunds
 }
 
+export interface AdminQueueJob {
+  id: string;
+  userId: string;
+  userEmail?: string;
+  userName?: string;
+  status: 'queued' | 'processing' | 'completed' | 'failed';
+  assetType: 'image' | 'video';
+  queueKind?: string;
+  toolName?: string;
+  prompt?: string;
+  jobId?: string;
+  progress?: number;
+  queueStage?: string;
+  queueLogs?: QueueProgressLogEntry[];
+  error?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  nextPollAt?: string;
+  processingStartedAt?: string;
+  leaseExpiresAt?: string;
+  isStuck?: boolean;
+}
+
+export interface AdminQueueSummary {
+  total: number;
+  queued: number;
+  processing: number;
+  completed: number;
+  failed: number;
+  overduePolls: number;
+  untouchedQueued: number;
+  stalledPreDispatch: number;
+}
+
 // --- NEW ECONOMY & USER TYPES ---
 
 export interface UserProfile {

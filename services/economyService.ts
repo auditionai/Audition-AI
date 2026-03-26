@@ -1,5 +1,5 @@
 ﻿import { getSupabaseAuthHeader, getSupabaseUser, supabase } from './supabaseClient';
-import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, HistoryItem, VcoinLog } from '../types';
+import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, HistoryItem, VcoinLog, AdminQueueJob, AdminQueueSummary } from '../types';
 import {
   creditsToVcoin,
   fetchTstModels,
@@ -1635,6 +1635,69 @@ export const getAdminUserHistory = async (targetUserId: string): Promise<History
     }
 
     return Array.isArray(payload?.history) ? payload.history : [];
+};
+
+export const getAdminQueueJobs = async (params?: {
+    email?: string;
+    userId?: string;
+    status?: 'all' | 'queued' | 'processing' | 'completed' | 'failed';
+    assetType?: 'all' | 'image' | 'video';
+    stage?: string;
+    stuckOnly?: boolean;
+    limit?: number;
+}): Promise<{ jobs: AdminQueueJob[]; summary: AdminQueueSummary }> => {
+    const authHeader = await getSessionAuthHeader();
+    const search = new URLSearchParams();
+
+    if (params?.email) search.set('email', params.email);
+    if (params?.userId) search.set('userId', params.userId);
+    if (params?.status) search.set('status', params.status);
+    if (params?.assetType) search.set('assetType', params.assetType);
+    if (params?.stage) search.set('stage', params.stage);
+    if (typeof params?.stuckOnly === 'boolean') search.set('stuckOnly', String(params.stuckOnly));
+    if (typeof params?.limit === 'number') search.set('limit', String(params.limit));
+
+    const response = await fetch(`/api/admin-queue-jobs?${search.toString()}`, {
+        method: 'GET',
+        headers: authHeader,
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        throw new Error(payload?.error || 'Khong the tai queue jobs');
+    }
+
+    return {
+        jobs: Array.isArray(payload?.jobs) ? payload.jobs : [],
+        summary: payload?.summary || {
+            total: 0,
+            queued: 0,
+            processing: 0,
+            completed: 0,
+            failed: 0,
+            overduePolls: 0,
+            untouchedQueued: 0,
+            stalledPreDispatch: 0,
+        },
+    };
+};
+
+export const runAdminQueueReconcile = async () => {
+    const authHeader = await getSessionAuthHeader();
+    const response = await fetch('/api/queue-reconcile', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...authHeader,
+        },
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        throw new Error(payload?.error || 'Khong the reconcile queue');
+    }
+
+    return payload;
 };
 
 // --- MAINTENANCE MODE ---

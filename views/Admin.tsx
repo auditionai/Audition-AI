@@ -30,6 +30,7 @@ import {
     saveStylePreset,
     deleteStylePreset,
     getAdminUserHistory,
+    getAdminQueueJobs,
     getGiftcodeUsages,
     getMaintenanceMode,
     saveMaintenanceMode,
@@ -38,7 +39,8 @@ import {
     syncTSTPrices,
     ModelPricing,
     getTstServerAvailabilityConfig,
-    saveTstServerAvailabilityConfig
+    saveTstServerAvailabilityConfig,
+    runAdminQueueReconcile
 } from '../services/economyService';
 import { getAllImagesFromStorage, deleteImageFromStorage, checkR2Connection, getUserImagesFromStorage, cleanupExpiredImages, cleanupR2Directly } from '../services/storageService';
 import { checkConnection, analyzeStyleImage } from '../services/geminiService';
@@ -55,7 +57,7 @@ import {
     type TstServerAvailabilityConfig
 } from '../services/tstCatalog';
 import { Icons } from '../components/Icons';
-import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, GeneratedImage, Language, StylePreset, HistoryItem } from '../types';
+import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, GeneratedImage, Language, StylePreset, HistoryItem, AdminQueueJob, AdminQueueSummary } from '../types';
 
 interface AdminProps {
   lang: Language;
@@ -402,7 +404,7 @@ const AdminModalPortal: React.FC<{ children: React.ReactNode }> = ({ children })
 const ADMIN_PRICING_DRAFTS_STORAGE_KEY = 'admin_pricing_drafts_v1';
 
 export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
-  const [activeView, setActiveView] = useState<'overview' | 'transactions' | 'users' | 'packages' | 'marketing' | 'pricing' | 'system' | 'styles'>('overview');
+  const [activeView, setActiveView] = useState<'overview' | 'transactions' | 'users' | 'queue' | 'packages' | 'marketing' | 'pricing' | 'system' | 'styles'>('overview');
   const [stats, setStats] = useState<any>(null);
   const [allImages, setAllImages] = useState<GeneratedImage[]>([]);
   const [packages, setPackages] = useState<CreditPackage[]>([]);
@@ -438,6 +440,24 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [userSortMode, setUserSortMode] = useState<'last_active_desc' | 'vcoin_desc' | 'usage_desc' | 'name_asc'>('last_active_desc');
   const [userListLimit, setUserListLimit] = useState(30);
   const [currentUserEmail, setCurrentUserEmail] = useState('');
+  const [queueEmailFilter, setQueueEmailFilter] = useState('');
+  const [queueStatusFilter, setQueueStatusFilter] = useState<'all' | 'queued' | 'processing' | 'completed' | 'failed'>('all');
+  const [queueAssetFilter, setQueueAssetFilter] = useState<'all' | 'image' | 'video'>('all');
+  const [queueStageFilter, setQueueStageFilter] = useState('all');
+  const [queueStuckOnly, setQueueStuckOnly] = useState(true);
+  const [queueJobs, setQueueJobs] = useState<AdminQueueJob[]>([]);
+  const [queueSummary, setQueueSummary] = useState<AdminQueueSummary>({
+      total: 0,
+      queued: 0,
+      processing: 0,
+      completed: 0,
+      failed: 0,
+      overduePolls: 0,
+      untouchedQueued: 0,
+      stalledPreDispatch: 0,
+  });
+  const [loadingQueueJobs, setLoadingQueueJobs] = useState(false);
+  const [reconcilingQueue, setReconcilingQueue] = useState(false);
 
   // Health State
   const [health, setHealth] = useState<SystemHealth>({
@@ -587,6 +607,29 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       } catch (error) {
           console.warn('Failed to load live TST pricing rows', error);
           setPricingRows([]);
+      }
+  };
+
+  const loadQueueJobs = async (options?: { silent?: boolean }) => {
+      if (!options?.silent) {
+          setLoadingQueueJobs(true);
+      }
+
+      try {
+          const result = await getAdminQueueJobs({
+              email: queueEmailFilter.trim() || undefined,
+              status: queueStatusFilter,
+              assetType: queueAssetFilter,
+              stage: queueStageFilter !== 'all' ? queueStageFilter : undefined,
+              stuckOnly: queueStuckOnly,
+              limit: 120,
+          });
+          setQueueJobs(result.jobs || []);
+          setQueueSummary(result.summary);
+      } catch (error: any) {
+          showToast(`Lỗi tải queue: ${error?.message || error}`, 'error');
+      } finally {
+          setLoadingQueueJobs(false);
       }
   };
 
@@ -1015,6 +1058,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       });
 
   const visibleUsers = filteredUsers.slice(0, userListLimit);
+  const queueStageOptions = Array.from(new Set(queueJobs.map((job) => job.queueStage).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b));
 
   const getAssetKind = (asset: GeneratedImage) => {
       if (asset.assetType) return asset.assetType;
@@ -1028,6 +1072,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       setUserListLimit(30);
   }, [userSearchEmail, userActivityFilter, userSortMode]);
 
+  useEffect(() => {
+      if (!isAdmin || activeView !== 'queue') return;
+      loadQueueJobs({ silent: false });
+  }, [activeView, isAdmin, queueEmailFilter, queueStatusFilter, queueAssetFilter, queueStageFilter, queueStuckOnly]);
+
   const handleViewGiftcodeUsage = async (code: Giftcode) => {
       setViewingGiftcodeUsage(code);
       setLoadingGiftcodeUsers(true);
@@ -1038,6 +1087,23 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           showToast('Lỗi tải danh sách người dùng', 'error');
       } finally {
           setLoadingGiftcodeUsers(false);
+      }
+  };
+
+  const handleQueueReconcile = async () => {
+      setReconcilingQueue(true);
+      try {
+          const payload = await runAdminQueueReconcile();
+          const resetQueued = Number(payload?.resetSummary?.resetQueued || 0);
+          const resetProcessing = Number(payload?.resetSummary?.resetProcessing || 0);
+          const submitted = Number(payload?.summary?.submitted || 0);
+          const polled = Number(payload?.summary?.claimedForPoll || 0);
+          showToast(`Reconcile xong. Reset queued=${resetQueued}, processing=${resetProcessing}, poll=${polled}, submitted=${submitted}.`, 'success');
+          await loadQueueJobs({ silent: false });
+      } catch (error: any) {
+          showToast(`Lỗi reconcile queue: ${error?.message || error}`, 'error');
+      } finally {
+          setReconcilingQueue(false);
       }
   };
 
@@ -1390,6 +1456,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   { id: 'overview', icon: Icons.Home, label: 'Tổng Quan' },
                   { id: 'transactions', icon: Icons.Gem, label: 'Giao Dịch' },
                   { id: 'users', icon: Icons.User, label: 'Người Dùng' },
+                  { id: 'queue', icon: Icons.Clock, label: 'Queue Jobs' },
                   { id: 'packages', icon: Icons.ShoppingBag, label: 'Gói Nạp' },
                   { id: 'marketing', icon: Icons.Zap, label: 'Sự Kiện & Code' },
                   { id: 'pricing', icon: Icons.Gem, label: 'Bảng Giá' },
@@ -1798,6 +1865,167 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           </button>
                       </div>
                   )}
+              </div>
+          )}
+
+          {activeView === 'queue' && (
+              <div className="space-y-6 animate-slide-in-right">
+                  <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+                      <div>
+                          <h2 className="text-lg md:text-2xl font-bold text-white">Queue Jobs</h2>
+                          <p className="text-sm text-slate-400 mt-1">Theo dõi job đang kẹt, poll quá hạn và queued quá lâu.</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                          <button onClick={() => loadQueueJobs({ silent: false })} disabled={loadingQueueJobs} className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-bold text-white disabled:opacity-60">
+                              {loadingQueueJobs ? 'Đang tải...' : 'Làm mới'}
+                          </button>
+                          <button onClick={handleQueueReconcile} disabled={reconcilingQueue} className="px-4 py-2 rounded-xl bg-audi-pink hover:bg-pink-600 text-white text-sm font-bold disabled:opacity-60">
+                              {reconcilingQueue ? 'Đang reconcile...' : 'Reconcile Queue'}
+                          </button>
+                      </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
+                      {[
+                          { label: 'Tổng', value: queueSummary.total, color: 'text-white' },
+                          { label: 'Queued', value: queueSummary.queued, color: 'text-yellow-400' },
+                          { label: 'Processing', value: queueSummary.processing, color: 'text-audi-cyan' },
+                          { label: 'Failed', value: queueSummary.failed, color: 'text-red-400' },
+                          { label: 'Completed', value: queueSummary.completed, color: 'text-green-400' },
+                          { label: 'Poll quá hạn', value: queueSummary.overduePolls, color: 'text-red-300' },
+                          { label: 'Queued bị bỏ đói', value: queueSummary.untouchedQueued, color: 'text-orange-400' },
+                          { label: 'Kẹt trước TST', value: queueSummary.stalledPreDispatch, color: 'text-pink-400' },
+                      ].map((item) => (
+                          <div key={item.label} className="bg-[#12121a] border border-white/10 rounded-2xl p-4">
+                              <div className="text-[11px] uppercase tracking-wider text-slate-500 font-bold">{item.label}</div>
+                              <div className={`text-2xl font-black mt-2 ${item.color}`}>{item.value}</div>
+                          </div>
+                      ))}
+                  </div>
+
+                  <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
+                          <div className="flex items-center gap-2 bg-white/5 rounded-xl border border-white/10 px-3 py-2">
+                              <Icons.Search className="w-4 h-4 text-slate-500" />
+                              <input type="text" placeholder="Lọc theo email..." value={queueEmailFilter} onChange={(e) => setQueueEmailFilter(e.target.value)} className="bg-transparent border-none outline-none text-sm text-white w-full placeholder-slate-500" />
+                          </div>
+                          <select value={queueStatusFilter} onChange={(e) => setQueueStatusFilter(e.target.value as typeof queueStatusFilter)} className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none">
+                              <option value="all" className="bg-[#12121a]">Tất cả trạng thái</option>
+                              <option value="queued" className="bg-[#12121a]">Queued</option>
+                              <option value="processing" className="bg-[#12121a]">Processing</option>
+                              <option value="completed" className="bg-[#12121a]">Completed</option>
+                              <option value="failed" className="bg-[#12121a]">Failed</option>
+                          </select>
+                          <select value={queueAssetFilter} onChange={(e) => setQueueAssetFilter(e.target.value as typeof queueAssetFilter)} className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none">
+                              <option value="all" className="bg-[#12121a]">Ảnh + Video</option>
+                              <option value="image" className="bg-[#12121a]">Chỉ ảnh</option>
+                              <option value="video" className="bg-[#12121a]">Chỉ video</option>
+                          </select>
+                          <select value={queueStageFilter} onChange={(e) => setQueueStageFilter(e.target.value)} className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none">
+                              <option value="all" className="bg-[#12121a]">Tất cả stage</option>
+                              {queueStageOptions.map((stage) => (
+                                  <option key={stage} value={stage} className="bg-[#12121a]">{stage}</option>
+                              ))}
+                          </select>
+                          <label className="flex items-center justify-between gap-3 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white">
+                              <span>Chỉ job đang kẹt</span>
+                              <input type="checkbox" checked={queueStuckOnly} onChange={(e) => setQueueStuckOnly(e.target.checked)} />
+                          </label>
+                      </div>
+
+                      <div className="hidden xl:block overflow-x-auto">
+                          <table className="w-full text-left text-sm text-slate-300">
+                              <thead className="text-[11px] uppercase tracking-wider text-slate-500 border-b border-white/10">
+                                  <tr>
+                                      <th className="px-3 py-3">User</th>
+                                      <th className="px-3 py-3">Job</th>
+                                      <th className="px-3 py-3">Trạng thái</th>
+                                      <th className="px-3 py-3">Stage</th>
+                                      <th className="px-3 py-3">Tiến trình</th>
+                                      <th className="px-3 py-3">Cập nhật</th>
+                                      <th className="px-3 py-3">Lỗi / Log cuối</th>
+                                  </tr>
+                              </thead>
+                              <tbody className="divide-y divide-white/5">
+                                  {queueJobs.length === 0 ? (
+                                      <tr>
+                                          <td colSpan={7} className="px-3 py-8 text-center text-slate-500">Không có job nào khớp bộ lọc.</td>
+                                      </tr>
+                                  ) : queueJobs.map((job) => {
+                                      const lastLog = job.queueLogs && job.queueLogs.length > 0 ? job.queueLogs[job.queueLogs.length - 1] : null;
+                                      return (
+                                          <tr key={job.id} className="align-top hover:bg-white/5">
+                                              <td className="px-3 py-3">
+                                                  <div className="font-bold text-white">{job.userName || 'Unknown'}</div>
+                                                  <div className="text-xs text-slate-500">{job.userEmail || job.userId}</div>
+                                              </td>
+                                              <td className="px-3 py-3">
+                                                  <div className="text-white font-mono text-xs">{job.id.slice(0, 12)}</div>
+                                                  <div className="text-xs text-slate-500 mt-1">{job.assetType} · {job.queueKind || 'unknown'}</div>
+                                                  {job.jobId && <div className="text-[11px] text-audi-cyan mt-1">provider: {job.jobId.slice(0, 16)}</div>}
+                                              </td>
+                                              <td className="px-3 py-3">
+                                                  <div className={`inline-flex px-2 py-1 rounded text-[11px] font-bold uppercase ${
+                                                      job.status === 'failed' ? 'bg-red-500/15 text-red-400' :
+                                                      job.status === 'completed' ? 'bg-green-500/15 text-green-400' :
+                                                      job.status === 'processing' ? 'bg-cyan-500/15 text-cyan-300' :
+                                                      'bg-yellow-500/15 text-yellow-300'
+                                                  }`}>
+                                                      {job.status}
+                                                  </div>
+                                                  {job.isStuck && <div className="text-[11px] text-orange-400 font-bold mt-2">STUCK</div>}
+                                              </td>
+                                              <td className="px-3 py-3 text-xs text-slate-300">{job.queueStage || '-'}</td>
+                                              <td className="px-3 py-3">
+                                                  <div className="text-sm font-bold text-white">{job.progress || 0}%</div>
+                                                  <div className="w-24 h-2 rounded-full bg-white/10 mt-2 overflow-hidden">
+                                                      <div className={`h-full ${job.status === 'queued' ? 'bg-yellow-400' : 'bg-audi-cyan'}`} style={{ width: `${Math.max(0, Math.min(100, job.progress || 0))}%` }} />
+                                                  </div>
+                                              </td>
+                                              <td className="px-3 py-3 text-xs text-slate-400">
+                                                  <div>{getTimeAgo(job.updatedAt)}</div>
+                                                  {job.nextPollAt && <div className="mt-1">poll: {getTimeAgo(job.nextPollAt)}</div>}
+                                              </td>
+                                              <td className="px-3 py-3 text-xs text-slate-400 max-w-[360px]">
+                                                  <div className="text-red-300">{job.error || '-'}</div>
+                                                  {lastLog && <div className="mt-2 text-slate-300">{lastLog.message}</div>}
+                                              </td>
+                                          </tr>
+                                      );
+                                  })}
+                              </tbody>
+                          </table>
+                      </div>
+
+                      <div className="xl:hidden space-y-3">
+                          {queueJobs.length === 0 ? (
+                              <div className="text-center text-slate-500 py-6">Không có job nào khớp bộ lọc.</div>
+                          ) : queueJobs.map((job) => {
+                              const lastLog = job.queueLogs && job.queueLogs.length > 0 ? job.queueLogs[job.queueLogs.length - 1] : null;
+                              return (
+                                  <div key={job.id} className="border border-white/10 rounded-xl p-4 bg-black/20">
+                                      <div className="flex items-start justify-between gap-3">
+                                          <div>
+                                              <div className="font-bold text-white text-sm">{job.userName || 'Unknown'}</div>
+                                              <div className="text-xs text-slate-500">{job.userEmail || job.userId}</div>
+                                          </div>
+                                          <div className="text-right">
+                                              <div className="text-xs font-bold uppercase text-white">{job.status}</div>
+                                              {job.isStuck && <div className="text-[11px] text-orange-400 font-bold mt-1">STUCK</div>}
+                                          </div>
+                                      </div>
+                                      <div className="grid grid-cols-2 gap-3 mt-3 text-xs">
+                                          <div><span className="text-slate-500">Job</span><div className="text-white font-mono mt-1">{job.id.slice(0, 12)}</div></div>
+                                          <div><span className="text-slate-500">Stage</span><div className="text-white mt-1">{job.queueStage || '-'}</div></div>
+                                          <div><span className="text-slate-500">Loại</span><div className="text-white mt-1">{job.assetType} · {job.queueKind || 'unknown'}</div></div>
+                                          <div><span className="text-slate-500">Cập nhật</span><div className="text-white mt-1">{getTimeAgo(job.updatedAt)}</div></div>
+                                      </div>
+                                      <div className="mt-3 text-xs text-slate-300">{lastLog?.message || job.error || 'Chưa có log mới'}</div>
+                                  </div>
+                              );
+                          })}
+                      </div>
+                  </div>
               </div>
           )}
 

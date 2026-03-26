@@ -390,16 +390,34 @@ const buildImageReferenceOrderDirective = (
 };
 
 export const buildImageProviderPrompt = (
-  prompt: string,
-  payload: Pick<ImageGenerateRecipePayload, 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
+  synthesizedPrompt: string,
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
   customNegativePrompt?: string,
 ) => {
   const mergedNegativePrompt = customNegativePrompt?.trim()
     ? `${IMAGE_NEGATIVE_PROMPT}, ${customNegativePrompt.trim()}`
     : IMAGE_NEGATIVE_PROMPT;
   const referenceOrderDirective = buildImageReferenceOrderDirective(payload);
+  const originalUserPrompt = payload.prompt?.trim() || '';
+  const normalizedSynthesizedPrompt = synthesizedPrompt?.trim() || originalUserPrompt;
 
-  return `STRICT RENDER DIRECTIVE:\n${IMAGE_ROLE_LOCK_CONSTRAINTS}\n\n${referenceOrderDirective}\n\nPRIMARY COMMAND PROMPT:\n${prompt}\n\nQUALITY TARGET:\n${IMAGE_QUALITY_BOOSTERS}\n\nNegative Prompt: ${mergedNegativePrompt}`;
+  return [
+    'STRICT RENDER DIRECTIVE:',
+    IMAGE_ROLE_LOCK_CONSTRAINTS,
+    '',
+    referenceOrderDirective,
+    '',
+    'USER ORIGINAL REQUEST (highest-priority scene/action/background intent, do not ignore):',
+    originalUserPrompt || 'No additional user prompt provided.',
+    '',
+    'DIRECTOR SYNTHESIS (supports the user request but must never overwrite it):',
+    normalizedSynthesizedPrompt || 'No director synthesis available.',
+    '',
+    'QUALITY TARGET:',
+    IMAGE_QUALITY_BOOSTERS,
+    '',
+    `Negative Prompt: ${mergedNegativePrompt}`,
+  ].join('\n');
 };
 
 export const getRecipeValidationPayload = (payload: QueueRecipePayload) => {

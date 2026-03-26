@@ -22,20 +22,39 @@ import { syncPayOSTransaction, triggerServerQueueTick } from './services/serverQ
 import MobileApp from './mobile-app/src/App';
 
 const PHONE_USER_AGENT_PATTERN = /iphone|ipod|android.+mobile|windows phone|blackberry|opera mini|mobile safari/i;
+const SHELL_PREFERENCE_STORAGE_KEY = 'auditionai:shell-preference';
 
 const shouldUseMobileShell = () => {
   if (typeof window === 'undefined') return false;
 
   const params = new URLSearchParams(window.location.search);
-  if (params.get('desktop') === '1') return false;
-  if (params.get('mobile') === '1') return true;
+  if (params.get('desktop') === '1') {
+    window.localStorage.setItem(SHELL_PREFERENCE_STORAGE_KEY, 'desktop');
+    return false;
+  }
+  if (params.get('mobile') === '1') {
+    window.localStorage.setItem(SHELL_PREFERENCE_STORAGE_KEY, 'mobile');
+    return true;
+  }
+
+  const savedPreference = window.localStorage.getItem(SHELL_PREFERENCE_STORAGE_KEY);
+  if (savedPreference === 'mobile') return true;
+  if (savedPreference === 'desktop') return false;
 
   const navigatorWithUAData = navigator as Navigator & { userAgentData?: { mobile?: boolean } };
   if (typeof navigatorWithUAData.userAgentData?.mobile === 'boolean') {
-    return navigatorWithUAData.userAgentData.mobile;
+    if (navigatorWithUAData.userAgentData.mobile) {
+      window.localStorage.setItem(SHELL_PREFERENCE_STORAGE_KEY, 'mobile');
+      return true;
+    }
+    return false;
   }
 
-  return PHONE_USER_AGENT_PATTERN.test(navigator.userAgent.toLowerCase());
+  const isPhoneBrowser = PHONE_USER_AGENT_PATTERN.test(navigator.userAgent.toLowerCase());
+  if (isPhoneBrowser) {
+    window.localStorage.setItem(SHELL_PREFERENCE_STORAGE_KEY, 'mobile');
+  }
+  return isPhoneBrowser;
 };
 
 const DEFAULT_IMAGE_FEATURE = APP_CONFIG.main_features.find((feature) => feature.toolType === 'generation') || APP_CONFIG.main_features[0] || null;
@@ -545,13 +564,15 @@ export default function App() {
             setUseMobileShell(shouldUseMobileShell());
         };
 
+        window.localStorage.setItem(SHELL_PREFERENCE_STORAGE_KEY, useMobileShell ? 'mobile' : 'desktop');
+
         refreshShellMode();
         window.addEventListener('popstate', refreshShellMode);
 
         return () => {
             window.removeEventListener('popstate', refreshShellMode);
         };
-    }, []);
+    }, [useMobileShell]);
 
     return useMobileShell ? <MobileApp /> : <DesktopApp />;
 }

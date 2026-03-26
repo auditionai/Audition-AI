@@ -1398,6 +1398,28 @@ export const getApiKeysList = async () => {
 
 // --- TRANSACTIONS ---
 
+const SHELL_PREFERENCE_STORAGE_KEY = 'auditionai:shell-preference';
+
+const buildPayOSReturnUrls = () => {
+    const baseUrl = new URL('/topup', window.location.origin);
+    const cancelUrl = new URL('/topup', window.location.origin);
+
+    const params = new URLSearchParams(window.location.search);
+    const prefersMobileShell =
+        params.get('mobile') === '1' ||
+        window.localStorage.getItem(SHELL_PREFERENCE_STORAGE_KEY) === 'mobile';
+
+    if (prefersMobileShell) {
+        baseUrl.searchParams.set('mobile', '1');
+        cancelUrl.searchParams.set('mobile', '1');
+    }
+
+    return {
+        returnUrl: baseUrl.toString(),
+        cancelUrl: cancelUrl.toString(),
+    };
+};
+
 export const createPaymentLink = async (packageId: string): Promise<Transaction> => {
     if (!supabase) throw new Error("No Database");
     const user = await getUserProfile();
@@ -1427,6 +1449,7 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
 
     // Call Cloud Function to get PayOS Link
     try {
+        const { returnUrl, cancelUrl } = buildPayOSReturnUrls();
         const res = await fetch('/api/create-payment', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1434,8 +1457,8 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
                 amount: pkg.price,
                 description: `AI${String(providerOrderCode).slice(-7)}`,
                 orderCode: providerOrderCode,
-                returnUrl: window.location.origin,
-                cancelUrl: window.location.origin,
+                returnUrl,
+                cancelUrl,
                 buyerName: user.username,
                 buyerEmail: user.email,
                 items: [

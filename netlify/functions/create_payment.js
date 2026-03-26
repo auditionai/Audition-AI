@@ -1,7 +1,7 @@
-import crypto from 'crypto';
+﻿import crypto from 'crypto';
 
 export const handler = async (event, context) => {
-  // Chỉ chấp nhận POST
+  // Chá»‰ cháº¥p nháº­n POST
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' };
   }
@@ -20,12 +20,12 @@ export const handler = async (event, context) => {
       expiredAt
     } = JSON.parse(event.body);
     
-    // Lấy Env Vars từ Netlify
+    // Láº¥y Env Vars tá»« Netlify
     const PAYOS_CLIENT_ID = process.env.PAYOS_CLIENT_ID;
     const PAYOS_API_KEY = process.env.PAYOS_API_KEY;
     const PAYOS_CHECKSUM_KEY = process.env.PAYOS_CHECKSUM_KEY;
     
-    // Lấy URL cấu hình từ Server (Ưu tiên dùng cái này để bảo mật/cố định domain)
+    // Láº¥y URL cáº¥u hÃ¬nh tá»« Server (Æ¯u tiÃªn dÃ¹ng cÃ¡i nÃ y Ä‘á»ƒ báº£o máº­t/cá»‘ Ä‘á»‹nh domain)
     const ENV_RETURN_URL = process.env.PAYOS_RETURN_URL;
     const ENV_CANCEL_URL = process.env.PAYOS_CANCEL_URL;
 
@@ -37,25 +37,32 @@ export const handler = async (event, context) => {
       };
     }
 
-    // Xử lý Logic URL:
-    // Nếu có biến môi trường PAYOS_RETURN_URL, ta dùng nó làm base và nối query string vào.
-    // Nếu không (ví dụ localhost), ta dùng URL do client gửi lên.
-    let finalReturnUrl = clientReturnUrl;
-    let finalCancelUrl = clientCancelUrl;
+    const buildRedirectUrl = (preferredBaseUrl, clientUrl, status) => {
+      const resolvedBaseUrl = preferredBaseUrl && preferredBaseUrl.startsWith('http')
+        ? new URL(preferredBaseUrl)
+        : new URL(clientUrl);
 
-    if (ENV_RETURN_URL && ENV_RETURN_URL.startsWith('http')) {
-        // Loại bỏ slash cuối nếu có để tránh double slash
-        const baseUrl = ENV_RETURN_URL.replace(/\/$/, "");
-        finalReturnUrl = `${baseUrl}/?status=PAID&orderCode=${orderCode}`;
-    }
+      if (clientUrl && clientUrl.startsWith('http')) {
+        const parsedClientUrl = new URL(clientUrl);
+        if (parsedClientUrl.pathname && parsedClientUrl.pathname !== '/') {
+          resolvedBaseUrl.pathname = parsedClientUrl.pathname;
+        }
 
-    if (ENV_CANCEL_URL && ENV_CANCEL_URL.startsWith('http')) {
-        const baseUrl = ENV_CANCEL_URL.replace(/\/$/, "");
-        finalCancelUrl = `${baseUrl}/?status=CANCELLED&orderCode=${orderCode}`;
-    }
+        parsedClientUrl.searchParams.forEach((value, key) => {
+          resolvedBaseUrl.searchParams.set(key, value);
+        });
+      }
 
-    // Tạo chữ ký (Signature)
-    // PayOS yêu cầu sắp xếp key theo alphabet
+      resolvedBaseUrl.searchParams.set('status', status);
+      resolvedBaseUrl.searchParams.set('orderCode', String(orderCode));
+      return resolvedBaseUrl.toString();
+    };
+
+    const finalReturnUrl = buildRedirectUrl(ENV_RETURN_URL, clientReturnUrl, 'PAID');
+    const finalCancelUrl = buildRedirectUrl(ENV_CANCEL_URL, clientCancelUrl, 'CANCELLED');
+
+    // Táº¡o chá»¯ kÃ½ (Signature)
+    // PayOS yÃªu cáº§u sáº¯p xáº¿p key theo alphabet
     const signatureData = {
         amount,
         cancelUrl: finalCancelUrl,
@@ -74,7 +81,7 @@ export const handler = async (event, context) => {
       .update(signString)
       .digest('hex');
 
-    // Body gửi sang PayOS
+    // Body gá»­i sang PayOS
     const requestBody = {
       ...signatureData,
       signature,
@@ -87,7 +94,7 @@ export const handler = async (event, context) => {
 
     console.log("Creating PayOS Link with returnUrl:", finalReturnUrl);
 
-    // Gọi API PayOS
+    // Gá»i API PayOS
     const response = await fetch('https://api-merchant.payos.vn/v2/payment-requests', {
       method: 'POST',
       headers: {
@@ -105,7 +112,7 @@ export const handler = async (event, context) => {
        return { statusCode: 400, body: JSON.stringify(resData) };
     }
 
-    // Trả về checkoutUrl
+    // Tráº£ vá» checkoutUrl
     return {
       statusCode: 200,
       body: JSON.stringify(resData.data) 

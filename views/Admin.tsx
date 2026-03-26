@@ -446,6 +446,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [queueAssetFilter, setQueueAssetFilter] = useState<'all' | 'image' | 'video'>('all');
   const [queueStageFilter, setQueueStageFilter] = useState('all');
   const [queueStuckOnly, setQueueStuckOnly] = useState(true);
+  const [queueSummaryFilter, setQueueSummaryFilter] = useState<'all' | 'queued' | 'processing' | 'failed' | 'completed' | 'overdue_polls' | 'untouched_queued' | 'stalled_pre_dispatch'>('all');
   const [queueJobs, setQueueJobs] = useState<AdminQueueJob[]>([]);
   const [queueSummary, setQueueSummary] = useState<AdminQueueSummary>({
       total: 0,
@@ -1063,6 +1064,26 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
   const visibleUsers = filteredUsers.slice(0, userListLimit);
   const queueStageOptions = Array.from(new Set(queueJobs.map((job) => job.queueStage).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b));
+  const filteredQueueJobs = queueJobs.filter((job) => {
+      switch (queueSummaryFilter) {
+          case 'queued':
+              return (job.displayStatus || job.status) === 'queued';
+          case 'processing':
+              return (job.displayStatus || job.status) === 'processing';
+          case 'failed':
+              return (job.displayStatus || job.status) === 'failed';
+          case 'completed':
+              return (job.displayStatus || job.status) === 'completed';
+          case 'overdue_polls':
+              return job.status === 'processing' && !!job.jobId && !!job.isStuck;
+          case 'untouched_queued':
+              return job.status === 'queued' && !!job.isStuck;
+          case 'stalled_pre_dispatch':
+              return job.status === 'processing' && !job.jobId && !!job.isStuck;
+          default:
+              return true;
+      }
+  });
   const getQueueStageLabel = (stage?: string) => {
       switch (stage) {
           case 'queued': return 'Đã vào hàng đợi';
@@ -1097,6 +1118,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           case 'rescuing': return 'bg-violet-500/15 text-violet-300';
           default: return 'bg-yellow-500/15 text-yellow-300';
       }
+  };
+  const handleQueueSummaryFilter = (filter: typeof queueSummaryFilter) => {
+      setQueueSummaryFilter((current) => current === filter ? 'all' : filter);
   };
   const getQueueErrorCategoryLabel = (category?: string) => {
       switch (category) {
@@ -1133,6 +1157,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       if (!isAdmin || activeView !== 'queue') return;
       loadQueueJobs({ silent: false });
   }, [activeView, isAdmin, queueEmailFilter, queueStatusFilter, queueAssetFilter, queueStageFilter, queueStuckOnly]);
+  useEffect(() => {
+      setQueueSummaryFilter('all');
+  }, [queueEmailFilter, queueStatusFilter, queueAssetFilter, queueStageFilter, queueStuckOnly]);
 
   const handleViewGiftcodeUsage = async (code: Giftcode) => {
       setViewingGiftcodeUsage(code);
@@ -1958,19 +1985,28 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
                   <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
                       {[
-                          { label: 'Tổng', value: queueSummary.total, color: 'text-white' },
-                          { label: 'Queued', value: queueSummary.queued, color: 'text-yellow-400' },
-                          { label: 'Processing', value: queueSummary.processing, color: 'text-audi-cyan' },
-                          { label: 'Failed', value: queueSummary.failed, color: 'text-red-400' },
-                          { label: 'Completed', value: queueSummary.completed, color: 'text-green-400' },
-                          { label: 'Poll quá hạn', value: queueSummary.overduePolls, color: 'text-red-300' },
-                          { label: 'Queued bị bỏ đói', value: queueSummary.untouchedQueued, color: 'text-orange-400' },
-                          { label: 'Kẹt trước TST', value: queueSummary.stalledPreDispatch, color: 'text-pink-400' },
+                          { key: 'all', label: 'Tổng', value: queueSummary.total, color: 'text-white' },
+                          { key: 'queued', label: 'Queued', value: queueSummary.queued, color: 'text-yellow-400' },
+                          { key: 'processing', label: 'Processing', value: queueSummary.processing, color: 'text-audi-cyan' },
+                          { key: 'failed', label: 'Failed', value: queueSummary.failed, color: 'text-red-400' },
+                          { key: 'completed', label: 'Completed', value: queueSummary.completed, color: 'text-green-400' },
+                          { key: 'overdue_polls', label: 'Poll quá hạn', value: queueSummary.overduePolls, color: 'text-red-300' },
+                          { key: 'untouched_queued', label: 'Queued bị bỏ đói', value: queueSummary.untouchedQueued, color: 'text-orange-400' },
+                          { key: 'stalled_pre_dispatch', label: 'Kẹt trước TST', value: queueSummary.stalledPreDispatch, color: 'text-pink-400' },
                       ].map((item) => (
-                          <div key={item.label} className="bg-[#12121a] border border-white/10 rounded-2xl p-4">
+                          <button
+                              key={item.label}
+                              type="button"
+                              onClick={() => handleQueueSummaryFilter(item.key as typeof queueSummaryFilter)}
+                              className={`text-left bg-[#12121a] border rounded-2xl p-4 transition-all hover:border-white/30 hover:bg-white/[0.07] ${
+                                  queueSummaryFilter === item.key || (item.key === 'all' && queueSummaryFilter === 'all')
+                                      ? 'border-audi-pink/60 shadow-[0_0_0_1px_rgba(255,0,153,0.25)]'
+                                      : 'border-white/10'
+                              }`}
+                          >
                               <div className="text-[11px] uppercase tracking-wider text-slate-500 font-bold">{item.label}</div>
                               <div className={`text-2xl font-black mt-2 ${item.color}`}>{item.value}</div>
-                          </div>
+                          </button>
                       ))}
                   </div>
 
@@ -2020,11 +2056,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   </tr>
                               </thead>
                               <tbody className="divide-y divide-white/5">
-                                  {queueJobs.length === 0 ? (
+                                  {filteredQueueJobs.length === 0 ? (
                                       <tr>
                                           <td colSpan={8} className="px-3 py-8 text-center text-slate-500">Không có job nào khớp bộ lọc.</td>
                                       </tr>
-                                  ) : queueJobs.map((job) => {
+                                  ) : filteredQueueJobs.map((job) => {
                                       const lastLog = job.queueLogs && job.queueLogs.length > 0 ? job.queueLogs[job.queueLogs.length - 1] : null;
                                       return (
                                           <tr key={job.id} className="align-top hover:bg-white/5">
@@ -2076,9 +2112,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       </div>
 
                       <div className="xl:hidden space-y-3">
-                          {queueJobs.length === 0 ? (
+                          {filteredQueueJobs.length === 0 ? (
                               <div className="text-center text-slate-500 py-6">Không có job nào khớp bộ lọc.</div>
-                          ) : queueJobs.map((job) => {
+                          ) : filteredQueueJobs.map((job) => {
                               const lastLog = job.queueLogs && job.queueLogs.length > 0 ? job.queueLogs[job.queueLogs.length - 1] : null;
                               return (
                                   <div key={job.id} className="border border-white/10 rounded-xl p-4 bg-black/20">

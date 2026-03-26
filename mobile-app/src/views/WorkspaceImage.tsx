@@ -10,7 +10,7 @@ import {
   X, User, Zap, Crown, RefreshCw, Loader, AlertTriangle, Wand2,
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../components/NotificationSystem';
 import { APP_CONFIG } from '../constants';
@@ -71,6 +71,20 @@ const MODE_META: Record<GenMode, { label: string; sampleCategoryId: number; samp
   squad: { label: 'Nhóm 4', sampleCategoryId: 4, sampleCategoryName: 'Ảnh nhóm' },
 };
 
+const MODE_TO_CHARACTER_COUNT: Record<GenMode, number> = {
+  single: 1,
+  couple: 2,
+  trio: 3,
+  squad: 4,
+};
+
+const FEATURE_ID_TO_MODE: Record<string, GenMode> = {
+  single_photo_gen: 'single',
+  couple_photo_gen: 'couple',
+  group_3_gen: 'trio',
+  group_4_gen: 'squad',
+};
+
 const SAMPLES_PER_PAGE = 20;
 
 const formatTime = (seconds: number) => {
@@ -120,6 +134,7 @@ const tryStageStyleReferenceInput = async (source: string, folder: string) => {
 
 export function WorkspaceImage() {
   const navigate = useNavigate();
+  const location = useLocation();
   useAuth();
   const { notify } = useNotification();
   const { queueStats, triggerPoll } = useConcurrency();
@@ -407,6 +422,35 @@ export function WorkspaceImage() {
     });
   }, []);
 
+  useEffect(() => {
+    const expectedCount = MODE_TO_CHARACTER_COUNT[activeMode];
+    setCharacters((prev) => {
+      if (prev.length === expectedCount) {
+        return prev;
+      }
+
+      const nextChars: CharacterInput[] = [];
+      for (let i = 1; i <= expectedCount; i += 1) {
+        const existing = prev.find((item) => item.id === i);
+        nextChars.push(existing || { id: i, bodyImage: null, gender: i % 2 === 0 ? 'male' : 'female' });
+      }
+      return nextChars;
+    });
+
+    setActiveCharTab((prev) => Math.min(prev, expectedCount) || 1);
+  }, [activeMode]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const toolId = params.get('tool');
+    if (!toolId) return;
+
+    const nextMode = FEATURE_ID_TO_MODE[toolId];
+    if (nextMode && nextMode !== activeMode) {
+      handleModeChange(nextMode);
+    }
+  }, [activeMode, handleModeChange, location.search]);
+
   // --- File Upload ---
   const handleUploadClick = (charId: number) => {
     activeUploadType.current = { charId, type: 'body' };
@@ -455,6 +499,14 @@ export function WorkspaceImage() {
     }
 
     if (!prompt.trim()) { notify('Vui lòng nhập mô tả.', 'warning'); return; }
+
+    const expectedCharacterCount = MODE_TO_CHARACTER_COUNT[activeMode];
+    if (characters.length !== expectedCharacterCount) {
+      notify('Trạng thái công cụ đang lệch số lượng nhân vật. Mình đã đồng bộ lại, vui lòng bấm tạo lại.', 'warning');
+      handleModeChange(activeMode);
+      setStage('input');
+      return;
+    }
 
     const missingSlots = characters.filter((c) => !c.bodyImage).map((c) => c.id);
     if (missingSlots.length > 0) {

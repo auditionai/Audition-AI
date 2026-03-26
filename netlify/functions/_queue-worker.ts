@@ -1705,6 +1705,19 @@ const rescueFailedJobsWithProviderResults = async () => {
         continue;
       }
 
+      if (
+        providerStatus === 'failed' ||
+        providerStatus === 'error' ||
+        providerStatus === 'cancelled' ||
+        providerStatus === 'canceled'
+      ) {
+        await finalizeFailedRescue(
+          job,
+          String(providerData?.error || providerData?.message || 'Provider job failed'),
+        );
+        continue;
+      }
+
       if (isTerminalRescueFailureMessage(String(providerData?.error || providerData?.message || providerStatus || ''))) {
         await finalizeFailedRescue(
           job,

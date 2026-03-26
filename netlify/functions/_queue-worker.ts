@@ -31,8 +31,9 @@ import {
   type MotionGenerateRecipePayload,
   type VideoGenerateRecipePayload,
 } from '../../shared/queueRecipes';
-import { normalizeQueueErrorMessage } from '../../shared/queueErrorClassifier';
+import { classifyQueueError, isTerminalRescueFailureMessage, normalizeQueueErrorMessage, pickQueueFailureMessage } from '../../shared/queueErrorClassifier';
 import { repairVietnameseMojibake } from '../../shared/queueLogText';
+import { clearFailedRescueMeta } from '../../shared/queueRescueState';
 
 type QueueJobRow = {
   id: string;
@@ -1499,6 +1500,26 @@ const scheduleFailedJobRescueRetry = async (
   });
 };
 
+const finalizeFailedRescue = async (
+  job: QueueJobRow,
+  message: string,
+) => {
+  const normalizedMessage = normalizeQueueErrorMessage(message);
+  const nextPayload = withQueueLog(
+    clearFailedRescueMeta(toQueuePayloadObject(job.queue_payload)),
+    'failed',
+    normalizedMessage,
+    'warning',
+  );
+
+  await updateGeneratedImageRecord(job.id, {
+    status: 'failed',
+    error_message: normalizedMessage,
+    queue_payload: nextPayload,
+    updated_at: new Date().toISOString(),
+  });
+};
+
 const reviveFailedJobToProcessing = async (
   job: QueueJobRow,
   providerData: any,
@@ -1551,6 +1572,14 @@ const rescueFailedJobsWithProviderResults = async () => {
     .filter((job) => !String(job?.image_url || '').trim())
     .filter((job) => getFailedRescueAttemptCount(job?.queue_payload) < FAILED_RESULT_RESCUE_MAX_ATTEMPTS)
     .filter((job) => {
+      const pickedMessage = pickQueueFailureMessage(job?.error_message, getQueueLogs(job?.queue_payload));
+      const category = classifyQueueError(pickedMessage).category;
+      if (isTerminalRescueFailureMessage(pickedMessage)) {
+        return false;
+      }
+      return category === 'provider' || category === 'unknown';
+    })
+    .filter((job) => {
       const nextAt = getFailedRescueNextAt(job?.queue_payload);
       return !nextAt || nextAt <= now;
     })
@@ -1582,12 +1611,24 @@ const rescueFailedJobsWithProviderResults = async () => {
         continue;
       }
 
+      if (isTerminalRescueFailureMessage(String(providerData?.error || providerData?.message || providerStatus || ''))) {
+        await finalizeFailedRescue(
+          job,
+          String(providerData?.error || providerData?.message || providerStatus || 'Job not found from provider'),
+        );
+        continue;
+      }
+
       await scheduleFailedJobRescueRetry(
         job,
         String(providerData?.error || providerData?.message || providerStatus || 'Không có kết quả từ provider'),
         getFailedRescueAttemptCount(job.queue_payload),
       );
     } catch (error: any) {
+      if (isTerminalRescueFailureMessage(String(error?.message || ''))) {
+        await finalizeFailedRescue(job, String(error?.message || 'Job not found from provider'));
+        continue;
+      }
       await scheduleFailedJobRescueRetry(
         job,
         String(error?.message || 'Queue rescue poll failed'),

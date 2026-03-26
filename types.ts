@@ -78,6 +78,7 @@ export interface GeneratedImage {
   userName?: string;  // New: Author name
   userId?: string; // New: User ID for storage organization
   status?: 'processing' | 'queued' | 'completed' | 'failed';
+  displayStatus?: 'processing' | 'queued' | 'completed' | 'failed' | 'rescuing';
   jobId?: string;
   progress?: number;
   queueStage?: string;
@@ -94,6 +95,7 @@ export interface AdminQueueJob {
   userEmail?: string;
   userName?: string;
   status: 'queued' | 'processing' | 'completed' | 'failed';
+  displayStatus?: 'queued' | 'processing' | 'completed' | 'failed' | 'rescuing';
   assetType: 'image' | 'video';
   queueKind?: string;
   toolName?: string;

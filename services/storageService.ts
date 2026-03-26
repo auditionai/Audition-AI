@@ -2,7 +2,8 @@
 import { GeneratedImage } from '../types';
 import type { QueueProgressLogEntry } from '../shared/queueRecipes';
 import { normalizeQueueProgressLogs, repairVietnameseMojibake } from '../shared/queueLogText';
-import { classifyQueueError, normalizeQueueErrorMessage } from '../shared/queueErrorClassifier';
+import { classifyQueueError, isTerminalRescueFailureMessage, normalizeQueueErrorMessage, pickQueueFailureMessage } from '../shared/queueErrorClassifier';
+import { hasFailedRescuePending } from '../shared/queueRescueState';
 import { getSupabaseAuthHeader, getSupabaseUser, supabase } from './supabaseClient';
 import { getUserProfile } from './economyService';
 import { S3Client, PutObjectCommand, DeleteObjectCommand, DeleteObjectsCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
@@ -295,7 +296,26 @@ const upsertImageMetadata = async (image: GeneratedImage, user: { id: string; us
 };
 
 const mapGeneratedImageRow = (row: any, fallbackUserName: string, fallbackCost?: number): GeneratedImage => {
-  const errorInfo = classifyQueueError(row.error_message || undefined);
+  const queueLogs =
+    row.queue_payload &&
+    typeof row.queue_payload === 'object' &&
+    Array.isArray(row.queue_payload.__logs)
+      ? normalizeQueueProgressLogs(row.queue_payload.__logs.filter((entry: any): entry is QueueProgressLogEntry =>
+          entry &&
+          typeof entry === 'object' &&
+          typeof entry.at === 'string' &&
+          typeof entry.stage === 'string' &&
+          typeof entry.level === 'string' &&
+          typeof entry.message === 'string'
+        ))
+      : undefined;
+  const displayErrorSource = pickQueueFailureMessage(row.error_message || undefined, queueLogs);
+  const errorInfo = classifyQueueError(displayErrorSource || row.error_message || undefined);
+  const isRescuing =
+    String(row.status || '') === 'failed' &&
+    hasFailedRescuePending(row.queue_payload && typeof row.queue_payload === 'object' ? row.queue_payload : null) &&
+    !isTerminalRescueFailureMessage(displayErrorSource) &&
+    (errorInfo.category === 'provider' || errorInfo.category === 'unknown');
 
   return ({
   id: row.id,
@@ -311,6 +331,7 @@ const mapGeneratedImageRow = (row: any, fallbackUserName: string, fallbackCost?:
   userId: row.user_id,
   userName: row.user_name || fallbackUserName,
   status: row.status || (row.image_url ? 'completed' : 'processing'),
+  displayStatus: isRescuing ? 'rescuing' : (row.status || (row.image_url ? 'completed' : 'processing')),
   jobId: row.job_id || undefined,
   progress: typeof row.progress === 'number' ? row.progress : undefined,
   queueStage:
@@ -319,20 +340,8 @@ const mapGeneratedImageRow = (row: any, fallbackUserName: string, fallbackCost?:
     typeof row.queue_payload.__stage === 'string'
       ? row.queue_payload.__stage
       : undefined,
-  queueLogs:
-    row.queue_payload &&
-    typeof row.queue_payload === 'object' &&
-    Array.isArray(row.queue_payload.__logs)
-      ? normalizeQueueProgressLogs(row.queue_payload.__logs.filter((entry: any): entry is QueueProgressLogEntry =>
-          entry &&
-          typeof entry === 'object' &&
-          typeof entry.at === 'string' &&
-          typeof entry.stage === 'string' &&
-          typeof entry.level === 'string' &&
-          typeof entry.message === 'string'
-        ))
-      : undefined,
-  error: normalizeQueueErrorMessage(row.error_message || undefined) || undefined,
+  queueLogs,
+  error: normalizeQueueErrorMessage(displayErrorSource || row.error_message || undefined) || undefined,
   errorCategory: errorInfo.category,
   errorRaw: repairVietnameseMojibake(row.error_message || undefined) || undefined,
   cost: Number.isFinite(Number(row.cost_vcoin)) ? Number(row.cost_vcoin) : fallbackCost,
@@ -782,7 +791,7 @@ export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
                     userId: user.id,
                     expiresAt:
                       Date.now() +
-                      (mergedImages.some((image) => image.status === 'queued' || image.status === 'processing')
+                      (mergedImages.some((image) => image.displayStatus === 'queued' || image.displayStatus === 'processing' || image.displayStatus === 'rescuing')
                         ? ACTIVE_GALLERY_CLIENT_CACHE_TTL_MS
                         : IDLE_GALLERY_CLIENT_CACHE_TTL_MS),
                     images: mergedImages,

@@ -2,7 +2,8 @@ import type { Handler } from '@netlify/functions';
 import type { AdminQueueInputMedia, AdminQueueJob, AdminQueueJobDetail } from '../../types';
 import type { QueueProgressLogEntry, QueueNotificationMediaEntry } from '../../shared/queueRecipes';
 import { normalizeQueueProgressLogs, repairVietnameseMojibake } from '../../shared/queueLogText';
-import { classifyQueueError, normalizeQueueErrorMessage } from '../../shared/queueErrorClassifier';
+import { classifyQueueError, isTerminalRescueFailureMessage, normalizeQueueErrorMessage, pickQueueFailureMessage } from '../../shared/queueErrorClassifier';
+import { hasFailedRescuePending } from '../../shared/queueRescueState';
 import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 
 const headers = {
@@ -38,7 +39,16 @@ const getQueueStage = (payload: Record<string, unknown> | null | undefined) => {
 };
 
 const toAdminJob = (row: any, profile?: { email?: string; displayName?: string }): AdminQueueJob => {
-  const errorInfo = classifyQueueError(row.error_message || undefined);
+  const queueLogs = normalizeQueueLogs(row.queue_payload || null);
+  const displayErrorSource = pickQueueFailureMessage(row.error_message || undefined, queueLogs);
+  const errorInfo = classifyQueueError(displayErrorSource || row.error_message || undefined);
+  const displayStatus =
+    String(row.status || 'queued') === 'failed' &&
+    hasFailedRescuePending(row.queue_payload || null) &&
+    !isTerminalRescueFailureMessage(displayErrorSource) &&
+    (errorInfo.category === 'provider' || errorInfo.category === 'unknown')
+      ? 'rescuing'
+      : ((row.status || 'queued') as AdminQueueJob['status']);
 
   return ({
   id: String(row.id),
@@ -46,6 +56,7 @@ const toAdminJob = (row: any, profile?: { email?: string; displayName?: string }
   userEmail: profile?.email || undefined,
   userName: profile?.displayName || undefined,
   status: (row.status || 'queued') as AdminQueueJob['status'],
+  displayStatus,
   assetType: (row.asset_type || 'image') as AdminQueueJob['assetType'],
   queueKind: row.queue_kind || undefined,
   toolName: row.tool_name || undefined,
@@ -53,8 +64,8 @@ const toAdminJob = (row: any, profile?: { email?: string; displayName?: string }
   jobId: row.job_id || undefined,
   progress: typeof row.progress === 'number' ? row.progress : undefined,
   queueStage: getQueueStage(row.queue_payload || null),
-  queueLogs: normalizeQueueLogs(row.queue_payload || null),
-  error: normalizeQueueErrorMessage(row.error_message || undefined) || undefined,
+  queueLogs,
+  error: normalizeQueueErrorMessage(displayErrorSource || row.error_message || undefined) || undefined,
   errorCategory: errorInfo.category,
   errorRaw: repairVietnameseMojibake(row.error_message || undefined) || undefined,
   createdAt: row.created_at || undefined,

@@ -442,7 +442,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [userListLimit, setUserListLimit] = useState(30);
   const [currentUserEmail, setCurrentUserEmail] = useState('');
   const [queueEmailFilter, setQueueEmailFilter] = useState('');
-  const [queueStatusFilter, setQueueStatusFilter] = useState<'all' | 'queued' | 'processing' | 'completed' | 'failed'>('all');
+  const [queueStatusFilter, setQueueStatusFilter] = useState<'all' | 'queued' | 'processing' | 'completed' | 'failed' | 'rescuing'>('all');
   const [queueAssetFilter, setQueueAssetFilter] = useState<'all' | 'image' | 'video'>('all');
   const [queueStageFilter, setQueueStageFilter] = useState('all');
   const [queueStuckOnly, setQueueStuckOnly] = useState(true);
@@ -1077,6 +1077,25 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           case 'completed': return 'Hoàn thành';
           case 'failed': return 'Thất bại';
           default: return stage || '-';
+      }
+  };
+  const getQueueStatusLabel = (status?: string) => {
+      switch (status) {
+          case 'queued': return 'Đang chờ';
+          case 'processing': return 'Đang xử lý';
+          case 'completed': return 'Hoàn thành';
+          case 'failed': return 'Thất bại';
+          case 'rescuing': return 'Đang cứu kết quả';
+          default: return status || '-';
+      }
+  };
+  const getQueueStatusClass = (status?: string) => {
+      switch (status) {
+          case 'failed': return 'bg-red-500/15 text-red-400';
+          case 'completed': return 'bg-green-500/15 text-green-400';
+          case 'processing': return 'bg-cyan-500/15 text-cyan-300';
+          case 'rescuing': return 'bg-violet-500/15 text-violet-300';
+          default: return 'bg-yellow-500/15 text-yellow-300';
       }
   };
   const getQueueErrorCategoryLabel = (category?: string) => {
@@ -1963,10 +1982,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           </div>
                           <select value={queueStatusFilter} onChange={(e) => setQueueStatusFilter(e.target.value as typeof queueStatusFilter)} className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none">
                               <option value="all" className="bg-[#12121a]">Tất cả trạng thái</option>
-                              <option value="queued" className="bg-[#12121a]">Queued</option>
-                              <option value="processing" className="bg-[#12121a]">Processing</option>
-                              <option value="completed" className="bg-[#12121a]">Completed</option>
-                              <option value="failed" className="bg-[#12121a]">Failed</option>
+                              <option value="queued" className="bg-[#12121a]">Đang chờ</option>
+                              <option value="processing" className="bg-[#12121a]">Đang xử lý</option>
+                              <option value="rescuing" className="bg-[#12121a]">Đang cứu kết quả</option>
+                              <option value="completed" className="bg-[#12121a]">Hoàn thành</option>
+                              <option value="failed" className="bg-[#12121a]">Thất bại</option>
                           </select>
                           <select value={queueAssetFilter} onChange={(e) => setQueueAssetFilter(e.target.value as typeof queueAssetFilter)} className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none">
                               <option value="all" className="bg-[#12121a]">Ảnh + Video</option>
@@ -2018,13 +2038,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                   {job.jobId && <div className="text-[11px] text-audi-cyan mt-1">provider: {job.jobId.slice(0, 16)}</div>}
                                               </td>
                                               <td className="px-3 py-3">
-                                                  <div className={`inline-flex px-2 py-1 rounded text-[11px] font-bold uppercase ${
-                                                      job.status === 'failed' ? 'bg-red-500/15 text-red-400' :
-                                                      job.status === 'completed' ? 'bg-green-500/15 text-green-400' :
-                                                      job.status === 'processing' ? 'bg-cyan-500/15 text-cyan-300' :
-                                                      'bg-yellow-500/15 text-yellow-300'
-                                                  }`}>
-                                                      {job.status}
+                                                  <div className={`inline-flex px-2 py-1 rounded text-[11px] font-bold uppercase ${getQueueStatusClass(job.displayStatus || job.status)}`}>
+                                                      {getQueueStatusLabel(job.displayStatus || job.status)}
                                                   </div>
                                                   {job.isStuck && <div className="text-[11px] text-orange-400 font-bold mt-2">STUCK</div>}
                                               </td>
@@ -2032,7 +2047,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               <td className="px-3 py-3">
                                                   <div className="text-sm font-bold text-white">{job.progress || 0}%</div>
                                                   <div className="w-24 h-2 rounded-full bg-white/10 mt-2 overflow-hidden">
-                                                      <div className={`h-full ${job.status === 'queued' ? 'bg-yellow-400' : 'bg-audi-cyan'}`} style={{ width: `${Math.max(0, Math.min(100, job.progress || 0))}%` }} />
+                                                      <div className={`h-full ${(job.displayStatus || job.status) === 'queued' ? 'bg-yellow-400' : (job.displayStatus || job.status) === 'rescuing' ? 'bg-violet-400' : 'bg-audi-cyan'}`} style={{ width: `${Math.max(0, Math.min(100, job.progress || 0))}%` }} />
                                                   </div>
                                               </td>
                                               <td className="px-3 py-3 text-xs text-slate-400">
@@ -2073,7 +2088,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               <div className="text-xs text-slate-500">{job.userEmail || job.userId}</div>
                                           </div>
                                           <div className="text-right">
-                                              <div className="text-xs font-bold uppercase text-white">{job.status}</div>
+                                              <div className={`inline-flex px-2 py-1 rounded text-[11px] font-bold uppercase ${getQueueStatusClass(job.displayStatus || job.status)}`}>{getQueueStatusLabel(job.displayStatus || job.status)}</div>
                                               {job.isStuck && <div className="text-[11px] text-orange-400 font-bold mt-1">STUCK</div>}
                                           </div>
                                       </div>
@@ -3058,7 +3073,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   {[
                                       { label: 'User', value: selectedQueueJobDetail.job.userName || 'Unknown' },
                                       { label: 'Email', value: selectedQueueJobDetail.job.userEmail || '-' },
-                                      { label: 'Status', value: selectedQueueJobDetail.job.status },
+                                      { label: 'Status', value: getQueueStatusLabel(selectedQueueJobDetail.job.displayStatus || selectedQueueJobDetail.job.status) },
                                       { label: 'Stage', value: getQueueStageLabel(selectedQueueJobDetail.job.queueStage) },
                                       { label: 'Asset', value: selectedQueueJobDetail.job.assetType },
                                       { label: 'Queue Kind', value: selectedQueueJobDetail.job.queueKind || '-' },

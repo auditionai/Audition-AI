@@ -1,4 +1,5 @@
 import { repairVietnameseMojibake } from './queueLogText';
+import type { QueueProgressLogEntry } from './queueRecipes';
 
 export type QueueErrorCategory = 'input' | 'queue' | 'provider' | 'config' | 'unknown';
 
@@ -9,6 +10,27 @@ export type QueueErrorInfo = {
 };
 
 const normalizeErrorText = (message?: string | null) => repairVietnameseMojibake(message || '').trim();
+
+export const isTerminalRescueFailureMessage = (message?: string | null) => {
+  const lower = normalizeErrorText(message).toLowerCase();
+  return lower.includes('job set not found') || lower.includes('job not found');
+};
+
+export const pickQueueFailureMessage = (
+  errorMessage?: string | null,
+  queueLogs?: QueueProgressLogEntry[] | null,
+) => {
+  const logs = queueLogs || [];
+  const latestFailedLog = [...logs]
+    .reverse()
+    .find((entry) => entry && typeof entry.message === 'string' && entry.stage === 'failed');
+
+  if (latestFailedLog?.message && (latestFailedLog.message.toLowerCase().includes('rescue tst') || isTerminalRescueFailureMessage(latestFailedLog.message))) {
+    return latestFailedLog.message;
+  }
+
+  return errorMessage || '';
+};
 
 export const classifyQueueError = (message?: string | null): QueueErrorInfo => {
   const rawMessage = normalizeErrorText(message);
@@ -92,4 +114,3 @@ export const normalizeQueueErrorMessage = (message?: string | null) => {
   const info = classifyQueueError(message);
   return info.displayMessage || info.rawMessage || '';
 };
-

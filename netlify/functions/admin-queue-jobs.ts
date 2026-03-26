@@ -2,7 +2,8 @@ import type { Handler } from '@netlify/functions';
 import type { AdminQueueJob, AdminQueueSummary } from '../../types';
 import type { QueueProgressLogEntry } from '../../shared/queueRecipes';
 import { normalizeQueueProgressLogs, repairVietnameseMojibake } from '../../shared/queueLogText';
-import { classifyQueueError, normalizeQueueErrorMessage } from '../../shared/queueErrorClassifier';
+import { classifyQueueError, isTerminalRescueFailureMessage, normalizeQueueErrorMessage, pickQueueFailureMessage } from '../../shared/queueErrorClassifier';
+import { hasFailedRescuePending } from '../../shared/queueRescueState';
 import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 
 const headers = {
@@ -64,8 +65,8 @@ const buildSummary = (jobs: AdminQueueJob[]): AdminQueueSummary => ({
   total: jobs.length,
   queued: jobs.filter((job) => job.status === 'queued').length,
   processing: jobs.filter((job) => job.status === 'processing').length,
-  completed: jobs.filter((job) => job.status === 'completed').length,
-  failed: jobs.filter((job) => job.status === 'failed').length,
+  completed: jobs.filter((job) => job.displayStatus === 'completed').length,
+  failed: jobs.filter((job) => job.displayStatus === 'failed').length,
   overduePolls: jobs.filter((job) => job.status === 'processing' && !!job.jobId && job.isStuck).length,
   untouchedQueued: jobs.filter((job) => job.status === 'queued' && job.isStuck).length,
   stalledPreDispatch: jobs.filter((job) => job.status === 'processing' && !job.jobId && job.isStuck).length,
@@ -141,7 +142,7 @@ export const handler: Handler = async (event) => {
       .order('updated_at', { ascending: false })
       .limit(limit);
 
-    if (statusFilter !== 'all') {
+    if (statusFilter !== 'all' && statusFilter !== 'rescuing') {
       query = query.eq('status', statusFilter);
     }
     if (assetTypeFilter === 'image' || assetTypeFilter === 'video') {
@@ -187,7 +188,15 @@ export const handler: Handler = async (event) => {
         : null;
       const profile = userMap.get(String(row.user_id || ''));
       const queueLogs = normalizeQueueLogs(payload);
-      const errorInfo = classifyQueueError(row.error_message || undefined);
+      const displayErrorSource = pickQueueFailureMessage(row.error_message || undefined, queueLogs);
+      const errorInfo = classifyQueueError(displayErrorSource || row.error_message || undefined);
+      const displayStatus =
+        String(row.status || 'queued') === 'failed' &&
+        hasFailedRescuePending(payload) &&
+        !isTerminalRescueFailureMessage(displayErrorSource) &&
+        (errorInfo.category === 'provider' || errorInfo.category === 'unknown')
+          ? 'rescuing'
+          : ((row.status || 'queued') as AdminQueueJob['status']);
 
       return {
         id: String(row.id),
@@ -195,6 +204,7 @@ export const handler: Handler = async (event) => {
         userEmail: profile?.email || undefined,
         userName: profile?.displayName || undefined,
         status: (row.status || 'queued') as AdminQueueJob['status'],
+        displayStatus,
         assetType: (row.asset_type || 'image') as AdminQueueJob['assetType'],
         queueKind: row.queue_kind || undefined,
         toolName: row.tool_name || undefined,
@@ -203,7 +213,7 @@ export const handler: Handler = async (event) => {
         progress: typeof row.progress === 'number' ? row.progress : undefined,
         queueStage: getQueueStage(payload),
         queueLogs,
-        error: normalizeQueueErrorMessage(row.error_message || undefined) || undefined,
+        error: normalizeQueueErrorMessage(displayErrorSource || row.error_message || undefined) || undefined,
         errorCategory: errorInfo.category,
         errorRaw: repairVietnameseMojibake(row.error_message || undefined) || undefined,
         createdAt: row.created_at || undefined,
@@ -215,6 +225,9 @@ export const handler: Handler = async (event) => {
       };
     });
 
+    if (statusFilter === 'rescuing') {
+      jobs = jobs.filter((job) => job.displayStatus === 'rescuing');
+    }
     if (stageFilter !== 'all') {
       jobs = jobs.filter((job) => String(job.queueStage || '').toLowerCase() === stageFilter);
     }

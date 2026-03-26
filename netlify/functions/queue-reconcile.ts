@@ -3,6 +3,9 @@ import type { Handler } from '@netlify/functions';
 import { runQueueDaemon } from './_queue-daemon';
 import { triggerBackgroundQueueWorker } from './_queue-launcher';
 import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
+import type { QueueProgressLogEntry } from '../../shared/queueRecipes';
+import { classifyQueueError, isTerminalRescueFailureMessage, normalizeQueueErrorMessage, pickQueueFailureMessage } from '../../shared/queueErrorClassifier';
+import { clearFailedRescueMeta, hasFailedRescuePending } from '../../shared/queueRescueState';
 
 const headers = {
   'Content-Type': 'application/json',
@@ -54,6 +57,70 @@ const hasQueueActivity = (summary: Awaited<ReturnType<typeof runQueueDaemon>>) =
   Number(summary.completed || 0) > 0 ||
   Number(summary.failed || 0) > 0 ||
   Number(summary.requeued || 0) > 0;
+
+const normalizeQueueLogs = (payload: Record<string, unknown> | null | undefined): QueueProgressLogEntry[] => {
+  const rawLogs = payload && typeof payload === 'object' ? (payload as Record<string, unknown>).__logs : null;
+  if (!Array.isArray(rawLogs)) {
+    return [];
+  }
+
+  return rawLogs.filter(
+    (entry): entry is QueueProgressLogEntry =>
+      Boolean(entry) &&
+      typeof entry === 'object' &&
+      typeof (entry as QueueProgressLogEntry).at === 'string' &&
+      typeof (entry as QueueProgressLogEntry).stage === 'string' &&
+      typeof (entry as QueueProgressLogEntry).level === 'string' &&
+      typeof (entry as QueueProgressLogEntry).message === 'string',
+  );
+};
+
+const finalizeTerminalFailedRescues = async () => {
+  const admin = getServiceRoleClient();
+  const { data, error } = await admin
+    .from('generated_images')
+    .select('id, status, error_message, queue_payload')
+    .eq('status', 'failed')
+    .not('job_id', 'is', null)
+    .limit(200);
+
+  if (error) {
+    throw error;
+  }
+
+  let finalized = 0;
+
+  for (const row of (data || []) as any[]) {
+    const payload = row?.queue_payload && typeof row.queue_payload === 'object'
+      ? row.queue_payload as Record<string, unknown>
+      : null;
+
+    if (!hasFailedRescuePending(payload)) {
+      continue;
+    }
+
+    const queueLogs = normalizeQueueLogs(payload);
+    const chosenMessage = pickQueueFailureMessage(row?.error_message || '', queueLogs);
+    const category = classifyQueueError(chosenMessage).category;
+
+    if (!isTerminalRescueFailureMessage(chosenMessage) && category !== 'input' && category !== 'config') {
+      continue;
+    }
+
+    await admin
+      .from('generated_images')
+      .update({
+        error_message: normalizeQueueErrorMessage(chosenMessage),
+        queue_payload: clearFailedRescueMeta(payload),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', row.id);
+
+    finalized += 1;
+  }
+
+  return finalized;
+};
 
 const resetStaleQueueStateForReconcile = async () => {
   const admin = getServiceRoleClient();
@@ -146,6 +213,7 @@ export const handler: Handler = async (event) => {
     }
 
     const resetSummary = await resetStaleQueueStateForReconcile();
+    const finalizedFailedRescues = await finalizeTerminalFailedRescues();
 
     const summary = await runQueueDaemon({
       maxRuntimeMs: 45_000,
@@ -158,7 +226,7 @@ export const handler: Handler = async (event) => {
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify({ success: true, resetSummary, summary, followUpLaunchNeeded }),
+      body: JSON.stringify({ success: true, resetSummary, finalizedFailedRescues, summary, followUpLaunchNeeded }),
     };
   } catch (error: any) {
     console.error('[queue-reconcile] failed:', error);

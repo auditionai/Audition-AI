@@ -1640,7 +1640,7 @@ export const getAdminUserHistory = async (targetUserId: string): Promise<History
 export const getAdminQueueJobs = async (params?: {
     email?: string;
     userId?: string;
-    status?: 'all' | 'queued' | 'processing' | 'completed' | 'failed';
+    status?: 'all' | 'queued' | 'processing' | 'completed' | 'failed' | 'rescuing';
     assetType?: 'all' | 'image' | 'video';
     stage?: string;
     stuckOnly?: boolean;

@@ -21,7 +21,8 @@ import {
 import { useNotification } from '../components/NotificationSystem';
 import { getUnifiedHistory } from '../services/economyService';
 import { QUEUE_SUBMITTED_EVENT } from '../services/serverQueueService';
-import { deleteImageFromStorage, getAllImagesFromStorage, invalidateGalleryCache } from '../services/storageService';
+import { deleteImageFromStorage, getAllImagesFromStorage, invalidateGalleryCache, publishImageToShowcase, checkR2Connection } from '../services/storageService';
+import { downloadAssetToBrowser } from '../../../services/downloadService';
 import type { GeneratedImage, HistoryItem } from '../types';
 
 type GalleryFilter = 'all' | 'completed' | 'failed' | 'processing';
@@ -71,6 +72,9 @@ const summarizePrompt = (prompt?: string | null, maxLength = 220) => {
   if (normalized.length <= maxLength) return normalized;
   return `${normalized.slice(0, maxLength).trimEnd()}...`;
 };
+
+const getDownloadFilename = (image: GeneratedImage) =>
+  `auditionai-${image.id}.${getAssetKind(image) === 'video' ? 'mp4' : 'png'}`;
 
 const getTransactionStatusLabel = (status: HistoryItem['status']) => {
   switch (status) {
@@ -234,13 +238,9 @@ export const Gallery: React.FC = () => {
   const handleDownload = async (image: GeneratedImage) => {
     if (!image.url) return;
     try {
-      const anchor = document.createElement('a');
-      anchor.href = image.url;
-      anchor.download = `auditionai-${image.id}.${getAssetKind(image) === 'video' ? 'mp4' : 'png'}`;
-      anchor.target = '_blank';
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
+      notify('Đang xử lý tải xuống...', 'info');
+      await downloadAssetToBrowser(image.url, getDownloadFilename(image));
+      notify(getAssetKind(image) === 'video' ? 'Đã lưu video thành công!' : 'Đã lưu ảnh thành công!', 'success');
     } catch (error) {
       console.error('[Gallery] Download failed', error);
       notify('Tải xuống thất bại.', 'error');
@@ -248,21 +248,28 @@ export const Gallery: React.FC = () => {
   };
 
   const handleShare = async (image: GeneratedImage) => {
-    if (!image.url) return;
+    if (!image.url || getAssetKind(image) !== 'image') return;
     try {
-      if (navigator.share) {
-        await navigator.share({
-          title: 'Audition AI',
-          text: image.prompt || 'Tác phẩm được tạo bởi Audition AI',
-          url: image.url,
-        });
+      if (image.isShared) {
+        notify('Ảnh này đã được publish trước đó.', 'info');
         return;
       }
 
-      await navigator.clipboard.writeText(image.url);
-      notify('Đã sao chép liên kết.', 'success');
+      const r2Ready = await checkR2Connection();
+      if (!r2Ready) {
+        notify('Cloudflare R2 chưa được cấu hình nên chưa thể publish ảnh công khai.', 'error');
+        return;
+      }
+
+      const updatedImage = await publishImageToShowcase(image);
+      setImages((current) => current.map((entry) => (entry.id === updatedImage.id ? updatedImage : entry)));
+      if (viewingImage?.id === updatedImage.id) {
+        setViewingImage(updatedImage);
+      }
+      notify('Đã chia sẻ ảnh lên trang chủ và lưu trữ lâu dài.', 'success');
     } catch (error) {
-      console.warn('[Gallery] Share failed', error);
+      console.error('[Gallery] Share failed', error);
+      notify(error instanceof Error ? error.message : 'Chia sẻ ảnh thất bại.', 'error');
     }
   };
 
@@ -427,7 +434,20 @@ export const Gallery: React.FC = () => {
           {isCompleted && image.url ? (
             <>
               <button onClick={() => void handleDownload(image)} className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-gray-900 px-4 py-3.5 text-sm font-bold text-white transition-transform active:scale-95 dark:bg-white dark:text-black"><Download className="h-4 w-4" />Tải xuống</button>
-              <button onClick={() => void handleShare(image)} className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-indigo-50 px-4 py-3.5 text-sm font-bold text-indigo-600 transition-transform active:scale-95 dark:bg-indigo-500/20 dark:text-indigo-300"><Share2 className="h-4 w-4" />Chia sẻ</button>
+              {getAssetKind(image) === 'image' ? (
+                <button
+                  onClick={() => void handleShare(image)}
+                  disabled={Boolean(image.isShared)}
+                  className={`flex flex-1 items-center justify-center gap-2 rounded-2xl px-4 py-3.5 text-sm font-bold transition-transform active:scale-95 ${
+                    image.isShared
+                      ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300'
+                      : 'bg-indigo-50 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-300'
+                  }`}
+                >
+                  <Share2 className="h-4 w-4" />
+                  {image.isShared ? 'Đã publish' : 'Chia sẻ'}
+                </button>
+              ) : null}
             </>
           ) : null}
           <button onClick={() => { setViewingImage(null); handleDelete(image); }} className="flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-red-50 px-5 py-3.5 text-sm font-bold text-red-500 transition-transform active:scale-95 dark:bg-red-500/20 dark:text-red-300"><Trash2 className="h-4 w-4" />Xóa</button>

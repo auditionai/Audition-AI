@@ -18,6 +18,7 @@ const SYSTEM_QUEUE_LIMIT = 10;
 const USER_IMAGE_LIMIT = 1;
 const USER_VIDEO_LIMIT = 1;
 const USER_QUEUE_LIMIT = 1;
+const TST_QUEUE_KINDS = new Set(['image_generate', 'video_generate', 'motion_generate']);
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -51,6 +52,13 @@ const buildInitialQueueLogs = (queueKind: string): QueueProgressLogEntry[] => {
 };
 
 const mapQueueError = (message: string) => {
+  if (/missing tst_api_key/i.test(message) || /khong the nhan job moi/i.test(message)) {
+    return {
+      statusCode: 503,
+      error: message,
+    };
+  }
+
   if (/SYSTEM_QUEUE_FULL|USER_QUEUE_LIMIT_REACHED|IMAGE_USER_LIMIT_REACHED|VIDEO_USER_LIMIT_REACHED/i.test(message)) {
     return { statusCode: 409, error: message };
   }
@@ -71,6 +79,19 @@ const mapQueueError = (message: string) => {
 
 const asQueueAssetType = (value: unknown): 'image' | 'video' => {
   return value === 'video' ? 'video' : 'image';
+};
+
+const ensureProviderConfiguredForQueueKind = (queueKind?: string) => {
+  const normalizedQueueKind = String(queueKind || '').trim().toLowerCase();
+  if (!TST_QUEUE_KINDS.has(normalizedQueueKind)) {
+    return;
+  }
+
+  if (!String(process.env.TST_API_KEY || '').trim()) {
+    throw new Error(
+      'May chu Audition AI dang thieu TST_API_KEY nen tam thoi khong the nhan job moi. Day la loi cau hinh server cua app, khong phai TST ben ngoai bi down.',
+    );
+  }
 };
 
 const normalizeJobId = (value: unknown) => {
@@ -325,6 +346,8 @@ export const handler: Handler = async (event) => {
         body: JSON.stringify({ error: 'Missing required queue payload fields' }),
       };
     }
+
+    ensureProviderConfiguredForQueueKind(body.queueKind);
 
     let row: any;
     const queuePayloadWithLogs =

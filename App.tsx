@@ -22,39 +22,54 @@ import { syncPayOSTransaction, triggerServerQueueTick } from './services/serverQ
 import MobileApp from './mobile-app/src/App';
 
 const PHONE_USER_AGENT_PATTERN = /iphone|ipod|android.+mobile|windows phone|blackberry|opera mini|mobile safari/i;
-const SHELL_PREFERENCE_STORAGE_KEY = 'auditionai:shell-preference';
+const SHELL_OVERRIDE_STORAGE_KEY = 'auditionai:shell-override';
+const LEGACY_SHELL_PREFERENCE_STORAGE_KEY = 'auditionai:shell-preference';
+
+const clearLegacyShellPreference = () => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.removeItem(LEGACY_SHELL_PREFERENCE_STORAGE_KEY);
+};
+
+const readShellOverride = () => {
+  if (typeof window === 'undefined') return null;
+  const saved = window.localStorage.getItem(SHELL_OVERRIDE_STORAGE_KEY);
+  return saved === 'mobile' || saved === 'desktop' ? saved : null;
+};
+
+const writeShellOverride = (value: 'mobile' | 'desktop') => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(SHELL_OVERRIDE_STORAGE_KEY, value);
+  clearLegacyShellPreference();
+};
+
+const detectPhoneBrowserShell = () => {
+  const navigatorWithUAData = navigator as Navigator & { userAgentData?: { mobile?: boolean } };
+  if (typeof navigatorWithUAData.userAgentData?.mobile === 'boolean') {
+    return navigatorWithUAData.userAgentData.mobile;
+  }
+
+  return PHONE_USER_AGENT_PATTERN.test(navigator.userAgent.toLowerCase());
+};
 
 const shouldUseMobileShell = () => {
   if (typeof window === 'undefined') return false;
 
   const params = new URLSearchParams(window.location.search);
   if (params.get('desktop') === '1') {
-    window.localStorage.setItem(SHELL_PREFERENCE_STORAGE_KEY, 'desktop');
+    writeShellOverride('desktop');
     return false;
   }
   if (params.get('mobile') === '1') {
-    window.localStorage.setItem(SHELL_PREFERENCE_STORAGE_KEY, 'mobile');
+    writeShellOverride('mobile');
     return true;
   }
 
-  const savedPreference = window.localStorage.getItem(SHELL_PREFERENCE_STORAGE_KEY);
-  if (savedPreference === 'mobile') return true;
-  if (savedPreference === 'desktop') return false;
+  clearLegacyShellPreference();
+  const savedOverride = readShellOverride();
+  if (savedOverride === 'mobile') return true;
+  if (savedOverride === 'desktop') return false;
 
-  const navigatorWithUAData = navigator as Navigator & { userAgentData?: { mobile?: boolean } };
-  if (typeof navigatorWithUAData.userAgentData?.mobile === 'boolean') {
-    if (navigatorWithUAData.userAgentData.mobile) {
-      window.localStorage.setItem(SHELL_PREFERENCE_STORAGE_KEY, 'mobile');
-      return true;
-    }
-    return false;
-  }
-
-  const isPhoneBrowser = PHONE_USER_AGENT_PATTERN.test(navigator.userAgent.toLowerCase());
-  if (isPhoneBrowser) {
-    window.localStorage.setItem(SHELL_PREFERENCE_STORAGE_KEY, 'mobile');
-  }
-  return isPhoneBrowser;
+  return detectPhoneBrowserShell();
 };
 
 const DEFAULT_IMAGE_FEATURE = APP_CONFIG.main_features.find((feature) => feature.toolType === 'generation') || APP_CONFIG.main_features[0] || null;
@@ -564,15 +579,15 @@ export default function App() {
             setUseMobileShell(shouldUseMobileShell());
         };
 
-        window.localStorage.setItem(SHELL_PREFERENCE_STORAGE_KEY, useMobileShell ? 'mobile' : 'desktop');
-
         refreshShellMode();
         window.addEventListener('popstate', refreshShellMode);
+        window.addEventListener('resize', refreshShellMode);
 
         return () => {
             window.removeEventListener('popstate', refreshShellMode);
+            window.removeEventListener('resize', refreshShellMode);
         };
-    }, [useMobileShell]);
+    }, []);
 
     return useMobileShell ? <MobileApp /> : <DesktopApp />;
 }

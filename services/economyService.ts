@@ -1398,18 +1398,31 @@ export const getApiKeysList = async () => {
 
 // --- TRANSACTIONS ---
 
-const SHELL_PREFERENCE_STORAGE_KEY = 'auditionai:shell-preference';
+const SHELL_OVERRIDE_STORAGE_KEY = 'auditionai:shell-override';
+const PHONE_USER_AGENT_PATTERN = /iphone|ipod|android.+mobile|windows phone|blackberry|opera mini|mobile safari/i;
+
+const shouldPreferMobileShell = () => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('desktop') === '1') return false;
+    if (params.get('mobile') === '1') return true;
+
+    const savedOverride = window.localStorage.getItem(SHELL_OVERRIDE_STORAGE_KEY);
+    if (savedOverride === 'mobile') return true;
+    if (savedOverride === 'desktop') return false;
+
+    const navigatorWithUAData = navigator as Navigator & { userAgentData?: { mobile?: boolean } };
+    if (typeof navigatorWithUAData.userAgentData?.mobile === 'boolean') {
+        return navigatorWithUAData.userAgentData.mobile;
+    }
+
+    return PHONE_USER_AGENT_PATTERN.test(navigator.userAgent.toLowerCase());
+};
 
 const buildPayOSReturnUrls = () => {
     const baseUrl = new URL('/topup', window.location.origin);
     const cancelUrl = new URL('/topup', window.location.origin);
 
-    const params = new URLSearchParams(window.location.search);
-    const prefersMobileShell =
-        params.get('mobile') === '1' ||
-        window.localStorage.getItem(SHELL_PREFERENCE_STORAGE_KEY) === 'mobile';
-
-    if (prefersMobileShell) {
+    if (shouldPreferMobileShell()) {
         baseUrl.searchParams.set('mobile', '1');
         cancelUrl.searchParams.set('mobile', '1');
     }

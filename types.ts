@@ -1,3 +1,5 @@
+import type { QueueProgressLogEntry } from './shared/queueRecipes';
+import type { QueueErrorCategory } from './shared/queueErrorClassifier';
 
 export type Language = 'vi' | 'en';
 export type Theme = 'light' | 'dark';
@@ -62,8 +64,6 @@ export interface AppConfig {
   };
 }
 
-import type { QueueProgressLogEntry } from './shared/queueRecipes';
-
 export interface GeneratedImage {
   id: string;
   url: string; // Base64 data or Public URL
@@ -83,6 +83,8 @@ export interface GeneratedImage {
   queueStage?: string;
   queueLogs?: QueueProgressLogEntry[];
   error?: string;
+  errorCategory?: QueueErrorCategory;
+  errorRaw?: string;
   cost?: number; // Keep track of cost for refunds
 }
 
@@ -101,6 +103,8 @@ export interface AdminQueueJob {
   queueStage?: string;
   queueLogs?: QueueProgressLogEntry[];
   error?: string;
+  errorCategory?: QueueErrorCategory;
+  errorRaw?: string;
   createdAt?: string;
   updatedAt?: string;
   nextPollAt?: string;

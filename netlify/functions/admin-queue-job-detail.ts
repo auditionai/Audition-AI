@@ -2,6 +2,7 @@ import type { Handler } from '@netlify/functions';
 import type { AdminQueueInputMedia, AdminQueueJob, AdminQueueJobDetail } from '../../types';
 import type { QueueProgressLogEntry, QueueNotificationMediaEntry } from '../../shared/queueRecipes';
 import { normalizeQueueProgressLogs, repairVietnameseMojibake } from '../../shared/queueLogText';
+import { classifyQueueError, normalizeQueueErrorMessage } from '../../shared/queueErrorClassifier';
 import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 
 const headers = {
@@ -36,7 +37,10 @@ const getQueueStage = (payload: Record<string, unknown> | null | undefined) => {
   return typeof rawStage === 'string' && rawStage.trim() ? rawStage.trim() : undefined;
 };
 
-const toAdminJob = (row: any, profile?: { email?: string; displayName?: string }): AdminQueueJob => ({
+const toAdminJob = (row: any, profile?: { email?: string; displayName?: string }): AdminQueueJob => {
+  const errorInfo = classifyQueueError(row.error_message || undefined);
+
+  return ({
   id: String(row.id),
   userId: String(row.user_id),
   userEmail: profile?.email || undefined,
@@ -50,14 +54,17 @@ const toAdminJob = (row: any, profile?: { email?: string; displayName?: string }
   progress: typeof row.progress === 'number' ? row.progress : undefined,
   queueStage: getQueueStage(row.queue_payload || null),
   queueLogs: normalizeQueueLogs(row.queue_payload || null),
-  error: repairVietnameseMojibake(row.error_message || undefined) || undefined,
+  error: normalizeQueueErrorMessage(row.error_message || undefined) || undefined,
+  errorCategory: errorInfo.category,
+  errorRaw: repairVietnameseMojibake(row.error_message || undefined) || undefined,
   createdAt: row.created_at || undefined,
   updatedAt: row.updated_at || undefined,
   nextPollAt: row.next_poll_at || undefined,
   processingStartedAt: row.processing_started_at || undefined,
   leaseExpiresAt: row.lease_expires_at || undefined,
   isStuck: false,
-});
+  });
+};
 
 const getMediaSourceType = (value: string): AdminQueueInputMedia['sourceType'] => {
   if (/^https?:\/\//i.test(value)) return 'http';

@@ -1079,6 +1079,24 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           default: return stage || '-';
       }
   };
+  const getQueueErrorCategoryLabel = (category?: string) => {
+      switch (category) {
+          case 'input': return 'Input';
+          case 'queue': return 'Queue';
+          case 'provider': return 'Provider';
+          case 'config': return 'Config';
+          default: return 'Unknown';
+      }
+  };
+  const getQueueErrorCategoryClass = (category?: string) => {
+      switch (category) {
+          case 'input': return 'bg-amber-500/15 text-amber-300 border-amber-500/20';
+          case 'queue': return 'bg-cyan-500/15 text-cyan-300 border-cyan-500/20';
+          case 'provider': return 'bg-violet-500/15 text-violet-300 border-violet-500/20';
+          case 'config': return 'bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/20';
+          default: return 'bg-white/10 text-slate-300 border-white/10';
+      }
+  };
 
   const getAssetKind = (asset: GeneratedImage) => {
       if (asset.assetType) return asset.assetType;
@@ -2022,6 +2040,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                   {job.nextPollAt && <div className="mt-1">poll: {getTimeAgo(job.nextPollAt)}</div>}
                                               </td>
                                               <td className="px-3 py-3 text-xs text-slate-400 max-w-[360px]">
+                                                  {job.errorCategory && job.error && (
+                                                      <div className={`inline-flex px-2 py-1 rounded border text-[10px] font-bold uppercase mb-2 ${getQueueErrorCategoryClass(job.errorCategory)}`}>
+                                                          {getQueueErrorCategoryLabel(job.errorCategory)}
+                                                      </div>
+                                                  )}
                                                   <div className="text-red-300">{job.error || '-'}</div>
                                                   {lastLog && <div className="mt-2 text-slate-300">{lastLog.message}</div>}
                                               </td>
@@ -2060,6 +2083,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           <div><span className="text-slate-500">Loại</span><div className="text-white mt-1">{job.assetType} · {job.queueKind || 'unknown'}</div></div>
                                           <div><span className="text-slate-500">Cập nhật</span><div className="text-white mt-1">{getTimeAgo(job.updatedAt)}</div></div>
                                       </div>
+                                      {job.errorCategory && job.error && (
+                                          <div className={`inline-flex mt-3 px-2 py-1 rounded border text-[10px] font-bold uppercase ${getQueueErrorCategoryClass(job.errorCategory)}`}>
+                                              {getQueueErrorCategoryLabel(job.errorCategory)}
+                                          </div>
+                                      )}
                                       <div className="mt-3 text-xs text-slate-300">{lastLog?.message || job.error || 'Chưa có log mới'}</div>
                                       <button onClick={() => handleOpenQueueJobDetail(job.id)} className="mt-3 w-full py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white text-xs font-bold">
                                           Xem chi tiết input
@@ -3031,9 +3059,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       { label: 'User', value: selectedQueueJobDetail.job.userName || 'Unknown' },
                                       { label: 'Email', value: selectedQueueJobDetail.job.userEmail || '-' },
                                       { label: 'Status', value: selectedQueueJobDetail.job.status },
-                                      { label: 'Stage', value: selectedQueueJobDetail.job.queueStage || '-' },
+                                      { label: 'Stage', value: getQueueStageLabel(selectedQueueJobDetail.job.queueStage) },
                                       { label: 'Asset', value: selectedQueueJobDetail.job.assetType },
                                       { label: 'Queue Kind', value: selectedQueueJobDetail.job.queueKind || '-' },
+                                      { label: 'Error Type', value: getQueueErrorCategoryLabel(selectedQueueJobDetail.job.errorCategory) },
                                       { label: 'Progress', value: `${selectedQueueJobDetail.job.progress || 0}%` },
                                       { label: 'Provider Job', value: selectedQueueJobDetail.job.jobId || '-' },
                                   ].map((item) => (
@@ -3050,6 +3079,31 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       {selectedQueueJobDetail.prompt || selectedQueueJobDetail.job.prompt || 'Không có prompt'}
                                   </div>
                               </div>
+
+                              {(selectedQueueJobDetail.job.error || selectedQueueJobDetail.job.errorRaw) && (
+                                  <div className="bg-black/20 border border-white/10 rounded-2xl p-4 space-y-3">
+                                      <div className="flex items-center gap-3">
+                                          <div className="text-sm font-bold text-white">Phân tích lỗi</div>
+                                          {selectedQueueJobDetail.job.errorCategory && (
+                                              <div className={`inline-flex px-2 py-1 rounded border text-[10px] font-bold uppercase ${getQueueErrorCategoryClass(selectedQueueJobDetail.job.errorCategory)}`}>
+                                                  {getQueueErrorCategoryLabel(selectedQueueJobDetail.job.errorCategory)}
+                                              </div>
+                                          )}
+                                      </div>
+                                      {selectedQueueJobDetail.job.error && (
+                                          <div>
+                                              <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Tóm tắt dễ hiểu</div>
+                                              <div className="text-sm text-red-300 mt-2 leading-relaxed">{selectedQueueJobDetail.job.error}</div>
+                                          </div>
+                                      )}
+                                      {selectedQueueJobDetail.job.errorRaw && selectedQueueJobDetail.job.errorRaw !== selectedQueueJobDetail.job.error && (
+                                          <div>
+                                              <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Lỗi gốc từ hệ thống</div>
+                                              <div className="text-sm text-slate-400 mt-2 leading-relaxed break-all">{selectedQueueJobDetail.job.errorRaw}</div>
+                                          </div>
+                                      )}
+                                  </div>
+                              )}
 
                               <div className="bg-black/20 border border-white/10 rounded-2xl p-4">
                                   <div className="flex items-center justify-between gap-3 mb-4">

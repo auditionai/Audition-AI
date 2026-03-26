@@ -2,6 +2,7 @@ import type { Handler } from '@netlify/functions';
 import type { AdminQueueJob, AdminQueueSummary } from '../../types';
 import type { QueueProgressLogEntry } from '../../shared/queueRecipes';
 import { normalizeQueueProgressLogs, repairVietnameseMojibake } from '../../shared/queueLogText';
+import { classifyQueueError, normalizeQueueErrorMessage } from '../../shared/queueErrorClassifier';
 import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 
 const headers = {
@@ -186,6 +187,7 @@ export const handler: Handler = async (event) => {
         : null;
       const profile = userMap.get(String(row.user_id || ''));
       const queueLogs = normalizeQueueLogs(payload);
+      const errorInfo = classifyQueueError(row.error_message || undefined);
 
       return {
         id: String(row.id),
@@ -201,7 +203,9 @@ export const handler: Handler = async (event) => {
         progress: typeof row.progress === 'number' ? row.progress : undefined,
         queueStage: getQueueStage(payload),
         queueLogs,
-        error: repairVietnameseMojibake(row.error_message || undefined) || undefined,
+        error: normalizeQueueErrorMessage(row.error_message || undefined) || undefined,
+        errorCategory: errorInfo.category,
+        errorRaw: repairVietnameseMojibake(row.error_message || undefined) || undefined,
         createdAt: row.created_at || undefined,
         updatedAt: row.updated_at || undefined,
         nextPollAt: row.next_poll_at || undefined,

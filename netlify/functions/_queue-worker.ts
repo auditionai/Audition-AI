@@ -31,6 +31,7 @@ import {
   type MotionGenerateRecipePayload,
   type VideoGenerateRecipePayload,
 } from '../../shared/queueRecipes';
+import { normalizeQueueErrorMessage } from '../../shared/queueErrorClassifier';
 import { repairVietnameseMojibake } from '../../shared/queueLogText';
 
 type QueueJobRow = {
@@ -133,9 +134,9 @@ const isAmbiguousDispatchError = (message: string) => {
 const parseErrorMessage = async (response: Response) => {
   try {
     const data = await response.json();
-    return data?.error || data?.message || data?.detail || `${response.status} ${response.statusText}`;
+    return normalizeQueueErrorMessage(data?.error || data?.message || data?.detail || `${response.status} ${response.statusText}`);
   } catch {
-    return `${response.status} ${response.statusText}`;
+    return normalizeQueueErrorMessage(`${response.status} ${response.statusText}`);
   }
 };
 

@@ -2,6 +2,7 @@
 import { GeneratedImage } from '../types';
 import type { QueueProgressLogEntry } from '../shared/queueRecipes';
 import { normalizeQueueProgressLogs, repairVietnameseMojibake } from '../shared/queueLogText';
+import { classifyQueueError, normalizeQueueErrorMessage } from '../shared/queueErrorClassifier';
 import { getSupabaseAuthHeader, getSupabaseUser, supabase } from './supabaseClient';
 import { getUserProfile } from './economyService';
 import { S3Client, PutObjectCommand, DeleteObjectCommand, DeleteObjectsCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
@@ -293,7 +294,10 @@ const upsertImageMetadata = async (image: GeneratedImage, user: { id: string; us
   }
 };
 
-const mapGeneratedImageRow = (row: any, fallbackUserName: string, fallbackCost?: number): GeneratedImage => ({
+const mapGeneratedImageRow = (row: any, fallbackUserName: string, fallbackCost?: number): GeneratedImage => {
+  const errorInfo = classifyQueueError(row.error_message || undefined);
+
+  return ({
   id: row.id,
   url: row.image_url || '',
   prompt: row.prompt,
@@ -328,9 +332,12 @@ const mapGeneratedImageRow = (row: any, fallbackUserName: string, fallbackCost?:
           typeof entry.message === 'string'
         ))
       : undefined,
-  error: repairVietnameseMojibake(row.error_message || undefined) || undefined,
+  error: normalizeQueueErrorMessage(row.error_message || undefined) || undefined,
+  errorCategory: errorInfo.category,
+  errorRaw: repairVietnameseMojibake(row.error_message || undefined) || undefined,
   cost: Number.isFinite(Number(row.cost_vcoin)) ? Number(row.cost_vcoin) : fallbackCost,
-});
+  });
+};
 
 const getGeneratedImageChargeMap = async (userId: string, imageIds: string[]): Promise<Map<string, number>> => {
   if (!supabase || imageIds.length === 0) {

@@ -102,6 +102,10 @@ const isTransientError = (message: string) => {
     normalized.includes('maintenance') ||
     normalized.includes('not available') ||
     normalized.includes('unavailable') ||
+    normalized.includes('520') ||
+    normalized.includes('521') ||
+    normalized.includes('522') ||
+    normalized.includes('523') ||
     normalized.includes('429') ||
     normalized.includes('rate limit') ||
     normalized.includes('timeout') ||
@@ -110,6 +114,8 @@ const isTransientError = (message: string) => {
     normalized.includes('503') ||
     normalized.includes('502') ||
     normalized.includes('504') ||
+    normalized.includes('525') ||
+    normalized.includes('526') ||
     normalized.includes('network')
   );
 };

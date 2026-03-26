@@ -38,6 +38,14 @@ export const pickQueueFailureMessage = (
 export const classifyQueueError = (message?: string | null): QueueErrorInfo => {
   const rawMessage = normalizeErrorText(message);
   const lower = rawMessage.toLowerCase();
+  const isUpstreamGatewayError =
+    /^52[0-6]\b/.test(lower) ||
+    lower.includes('520 <none>') ||
+    lower.includes('521 <none>') ||
+    lower.includes('522 <none>') ||
+    lower.includes('523 <none>') ||
+    lower.includes('525 <none>') ||
+    lower.includes('526 <none>');
 
   if (!rawMessage) {
     return {
@@ -96,6 +104,7 @@ export const classifyQueueError = (message?: string | null): QueueErrorInfo => {
   }
 
   if (
+    isUpstreamGatewayError ||
     /^524\b/.test(lower) ||
     lower.includes('524 <none>') ||
     lower.includes('gateway timeout') ||
@@ -108,7 +117,7 @@ export const classifyQueueError = (message?: string | null): QueueErrorInfo => {
     return {
       rawMessage,
       displayMessage:
-        'TST hoac lop proxy upstream bi timeout / mat dau job. Input co the van hop le, nhung lan chay nay that bai do provider.',
+        'TST hoặc lớp proxy upstream đang lỗi tạm thời (HTTP 52x / timeout / mất dấu job). Input có thể vẫn hợp lệ, nhưng lần chạy này thất bại do provider.',
       category: 'provider',
     };
   }

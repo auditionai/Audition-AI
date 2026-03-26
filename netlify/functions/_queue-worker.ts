@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { getServiceRoleClient } from './_supabase';
 import { fireTelegramJobNotification } from './_telegram-notify';
 import { validateQueuePayloadAgainstLiveCatalog } from './_tst-live-catalog';
@@ -1087,6 +1088,67 @@ const markSubmittingPreparedPayload = async (jobId: string, payload?: Record<str
   return nextPayload;
 };
 
+const markSubmittingPreparedPayloadWithOwnership = async (
+  jobId: string,
+  payload: Record<string, unknown> | null | undefined,
+  dispatchAttemptId: string,
+) => {
+  const nextPayload = withQueueLog(
+    {
+      ...toQueuePayloadObject(payload),
+      __tstTouched: true,
+      __dispatchConfirmationPending: true,
+      __dispatchAttemptId: dispatchAttemptId,
+    },
+    'dispatching',
+    'Đang gửi yêu cầu tới provider TST.',
+  );
+  await updateGeneratedImageRecord(jobId, {
+    status: 'processing',
+    progress: 50,
+    error_message: null,
+    queue_payload: nextPayload,
+    next_poll_at: null,
+    updated_at: new Date().toISOString(),
+  });
+
+  return nextPayload;
+};
+
+const confirmDispatchAttemptOwnership = async (jobId: string, dispatchAttemptId: string) => {
+  const admin = getServiceRoleClient();
+  const { data, error } = await admin
+    .from('generated_images')
+    .select('status, job_id, queue_payload')
+    .eq('id', jobId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
+    return false;
+  }
+
+  const currentStatus = String((data as any).status || '').toLowerCase();
+  const providerJobId = String((data as any).job_id || '').trim();
+  const payload =
+    (data as any).queue_payload && typeof (data as any).queue_payload === 'object'
+      ? ((data as any).queue_payload as Record<string, unknown>)
+      : null;
+  const currentAttemptId =
+    payload && typeof payload.__dispatchAttemptId === 'string'
+      ? String(payload.__dispatchAttemptId)
+      : '';
+
+  if (providerJobId || currentStatus === 'completed' || currentStatus === 'failed') {
+    return false;
+  }
+
+  return currentAttemptId === dispatchAttemptId;
+};
+
 const markDispatchAwaitingProviderConfirmation = async (
   job: QueueJobRow,
   errorMessage: string,
@@ -1143,6 +1205,32 @@ const markSubmitted = async (job: QueueJobRow, providerJobId: string) => {
     status: 'processing',
     job_id: providerJobId,
     queue_payload: withQueueLog(job.queue_payload, 'submitted', `Provider đã nhận job: ${providerJobId}.`, 'success'),
+    progress: 60,
+    error_message: null,
+    processing_started_at: new Date().toISOString(),
+    next_poll_at: new Date(Date.now() + POLL_INTERVAL_SECONDS * 1000).toISOString(),
+    lease_token: null,
+    lease_expires_at: null,
+    updated_at: new Date().toISOString(),
+  });
+};
+
+const markSubmittedWithOwnership = async (job: QueueJobRow, providerJobId: string) => {
+  const nextPayload = withQueueLog(
+    {
+      ...toQueuePayloadObject(job.queue_payload),
+      __dispatchConfirmationPending: false,
+      __dispatchAttemptId: null,
+    },
+    'submitted',
+    `Provider đã nhận job: ${providerJobId}.`,
+    'success',
+  );
+
+  await updateGeneratedImageRecord(job.id, {
+    status: 'processing',
+    job_id: providerJobId,
+    queue_payload: nextPayload,
     progress: 60,
     error_message: null,
     processing_started_at: new Date().toISOString(),
@@ -2056,10 +2144,15 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
       job.queue_payload = await persistPreparedPayload(job.id, providerPayloadForSubmit, job.queue_payload || currentPayload);
     }
 
-    job.queue_payload = await markSubmittingPreparedPayload(job.id, job.queue_payload);
+    const dispatchAttemptId = randomUUID();
+    job.queue_payload = await markSubmittingPreparedPayloadWithOwnership(job.id, job.queue_payload, dispatchAttemptId);
+    if (!(await confirmDispatchAttemptOwnership(job.id, dispatchAttemptId))) {
+      await releaseLease(job.id);
+      return {};
+    }
     providerDispatchStarted = true;
     const providerJobId = await submitProviderJob(job.queue_kind, providerPayloadForSubmit);
-    await markSubmitted(job, providerJobId);
+    await markSubmittedWithOwnership(job, providerJobId);
     return { submitted: 1 };
   } catch (error: any) {
     const message = error?.message || 'Queue dispatch failed';

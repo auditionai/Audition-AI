@@ -528,6 +528,24 @@ export function WorkspaceVideo() {
             </div>
 
             {/* Config Grids */}
+            {modelOptions.showAspectRatio && modelOptions.aspectRatios.length > 0 && (
+              <div className="space-y-2">
+                <h3 className="text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider ml-1">Tỷ lệ khung hình</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {modelOptions.aspectRatios.map((ratio: string) => (
+                    <button
+                      key={ratio}
+                      onClick={() => setAspectRatio(ratio)}
+                      className={`text-xs p-2.5 rounded-[12px] font-medium transition-all ${
+                        aspectRatio === ratio ? 'bg-fuchsia-50 dark:bg-fuchsia-500/10 text-fuchsia-700 border border-fuchsia-200 dark:border-fuchsia-500/30' : 'bg-white dark:bg-[#18181B] border border-gray-100 text-gray-500 dark:text-zinc-400'
+                      }`}
+                    >
+                      {ratio}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <h3 className="text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider ml-1">Model</h3>

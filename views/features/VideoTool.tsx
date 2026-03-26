@@ -926,7 +926,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                         ) : (
                             <div className="flex flex-col items-center text-slate-500 group-hover/item:text-audi-pink transition-colors">
                                 <Icons.Image className="w-8 h-8 mb-1" />
-                                <span className="text-[10px] uppercase font-bold">Ảnh mẫu (Tùy chọn)</span>
+                                <span className="text-[10px] uppercase font-bold">Ảnh mẫu (Bắt buộc)</span>
                             </div>
                         )}
                     </div>

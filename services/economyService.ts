@@ -1924,7 +1924,7 @@ export const deleteGiftcode = async (id: string) => {
 export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean, reward: number, message: string}> => {
     if (!supabase) return { success: false, reward: 0, message: "No Database" };
     const cleanCode = codeStr.trim().toUpperCase();
-    if (!cleanCode) return { success: false, reward: 0, message: "Vui lÃ²ng nháº­p giftcode." };
+    if (!cleanCode) return { success: false, reward: 0, message: "Vui lòng nhập giftcode." };
 
     try {
         const authHeader = await getSessionAuthHeader();
@@ -1942,7 +1942,7 @@ export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean
             return {
                 success: false,
                 reward: 0,
-                message: payload?.message || 'KhÃ´ng thá»ƒ sá»­ dá»¥ng giftcode.',
+                message: payload?.message || 'Không thể sử dụng giftcode.',
             };
         }
 

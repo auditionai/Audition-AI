@@ -1,0 +1,53 @@
+{
+  "executedAt": "2026-03-26T15:55:54.473Z",
+  "baseUrl": "https://develop--audition-ai.netlify.app",
+  "testEmail": "codex.deploy.1774540513715@example.com",
+  "results": [
+    {
+      "step": "desktop_home",
+      "status": "passed",
+      "detail": "Desktop route opened: https://develop--audition-ai.netlify.app/home"
+    },
+    {
+      "step": "login",
+      "status": "passed",
+      "detail": "Logged in and landed on https://develop--audition-ai.netlify.app/home"
+    },
+    {
+      "step": "route__home",
+      "status": "passed",
+      "detail": "Opened https://develop--audition-ai.netlify.app/home"
+    },
+    {
+      "step": "route__gallery",
+      "status": "passed",
+      "detail": "Opened https://develop--audition-ai.netlify.app/gallery"
+    },
+    {
+      "step": "route__topup",
+      "status": "passed",
+      "detail": "Opened https://develop--audition-ai.netlify.app/topup"
+    },
+    {
+      "step": "route__generate_image",
+      "status": "passed",
+      "detail": "Opened https://develop--audition-ai.netlify.app/generate/image"
+    },
+    {
+      "step": "route__generate_video",
+      "status": "passed",
+      "detail": "Opened https://develop--audition-ai.netlify.app/generate/video"
+    },
+    {
+      "step": "route__admin",
+      "status": "passed",
+      "detail": "Opened https://develop--audition-ai.netlify.app/admin"
+    },
+    {
+      "step": "gallery_video_scan",
+      "status": "passed",
+      "detail": "Gallery video badge count: 1",
+      "hasEmptyState": true
+    }
+  ]
+}

@@ -10,6 +10,23 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    build: {
+      chunkSizeWarningLimit: 700,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            const normalizedId = id.replace(/\\/g, '/');
+            if (!normalizedId.includes('node_modules')) return;
+            if (normalizedId.includes('react-dom') || normalizedId.includes('react') || normalizedId.includes('scheduler') || normalizedId.includes('react-router-dom')) return 'vendor-react';
+            if (normalizedId.includes('@supabase/supabase-js')) return 'vendor-supabase';
+            if (normalizedId.includes('recharts')) return 'vendor-charts';
+            if (normalizedId.includes('lucide-react')) return 'vendor-icons';
+            if (normalizedId.includes('@google/genai') || normalizedId.includes('google-auth-library') || normalizedId.includes('/gaxios/') || normalizedId.includes('/gcp-metadata/') || normalizedId.includes('/gtoken/')) return 'vendor-ai';
+            return 'vendor';
+          },
+        },
+      },
+    },
     server: {
       proxy: {
         // In local dev, keep the frontend on Vite and forward pseudo Netlify routes

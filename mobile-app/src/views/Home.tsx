@@ -58,7 +58,7 @@ export function Home() {
     return 'Chào buổi tối';
   })();
 
-  const userName = user?.username || 'Creator';
+  const userName = user?.username || 'Nhà sáng tạo';
 
   return (
     <div className="p-5 space-y-8 pb-32 animate-fade-in relative">

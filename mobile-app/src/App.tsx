@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+﻿import { useEffect, useRef } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { AlertTriangle, Loader } from 'lucide-react';
 import { NotificationProvider, useNotification } from './components/NotificationSystem';
@@ -197,7 +197,7 @@ function MobileRuntimeEffects() {
 
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/75 backdrop-blur-md p-5">
-      <div className="w-full max-w-sm rounded-[32px] border border-red-500/20 bg-white dark:bg-[#18181B] shadow-2xl p-6 text-center animate-slide-up">
+      <div className="w-full max-w-sm rounded-[32px] border border-red-500/20 bg-white p-6 text-center shadow-2xl animate-slide-up dark:bg-[#18181B]">
         <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-50 dark:bg-red-500/10 flex items-center justify-center">
           <AlertTriangle className="w-8 h-8 text-red-500" />
         </div>

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+﻿import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   ArrowDownCircle,
@@ -63,6 +63,17 @@ const formatDate = (timestamp: number | string) => {
     hour: '2-digit',
     minute: '2-digit',
   });
+};
+
+const getTransactionStatusLabel = (status: HistoryItem['status']) => {
+  switch (status) {
+    case 'pending':
+      return 'CHỜ DUYỆT';
+    case 'failed':
+      return 'THẤT BẠI';
+    default:
+      return 'THÀNH CÔNG';
+  }
 };
 
 export const Gallery: React.FC = () => {
@@ -182,7 +193,9 @@ export const Gallery: React.FC = () => {
         if (filter === 'all') return true;
         if (filter === 'completed') return !status || status === 'completed';
         if (filter === 'failed') return status === 'failed';
-        if (filter === 'processing') return status === 'processing' || status === 'queued' || status === 'rescuing';
+        if (filter === 'processing') {
+          return status === 'processing' || status === 'queued' || status === 'rescuing';
+        }
         return true;
       })
       .sort((a, b) => b.timestamp - a.timestamp);
@@ -197,18 +210,16 @@ export const Gallery: React.FC = () => {
 
   const handleDelete = (image: GeneratedImage) => {
     confirm({
-      title: 'Xoa muc nay?',
-      message: 'Ban co chac muon xoa vinh vien muc nay khoi lich su tao?',
-      confirmText: 'Xoa',
-      cancelText: 'Huy',
+      title: 'Xóa mục này?',
+      message: 'Bạn có chắc muốn xóa vĩnh viễn mục này khỏi lịch sử tạo?',
+      confirmText: 'Xóa',
+      cancelText: 'Hủy',
       isDanger: true,
       onConfirm: async () => {
         await deleteImageFromStorage(image.id);
         setImages((current) => current.filter((item) => item.id !== image.id));
-        if (viewingImage?.id === image.id) {
-          setViewingImage(null);
-        }
-        notify('Da xoa thanh cong.', 'info');
+        if (viewingImage?.id === image.id) setViewingImage(null);
+        notify('Đã xóa thành công.', 'info');
       },
     });
   };
@@ -225,7 +236,7 @@ export const Gallery: React.FC = () => {
       document.body.removeChild(anchor);
     } catch (error) {
       console.error('[Gallery] Download failed', error);
-      notify('Tai xuong that bai.', 'error');
+      notify('Tải xuống thất bại.', 'error');
     }
   };
 
@@ -235,14 +246,14 @@ export const Gallery: React.FC = () => {
       if (navigator.share) {
         await navigator.share({
           title: 'Audition AI',
-          text: image.prompt || 'Tac pham duoc tao boi Audition AI',
+          text: image.prompt || 'Tác phẩm được tạo bởi Audition AI',
           url: image.url,
         });
         return;
       }
 
       await navigator.clipboard.writeText(image.url);
-      notify('Da copy link.', 'success');
+      notify('Đã sao chép liên kết.', 'success');
     } catch (error) {
       console.warn('[Gallery] Share failed', error);
     }
@@ -267,7 +278,7 @@ export const Gallery: React.FC = () => {
       return (
         <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-500 dark:bg-red-500/10 dark:text-red-300">
           <AlertTriangle className="h-3 w-3" />
-          Loi
+          Lỗi
         </span>
       );
     }
@@ -287,18 +298,18 @@ export const Gallery: React.FC = () => {
   const getTransactionBadge = (type: string) => {
     switch (type) {
       case 'topup':
-        return <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300"><ArrowUpCircle className="h-3 w-3" /> Nap</span>;
+        return <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300"><ArrowUpCircle className="h-3 w-3" /> Nạp</span>;
       case 'pending_topup':
-        return <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:bg-amber-500/10 dark:text-amber-300"><Clock3 className="h-3 w-3" /> Cho</span>;
+        return <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:bg-amber-500/10 dark:text-amber-300"><Clock3 className="h-3 w-3" /> Chờ</span>;
       case 'usage':
-        return <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-600 dark:bg-blue-500/10 dark:text-blue-300"><ArrowDownCircle className="h-3 w-3" /> Dung</span>;
+        return <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-600 dark:bg-blue-500/10 dark:text-blue-300"><ArrowDownCircle className="h-3 w-3" /> Dùng</span>;
       case 'refund':
-        return <span className="inline-flex items-center gap-1 rounded-full bg-cyan-50 px-2 py-0.5 text-[10px] font-bold text-cyan-600 dark:bg-cyan-500/10 dark:text-cyan-300"><RefreshCw className="h-3 w-3" /> Hoan</span>;
+        return <span className="inline-flex items-center gap-1 rounded-full bg-cyan-50 px-2 py-0.5 text-[10px] font-bold text-cyan-600 dark:bg-cyan-500/10 dark:text-cyan-300"><RefreshCw className="h-3 w-3" /> Hoàn</span>;
       case 'reward':
       case 'giftcode':
-        return <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-bold text-purple-600 dark:bg-purple-500/10 dark:text-purple-300"><Gift className="h-3 w-3" /> Thuong</span>;
+        return <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-bold text-purple-600 dark:bg-purple-500/10 dark:text-purple-300"><Gift className="h-3 w-3" /> Thưởng</span>;
       default:
-        return <span className="text-[10px] font-semibold text-gray-400 dark:text-zinc-500">Khac</span>;
+        return <span className="text-[10px] font-semibold text-gray-400 dark:text-zinc-500">Khác</span>;
     }
   };
 
@@ -316,12 +327,9 @@ export const Gallery: React.FC = () => {
         <div className="flex items-center justify-between p-4">
           <div className="flex items-center gap-2">
             {isVideo ? <Video className="h-4 w-4 text-purple-500" /> : <ImageIcon className="h-4 w-4 text-blue-500" />}
-            <span className="text-xs font-bold uppercase text-gray-400 dark:text-zinc-500">{isVideo ? 'Video' : 'Image'}</span>
+            <span className="text-xs font-bold uppercase text-gray-400 dark:text-zinc-500">{isVideo ? 'Video' : 'Ảnh'}</span>
           </div>
-          <button
-            onClick={() => setViewingImage(null)}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-500 transition-colors hover:bg-gray-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
-          >
+          <button onClick={() => setViewingImage(null)} className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-500 transition-colors hover:bg-gray-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -340,7 +348,7 @@ export const Gallery: React.FC = () => {
                   {status === 'processing' || status === 'queued' || status === 'rescuing' ? (
                     <div className="text-center">
                       <Loader className="mx-auto mb-3 h-10 w-10 animate-spin text-purple-500" />
-                      <p className="text-sm text-gray-500 dark:text-zinc-400">Dang tao... {Math.round(image.progress || 0)}%</p>
+                      <p className="text-sm text-gray-500 dark:text-zinc-400">Đang tạo... {Math.round(image.progress || 0)}%</p>
                       <div className="mx-auto mt-2 h-1.5 w-48 overflow-hidden rounded-full bg-gray-200 dark:bg-zinc-700">
                         <div className="h-full rounded-full bg-purple-500 transition-all" style={{ width: `${image.progress || 0}%` }} />
                       </div>
@@ -348,8 +356,8 @@ export const Gallery: React.FC = () => {
                   ) : status === 'failed' ? (
                     <div className="px-6 text-center">
                       <AlertTriangle className="mx-auto mb-3 h-10 w-10 text-red-400" />
-                      <p className="text-sm font-semibold text-red-500">That bai</p>
-                      <p className="mt-1 text-xs text-gray-400 dark:text-zinc-500">{image.error || 'Khong co chi tiet loi'}</p>
+                      <p className="text-sm font-semibold text-red-500">Thất bại</p>
+                      <p className="mt-1 text-xs text-gray-400 dark:text-zinc-500">{image.error || 'Không có chi tiết lỗi'}</p>
                     </div>
                   ) : isVideo ? (
                     <Video className="h-10 w-10 text-gray-300 dark:text-zinc-700" />
@@ -365,7 +373,7 @@ export const Gallery: React.FC = () => {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 {isVideo ? <Video className="h-4 w-4 text-purple-500" /> : <ImageIcon className="h-4 w-4 text-blue-500" />}
-                <span className="text-xs font-bold uppercase text-gray-400 dark:text-zinc-500">{isVideo ? 'Video' : 'Image'}</span>
+                <span className="text-xs font-bold uppercase text-gray-400 dark:text-zinc-500">{isVideo ? 'Video' : 'Ảnh'}</span>
               </div>
               {getStatusBadge(image)}
             </div>
@@ -373,61 +381,24 @@ export const Gallery: React.FC = () => {
             {image.prompt ? <p className="text-sm leading-relaxed text-gray-700 dark:text-zinc-200">{image.prompt}</p> : null}
 
             <div className="grid grid-cols-2 gap-3 text-xs">
-              <div className="rounded-2xl bg-gray-50 p-3 dark:bg-zinc-800/80">
-                <span className="text-gray-400 dark:text-zinc-500">Thoi gian</span>
-                <p className="mt-0.5 font-medium text-gray-700 dark:text-zinc-200">{formatDate(image.timestamp)}</p>
-              </div>
-              <div className="rounded-2xl bg-gray-50 p-3 dark:bg-zinc-800/80">
-                <span className="text-gray-400 dark:text-zinc-500">Chi phi</span>
-                <p className="mt-0.5 font-medium text-gray-700 dark:text-zinc-200">{typeof image.cost === 'number' ? `${image.cost} Vcoin` : 'N/A'}</p>
-              </div>
-              <div className="rounded-2xl bg-gray-50 p-3 dark:bg-zinc-800/80">
-                <span className="text-gray-400 dark:text-zinc-500">Cong cu</span>
-                <p className="mt-0.5 truncate font-medium text-gray-700 dark:text-zinc-200">{image.toolName || image.engine}</p>
-              </div>
-              <div className="rounded-2xl bg-gray-50 p-3 dark:bg-zinc-800/80">
-                <span className="text-gray-400 dark:text-zinc-500">ID</span>
-                <p className="mt-0.5 truncate font-mono text-gray-500 dark:text-zinc-400">{image.id.substring(0, 12)}</p>
-              </div>
+              <div className="rounded-2xl bg-gray-50 p-3 dark:bg-zinc-800/80"><span className="text-gray-400 dark:text-zinc-500">Thời gian</span><p className="mt-0.5 font-medium text-gray-700 dark:text-zinc-200">{formatDate(image.timestamp)}</p></div>
+              <div className="rounded-2xl bg-gray-50 p-3 dark:bg-zinc-800/80"><span className="text-gray-400 dark:text-zinc-500">Chi phí</span><p className="mt-0.5 font-medium text-gray-700 dark:text-zinc-200">{typeof image.cost === 'number' ? `${image.cost} Vcoin` : 'Không có'}</p></div>
+              <div className="rounded-2xl bg-gray-50 p-3 dark:bg-zinc-800/80"><span className="text-gray-400 dark:text-zinc-500">Công cụ</span><p className="mt-0.5 truncate font-medium text-gray-700 dark:text-zinc-200">{image.toolName || image.engine}</p></div>
+              <div className="rounded-2xl bg-gray-50 p-3 dark:bg-zinc-800/80"><span className="text-gray-400 dark:text-zinc-500">ID</span><p className="mt-0.5 truncate font-mono text-gray-500 dark:text-zinc-400">{image.id.substring(0, 12)}</p></div>
             </div>
 
-            {status === 'failed' && image.error ? (
-              <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">
-                {image.error}
-              </div>
-            ) : null}
+            {status === 'failed' && image.error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">{image.error}</div> : null}
           </div>
         </div>
 
         <div className="mx-auto flex w-full max-w-lg gap-2 bg-gradient-to-t from-white via-white/95 to-transparent p-4 pb-6 dark:from-black dark:via-black/95" onClick={(event) => event.stopPropagation()}>
           {isCompleted && image.url ? (
             <>
-              <button
-                onClick={() => void handleDownload(image)}
-                className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-gray-900 px-4 py-3.5 text-sm font-bold text-white transition-transform active:scale-95 dark:bg-white dark:text-black"
-              >
-                <Download className="h-4 w-4" />
-                Tai xuong
-              </button>
-              <button
-                onClick={() => void handleShare(image)}
-                className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-indigo-50 px-4 py-3.5 text-sm font-bold text-indigo-600 transition-transform active:scale-95 dark:bg-indigo-500/20 dark:text-indigo-300"
-              >
-                <Share2 className="h-4 w-4" />
-                Chia se
-              </button>
+              <button onClick={() => void handleDownload(image)} className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-gray-900 px-4 py-3.5 text-sm font-bold text-white transition-transform active:scale-95 dark:bg-white dark:text-black"><Download className="h-4 w-4" />Tải xuống</button>
+              <button onClick={() => void handleShare(image)} className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-indigo-50 px-4 py-3.5 text-sm font-bold text-indigo-600 transition-transform active:scale-95 dark:bg-indigo-500/20 dark:text-indigo-300"><Share2 className="h-4 w-4" />Chia sẻ</button>
             </>
           ) : null}
-          <button
-            onClick={() => {
-              setViewingImage(null);
-              handleDelete(image);
-            }}
-            className="flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-red-50 px-5 py-3.5 text-sm font-bold text-red-500 transition-transform active:scale-95 dark:bg-red-500/20 dark:text-red-300"
-          >
-            <Trash2 className="h-4 w-4" />
-            Xoa
-          </button>
+          <button onClick={() => { setViewingImage(null); handleDelete(image); }} className="flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-red-50 px-5 py-3.5 text-sm font-bold text-red-500 transition-transform active:scale-95 dark:bg-red-500/20 dark:text-red-300"><Trash2 className="h-4 w-4" />Xóa</button>
         </div>
       </div>
     );
@@ -437,26 +408,8 @@ export const Gallery: React.FC = () => {
     <div className="min-h-screen bg-[#FAFAFA] pb-28 dark:bg-[#09090B]">
       <div className="sticky top-0 z-30 border-b border-gray-100 bg-white/90 px-4 pb-0 pt-3 backdrop-blur-xl dark:border-zinc-800 dark:bg-[#18181B]/85">
         <div className="mb-3 flex rounded-2xl bg-gray-100 p-1 dark:bg-zinc-800">
-          <button
-            onClick={() => setActiveTab('generation')}
-            className={`flex-1 rounded-xl py-2.5 text-xs font-bold transition-all ${
-              activeTab === 'generation'
-                ? 'bg-white text-gray-900 shadow-sm dark:bg-[#18181B] dark:text-white'
-                : 'text-gray-400 dark:text-zinc-500'
-            }`}
-          >
-            Lich su tao
-          </button>
-          <button
-            onClick={() => setActiveTab('transactions')}
-            className={`flex-1 rounded-xl py-2.5 text-xs font-bold transition-all ${
-              activeTab === 'transactions'
-                ? 'bg-white text-gray-900 shadow-sm dark:bg-[#18181B] dark:text-white'
-                : 'text-gray-400 dark:text-zinc-500'
-            }`}
-          >
-            Giao dich Vcoin
-          </button>
+          <button onClick={() => setActiveTab('generation')} className={`flex-1 rounded-xl py-2.5 text-xs font-bold transition-all ${activeTab === 'generation' ? 'bg-white text-gray-900 shadow-sm dark:bg-[#18181B] dark:text-white' : 'text-gray-400 dark:text-zinc-500'}`}>Lịch sử tạo</button>
+          <button onClick={() => setActiveTab('transactions')} className={`flex-1 rounded-xl py-2.5 text-xs font-bold transition-all ${activeTab === 'transactions' ? 'bg-white text-gray-900 shadow-sm dark:bg-[#18181B] dark:text-white' : 'text-gray-400 dark:text-zinc-500'}`}>Giao dịch Vcoin</button>
         </div>
 
         {activeTab === 'generation' ? (
@@ -464,45 +417,23 @@ export const Gallery: React.FC = () => {
             <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
               <Filter className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-zinc-500" />
               {([
-                ['all', 'Tat ca'],
+                ['all', 'Tất cả'],
                 ['completed', 'Xong'],
-                ['failed', 'Loi'],
-                ['processing', 'Dang cho'],
+                ['failed', 'Lỗi'],
+                ['processing', 'Đang chờ'],
               ] as const).map(([key, label]) => (
-                <button
-                  key={key}
-                  onClick={() => setFilter(key)}
-                  className={`whitespace-nowrap rounded-full px-3.5 py-1.5 text-[11px] font-bold transition-all ${
-                    filter === key
-                      ? 'bg-gray-900 text-white dark:bg-white dark:text-black'
-                      : 'bg-gray-100 text-gray-400 dark:bg-zinc-800 dark:text-zinc-500'
-                  }`}
-                >
-                  {label}
-                </button>
+                <button key={key} onClick={() => setFilter(key)} className={`whitespace-nowrap rounded-full px-3.5 py-1.5 text-[11px] font-bold transition-all ${filter === key ? 'bg-gray-900 text-white dark:bg-white dark:text-black' : 'bg-gray-100 text-gray-400 dark:bg-zinc-800 dark:text-zinc-500'}`}>{label}</button>
               ))}
-              <button onClick={() => void handleRefresh()} className="ml-auto rounded-full p-1.5 transition hover:bg-gray-100 dark:bg-zinc-800">
-                <RefreshCw className={`h-4 w-4 text-gray-400 dark:text-zinc-500 ${loadingImages ? 'animate-spin' : ''}`} />
-              </button>
+              <button onClick={() => void handleRefresh()} className="ml-auto rounded-full p-1.5 transition hover:bg-gray-100 dark:bg-zinc-800"><RefreshCw className={`h-4 w-4 text-gray-400 dark:text-zinc-500 ${loadingImages ? 'animate-spin' : ''}`} /></button>
             </div>
 
             <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
               {([
-                ['all', `All ${images.length}`],
-                ['image', `Image ${mediaCounts.image}`],
+                ['all', `Tất cả ${images.length}`],
+                ['image', `Ảnh ${mediaCounts.image}`],
                 ['video', `Video ${mediaCounts.video}`],
               ] as const).map(([key, label]) => (
-                <button
-                  key={key}
-                  onClick={() => setMediaFilter(key)}
-                  className={`whitespace-nowrap rounded-full px-3 py-1.5 text-[11px] font-bold transition-all ${
-                    mediaFilter === key
-                      ? 'bg-indigo-500 text-white'
-                      : 'bg-gray-100 text-gray-400 dark:bg-zinc-800 dark:text-zinc-500'
-                  }`}
-                >
-                  {label}
-                </button>
+                <button key={key} onClick={() => setMediaFilter(key)} className={`whitespace-nowrap rounded-full px-3 py-1.5 text-[11px] font-bold transition-all ${mediaFilter === key ? 'bg-indigo-500 text-white' : 'bg-gray-100 text-gray-400 dark:bg-zinc-800 dark:text-zinc-500'}`}>{label}</button>
               ))}
             </div>
           </div>
@@ -512,13 +443,11 @@ export const Gallery: React.FC = () => {
       <div className="px-4 py-4">
         {activeTab === 'generation' ? (
           loadingImages ? (
-            <div className="flex justify-center py-20">
-              <Loader className="h-7 w-7 animate-spin text-gray-300" />
-            </div>
+            <div className="flex justify-center py-20"><Loader className="h-7 w-7 animate-spin text-gray-300" /></div>
           ) : filteredImages.length === 0 ? (
             <div className="py-20 text-center">
               {mediaFilter === 'video' ? <Video className="mx-auto mb-3 h-12 w-12 text-gray-200" /> : <ImageIcon className="mx-auto mb-3 h-12 w-12 text-gray-200" />}
-              <p className="text-sm text-gray-400 dark:text-zinc-500">Khong co du lieu phu hop.</p>
+              <p className="text-sm text-gray-400 dark:text-zinc-500">Không có dữ liệu phù hợp.</p>
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3">
@@ -530,72 +459,42 @@ export const Gallery: React.FC = () => {
                 const isFailed = status === 'failed';
 
                 return (
-                  <button
-                    key={image.id}
-                    onClick={() => setViewingImage(image)}
-                    className="overflow-hidden rounded-[26px] border border-gray-100 bg-white text-left shadow-sm transition-transform active:scale-[0.985] dark:border-zinc-800 dark:bg-[#18181B]"
-                  >
+                  <button key={image.id} onClick={() => setViewingImage(image)} className="overflow-hidden rounded-[26px] border border-gray-100 bg-white text-left shadow-sm transition-transform active:scale-[0.985] dark:border-zinc-800 dark:bg-[#18181B]">
                     <div className="relative aspect-square bg-gray-100 dark:bg-zinc-800">
                       {isProcessing ? (
                         <div className="flex h-full w-full flex-col items-center justify-center">
                           <Loader className="mb-2 h-6 w-6 animate-spin text-purple-400" />
                           <span className="text-[10px] text-gray-400 dark:text-zinc-500">{Math.round(image.progress || 0)}%</span>
-                          <div className="mt-1 h-1 w-16 overflow-hidden rounded-full bg-gray-200 dark:bg-zinc-700">
-                            <div className="h-full rounded-full bg-purple-400" style={{ width: `${image.progress || 0}%` }} />
-                          </div>
+                          <div className="mt-1 h-1 w-16 overflow-hidden rounded-full bg-gray-200 dark:bg-zinc-700"><div className="h-full rounded-full bg-purple-400" style={{ width: `${image.progress || 0}%` }} /></div>
                         </div>
                       ) : isFailed ? (
-                        <div className="flex h-full w-full flex-col items-center justify-center">
-                          <AlertTriangle className="mb-1 h-6 w-6 text-red-300" />
-                          <span className="text-[10px] text-red-400">That bai</span>
-                        </div>
+                        <div className="flex h-full w-full flex-col items-center justify-center"><AlertTriangle className="mb-1 h-6 w-6 text-red-300" /><span className="text-[10px] text-red-400">Thất bại</span></div>
                       ) : image.url ? (
                         isVideo ? (
                           <>
-                            <video
-                              src={image.url}
-                              className="h-full w-full object-cover"
-                              muted
-                              playsInline
-                              preload="metadata"
-                            />
+                            <video src={image.url} className="h-full w-full object-cover" muted playsInline preload="metadata" />
                             <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent" />
-                            <div className="absolute bottom-2 right-2 rounded-full bg-white/90 p-1.5 text-purple-600 shadow-lg">
-                              <PlayCircle className="h-4 w-4" />
-                            </div>
+                            <div className="absolute bottom-2 right-2 rounded-full bg-white/90 p-1.5 text-purple-600 shadow-lg"><PlayCircle className="h-4 w-4" /></div>
                           </>
                         ) : (
                           <img src={image.url} alt="" className="h-full w-full object-cover" loading="lazy" />
                         )
                       ) : (
-                        <div className="flex h-full w-full items-center justify-center">
-                          {isVideo ? <Video className="h-6 w-6 text-gray-300 dark:text-zinc-600" /> : <ImageIcon className="h-6 w-6 text-gray-300 dark:text-zinc-600" />}
-                        </div>
+                        <div className="flex h-full w-full items-center justify-center">{isVideo ? <Video className="h-6 w-6 text-gray-300 dark:text-zinc-600" /> : <ImageIcon className="h-6 w-6 text-gray-300 dark:text-zinc-600" />}</div>
                       )}
 
                       <div className="absolute left-2 top-2">
                         {isVideo ? (
-                          <span className="flex items-center gap-1 rounded-md bg-purple-500/90 px-1.5 py-0.5 text-[9px] font-bold text-white">
-                            <Video className="h-2.5 w-2.5" />
-                            Video
-                          </span>
+                          <span className="flex items-center gap-1 rounded-md bg-purple-500/90 px-1.5 py-0.5 text-[9px] font-bold text-white"><Video className="h-2.5 w-2.5" />Video</span>
                         ) : (
-                          <span className="flex items-center gap-1 rounded-md bg-blue-500/90 px-1.5 py-0.5 text-[9px] font-bold text-white">
-                            <ImageIcon className="h-2.5 w-2.5" />
-                            Anh
-                          </span>
+                          <span className="flex items-center gap-1 rounded-md bg-blue-500/90 px-1.5 py-0.5 text-[9px] font-bold text-white"><ImageIcon className="h-2.5 w-2.5" />Ảnh</span>
                         )}
                       </div>
                     </div>
 
                     <div className="space-y-1.5 p-2.5">
-                      <p className="line-clamp-2 min-h-[2.5rem] text-[11px] font-medium text-gray-700 dark:text-zinc-200">
-                        {image.prompt || image.toolName || (isVideo ? 'Video AI' : 'Image AI')}
-                      </p>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="truncate text-[10px] text-gray-400 dark:text-zinc-500">{formatDate(image.timestamp).split(',')[0]}</span>
-                        {getStatusBadge(image)}
-                      </div>
+                      <p className="line-clamp-2 min-h-[2.5rem] text-[11px] font-medium text-gray-700 dark:text-zinc-200">{image.prompt || image.toolName || (isVideo ? 'Video AI' : 'Ảnh AI')}</p>
+                      <div className="flex items-center justify-between gap-2"><span className="truncate text-[10px] text-gray-400 dark:text-zinc-500">{formatDate(image.timestamp).split(',')[0]}</span>{getStatusBadge(image)}</div>
                     </div>
                   </button>
                 );
@@ -603,14 +502,9 @@ export const Gallery: React.FC = () => {
             </div>
           )
         ) : loadingTransactions ? (
-          <div className="flex justify-center py-20">
-            <Loader className="h-7 w-7 animate-spin text-gray-300" />
-          </div>
+          <div className="flex justify-center py-20"><Loader className="h-7 w-7 animate-spin text-gray-300" /></div>
         ) : transactions.length === 0 ? (
-          <div className="py-20 text-center">
-            <Coins className="mx-auto mb-3 h-12 w-12 text-gray-200" />
-            <p className="text-sm text-gray-400 dark:text-zinc-500">Chua co giao dich nao.</p>
-          </div>
+          <div className="py-20 text-center"><Coins className="mx-auto mb-3 h-12 w-12 text-gray-200" /><p className="text-sm text-gray-400 dark:text-zinc-500">Chưa có giao dịch nào.</p></div>
         ) : (
           <div className="space-y-2.5">
             {transactions.map((transaction) => (
@@ -619,22 +513,14 @@ export const Gallery: React.FC = () => {
                   <div className="min-w-0 flex-1">
                     <div className="mb-1 flex items-center gap-2">
                       {getTransactionBadge(transaction.type)}
-                      {transaction.status === 'pending' ? <span className="text-[10px] font-bold text-amber-500">PENDING</span> : null}
-                      {transaction.status === 'failed' ? <span className="text-[10px] font-bold text-red-500">FAILED</span> : null}
+                      {transaction.status !== 'success' ? <span className={`text-[10px] font-bold ${transaction.status === 'pending' ? 'text-amber-500' : 'text-red-500'}`}>{getTransactionStatusLabel(transaction.status)}</span> : null}
                     </div>
                     <p className="line-clamp-1 text-sm text-gray-700 dark:text-zinc-200">{transaction.description}</p>
                     <p className="mt-1 text-[10px] text-gray-400 dark:text-zinc-500">{formatDate(transaction.createdAt)}</p>
                   </div>
                   <div className="shrink-0 text-right">
-                    <p className={`text-sm font-bold ${transaction.vcoinChange >= 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-red-500 dark:text-red-300'}`}>
-                      {transaction.vcoinChange >= 0 ? '+' : ''}
-                      {transaction.vcoinChange} VC
-                    </p>
-                    {transaction.amountVnd ? (
-                      <p className="text-[10px] text-gray-400 dark:text-zinc-500">
-                        {new Intl.NumberFormat('vi-VN').format(transaction.amountVnd)}d
-                      </p>
-                    ) : null}
+                    <p className={`text-sm font-bold ${transaction.vcoinChange >= 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-red-500 dark:text-red-300'}`}>{transaction.vcoinChange >= 0 ? '+' : ''}{transaction.vcoinChange} VC</p>
+                    {transaction.amountVnd ? <p className="text-[10px] text-gray-400 dark:text-zinc-500">{new Intl.NumberFormat('vi-VN').format(transaction.amountVnd)}đ</p> : null}
                   </div>
                 </div>
               </div>

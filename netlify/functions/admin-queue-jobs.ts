@@ -136,7 +136,7 @@ export const handler: Handler = async (event) => {
     let query = admin
       .from('generated_images')
       .select('id, user_id, prompt, tool_name, queue_kind, asset_type, status, job_id, progress, queue_payload, error_message, created_at, updated_at, next_poll_at, processing_started_at, lease_expires_at')
-      .order('updated_at', { ascending: true })
+      .order('updated_at', { ascending: false })
       .limit(limit);
 
     if (statusFilter !== 'all') {

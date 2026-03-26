@@ -184,12 +184,24 @@ export function WorkspaceImage() {
   const availableResolutions = getCompatibleGenerationResolutions({
     tier: generationTier, pricingEntries, serverId: generationServerId, speed: generationSpeedId,
   });
+  const speedCandidateServers = getCompatibleGenerationServers({
+    tier: generationTier,
+    pricingEntries,
+    resolution,
+  });
   const availableServers = getCompatibleGenerationServers({
     tier: generationTier, pricingEntries, speed: generationSpeedId, resolution,
   });
-  const availableSpeeds = getCompatibleGenerationSpeeds({
-    tier: generationTier, pricingEntries, serverId: generationServerId, resolution,
-  });
+  const availableSpeeds = Array.from(new Set(
+    (speedCandidateServers.length > 0 ? speedCandidateServers : [generationServerId]).flatMap((serverId) =>
+      getCompatibleGenerationSpeeds({
+        tier: generationTier,
+        pricingEntries,
+        serverId,
+        resolution,
+      }),
+    ),
+  ));
   const selectedCost = getGenerationCostBreakdown({
     tier: generationTier, resolution, speed: generationSpeedId,
     serverId: generationServerId, pricingEntries, pricingOverrides,

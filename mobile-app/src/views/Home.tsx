@@ -61,7 +61,7 @@ export function Home() {
   const userName = user?.username || 'Nhà sáng tạo';
 
   return (
-    <div className="p-5 space-y-8 pb-32 animate-fade-in relative">
+    <div className="relative animate-fade-in space-y-8 p-5 pb-20">
       {/* Greeting and Checkin Action */}
       <div className="pt-1 flex items-start justify-between">
         <div>

@@ -1,3 +1,5 @@
+import type { QueueProgressLogEntry } from './shared/queueRecipes';
+import type { QueueErrorCategory } from './shared/queueErrorClassifier';
 
 export type Language = 'vi' | 'en';
 export type Theme = 'light' | 'dark';
@@ -62,8 +64,6 @@ export interface AppConfig {
   };
 }
 
-import type { QueueProgressLogEntry } from './shared/queueRecipes';
-
 export interface GeneratedImage {
   id: string;
   url: string; // Base64 data or Public URL
@@ -78,12 +78,69 @@ export interface GeneratedImage {
   userName?: string;  // New: Author name
   userId?: string; // New: User ID for storage organization
   status?: 'processing' | 'queued' | 'completed' | 'failed';
+  displayStatus?: 'processing' | 'queued' | 'completed' | 'failed' | 'rescuing';
   jobId?: string;
   progress?: number;
   queueStage?: string;
   queueLogs?: QueueProgressLogEntry[];
   error?: string;
+  errorCategory?: QueueErrorCategory;
+  errorRaw?: string;
   cost?: number; // Keep track of cost for refunds
+}
+
+export interface AdminQueueJob {
+  id: string;
+  userId: string;
+  userEmail?: string;
+  userName?: string;
+  status: 'queued' | 'processing' | 'completed' | 'failed';
+  displayStatus?: 'queued' | 'processing' | 'completed' | 'failed' | 'rescuing';
+  assetType: 'image' | 'video';
+  queueKind?: string;
+  toolName?: string;
+  prompt?: string;
+  jobId?: string;
+  progress?: number;
+  queueStage?: string;
+  queueLogs?: QueueProgressLogEntry[];
+  error?: string;
+  errorCategory?: QueueErrorCategory;
+  errorRaw?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  nextPollAt?: string;
+  processingStartedAt?: string;
+  leaseExpiresAt?: string;
+  isStuck?: boolean;
+}
+
+export interface AdminQueueSummary {
+  total: number;
+  queued: number;
+  processing: number;
+  completed: number;
+  failed: number;
+  overduePolls: number;
+  untouchedQueued: number;
+  stalledPreDispatch: number;
+}
+
+export interface AdminQueueInputMedia {
+  label: string;
+  role: string;
+  kind: 'image' | 'video';
+  url?: string;
+  sourceType: 'http' | 'data' | 'base64' | 'unknown';
+  note?: string;
+  userProvided?: boolean;
+}
+
+export interface AdminQueueJobDetail {
+  job: AdminQueueJob;
+  prompt?: string;
+  queuePayloadPreview?: Record<string, unknown>;
+  inputMedia: AdminQueueInputMedia[];
 }
 
 // --- NEW ECONOMY & USER TYPES ---

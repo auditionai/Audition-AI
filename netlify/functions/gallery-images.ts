@@ -51,7 +51,7 @@ export const handler: Handler = async (event) => {
 
     const { data, error } = await admin
       .from('generated_images')
-      .select('id,image_url,prompt,created_at,updated_at,asset_type,tool_id,tool_name,model_used,user_id,user_name,is_public,status,job_id,progress,error_message,cost_vcoin')
+      .select('id,image_url,prompt,created_at,updated_at,asset_type,tool_id,tool_name,model_used,user_id,user_name,is_public,status,job_id,progress,error_message,cost_vcoin,queue_payload')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(GALLERY_PAGE_LIMIT);
@@ -61,29 +61,6 @@ export const handler: Handler = async (event) => {
     }
 
     const rows = data || [];
-    const activeIds = rows
-      .filter((row: any) => row && (row.status === 'queued' || row.status === 'processing'))
-      .map((row: any) => row.id)
-      .filter((id: any): id is string => typeof id === 'string' && id.length > 0);
-
-    let queuePayloadById = new Map<string, any>();
-    if (activeIds.length > 0) {
-      const { data: activeRows, error: activeError } = await admin
-        .from('generated_images')
-        .select('id,queue_payload')
-        .in('id', activeIds);
-
-      if (activeError) {
-        throw activeError;
-      }
-
-      queuePayloadById = new Map(
-        (activeRows || [])
-          .filter((row: any) => row && typeof row.id === 'string')
-          .map((row: any) => [row.id, row.queue_payload]),
-      );
-    }
-
     const idsMissingCost = rows
       .filter((row: any) => !Number.isFinite(Number(row?.cost_vcoin)))
       .map((row: any) => row.id)
@@ -118,7 +95,6 @@ export const handler: Handler = async (event) => {
 
     const images = rows.map((row: any) => ({
       ...row,
-      queue_payload: queuePayloadById.get(row.id) || null,
       cost_vcoin: Number.isFinite(Number(row?.cost_vcoin)) ? Number(row.cost_vcoin) : chargeMap.get(row.id) ?? null,
     }));
 

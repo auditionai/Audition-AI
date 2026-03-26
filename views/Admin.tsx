@@ -30,6 +30,8 @@ import {
     saveStylePreset,
     deleteStylePreset,
     getAdminUserHistory,
+    getAdminQueueJobs,
+    getAdminQueueJobDetail,
     getGiftcodeUsages,
     getMaintenanceMode,
     saveMaintenanceMode,
@@ -38,7 +40,8 @@ import {
     syncTSTPrices,
     ModelPricing,
     getTstServerAvailabilityConfig,
-    saveTstServerAvailabilityConfig
+    saveTstServerAvailabilityConfig,
+    runAdminQueueReconcile
 } from '../services/economyService';
 import { getAllImagesFromStorage, deleteImageFromStorage, checkR2Connection, getUserImagesFromStorage, cleanupExpiredImages, cleanupR2Directly } from '../services/storageService';
 import { checkConnection, analyzeStyleImage } from '../services/geminiService';
@@ -55,7 +58,7 @@ import {
     type TstServerAvailabilityConfig
 } from '../services/tstCatalog';
 import { Icons } from '../components/Icons';
-import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, GeneratedImage, Language, StylePreset, HistoryItem } from '../types';
+import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, GeneratedImage, Language, StylePreset, HistoryItem, AdminQueueJob, AdminQueueSummary, AdminQueueJobDetail } from '../types';
 
 interface AdminProps {
   lang: Language;
@@ -402,7 +405,7 @@ const AdminModalPortal: React.FC<{ children: React.ReactNode }> = ({ children })
 const ADMIN_PRICING_DRAFTS_STORAGE_KEY = 'admin_pricing_drafts_v1';
 
 export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
-  const [activeView, setActiveView] = useState<'overview' | 'transactions' | 'users' | 'packages' | 'marketing' | 'pricing' | 'system' | 'styles'>('overview');
+  const [activeView, setActiveView] = useState<'overview' | 'transactions' | 'users' | 'queue' | 'packages' | 'marketing' | 'pricing' | 'system' | 'styles'>('overview');
   const [stats, setStats] = useState<any>(null);
   const [allImages, setAllImages] = useState<GeneratedImage[]>([]);
   const [packages, setPackages] = useState<CreditPackage[]>([]);
@@ -438,6 +441,28 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [userSortMode, setUserSortMode] = useState<'last_active_desc' | 'vcoin_desc' | 'usage_desc' | 'name_asc'>('last_active_desc');
   const [userListLimit, setUserListLimit] = useState(30);
   const [currentUserEmail, setCurrentUserEmail] = useState('');
+  const [queueEmailFilter, setQueueEmailFilter] = useState('');
+  const [queueStatusFilter, setQueueStatusFilter] = useState<'all' | 'queued' | 'processing' | 'completed' | 'failed' | 'rescuing'>('all');
+  const [queueAssetFilter, setQueueAssetFilter] = useState<'all' | 'image' | 'video'>('all');
+  const [queueStageFilter, setQueueStageFilter] = useState('all');
+  const [queueStuckOnly, setQueueStuckOnly] = useState(true);
+  const [queueSummaryFilter, setQueueSummaryFilter] = useState<'all' | 'queued' | 'processing' | 'failed' | 'completed' | 'overdue_polls' | 'untouched_queued' | 'stalled_pre_dispatch'>('all');
+  const [queueJobs, setQueueJobs] = useState<AdminQueueJob[]>([]);
+  const [queueSummary, setQueueSummary] = useState<AdminQueueSummary>({
+      total: 0,
+      queued: 0,
+      processing: 0,
+      completed: 0,
+      failed: 0,
+      overduePolls: 0,
+      untouchedQueued: 0,
+      stalledPreDispatch: 0,
+  });
+  const [loadingQueueJobs, setLoadingQueueJobs] = useState(false);
+  const [reconcilingQueue, setReconcilingQueue] = useState(false);
+  const [selectedQueueJobId, setSelectedQueueJobId] = useState<string | null>(null);
+  const [selectedQueueJobDetail, setSelectedQueueJobDetail] = useState<AdminQueueJobDetail | null>(null);
+  const [loadingQueueJobDetail, setLoadingQueueJobDetail] = useState(false);
 
   // Health State
   const [health, setHealth] = useState<SystemHealth>({
@@ -587,6 +612,29 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       } catch (error) {
           console.warn('Failed to load live TST pricing rows', error);
           setPricingRows([]);
+      }
+  };
+
+  const loadQueueJobs = async (options?: { silent?: boolean }) => {
+      if (!options?.silent) {
+          setLoadingQueueJobs(true);
+      }
+
+      try {
+          const result = await getAdminQueueJobs({
+              email: queueEmailFilter.trim() || undefined,
+              status: queueStatusFilter,
+              assetType: queueAssetFilter,
+              stage: queueStageFilter !== 'all' ? queueStageFilter : undefined,
+              stuckOnly: queueStuckOnly,
+              limit: 120,
+          });
+          setQueueJobs(result.jobs || []);
+          setQueueSummary(result.summary);
+      } catch (error: any) {
+          showToast(`Lỗi tải queue: ${error?.message || error}`, 'error');
+      } finally {
+          setLoadingQueueJobs(false);
       }
   };
 
@@ -1015,6 +1063,83 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       });
 
   const visibleUsers = filteredUsers.slice(0, userListLimit);
+  const queueStageOptions = Array.from(new Set(queueJobs.map((job) => job.queueStage).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b));
+  const filteredQueueJobs = queueJobs.filter((job) => {
+      switch (queueSummaryFilter) {
+          case 'queued':
+              return (job.displayStatus || job.status) === 'queued';
+          case 'processing':
+              return (job.displayStatus || job.status) === 'processing';
+          case 'failed':
+              return (job.displayStatus || job.status) === 'failed';
+          case 'completed':
+              return (job.displayStatus || job.status) === 'completed';
+          case 'overdue_polls':
+              return job.status === 'processing' && !!job.jobId && !!job.isStuck;
+          case 'untouched_queued':
+              return job.status === 'queued' && !!job.isStuck;
+          case 'stalled_pre_dispatch':
+              return job.status === 'processing' && !job.jobId && !!job.isStuck;
+          default:
+              return true;
+      }
+  });
+  const getQueueStageLabel = (stage?: string) => {
+      switch (stage) {
+          case 'queued': return 'Đã vào hàng đợi';
+          case 'preparing': return 'Đang chuẩn bị';
+          case 'uploading_refs': return 'Đang tải ảnh tham chiếu';
+          case 'synthesizing_prompt': return 'Đang tổng hợp prompt';
+          case 'building_payload': return 'Đang dựng payload';
+          case 'dispatching': return 'Đang gửi provider';
+          case 'submitted': return 'Provider đã nhận job';
+          case 'polling': return 'Đang chờ provider';
+          case 'verifying_output': return 'Đang hậu kiểm kết quả';
+          case 'completed': return 'Hoàn thành';
+          case 'failed': return 'Thất bại';
+          default: return stage || '-';
+      }
+  };
+  const getQueueStatusLabel = (status?: string) => {
+      switch (status) {
+          case 'queued': return 'Đang chờ';
+          case 'processing': return 'Đang xử lý';
+          case 'completed': return 'Hoàn thành';
+          case 'failed': return 'Thất bại';
+          case 'rescuing': return 'Đang cứu kết quả';
+          default: return status || '-';
+      }
+  };
+  const getQueueStatusClass = (status?: string) => {
+      switch (status) {
+          case 'failed': return 'bg-red-500/15 text-red-400';
+          case 'completed': return 'bg-green-500/15 text-green-400';
+          case 'processing': return 'bg-cyan-500/15 text-cyan-300';
+          case 'rescuing': return 'bg-violet-500/15 text-violet-300';
+          default: return 'bg-yellow-500/15 text-yellow-300';
+      }
+  };
+  const handleQueueSummaryFilter = (filter: typeof queueSummaryFilter) => {
+      setQueueSummaryFilter((current) => current === filter ? 'all' : filter);
+  };
+  const getQueueErrorCategoryLabel = (category?: string) => {
+      switch (category) {
+          case 'input': return 'Input';
+          case 'queue': return 'Queue';
+          case 'provider': return 'Provider';
+          case 'config': return 'Config';
+          default: return 'Unknown';
+      }
+  };
+  const getQueueErrorCategoryClass = (category?: string) => {
+      switch (category) {
+          case 'input': return 'bg-amber-500/15 text-amber-300 border-amber-500/20';
+          case 'queue': return 'bg-cyan-500/15 text-cyan-300 border-cyan-500/20';
+          case 'provider': return 'bg-violet-500/15 text-violet-300 border-violet-500/20';
+          case 'config': return 'bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/20';
+          default: return 'bg-white/10 text-slate-300 border-white/10';
+      }
+  };
 
   const getAssetKind = (asset: GeneratedImage) => {
       if (asset.assetType) return asset.assetType;
@@ -1028,6 +1153,14 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       setUserListLimit(30);
   }, [userSearchEmail, userActivityFilter, userSortMode]);
 
+  useEffect(() => {
+      if (!isAdmin || activeView !== 'queue') return;
+      loadQueueJobs({ silent: false });
+  }, [activeView, isAdmin, queueEmailFilter, queueStatusFilter, queueAssetFilter, queueStageFilter, queueStuckOnly]);
+  useEffect(() => {
+      setQueueSummaryFilter('all');
+  }, [queueEmailFilter, queueStatusFilter, queueAssetFilter, queueStageFilter, queueStuckOnly]);
+
   const handleViewGiftcodeUsage = async (code: Giftcode) => {
       setViewingGiftcodeUsage(code);
       setLoadingGiftcodeUsers(true);
@@ -1038,6 +1171,37 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           showToast('Lỗi tải danh sách người dùng', 'error');
       } finally {
           setLoadingGiftcodeUsers(false);
+      }
+  };
+
+  const handleQueueReconcile = async () => {
+      setReconcilingQueue(true);
+      try {
+          const payload = await runAdminQueueReconcile();
+          const resetQueued = Number(payload?.resetSummary?.resetQueued || 0);
+          const resetProcessing = Number(payload?.resetSummary?.resetProcessing || 0);
+          const submitted = Number(payload?.summary?.submitted || 0);
+          const polled = Number(payload?.summary?.claimedForPoll || 0);
+          showToast(`Reconcile xong. Reset queued=${resetQueued}, processing=${resetProcessing}, poll=${polled}, submitted=${submitted}.`, 'success');
+          await loadQueueJobs({ silent: false });
+      } catch (error: any) {
+          showToast(`Lỗi reconcile queue: ${error?.message || error}`, 'error');
+      } finally {
+          setReconcilingQueue(false);
+      }
+  };
+
+  const handleOpenQueueJobDetail = async (jobId: string) => {
+      setSelectedQueueJobId(jobId);
+      setSelectedQueueJobDetail(null);
+      setLoadingQueueJobDetail(true);
+      try {
+          const detail = await getAdminQueueJobDetail(jobId);
+          setSelectedQueueJobDetail(detail);
+      } catch (error: any) {
+          showToast(`Lỗi tải chi tiết job: ${error?.message || error}`, 'error');
+      } finally {
+          setLoadingQueueJobDetail(false);
       }
   };
 
@@ -1390,6 +1554,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   { id: 'overview', icon: Icons.Home, label: 'Tổng Quan' },
                   { id: 'transactions', icon: Icons.Gem, label: 'Giao Dịch' },
                   { id: 'users', icon: Icons.User, label: 'Người Dùng' },
+                  { id: 'queue', icon: Icons.Clock, label: 'Queue Jobs' },
                   { id: 'packages', icon: Icons.ShoppingBag, label: 'Gói Nạp' },
                   { id: 'marketing', icon: Icons.Zap, label: 'Sự Kiện & Code' },
                   { id: 'pricing', icon: Icons.Gem, label: 'Bảng Giá' },
@@ -1798,6 +1963,191 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           </button>
                       </div>
                   )}
+              </div>
+          )}
+
+          {activeView === 'queue' && (
+              <div className="space-y-6 animate-slide-in-right">
+                  <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+                      <div>
+                          <h2 className="text-lg md:text-2xl font-bold text-white">Queue Jobs</h2>
+                          <p className="text-sm text-slate-400 mt-1">Theo dõi job đang kẹt, poll quá hạn và queued quá lâu.</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                          <button onClick={() => loadQueueJobs({ silent: false })} disabled={loadingQueueJobs} className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-bold text-white disabled:opacity-60">
+                              {loadingQueueJobs ? 'Đang tải...' : 'Làm mới'}
+                          </button>
+                          <button onClick={handleQueueReconcile} disabled={reconcilingQueue} className="px-4 py-2 rounded-xl bg-audi-pink hover:bg-pink-600 text-white text-sm font-bold disabled:opacity-60">
+                              {reconcilingQueue ? 'Đang reconcile...' : 'Reconcile Queue'}
+                          </button>
+                      </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
+                      {[
+                          { key: 'all', label: 'Tổng', value: queueSummary.total, color: 'text-white' },
+                          { key: 'queued', label: 'Queued', value: queueSummary.queued, color: 'text-yellow-400' },
+                          { key: 'processing', label: 'Processing', value: queueSummary.processing, color: 'text-audi-cyan' },
+                          { key: 'failed', label: 'Failed', value: queueSummary.failed, color: 'text-red-400' },
+                          { key: 'completed', label: 'Completed', value: queueSummary.completed, color: 'text-green-400' },
+                          { key: 'overdue_polls', label: 'Poll quá hạn', value: queueSummary.overduePolls, color: 'text-red-300' },
+                          { key: 'untouched_queued', label: 'Queued bị bỏ đói', value: queueSummary.untouchedQueued, color: 'text-orange-400' },
+                          { key: 'stalled_pre_dispatch', label: 'Kẹt trước TST', value: queueSummary.stalledPreDispatch, color: 'text-pink-400' },
+                      ].map((item) => (
+                          <button
+                              key={item.label}
+                              type="button"
+                              onClick={() => handleQueueSummaryFilter(item.key as typeof queueSummaryFilter)}
+                              className={`text-left bg-[#12121a] border rounded-2xl p-4 transition-all hover:border-white/30 hover:bg-white/[0.07] ${
+                                  queueSummaryFilter === item.key || (item.key === 'all' && queueSummaryFilter === 'all')
+                                      ? 'border-audi-pink/60 shadow-[0_0_0_1px_rgba(255,0,153,0.25)]'
+                                      : 'border-white/10'
+                              }`}
+                          >
+                              <div className="text-[11px] uppercase tracking-wider text-slate-500 font-bold">{item.label}</div>
+                              <div className={`text-2xl font-black mt-2 ${item.color}`}>{item.value}</div>
+                          </button>
+                      ))}
+                  </div>
+
+                  <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
+                          <div className="flex items-center gap-2 bg-white/5 rounded-xl border border-white/10 px-3 py-2">
+                              <Icons.Search className="w-4 h-4 text-slate-500" />
+                              <input type="text" placeholder="Lọc theo email..." value={queueEmailFilter} onChange={(e) => setQueueEmailFilter(e.target.value)} className="bg-transparent border-none outline-none text-sm text-white w-full placeholder-slate-500" />
+                          </div>
+                          <select value={queueStatusFilter} onChange={(e) => setQueueStatusFilter(e.target.value as typeof queueStatusFilter)} className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none">
+                              <option value="all" className="bg-[#12121a]">Tất cả trạng thái</option>
+                              <option value="queued" className="bg-[#12121a]">Đang chờ</option>
+                              <option value="processing" className="bg-[#12121a]">Đang xử lý</option>
+                              <option value="rescuing" className="bg-[#12121a]">Đang cứu kết quả</option>
+                              <option value="completed" className="bg-[#12121a]">Hoàn thành</option>
+                              <option value="failed" className="bg-[#12121a]">Thất bại</option>
+                          </select>
+                          <select value={queueAssetFilter} onChange={(e) => setQueueAssetFilter(e.target.value as typeof queueAssetFilter)} className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none">
+                              <option value="all" className="bg-[#12121a]">Ảnh + Video</option>
+                              <option value="image" className="bg-[#12121a]">Chỉ ảnh</option>
+                              <option value="video" className="bg-[#12121a]">Chỉ video</option>
+                          </select>
+                          <select value={queueStageFilter} onChange={(e) => setQueueStageFilter(e.target.value)} className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none">
+                              <option value="all" className="bg-[#12121a]">Tất cả stage</option>
+                              {queueStageOptions.map((stage) => (
+                                  <option key={stage} value={stage} className="bg-[#12121a]">{getQueueStageLabel(stage)}</option>
+                              ))}
+                          </select>
+                          <label className="flex items-center justify-between gap-3 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white">
+                              <span>Chỉ job đang kẹt</span>
+                              <input type="checkbox" checked={queueStuckOnly} onChange={(e) => setQueueStuckOnly(e.target.checked)} />
+                          </label>
+                      </div>
+
+                      <div className="hidden xl:block overflow-x-auto">
+                          <table className="w-full text-left text-sm text-slate-300">
+                              <thead className="text-[11px] uppercase tracking-wider text-slate-500 border-b border-white/10">
+                                  <tr>
+                                      <th className="px-3 py-3">User</th>
+                                      <th className="px-3 py-3">Job</th>
+                                      <th className="px-3 py-3">Trạng thái</th>
+                                      <th className="px-3 py-3">Stage</th>
+                                      <th className="px-3 py-3">Tiến trình</th>
+                                      <th className="px-3 py-3">Cập nhật</th>
+                                      <th className="px-3 py-3">Lỗi / Log cuối</th>
+                                      <th className="px-3 py-3 text-right">Chi tiết</th>
+                                  </tr>
+                              </thead>
+                              <tbody className="divide-y divide-white/5">
+                                  {filteredQueueJobs.length === 0 ? (
+                                      <tr>
+                                          <td colSpan={8} className="px-3 py-8 text-center text-slate-500">Không có job nào khớp bộ lọc.</td>
+                                      </tr>
+                                  ) : filteredQueueJobs.map((job) => {
+                                      const lastLog = job.queueLogs && job.queueLogs.length > 0 ? job.queueLogs[job.queueLogs.length - 1] : null;
+                                      return (
+                                          <tr key={job.id} className="align-top hover:bg-white/5">
+                                              <td className="px-3 py-3">
+                                                  <div className="font-bold text-white">{job.userName || 'Unknown'}</div>
+                                                  <div className="text-xs text-slate-500">{job.userEmail || job.userId}</div>
+                                              </td>
+                                              <td className="px-3 py-3">
+                                                  <div className="text-white font-mono text-xs">{job.id.slice(0, 12)}</div>
+                                                  <div className="text-xs text-slate-500 mt-1">{job.assetType} · {job.queueKind || 'unknown'}</div>
+                                                  {job.jobId && <div className="text-[11px] text-audi-cyan mt-1">provider: {job.jobId.slice(0, 16)}</div>}
+                                              </td>
+                                              <td className="px-3 py-3">
+                                                  <div className={`inline-flex px-2 py-1 rounded text-[11px] font-bold uppercase ${getQueueStatusClass(job.displayStatus || job.status)}`}>
+                                                      {getQueueStatusLabel(job.displayStatus || job.status)}
+                                                  </div>
+                                                  {job.isStuck && <div className="text-[11px] text-orange-400 font-bold mt-2">STUCK</div>}
+                                              </td>
+                                              <td className="px-3 py-3 text-xs text-slate-300">{getQueueStageLabel(job.queueStage)}</td>
+                                              <td className="px-3 py-3">
+                                                  <div className="text-sm font-bold text-white">{job.progress || 0}%</div>
+                                                  <div className="w-24 h-2 rounded-full bg-white/10 mt-2 overflow-hidden">
+                                                      <div className={`h-full ${(job.displayStatus || job.status) === 'queued' ? 'bg-yellow-400' : (job.displayStatus || job.status) === 'rescuing' ? 'bg-violet-400' : 'bg-audi-cyan'}`} style={{ width: `${Math.max(0, Math.min(100, job.progress || 0))}%` }} />
+                                                  </div>
+                                              </td>
+                                              <td className="px-3 py-3 text-xs text-slate-400">
+                                                  <div>{getTimeAgo(job.updatedAt)}</div>
+                                                  {job.nextPollAt && <div className="mt-1">poll: {getTimeAgo(job.nextPollAt)}</div>}
+                                              </td>
+                                              <td className="px-3 py-3 text-xs text-slate-400 max-w-[360px]">
+                                                  {job.errorCategory && job.error && (
+                                                      <div className={`inline-flex px-2 py-1 rounded border text-[10px] font-bold uppercase mb-2 ${getQueueErrorCategoryClass(job.errorCategory)}`}>
+                                                          {getQueueErrorCategoryLabel(job.errorCategory)}
+                                                      </div>
+                                                  )}
+                                                  <div className="text-red-300">{job.error || '-'}</div>
+                                                  {lastLog && <div className="mt-2 text-slate-300">{lastLog.message}</div>}
+                                              </td>
+                                              <td className="px-3 py-3 text-right">
+                                                  <button onClick={() => handleOpenQueueJobDetail(job.id)} className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white text-xs font-bold">
+                                                      Xem
+                                                  </button>
+                                              </td>
+                                          </tr>
+                                      );
+                                  })}
+                              </tbody>
+                          </table>
+                      </div>
+
+                      <div className="xl:hidden space-y-3">
+                          {filteredQueueJobs.length === 0 ? (
+                              <div className="text-center text-slate-500 py-6">Không có job nào khớp bộ lọc.</div>
+                          ) : filteredQueueJobs.map((job) => {
+                              const lastLog = job.queueLogs && job.queueLogs.length > 0 ? job.queueLogs[job.queueLogs.length - 1] : null;
+                              return (
+                                  <div key={job.id} className="border border-white/10 rounded-xl p-4 bg-black/20">
+                                      <div className="flex items-start justify-between gap-3">
+                                          <div>
+                                              <div className="font-bold text-white text-sm">{job.userName || 'Unknown'}</div>
+                                              <div className="text-xs text-slate-500">{job.userEmail || job.userId}</div>
+                                          </div>
+                                          <div className="text-right">
+                                              <div className={`inline-flex px-2 py-1 rounded text-[11px] font-bold uppercase ${getQueueStatusClass(job.displayStatus || job.status)}`}>{getQueueStatusLabel(job.displayStatus || job.status)}</div>
+                                              {job.isStuck && <div className="text-[11px] text-orange-400 font-bold mt-1">STUCK</div>}
+                                          </div>
+                                      </div>
+                                      <div className="grid grid-cols-2 gap-3 mt-3 text-xs">
+                                          <div><span className="text-slate-500">Job</span><div className="text-white font-mono mt-1">{job.id.slice(0, 12)}</div></div>
+                                          <div><span className="text-slate-500">Stage</span><div className="text-white mt-1">{getQueueStageLabel(job.queueStage)}</div></div>
+                                          <div><span className="text-slate-500">Loại</span><div className="text-white mt-1">{job.assetType} · {job.queueKind || 'unknown'}</div></div>
+                                          <div><span className="text-slate-500">Cập nhật</span><div className="text-white mt-1">{getTimeAgo(job.updatedAt)}</div></div>
+                                      </div>
+                                      {job.errorCategory && job.error && (
+                                          <div className={`inline-flex mt-3 px-2 py-1 rounded border text-[10px] font-bold uppercase ${getQueueErrorCategoryClass(job.errorCategory)}`}>
+                                              {getQueueErrorCategoryLabel(job.errorCategory)}
+                                          </div>
+                                      )}
+                                      <div className="mt-3 text-xs text-slate-300">{lastLog?.message || job.error || 'Chưa có log mới'}</div>
+                                      <button onClick={() => handleOpenQueueJobDetail(job.id)} className="mt-3 w-full py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white text-xs font-bold">
+                                          Xem chi tiết input
+                                      </button>
+                                  </div>
+                              );
+                          })}
+                      </div>
+                  </div>
               </div>
           )}
 
@@ -2732,6 +3082,147 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   </div>
               </div>
           </div>
+      )}
+
+      {selectedQueueJobId && (
+          <AdminModalPortal>
+          <div className="fixed inset-0 z-[2100] bg-black/70 backdrop-blur-sm flex justify-center items-center p-4 md:p-6 animate-fade-in">
+              <div className="bg-[#12121a] w-full max-w-6xl rounded-2xl border border-white/20 shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
+                  <div className="flex items-center justify-between gap-4 px-6 py-4 border-b border-white/10">
+                      <div>
+                          <h3 className="text-xl font-bold text-white">Chi tiết Queue Job</h3>
+                          <p className="text-xs text-slate-400 font-mono mt-1">{selectedQueueJobId}</p>
+                      </div>
+                      <button onClick={() => { setSelectedQueueJobId(null); setSelectedQueueJobDetail(null); }} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white">
+                          <Icons.X className="w-5 h-5" />
+                      </button>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
+                      {loadingQueueJobDetail ? (
+                          <div className="py-20 text-center text-slate-400">Đang tải chi tiết job...</div>
+                      ) : !selectedQueueJobDetail ? (
+                          <div className="py-20 text-center text-slate-400">Không tải được dữ liệu chi tiết cho job này.</div>
+                      ) : (
+                          <div className="space-y-6">
+                              <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
+                                  {[
+                                      { label: 'User', value: selectedQueueJobDetail.job.userName || 'Unknown' },
+                                      { label: 'Email', value: selectedQueueJobDetail.job.userEmail || '-' },
+                                      { label: 'Status', value: getQueueStatusLabel(selectedQueueJobDetail.job.displayStatus || selectedQueueJobDetail.job.status) },
+                                      { label: 'Stage', value: getQueueStageLabel(selectedQueueJobDetail.job.queueStage) },
+                                      { label: 'Asset', value: selectedQueueJobDetail.job.assetType },
+                                      { label: 'Queue Kind', value: selectedQueueJobDetail.job.queueKind || '-' },
+                                      { label: 'Error Type', value: getQueueErrorCategoryLabel(selectedQueueJobDetail.job.errorCategory) },
+                                      { label: 'Progress', value: `${selectedQueueJobDetail.job.progress || 0}%` },
+                                      { label: 'Provider Job', value: selectedQueueJobDetail.job.jobId || '-' },
+                                  ].map((item) => (
+                                      <div key={item.label} className="bg-black/30 border border-white/10 rounded-xl p-3">
+                                          <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">{item.label}</div>
+                                          <div className="text-sm text-white font-bold mt-2 break-words">{item.value}</div>
+                                      </div>
+                                  ))}
+                              </div>
+
+                              <div className="bg-black/20 border border-white/10 rounded-2xl p-4">
+                                  <div className="text-sm font-bold text-white mb-2">Prompt</div>
+                                  <div className="text-sm text-slate-300 whitespace-pre-wrap leading-relaxed">
+                                      {selectedQueueJobDetail.prompt || selectedQueueJobDetail.job.prompt || 'Không có prompt'}
+                                  </div>
+                              </div>
+
+                              {(selectedQueueJobDetail.job.error || selectedQueueJobDetail.job.errorRaw) && (
+                                  <div className="bg-black/20 border border-white/10 rounded-2xl p-4 space-y-3">
+                                      <div className="flex items-center gap-3">
+                                          <div className="text-sm font-bold text-white">Phân tích lỗi</div>
+                                          {selectedQueueJobDetail.job.errorCategory && (
+                                              <div className={`inline-flex px-2 py-1 rounded border text-[10px] font-bold uppercase ${getQueueErrorCategoryClass(selectedQueueJobDetail.job.errorCategory)}`}>
+                                                  {getQueueErrorCategoryLabel(selectedQueueJobDetail.job.errorCategory)}
+                                              </div>
+                                          )}
+                                      </div>
+                                      {selectedQueueJobDetail.job.error && (
+                                          <div>
+                                              <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Tóm tắt dễ hiểu</div>
+                                              <div className="text-sm text-red-300 mt-2 leading-relaxed">{selectedQueueJobDetail.job.error}</div>
+                                          </div>
+                                      )}
+                                      {selectedQueueJobDetail.job.errorRaw && selectedQueueJobDetail.job.errorRaw !== selectedQueueJobDetail.job.error && (
+                                          <div>
+                                              <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Lỗi gốc từ hệ thống</div>
+                                              <div className="text-sm text-slate-400 mt-2 leading-relaxed break-all">{selectedQueueJobDetail.job.errorRaw}</div>
+                                          </div>
+                                      )}
+                                  </div>
+                              )}
+
+                              <div className="bg-black/20 border border-white/10 rounded-2xl p-4">
+                                  <div className="flex items-center justify-between gap-3 mb-4">
+                                      <div className="text-sm font-bold text-white">Input Media</div>
+                                      <div className="text-xs text-slate-500">{selectedQueueJobDetail.inputMedia.length} mục</div>
+                                  </div>
+                                  {selectedQueueJobDetail.inputMedia.length === 0 ? (
+                                      <div className="text-sm text-slate-500">Không tìm thấy input media trong payload.</div>
+                                  ) : (
+                                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                                          {selectedQueueJobDetail.inputMedia.map((media, index) => (
+                                              <div key={`${media.role}-${index}`} className="bg-[#0f0f16] border border-white/10 rounded-xl overflow-hidden">
+                                                  <div className="px-3 py-2 border-b border-white/10">
+                                                      <div className="text-sm font-bold text-white">{media.label}</div>
+                                                      <div className="text-[11px] text-slate-500 mt-1">{media.role} · {media.kind} · {media.sourceType}</div>
+                                                  </div>
+                                                  <div className="p-3">
+                                                      {media.url ? (
+                                                          media.kind === 'video' ? (
+                                                              <video src={media.url} controls className="w-full rounded-lg bg-black max-h-72" />
+                                                          ) : (
+                                                              <img src={media.url} className="w-full rounded-lg bg-black max-h-72 object-contain" />
+                                                          )
+                                                      ) : (
+                                                          <div className="text-xs text-yellow-300 bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3">
+                                                              {media.note || 'Media quá lớn hoặc không thể render trực tiếp.'}
+                                                          </div>
+                                                      )}
+                                                  </div>
+                                              </div>
+                                          ))}
+                                      </div>
+                                  )}
+                              </div>
+
+                              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                                  <div className="bg-black/20 border border-white/10 rounded-2xl p-4">
+                                      <div className="text-sm font-bold text-white mb-3">Log tiến trình</div>
+                                      <div className="space-y-3 max-h-[420px] overflow-y-auto custom-scrollbar pr-2">
+                                          {(selectedQueueJobDetail.job.queueLogs || []).length === 0 ? (
+                                              <div className="text-sm text-slate-500">Chưa có log cho job này.</div>
+                                          ) : (
+                                              (selectedQueueJobDetail.job.queueLogs || []).map((log, index) => (
+                                                  <div key={`${log.at}-${index}`} className="border border-white/10 rounded-xl p-3 bg-[#0f0f16]">
+                                                      <div className="flex items-center justify-between gap-3">
+                                                          <div className="text-xs font-bold text-white uppercase">{getQueueStageLabel(log.stage)}</div>
+                                                          <div className="text-[11px] text-slate-500">{new Date(log.at).toLocaleString()}</div>
+                                                      </div>
+                                                      <div className="text-sm text-slate-300 mt-2">{log.message}</div>
+                                                  </div>
+                                              ))
+                                          )}
+                                      </div>
+                                  </div>
+
+                                  <div className="bg-black/20 border border-white/10 rounded-2xl p-4">
+                                      <div className="text-sm font-bold text-white mb-3">Payload Preview</div>
+                                      <pre className="text-[11px] text-slate-300 bg-[#0f0f16] border border-white/10 rounded-xl p-4 overflow-auto max-h-[420px] whitespace-pre-wrap break-all">
+{JSON.stringify(selectedQueueJobDetail.queuePayloadPreview || {}, null, 2)}
+                                      </pre>
+                                  </div>
+                              </div>
+                          </div>
+                      )}
+                  </div>
+              </div>
+          </div>
+          </AdminModalPortal>
       )}
 
       {viewingUser && (

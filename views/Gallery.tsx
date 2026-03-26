@@ -20,7 +20,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
   // Generation History State
   const [images, setImages] = useState<GeneratedImage[]>([]);
   const [loadingImages, setLoadingImages] = useState(true);
-  const [filter, setFilter] = useState<'all' | 'completed' | 'failed' | 'processing' | 'queued'>('all');
+  const [filter, setFilter] = useState<'all' | 'completed' | 'failed' | 'processing' | 'queued' | 'rescuing'>('all');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [viewingImage, setViewingImage] = useState<GeneratedImage | null>(null);
   const [showLogViewer, setShowLogViewer] = useState(false);
@@ -30,7 +30,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
   const [loadingTransactions, setLoadingTransactions] = useState(false);
   const retentionDays = getHistoryRetentionDays();
   const hasActiveJobs = useMemo(
-    () => images.some((img) => img.status === 'processing' || img.status === 'queued'),
+    () => images.some((img) => img.displayStatus === 'processing' || img.displayStatus === 'queued' || img.displayStatus === 'rescuing'),
     [images],
   );
 
@@ -207,9 +207,11 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
   const filteredImages = useMemo(() => {
       return images.filter(img => {
           if (filter === 'all') return true;
-          if (filter === 'completed') return !img.status || img.status === 'completed';
-          if (filter === 'failed') return img.status === 'failed';
-          if (filter === 'processing' || filter === 'queued') return img.status === 'processing' || img.status === 'queued';
+          const status = img.displayStatus || img.status;
+          if (filter === 'completed') return !status || status === 'completed';
+          if (filter === 'failed') return status === 'failed';
+          if (filter === 'rescuing') return status === 'rescuing';
+          if (filter === 'processing' || filter === 'queued') return status === 'processing' || status === 'queued' || status === 'rescuing';
           return true;
       }).sort((a, b) => b.timestamp - a.timestamp);
   }, [images, filter]);
@@ -249,8 +251,10 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
           : (lang === 'vi' ? 'Đang tạo ảnh' : 'Generating image');
       const queueProgress = Math.max(0, Math.min(100, img.progress || 0));
 
-      if (img.status === 'failed') return lang === 'vi' ? 'Thất bại' : 'Failed';
-      if (!img.status || img.status === 'completed') return lang === 'vi' ? 'Hoàn thành' : 'Completed';
+      const status = img.displayStatus || img.status;
+      if (status === 'rescuing') return lang === 'vi' ? 'Đang cứu kết quả' : 'Rescuing result';
+      if (status === 'failed') return lang === 'vi' ? 'Thất bại' : 'Failed';
+      if (!status || status === 'completed') return lang === 'vi' ? 'Hoàn thành' : 'Completed';
       if (img.jobId) return generatingLabel;
       if (img.queueStage === 'uploading_refs') return lang === 'vi' ? 'Đang xử lý' : 'Processing';
       if (img.queueStage === 'synthesizing_prompt' || img.queueStage === 'building_payload') {
@@ -265,7 +269,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
           return lang === 'vi' ? 'Đang xử lý' : 'Processing';
       }
 
-      if (img.status === 'queued') {
+      if (status === 'queued') {
           return lang === 'vi' ? 'Đang chuẩn bị' : 'Preparing';
       }
 
@@ -282,6 +286,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
   const getQueueStageDisplay = (stage?: string) => {
       switch (stage) {
           case 'queued': return lang === 'vi' ? 'Đã vào hàng đợi' : 'Queued';
+          case 'rescuing': return lang === 'vi' ? 'Đang cứu kết quả' : 'Rescuing result';
           case 'preparing': return lang === 'vi' ? 'Đang chuẩn bị' : 'Preparing';
           case 'uploading_refs': return lang === 'vi' ? 'Đang tải ảnh tham chiếu' : 'Uploading references';
           case 'synthesizing_prompt': return lang === 'vi' ? 'Đang tổng hợp prompt' : 'Synthesizing prompt';
@@ -408,6 +413,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                             <button onClick={() => setFilter('all')} className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-colors whitespace-nowrap ${filter === 'all' ? 'bg-audi-cyan/20 border-audi-cyan/50 text-audi-cyan' : 'border-white/10 text-slate-400 hover:bg-white/5'}`}>Tất cả</button>
                             <button onClick={() => setFilter('completed')} className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-colors whitespace-nowrap ${filter === 'completed' ? 'bg-green-500/20 border-green-500/50 text-green-400' : 'border-white/10 text-slate-400 hover:bg-white/5'}`}>Hoàn thành</button>
                             <button onClick={() => setFilter('failed')} className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-colors whitespace-nowrap ${filter === 'failed' ? 'bg-red-500/20 border-red-500/50 text-red-400' : 'border-white/10 text-slate-400 hover:bg-white/5'}`}>Thất bại</button>
+                            <button onClick={() => setFilter('rescuing')} className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-colors whitespace-nowrap ${filter === 'rescuing' ? 'bg-violet-500/20 border-violet-500/50 text-violet-300' : 'border-white/10 text-slate-400 hover:bg-white/5'}`}>Đang cứu</button>
                             <button onClick={() => setFilter('processing')} className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-colors whitespace-nowrap ${filter === 'processing' || filter === 'queued' ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-400' : 'border-white/10 text-slate-400 hover:bg-white/5'}`}>Đang chờ</button>
                         </div>
                         <div className="w-px h-6 bg-white/10 mx-2 hidden md:block"></div>
@@ -451,9 +457,10 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                             ) : filteredImages.length === 0 ? (
                                 <tr><td colSpan={7} className="text-center py-12 text-slate-500 italic">Không có dữ liệu</td></tr>
                             ) : filteredImages.map(img => {
-                                const isCompleted = !img.status || img.status === 'completed';
-                                const isFailed = img.status === 'failed';
-                                const isProcessing = img.status === 'processing' || img.status === 'queued';
+                                const displayStatus = img.displayStatus || img.status;
+                                const isCompleted = !displayStatus || displayStatus === 'completed';
+                                const isFailed = displayStatus === 'failed';
+                                const isProcessing = displayStatus === 'processing' || displayStatus === 'queued' || displayStatus === 'rescuing';
 
                                 return (
                                     <tr
@@ -536,7 +543,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                                     </span>
                                                     <div className="mt-2">
                                                         <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
-                                                            <div className={`h-full rounded-full transition-all duration-500 ${img.status === 'queued' ? 'bg-yellow-400' : 'bg-audi-cyan'}`} style={{ width: `${Math.max(0, Math.min(100, img.progress || 0))}%` }} />
+                                                            <div className={`h-full rounded-full transition-all duration-500 ${(img.displayStatus || img.status) === 'queued' ? 'bg-yellow-400' : (img.displayStatus || img.status) === 'rescuing' ? 'bg-violet-400' : 'bg-audi-cyan'}`} style={{ width: `${Math.max(0, Math.min(100, img.progress || 0))}%` }} />
                                                         </div>
                                                         <div className="text-[10px] text-slate-500 mt-1">
                                                             {getProcessingStageLabel(img)} · {Math.max(0, Math.min(100, img.progress || 0))}% {img.jobId ? `· ${img.jobId.slice(0, 10)}` : ''}
@@ -664,15 +671,15 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                             getAssetKind(viewingImage) === 'video' ? (<video src={viewingImage.url} className="max-w-full max-h-full object-contain rounded-xl shadow-2xl" controls autoPlay loop playsInline />) : (<img src={viewingImage.url} alt="Generated" className="max-w-full max-h-full object-contain rounded-xl shadow-2xl" />)
                         ) : (
                             <div className="flex flex-col items-center justify-center text-slate-500">
-                                {viewingImage.status === 'failed' ? (
+                                {(viewingImage.displayStatus || viewingImage.status) === 'failed' ? (
                                     <Icons.AlertTriangle className="w-16 h-16 mb-4 text-red-500/50" />
-                                ) : viewingImage.status === 'processing' || viewingImage.status === 'queued' ? (
+                                ) : (viewingImage.displayStatus || viewingImage.status) === 'processing' || (viewingImage.displayStatus || viewingImage.status) === 'queued' || (viewingImage.displayStatus || viewingImage.status) === 'rescuing' ? (
                                     <Icons.Loader className="w-16 h-16 mb-4 animate-spin text-audi-cyan/50" />
                                 ) : (
                                     <Icons.Image className="w-16 h-16 mb-4 opacity-50" />
                                 )}
-                                <p>{viewingImage.status === 'failed' ? (lang === 'vi' ? 'Tạo ảnh thất bại' : 'Image generation failed') : viewingImage.status === 'processing' || viewingImage.status === 'queued' ? getProcessingStageLabel(viewingImage) : (lang === 'vi' ? 'Không có ảnh' : 'No image available')}</p>
-                                {viewingImage.status === 'failed' && (
+                                <p>{(viewingImage.displayStatus || viewingImage.status) === 'failed' ? (lang === 'vi' ? 'Tạo ảnh thất bại' : 'Image generation failed') : (viewingImage.displayStatus || viewingImage.status) === 'processing' || (viewingImage.displayStatus || viewingImage.status) === 'queued' || (viewingImage.displayStatus || viewingImage.status) === 'rescuing' ? getProcessingStageLabel(viewingImage) : (lang === 'vi' ? 'Không có ảnh' : 'No image available')}</p>
+                                {(viewingImage.displayStatus || viewingImage.status) === 'failed' && (
                                     <p className="mt-2 max-w-[320px] text-center text-sm text-red-300 leading-relaxed">
                                         {getFailedAssetMessage(viewingImage)}
                                     </p>
@@ -765,12 +772,12 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                             <div className="w-1.5 h-1.5 rounded-full bg-green-500"></div> Hoàn thành
                                         </span>
                                     )}
-                                    {viewingImage.status === 'failed' && (
+                                    {(viewingImage.displayStatus || viewingImage.status) === 'failed' && (
                                         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 text-xs font-bold uppercase tracking-wider">
                                             <div className="w-1.5 h-1.5 rounded-full bg-red-500"></div> Thất bại
                                         </span>
                                     )}
-                                    {(viewingImage.status === 'processing' || viewingImage.status === 'queued') && (
+                                    {((viewingImage.displayStatus || viewingImage.status) === 'processing' || (viewingImage.displayStatus || viewingImage.status) === 'queued' || (viewingImage.displayStatus || viewingImage.status) === 'rescuing') && (
                                         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 text-xs font-bold uppercase tracking-wider">
                                             <Icons.Loader className="w-3 h-3 animate-spin" /> {getProcessingStageLabel(viewingImage)}
                                         </span>
@@ -779,7 +786,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                             </div>
 
                             {/* Error Message if failed */}
-                            {viewingImage.status === 'failed' && viewingImage.error && (
+                            {(viewingImage.displayStatus || viewingImage.status) === 'failed' && viewingImage.error && (
                                 <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4">
                                     <div className="text-xs font-bold text-red-400 uppercase tracking-wider mb-1">
                                         {lang === 'vi' ? 'Lý do thất bại' : 'Failure reason'}

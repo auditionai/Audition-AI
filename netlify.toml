@@ -79,6 +79,16 @@
   status = 200
 
 [[redirects]]
+  from = "/api/admin-queue-jobs"
+  to = "/.netlify/functions/admin-queue-jobs"
+  status = 200
+
+[[redirects]]
+  from = "/api/admin-queue-job-detail"
+  to = "/.netlify/functions/admin-queue-job-detail"
+  status = 200
+
+[[redirects]]
   from = "/api/force-rescue-failed-jobs"
   to = "/.netlify/functions/force-rescue-failed-jobs"
   status = 200

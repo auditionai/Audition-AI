@@ -217,7 +217,7 @@ export const handler: Handler = async (event) => {
 
     const summary = await runQueueDaemon({
       maxRuntimeMs: 45_000,
-      idleIterationsToStop: 3,
+      idleIterationsToStop: 24,
       activeDelayMs: 50,
       idleDelayMs: 500,
     });

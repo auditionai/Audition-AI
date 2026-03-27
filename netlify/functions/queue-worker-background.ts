@@ -6,6 +6,14 @@ import { getServiceRoleClient } from './_supabase';
 
 const WORKER_LOCK_LEASE_SECONDS = 90;
 
+const hasQueueActivity = (summary: Awaited<ReturnType<typeof runQueueDaemon>>) =>
+  Number(summary.claimedForDispatch || 0) > 0 ||
+  Number(summary.submitted || 0) > 0 ||
+  Number(summary.claimedForPoll || 0) > 0 ||
+  Number(summary.completed || 0) > 0 ||
+  Number(summary.failed || 0) > 0 ||
+  Number(summary.requeued || 0) > 0;
+
 const tryAcquireQueueWorkerLock = async (owner: string) => {
   const admin = getServiceRoleClient();
   const { data, error } = await admin.rpc('try_acquire_queue_worker_lock', {
@@ -67,12 +75,7 @@ export const handler: Handler = async (event) => {
     }
 
     const summary = await runQueueDaemon();
-    followUpLaunchNeeded =
-      Number(summary.claimedForDispatch || 0) > 0 ||
-      Number(summary.submitted || 0) > 0 ||
-      Number(summary.requeued || 0) > 0 ||
-      Number(summary.completed || 0) > 0 ||
-      Number(summary.failed || 0) > 0;
+    followUpLaunchNeeded = hasQueueActivity(summary) && !summary.exitedIdle;
     return {
       statusCode: 200,
       body: JSON.stringify({ success: true, summary, followUpLaunchNeeded }),

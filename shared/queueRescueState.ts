@@ -19,6 +19,9 @@ export const getFailedRescueNextAt = (payload?: Record<string, unknown> | null) 
 export const hasFailedRescuePending = (payload?: Record<string, unknown> | null) =>
   getFailedRescueAttemptCount(payload) > 0 && getFailedRescueNextAt(payload) > 0;
 
+export const hasFailedRescueFinalized = (payload?: Record<string, unknown> | null) =>
+  asPayload(payload).__failedRescueFinalized === true;
+
 const FAILED_RESCUE_STALE_GRACE_MS = 15 * 60 * 1000;
 
 export const isFailedRescueStillActive = (
@@ -43,6 +46,7 @@ export const clearFailedRescueMeta = (payload?: Record<string, unknown> | null) 
   const nextPayload = { ...asPayload(payload) } as Record<string, unknown>;
   nextPayload.__failedRescueAttemptCount = 0;
   nextPayload.__nextFailedRescueAt = null;
+  nextPayload.__failedRescueFinalized = true;
   return nextPayload;
 };
 

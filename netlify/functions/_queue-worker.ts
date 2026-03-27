@@ -34,7 +34,7 @@ import {
 } from '../../shared/queueRecipes';
 import { classifyQueueError, isTerminalRescueFailureMessage, normalizeQueueErrorMessage, pickQueueFailureMessage } from '../../shared/queueErrorClassifier';
 import { repairVietnameseMojibake } from '../../shared/queueLogText';
-import { clearFailedRescueMeta } from '../../shared/queueRescueState';
+import { clearFailedRescueMeta, hasFailedRescueFinalized } from '../../shared/queueRescueState';
 
 type QueueJobRow = {
   id: string;
@@ -319,7 +319,16 @@ const withQueueLog = (
   message: string,
   level: QueueProgressLogEntry['level'] = 'info',
 ) => {
-  const nextLogs = [...getQueueLogs(payload), buildQueueLogEntry(stage, message, level)].slice(-MAX_QUEUE_LOG_ENTRIES);
+  const nextEntry = buildQueueLogEntry(stage, message, level);
+  const previousLogs = getQueueLogs(payload);
+  const lastEntry = previousLogs.at(-1);
+  const nextLogs =
+    lastEntry &&
+    lastEntry.stage === nextEntry.stage &&
+    lastEntry.level === nextEntry.level &&
+    lastEntry.message === nextEntry.message
+      ? [...previousLogs.slice(0, -1), { ...lastEntry, at: nextEntry.at }].slice(-MAX_QUEUE_LOG_ENTRIES)
+      : [...previousLogs, nextEntry].slice(-MAX_QUEUE_LOG_ENTRIES);
   return {
     ...toQueuePayloadObject(payload),
     __stage: stage,
@@ -1597,6 +1606,7 @@ const scheduleFailedJobRescueRetry = async (
       ...toQueuePayloadObject(job.queue_payload),
       __failedRescueAttemptCount: nextAttempt,
       __nextFailedRescueAt: nextRetryAt,
+      __failedRescueFinalized: false,
     },
     'failed',
     `Rescue TST chưa tìm thấy kết quả hợp lệ. Sẽ thử lại sau: ${message}`,
@@ -1643,6 +1653,7 @@ const reviveFailedJobToProcessing = async (
       ...toQueuePayloadObject(job.queue_payload),
       __failedRescueAttemptCount: 0,
       __nextFailedRescueAt: null,
+      __failedRescueFinalized: false,
     },
     'polling',
     'Rescue TST: provider vẫn đang xử lý. Chuyển job trở lại trạng thái processing.',
@@ -1685,6 +1696,7 @@ const rescueFailedJobsWithProviderResults = async () => {
   let rescued = 0;
   const candidates = ((data || []) as any[])
     .filter((job) => !String(job?.image_url || '').trim())
+    .filter((job) => !hasFailedRescueFinalized(job?.queue_payload))
     .filter((job) => getFailedRescueAttemptCount(job?.queue_payload) < FAILED_RESULT_RESCUE_MAX_ATTEMPTS)
     .filter((job) => {
       const pickedMessage = pickQueueFailureMessage(job?.error_message, getQueueLogs(job?.queue_payload));

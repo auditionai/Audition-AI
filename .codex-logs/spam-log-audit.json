@@ -1,0 +1,78 @@
+{
+  "scanned_failed_jobs": 32,
+  "flagged_count": 6,
+  "flagged": [
+    {
+      "id": "4ef4c3fd-77ab-4471-b178-9c63476aa0e9",
+      "status": "failed",
+      "updated_at": "2026-03-26T14:34:10.400361+00:00",
+      "finished_at": "2026-03-25T15:26:08.772+00:00",
+      "job_id": "1d1bb126-95f4-49ec-a7a6-0a82a09c93a3",
+      "logs_count": 21,
+      "failed_logs_count": 9,
+      "repeated_tail_count": 1,
+      "finished_lag_minutes": 1388,
+      "last_failed_message": "Rescue TST chưa tìm thấy kết quả hợp lệ. Sẽ thử lại sau: Job set not found"
+    },
+    {
+      "id": "6f946a76-6ee7-43c7-9d8e-60d1216ad4bb",
+      "status": "failed",
+      "updated_at": "2026-03-27T14:33:35.862269+00:00",
+      "finished_at": "2026-03-26T19:45:49.852+00:00",
+      "job_id": "e3e39a95-29e5-4e1c-b60c-aee1643d05eb",
+      "logs_count": 80,
+      "failed_logs_count": 80,
+      "repeated_tail_count": 1,
+      "finished_lag_minutes": 1128,
+      "last_failed_message": "TST hoặc lớp proxy upstream đang lỗi tạm thời (HTTP 52x / timeout / mất dấu job). Input có thể vẫn hợp lệ, nhưng lần chạy này thất bại do provider."
+    },
+    {
+      "id": "38a8de03-93f1-42b5-90fa-aad41665f837",
+      "status": "failed",
+      "updated_at": "2026-03-27T14:33:42.506072+00:00",
+      "finished_at": "2026-03-27T13:01:34.187+00:00",
+      "job_id": "edc3ca33-d2b0-4d9a-9f90-bec53701ae00",
+      "logs_count": 80,
+      "failed_logs_count": 80,
+      "repeated_tail_count": 37,
+      "finished_lag_minutes": 92,
+      "last_failed_message": "TST hoặc lớp proxy upstream đang lỗi tạm thời (HTTP 52x / timeout / mất dấu job). Input có thể vẫn hợp lệ, nhưng lần chạy này thất bại do provider."
+    },
+    {
+      "id": "36bdda38-dc5b-48d8-9067-cb4ed5ca62cf",
+      "status": "failed",
+      "updated_at": "2026-03-27T14:33:47.4894+00:00",
+      "finished_at": "2026-03-27T13:19:04.268+00:00",
+      "job_id": "a2397941-8e8d-4c7e-bd16-6b75117457fd",
+      "logs_count": 80,
+      "failed_logs_count": 80,
+      "repeated_tail_count": 80,
+      "finished_lag_minutes": 75,
+      "last_failed_message": "TST hoặc lớp proxy upstream đang lỗi tạm thời (HTTP 52x / timeout / mất dấu job). Input có thể vẫn hợp lệ, nhưng lần chạy này thất bại do provider."
+    },
+    {
+      "id": "09725578-c703-43b3-9f8b-cb05cd95ecc5",
+      "status": "failed",
+      "updated_at": "2026-03-27T14:33:49.127205+00:00",
+      "finished_at": "2026-03-27T14:28:19.759+00:00",
+      "job_id": "020eabd4-7076-4941-b85d-03a422c0456f",
+      "logs_count": 22,
+      "failed_logs_count": 7,
+      "repeated_tail_count": 4,
+      "finished_lag_minutes": 5,
+      "last_failed_message": "TST hoặc lớp proxy upstream đang lỗi tạm thời (HTTP 52x / timeout / mất dấu job). Input có thể vẫn hợp lệ, nhưng lần chạy này thất bại do provider."
+    },
+    {
+      "id": "40f30ba6-b0ca-496f-9de1-2fd7d6b9842a",
+      "status": "failed",
+      "updated_at": "2026-03-27T13:38:40.020113+00:00",
+      "finished_at": "2026-03-27T13:38:39.78+00:00",
+      "job_id": "28e22202-2319-48cd-bfd5-8a4d7e0c12de",
+      "logs_count": 80,
+      "failed_logs_count": 40,
+      "repeated_tail_count": 4,
+      "finished_lag_minutes": 0,
+      "last_failed_message": "Identity guard failed: Both character slots are successfully preserved in the final image. The final result adopts the 3D render style from the style image without copying its specific character design, pose, or clothing.. Retry limit reached."
+    }
+  ]
+}

@@ -15,10 +15,10 @@ import { PayOSGateway } from './views/PayOSGateway';
 import { Language, Theme, ViewId, Feature } from './types';
 import { APP_CONFIG } from './constants';
 import { getSupabaseSession, getSupabaseUser, supabase } from './services/supabaseClient';
-import { getUserProfile, logVisit, updateLastActive, getMaintenanceMode } from './services/economyService';
+import { getUserProfile, logVisit, updateLastActive, subscribeMaintenanceMode } from './services/economyService';
 import { NotificationProvider, useNotification } from './components/NotificationSystem';
 import { Icons } from './components/Icons';
-import { syncPayOSTransaction, triggerServerQueueTick } from './services/serverQueueService';
+import { syncPayOSTransaction } from './services/serverQueueService';
 import MobileApp from './mobile-app/src/App';
 
 const PHONE_USER_AGENT_PATTERN = /iphone|ipod|android.+mobile|windows phone|blackberry|opera mini|mobile safari/i;
@@ -161,10 +161,6 @@ const buildDesktopPath = (view: ViewId, selectedFeature: Feature | null) => {
 };
 
 function AppContent() {
-  const queueHeartbeatLeaseKey = 'auditionai:queue-heartbeat:leader';
-  const queueHeartbeatIntervalMs = 30000;
-  const queueHeartbeatLeaseMs = 35000;
-  const heartbeatInstanceIdRef = useRef(typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `tab-${Date.now()}`);
   const desktopHistoryModeRef = useRef<'replace' | 'push'>('replace');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userRole, setUserRole] = useState<'user' | 'admin'>('user');
@@ -219,14 +215,7 @@ function AppContent() {
 
     // Check for existing session on load
     if (supabase) {
-        // Fetch Maintenance Mode periodically
-        const fetchMaintenance = () => {
-            getMaintenanceMode().then(res => {
-                setMaintenanceMode(res);
-            });
-        };
-        fetchMaintenance();
-        const maintenanceInterval = setInterval(fetchMaintenance, 300000); // Check every 5 minutes
+        const unsubscribeMaintenanceMode = subscribeMaintenanceMode(setMaintenanceMode);
 
         getSupabaseSession().then((session: any) => {
             if (session) {
@@ -250,8 +239,8 @@ function AppContent() {
 
         return () => {
             subscription.unsubscribe();
+            unsubscribeMaintenanceMode();
             clearInterval(activeInterval);
-            clearInterval(maintenanceInterval);
             document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
     }
@@ -331,77 +320,6 @@ function AppContent() {
     }
     desktopHistoryModeRef.current = 'replace';
   }, [currentView, isAuthenticated, selectedFeature]);
-
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
-    const heartbeatInstanceId = heartbeatInstanceIdRef.current;
-
-    const releaseLease = () => {
-      try {
-        const raw = window.localStorage.getItem(queueHeartbeatLeaseKey);
-        if (!raw) return;
-        const current = JSON.parse(raw);
-        if (current?.id === heartbeatInstanceId) {
-          window.localStorage.removeItem(queueHeartbeatLeaseKey);
-        }
-      } catch (error) {
-        console.warn('[App] Failed to release queue heartbeat lease:', error);
-      }
-    };
-
-    const tryBecomeHeartbeatLeader = () => {
-      try {
-        const now = Date.now();
-        const raw = window.localStorage.getItem(queueHeartbeatLeaseKey);
-        const current = raw ? JSON.parse(raw) : null;
-        if (!current || !current.id || Number(current.expiresAt || 0) <= now || current.id === heartbeatInstanceId) {
-          window.localStorage.setItem(
-            queueHeartbeatLeaseKey,
-            JSON.stringify({
-              id: heartbeatInstanceId,
-              expiresAt: now + queueHeartbeatLeaseMs,
-            }),
-          );
-          return true;
-        }
-        return false;
-      } catch (error) {
-        console.warn('[App] Failed to acquire queue heartbeat lease:', error);
-        return true;
-      }
-    };
-
-    const runHeartbeat = () => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
-        return;
-      }
-      if (!tryBecomeHeartbeatLeader()) {
-        return;
-      }
-      triggerServerQueueTick().catch((error) => {
-        console.warn('[App] Queue heartbeat failed:', error);
-      });
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        runHeartbeat();
-      }
-    };
-
-    runHeartbeat();
-    const interval = setInterval(runHeartbeat, queueHeartbeatIntervalMs);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('beforeunload', releaseLease);
-
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('beforeunload', releaseLease);
-      releaseLease();
-    };
-  }, [isAuthenticated]);
 
   const checkAdminRole = async (userId: string) => {
       if (!supabase) return;

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, Flame, Gift, Loader, Lock, Trophy, X, CalendarDays, ChevronLeft, ChevronRight, Hand } from 'lucide-react';
-import { getCheckinStatus, performCheckin, claimMilestoneReward } from '../services/economyService';
+import { performCheckin, claimMilestoneReward, subscribeCheckinStatus } from '../services/economyService';
 
 interface DailyCheckinProps {
   onClose: () => void;
@@ -23,14 +23,12 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
 
   useEffect(() => {
-    const loadStatus = async () => {
-        const status = await getCheckinStatus();
+    return subscribeCheckinStatus((status) => {
         setStreak(status.streak); 
         setCheckedIn(status.isCheckedInToday);
         setHistory(status.history);
         setClaimedMilestones(status.claimedMilestones);
-    };
-    loadStatus();
+    }, { force: true });
   }, []);
 
   const handleClaim = async () => {

@@ -126,12 +126,17 @@ export const classifyQueueError = (message?: string | null): QueueErrorInfo => {
     lower.includes('prompt hoac anh vi pham') ||
     lower.includes('change prompt or input and try again') ||
     lower.includes('khong duyet video') ||
-    lower.includes('khong duyet motion control')
+    lower.includes('khong duyet motion control') ||
+    lower.includes('identity guard failed') ||
+    lower.includes('hau kiem ket qua ai') ||
+    lower.includes('retry limit reached') && lower.includes('identity guard')
   ) {
     return {
       rawMessage,
       displayMessage:
-        'Provider hoac lop kiem duyet dau vao da tu choi prompt / anh / video cua job nay.',
+        lower.includes('identity guard failed')
+          ? 'Ket qua AI khong vuot qua buoc hau kiem identity/consistency, nen job duoc danh dau that bai va khong nen tu dong rescue lai.'
+          : 'Provider hoac lop kiem duyet dau vao da tu choi prompt / anh / video cua job nay.',
       category: 'input',
     };
   }

@@ -1630,6 +1630,7 @@ const reviveFailedJobToProcessing = async (
 ) => {
   const providerProgress = typeof providerData?.progress === 'number' ? providerData.progress : 0;
   const progress = Math.max(60, providerProgress);
+  const resumedAt = new Date().toISOString();
   const nextPayload = withQueueLog(
     {
       ...toQueuePayloadObject(job.queue_payload),
@@ -1647,9 +1648,12 @@ const reviveFailedJobToProcessing = async (
     error_message: null,
     queue_payload: nextPayload,
     finished_at: null,
+    processing_started_at: resumedAt,
+    attempt_count: 0,
     next_poll_at: new Date(Date.now() + POLL_INTERVAL_SECONDS * 1000).toISOString(),
     lease_token: null,
     lease_expires_at: null,
+    last_error_at: null,
     updated_at: new Date().toISOString(),
   });
 };

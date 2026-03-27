@@ -28,6 +28,7 @@ type NotificationUserProfile = {
 };
 
 type NotificationMediaEntry = QueueNotificationMediaEntry;
+type TelegramNotificationEventState = Partial<Record<JobNotificationEvent, string>>;
 
 const getEnv = (...keys: string[]) => {
   for (const key of keys) {
@@ -171,6 +172,91 @@ const getUserProfile = async (userId: string): Promise<NotificationUserProfile |
   return data;
 };
 
+const getAdminClient = () => {
+  if (!supabaseUrl || !supabaseServiceRoleKey) {
+    return null;
+  }
+
+  return createClient(supabaseUrl, supabaseServiceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+};
+
+const buildNotificationSignature = (
+  eventType: JobNotificationEvent,
+  record: JobNotificationRecord,
+) => {
+  if (eventType === 'failed') {
+    return String(record.errorMessage || '').trim() || 'failed';
+  }
+  if (eventType === 'completed') {
+    return String(record.resultUrl || '').trim() || 'completed';
+  }
+  return 'queued';
+};
+
+const shouldSkipDuplicateNotification = async (
+  eventType: JobNotificationEvent,
+  record: JobNotificationRecord,
+) => {
+  const admin = getAdminClient();
+  if (!admin || !record.id) {
+    return false;
+  }
+
+  const { data, error } = await admin
+    .from('generated_images')
+    .select('queue_payload')
+    .eq('id', record.id)
+    .maybeSingle();
+
+  if (error) {
+    console.warn('[telegram-notify] Failed to inspect notification state:', error);
+    return false;
+  }
+
+  const queuePayload =
+    data?.queue_payload && typeof data.queue_payload === 'object'
+      ? { ...(data.queue_payload as Record<string, unknown>) }
+      : {};
+
+  const currentState =
+    queuePayload.__telegramNotifications &&
+    typeof queuePayload.__telegramNotifications === 'object'
+      ? (queuePayload.__telegramNotifications as TelegramNotificationEventState)
+      : {};
+
+  const signature = buildNotificationSignature(eventType, record);
+  if (currentState[eventType] === signature) {
+    return true;
+  }
+
+  const nextPayload = {
+    ...queuePayload,
+    __telegramNotifications: {
+      ...currentState,
+      [eventType]: signature,
+    },
+  };
+
+  const { error: updateError } = await admin
+    .from('generated_images')
+    .update({
+      queue_payload: nextPayload,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', record.id);
+
+  if (updateError) {
+    console.warn('[telegram-notify] Failed to persist notification state:', updateError);
+  }
+
+  return false;
+};
+
 const postNotification = async (body: Record<string, unknown>) => {
   if (!notifyWebhookUrl || !notifyWebhookSecret) {
     return;
@@ -201,6 +287,10 @@ export const sendTelegramJobNotification = async (
   }
 
   try {
+    if (await shouldSkipDuplicateNotification(eventType, record)) {
+      return;
+    }
+
     const userProfile = await getUserProfile(record.userId);
     const config = getConfigSummary(record.queuePayload, record.toolId);
     const inputMedia = extractInputMedia(record.queuePayload);

@@ -6,7 +6,7 @@
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { supabase, getSupabaseSession, getSupabaseUser } from '../services/supabaseClient';
-import { getUserProfile, logVisit, updateLastActive, getMaintenanceMode, invalidateUserProfileCache } from '../services/economyService';
+import { getUserProfile, logVisit, updateLastActive, subscribeMaintenanceMode, invalidateUserProfileCache } from '../services/economyService';
 import type { UserProfile } from '../types';
 
 interface AuthContextType {
@@ -93,14 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     if (supabase) {
-      // Fetch maintenance mode
-      const fetchMaintenance = () => {
-        getMaintenanceMode().then((res) => {
-          setMaintenanceMode(res);
-        });
-      };
-      fetchMaintenance();
-      const maintenanceInterval = setInterval(fetchMaintenance, 300000);
+      const unsubscribeMaintenanceMode = subscribeMaintenanceMode(setMaintenanceMode);
 
       // Check existing session
       getSupabaseSession().then(async (session: any) => {
@@ -141,8 +134,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       return () => {
         subscription.unsubscribe();
+        unsubscribeMaintenanceMode();
         clearInterval(activeInterval);
-        clearInterval(maintenanceInterval);
         document.removeEventListener('visibilitychange', handleVisibilityChange);
         window.removeEventListener('balance_updated', handleBalanceUpdate);
       };

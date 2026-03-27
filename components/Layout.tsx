@@ -30,10 +30,19 @@ export const Layout: React.FC<LayoutProps> = ({
     const handleScroll = () => setScrolled((root?.scrollTop || 0) > 20);
     const refreshUser = (force = false) => getUserProfile(force ? { force: true } : undefined).then(setUser).catch(() => setUser(null));
     const refreshPromotion = () => getActivePromotion().then(setPromoConfig).catch(() => setPromoConfig(null));
+    let lastPassiveRefreshAt = 0;
+    const refreshOnAttention = () => {
+      const now = Date.now();
+      if (now - lastPassiveRefreshAt < 15_000) {
+        return;
+      }
+      lastPassiveRefreshAt = now;
+      refreshUser();
+      refreshPromotion();
+    };
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
-        refreshUser(true);
-        refreshPromotion();
+        refreshOnAttention();
       }
     };
     
@@ -44,7 +53,7 @@ export const Layout: React.FC<LayoutProps> = ({
     
     // Listen for instant balance updates
     const handleBalanceUpdated = () => refreshUser(true);
-    const handleWindowFocus = () => refreshUser(true);
+    const handleWindowFocus = () => refreshOnAttention();
     window.addEventListener('balance_updated', handleBalanceUpdated);
     window.addEventListener('focus', handleWindowFocus);
     document.addEventListener('visibilitychange', handleVisibility);

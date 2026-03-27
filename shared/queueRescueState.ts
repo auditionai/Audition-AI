@@ -19,6 +19,26 @@ export const getFailedRescueNextAt = (payload?: Record<string, unknown> | null) 
 export const hasFailedRescuePending = (payload?: Record<string, unknown> | null) =>
   getFailedRescueAttemptCount(payload) > 0 && getFailedRescueNextAt(payload) > 0;
 
+const FAILED_RESCUE_STALE_GRACE_MS = 15 * 60 * 1000;
+
+export const isFailedRescueStillActive = (
+  payload?: Record<string, unknown> | null,
+  now = Date.now(),
+  staleGraceMs = FAILED_RESCUE_STALE_GRACE_MS,
+) => {
+  const nextAt = getFailedRescueNextAt(payload);
+  return hasFailedRescuePending(payload) && nextAt > 0 && now <= nextAt + staleGraceMs;
+};
+
+export const isFailedRescueStale = (
+  payload?: Record<string, unknown> | null,
+  now = Date.now(),
+  staleGraceMs = FAILED_RESCUE_STALE_GRACE_MS,
+) => {
+  const nextAt = getFailedRescueNextAt(payload);
+  return hasFailedRescuePending(payload) && nextAt > 0 && now > nextAt + staleGraceMs;
+};
+
 export const clearFailedRescueMeta = (payload?: Record<string, unknown> | null) => {
   const nextPayload = { ...asPayload(payload) } as Record<string, unknown>;
   nextPayload.__failedRescueAttemptCount = 0;
@@ -30,4 +50,3 @@ export const getLatestQueueLog = (logs?: QueueProgressLogEntry[] | null) => {
   const entries = logs || [];
   return entries.length > 0 ? entries[entries.length - 1] : null;
 };
-

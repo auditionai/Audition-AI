@@ -14,7 +14,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../components/NotificationSystem';
 import { APP_CONFIG } from '../constants';
-import { getUserProfile, getStylePresets, getModelPricing } from '../services/economyService';
+import { getUserProfile, getStylePresets, getModelPricing, getTstServerAvailabilityConfig } from '../services/economyService';
 import { useConcurrency, CONCURRENCY_LIMITS } from '../services/concurrencyService';
 import { enqueueServerJob } from '../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../services/storageService';
@@ -251,13 +251,14 @@ export function WorkspaceImage() {
   useEffect(() => {
     const loadCatalog = async () => {
       try {
-        const [entries, models, pricingConfig] = await Promise.all([
+        const [entries, models, pricingConfig, serverAvailabilityConfig] = await Promise.all([
           fetchTstPricing(),
           fetchTstModels(),
           getModelPricing(),
+          getTstServerAvailabilityConfig(),
         ]);
-        const filteredModels = applyServerAvailabilityToRuntimeModels(models);
-        setPricingEntries(sanitizePricingEntriesWithRuntimeModels(entries, filteredModels));
+        const filteredModels = applyServerAvailabilityToRuntimeModels(models, serverAvailabilityConfig);
+        setPricingEntries(sanitizePricingEntriesWithRuntimeModels(entries, filteredModels, serverAvailabilityConfig));
         setRuntimeModels(filteredModels);
         setAuditionPricing(pricingConfig || []);
         setCatalogError(null);

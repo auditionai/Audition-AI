@@ -14,6 +14,7 @@ type AutoDisabledServerCombo = {
 type ServerAvailabilityConfig = {
   disabledByModel: Record<string, string[]>;
   autoDisabledCombos?: Record<string, AutoDisabledServerCombo[]>;
+  manualReopenedCombos?: Record<string, Array<{ serverId: string; speed: string; reopenedAt: string }>>;
   updatedAt?: string;
 };
 
@@ -109,6 +110,18 @@ const normalizeConfig = (config: any, now = Date.now()): ServerAvailabilityConfi
         }),
     ]),
   ),
+  manualReopenedCombos: Object.fromEntries(
+    Object.entries(config?.manualReopenedCombos || {}).map(([modelId, combos]) => [
+      normalize(modelId),
+      (Array.isArray(combos) ? combos : [])
+        .map((entry) => ({
+          serverId: normalize(entry?.serverId),
+          speed: normalize(entry?.speed),
+          reopenedAt: typeof entry?.reopenedAt === 'string' ? entry.reopenedAt : '',
+        }))
+        .filter((entry) => entry.serverId && entry.speed && entry.reopenedAt),
+    ]),
+  ),
   updatedAt: typeof config?.updatedAt === 'string' ? config.updatedAt : undefined,
 });
 
@@ -117,6 +130,7 @@ const saveServerAvailabilityConfig = async (config: ServerAvailabilityConfig) =>
   const payload = {
     disabledByModel: config.disabledByModel || {},
     autoDisabledCombos: config.autoDisabledCombos || {},
+    manualReopenedCombos: config.manualReopenedCombos || {},
     updatedAt: new Date().toISOString(),
   };
 
@@ -156,7 +170,7 @@ export const getServerAvailabilityConfig = async (forceRefresh = false): Promise
         throw error;
       }
 
-      configCache = normalizeConfig(data?.value || { disabledByModel: {}, autoDisabledCombos: {} });
+      configCache = normalizeConfig(data?.value || { disabledByModel: {}, autoDisabledCombos: {}, manualReopenedCombos: {} });
       configFetchedAt = Date.now();
       return configCache;
     })().finally(() => {
@@ -210,6 +224,7 @@ export const refreshAutoDisabledServerAvailability = async () => {
   const nextConfig: ServerAvailabilityConfig = {
     disabledByModel: existingConfig.disabledByModel || {},
     autoDisabledCombos: { ...(existingConfig.autoDisabledCombos || {}) },
+    manualReopenedCombos: { ...(existingConfig.manualReopenedCombos || {}) },
     updatedAt: existingConfig.updatedAt,
   };
 
@@ -236,6 +251,15 @@ export const refreshAutoDisabledServerAvailability = async () => {
 
     const { modelId, speed, serverId } = extractRuntimeIdentity(queuePayload);
     if (!modelId || !speed || !serverId) {
+      continue;
+    }
+
+    const reopenedAt = (nextConfig.manualReopenedCombos?.[modelId] || []).find(
+      (entry) => entry.serverId === serverId && entry.speed === speed,
+    )?.reopenedAt;
+    const rowUpdatedAtMs = new Date(String(row?.updated_at || '')).getTime();
+    const reopenedAtMs = new Date(String(reopenedAt || '')).getTime();
+    if (reopenedAt && Number.isFinite(reopenedAtMs) && Number.isFinite(rowUpdatedAtMs) && rowUpdatedAtMs <= reopenedAtMs) {
       continue;
     }
 
@@ -269,6 +293,12 @@ export const refreshAutoDisabledServerAvailability = async () => {
     nextConfig.autoDisabledCombos = {
       ...(nextConfig.autoDisabledCombos || {}),
       [item.modelId]: retainedCombos,
+    };
+    nextConfig.manualReopenedCombos = {
+      ...(nextConfig.manualReopenedCombos || {}),
+      [item.modelId]: (nextConfig.manualReopenedCombos?.[item.modelId] || []).filter(
+        (entry) => !(entry.serverId === item.serverId && entry.speed === item.speed),
+      ),
     };
     triggered += 1;
   }

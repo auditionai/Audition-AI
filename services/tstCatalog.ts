@@ -91,6 +91,11 @@ export interface TstServerAvailabilityConfig {
     hitCount?: number;
     windowHours?: number;
   }>>;
+  manualReopenedCombos?: Record<string, Array<{
+    serverId: string;
+    speed: string;
+    reopenedAt: string;
+  }>>;
   updatedAt?: string;
 }
 
@@ -269,6 +274,7 @@ let modelsCacheFetchedAt = 0;
 export const DEFAULT_TST_SERVER_AVAILABILITY_CONFIG: TstServerAvailabilityConfig = {
   disabledByModel: {},
   autoDisabledCombos: {},
+  manualReopenedCombos: {},
 };
 
 export const ADMIN_MANAGED_MODEL_LABELS = [
@@ -509,9 +515,23 @@ const normalizeServerAvailabilityConfig = (
     ]),
   );
 
+  const manualReopenedCombos = Object.fromEntries(
+    Object.entries(config?.manualReopenedCombos || {}).map(([modelId, combos]) => [
+      normalizeModelId(modelId),
+      (Array.isArray(combos) ? combos : [])
+        .map((entry) => ({
+          serverId: normalizeServer(entry?.serverId),
+          speed: normalizeSpeed(entry?.speed),
+          reopenedAt: typeof entry?.reopenedAt === 'string' ? entry.reopenedAt : '',
+        }))
+        .filter((entry) => entry.serverId && entry.speed && entry.reopenedAt),
+    ]),
+  );
+
   return {
     disabledByModel,
     autoDisabledCombos,
+    manualReopenedCombos,
     updatedAt: config?.updatedAt,
   };
 };

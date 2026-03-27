@@ -440,6 +440,7 @@ export const getTstServerAvailabilityConfig = async (options?: { force?: boolean
   const value = {
     disabledByModel: parsed?.disabledByModel || {},
     autoDisabledCombos: parsed?.autoDisabledCombos || {},
+    manualReopenedCombos: parsed?.manualReopenedCombos || {},
     updatedAt: parsed?.updatedAt,
   };
   tstServerAvailabilityCache = {
@@ -457,6 +458,7 @@ export const saveTstServerAvailabilityConfig = async (
   const payload: TstServerAvailabilityConfig = {
     disabledByModel: config?.disabledByModel || {},
     autoDisabledCombos: config?.autoDisabledCombos || {},
+    manualReopenedCombos: config?.manualReopenedCombos || {},
     updatedAt: new Date().toISOString(),
   };
 

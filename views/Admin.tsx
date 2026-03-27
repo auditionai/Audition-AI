@@ -1,5 +1,5 @@
 ﻿
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { getSupabaseUser, supabase } from '../services/supabaseClient';
 import { 
@@ -418,7 +418,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [pricingRows, setPricingRows] = useState<TstPricingRow[]>([]);
   const [pricingDrafts, setPricingDrafts] = useState<Record<string, string>>({});
   const [savingAllPricing, setSavingAllPricing] = useState(false);
-  const [serverAvailabilityConfig, setServerAvailabilityConfig] = useState<TstServerAvailabilityConfig>({ disabledByModel: {} });
+  const [serverAvailabilityConfig, setServerAvailabilityConfig] = useState<TstServerAvailabilityConfig>({ disabledByModel: {}, autoDisabledCombos: {} });
   const [editingStyle, setEditingStyle] = useState<StylePreset | null>(null);
   
   const [maintenanceMode, setMaintenanceMode] = useState({ isActive: false, message: "Hệ thống đang bảo trì, vui lòng quay lại sau." });
@@ -465,6 +465,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [selectedQueueJobDetail, setSelectedQueueJobDetail] = useState<AdminQueueJobDetail | null>(null);
   const [loadingQueueJobDetail, setLoadingQueueJobDetail] = useState(false);
   const [stoppingQueueJob, setStoppingQueueJob] = useState(false);
+  const [reopeningAutoDisabledKey, setReopeningAutoDisabledKey] = useState<string | null>(null);
 
   // Health State
   const [health, setHealth] = useState<SystemHealth>({
@@ -828,6 +829,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
       const nextConfig: TstServerAvailabilityConfig = {
           disabledByModel: nextDisabledByModel,
+          autoDisabledCombos: serverAvailabilityConfig.autoDisabledCombos || {},
+          manualReopenedCombos: serverAvailabilityConfig.manualReopenedCombos || {},
           updatedAt: new Date().toISOString(),
       };
 
@@ -844,6 +847,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const handleEnableAllPricingServers = async () => {
       const nextConfig: TstServerAvailabilityConfig = {
           disabledByModel: {},
+          autoDisabledCombos: serverAvailabilityConfig.autoDisabledCombos || {},
+          manualReopenedCombos: serverAvailabilityConfig.manualReopenedCombos || {},
           updatedAt: new Date().toISOString(),
       };
 
@@ -876,6 +881,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
       const nextConfig: TstServerAvailabilityConfig = {
           disabledByModel: nextDisabledByModel,
+          autoDisabledCombos: serverAvailabilityConfig.autoDisabledCombos || {},
+          manualReopenedCombos: serverAvailabilityConfig.manualReopenedCombos || {},
           updatedAt: new Date().toISOString(),
       };
 
@@ -892,6 +899,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const handleRestorePricingServersFromLive = async () => {
       const nextConfig: TstServerAvailabilityConfig = {
           disabledByModel: {},
+          autoDisabledCombos: serverAvailabilityConfig.autoDisabledCombos || {},
+          manualReopenedCombos: serverAvailabilityConfig.manualReopenedCombos || {},
           updatedAt: new Date().toISOString(),
       };
 
@@ -903,6 +912,72 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
       setServerAvailabilityConfig(nextConfig);
       showToast('\u0110\u00e3 kh\u00f4i ph\u1ee5c c\u1ea5u h\u00ecnh server theo TST live.', 'success');
+  };
+
+  const activeAutoDisabledCombos = useMemo(() => {
+      const now = Date.now();
+      return Object.entries(serverAvailabilityConfig.autoDisabledCombos || {})
+          .flatMap(([modelId, combos]) =>
+              (Array.isArray(combos) ? combos : [])
+                  .map((entry) => ({
+                      modelId,
+                      serverId: String(entry.serverId || '').trim().toLowerCase(),
+                      speed: String(entry.speed || '').trim().toLowerCase(),
+                      disabledUntil: String(entry.disabledUntil || ''),
+                      hiddenAt: entry.hiddenAt ? String(entry.hiddenAt) : undefined,
+                      reason: entry.reason ? String(entry.reason) : undefined,
+                      hitCount: Number(entry.hitCount || 0) || 0,
+                      windowHours: Number(entry.windowHours || 0) || 0,
+                  }))
+                  .filter((entry) => entry.serverId && entry.speed && new Date(entry.disabledUntil).getTime() > now),
+          )
+          .sort((a, b) => new Date(a.disabledUntil).getTime() - new Date(b.disabledUntil).getTime());
+  }, [serverAvailabilityConfig]);
+
+  const handleManualReopenAutoDisabledCombo = async (modelId: string, serverId: string, speed: string) => {
+      const key = `${modelId}::${serverId}::${speed}`;
+      setReopeningAutoDisabledKey(key);
+      const nextAutoDisabledCombos = Object.fromEntries(
+          Object.entries(serverAvailabilityConfig.autoDisabledCombos || {}).map(([entryModelId, combos]) => [
+              entryModelId,
+              (Array.isArray(combos) ? combos : []).filter((entry) => {
+                  const sameServer = String(entry?.serverId || '').trim().toLowerCase() === serverId;
+                  const sameSpeed = String(entry?.speed || '').trim().toLowerCase() === speed;
+                  return !(entryModelId === modelId && sameServer && sameSpeed);
+              }),
+          ]).filter(([, combos]) => Array.isArray(combos) && combos.length > 0),
+      );
+
+      const nextConfig: TstServerAvailabilityConfig = {
+          disabledByModel: serverAvailabilityConfig.disabledByModel || {},
+          autoDisabledCombos: nextAutoDisabledCombos,
+          manualReopenedCombos: {
+              ...(serverAvailabilityConfig.manualReopenedCombos || {}),
+              [modelId]: [
+                  ...((serverAvailabilityConfig.manualReopenedCombos?.[modelId] || []).filter((entry) => {
+                      const sameServer = String(entry?.serverId || '').trim().toLowerCase() === serverId;
+                      const sameSpeed = String(entry?.speed || '').trim().toLowerCase() === speed;
+                      return !(sameServer && sameSpeed);
+                  })),
+                  {
+                      serverId,
+                      speed,
+                      reopenedAt: new Date().toISOString(),
+                  },
+              ],
+          },
+          updatedAt: new Date().toISOString(),
+      };
+
+      const result = await saveTstServerAvailabilityConfig(nextConfig);
+      setReopeningAutoDisabledKey(null);
+      if (!result.success) {
+          showToast(`Lỗi mở lại combo: ${result.error}`, 'error');
+          return;
+      }
+
+      setServerAvailabilityConfig(nextConfig);
+      showToast('Đã mở lại combo server thủ công.', 'success');
   };
 
   const runSystemChecks = async (specificKey?: string) => {
@@ -2399,6 +2474,62 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                               </button>
                           </div>
                       </div>
+                  </div>
+
+                  <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 md:p-5">
+                      <div className="flex items-center justify-between gap-3 mb-4">
+                          <div>
+                              <h3 className="text-sm md:text-base font-bold text-white">Combo Auto-Hide Đang Hoạt Động</h3>
+                              <p className="text-xs text-slate-400 mt-1">
+                                  Tự động khóa tạm đúng combo model + tốc độ + server nếu có hơn 5 job timeout trong 5 giờ.
+                              </p>
+                          </div>
+                          <span className="px-3 py-2 rounded-xl border border-white/10 bg-white/5 text-xs font-bold text-slate-200">
+                              {activeAutoDisabledCombos.length} combo
+                          </span>
+                      </div>
+
+                      {activeAutoDisabledCombos.length === 0 ? (
+                          <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-slate-400">
+                              Hiện chưa có combo nào đang bị auto-hide.
+                          </div>
+                      ) : (
+                          <div className="space-y-3">
+                              {activeAutoDisabledCombos.map((entry) => {
+                                  const reopenKey = `${entry.modelId}::${entry.serverId}::${entry.speed}`;
+                                  return (
+                                      <div key={reopenKey} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                                          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                              <div className="grid flex-1 grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3">
+                                                  {[
+                                                      { label: 'Model', value: entry.modelId },
+                                                      { label: 'Tốc độ', value: tstSpeedToUi(entry.speed) || entry.speed },
+                                                      { label: 'Server', value: tstServerToUi(entry.serverId) || entry.serverId.toUpperCase() },
+                                                      { label: 'Lý do', value: entry.reason || 'image_timeout_cluster' },
+                                                      { label: 'Số job timeout', value: String(entry.hitCount || 0) },
+                                                      { label: 'Cửa sổ quét', value: `${entry.windowHours || 5} giờ` },
+                                                      { label: 'Bắt đầu ẩn', value: entry.hiddenAt ? new Date(entry.hiddenAt).toLocaleString() : '-' },
+                                                      { label: 'Mở lại lúc', value: entry.disabledUntil ? new Date(entry.disabledUntil).toLocaleString() : '-' },
+                                                  ].map((item) => (
+                                                      <div key={`${reopenKey}_${item.label}`} className="rounded-xl border border-white/10 bg-[#101018] p-3">
+                                                          <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">{item.label}</div>
+                                                          <div className="mt-2 break-words text-sm font-bold text-white">{item.value}</div>
+                                                      </div>
+                                                  ))}
+                                              </div>
+                                              <button
+                                                  onClick={() => handleManualReopenAutoDisabledCombo(entry.modelId, entry.serverId, entry.speed)}
+                                                  disabled={reopeningAutoDisabledKey === reopenKey}
+                                                  className="px-4 py-3 rounded-xl border border-emerald-400/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 font-bold text-sm transition-colors disabled:opacity-50"
+                                              >
+                                                  {reopeningAutoDisabledKey === reopenKey ? 'Đang mở lại...' : 'Mở lại thủ công'}
+                                              </button>
+                                          </div>
+                                      </div>
+                                  );
+                              })}
+                          </div>
+                      )}
                   </div>
 
                   <div className="bg-[#12121a] border border-white/10 rounded-2xl overflow-hidden">

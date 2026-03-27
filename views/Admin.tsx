@@ -32,6 +32,7 @@ import {
     getAdminUserHistory,
     getAdminQueueJobs,
     getAdminQueueJobDetail,
+    stopAdminQueueJob,
     getGiftcodeUsages,
     getMaintenanceMode,
     saveMaintenanceMode,
@@ -463,6 +464,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [selectedQueueJobId, setSelectedQueueJobId] = useState<string | null>(null);
   const [selectedQueueJobDetail, setSelectedQueueJobDetail] = useState<AdminQueueJobDetail | null>(null);
   const [loadingQueueJobDetail, setLoadingQueueJobDetail] = useState(false);
+  const [stoppingQueueJob, setStoppingQueueJob] = useState(false);
 
   // Health State
   const [health, setHealth] = useState<SystemHealth>({
@@ -1203,6 +1205,25 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       } finally {
           setLoadingQueueJobDetail(false);
       }
+  };
+
+  const handleStopQueueJob = async (jobId: string) => {
+      showConfirm('Dừng thủ công job này? Queue sẽ ngừng poll/rescue và đánh dấu job là thất bại.', async () => {
+          setStoppingQueueJob(true);
+          try {
+              const result = await stopAdminQueueJob(jobId);
+              showToast(result?.refunded ? 'Đã dừng job và hoàn lại Vcoin.' : 'Đã dừng job.');
+              await loadQueueJobs({ silent: false });
+              if (selectedQueueJobId === jobId) {
+                  const detail = await getAdminQueueJobDetail(jobId);
+                  setSelectedQueueJobDetail(detail);
+              }
+          } catch (error: any) {
+              showToast(`Không thể dừng job: ${error?.message || error}`, 'error');
+          } finally {
+              setStoppingQueueJob(false);
+          }
+      });
   };
 
   const handleSaveUser = async () => {
@@ -3093,9 +3114,20 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           <h3 className="text-xl font-bold text-white">Chi tiết Queue Job</h3>
                           <p className="text-xs text-slate-400 font-mono mt-1">{selectedQueueJobId}</p>
                       </div>
-                      <button onClick={() => { setSelectedQueueJobId(null); setSelectedQueueJobDetail(null); }} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white">
-                          <Icons.X className="w-5 h-5" />
-                      </button>
+                      <div className="flex items-center gap-2">
+                          {selectedQueueJobDetail && ['queued', 'processing', 'rescuing'].includes(selectedQueueJobDetail.job.displayStatus || selectedQueueJobDetail.job.status) && (
+                              <button
+                                  onClick={() => handleStopQueueJob(selectedQueueJobDetail.job.id)}
+                                  disabled={stoppingQueueJob}
+                                  className="px-3 py-2 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-200 text-sm font-bold disabled:opacity-60"
+                              >
+                                  {stoppingQueueJob ? 'Đang dừng...' : 'Dừng tiến trình'}
+                              </button>
+                          )}
+                          <button onClick={() => { setSelectedQueueJobId(null); setSelectedQueueJobDetail(null); }} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white">
+                              <Icons.X className="w-5 h-5" />
+                          </button>
+                      </div>
                   </div>
 
                   <div className="flex-1 overflow-y-auto custom-scrollbar p-6">

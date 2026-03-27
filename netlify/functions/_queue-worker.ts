@@ -34,7 +34,7 @@ import {
 } from '../../shared/queueRecipes';
 import { classifyQueueError, isTerminalRescueFailureMessage, normalizeQueueErrorMessage, pickQueueFailureMessage } from '../../shared/queueErrorClassifier';
 import { repairVietnameseMojibake } from '../../shared/queueLogText';
-import { clearFailedRescueMeta, hasFailedRescueFinalized } from '../../shared/queueRescueState';
+import { clearFailedRescueMeta, hasFailedRescueFinalized, hasManualStopFlag } from '../../shared/queueRescueState';
 
 type QueueJobRow = {
   id: string;
@@ -767,7 +767,7 @@ const getJobRuntimeState = async (jobId: string) => {
   const admin = getServiceRoleClient();
   const { data, error } = await admin
     .from('generated_images')
-    .select('id, status, attempt_count, processing_started_at, created_at, job_id')
+    .select('id, status, attempt_count, processing_started_at, created_at, job_id, queue_payload')
     .eq('id', jobId)
     .maybeSingle();
 
@@ -776,6 +776,11 @@ const getJobRuntimeState = async (jobId: string) => {
   }
 
   return data;
+};
+
+const isJobManuallyStopped = async (jobId: string) => {
+  const state = await getJobRuntimeState(jobId);
+  return String(state?.status || '').toLowerCase() === 'failed' && hasManualStopFlag((state as any)?.queue_payload);
 };
 
 const getGenerateEndpoint = (queueKind: string) => {
@@ -1469,6 +1474,11 @@ const completePolledJobWithResultUrl = async (
     completionLevel?: QueueProgressLogEntry['level'];
   },
 ) => {
+  if (await isJobManuallyStopped(job.id)) {
+    await releaseLease(job.id);
+    return 'failed' as const;
+  }
+
   const admin = getServiceRoleClient();
   let completionPayload = job.queue_payload;
   const storedImageRecipe =
@@ -1697,6 +1707,7 @@ const rescueFailedJobsWithProviderResults = async () => {
   const candidates = ((data || []) as any[])
     .filter((job) => !String(job?.image_url || '').trim())
     .filter((job) => !hasFailedRescueFinalized(job?.queue_payload))
+    .filter((job) => !hasManualStopFlag(job?.queue_payload))
     .filter((job) => getFailedRescueAttemptCount(job?.queue_payload) < FAILED_RESULT_RESCUE_MAX_ATTEMPTS)
     .filter((job) => {
       const pickedMessage = pickQueueFailureMessage(job?.error_message, getQueueLogs(job?.queue_payload));
@@ -1781,6 +1792,11 @@ const rescueFailedJobsWithProviderResults = async () => {
 };
 
 const markPolledState = async (job: QueueJobRow, providerData: any) => {
+  if (await isJobManuallyStopped(job.id)) {
+    await releaseLease(job.id);
+    return 'failed';
+  }
+
   const admin = getServiceRoleClient();
   const providerStatus = String(providerData?.status || '').toLowerCase();
   const providerProgress = typeof providerData?.progress === 'number' ? providerData.progress : 0;
@@ -1851,6 +1867,11 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
 };
 
 const handlePollFailure = async (job: QueueJobRow, errorMessage: string) => {
+  if (await isJobManuallyStopped(job.id)) {
+    await releaseLease(job.id);
+    return 'failed';
+  }
+
   const admin = getServiceRoleClient();
   const state = await getJobRuntimeState(job.id);
   const nextAttemptCount = Number(state?.attempt_count || 0) + 1;
@@ -2224,6 +2245,11 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
       job.queue_payload = await persistPreparedPayload(job.id, providerPayloadForSubmit, job.queue_payload || currentPayload);
     }
 
+    if (await isJobManuallyStopped(job.id)) {
+      await releaseLease(job.id);
+      return {};
+    }
+
     const dispatchAttemptId = randomUUID();
     job.queue_payload = await markSubmittingPreparedPayloadWithOwnership(job.id, job.queue_payload, dispatchAttemptId);
     if (!(await confirmDispatchAttemptOwnership(job.id, dispatchAttemptId))) {
@@ -2260,6 +2286,11 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
 
 const processPollJob = async (job: QueueJobRow, workerStartedAt: number): Promise<Partial<QueueWorkerSummary>> => {
   if (!hasWorkerTickBudgetRemaining(workerStartedAt)) {
+    return {};
+  }
+
+  if (await isJobManuallyStopped(job.id)) {
+    await releaseLease(job.id);
     return {};
   }
 

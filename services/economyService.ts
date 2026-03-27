@@ -1904,6 +1904,25 @@ export const getAdminQueueJobDetail = async (jobId: string): Promise<AdminQueueJ
     return payload as AdminQueueJobDetail;
 };
 
+export const stopAdminQueueJob = async (jobId: string) => {
+    const authHeader = await getSessionAuthHeader();
+    const response = await fetch('/api/admin-stop-queue-job', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...authHeader,
+        },
+        body: JSON.stringify({ jobId }),
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        throw new Error(payload?.error || 'Khong the dung queue job');
+    }
+
+    return payload as { success: boolean; refunded?: boolean; jobId?: string; providerJobId?: string | null };
+};
+
 // --- MAINTENANCE MODE ---
 
 export const getMaintenanceMode = async (options?: { force?: boolean }) => {

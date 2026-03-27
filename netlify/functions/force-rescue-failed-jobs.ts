@@ -1,7 +1,7 @@
 import type { Handler } from '@netlify/functions';
 import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 import { triggerBackgroundQueueWorker } from './_queue-launcher';
-import { clearFailedRescueMeta, hasFailedRescueFinalized } from '../../shared/queueRescueState';
+import { clearFailedRescueMeta, hasFailedRescueFinalized, hasManualStopFlag } from '../../shared/queueRescueState';
 
 const headers = {
   'Content-Type': 'application/json',
@@ -271,6 +271,7 @@ export const handler: Handler = async (event) => {
     const jobs = ((data || []) as RescueJobRow[])
       .filter((job) => !String(job.image_url || '').trim())
       .filter((job) => !hasFailedRescueFinalized(job.queue_payload))
+      .filter((job) => !hasManualStopFlag(job.queue_payload))
       .filter((job) => !exactJobId || job.id.toLowerCase() === exactJobId)
       .filter((job) => !idPrefix || job.id.toLowerCase().startsWith(idPrefix))
       .slice(0, limit);

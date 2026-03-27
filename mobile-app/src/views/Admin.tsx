@@ -27,6 +27,7 @@ import {
   getMaintenanceMode,
   runAdminQueueReconcile,
   saveMaintenanceMode,
+  stopAdminQueueJob,
 } from '../services/economyService';
 import type { AdminQueueJob, AdminQueueSummary, Transaction } from '../types';
 
@@ -138,6 +139,7 @@ export function AdminView() {
   const [loadingQueue, setLoadingQueue] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [reconciling, setReconciling] = useState(false);
+  const [stoppingQueueJobId, setStoppingQueueJobId] = useState<string | null>(null);
   const [actingTransactionId, setActingTransactionId] = useState<string | null>(null);
   const [queueStatusFilter, setQueueStatusFilter] = useState<'all' | 'processing' | 'failed'>('all');
   const [queueAssetFilter, setQueueAssetFilter] = useState<'all' | 'image' | 'video'>('all');
@@ -296,6 +298,28 @@ export function AdminView() {
       },
     });
 
+  const stopQueueJob = (job: AdminQueueJob) =>
+    confirm({
+      title: 'Dừng tiến trình?',
+      message: 'Queue sẽ ngừng poll/rescue và đánh dấu job là thất bại.',
+      confirmText: 'Dừng ngay',
+      cancelText: 'Hủy',
+      isDanger: true,
+      onConfirm: async () => {
+        setStoppingQueueJobId(job.id);
+        try {
+          const result = await stopAdminQueueJob(job.id);
+          await loadQueue();
+          notify(result?.refunded ? 'Đã dừng job và hoàn lại Vcoin.' : 'Đã dừng job.', 'success');
+        } catch (error: any) {
+          console.error('[MobileAdmin] Stop queue job failed', error);
+          notify(error?.message || 'Không thể dừng job.', 'error');
+        } finally {
+          setStoppingQueueJobId(null);
+        }
+      },
+    });
+
   const saveMaintenance = async () => {
     setSavingMaintenance(true);
     const result = await saveMaintenanceMode(maintenance.isActive, maintenance.message);
@@ -404,7 +428,7 @@ export function AdminView() {
             <div className="mb-3 grid grid-cols-3 gap-2">{[['Đang chạy', queueSummary.processing + queueSummary.queued], ['Lỗi', queueSummary.failed], ['Xong', queueSummary.completed]].map(([label, value]) => <div key={String(label)} className="rounded-[22px] bg-gray-50 px-3 py-3 dark:bg-zinc-800/80"><div className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400 dark:text-zinc-500">{label}</div><div className="mt-1 text-xl font-black text-gray-900 dark:text-white">{value}</div></div>)}</div>
             <div className="mb-3 flex gap-2 overflow-x-auto no-scrollbar">{(['all', 'processing', 'failed'] as const).map((key) => <button key={key} onClick={() => setQueueStatusFilter(key)} className={`rounded-full px-3 py-1.5 text-[11px] font-bold ${queueStatusFilter === key ? 'bg-gray-900 text-white dark:bg-white dark:text-black' : 'bg-gray-100 text-gray-500 dark:bg-zinc-800 dark:text-zinc-400'}`}>{key === 'all' ? 'Tất cả' : key === 'processing' ? 'Đang chạy' : 'Lỗi'}</button>)}</div>
             <div className="mb-4 flex gap-2 overflow-x-auto no-scrollbar">{(['all', 'image', 'video'] as const).map((key) => <button key={key} onClick={() => setQueueAssetFilter(key)} className={`rounded-full px-3 py-1.5 text-[11px] font-bold ${queueAssetFilter === key ? 'bg-indigo-500 text-white' : 'bg-gray-100 text-gray-500 dark:bg-zinc-800 dark:text-zinc-400'}`}>{key === 'image' ? 'Ảnh' : key === 'video' ? 'Video' : 'Tất cả'}</button>)}</div>
-            {loadingQueue ? <div className="flex justify-center py-12"><Loader className="h-7 w-7 animate-spin text-gray-300" /></div> : queueJobs.length === 0 ? <div className="rounded-[24px] bg-gray-50 px-4 py-6 text-sm text-gray-500 dark:bg-zinc-800/80 dark:text-zinc-400">Không có queue job phù hợp.</div> : <div className="space-y-3">{queueJobs.map((job) => { const status = getQueueStatus(job); return <div key={job.id} className="rounded-[24px] bg-gray-50 p-4 dark:bg-zinc-800/80"><div className="mb-2 flex items-start justify-between gap-3"><div className="min-w-0"><div className="truncate text-sm font-black text-gray-900 dark:text-white">{job.userName || job.userEmail || 'Người dùng không xác định'}</div><div className="mt-1 text-[11px] text-gray-500 dark:text-zinc-400">{job.userEmail || job.id}</div></div><div className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${status === 'failed' ? 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-300' : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'}`}>{getQueueStatusLabel(status)}</div></div><div className="mb-2 flex items-center gap-2">{job.assetType === 'video' ? <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-2.5 py-1 text-[10px] font-bold text-purple-600 dark:bg-purple-500/10 dark:text-purple-300"><Video className="h-3 w-3" />Video</span> : <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-600 dark:bg-blue-500/10 dark:text-blue-300"><ImageIcon className="h-3 w-3" />Ảnh</span>}{typeof job.progress === 'number' ? <span className="text-[11px] font-semibold text-gray-500 dark:text-zinc-400">{Math.round(job.progress)}%</span> : null}</div><div className="line-clamp-2 text-sm text-gray-700 dark:text-zinc-200">{job.prompt || job.toolName || 'Không có prompt'}</div>{job.error ? <div className="mt-3 line-clamp-2 text-xs text-red-500 dark:text-red-300">{job.error}</div> : <div className="mt-3 text-[11px] text-gray-500 dark:text-zinc-400">{formatDateTime(job.updatedAt)}</div>}</div>; })}</div>}
+            {loadingQueue ? <div className="flex justify-center py-12"><Loader className="h-7 w-7 animate-spin text-gray-300" /></div> : queueJobs.length === 0 ? <div className="rounded-[24px] bg-gray-50 px-4 py-6 text-sm text-gray-500 dark:bg-zinc-800/80 dark:text-zinc-400">Không có queue job phù hợp.</div> : <div className="space-y-3">{queueJobs.map((job) => { const status = getQueueStatus(job); const canStop = ['queued', 'processing', 'rescuing'].includes(status); return <div key={job.id} className="rounded-[24px] bg-gray-50 p-4 dark:bg-zinc-800/80"><div className="mb-2 flex items-start justify-between gap-3"><div className="min-w-0"><div className="truncate text-sm font-black text-gray-900 dark:text-white">{job.userName || job.userEmail || 'Người dùng không xác định'}</div><div className="mt-1 text-[11px] text-gray-500 dark:text-zinc-400">{job.userEmail || job.id}</div></div><div className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${status === 'failed' ? 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-300' : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'}`}>{getQueueStatusLabel(status)}</div></div><div className="mb-2 flex items-center gap-2">{job.assetType === 'video' ? <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-2.5 py-1 text-[10px] font-bold text-purple-600 dark:bg-purple-500/10 dark:text-purple-300"><Video className="h-3 w-3" />Video</span> : <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-600 dark:bg-blue-500/10 dark:text-blue-300"><ImageIcon className="h-3 w-3" />Ảnh</span>}{typeof job.progress === 'number' ? <span className="text-[11px] font-semibold text-gray-500 dark:text-zinc-400">{Math.round(job.progress)}%</span> : null}</div><div className="line-clamp-2 text-sm text-gray-700 dark:text-zinc-200">{job.prompt || job.toolName || 'Không có prompt'}</div>{job.error ? <div className="mt-3 line-clamp-2 text-xs text-red-500 dark:text-red-300">{job.error}</div> : <div className="mt-3 text-[11px] text-gray-500 dark:text-zinc-400">{formatDateTime(job.updatedAt)}</div>}{canStop ? <button onClick={() => stopQueueJob(job)} disabled={stoppingQueueJobId === job.id} className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-red-500 px-4 py-3 text-sm font-bold text-white disabled:opacity-60">{stoppingQueueJobId === job.id ? <Loader className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}Dừng tiến trình</button> : null}</div>; })}</div>}
           </Card>
         )}
 

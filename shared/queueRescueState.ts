@@ -22,6 +22,9 @@ export const hasFailedRescuePending = (payload?: Record<string, unknown> | null)
 export const hasFailedRescueFinalized = (payload?: Record<string, unknown> | null) =>
   asPayload(payload).__failedRescueFinalized === true;
 
+export const hasManualStopFlag = (payload?: Record<string, unknown> | null) =>
+  asPayload(payload).__manuallyStopped === true;
+
 const FAILED_RESCUE_STALE_GRACE_MS = 15 * 60 * 1000;
 
 export const isFailedRescueStillActive = (
@@ -47,6 +50,12 @@ export const clearFailedRescueMeta = (payload?: Record<string, unknown> | null) 
   nextPayload.__failedRescueAttemptCount = 0;
   nextPayload.__nextFailedRescueAt = null;
   nextPayload.__failedRescueFinalized = true;
+  return nextPayload;
+};
+
+export const markManualStopMeta = (payload?: Record<string, unknown> | null) => {
+  const nextPayload = clearFailedRescueMeta(payload);
+  nextPayload.__manuallyStopped = true;
   return nextPayload;
 };
 

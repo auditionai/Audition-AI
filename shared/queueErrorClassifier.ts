@@ -91,6 +91,19 @@ export const classifyQueueError = (message?: string | null): QueueErrorInfo => {
   }
 
   if (
+    lower.includes('admin manually stopped this job') ||
+    lower.includes('quan tri vien da dung job') ||
+    lower.includes('đã dừng thủ công') ||
+    lower.includes('da dung thu cong')
+  ) {
+    return {
+      rawMessage,
+      displayMessage: 'Job đã được quản trị viên dừng thủ công, nên queue sẽ không tiếp tục xử lý hay rescue lại nữa.',
+      category: 'queue',
+    };
+  }
+
+  if (
     lower.includes('queue preparation timed out before') ||
     lower.includes('qua thoi gian chuan bi') ||
     lower.includes('tam hoan va xep lai hang doi')

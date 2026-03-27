@@ -82,6 +82,15 @@ export interface AuditionPricingOverride {
 
 export interface TstServerAvailabilityConfig {
   disabledByModel: Record<string, string[]>;
+  autoDisabledCombos?: Record<string, Array<{
+    serverId: string;
+    speed: string;
+    disabledUntil: string;
+    hiddenAt?: string;
+    reason?: string;
+    hitCount?: number;
+    windowHours?: number;
+  }>>;
   updatedAt?: string;
 }
 
@@ -259,6 +268,7 @@ let modelsCacheFetchedAt = 0;
 
 export const DEFAULT_TST_SERVER_AVAILABILITY_CONFIG: TstServerAvailabilityConfig = {
   disabledByModel: {},
+  autoDisabledCombos: {},
 };
 
 export const ADMIN_MANAGED_MODEL_LABELS = [
@@ -431,7 +441,7 @@ export const sanitizePricingEntriesWithRuntimeModels = (
     const model = modelMap.get(normalizeModelId(entry.model));
     if (!model) return false;
 
-    if (!isServerEnabledForModel(serverAvailabilityConfig, entry.model, entry.server)) {
+    if (!isServerEnabledForModel(serverAvailabilityConfig, entry.model, entry.server, entry.speed)) {
       return false;
     }
 
@@ -482,10 +492,40 @@ const normalizeServerAvailabilityConfig = (
     ]),
   );
 
+  const autoDisabledCombos = Object.fromEntries(
+    Object.entries(config?.autoDisabledCombos || {}).map(([modelId, combos]) => [
+      normalizeModelId(modelId),
+      (Array.isArray(combos) ? combos : [])
+        .map((entry) => ({
+          serverId: normalizeServer(entry?.serverId),
+          speed: normalizeSpeed(entry?.speed),
+          disabledUntil: typeof entry?.disabledUntil === 'string' ? entry.disabledUntil : '',
+          hiddenAt: typeof entry?.hiddenAt === 'string' ? entry.hiddenAt : undefined,
+          reason: typeof entry?.reason === 'string' ? entry.reason : undefined,
+          hitCount: Number(entry?.hitCount || 0) || undefined,
+          windowHours: Number(entry?.windowHours || 0) || undefined,
+        }))
+        .filter((entry) => entry.serverId && entry.speed && entry.disabledUntil),
+    ]),
+  );
+
   return {
     disabledByModel,
+    autoDisabledCombos,
     updatedAt: config?.updatedAt,
   };
+};
+
+export const getActiveAutoDisabledServerCombosForModel = (
+  config: TstServerAvailabilityConfig | null | undefined,
+  modelId: string,
+  now = Date.now(),
+) => {
+  const normalizedConfig = normalizeServerAvailabilityConfig(config);
+  return (normalizedConfig.autoDisabledCombos?.[normalizeModelId(modelId)] || []).filter((entry) => {
+    const disabledUntilMs = new Date(entry.disabledUntil).getTime();
+    return Number.isFinite(disabledUntilMs) && disabledUntilMs > now;
+  });
 };
 
 export const getDisabledServersForModel = (
@@ -500,10 +540,22 @@ export const isServerEnabledForModel = (
   config: TstServerAvailabilityConfig | null | undefined,
   modelId: string,
   serverId?: string,
+  speed?: string,
 ) => {
   const normalizedServerId = normalizeServer(serverId);
   if (!normalizedServerId) return true;
-  return !getDisabledServersForModel(config, modelId).includes(normalizedServerId);
+  if (getDisabledServersForModel(config, modelId).includes(normalizedServerId)) {
+    return false;
+  }
+
+  const normalizedSpeed = normalizeSpeed(speed);
+  if (!normalizedSpeed) {
+    return true;
+  }
+
+  return !getActiveAutoDisabledServerCombosForModel(config, modelId).some(
+    (entry) => entry.serverId === normalizedServerId && entry.speed === normalizedSpeed,
+  );
 };
 
 export const applyServerAvailabilityToRuntimeModels = (
@@ -519,7 +571,7 @@ export const applyServerAvailabilityToPricingEntries = (
   pricingEntries: TstPricingEntry[] = [],
   config?: TstServerAvailabilityConfig | null,
 ) =>
-  pricingEntries.filter((entry) => isServerEnabledForModel(config, entry.model, entry.server));
+  pricingEntries.filter((entry) => isServerEnabledForModel(config, entry.model, entry.server, entry.speed));
 
 export const clearTstCatalogCache = () => {
   pricingCache = null;

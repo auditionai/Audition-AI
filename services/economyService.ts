@@ -439,6 +439,7 @@ export const getTstServerAvailabilityConfig = async (options?: { force?: boolean
   const parsed = parseSettingValue<TstServerAvailabilityConfig>(data?.value, DEFAULT_TST_SERVER_AVAILABILITY_CONFIG);
   const value = {
     disabledByModel: parsed?.disabledByModel || {},
+    autoDisabledCombos: parsed?.autoDisabledCombos || {},
     updatedAt: parsed?.updatedAt,
   };
   tstServerAvailabilityCache = {
@@ -455,6 +456,7 @@ export const saveTstServerAvailabilityConfig = async (
 
   const payload: TstServerAvailabilityConfig = {
     disabledByModel: config?.disabledByModel || {},
+    autoDisabledCombos: config?.autoDisabledCombos || {},
     updatedAt: new Date().toISOString(),
   };
 
@@ -1920,7 +1922,7 @@ export const stopAdminQueueJob = async (jobId: string) => {
         throw new Error(payload?.error || 'Khong the dung queue job');
     }
 
-    return payload as { success: boolean; refunded?: boolean; jobId?: string; providerJobId?: string | null };
+    return payload as { success: boolean; refunded?: boolean; jobId?: string; providerJobId?: string | null; providerCancelRequested?: boolean };
 };
 
 // --- MAINTENANCE MODE ---

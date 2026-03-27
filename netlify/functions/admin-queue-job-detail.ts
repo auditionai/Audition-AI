@@ -194,6 +194,52 @@ const sanitizePayloadValue = (value: unknown): unknown => {
   return value;
 };
 
+const toPayloadObject = (value: unknown): Record<string, unknown> =>
+  value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+
+const deriveRuntimeConfig = (payload: Record<string, unknown>, toolName?: string | null) => {
+  const recipePayload = toPayloadObject(payload.__recipePayload);
+  const source = Object.keys(recipePayload).length > 0 ? recipePayload : payload;
+  const characterCount = Number(source.characterCount || 0) || undefined;
+  const modelId = String(source.modelId || payload.model || '').trim() || undefined;
+  const speedKey = String(source.speed || payload.speed || '').trim() || undefined;
+  const serverId = String(source.serverId || payload.server_id || '').trim() || undefined;
+  const resolution = String(source.resolution || payload.resolution || '').trim() || undefined;
+  const aspectRatio = String(source.aspectRatio || payload.aspect_ratio || '').trim() || undefined;
+  const configKey = String(payload.config_key || '').trim() || undefined;
+
+  const generationMode =
+    characterCount === 4 ? 'Nhóm 4 người' :
+    characterCount === 3 ? 'Nhóm 3 người' :
+    characterCount === 2 ? 'Ảnh đôi' :
+    characterCount === 1 ? 'Ảnh đơn' :
+    (toolName || undefined);
+
+  const lowerModelId = String(modelId || '').toLowerCase();
+  const modelMode =
+    lowerModelId.includes('flash') ? 'Flash' :
+    lowerModelId ? 'Pro' : undefined;
+
+  const lowerSpeed = String(speedKey || '').toLowerCase();
+  const speedMode =
+    lowerSpeed === 'fast' ? 'Nhanh' :
+    lowerSpeed === 'slow' ? 'Tiết kiệm' :
+    undefined;
+
+  return {
+    generationMode,
+    modelMode,
+    modelId,
+    speedMode,
+    speedKey,
+    serverId,
+    resolution,
+    aspectRatio,
+    configKey,
+    characterCount,
+  };
+};
+
 export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers, body: '' };
@@ -269,6 +315,7 @@ export const handler: Handler = async (event) => {
       prompt: typeof payload.prompt === 'string' && payload.prompt.trim() ? payload.prompt : row.prompt || undefined,
       queuePayloadPreview: sanitizePayloadValue(payload) as Record<string, unknown>,
       inputMedia,
+      runtimeConfig: deriveRuntimeConfig(payload, row.tool_name),
     };
 
     return {

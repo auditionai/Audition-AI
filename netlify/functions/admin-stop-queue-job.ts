@@ -9,6 +9,9 @@ const headers = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
+const TST_API_KEY = process.env.TST_API_KEY || '';
+const TST_API_BASE = 'https://api.tramsangtao.com/v1';
+
 type QueueProgressLogEntry = {
   at: string;
   stage: string;
@@ -65,6 +68,33 @@ const withQueueLog = (
     __stage: 'failed',
     __logs: nextLogs,
   };
+};
+
+const cancelProviderJobBestEffort = async (providerJobId?: string | null) => {
+  const normalizedJobId = String(providerJobId || '').trim();
+  if (!normalizedJobId || !TST_API_KEY) {
+    return false;
+  }
+
+  try {
+    const response = await fetch(`${TST_API_BASE}/jobs/${encodeURIComponent(normalizedJobId)}/cancel`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${TST_API_KEY}`,
+      },
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!response.ok) {
+      console.warn('[admin-stop-queue-job] provider cancel failed:', normalizedJobId, response.status, response.statusText);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.warn('[admin-stop-queue-job] provider cancel errored:', normalizedJobId, error);
+    return false;
+  }
 };
 
 export const handler: Handler = async (event) => {
@@ -132,6 +162,8 @@ export const handler: Handler = async (event) => {
       };
     }
 
+    const providerCancelRequested = await cancelProviderJobBestEffort(row.job_id);
+
     const stoppedPayload = markManualStopMeta(
       withQueueLog(row.queue_payload || null, 'failed', 'Quản trị viên đã dừng thủ công tiến trình này.', 'warning'),
     );
@@ -172,6 +204,7 @@ export const handler: Handler = async (event) => {
         refunded,
         jobId,
         providerJobId: row.job_id || null,
+        providerCancelRequested,
       }),
     };
   } catch (error: any) {

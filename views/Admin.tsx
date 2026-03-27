@@ -3156,6 +3156,28 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   ))}
                               </div>
 
+                              {selectedQueueJobDetail.runtimeConfig && (
+                                  <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
+                                      {[
+                                          { label: 'Chế độ tạo', value: selectedQueueJobDetail.runtimeConfig.generationMode || '-' },
+                                          { label: 'Model UI', value: selectedQueueJobDetail.runtimeConfig.modelMode || '-' },
+                                          { label: 'Model ID', value: selectedQueueJobDetail.runtimeConfig.modelId || '-' },
+                                          { label: 'Tốc độ', value: selectedQueueJobDetail.runtimeConfig.speedMode || '-' },
+                                          { label: 'Speed Key', value: selectedQueueJobDetail.runtimeConfig.speedKey || '-' },
+                                          { label: 'Server', value: selectedQueueJobDetail.runtimeConfig.serverId || '-' },
+                                          { label: 'Độ phân giải', value: selectedQueueJobDetail.runtimeConfig.resolution || '-' },
+                                          { label: 'Tỷ lệ', value: selectedQueueJobDetail.runtimeConfig.aspectRatio || '-' },
+                                          { label: 'Config Key', value: selectedQueueJobDetail.runtimeConfig.configKey || '-' },
+                                          { label: 'Số nhân vật', value: selectedQueueJobDetail.runtimeConfig.characterCount != null ? String(selectedQueueJobDetail.runtimeConfig.characterCount) : '-' },
+                                      ].map((item) => (
+                                          <div key={item.label} className="bg-[#11111a] border border-white/10 rounded-xl p-3">
+                                              <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">{item.label}</div>
+                                              <div className="text-sm text-white font-bold mt-2 break-words">{item.value}</div>
+                                          </div>
+                                      ))}
+                                  </div>
+                              )}
+
                               <div className="bg-black/20 border border-white/10 rounded-2xl p-4">
                                   <div className="text-sm font-bold text-white mb-2">Prompt</div>
                                   <div className="text-sm text-slate-300 whitespace-pre-wrap leading-relaxed">

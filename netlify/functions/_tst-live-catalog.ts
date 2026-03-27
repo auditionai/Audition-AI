@@ -1,4 +1,4 @@
-import { getServerAvailabilityConfig } from './_server-availability';
+import { getServerAvailabilityConfig, isServerAllowedBySnapshot } from './_server-availability';
 
 const TST_API_BASE = 'https://api.tramsangtao.com/v1';
 export const TST_LIVE_CATALOG_TTL_MS = 60_000;
@@ -234,7 +234,7 @@ export const validateQueuePayloadAgainstLiveCatalog = async (
   }
 
   const modelPricing = getMatchingPricingEntries(modelId, pricing).filter(
-    (entry) => !((serverAvailabilityConfig.disabledByModel[modelId] || []).includes(normalizeServer(entry.server))),
+    (entry) => isServerAllowedBySnapshot(serverAvailabilityConfig, modelId, entry.server, entry.speed),
   );
   if (modelPricing.length === 0) {
     throw new Error(`INVALID_TST_CONFIG: Model ${modelId} has no live pricing on TST`);
@@ -246,6 +246,10 @@ export const validateQueuePayloadAgainstLiveCatalog = async (
   const speed = normalizeSpeed(String(queuePayload.speed || ''));
   const audio = typeof queuePayload.audio === 'boolean' ? queuePayload.audio : undefined;
   const aspectRatio = String(queuePayload.aspect_ratio || '').trim();
+
+  if (serverId && !isServerAllowedBySnapshot(serverAvailabilityConfig, modelId, serverId, speed)) {
+    throw new Error(`INVALID_TST_CONFIG: Server ${serverId} đang tạm ẩn do quá tải ở chế độ ${speed || 'default'}. Vui lòng chọn server khác.`);
+  }
 
   if (serverId && Array.isArray(model.servers) && model.servers.length > 0) {
     const availableServers = model.servers

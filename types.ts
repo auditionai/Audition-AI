@@ -142,6 +142,18 @@ export interface AdminQueueJobDetail {
   prompt?: string;
   queuePayloadPreview?: Record<string, unknown>;
   inputMedia: AdminQueueInputMedia[];
+  runtimeConfig?: {
+    generationMode?: string;
+    modelMode?: string;
+    modelId?: string;
+    speedMode?: string;
+    speedKey?: string;
+    serverId?: string;
+    resolution?: string;
+    aspectRatio?: string;
+    configKey?: string;
+    characterCount?: number;
+  };
 }
 
 // --- NEW ECONOMY & USER TYPES ---

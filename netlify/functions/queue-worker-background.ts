@@ -4,7 +4,7 @@ import { runQueueDaemon } from './_queue-daemon';
 import { triggerBackgroundQueueWorker } from './_queue-launcher';
 import { getServiceRoleClient } from './_supabase';
 
-const WORKER_LOCK_LEASE_SECONDS = 90;
+const WORKER_LOCK_LEASE_SECONDS = 180;
 
 const hasQueueActivity = (summary: Awaited<ReturnType<typeof runQueueDaemon>>) =>
   Number(summary.claimedForDispatch || 0) > 0 ||

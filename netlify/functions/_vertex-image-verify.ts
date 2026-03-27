@@ -145,6 +145,28 @@ const textSignalsLayeredSingleSubject = (value: string) => {
   );
 };
 
+const summarySignalsSuccessfulMultiCharacterCoverage = (summary: string, expectedCount: number) => {
+  const lower = summary.toLowerCase();
+  if (!lower) return false;
+
+  if (
+    lower.includes('successfully incorporates both character slots') ||
+    lower.includes('successfully incorporates all character slots') ||
+    lower.includes('preserves both character slots') ||
+    lower.includes('preserves all character slots') ||
+    lower.includes('all uploaded character slots are preserved') ||
+    lower.includes('all character slots are preserved')
+  ) {
+    return true;
+  }
+
+  if (expectedCount === 2 && lower.includes('both character slots')) {
+    return true;
+  }
+
+  return lower.includes(`all ${expectedCount} character slots`);
+};
+
 const normalizeVerificationResult = (raw: any): ImageOutputVerificationResult => {
   const summary = typeof raw?.summary === 'string' ? raw.summary.trim() : '';
   const missingCharacterSlots = normalizeNumberArray(raw?.missingCharacterSlots);
@@ -303,6 +325,59 @@ const shouldAcceptLayeredSingleSubjectVerificationResult = (
   return textSignalsLayeredSingleSubject(combinedText);
 };
 
+const shouldAcceptPositiveMultiCharacterVerificationResult = (
+  payload: ImageGenerateRecipePayload,
+  result: ImageOutputVerificationResult,
+) => {
+  const expectedCount = Math.max(
+    1,
+    Math.floor(Number(payload.characterCount || getImageCharacterReferenceGroups(payload).length || 1)),
+  );
+
+  if (expectedCount < 2) {
+    return false;
+  }
+
+  if (!summarySignalsSuccessfulMultiCharacterCoverage(result.summary, expectedCount)) {
+    return false;
+  }
+
+  if (result.substitutedFromSampleOrStyle) {
+    return false;
+  }
+
+  if (result.missingCharacterSlots.length > 0 || result.duplicatedCharacterSlots.length > 0) {
+    return false;
+  }
+
+  const combinedText = [result.summary, ...result.issues, ...result.slotFindings.map((entry) => entry.notes)]
+    .join(' ')
+    .toLowerCase();
+
+  if (
+    combinedText.includes('missing') ||
+    combinedText.includes('duplicated') ||
+    combinedText.includes('substituted') ||
+    combinedText.includes('blended identity') ||
+    combinedText.includes('invented') ||
+    combinedText.includes('replaced')
+  ) {
+    return false;
+  }
+
+  if (summarySignalsStyleBorrow(result.summary)) {
+    return false;
+  }
+
+  const issueSignalsStyleBorrow = result.issues.some((entry) => textSignalsStyleBorrow(entry));
+  const notesSignalStyleBorrow = result.slotFindings.some((entry) => textSignalsStyleBorrow(entry.notes));
+  if (issueSignalsStyleBorrow || notesSignalStyleBorrow) {
+    return false;
+  }
+
+  return true;
+};
+
 export const verifyGeneratedImageOutput = async (
   payload: ImageGenerateRecipePayload,
   resultImageUrl: string,
@@ -365,6 +440,16 @@ export const verifyGeneratedImageOutput = async (
           summary:
             normalized.summary ||
             'Allowed layered single-subject composition: prompt-requested double-exposure style was preserved without introducing a second distinct person.',
+        };
+      }
+
+      if (!normalized.pass && shouldAcceptPositiveMultiCharacterVerificationResult(payload, normalized)) {
+        return {
+          ...normalized,
+          pass: true,
+          summary:
+            normalized.summary ||
+            'Verification accepted because all requested character slots were preserved correctly in the final image.',
         };
       }
 

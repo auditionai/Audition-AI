@@ -1,6 +1,7 @@
 import type { Handler } from '@netlify/functions';
 import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 import { triggerBackgroundQueueWorker } from './_queue-launcher';
+import { clearFailedRescueMeta, hasFailedRescueFinalized } from '../../shared/queueRescueState';
 
 const headers = {
   'Content-Type': 'application/json',
@@ -82,19 +83,29 @@ const withQueueLog = (
   stage: string,
   message: string,
   level: QueueProgressLogEntry['level'] = 'info',
-) => ({
-  ...toPayloadObject(payload),
-  __stage: stage,
-  __logs: [
-    ...getQueueLogs(payload),
-    {
-      at: new Date().toISOString(),
-      stage,
-      level,
-      message,
-    },
-  ].slice(-MAX_QUEUE_LOG_ENTRIES),
-});
+) => {
+  const nextEntry = {
+    at: new Date().toISOString(),
+    stage,
+    level,
+    message,
+  } satisfies QueueProgressLogEntry;
+  const previousLogs = getQueueLogs(payload);
+  const lastEntry = previousLogs.at(-1);
+  const nextLogs =
+    lastEntry &&
+    lastEntry.stage === nextEntry.stage &&
+    lastEntry.level === nextEntry.level &&
+    lastEntry.message === nextEntry.message
+      ? [...previousLogs.slice(0, -1), { ...lastEntry, at: nextEntry.at }].slice(-MAX_QUEUE_LOG_ENTRIES)
+      : [...previousLogs, nextEntry].slice(-MAX_QUEUE_LOG_ENTRIES);
+
+  return {
+    ...toPayloadObject(payload),
+    __stage: stage,
+    __logs: nextLogs,
+  };
+};
 
 const extractResultUrl = (data: any): string | null => {
   if (typeof data?.result === 'string' && data.result.trim()) return data.result.trim();
@@ -130,6 +141,16 @@ const pollProviderJob = async (providerJobId: string) => {
 
 const rescueCompletedJob = async (job: RescueJobRow, resultUrl: string, providerStatus: string, providerMessage: string) => {
   const admin = getServiceRoleClient();
+  const nextPayload = clearFailedRescueMeta(
+    withQueueLog(
+      job.queue_payload,
+      'completed',
+      providerStatus === 'completed'
+        ? 'Force rescue: da tim thay ket qua hop le tren TST va dong bo lai thanh cong.'
+        : `Force rescue: TST bao "${providerMessage}" nhung van tra ve ket qua hop le. Da uu tien luu anh ket qua.`,
+      'warning',
+    ),
+  );
   await admin
     .from('generated_images')
     .update({
@@ -142,20 +163,22 @@ const rescueCompletedJob = async (job: RescueJobRow, resultUrl: string, provider
       lease_token: null,
       lease_expires_at: null,
       updated_at: new Date().toISOString(),
-      queue_payload: withQueueLog(
-        job.queue_payload,
-        'completed',
-        providerStatus === 'completed'
-          ? 'Force rescue: da tim thay ket qua hop le tren TST va dong bo lai thanh cong.'
-          : `Force rescue: TST bao "${providerMessage}" nhung van tra ve ket qua hop le. Da uu tien luu anh ket qua.`,
-        'warning',
-      ),
+      queue_payload: nextPayload,
     })
     .eq('id', job.id);
 };
 
 const reviveProcessingJob = async (job: RescueJobRow, providerStatus: string) => {
   const admin = getServiceRoleClient();
+  const nextPayload = {
+    ...withQueueLog(
+      job.queue_payload,
+      'polling',
+      `Force rescue: TST hien dang o trang thai ${providerStatus}. Da dua job tro lai processing de tiep tuc dong bo.`,
+      'warning',
+    ),
+    __failedRescueFinalized: false,
+  };
   await admin
     .from('generated_images')
     .update({
@@ -167,28 +190,26 @@ const reviveProcessingJob = async (job: RescueJobRow, providerStatus: string) =>
       lease_token: null,
       lease_expires_at: null,
       updated_at: new Date().toISOString(),
-      queue_payload: withQueueLog(
-        job.queue_payload,
-        'polling',
-        `Force rescue: TST hien dang o trang thai ${providerStatus}. Da dua job tro lai processing de tiep tuc dong bo.`,
-        'warning',
-      ),
+      queue_payload: nextPayload,
     })
     .eq('id', job.id);
 };
 
 const markRescueCheckedWithoutResult = async (job: RescueJobRow, providerStatus: string, providerMessage: string) => {
   const admin = getServiceRoleClient();
+  const nextPayload = clearFailedRescueMeta(
+    withQueueLog(
+      job.queue_payload,
+      'failed',
+      `Force rescue: da kiem tra lai TST, chua co ket qua de cuu. Trang thai provider = ${providerStatus || 'unknown'}. ${providerMessage || ''}`.trim(),
+      'warning',
+    ),
+  );
   await admin
     .from('generated_images')
     .update({
       updated_at: new Date().toISOString(),
-      queue_payload: withQueueLog(
-        job.queue_payload,
-        'failed',
-        `Force rescue: da kiem tra lai TST, chua co ket qua de cuu. Trang thai provider = ${providerStatus || 'unknown'}. ${providerMessage || ''}`.trim(),
-        'warning',
-      ),
+      queue_payload: nextPayload,
     })
     .eq('id', job.id);
 };
@@ -249,6 +270,7 @@ export const handler: Handler = async (event) => {
 
     const jobs = ((data || []) as RescueJobRow[])
       .filter((job) => !String(job.image_url || '').trim())
+      .filter((job) => !hasFailedRescueFinalized(job.queue_payload))
       .filter((job) => !exactJobId || job.id.toLowerCase() === exactJobId)
       .filter((job) => !idPrefix || job.id.toLowerCase().startsWith(idPrefix))
       .slice(0, limit);

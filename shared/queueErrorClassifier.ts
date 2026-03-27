@@ -109,6 +109,10 @@ export const classifyQueueError = (message?: string | null): QueueErrorInfo => {
     lower.includes('524 <none>') ||
     lower.includes('gateway timeout') ||
     lower.includes('upstream request timeout') ||
+    lower.includes('curl: (7)') ||
+    lower.includes('failed to connect to') ||
+    lower.includes('could not connect to server') ||
+    lower.includes('libcurl') ||
     lower.includes('job set not found') ||
     lower.includes('job not found') ||
     lower.includes('provider dang xu ly') ||

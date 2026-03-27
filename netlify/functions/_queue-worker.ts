@@ -413,6 +413,13 @@ const getRetryDelaySeconds = (attemptCount: number) => {
 const isGenericProviderFailure = (message: string) => {
   const normalized = message.toLowerCase();
   return (
+    normalized.includes('curl: (7)') ||
+    normalized.includes('failed to connect to') ||
+    normalized.includes('could not connect to server') ||
+    normalized.includes('libcurl') ||
+    normalized.includes('gateway timeout') ||
+    normalized.includes('job not found') ||
+    normalized.includes('job set not found') ||
     normalized.includes('job failed, change prompt or input and try again') ||
     normalized.includes('change prompt or input and try again')
   );
@@ -1786,10 +1793,10 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
     }
     const currentState = await getJobRuntimeState(job.id);
     const currentAttempts = Number(currentState?.attempt_count || 0);
+    const failureCategory = classifyQueueError(failureMessage).category;
 
     if (
-      job.queue_kind === 'motion_generate' &&
-      isGenericProviderFailure(failureMessage) &&
+      (failureCategory === 'provider' || (job.queue_kind === 'motion_generate' && isGenericProviderFailure(failureMessage))) &&
       currentAttempts < MAX_PROVIDER_GENERIC_RETRIES
     ) {
       await requeueJob(job, failureMessage);

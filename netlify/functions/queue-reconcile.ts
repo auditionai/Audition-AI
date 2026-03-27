@@ -3,6 +3,7 @@ import type { Handler } from '@netlify/functions';
 import { runQueueDaemon } from './_queue-daemon';
 import { triggerBackgroundQueueWorker } from './_queue-launcher';
 import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
+import { refreshAutoDisabledServerAvailability } from './_server-availability';
 import type { QueueProgressLogEntry } from '../../shared/queueRecipes';
 import { classifyQueueError, isTerminalRescueFailureMessage, normalizeQueueErrorMessage, pickQueueFailureMessage } from '../../shared/queueErrorClassifier';
 import { clearFailedRescueMeta, hasFailedRescuePending, isFailedRescueStale } from '../../shared/queueRescueState';
@@ -241,6 +242,7 @@ export const handler: Handler = async (event) => {
 
     const resetSummary = await resetStaleQueueStateForReconcile();
     const finalizedFailedRescues = await finalizeTerminalFailedRescues();
+    const serverAvailabilityAutoRefresh = await refreshAutoDisabledServerAvailability();
 
     const summary = await runQueueDaemon({
       maxRuntimeMs: 45_000,
@@ -253,7 +255,7 @@ export const handler: Handler = async (event) => {
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify({ success: true, resetSummary, finalizedFailedRescues, summary, followUpLaunchNeeded }),
+      body: JSON.stringify({ success: true, resetSummary, finalizedFailedRescues, serverAvailabilityAutoRefresh, summary, followUpLaunchNeeded }),
     };
   } catch (error: any) {
     console.error('[queue-reconcile] failed:', error);

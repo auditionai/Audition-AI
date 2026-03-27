@@ -439,6 +439,8 @@ export const getTstServerAvailabilityConfig = async (options?: { force?: boolean
   const parsed = parseSettingValue<TstServerAvailabilityConfig>(data?.value, DEFAULT_TST_SERVER_AVAILABILITY_CONFIG);
   const value = {
     disabledByModel: parsed?.disabledByModel || {},
+    autoDisabledCombos: parsed?.autoDisabledCombos || {},
+    manualReopenedCombos: parsed?.manualReopenedCombos || {},
     updatedAt: parsed?.updatedAt,
   };
   tstServerAvailabilityCache = {
@@ -455,6 +457,8 @@ export const saveTstServerAvailabilityConfig = async (
 
   const payload: TstServerAvailabilityConfig = {
     disabledByModel: config?.disabledByModel || {},
+    autoDisabledCombos: config?.autoDisabledCombos || {},
+    manualReopenedCombos: config?.manualReopenedCombos || {},
     updatedAt: new Date().toISOString(),
   };
 
@@ -1902,6 +1906,25 @@ export const getAdminQueueJobDetail = async (jobId: string): Promise<AdminQueueJ
     }
 
     return payload as AdminQueueJobDetail;
+};
+
+export const stopAdminQueueJob = async (jobId: string) => {
+    const authHeader = await getSessionAuthHeader();
+    const response = await fetch('/api/admin-stop-queue-job', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...authHeader,
+        },
+        body: JSON.stringify({ jobId }),
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        throw new Error(payload?.error || 'Khong the dung queue job');
+    }
+
+    return payload as { success: boolean; refunded?: boolean; jobId?: string; providerJobId?: string | null; providerCancelRequested?: boolean };
 };
 
 // --- MAINTENANCE MODE ---

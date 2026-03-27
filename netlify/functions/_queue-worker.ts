@@ -34,7 +34,7 @@ import {
 } from '../../shared/queueRecipes';
 import { classifyQueueError, isTerminalRescueFailureMessage, normalizeQueueErrorMessage, pickQueueFailureMessage } from '../../shared/queueErrorClassifier';
 import { repairVietnameseMojibake } from '../../shared/queueLogText';
-import { clearFailedRescueMeta, hasFailedRescueFinalized } from '../../shared/queueRescueState';
+import { clearFailedRescueMeta, hasFailedRescueFinalized, hasManualStopFlag } from '../../shared/queueRescueState';
 
 type QueueJobRow = {
   id: string;
@@ -68,10 +68,10 @@ const TST_API_BASE = 'https://api.tramsangtao.com/v1';
 const POLL_INTERVAL_SECONDS = 10;
 const MAX_DISPATCH_RETRIES = 6;
 const MAX_POLL_FAILURES = 8;
-const MAX_PROCESSING_AGE_MS = 45 * 60 * 1000;
+const MAX_PROCESSING_AGE_MS = 30 * 60 * 1000;
 const MAX_VIDEO_PROCESSING_AGE_MS = 30 * 60 * 1000;
-const MAX_SINGLE_IMAGE_PROCESSING_AGE_MS = 15 * 60 * 1000;
-const MAX_COUPLE_IMAGE_PROCESSING_AGE_MS = 20 * 60 * 1000;
+const MAX_SINGLE_IMAGE_PROCESSING_AGE_MS = 30 * 60 * 1000;
+const MAX_COUPLE_IMAGE_PROCESSING_AGE_MS = 30 * 60 * 1000;
 const MAX_GROUP3_IMAGE_PROCESSING_AGE_MS = 30 * 60 * 1000;
 const MAX_GROUP4_IMAGE_PROCESSING_AGE_MS = 30 * 60 * 1000;
 const MAX_PROVIDER_GENERIC_RETRIES = 2;
@@ -718,7 +718,7 @@ const getProcessingTimeoutUserMessage = (
     return `Video đã quá thời gian chờ ${timeoutMinutes} phút. Vui lòng tạo lại video mới.`;
   }
 
-  return `Anh da qua thoi gian cho ${timeoutMinutes} phut tu luc gui sang he thong tao anh. Vui long thu lai.`;
+  return `Server tạo ảnh đang quá tải. Job đã chờ quá ${timeoutMinutes} phút nên hệ thống tự dừng. Vui lòng chọn server khác rồi tạo lại.`;
 };
 
 const shouldRefundFailure = (
@@ -767,7 +767,7 @@ const getJobRuntimeState = async (jobId: string) => {
   const admin = getServiceRoleClient();
   const { data, error } = await admin
     .from('generated_images')
-    .select('id, status, attempt_count, processing_started_at, created_at, job_id')
+    .select('id, status, attempt_count, processing_started_at, created_at, job_id, queue_payload')
     .eq('id', jobId)
     .maybeSingle();
 
@@ -776,6 +776,11 @@ const getJobRuntimeState = async (jobId: string) => {
   }
 
   return data;
+};
+
+const isJobManuallyStopped = async (jobId: string) => {
+  const state = await getJobRuntimeState(jobId);
+  return String(state?.status || '').toLowerCase() === 'failed' && hasManualStopFlag((state as any)?.queue_payload);
 };
 
 const getGenerateEndpoint = (queueKind: string) => {
@@ -862,6 +867,33 @@ const pollProviderJob = async (providerJobId: string) => {
   }
 
   return response.json();
+};
+
+const cancelProviderJobBestEffort = async (providerJobId?: string | null) => {
+  const normalizedJobId = String(providerJobId || '').trim();
+  if (!normalizedJobId || !TST_API_KEY) {
+    return false;
+  }
+
+  try {
+    const response = await fetch(`${TST_API_BASE}/jobs/${encodeURIComponent(normalizedJobId)}/cancel`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${TST_API_KEY}`,
+      },
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!response.ok) {
+      console.warn('[queue-worker] Provider cancel failed:', normalizedJobId, await parseErrorMessage(response));
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.warn('[queue-worker] Provider cancel request errored:', normalizedJobId, error);
+    return false;
+  }
 };
 
 const releaseLease = async (jobId: string) => {
@@ -1469,6 +1501,11 @@ const completePolledJobWithResultUrl = async (
     completionLevel?: QueueProgressLogEntry['level'];
   },
 ) => {
+  if (await isJobManuallyStopped(job.id)) {
+    await releaseLease(job.id);
+    return 'failed' as const;
+  }
+
   const admin = getServiceRoleClient();
   let completionPayload = job.queue_payload;
   const storedImageRecipe =
@@ -1697,6 +1734,7 @@ const rescueFailedJobsWithProviderResults = async () => {
   const candidates = ((data || []) as any[])
     .filter((job) => !String(job?.image_url || '').trim())
     .filter((job) => !hasFailedRescueFinalized(job?.queue_payload))
+    .filter((job) => !hasManualStopFlag(job?.queue_payload))
     .filter((job) => getFailedRescueAttemptCount(job?.queue_payload) < FAILED_RESULT_RESCUE_MAX_ATTEMPTS)
     .filter((job) => {
       const pickedMessage = pickQueueFailureMessage(job?.error_message, getQueueLogs(job?.queue_payload));
@@ -1781,6 +1819,11 @@ const rescueFailedJobsWithProviderResults = async () => {
 };
 
 const markPolledState = async (job: QueueJobRow, providerData: any) => {
+  if (await isJobManuallyStopped(job.id)) {
+    await releaseLease(job.id);
+    return 'failed';
+  }
+
   const admin = getServiceRoleClient();
   const providerStatus = String(providerData?.status || '').toLowerCase();
   const providerProgress = typeof providerData?.progress === 'number' ? providerData.progress : 0;
@@ -1806,8 +1849,10 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
     const currentState = await getJobRuntimeState(job.id);
     const currentAttempts = Number(currentState?.attempt_count || 0);
     const failureCategory = classifyQueueError(failureMessage).category;
+    const isTerminalProviderFailure = isTerminalRescueFailureMessage(failureMessage);
 
     if (
+      !isTerminalProviderFailure &&
       (failureCategory === 'provider' || (job.queue_kind === 'motion_generate' && isGenericProviderFailure(failureMessage))) &&
       currentAttempts < MAX_PROVIDER_GENERIC_RETRIES
     ) {
@@ -1823,6 +1868,7 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
   const startedAt = currentState?.processing_started_at || currentState?.created_at || new Date().toISOString();
   const processingAgeMs = Date.now() - new Date(startedAt).getTime();
   if (processingAgeMs >= getProviderProcessingTimeoutMs(job, job.queue_payload)) {
+    await cancelProviderJobBestEffort(job.job_id);
     await markFailedRespectingRefundPolicy(job, getProcessingTimeoutUserMessage(job, job.queue_payload));
     return 'failed';
   }
@@ -1849,17 +1895,32 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
 };
 
 const handlePollFailure = async (job: QueueJobRow, errorMessage: string) => {
+  if (await isJobManuallyStopped(job.id)) {
+    await releaseLease(job.id);
+    return 'failed';
+  }
+
   const admin = getServiceRoleClient();
   const state = await getJobRuntimeState(job.id);
   const nextAttemptCount = Number(state?.attempt_count || 0) + 1;
   const startedAt = state?.processing_started_at || state?.created_at || new Date().toISOString();
   const processingAgeMs = Date.now() - new Date(startedAt).getTime();
+  const isTerminalPollFailure = isTerminalRescueFailureMessage(errorMessage);
 
-  if (nextAttemptCount >= MAX_POLL_FAILURES || processingAgeMs >= getProviderProcessingTimeoutMs(job, job.queue_payload)) {
+  if (
+    isTerminalPollFailure ||
+    nextAttemptCount >= MAX_POLL_FAILURES ||
+    processingAgeMs >= getProviderProcessingTimeoutMs(job, job.queue_payload)
+  ) {
     const finalMessage =
-      processingAgeMs >= getProviderProcessingTimeoutMs(job, job.queue_payload)
+      isTerminalPollFailure
+        ? errorMessage
+        : processingAgeMs >= getProviderProcessingTimeoutMs(job, job.queue_payload)
         ? getProcessingTimeoutUserMessage(job, job.queue_payload)
         : errorMessage;
+    if (processingAgeMs >= getProviderProcessingTimeoutMs(job, job.queue_payload)) {
+      await cancelProviderJobBestEffort(job.job_id);
+    }
     await markFailedRespectingRefundPolicy(job, finalMessage);
     return 'failed';
   }
@@ -2215,6 +2276,11 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
       job.queue_payload = await persistPreparedPayload(job.id, providerPayloadForSubmit, job.queue_payload || currentPayload);
     }
 
+    if (await isJobManuallyStopped(job.id)) {
+      await releaseLease(job.id);
+      return {};
+    }
+
     const dispatchAttemptId = randomUUID();
     job.queue_payload = await markSubmittingPreparedPayloadWithOwnership(job.id, job.queue_payload, dispatchAttemptId);
     if (!(await confirmDispatchAttemptOwnership(job.id, dispatchAttemptId))) {
@@ -2251,6 +2317,11 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
 
 const processPollJob = async (job: QueueJobRow, workerStartedAt: number): Promise<Partial<QueueWorkerSummary>> => {
   if (!hasWorkerTickBudgetRemaining(workerStartedAt)) {
+    return {};
+  }
+
+  if (await isJobManuallyStopped(job.id)) {
+    await releaseLease(job.id);
     return {};
   }
 

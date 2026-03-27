@@ -1,0 +1,29 @@
+{
+  "scanned_active_jobs": 2,
+  "flagged_count": 1,
+  "flagged": [
+    {
+      "id": "cfcf28f8-7a39-48f0-a47a-4ea50197e268",
+      "status": "processing",
+      "updated_at": "2026-03-27T14:45:41.980094+00:00",
+      "created_at": "2026-03-27T13:06:58.100592+00:00",
+      "finished_at": null,
+      "error_message": null,
+      "provider_job_id": "90928ca0-ceb1-4588-b755-17868fad21b3",
+      "progress": 60,
+      "next_poll_at": "2026-03-27T14:45:51.815+00:00",
+      "stage": "polling",
+      "tool_id": "couple_photo_gen",
+      "tool_name": "Couple 3D Mode",
+      "model_used": "Pro Engine 4K",
+      "matched_logs": [
+        {
+          "at": "2026-03-27T14:31:34.444Z",
+          "level": "warning",
+          "stage": "queued",
+          "message": "Tam hoan va xep lai hang doi: Job set not found"
+        }
+      ]
+    }
+  ]
+}

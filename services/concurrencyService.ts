@@ -28,9 +28,9 @@ export const CONCURRENCY_LIMITS = {
     queued: 1,
   },
   system: {
-    imageProcessing: 4,
-    videoProcessing: 4,
-    queued: 10,
+    imageProcessing: 8,
+    videoProcessing: 6,
+    queued: 20,
   },
 } as const;
 
@@ -43,7 +43,7 @@ const EMPTY_QUEUE_STATS: QueueStats = {
   systemQueued: 0,
 };
 
-const BUSY_QUEUE_POLL_MS = 10_000;
+const BUSY_QUEUE_POLL_MS = 5_000;
 const IDLE_QUEUE_POLL_MS = 60_000;
 const MANUAL_QUEUE_POLL_MIN_INTERVAL_MS = 2_000;
 const REALTIME_STATS_REFRESH_DEBOUNCE_MS = 350;

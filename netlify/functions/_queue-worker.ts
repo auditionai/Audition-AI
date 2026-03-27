@@ -60,6 +60,14 @@ type QueueWorkerSummary = {
   requeued: number;
 };
 
+type QueueBacklogSnapshot = {
+  queuedImages: number;
+  queuedVideos: number;
+  processingImages: number;
+  processingVideos: number;
+  duePollCount: number;
+};
+
 let activeWorkerRun: Promise<QueueWorkerSummary> | null = null;
 
 const TST_API_KEY = process.env.TST_API_KEY || '';
@@ -474,6 +482,56 @@ const runWithConcurrency = async <T, R>(
 
   await Promise.all(runners);
   return results;
+};
+
+const getQueueBacklogSnapshot = async (): Promise<QueueBacklogSnapshot> => {
+  const admin = getServiceRoleClient();
+  const nowIso = new Date().toISOString();
+
+  const [{ data: queuedRows, error: queuedError }, { data: processingRows, error: processingError }, { data: duePollRows, error: duePollError }] =
+    await Promise.all([
+      admin
+        .from('generated_images')
+        .select('asset_type')
+        .eq('status', 'queued')
+        .limit(200),
+      admin
+        .from('generated_images')
+        .select('asset_type')
+        .eq('status', 'processing')
+        .limit(200),
+      admin
+        .from('generated_images')
+        .select('id')
+        .eq('status', 'processing')
+        .not('job_id', 'is', null)
+        .or(`next_poll_at.is.null,next_poll_at.lte.${nowIso}`)
+        .limit(200),
+    ]);
+
+  if (queuedError) {
+    throw queuedError;
+  }
+  if (processingError) {
+    throw processingError;
+  }
+  if (duePollError) {
+    throw duePollError;
+  }
+
+  const queuedImages = (queuedRows || []).filter((row: any) => (row?.asset_type || 'image') !== 'video').length;
+  const queuedVideos = (queuedRows || []).filter((row: any) => row?.asset_type === 'video').length;
+  const processingImages = (processingRows || []).filter((row: any) => (row?.asset_type || 'image') !== 'video').length;
+  const processingVideos = (processingRows || []).filter((row: any) => row?.asset_type === 'video').length;
+  const duePollCount = Array.isArray(duePollRows) ? duePollRows.length : 0;
+
+  return {
+    queuedImages,
+    queuedVideos,
+    processingImages,
+    processingVideos,
+    duePollCount,
+  };
 };
 
 const updateGeneratedImageRecord = async (jobId: string, updates: Record<string, unknown>) => {
@@ -2397,6 +2455,17 @@ const processPollJob = async (job: QueueJobRow, workerStartedAt: number): Promis
 const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
   const admin = getServiceRoleClient();
   const workerStartedAt = Date.now();
+  const backlog = await getQueueBacklogSnapshot();
+  const dynamicPollClaimLimit = Math.max(POLL_CLAIM_LIMIT, Math.min(40, backlog.duePollCount + 4));
+  const dynamicDispatchClaimLimit = Math.max(
+    DISPATCH_CLAIM_LIMIT,
+    Math.min(20, backlog.queuedImages + backlog.queuedVideos + 4),
+  );
+  const dynamicPollConcurrencyLimit = Math.max(POLL_CONCURRENCY_LIMIT, Math.min(24, dynamicPollClaimLimit));
+  const dynamicDispatchConcurrencyLimit = Math.max(
+    DISPATCH_CONCURRENCY_LIMIT,
+    Math.min(16, dynamicDispatchClaimLimit),
+  );
   const summary: QueueWorkerSummary = {
     claimedForDispatch: 0,
     submitted: 0,
@@ -2411,7 +2480,7 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
   summary.requeued += await recoverStalePreparingJobs();
 
   const { data: claimedPollRows, error: prioritizedPollError } = await admin.rpc('claim_pollable_generated_jobs', {
-    p_limit: POLL_CLAIM_LIMIT,
+    p_limit: dynamicPollClaimLimit,
     p_lease_seconds: 60,
   });
 
@@ -2424,7 +2493,7 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
 
   const pollResults = await runWithConcurrency(
     prioritizedPollJobs,
-    POLL_CONCURRENCY_LIMIT,
+    dynamicPollConcurrencyLimit,
     (job) => processPollJob(job, workerStartedAt),
   );
   for (const result of pollResults) {
@@ -2434,7 +2503,7 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
   }
 
   const { data: claimedDispatchRows, error: prioritizedDispatchError } = await admin.rpc('claim_dispatchable_generated_jobs', {
-    p_limit: DISPATCH_CLAIM_LIMIT,
+    p_limit: dynamicDispatchClaimLimit,
     p_lease_seconds: DISPATCH_LEASE_SECONDS,
   });
 
@@ -2447,7 +2516,7 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
 
   const dispatchResults = await runWithConcurrency(
     prioritizedDispatchJobs,
-    DISPATCH_CONCURRENCY_LIMIT,
+    dynamicDispatchConcurrencyLimit,
     (job) => processDispatchJob(job, workerStartedAt),
   );
   for (const result of dispatchResults) {

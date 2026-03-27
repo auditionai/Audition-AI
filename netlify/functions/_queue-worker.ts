@@ -1806,8 +1806,10 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
     const currentState = await getJobRuntimeState(job.id);
     const currentAttempts = Number(currentState?.attempt_count || 0);
     const failureCategory = classifyQueueError(failureMessage).category;
+    const isTerminalProviderFailure = isTerminalRescueFailureMessage(failureMessage);
 
     if (
+      !isTerminalProviderFailure &&
       (failureCategory === 'provider' || (job.queue_kind === 'motion_generate' && isGenericProviderFailure(failureMessage))) &&
       currentAttempts < MAX_PROVIDER_GENERIC_RETRIES
     ) {
@@ -1854,10 +1856,17 @@ const handlePollFailure = async (job: QueueJobRow, errorMessage: string) => {
   const nextAttemptCount = Number(state?.attempt_count || 0) + 1;
   const startedAt = state?.processing_started_at || state?.created_at || new Date().toISOString();
   const processingAgeMs = Date.now() - new Date(startedAt).getTime();
+  const isTerminalPollFailure = isTerminalRescueFailureMessage(errorMessage);
 
-  if (nextAttemptCount >= MAX_POLL_FAILURES || processingAgeMs >= getProviderProcessingTimeoutMs(job, job.queue_payload)) {
+  if (
+    isTerminalPollFailure ||
+    nextAttemptCount >= MAX_POLL_FAILURES ||
+    processingAgeMs >= getProviderProcessingTimeoutMs(job, job.queue_payload)
+  ) {
     const finalMessage =
-      processingAgeMs >= getProviderProcessingTimeoutMs(job, job.queue_payload)
+      isTerminalPollFailure
+        ? errorMessage
+        : processingAgeMs >= getProviderProcessingTimeoutMs(job, job.queue_payload)
         ? getProcessingTimeoutUserMessage(job, job.queue_payload)
         : errorMessage;
     await markFailedRespectingRefundPolicy(job, finalMessage);

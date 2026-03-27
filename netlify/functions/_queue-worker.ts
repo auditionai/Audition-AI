@@ -10,7 +10,6 @@ import {
   uploadImageToTst,
 } from './_queue-recipes';
 import { runVertexImageEdit } from './_vertex-image-edit';
-import { verifyGeneratedImageOutput } from './_vertex-image-verify';
 import {
   inspectMotionVideoDurationSeconds,
   reviewMotionCharacterInput,
@@ -65,7 +64,7 @@ let activeWorkerRun: Promise<QueueWorkerSummary> | null = null;
 
 const TST_API_KEY = process.env.TST_API_KEY || '';
 const TST_API_BASE = 'https://api.tramsangtao.com/v1';
-const POLL_INTERVAL_SECONDS = 10;
+const POLL_INTERVAL_SECONDS = 5;
 const MAX_DISPATCH_RETRIES = 6;
 const MAX_POLL_FAILURES = 8;
 const MAX_PROCESSING_AGE_MS = 30 * 60 * 1000;
@@ -75,7 +74,6 @@ const MAX_COUPLE_IMAGE_PROCESSING_AGE_MS = 30 * 60 * 1000;
 const MAX_GROUP3_IMAGE_PROCESSING_AGE_MS = 30 * 60 * 1000;
 const MAX_GROUP4_IMAGE_PROCESSING_AGE_MS = 30 * 60 * 1000;
 const MAX_PROVIDER_GENERIC_RETRIES = 2;
-const MAX_OUTPUT_VERIFICATION_RETRIES = 2;
 const FAILED_RESULT_RESCUE_SCAN_LIMIT = 10;
 const FAILED_RESULT_RESCUE_LOOKBACK_MS = 24 * 60 * 60 * 1000;
 const FAILED_RESULT_RESCUE_MAX_ATTEMPTS = 8;
@@ -95,6 +93,8 @@ const LEASE_HEARTBEAT_INTERVAL_MS = 30_000;
 const DISPATCH_LEASE_SECONDS = 300;
 const STALE_RECOVERY_SCAN_LIMIT = 50;
 const STALE_RECOVERY_MIN_AGE_MS = 45_000;
+const STALE_VERIFYING_OUTPUT_RECOVERY_MIN_AGE_MS = 90_000;
+const STALE_PROVIDER_POLL_RECOVERY_MIN_AGE_MS = 45_000;
 
 const isTransientError = (message: string) => {
   const normalized = message.toLowerCase();
@@ -265,11 +265,6 @@ const getStoredImageGenerateRecipePayload = (
   }
 
   return null;
-};
-
-const getOutputVerificationRetryCount = (payload?: Record<string, unknown> | ImageGenerateRecipePayload | null) => {
-  const recipePayload = getStoredImageGenerateRecipePayload(payload);
-  return Math.max(0, Number(recipePayload?.__outputVerificationRetryCount || 0));
 };
 
 const getFailedRescueAttemptCount = (payload?: Record<string, unknown> | ImageGenerateRecipePayload | null) =>
@@ -983,6 +978,8 @@ const requeueJob = async (job: QueueJobRow, errorMessage: string) => {
   await updateGeneratedImageRecord(job.id, {
     status: 'queued',
     job_id: null,
+    image_url: null,
+    finished_at: null,
     processing_started_at: null,
     error_message: errorMessage,
     queue_payload: withQueueLog(requeuePayload, 'queued', `Tam hoan va xep lai hang doi: ${errorMessage}`, 'warning'),
@@ -1512,77 +1509,11 @@ const completePolledJobWithResultUrl = async (
     job.queue_kind === 'image_generate'
       ? getStoredImageGenerateRecipePayload(job.queue_payload)
       : null;
-  const shouldRunOutputVerification =
-    storedImageRecipe != null && getImageRecipeCharacterCount(job, storedImageRecipe) >= 2;
-
-  if (storedImageRecipe && shouldRunOutputVerification) {
-    const verifyingPayload = await persistQueueLog(
-      job.id,
-      completionPayload,
-      'verifying_output',
-      'Dang hau kiem ket qua AI de bao toan identity.',
-    );
-
-    try {
-      const verificationResult = await verifyGeneratedImageOutput(storedImageRecipe, resultUrl);
-      const verificationSummary =
-        verificationResult.summary ||
-        verificationResult.issues.join('; ') ||
-        'Identity guard completed.';
-
-      if (!verificationResult.pass) {
-        const nextVerifyRetryCount = getOutputVerificationRetryCount(storedImageRecipe) + 1;
-        const retryPayload = {
-          ...storedImageRecipe,
-          __stage: 'verifying_output',
-          __logs: getQueueLogs(verifyingPayload),
-          __notifyInputMedia: buildNotificationMediaEntries(verifyingPayload),
-          __outputVerificationRetryCount: nextVerifyRetryCount,
-          __lastOutputVerificationSummary: verificationSummary,
-        } as ImageGenerateRecipePayload & Record<string, unknown>;
-        const retryMessage = `Identity guard failed: ${verificationSummary}`;
-
-        if (nextVerifyRetryCount >= MAX_OUTPUT_VERIFICATION_RETRIES) {
-          await markFailedAndRefund(
-            {
-              ...job,
-              queue_payload: retryPayload,
-            },
-            `${retryMessage}. Retry limit reached.`,
-          );
-          return 'failed' as const;
-        }
-
-        return requeueJob(
-          {
-            ...job,
-            queue_payload: retryPayload,
-          },
-          retryMessage,
-        );
-      }
-
-      completionPayload = withQueueLog(
-        verifyingPayload,
-        'verifying_output',
-        `Identity guard passed: ${verificationSummary}`,
-        'success',
-      );
-    } catch (verificationError) {
-      const verificationMessage =
-        verificationError instanceof Error ? verificationError.message : String(verificationError || 'Unknown verification error');
-      completionPayload = withQueueLog(
-        verifyingPayload,
-        'verifying_output',
-        `Identity guard unavailable, completing without auto-retry: ${verificationMessage}`,
-        'warning',
-      );
-    }
-  } else if (storedImageRecipe) {
+  if (storedImageRecipe) {
     completionPayload = withQueueLog(
       completionPayload,
       'verifying_output',
-      'Bo qua hau kiem identity cho anh don. Nhan ket qua truc tiep tu provider.',
+      'Bo qua toan bo hau kiem. Dong bo ngay ket qua dau tien tu provider.',
       'info',
     );
   }
@@ -2093,6 +2024,129 @@ const recoverStalePreparingJobs = async () => {
   return recovered;
 };
 
+const recoverStaleVerifyingOutputJobs = async () => {
+  const admin = getServiceRoleClient();
+  const nowIso = new Date().toISOString();
+  const staleBeforeIso = new Date(Date.now() - STALE_VERIFYING_OUTPUT_RECOVERY_MIN_AGE_MS).toISOString();
+  const { data, error } = await admin
+    .from('generated_images')
+    .select('id, user_id, asset_type, queue_kind, queue_payload, prompt, tool_id, tool_name, model_used, cost_vcoin, job_id, status, image_url, updated_at, lease_expires_at')
+    .eq('status', 'processing')
+    .not('job_id', 'is', null)
+    .lt('updated_at', staleBeforeIso)
+    .order('updated_at', { ascending: true })
+    .limit(STALE_RECOVERY_SCAN_LIMIT);
+
+  if (error) {
+    throw error;
+  }
+
+  let recovered = 0;
+  for (const job of ((data || []) as QueueJobRow[])) {
+    const payload = job.queue_payload || {};
+    const stage = getQueueStage(payload);
+    const leaseExpired =
+      !(job as any).lease_expires_at || String((job as any).lease_expires_at) < nowIso;
+
+    if (stage !== 'verifying_output' || !leaseExpired) {
+      continue;
+    }
+
+    const existingResultUrl = typeof (job as any).image_url === 'string' ? String((job as any).image_url).trim() : '';
+    if (existingResultUrl) {
+      const state = await completePolledJobWithResultUrl(job, existingResultUrl, {
+        completionMessage: 'Da dong bo ket qua dau tien sau khi buoc hau kiem cu bi treo.',
+        completionLevel: 'warning',
+      });
+      if (state === 'completed') {
+        recovered += 1;
+      }
+      continue;
+    }
+
+    try {
+      const providerData = await pollProviderJob(String(job.job_id || ''));
+      const resultUrl = extractResultUrl(providerData);
+      if (!resultUrl) {
+        continue;
+      }
+
+      const state = await completePolledJobWithResultUrl(job, resultUrl, {
+        completionMessage: 'Da dong bo lai ket qua provider sau khi buoc hau kiem cu bi treo.',
+        completionLevel: 'warning',
+      });
+      if (state === 'completed') {
+        recovered += 1;
+      }
+    } catch (recoveryError) {
+      console.warn('[queue-worker] Failed to recover stale verifying_output job:', job.id, recoveryError);
+    }
+  }
+
+  return recovered;
+};
+
+const recoverStaleProviderPollingJobs = async () => {
+  const admin = getServiceRoleClient();
+  const nowIso = new Date().toISOString();
+  const staleBeforeIso = new Date(Date.now() - STALE_PROVIDER_POLL_RECOVERY_MIN_AGE_MS).toISOString();
+  const { data, error } = await admin
+    .from('generated_images')
+    .select('id, user_id, asset_type, queue_kind, queue_payload, prompt, tool_id, tool_name, model_used, cost_vcoin, job_id, status, updated_at, lease_expires_at, next_poll_at')
+    .eq('status', 'processing')
+    .not('job_id', 'is', null)
+    .lt('updated_at', staleBeforeIso)
+    .order('updated_at', { ascending: true })
+    .limit(STALE_RECOVERY_SCAN_LIMIT);
+
+  if (error) {
+    throw error;
+  }
+
+  let recovered = 0;
+  for (const job of ((data || []) as QueueJobRow[])) {
+    const payload = job.queue_payload || {};
+    const stage = getQueueStage(payload);
+    const leaseExpired =
+      !(job as any).lease_expires_at || String((job as any).lease_expires_at) < nowIso;
+    const nextPollAt = typeof (job as any).next_poll_at === 'string' ? String((job as any).next_poll_at) : '';
+    const pollDue = !nextPollAt || nextPollAt <= nowIso;
+
+    if (!leaseExpired || !pollDue) {
+      continue;
+    }
+
+    if (
+      stage !== 'submitted' &&
+      stage !== 'polling' &&
+      stage !== 'dispatching' &&
+      stage !== 'verifying_output'
+    ) {
+      continue;
+    }
+
+    const nextPayload = withQueueLog(
+      payload,
+      'polling',
+      'Phat hien job dang cho provider bi mat nhip. Yeu cau poll lai ngay.',
+      'warning',
+    );
+
+    await updateGeneratedImageRecord(job.id, {
+      status: 'processing',
+      queue_payload: nextPayload,
+      error_message: null,
+      lease_token: null,
+      lease_expires_at: null,
+      next_poll_at: nowIso,
+      updated_at: nowIso,
+    });
+    recovered += 1;
+  }
+
+  return recovered;
+};
+
 const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Promise<Partial<QueueWorkerSummary>> => {
   if (!hasWorkerTickBudgetRemaining(workerStartedAt)) {
     return {};
@@ -2352,6 +2406,8 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
     requeued: 0,
   };
 
+  summary.completed += await recoverStaleVerifyingOutputJobs();
+  summary.requeued += await recoverStaleProviderPollingJobs();
   summary.requeued += await recoverStalePreparingJobs();
 
   const { data: claimedPollRows, error: prioritizedPollError } = await admin.rpc('claim_pollable_generated_jobs', {

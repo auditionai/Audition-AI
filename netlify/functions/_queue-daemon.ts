@@ -15,8 +15,8 @@ type QueueDaemonOptions = {
   idleDelayMs?: number;
 };
 
-const DEFAULT_MAX_RUNTIME_MS = 60_000;
-const DEFAULT_IDLE_ITERATIONS_TO_STOP = 15;
+const DEFAULT_MAX_RUNTIME_MS = 90_000;
+const DEFAULT_IDLE_ITERATIONS_TO_STOP = 30;
 const DEFAULT_ACTIVE_DELAY_MS = 50;
 const DEFAULT_IDLE_DELAY_MS = 1_000;
 

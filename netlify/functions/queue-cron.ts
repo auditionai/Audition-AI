@@ -9,7 +9,7 @@ export const config = {
 export const handler: Handler = async () => {
   try {
     const serverAvailabilityAutoRefresh = await refreshAutoDisabledServerAvailability();
-    const summary = await runQueueDaemon({ maxRuntimeMs: 50_000, idleIterationsToStop: 15 });
+    const summary = await runQueueDaemon({ maxRuntimeMs: 75_000, idleIterationsToStop: 30 });
     return {
       statusCode: 200,
       body: JSON.stringify({ success: true, serverAvailabilityAutoRefresh, summary }),

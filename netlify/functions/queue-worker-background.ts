@@ -14,6 +14,21 @@ const hasQueueActivity = (summary: Awaited<ReturnType<typeof runQueueDaemon>>) =
   Number(summary.failed || 0) > 0 ||
   Number(summary.requeued || 0) > 0;
 
+const hasOutstandingQueueWork = async () => {
+  const admin = getServiceRoleClient();
+  const { data, error } = await admin
+    .from('generated_images')
+    .select('id')
+    .in('status', ['queued', 'processing'])
+    .limit(1);
+
+  if (error) {
+    throw error;
+  }
+
+  return Array.isArray(data) && data.length > 0;
+};
+
 const tryAcquireQueueWorkerLock = async (owner: string) => {
   const admin = getServiceRoleClient();
   const { data, error } = await admin.rpc('try_acquire_queue_worker_lock', {
@@ -75,7 +90,7 @@ export const handler: Handler = async (event) => {
     }
 
     const summary = await runQueueDaemon();
-    followUpLaunchNeeded = hasQueueActivity(summary) && !summary.exitedIdle;
+    followUpLaunchNeeded = hasQueueActivity(summary) || (await hasOutstandingQueueWork());
     return {
       statusCode: 200,
       body: JSON.stringify({ success: true, summary, followUpLaunchNeeded }),

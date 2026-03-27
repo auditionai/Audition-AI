@@ -7,7 +7,7 @@ export const config = {
 
 export const handler: Handler = async () => {
   try {
-    const summary = await runQueueDaemon({ maxRuntimeMs: 50_000, idleIterationsToStop: 1 });
+    const summary = await runQueueDaemon({ maxRuntimeMs: 50_000, idleIterationsToStop: 15 });
     return {
       statusCode: 200,
       body: JSON.stringify({ success: true, summary }),

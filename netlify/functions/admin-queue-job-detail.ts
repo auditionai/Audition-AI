@@ -3,7 +3,7 @@ import type { AdminQueueInputMedia, AdminQueueJob, AdminQueueJobDetail } from '.
 import type { QueueProgressLogEntry, QueueNotificationMediaEntry } from '../../shared/queueRecipes';
 import { normalizeQueueProgressLogs, repairVietnameseMojibake } from '../../shared/queueLogText';
 import { classifyQueueError, isTerminalRescueFailureMessage, normalizeQueueErrorMessage, pickQueueFailureMessage } from '../../shared/queueErrorClassifier';
-import { hasFailedRescuePending } from '../../shared/queueRescueState';
+import { isFailedRescueStillActive } from '../../shared/queueRescueState';
 import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 
 const headers = {
@@ -44,7 +44,7 @@ const toAdminJob = (row: any, profile?: { email?: string; displayName?: string }
   const errorInfo = classifyQueueError(displayErrorSource || row.error_message || undefined);
   const displayStatus =
     String(row.status || 'queued') === 'failed' &&
-    hasFailedRescuePending(row.queue_payload || null) &&
+    isFailedRescueStillActive(row.queue_payload || null) &&
     !isTerminalRescueFailureMessage(displayErrorSource) &&
     (errorInfo.category === 'provider' || errorInfo.category === 'unknown')
       ? 'rescuing'

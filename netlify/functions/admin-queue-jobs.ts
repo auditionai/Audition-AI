@@ -3,7 +3,7 @@ import type { AdminQueueJob, AdminQueueSummary } from '../../types';
 import type { QueueProgressLogEntry } from '../../shared/queueRecipes';
 import { normalizeQueueProgressLogs, repairVietnameseMojibake } from '../../shared/queueLogText';
 import { classifyQueueError, isTerminalRescueFailureMessage, normalizeQueueErrorMessage, pickQueueFailureMessage } from '../../shared/queueErrorClassifier';
-import { hasFailedRescuePending } from '../../shared/queueRescueState';
+import { isFailedRescueStillActive } from '../../shared/queueRescueState';
 import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 
 const headers = {
@@ -192,7 +192,7 @@ export const handler: Handler = async (event) => {
       const errorInfo = classifyQueueError(displayErrorSource || row.error_message || undefined);
       const displayStatus =
         String(row.status || 'queued') === 'failed' &&
-        hasFailedRescuePending(payload) &&
+        isFailedRescueStillActive(payload) &&
         !isTerminalRescueFailureMessage(displayErrorSource) &&
         (errorInfo.category === 'provider' || errorInfo.category === 'unknown')
           ? 'rescuing'

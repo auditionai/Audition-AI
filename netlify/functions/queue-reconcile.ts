@@ -5,7 +5,7 @@ import { triggerBackgroundQueueWorker } from './_queue-launcher';
 import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 import type { QueueProgressLogEntry } from '../../shared/queueRecipes';
 import { classifyQueueError, isTerminalRescueFailureMessage, normalizeQueueErrorMessage, pickQueueFailureMessage } from '../../shared/queueErrorClassifier';
-import { clearFailedRescueMeta, hasFailedRescuePending } from '../../shared/queueRescueState';
+import { clearFailedRescueMeta, hasFailedRescuePending, isFailedRescueStale } from '../../shared/queueRescueState';
 
 const headers = {
   'Content-Type': 'application/json',
@@ -96,6 +96,18 @@ const finalizeTerminalFailedRescues = async () => {
       : null;
 
     if (!hasFailedRescuePending(payload)) {
+      continue;
+    }
+
+    if (isFailedRescueStale(payload)) {
+      await admin
+        .from('generated_images')
+        .update({
+          queue_payload: clearFailedRescueMeta(payload),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', row.id);
+      finalized += 1;
       continue;
     }
 
@@ -217,7 +229,7 @@ export const handler: Handler = async (event) => {
 
     const summary = await runQueueDaemon({
       maxRuntimeMs: 45_000,
-      idleIterationsToStop: 3,
+      idleIterationsToStop: 24,
       activeDelayMs: 50,
       idleDelayMs: 500,
     });

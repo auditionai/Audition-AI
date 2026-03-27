@@ -90,6 +90,7 @@ const POLL_CONCURRENCY_LIMIT = 12;
 const WORKER_TICK_BUDGET_MS = 8_000;
 const MAX_QUEUE_LOG_ENTRIES = 80;
 const ORPHAN_CLAIM_GRACE_MS = 30_000;
+const AMBIGUOUS_DISPATCH_RECOVERY_GRACE_MS = 3 * 60 * 1000;
 const LEASE_HEARTBEAT_INTERVAL_MS = 30_000;
 const DISPATCH_LEASE_SECONDS = 300;
 const STALE_RECOVERY_SCAN_LIMIT = 50;
@@ -1879,6 +1880,7 @@ const recoverStalePreparingJobs = async () => {
   for (const job of ((data || []) as QueueJobRow[])) {
     const startedAt = (job as any).processing_started_at || (job as any).created_at || nowIso;
     const ageMs = Date.now() - new Date(startedAt).getTime();
+    const updatedAgeMs = Date.now() - new Date((job as any).updated_at || startedAt).getTime();
     const leaseExpired =
       !(job as any).lease_expires_at || String((job as any).lease_expires_at) < nowIso;
     const currentStatus = String((job as any).status || '').toLowerCase();
@@ -1908,6 +1910,15 @@ const recoverStalePreparingJobs = async () => {
       isStagedRecipe &&
       leaseExpired &&
       ageMs >= ORPHAN_CLAIM_GRACE_MS;
+    const isAwaitingAmbiguousDispatchConfirmation =
+      currentStatus === 'processing' &&
+      isRecipePayload &&
+      missingProviderJobId &&
+      recipeStage.startsWith('dispatching') &&
+      payload &&
+      typeof payload === 'object' &&
+      (payload as Record<string, unknown>).__dispatchConfirmationPending === true &&
+      updatedAgeMs >= AMBIGUOUS_DISPATCH_RECOVERY_GRACE_MS;
 
     if (isOrphanedClaim) {
       const resetPayload = withQueueLog(
@@ -1962,6 +1973,15 @@ const recoverStalePreparingJobs = async () => {
         updated_at: new Date().toISOString(),
       });
       recovered += 1;
+      continue;
+    }
+
+    if (isAwaitingAmbiguousDispatchConfirmation) {
+      const result = await requeueJob(
+        job,
+        'Khong nhan duoc xac nhan provider job ID sau loi mang/timeout. Dua job ve hang doi de thu lai an toan.',
+      );
+      if (result === 'requeued') recovered += 1;
       continue;
     }
 

@@ -7,8 +7,8 @@ import { useState, useEffect } from 'react';
 import { Image as ImageIcon, Video, Wand2, CalendarDays, Scissors, Sparkles, ExternalLink } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { getAllImagesFromStorage, invalidateGalleryCache } from '../services/storageService';
-import { getCheckinStatus } from '../services/economyService';
+import { getAllImagesFromStorage } from '../services/storageService';
+import { subscribeCheckinStatus } from '../services/economyService';
 import { DailyCheckin } from '../components/DailyCheckin';
 import type { GeneratedImage } from '../types';
 
@@ -22,7 +22,6 @@ export function Home() {
   useEffect(() => {
     (async () => {
       try {
-        invalidateGalleryCache();
         const all = await getAllImagesFromStorage();
         setRecentItems(all.sort((a, b) => b.timestamp - a.timestamp).slice(0, 6));
       } catch { /* silent */ }
@@ -30,25 +29,10 @@ export function Home() {
   }, []);
 
   useEffect(() => {
-    const checkStatus = () => {
-      getCheckinStatus().then(status => setIsCheckedIn(status.isCheckedInToday)).catch(() => setIsCheckedIn(true));
-    };
-    checkStatus();
-    // Refresh status when returning to the tab
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') checkStatus();
-    };
-    window.addEventListener('focus', checkStatus);
-    document.addEventListener('visibilitychange', handleVisibility);
-
-    // Listen to custom balance update events
-    window.addEventListener('balance_updated', checkStatus);
-
-    return () => {
-      window.removeEventListener('focus', checkStatus);
-      document.removeEventListener('visibilitychange', handleVisibility);
-      window.removeEventListener('balance_updated', checkStatus);
-    };
+    return subscribeCheckinStatus(
+      (status) => setIsCheckedIn(status.isCheckedInToday),
+      { force: true }
+    );
   }, []);
 
   const greeting = (() => {

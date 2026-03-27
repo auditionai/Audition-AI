@@ -28,8 +28,11 @@ const USER_PROFILE_CACHE_TTL_MS = 30_000;
 const PACKAGE_CACHE_TTL_MS = 5 * 60_000;
 const PROMOTION_CACHE_TTL_MS = 5 * 60_000;
 const CHECKIN_STATUS_CACHE_TTL_MS = 30_000;
+const CHECKIN_STATUS_ATTENTION_THROTTLE_MS = 15_000;
 const MODEL_PRICING_CACHE_TTL_MS = 60_000;
 const TST_SERVER_AVAILABILITY_CACHE_TTL_MS = 60_000;
+const MAINTENANCE_MODE_CACHE_TTL_MS = 60_000;
+const MAINTENANCE_MODE_POLL_MS = 300_000;
 const VISIT_LOG_THROTTLE_MS = 30 * 60_000;
 const USER_HISTORY_FETCH_LIMIT = 200;
 const ADMIN_STATS_TRANSACTION_LIMIT = 1000;
@@ -41,13 +44,39 @@ type TimedCache<T> = {
     expiresAt: number;
 };
 
+export type CheckinStatusState = {
+    streak: number;
+    isCheckedInToday: boolean;
+    history: string[];
+    claimedMilestones: number[];
+};
+
 let userProfileCache: (TimedCache<UserProfile> & { userId: string }) | null = null;
 let userProfilePromise: Promise<UserProfile> | null = null;
 let packageCache: TimedCache<CreditPackage[]> | null = null;
 let promotionCache: TimedCache<PromotionCampaign | null> | null = null;
-let checkinStatusCache: (TimedCache<{ streak: number; isCheckedInToday: boolean; history: string[]; claimedMilestones: number[]; }> & { userId: string }) | null = null;
+const DEFAULT_CHECKIN_STATUS: CheckinStatusState = {
+    streak: 0,
+    isCheckedInToday: false,
+    history: [],
+    claimedMilestones: [],
+};
+let checkinStatusCache: (TimedCache<CheckinStatusState> & { userId: string }) | null = null;
+let checkinStatusPromise: Promise<CheckinStatusState> | null = null;
+const checkinStatusSubscribers = new Set<(value: CheckinStatusState) => void>();
+let checkinStatusAttentionCleanup: (() => void) | null = null;
+let lastCheckinStatusAttentionAt = 0;
 let modelPricingCache: TimedCache<ModelPricing[]> | null = null;
 let tstServerAvailabilityCache: TimedCache<TstServerAvailabilityConfig> | null = null;
+const DEFAULT_MAINTENANCE_MODE = {
+    isActive: false,
+    message: "Há»‡ thá»‘ng Ä‘ang báº£o trÃ¬, vui lÃ²ng quay láº¡i sau."
+};
+type MaintenanceModeState = typeof DEFAULT_MAINTENANCE_MODE;
+let maintenanceModeCache: TimedCache<MaintenanceModeState> | null = null;
+let maintenanceModePromise: Promise<MaintenanceModeState> | null = null;
+const maintenanceModeSubscribers = new Set<(value: MaintenanceModeState) => void>();
+let maintenanceModePollTimer: ReturnType<typeof setInterval> | null = null;
 let lastActiveUpdateAt = 0;
 
 export const invalidateUserProfileCache = () => {
@@ -65,6 +94,7 @@ export const invalidatePromotionCache = () => {
 
 export const invalidateCheckinStatusCache = () => {
     checkinStatusCache = null;
+    checkinStatusPromise = null;
 };
 
 export const invalidateModelPricingCache = () => {
@@ -73,6 +103,96 @@ export const invalidateModelPricingCache = () => {
 
 export const invalidateTstServerAvailabilityCache = () => {
     tstServerAvailabilityCache = null;
+};
+
+export const invalidateMaintenanceModeCache = () => {
+    maintenanceModeCache = null;
+    maintenanceModePromise = null;
+};
+
+const notifyMaintenanceModeSubscribers = (value: MaintenanceModeState) => {
+    maintenanceModeSubscribers.forEach((subscriber) => subscriber(value));
+};
+
+const setSharedMaintenanceMode = (value: MaintenanceModeState) => {
+    maintenanceModeCache = {
+        value,
+        expiresAt: Date.now() + MAINTENANCE_MODE_CACHE_TTL_MS,
+    };
+    notifyMaintenanceModeSubscribers(value);
+    return value;
+};
+
+const stopMaintenanceModePolling = () => {
+    if (maintenanceModePollTimer) {
+        clearInterval(maintenanceModePollTimer);
+        maintenanceModePollTimer = null;
+    }
+};
+
+const ensureMaintenanceModePolling = () => {
+    if (maintenanceModePollTimer || maintenanceModeSubscribers.size === 0) {
+        return;
+    }
+
+    maintenanceModePollTimer = setInterval(() => {
+        void getMaintenanceMode({ force: true });
+    }, MAINTENANCE_MODE_POLL_MS);
+};
+
+const notifyCheckinStatusSubscribers = (value: CheckinStatusState) => {
+    checkinStatusSubscribers.forEach((subscriber) => subscriber(value));
+};
+
+const setSharedCheckinStatus = (userId: string, value: CheckinStatusState) => {
+    checkinStatusCache = {
+        userId,
+        value,
+        expiresAt: Date.now() + CHECKIN_STATUS_CACHE_TTL_MS,
+    };
+    notifyCheckinStatusSubscribers(value);
+    return value;
+};
+
+const stopCheckinStatusAttentionTracking = () => {
+    if (checkinStatusAttentionCleanup) {
+        checkinStatusAttentionCleanup();
+        checkinStatusAttentionCleanup = null;
+    }
+};
+
+const ensureCheckinStatusAttentionTracking = () => {
+    if (
+        checkinStatusAttentionCleanup ||
+        checkinStatusSubscribers.size === 0 ||
+        typeof window === 'undefined' ||
+        typeof document === 'undefined'
+    ) {
+        return;
+    }
+
+    const refreshOnAttention = () => {
+        const now = Date.now();
+        if (now - lastCheckinStatusAttentionAt < CHECKIN_STATUS_ATTENTION_THROTTLE_MS) {
+            return;
+        }
+        lastCheckinStatusAttentionAt = now;
+        void getCheckinStatus({ force: true });
+    };
+
+    const handleVisibility = () => {
+        if (document.visibilityState === 'visible') {
+            refreshOnAttention();
+        }
+    };
+
+    window.addEventListener('focus', refreshOnAttention);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    checkinStatusAttentionCleanup = () => {
+        window.removeEventListener('focus', refreshOnAttention);
+        document.removeEventListener('visibilitychange', handleVisibility);
+    };
 };
 
 const getCurrentSessionUser = async () => {
@@ -1057,49 +1177,80 @@ const ensureRewardApplied = async ({
 
 // --- CHECKIN & REWARDS ---
 
-export const getCheckinStatus = async () => {
-    if (!supabase) return { streak: 0, isCheckedInToday: false, history: [], claimedMilestones: [] };
+export const getCheckinStatus = async (options?: { force?: boolean }): Promise<CheckinStatusState> => {
+    if (!supabase) return DEFAULT_CHECKIN_STATUS;
     const user = await getCurrentSessionUser();
-    if (!user) return { streak: 0, isCheckedInToday: false, history: [], claimedMilestones: [] };
-    if (checkinStatusCache && checkinStatusCache.userId === user.id && checkinStatusCache.expiresAt > Date.now()) {
+    if (!user) return DEFAULT_CHECKIN_STATUS;
+
+    const forceRefresh = options?.force === true;
+    if (!forceRefresh && checkinStatusCache && checkinStatusCache.userId === user.id && checkinStatusCache.expiresAt > Date.now()) {
         return checkinStatusCache.value;
     }
+    if (!forceRefresh && checkinStatusPromise) {
+        return checkinStatusPromise;
+    }
 
-    // Get basic stats from user table or dedicated checkin table
-    // Simplified: check `daily_check_ins` table
-    const today = getLocalTodayStr();
-    const { data } = await supabase
-        .from('daily_check_ins')
-        .select('check_in_date')
-        .eq('user_id', user.id);
+    checkinStatusPromise = (async () => {
+        const today = getLocalTodayStr();
+        const startOfMonth = new Date(today.substring(0, 7) + '-01').toISOString();
 
-    const history = data?.map((r: any) => r.check_in_date) || [];
-    const isCheckedInToday = history.includes(today);
-    
-    // Simple streak calculation (count of this month)
-    const currentMonthPrefix = today.substring(0, 7);
-    const streak = history.filter((d: string) => d.startsWith(currentMonthPrefix)).length;
+        const [{ data: checkins, error: checkinError }, { data: milestones, error: milestoneError }] = await Promise.all([
+            supabase
+                .from('daily_check_ins')
+                .select('check_in_date')
+                .eq('user_id', user.id),
+            supabase
+                .from('milestone_claims')
+                .select('day_milestone')
+                .eq('user_id', user.id)
+                .gte('created_at', startOfMonth),
+        ]);
 
-    // Get milestones for the current month ONLY
-    const startOfMonth = new Date(today.substring(0, 7) + '-01').toISOString();
-    const { data: milestones } = await supabase
-        .from('milestone_claims')
-        .select('day_milestone')
-        .eq('user_id', user.id)
-        .gte('created_at', startOfMonth);
-        
-    const value = {
-        streak,
-        isCheckedInToday,
-        history,
-        claimedMilestones: milestones?.map((m: any) => m.day_milestone) || []
+        if (checkinError) {
+            throw new Error(checkinError.message);
+        }
+        if (milestoneError) {
+            throw new Error(milestoneError.message);
+        }
+
+        const history = checkins?.map((r: any) => r.check_in_date) || [];
+        const currentMonthPrefix = today.substring(0, 7);
+        const value: CheckinStatusState = {
+            streak: history.filter((d: string) => d.startsWith(currentMonthPrefix)).length,
+            isCheckedInToday: history.includes(today),
+            history,
+            claimedMilestones: milestones?.map((m: any) => m.day_milestone) || [],
+        };
+
+        return setSharedCheckinStatus(user.id, value);
+    })();
+
+    try {
+        return await checkinStatusPromise;
+    } finally {
+        checkinStatusPromise = null;
+    }
+};
+
+export const subscribeCheckinStatus = (
+    subscriber: (value: CheckinStatusState) => void,
+    options?: { force?: boolean }
+) => {
+    checkinStatusSubscribers.add(subscriber);
+    ensureCheckinStatusAttentionTracking();
+
+    if (options?.force !== true && checkinStatusCache && checkinStatusCache.expiresAt > Date.now()) {
+        subscriber(checkinStatusCache.value);
+    } else {
+        void getCheckinStatus(options).catch(() => subscriber(DEFAULT_CHECKIN_STATUS));
+    }
+
+    return () => {
+        checkinStatusSubscribers.delete(subscriber);
+        if (checkinStatusSubscribers.size === 0) {
+            stopCheckinStatusAttentionTracking();
+        }
     };
-    checkinStatusCache = {
-        userId: user.id,
-        value,
-        expiresAt: Date.now() + CHECKIN_STATUS_CACHE_TTL_MS,
-    };
-    return value;
 };
 
 export const performCheckin = async (): Promise<{success: boolean, reward: number, newStreak: number, message?: string}> => {
@@ -1122,12 +1273,13 @@ export const performCheckin = async (): Promise<{success: boolean, reward: numbe
 
         invalidateCheckinStatusCache();
         invalidateUserProfileCache();
+        const refreshedStatus = await getCheckinStatus({ force: true }).catch(() => DEFAULT_CHECKIN_STATUS);
         window.dispatchEvent(new Event('balance_updated'));
 
         return {
             success: Boolean(payload?.success),
             reward: Number(payload?.reward || 0),
-            newStreak: Number(payload?.newStreak || 0),
+            newStreak: Number(payload?.newStreak || refreshedStatus.streak || 0),
             message: payload?.message,
         };
     } catch (e: any) {
@@ -1154,6 +1306,7 @@ export const claimMilestoneReward = async (day: number): Promise<{success: boole
 
         invalidateCheckinStatusCache();
         invalidateUserProfileCache();
+        await getCheckinStatus({ force: true }).catch(() => DEFAULT_CHECKIN_STATUS);
         window.dispatchEvent(new Event('balance_updated'));
 
         return {
@@ -1753,27 +1906,63 @@ export const getAdminQueueJobDetail = async (jobId: string): Promise<AdminQueueJ
 
 // --- MAINTENANCE MODE ---
 
-export const getMaintenanceMode = async () => {
-    if (!supabase) return { isActive: false, message: "Há»‡ thá»‘ng Ä‘ang báº£o trÃ¬, vui lÃ²ng quay láº¡i sau." };
-    try {
-        const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'maintenance_mode').maybeSingle();
-        if (error) throw error;
+export const getMaintenanceMode = async (options?: { force?: boolean }) => {
+    if (!supabase) return DEFAULT_MAINTENANCE_MODE;
 
-        if (data?.value) {
-            const parsedValue = parseSettingValue(data.value, {
-                isActive: false,
-                message: "Há»‡ thá»‘ng Ä‘ang báº£o trÃ¬, vui lÃ²ng quay láº¡i sau."
-            });
-            return {
-                isActive: !!parsedValue.isActive,
-                message: parsedValue.message || "Há»‡ thá»‘ng Ä‘ang báº£o trÃ¬, vui lÃ²ng quay láº¡i sau."
-            };
-        }
-        return { isActive: false, message: "Há»‡ thá»‘ng Ä‘ang báº£o trÃ¬, vui lÃ²ng quay láº¡i sau." };
-    } catch (e) {
-        console.error("Get Maintenance Mode Error", e);
-        return { isActive: false, message: "Há»‡ thá»‘ng Ä‘ang báº£o trÃ¬, vui lÃ²ng quay láº¡i sau." };
+    if (!options?.force && maintenanceModeCache && maintenanceModeCache.expiresAt > Date.now()) {
+        return maintenanceModeCache.value;
     }
+
+    if (!options?.force && maintenanceModePromise) {
+        return maintenanceModePromise;
+    }
+
+    maintenanceModePromise = (async () => {
+        try {
+            const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'maintenance_mode').maybeSingle();
+            if (error) throw error;
+
+            if (data?.value) {
+                const parsedValue = parseSettingValue(data.value, DEFAULT_MAINTENANCE_MODE);
+                return setSharedMaintenanceMode({
+                    isActive: !!parsedValue.isActive,
+                    message: parsedValue.message || DEFAULT_MAINTENANCE_MODE.message
+                });
+            }
+
+            return setSharedMaintenanceMode(DEFAULT_MAINTENANCE_MODE);
+        } catch (e) {
+            console.error("Get Maintenance Mode Error", e);
+            return setSharedMaintenanceMode(DEFAULT_MAINTENANCE_MODE);
+        }
+    })();
+
+    try {
+        return await maintenanceModePromise;
+    } finally {
+        maintenanceModePromise = null;
+    }
+};
+
+export const subscribeMaintenanceMode = (
+    subscriber: (value: MaintenanceModeState) => void,
+    options?: { immediate?: boolean }
+) => {
+    maintenanceModeSubscribers.add(subscriber);
+
+    if (options?.immediate !== false) {
+        subscriber(maintenanceModeCache?.value || DEFAULT_MAINTENANCE_MODE);
+    }
+
+    ensureMaintenanceModePolling();
+    void getMaintenanceMode();
+
+    return () => {
+        maintenanceModeSubscribers.delete(subscriber);
+        if (maintenanceModeSubscribers.size === 0) {
+            stopMaintenanceModePolling();
+        }
+    };
 };
 
 export const saveMaintenanceMode = async (isActive: boolean, message: string) => {
@@ -1785,6 +1974,7 @@ export const saveMaintenanceMode = async (isActive: boolean, message: string) =>
         ).select();
 
         if (error) throw error;
+        setSharedMaintenanceMode({ isActive, message: message || DEFAULT_MAINTENANCE_MODE.message });
         return { success: true };
     } catch (e) {
         console.error("Save Maintenance Mode Error", e);

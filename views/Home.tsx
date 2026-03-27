@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { APP_CONFIG } from '../constants';
 import { Language, Feature, ViewId } from '../types';
 import { Icons } from '../components/Icons';
-import { getCheckinStatus } from '../services/economyService';
+import { subscribeCheckinStatus } from '../services/economyService';
 
 interface HomeProps {
   lang: Language;
@@ -116,22 +116,10 @@ export const Home: React.FC<HomeProps> = ({ lang, onSelectFeature, onNavigate, o
   const [isCheckedIn, setIsCheckedIn] = useState(true);
 
   useEffect(() => {
-    const checkStatus = () => {
-        getCheckinStatus().then(status => setIsCheckedIn(status.isCheckedInToday)).catch(() => setIsCheckedIn(true));
-    };
-    const handleVisibility = () => {
-        if (document.visibilityState === 'visible') {
-            checkStatus();
-        }
-    };
-
-    checkStatus();
-    window.addEventListener('focus', checkStatus);
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => {
-        window.removeEventListener('focus', checkStatus);
-        document.removeEventListener('visibilitychange', handleVisibility);
-    };
+    return subscribeCheckinStatus(
+      (status) => setIsCheckedIn(status.isCheckedInToday),
+      { force: true }
+    );
   }, []);
 
   return (

@@ -47,6 +47,43 @@ export const invalidateGalleryCache = () => {
     galleryFetchCache = null;
 };
 
+export const subscribeToGeneratedImagesRealtime = ({
+    userId,
+    onEvent,
+}: {
+    userId: string;
+    onEvent: () => void;
+}) => {
+    if (!supabase || !userId) {
+        return () => {};
+    }
+
+    const channel = supabase
+        .channel(`generated-images:${userId}:${Date.now()}`)
+        .on(
+            'postgres_changes',
+            {
+                event: '*',
+                schema: 'public',
+                table: TABLE_NAME,
+                filter: `user_id=eq.${userId}`,
+            },
+            () => {
+                invalidateGalleryCache();
+                onEvent();
+            },
+        )
+        .subscribe((status: string) => {
+            if (status === 'CHANNEL_ERROR') {
+                console.warn('[Storage] Realtime subscription failed for generated_images.');
+            }
+        });
+
+    return () => {
+        void supabase.removeChannel(channel);
+    };
+};
+
 // Debug Log on Init
 console.log("[System] R2 Config Check:", {
     hasEndpoint: !!R2_ENDPOINT,

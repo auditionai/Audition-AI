@@ -18,7 +18,7 @@ import { Support } from './views/Support';
 import { Guide } from './views/Guide';
 import { AdminView } from './views/Admin';
 import { PaymentGatewayView } from './views/PaymentGateway';
-import { syncPayOSTransaction, triggerServerQueueTick } from './services/serverQueueService';
+import { syncPayOSTransaction } from './services/serverQueueService';
 import './mobile-shell.css';
 
 function AppRoutes() {
@@ -74,13 +74,7 @@ function MobileRuntimeEffects() {
   const { notify } = useNotification();
   const { isAuthenticated, maintenanceMode, userRole } = useAuth();
 
-  const queueHeartbeatLeaseKey = 'auditionai:queue-heartbeat:leader';
-  const queueHeartbeatIntervalMs = 30000;
-  const queueHeartbeatLeaseMs = 35000;
   const handledPayOsReturnRef = useRef<string | null>(null);
-  const heartbeatInstanceIdRef = useRef(
-    typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `mobile-${Date.now()}`,
-  );
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -122,74 +116,6 @@ function MobileRuntimeEffects() {
 
     void handleReturn();
   }, [location.pathname, location.search, navigate, notify]);
-
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
-    const heartbeatInstanceId = heartbeatInstanceIdRef.current;
-
-    const releaseLease = () => {
-      try {
-        const raw = window.localStorage.getItem(queueHeartbeatLeaseKey);
-        if (!raw) return;
-        const current = JSON.parse(raw);
-        if (current?.id === heartbeatInstanceId) {
-          window.localStorage.removeItem(queueHeartbeatLeaseKey);
-        }
-      } catch (error) {
-        console.warn('[MobileApp] Failed to release queue heartbeat lease:', error);
-      }
-    };
-
-    const tryBecomeHeartbeatLeader = () => {
-      try {
-        const now = Date.now();
-        const raw = window.localStorage.getItem(queueHeartbeatLeaseKey);
-        const current = raw ? JSON.parse(raw) : null;
-        if (!current || !current.id || Number(current.expiresAt || 0) <= now || current.id === heartbeatInstanceId) {
-          window.localStorage.setItem(
-            queueHeartbeatLeaseKey,
-            JSON.stringify({
-              id: heartbeatInstanceId,
-              expiresAt: now + queueHeartbeatLeaseMs,
-            }),
-          );
-          return true;
-        }
-        return false;
-      } catch (error) {
-        console.warn('[MobileApp] Failed to acquire queue heartbeat lease:', error);
-        return true;
-      }
-    };
-
-    const runHeartbeat = () => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
-      if (!tryBecomeHeartbeatLeader()) return;
-
-      triggerServerQueueTick().catch((error) => {
-        console.warn('[MobileApp] Queue heartbeat failed:', error);
-      });
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        runHeartbeat();
-      }
-    };
-
-    runHeartbeat();
-    const interval = window.setInterval(runHeartbeat, queueHeartbeatIntervalMs);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('beforeunload', releaseLease);
-
-    return () => {
-      window.clearInterval(interval);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('beforeunload', releaseLease);
-      releaseLease();
-    };
-  }, [isAuthenticated]);
 
   if (!(isAuthenticated && maintenanceMode.isActive && userRole !== 'admin')) {
     return null;

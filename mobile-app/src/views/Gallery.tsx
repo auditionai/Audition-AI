@@ -21,9 +21,10 @@ import {
 import { useNotification } from '../components/NotificationSystem';
 import { getUnifiedHistory } from '../services/economyService';
 import { QUEUE_SUBMITTED_EVENT } from '../services/serverQueueService';
-import { deleteImageFromStorage, getAllImagesFromStorage, invalidateGalleryCache, publishImageToShowcase, checkR2Connection } from '../services/storageService';
+import { deleteImageFromStorage, getAllImagesFromStorage, invalidateGalleryCache, publishImageToShowcase, checkR2Connection, subscribeToGeneratedImagesRealtime } from '../services/storageService';
 import { downloadAssetToBrowser } from '../../../services/downloadService';
 import type { GeneratedImage, HistoryItem } from '../types';
+import { getSupabaseUser } from '../services/supabaseClient';
 
 type GalleryFilter = 'all' | 'completed' | 'failed' | 'processing';
 type GalleryMediaFilter = 'all' | 'image' | 'video';
@@ -89,6 +90,7 @@ const getTransactionStatusLabel = (status: HistoryItem['status']) => {
 
 export const Gallery: React.FC = () => {
   const { notify, confirm } = useNotification();
+  const lastRealtimeRefreshAtRef = React.useRef(0);
   const [activeTab, setActiveTab] = useState<GalleryTab>('generation');
   const [images, setImages] = useState<GeneratedImage[]>([]);
   const [loadingImages, setLoadingImages] = useState(true);
@@ -97,15 +99,6 @@ export const Gallery: React.FC = () => {
   const [transactions, setTransactions] = useState<HistoryItem[]>([]);
   const [loadingTransactions, setLoadingTransactions] = useState(false);
   const [viewingImage, setViewingImage] = useState<GeneratedImage | null>(null);
-
-  const hasActiveJobs = useMemo(
-    () =>
-      images.some((image) => {
-        const status = getImageStatus(image);
-        return status === 'processing' || status === 'queued' || status === 'rescuing';
-      }),
-    [images],
-  );
 
   const mediaCounts = useMemo(
     () => ({
@@ -133,30 +126,58 @@ export const Gallery: React.FC = () => {
   }, [loadImages]);
 
   useEffect(() => {
-    if (!hasActiveJobs) return;
-    const interval = setInterval(() => {
-      void loadImages();
-    }, 10_000);
-    return () => clearInterval(interval);
-  }, [hasActiveJobs, loadImages]);
-
-  useEffect(() => {
     let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 
     const handleQueueSubmitted = () => {
-      invalidateGalleryCache();
-      void loadImages();
       if (refreshTimer) clearTimeout(refreshTimer);
       refreshTimer = setTimeout(() => {
+        if (Date.now() - lastRealtimeRefreshAtRef.current < 3500) {
+          return;
+        }
         invalidateGalleryCache();
         void loadImages();
-      }, 4500);
+      }, 2500);
     };
 
     window.addEventListener(QUEUE_SUBMITTED_EVENT, handleQueueSubmitted);
     return () => {
       if (refreshTimer) clearTimeout(refreshTimer);
       window.removeEventListener(QUEUE_SUBMITTED_EVENT, handleQueueSubmitted);
+    };
+  }, [loadImages]);
+
+  useEffect(() => {
+    let isMounted = true;
+    let unsubscribe = () => {};
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleRefresh = () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
+      lastRealtimeRefreshAtRef.current = Date.now();
+      refreshTimer = setTimeout(() => {
+        if (!isMounted) return;
+        invalidateGalleryCache();
+        void loadImages();
+      }, 250);
+    };
+
+    void (async () => {
+      try {
+        const user = await getSupabaseUser();
+        if (!isMounted || !user?.id) return;
+        unsubscribe = subscribeToGeneratedImagesRealtime({
+          userId: user.id,
+          onEvent: scheduleRefresh,
+        });
+      } catch (error) {
+        console.warn('[Gallery] Failed to start realtime subscription', error);
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+      if (refreshTimer) clearTimeout(refreshTimer);
+      unsubscribe();
     };
   }, [loadImages]);
 

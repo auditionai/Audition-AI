@@ -43,9 +43,13 @@ const EMPTY_QUEUE_STATS: QueueStats = {
   systemQueued: 0,
 };
 
-const BUSY_QUEUE_POLL_MS = 5_000;
-const IDLE_QUEUE_POLL_MS = 30_000;
+const BUSY_QUEUE_POLL_MS = 10_000;
+const IDLE_QUEUE_POLL_MS = 60_000;
 const MANUAL_QUEUE_POLL_MIN_INTERVAL_MS = 2_000;
+const REALTIME_STATS_REFRESH_DEBOUNCE_MS = 350;
+const SUBMIT_FALLBACK_REFRESH_MS = 2_500;
+const RECENT_REALTIME_WINDOW_MS = 3_500;
+const ACTIVE_JOB_STATUSES = new Set(['queued', 'processing']);
 
 let globalChannel: any = null;
 let currentJobs: JobState[] = [];
@@ -59,6 +63,19 @@ let lastQueueStatsFetchAt = 0;
 let queueStatsConsumerCount = 0;
 let sharedUserId: string | null = null;
 let sharedUserIdPromise: Promise<string | null> | null = null;
+let trackerUserId: string | null = null;
+let trackerInitPromise: Promise<void> | null = null;
+let realtimeRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+let lastRealtimeQueueEventAt = 0;
+
+type GeneratedImageQueueRow = {
+  id: string;
+  user_id: string;
+  asset_type?: string | null;
+  status?: string | null;
+  progress?: number | null;
+  created_at?: string | null;
+};
 
 const notifyJobSubscribers = () => {
   jobSubscribers.forEach((subscriber) => subscriber(currentJobs));
@@ -82,6 +99,77 @@ const shouldNudgeQueueWorker = (stats: QueueStats) =>
     stats.systemImageProcessing < CONCURRENCY_LIMITS.system.imageProcessing ||
     stats.systemVideoProcessing < CONCURRENCY_LIMITS.system.videoProcessing
   );
+
+const sortJobsByTimestampDesc = (jobs: JobState[]) =>
+  [...jobs].sort((a, b) => b.timestamp - a.timestamp);
+
+const mapGeneratedImageToJobState = (row: GeneratedImageQueueRow | null | undefined): JobState | null => {
+  if (!row?.id || !row.user_id || !ACTIVE_JOB_STATUSES.has(String(row.status || ''))) {
+    return null;
+  }
+
+  return {
+    jobId: row.id,
+    userId: row.user_id,
+    type: row.asset_type === 'video' ? 'video' : 'image',
+    status: row.status === 'processing' ? 'processing' : 'queued',
+    timestamp: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+    progress: typeof row.progress === 'number' ? row.progress : 0,
+  };
+};
+
+const replaceCurrentJobs = (jobs: JobState[]) => {
+  currentJobs = sortJobsByTimestampDesc(jobs);
+  notifyJobSubscribers();
+};
+
+const upsertCurrentJob = (job: JobState | null) => {
+  if (!job) {
+    return;
+  }
+
+  const nextJobs = currentJobs.filter((entry) => entry.jobId !== job.jobId);
+  nextJobs.push(job);
+  replaceCurrentJobs(nextJobs);
+};
+
+const removeCurrentJob = (jobId?: string | null) => {
+  if (!jobId) {
+    return;
+  }
+
+  const nextJobs = currentJobs.filter((entry) => entry.jobId !== jobId);
+  if (nextJobs.length !== currentJobs.length) {
+    replaceCurrentJobs(nextJobs);
+  }
+};
+
+const clearRealtimeRefreshTimer = () => {
+  if (realtimeRefreshTimer) {
+    clearTimeout(realtimeRefreshTimer);
+    realtimeRefreshTimer = null;
+  }
+};
+
+const scheduleRealtimeStatsRefresh = (triggerReason: string) => {
+  lastRealtimeQueueEventAt = Date.now();
+  clearRealtimeRefreshTimer();
+  realtimeRefreshTimer = setTimeout(() => {
+    fetchSharedQueueStats(true).catch((error) => {
+      console.warn(`[Concurrency] Queue stats refresh after ${triggerReason} failed`, error);
+    });
+  }, REALTIME_STATS_REFRESH_DEBOUNCE_MS);
+};
+
+const cleanupConcurrencyTracker = () => {
+  clearRealtimeRefreshTimer();
+  if (globalChannel && supabase) {
+    supabase.removeChannel(globalChannel).catch(() => undefined);
+  }
+  globalChannel = null;
+  trackerUserId = null;
+  replaceCurrentJobs([]);
+};
 
 const scheduleQueueStatsPoll = () => {
   if (queueStatsPollTimer) {
@@ -175,7 +263,91 @@ const fetchSharedQueueStats = async (force = false) => {
 };
 
 export const initConcurrencyTracker = async () => {
-  return;
+  if (!supabase) {
+    cleanupConcurrencyTracker();
+    return;
+  }
+
+  if (trackerInitPromise) {
+    return trackerInitPromise;
+  }
+
+  trackerInitPromise = (async () => {
+    const userId = await getSharedUserId();
+
+    if (!userId || queueStatsConsumerCount <= 0) {
+      cleanupConcurrencyTracker();
+      return;
+    }
+
+    if (globalChannel && trackerUserId === userId) {
+      return;
+    }
+
+    cleanupConcurrencyTracker();
+    trackerUserId = userId;
+
+    try {
+      const { data, error } = await supabase
+        .from('generated_images')
+        .select('id, user_id, asset_type, status, progress, created_at')
+        .eq('user_id', userId)
+        .in('status', ['queued', 'processing'])
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+
+      replaceCurrentJobs(
+        (data || [])
+          .map((row: GeneratedImageQueueRow) => mapGeneratedImageToJobState(row))
+          .filter(Boolean) as JobState[],
+      );
+    } catch (error) {
+      console.warn('[Concurrency] Failed to seed active jobs from Supabase', error);
+      replaceCurrentJobs([]);
+    }
+
+    if (queueStatsConsumerCount <= 0) {
+      cleanupConcurrencyTracker();
+      return;
+    }
+
+    globalChannel = supabase
+      .channel(`audition:queue:${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'generated_images',
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload: any) => {
+          const nextRow = mapGeneratedImageToJobState(payload?.new as GeneratedImageQueueRow | undefined);
+          const previousJobId = payload?.old?.id || payload?.new?.id;
+
+          if (nextRow) {
+            upsertCurrentJob(nextRow);
+          } else {
+            removeCurrentJob(previousJobId);
+          }
+
+          scheduleRealtimeStatsRefresh(`realtime ${payload?.eventType || 'change'}`);
+        },
+      )
+      .subscribe((status: string) => {
+        if (status === 'CHANNEL_ERROR') {
+          console.warn('[Concurrency] Realtime queue channel failed, relying on polling fallback.');
+        }
+      });
+  })()
+    .finally(() => {
+      trackerInitPromise = null;
+    });
+
+  return trackerInitPromise;
 };
 
 export const useConcurrency = () => {
@@ -214,19 +386,27 @@ export const useConcurrency = () => {
     });
 
     const handleQueueSubmitted = () => {
-      fetchSharedQueueStats(true).catch((error) => {
-        console.warn('[Concurrency] Queue stats refresh after submit failed', error);
-      });
-
       if (queuedRefreshTimer) {
         clearTimeout(queuedRefreshTimer);
       }
 
-      queuedRefreshTimer = setTimeout(() => {
+      const trackerReady = Boolean(globalChannel) && trackerUserId === sharedUserId;
+      if (!trackerReady) {
         fetchSharedQueueStats(true).catch((error) => {
-          console.warn('[Concurrency] Delayed queue stats refresh failed', error);
+          console.warn('[Concurrency] Queue stats refresh after submit failed', error);
         });
-      }, 4_500);
+        return;
+      }
+
+      queuedRefreshTimer = setTimeout(() => {
+        if (Date.now() - lastRealtimeQueueEventAt < RECENT_REALTIME_WINDOW_MS) {
+          return;
+        }
+
+        fetchSharedQueueStats(true).catch((error) => {
+          console.warn('[Concurrency] Fallback queue stats refresh after submit failed', error);
+        });
+      }, SUBMIT_FALLBACK_REFRESH_MS);
     };
 
     if (typeof window !== 'undefined') {
@@ -247,6 +427,9 @@ export const useConcurrency = () => {
       if (queueStatsConsumerCount === 0 && queueStatsPollTimer) {
         clearTimeout(queueStatsPollTimer);
         queueStatsPollTimer = null;
+      }
+      if (queueStatsConsumerCount === 0) {
+        cleanupConcurrencyTracker();
       }
     };
   }, []);

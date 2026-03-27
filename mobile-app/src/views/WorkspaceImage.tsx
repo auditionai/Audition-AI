@@ -137,7 +137,7 @@ export function WorkspaceImage() {
   const location = useLocation();
   useAuth();
   const { notify } = useNotification();
-  const { queueStats, triggerPoll } = useConcurrency();
+  const { queueStats } = useConcurrency();
 
   const [stage, setStage] = useState<Stage>('input');
   const [activeMode, setActiveMode] = useState<GenMode>('single');
@@ -621,7 +621,6 @@ export function WorkspaceImage() {
         });
 
         window.dispatchEvent(new Event('balance_updated'));
-        triggerPoll();
         addSubmissionLog('Đã tạo job. Đang chuyển sang Thư viện.');
         notify('Đã tạo job. Kết quả sẽ cập nhật trong Lịch sử.', 'success');
         localStorage.setItem('gen_cooldown_end', (Date.now() + 60000).toString());

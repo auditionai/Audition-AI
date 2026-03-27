@@ -81,7 +81,6 @@ const MAX_SINGLE_IMAGE_PROCESSING_AGE_MS = 30 * 60 * 1000;
 const MAX_COUPLE_IMAGE_PROCESSING_AGE_MS = 30 * 60 * 1000;
 const MAX_GROUP3_IMAGE_PROCESSING_AGE_MS = 30 * 60 * 1000;
 const MAX_GROUP4_IMAGE_PROCESSING_AGE_MS = 30 * 60 * 1000;
-const MAX_PROVIDER_GENERIC_RETRIES = 2;
 const FAILED_RESULT_RESCUE_SCAN_LIMIT = 10;
 const FAILED_RESULT_RESCUE_LOOKBACK_MS = 24 * 60 * 60 * 1000;
 const FAILED_RESULT_RESCUE_MAX_ATTEMPTS = 8;
@@ -383,6 +382,9 @@ const withQueueMeta = (
 const hasTstBeenTouched = (
   payload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
 ) => toQueuePayloadObject(payload).__tstTouched === true;
+
+const hasProviderBeenCommitted = (job: QueueJobRow, payload?: Record<string, unknown> | ImageGenerateRecipePayload | null) =>
+  Boolean(String(job.job_id || '').trim()) || hasTstBeenTouched(payload ?? job.queue_payload);
 
 const persistQueueLog = async (
   jobId: string,
@@ -1020,6 +1022,22 @@ const requeueJob = async (job: QueueJobRow, errorMessage: string) => {
   const admin = getServiceRoleClient();
   const state = await getJobRuntimeState(job.id);
   const nextAttemptCount = Number(state?.attempt_count || 0) + 1;
+  const currentPayload =
+    state?.queue_payload && typeof state.queue_payload === 'object'
+      ? (state.queue_payload as Record<string, unknown>)
+      : job.queue_payload;
+
+  if (hasProviderBeenCommitted(job, currentPayload)) {
+    await markFailedRespectingRefundPolicy(
+      {
+        ...job,
+        queue_payload: currentPayload || job.queue_payload,
+      },
+      errorMessage,
+      currentPayload,
+    );
+    return 'failed';
+  }
 
   if (nextAttemptCount >= MAX_DISPATCH_RETRIES) {
     await markFailedRespectingRefundPolicy(job, errorMessage);
@@ -1703,6 +1721,7 @@ const reviveFailedJobToProcessing = async (
 };
 
 const rescueFailedJobsWithProviderResults = async () => {
+  return 0;
   const admin = getServiceRoleClient();
   const lookbackIso = new Date(Date.now() - FAILED_RESULT_RESCUE_LOOKBACK_MS).toISOString();
   const now = Date.now();
@@ -1835,20 +1854,6 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
         completionLevel: 'warning',
       });
     }
-    const currentState = await getJobRuntimeState(job.id);
-    const currentAttempts = Number(currentState?.attempt_count || 0);
-    const failureCategory = classifyQueueError(failureMessage).category;
-    const isTerminalProviderFailure = isTerminalRescueFailureMessage(failureMessage);
-
-    if (
-      !isTerminalProviderFailure &&
-      (failureCategory === 'provider' || (job.queue_kind === 'motion_generate' && isGenericProviderFailure(failureMessage))) &&
-      currentAttempts < MAX_PROVIDER_GENERIC_RETRIES
-    ) {
-      await requeueJob(job, failureMessage);
-      return 'requeued';
-    }
-
     await markFailedRespectingRefundPolicy(job, failureMessage);
     return 'failed';
   }
@@ -2050,11 +2055,10 @@ const recoverStalePreparingJobs = async () => {
     }
 
     if (isAwaitingAmbiguousDispatchConfirmation) {
-      const result = await requeueJob(
+      await markFailedRespectingRefundPolicy(
         job,
-        'Khong nhan duoc xac nhan provider job ID sau loi mang/timeout. Dua job ve hang doi de thu lai an toan.',
+        'Khong nhan duoc xac nhan provider job goc sau loi mang/timeout. Job da dung de tranh tao them provider moi.',
       );
-      if (result === 'requeued') recovered += 1;
       continue;
     }
 

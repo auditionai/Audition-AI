@@ -94,11 +94,12 @@ const hasQueueActivity = (stats: QueueStats) =>
   stats.systemQueued > 0;
 
 const shouldNudgeQueueWorker = (stats: QueueStats) =>
-  stats.systemQueued > 0 &&
-  (
-    stats.systemImageProcessing < CONCURRENCY_LIMITS.system.imageProcessing ||
-    stats.systemVideoProcessing < CONCURRENCY_LIMITS.system.videoProcessing
-  );
+  stats.systemQueued > 0 ||
+  stats.myQueued > 0 ||
+  stats.myImageProcessing > 0 ||
+  stats.myVideoProcessing > 0 ||
+  stats.systemImageProcessing > 0 ||
+  stats.systemVideoProcessing > 0;
 
 const sortJobsByTimestampDesc = (jobs: JobState[]) =>
   [...jobs].sort((a, b) => b.timestamp - a.timestamp);

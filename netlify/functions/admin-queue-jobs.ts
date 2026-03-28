@@ -53,18 +53,6 @@ const normalizeQueueLogsFromRow = (row: any) => {
     return normalizeQueueLogs(row.queue_payload as Record<string, unknown>);
   }
 
-  if (Array.isArray(row.queue_logs)) {
-    return normalizeQueueProgressLogs(row.queue_logs.filter(
-      (entry: any): entry is QueueProgressLogEntry =>
-        Boolean(entry) &&
-        typeof entry === 'object' &&
-        typeof entry.at === 'string' &&
-        typeof entry.stage === 'string' &&
-        typeof entry.level === 'string' &&
-        typeof entry.message === 'string',
-    ));
-  }
-
   return [];
 };
 
@@ -77,7 +65,14 @@ const getQueueStageFromRow = (row: any) => {
   if (row.queue_payload && typeof row.queue_payload === 'object') {
     return getQueueStage(row.queue_payload as Record<string, unknown>);
   }
-  return typeof row.queue_stage === 'string' && row.queue_stage.trim() ? row.queue_stage.trim() : undefined;
+  const status = String(row.status || '').toLowerCase();
+  if (status === 'completed') return 'completed';
+  if (status === 'failed') return 'failed';
+  if (status === 'queued') return 'queued';
+  if (status === 'processing') {
+    return String(row.job_id || '').trim() ? 'polling' : 'dispatching';
+  }
+  return undefined;
 };
 
 const getQueueClientPlatform = (payload: Record<string, unknown> | null | undefined): AdminQueueJob['clientPlatform'] => {
@@ -92,11 +87,6 @@ const getQueueClientPlatform = (payload: Record<string, unknown> | null | undefi
 const getQueueClientPlatformFromRow = (row: any): AdminQueueJob['clientPlatform'] => {
   if (row.queue_payload && typeof row.queue_payload === 'object') {
     return getQueueClientPlatform(row.queue_payload as Record<string, unknown>);
-  }
-
-  const normalized = typeof row.queue_client_platform === 'string' ? row.queue_client_platform.trim().toLowerCase() : '';
-  if (normalized === 'mobile' || normalized === 'desktop' || normalized === 'unknown') {
-    return normalized;
   }
   return undefined;
 };
@@ -300,9 +290,9 @@ export const handler: Handler = async (event) => {
       }
     }
 
-    const useLightweightPayload = timeScope === 'all' && !searchFilter && statusFilter !== 'rescuing' && stageFilter === 'all' && !stuckOnly;
+    const useLightweightPayload = timeScope === 'all';
     const selectClause = useLightweightPayload
-      ? 'id, user_id, prompt, tool_name, queue_kind, asset_type, status, job_id, progress, error_message, created_at, updated_at, next_poll_at, processing_started_at, lease_expires_at, image_url, queue_stage:queue_payload->>__stage, queue_client_platform:queue_payload->>__clientPlatform, queue_logs:queue_payload->__logs'
+      ? 'id, user_id, prompt, tool_name, queue_kind, asset_type, status, job_id, progress, error_message, created_at, updated_at, next_poll_at, processing_started_at, lease_expires_at, image_url'
       : 'id, user_id, prompt, tool_name, queue_kind, asset_type, status, job_id, progress, queue_payload, error_message, created_at, updated_at, next_poll_at, processing_started_at, lease_expires_at, image_url';
 
     let query = admin

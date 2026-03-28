@@ -1,6 +1,19 @@
 const DEFAULT_LAUNCH_TIMEOUT_MS = 10_000;
 const BACKGROUND_WORKER_PATH = '/.netlify/functions/queue-worker-background';
 
+const isDedicatedWorkerMode = () => {
+  const queueWorkerMode = String(process.env.QUEUE_WORKER_MODE || '').trim().toLowerCase();
+  const disableTrigger = String(process.env.DISABLE_BACKGROUND_QUEUE_TRIGGER || '').trim().toLowerCase();
+
+  return (
+    queueWorkerMode === 'dedicated' ||
+    queueWorkerMode === 'render' ||
+    disableTrigger === '1' ||
+    disableTrigger === 'true' ||
+    disableTrigger === 'yes'
+  );
+};
+
 const resolveBaseUrl = (rawUrl?: string | null) => {
   if (rawUrl) {
     try {
@@ -17,9 +30,13 @@ export const triggerBackgroundQueueWorker = async (
   rawUrl?: string | null,
   timeoutMs = DEFAULT_LAUNCH_TIMEOUT_MS,
 ) => {
+  if (isDedicatedWorkerMode()) {
+    return false;
+  }
+
   const baseUrl = resolveBaseUrl(rawUrl);
   if (!baseUrl) {
-    throw new Error('Missing site URL for background queue worker launch');
+    return false;
   }
 
   const controller = new AbortController();

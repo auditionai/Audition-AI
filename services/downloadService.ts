@@ -45,7 +45,7 @@ export const downloadAssetToBrowser = async (url: string, filename: string) => {
     }
     blob = await response.blob();
   } else {
-    const proxyUrl = `/.netlify/functions/download_proxy?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`;
+    const proxyUrl = `/api/download-proxy?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`;
     triggerBrowserDownload(proxyUrl, filename);
     return;
   }

@@ -2,9 +2,9 @@ import 'dotenv/config';
 
 import { randomUUID } from 'node:crypto';
 
-import { runQueueDaemon } from '../netlify/functions/_queue-daemon';
-import { refreshAutoDisabledServerAvailability } from '../netlify/functions/_server-availability';
-import { getServiceRoleClient } from '../netlify/functions/_supabase';
+import { runQueueDaemon } from '../netlify/functions/_queue-daemon.ts';
+import { refreshAutoDisabledServerAvailability } from '../netlify/functions/_server-availability.ts';
+import { getServiceRoleClient } from '../netlify/functions/_supabase.ts';
 
 const WORKER_LOCK_LEASE_SECONDS = 180;
 const IDLE_DELAY_MS = 2_000;
@@ -14,13 +14,13 @@ const ERROR_DELAY_MS = 10_000;
 
 let shouldStop = false;
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const log = (...args: unknown[]) => {
+const log = (...args) => {
   console.log('[render-queue-worker]', ...args);
 };
 
-const tryAcquireQueueWorkerLock = async (owner: string) => {
+const tryAcquireQueueWorkerLock = async (owner) => {
   const admin = getServiceRoleClient();
   const { data, error } = await admin.rpc('try_acquire_queue_worker_lock', {
     p_owner: owner,
@@ -39,7 +39,7 @@ const tryAcquireQueueWorkerLock = async (owner: string) => {
   return data !== false;
 };
 
-const releaseQueueWorkerLock = async (owner: string) => {
+const releaseQueueWorkerLock = async (owner) => {
   const admin = getServiceRoleClient();
   const { error } = await admin.rpc('release_queue_worker_lock', {
     p_owner: owner,
@@ -54,7 +54,7 @@ const releaseQueueWorkerLock = async (owner: string) => {
   }
 };
 
-const hasQueueActivity = (summary: Awaited<ReturnType<typeof runQueueDaemon>>) =>
+const hasQueueActivity = (summary) =>
   Number(summary.claimedForDispatch || 0) > 0 ||
   Number(summary.submitted || 0) > 0 ||
   Number(summary.claimedForPoll || 0) > 0 ||
@@ -63,7 +63,7 @@ const hasQueueActivity = (summary: Awaited<ReturnType<typeof runQueueDaemon>>) =
   Number(summary.requeued || 0) > 0;
 
 const registerSignalHandlers = () => {
-  const stop = (signal: NodeJS.Signals) => {
+  const stop = (signal) => {
     if (shouldStop) {
       return;
     }

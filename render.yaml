@@ -1,0 +1,78 @@
+services:
+  - type: web
+    name: audition-web
+    runtime: node
+    plan: starter
+    region: singapore
+    buildCommand: npm ci && npm run build
+    startCommand: npm run render:web
+    envVars:
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: VITE_R2_ENDPOINT
+        sync: false
+      - key: VITE_R2_ACCESS_KEY_ID
+        sync: false
+      - key: VITE_R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: VITE_R2_BUCKET_NAME
+        sync: false
+      - key: VITE_R2_PUBLIC_URL
+        sync: false
+      - key: VITE_CAULENHAU_SUPABASE_URL
+        sync: false
+      - key: VITE_CAULENHAU_SUPABASE_ANON_KEY
+        sync: false
+      - key: CAULENHAU_SUPABASE_URL
+        sync: false
+      - key: CAULENHAU_SUPABASE_ANON_KEY
+        sync: false
+      - key: TST_API_KEY
+        sync: false
+      - key: PAYOS_CLIENT_ID
+        sync: false
+      - key: PAYOS_API_KEY
+        sync: false
+      - key: PAYOS_CHECKSUM_KEY
+        sync: false
+      - key: PAYOS_RETURN_URL
+        sync: false
+      - key: PAYOS_CANCEL_URL
+        sync: false
+      - key: PAYOS_WEBHOOK_URL
+        sync: false
+      - key: TELEGRAM_NOTIFY_WEBHOOK_URL
+        sync: false
+      - key: TELEGRAM_NOTIFY_WEBHOOK_SECRET
+        sync: false
+      - key: QUEUE_WORKER_MODE
+        value: dedicated
+      - key: DISABLE_BACKGROUND_QUEUE_TRIGGER
+        value: "true"
+
+  - type: worker
+    name: audition-queue-worker
+    runtime: node
+    plan: starter
+    region: singapore
+    buildCommand: npm ci
+    startCommand: npm run render:queue-worker
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: TST_API_KEY
+        sync: false
+      - key: TELEGRAM_NOTIFY_WEBHOOK_URL
+        sync: false
+      - key: TELEGRAM_NOTIFY_WEBHOOK_SECRET
+        sync: false

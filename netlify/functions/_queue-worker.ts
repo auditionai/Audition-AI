@@ -123,6 +123,7 @@ const activeWorkerRuns = new Map<QueueWorkerLane, Promise<QueueWorkerSummary>>()
 const TST_API_KEY = process.env.TST_API_KEY || '';
 const TST_API_BASE = 'https://api.tramsangtao.com/v1';
 const POLL_INTERVAL_SECONDS = parsePositiveIntEnv('QUEUE_POLL_INTERVAL_SECONDS', 5);
+const PROVIDER_FAILURE_GRACE_SECONDS = parsePositiveIntEnv('QUEUE_PROVIDER_FAILURE_GRACE_SECONDS', 90, 5);
 const MAX_DISPATCH_RETRIES = 6;
 const MAX_POLL_FAILURES = 8;
 const MAX_PROCESSING_AGE_MS = 30 * 60 * 1000;
@@ -457,16 +458,78 @@ const extractJobId = (data: any): string | null => {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
 };
 
-const extractResultUrl = (data: any): string | null => {
-  if (typeof data?.result === 'string' && data.result.trim()) return data.result.trim();
-  if (Array.isArray(data?.result) && typeof data.result[0] === 'string' && data.result[0].trim()) return data.result[0].trim();
-  if (typeof data?.output === 'string' && data.output.trim()) return data.output.trim();
-  if (Array.isArray(data?.output) && typeof data.output[0] === 'string' && data.output[0].trim()) return data.output[0].trim();
-  if (typeof data?.data?.result === 'string' && data.data.result.trim()) return data.data.result.trim();
-  if (Array.isArray(data?.data?.result) && typeof data.data.result[0] === 'string' && data.data.result[0].trim()) return data.data.result[0].trim();
-  if (typeof data?.data?.output === 'string' && data.data.output.trim()) return data.data.output.trim();
-  if (Array.isArray(data?.data?.output) && typeof data.data.output[0] === 'string' && data.data.output[0].trim()) return data.data.output[0].trim();
+const INITIAL_POLL_DELAY_SECONDS = parsePositiveIntEnv('QUEUE_INITIAL_POLL_DELAY_SECONDS', 2);
+
+const normalizeResultUrl = (value: unknown): string | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value.trim();
+  if (!normalized || !/^https?:\/\//i.test(normalized)) {
+    return null;
+  }
+
+  return normalized;
+};
+
+const extractResultUrlFromValue = (value: unknown): string | null => {
+  const direct = normalizeResultUrl(value);
+  if (direct) {
+    return direct;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const nested = extractResultUrlFromValue(item);
+      if (nested) {
+        return nested;
+      }
+    }
+    return null;
+  }
+
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const objectValue = value as Record<string, unknown>;
+  const preferredKeys = [
+    'result',
+    'output',
+    'result_url',
+    'resultUrl',
+    'output_url',
+    'outputUrl',
+    'image_url',
+    'imageUrl',
+    'file_url',
+    'fileUrl',
+    'cdn_url',
+    'cdnUrl',
+    'url',
+  ];
+
+  for (const key of preferredKeys) {
+    const nested = extractResultUrlFromValue(objectValue[key]);
+    if (nested) {
+      return nested;
+    }
+  }
+
+  const collectionKeys = ['results', 'outputs', 'images', 'files', 'artifacts', 'items', 'data'];
+  for (const key of collectionKeys) {
+    const nested = extractResultUrlFromValue(objectValue[key]);
+    if (nested) {
+      return nested;
+    }
+  }
+
   return null;
+};
+
+const extractResultUrl = (data: any): string | null => {
+  return extractResultUrlFromValue(data);
 };
 
 const getRetryDelaySeconds = (attemptCount: number) => {
@@ -1386,7 +1449,7 @@ const markSubmitted = async (job: QueueJobRow, providerJobId: string) => {
     progress: 60,
     error_message: null,
     processing_started_at: new Date().toISOString(),
-    next_poll_at: new Date(Date.now() + POLL_INTERVAL_SECONDS * 1000).toISOString(),
+    next_poll_at: new Date(Date.now() + INITIAL_POLL_DELAY_SECONDS * 1000).toISOString(),
     lease_token: null,
     lease_expires_at: null,
     updated_at: new Date().toISOString(),
@@ -1412,7 +1475,7 @@ const markSubmittedWithOwnership = async (job: QueueJobRow, providerJobId: strin
     progress: 60,
     error_message: null,
     processing_started_at: new Date().toISOString(),
-    next_poll_at: new Date(Date.now() + POLL_INTERVAL_SECONDS * 1000).toISOString(),
+    next_poll_at: new Date(Date.now() + INITIAL_POLL_DELAY_SECONDS * 1000).toISOString(),
     lease_token: null,
     lease_expires_at: null,
     updated_at: new Date().toISOString(),
@@ -1886,6 +1949,9 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
   const providerStatus = String(providerData?.status || '').toLowerCase();
   const providerProgress = typeof providerData?.progress === 'number' ? providerData.progress : 0;
   const progress = Math.max(60, providerProgress);
+  const currentState = await getJobRuntimeState(job.id);
+  const startedAt = currentState?.processing_started_at || currentState?.created_at || new Date().toISOString();
+  const processingAgeMs = Date.now() - new Date(startedAt).getTime();
 
   if (providerStatus === 'completed') {
     const resultUrl = extractResultUrl(providerData);
@@ -1904,13 +1970,19 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
         completionLevel: 'warning',
       });
     }
+    const nextAttemptCount = Number(currentState?.attempt_count || 0) + 1;
+    if (
+      isGenericProviderFailure(String(failureMessage)) &&
+      nextAttemptCount < MAX_POLL_FAILURES &&
+      processingAgeMs < PROVIDER_FAILURE_GRACE_SECONDS * 1000
+    ) {
+      await requeueProviderSoftFailure(job, String(failureMessage), nextAttemptCount, providerStatus);
+      return 'requeued';
+    }
     await markFailedRespectingRefundPolicy(job, failureMessage);
     return 'failed';
   }
 
-  const currentState = await getJobRuntimeState(job.id);
-  const startedAt = currentState?.processing_started_at || currentState?.created_at || new Date().toISOString();
-  const processingAgeMs = Date.now() - new Date(startedAt).getTime();
   if (processingAgeMs >= getProviderProcessingTimeoutMs(job, job.queue_payload)) {
     await cancelProviderJobBestEffort(job.job_id);
     await markFailedRespectingRefundPolicy(job, getProcessingTimeoutUserMessage(job, job.queue_payload));
@@ -1985,6 +2057,34 @@ const handlePollFailure = async (job: QueueJobRow, errorMessage: string) => {
     .eq('id', job.id);
 
   return 'requeued';
+};
+
+const requeueProviderSoftFailure = async (
+  job: QueueJobRow,
+  errorMessage: string,
+  nextAttemptCount: number,
+  providerStatus: string,
+) => {
+  const admin = getServiceRoleClient();
+  await admin
+    .from('generated_images')
+    .update({
+      status: 'processing',
+      error_message: errorMessage,
+      queue_payload: withQueueLog(
+        job.queue_payload,
+        'polling',
+        `Provider tra ve trang thai ${providerStatus || 'failed'} tam thoi. Se thu poll lai: ${errorMessage}`,
+        'warning',
+      ),
+      attempt_count: nextAttemptCount,
+      next_poll_at: new Date(Date.now() + getRetryDelaySeconds(nextAttemptCount) * 1000).toISOString(),
+      lease_token: null,
+      lease_expires_at: null,
+      last_error_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', job.id);
 };
 
 const recoverStalePreparingJobs = async () => {

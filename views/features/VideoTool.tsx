@@ -686,6 +686,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
             assetType: 'video',
             costVcoin: cost,
             queueKind: activeMode === 'video_ai' ? 'video_generate' : 'motion_generate',
+            clientPlatform: 'desktop',
             queuePayload,
         });
 
@@ -792,6 +793,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
             assetType: 'video',
             costVcoin: cost,
             queueKind: activeMode === 'video_ai' ? 'video_generate' : 'motion_generate',
+            clientPlatform: 'desktop',
             queuePayload,
         });
 

@@ -104,6 +104,7 @@ export interface AdminQueueJob {
   toolName?: string;
   prompt?: string;
   jobId?: string;
+  resultUrl?: string;
   progress?: number;
   queueStage?: string;
   queueLogs?: QueueProgressLogEntry[];
@@ -118,7 +119,7 @@ export interface AdminQueueJob {
   isStuck?: boolean;
 }
 
-export interface AdminQueueSummary {
+export interface AdminQueueSummaryCounts {
   total: number;
   queued: number;
   processing: number;
@@ -127,6 +128,11 @@ export interface AdminQueueSummary {
   overduePolls: number;
   untouchedQueued: number;
   stalledPreDispatch: number;
+}
+
+export interface AdminQueueSummary extends AdminQueueSummaryCounts {
+  today: AdminQueueSummaryCounts;
+  all: AdminQueueSummaryCounts;
 }
 
 export interface AdminQueueInputMedia {
@@ -139,11 +145,19 @@ export interface AdminQueueInputMedia {
   userProvided?: boolean;
 }
 
+export interface AdminQueueMediaSection {
+  key: 'reference' | 'sample' | 'result';
+  label: string;
+  description?: string;
+  items: AdminQueueInputMedia[];
+}
+
 export interface AdminQueueJobDetail {
   job: AdminQueueJob;
   prompt?: string;
   queuePayloadPreview?: Record<string, unknown>;
   inputMedia: AdminQueueInputMedia[];
+  mediaSections: AdminQueueMediaSection[];
   runtimeConfig?: {
     generationMode?: string;
     modelMode?: string;

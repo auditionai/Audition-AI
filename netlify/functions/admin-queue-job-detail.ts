@@ -1,5 +1,5 @@
 import type { Handler } from '@netlify/functions';
-import type { AdminQueueInputMedia, AdminQueueJob, AdminQueueJobDetail } from '../../types';
+import type { AdminQueueInputMedia, AdminQueueJob, AdminQueueJobDetail, AdminQueueMediaSection } from '../../types';
 import type { QueueProgressLogEntry, QueueNotificationMediaEntry } from '../../shared/queueRecipes';
 import { normalizeQueueProgressLogs, repairVietnameseMojibake } from '../../shared/queueLogText';
 import { classifyQueueError, isTerminalRescueFailureMessage, normalizeQueueErrorMessage, pickQueueFailureMessage } from '../../shared/queueErrorClassifier';
@@ -48,43 +48,47 @@ const getQueueClientPlatform = (payload: Record<string, unknown> | null | undefi
 };
 
 const toAdminJob = (row: any, profile?: { email?: string; displayName?: string }): AdminQueueJob => {
-  const queueLogs = normalizeQueueLogs(row.queue_payload || null);
+  const payload = row.queue_payload && typeof row.queue_payload === 'object'
+    ? row.queue_payload as Record<string, unknown>
+    : null;
+  const queueLogs = normalizeQueueLogs(payload);
   const displayErrorSource = pickQueueFailureMessage(row.error_message || undefined, queueLogs);
   const errorInfo = classifyQueueError(displayErrorSource || row.error_message || undefined);
   const displayStatus =
     String(row.status || 'queued') === 'failed' &&
-    isFailedRescueStillActive(row.queue_payload || null) &&
+    isFailedRescueStillActive(payload) &&
     !isTerminalRescueFailureMessage(displayErrorSource) &&
     (errorInfo.category === 'provider' || errorInfo.category === 'unknown')
       ? 'rescuing'
       : ((row.status || 'queued') as AdminQueueJob['status']);
 
-  return ({
-  id: String(row.id),
-  userId: String(row.user_id),
-  userEmail: profile?.email || undefined,
-  userName: profile?.displayName || undefined,
-  clientPlatform: getQueueClientPlatform(row.queue_payload || null),
-  status: (row.status || 'queued') as AdminQueueJob['status'],
-  displayStatus,
-  assetType: (row.asset_type || 'image') as AdminQueueJob['assetType'],
-  queueKind: row.queue_kind || undefined,
-  toolName: row.tool_name || undefined,
-  prompt: row.prompt || undefined,
-  jobId: row.job_id || undefined,
-  progress: typeof row.progress === 'number' ? row.progress : undefined,
-  queueStage: getQueueStage(row.queue_payload || null),
-  queueLogs,
-  error: normalizeQueueErrorMessage(displayErrorSource || row.error_message || undefined) || undefined,
-  errorCategory: errorInfo.category,
-  errorRaw: repairVietnameseMojibake(row.error_message || undefined) || undefined,
-  createdAt: row.created_at || undefined,
-  updatedAt: row.updated_at || undefined,
-  nextPollAt: row.next_poll_at || undefined,
-  processingStartedAt: row.processing_started_at || undefined,
-  leaseExpiresAt: row.lease_expires_at || undefined,
-  isStuck: false,
-  });
+  return {
+    id: String(row.id),
+    userId: String(row.user_id),
+    userEmail: profile?.email || undefined,
+    userName: profile?.displayName || undefined,
+    clientPlatform: getQueueClientPlatform(payload),
+    status: (row.status || 'queued') as AdminQueueJob['status'],
+    displayStatus,
+    assetType: (row.asset_type || 'image') as AdminQueueJob['assetType'],
+    queueKind: row.queue_kind || undefined,
+    toolName: row.tool_name || undefined,
+    prompt: row.prompt || undefined,
+    jobId: row.job_id || undefined,
+    resultUrl: typeof row.image_url === 'string' && row.image_url.trim() ? row.image_url : undefined,
+    progress: typeof row.progress === 'number' ? row.progress : undefined,
+    queueStage: getQueueStage(payload),
+    queueLogs,
+    error: normalizeQueueErrorMessage(displayErrorSource || row.error_message || undefined) || undefined,
+    errorCategory: errorInfo.category,
+    errorRaw: repairVietnameseMojibake(row.error_message || undefined) || undefined,
+    createdAt: row.created_at || undefined,
+    updatedAt: row.updated_at || undefined,
+    nextPollAt: row.next_poll_at || undefined,
+    processingStartedAt: row.processing_started_at || undefined,
+    leaseExpiresAt: row.lease_expires_at || undefined,
+    isStuck: false,
+  };
 };
 
 const getMediaSourceType = (value: string): AdminQueueInputMedia['sourceType'] => {
@@ -250,6 +254,50 @@ const deriveRuntimeConfig = (payload: Record<string, unknown>, toolName?: string
   };
 };
 
+const buildResultMedia = (row: any): AdminQueueInputMedia[] => {
+  const resultUrl = typeof row.image_url === 'string' ? row.image_url.trim() : '';
+  if (!resultUrl) return [];
+  return [
+    toMediaPreview(
+      resultUrl,
+      row.asset_type === 'video' ? 'Video kết quả' : 'Ảnh kết quả',
+      'result',
+      row.asset_type === 'video' ? 'video' : 'image',
+      false,
+    ),
+  ];
+};
+
+const buildMediaSections = (
+  inputMedia: AdminQueueInputMedia[],
+  resultMedia: AdminQueueInputMedia[],
+): AdminQueueMediaSection[] => {
+  const referenceRoles = new Set(['character', 'reference', 'source', 'keyframe']);
+  const referenceMedia = inputMedia.filter((media) => media.kind === 'image' && referenceRoles.has(media.role));
+  const sampleMedia = inputMedia.filter((media) => media.kind === 'image' && media.role === 'sample');
+
+  return [
+    {
+      key: 'reference',
+      label: 'Ảnh tham chiếu nhân vật',
+      description: 'Ảnh nhân vật, ảnh tham chiếu hoặc ảnh nguồn dùng để dựng job.',
+      items: referenceMedia,
+    },
+    {
+      key: 'sample',
+      label: 'Ảnh mẫu',
+      description: 'Ảnh mẫu hoặc ảnh gợi ý mà người dùng đã chọn trước khi tạo.',
+      items: sampleMedia,
+    },
+    {
+      key: 'result',
+      label: 'Kết quả',
+      description: 'Ảnh hoặc video đã được provider trả về và lưu thành công.',
+      items: resultMedia,
+    },
+  ].filter((section) => section.items.length > 0);
+};
+
 export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers, body: '' };
@@ -292,7 +340,7 @@ export const handler: Handler = async (event) => {
 
     const { data: row, error } = await admin
       .from('generated_images')
-      .select('id, user_id, prompt, tool_name, queue_kind, asset_type, status, job_id, progress, queue_payload, error_message, created_at, updated_at, next_poll_at, processing_started_at, lease_expires_at')
+      .select('id, user_id, prompt, tool_name, queue_kind, asset_type, status, job_id, progress, queue_payload, error_message, created_at, updated_at, next_poll_at, processing_started_at, lease_expires_at, image_url')
       .eq('id', jobId)
       .maybeSingle();
 
@@ -315,7 +363,10 @@ export const handler: Handler = async (event) => {
       ? row.queue_payload as Record<string, unknown>
       : {};
     const explicitMedia = extractExplicitMedia(payload);
-    const inputMedia = explicitMedia.length > 0 ? explicitMedia : extractRecipeMedia(payload);
+    const inputMedia = (explicitMedia.length > 0 ? explicitMedia : extractRecipeMedia(payload))
+      .filter((media) => media.role !== 'style');
+    const resultMedia = buildResultMedia(row);
+    const mediaSections = buildMediaSections(inputMedia, resultMedia);
 
     const detail: AdminQueueJobDetail = {
       job: toAdminJob(row, {
@@ -325,6 +376,7 @@ export const handler: Handler = async (event) => {
       prompt: typeof payload.prompt === 'string' && payload.prompt.trim() ? payload.prompt : row.prompt || undefined,
       queuePayloadPreview: sanitizePayloadValue(payload) as Record<string, unknown>,
       inputMedia,
+      mediaSections,
       runtimeConfig: deriveRuntimeConfig(payload, row.tool_name),
     };
 

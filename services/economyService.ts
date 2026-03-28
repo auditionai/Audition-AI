@@ -1830,7 +1830,36 @@ export const getAdminUserHistory = async (targetUserId: string): Promise<History
     return Array.isArray(payload?.history) ? payload.history : [];
 };
 
+const EMPTY_ADMIN_QUEUE_SUMMARY_COUNTS: AdminQueueSummary['today'] = {
+    total: 0,
+    queued: 0,
+    processing: 0,
+    completed: 0,
+    failed: 0,
+    overduePolls: 0,
+    untouchedQueued: 0,
+    stalledPreDispatch: 0,
+};
+
+const normalizeAdminQueueSummaryCounts = (value: Partial<AdminQueueSummary['today']> | null | undefined): AdminQueueSummary['today'] => ({
+    total: Number(value?.total || 0),
+    queued: Number(value?.queued || 0),
+    processing: Number(value?.processing || 0),
+    completed: Number(value?.completed || 0),
+    failed: Number(value?.failed || 0),
+    overduePolls: Number(value?.overduePolls || 0),
+    untouchedQueued: Number(value?.untouchedQueued || 0),
+    stalledPreDispatch: Number(value?.stalledPreDispatch || 0),
+});
+
+const normalizeAdminQueueSummary = (value: Partial<AdminQueueSummary> | null | undefined): AdminQueueSummary => ({
+    ...normalizeAdminQueueSummaryCounts(value),
+    today: normalizeAdminQueueSummaryCounts(value?.today),
+    all: normalizeAdminQueueSummaryCounts(value?.all),
+});
+
 export const getAdminQueueJobs = async (params?: {
+    search?: string;
     email?: string;
     userId?: string;
     status?: 'all' | 'queued' | 'processing' | 'completed' | 'failed' | 'rescuing';
@@ -1842,6 +1871,7 @@ export const getAdminQueueJobs = async (params?: {
     const authHeader = await getSessionAuthHeader();
     const search = new URLSearchParams();
 
+    if (params?.search) search.set('search', params.search);
     if (params?.email) search.set('email', params.email);
     if (params?.userId) search.set('userId', params.userId);
     if (params?.status) search.set('status', params.status);
@@ -1862,16 +1892,11 @@ export const getAdminQueueJobs = async (params?: {
 
     return {
         jobs: Array.isArray(payload?.jobs) ? payload.jobs : [],
-        summary: payload?.summary || {
-            total: 0,
-            queued: 0,
-            processing: 0,
-            completed: 0,
-            failed: 0,
-            overduePolls: 0,
-            untouchedQueued: 0,
-            stalledPreDispatch: 0,
-        },
+        summary: normalizeAdminQueueSummary(payload?.summary || {
+            ...EMPTY_ADMIN_QUEUE_SUMMARY_COUNTS,
+            today: EMPTY_ADMIN_QUEUE_SUMMARY_COUNTS,
+            all: EMPTY_ADMIN_QUEUE_SUMMARY_COUNTS,
+        }),
     };
 };
 

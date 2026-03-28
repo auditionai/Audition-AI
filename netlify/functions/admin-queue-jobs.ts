@@ -1,5 +1,5 @@
 import type { Handler } from '@netlify/functions';
-import type { AdminQueueJob, AdminQueueSummary } from '../../types';
+import type { AdminQueueJob, AdminQueueSummary, AdminQueueSummaryCounts } from '../../types';
 import type { QueueProgressLogEntry } from '../../shared/queueRecipes';
 import { normalizeQueueProgressLogs, repairVietnameseMojibake } from '../../shared/queueLogText';
 import { classifyQueueError, isTerminalRescueFailureMessage, normalizeQueueErrorMessage, pickQueueFailureMessage } from '../../shared/queueErrorClassifier';
@@ -15,8 +15,21 @@ const headers = {
 };
 
 const DEFAULT_LIMIT = 100;
+const SEARCH_LIMIT = 240;
 const STALE_QUEUE_MS = 5 * 60 * 1000;
 const OVERDUE_POLL_GRACE_MS = 2 * 60 * 1000;
+const SUMMARY_TIME_ZONE = 'Asia/Ho_Chi_Minh';
+
+const EMPTY_SUMMARY_COUNTS: AdminQueueSummaryCounts = {
+  total: 0,
+  queued: 0,
+  processing: 0,
+  completed: 0,
+  failed: 0,
+  overduePolls: 0,
+  untouchedQueued: 0,
+  stalledPreDispatch: 0,
+};
 
 const normalizeQueueLogs = (payload: Record<string, unknown> | null | undefined): QueueProgressLogEntry[] => {
   const rawLogs = payload && typeof payload === 'object' ? (payload as Record<string, unknown>).__logs : null;
@@ -71,16 +84,105 @@ const isStuckJob = (row: any) => {
   return false;
 };
 
-const buildSummary = (jobs: AdminQueueJob[]): AdminQueueSummary => ({
+const buildSummaryCounts = (jobs: Array<Pick<AdminQueueJob, 'status' | 'displayStatus' | 'jobId' | 'isStuck'>>): AdminQueueSummaryCounts => ({
   total: jobs.length,
   queued: jobs.filter((job) => job.status === 'queued').length,
   processing: jobs.filter((job) => job.status === 'processing').length,
-  completed: jobs.filter((job) => job.displayStatus === 'completed').length,
-  failed: jobs.filter((job) => job.displayStatus === 'failed').length,
-  overduePolls: jobs.filter((job) => job.status === 'processing' && !!job.jobId && job.isStuck).length,
-  untouchedQueued: jobs.filter((job) => job.status === 'queued' && job.isStuck).length,
-  stalledPreDispatch: jobs.filter((job) => job.status === 'processing' && !job.jobId && job.isStuck).length,
+  completed: jobs.filter((job) => (job.displayStatus || job.status) === 'completed').length,
+  failed: jobs.filter((job) => (job.displayStatus || job.status) === 'failed').length,
+  overduePolls: jobs.filter((job) => job.status === 'processing' && !!job.jobId && !!job.isStuck).length,
+  untouchedQueued: jobs.filter((job) => job.status === 'queued' && !!job.isStuck).length,
+  stalledPreDispatch: jobs.filter((job) => job.status === 'processing' && !job.jobId && !!job.isStuck).length,
 });
+
+const buildSummary = (
+  currentJobs: Array<Pick<AdminQueueJob, 'status' | 'displayStatus' | 'jobId' | 'isStuck'>>,
+  todayJobs: Array<Pick<AdminQueueJob, 'status' | 'displayStatus' | 'jobId' | 'isStuck'>>,
+  allJobs: Array<Pick<AdminQueueJob, 'status' | 'displayStatus' | 'jobId' | 'isStuck'>>,
+): AdminQueueSummary => ({
+  ...buildSummaryCounts(currentJobs),
+  today: buildSummaryCounts(todayJobs),
+  all: buildSummaryCounts(allJobs),
+});
+
+const getSaigonTodayStart = () => {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: SUMMARY_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  const parts = formatter.formatToParts(new Date());
+  const year = parts.find((part) => part.type === 'year')?.value || '1970';
+  const month = parts.find((part) => part.type === 'month')?.value || '01';
+  const day = parts.find((part) => part.type === 'day')?.value || '01';
+  return new Date(`${year}-${month}-${day}T00:00:00+07:00`);
+};
+
+const isCreatedTodayInSaigon = (value?: string | null) => {
+  if (!value) return false;
+  const createdAt = new Date(value);
+  if (Number.isNaN(createdAt.getTime())) return false;
+  return createdAt.getTime() >= getSaigonTodayStart().getTime();
+};
+
+const matchesSearch = (job: AdminQueueJob, search: string) => {
+  if (!search) return true;
+  const haystacks = [
+    job.id,
+    job.jobId || '',
+    job.userEmail || '',
+    job.userName || '',
+  ].map((value) => value.toLowerCase());
+  return haystacks.some((value) => value.includes(search));
+};
+
+const mapRowToAdminJob = (
+  row: any,
+  profile?: { email?: string; displayName?: string },
+): AdminQueueJob => {
+  const payload = row.queue_payload && typeof row.queue_payload === 'object'
+    ? row.queue_payload as Record<string, unknown>
+    : null;
+  const queueLogs = normalizeQueueLogs(payload);
+  const displayErrorSource = pickQueueFailureMessage(row.error_message || undefined, queueLogs);
+  const errorInfo = classifyQueueError(displayErrorSource || row.error_message || undefined);
+  const displayStatus =
+    String(row.status || 'queued') === 'failed' &&
+    isFailedRescueStillActive(payload) &&
+    !isTerminalRescueFailureMessage(displayErrorSource) &&
+    (errorInfo.category === 'provider' || errorInfo.category === 'unknown')
+      ? 'rescuing'
+      : ((row.status || 'queued') as AdminQueueJob['status']);
+
+  return {
+    id: String(row.id),
+    userId: String(row.user_id),
+    userEmail: profile?.email || undefined,
+    userName: profile?.displayName || undefined,
+    clientPlatform: getQueueClientPlatform(payload),
+    status: (row.status || 'queued') as AdminQueueJob['status'],
+    displayStatus,
+    assetType: (row.asset_type || 'image') as AdminQueueJob['assetType'],
+    queueKind: row.queue_kind || undefined,
+    toolName: row.tool_name || undefined,
+    prompt: row.prompt || undefined,
+    jobId: row.job_id || undefined,
+    resultUrl: typeof row.image_url === 'string' && row.image_url.trim() ? row.image_url : undefined,
+    progress: typeof row.progress === 'number' ? row.progress : undefined,
+    queueStage: getQueueStage(payload),
+    queueLogs,
+    error: normalizeQueueErrorMessage(displayErrorSource || row.error_message || undefined) || undefined,
+    errorCategory: errorInfo.category,
+    errorRaw: repairVietnameseMojibake(row.error_message || undefined) || undefined,
+    createdAt: row.created_at || undefined,
+    updatedAt: row.updated_at || undefined,
+    nextPollAt: row.next_poll_at || undefined,
+    processingStartedAt: row.processing_started_at || undefined,
+    leaseExpiresAt: row.lease_expires_at || undefined,
+    isStuck: isStuckJob(row),
+  };
+};
 
 export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
@@ -117,54 +219,47 @@ export const handler: Handler = async (event) => {
     }
 
     const statusFilter = String(event.queryStringParameters?.status || 'all').trim().toLowerCase();
-    const emailFilter = String(event.queryStringParameters?.email || '').trim().toLowerCase();
+    const searchFilter = String(event.queryStringParameters?.search || event.queryStringParameters?.email || '').trim().toLowerCase();
     const userIdFilter = String(event.queryStringParameters?.userId || '').trim();
     const assetTypeFilter = String(event.queryStringParameters?.assetType || 'all').trim().toLowerCase();
     const stageFilter = String(event.queryStringParameters?.stage || 'all').trim().toLowerCase();
     const stuckOnly = String(event.queryStringParameters?.stuckOnly || 'false').trim().toLowerCase() === 'true';
-    const limit = Math.max(1, Math.min(200, Number(event.queryStringParameters?.limit || DEFAULT_LIMIT)));
+    const limit = Math.max(1, Math.min(240, Number(event.queryStringParameters?.limit || DEFAULT_LIMIT)));
 
-    let scopedUserIds: string[] | null = null;
-    if (emailFilter) {
-      const { data: matchedUsers, error: usersError } = await admin
+    let matchedUserIds: string[] = [];
+    if (!userIdFilter && searchFilter) {
+      const { data: matchedUsers, error: matchedUsersError } = await admin
         .from('users')
         .select('id')
-        .ilike('email', `%${emailFilter}%`)
-        .limit(100);
+        .ilike('email', `%${searchFilter}%`)
+        .limit(200);
 
-      if (usersError) {
-        throw usersError;
+      if (matchedUsersError) {
+        throw matchedUsersError;
       }
 
-      scopedUserIds = (matchedUsers || []).map((row: any) => String(row.id || '')).filter(Boolean);
-      if (scopedUserIds.length === 0) {
-        return {
-          statusCode: 200,
-          headers,
-          body: JSON.stringify({ jobs: [], summary: buildSummary([]) }),
-        };
-      }
+      matchedUserIds = (matchedUsers || []).map((row: any) => String(row.id || '')).filter(Boolean);
     }
 
-    let query = admin
+    let listQuery = admin
       .from('generated_images')
-      .select('id, user_id, prompt, tool_name, queue_kind, asset_type, status, job_id, progress, queue_payload, error_message, created_at, updated_at, next_poll_at, processing_started_at, lease_expires_at')
+      .select('id, user_id, prompt, tool_name, queue_kind, asset_type, status, job_id, progress, queue_payload, error_message, created_at, updated_at, next_poll_at, processing_started_at, lease_expires_at, image_url')
       .order('updated_at', { ascending: false })
-      .limit(limit);
+      .limit(searchFilter ? Math.max(limit, SEARCH_LIMIT) : limit);
 
     if (statusFilter !== 'all' && statusFilter !== 'rescuing') {
-      query = query.eq('status', statusFilter);
+      listQuery = listQuery.eq('status', statusFilter);
     }
     if (assetTypeFilter === 'image' || assetTypeFilter === 'video') {
-      query = query.eq('asset_type', assetTypeFilter);
+      listQuery = listQuery.eq('asset_type', assetTypeFilter);
     }
     if (userIdFilter) {
-      query = query.eq('user_id', userIdFilter);
-    } else if (scopedUserIds) {
-      query = query.in('user_id', scopedUserIds);
+      listQuery = listQuery.eq('user_id', userIdFilter);
+    } else if (matchedUserIds.length > 0) {
+      listQuery = listQuery.in('user_id', matchedUserIds);
     }
 
-    const { data, error } = await query;
+    const { data, error } = await listQuery;
     if (error) {
       throw error;
     }
@@ -194,50 +289,11 @@ export const handler: Handler = async (event) => {
 
     let jobs: AdminQueueJob[] = rows
       .filter((row: any) => isSystemQueueKind(row.queue_kind))
-      .map((row: any) => {
-      const payload = row.queue_payload && typeof row.queue_payload === 'object'
-        ? row.queue_payload as Record<string, unknown>
-        : null;
-      const profile = userMap.get(String(row.user_id || ''));
-      const queueLogs = normalizeQueueLogs(payload);
-      const displayErrorSource = pickQueueFailureMessage(row.error_message || undefined, queueLogs);
-      const errorInfo = classifyQueueError(displayErrorSource || row.error_message || undefined);
-      const displayStatus =
-        String(row.status || 'queued') === 'failed' &&
-        isFailedRescueStillActive(payload) &&
-        !isTerminalRescueFailureMessage(displayErrorSource) &&
-        (errorInfo.category === 'provider' || errorInfo.category === 'unknown')
-          ? 'rescuing'
-          : ((row.status || 'queued') as AdminQueueJob['status']);
+      .map((row: any) => mapRowToAdminJob(row, userMap.get(String(row.user_id || ''))));
 
-      return {
-        id: String(row.id),
-        userId: String(row.user_id),
-        userEmail: profile?.email || undefined,
-        userName: profile?.displayName || undefined,
-        clientPlatform: getQueueClientPlatform(payload),
-        status: (row.status || 'queued') as AdminQueueJob['status'],
-        displayStatus,
-        assetType: (row.asset_type || 'image') as AdminQueueJob['assetType'],
-        queueKind: row.queue_kind || undefined,
-        toolName: row.tool_name || undefined,
-        prompt: row.prompt || undefined,
-        jobId: row.job_id || undefined,
-        progress: typeof row.progress === 'number' ? row.progress : undefined,
-        queueStage: getQueueStage(payload),
-        queueLogs,
-        error: normalizeQueueErrorMessage(displayErrorSource || row.error_message || undefined) || undefined,
-        errorCategory: errorInfo.category,
-        errorRaw: repairVietnameseMojibake(row.error_message || undefined) || undefined,
-        createdAt: row.created_at || undefined,
-        updatedAt: row.updated_at || undefined,
-        nextPollAt: row.next_poll_at || undefined,
-        processingStartedAt: row.processing_started_at || undefined,
-        leaseExpiresAt: row.lease_expires_at || undefined,
-        isStuck: isStuckJob(row),
-      };
-      });
-
+    if (searchFilter) {
+      jobs = jobs.filter((job) => matchesSearch(job, searchFilter));
+    }
     if (statusFilter === 'rescuing') {
       jobs = jobs.filter((job) => job.displayStatus === 'rescuing');
     }
@@ -248,12 +304,71 @@ export const handler: Handler = async (event) => {
       jobs = jobs.filter((job) => job.isStuck);
     }
 
+    const filteredJobs = jobs.slice(0, limit);
+
+    const canComputeGlobalSummary = statusFilter !== 'rescuing' && (!searchFilter || matchedUserIds.length > 0 || /^[0-9a-f-]{6,}$/i.test(searchFilter));
+    let todayJobs: Array<Pick<AdminQueueJob, 'status' | 'displayStatus' | 'jobId' | 'isStuck'>> = [];
+    let allJobs: Array<Pick<AdminQueueJob, 'status' | 'displayStatus' | 'jobId' | 'isStuck'>> = [];
+
+    if (canComputeGlobalSummary) {
+      let summaryQuery = admin
+        .from('generated_images')
+        .select('id, user_id, queue_kind, asset_type, status, job_id, created_at, updated_at, next_poll_at')
+        .order('updated_at', { ascending: false });
+
+      if (statusFilter !== 'all') {
+        summaryQuery = summaryQuery.eq('status', statusFilter);
+      }
+      if (assetTypeFilter === 'image' || assetTypeFilter === 'video') {
+        summaryQuery = summaryQuery.eq('asset_type', assetTypeFilter);
+      }
+      if (userIdFilter) {
+        summaryQuery = summaryQuery.eq('user_id', userIdFilter);
+      } else if (matchedUserIds.length > 0) {
+        summaryQuery = summaryQuery.in('user_id', matchedUserIds);
+      }
+
+      const { data: summaryRows, error: summaryError } = await summaryQuery;
+      if (summaryError) {
+        throw summaryError;
+      }
+
+      let summaryJobs = (Array.isArray(summaryRows) ? summaryRows : [])
+        .filter((row: any) => isSystemQueueKind(row.queue_kind))
+        .map((row: any) => ({
+          id: String(row.id),
+          userId: String(row.user_id),
+          status: (row.status || 'queued') as AdminQueueJob['status'],
+          assetType: (row.asset_type || 'image') as AdminQueueJob['assetType'],
+          jobId: row.job_id || undefined,
+          createdAt: row.created_at || undefined,
+          updatedAt: row.updated_at || undefined,
+          nextPollAt: row.next_poll_at || undefined,
+          isStuck: isStuckJob(row),
+        }));
+
+      if (searchFilter) {
+        if (matchedUserIds.length === 0) {
+          summaryJobs = summaryJobs.filter((job) => {
+            const jobIdValue = String(job.jobId || '').toLowerCase();
+            return job.id.toLowerCase().includes(searchFilter) || jobIdValue.includes(searchFilter);
+          });
+        }
+      }
+
+      todayJobs = summaryJobs.filter((job) => isCreatedTodayInSaigon(job.createdAt));
+      allJobs = summaryJobs;
+    } else {
+      todayJobs = filteredJobs.filter((job) => isCreatedTodayInSaigon(job.createdAt));
+      allJobs = filteredJobs;
+    }
+
     return {
       statusCode: 200,
       headers,
       body: JSON.stringify({
-        jobs,
-        summary: buildSummary(jobs),
+        jobs: filteredJobs,
+        summary: buildSummary(filteredJobs, todayJobs, allJobs),
       }),
     };
   } catch (error: any) {
@@ -261,7 +376,14 @@ export const handler: Handler = async (event) => {
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ error: error?.message || 'Internal Server Error' }),
+      body: JSON.stringify({
+        error: error?.message || 'Internal Server Error',
+        summary: {
+          ...EMPTY_SUMMARY_COUNTS,
+          today: EMPTY_SUMMARY_COUNTS,
+          all: EMPTY_SUMMARY_COUNTS,
+        },
+      }),
     };
   }
 };

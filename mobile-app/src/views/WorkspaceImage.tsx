@@ -617,6 +617,7 @@ export function WorkspaceImage() {
           assetType: 'image',
           costVcoin: cost,
           queueKind: 'image_generate',
+          clientPlatform: 'mobile',
           queuePayload,
         });
 

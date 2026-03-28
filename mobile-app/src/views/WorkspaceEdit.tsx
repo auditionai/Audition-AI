@@ -267,6 +267,7 @@ export function WorkspaceEdit() {
           assetType: 'image',
           costVcoin: selectedCost.vcoin,
           queueKind: 'image_generate',
+          clientPlatform: 'mobile',
           queuePayload,
         });
 

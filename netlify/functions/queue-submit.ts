@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import type { Handler } from '@netlify/functions';
 import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 import { triggerBackgroundQueueWorker } from './_queue-launcher';
-import { fireTelegramJobNotification } from './_telegram-notify';
 import type { QueueProcessingStage, QueueProgressLogEntry } from '../../shared/queueRecipes';
 
 const headers = {
@@ -453,19 +452,6 @@ export const handler: Handler = async (event) => {
     }
 
     await runSafeWorkerTick(event.rawUrl);
-    fireTelegramJobNotification('queued', {
-      id: String(row?.id || body.id || ''),
-      userId: user.id,
-      prompt: body.prompt || '',
-      assetType: asQueueAssetType(body.assetType),
-      toolId: body.toolId || body.queueKind,
-      toolName: body.toolName || body.queueKind,
-      engine: body.engine || body.toolName || body.queueKind,
-      queueKind: body.queueKind,
-      costVcoin: Number(body.costVcoin || 0),
-      createdAt: new Date().toISOString(),
-      queuePayload: queuePayloadWithLogs,
-    });
 
     return {
       statusCode: 200,

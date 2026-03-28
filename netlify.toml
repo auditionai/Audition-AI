@@ -128,6 +128,11 @@
   to = "/.netlify/functions/create_payment"
   status = 200
 
+[[redirects]]
+  from = "/api/download-proxy"
+  to = "/.netlify/functions/download_proxy"
+  status = 200
+
 # Fallback cho React Router (SPA)
 [[redirects]]
   from = "/*"

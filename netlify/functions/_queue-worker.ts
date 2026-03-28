@@ -74,6 +74,16 @@ type QueueBacklogSnapshot = {
   duePollCount: number;
 };
 
+type PreparedQueueDispatchResult =
+  | {
+      type: 'requeue';
+    }
+  | {
+      type: 'prepared';
+      providerPayload: Record<string, unknown>;
+      storedPayload: Record<string, unknown>;
+    };
+
 const getNormalizedProviderJobId = (job: Pick<QueueJobRow, 'job_id'>) => {
   const providerJobId = typeof job.job_id === 'string' ? job.job_id.trim() : '';
   return providerJobId || null;
@@ -1442,10 +1452,11 @@ const shouldSkipDispatch = async (job: QueueJobRow) => {
 };
 
 const markSubmitted = async (job: QueueJobRow, providerJobId: string) => {
+  const nextPayload = withQueueLog(job.queue_payload, 'submitted', `Provider đã nhận job: ${providerJobId}.`, 'success');
   await updateGeneratedImageRecord(job.id, {
     status: 'processing',
     job_id: providerJobId,
-    queue_payload: withQueueLog(job.queue_payload, 'submitted', `Provider đã nhận job: ${providerJobId}.`, 'success'),
+    queue_payload: nextPayload,
     progress: 60,
     error_message: null,
     processing_started_at: new Date().toISOString(),
@@ -1454,6 +1465,8 @@ const markSubmitted = async (job: QueueJobRow, providerJobId: string) => {
     lease_expires_at: null,
     updated_at: new Date().toISOString(),
   });
+
+  return nextPayload;
 };
 
 const markSubmittedWithOwnership = async (job: QueueJobRow, providerJobId: string) => {
@@ -1480,6 +1493,8 @@ const markSubmittedWithOwnership = async (job: QueueJobRow, providerJobId: strin
     lease_expires_at: null,
     updated_at: new Date().toISOString(),
   });
+
+  return nextPayload;
 };
 
 const persistPreparedPayload = async (
@@ -1556,7 +1571,10 @@ const markRecipePreparedForDispatch = async (
   return storedPayload;
 };
 
-const prepareImageRecipeInStages = async (job: QueueJobRow, recipePayload: ImageGenerateRecipePayload) => {
+const prepareImageRecipeInStages = async (
+  job: QueueJobRow,
+  recipePayload: ImageGenerateRecipePayload,
+): Promise<PreparedQueueDispatchResult> => {
   validateImageGenerateReferenceIntegrity(recipePayload);
   const renderSources =
     (recipePayload.__uploadSources || []).filter((value): value is string => Boolean(value)).length > 0
@@ -1654,19 +1672,20 @@ const prepareImageRecipeInStages = async (job: QueueJobRow, recipePayload: Image
 
   const validationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, stripInternalQueueMeta(providerPayload));
   const validatedProviderPayload = applyLivePricingConfigToPayload(job.queue_kind, providerPayload, validationResult);
-  await markRecipePreparedForDispatch(job.id, validatedProviderPayload, recipePayload);
+  const storedPayload = await markRecipePreparedForDispatch(job.id, validatedProviderPayload, recipePayload);
 
-  return { type: 'prepared' as const, providerPayload: validatedProviderPayload };
+  return { type: 'prepared', providerPayload: validatedProviderPayload, storedPayload };
 };
 
 const markCompletedWithAssetUrl = async (job: QueueJobRow, assetUrl: string) => {
   const admin = getServiceRoleClient();
+  const nextPayload = withQueueLog(job.queue_payload, 'completed', 'Đã hoàn thành và nhận kết quả.', 'success');
   await admin
     .from('generated_images')
     .update({
       status: 'completed',
       image_url: assetUrl,
-      queue_payload: withQueueLog(job.queue_payload, 'completed', 'Đã hoàn thành và nhận kết quả.', 'success'),
+      queue_payload: nextPayload,
       progress: 100,
       error_message: null,
       attempt_count: 0,
@@ -1677,6 +1696,8 @@ const markCompletedWithAssetUrl = async (job: QueueJobRow, assetUrl: string) => 
       updated_at: new Date().toISOString(),
     })
     .eq('id', job.id);
+
+  return nextPayload;
 };
 
 const completePolledJobWithResultUrl = async (
@@ -2406,7 +2427,7 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
         'Queue preparation timed out before image edit dispatch.',
       );
 
-      await markCompletedWithAssetUrl(job, resultUrl);
+      job.queue_payload = await markCompletedWithAssetUrl(job, resultUrl);
       fireTelegramJobNotification('completed', {
         id: job.id,
         userId: job.user_id,
@@ -2449,11 +2470,7 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
 
       submitPayload = stagedResult.providerPayload;
       submitValidationResult = { pricingMatch: { config_key: String(stagedResult.providerPayload.config_key || '') || undefined } };
-      job.queue_payload = withQueueMeta(
-        stagedResult.providerPayload,
-        job.queue_payload || currentPayload,
-        'dispatching',
-      );
+      job.queue_payload = stagedResult.storedPayload;
     }
 
     if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType !== 'image_generate_recipe_v1') {
@@ -2556,7 +2573,7 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
     }
     providerDispatchStarted = true;
     const providerJobId = await submitProviderJob(job.queue_kind, providerPayloadForSubmit);
-    await markSubmittedWithOwnership(job, providerJobId);
+    job.queue_payload = await markSubmittedWithOwnership(job, providerJobId);
     logQueueWorkerEvent('Submitted job to provider.', {
       ...getQueueWorkerLogJob(job),
       providerJobId,
@@ -2789,7 +2806,7 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
           'Queue preparation timed out before image edit dispatch.',
         );
 
-        await markCompletedWithAssetUrl(job, resultUrl);
+        job.queue_payload = await markCompletedWithAssetUrl(job, resultUrl);
         fireTelegramJobNotification('completed', {
           id: job.id,
           userId: job.user_id,
@@ -2833,11 +2850,7 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
 
         submitPayload = stagedResult.providerPayload;
         submitValidationResult = { pricingMatch: { config_key: String(stagedResult.providerPayload.config_key || '') || undefined } };
-        job.queue_payload = withQueueMeta(
-          stagedResult.providerPayload,
-          job.queue_payload || currentPayload,
-          'dispatching',
-        );
+        job.queue_payload = stagedResult.storedPayload;
       }
 
       if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType !== 'image_generate_recipe_v1') {
@@ -2931,7 +2944,7 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
       job.queue_payload = await markSubmittingPreparedPayload(job.id, job.queue_payload);
       providerDispatchStarted = true;
       const providerJobId = await submitProviderJob(job.queue_kind, providerPayloadForSubmit);
-      await markSubmitted(job, providerJobId);
+      job.queue_payload = await markSubmitted(job, providerJobId);
       summary.submitted += 1;
     } catch (error: any) {
       const message = error?.message || 'Queue dispatch failed';

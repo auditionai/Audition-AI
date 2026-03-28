@@ -437,6 +437,7 @@ export function WorkspaceVideo() {
           id: jobId, prompt: queuedPrompt, toolId: effectiveToolId, toolName: effectiveToolName,
           engine: selectedModelName, assetType: 'video', costVcoin: cost,
           queueKind: activeMode === 'video_ai' ? 'video_generate' : 'motion_generate',
+          clientPlatform: 'mobile',
           queuePayload,
         });
 

@@ -803,6 +803,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                 assetType: 'image',
                 costVcoin: cost,
                 queueKind: 'image_generate',
+                clientPlatform: 'desktop',
                 queuePayload,
             });
 
@@ -912,6 +913,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
             assetType: 'image',
             costVcoin: cost,
             queueKind: 'image_generate',
+            clientPlatform: 'desktop',
             queuePayload: payload,
         });
 

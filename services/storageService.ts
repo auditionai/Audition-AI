@@ -534,7 +534,7 @@ const fetchAssetBlobForPersistence = async (assetUrl: string): Promise<Blob> => 
         if (!response.ok) throw new Error(`Direct fetch failed: ${response.status}`);
         return await response.blob();
     } catch (directError) {
-        const proxyUrl = `/.netlify/functions/download_proxy?url=${encodeURIComponent(assetUrl)}`;
+        const proxyUrl = `/api/download-proxy?url=${encodeURIComponent(assetUrl)}`;
         const proxyResponse = await fetch(proxyUrl);
         if (!proxyResponse.ok) {
             throw directError instanceof Error ? directError : new Error('Failed to fetch asset for publish');

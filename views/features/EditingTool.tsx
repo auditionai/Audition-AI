@@ -2,13 +2,7 @@
 import { Feature, GeneratedImage, Language, ViewId } from '../../types';
 import { Icons } from '../../components/Icons';
 import { useNotification } from '../../components/NotificationSystem';
-import {
-  getModelPricing,
-  getUserProfile,
-  type ModelPricing,
-} from '../../services/economyService';
-import { CONCURRENCY_LIMITS, useConcurrency } from '../../services/concurrencyService';
-import { enqueueServerJob } from '../../services/serverQueueService';
+import { getModelPricing, getUserProfile, type ModelPricing } from '../../services/economyService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import {
   getVertexEditResolutionCostMap,
@@ -16,6 +10,8 @@ import {
   type AuditionPricingOverride,
 } from '../../services/tstCatalog';
 import type { ImageEditRecipePayload } from '../../shared/queueRecipes';
+import { DIRECT_IMAGE_EDIT_QUEUE_KIND } from '../../shared/queueKinds';
+import { runDirectImageEdit } from '../../services/directImageEditService';
 import { calculateAspectRatioString, loadImageWithTimeout } from '../../utils/imageProcessor';
 
 interface EditingToolProps {
@@ -115,7 +111,6 @@ export const EditingTool: React.FC<EditingToolProps> = ({
   onNavigateView,
 }) => {
   const { notify } = useNotification();
-  const { queueStats } = useConcurrency();
 
   const [prompt, setPrompt] = useState('');
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
@@ -250,26 +245,6 @@ export const EditingTool: React.FC<EditingToolProps> = ({
       );
       return;
     }
-    if (
-      queueStats.myImageProcessing >= CONCURRENCY_LIMITS.user.imageProcessing &&
-      queueStats.myQueued >= CONCURRENCY_LIMITS.user.queued
-    ) {
-      notify(
-        lang === 'vi'
-          ? 'Bạn đã đạt giới hạn 1 luồng xử lý ảnh và 1 hàng chờ. Vui lòng đợi.'
-          : 'You have reached the limit of 1 image slot and 1 queued job.',
-        'warning',
-      );
-      return;
-    }
-    if (queueStats.systemQueued >= CONCURRENCY_LIMITS.system.queued) {
-      notify(
-        lang === 'vi' ? 'Hệ thống đang quá tải (hàng chờ đầy). Vui lòng thử lại sau.' : 'System queue is full. Please try again later.',
-        'error',
-      );
-      return;
-    }
-
     const user = await getUserProfile();
     if ((user.vcoin_balance || 0) < selectedGenerationCost.vcoin) {
       notify(
@@ -295,12 +270,24 @@ export const EditingTool: React.FC<EditingToolProps> = ({
       timestamp: Date.now(),
       updatedAt: Date.now(),
       assetType: 'image',
+      queueKind: DIRECT_IMAGE_EDIT_QUEUE_KIND,
       toolId: feature.id,
       toolName: feature.name.en,
       engine: engineLabel,
-      status: 'queued',
+      status: 'processing',
       jobId: queuedJobId,
-      progress: 0,
+      progress: 15,
+      queueStage: 'preparing',
+      queueLogs: [
+        {
+          at: new Date().toISOString(),
+          stage: 'preparing',
+          level: 'info',
+          message: lang === 'vi'
+            ? 'Đang tải ảnh nguồn và khởi tạo xử lý trực tiếp.'
+            : 'Uploading source image and initializing direct processing.',
+        },
+      ],
       cost: selectedGenerationCost.vcoin,
     };
 
@@ -334,23 +321,41 @@ export const EditingTool: React.FC<EditingToolProps> = ({
           aspectRatio,
         };
 
-        await enqueueServerJob({
+        const result = await runDirectImageEdit({
           id: queuedJobId,
           prompt: displayPrompt,
           toolId: feature.id,
           toolName: feature.name.en,
           engine: engineLabel,
-          assetType: 'image',
           costVcoin: selectedGenerationCost.vcoin,
-          queueKind: 'image_generate',
           queuePayload,
+        });
+
+        await saveImageToLocalCache({
+          ...queuedImage,
+          url: result.imageUrl || '',
+          status: 'completed',
+          progress: 100,
+          queueStage: 'completed',
+          updatedAt: result.updatedAt ? new Date(result.updatedAt).getTime() : Date.now(),
+          queueLogs: [
+            ...(queuedImage.queueLogs || []),
+            {
+              at: result.updatedAt || new Date().toISOString(),
+              stage: 'completed',
+              level: 'success',
+              message: lang === 'vi'
+                ? 'Đã hoàn thành xử lý trực tiếp.'
+                : 'Direct edit completed.',
+            },
+          ],
         });
 
         window.dispatchEvent(new Event('balance_updated'));
         notify(
           lang === 'vi'
-            ? 'Đã tạo job. Tiến trình sẽ được cập nhật realtime trong Lịch sử.'
-            : 'Job submitted. Progress will update in History in realtime.',
+            ? 'Đã xử lý xong. Kết quả đã được lưu vào Lịch sử.'
+            : 'Direct edit finished. The result has been saved to History.',
           'success',
         );
       } catch (error) {
@@ -369,6 +374,16 @@ export const EditingTool: React.FC<EditingToolProps> = ({
             error: errorMessage,
             updatedAt: Date.now(),
             progress: 0,
+            queueStage: 'failed',
+            queueLogs: [
+              ...(queuedImage.queueLogs || []),
+              {
+                at: new Date().toISOString(),
+                stage: 'failed',
+                level: 'error',
+                message: errorMessage,
+              },
+            ],
           });
         } catch (persistError) {
           console.warn('[EditingTool] Failed to persist failed placeholder', persistError);

@@ -11,6 +11,7 @@ import { handler as adminStopQueueJobHandler } from '../netlify/functions/admin-
 import { handler as adminUserHistoryHandler } from '../netlify/functions/admin-user-history.ts';
 import { handler as checkinRewardHandler } from '../netlify/functions/checkin-reward.ts';
 import { handler as createPaymentHandler } from '../netlify/functions/create_payment.js';
+import { handler as directImageEditHandler } from '../netlify/functions/direct-image-edit.ts';
 import { handler as forceRescueFailedJobsHandler } from '../netlify/functions/force-rescue-failed-jobs.ts';
 import { handler as galleryImagesHandler } from '../netlify/functions/gallery-images.ts';
 import { handler as getVertexTokenHandler } from '../netlify/functions/get-vertex-token.ts';
@@ -68,6 +69,7 @@ const handlerConfigs = [
   { fnName: 'payos-sync-transaction', apiPath: '/api/payos-sync-transaction', handler: payosSyncTransactionHandler },
   { fnName: 'payos-webhook', apiPath: '/api/payos-webhook', handler: payosWebhookHandler, extraApiPaths: ['/api/payment-webhook'] },
   { fnName: 'create_payment', apiPath: '/api/create-payment', handler: createPaymentHandler },
+  { fnName: 'direct-image-edit', apiPath: '/api/direct-image-edit', handler: directImageEditHandler },
 ];
 
 const toHeaderRecord = (headers) => {

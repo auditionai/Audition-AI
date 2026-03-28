@@ -107,6 +107,8 @@ export interface AdminQueueJob {
   resultUrl?: string;
   progress?: number;
   queueStage?: string;
+  lastLogMessage?: string;
+  lastLogAt?: string;
   queueLogs?: QueueProgressLogEntry[];
   error?: string;
   errorCategory?: QueueErrorCategory;

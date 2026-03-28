@@ -2203,7 +2203,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           <td colSpan={8} className="px-3 py-8 text-center text-slate-500">Không có job nào khớp bộ lọc.</td>
                                       </tr>
                                   ) : filteredQueueJobs.map((job) => {
-                                      const lastLog = job.queueLogs && job.queueLogs.length > 0 ? job.queueLogs[job.queueLogs.length - 1] : null;
+                                      const lastLogMessage = job.lastLogMessage || (job.queueLogs && job.queueLogs.length > 0 ? job.queueLogs[job.queueLogs.length - 1]?.message : '') || job.error || '-';
                                       return (
                                           <tr key={job.id} className="align-top hover:bg-white/5">
                                               <td className="px-3 py-3">
@@ -2239,7 +2239,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                       </div>
                                                   )}
                                                   <div className="text-red-300">{job.error || '-'}</div>
-                                                  {lastLog && <div className="mt-2 text-slate-300">{lastLog.message}</div>}
+                                                  {lastLogMessage && <div className="mt-2 text-slate-300">{lastLogMessage}</div>}
                                                   {job.jobId && <div className="mt-1 text-[11px] text-audi-cyan">Provider ID: {job.jobId}</div>}
                                               </td>
                                               <td className="px-3 py-3 text-right">
@@ -2258,7 +2258,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           {filteredQueueJobs.length === 0 ? (
                               <div className="text-center text-slate-500 py-6">Không có job nào khớp bộ lọc.</div>
                           ) : filteredQueueJobs.map((job) => {
-                              const lastLog = job.queueLogs && job.queueLogs.length > 0 ? job.queueLogs[job.queueLogs.length - 1] : null;
+                              const lastLogMessage = job.lastLogMessage || (job.queueLogs && job.queueLogs.length > 0 ? job.queueLogs[job.queueLogs.length - 1]?.message : '') || job.error || 'Chưa có log mới';
                               return (
                                   <div key={job.id} className="border border-white/10 rounded-xl p-4 bg-black/20">
                                       <div className="flex items-start justify-between gap-3">
@@ -2283,7 +2283,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               {getQueueErrorCategoryLabel(job.errorCategory)}
                                           </div>
                                       )}
-                                      <div className="mt-3 text-xs text-slate-300">{lastLog?.message || job.error || 'Chưa có log mới'}</div>
+                                      <div className="mt-3 text-xs text-slate-300">{lastLogMessage}</div>
                                       {job.jobId && <div className="mt-1 text-[11px] text-audi-cyan">Provider ID: {job.jobId}</div>}
                                       <button onClick={() => handleOpenQueueJobDetail(job.id)} className="mt-3 w-full py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white text-xs font-bold">
                                           Xem chi tiết input

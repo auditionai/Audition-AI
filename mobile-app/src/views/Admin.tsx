@@ -645,7 +645,7 @@ export function AdminView() {
                 {queueJobs.map((job) => {
                   const status = getQueueStatus(job);
                   const canStop = ['queued', 'processing', 'rescuing'].includes(status);
-                  const lastLog = job.queueLogs && job.queueLogs.length > 0 ? job.queueLogs[job.queueLogs.length - 1] : null;
+                  const lastLogMessage = job.lastLogMessage || (job.queueLogs && job.queueLogs.length > 0 ? job.queueLogs[job.queueLogs.length - 1]?.message : '') || job.error || formatDateTime(job.updatedAt);
                   return (
                     <div key={job.id} className="rounded-[24px] bg-gray-50 p-4 dark:bg-zinc-800/80">
                       <div className="mb-3 flex items-start justify-between gap-3">
@@ -678,8 +678,8 @@ export function AdminView() {
                         </div>
                       </div>
 
-                      <div className="mt-3 line-clamp-2 text-sm text-gray-700 dark:text-zinc-200">{job.prompt || job.toolName || 'Không có prompt'}</div>
-                      <div className="mt-3 text-[11px] text-gray-500 dark:text-zinc-400">{lastLog?.message || job.error || formatDateTime(job.updatedAt)}</div>
+                      <div className="mt-3 text-sm text-gray-700 dark:text-zinc-200">{job.toolName || (job.assetType === 'video' ? 'Video' : 'Ảnh')}</div>
+                      <div className="mt-3 text-[11px] text-gray-500 dark:text-zinc-400">{lastLogMessage}</div>
 
                       <div className="mt-4 flex gap-2">
                         <button onClick={() => void openQueueDetail(job.id)} className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-gray-900 px-4 py-3 text-sm font-bold text-white dark:bg-white dark:text-black">

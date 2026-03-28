@@ -39,6 +39,11 @@ const getQueueStage = (payload: Record<string, unknown> | null | undefined) => {
   return typeof rawStage === 'string' && rawStage.trim() ? rawStage.trim() : undefined;
 };
 
+const getLastQueueLog = (payload: Record<string, unknown> | null | undefined) => {
+  const logs = normalizeQueueLogs(payload);
+  return logs.length > 0 ? logs[logs.length - 1] : null;
+};
+
 const getQueueClientPlatform = (payload: Record<string, unknown> | null | undefined): AdminQueueJob['clientPlatform'] => {
   const rawPlatform = payload && typeof payload === 'object' ? (payload as Record<string, unknown>).__clientPlatform : null;
   const normalized = typeof rawPlatform === 'string' ? rawPlatform.trim().toLowerCase() : '';
@@ -151,7 +156,7 @@ export const handler: Handler = async (event) => {
 
     let query = admin
       .from('generated_images')
-      .select('id, user_id, prompt, tool_name, queue_kind, asset_type, status, job_id, progress, queue_payload, error_message, created_at, updated_at, next_poll_at, processing_started_at, lease_expires_at, image_url')
+      .select('id, user_id, tool_name, queue_kind, asset_type, status, job_id, progress, queue_payload, error_message, error_category, error_raw, created_at, updated_at, next_poll_at, processing_started_at, lease_expires_at')
       .order('updated_at', { ascending: false })
       .limit(limit);
 
@@ -201,7 +206,7 @@ export const handler: Handler = async (event) => {
         ? row.queue_payload as Record<string, unknown>
         : null;
       const profile = userMap.get(String(row.user_id || ''));
-      const queueLogs = normalizeQueueLogs(payload);
+      const lastQueueLog = getLastQueueLog(payload);
       const normalizedStatus = String(row.status || 'queued').toLowerCase();
 
       const displayStatus =
@@ -224,13 +229,14 @@ export const handler: Handler = async (event) => {
         assetType: (row.asset_type || 'image') as AdminQueueJob['assetType'],
         queueKind: row.queue_kind || undefined,
         toolName: row.tool_name || undefined,
-        prompt: row.prompt || undefined,
         jobId: row.job_id || undefined,
-        resultUrl: typeof row.image_url === 'string' && row.image_url.trim() ? row.image_url : undefined,
         progress: typeof row.progress === 'number' ? row.progress : undefined,
         queueStage: getQueueStage(payload),
-        queueLogs,
+        lastLogMessage: lastQueueLog?.message || undefined,
+        lastLogAt: lastQueueLog?.at || undefined,
         error: row.error_message || undefined,
+        errorCategory: row.error_category || undefined,
+        errorRaw: row.error_raw || undefined,
         createdAt: row.created_at || undefined,
         updatedAt: row.updated_at || undefined,
         nextPollAt: row.next_poll_at || undefined,

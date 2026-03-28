@@ -40,6 +40,15 @@ const getQueueStage = (payload: Record<string, unknown> | null | undefined) => {
   return typeof rawStage === 'string' && rawStage.trim() ? rawStage.trim() : undefined;
 };
 
+const getQueueClientPlatform = (payload: Record<string, unknown> | null | undefined): AdminQueueJob['clientPlatform'] => {
+  const rawPlatform = payload && typeof payload === 'object' ? (payload as Record<string, unknown>).__clientPlatform : null;
+  const normalized = typeof rawPlatform === 'string' ? rawPlatform.trim().toLowerCase() : '';
+  if (normalized === 'mobile' || normalized === 'desktop' || normalized === 'unknown') {
+    return normalized;
+  }
+  return undefined;
+};
+
 const isStuckJob = (row: any) => {
   const now = Date.now();
   const updatedAt = new Date(row.updated_at || row.created_at || now).getTime();
@@ -206,6 +215,7 @@ export const handler: Handler = async (event) => {
         userId: String(row.user_id),
         userEmail: profile?.email || undefined,
         userName: profile?.displayName || undefined,
+        clientPlatform: getQueueClientPlatform(payload),
         status: (row.status || 'queued') as AdminQueueJob['status'],
         displayStatus,
         assetType: (row.asset_type || 'image') as AdminQueueJob['assetType'],

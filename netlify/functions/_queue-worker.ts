@@ -423,6 +423,11 @@ const withQueueMeta = (
     nextPayload.__tstTouched = true;
   }
 
+  const previousClientPlatform = toQueuePayloadObject(previousPayload).__clientPlatform;
+  if (typeof previousClientPlatform === 'string' && previousClientPlatform.trim()) {
+    nextPayload.__clientPlatform = previousClientPlatform.trim().toLowerCase();
+  }
+
   const previousRecipePayload = getStoredImageGenerateRecipePayload(previousPayload);
   if (previousRecipePayload) {
     nextPayload.__recipePayload = previousRecipePayload;

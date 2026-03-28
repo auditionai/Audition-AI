@@ -4,6 +4,7 @@ import type { QueueErrorCategory } from './shared/queueErrorClassifier';
 export type Language = 'vi' | 'en';
 export type Theme = 'light' | 'dark';
 export type ViewId = 'home' | 'tools' | 'gallery' | 'admin' | 'guide' | 'about' | 'tool_workspace' | 'support' | 'settings' | 'topup' | 'payment_gateway';
+export type QueueClientPlatform = 'mobile' | 'desktop' | 'unknown';
 
 declare global {
   interface Window {
@@ -95,6 +96,7 @@ export interface AdminQueueJob {
   userId: string;
   userEmail?: string;
   userName?: string;
+  clientPlatform?: QueueClientPlatform;
   status: 'queued' | 'processing' | 'completed' | 'failed';
   displayStatus?: 'queued' | 'processing' | 'completed' | 'failed' | 'rescuing';
   assetType: 'image' | 'video';

@@ -38,6 +38,15 @@ const getQueueStage = (payload: Record<string, unknown> | null | undefined) => {
   return typeof rawStage === 'string' && rawStage.trim() ? rawStage.trim() : undefined;
 };
 
+const getQueueClientPlatform = (payload: Record<string, unknown> | null | undefined): AdminQueueJob['clientPlatform'] => {
+  const rawPlatform = payload && typeof payload === 'object' ? (payload as Record<string, unknown>).__clientPlatform : null;
+  const normalized = typeof rawPlatform === 'string' ? rawPlatform.trim().toLowerCase() : '';
+  if (normalized === 'mobile' || normalized === 'desktop' || normalized === 'unknown') {
+    return normalized;
+  }
+  return undefined;
+};
+
 const toAdminJob = (row: any, profile?: { email?: string; displayName?: string }): AdminQueueJob => {
   const queueLogs = normalizeQueueLogs(row.queue_payload || null);
   const displayErrorSource = pickQueueFailureMessage(row.error_message || undefined, queueLogs);
@@ -55,6 +64,7 @@ const toAdminJob = (row: any, profile?: { email?: string; displayName?: string }
   userId: String(row.user_id),
   userEmail: profile?.email || undefined,
   userName: profile?.displayName || undefined,
+  clientPlatform: getQueueClientPlatform(row.queue_payload || null),
   status: (row.status || 'queued') as AdminQueueJob['status'],
   displayStatus,
   assetType: (row.asset_type || 'image') as AdminQueueJob['assetType'],

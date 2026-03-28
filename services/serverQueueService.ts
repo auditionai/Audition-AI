@@ -1,8 +1,34 @@
 import { getSupabaseAuthHeader } from './supabaseClient';
 import type { QueueRecipePayload } from '../shared/queueRecipes';
+import type { QueueClientPlatform } from '../types';
 
 export type QueueAssetType = 'image' | 'video';
 export type QueueKind = 'image_generate' | 'video_generate' | 'motion_generate';
+
+const SHELL_OVERRIDE_STORAGE_KEY = 'auditionai:shell-override';
+const PHONE_USER_AGENT_PATTERN = /iphone|ipod|android.+mobile|windows phone|blackberry|opera mini|mobile safari/i;
+
+const detectQueueClientPlatform = (): QueueClientPlatform => {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+    return 'unknown';
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('desktop') === '1') return 'desktop';
+  if (params.get('mobile') === '1') return 'mobile';
+
+  const savedOverride = window.localStorage.getItem(SHELL_OVERRIDE_STORAGE_KEY);
+  if (savedOverride === 'mobile' || savedOverride === 'desktop') {
+    return savedOverride;
+  }
+
+  const navigatorWithUAData = navigator as Navigator & { userAgentData?: { mobile?: boolean } };
+  if (typeof navigatorWithUAData.userAgentData?.mobile === 'boolean') {
+    return navigatorWithUAData.userAgentData.mobile ? 'mobile' : 'desktop';
+  }
+
+  return PHONE_USER_AGENT_PATTERN.test(navigator.userAgent.toLowerCase()) ? 'mobile' : 'desktop';
+};
 
 export interface QueueEnqueueRequest {
   id: string;
@@ -14,6 +40,7 @@ export interface QueueEnqueueRequest {
   costVcoin: number;
   queueKind: QueueKind;
   queuePayload: Record<string, unknown> | QueueRecipePayload;
+  clientPlatform?: QueueClientPlatform;
 }
 
 export const QUEUE_SUBMITTED_EVENT = 'audition:queue-submitted';
@@ -44,14 +71,19 @@ const notifyQueueSubmitted = (payload: any) => {
 
 export const enqueueServerJob = async (request: QueueEnqueueRequest) => {
   const authHeader = await getAuthHeader();
+  const clientPlatform = request.clientPlatform || detectQueueClientPlatform();
 
   const response = await fetch('/api/queue-submit', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'x-client-platform': clientPlatform,
       ...authHeader,
     },
-    body: JSON.stringify(request),
+    body: JSON.stringify({
+      ...request,
+      clientPlatform,
+    }),
   });
 
   const payload = await response.json().catch(() => ({}));

@@ -19,6 +19,7 @@ const SEARCH_LIMIT = 240;
 const STALE_QUEUE_MS = 5 * 60 * 1000;
 const OVERDUE_POLL_GRACE_MS = 2 * 60 * 1000;
 const SUMMARY_TIME_ZONE = 'Asia/Ho_Chi_Minh';
+const USER_LOOKUP_CHUNK_SIZE = 40;
 const EMPTY_SUMMARY: AdminQueueSummary = {
   total: 0,
   queued: 0,
@@ -168,6 +169,32 @@ const mapRowToAdminJob = (
   };
 };
 
+const fetchUserMapInChunks = async (admin: ReturnType<typeof getServiceRoleClient>, userIds: string[]) => {
+  const userMap = new Map<string, { email: string; displayName: string }>();
+  for (let index = 0; index < userIds.length; index += USER_LOOKUP_CHUNK_SIZE) {
+    const chunk = userIds.slice(index, index + USER_LOOKUP_CHUNK_SIZE);
+    if (chunk.length === 0) continue;
+
+    const { data, error } = await admin
+      .from('users')
+      .select('id, email, display_name')
+      .in('id', chunk);
+
+    if (error) {
+      throw error;
+    }
+
+    for (const row of (data || []) as any[]) {
+      userMap.set(String(row.id || ''), {
+        email: typeof row.email === 'string' ? row.email : '',
+        displayName: typeof row.display_name === 'string' ? row.display_name : '',
+      });
+    }
+  }
+
+  return userMap;
+};
+
 export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers, body: '' };
@@ -261,26 +288,7 @@ export const handler: Handler = async (event) => {
 
     const rows = Array.isArray(data) ? data : [];
     const userIds = [...new Set(rows.map((row: any) => String(row.user_id || '')).filter(Boolean))];
-    const { data: userRows, error: userRowsError } = userIds.length > 0
-      ? await admin
-          .from('users')
-          .select('id, email, display_name')
-          .in('id', userIds)
-      : { data: [], error: null };
-
-    if (userRowsError) {
-      throw userRowsError;
-    }
-
-    const userMap = new Map(
-      ((userRows || []) as any[]).map((row) => [
-        String(row.id || ''),
-        {
-          email: typeof row.email === 'string' ? row.email : '',
-          displayName: typeof row.display_name === 'string' ? row.display_name : '',
-        },
-      ]),
-    );
+    const userMap = userIds.length > 0 ? await fetchUserMapInChunks(admin, userIds) : new Map();
 
     let jobs = rows
       .filter((row: any) => isSystemQueueKind(row.queue_kind))

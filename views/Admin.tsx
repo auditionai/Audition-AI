@@ -2137,18 +2137,18 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   </div>
 
                   <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3">
-                          <div className="flex items-center gap-2 bg-white/5 rounded-xl border border-white/10 px-3 py-2">
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[minmax(220px,1.2fr)_170px_repeat(3,minmax(0,1fr))_170px] gap-3">
+                          <div className="flex h-12 items-center gap-2 bg-white/5 rounded-xl border border-white/10 px-3">
                               <Icons.Search className="w-4 h-4 text-slate-500" />
-                              <input type="text" placeholder="Lọc theo email hoặc job id..." value={queueEmailFilter} onChange={(e) => setQueueEmailFilter(e.target.value)} className="bg-transparent border-none outline-none text-sm text-white w-full placeholder-slate-500" />
+                              <input type="text" placeholder="Email hoặc job id" value={queueEmailFilter} onChange={(e) => setQueueEmailFilter(e.target.value)} className="bg-transparent border-none outline-none text-sm text-white w-full placeholder-slate-500" />
                           </div>
-                          <div className="flex items-center gap-2 bg-white/5 rounded-xl border border-white/10 p-1">
+                          <div className="flex h-12 items-center gap-1 bg-white/5 rounded-xl border border-white/10 p-1">
                               <button
                                   type="button"
                                   onClick={() => setQueueTimeScope('today')}
                                   className={`flex-1 rounded-lg px-3 py-2 text-sm font-bold transition-colors ${queueTimeScope === 'today' ? 'bg-audi-cyan text-slate-950' : 'text-white hover:bg-white/5'}`}
                               >
-                                  Job hôm nay
+                                  Hôm nay
                               </button>
                               <button
                                   type="button"
@@ -2158,28 +2158,28 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   Tất cả
                               </button>
                           </div>
-                          <select value={queueStatusFilter} onChange={(e) => setQueueStatusFilter(e.target.value as typeof queueStatusFilter)} className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none">
-                              <option value="all" className="bg-[#12121a]">Tất cả trạng thái</option>
+                          <select value={queueStatusFilter} onChange={(e) => setQueueStatusFilter(e.target.value as typeof queueStatusFilter)} className="h-12 bg-white/5 border border-white/10 rounded-xl px-3 text-sm text-white outline-none">
+                              <option value="all" className="bg-[#12121a]">Trạng thái</option>
                               <option value="queued" className="bg-[#12121a]">Đang chờ</option>
                               <option value="processing" className="bg-[#12121a]">Đang xử lý</option>
                               <option value="rescuing" className="bg-[#12121a]">Đang cứu kết quả</option>
                               <option value="completed" className="bg-[#12121a]">Hoàn thành</option>
                               <option value="failed" className="bg-[#12121a]">Thất bại</option>
                           </select>
-                          <select value={queueAssetFilter} onChange={(e) => setQueueAssetFilter(e.target.value as typeof queueAssetFilter)} className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none">
+                          <select value={queueAssetFilter} onChange={(e) => setQueueAssetFilter(e.target.value as typeof queueAssetFilter)} className="h-12 bg-white/5 border border-white/10 rounded-xl px-3 text-sm text-white outline-none">
                               <option value="all" className="bg-[#12121a]">Ảnh + Video</option>
                               <option value="image" className="bg-[#12121a]">Chỉ ảnh</option>
                               <option value="video" className="bg-[#12121a]">Chỉ video</option>
                           </select>
-                          <select value={queueStageFilter} onChange={(e) => setQueueStageFilter(e.target.value)} className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none">
-                              <option value="all" className="bg-[#12121a]">Tất cả stage</option>
+                          <select value={queueStageFilter} onChange={(e) => setQueueStageFilter(e.target.value)} className="h-12 bg-white/5 border border-white/10 rounded-xl px-3 text-sm text-white outline-none">
+                              <option value="all" className="bg-[#12121a]">Stage</option>
                               {queueStageOptions.map((stage) => (
                                   <option key={stage} value={stage} className="bg-[#12121a]">{getQueueStageLabel(stage)}</option>
                               ))}
                           </select>
-                          <label className="flex items-center justify-between gap-3 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white">
-                              <span>Chỉ job đang kẹt</span>
-                              <input type="checkbox" checked={queueStuckOnly} onChange={(e) => setQueueStuckOnly(e.target.checked)} />
+                          <label className="flex h-12 items-center justify-between gap-3 bg-white/5 border border-white/10 rounded-xl px-3 text-sm text-white">
+                              <span>Đang kẹt</span>
+                              <input type="checkbox" className="accent-audi-pink" checked={queueStuckOnly} onChange={(e) => setQueueStuckOnly(e.target.checked)} />
                           </label>
                       </div>
 
@@ -2212,9 +2212,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               </td>
                                               <td className="px-3 py-3">
                                                   <div className="text-white font-mono text-xs">{job.id.slice(0, 12)}</div>
-                                                  <div className="text-xs text-slate-500 mt-1">{job.assetType} · {job.queueKind || 'unknown'}</div>
+                                                  <div className="text-xs text-slate-500 mt-1">{job.assetType === 'video' ? 'Video' : 'Ảnh'}</div>
                                                   <div className="text-[11px] text-slate-500 mt-1">thiết bị: {getQueuePlatformLabel(job.clientPlatform)}</div>
-                                                  {job.jobId && <div className="text-[11px] text-audi-cyan mt-1">provider: {job.jobId.slice(0, 16)}</div>}
                                               </td>
                                               <td className="px-3 py-3">
                                                   <div className={`inline-flex px-2 py-1 rounded text-[11px] font-bold uppercase ${getQueueStatusClass(job.displayStatus || job.status)}`}>
@@ -2241,6 +2240,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                   )}
                                                   <div className="text-red-300">{job.error || '-'}</div>
                                                   {lastLog && <div className="mt-2 text-slate-300">{lastLog.message}</div>}
+                                                  {job.jobId && <div className="mt-1 text-[11px] text-audi-cyan">Provider ID: {job.jobId}</div>}
                                               </td>
                                               <td className="px-3 py-3 text-right">
                                                   <button onClick={() => handleOpenQueueJobDetail(job.id)} className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white text-xs font-bold">
@@ -2271,10 +2271,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               {job.isStuck && <div className="text-[11px] text-orange-400 font-bold mt-1">STUCK</div>}
                                           </div>
                                       </div>
-                                      <div className="grid grid-cols-2 gap-3 mt-3 text-xs">
+                                          <div className="grid grid-cols-2 gap-3 mt-3 text-xs">
                                           <div><span className="text-slate-500">Job</span><div className="text-white font-mono mt-1">{job.id.slice(0, 12)}</div></div>
                                           <div><span className="text-slate-500">Stage</span><div className="text-white mt-1">{getQueueStageLabel(job.queueStage)}</div></div>
-                                          <div><span className="text-slate-500">Loại</span><div className="text-white mt-1">{job.assetType} · {job.queueKind || 'unknown'}</div></div>
+                                          <div><span className="text-slate-500">Loại</span><div className="text-white mt-1">{job.assetType === 'video' ? 'Video' : 'Ảnh'}</div></div>
                                           <div><span className="text-slate-500">Thiết bị</span><div className="text-white mt-1">{getQueuePlatformLabel(job.clientPlatform)}</div></div>
                                           <div><span className="text-slate-500">Cập nhật</span><div className="text-white mt-1">{getTimeAgo(job.updatedAt)}</div></div>
                                       </div>
@@ -2284,6 +2284,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           </div>
                                       )}
                                       <div className="mt-3 text-xs text-slate-300">{lastLog?.message || job.error || 'Chưa có log mới'}</div>
+                                      {job.jobId && <div className="mt-1 text-[11px] text-audi-cyan">Provider ID: {job.jobId}</div>}
                                       <button onClick={() => handleOpenQueueJobDetail(job.id)} className="mt-3 w-full py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white text-xs font-bold">
                                           Xem chi tiết input
                                       </button>

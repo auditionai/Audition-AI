@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Handler } from '@netlify/functions';
 import { runQueueDaemon } from './_queue-daemon';
 import { triggerBackgroundQueueWorker } from './_queue-launcher';
+import { isDedicatedQueueWorkerMode } from './_queue-runtime-mode';
 import { getServiceRoleClient } from './_supabase';
 
 const WORKER_LOCK_LEASE_SECONDS = 180;
@@ -75,6 +76,13 @@ export const handler: Handler = async (event) => {
     return {
       statusCode: 405,
       body: JSON.stringify({ error: 'Method Not Allowed' }),
+    };
+  }
+
+  if (isDedicatedQueueWorkerMode()) {
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ success: true, skipped: true, reason: 'dedicated_worker_mode' }),
     };
   }
 

@@ -60,6 +60,12 @@ type QueueWorkerSummary = {
   requeued: number;
 };
 
+export type QueueWorkerLane = 'all' | 'dispatch' | 'poll';
+
+export type QueueWorkerOptions = {
+  lane?: QueueWorkerLane;
+};
+
 type QueueBacklogSnapshot = {
   queuedImages: number;
   queuedVideos: number;
@@ -95,11 +101,28 @@ const logClaimedJobs = (phase: 'dispatch' | 'poll', jobs: QueueJobRow[]) => {
   });
 };
 
-let activeWorkerRun: Promise<QueueWorkerSummary> | null = null;
+const normalizeQueueWorkerLane = (lane?: string | null): QueueWorkerLane => {
+  if (lane === 'dispatch' || lane === 'poll') {
+    return lane;
+  }
+
+  return 'all';
+};
+
+const parsePositiveIntEnv = (name: string, fallback: number, minimum = 1) => {
+  const raw = Number.parseInt(String(process.env[name] || '').trim(), 10);
+  if (!Number.isFinite(raw) || raw < minimum) {
+    return fallback;
+  }
+
+  return raw;
+};
+
+const activeWorkerRuns = new Map<QueueWorkerLane, Promise<QueueWorkerSummary>>();
 
 const TST_API_KEY = process.env.TST_API_KEY || '';
 const TST_API_BASE = 'https://api.tramsangtao.com/v1';
-const POLL_INTERVAL_SECONDS = 5;
+const POLL_INTERVAL_SECONDS = parsePositiveIntEnv('QUEUE_POLL_INTERVAL_SECONDS', 5);
 const MAX_DISPATCH_RETRIES = 6;
 const MAX_POLL_FAILURES = 8;
 const MAX_PROCESSING_AGE_MS = 30 * 60 * 1000;
@@ -115,16 +138,16 @@ const SINGLE_AND_COUPLE_PREPARE_TIMEOUT_MS = 10 * 60 * 1000;
 const GROUP_OF_THREE_PREPARE_TIMEOUT_MS = 15 * 60 * 1000;
 const GROUP_OF_FOUR_PREPARE_TIMEOUT_MS = 20 * 60 * 1000;
 const IMAGE_REFERENCE_UPLOAD_CHUNK_SIZE = 2;
-const DISPATCH_CLAIM_LIMIT = 8;
-const POLL_CLAIM_LIMIT = 12;
-const DISPATCH_CONCURRENCY_LIMIT = 8;
-const POLL_CONCURRENCY_LIMIT = 12;
+const DISPATCH_CLAIM_LIMIT = parsePositiveIntEnv('QUEUE_DISPATCH_CLAIM_LIMIT', 8);
+const POLL_CLAIM_LIMIT = parsePositiveIntEnv('QUEUE_POLL_CLAIM_LIMIT', 12);
+const DISPATCH_CONCURRENCY_LIMIT = parsePositiveIntEnv('QUEUE_DISPATCH_CONCURRENCY_LIMIT', 8);
+const POLL_CONCURRENCY_LIMIT = parsePositiveIntEnv('QUEUE_POLL_CONCURRENCY_LIMIT', 12);
 const WORKER_TICK_BUDGET_MS = 8_000;
 const MAX_QUEUE_LOG_ENTRIES = 80;
 const ORPHAN_CLAIM_GRACE_MS = 30_000;
 const AMBIGUOUS_DISPATCH_RECOVERY_GRACE_MS = 3 * 60 * 1000;
 const LEASE_HEARTBEAT_INTERVAL_MS = 30_000;
-const DISPATCH_LEASE_SECONDS = 300;
+const DISPATCH_LEASE_SECONDS = parsePositiveIntEnv('QUEUE_DISPATCH_LEASE_SECONDS', 300, 30);
 const STALE_RECOVERY_SCAN_LIMIT = 50;
 const STALE_RECOVERY_MIN_AGE_MS = 45_000;
 const STALE_VERIFYING_OUTPUT_RECOVERY_MIN_AGE_MS = 90_000;
@@ -2513,7 +2536,10 @@ const processPollJob = async (job: QueueJobRow, workerStartedAt: number): Promis
   }
 };
 
-const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
+const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise<QueueWorkerSummary> => {
+  const lane = normalizeQueueWorkerLane(options.lane);
+  const shouldRunPollLane = lane !== 'dispatch';
+  const shouldRunDispatchLane = lane !== 'poll';
   const admin = getServiceRoleClient();
   const workerStartedAt = Date.now();
   const backlog = await getQueueBacklogSnapshot();
@@ -2536,60 +2562,69 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
     requeued: 0,
   };
 
-  summary.completed += await recoverStaleVerifyingOutputJobs();
-  summary.requeued += await recoverStaleProviderPollingJobs();
-  summary.requeued += await recoverStalePreparingJobs();
-
-  const { data: claimedPollRows, error: prioritizedPollError } = await admin.rpc('claim_pollable_generated_jobs', {
-    p_limit: dynamicPollClaimLimit,
-    p_lease_seconds: 60,
-  });
-
-  if (prioritizedPollError) {
-    throw prioritizedPollError;
+  if (shouldRunPollLane) {
+    summary.completed += await recoverStaleVerifyingOutputJobs();
+    summary.requeued += await recoverStaleProviderPollingJobs();
   }
 
-  const prioritizedPollJobs = (claimedPollRows || []) as QueueJobRow[];
-  summary.claimedForPoll = prioritizedPollJobs.length;
-  logClaimedJobs('poll', prioritizedPollJobs);
-
-  const pollResults = await runWithConcurrency(
-    prioritizedPollJobs,
-    dynamicPollConcurrencyLimit,
-    (job) => processPollJob(job, workerStartedAt),
-  );
-  for (const result of pollResults) {
-    summary.completed += Number(result.completed || 0);
-    summary.failed += Number(result.failed || 0);
-    summary.requeued += Number(result.requeued || 0);
+  if (shouldRunDispatchLane) {
+    summary.requeued += await recoverStalePreparingJobs();
   }
 
-  const { data: claimedDispatchRows, error: prioritizedDispatchError } = await admin.rpc('claim_dispatchable_generated_jobs', {
-    p_limit: dynamicDispatchClaimLimit,
-    p_lease_seconds: DISPATCH_LEASE_SECONDS,
-  });
+  if (shouldRunPollLane) {
+    const { data: claimedPollRows, error: prioritizedPollError } = await admin.rpc('claim_pollable_generated_jobs', {
+      p_limit: dynamicPollClaimLimit,
+      p_lease_seconds: 60,
+    });
 
-  if (prioritizedDispatchError) {
-    throw prioritizedDispatchError;
+    if (prioritizedPollError) {
+      throw prioritizedPollError;
+    }
+
+    const prioritizedPollJobs = (claimedPollRows || []) as QueueJobRow[];
+    summary.claimedForPoll = prioritizedPollJobs.length;
+    logClaimedJobs('poll', prioritizedPollJobs);
+
+    const pollResults = await runWithConcurrency(
+      prioritizedPollJobs,
+      dynamicPollConcurrencyLimit,
+      (job) => processPollJob(job, workerStartedAt),
+    );
+    for (const result of pollResults) {
+      summary.completed += Number(result.completed || 0);
+      summary.failed += Number(result.failed || 0);
+      summary.requeued += Number(result.requeued || 0);
+    }
   }
 
-  const prioritizedDispatchJobs = (claimedDispatchRows || []) as QueueJobRow[];
-  summary.claimedForDispatch = prioritizedDispatchJobs.length;
-  logClaimedJobs('dispatch', prioritizedDispatchJobs);
+  if (shouldRunDispatchLane) {
+    const { data: claimedDispatchRows, error: prioritizedDispatchError } = await admin.rpc('claim_dispatchable_generated_jobs', {
+      p_limit: dynamicDispatchClaimLimit,
+      p_lease_seconds: DISPATCH_LEASE_SECONDS,
+    });
 
-  const dispatchResults = await runWithConcurrency(
-    prioritizedDispatchJobs,
-    dynamicDispatchConcurrencyLimit,
-    (job) => processDispatchJob(job, workerStartedAt),
-  );
-  for (const result of dispatchResults) {
-    summary.submitted += Number(result.submitted || 0);
-    summary.completed += Number(result.completed || 0);
-    summary.failed += Number(result.failed || 0);
-    summary.requeued += Number(result.requeued || 0);
+    if (prioritizedDispatchError) {
+      throw prioritizedDispatchError;
+    }
+
+    const prioritizedDispatchJobs = (claimedDispatchRows || []) as QueueJobRow[];
+    summary.claimedForDispatch = prioritizedDispatchJobs.length;
+    logClaimedJobs('dispatch', prioritizedDispatchJobs);
+
+    const dispatchResults = await runWithConcurrency(
+      prioritizedDispatchJobs,
+      dynamicDispatchConcurrencyLimit,
+      (job) => processDispatchJob(job, workerStartedAt),
+    );
+    for (const result of dispatchResults) {
+      summary.submitted += Number(result.submitted || 0);
+      summary.completed += Number(result.completed || 0);
+      summary.failed += Number(result.failed || 0);
+      summary.requeued += Number(result.requeued || 0);
+    }
   }
 
-  if (hasWorkerTickBudgetRemaining(workerStartedAt)) {
+  if (shouldRunPollLane && hasWorkerTickBudgetRemaining(workerStartedAt)) {
     summary.completed += await rescueFailedJobsWithProviderResults();
   }
 
@@ -2870,18 +2905,21 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
   return summary;
 };
 
-export const runQueueWorker = async (): Promise<QueueWorkerSummary> => {
+export const runQueueWorker = async (options: QueueWorkerOptions = {}): Promise<QueueWorkerSummary> => {
+  const lane = normalizeQueueWorkerLane(options.lane);
+  const activeWorkerRun = activeWorkerRuns.get(lane);
   if (activeWorkerRun) {
     return activeWorkerRun;
   }
 
-  activeWorkerRun = (async () => {
+  const createdRun = (async () => {
     try {
-      return await runQueueWorkerInternal();
+      return await runQueueWorkerInternal({ lane });
     } finally {
-      activeWorkerRun = null;
+      activeWorkerRuns.delete(lane);
     }
   })();
 
-  return activeWorkerRun;
+  activeWorkerRuns.set(lane, createdRun);
+  return createdRun;
 };

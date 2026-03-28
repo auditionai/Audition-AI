@@ -17,6 +17,14 @@ export interface QueueEnqueueRequest {
 }
 
 export const QUEUE_SUBMITTED_EVENT = 'audition:queue-submitted';
+const QUEUE_TICK_NOOP_RESULT = {
+  success: true,
+  accepted: false,
+  background: false,
+  reason: 'dedicated_worker_mode',
+} as const;
+
+let queueTickDisabledLogged = false;
 
 const getAuthHeader = async () => {
   return getSupabaseAuthHeader();
@@ -32,18 +40,6 @@ const notifyQueueSubmitted = (payload: any) => {
       detail: payload,
     }),
   );
-};
-
-const scheduleQueueTickRetry = (delayMs: number) => {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  window.setTimeout(() => {
-    triggerServerQueueTick(true).catch((error) => {
-      console.warn('[Queue] Retry tick failed:', error);
-    });
-  }, delayMs);
 };
 
 export const enqueueServerJob = async (request: QueueEnqueueRequest) => {
@@ -67,71 +63,17 @@ export const enqueueServerJob = async (request: QueueEnqueueRequest) => {
     request,
     response: payload,
   });
-  triggerServerQueueTick(true).catch((error) => {
-    console.warn('[Queue] Immediate tick failed:', error);
-  });
-  scheduleQueueTickRetry(1_000);
-  scheduleQueueTickRetry(2_500);
-  scheduleQueueTickRetry(5_000);
 
   return payload;
 };
 
-let lastTickAt = 0;
-let queueTickDisabledLogged = false;
-let queueTickUnavailableUntil = 0;
-
-export const triggerServerQueueTick = async (force = false) => {
-  const now = Date.now();
-  if (!force && queueTickUnavailableUntil > now) {
-    return null;
-  }
-  if (!force && now - lastTickAt < 3000) {
-    return null;
+export const triggerServerQueueTick = async (_force = false) => {
+  if (!queueTickDisabledLogged) {
+    queueTickDisabledLogged = true;
+    console.info('[Queue] queue-tick is disabled. Render dedicated worker owns queue processing.');
   }
 
-  lastTickAt = now;
-  let response: Response;
-  let payload: any = {};
-  let errorMessage = 'Failed to trigger queue worker';
-
-  try {
-    response = await fetch('/api/queue-tick', {
-      method: 'POST',
-    });
-    payload = await response.json().catch(() => ({}));
-    errorMessage = payload?.error || errorMessage;
-  } catch (error: any) {
-    queueTickUnavailableUntil = Date.now() + 60_000;
-    if (!queueTickDisabledLogged) {
-      queueTickDisabledLogged = true;
-      console.warn('[Queue] Server worker unavailable:', error?.message || error);
-    }
-    throw error;
-  }
-
-  if (!response.ok) {
-    throw new Error(errorMessage);
-  }
-
-  if (payload?.disabled) {
-    queueTickUnavailableUntil = Date.now() + 60_000;
-    if (!queueTickDisabledLogged) {
-      queueTickDisabledLogged = true;
-      console.warn('[Queue] Server worker disabled:', errorMessage);
-    }
-    return payload;
-  }
-
-  if (payload?.timedOut) {
-    queueTickDisabledLogged = false;
-    queueTickUnavailableUntil = 0;
-    return payload;
-  }
-
-  queueTickDisabledLogged = false;
-  queueTickUnavailableUntil = 0;
-  return payload;
+  return QUEUE_TICK_NOOP_RESULT;
 };
 
 export const syncPayOSTransaction = async (orderCode: string | number) => {

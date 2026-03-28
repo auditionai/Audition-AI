@@ -1,4 +1,4 @@
-import { runQueueWorker } from './_queue-worker';
+import { runQueueWorker, type QueueWorkerLane, type QueueWorkerOptions } from './_queue-worker';
 
 type QueueWorkerSummary = Awaited<ReturnType<typeof runQueueWorker>>;
 
@@ -9,6 +9,7 @@ export type QueueDaemonSummary = QueueWorkerSummary & {
 };
 
 type QueueDaemonOptions = {
+  lane?: QueueWorkerLane;
   maxRuntimeMs?: number;
   idleIterationsToStop?: number;
   activeDelayMs?: number;
@@ -53,6 +54,7 @@ const hasWorkerActivity = (summary: QueueWorkerSummary) =>
 
 export const runQueueDaemon = async (options: QueueDaemonOptions = {}): Promise<QueueDaemonSummary> => {
   const {
+    lane = 'all',
     maxRuntimeMs = DEFAULT_MAX_RUNTIME_MS,
     idleIterationsToStop = DEFAULT_IDLE_ITERATIONS_TO_STOP,
     activeDelayMs = DEFAULT_ACTIVE_DELAY_MS,
@@ -64,7 +66,8 @@ export const runQueueDaemon = async (options: QueueDaemonOptions = {}): Promise<
   let idleIterations = 0;
 
   while (Date.now() - startedAt < maxRuntimeMs) {
-    const summary = await runQueueWorker();
+    const workerOptions: QueueWorkerOptions = { lane };
+    const summary = await runQueueWorker(workerOptions);
     aggregate.iterations += 1;
     mergeSummary(aggregate, summary);
 

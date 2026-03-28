@@ -48,14 +48,53 @@ const normalizeQueueLogs = (payload: Record<string, unknown> | null | undefined)
   ));
 };
 
+const normalizeQueueLogsFromRow = (row: any) => {
+  if (row.queue_payload && typeof row.queue_payload === 'object') {
+    return normalizeQueueLogs(row.queue_payload as Record<string, unknown>);
+  }
+
+  if (Array.isArray(row.queue_logs)) {
+    return normalizeQueueProgressLogs(row.queue_logs.filter(
+      (entry: any): entry is QueueProgressLogEntry =>
+        Boolean(entry) &&
+        typeof entry === 'object' &&
+        typeof entry.at === 'string' &&
+        typeof entry.stage === 'string' &&
+        typeof entry.level === 'string' &&
+        typeof entry.message === 'string',
+    ));
+  }
+
+  return [];
+};
+
 const getQueueStage = (payload: Record<string, unknown> | null | undefined) => {
   const rawStage = payload && typeof payload === 'object' ? (payload as Record<string, unknown>).__stage : null;
   return typeof rawStage === 'string' && rawStage.trim() ? rawStage.trim() : undefined;
 };
 
+const getQueueStageFromRow = (row: any) => {
+  if (row.queue_payload && typeof row.queue_payload === 'object') {
+    return getQueueStage(row.queue_payload as Record<string, unknown>);
+  }
+  return typeof row.queue_stage === 'string' && row.queue_stage.trim() ? row.queue_stage.trim() : undefined;
+};
+
 const getQueueClientPlatform = (payload: Record<string, unknown> | null | undefined): AdminQueueJob['clientPlatform'] => {
   const rawPlatform = payload && typeof payload === 'object' ? (payload as Record<string, unknown>).__clientPlatform : null;
   const normalized = typeof rawPlatform === 'string' ? rawPlatform.trim().toLowerCase() : '';
+  if (normalized === 'mobile' || normalized === 'desktop' || normalized === 'unknown') {
+    return normalized;
+  }
+  return undefined;
+};
+
+const getQueueClientPlatformFromRow = (row: any): AdminQueueJob['clientPlatform'] => {
+  if (row.queue_payload && typeof row.queue_payload === 'object') {
+    return getQueueClientPlatform(row.queue_payload as Record<string, unknown>);
+  }
+
+  const normalized = typeof row.queue_client_platform === 'string' ? row.queue_client_platform.trim().toLowerCase() : '';
   if (normalized === 'mobile' || normalized === 'desktop' || normalized === 'unknown') {
     return normalized;
   }
@@ -129,10 +168,11 @@ const mapRowToAdminJob = (
   const payload = row.queue_payload && typeof row.queue_payload === 'object'
     ? row.queue_payload as Record<string, unknown>
     : null;
-  const queueLogs = normalizeQueueLogs(payload);
+  const queueLogs = normalizeQueueLogsFromRow(row);
   const displayErrorSource = pickQueueFailureMessage(row.error_message || undefined, queueLogs);
   const errorInfo = classifyQueueError(displayErrorSource || row.error_message || undefined);
   const displayStatus =
+    payload &&
     String(row.status || 'queued') === 'failed' &&
     isFailedRescueStillActive(payload) &&
     !isTerminalRescueFailureMessage(displayErrorSource) &&
@@ -145,7 +185,7 @@ const mapRowToAdminJob = (
     userId: String(row.user_id),
     userEmail: profile?.email || undefined,
     userName: profile?.displayName || undefined,
-    clientPlatform: getQueueClientPlatform(payload),
+    clientPlatform: getQueueClientPlatformFromRow(row),
     status: (row.status || 'queued') as AdminQueueJob['status'],
     displayStatus,
     assetType: (row.asset_type || 'image') as AdminQueueJob['assetType'],
@@ -155,7 +195,7 @@ const mapRowToAdminJob = (
     jobId: row.job_id || undefined,
     resultUrl: typeof row.image_url === 'string' && row.image_url.trim() ? row.image_url : undefined,
     progress: typeof row.progress === 'number' ? row.progress : undefined,
-    queueStage: getQueueStage(payload),
+    queueStage: getQueueStageFromRow(row),
     queueLogs,
     error: normalizeQueueErrorMessage(displayErrorSource || row.error_message || undefined) || undefined,
     errorCategory: errorInfo.category,
@@ -260,9 +300,14 @@ export const handler: Handler = async (event) => {
       }
     }
 
+    const useLightweightPayload = timeScope === 'all' && !searchFilter && statusFilter !== 'rescuing' && stageFilter === 'all' && !stuckOnly;
+    const selectClause = useLightweightPayload
+      ? 'id, user_id, prompt, tool_name, queue_kind, asset_type, status, job_id, progress, error_message, created_at, updated_at, next_poll_at, processing_started_at, lease_expires_at, image_url, queue_stage:queue_payload->>__stage, queue_client_platform:queue_payload->>__clientPlatform, queue_logs:queue_payload->__logs'
+      : 'id, user_id, prompt, tool_name, queue_kind, asset_type, status, job_id, progress, queue_payload, error_message, created_at, updated_at, next_poll_at, processing_started_at, lease_expires_at, image_url';
+
     let query = admin
       .from('generated_images')
-      .select('id, user_id, prompt, tool_name, queue_kind, asset_type, status, job_id, progress, queue_payload, error_message, created_at, updated_at, next_poll_at, processing_started_at, lease_expires_at, image_url')
+      .select(selectClause)
       .order('updated_at', { ascending: false })
       .limit(searchFilter ? Math.max(limit, SEARCH_LIMIT) : limit);
 

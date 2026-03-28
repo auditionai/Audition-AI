@@ -181,7 +181,7 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
           .from('generated_images')
           .select('id', { count: 'exact', head: true })
           .eq('user_id', userId)
-          .eq('status', 'queued'),
+          .eq('status', 'queued')
           .in('queue_kind', TST_QUEUE_KIND_VALUES),
       ),
       countRows(

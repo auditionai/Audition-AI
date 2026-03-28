@@ -9,6 +9,7 @@
     "dev:functions": "node ./scripts/run-netlify-functions-with-timeout.mjs",
     "dev:netlify": "netlify dev",
     "build": "tsc && vite build",
+    "render:queue-worker": "tsx ./scripts/render-queue-worker.ts",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
   },

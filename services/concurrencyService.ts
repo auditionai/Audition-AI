@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from './supabaseClient';
 import { getUserProfile } from './economyService';
 import { QUEUE_SUBMITTED_EVENT, triggerServerQueueTick } from './serverQueueService';
+import { isSystemQueueKind } from '../shared/queueKinds';
 
 export interface JobState {
   jobId: string;
@@ -72,6 +73,7 @@ type GeneratedImageQueueRow = {
   id: string;
   user_id: string;
   asset_type?: string | null;
+  queue_kind?: string | null;
   status?: string | null;
   progress?: number | null;
   created_at?: string | null;
@@ -105,7 +107,12 @@ const sortJobsByTimestampDesc = (jobs: JobState[]) =>
   [...jobs].sort((a, b) => b.timestamp - a.timestamp);
 
 const mapGeneratedImageToJobState = (row: GeneratedImageQueueRow | null | undefined): JobState | null => {
-  if (!row?.id || !row.user_id || !ACTIVE_JOB_STATUSES.has(String(row.status || ''))) {
+  if (
+    !row?.id ||
+    !row.user_id ||
+    !ACTIVE_JOB_STATUSES.has(String(row.status || '')) ||
+    !isSystemQueueKind(row.queue_kind)
+  ) {
     return null;
   }
 
@@ -291,7 +298,7 @@ export const initConcurrencyTracker = async () => {
     try {
       const { data, error } = await supabase
         .from('generated_images')
-        .select('id, user_id, asset_type, status, progress, created_at')
+        .select('id, user_id, asset_type, queue_kind, status, progress, created_at')
         .eq('user_id', userId)
         .in('status', ['queued', 'processing'])
         .order('created_at', { ascending: false });

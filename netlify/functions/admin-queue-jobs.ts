@@ -4,6 +4,7 @@ import type { QueueProgressLogEntry } from '../../shared/queueRecipes';
 import { normalizeQueueProgressLogs, repairVietnameseMojibake } from '../../shared/queueLogText';
 import { classifyQueueError, isTerminalRescueFailureMessage, normalizeQueueErrorMessage, pickQueueFailureMessage } from '../../shared/queueErrorClassifier';
 import { isFailedRescueStillActive } from '../../shared/queueRescueState';
+import { isSystemQueueKind } from '../../shared/queueKinds';
 import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 
 const headers = {
@@ -182,7 +183,9 @@ export const handler: Handler = async (event) => {
       ]),
     );
 
-    let jobs: AdminQueueJob[] = rows.map((row: any) => {
+    let jobs: AdminQueueJob[] = rows
+      .filter((row: any) => isSystemQueueKind(row.queue_kind))
+      .map((row: any) => {
       const payload = row.queue_payload && typeof row.queue_payload === 'object'
         ? row.queue_payload as Record<string, unknown>
         : null;
@@ -223,7 +226,7 @@ export const handler: Handler = async (event) => {
         leaseExpiresAt: row.lease_expires_at || undefined,
         isStuck: isStuckJob(row),
       };
-    });
+      });
 
     if (statusFilter === 'rescuing') {
       jobs = jobs.filter((job) => job.displayStatus === 'rescuing');

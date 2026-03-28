@@ -19,6 +19,7 @@ const USER_IMAGE_LIMIT = 1;
 const USER_VIDEO_LIMIT = 1;
 const USER_QUEUE_LIMIT = 1;
 const TST_QUEUE_KINDS = new Set(['image_generate', 'video_generate', 'motion_generate']);
+const TST_QUEUE_KIND_VALUES = Array.from(TST_QUEUE_KINDS);
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -163,6 +164,7 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
           .select('id', { count: 'exact', head: true })
           .eq('user_id', userId)
           .eq('status', 'processing')
+          .in('queue_kind', TST_QUEUE_KIND_VALUES)
           .eq('asset_type', 'image'),
       ),
       countRows(
@@ -171,6 +173,7 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
           .select('id', { count: 'exact', head: true })
           .eq('user_id', userId)
           .eq('status', 'processing')
+          .in('queue_kind', TST_QUEUE_KIND_VALUES)
           .eq('asset_type', 'video'),
       ),
       countRows(
@@ -179,12 +182,14 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
           .select('id', { count: 'exact', head: true })
           .eq('user_id', userId)
           .eq('status', 'queued'),
+          .in('queue_kind', TST_QUEUE_KIND_VALUES),
       ),
       countRows(
         admin
           .from('generated_images')
           .select('id', { count: 'exact', head: true })
           .eq('status', 'processing')
+          .in('queue_kind', TST_QUEUE_KIND_VALUES)
           .eq('asset_type', 'image'),
       ),
       countRows(
@@ -192,13 +197,15 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
           .from('generated_images')
           .select('id', { count: 'exact', head: true })
           .eq('status', 'processing')
+          .in('queue_kind', TST_QUEUE_KIND_VALUES)
           .eq('asset_type', 'video'),
       ),
       countRows(
         admin
           .from('generated_images')
           .select('id', { count: 'exact', head: true })
-          .eq('status', 'queued'),
+          .eq('status', 'queued')
+          .in('queue_kind', TST_QUEUE_KIND_VALUES),
       ),
     ]);
 

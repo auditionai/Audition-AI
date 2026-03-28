@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Handler } from '@netlify/functions';
 import { runQueueDaemon } from './_queue-daemon';
 import { triggerBackgroundQueueWorker } from './_queue-launcher';
+import { isDedicatedQueueWorkerMode } from './_queue-runtime-mode';
 import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 import { refreshAutoDisabledServerAvailability } from './_server-availability';
 import type { QueueProgressLogEntry } from '../../shared/queueRecipes';
@@ -204,6 +205,14 @@ export const handler: Handler = async (event) => {
       statusCode: 405,
       headers,
       body: JSON.stringify({ error: 'Method Not Allowed' }),
+    };
+  }
+
+  if (isDedicatedQueueWorkerMode()) {
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify({ success: true, skipped: true, reason: 'dedicated_worker_mode' }),
     };
   }
 

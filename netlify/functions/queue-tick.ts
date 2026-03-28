@@ -1,5 +1,6 @@
 import type { Handler } from '@netlify/functions';
 import { triggerBackgroundQueueWorker } from './_queue-launcher';
+import { isDedicatedQueueWorkerMode } from './_queue-runtime-mode';
 
 const headers = {
   'Content-Type': 'application/json',
@@ -22,6 +23,14 @@ export const handler: Handler = async (event) => {
       statusCode: 405,
       headers,
       body: JSON.stringify({ error: 'Method Not Allowed' }),
+    };
+  }
+
+  if (isDedicatedQueueWorkerMode()) {
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify({ success: true, accepted: false, background: false, reason: 'dedicated_worker_mode' }),
     };
   }
 

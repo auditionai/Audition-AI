@@ -1187,6 +1187,13 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           default: return status || '-';
       }
   };
+  const getQueuePlatformLabel = (platform?: string) => {
+      switch (platform) {
+          case 'mobile': return 'Điện thoại';
+          case 'desktop': return 'Máy tính';
+          default: return 'Không rõ';
+      }
+  };
   const getQueueStatusClass = (status?: string) => {
       switch (status) {
           case 'failed': return 'bg-red-500/15 text-red-400';
@@ -2167,6 +2174,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               <td className="px-3 py-3">
                                                   <div className="text-white font-mono text-xs">{job.id.slice(0, 12)}</div>
                                                   <div className="text-xs text-slate-500 mt-1">{job.assetType} · {job.queueKind || 'unknown'}</div>
+                                                  <div className="text-[11px] text-slate-500 mt-1">thiết bị: {getQueuePlatformLabel(job.clientPlatform)}</div>
                                                   {job.jobId && <div className="text-[11px] text-audi-cyan mt-1">provider: {job.jobId.slice(0, 16)}</div>}
                                               </td>
                                               <td className="px-3 py-3">
@@ -2228,6 +2236,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           <div><span className="text-slate-500">Job</span><div className="text-white font-mono mt-1">{job.id.slice(0, 12)}</div></div>
                                           <div><span className="text-slate-500">Stage</span><div className="text-white mt-1">{getQueueStageLabel(job.queueStage)}</div></div>
                                           <div><span className="text-slate-500">Loại</span><div className="text-white mt-1">{job.assetType} · {job.queueKind || 'unknown'}</div></div>
+                                          <div><span className="text-slate-500">Thiết bị</span><div className="text-white mt-1">{getQueuePlatformLabel(job.clientPlatform)}</div></div>
                                           <div><span className="text-slate-500">Cập nhật</span><div className="text-white mt-1">{getTimeAgo(job.updatedAt)}</div></div>
                                       </div>
                                       {job.errorCategory && job.error && (
@@ -3274,6 +3283,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       { label: 'Email', value: selectedQueueJobDetail.job.userEmail || '-' },
                                       { label: 'Status', value: getQueueStatusLabel(selectedQueueJobDetail.job.displayStatus || selectedQueueJobDetail.job.status) },
                                       { label: 'Stage', value: getQueueStageLabel(selectedQueueJobDetail.job.queueStage) },
+                                      { label: 'Thiết bị', value: getQueuePlatformLabel(selectedQueueJobDetail.job.clientPlatform) },
                                       { label: 'Asset', value: selectedQueueJobDetail.job.assetType },
                                       { label: 'Queue Kind', value: selectedQueueJobDetail.job.queueKind || '-' },
                                       { label: 'Error Type', value: getQueueErrorCategoryLabel(selectedQueueJobDetail.job.errorCategory) },

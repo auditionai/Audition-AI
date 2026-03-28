@@ -282,6 +282,10 @@ export const sendTelegramJobNotification = async (
   eventType: JobNotificationEvent,
   record: JobNotificationRecord,
 ) => {
+  if (eventType === 'queued') {
+    return;
+  }
+
   if (!notifyWebhookUrl || !notifyWebhookSecret) {
     return;
   }
@@ -333,5 +337,9 @@ export const fireTelegramJobNotification = (
   eventType: JobNotificationEvent,
   record: JobNotificationRecord,
 ) => {
+  if (eventType === 'queued') {
+    return;
+  }
+
   void sendTelegramJobNotification(eventType, record);
 };

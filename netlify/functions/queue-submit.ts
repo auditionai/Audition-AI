@@ -2,13 +2,12 @@ import { randomUUID } from 'node:crypto';
 import type { Handler } from '@netlify/functions';
 import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 import { triggerBackgroundQueueWorker } from './_queue-launcher';
-import { fireTelegramJobNotification } from './_telegram-notify';
 import type { QueueProcessingStage, QueueProgressLogEntry } from '../../shared/queueRecipes';
 
 const headers = {
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Platform',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
@@ -22,6 +21,9 @@ const TST_QUEUE_KINDS = new Set(['image_generate', 'video_generate', 'motion_gen
 const TST_QUEUE_KIND_VALUES = Array.from(TST_QUEUE_KINDS);
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const PHONE_USER_AGENT_PATTERN = /iphone|ipod|android.+mobile|windows phone|blackberry|opera mini|mobile safari/i;
+
+type QueueClientPlatform = 'mobile' | 'desktop' | 'unknown';
 
 type QueueBody = {
   id?: string;
@@ -33,6 +35,7 @@ type QueueBody = {
   costVcoin?: number;
   queueKind?: string;
   queuePayload?: Record<string, unknown>;
+  clientPlatform?: QueueClientPlatform | string;
 };
 
 const buildInitialQueueLogs = (queueKind: string): QueueProgressLogEntry[] => {
@@ -99,6 +102,61 @@ const normalizeJobId = (value: unknown) => {
   return typeof value === 'string' && UUID_PATTERN.test(value) ? value : randomUUID();
 };
 
+const normalizeQueueClientPlatform = (value: unknown): QueueClientPlatform | null => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'mobile' || normalized === 'desktop' || normalized === 'unknown') {
+    return normalized;
+  }
+  return null;
+};
+
+const inferQueueClientPlatformFromUserAgent = (userAgent?: string | null): QueueClientPlatform => {
+  const normalizedUserAgent = String(userAgent || '').trim().toLowerCase();
+  if (!normalizedUserAgent) {
+    return 'unknown';
+  }
+
+  return PHONE_USER_AGENT_PATTERN.test(normalizedUserAgent) ? 'mobile' : 'desktop';
+};
+
+const resolveQueueClientPlatform = (event: HandlerEventLike, body: QueueBody): QueueClientPlatform => {
+  const bodyPlatform = normalizeQueueClientPlatform(body.clientPlatform);
+  if (bodyPlatform) {
+    return bodyPlatform;
+  }
+
+  const headerPlatform = normalizeQueueClientPlatform(
+    event.headers['x-client-platform'] ||
+    event.headers['X-Client-Platform'],
+  );
+  if (headerPlatform) {
+    return headerPlatform;
+  }
+
+  return inferQueueClientPlatformFromUserAgent(
+    event.headers['user-agent'] ||
+    event.headers['User-Agent'],
+  );
+};
+
+type HandlerEventLike = {
+  headers: Record<string, string | undefined>;
+};
+
+const buildInitialQueuePayload = (
+  queuePayload: Record<string, unknown> | undefined,
+  queueKind: string,
+  clientPlatform: QueueClientPlatform,
+) =>
+  queuePayload && typeof queuePayload === 'object'
+    ? {
+        ...queuePayload,
+        __stage: 'queued',
+        __logs: buildInitialQueueLogs(queueKind),
+        __clientPlatform: clientPlatform,
+      }
+    : queuePayload;
+
 const countRows = async (query: PromiseLike<{ count: number | null; error: any }>) => {
   const { count, error } = await query;
   if (error) {
@@ -113,6 +171,7 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
   const assetType = asQueueAssetType(body.assetType);
   const costVcoin = Number(body.costVcoin || 0);
   const queueKind = body.queueKind || (assetType === 'video' ? 'video_generate' : 'image_generate');
+  const clientPlatform = normalizeQueueClientPlatform(body.clientPlatform) || 'unknown';
   const queuePayload = body.queuePayload ?? {};
   let chargeApplied = false;
 
@@ -251,14 +310,7 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
   }
 
   const now = new Date().toISOString();
-  const queuePayloadWithLogs =
-    queuePayload && typeof queuePayload === 'object'
-      ? {
-          ...queuePayload,
-          __stage: 'queued',
-          __logs: buildInitialQueueLogs(queueKind),
-        }
-      : queuePayload;
+  const queuePayloadWithLogs = buildInitialQueuePayload(queuePayload, queueKind, clientPlatform);
   const { error: insertError } = await admin.from('generated_images').insert({
     id: jobId,
     user_id: userId,
@@ -345,6 +397,7 @@ export const handler: Handler = async (event) => {
     const { user } = await requireAuthenticatedUser(event);
     const admin = getServiceRoleClient();
     const body = JSON.parse(event.body || '{}') as QueueBody;
+    const clientPlatform = resolveQueueClientPlatform(event, body);
 
     if (!body.queueKind || !body.queuePayload || !body.assetType) {
       return {
@@ -357,14 +410,11 @@ export const handler: Handler = async (event) => {
     ensureProviderConfiguredForQueueKind(body.queueKind);
 
     let row: any;
-    const queuePayloadWithLogs =
-      body.queuePayload && typeof body.queuePayload === 'object'
-        ? {
-            ...body.queuePayload,
-            __stage: 'queued',
-            __logs: buildInitialQueueLogs(body.queueKind),
-          }
-        : body.queuePayload;
+    const queuePayloadWithLogs = buildInitialQueuePayload(body.queuePayload, body.queueKind, clientPlatform);
+    const normalizedBody: QueueBody = {
+      ...body,
+      clientPlatform,
+    };
 
     const rpcResult = await admin.rpc('server_enqueue_generated_job', {
       p_id: normalizeJobId(body.id),
@@ -396,25 +446,12 @@ export const handler: Handler = async (event) => {
       }
 
       console.warn('[queue-submit] Falling back to direct enqueue because RPC is unavailable:', message);
-      row = await enqueueDirectly(user.id, body);
+      row = await enqueueDirectly(user.id, normalizedBody);
     } else {
       row = Array.isArray(rpcResult.data) ? rpcResult.data[0] : rpcResult.data;
     }
 
     await runSafeWorkerTick(event.rawUrl);
-    fireTelegramJobNotification('queued', {
-      id: String(row?.id || body.id || ''),
-      userId: user.id,
-      prompt: body.prompt || '',
-      assetType: asQueueAssetType(body.assetType),
-      toolId: body.toolId || body.queueKind,
-      toolName: body.toolName || body.queueKind,
-      engine: body.engine || body.toolName || body.queueKind,
-      queueKind: body.queueKind,
-      costVcoin: Number(body.costVcoin || 0),
-      createdAt: new Date().toISOString(),
-      queuePayload: queuePayloadWithLogs,
-    });
 
     return {
       statusCode: 200,

@@ -156,7 +156,7 @@ export const handler: Handler = async (event) => {
 
     let query = admin
       .from('generated_images')
-      .select('id, user_id, tool_name, queue_kind, asset_type, status, job_id, progress, queue_payload, error_message, error_category, error_raw, created_at, updated_at, next_poll_at, processing_started_at, lease_expires_at')
+      .select('id, user_id, tool_name, queue_kind, asset_type, status, job_id, progress, queue_payload, error_message, created_at, updated_at, next_poll_at, processing_started_at, lease_expires_at')
       .order('updated_at', { ascending: false })
       .limit(limit);
 
@@ -235,8 +235,6 @@ export const handler: Handler = async (event) => {
         lastLogMessage: lastQueueLog?.message || undefined,
         lastLogAt: lastQueueLog?.at || undefined,
         error: row.error_message || undefined,
-        errorCategory: row.error_category || undefined,
-        errorRaw: row.error_raw || undefined,
         createdAt: row.created_at || undefined,
         updatedAt: row.updated_at || undefined,
         nextPollAt: row.next_poll_at || undefined,

@@ -53,7 +53,7 @@ type AdminUserRow = {
   usageCount?: number;
 };
 
-const EMPTY_QUEUE_SUMMARY_COUNTS: AdminQueueSummary['today'] = {
+const EMPTY_QUEUE_SUMMARY: AdminQueueSummary = {
   total: 0,
   queued: 0,
   processing: 0,
@@ -62,12 +62,6 @@ const EMPTY_QUEUE_SUMMARY_COUNTS: AdminQueueSummary['today'] = {
   overduePolls: 0,
   untouchedQueued: 0,
   stalledPreDispatch: 0,
-};
-
-const EMPTY_QUEUE_SUMMARY: AdminQueueSummary = {
-  ...EMPTY_QUEUE_SUMMARY_COUNTS,
-  today: { ...EMPTY_QUEUE_SUMMARY_COUNTS },
-  all: { ...EMPTY_QUEUE_SUMMARY_COUNTS },
 };
 
 const formatDateTime = (value?: string) =>
@@ -168,15 +162,6 @@ const getQueueMediaSectionTone = (key: AdminQueueMediaSection['key']) => {
 
 const getQueueMediaMeta = (media: AdminQueueInputMedia) => `${media.kind} · ${media.sourceType}${media.userProvided === false ? ' · hệ thống' : ''}`;
 
-const getQueueSummaryMetricValue = (
-  summary: AdminQueueSummary,
-  scope: 'current' | 'today' | 'all',
-  key: keyof typeof EMPTY_QUEUE_SUMMARY_COUNTS,
-) => {
-  if (scope === 'current') return summary[key];
-  return summary[scope][key];
-};
-
 const getPaymentStatusLabel = (status?: string) => {
   switch (status) {
     case 'pending':
@@ -231,6 +216,7 @@ export function AdminView() {
   const [actingTransactionId, setActingTransactionId] = useState<string | null>(null);
   const [queueStatusFilter, setQueueStatusFilter] = useState<'all' | 'processing' | 'failed' | 'completed'>('all');
   const [queueAssetFilter, setQueueAssetFilter] = useState<'all' | 'image' | 'video'>('all');
+  const [queueTimeScope, setQueueTimeScope] = useState<'today' | 'all'>('today');
   const [queueSearch, setQueueSearch] = useState('');
   const [queueStuckOnly, setQueueStuckOnly] = useState(false);
   const [userSearch, setUserSearch] = useState('');
@@ -264,6 +250,7 @@ export function AdminView() {
         search: queueSearch.trim() || undefined,
         status: queueStatusFilter === 'processing' ? 'all' : queueStatusFilter,
         assetType: queueAssetFilter,
+        timeScope: queueTimeScope,
         stuckOnly: queueStuckOnly,
         limit: 80,
       });
@@ -288,7 +275,7 @@ export function AdminView() {
     } finally {
       setLoadingQueue(false);
     }
-  }, [notify, queueAssetFilter, queueSearch, queueStatusFilter, queueStuckOnly]);
+  }, [notify, queueAssetFilter, queueSearch, queueStatusFilter, queueStuckOnly, queueTimeScope]);
 
   useEffect(() => {
     void loadStats();
@@ -567,28 +554,15 @@ export function AdminView() {
 
             <div className="mb-3 grid grid-cols-3 gap-2">
               {[
-                ['Đang chạy', getQueueSummaryMetricValue(queueSummary, 'current', 'processing') + getQueueSummaryMetricValue(queueSummary, 'current', 'queued')],
-                ['Lỗi', getQueueSummaryMetricValue(queueSummary, 'current', 'failed')],
-                ['Xong', getQueueSummaryMetricValue(queueSummary, 'current', 'completed')],
+                ['Đang chạy', queueSummary.processing + queueSummary.queued],
+                ['Lỗi', queueSummary.failed],
+                ['Xong', queueSummary.completed],
               ].map(([label, value]) => (
                 <div key={String(label)} className="rounded-[22px] bg-gray-50 px-3 py-3 dark:bg-zinc-800/80">
                   <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400 dark:text-zinc-500">{label}</div>
                   <div className="mt-1 text-xl font-black text-gray-900 dark:text-white">{value}</div>
                 </div>
               ))}
-            </div>
-
-            <div className="mb-4 grid grid-cols-2 gap-2">
-              <div className="rounded-[22px] border border-cyan-100 bg-cyan-50 px-3 py-3 dark:border-cyan-500/20 dark:bg-cyan-500/10">
-                <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-700 dark:text-cyan-300">Hôm nay</div>
-                <div className="mt-1 text-xl font-black text-gray-900 dark:text-white">{queueSummary.today.total}</div>
-                <div className="mt-1 text-[11px] text-cyan-700/80 dark:text-cyan-200/70">Job được tạo trong ngày</div>
-              </div>
-              <div className="rounded-[22px] border border-fuchsia-100 bg-fuchsia-50 px-3 py-3 dark:border-fuchsia-500/20 dark:bg-fuchsia-500/10">
-                <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-fuchsia-700 dark:text-fuchsia-300">Tất cả</div>
-                <div className="mt-1 text-xl font-black text-gray-900 dark:text-white">{queueSummary.all.total}</div>
-                <div className="mt-1 text-[11px] text-fuchsia-700/80 dark:text-fuchsia-200/70">Toàn bộ job khớp bộ lọc</div>
-              </div>
             </div>
 
             <div className="mb-3 flex items-center gap-3 rounded-[24px] border border-gray-200 bg-gray-50 px-4 py-3 dark:border-zinc-700 dark:bg-zinc-800">
@@ -599,6 +573,18 @@ export function AdminView() {
                 placeholder="Tìm theo email hoặc job id"
                 className="w-full bg-transparent text-sm text-gray-800 outline-none placeholder:text-gray-400 dark:text-white dark:placeholder:text-zinc-500"
               />
+            </div>
+
+            <div className="mb-3 flex gap-2 overflow-x-auto no-scrollbar">
+              {(['today', 'all'] as const).map((key) => (
+                <button
+                  key={key}
+                  onClick={() => setQueueTimeScope(key)}
+                  className={`rounded-full px-3 py-1.5 text-[11px] font-bold ${queueTimeScope === key ? (key === 'today' ? 'bg-cyan-500 text-white' : 'bg-pink-500 text-white') : 'bg-gray-100 text-gray-500 dark:bg-zinc-800 dark:text-zinc-400'}`}
+                >
+                  {key === 'today' ? 'Job hôm nay' : 'Tất cả job'}
+                </button>
+              ))}
             </div>
 
             <div className="mb-3 flex gap-2 overflow-x-auto no-scrollbar">

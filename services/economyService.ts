@@ -1830,7 +1830,7 @@ export const getAdminUserHistory = async (targetUserId: string): Promise<History
     return Array.isArray(payload?.history) ? payload.history : [];
 };
 
-const EMPTY_ADMIN_QUEUE_SUMMARY_COUNTS: AdminQueueSummary['today'] = {
+const EMPTY_ADMIN_QUEUE_SUMMARY: AdminQueueSummary = {
     total: 0,
     queued: 0,
     processing: 0,
@@ -1841,7 +1841,7 @@ const EMPTY_ADMIN_QUEUE_SUMMARY_COUNTS: AdminQueueSummary['today'] = {
     stalledPreDispatch: 0,
 };
 
-const normalizeAdminQueueSummaryCounts = (value: Partial<AdminQueueSummary['today']> | null | undefined): AdminQueueSummary['today'] => ({
+const normalizeAdminQueueSummary = (value: Partial<AdminQueueSummary> | null | undefined): AdminQueueSummary => ({
     total: Number(value?.total || 0),
     queued: Number(value?.queued || 0),
     processing: Number(value?.processing || 0),
@@ -1852,18 +1852,13 @@ const normalizeAdminQueueSummaryCounts = (value: Partial<AdminQueueSummary['toda
     stalledPreDispatch: Number(value?.stalledPreDispatch || 0),
 });
 
-const normalizeAdminQueueSummary = (value: Partial<AdminQueueSummary> | null | undefined): AdminQueueSummary => ({
-    ...normalizeAdminQueueSummaryCounts(value),
-    today: normalizeAdminQueueSummaryCounts(value?.today),
-    all: normalizeAdminQueueSummaryCounts(value?.all),
-});
-
 export const getAdminQueueJobs = async (params?: {
     search?: string;
     email?: string;
     userId?: string;
     status?: 'all' | 'queued' | 'processing' | 'completed' | 'failed' | 'rescuing';
     assetType?: 'all' | 'image' | 'video';
+    timeScope?: 'today' | 'all';
     stage?: string;
     stuckOnly?: boolean;
     limit?: number;
@@ -1876,6 +1871,7 @@ export const getAdminQueueJobs = async (params?: {
     if (params?.userId) search.set('userId', params.userId);
     if (params?.status) search.set('status', params.status);
     if (params?.assetType) search.set('assetType', params.assetType);
+    if (params?.timeScope) search.set('timeScope', params.timeScope);
     if (params?.stage) search.set('stage', params.stage);
     if (typeof params?.stuckOnly === 'boolean') search.set('stuckOnly', String(params.stuckOnly));
     if (typeof params?.limit === 'number') search.set('limit', String(params.limit));
@@ -1892,11 +1888,7 @@ export const getAdminQueueJobs = async (params?: {
 
     return {
         jobs: Array.isArray(payload?.jobs) ? payload.jobs : [],
-        summary: normalizeAdminQueueSummary(payload?.summary || {
-            ...EMPTY_ADMIN_QUEUE_SUMMARY_COUNTS,
-            today: EMPTY_ADMIN_QUEUE_SUMMARY_COUNTS,
-            all: EMPTY_ADMIN_QUEUE_SUMMARY_COUNTS,
-        }),
+        summary: normalizeAdminQueueSummary(payload?.summary || EMPTY_ADMIN_QUEUE_SUMMARY),
     };
 };
 

@@ -130,10 +130,7 @@ export interface AdminQueueSummaryCounts {
   stalledPreDispatch: number;
 }
 
-export interface AdminQueueSummary extends AdminQueueSummaryCounts {
-  today: AdminQueueSummaryCounts;
-  all: AdminQueueSummaryCounts;
-}
+export interface AdminQueueSummary extends AdminQueueSummaryCounts {}
 
 export interface AdminQueueInputMedia {
   label: string;

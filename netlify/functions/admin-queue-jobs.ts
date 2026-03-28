@@ -1,5 +1,5 @@
 import type { Handler } from '@netlify/functions';
-import type { AdminQueueJob, AdminQueueSummary, AdminQueueSummaryCounts } from '../../types';
+import type { AdminQueueJob, AdminQueueSummary } from '../../types';
 import type { QueueProgressLogEntry } from '../../shared/queueRecipes';
 import { normalizeQueueProgressLogs, repairVietnameseMojibake } from '../../shared/queueLogText';
 import { classifyQueueError, isTerminalRescueFailureMessage, normalizeQueueErrorMessage, pickQueueFailureMessage } from '../../shared/queueErrorClassifier';
@@ -19,8 +19,7 @@ const SEARCH_LIMIT = 240;
 const STALE_QUEUE_MS = 5 * 60 * 1000;
 const OVERDUE_POLL_GRACE_MS = 2 * 60 * 1000;
 const SUMMARY_TIME_ZONE = 'Asia/Ho_Chi_Minh';
-
-const EMPTY_SUMMARY_COUNTS: AdminQueueSummaryCounts = {
+const EMPTY_SUMMARY: AdminQueueSummary = {
   total: 0,
   queued: 0,
   processing: 0,
@@ -84,7 +83,7 @@ const isStuckJob = (row: any) => {
   return false;
 };
 
-const buildSummaryCounts = (jobs: Array<Pick<AdminQueueJob, 'status' | 'displayStatus' | 'jobId' | 'isStuck'>>): AdminQueueSummaryCounts => ({
+const buildSummary = (jobs: Array<Pick<AdminQueueJob, 'status' | 'displayStatus' | 'jobId' | 'isStuck'>>): AdminQueueSummary => ({
   total: jobs.length,
   queued: jobs.filter((job) => job.status === 'queued').length,
   processing: jobs.filter((job) => job.status === 'processing').length,
@@ -95,17 +94,7 @@ const buildSummaryCounts = (jobs: Array<Pick<AdminQueueJob, 'status' | 'displayS
   stalledPreDispatch: jobs.filter((job) => job.status === 'processing' && !job.jobId && !!job.isStuck).length,
 });
 
-const buildSummary = (
-  currentJobs: Array<Pick<AdminQueueJob, 'status' | 'displayStatus' | 'jobId' | 'isStuck'>>,
-  todayJobs: Array<Pick<AdminQueueJob, 'status' | 'displayStatus' | 'jobId' | 'isStuck'>>,
-  allJobs: Array<Pick<AdminQueueJob, 'status' | 'displayStatus' | 'jobId' | 'isStuck'>>,
-): AdminQueueSummary => ({
-  ...buildSummaryCounts(currentJobs),
-  today: buildSummaryCounts(todayJobs),
-  all: buildSummaryCounts(allJobs),
-});
-
-const getSaigonTodayStart = () => {
+const getSaigonTodayStartIso = () => {
   const formatter = new Intl.DateTimeFormat('en-CA', {
     timeZone: SUMMARY_TIME_ZONE,
     year: 'numeric',
@@ -116,15 +105,10 @@ const getSaigonTodayStart = () => {
   const year = parts.find((part) => part.type === 'year')?.value || '1970';
   const month = parts.find((part) => part.type === 'month')?.value || '01';
   const day = parts.find((part) => part.type === 'day')?.value || '01';
-  return new Date(`${year}-${month}-${day}T00:00:00+07:00`);
+  return new Date(`${year}-${month}-${day}T00:00:00+07:00`).toISOString();
 };
 
-const isCreatedTodayInSaigon = (value?: string | null) => {
-  if (!value) return false;
-  const createdAt = new Date(value);
-  if (Number.isNaN(createdAt.getTime())) return false;
-  return createdAt.getTime() >= getSaigonTodayStart().getTime();
-};
+const isLikelyJobSearch = (value: string) => /^[0-9a-f-]{4,}$/i.test(value);
 
 const matchesSearch = (job: AdminQueueJob, search: string) => {
   if (!search) return true;
@@ -222,6 +206,7 @@ export const handler: Handler = async (event) => {
     const searchFilter = String(event.queryStringParameters?.search || event.queryStringParameters?.email || '').trim().toLowerCase();
     const userIdFilter = String(event.queryStringParameters?.userId || '').trim();
     const assetTypeFilter = String(event.queryStringParameters?.assetType || 'all').trim().toLowerCase();
+    const timeScope = String(event.queryStringParameters?.timeScope || 'today').trim().toLowerCase();
     const stageFilter = String(event.queryStringParameters?.stage || 'all').trim().toLowerCase();
     const stuckOnly = String(event.queryStringParameters?.stuckOnly || 'false').trim().toLowerCase() === 'true';
     const limit = Math.max(1, Math.min(240, Number(event.queryStringParameters?.limit || DEFAULT_LIMIT)));
@@ -239,27 +224,37 @@ export const handler: Handler = async (event) => {
       }
 
       matchedUserIds = (matchedUsers || []).map((row: any) => String(row.id || '')).filter(Boolean);
+      if (matchedUserIds.length === 0 && !isLikelyJobSearch(searchFilter)) {
+        return {
+          statusCode: 200,
+          headers,
+          body: JSON.stringify({ jobs: [], summary: EMPTY_SUMMARY }),
+        };
+      }
     }
 
-    let listQuery = admin
+    let query = admin
       .from('generated_images')
       .select('id, user_id, prompt, tool_name, queue_kind, asset_type, status, job_id, progress, queue_payload, error_message, created_at, updated_at, next_poll_at, processing_started_at, lease_expires_at, image_url')
       .order('updated_at', { ascending: false })
       .limit(searchFilter ? Math.max(limit, SEARCH_LIMIT) : limit);
 
     if (statusFilter !== 'all' && statusFilter !== 'rescuing') {
-      listQuery = listQuery.eq('status', statusFilter);
+      query = query.eq('status', statusFilter);
     }
     if (assetTypeFilter === 'image' || assetTypeFilter === 'video') {
-      listQuery = listQuery.eq('asset_type', assetTypeFilter);
+      query = query.eq('asset_type', assetTypeFilter);
+    }
+    if (timeScope === 'today') {
+      query = query.gte('created_at', getSaigonTodayStartIso());
     }
     if (userIdFilter) {
-      listQuery = listQuery.eq('user_id', userIdFilter);
+      query = query.eq('user_id', userIdFilter);
     } else if (matchedUserIds.length > 0) {
-      listQuery = listQuery.in('user_id', matchedUserIds);
+      query = query.in('user_id', matchedUserIds);
     }
 
-    const { data, error } = await listQuery;
+    const { data, error } = await query;
     if (error) {
       throw error;
     }
@@ -287,7 +282,7 @@ export const handler: Handler = async (event) => {
       ]),
     );
 
-    let jobs: AdminQueueJob[] = rows
+    let jobs = rows
       .filter((row: any) => isSystemQueueKind(row.queue_kind))
       .map((row: any) => mapRowToAdminJob(row, userMap.get(String(row.user_id || ''))));
 
@@ -306,69 +301,12 @@ export const handler: Handler = async (event) => {
 
     const filteredJobs = jobs.slice(0, limit);
 
-    const canComputeGlobalSummary = statusFilter !== 'rescuing' && (!searchFilter || matchedUserIds.length > 0 || /^[0-9a-f-]{6,}$/i.test(searchFilter));
-    let todayJobs: Array<Pick<AdminQueueJob, 'status' | 'displayStatus' | 'jobId' | 'isStuck'>> = [];
-    let allJobs: Array<Pick<AdminQueueJob, 'status' | 'displayStatus' | 'jobId' | 'isStuck'>> = [];
-
-    if (canComputeGlobalSummary) {
-      let summaryQuery = admin
-        .from('generated_images')
-        .select('id, user_id, queue_kind, asset_type, status, job_id, created_at, updated_at, next_poll_at')
-        .order('updated_at', { ascending: false });
-
-      if (statusFilter !== 'all') {
-        summaryQuery = summaryQuery.eq('status', statusFilter);
-      }
-      if (assetTypeFilter === 'image' || assetTypeFilter === 'video') {
-        summaryQuery = summaryQuery.eq('asset_type', assetTypeFilter);
-      }
-      if (userIdFilter) {
-        summaryQuery = summaryQuery.eq('user_id', userIdFilter);
-      } else if (matchedUserIds.length > 0) {
-        summaryQuery = summaryQuery.in('user_id', matchedUserIds);
-      }
-
-      const { data: summaryRows, error: summaryError } = await summaryQuery;
-      if (summaryError) {
-        throw summaryError;
-      }
-
-      let summaryJobs = (Array.isArray(summaryRows) ? summaryRows : [])
-        .filter((row: any) => isSystemQueueKind(row.queue_kind))
-        .map((row: any) => ({
-          id: String(row.id),
-          userId: String(row.user_id),
-          status: (row.status || 'queued') as AdminQueueJob['status'],
-          assetType: (row.asset_type || 'image') as AdminQueueJob['assetType'],
-          jobId: row.job_id || undefined,
-          createdAt: row.created_at || undefined,
-          updatedAt: row.updated_at || undefined,
-          nextPollAt: row.next_poll_at || undefined,
-          isStuck: isStuckJob(row),
-        }));
-
-      if (searchFilter) {
-        if (matchedUserIds.length === 0) {
-          summaryJobs = summaryJobs.filter((job) => {
-            const jobIdValue = String(job.jobId || '').toLowerCase();
-            return job.id.toLowerCase().includes(searchFilter) || jobIdValue.includes(searchFilter);
-          });
-        }
-      }
-
-      todayJobs = summaryJobs.filter((job) => isCreatedTodayInSaigon(job.createdAt));
-      allJobs = summaryJobs;
-    } else {
-      todayJobs = filteredJobs.filter((job) => isCreatedTodayInSaigon(job.createdAt));
-      allJobs = filteredJobs;
-    }
-
     return {
       statusCode: 200,
       headers,
       body: JSON.stringify({
         jobs: filteredJobs,
-        summary: buildSummary(filteredJobs, todayJobs, allJobs),
+        summary: buildSummary(filteredJobs),
       }),
     };
   } catch (error: any) {
@@ -378,11 +316,7 @@ export const handler: Handler = async (event) => {
       headers,
       body: JSON.stringify({
         error: error?.message || 'Internal Server Error',
-        summary: {
-          ...EMPTY_SUMMARY_COUNTS,
-          today: EMPTY_SUMMARY_COUNTS,
-          all: EMPTY_SUMMARY_COUNTS,
-        },
+        summary: EMPTY_SUMMARY,
       }),
     };
   }

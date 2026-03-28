@@ -404,7 +404,7 @@ const AdminModalPortal: React.FC<{ children: React.ReactNode }> = ({ children })
 };
 
 const ADMIN_PRICING_DRAFTS_STORAGE_KEY = 'admin_pricing_drafts_v1';
-const EMPTY_QUEUE_SUMMARY_COUNTS: AdminQueueSummary['today'] = {
+const EMPTY_QUEUE_SUMMARY: AdminQueueSummary = {
     total: 0,
     queued: 0,
     processing: 0,
@@ -413,16 +413,6 @@ const EMPTY_QUEUE_SUMMARY_COUNTS: AdminQueueSummary['today'] = {
     overduePolls: 0,
     untouchedQueued: 0,
     stalledPreDispatch: 0,
-};
-const EMPTY_QUEUE_SUMMARY: AdminQueueSummary = {
-    ...EMPTY_QUEUE_SUMMARY_COUNTS,
-    today: { ...EMPTY_QUEUE_SUMMARY_COUNTS },
-    all: { ...EMPTY_QUEUE_SUMMARY_COUNTS },
-};
-type QueueSummaryMetricKey = keyof typeof EMPTY_QUEUE_SUMMARY_COUNTS;
-const getQueueSummaryMetricValue = (summary: AdminQueueSummary, scope: 'current' | 'today' | 'all', key: QueueSummaryMetricKey) => {
-    if (scope === 'current') return summary[key];
-    return summary[scope][key];
 };
 const getQueueMediaSectionTone = (key: AdminQueueMediaSection['key']) => {
     switch (key) {
@@ -476,6 +466,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [queueEmailFilter, setQueueEmailFilter] = useState('');
   const [queueStatusFilter, setQueueStatusFilter] = useState<'all' | 'queued' | 'processing' | 'completed' | 'failed' | 'rescuing'>('all');
   const [queueAssetFilter, setQueueAssetFilter] = useState<'all' | 'image' | 'video'>('all');
+  const [queueTimeScope, setQueueTimeScope] = useState<'today' | 'all'>('today');
   const [queueStageFilter, setQueueStageFilter] = useState('all');
   const [queueStuckOnly, setQueueStuckOnly] = useState(false);
   const [queueSummaryFilter, setQueueSummaryFilter] = useState<'all' | 'queued' | 'processing' | 'failed' | 'completed' | 'overdue_polls' | 'untouched_queued' | 'stalled_pre_dispatch'>('all');
@@ -651,6 +642,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               search: queueEmailFilter.trim() || undefined,
               status: queueStatusFilter,
               assetType: queueAssetFilter,
+              timeScope: queueTimeScope,
               stage: queueStageFilter !== 'all' ? queueStageFilter : undefined,
               stuckOnly: queueStuckOnly,
               limit: 120,
@@ -1270,10 +1262,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   useEffect(() => {
       if (!isAdmin || activeView !== 'queue') return;
       loadQueueJobs({ silent: false });
-  }, [activeView, isAdmin, queueEmailFilter, queueStatusFilter, queueAssetFilter, queueStageFilter, queueStuckOnly]);
+  }, [activeView, isAdmin, queueEmailFilter, queueStatusFilter, queueAssetFilter, queueTimeScope, queueStageFilter, queueStuckOnly]);
   useEffect(() => {
       setQueueSummaryFilter('all');
-  }, [queueEmailFilter, queueStatusFilter, queueAssetFilter, queueStageFilter, queueStuckOnly]);
+  }, [queueEmailFilter, queueStatusFilter, queueAssetFilter, queueTimeScope, queueStageFilter, queueStuckOnly]);
 
   const handleViewGiftcodeUsage = async (code: Giftcode) => {
       setViewingGiftcodeUsage(code);
@@ -2117,34 +2109,16 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      <div className="bg-[#12121a] border border-cyan-500/20 rounded-2xl px-4 py-3">
-                          <div className="text-[11px] uppercase tracking-wider text-slate-500 font-bold">Job đã tạo hôm nay</div>
-                          <div className="mt-2 text-2xl font-black text-white">{queueSummary.today.total}</div>
-                          <div className="mt-1 text-xs text-slate-400">Tính theo giờ Việt Nam, giữ nguyên các bộ lọc đang chọn.</div>
-                      </div>
-                      <div className="bg-[#12121a] border border-fuchsia-500/20 rounded-2xl px-4 py-3">
-                          <div className="text-[11px] uppercase tracking-wider text-slate-500 font-bold">Tất cả job</div>
-                          <div className="mt-2 text-2xl font-black text-white">{queueSummary.all.total}</div>
-                          <div className="mt-1 text-xs text-slate-400">Toàn bộ lịch sử phù hợp với bộ lọc trạng thái, loại job và tìm kiếm.</div>
-                      </div>
-                      <div className="bg-[#12121a] border border-white/10 rounded-2xl px-4 py-3">
-                          <div className="text-[11px] uppercase tracking-wider text-slate-500 font-bold">Đang hiển thị</div>
-                          <div className="mt-2 text-2xl font-black text-white">{filteredQueueJobs.length}</div>
-                          <div className="mt-1 text-xs text-slate-400">{queueStuckOnly ? 'Đang bật lọc job kẹt.' : 'Danh sách hiện tại sau stage, stuck và card lọc.'}</div>
-                      </div>
-                  </div>
-
                   <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
                       {[
-                          { key: 'all', metricKey: 'total' as QueueSummaryMetricKey, label: 'Tổng', color: 'text-white' },
-                          { key: 'queued', metricKey: 'queued' as QueueSummaryMetricKey, label: 'Queued', color: 'text-yellow-400' },
-                          { key: 'processing', metricKey: 'processing' as QueueSummaryMetricKey, label: 'Processing', color: 'text-audi-cyan' },
-                          { key: 'failed', metricKey: 'failed' as QueueSummaryMetricKey, label: 'Failed', color: 'text-red-400' },
-                          { key: 'completed', metricKey: 'completed' as QueueSummaryMetricKey, label: 'Completed', color: 'text-green-400' },
-                          { key: 'overdue_polls', metricKey: 'overduePolls' as QueueSummaryMetricKey, label: 'Poll quá hạn', color: 'text-red-300' },
-                          { key: 'untouched_queued', metricKey: 'untouchedQueued' as QueueSummaryMetricKey, label: 'Queued bị bỏ đói', color: 'text-orange-400' },
-                          { key: 'stalled_pre_dispatch', metricKey: 'stalledPreDispatch' as QueueSummaryMetricKey, label: 'Kẹt trước TST', color: 'text-pink-400' },
+                          { key: 'all', value: queueSummary.total, label: 'Tổng', color: 'text-white' },
+                          { key: 'queued', value: queueSummary.queued, label: 'Queued', color: 'text-yellow-400' },
+                          { key: 'processing', value: queueSummary.processing, label: 'Processing', color: 'text-audi-cyan' },
+                          { key: 'failed', value: queueSummary.failed, label: 'Failed', color: 'text-red-400' },
+                          { key: 'completed', value: queueSummary.completed, label: 'Completed', color: 'text-green-400' },
+                          { key: 'overdue_polls', value: queueSummary.overduePolls, label: 'Poll quá hạn', color: 'text-red-300' },
+                          { key: 'untouched_queued', value: queueSummary.untouchedQueued, label: 'Queued bị bỏ đói', color: 'text-orange-400' },
+                          { key: 'stalled_pre_dispatch', value: queueSummary.stalledPreDispatch, label: 'Kẹt trước TST', color: 'text-pink-400' },
                       ].map((item) => (
                           <button
                               key={item.label}
@@ -2157,20 +2131,32 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                               }`}
                           >
                               <div className="text-[11px] uppercase tracking-wider text-slate-500 font-bold">{item.label}</div>
-                              <div className={`text-2xl font-black mt-2 ${item.color}`}>{getQueueSummaryMetricValue(queueSummary, 'current', item.metricKey)}</div>
-                              <div className="mt-3 flex items-center justify-between gap-3 text-[11px] text-slate-500">
-                                  <span>Hôm nay {getQueueSummaryMetricValue(queueSummary, 'today', item.metricKey)}</span>
-                                  <span>Tất cả {getQueueSummaryMetricValue(queueSummary, 'all', item.metricKey)}</span>
-                              </div>
+                              <div className={`text-2xl font-black mt-2 ${item.color}`}>{item.value}</div>
                           </button>
                       ))}
                   </div>
 
                   <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3">
                           <div className="flex items-center gap-2 bg-white/5 rounded-xl border border-white/10 px-3 py-2">
                               <Icons.Search className="w-4 h-4 text-slate-500" />
                               <input type="text" placeholder="Lọc theo email hoặc job id..." value={queueEmailFilter} onChange={(e) => setQueueEmailFilter(e.target.value)} className="bg-transparent border-none outline-none text-sm text-white w-full placeholder-slate-500" />
+                          </div>
+                          <div className="flex items-center gap-2 bg-white/5 rounded-xl border border-white/10 p-1">
+                              <button
+                                  type="button"
+                                  onClick={() => setQueueTimeScope('today')}
+                                  className={`flex-1 rounded-lg px-3 py-2 text-sm font-bold transition-colors ${queueTimeScope === 'today' ? 'bg-audi-cyan text-slate-950' : 'text-white hover:bg-white/5'}`}
+                              >
+                                  Job hôm nay
+                              </button>
+                              <button
+                                  type="button"
+                                  onClick={() => setQueueTimeScope('all')}
+                                  className={`flex-1 rounded-lg px-3 py-2 text-sm font-bold transition-colors ${queueTimeScope === 'all' ? 'bg-audi-pink text-white' : 'text-white hover:bg-white/5'}`}
+                              >
+                                  Tất cả
+                              </button>
                           </div>
                           <select value={queueStatusFilter} onChange={(e) => setQueueStatusFilter(e.target.value as typeof queueStatusFilter)} className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none">
                               <option value="all" className="bg-[#12121a]">Tất cả trạng thái</option>

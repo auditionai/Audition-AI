@@ -68,6 +68,33 @@ type QueueBacklogSnapshot = {
   duePollCount: number;
 };
 
+const getNormalizedProviderJobId = (job: Pick<QueueJobRow, 'job_id'>) => {
+  const providerJobId = typeof job.job_id === 'string' ? job.job_id.trim() : '';
+  return providerJobId || null;
+};
+
+const getQueueWorkerLogJob = (job: QueueJobRow) => ({
+  jobId: job.id,
+  providerJobId: getNormalizedProviderJobId(job),
+  queueKind: job.queue_kind,
+  assetType: job.asset_type,
+});
+
+const logQueueWorkerEvent = (message: string, details: Record<string, unknown>) => {
+  console.log(`[queue-worker] ${message}`, details);
+};
+
+const logClaimedJobs = (phase: 'dispatch' | 'poll', jobs: QueueJobRow[]) => {
+  if (!jobs.length) {
+    return;
+  }
+
+  logQueueWorkerEvent(`Claimed ${phase} jobs.`, {
+    count: jobs.length,
+    jobs: jobs.map((job) => getQueueWorkerLogJob(job)),
+  });
+};
+
 let activeWorkerRun: Promise<QueueWorkerSummary> | null = null;
 
 const TST_API_KEY = process.env.TST_API_KEY || '';
@@ -2271,6 +2298,7 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
         finishedAt: new Date().toISOString(),
         queuePayload: job.queue_payload,
       });
+      logQueueWorkerEvent('Completed inline image edit job.', getQueueWorkerLogJob(job));
       return { completed: 1 };
     }
 
@@ -2406,6 +2434,10 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
     providerDispatchStarted = true;
     const providerJobId = await submitProviderJob(job.queue_kind, providerPayloadForSubmit);
     await markSubmittedWithOwnership(job, providerJobId);
+    logQueueWorkerEvent('Submitted job to provider.', {
+      ...getQueueWorkerLogJob(job),
+      providerJobId,
+    });
     return { submitted: 1 };
   } catch (error: any) {
     const message = error?.message || 'Queue dispatch failed';
@@ -2415,18 +2447,34 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
     }
     if (message.startsWith('INVALID_TST_CONFIG:')) {
       await markFailedRespectingRefundPolicy(job, message.replace('INVALID_TST_CONFIG:', '').trim());
+      logQueueWorkerEvent('Dispatch failed permanently.', {
+        ...getQueueWorkerLogJob(job),
+        reason: message,
+      });
       return { failed: 1 };
     }
     if (message.includes('Queue preparation timed out before')) {
       const result = await requeueJob(job, message);
+      logQueueWorkerEvent(result === 'failed' ? 'Preparation timeout ended in failure.' : 'Preparation timeout requeued job.', {
+        ...getQueueWorkerLogJob(job),
+        reason: message,
+      });
       return result === 'failed' ? { failed: 1 } : { requeued: 1 };
     }
     if (isTransientError(message)) {
       const result = await requeueJob(job, message);
+      logQueueWorkerEvent(result === 'failed' ? 'Transient dispatch error ended in failure.' : 'Transient dispatch error requeued job.', {
+        ...getQueueWorkerLogJob(job),
+        reason: message,
+      });
       return result === 'failed' ? { failed: 1 } : { requeued: 1 };
     }
 
     await markFailedRespectingRefundPolicy(job, message);
+    logQueueWorkerEvent('Dispatch failed permanently.', {
+      ...getQueueWorkerLogJob(job),
+      reason: message,
+    });
     return { failed: 1 };
   }
 };
@@ -2444,9 +2492,18 @@ const processPollJob = async (job: QueueJobRow, workerStartedAt: number): Promis
   try {
     const providerData = await pollProviderJob(String(job.job_id || ''));
     const state = await markPolledState(job, providerData);
-    if (state === 'completed') return { completed: 1 };
-    if (state === 'failed') return { failed: 1 };
-    if (state === 'requeued') return { requeued: 1 };
+    if (state === 'completed') {
+      logQueueWorkerEvent('Completed polled job.', getQueueWorkerLogJob(job));
+      return { completed: 1 };
+    }
+    if (state === 'failed') {
+      logQueueWorkerEvent('Polled job failed.', getQueueWorkerLogJob(job));
+      return { failed: 1 };
+    }
+    if (state === 'requeued') {
+      logQueueWorkerEvent('Polled job requeued.', getQueueWorkerLogJob(job));
+      return { requeued: 1 };
+    }
     return {};
   } catch (error: any) {
     const message = error?.message || 'Queue poll failed';
@@ -2494,6 +2551,7 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
 
   const prioritizedPollJobs = (claimedPollRows || []) as QueueJobRow[];
   summary.claimedForPoll = prioritizedPollJobs.length;
+  logClaimedJobs('poll', prioritizedPollJobs);
 
   const pollResults = await runWithConcurrency(
     prioritizedPollJobs,
@@ -2517,6 +2575,7 @@ const runQueueWorkerInternal = async (): Promise<QueueWorkerSummary> => {
 
   const prioritizedDispatchJobs = (claimedDispatchRows || []) as QueueJobRow[];
   summary.claimedForDispatch = prioritizedDispatchJobs.length;
+  logClaimedJobs('dispatch', prioritizedDispatchJobs);
 
   const dispatchResults = await runWithConcurrency(
     prioritizedDispatchJobs,

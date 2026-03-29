@@ -1,8 +1,8 @@
 import { optimizePayload } from '../utils/imageProcessor';
 
 const TST_IMAGE_UPLOAD_MAX_WIDTH = 1280;
-const TST_POLL_INTERVAL_MS = 10000;
-const TST_DEFAULT_TIMEOUT_MS = 30 * 60 * 1000;
+const TST_VIDEO_AND_MOTION_POLL_INTERVAL_MS = 10 * 60 * 1000;
+const TST_DEFAULT_TIMEOUT_MS = 120 * 60 * 1000;
 
 const cleanBase64 = (b64: string) => b64.replace(/^data:image\/\w+;base64,/, '');
 
@@ -225,11 +225,21 @@ export const prepareTramsangtaoMotionJob = async ({
   return payload;
 };
 
-const pollJob = async (jobId: string, onLog: (message: string) => void, timeoutMs = TST_DEFAULT_TIMEOUT_MS): Promise<string> => {
+const pollJob = async (
+  jobId: string,
+  onLog: (message: string) => void,
+  {
+    timeoutMs = TST_DEFAULT_TIMEOUT_MS,
+    pollIntervalMs = TST_VIDEO_AND_MOTION_POLL_INTERVAL_MS,
+  }: {
+    timeoutMs?: number;
+    pollIntervalMs?: number;
+  } = {},
+): Promise<string> => {
   const startedAt = Date.now();
 
   while (Date.now() - startedAt < timeoutMs) {
-    await new Promise((resolve) => setTimeout(resolve, TST_POLL_INTERVAL_MS));
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
     const response = await fetch(`/api/tst-poll?jobId=${encodeURIComponent(jobId)}`);
 
     if (!response.ok) {
@@ -300,7 +310,10 @@ export const runTramsangtaoVideoGenerate = async ({
   const jobId = await submitJob('/api/tst-video-generate', payload, onLog);
   return {
     jobId,
-    resultPromise: pollJob(jobId, onLog, timeoutMs),
+    resultPromise: pollJob(jobId, onLog, {
+      timeoutMs,
+      pollIntervalMs: TST_VIDEO_AND_MOTION_POLL_INTERVAL_MS,
+    }),
   };
 };
 
@@ -339,6 +352,9 @@ export const runTramsangtaoMotionGenerate = async ({
   const jobId = await submitJob('/api/tst-motion-generate', payload, onLog);
   return {
     jobId,
-    resultPromise: pollJob(jobId, onLog, timeoutMs),
+    resultPromise: pollJob(jobId, onLog, {
+      timeoutMs,
+      pollIntervalMs: TST_VIDEO_AND_MOTION_POLL_INTERVAL_MS,
+    }),
   };
 };

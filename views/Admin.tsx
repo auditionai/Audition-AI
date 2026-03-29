@@ -1286,9 +1286,14 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           const payload = await runAdminQueueReconcile();
           const resetQueued = Number(payload?.resetSummary?.resetQueued || 0);
           const resetProcessing = Number(payload?.resetSummary?.resetProcessing || 0);
+          const resetStalledPreDispatch = Number(payload?.resetSummary?.resetStalledPreDispatch || 0);
           const submitted = Number(payload?.summary?.submitted || 0);
           const polled = Number(payload?.summary?.claimedForPoll || 0);
-          showToast(`Reconcile xong. Reset queued=${resetQueued}, processing=${resetProcessing}, poll=${polled}, submitted=${submitted}.`, 'success');
+          if (payload?.skipped && payload?.reason === 'dedicated_worker_mode') {
+              showToast(`Reconcile đã reset queued=${resetQueued}, processing=${resetProcessing}, pre-dispatch=${resetStalledPreDispatch}. Worker riêng sẽ xử lý tiếp.`, 'success');
+          } else {
+              showToast(`Reconcile xong. Reset queued=${resetQueued}, processing=${resetProcessing}, pre-dispatch=${resetStalledPreDispatch}, poll=${polled}, submitted=${submitted}.`, 'success');
+          }
           await loadQueueJobs({ silent: false });
       } catch (error: any) {
           showToast(`Lỗi reconcile queue: ${error?.message || error}`, 'error');

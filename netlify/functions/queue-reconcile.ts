@@ -17,6 +17,7 @@ const headers = {
 };
 
 const WORKER_LOCK_LEASE_SECONDS = 120;
+const STALE_PRE_DISPATCH_RECONCILE_MS = 45_000;
 
 const tryAcquireQueueWorkerLock = async (owner: string) => {
   const admin = getServiceRoleClient();
@@ -154,6 +155,7 @@ const finalizeTerminalFailedRescues = async () => {
 const resetStaleQueueStateForReconcile = async () => {
   const admin = getServiceRoleClient();
   const nowIso = new Date().toISOString();
+  const staleBeforeIso = new Date(Date.now() - STALE_PRE_DISPATCH_RECONCILE_MS).toISOString();
 
   const { data: processingRows, error: processingError } = await admin
     .from('generated_images')
@@ -170,6 +172,54 @@ const resetStaleQueueStateForReconcile = async () => {
 
   if (processingError) {
     throw processingError;
+  }
+
+  const { data: stalledPreDispatchRows, error: stalledPreDispatchError } = await admin
+    .from('generated_images')
+    .select('id, updated_at, lease_expires_at')
+    .eq('status', 'processing')
+    .is('job_id', null)
+    .not('queue_payload', 'is', null)
+    .limit(200);
+
+  if (stalledPreDispatchError) {
+    throw stalledPreDispatchError;
+  }
+
+  const stalledPreDispatchIds = ((stalledPreDispatchRows || []) as Array<{ id: string; updated_at?: string | null; lease_expires_at?: string | null }>)
+    .filter((row) => {
+      const leaseExpired =
+        !row.lease_expires_at ||
+        new Date(row.lease_expires_at).getTime() <= Date.now();
+      const isStale =
+        !row.updated_at ||
+        new Date(row.updated_at).getTime() <= new Date(staleBeforeIso).getTime();
+      return leaseExpired || isStale;
+    })
+    .map((row) => row.id);
+
+  let resetStalledPreDispatch = 0;
+  if (stalledPreDispatchIds.length > 0) {
+    const { data: resetRows, error: resetError } = await admin
+      .from('generated_images')
+      .update({
+        status: 'queued',
+        job_id: null,
+        processing_started_at: null,
+        lease_token: null,
+        lease_expires_at: null,
+        next_poll_at: nowIso,
+        updated_at: nowIso,
+        error_message: null,
+      })
+      .in('id', stalledPreDispatchIds)
+      .select('id');
+
+    if (resetError) {
+      throw resetError;
+    }
+
+    resetStalledPreDispatch = Array.isArray(resetRows) ? resetRows.length : 0;
   }
 
   const { data: queuedRows, error: queuedError } = await admin
@@ -191,6 +241,7 @@ const resetStaleQueueStateForReconcile = async () => {
 
   return {
     resetProcessing: Array.isArray(processingRows) ? processingRows.length : 0,
+    resetStalledPreDispatch,
     resetQueued: Array.isArray(queuedRows) ? queuedRows.length : 0,
   };
 };
@@ -205,14 +256,6 @@ export const handler: Handler = async (event) => {
       statusCode: 405,
       headers,
       body: JSON.stringify({ error: 'Method Not Allowed' }),
-    };
-  }
-
-  if (isDedicatedQueueWorkerMode()) {
-    return {
-      statusCode: 200,
-      headers,
-      body: JSON.stringify({ success: true, skipped: true, reason: 'dedicated_worker_mode' }),
     };
   }
 
@@ -252,6 +295,23 @@ export const handler: Handler = async (event) => {
     const resetSummary = await resetStaleQueueStateForReconcile();
     const finalizedFailedRescues = await finalizeTerminalFailedRescues();
     const serverAvailabilityAutoRefresh = await refreshAutoDisabledServerAvailability();
+
+    if (isDedicatedQueueWorkerMode()) {
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          success: true,
+          skipped: true,
+          reason: 'dedicated_worker_mode',
+          resetSummary,
+          finalizedFailedRescues,
+          serverAvailabilityAutoRefresh,
+          summary: null,
+          followUpLaunchNeeded: false,
+        }),
+      };
+    }
 
     const summary = await runQueueDaemon({
       maxRuntimeMs: 45_000,

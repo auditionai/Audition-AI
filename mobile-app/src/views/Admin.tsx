@@ -372,13 +372,20 @@ export function AdminView() {
       onConfirm: async () => {
         setReconciling(true);
         try {
-          await runAdminQueueReconcile();
+          const payload = await runAdminQueueReconcile();
           await loadQueue();
           if (selectedQueueJobId) {
             const detail = await getAdminQueueJobDetail(selectedQueueJobId);
             setSelectedQueueJobDetail(detail);
           }
-          notify('Đã chạy queue reconcile.', 'success');
+          const resetQueued = Number(payload?.resetSummary?.resetQueued || 0);
+          const resetProcessing = Number(payload?.resetSummary?.resetProcessing || 0);
+          const resetStalledPreDispatch = Number(payload?.resetSummary?.resetStalledPreDispatch || 0);
+          if (payload?.skipped && payload?.reason === 'dedicated_worker_mode') {
+            notify(`Reconcile đã reset ${resetQueued}/${resetProcessing}/${resetStalledPreDispatch}. Worker riêng sẽ xử lý tiếp.`, 'success');
+          } else {
+            notify(`Đã reconcile queue: ${resetQueued}/${resetProcessing}/${resetStalledPreDispatch}.`, 'success');
+          }
         } catch (error) {
           console.error('[MobileAdmin] Queue reconcile failed', error);
           notify('Queue reconcile thất bại.', 'error');

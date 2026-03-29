@@ -29,9 +29,9 @@ export const CONCURRENCY_LIMITS = {
     queued: 1,
   },
   system: {
-    imageProcessing: 8,
-    videoProcessing: 6,
-    queued: 20,
+    imageProcessing: 4,
+    videoProcessing: 4,
+    queued: 10,
   },
 } as const;
 

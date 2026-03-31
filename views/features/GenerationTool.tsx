@@ -70,6 +70,8 @@ const SMART_TIPS = [
     { icon: Icons.ExternalLink, text: "Mẹo: Truy cập AuMix3D.com để mix đồ và chụp ảnh nhân vật tách nền cực nét làm nguyên liệu cho AI." }
 ];
 
+const SAMPLE_IMAGE_PROMPT_LOCK = 'Giữ nguyên 100% quần áo, trang phục, kiểu tóc, gương mặt, lớp hoá trang makeup trên gương mặt, biểu cảm trên gương mặt, phụ kiện như kính, khuyên tai trên mũ tóc, giày dép của ảnh tham chiếu nam và nữ tải lên. Không sử dụng quần áo, trang phục, kiểu tóc, gương mặt, lớp hoá trang makeup, biểu cảm, phụ kiện, giày dép của ảnh mẫu. Không được tự động xoá các chi tiết trên người của ảnh tham chiếu nam và nữ tải lên, không được tự động sáng tạo gương mặt và biểu cảm.';
+
 const TUTORIAL_VIDEO_ID = "ba2WR8txe_c";
 
 interface SamplePrompt {
@@ -193,6 +195,21 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
   const [isConcurrencyExpanded, setIsConcurrencyExpanded] = useState(false);
   const activeFeature = APP_CONFIG.main_features.find((entry) => entry.id === MODE_TO_FEATURE_ID[activeMode]) || feature;
+
+  useEffect(() => {
+      if (!refImage) return;
+
+      setPrompt((previous) => {
+          const normalized = previous.trim();
+          if (normalized.includes(SAMPLE_IMAGE_PROMPT_LOCK)) {
+              return previous;
+          }
+
+          return normalized
+              ? `${SAMPLE_IMAGE_PROMPT_LOCK}\n\n${normalized}`
+              : SAMPLE_IMAGE_PROMPT_LOCK;
+      });
+  }, [refImage]);
 
   const pricingOverrides: AuditionPricingOverride[] = auditionPricing.map((row) => ({
       modelId: row.model_id,
@@ -790,6 +807,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                 recipeType: 'image_generate_recipe_v1',
                 modelId: getGenerationModelId(aiModel),
                 prompt: basePrompt,
+                userPromptInput: prompt.trim(),
+                systemPromptPrefix: activeFeature.defaultPrompt || '',
                 characterCount: characters.length,
                 resolution,
                 aspectRatio,

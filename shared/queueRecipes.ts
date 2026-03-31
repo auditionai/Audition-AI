@@ -57,6 +57,8 @@ export interface ImageGenerateRecipePayload {
   recipeType: 'image_generate_recipe_v1';
   modelId: string;
   prompt: string;
+  userPromptInput?: string;
+  systemPromptPrefix?: string | null;
   characterCount?: number;
   resolution?: string;
   aspectRatio?: string;

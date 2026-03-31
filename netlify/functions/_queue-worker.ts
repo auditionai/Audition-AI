@@ -5,8 +5,8 @@ import { validateQueuePayloadAgainstLiveCatalog } from './_tst-live-catalog';
 import { normalizeTstOutboundPayload } from './_tst-payload-normalizer';
 import {
   buildImageGenerateProviderPayload,
+  prepareImageGeneratePromptWithinLimit,
   prepareProviderPayloadFromQueueRecipe,
-  synthesizeImageGeneratePrompt,
   uploadImageToTst,
 } from './_queue-recipes';
 import { runVertexImageEdit } from './_vertex-image-edit';
@@ -146,7 +146,6 @@ const MAX_GROUP4_IMAGE_PROCESSING_AGE_MS = 30 * 60 * 1000;
 const FAILED_RESULT_RESCUE_SCAN_LIMIT = 10;
 const FAILED_RESULT_RESCUE_LOOKBACK_MS = 24 * 60 * 60 * 1000;
 const FAILED_RESULT_RESCUE_MAX_ATTEMPTS = 8;
-const MAX_PROVIDER_LOST_JOB_RETRIES = 1;
 const PROVIDER_LOST_JOB_CONFIRMATION_POLLS = 3;
 const PROVIDER_LOST_JOB_CONFIRMATION_INTERVAL_SECONDS = 60;
 const SINGLE_AND_COUPLE_PREPARE_TIMEOUT_MS = 10 * 60 * 1000;
@@ -354,9 +353,6 @@ const getFailedRescueNextAt = (payload?: Record<string, unknown> | ImageGenerate
   const timestamp = new Date(raw).getTime();
   return Number.isFinite(timestamp) ? timestamp : 0;
 };
-
-const getProviderLostJobRetryCount = (payload?: Record<string, unknown> | ImageGenerateRecipePayload | null) =>
-  Math.max(0, Number(toQueuePayloadObject(payload).__providerLostJobRetryCount || 0));
 
 const getProviderLostJobNotFoundCount = (payload?: Record<string, unknown> | ImageGenerateRecipePayload | null) =>
   Math.max(0, Number(toQueuePayloadObject(payload).__providerLostJobNotFoundCount || 0));
@@ -1688,10 +1684,10 @@ const prepareImageRecipeInStages = async (
       'synthesizing_prompt',
       `Đang phân tích ${directorSources.length} ảnh để tổng hợp prompt.`,
     ) as ImageGenerateRecipePayload;
-    const synthesizedPrompt = await synthesizeImageGeneratePrompt(recipePayload);
+    const promptPreparation = await prepareImageGeneratePromptWithinLimit(recipePayload);
     const nextPayload: ImageGenerateRecipePayload = {
-      ...recipePayload,
-      __synthesizedPrompt: synthesizedPrompt,
+      ...promptPreparation.optimizedPayload,
+      __synthesizedPrompt: promptPreparation.synthesizedPrompt,
       __stage: 'building_payload',
       __uploadSources: renderSources,
       __directorSources: directorSources,
@@ -1715,14 +1711,17 @@ const prepareImageRecipeInStages = async (
     'building_payload',
     'Đang dựng và kiểm tra payload cuối.',
   ) as ImageGenerateRecipePayload;
-  const synthesizedPrompt = recipePayload.__synthesizedPrompt?.trim()
-    ? recipePayload.__synthesizedPrompt.trim()
-    : await synthesizeImageGeneratePrompt(recipePayload);
-  const providerPayload = buildImageGenerateProviderPayload(recipePayload, uploadedUrls, synthesizedPrompt);
+  const promptPreparation = await prepareImageGeneratePromptWithinLimit(recipePayload);
+  const providerPayload = buildImageGenerateProviderPayload(
+    promptPreparation.optimizedPayload,
+    uploadedUrls,
+    promptPreparation.synthesizedPrompt,
+    promptPreparation.providerPrompt,
+  );
 
   const validationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, stripInternalQueueMeta(providerPayload));
   const validatedProviderPayload = applyLivePricingConfigToPayload(job.queue_kind, providerPayload, validationResult);
-  const storedPayload = await markRecipePreparedForDispatch(job.id, validatedProviderPayload, recipePayload);
+  const storedPayload = await markRecipePreparedForDispatch(job.id, validatedProviderPayload, promptPreparation.optimizedPayload);
 
   return { type: 'prepared', providerPayload: validatedProviderPayload, storedPayload };
 };
@@ -2181,7 +2180,7 @@ const scheduleLostProviderJobConfirmation = async (
   const nextPollAtIso = new Date(Date.now() + PROVIDER_LOST_JOB_CONFIRMATION_INTERVAL_SECONDS * 1000).toISOString();
   const warningMessage =
     finalConfirmationPending
-      ? `Provider tra ve "job set not found" ${PROVIDER_LOST_JOB_CONFIRMATION_POLLS} lan lien tiep. Se doi ${PROVIDER_LOST_JOB_CONFIRMATION_INTERVAL_SECONDS}s va xac minh lan cuoi truoc khi tao lai job.`
+      ? `Provider tra ve "job set not found" ${PROVIDER_LOST_JOB_CONFIRMATION_POLLS} lan lien tiep. Se doi ${PROVIDER_LOST_JOB_CONFIRMATION_INTERVAL_SECONDS}s va xac minh lan cuoi truoc khi danh dau that bai.`
       : `Provider tra ve "job set not found" (${nextNotFoundCount}/${PROVIDER_LOST_JOB_CONFIRMATION_POLLS}). Se poll lai sau ${PROVIDER_LOST_JOB_CONFIRMATION_INTERVAL_SECONDS}s de tranh tao trung provider job.`;
 
   await updateGeneratedImageRecord(job.id, {
@@ -2249,85 +2248,8 @@ const handleLostProviderJobSignal = async (
     return 'requeued';
   }
 
-  if (await autoRedriveLostProviderJob(job, errorMessage)) {
-    return 'requeued';
-  }
-
   await markFailedRespectingRefundPolicy(job, buildProviderLostJobFinalFailureMessage(errorMessage));
   return 'failed';
-};
-
-const autoRedriveLostProviderJob = async (
-  job: QueueJobRow,
-  errorMessage: string,
-) => {
-  if (job.queue_kind !== 'image_generate') {
-    return false;
-  }
-
-  const state = await getJobRuntimeState(job.id);
-  const currentPayload =
-    state?.queue_payload && typeof state.queue_payload === 'object'
-      ? (state.queue_payload as Record<string, unknown>)
-      : job.queue_payload;
-  const currentRetryCount = getProviderLostJobRetryCount(currentPayload);
-  if (currentRetryCount >= MAX_PROVIDER_LOST_JOB_RETRIES) {
-    return false;
-  }
-
-  const currentPayloadObject = toQueuePayloadObject(currentPayload);
-  const reusableProviderPayload =
-    (Array.isArray(currentPayloadObject.img_url) && currentPayloadObject.img_url.length > 0) ||
-    (typeof currentPayloadObject.img_url === 'string' && currentPayloadObject.img_url.trim())
-      ? currentPayloadObject
-      : null;
-  const restoredRecipePayload = getStoredImageGenerateRecipePayload(currentPayload);
-  const nextBasePayload =
-    reusableProviderPayload
-      ? reusableProviderPayload
-      : (restoredRecipePayload || currentPayloadObject);
-
-  if (!nextBasePayload || Object.keys(nextBasePayload).length === 0) {
-    return false;
-  }
-
-  const nextRetryCount = currentRetryCount + 1;
-  const nextPayload = withQueueLog(
-    {
-      ...clearProviderLostJobConfirmationMeta(nextBasePayload),
-      __providerLostJobRetryCount: nextRetryCount,
-      __dispatchAttemptId: null,
-      __dispatchConfirmationPending: false,
-    },
-    'queued',
-    `Provider van khong tim thay job ${String(job.job_id || '').trim() || 'cu'} sau ${PROVIDER_LOST_JOB_CONFIRMATION_POLLS} lan poll lien tiep va 1 lan xac minh cuoi. Tu dong tao lai mot lan (${nextRetryCount}/${MAX_PROVIDER_LOST_JOB_RETRIES}).`,
-    'warning',
-  );
-
-  await updateGeneratedImageRecord(job.id, {
-    status: 'queued',
-    job_id: null,
-    image_url: null,
-    finished_at: null,
-    processing_started_at: null,
-    error_message: null,
-    queue_payload: nextPayload,
-    progress: 55,
-    lease_token: null,
-    lease_expires_at: null,
-    next_poll_at: new Date().toISOString(),
-    attempt_count: 0,
-    last_error_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  });
-
-  logQueueWorkerEvent('Requeued job after provider lost the original job id.', {
-    ...getQueueWorkerLogJob(job),
-    previousProviderJobId: job.job_id || null,
-    retryCount: nextRetryCount,
-    reason: errorMessage,
-  });
-  return true;
 };
 
 const recoverStalePreparingJobs = async () => {

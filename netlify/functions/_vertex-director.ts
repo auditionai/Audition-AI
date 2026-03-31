@@ -2,6 +2,7 @@ import { getImageCharacterReferenceGroups, getImageDirectorSources, type ImageGe
 import { runWithVertexCredentialFailover } from './_vertex-credentials';
 
 const VERTEX_MODEL = 'gemini-3.1-pro-preview';
+const normalizePromptWhitespace = (value: string) => value.replace(/\s+/g, ' ').trim();
 
 const parseErrorMessage = async (response: Response) => {
   try {
@@ -187,3 +188,75 @@ export const synthesizeStrictImagePrompt = async (payload: ImageGenerateRecipePa
     },
   });
 };
+
+export const rewriteUserPromptToFitLimit = async (
+  prompt: string,
+  maxCharacters: number,
+  pipelineLabel = 'generation',
+) => {
+  const normalizedPrompt = normalizePromptWhitespace(prompt);
+  if (!normalizedPrompt) {
+    return '';
+  }
+
+  if (normalizedPrompt.length <= maxCharacters) {
+    return normalizedPrompt;
+  }
+
+  const instruction = [
+    `You rewrite user prompts for a ${pipelineLabel} pipeline.`,
+    'Your job is to make the prompt shorter without changing the original meaning.',
+    'Rules:',
+    '- Keep the same language as the input.',
+    '- Preserve all concrete requirements, constraints, poses, outfits, colors, makeup, expressions, accessories, camera, composition, character count, and prohibitions.',
+    '- Remove repetition, filler, and verbose phrasing only.',
+    '- Do not add new ideas.',
+    `- The final rewritten prompt must be at most ${maxCharacters} characters including spaces.`,
+    '- Return only the rewritten prompt.',
+    '',
+    'USER PROMPT:',
+    normalizedPrompt,
+  ].join('\n');
+
+  return runWithVertexCredentialFailover({
+    taskName: 'image prompt compression',
+    operation: async ({ projectId, accessToken }) => {
+      const response = await fetch(
+        `https://aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/global/publishers/google/models/${VERTEX_MODEL}:generateContent`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: instruction }] }],
+            generationConfig: {
+              temperature: 0.1,
+              topP: 0.8,
+              maxOutputTokens: 1024,
+            },
+          }),
+          signal: AbortSignal.timeout(120000),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(await parseErrorMessage(response));
+      }
+
+      const data = await response.json();
+      const text = normalizePromptWhitespace(String(data?.candidates?.[0]?.content?.parts?.[0]?.text || ''));
+      if (!text) {
+        throw new Error('Vertex AI did not return a compressed user prompt.');
+      }
+
+      return text;
+    },
+  });
+};
+
+export const rewriteUserImagePromptToFitLimit = async (
+  prompt: string,
+  maxCharacters: number,
+) => rewriteUserPromptToFitLimit(prompt, maxCharacters, 'image generation');

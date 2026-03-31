@@ -6,9 +6,17 @@ import {
   type ImageGenerateRecipePayload,
   type QueueRecipePayload,
 } from '../../shared/queueRecipes';
-import { synthesizeStrictImagePrompt } from './_vertex-director';
+import {
+  rewriteUserImagePromptToFitLimit,
+  rewriteUserPromptToFitLimit,
+  synthesizeStrictImagePrompt,
+} from './_vertex-director';
 
 const TST_API_BASE = 'https://api.tramsangtao.com/v1';
+export const TST_PROMPT_MAX_CHARACTERS = 10_000;
+const PROMPT_REWRITE_SAFETY_MARGIN = 400;
+const MIN_USER_PROMPT_REWRITE_CHARACTERS = 180;
+const MAX_PROMPT_REWRITE_ATTEMPTS = 3;
 
 const cleanBase64 = (value: string) => value.replace(/^data:[^;]+;base64,/, '');
 
@@ -177,6 +185,7 @@ export const buildImageGenerateProviderPayload = (
   payload: ImageGenerateRecipePayload,
   uploadedUrls: string[],
   synthesizedPrompt: string,
+  providerPromptOverride?: string,
 ) => {
   const effectiveResolution = getEffectiveImageGenerationResolution(
     payload.modelId,
@@ -185,7 +194,7 @@ export const buildImageGenerateProviderPayload = (
   );
 
   const providerPayload: Record<string, unknown> = {
-    prompt: buildImageProviderPrompt(synthesizedPrompt, payload, payload.negativePrompt),
+    prompt: providerPromptOverride || buildImageProviderPrompt(synthesizedPrompt, payload, payload.negativePrompt),
     model: payload.modelId,
   };
 
@@ -196,6 +205,123 @@ export const buildImageGenerateProviderPayload = (
   if (payload.serverId) providerPayload.server_id = payload.serverId;
 
   return providerPayload;
+};
+
+const normalizePromptWhitespace = (value?: string | null) => String(value || '').replace(/\s+/g, ' ').trim();
+
+const combineImageGeneratePrompt = (systemPromptPrefix: string, userPromptInput: string) =>
+  `${systemPromptPrefix}${userPromptInput}`.trim();
+
+const prepareDirectPromptWithinLimit = async (
+  prompt: string,
+  pipelineLabel: string,
+) => {
+  const normalizedPrompt = normalizePromptWhitespace(prompt);
+  if (!normalizedPrompt) {
+    return '';
+  }
+
+  if (normalizedPrompt.length <= TST_PROMPT_MAX_CHARACTERS) {
+    return normalizedPrompt;
+  }
+
+  let sourcePromptForRewrite = normalizedPrompt;
+
+  for (let attempt = 1; attempt <= MAX_PROMPT_REWRITE_ATTEMPTS; attempt += 1) {
+    const overflow = sourcePromptForRewrite.length - TST_PROMPT_MAX_CHARACTERS;
+    const targetCharacters = Math.max(
+      MIN_USER_PROMPT_REWRITE_CHARACTERS,
+      sourcePromptForRewrite.length - overflow - PROMPT_REWRITE_SAFETY_MARGIN,
+    );
+    const rewrittenPrompt = normalizePromptWhitespace(
+      await rewriteUserPromptToFitLimit(normalizedPrompt, targetCharacters, pipelineLabel),
+    );
+
+    if (!rewrittenPrompt) {
+      break;
+    }
+
+    if (rewrittenPrompt.length <= TST_PROMPT_MAX_CHARACTERS) {
+      return rewrittenPrompt;
+    }
+
+    sourcePromptForRewrite = rewrittenPrompt;
+  }
+
+  throw new Error(
+    `Tong prompt gui sang provider van vuot ${TST_PROMPT_MAX_CHARACTERS} ky tu sau khi rut gon. Vui long rut ngan prompt va thu lai.`,
+  );
+};
+
+export type ImageGeneratePromptPreparation = {
+  optimizedPayload: ImageGenerateRecipePayload;
+  synthesizedPrompt: string;
+  providerPrompt: string;
+};
+
+export const prepareImageGeneratePromptWithinLimit = async (
+  payload: ImageGenerateRecipePayload,
+): Promise<ImageGeneratePromptPreparation> => {
+  let workingPayload: ImageGenerateRecipePayload = { ...payload };
+  let synthesizedPrompt = await synthesizeImageGeneratePrompt(workingPayload);
+  let providerPrompt = buildImageProviderPrompt(synthesizedPrompt, workingPayload, workingPayload.negativePrompt);
+
+  if (providerPrompt.length <= TST_PROMPT_MAX_CHARACTERS) {
+    return {
+      optimizedPayload: workingPayload,
+      synthesizedPrompt,
+      providerPrompt,
+    };
+  }
+
+  const originalUserPromptInput = normalizePromptWhitespace(workingPayload.userPromptInput || workingPayload.prompt);
+  const systemPromptPrefix = typeof workingPayload.systemPromptPrefix === 'string'
+    ? workingPayload.systemPromptPrefix
+    : '';
+
+  if (!originalUserPromptInput) {
+    throw new Error(`Provider prompt vuot ${TST_PROMPT_MAX_CHARACTERS} ky tu va khong co noi dung prompt nguoi dung de rut gon.`);
+  }
+
+  let sourcePromptForRewrite = originalUserPromptInput;
+
+  for (let attempt = 1; attempt <= MAX_PROMPT_REWRITE_ATTEMPTS; attempt += 1) {
+    const overflow = providerPrompt.length - TST_PROMPT_MAX_CHARACTERS;
+    const targetCharacters = Math.max(
+      MIN_USER_PROMPT_REWRITE_CHARACTERS,
+      sourcePromptForRewrite.length - overflow - PROMPT_REWRITE_SAFETY_MARGIN,
+    );
+    const rewrittenPrompt = normalizePromptWhitespace(
+      await rewriteUserImagePromptToFitLimit(originalUserPromptInput, targetCharacters),
+    );
+
+    if (!rewrittenPrompt) {
+      break;
+    }
+
+    workingPayload = {
+      ...workingPayload,
+      prompt: combineImageGeneratePrompt(systemPromptPrefix, rewrittenPrompt),
+      userPromptInput: rewrittenPrompt,
+      systemPromptPrefix,
+    };
+    synthesizedPrompt = await synthesizeImageGeneratePrompt(workingPayload);
+    providerPrompt = buildImageProviderPrompt(synthesizedPrompt, workingPayload, workingPayload.negativePrompt);
+
+    if (providerPrompt.length <= TST_PROMPT_MAX_CHARACTERS) {
+      return {
+        optimizedPayload: workingPayload,
+        synthesizedPrompt,
+        providerPrompt,
+      };
+    }
+
+    sourcePromptForRewrite = rewrittenPrompt;
+  }
+
+  throw new Error(
+    `Tong prompt gui sang provider van vuot ${TST_PROMPT_MAX_CHARACTERS} ky tu sau khi rut gon. Vui long rut ngan prompt va thu lai.`,
+  );
 };
 
 export const prepareProviderPayloadFromQueueRecipe = async (payload: QueueRecipePayload): Promise<Record<string, unknown>> => {
@@ -211,24 +337,32 @@ export const prepareProviderPayloadFromQueueRecipe = async (payload: QueueRecipe
         throw new Error('CRITICAL FAILURE: No valid image references were prepared for the generation payload.');
       }
 
-      const [uploadedUrls, synthesizedPrompt] = await Promise.all([
-        Promise.all(
-          uploadSources
-            .filter((value): value is string => Boolean(value))
-            .map((source) => uploadImageToTst(source)),
-        ),
-        directorSources.length > 0
-          ? synthesizeImageGeneratePrompt(structuredPayload)
-          : Promise.resolve(payload.prompt),
-      ]);
+      const uploadedUrls = await Promise.all(
+        uploadSources
+          .filter((value): value is string => Boolean(value))
+          .map((source) => uploadImageToTst(source)),
+      );
+      const promptPreparation = directorSources.length > 0
+        ? await prepareImageGeneratePromptWithinLimit(structuredPayload)
+        : {
+            optimizedPayload: structuredPayload,
+            synthesizedPrompt: payload.prompt,
+            providerPrompt: payload.prompt,
+          };
 
-      return buildImageGenerateProviderPayload(structuredPayload, uploadedUrls, synthesizedPrompt);
+      return buildImageGenerateProviderPayload(
+        promptPreparation.optimizedPayload,
+        uploadedUrls,
+        promptPreparation.synthesizedPrompt,
+        promptPreparation.providerPrompt,
+      );
     }
 
     case 'image_edit_recipe_v1': {
+      const providerPrompt = await prepareDirectPromptWithinLimit(payload.prompt, 'image editing');
       const uploadedUrl = await uploadImageToTst(payload.sourceImage);
       const providerPayload: Record<string, unknown> = {
-        prompt: payload.prompt,
+        prompt: providerPrompt,
         model: payload.modelId,
         img_url: [uploadedUrl],
       };
@@ -242,8 +376,12 @@ export const prepareProviderPayloadFromQueueRecipe = async (payload: QueueRecipe
     }
 
     case 'video_generate_recipe_v1': {
+      const providerPrompt = await prepareDirectPromptWithinLimit(
+        payload.prompt || 'Create a cinematic video',
+        'video generation',
+      );
       const providerPayload: Record<string, unknown> = {
-        prompt: payload.prompt,
+        prompt: providerPrompt,
         model: payload.modelId,
         duration: payload.duration,
       };
@@ -266,6 +404,9 @@ export const prepareProviderPayloadFromQueueRecipe = async (payload: QueueRecipe
     }
 
     case 'motion_generate_recipe_v1': {
+      const providerPrompt = payload.prompt?.trim()
+        ? await prepareDirectPromptWithinLimit(payload.prompt, 'motion generation')
+        : '';
       const [characterImageUrl, motionVideoUrl] = await Promise.all([
         uploadImageToTst(payload.characterImage),
         uploadVideoToTst(payload.motionVideoDataUrl),
@@ -278,7 +419,7 @@ export const prepareProviderPayloadFromQueueRecipe = async (payload: QueueRecipe
         motion_video_url: motionVideoUrl,
       };
 
-      if (payload.prompt?.trim()) providerPayload.prompt = payload.prompt.trim();
+      if (providerPrompt) providerPayload.prompt = providerPrompt;
       if (payload.resolution) providerPayload.resolution = payload.resolution.toLowerCase();
       if (payload.speed) providerPayload.speed = payload.speed;
       if (payload.serverId) providerPayload.server_id = payload.serverId;

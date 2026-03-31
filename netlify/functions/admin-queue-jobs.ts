@@ -3,6 +3,9 @@ import type { AdminQueueJob, AdminQueueSummary } from '../../types';
 import type { QueueProgressLogEntry } from '../../shared/queueRecipes';
 import { normalizeQueueProgressLogs } from '../../shared/queueLogText';
 import { isSystemQueueKind } from '../../shared/queueKinds';
+import { classifyQueueError, isTerminalRescueFailureMessage, normalizeQueueErrorMessage, pickQueueFailureMessage } from '../../shared/queueErrorClassifier';
+import { isFailedRescueStillActive } from '../../shared/queueRescueState';
+import { repairVietnameseMojibake } from '../../shared/queueLogText';
 import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 
 const headers = {
@@ -13,6 +16,8 @@ const headers = {
 };
 
 const DEFAULT_LIMIT = 100;
+const FILTER_OVERFETCH_MULTIPLIER = 5;
+const MAX_FILTER_OVERFETCH = 1000;
 const STALE_QUEUE_MS = 5 * 60 * 1000;
 const OVERDUE_POLL_GRACE_MS = 2 * 60 * 1000;
 const SUMMARY_TIME_ZONE = 'Asia/Ho_Chi_Minh';
@@ -154,11 +159,19 @@ export const handler: Handler = async (event) => {
     const stuckOnly = String(event.queryStringParameters?.stuckOnly || 'false').trim().toLowerCase() === 'true';
     const limit = Math.max(1, Math.min(200, Number(event.queryStringParameters?.limit || DEFAULT_LIMIT)));
 
+    const needsInMemoryFiltering = Boolean(searchFilter)
+      || stageFilter !== 'all'
+      || stuckOnly
+      || statusFilter === 'rescuing';
+    const queryLimit = needsInMemoryFiltering
+      ? Math.min(MAX_FILTER_OVERFETCH, Math.max(limit * FILTER_OVERFETCH_MULTIPLIER, limit))
+      : limit;
+
     let query = admin
       .from('generated_images')
       .select('id, user_id, tool_name, queue_kind, asset_type, status, job_id, progress, queue_payload, error_message, created_at, updated_at, next_poll_at, processing_started_at, lease_expires_at')
       .order('updated_at', { ascending: false })
-      .limit(limit);
+      .limit(queryLimit);
 
     if (statusFilter !== 'all' && statusFilter !== 'rescuing') {
       query = query.eq('status', statusFilter);
@@ -208,9 +221,15 @@ export const handler: Handler = async (event) => {
       const profile = userMap.get(String(row.user_id || ''));
       const lastQueueLog = getLastQueueLog(payload);
       const normalizedStatus = String(row.status || 'queued').toLowerCase();
+      const queueLogs = normalizeQueueLogs(payload);
+      const displayErrorSource = pickQueueFailureMessage(row.error_message || undefined, queueLogs);
+      const errorInfo = classifyQueueError(displayErrorSource || row.error_message || undefined);
 
       const displayStatus =
-        statusFilter === 'rescuing'
+        normalizedStatus === 'failed' &&
+        isFailedRescueStillActive(payload) &&
+        !isTerminalRescueFailureMessage(displayErrorSource) &&
+        (errorInfo.category === 'provider' || errorInfo.category === 'unknown')
           ? 'rescuing'
           : ((normalizedStatus === 'queued' || normalizedStatus === 'processing' || normalizedStatus === 'completed' || normalizedStatus === 'failed')
             ? normalizedStatus
@@ -232,9 +251,12 @@ export const handler: Handler = async (event) => {
         jobId: row.job_id || undefined,
         progress: typeof row.progress === 'number' ? row.progress : undefined,
         queueStage: getQueueStage(payload),
+        queueLogs,
         lastLogMessage: lastQueueLog?.message || undefined,
         lastLogAt: lastQueueLog?.at || undefined,
-        error: row.error_message || undefined,
+        error: normalizeQueueErrorMessage(displayErrorSource || row.error_message || undefined) || undefined,
+        errorCategory: errorInfo.category,
+        errorRaw: repairVietnameseMojibake(row.error_message || undefined) || undefined,
         createdAt: row.created_at || undefined,
         updatedAt: row.updated_at || undefined,
         nextPollAt: row.next_poll_at || undefined,
@@ -248,7 +270,7 @@ export const handler: Handler = async (event) => {
       jobs = jobs.filter((job) => matchesSearch(job, searchFilter));
     }
     if (statusFilter === 'rescuing') {
-      jobs = jobs.filter((job) => job.status === 'failed');
+      jobs = jobs.filter((job) => job.displayStatus === 'rescuing');
     }
     if (stageFilter !== 'all') {
       jobs = jobs.filter((job) => String(job.queueStage || '').toLowerCase() === stageFilter);
@@ -256,6 +278,8 @@ export const handler: Handler = async (event) => {
     if (stuckOnly) {
       jobs = jobs.filter((job) => job.isStuck);
     }
+
+    jobs = jobs.slice(0, limit);
 
     return {
       statusCode: 200,

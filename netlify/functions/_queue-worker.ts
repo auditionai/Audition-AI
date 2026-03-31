@@ -5,8 +5,9 @@ import { validateQueuePayloadAgainstLiveCatalog } from './_tst-live-catalog';
 import { normalizeTstOutboundPayload } from './_tst-payload-normalizer';
 import {
   buildImageGenerateProviderPayload,
+  prepareImageGeneratePromptWithinLimit,
   prepareProviderPayloadFromQueueRecipe,
-  synthesizeImageGeneratePrompt,
+  TST_PROMPT_MAX_CHARACTERS,
   uploadImageToTst,
 } from './_queue-recipes';
 import { runVertexImageEdit } from './_vertex-image-edit';
@@ -18,6 +19,7 @@ import {
   type VideoInputReviewResult,
 } from './_vertex-video-input-review';
 import {
+  buildImageProviderPrompt,
   getImageDirectorSources,
   validateImageGenerateReferenceIntegrity,
   getImageRenderReferenceSources,
@@ -146,6 +148,8 @@ const MAX_GROUP4_IMAGE_PROCESSING_AGE_MS = 30 * 60 * 1000;
 const FAILED_RESULT_RESCUE_SCAN_LIMIT = 10;
 const FAILED_RESULT_RESCUE_LOOKBACK_MS = 24 * 60 * 60 * 1000;
 const FAILED_RESULT_RESCUE_MAX_ATTEMPTS = 8;
+const PROVIDER_LOST_JOB_CONFIRMATION_POLLS = 3;
+const PROVIDER_LOST_JOB_CONFIRMATION_INTERVAL_SECONDS = 60;
 const SINGLE_AND_COUPLE_PREPARE_TIMEOUT_MS = 10 * 60 * 1000;
 const GROUP_OF_THREE_PREPARE_TIMEOUT_MS = 15 * 60 * 1000;
 const GROUP_OF_FOUR_PREPARE_TIMEOUT_MS = 20 * 60 * 1000;
@@ -164,6 +168,8 @@ const STALE_RECOVERY_SCAN_LIMIT = 50;
 const STALE_RECOVERY_MIN_AGE_MS = 45_000;
 const STALE_VERIFYING_OUTPUT_RECOVERY_MIN_AGE_MS = 90_000;
 const STALE_PROVIDER_POLL_RECOVERY_MIN_AGE_MS = 45_000;
+const AMBIGUOUS_DISPATCH_DUPLICATE_PROTECTION_MESSAGE =
+  'Khong nhan duoc xac nhan provider job goc sau loi mang/timeout. Job da dung de tranh tao them provider moi.';
 
 const isTransientError = (message: string) => {
   const normalized = message.toLowerCase();
@@ -212,9 +218,10 @@ const isAmbiguousDispatchError = (message: string) => {
 const parseErrorMessage = async (response: Response) => {
   try {
     const data = await response.json();
-    return normalizeQueueErrorMessage(data?.error || data?.message || data?.detail || `${response.status} ${response.statusText}`);
+    const detail = data?.error || data?.message || data?.detail || `${response.status} ${response.statusText}`;
+    return repairVietnameseMojibake(typeof detail === 'string' ? detail : JSON.stringify(detail));
   } catch {
-    return normalizeQueueErrorMessage(`${response.status} ${response.statusText}`);
+    return repairVietnameseMojibake(`${response.status} ${response.statusText}`);
   }
 };
 
@@ -349,6 +356,22 @@ const getFailedRescueNextAt = (payload?: Record<string, unknown> | ImageGenerate
   return Number.isFinite(timestamp) ? timestamp : 0;
 };
 
+const getProviderLostJobNotFoundCount = (payload?: Record<string, unknown> | ImageGenerateRecipePayload | null) =>
+  Math.max(0, Number(toQueuePayloadObject(payload).__providerLostJobNotFoundCount || 0));
+
+const hasProviderLostJobFinalConfirmationPending = (
+  payload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
+) => toQueuePayloadObject(payload).__providerLostJobFinalConfirmationPending === true;
+
+const clearProviderLostJobConfirmationMeta = (
+  payload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
+) => {
+  const nextPayload = toQueuePayloadObject(payload);
+  delete nextPayload.__providerLostJobNotFoundCount;
+  delete nextPayload.__providerLostJobFinalConfirmationPending;
+  return nextPayload;
+};
+
 const getQueueLogs = (payload?: Record<string, unknown> | ImageGenerateRecipePayload | null): QueueProgressLogEntry[] => {
   const rawLogs = toQueuePayloadObject(payload).__logs;
   if (!Array.isArray(rawLogs)) {
@@ -449,6 +472,10 @@ const withQueueMeta = (
 const hasTstBeenTouched = (
   payload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
 ) => toQueuePayloadObject(payload).__tstTouched === true;
+
+const hasDispatchConfirmationPending = (
+  payload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
+) => toQueuePayloadObject(payload).__dispatchConfirmationPending === true;
 
 const hasProviderBeenCommitted = (job: QueueJobRow, payload?: Record<string, unknown> | ImageGenerateRecipePayload | null) =>
   Boolean(String(job.job_id || '').trim()) || hasTstBeenTouched(payload ?? job.queue_payload);
@@ -581,7 +608,10 @@ const isGenericProviderFailure = (message: string) => {
     normalized.includes('job not found') ||
     normalized.includes('job set not found') ||
     normalized.includes('job failed, change prompt or input and try again') ||
-    normalized.includes('change prompt or input and try again')
+    normalized.includes('change prompt or input and try again') ||
+    normalized.includes('đã xảy ra lỗi khi xử lý') ||
+    normalized.includes('da xay ra loi khi xu ly') ||
+    normalized.includes('an error occurred while processing')
   );
 };
 
@@ -833,20 +863,14 @@ const getPreparationTimeoutMs = (job: Pick<QueueJobRow, 'tool_id'>, payload?: Qu
 
 const getPreparationLeaseSeconds = (job: Pick<QueueJobRow, 'tool_id' | 'queue_kind'>, payload?: QueueJobRow['queue_payload']) => {
   if (job.queue_kind === 'motion_generate' || job.queue_kind === 'video_generate') {
-    return 300;
+    return Math.max(420, Math.ceil(getPreparationTimeoutMs(job, payload) / 1000) + 120);
   }
 
   if (isQueueRecipePayload(payload) && payload.recipeType === 'image_generate_recipe_v1') {
-    const characterCount = getImageRecipeCharacterCount(job, payload);
-    if (characterCount && characterCount >= 4) {
-      return 480;
-    }
-    if (characterCount === 3) {
-      return 360;
-    }
+    return Math.max(DISPATCH_LEASE_SECONDS, Math.ceil(getPreparationTimeoutMs(job, payload) / 1000) + 120);
   }
 
-  return DISPATCH_LEASE_SECONDS;
+  return Math.max(DISPATCH_LEASE_SECONDS, Math.ceil(getPreparationTimeoutMs(job, payload) / 1000) + 120);
 };
 
 const getPreparationTimeoutUserMessage = (job: Pick<QueueJobRow, 'tool_id'>, payload?: QueueJobRow['queue_payload']) => {
@@ -1139,6 +1163,7 @@ const markFailed = async (
   fireTelegramJobNotification('failed', {
     id: job.id,
     userId: job.user_id,
+    providerJobId: job.job_id || null,
     prompt: job.prompt,
     assetType: job.asset_type,
     toolId: job.tool_id,
@@ -1661,10 +1686,10 @@ const prepareImageRecipeInStages = async (
       'synthesizing_prompt',
       `Đang phân tích ${directorSources.length} ảnh để tổng hợp prompt.`,
     ) as ImageGenerateRecipePayload;
-    const synthesizedPrompt = await synthesizeImageGeneratePrompt(recipePayload);
+    const promptPreparation = await prepareImageGeneratePromptWithinLimit(recipePayload);
     const nextPayload: ImageGenerateRecipePayload = {
-      ...recipePayload,
-      __synthesizedPrompt: synthesizedPrompt,
+      ...promptPreparation.optimizedPayload,
+      __synthesizedPrompt: promptPreparation.synthesizedPrompt,
       __stage: 'building_payload',
       __uploadSources: renderSources,
       __directorSources: directorSources,
@@ -1688,14 +1713,29 @@ const prepareImageRecipeInStages = async (
     'building_payload',
     'Đang dựng và kiểm tra payload cuối.',
   ) as ImageGenerateRecipePayload;
-  const synthesizedPrompt = recipePayload.__synthesizedPrompt?.trim()
-    ? recipePayload.__synthesizedPrompt.trim()
-    : await synthesizeImageGeneratePrompt(recipePayload);
-  const providerPayload = buildImageGenerateProviderPayload(recipePayload, uploadedUrls, synthesizedPrompt);
+  const existingSynthesizedPrompt = recipePayload.__synthesizedPrompt?.trim();
+  const existingProviderPrompt =
+    existingSynthesizedPrompt
+      ? buildImageProviderPrompt(existingSynthesizedPrompt, recipePayload, recipePayload.negativePrompt)
+      : '';
+  const promptPreparation =
+    existingSynthesizedPrompt && existingProviderPrompt.length <= TST_PROMPT_MAX_CHARACTERS
+      ? {
+          optimizedPayload: recipePayload,
+          synthesizedPrompt: existingSynthesizedPrompt,
+          providerPrompt: existingProviderPrompt,
+        }
+      : await prepareImageGeneratePromptWithinLimit(recipePayload);
+  const providerPayload = buildImageGenerateProviderPayload(
+    promptPreparation.optimizedPayload,
+    uploadedUrls,
+    promptPreparation.synthesizedPrompt,
+    promptPreparation.providerPrompt,
+  );
 
   const validationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, stripInternalQueueMeta(providerPayload));
   const validatedProviderPayload = applyLivePricingConfigToPayload(job.queue_kind, providerPayload, validationResult);
-  const storedPayload = await markRecipePreparedForDispatch(job.id, validatedProviderPayload, recipePayload);
+  const storedPayload = await markRecipePreparedForDispatch(job.id, validatedProviderPayload, promptPreparation.optimizedPayload);
 
   return { type: 'prepared', providerPayload: validatedProviderPayload, storedPayload };
 };
@@ -1776,6 +1816,7 @@ const completePolledJobWithResultUrl = async (
   fireTelegramJobNotification('completed', {
     id: job.id,
     userId: job.user_id,
+    providerJobId: job.job_id || null,
     prompt: job.prompt,
     assetType: job.asset_type,
     toolId: job.tool_id,
@@ -2014,6 +2055,9 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
         completionLevel: 'warning',
       });
     }
+    if (isTerminalRescueFailureMessage(String(failureMessage))) {
+      return handleLostProviderJobSignal(job, String(failureMessage), currentState);
+    }
     const nextAttemptCount = Number(currentState?.attempt_count || 0) + 1;
     if (
       isGenericProviderFailure(String(failureMessage)) &&
@@ -2038,7 +2082,7 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
     .update({
       status: 'processing',
       queue_payload: withQueueLog(
-        job.queue_payload,
+        clearProviderLostJobConfirmationMeta(job.queue_payload),
         'polling',
         `Provider đang xử lý${providerProgress > 0 ? ` (${providerProgress}%)` : ''}.`,
       ),
@@ -2067,6 +2111,10 @@ const handlePollFailure = async (job: QueueJobRow, errorMessage: string) => {
   const processingAgeMs = Date.now() - new Date(startedAt).getTime();
   const isTerminalPollFailure = isTerminalRescueFailureMessage(errorMessage);
 
+  if (isTerminalPollFailure) {
+    return handleLostProviderJobSignal(job, errorMessage, state);
+  }
+
   if (
     isTerminalPollFailure ||
     nextAttemptCount >= MAX_POLL_FAILURES ||
@@ -2084,6 +2132,8 @@ const handlePollFailure = async (job: QueueJobRow, errorMessage: string) => {
     await markFailedRespectingRefundPolicy(job, finalMessage);
     return 'failed';
   }
+
+  job.queue_payload = clearProviderLostJobConfirmationMeta(job.queue_payload);
 
   await admin
     .from('generated_images')
@@ -2110,6 +2160,7 @@ const requeueProviderSoftFailure = async (
   providerStatus: string,
 ) => {
   const admin = getServiceRoleClient();
+  job.queue_payload = clearProviderLostJobConfirmationMeta(job.queue_payload);
   await admin
     .from('generated_images')
     .update({
@@ -2129,6 +2180,90 @@ const requeueProviderSoftFailure = async (
       updated_at: new Date().toISOString(),
     })
     .eq('id', job.id);
+};
+
+const scheduleLostProviderJobConfirmation = async (
+  job: QueueJobRow,
+  payload: Record<string, unknown> | ImageGenerateRecipePayload | null,
+  errorMessage: string,
+  nextAttemptCount: number,
+  nextNotFoundCount: number,
+  finalConfirmationPending: boolean,
+) => {
+  const nowIso = new Date().toISOString();
+  const nextPollAtIso = new Date(Date.now() + PROVIDER_LOST_JOB_CONFIRMATION_INTERVAL_SECONDS * 1000).toISOString();
+  const warningMessage =
+    finalConfirmationPending
+      ? `Provider tra ve "job set not found" ${PROVIDER_LOST_JOB_CONFIRMATION_POLLS} lan lien tiep. Se doi ${PROVIDER_LOST_JOB_CONFIRMATION_INTERVAL_SECONDS}s va xac minh lan cuoi truoc khi danh dau that bai.`
+      : `Provider tra ve "job set not found" (${nextNotFoundCount}/${PROVIDER_LOST_JOB_CONFIRMATION_POLLS}). Se poll lai sau ${PROVIDER_LOST_JOB_CONFIRMATION_INTERVAL_SECONDS}s de tranh tao trung provider job.`;
+
+  await updateGeneratedImageRecord(job.id, {
+    status: 'processing',
+    error_message: errorMessage,
+    queue_payload: withQueueLog(
+      {
+        ...clearProviderLostJobConfirmationMeta(payload),
+        __providerLostJobNotFoundCount: nextNotFoundCount,
+        __providerLostJobFinalConfirmationPending: finalConfirmationPending,
+      },
+      'polling',
+      warningMessage,
+      'warning',
+    ),
+    attempt_count: nextAttemptCount,
+    next_poll_at: nextPollAtIso,
+    lease_token: null,
+    lease_expires_at: null,
+    last_error_at: nowIso,
+    updated_at: nowIso,
+  });
+
+  logQueueWorkerEvent('Scheduled provider lost-job confirmation poll.', {
+    ...getQueueWorkerLogJob(job),
+    providerJobId: job.job_id || null,
+    nextNotFoundCount,
+    finalConfirmationPending,
+    nextPollAt: nextPollAtIso,
+    reason: errorMessage,
+  });
+};
+
+const buildProviderLostJobFinalFailureMessage = (errorMessage: string) =>
+  `Provider van tra ve "${errorMessage}" sau ${PROVIDER_LOST_JOB_CONFIRMATION_POLLS} lan poll lien tiep va 1 lan xac minh cuoi. Job duoc danh dau that bai de tranh tao them provider job moi.`;
+
+const handleLostProviderJobSignal = async (
+  job: QueueJobRow,
+  errorMessage: string,
+  currentState?: Awaited<ReturnType<typeof getJobRuntimeState>> | null,
+) => {
+  if (job.queue_kind !== 'image_generate') {
+    await markFailedRespectingRefundPolicy(job, errorMessage);
+    return 'failed';
+  }
+
+  const state = currentState ?? await getJobRuntimeState(job.id);
+  const currentPayload =
+    state?.queue_payload && typeof state.queue_payload === 'object'
+      ? (state.queue_payload as Record<string, unknown>)
+      : job.queue_payload;
+  const nextAttemptCount = Number(state?.attempt_count || 0) + 1;
+  const nextNotFoundCount = getProviderLostJobNotFoundCount(currentPayload) + 1;
+  const finalConfirmationPending = hasProviderLostJobFinalConfirmationPending(currentPayload);
+
+  if (!finalConfirmationPending) {
+    await scheduleLostProviderJobConfirmation(
+      job,
+      currentPayload,
+      errorMessage,
+      nextAttemptCount,
+      nextNotFoundCount,
+      nextNotFoundCount >= PROVIDER_LOST_JOB_CONFIRMATION_POLLS,
+    );
+    return 'requeued';
+  }
+
+  await markFailedRespectingRefundPolicy(job, buildProviderLostJobFinalFailureMessage(errorMessage));
+  return 'failed';
 };
 
 const recoverStalePreparingJobs = async () => {
@@ -2165,6 +2300,8 @@ const recoverStalePreparingJobs = async () => {
     const isStagedRecipe =
       isRecipePayload && ['uploading_refs', 'synthesizing_prompt', 'building_payload'].includes(recipeStage);
     const missingProviderJobId = !String((job as any).job_id || '').trim();
+    const dispatchConfirmationPending = hasDispatchConfirmationPending(payload);
+    const providerDispatchWasAttempted = hasTstBeenTouched(payload);
     const logCount = getQueueLogs(payload).length;
     const isOrphanedClaim =
       currentStatus === 'processing' &&
@@ -2182,14 +2319,17 @@ const recoverStalePreparingJobs = async () => {
       isStagedRecipe &&
       leaseExpired &&
       ageMs >= ORPHAN_CLAIM_GRACE_MS;
-    const isAwaitingAmbiguousDispatchConfirmation =
+    const isWaitingForAmbiguousDispatchConfirmation =
       currentStatus === 'processing' &&
-      isRecipePayload &&
       missingProviderJobId &&
       recipeStage.startsWith('dispatching') &&
-      payload &&
-      typeof payload === 'object' &&
-      (payload as Record<string, unknown>).__dispatchConfirmationPending === true &&
+      dispatchConfirmationPending &&
+      updatedAgeMs < AMBIGUOUS_DISPATCH_RECOVERY_GRACE_MS;
+    const isAwaitingAmbiguousDispatchConfirmation =
+      currentStatus === 'processing' &&
+      missingProviderJobId &&
+      recipeStage.startsWith('dispatching') &&
+      dispatchConfirmationPending &&
       updatedAgeMs >= AMBIGUOUS_DISPATCH_RECOVERY_GRACE_MS;
 
     if (isOrphanedClaim) {
@@ -2248,10 +2388,14 @@ const recoverStalePreparingJobs = async () => {
       continue;
     }
 
+    if (isWaitingForAmbiguousDispatchConfirmation) {
+      continue;
+    }
+
     if (isAwaitingAmbiguousDispatchConfirmation) {
       await markFailedRespectingRefundPolicy(
         job,
-        'Khong nhan duoc xac nhan provider job goc sau loi mang/timeout. Job da dung de tranh tao them provider moi.',
+        AMBIGUOUS_DISPATCH_DUPLICATE_PROTECTION_MESSAGE,
       );
       continue;
     }
@@ -2261,6 +2405,11 @@ const recoverStalePreparingJobs = async () => {
     }
 
     if (currentStatus === 'processing' && !isRecipePayload) {
+      if (missingProviderJobId && providerDispatchWasAttempted && recipeStage.startsWith('dispatching')) {
+        await markFailedRespectingRefundPolicy(job, AMBIGUOUS_DISPATCH_DUPLICATE_PROTECTION_MESSAGE);
+        continue;
+      }
+
       await markPreparedForDispatch(job.id);
       recovered += 1;
       continue;
@@ -2454,6 +2603,7 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
       fireTelegramJobNotification('completed', {
         id: job.id,
         userId: job.user_id,
+        providerJobId: job.job_id || null,
         prompt: job.prompt,
         assetType: job.asset_type,
         toolId: job.tool_id,
@@ -2833,6 +2983,7 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
         fireTelegramJobNotification('completed', {
           id: job.id,
           userId: job.user_id,
+          providerJobId: job.job_id || null,
           prompt: job.prompt,
           assetType: job.asset_type,
           toolId: job.tool_id,

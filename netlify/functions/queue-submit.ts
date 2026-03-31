@@ -143,6 +143,53 @@ type HandlerEventLike = {
   headers: Record<string, string | undefined>;
 };
 
+const getImageGenerateToolMetadata = (
+  queueKind: string,
+  queuePayload: Record<string, unknown> | undefined,
+  fallbackToolId?: string,
+  fallbackToolName?: string,
+) => {
+  if (queueKind !== 'image_generate' || !queuePayload || typeof queuePayload !== 'object') {
+    return {
+      toolId: fallbackToolId || queueKind,
+      toolName: fallbackToolName || queueKind,
+    };
+  }
+
+  const raw = queuePayload;
+  const recipePayload =
+    raw.__recipePayload && typeof raw.__recipePayload === 'object'
+      ? raw.__recipePayload as Record<string, unknown>
+      : raw;
+  const recipeType = String(recipePayload.recipeType || '').trim().toLowerCase();
+  if (recipeType !== 'image_generate_recipe_v1') {
+    return {
+      toolId: fallbackToolId || queueKind,
+      toolName: fallbackToolName || queueKind,
+    };
+  }
+
+  const groupCount = Array.isArray(recipePayload.characterReferenceGroups)
+    ? recipePayload.characterReferenceGroups.length
+    : 0;
+  const flatCount = Array.isArray(recipePayload.characterImages)
+    ? recipePayload.characterImages.length
+    : 0;
+  const characterCount = Math.max(1, Math.floor(Number(recipePayload.characterCount || 0)) || groupCount || flatCount || 1);
+
+  if (characterCount >= 4) {
+    return { toolId: 'group_4_gen', toolName: 'Clan of 4' };
+  }
+  if (characterCount === 3) {
+    return { toolId: 'group_3_gen', toolName: 'Squad of 3' };
+  }
+  if (characterCount === 2) {
+    return { toolId: 'couple_photo_gen', toolName: 'Couple 3D Mode' };
+  }
+
+  return { toolId: 'single_photo_gen', toolName: 'Single 3D Character' };
+};
+
 const buildInitialQueuePayload = (
   queuePayload: Record<string, unknown> | undefined,
   queueKind: string,
@@ -173,6 +220,9 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
   const queueKind = body.queueKind || (assetType === 'video' ? 'video_generate' : 'image_generate');
   const clientPlatform = normalizeQueueClientPlatform(body.clientPlatform) || 'unknown';
   const queuePayload = body.queuePayload ?? {};
+  const normalizedToolMeta = getImageGenerateToolMetadata(queueKind, queuePayload, body.toolId, body.toolName);
+  const effectiveToolId = normalizedToolMeta.toolId;
+  const effectiveToolName = normalizedToolMeta.toolName;
   let chargeApplied = false;
 
   const { data: existing, error: existingError } = await admin
@@ -285,13 +335,13 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
     const { data: charged, error: chargeError } = await admin.rpc('apply_balance_transaction', {
       p_target_user_id: userId,
       p_amount: -costVcoin,
-      p_reason: body.toolName || queueKind,
+      p_reason: effectiveToolName || queueKind,
       p_log_type: 'usage',
       p_reference_type: 'generated_image_charge',
       p_reference_id: jobId,
       p_metadata: {
         generated_image_id: jobId,
-        tool_id: body.toolId || queueKind,
+        tool_id: effectiveToolId,
         queue_kind: queueKind,
         asset_type: assetType,
         cost_vcoin: costVcoin,
@@ -316,11 +366,11 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
     user_id: userId,
     image_url: '',
     prompt: body.prompt || '',
-    model_used: body.engine || body.toolName || queueKind,
+    model_used: body.engine || effectiveToolName || queueKind,
     created_at: now,
     is_public: false,
-    tool_id: body.toolId || queueKind,
-    tool_name: body.toolName || queueKind,
+    tool_id: effectiveToolId,
+    tool_name: effectiveToolName,
     status: 'queued',
     progress: 0,
     cost_vcoin: costVcoin,
@@ -345,13 +395,13 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
       await admin.rpc('apply_balance_transaction', {
         p_target_user_id: userId,
         p_amount: costVcoin,
-        p_reason: `Refund: ${(body.toolName || queueKind)} enqueue failed`,
+        p_reason: `Refund: ${(effectiveToolName || queueKind)} enqueue failed`,
         p_log_type: 'refund',
         p_reference_type: 'generated_image_refund',
         p_reference_id: jobId,
         p_metadata: {
           generated_image_id: jobId,
-          tool_id: body.toolId || queueKind,
+          tool_id: effectiveToolId,
           queue_kind: queueKind,
           asset_type: assetType,
           cost_vcoin: costVcoin,
@@ -411,8 +461,11 @@ export const handler: Handler = async (event) => {
 
     let row: any;
     const queuePayloadWithLogs = buildInitialQueuePayload(body.queuePayload, body.queueKind, clientPlatform);
+    const normalizedToolMeta = getImageGenerateToolMetadata(body.queueKind, queuePayloadWithLogs, body.toolId, body.toolName);
     const normalizedBody: QueueBody = {
       ...body,
+      toolId: normalizedToolMeta.toolId,
+      toolName: normalizedToolMeta.toolName,
       clientPlatform,
     };
 
@@ -420,9 +473,9 @@ export const handler: Handler = async (event) => {
       p_id: normalizeJobId(body.id),
       p_user_id: user.id,
       p_prompt: body.prompt || '',
-      p_tool_id: body.toolId || body.queueKind,
-      p_tool_name: body.toolName || body.queueKind,
-      p_engine: body.engine || body.toolName || body.queueKind,
+      p_tool_id: normalizedToolMeta.toolId,
+      p_tool_name: normalizedToolMeta.toolName,
+      p_engine: body.engine || normalizedToolMeta.toolName || body.queueKind,
       p_asset_type: asQueueAssetType(body.assetType),
       p_cost_vcoin: Number(body.costVcoin || 0),
       p_queue_kind: body.queueKind,

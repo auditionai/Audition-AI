@@ -154,28 +154,42 @@ const extractRecipeMedia = (payload: Record<string, unknown>): AdminQueueInputMe
     media.push(toMediaPreview(value, label, role, kind, userProvided));
   };
 
-  const groups = Array.isArray(payload.characterReferenceGroups) ? payload.characterReferenceGroups : [];
-  groups.forEach((group: any, groupIndex: number) => {
-    const refs = Array.isArray(group?.references) ? group.references : [];
-    refs.forEach((ref: any, refIndex: number) => {
-      if (typeof ref?.source !== 'string' || !ref.source.trim()) return;
-      const kind = typeof ref?.kind === 'string' ? ref.kind : 'reference';
-      push(ref.source, `Character ${group?.characterIndex || groupIndex + 1} - ${kind} ${refIndex + 1}`, 'character', 'image', true);
+  const payloadSources = [
+    payload,
+    toPayloadObject(payload.__recipePayload),
+  ].filter((source) => Object.keys(source).length > 0);
+
+  payloadSources.forEach((sourcePayload) => {
+    const groups = Array.isArray(sourcePayload.characterReferenceGroups) ? sourcePayload.characterReferenceGroups : [];
+    groups.forEach((group: any, groupIndex: number) => {
+      const refs = Array.isArray(group?.references) ? group.references : [];
+      refs.forEach((ref: any, refIndex: number) => {
+        if (typeof ref?.source !== 'string' || !ref.source.trim()) return;
+        const kind = typeof ref?.kind === 'string' ? ref.kind : 'reference';
+        push(ref.source, `Character ${group?.characterIndex || groupIndex + 1} - ${kind} ${refIndex + 1}`, 'character', 'image', true);
+      });
     });
+
+    (Array.isArray(sourcePayload.characterImages) ? sourcePayload.characterImages : []).forEach((value: unknown, index: number) => {
+      push(value, `Character image ${index + 1}`, 'character', 'image', true);
+    });
+    (Array.isArray(sourcePayload.referenceImages) ? sourcePayload.referenceImages : []).forEach((value: unknown, index: number) => {
+      push(value, `Reference image ${index + 1}`, 'reference', 'image', true);
+    });
+    push(sourcePayload.sampleImage, 'Sample image', 'sample', 'image', true);
+    push(sourcePayload.styleImage, 'Style image', 'style', 'image', false);
+    push(sourcePayload.sourceImage, 'Source image', 'source', 'image', true);
+    push(sourcePayload.keyframeImage, 'Keyframe image', 'keyframe', 'image', true);
+    push(sourcePayload.characterImage, 'Motion character image', 'character', 'image', true);
+    push(sourcePayload.motionVideoDataUrl, 'Motion video', 'motion', 'video', true);
   });
 
-  (Array.isArray(payload.characterImages) ? payload.characterImages : []).forEach((value: unknown, index: number) => {
-    push(value, `Character image ${index + 1}`, 'character', 'image', true);
+  (Array.isArray(payload.img_url) ? payload.img_url : [payload.img_url]).forEach((value: unknown, index: number) => {
+    push(value, `Provider reference ${index + 1}`, 'reference', 'image', false);
   });
-  (Array.isArray(payload.referenceImages) ? payload.referenceImages : []).forEach((value: unknown, index: number) => {
-    push(value, `Reference image ${index + 1}`, 'reference', 'image', true);
-  });
-  push(payload.sampleImage, 'Sample image', 'sample', 'image', true);
-  push(payload.styleImage, 'Style image', 'style', 'image', false);
-  push(payload.sourceImage, 'Source image', 'source', 'image', true);
-  push(payload.keyframeImage, 'Keyframe image', 'keyframe', 'image', true);
-  push(payload.characterImage, 'Motion character image', 'character', 'image', true);
-  push(payload.motionVideoDataUrl, 'Motion video', 'motion', 'video', true);
+  push(payload.image_url, 'Provider keyframe image', 'keyframe', 'image', false);
+  push(payload.character_image_url, 'Provider character image', 'character', 'image', false);
+  push(payload.motion_video_url, 'Provider motion video', 'motion', 'video', false);
 
   return media.filter((entry, index, all) => {
     const key = `${entry.role}:${entry.kind}:${entry.url || entry.note || index}`;

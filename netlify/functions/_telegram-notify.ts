@@ -31,6 +31,22 @@ type NotificationUserProfile = {
 type NotificationMediaEntry = QueueNotificationMediaEntry;
 type TelegramNotificationEventState = Partial<Record<JobNotificationEvent, string>>;
 
+const toPayloadObject = (payload: QueuePayloadObject): Record<string, unknown> =>
+  payload && typeof payload === 'object' ? { ...(payload as Record<string, unknown>) } : {};
+
+const getEmbeddedRecipePayload = (payload: QueuePayloadObject): Record<string, unknown> => {
+  const raw = toPayloadObject(payload);
+  return raw.__recipePayload && typeof raw.__recipePayload === 'object'
+    ? { ...(raw.__recipePayload as Record<string, unknown>) }
+    : {};
+};
+
+const getRecipeAwarePayload = (payload: QueuePayloadObject) => {
+  const raw = toPayloadObject(payload);
+  const recipe = getEmbeddedRecipePayload(payload);
+  return Object.keys(recipe).length > 0 ? recipe : raw;
+};
+
 const getEnv = (...keys: string[]) => {
   for (const key of keys) {
     const value = process.env[key];
@@ -67,7 +83,9 @@ const pushInputMedia = (
 
 const extractInputMedia = (payload: QueuePayloadObject) => {
   const inputMedia = new Map<string, NotificationMediaEntry>();
-  const raw = payload && typeof payload === 'object' ? payload : {};
+  const raw = toPayloadObject(payload);
+  const recipePayload = getEmbeddedRecipePayload(payload);
+  const source = Object.keys(recipePayload).length > 0 ? recipePayload : raw;
 
   const explicit = Array.isArray(raw.__notifyInputMedia)
     ? raw.__notifyInputMedia
@@ -92,27 +110,27 @@ const extractInputMedia = (payload: QueuePayloadObject) => {
   if (explicit.length > 0) {
     explicit.forEach((entry) => inputMedia.set(entry.url, entry));
   } else {
-    pushInputMedia(inputMedia, raw.sampleImage, 'sample', 'image', true);
-    pushInputMedia(inputMedia, raw.styleImage, 'style', 'image', false);
-    pushInputMedia(inputMedia, raw.sourceImage, 'source', 'image', true);
-    pushInputMedia(inputMedia, raw.keyframeImage, 'keyframe', 'image', true);
-    pushInputMedia(inputMedia, raw.characterImage, 'character', 'image', true);
+    pushInputMedia(inputMedia, source.sampleImage, 'sample', 'image', true);
+    pushInputMedia(inputMedia, source.styleImage, 'style', 'image', false);
+    pushInputMedia(inputMedia, source.sourceImage, 'source', 'image', true);
+    pushInputMedia(inputMedia, source.keyframeImage, 'keyframe', 'image', true);
+    pushInputMedia(inputMedia, source.characterImage, 'character', 'image', true);
 
     for (const key of ['characterImages', 'referenceImages', '__uploadSources'] as const) {
-      const values = raw[key];
+      const values = source[key];
       if (Array.isArray(values)) {
         values.forEach((value) => pushInputMedia(inputMedia, value, key === 'characterImages' ? 'character' : 'reference', 'image', true));
       }
     }
 
-    pushInputMedia(inputMedia, raw.motionVideoDataUrl, 'motion', 'video', true);
+    pushInputMedia(inputMedia, source.motionVideoDataUrl, 'motion', 'video', true);
   }
 
   return [...inputMedia.values()];
 };
 
 const inferMode = (toolId: string | null | undefined, payload: QueuePayloadObject) => {
-  const raw = payload && typeof payload === 'object' ? payload : {};
+  const raw = getRecipeAwarePayload(payload);
   const recipeType = String(raw.recipeType || '').trim().toLowerCase();
   const characterCount = Number(raw.characterCount || 0);
 
@@ -131,20 +149,44 @@ const inferMode = (toolId: string | null | undefined, payload: QueuePayloadObjec
 };
 
 const getConfigSummary = (payload: QueuePayloadObject, toolId?: string | null) => {
-  const raw = payload && typeof payload === 'object' ? payload : {};
+  const raw = toPayloadObject(payload);
+  const source = getRecipeAwarePayload(payload);
 
   return {
-    recipeType: String(raw.recipeType || '').trim() || null,
-    modelId: String(raw.modelId || '').trim() || null,
-    mode: inferMode(toolId, raw),
-    resolution: String(raw.resolution || '').trim() || null,
-    speed: String(raw.speed || '').trim() || null,
-    serverId: String(raw.serverId || '').trim() || null,
-    aspectRatio: String(raw.aspectRatio || '').trim() || null,
-    duration: String(raw.duration || '').trim() || null,
-    audio: typeof raw.audio === 'boolean' ? raw.audio : null,
-    characterCount: Number.isFinite(Number(raw.characterCount)) ? Number(raw.characterCount) : null,
+    recipeType: String(source.recipeType || '').trim() || null,
+    modelId: String(source.modelId || raw.modelId || raw.model || '').trim() || null,
+    mode: inferMode(toolId, payload),
+    resolution: String(source.resolution || raw.resolution || '').trim() || null,
+    speed: String(source.speed || raw.speed || '').trim() || null,
+    serverId: String(source.serverId || raw.serverId || raw.server_id || '').trim() || null,
+    aspectRatio: String(source.aspectRatio || raw.aspectRatio || raw.aspect_ratio || '').trim() || null,
+    duration: String(source.duration || raw.duration || '').trim() || null,
+    audio: typeof source.audio === 'boolean' ? source.audio : (typeof raw.audio === 'boolean' ? raw.audio : null),
+    characterCount: Number.isFinite(Number(source.characterCount)) ? Number(source.characterCount) : null,
   };
+};
+
+const getDisplayToolName = (
+  toolName: string | null | undefined,
+  queueKind: string | null | undefined,
+  config: ReturnType<typeof getConfigSummary>,
+) => {
+  if (queueKind === 'image_generate') {
+    if (config.mode === 'couple') return 'Couple 3D Mode';
+    if (config.mode === 'group3') return 'Squad of 3';
+    if (config.mode === 'group4') return 'Clan of 4';
+    if (config.mode === 'single') return 'Single 3D Character';
+  }
+
+  if (queueKind === 'motion_generate' && config.mode === 'motion_control') {
+    return 'Motion Control';
+  }
+
+  if (queueKind === 'video_generate' && config.mode === 'video_ai') {
+    return 'Video AI';
+  }
+
+  return String(toolName || '').trim() || null;
 };
 
 const getUserProfile = async (userId: string): Promise<NotificationUserProfile | null> => {
@@ -298,6 +340,7 @@ export const sendTelegramJobNotification = async (
 
     const userProfile = await getUserProfile(record.userId);
     const config = getConfigSummary(record.queuePayload, record.toolId);
+    const displayToolName = getDisplayToolName(record.toolName, record.queueKind, config);
     const inputMedia = extractInputMedia(record.queuePayload);
     const inputUrls = inputMedia.map((entry) => entry.url);
 
@@ -313,7 +356,7 @@ export const sendTelegramJobNotification = async (
         prompt: record.prompt || '',
         assetType: record.assetType || 'image',
         toolId: record.toolId || null,
-        toolName: record.toolName || null,
+        toolName: displayToolName,
         engine: record.engine || null,
         queueKind: record.queueKind || null,
         costVcoin: Number(record.costVcoin || 0),

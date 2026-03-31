@@ -11,6 +11,7 @@ import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import { downloadAssetToBrowser } from '../../services/downloadService';
 import { createSolidFence, createStyleOnlyReference, optimizePayload } from '../../utils/imageProcessor';
+import { APP_CONFIG } from '../../constants';
 import {
   type AuditionPricingOverride,
   fetchTstModels,
@@ -41,6 +42,13 @@ interface GenerationToolProps {
 type GenMode = 'single' | 'couple' | 'group3' | 'group4';
 type Stage = 'input' | 'processing' | 'result';
 type Resolution = '1K' | '2K' | '4K';
+
+const MODE_TO_FEATURE_ID: Record<GenMode, string> = {
+    single: 'single_photo_gen',
+    couple: 'couple_photo_gen',
+    group3: 'group_3_gen',
+    group4: 'group_4_gen',
+};
 
 interface CharacterInput {
   id: number;
@@ -184,6 +192,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [isConcurrencyExpanded, setIsConcurrencyExpanded] = useState(false);
+  const activeFeature = APP_CONFIG.main_features.find((entry) => entry.id === MODE_TO_FEATURE_ID[activeMode]) || feature;
 
   const pricingOverrides: AuditionPricingOverride[] = auditionPricing.map((row) => ({
       modelId: row.model_id,
@@ -674,7 +683,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
     setIsSubmitting(true);
     const queuedJobId = crypto.randomUUID();
 
-    const basePrompt = `${feature.defaultPrompt || ''}${prompt}`.trim();
+    const basePrompt = `${activeFeature.defaultPrompt || ''}${prompt}`.trim();
     const styleMetadata = availableStyles.find((style: any) => style.image_url === activeStylePreset);
     const requestedSpeedId = uiSpeedToTst(speed) || 'fast';
     const requestedServerId = uiServerToTst(server) || 'fast';
@@ -703,8 +712,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
         timestamp: Date.now(),
         updatedAt: Date.now(),
         assetType: 'image',
-        toolId: feature.id,
-        toolName: feature.name['en'],
+        toolId: activeFeature.id,
+        toolName: activeFeature.name['en'],
         engine: aiModel === 'flash' ? `Flash Engine ${resolution}` : `Pro Engine ${resolution}`,
         status: 'queued',
         jobId: queuedJobId,
@@ -797,8 +806,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
             await enqueueServerJob({
                 id: queuedJobId,
                 prompt: basePrompt,
-                toolId: feature.id,
-                toolName: feature.name['en'],
+                toolId: activeFeature.id,
+                toolName: activeFeature.name['en'],
                 engine: aiModel === 'flash' ? `Flash Engine ${resolution}` : `Pro Engine ${resolution}`,
                 assetType: 'image',
                 costVcoin: cost,
@@ -862,7 +871,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
             structureRefData = refImage || undefined;
         }
 
-        let finalPrompt = (feature.defaultPrompt || '') + prompt;
+        let finalPrompt = (activeFeature.defaultPrompt || '') + prompt;
         if (negativePrompt) finalPrompt += ` --no ${negativePrompt}`;
 
         addLog('Gửi lệnh đến Image Generation Engine...');
@@ -907,8 +916,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
         await enqueueServerJob({
             id: queuedJobId,
             prompt: providerPrompt,
-            toolId: feature.id,
-            toolName: feature.name['en'],
+            toolId: activeFeature.id,
+            toolName: activeFeature.name['en'],
             engine: aiModel === 'flash' ? `Flash Engine ${resolution}` : `Pro Engine ${resolution}`,
             assetType: 'image',
             costVcoin: cost,

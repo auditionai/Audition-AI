@@ -164,6 +164,8 @@ const STALE_RECOVERY_SCAN_LIMIT = 50;
 const STALE_RECOVERY_MIN_AGE_MS = 45_000;
 const STALE_VERIFYING_OUTPUT_RECOVERY_MIN_AGE_MS = 90_000;
 const STALE_PROVIDER_POLL_RECOVERY_MIN_AGE_MS = 45_000;
+const AMBIGUOUS_DISPATCH_DUPLICATE_PROTECTION_MESSAGE =
+  'Khong nhan duoc xac nhan provider job goc sau loi mang/timeout. Job da dung de tranh tao them provider moi.';
 
 const isTransientError = (message: string) => {
   const normalized = message.toLowerCase();
@@ -449,6 +451,10 @@ const withQueueMeta = (
 const hasTstBeenTouched = (
   payload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
 ) => toQueuePayloadObject(payload).__tstTouched === true;
+
+const hasDispatchConfirmationPending = (
+  payload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
+) => toQueuePayloadObject(payload).__dispatchConfirmationPending === true;
 
 const hasProviderBeenCommitted = (job: QueueJobRow, payload?: Record<string, unknown> | ImageGenerateRecipePayload | null) =>
   Boolean(String(job.job_id || '').trim()) || hasTstBeenTouched(payload ?? job.queue_payload);
@@ -1139,6 +1145,7 @@ const markFailed = async (
   fireTelegramJobNotification('failed', {
     id: job.id,
     userId: job.user_id,
+    providerJobId: job.job_id || null,
     prompt: job.prompt,
     assetType: job.asset_type,
     toolId: job.tool_id,
@@ -1776,6 +1783,7 @@ const completePolledJobWithResultUrl = async (
   fireTelegramJobNotification('completed', {
     id: job.id,
     userId: job.user_id,
+    providerJobId: job.job_id || null,
     prompt: job.prompt,
     assetType: job.asset_type,
     toolId: job.tool_id,
@@ -2165,6 +2173,8 @@ const recoverStalePreparingJobs = async () => {
     const isStagedRecipe =
       isRecipePayload && ['uploading_refs', 'synthesizing_prompt', 'building_payload'].includes(recipeStage);
     const missingProviderJobId = !String((job as any).job_id || '').trim();
+    const dispatchConfirmationPending = hasDispatchConfirmationPending(payload);
+    const providerDispatchWasAttempted = hasTstBeenTouched(payload);
     const logCount = getQueueLogs(payload).length;
     const isOrphanedClaim =
       currentStatus === 'processing' &&
@@ -2182,14 +2192,17 @@ const recoverStalePreparingJobs = async () => {
       isStagedRecipe &&
       leaseExpired &&
       ageMs >= ORPHAN_CLAIM_GRACE_MS;
-    const isAwaitingAmbiguousDispatchConfirmation =
+    const isWaitingForAmbiguousDispatchConfirmation =
       currentStatus === 'processing' &&
-      isRecipePayload &&
       missingProviderJobId &&
       recipeStage.startsWith('dispatching') &&
-      payload &&
-      typeof payload === 'object' &&
-      (payload as Record<string, unknown>).__dispatchConfirmationPending === true &&
+      dispatchConfirmationPending &&
+      updatedAgeMs < AMBIGUOUS_DISPATCH_RECOVERY_GRACE_MS;
+    const isAwaitingAmbiguousDispatchConfirmation =
+      currentStatus === 'processing' &&
+      missingProviderJobId &&
+      recipeStage.startsWith('dispatching') &&
+      dispatchConfirmationPending &&
       updatedAgeMs >= AMBIGUOUS_DISPATCH_RECOVERY_GRACE_MS;
 
     if (isOrphanedClaim) {
@@ -2248,10 +2261,14 @@ const recoverStalePreparingJobs = async () => {
       continue;
     }
 
+    if (isWaitingForAmbiguousDispatchConfirmation) {
+      continue;
+    }
+
     if (isAwaitingAmbiguousDispatchConfirmation) {
       await markFailedRespectingRefundPolicy(
         job,
-        'Khong nhan duoc xac nhan provider job goc sau loi mang/timeout. Job da dung de tranh tao them provider moi.',
+        AMBIGUOUS_DISPATCH_DUPLICATE_PROTECTION_MESSAGE,
       );
       continue;
     }
@@ -2261,6 +2278,11 @@ const recoverStalePreparingJobs = async () => {
     }
 
     if (currentStatus === 'processing' && !isRecipePayload) {
+      if (missingProviderJobId && providerDispatchWasAttempted && recipeStage.startsWith('dispatching')) {
+        await markFailedRespectingRefundPolicy(job, AMBIGUOUS_DISPATCH_DUPLICATE_PROTECTION_MESSAGE);
+        continue;
+      }
+
       await markPreparedForDispatch(job.id);
       recovered += 1;
       continue;
@@ -2454,6 +2476,7 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
       fireTelegramJobNotification('completed', {
         id: job.id,
         userId: job.user_id,
+        providerJobId: job.job_id || null,
         prompt: job.prompt,
         assetType: job.asset_type,
         toolId: job.tool_id,
@@ -2833,6 +2856,7 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
         fireTelegramJobNotification('completed', {
           id: job.id,
           userId: job.user_id,
+          providerJobId: job.job_id || null,
           prompt: job.prompt,
           assetType: job.asset_type,
           toolId: job.tool_id,

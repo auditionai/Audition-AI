@@ -8,6 +8,7 @@ type JobNotificationEvent = 'queued' | 'completed' | 'failed';
 type JobNotificationRecord = {
   id: string;
   userId: string;
+  providerJobId?: string | null;
   prompt?: string | null;
   assetType?: string | null;
   toolId?: string | null;
@@ -305,6 +306,7 @@ export const sendTelegramJobNotification = async (
       app: 'Audition AI',
       job: {
         id: record.id,
+        providerJobId: record.providerJobId || null,
         userId: record.userId,
         displayName: userProfile?.display_name || null,
         email: userProfile?.email || null,

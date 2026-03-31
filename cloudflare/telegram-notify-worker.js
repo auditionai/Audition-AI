@@ -156,9 +156,13 @@ const buildSummaryLines = (payload) => {
     `• Model: ${escapeHtml(displayValue(config?.modelId || job?.engine))}`,
     `• Chế độ: ${escapeHtml(displayValue(config?.mode))} | ${escapeHtml(displayValue(job?.assetType, 'image'))}`,
     `• Cấu hình: ${escapeHtml(displayValue(config?.resolution))} | ${escapeHtml(displayValue(config?.speed))}`,
-    `• Job ID: <code>${escapeHtml(getShortId(job?.id))}</code>`,
+    `• App Job ID: <code>${escapeHtml(getShortId(job?.id))}</code>`,
     `• Prompt: đã ẩn (${escapeHtml(String(promptMeta.length))} ký tự)`,
   ];
+
+  if (job?.providerJobId) {
+    lines.splice(lines.length - 1, 0, `• Provider ID: <code>${escapeHtml(getShortId(job?.providerJobId))}</code>`);
+  }
 
   if (payload?.eventType === 'completed') {
     lines.push(`• Hoàn tất: ${escapeHtml(formatIso(job?.finishedAt))}`);
@@ -182,7 +186,8 @@ const buildMediaCaption = (payload) =>
       `${getEventLabel(payload?.eventType)} | ${displayValue(payload?.job?.toolName || payload?.job?.queueKind)}`,
       `${displayValue(payload?.job?.displayName, 'Unknown')} | ${displayValue(payload?.job?.costVcoin ?? 0, '0')} VC`,
       `Model: ${displayValue(payload?.job?.config?.modelId || payload?.job?.engine)}`,
-      `Job: ${getShortId(payload?.job?.id)}`,
+      `App Job: ${getShortId(payload?.job?.id)}`,
+      ...(payload?.job?.providerJobId ? [`Provider: ${getShortId(payload?.job?.providerJobId)}`] : []),
     ].join('\n'),
     900,
   );

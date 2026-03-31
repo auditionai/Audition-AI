@@ -146,6 +146,7 @@ const MAX_GROUP4_IMAGE_PROCESSING_AGE_MS = 30 * 60 * 1000;
 const FAILED_RESULT_RESCUE_SCAN_LIMIT = 10;
 const FAILED_RESULT_RESCUE_LOOKBACK_MS = 24 * 60 * 60 * 1000;
 const FAILED_RESULT_RESCUE_MAX_ATTEMPTS = 8;
+const MAX_PROVIDER_LOST_JOB_RETRIES = 1;
 const SINGLE_AND_COUPLE_PREPARE_TIMEOUT_MS = 10 * 60 * 1000;
 const GROUP_OF_THREE_PREPARE_TIMEOUT_MS = 15 * 60 * 1000;
 const GROUP_OF_FOUR_PREPARE_TIMEOUT_MS = 20 * 60 * 1000;
@@ -214,9 +215,10 @@ const isAmbiguousDispatchError = (message: string) => {
 const parseErrorMessage = async (response: Response) => {
   try {
     const data = await response.json();
-    return normalizeQueueErrorMessage(data?.error || data?.message || data?.detail || `${response.status} ${response.statusText}`);
+    const detail = data?.error || data?.message || data?.detail || `${response.status} ${response.statusText}`;
+    return repairVietnameseMojibake(typeof detail === 'string' ? detail : JSON.stringify(detail));
   } catch {
-    return normalizeQueueErrorMessage(`${response.status} ${response.statusText}`);
+    return repairVietnameseMojibake(`${response.status} ${response.statusText}`);
   }
 };
 
@@ -350,6 +352,9 @@ const getFailedRescueNextAt = (payload?: Record<string, unknown> | ImageGenerate
   const timestamp = new Date(raw).getTime();
   return Number.isFinite(timestamp) ? timestamp : 0;
 };
+
+const getProviderLostJobRetryCount = (payload?: Record<string, unknown> | ImageGenerateRecipePayload | null) =>
+  Math.max(0, Number(toQueuePayloadObject(payload).__providerLostJobRetryCount || 0));
 
 const getQueueLogs = (payload?: Record<string, unknown> | ImageGenerateRecipePayload | null): QueueProgressLogEntry[] => {
   const rawLogs = toQueuePayloadObject(payload).__logs;
@@ -587,7 +592,10 @@ const isGenericProviderFailure = (message: string) => {
     normalized.includes('job not found') ||
     normalized.includes('job set not found') ||
     normalized.includes('job failed, change prompt or input and try again') ||
-    normalized.includes('change prompt or input and try again')
+    normalized.includes('change prompt or input and try again') ||
+    normalized.includes('đã xảy ra lỗi khi xử lý') ||
+    normalized.includes('da xay ra loi khi xu ly') ||
+    normalized.includes('an error occurred while processing')
   );
 };
 
@@ -839,20 +847,14 @@ const getPreparationTimeoutMs = (job: Pick<QueueJobRow, 'tool_id'>, payload?: Qu
 
 const getPreparationLeaseSeconds = (job: Pick<QueueJobRow, 'tool_id' | 'queue_kind'>, payload?: QueueJobRow['queue_payload']) => {
   if (job.queue_kind === 'motion_generate' || job.queue_kind === 'video_generate') {
-    return 300;
+    return Math.max(420, Math.ceil(getPreparationTimeoutMs(job, payload) / 1000) + 120);
   }
 
   if (isQueueRecipePayload(payload) && payload.recipeType === 'image_generate_recipe_v1') {
-    const characterCount = getImageRecipeCharacterCount(job, payload);
-    if (characterCount && characterCount >= 4) {
-      return 480;
-    }
-    if (characterCount === 3) {
-      return 360;
-    }
+    return Math.max(DISPATCH_LEASE_SECONDS, Math.ceil(getPreparationTimeoutMs(job, payload) / 1000) + 120);
   }
 
-  return DISPATCH_LEASE_SECONDS;
+  return Math.max(DISPATCH_LEASE_SECONDS, Math.ceil(getPreparationTimeoutMs(job, payload) / 1000) + 120);
 };
 
 const getPreparationTimeoutUserMessage = (job: Pick<QueueJobRow, 'tool_id'>, payload?: QueueJobRow['queue_payload']) => {
@@ -2022,6 +2024,9 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
         completionLevel: 'warning',
       });
     }
+    if (isTerminalRescueFailureMessage(String(failureMessage)) && await autoRedriveLostProviderJob(job, String(failureMessage))) {
+      return 'requeued';
+    }
     const nextAttemptCount = Number(currentState?.attempt_count || 0) + 1;
     if (
       isGenericProviderFailure(String(failureMessage)) &&
@@ -2074,6 +2079,10 @@ const handlePollFailure = async (job: QueueJobRow, errorMessage: string) => {
   const startedAt = state?.processing_started_at || state?.created_at || new Date().toISOString();
   const processingAgeMs = Date.now() - new Date(startedAt).getTime();
   const isTerminalPollFailure = isTerminalRescueFailureMessage(errorMessage);
+
+  if (isTerminalPollFailure && await autoRedriveLostProviderJob(job, errorMessage)) {
+    return 'requeued';
+  }
 
   if (
     isTerminalPollFailure ||
@@ -2137,6 +2146,79 @@ const requeueProviderSoftFailure = async (
       updated_at: new Date().toISOString(),
     })
     .eq('id', job.id);
+};
+
+const autoRedriveLostProviderJob = async (
+  job: QueueJobRow,
+  errorMessage: string,
+) => {
+  if (job.queue_kind !== 'image_generate') {
+    return false;
+  }
+
+  const state = await getJobRuntimeState(job.id);
+  const currentPayload =
+    state?.queue_payload && typeof state.queue_payload === 'object'
+      ? (state.queue_payload as Record<string, unknown>)
+      : job.queue_payload;
+  const currentRetryCount = getProviderLostJobRetryCount(currentPayload);
+  if (currentRetryCount >= MAX_PROVIDER_LOST_JOB_RETRIES) {
+    return false;
+  }
+
+  const currentPayloadObject = toQueuePayloadObject(currentPayload);
+  const reusableProviderPayload =
+    (Array.isArray(currentPayloadObject.img_url) && currentPayloadObject.img_url.length > 0) ||
+    (typeof currentPayloadObject.img_url === 'string' && currentPayloadObject.img_url.trim())
+      ? currentPayloadObject
+      : null;
+  const restoredRecipePayload = getStoredImageGenerateRecipePayload(currentPayload);
+  const nextBasePayload =
+    reusableProviderPayload
+      ? reusableProviderPayload
+      : (restoredRecipePayload || currentPayloadObject);
+
+  if (!nextBasePayload || Object.keys(nextBasePayload).length === 0) {
+    return false;
+  }
+
+  const nextRetryCount = currentRetryCount + 1;
+  const nextPayload = withQueueLog(
+    {
+      ...nextBasePayload,
+      __providerLostJobRetryCount: nextRetryCount,
+      __dispatchAttemptId: null,
+      __dispatchConfirmationPending: false,
+    },
+    'queued',
+    `Provider khong con tim thay job ${String(job.job_id || '').trim() || 'cu'}. Tu dong tao lai mot lan (${nextRetryCount}/${MAX_PROVIDER_LOST_JOB_RETRIES}).`,
+    'warning',
+  );
+
+  await updateGeneratedImageRecord(job.id, {
+    status: 'queued',
+    job_id: null,
+    image_url: null,
+    finished_at: null,
+    processing_started_at: null,
+    error_message: null,
+    queue_payload: nextPayload,
+    progress: 55,
+    lease_token: null,
+    lease_expires_at: null,
+    next_poll_at: new Date().toISOString(),
+    attempt_count: 0,
+    last_error_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  });
+
+  logQueueWorkerEvent('Requeued job after provider lost the original job id.', {
+    ...getQueueWorkerLogJob(job),
+    previousProviderJobId: job.job_id || null,
+    retryCount: nextRetryCount,
+    reason: errorMessage,
+  });
+  return true;
 };
 
 const recoverStalePreparingJobs = async () => {

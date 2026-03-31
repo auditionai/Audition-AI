@@ -3,6 +3,9 @@ import type { AdminQueueJob, AdminQueueSummary } from '../../types';
 import type { QueueProgressLogEntry } from '../../shared/queueRecipes';
 import { normalizeQueueProgressLogs } from '../../shared/queueLogText';
 import { isSystemQueueKind } from '../../shared/queueKinds';
+import { classifyQueueError, isTerminalRescueFailureMessage, normalizeQueueErrorMessage, pickQueueFailureMessage } from '../../shared/queueErrorClassifier';
+import { isFailedRescueStillActive } from '../../shared/queueRescueState';
+import { repairVietnameseMojibake } from '../../shared/queueLogText';
 import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 
 const headers = {
@@ -208,9 +211,15 @@ export const handler: Handler = async (event) => {
       const profile = userMap.get(String(row.user_id || ''));
       const lastQueueLog = getLastQueueLog(payload);
       const normalizedStatus = String(row.status || 'queued').toLowerCase();
+      const queueLogs = normalizeQueueLogs(payload);
+      const displayErrorSource = pickQueueFailureMessage(row.error_message || undefined, queueLogs);
+      const errorInfo = classifyQueueError(displayErrorSource || row.error_message || undefined);
 
       const displayStatus =
-        statusFilter === 'rescuing'
+        normalizedStatus === 'failed' &&
+        isFailedRescueStillActive(payload) &&
+        !isTerminalRescueFailureMessage(displayErrorSource) &&
+        (errorInfo.category === 'provider' || errorInfo.category === 'unknown')
           ? 'rescuing'
           : ((normalizedStatus === 'queued' || normalizedStatus === 'processing' || normalizedStatus === 'completed' || normalizedStatus === 'failed')
             ? normalizedStatus
@@ -232,9 +241,12 @@ export const handler: Handler = async (event) => {
         jobId: row.job_id || undefined,
         progress: typeof row.progress === 'number' ? row.progress : undefined,
         queueStage: getQueueStage(payload),
+        queueLogs,
         lastLogMessage: lastQueueLog?.message || undefined,
         lastLogAt: lastQueueLog?.at || undefined,
-        error: row.error_message || undefined,
+        error: normalizeQueueErrorMessage(displayErrorSource || row.error_message || undefined) || undefined,
+        errorCategory: errorInfo.category,
+        errorRaw: repairVietnameseMojibake(row.error_message || undefined) || undefined,
         createdAt: row.created_at || undefined,
         updatedAt: row.updated_at || undefined,
         nextPollAt: row.next_poll_at || undefined,

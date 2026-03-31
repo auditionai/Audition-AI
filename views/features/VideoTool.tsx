@@ -5,7 +5,6 @@ import { useNotification } from '../../components/NotificationSystem';
 import { getUserProfile, getModelPricing, getTstServerAvailabilityConfig, type ModelPricing } from '../../services/economyService';
 import { CONCURRENCY_LIMITS, useConcurrency } from '../../services/concurrencyService';
 import { enqueueServerJob } from '../../services/serverQueueService';
-import { prepareTramsangtaoMotionJob, prepareTramsangtaoVideoJob } from '../../services/tstVideoService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import { downloadAssetToBrowser } from '../../services/downloadService';
 import type { MotionGenerateRecipePayload, VideoGenerateRecipePayload } from '../../shared/queueRecipes';
@@ -713,101 +712,6 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
     })();
 
     return;
-
-    try {
-        const requestedServerId = uiServerToTst(server) || (activeMode === 'video_ai' ? 'fast' : 'vip2');
-        const requestedSpeedId = uiSpeedToTst(speed) || 'fast';
-        const effectiveServerId = activeMode === 'video_ai'
-            ? (() => {
-                const compatibleServers = getVideoCompatibleServers({
-                    modelId: videoModel,
-                    pricingEntries,
-                    resolution: quality.toLowerCase(),
-                    duration: duration.toLowerCase(),
-                    speed: requestedSpeedId,
-                    audio: sound
-                });
-                return compatibleServers.includes(requestedServerId) ? requestedServerId : (compatibleServers[0] || requestedServerId);
-            })()
-            : (() => {
-                const compatibleServers = getMotionCompatibleServers({
-                    modelId: motionModel,
-                    pricingEntries,
-                    resolution: quality.toLowerCase(),
-                    speed: requestedSpeedId
-                });
-                return compatibleServers.includes(requestedServerId) ? requestedServerId : (compatibleServers[0] || requestedServerId);
-            })();
-        const effectiveSpeedId = activeMode === 'video_ai'
-            ? (() => {
-                const compatibleSpeeds = getVideoCompatibleSpeeds({
-                    modelId: videoModel,
-                    pricingEntries,
-                    serverId: effectiveServerId,
-                    resolution: quality.toLowerCase(),
-                    duration: duration.toLowerCase(),
-                    audio: sound
-                });
-                return compatibleSpeeds.includes(requestedSpeedId) ? requestedSpeedId : (compatibleSpeeds[0] || requestedSpeedId);
-            })()
-            : (() => {
-                const compatibleSpeeds = getMotionCompatibleSpeeds({
-                    modelId: motionModel,
-                    pricingEntries,
-                    serverId: effectiveServerId,
-                    resolution: quality.toLowerCase()
-                });
-                return compatibleSpeeds.includes(requestedSpeedId) ? requestedSpeedId : (compatibleSpeeds[0] || requestedSpeedId);
-            })();
-
-        const queuePayload = activeMode === 'video_ai'
-            ? await prepareTramsangtaoVideoJob({
-                prompt: prompt || 'Create a cinematic video',
-                modelId: videoModel,
-                duration: duration.toLowerCase(),
-                resolution: quality.toLowerCase(),
-                aspectRatio,
-                speed: effectiveSpeedId || 'fast',
-                serverId: effectiveServerId,
-                keyframe: keyframeImage,
-                audio: sound,
-                onLog: (message) => console.log('[VideoTool]', message)
-            })
-            : await prepareTramsangtaoMotionJob({
-                modelId: motionModel,
-                characterImage: characterImage!,
-                motionVideo: motionVideoFile!,
-                prompt: motionPrompt,
-                resolution: quality.toLowerCase(),
-                speed: effectiveSpeedId || 'fast',
-                serverId: effectiveServerId,
-                onLog: (message) => console.log('[MotionTool]', message)
-            });
-
-        await enqueueServerJob({
-            id: queuedId,
-            prompt: activeMode === 'video_ai' ? (prompt || 'Create a cinematic video') : (motionPrompt || 'Motion Control'),
-            toolId: feature.id,
-            toolName: feature.name['en'],
-            engine: selectedModelName,
-            assetType: 'video',
-            costVcoin: cost,
-            queueKind: activeMode === 'video_ai' ? 'video_generate' : 'motion_generate',
-            clientPlatform: 'desktop',
-            queuePayload,
-        });
-
-        window.dispatchEvent(new Event('balance_updated'));
-        setStage('input');
-        setResultVideo(null);
-        notify(lang === 'vi' ? 'Đã gửi job. Theo dõi tiến trình trong Lịch sử tạo.' : 'Job submitted. Track progress in History.', 'success');
-        onNavigateView?.('gallery');
-    } catch (error: any) {
-        console.error(error);
-        notify(error instanceof Error ? error.message : (lang === 'vi' ? 'Tạo video thất bại' : 'Video generation failed'), 'error');
-    } finally {
-        setIsProcessing(false);
-    }
   };
 
   const TipIcon = SMART_TIPS[currentTipIdx].icon;

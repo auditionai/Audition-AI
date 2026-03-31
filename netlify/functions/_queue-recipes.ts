@@ -6,10 +6,14 @@ import {
   type ImageGenerateRecipePayload,
   type QueueRecipePayload,
 } from '../../shared/queueRecipes';
-import { rewriteUserImagePromptToFitLimit, synthesizeStrictImagePrompt } from './_vertex-director';
+import {
+  rewriteUserImagePromptToFitLimit,
+  rewriteUserPromptToFitLimit,
+  synthesizeStrictImagePrompt,
+} from './_vertex-director';
 
 const TST_API_BASE = 'https://api.tramsangtao.com/v1';
-const TST_PROMPT_MAX_CHARACTERS = 10_000;
+export const TST_PROMPT_MAX_CHARACTERS = 10_000;
 const PROMPT_REWRITE_SAFETY_MARGIN = 400;
 const MIN_USER_PROMPT_REWRITE_CHARACTERS = 180;
 const MAX_PROMPT_REWRITE_ATTEMPTS = 3;
@@ -208,6 +212,47 @@ const normalizePromptWhitespace = (value?: string | null) => String(value || '')
 const combineImageGeneratePrompt = (systemPromptPrefix: string, userPromptInput: string) =>
   `${systemPromptPrefix}${userPromptInput}`.trim();
 
+const prepareDirectPromptWithinLimit = async (
+  prompt: string,
+  pipelineLabel: string,
+) => {
+  const normalizedPrompt = normalizePromptWhitespace(prompt);
+  if (!normalizedPrompt) {
+    return '';
+  }
+
+  if (normalizedPrompt.length <= TST_PROMPT_MAX_CHARACTERS) {
+    return normalizedPrompt;
+  }
+
+  let sourcePromptForRewrite = normalizedPrompt;
+
+  for (let attempt = 1; attempt <= MAX_PROMPT_REWRITE_ATTEMPTS; attempt += 1) {
+    const overflow = sourcePromptForRewrite.length - TST_PROMPT_MAX_CHARACTERS;
+    const targetCharacters = Math.max(
+      MIN_USER_PROMPT_REWRITE_CHARACTERS,
+      sourcePromptForRewrite.length - overflow - PROMPT_REWRITE_SAFETY_MARGIN,
+    );
+    const rewrittenPrompt = normalizePromptWhitespace(
+      await rewriteUserPromptToFitLimit(normalizedPrompt, targetCharacters, pipelineLabel),
+    );
+
+    if (!rewrittenPrompt) {
+      break;
+    }
+
+    if (rewrittenPrompt.length <= TST_PROMPT_MAX_CHARACTERS) {
+      return rewrittenPrompt;
+    }
+
+    sourcePromptForRewrite = rewrittenPrompt;
+  }
+
+  throw new Error(
+    `Tong prompt gui sang provider van vuot ${TST_PROMPT_MAX_CHARACTERS} ky tu sau khi rut gon. Vui long rut ngan prompt va thu lai.`,
+  );
+};
+
 export type ImageGeneratePromptPreparation = {
   optimizedPayload: ImageGenerateRecipePayload;
   synthesizedPrompt: string;
@@ -314,9 +359,10 @@ export const prepareProviderPayloadFromQueueRecipe = async (payload: QueueRecipe
     }
 
     case 'image_edit_recipe_v1': {
+      const providerPrompt = await prepareDirectPromptWithinLimit(payload.prompt, 'image editing');
       const uploadedUrl = await uploadImageToTst(payload.sourceImage);
       const providerPayload: Record<string, unknown> = {
-        prompt: payload.prompt,
+        prompt: providerPrompt,
         model: payload.modelId,
         img_url: [uploadedUrl],
       };
@@ -330,8 +376,12 @@ export const prepareProviderPayloadFromQueueRecipe = async (payload: QueueRecipe
     }
 
     case 'video_generate_recipe_v1': {
+      const providerPrompt = await prepareDirectPromptWithinLimit(
+        payload.prompt || 'Create a cinematic video',
+        'video generation',
+      );
       const providerPayload: Record<string, unknown> = {
-        prompt: payload.prompt,
+        prompt: providerPrompt,
         model: payload.modelId,
         duration: payload.duration,
       };
@@ -354,6 +404,9 @@ export const prepareProviderPayloadFromQueueRecipe = async (payload: QueueRecipe
     }
 
     case 'motion_generate_recipe_v1': {
+      const providerPrompt = payload.prompt?.trim()
+        ? await prepareDirectPromptWithinLimit(payload.prompt, 'motion generation')
+        : '';
       const [characterImageUrl, motionVideoUrl] = await Promise.all([
         uploadImageToTst(payload.characterImage),
         uploadVideoToTst(payload.motionVideoDataUrl),
@@ -366,7 +419,7 @@ export const prepareProviderPayloadFromQueueRecipe = async (payload: QueueRecipe
         motion_video_url: motionVideoUrl,
       };
 
-      if (payload.prompt?.trim()) providerPayload.prompt = payload.prompt.trim();
+      if (providerPrompt) providerPayload.prompt = providerPrompt;
       if (payload.resolution) providerPayload.resolution = payload.resolution.toLowerCase();
       if (payload.speed) providerPayload.speed = payload.speed;
       if (payload.serverId) providerPayload.server_id = payload.serverId;

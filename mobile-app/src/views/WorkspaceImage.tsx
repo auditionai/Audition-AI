@@ -56,6 +56,7 @@ const SMART_TIPS = [
 ];
 
 const NEGATIVE_PROMPT = 'crowd, extra people, audience, bystanders, deformed, bad anatomy, disfigured, poorly drawn face, mutation, mutated, extra limb, ugly, disgusting, poorly drawn hands, missing limb, floating limbs, disconnected limbs, malformed hands, blur, out of focus, long neck, long body, mutated hands and fingers, out of frame, blender, doll, cropped, low-res, close-up, poorly-drawn face, out of frame double, two heads, blurred, ugly, disfigured, too many fingers, deformed, repetitive, black and white, grainy, extra limbs, bad anatomy, duplicate, photorealistic, realistic photo, sketch, cartoon, drawing, art, 2d';
+const SAMPLE_IMAGE_PROMPT_LOCK = 'Giữ nguyên 100% quần áo, trang phục, kiểu tóc, gương mặt, lớp hoá trang makeup trên gương mặt, biểu cảm trên gương mặt, phụ kiện như kính, khuyên tai trên mũ tóc, giày dép của ảnh tham chiếu nam và nữ tải lên. Không sử dụng quần áo, trang phục, kiểu tóc, gương mặt, lớp hoá trang makeup, biểu cảm, phụ kiện, giày dép của ảnh mẫu. Không được tự động xoá các chi tiết trên người của ảnh tham chiếu nam và nữ tải lên, không được tự động sáng tạo gương mặt và biểu cảm.';
 
 const MODE_TO_FEATURE_ID: Record<GenMode, string> = {
   single: 'single_photo_gen',
@@ -237,6 +238,21 @@ export function WorkspaceImage() {
     || !prompt.trim()
     || characters.some((char) => !char.bodyImage)
     || (aiModel === 'flash' ? !isFlashAvailable : !isProAvailable);
+
+  useEffect(() => {
+    if (!refImage) return;
+
+    setPrompt((current) => {
+      const normalized = current.trim();
+      if (normalized.includes(SAMPLE_IMAGE_PROMPT_LOCK)) {
+        return current;
+      }
+
+      return normalized
+        ? `${SAMPLE_IMAGE_PROMPT_LOCK}\n\n${normalized}`
+        : SAMPLE_IMAGE_PROMPT_LOCK;
+    });
+  }, [refImage]);
 
   const calculateCost = () => {
     const baseCost = selectedCost.vcoin;
@@ -594,6 +610,8 @@ export function WorkspaceImage() {
           recipeType: 'image_generate_recipe_v1',
           modelId: getGenerationModelId(aiModel),
           prompt: basePrompt,
+          userPromptInput: prompt.trim(),
+          systemPromptPrefix: activeFeature.defaultPrompt || '',
           negativePrompt: NEGATIVE_PROMPT,
           characterCount: characters.length,
           resolution,

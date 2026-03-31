@@ -2,7 +2,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Feature, Language, GeneratedImage, ViewId } from '../../types';
 import { Icons } from '../../components/Icons';
-import { prepareImageGenerationJob, testApiKey } from '../../services/geminiService';
 import { getUserProfile, getStylePresets, getTutorialVideo, getModelPricing, getTstServerAvailabilityConfig, type ModelPricing } from '../../services/economyService';
 import { useNotification } from '../../components/NotificationSystem';
 import { caulenhauClient } from '../../services/supabaseClient';
@@ -154,17 +153,12 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const [server, setServer] = useState('VIP 1');
   const [aiModel, setAiModel] = useState<'flash' | 'pro'>('flash');
 
-  // Features always ON
-  const useSearch = true;
-  const useCloudRef = true;
-
   const [guideTopic, setGuideTopic] = useState<'chars' | 'settings' | null>(null);
   const [currentTipIdx, setCurrentTipIdx] = useState(0);
   const [showVideo, setShowVideo] = useState(false);
   const [tutorialVideoUrl, setTutorialVideoUrl] = useState<string | null>(null);
 
   const [resultImage, setResultImage] = useState<string | null>(null);
-  const [generatedData, setGeneratedData] = useState<GeneratedImage | null>(null);
 
   // --- NEW: COOLDOWN STATE ---
   const [cooldownRemaining, setCooldownRemaining] = useState(() => {
@@ -863,115 +857,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
     })();
 
     return;
-
-    try {
-        addLog('Đang kiểm tra máy chủ phân tích Google...');
-        const isKeyValid = await testApiKey(aiModel, 1);
-        if (isKeyValid) {
-            addLog('Xác thực máy chủ phân tích thành công. Bắt đầu quá trình tạo ảnh...');
-        } else {
-            addLog('Máy chủ phân tích Google đang bận. Tiếp tục với prompt gốc và gọi job sang Trạm Sáng Tạo...');
-        }
-
-        let structureRefData: string | undefined = undefined;
-        const characterDataList = [];
-        for (const char of characters) {
-            characterDataList.push({
-                id: char.id,
-                gender: char.gender,
-                image: char.bodyImage,
-                faceImage: char.isFaceLocked ? char.bodyImage : null,
-                shoesImage: null,
-            });
-        }
-
-        if (refImage) {
-            addLog('Đang trích xuất cấu trúc (Wireframe)...');
-            structureRefData = refImage || undefined;
-        }
-
-        let finalPrompt = (activeFeature.defaultPrompt || '') + prompt;
-        if (negativePrompt) finalPrompt += ` --no ${negativePrompt}`;
-
-        addLog('Gửi lệnh đến Image Generation Engine...');
-
-        const requestedSpeedId = uiSpeedToTst(speed) || 'fast';
-        const requestedServerId = uiServerToTst(server) || 'fast';
-        const compatibleServers = getCompatibleGenerationServers({
-            tier: aiModel === 'flash' ? 'flash' : 'pro',
-            pricingEntries,
-            speed: requestedSpeedId,
-            resolution,
-        });
-        const effectiveServerId = compatibleServers.includes(requestedServerId)
-            ? requestedServerId
-            : (compatibleServers[0] || requestedServerId);
-        const compatibleSpeeds = getCompatibleGenerationSpeeds({
-            tier: aiModel === 'flash' ? 'flash' : 'pro',
-            pricingEntries,
-            serverId: effectiveServerId,
-            resolution,
-        });
-        const effectiveSpeedId = compatibleSpeeds.includes(requestedSpeedId)
-            ? requestedSpeedId
-            : (compatibleSpeeds[0] || requestedSpeedId);
-
-        const { payload, finalPrompt: providerPrompt } = await prepareImageGenerationJob(
-            finalPrompt,
-            aspectRatio,
-            structureRefData,
-            characterDataList,
-            resolution,
-            aiModel,
-            useSearch,
-            useCloudRef,
-            (msg) => addLog(msg),
-            activeStylePreset,
-            availableStyles,
-            effectiveSpeedId,
-            effectiveServerId,
-        );
-
-        await enqueueServerJob({
-            id: queuedJobId,
-            prompt: providerPrompt,
-            toolId: activeFeature.id,
-            toolName: activeFeature.name['en'],
-            engine: aiModel === 'flash' ? `Flash Engine ${resolution}` : `Pro Engine ${resolution}`,
-            assetType: 'image',
-            costVcoin: cost,
-            queueKind: 'image_generate',
-            clientPlatform: 'desktop',
-            queuePayload: payload,
-        });
-
-        window.dispatchEvent(new Event('balance_updated'));
-        addLog(lang === 'vi' ? 'Job đã được đưa vào hàng đợi xử lý.' : 'Job submitted to the server queue.');
-        notify(
-            lang === 'vi'
-                ? 'Đã tạo job. Kết quả sẽ được cập nhật realtime trong Lịch sử.'
-                : 'Job submitted. Progress will update in History in realtime.',
-            'success'
-        );
-        onNavigateView?.('gallery');
-        setStage('input');
-        setResultImage(null);
-        setGeneratedData(null);
-        startCooldown(60);
-    } catch (error: any) {
-        console.error(error);
-        const errorMsg = error instanceof Error ? error.message : (lang === 'vi' ? 'Lỗi không xác định' : 'Unknown Error');
-        addLog(`ERROR: ${errorMsg}`);
-        notify(errorMsg, 'error');
-
-        try {
-            addLog(lang === 'vi' ? 'Đã ghi nhận lỗi enqueue phía server.' : 'Server-side enqueue error recorded.');
-        } catch (refundError) {
-            console.error('Refund log failed', refundError);
-        } finally {
-            setTimeout(() => setStage('input'), 2000);
-        }
-    }
   };
 
   const ratios = [

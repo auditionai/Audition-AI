@@ -189,9 +189,10 @@ export const synthesizeStrictImagePrompt = async (payload: ImageGenerateRecipePa
   });
 };
 
-export const rewriteUserImagePromptToFitLimit = async (
+export const rewriteUserPromptToFitLimit = async (
   prompt: string,
   maxCharacters: number,
+  pipelineLabel = 'generation',
 ) => {
   const normalizedPrompt = normalizePromptWhitespace(prompt);
   if (!normalizedPrompt) {
@@ -203,7 +204,7 @@ export const rewriteUserImagePromptToFitLimit = async (
   }
 
   const instruction = [
-    'You rewrite user prompts for an image-generation pipeline.',
+    `You rewrite user prompts for a ${pipelineLabel} pipeline.`,
     'Your job is to make the prompt shorter without changing the original meaning.',
     'Rules:',
     '- Keep the same language as the input.',
@@ -254,3 +255,8 @@ export const rewriteUserImagePromptToFitLimit = async (
     },
   });
 };
+
+export const rewriteUserImagePromptToFitLimit = async (
+  prompt: string,
+  maxCharacters: number,
+) => rewriteUserPromptToFitLimit(prompt, maxCharacters, 'image generation');

@@ -7,6 +7,7 @@ import {
   buildImageGenerateProviderPayload,
   prepareImageGeneratePromptWithinLimit,
   prepareProviderPayloadFromQueueRecipe,
+  TST_PROMPT_MAX_CHARACTERS,
   uploadImageToTst,
 } from './_queue-recipes';
 import { runVertexImageEdit } from './_vertex-image-edit';
@@ -18,6 +19,7 @@ import {
   type VideoInputReviewResult,
 } from './_vertex-video-input-review';
 import {
+  buildImageProviderPrompt,
   getImageDirectorSources,
   validateImageGenerateReferenceIntegrity,
   getImageRenderReferenceSources,
@@ -1711,7 +1713,19 @@ const prepareImageRecipeInStages = async (
     'building_payload',
     'Đang dựng và kiểm tra payload cuối.',
   ) as ImageGenerateRecipePayload;
-  const promptPreparation = await prepareImageGeneratePromptWithinLimit(recipePayload);
+  const existingSynthesizedPrompt = recipePayload.__synthesizedPrompt?.trim();
+  const existingProviderPrompt =
+    existingSynthesizedPrompt
+      ? buildImageProviderPrompt(existingSynthesizedPrompt, recipePayload, recipePayload.negativePrompt)
+      : '';
+  const promptPreparation =
+    existingSynthesizedPrompt && existingProviderPrompt.length <= TST_PROMPT_MAX_CHARACTERS
+      ? {
+          optimizedPayload: recipePayload,
+          synthesizedPrompt: existingSynthesizedPrompt,
+          providerPrompt: existingProviderPrompt,
+        }
+      : await prepareImageGeneratePromptWithinLimit(recipePayload);
   const providerPayload = buildImageGenerateProviderPayload(
     promptPreparation.optimizedPayload,
     uploadedUrls,

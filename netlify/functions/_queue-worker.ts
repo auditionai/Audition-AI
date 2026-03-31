@@ -147,6 +147,8 @@ const FAILED_RESULT_RESCUE_SCAN_LIMIT = 10;
 const FAILED_RESULT_RESCUE_LOOKBACK_MS = 24 * 60 * 60 * 1000;
 const FAILED_RESULT_RESCUE_MAX_ATTEMPTS = 8;
 const MAX_PROVIDER_LOST_JOB_RETRIES = 1;
+const PROVIDER_LOST_JOB_CONFIRMATION_POLLS = 3;
+const PROVIDER_LOST_JOB_CONFIRMATION_INTERVAL_SECONDS = 60;
 const SINGLE_AND_COUPLE_PREPARE_TIMEOUT_MS = 10 * 60 * 1000;
 const GROUP_OF_THREE_PREPARE_TIMEOUT_MS = 15 * 60 * 1000;
 const GROUP_OF_FOUR_PREPARE_TIMEOUT_MS = 20 * 60 * 1000;
@@ -355,6 +357,22 @@ const getFailedRescueNextAt = (payload?: Record<string, unknown> | ImageGenerate
 
 const getProviderLostJobRetryCount = (payload?: Record<string, unknown> | ImageGenerateRecipePayload | null) =>
   Math.max(0, Number(toQueuePayloadObject(payload).__providerLostJobRetryCount || 0));
+
+const getProviderLostJobNotFoundCount = (payload?: Record<string, unknown> | ImageGenerateRecipePayload | null) =>
+  Math.max(0, Number(toQueuePayloadObject(payload).__providerLostJobNotFoundCount || 0));
+
+const hasProviderLostJobFinalConfirmationPending = (
+  payload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
+) => toQueuePayloadObject(payload).__providerLostJobFinalConfirmationPending === true;
+
+const clearProviderLostJobConfirmationMeta = (
+  payload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
+) => {
+  const nextPayload = toQueuePayloadObject(payload);
+  delete nextPayload.__providerLostJobNotFoundCount;
+  delete nextPayload.__providerLostJobFinalConfirmationPending;
+  return nextPayload;
+};
 
 const getQueueLogs = (payload?: Record<string, unknown> | ImageGenerateRecipePayload | null): QueueProgressLogEntry[] => {
   const rawLogs = toQueuePayloadObject(payload).__logs;
@@ -2024,8 +2042,8 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
         completionLevel: 'warning',
       });
     }
-    if (isTerminalRescueFailureMessage(String(failureMessage)) && await autoRedriveLostProviderJob(job, String(failureMessage))) {
-      return 'requeued';
+    if (isTerminalRescueFailureMessage(String(failureMessage))) {
+      return handleLostProviderJobSignal(job, String(failureMessage), currentState);
     }
     const nextAttemptCount = Number(currentState?.attempt_count || 0) + 1;
     if (
@@ -2051,7 +2069,7 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
     .update({
       status: 'processing',
       queue_payload: withQueueLog(
-        job.queue_payload,
+        clearProviderLostJobConfirmationMeta(job.queue_payload),
         'polling',
         `Provider đang xử lý${providerProgress > 0 ? ` (${providerProgress}%)` : ''}.`,
       ),
@@ -2080,8 +2098,8 @@ const handlePollFailure = async (job: QueueJobRow, errorMessage: string) => {
   const processingAgeMs = Date.now() - new Date(startedAt).getTime();
   const isTerminalPollFailure = isTerminalRescueFailureMessage(errorMessage);
 
-  if (isTerminalPollFailure && await autoRedriveLostProviderJob(job, errorMessage)) {
-    return 'requeued';
+  if (isTerminalPollFailure) {
+    return handleLostProviderJobSignal(job, errorMessage, state);
   }
 
   if (
@@ -2101,6 +2119,8 @@ const handlePollFailure = async (job: QueueJobRow, errorMessage: string) => {
     await markFailedRespectingRefundPolicy(job, finalMessage);
     return 'failed';
   }
+
+  job.queue_payload = clearProviderLostJobConfirmationMeta(job.queue_payload);
 
   await admin
     .from('generated_images')
@@ -2127,6 +2147,7 @@ const requeueProviderSoftFailure = async (
   providerStatus: string,
 ) => {
   const admin = getServiceRoleClient();
+  job.queue_payload = clearProviderLostJobConfirmationMeta(job.queue_payload);
   await admin
     .from('generated_images')
     .update({
@@ -2146,6 +2167,94 @@ const requeueProviderSoftFailure = async (
       updated_at: new Date().toISOString(),
     })
     .eq('id', job.id);
+};
+
+const scheduleLostProviderJobConfirmation = async (
+  job: QueueJobRow,
+  payload: Record<string, unknown> | ImageGenerateRecipePayload | null,
+  errorMessage: string,
+  nextAttemptCount: number,
+  nextNotFoundCount: number,
+  finalConfirmationPending: boolean,
+) => {
+  const nowIso = new Date().toISOString();
+  const nextPollAtIso = new Date(Date.now() + PROVIDER_LOST_JOB_CONFIRMATION_INTERVAL_SECONDS * 1000).toISOString();
+  const warningMessage =
+    finalConfirmationPending
+      ? `Provider tra ve "job set not found" ${PROVIDER_LOST_JOB_CONFIRMATION_POLLS} lan lien tiep. Se doi ${PROVIDER_LOST_JOB_CONFIRMATION_INTERVAL_SECONDS}s va xac minh lan cuoi truoc khi tao lai job.`
+      : `Provider tra ve "job set not found" (${nextNotFoundCount}/${PROVIDER_LOST_JOB_CONFIRMATION_POLLS}). Se poll lai sau ${PROVIDER_LOST_JOB_CONFIRMATION_INTERVAL_SECONDS}s de tranh tao trung provider job.`;
+
+  await updateGeneratedImageRecord(job.id, {
+    status: 'processing',
+    error_message: errorMessage,
+    queue_payload: withQueueLog(
+      {
+        ...clearProviderLostJobConfirmationMeta(payload),
+        __providerLostJobNotFoundCount: nextNotFoundCount,
+        __providerLostJobFinalConfirmationPending: finalConfirmationPending,
+      },
+      'polling',
+      warningMessage,
+      'warning',
+    ),
+    attempt_count: nextAttemptCount,
+    next_poll_at: nextPollAtIso,
+    lease_token: null,
+    lease_expires_at: null,
+    last_error_at: nowIso,
+    updated_at: nowIso,
+  });
+
+  logQueueWorkerEvent('Scheduled provider lost-job confirmation poll.', {
+    ...getQueueWorkerLogJob(job),
+    providerJobId: job.job_id || null,
+    nextNotFoundCount,
+    finalConfirmationPending,
+    nextPollAt: nextPollAtIso,
+    reason: errorMessage,
+  });
+};
+
+const buildProviderLostJobFinalFailureMessage = (errorMessage: string) =>
+  `Provider van tra ve "${errorMessage}" sau ${PROVIDER_LOST_JOB_CONFIRMATION_POLLS} lan poll lien tiep va 1 lan xac minh cuoi. Job duoc danh dau that bai de tranh tao them provider job moi.`;
+
+const handleLostProviderJobSignal = async (
+  job: QueueJobRow,
+  errorMessage: string,
+  currentState?: Awaited<ReturnType<typeof getJobRuntimeState>> | null,
+) => {
+  if (job.queue_kind !== 'image_generate') {
+    await markFailedRespectingRefundPolicy(job, errorMessage);
+    return 'failed';
+  }
+
+  const state = currentState ?? await getJobRuntimeState(job.id);
+  const currentPayload =
+    state?.queue_payload && typeof state.queue_payload === 'object'
+      ? (state.queue_payload as Record<string, unknown>)
+      : job.queue_payload;
+  const nextAttemptCount = Number(state?.attempt_count || 0) + 1;
+  const nextNotFoundCount = getProviderLostJobNotFoundCount(currentPayload) + 1;
+  const finalConfirmationPending = hasProviderLostJobFinalConfirmationPending(currentPayload);
+
+  if (!finalConfirmationPending) {
+    await scheduleLostProviderJobConfirmation(
+      job,
+      currentPayload,
+      errorMessage,
+      nextAttemptCount,
+      nextNotFoundCount,
+      nextNotFoundCount >= PROVIDER_LOST_JOB_CONFIRMATION_POLLS,
+    );
+    return 'requeued';
+  }
+
+  if (await autoRedriveLostProviderJob(job, errorMessage)) {
+    return 'requeued';
+  }
+
+  await markFailedRespectingRefundPolicy(job, buildProviderLostJobFinalFailureMessage(errorMessage));
+  return 'failed';
 };
 
 const autoRedriveLostProviderJob = async (
@@ -2185,13 +2294,13 @@ const autoRedriveLostProviderJob = async (
   const nextRetryCount = currentRetryCount + 1;
   const nextPayload = withQueueLog(
     {
-      ...nextBasePayload,
+      ...clearProviderLostJobConfirmationMeta(nextBasePayload),
       __providerLostJobRetryCount: nextRetryCount,
       __dispatchAttemptId: null,
       __dispatchConfirmationPending: false,
     },
     'queued',
-    `Provider khong con tim thay job ${String(job.job_id || '').trim() || 'cu'}. Tu dong tao lai mot lan (${nextRetryCount}/${MAX_PROVIDER_LOST_JOB_RETRIES}).`,
+    `Provider van khong tim thay job ${String(job.job_id || '').trim() || 'cu'} sau ${PROVIDER_LOST_JOB_CONFIRMATION_POLLS} lan poll lien tiep va 1 lan xac minh cuoi. Tu dong tao lai mot lan (${nextRetryCount}/${MAX_PROVIDER_LOST_JOB_RETRIES}).`,
     'warning',
   );
 

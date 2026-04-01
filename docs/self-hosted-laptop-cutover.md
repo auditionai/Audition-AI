@@ -143,6 +143,48 @@ Can dam bao:
 - co UPS neu dien khong on dinh
 - co backup database dinh ky
 
+## Tu dong bat lai sau khi reboot Windows
+
+Muc tieu:
+- Docker Desktop tu chay
+- Supabase local tu chay
+- Cloudflare Tunnel tu chay
+
+### Docker Desktop
+
+Bat tuy chon:
+- `Settings -> General -> Start Docker Desktop when you sign in`
+
+### Cloudflare Tunnel
+
+Neu da cai bang:
+
+```powershell
+cloudflared.exe service install <TUNNEL_TOKEN>
+```
+
+thi `Cloudflared` da la Windows service va se tu bat lai sau reboot.
+
+### Supabase local
+
+Cach on dinh nhat la tao `Task Scheduler` task chay script:
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File "c:\Users\cuong\OneDrive\Documents\GitHub\Audition-AI\scripts\start-self-hosted-stack.ps1"
+```
+
+Script nay se:
+- mo Docker Desktop neu chua chay
+- doi Docker engine san sang
+- chay `npx supabase start`
+- kiem tra `Cloudflared` service
+
+Task Scheduler nen dat:
+- Trigger: `At log on`
+- Delay task for: `30 seconds`
+- Run with highest privileges: `Enabled`
+- Run whether user is logged on or not: `Enabled` neu muon chay nen
+
 ## Script local hien co
 
 - `npm run dev:local`

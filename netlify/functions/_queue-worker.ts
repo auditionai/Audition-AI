@@ -1216,11 +1216,11 @@ const requeueJob = async (job: QueueJobRow, errorMessage: string) => {
   }
 
   const nextPollAt = new Date(Date.now() + getRetryDelaySeconds(nextAttemptCount) * 1000).toISOString();
-  const restoredRecipePayload = getStoredImageGenerateRecipePayload(job.queue_payload);
+  const restoredRecipePayload = getStoredImageGenerateRecipePayload(currentPayload);
   const requeuePayload =
     job.queue_kind === 'image_generate' && restoredRecipePayload
       ? restoredRecipePayload
-      : toQueuePayloadObject(job.queue_payload);
+      : toQueuePayloadObject(currentPayload);
 
   await updateGeneratedImageRecord(job.id, {
     status: 'queued',
@@ -1651,8 +1651,30 @@ const prepareImageRecipeInStages = async (
         'uploading_refs',
         `Đang tải ${chunk.length} ảnh tham chiếu (${uploadCursor + 1}-${uploadCursor + chunk.length}/${renderSources.length}).`,
       ) as ImageGenerateRecipePayload;
-      const chunkUrls = await Promise.all(chunk.map((source) => uploadImageToTst(source)));
-      uploadedUrls.push(...chunkUrls);
+
+      for (let index = 0; index < chunk.length; index += 1) {
+        const source = chunk[index];
+        const absoluteIndex = uploadCursor + index;
+        const uploadedUrl = await uploadImageToTst(source);
+        uploadedUrls.push(uploadedUrl);
+
+        recipePayload = await persistRecipePayload(job.id, {
+          ...recipePayload,
+          __stage: 'uploading_refs',
+          __uploadSources: renderSources,
+          __directorSources: directorSources,
+          __uploadCursor: absoluteIndex + 1,
+          __uploadedUrls: [...uploadedUrls],
+        });
+
+        recipePayload = await persistQueueLog(
+          job.id,
+          recipePayload,
+          'uploading_refs',
+          `Đã tải ${absoluteIndex + 1}/${renderSources.length} ảnh tham chiếu.`,
+          'success',
+        ) as ImageGenerateRecipePayload;
+      }
     }
 
     const nextCursor = uploadCursor + chunk.length;

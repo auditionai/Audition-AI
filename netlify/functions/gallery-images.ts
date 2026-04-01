@@ -125,10 +125,11 @@ export const handler: Handler = async (event) => {
     } catch {
       // ignore auth/cache fallback errors and return the original failure
     }
+    const isUnauthorized = error?.message === 'Unauthorized';
     return {
-      statusCode: 500,
+      statusCode: isUnauthorized ? 401 : 500,
       headers,
-      body: JSON.stringify({ error: error?.message || 'Internal Server Error' }),
+      body: JSON.stringify({ error: isUnauthorized ? 'Unauthorized' : (error?.message || 'Internal Server Error') }),
     };
   }
 };

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:local": "node ./scripts/run-local-dev.mjs",
     "dev:vite": "vite",
     "dev:functions": "node ./scripts/run-netlify-functions-with-timeout.mjs",
     "dev:netlify": "netlify dev",

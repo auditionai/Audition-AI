@@ -130,6 +130,9 @@ type ParsedMarkdownModel = {
 const VND_PER_CREDIT = 40;
 const VND_PER_VCOIN = 1000;
 export const TST_CATALOG_CACHE_TTL_MS = 60_000;
+const TST_CATALOG_FETCH_TIMEOUT_MS = 15_000;
+const TST_CATALOG_FETCH_RETRIES = 1;
+const TST_CATALOG_FETCH_RETRY_DELAY_MS = 750;
 const SERVER_ORDER = ['cheap', 'fast', 'vip2', 'vip1'];
 const SPEED_ORDER = ['fast', 'slow'];
 const RESOLUTION_ORDER = ['default', '1k', '2k', '4k', '720p', '1080p'];
@@ -270,6 +273,50 @@ let modelsCache: TstRuntimeModel[] | null = null;
 let modelsPromise: Promise<TstRuntimeModel[]> | null = null;
 let pricingCacheFetchedAt = 0;
 let modelsCacheFetchedAt = 0;
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const fetchCatalogJson = async (url: string, label: string) => {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), TST_CATALOG_FETCH_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`${label}: ${response.status} ${response.statusText}`);
+    }
+
+    return response.json();
+  } catch (error) {
+    if ((error as Error)?.name === 'AbortError') {
+      throw new Error(`${label} timed out after ${Math.round(TST_CATALOG_FETCH_TIMEOUT_MS / 1000)}s`);
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+};
+
+const fetchCatalogJsonWithRetry = async (url: string, label: string) => {
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt <= TST_CATALOG_FETCH_RETRIES; attempt += 1) {
+    try {
+      return await fetchCatalogJson(url, label);
+    } catch (error) {
+      lastError = error;
+      if (attempt >= TST_CATALOG_FETCH_RETRIES) {
+        break;
+      }
+      await delay(TST_CATALOG_FETCH_RETRY_DELAY_MS);
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(`${label} failed`);
+};
 
 export const DEFAULT_TST_SERVER_AVAILABILITY_CONFIG: TstServerAvailabilityConfig = {
   disabledByModel: {},
@@ -804,13 +851,9 @@ export const fetchTstPricing = async (forceRefresh = false): Promise<TstPricingE
   }
 
   if (!pricingPromise) {
-    pricingPromise = fetch(forceRefresh ? '/api/tst-models-pricing?force=1' : '/api/tst-models-pricing')
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error(`Failed to load TST pricing: ${response.status} ${response.statusText}`);
-        }
-
-        const data = await response.json();
+    const url = forceRefresh ? '/api/tst-models-pricing?force=1' : '/api/tst-models-pricing';
+    pricingPromise = fetchCatalogJsonWithRetry(url, 'Failed to load TST pricing')
+      .then(async (data) => {
         pricingCache = Array.isArray(data?.pricing) ? data.pricing.map(mapPricingEntry) : [];
         pricingCacheFetchedAt = Date.now();
         return pricingCache ?? [];
@@ -840,13 +883,9 @@ export const fetchTstModels = async (forceRefresh = false): Promise<TstRuntimeMo
   }
 
   if (!modelsPromise) {
-    modelsPromise = fetch(forceRefresh ? '/api/tst-models?force=1' : '/api/tst-models')
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error(`Failed to load TST models: ${response.status} ${response.statusText}`);
-        }
-
-        const data = await response.json();
+    const url = forceRefresh ? '/api/tst-models?force=1' : '/api/tst-models';
+    modelsPromise = fetchCatalogJsonWithRetry(url, 'Failed to load TST models')
+      .then(async (data) => {
         modelsCache = Array.isArray(data?.models) ? data.models.map(mapRuntimeModel) : [];
         modelsCacheFetchedAt = Date.now();
         return modelsCache ?? [];

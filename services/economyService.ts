@@ -31,6 +31,9 @@ const CHECKIN_STATUS_CACHE_TTL_MS = 30_000;
 const CHECKIN_STATUS_ATTENTION_THROTTLE_MS = 15_000;
 const MODEL_PRICING_CACHE_TTL_MS = 60_000;
 const TST_SERVER_AVAILABILITY_CACHE_TTL_MS = 60_000;
+const TST_SUPABASE_READ_TIMEOUT_MS = 12_000;
+const TST_SUPABASE_READ_RETRIES = 1;
+const TST_SUPABASE_READ_RETRY_DELAY_MS = 500;
 const MAINTENANCE_MODE_CACHE_TTL_MS = 60_000;
 const MAINTENANCE_MODE_POLL_MS = 300_000;
 const VISIT_LOG_THROTTLE_MS = 30 * 60_000;
@@ -42,6 +45,45 @@ const ADMIN_STATS_USER_PAGE_SIZE = 500;
 type TimedCache<T> = {
     value: T;
     expiresAt: number;
+};
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> => {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    try {
+        return await Promise.race([
+            promise,
+            new Promise<T>((_, reject) => {
+                timeoutId = setTimeout(() => {
+                    reject(new Error(`${label} timed out after ${Math.round(timeoutMs / 1000)}s`));
+                }, timeoutMs);
+            }),
+        ]);
+    } finally {
+        if (timeoutId) {
+            clearTimeout(timeoutId);
+        }
+    }
+};
+
+const readWithRetry = async <T>(factory: () => Promise<T>, label: string): Promise<T> => {
+    let lastError: unknown = null;
+
+    for (let attempt = 0; attempt <= TST_SUPABASE_READ_RETRIES; attempt += 1) {
+        try {
+            return await withTimeout(factory(), TST_SUPABASE_READ_TIMEOUT_MS, label);
+        } catch (error) {
+            lastError = error;
+            if (attempt >= TST_SUPABASE_READ_RETRIES) {
+                break;
+            }
+            await delay(TST_SUPABASE_READ_RETRY_DELAY_MS);
+        }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error(`${label} failed`);
 };
 
 export type CheckinStatusState = {
@@ -392,7 +434,19 @@ export const getModelPricing = async (options?: { force?: boolean }): Promise<Mo
   if (!options?.force && modelPricingCache && modelPricingCache.expiresAt > Date.now()) {
     return modelPricingCache.value;
   }
-  const { data, error } = await supabase.from('model_pricing').select('*');
+  let data: ModelPricing[] | null = null;
+  let error: { message?: string } | null = null;
+  try {
+    const response = await readWithRetry<{ data: ModelPricing[] | null; error: { message?: string } | null }>(
+      () => supabase.from('model_pricing').select('*'),
+      'Fetching model pricing',
+    );
+    data = response.data;
+    error = response.error;
+  } catch (readError) {
+    console.error('Error fetching model pricing:', readError);
+    return [];
+  }
   if (error) {
     console.error('Error fetching model pricing:', error);
     return [];
@@ -425,11 +479,24 @@ export const getTstServerAvailabilityConfig = async (options?: { force?: boolean
   if (!options?.force && tstServerAvailabilityCache && tstServerAvailabilityCache.expiresAt > Date.now()) {
     return tstServerAvailabilityCache.value;
   }
-  const { data, error } = await supabase
-    .from('system_settings')
-    .select('value')
-    .eq('key', 'tst_server_availability')
-    .maybeSingle();
+  let data: { value?: unknown } | null = null;
+  let error: { message?: string } | null = null;
+  try {
+    const response = await readWithRetry<{ data: { value?: unknown } | null; error: { message?: string } | null }>(
+      () =>
+        supabase
+          .from('system_settings')
+          .select('value')
+          .eq('key', 'tst_server_availability')
+          .maybeSingle(),
+      'Fetching TST server availability config',
+    );
+    data = response.data;
+    error = response.error;
+  } catch (readError) {
+    console.error('Error fetching TST server availability config:', readError);
+    return DEFAULT_TST_SERVER_AVAILABILITY_CONFIG;
+  }
 
   if (error) {
     console.error('Error fetching TST server availability config:', error);

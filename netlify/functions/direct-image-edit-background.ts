@@ -1,21 +1,21 @@
-import type { BackgroundHandler, Handler } from '@netlify/functions';
+import type { Handler } from '@netlify/functions';
 import { processDirectImageEditJob } from './_direct-image-edit-processor';
 
 type DirectImageEditBackgroundBody = {
   jobId?: string;
 };
 
-export const handler: BackgroundHandler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') {
-    return;
-  }
+const getJobIdFromRequest = async (request: Request) => {
+  const body = (await request.json().catch(() => ({}))) as DirectImageEditBackgroundBody;
+  return String(body.jobId || '').trim();
+};
 
-  if (event.httpMethod !== 'POST') {
+export default async (request: Request) => {
+  if (request.method !== 'POST') {
     throw new Error('Method Not Allowed');
   }
 
-  const body = JSON.parse(event.body || '{}') as DirectImageEditBackgroundBody;
-  const jobId = String(body.jobId || '').trim();
+  const jobId = await getJobIdFromRequest(request);
   if (!jobId) {
     throw new Error('Missing jobId');
   }
@@ -29,8 +29,31 @@ export const handler: BackgroundHandler = async (event) => {
 };
 
 export const localHandler: Handler = async (event) => {
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 204,
+      body: '',
+    };
+  }
+
+  if (event.httpMethod !== 'POST') {
+    return {
+      statusCode: 405,
+      body: JSON.stringify({ error: 'Method Not Allowed' }),
+    };
+  }
+
   try {
-    await handler(event, {} as any);
+    const body = JSON.parse(event.body || '{}') as DirectImageEditBackgroundBody;
+    const jobId = String(body.jobId || '').trim();
+    if (!jobId) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: 'Missing jobId' }),
+      };
+    }
+
+    await processDirectImageEditJob(jobId);
     return {
       statusCode: 200,
       body: JSON.stringify({ success: true }),

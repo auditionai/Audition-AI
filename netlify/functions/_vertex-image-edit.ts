@@ -50,6 +50,38 @@ type RunVertexImageEditParams = {
   instruction: string;
   modelId: string;
   mimeType?: string;
+  resolution?: string;
+  aspectRatio?: string;
+};
+
+const normalizeImageSize = (value?: string) => {
+  const normalized = String(value || '').trim().toUpperCase();
+  if (normalized === '512') return '512';
+  if (normalized === '1K') return '1K';
+  if (normalized === '2K') return '2K';
+  if (normalized === '4K') return '4K';
+  return undefined;
+};
+
+const normalizeAspectRatio = (value?: string) => {
+  const normalized = String(value || '').trim();
+  if (!normalized) return undefined;
+
+  const supportedAspectRatios = new Set([
+    '1:1',
+    '3:4',
+    '4:3',
+    '9:16',
+    '16:9',
+    '3:2',
+    '2:3',
+    '4:5',
+    '5:4',
+    '21:9',
+    '9:21',
+  ]);
+
+  return supportedAspectRatios.has(normalized) ? normalized : undefined;
 };
 
 export const runVertexImageEdit = async ({
@@ -57,15 +89,23 @@ export const runVertexImageEdit = async ({
   instruction,
   modelId,
   mimeType,
+  resolution,
+  aspectRatio,
 }: RunVertexImageEditParams): Promise<string> => {
   const preferPro = modelId.toLowerCase().includes('pro');
   const modelName = preferPro ? PRO_IMAGE_MODEL : FLASH_IMAGE_MODEL;
+  const imageSize = normalizeImageSize(resolution);
+  const normalizedAspectRatio = normalizeAspectRatio(aspectRatio);
+  const imageConfig = {
+    ...(normalizedAspectRatio ? { aspectRatio: normalizedAspectRatio } : {}),
+    ...(imageSize ? { imageSize } : {}),
+  };
 
   return runWithVertexCredentialFailover({
     taskName: `image editing (${modelName})`,
     operation: async ({ projectId, accessToken }) => {
       const response = await fetch(
-        `https://aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/global/publishers/google/models/${modelName}:generateContent`,
+        `https://aiplatform.googleapis.com/v1/projects/${projectId}/locations/global/publishers/google/models/${modelName}:generateContent`,
         {
           method: 'POST',
           headers: {
@@ -86,6 +126,8 @@ export const runVertexImageEdit = async ({
               temperature: 0.2,
               topP: 0.8,
               maxOutputTokens: 8192,
+              responseModalities: ['TEXT', 'IMAGE'],
+              ...(Object.keys(imageConfig).length > 0 ? { imageConfig } : {}),
             },
           }),
           signal: AbortSignal.timeout(120000),

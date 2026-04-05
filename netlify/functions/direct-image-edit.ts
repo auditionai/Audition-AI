@@ -325,6 +325,8 @@ export const handler: Handler = async (event) => {
         instruction: queuePayload.prompt,
         modelId: queuePayload.modelId,
         mimeType: queuePayload.mimeType,
+        resolution: queuePayload.resolution,
+        aspectRatio: queuePayload.aspectRatio,
       });
 
       await updateDirectEditRecord(jobId, {

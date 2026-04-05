@@ -33,9 +33,19 @@ export const runDirectImageEdit = async (
     body: JSON.stringify(request),
   });
 
-  const payload = await response.json().catch(() => ({}));
+  const rawText = await response.text();
+  let payload: Record<string, any> = {};
+  try {
+    payload = rawText ? JSON.parse(rawText) : {};
+  } catch {
+    payload = {};
+  }
+
   if (!response.ok) {
-    throw new Error(payload?.error || 'Failed to run direct image edit');
+    const textFallback = rawText && !rawText.trim().startsWith('<')
+      ? rawText.trim()
+      : '';
+    throw new Error(payload?.error || textFallback || `Direct image edit failed (${response.status})`);
   }
 
   return payload as DirectImageEditResponse;

@@ -58,7 +58,7 @@ const triggerDirectImageEditBackground = async (rawUrl?: string | null, jobId?: 
   }
 
   try {
-    const launched = await triggerBackgroundFunction(DIRECT_IMAGE_EDIT_BACKGROUND_PATH, rawUrl, 1_500, {
+    const launched = await triggerBackgroundFunction(DIRECT_IMAGE_EDIT_BACKGROUND_PATH, rawUrl, 5_000, {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ jobId }),
     });
@@ -103,6 +103,10 @@ export const handler: Handler = async (event) => {
           headers,
           body: JSON.stringify({ error: 'Direct edit job not found' }),
         };
+      }
+
+      if (existing.status === 'queued' || existing.status === 'processing') {
+        void triggerDirectImageEditBackground(event.rawUrl, existing.id);
       }
 
       return {

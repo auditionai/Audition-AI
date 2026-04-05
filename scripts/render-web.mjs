@@ -12,7 +12,7 @@ import { handler as adminUserHistoryHandler } from '../netlify/functions/admin-u
 import { handler as checkinRewardHandler } from '../netlify/functions/checkin-reward.ts';
 import { handler as createPaymentHandler } from '../netlify/functions/create_payment.js';
 import { handler as directImageEditHandler } from '../netlify/functions/direct-image-edit.ts';
-import { handler as directImageEditBackgroundHandler } from '../netlify/functions/direct-image-edit-background.ts';
+import { localHandler as directImageEditBackgroundHandler } from '../netlify/functions/direct-image-edit-background.ts';
 import { handler as forceRescueFailedJobsHandler } from '../netlify/functions/force-rescue-failed-jobs.ts';
 import { handler as galleryImagesHandler } from '../netlify/functions/gallery-images.ts';
 import { handler as getVertexTokenHandler } from '../netlify/functions/get-vertex-token.ts';

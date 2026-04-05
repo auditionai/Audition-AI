@@ -310,10 +310,19 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       runtimeImageModelIds.has(getGenerationModelId('pro')) &&
       pricingEntries.some((entry) => entry.model.trim().toLowerCase() === getGenerationModelId('pro'));
   const isCatalogReady = !catalogLoading && !catalogError && pricingEntries.length > 0 && runtimeModels.length > 0;
+  const hasCharacterImagesReady = characters.every((char) => !!char.bodyImage);
+  const isAnyCharacterReviewRunning = characters.some((char) => !!reviewLoadingByCharId[char.id]);
+  const isAnyCharacterAssistRunning = characters.some((char) => !!assistLoadingByCharId[char.id]);
+  const hasCompletedCharacterReviews = characters.every((char) => !char.bodyImage || !!characterReviews[char.id]);
   const isGenerateDisabled =
       cooldownRemaining > 0 ||
       !isCatalogReady ||
       !selectedGenerationCost.available ||
+      !prompt.trim() ||
+      !hasCharacterImagesReady ||
+      isAnyCharacterReviewRunning ||
+      isAnyCharacterAssistRunning ||
+      !hasCompletedCharacterReviews ||
       (aiModel === 'flash' ? !isFlashAvailable : !isProAvailable);
   const availableSpeedLabels = availableSpeeds.map((speedId) => speedId === 'slow' ? 'Tiết Kiệm' : 'Nhanh');
   const availableServerLabels = availableServers.map((serverId) => tstServerToUi(serverId));
@@ -1517,11 +1526,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                                 ? 'Ảnh nhân vật đạt chuẩn: rõ mặt, rõ đồ, tách nền sạch.'
                                                 : 'Ảnh mẫu nên rõ bố cục, góc máy và tư thế.'}
                                         </p>
-                                        {guideImageMeta[hoveredGuidePreview] && (
-                                            <p className="mt-1 text-[10px] text-slate-400">
-                                                Kích thước gốc: {guideImageMeta[hoveredGuidePreview]?.width} x {guideImageMeta[hoveredGuidePreview]?.height}
-                                            </p>
-                                        )}
                                     </>
                                 ) : (
                                     <p className="text-[10px] text-slate-400 leading-relaxed">
@@ -1560,6 +1564,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                         const assistantError = assistantErrorByCharId[char.id];
                         const isReviewing = !!reviewLoadingByCharId[char.id];
                         const activeAssist = assistLoadingByCharId[char.id];
+                        const isAssistRunning = !!activeAssist;
                         const hasCleanStatus = !!review && !reviewMessage;
 
                         return (
@@ -1620,12 +1625,12 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                                 type="button"
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    if (activeAssist !== null) return;
+                                                    if (isAssistRunning) return;
                                                     void handleCharacterAssistant(char.id, 'remove_bg_pro');
                                                 }}
-                                                aria-disabled={activeAssist !== null}
+                                                aria-disabled={isAssistRunning}
                                                 className={`px-2 py-2 rounded-xl text-[10px] font-bold border border-audi-cyan/40 bg-audi-cyan/10 text-audi-cyan flex flex-col items-center gap-1 min-h-[76px] relative z-10 pointer-events-auto ${
-                                                    activeAssist !== null ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:bg-audi-cyan/15'
+                                                    isAssistRunning ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:bg-audi-cyan/15'
                                                 }`}
                                             >
                                                 {activeAssist === 'remove_bg_pro' ? <Icons.Loader className="w-3.5 h-3.5 animate-spin" /> : <Icons.Scissors className="w-3.5 h-3.5" />}
@@ -1640,12 +1645,12 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                                 type="button"
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    if (activeAssist !== null) return;
+                                                    if (isAssistRunning) return;
                                                     void handleCharacterAssistant(char.id, 'sharpen_upscale');
                                                 }}
-                                                aria-disabled={activeAssist !== null}
+                                                aria-disabled={isAssistRunning}
                                                 className={`px-2 py-2 rounded-xl text-[10px] font-bold border border-audi-pink/40 bg-audi-pink/10 text-audi-pink flex flex-col items-center gap-1 min-h-[76px] relative z-10 pointer-events-auto ${
-                                                    activeAssist !== null ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:bg-audi-pink/15'
+                                                    isAssistRunning ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:bg-audi-pink/15'
                                                 }`}
                                             >
                                                 {activeAssist === 'sharpen_upscale' ? <Icons.Loader className="w-3.5 h-3.5 animate-spin" /> : <Icons.Sparkles className="w-3.5 h-3.5" />}

@@ -270,9 +270,16 @@ export function WorkspaceImage() {
   const isProAvailable = runtimeImageModelIds.has(getGenerationModelId('pro'))
     && pricingEntries.some((e) => e.model.trim().toLowerCase() === getGenerationModelId('pro'));
   const isCatalogReady = !catalogLoading && !catalogError && pricingEntries.length > 0 && runtimeModels.length > 0;
+  const hasCharacterImagesReady = characters.every((char) => !!char.bodyImage);
+  const isAnyCharacterReviewRunning = characters.some((char) => !!reviewLoadingByCharId[char.id]);
+  const isAnyCharacterAssistRunning = characters.some((char) => !!assistLoadingByCharId[char.id]);
+  const hasCompletedCharacterReviews = characters.every((char) => !char.bodyImage || !!characterReviews[char.id]);
   const isGenerateDisabled = cooldownRemaining > 0 || !isCatalogReady || !selectedCost.available
     || !prompt.trim()
-    || characters.some((char) => !char.bodyImage)
+    || !hasCharacterImagesReady
+    || isAnyCharacterReviewRunning
+    || isAnyCharacterAssistRunning
+    || !hasCompletedCharacterReviews
     || (aiModel === 'flash' ? !isFlashAvailable : !isProAvailable);
   const removeBgCost = getVertexEditToolCostBreakdown({
     toolId: 'remove_bg_pro',
@@ -931,6 +938,7 @@ export function WorkspaceImage() {
           const assistantError = assistantErrorByCharId[char.id];
           const isReviewing = !!reviewLoadingByCharId[char.id];
           const activeAssist = assistLoadingByCharId[char.id];
+          const isAssistRunning = !!activeAssist;
           const hasCleanStatus = !!review && !reviewMessage;
 
           return (
@@ -1002,13 +1010,13 @@ export function WorkspaceImage() {
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
-                    aria-disabled={activeAssist !== null}
+                    aria-disabled={isAssistRunning}
                     onClick={() => {
-                      if (activeAssist !== null) return;
+                      if (isAssistRunning) return;
                       void handleCharacterAssistant(char.id, 'remove_bg_pro');
                     }}
                     className={`rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-cyan-700 dark:border-cyan-500/20 dark:bg-cyan-500/10 dark:text-cyan-200 min-h-[82px] ${
-                      activeAssist !== null ? 'opacity-60' : ''
+                      isAssistRunning ? 'opacity-60' : ''
                     }`}
                   >
                     <div className="flex items-center justify-center gap-2 text-xs font-bold">
@@ -1021,13 +1029,13 @@ export function WorkspaceImage() {
                   </button>
                   <button
                     type="button"
-                    aria-disabled={activeAssist !== null}
+                    aria-disabled={isAssistRunning}
                     onClick={() => {
-                      if (activeAssist !== null) return;
+                      if (isAssistRunning) return;
                       void handleCharacterAssistant(char.id, 'sharpen_upscale');
                     }}
                     className={`rounded-2xl border border-pink-200 bg-pink-50 px-4 py-3 text-pink-700 dark:border-pink-500/20 dark:bg-pink-500/10 dark:text-pink-200 min-h-[82px] ${
-                      activeAssist !== null ? 'opacity-60' : ''
+                      isAssistRunning ? 'opacity-60' : ''
                     }`}
                   >
                     <div className="flex items-center justify-center gap-2 text-xs font-bold">
@@ -1322,11 +1330,6 @@ export function WorkspaceImage() {
                     className="max-w-full max-h-full object-contain"
                   />
                 </div>
-                {guideImageMeta[previewGuide] && (
-                  <p className="mt-3 text-xs text-gray-500 dark:text-zinc-400">
-                    Kích thước gốc: {guideImageMeta[previewGuide]?.width} x {guideImageMeta[previewGuide]?.height}
-                  </p>
-                )}
               </>
             ) : (
               <div className="mt-4 rounded-[24px] border border-dashed border-gray-200 px-4 py-10 text-center text-xs text-gray-400 dark:border-zinc-700 dark:text-zinc-500">

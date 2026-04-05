@@ -205,6 +205,7 @@ export function WorkspaceImage() {
   const [reviewLoadingByCharId, setReviewLoadingByCharId] = useState<Record<number, boolean>>({});
   const [assistLoadingByCharId, setAssistLoadingByCharId] = useState<Record<number, CharacterAssistantToolId | null>>({});
   const [reviewErrorByCharId, setReviewErrorByCharId] = useState<Record<number, string | null>>({});
+  const [assistantErrorByCharId, setAssistantErrorByCharId] = useState<Record<number, string | null>>({});
 
   const [currentTipIdx, setCurrentTipIdx] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -592,6 +593,7 @@ export function WorkspaceImage() {
         setCharacters((prev) => prev.map((c) => (c.id === currentType.charId ? { ...c, bodyImage: result } : c)));
         setCharacterReviews((prev) => ({ ...prev, [currentType.charId!]: null }));
         setReviewErrorByCharId((prev) => ({ ...prev, [currentType.charId!]: null }));
+        setAssistantErrorByCharId((prev) => ({ ...prev, [currentType.charId!]: null }));
         void reviewCharacterUpload(currentType.charId, result);
       }
     };
@@ -619,6 +621,7 @@ export function WorkspaceImage() {
     }
 
     setAssistLoadingByCharId((prev) => ({ ...prev, [charId]: toolId }));
+    setAssistantErrorByCharId((prev) => ({ ...prev, [charId]: null }));
     try {
       const result = await runCharacterAssistantAction({
         sourceImage: character.bodyImage,
@@ -642,6 +645,10 @@ export function WorkspaceImage() {
       await reviewCharacterUpload(charId, refreshedUrl);
     } catch (error) {
       console.error('[WorkspaceImage] Character assistant failed', error);
+      setAssistantErrorByCharId((prev) => ({
+        ...prev,
+        [charId]: error instanceof Error ? error.message : 'Không thể xử lý ảnh lúc này.',
+      }));
       notify(error instanceof Error ? error.message : 'Không thể xử lý ảnh lúc này.', 'error');
     } finally {
       setAssistLoadingByCharId((prev) => ({ ...prev, [charId]: null }));
@@ -884,6 +891,7 @@ export function WorkspaceImage() {
           const review = characterReviews[char.id];
           const reviewMessage = buildCharacterReviewMessage(review);
           const reviewError = reviewErrorByCharId[char.id];
+          const assistantError = assistantErrorByCharId[char.id];
           const isReviewing = !!reviewLoadingByCharId[char.id];
           const activeAssist = assistLoadingByCharId[char.id];
           const hasCleanStatus = !!review && !reviewMessage;
@@ -979,6 +987,12 @@ export function WorkspaceImage() {
                     </div>
                     <div className="mt-1 text-[11px] opacity-80">{CHARACTER_ASSISTANT_RESOLUTION} • {sharpenCost.vcoin} Vcoin</div>
                   </button>
+                </div>
+              )}
+              {!isReviewing && assistantError && (
+                <div className="rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-xs text-orange-700 dark:border-orange-500/20 dark:bg-orange-500/10 dark:text-orange-200 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>Lỗi xử lý ảnh: {assistantError}</span>
                 </div>
               )}
             </div>

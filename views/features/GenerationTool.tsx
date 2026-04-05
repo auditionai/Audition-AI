@@ -182,6 +182,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const [reviewLoadingByCharId, setReviewLoadingByCharId] = useState<Record<number, boolean>>({});
   const [assistLoadingByCharId, setAssistLoadingByCharId] = useState<Record<number, CharacterAssistantToolId | null>>({});
   const [reviewErrorByCharId, setReviewErrorByCharId] = useState<Record<number, string | null>>({});
+  const [assistantErrorByCharId, setAssistantErrorByCharId] = useState<Record<number, string | null>>({});
 
   // --- NEW: COOLDOWN STATE ---
   const [cooldownRemaining, setCooldownRemaining] = useState(() => {
@@ -678,6 +679,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
               setCharacters(prev => prev.map(c => c.id === currentType.charId ? { ...c, bodyImage: result } : c));
               setCharacterReviews((prev) => ({ ...prev, [currentType.charId!]: null }));
               setReviewErrorByCharId((prev) => ({ ...prev, [currentType.charId!]: null }));
+              setAssistantErrorByCharId((prev) => ({ ...prev, [currentType.charId!]: null }));
               void reviewCharacterUpload(currentType.charId, result);
           }
       };
@@ -741,6 +743,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       }
 
       setAssistLoadingByCharId((prev) => ({ ...prev, [charId]: toolId }));
+      setAssistantErrorByCharId((prev) => ({ ...prev, [charId]: null }));
       try {
           const result = await runCharacterAssistantAction({
               sourceImage: character.bodyImage,
@@ -771,6 +774,10 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           await reviewCharacterUpload(charId, refreshedUrl);
       } catch (error) {
           console.error('[GenerationTool] Character assistant failed', error);
+          setAssistantErrorByCharId((prev) => ({
+              ...prev,
+              [charId]: error instanceof Error ? error.message : 'Không thể xử lý ảnh lúc này.',
+          }));
           notify(error instanceof Error ? error.message : 'Không thể xử lý ảnh lúc này.', 'error');
       } finally {
           setAssistLoadingByCharId((prev) => ({ ...prev, [charId]: null }));
@@ -1505,6 +1512,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                         const review = characterReviews[char.id];
                         const reviewMessage = buildCharacterReviewMessage(review);
                         const reviewError = reviewErrorByCharId[char.id];
+                        const assistantError = assistantErrorByCharId[char.id];
                         const isReviewing = !!reviewLoadingByCharId[char.id];
                         const activeAssist = assistLoadingByCharId[char.id];
                         const hasCleanStatus = !!review && !reviewMessage;
@@ -1593,6 +1601,12 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                                     {CHARACTER_ASSISTANT_RESOLUTION} <Icons.Gem className="w-3 h-3 text-audi-yellow" /> {sharpenCost.vcoin}
                                                 </span>
                                             </button>
+                                        </div>
+                                    )}
+                                    {!isReviewing && assistantError && (
+                                        <div className="rounded-xl border border-orange-500/30 bg-orange-500/10 px-3 py-2 flex items-start gap-2">
+                                            <Icons.AlertTriangle className="w-3.5 h-3.5 text-orange-300 shrink-0 mt-0.5" />
+                                            <p className="text-[10px] leading-relaxed text-orange-200">Lỗi xử lý ảnh: {assistantError}</p>
                                         </div>
                                     )}
                                 </div>

@@ -2135,6 +2135,62 @@ export const saveTutorialVideo = async (url: string, isActive: boolean) => {
     }
 };
 
+export type GenerationGuideImagesConfig = {
+    characterUrl: string;
+    sampleUrl: string;
+};
+
+const DEFAULT_GENERATION_GUIDE_IMAGES: GenerationGuideImagesConfig = {
+    characterUrl: '',
+    sampleUrl: '',
+};
+
+export const getGenerationGuideImages = async (): Promise<GenerationGuideImagesConfig> => {
+    if (!supabase) return DEFAULT_GENERATION_GUIDE_IMAGES;
+    try {
+        const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'generation_guide_images').maybeSingle();
+        if (error) throw error;
+
+        if (data?.value) {
+            const parsedValue = parseSettingValue(data.value, DEFAULT_GENERATION_GUIDE_IMAGES);
+            return {
+                characterUrl: String(parsedValue.characterUrl || '').trim(),
+                sampleUrl: String(parsedValue.sampleUrl || '').trim(),
+            };
+        }
+
+        return DEFAULT_GENERATION_GUIDE_IMAGES;
+    } catch (e) {
+        return DEFAULT_GENERATION_GUIDE_IMAGES;
+    }
+};
+
+export const saveGenerationGuideImages = async (characterUrl: string, sampleUrl: string) => {
+    if (!supabase) return { success: false, error: "No Database" };
+    try {
+        const payload = {
+            characterUrl: characterUrl.trim(),
+            sampleUrl: sampleUrl.trim(),
+        };
+
+        const { data: existing } = await supabase.from('system_settings').select('key').eq('key', 'generation_guide_images').maybeSingle();
+
+        let error;
+        if (existing) {
+            const res = await supabase.from('system_settings').update({ value: payload }).eq('key', 'generation_guide_images');
+            error = res.error;
+        } else {
+            const res = await supabase.from('system_settings').insert({ key: 'generation_guide_images', value: payload });
+            error = res.error;
+        }
+
+        if (error) throw error;
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+};
+
 export const getGiftcodePromoConfig = async () => {
     if (!supabase) return { text: "Nháº­p CODE \"HELLO2026\" Ä‘á»ƒ nháº­n 20 Vcoin miá»…n phÃ­ !!!", isActive: true };
     try {

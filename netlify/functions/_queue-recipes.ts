@@ -7,7 +7,6 @@ import {
   type QueueRecipePayload,
 } from '../../shared/queueRecipes';
 import {
-  rewriteUserImagePromptToFitLimit,
   rewriteUserPromptToFitLimit,
   synthesizeStrictImagePrompt,
 } from './_vertex-director';
@@ -209,9 +208,6 @@ export const buildImageGenerateProviderPayload = (
 
 const normalizePromptWhitespace = (value?: string | null) => String(value || '').replace(/\s+/g, ' ').trim();
 
-const combineImageGeneratePrompt = (systemPromptPrefix: string, userPromptInput: string) =>
-  `${systemPromptPrefix}${userPromptInput}`.trim();
-
 const prepareDirectPromptWithinLimit = async (
   prompt: string,
   pipelineLabel: string,
@@ -262,9 +258,9 @@ export type ImageGeneratePromptPreparation = {
 export const prepareImageGeneratePromptWithinLimit = async (
   payload: ImageGenerateRecipePayload,
 ): Promise<ImageGeneratePromptPreparation> => {
-  let workingPayload: ImageGenerateRecipePayload = { ...payload };
-  let synthesizedPrompt = await synthesizeImageGeneratePrompt(workingPayload);
-  let providerPrompt = buildImageProviderPrompt(synthesizedPrompt, workingPayload, workingPayload.negativePrompt);
+  const workingPayload: ImageGenerateRecipePayload = { ...payload };
+  const synthesizedPrompt = await synthesizeImageGeneratePrompt(workingPayload);
+  const providerPrompt = buildImageProviderPrompt(synthesizedPrompt, workingPayload, workingPayload.negativePrompt);
 
   if (providerPrompt.length <= TST_PROMPT_MAX_CHARACTERS) {
     return {
@@ -274,53 +270,11 @@ export const prepareImageGeneratePromptWithinLimit = async (
     };
   }
 
-  const originalUserPromptInput = normalizePromptWhitespace(workingPayload.userPromptInput || workingPayload.prompt);
-  const systemPromptPrefix = typeof workingPayload.systemPromptPrefix === 'string'
-    ? workingPayload.systemPromptPrefix
-    : '';
-
-  if (!originalUserPromptInput) {
-    throw new Error(`Provider prompt vuot ${TST_PROMPT_MAX_CHARACTERS} ky tu va khong co noi dung prompt nguoi dung de rut gon.`);
-  }
-
-  let sourcePromptForRewrite = originalUserPromptInput;
-
-  for (let attempt = 1; attempt <= MAX_PROMPT_REWRITE_ATTEMPTS; attempt += 1) {
-    const overflow = providerPrompt.length - TST_PROMPT_MAX_CHARACTERS;
-    const targetCharacters = Math.max(
-      MIN_USER_PROMPT_REWRITE_CHARACTERS,
-      sourcePromptForRewrite.length - overflow - PROMPT_REWRITE_SAFETY_MARGIN,
-    );
-    const rewrittenPrompt = normalizePromptWhitespace(
-      await rewriteUserImagePromptToFitLimit(originalUserPromptInput, targetCharacters),
-    );
-
-    if (!rewrittenPrompt) {
-      break;
-    }
-
-    workingPayload = {
-      ...workingPayload,
-      prompt: combineImageGeneratePrompt(systemPromptPrefix, rewrittenPrompt),
-      userPromptInput: rewrittenPrompt,
-      systemPromptPrefix,
-    };
-    synthesizedPrompt = await synthesizeImageGeneratePrompt(workingPayload);
-    providerPrompt = buildImageProviderPrompt(synthesizedPrompt, workingPayload, workingPayload.negativePrompt);
-
-    if (providerPrompt.length <= TST_PROMPT_MAX_CHARACTERS) {
-      return {
-        optimizedPayload: workingPayload,
-        synthesizedPrompt,
-        providerPrompt,
-      };
-    }
-
-    sourcePromptForRewrite = rewrittenPrompt;
-  }
-
+  const workflowLabel = workingPayload.sampleImage
+    ? 'nhanh co SAMPLE IMAGE va prompt provider day du'
+    : 'nhanh khong SAMPLE IMAGE va prompt provider rut gon';
   throw new Error(
-    `Tong prompt gui sang provider van vuot ${TST_PROMPT_MAX_CHARACTERS} ky tu sau khi rut gon. Vui long rut ngan prompt va thu lai.`,
+    `Tong prompt gui sang provider vuot ${TST_PROMPT_MAX_CHARACTERS} ky tu o ${workflowLabel}. He thong giu nguyen prompt nguoi dung, khong tu dong toi uu lai prompt nhap. Vui long rut ngan noi dung prompt va thu lai.`,
   );
 };
 

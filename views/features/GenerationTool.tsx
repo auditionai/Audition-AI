@@ -2,7 +2,16 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Feature, Language, GeneratedImage, ViewId } from '../../types';
 import { Icons } from '../../components/Icons';
-import { getUserProfile, getStylePresets, getTutorialVideo, getModelPricing, getTstServerAvailabilityConfig, type ModelPricing } from '../../services/economyService';
+import {
+  getUserProfile,
+  getStylePresets,
+  getTutorialVideo,
+  getModelPricing,
+  getTstServerAvailabilityConfig,
+  getGenerationGuideImages,
+  type ModelPricing,
+  type GenerationGuideImagesConfig,
+} from '../../services/economyService';
 import { useNotification } from '../../components/NotificationSystem';
 import { caulenhauClient } from '../../services/supabaseClient';
 import { CONCURRENCY_LIMITS, useConcurrency } from '../../services/concurrencyService';
@@ -19,6 +28,7 @@ import {
   getCompatibleGenerationResolutions,
   getCompatibleGenerationSpeeds,
   getGenerationCostBreakdown,
+  getVertexEditToolCostBreakdown,
   getGenerationModelId,
   getResolutionCostMap,
   applyServerAvailabilityToRuntimeModels,
@@ -30,6 +40,15 @@ import {
   type TstRuntimeModel,
 } from '../../services/tstCatalog';
 import type { CharacterReferenceGroup, ImageGenerateRecipePayload } from '../../shared/queueRecipes';
+import {
+  CHARACTER_ASSISTANT_RESOLUTION,
+  runCharacterAssistantAction,
+  type CharacterAssistantToolId,
+} from '../../services/characterImageAssistService';
+import {
+  runCharacterImageReview,
+  type CharacterImageReviewResult,
+} from '../../services/characterImageReviewService';
 
 interface GenerationToolProps {
   feature: Feature;
@@ -52,9 +71,7 @@ const MODE_TO_FEATURE_ID: Record<GenMode, string> = {
 interface CharacterInput {
   id: number;
   bodyImage: string | null;
-  faceImage: string | null;
   gender: 'female' | 'male';
-  isFaceLocked: boolean;
 }
 
 const SMART_TIPS = [
@@ -62,7 +79,7 @@ const SMART_TIPS = [
     { icon: Icons.Zap, text: "Tip: Để khuôn mặt sắc nét, hãy dùng ảnh chụp cận mặt từ Patch hoặc đã qua làm nét (Remini)." },
     { icon: Icons.Crown, text: "Lưu ý: Model Pro 4K mang lại độ chi tiết trang phục chân thực nhất." },
     { icon: Icons.Palette, text: "Mẹo: Nhập mô tả màu sắc trang phục cụ thể, ví dụ váy đỏ hoặc giày trắng, để AI vẽ đúng ý." },
-    { icon: Icons.Unlock, text: "Tip: Tắt 'Khóa Mặt' nếu bạn muốn AI tự sáng tạo khuôn mặt mới ngẫu nhiên." },
+    { icon: Icons.Lock, text: "MỚI: Hệ thống tự động khóa nhận diện khuôn mặt và trang phục từ ảnh nhân vật, bạn không cần bật tay nữa." },
     { icon: Icons.Image, text: "Mẹo: Ảnh mẫu (Ref) nên có góc chụp tương đồng với ý tưởng bạn muốn tạo." },
     { icon: Icons.MessageCircle, text: "Tip: Bí ý tưởng? Dùng nút 'Sử dụng Prompt Mẫu' để lấy ý tưởng từ cộng đồng." },
     { icon: Icons.Monitor, text: "Lưu ý: Độ phân giải 4K rất nét, thích hợp in ấn nhưng sẽ tốn thời gian xử lý hơn." },
@@ -129,7 +146,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   const [activeMode, setActiveMode] = useState<GenMode>('single');
-  const [characters, setCharacters] = useState<CharacterInput[]>([{ id: 1, bodyImage: null, faceImage: null, gender: 'female', isFaceLocked: true }]);
+  const [characters, setCharacters] = useState<CharacterInput[]>([{ id: 1, bodyImage: null, gender: 'female' }]);
   const [activeCharTab, setActiveCharTab] = useState<number>(1);
 
   const [refImage, setRefImage] = useState<string | null>(null);
@@ -157,8 +174,13 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const [currentTipIdx, setCurrentTipIdx] = useState(0);
   const [showVideo, setShowVideo] = useState(false);
   const [tutorialVideoUrl, setTutorialVideoUrl] = useState<string | null>(null);
+  const [guideImages, setGuideImages] = useState<GenerationGuideImagesConfig>({ characterUrl: '', sampleUrl: '' });
+  const [hoveredGuidePreview, setHoveredGuidePreview] = useState<'character' | 'sample' | null>(null);
 
   const [resultImage, setResultImage] = useState<string | null>(null);
+  const [characterReviews, setCharacterReviews] = useState<Record<number, CharacterImageReviewResult | null>>({});
+  const [reviewLoadingByCharId, setReviewLoadingByCharId] = useState<Record<number, boolean>>({});
+  const [assistLoadingByCharId, setAssistLoadingByCharId] = useState<Record<number, CharacterAssistantToolId | null>>({});
 
   // --- NEW: COOLDOWN STATE ---
   const [cooldownRemaining, setCooldownRemaining] = useState(() => {
@@ -174,7 +196,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const activeUploadType = useRef<{ charId?: number, type: 'body' | 'face' | 'ref' } | null>(null);
+  const activeUploadType = useRef<{ charId?: number, type: 'body' | 'ref' } | null>(null);
 
   // --- NEW: STYLE PRESET STATE ---
   const [activeStylePreset, setActiveStylePreset] = useState<string | null>(null);
@@ -280,6 +302,38 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       (aiModel === 'flash' ? !isFlashAvailable : !isProAvailable);
   const availableSpeedLabels = availableSpeeds.map((speedId) => speedId === 'slow' ? 'Tiết Kiệm' : 'Nhanh');
   const availableServerLabels = availableServers.map((serverId) => tstServerToUi(serverId));
+  const removeBgCost = getVertexEditToolCostBreakdown({
+      toolId: 'remove_bg_pro',
+      tier: 'flash',
+      resolution: CHARACTER_ASSISTANT_RESOLUTION,
+      pricingOverrides,
+  });
+  const sharpenCost = getVertexEditToolCostBreakdown({
+      toolId: 'sharpen_upscale',
+      tier: 'flash',
+      resolution: CHARACTER_ASSISTANT_RESOLUTION,
+      pricingOverrides,
+  });
+
+  const buildCharacterReviewMessage = (review: CharacterImageReviewResult | null) => {
+      if (!review) return null;
+      if (review.detectedCharacterCount === 0) {
+          return 'Không thấy rõ nhân vật chính trong ảnh. Hãy tải lại ảnh chỉ chứa 1 nhân vật rõ mặt và trang phục.';
+      }
+      if ((review.detectedCharacterCount || 0) > 1) {
+          return 'Ảnh đang có nhiều hơn 1 nhân vật hoặc nhiều chủ thể nổi bật. Hãy cắt lại chỉ còn đúng 1 nhân vật.';
+      }
+
+      const warnings: string[] = [];
+      if (review.needsSharpen) {
+          warnings.push('Ảnh nhân vật của bạn đang bị mờ hoặc thiếu chi tiết, nên làm nét ảnh để khi tạo ảnh có kết quả đẹp và đúng mặt hơn.');
+      }
+      if (review.needsBackgroundRemoval) {
+          warnings.push('Ảnh của bạn đang chưa tách nền sạch, nên tách nền để AI lấy đúng nhân vật và trang phục.');
+      }
+
+      return warnings.length > 0 ? warnings.join(' ') : null;
+  };
 
   useEffect(() => {
       // Load Default Style Preset
@@ -344,6 +398,12 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           }
       };
       loadTutorialVideo();
+
+      const loadGuideImages = async () => {
+          const config = await getGenerationGuideImages();
+          setGuideImages(config);
+      };
+      loadGuideImages();
   }, []);
   // -------------------------------
 
@@ -467,9 +527,16 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           const newChars = [];
           for (let i = 1; i <= count; i++) {
               const existing = prev.find(p => p.id === i);
-              newChars.push(existing || { id: i, bodyImage: null, faceImage: null, gender: (i % 2 === 0 ? 'male' : 'female') as 'male' | 'female', isFaceLocked: true });
+              newChars.push(existing || { id: i, bodyImage: null, gender: (i % 2 === 0 ? 'male' : 'female') as 'male' | 'female' });
           }
           return newChars;
+      });
+      setCharacterReviews((prev) => {
+          const next: Record<number, CharacterImageReviewResult | null> = {};
+          for (let i = 1; i <= count; i += 1) {
+              next[i] = prev[i] ?? null;
+          }
+          return next;
       });
   };
 
@@ -554,14 +621,27 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       }
   };
 
-  const handleUploadClick = (charId: number, type: 'body' | 'face') => {
-      activeUploadType.current = { charId, type };
+  const handleUploadClick = (charId: number) => {
+      activeUploadType.current = { charId, type: 'body' };
       fileInputRef.current?.click();
   };
 
   const handleRefUploadClick = () => {
       activeUploadType.current = { type: 'ref' };
       fileInputRef.current?.click();
+  };
+
+  const reviewCharacterUpload = async (charId: number, imageSource: string) => {
+      setReviewLoadingByCharId((prev) => ({ ...prev, [charId]: true }));
+      try {
+          const review = await runCharacterImageReview(imageSource);
+          setCharacterReviews((prev) => ({ ...prev, [charId]: review }));
+      } catch (error) {
+          console.warn('[GenerationTool] Failed to review character image', error);
+          setCharacterReviews((prev) => ({ ...prev, [charId]: null }));
+      } finally {
+          setReviewLoadingByCharId((prev) => ({ ...prev, [charId]: false }));
+      }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -575,14 +655,10 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
           if (currentType?.type === 'ref') {
              setRefImage(result);
-          } else if (currentType?.charId) {
-              setCharacters(prev => prev.map(c => {
-                  if (c.id === currentType.charId) {
-                      if (currentType.type === 'body') return { ...c, bodyImage: result };
-                      if (currentType.type === 'face') return { ...c, faceImage: result, isFaceLocked: true };
-                  }
-                  return c;
-              }));
+          } else if (currentType?.charId && currentType.type === 'body') {
+              setCharacters(prev => prev.map(c => c.id === currentType.charId ? { ...c, bodyImage: result } : c));
+              setCharacterReviews((prev) => ({ ...prev, [currentType.charId!]: null }));
+              void reviewCharacterUpload(currentType.charId, result);
           }
       };
       reader.readAsDataURL(file);
@@ -591,10 +667,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
   const toggleGender = (charId: number, gender: 'male' | 'female') => {
       setCharacters(prev => prev.map(c => c.id === charId ? { ...c, gender } : c));
-  }
-
-  const toggleFaceLock = (charId: number) => {
-      setCharacters(prev => prev.map(c => c.id === charId ? { ...c, isFaceLocked: !c.isFaceLocked } : c));
   }
 
   const handleForceDownload = async (url: string, filename: string) => {
@@ -627,6 +699,59 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const addLog = (msg: string) => {
       setProgressLogs(prev => [...prev, msg]);
       setProgressMsg(msg);
+  };
+
+  const handleCharacterAssistant = async (charId: number, toolId: CharacterAssistantToolId) => {
+      const character = characters.find((item) => item.id === charId);
+      if (!character?.bodyImage) {
+          notify('Vui lòng tải ảnh nhân vật trước.', 'warning');
+          return;
+      }
+
+      const pricing = toolId === 'remove_bg_pro' ? removeBgCost : sharpenCost;
+      if (!pricing.available) {
+          notify('Công cụ này hiện chưa khả dụng.', 'error');
+          return;
+      }
+
+      const user = await getUserProfile();
+      if ((user.vcoin_balance || 0) < pricing.vcoin) {
+          notify(`Số dư không đủ, cần ${pricing.vcoin} Vcoin.`, 'error');
+          return;
+      }
+
+      setAssistLoadingByCharId((prev) => ({ ...prev, [charId]: toolId }));
+      try {
+          const result = await runCharacterAssistantAction({
+              sourceImage: character.bodyImage,
+              toolId,
+              costVcoin: pricing.vcoin,
+              storageFolder: `inputs/character-assist/${toolId}/character-${charId}`,
+          });
+
+          if (!result.imageUrl) {
+              throw new Error('Vertex AI không trả về ảnh kết quả.');
+          }
+
+          setCharacters((prev) => prev.map((item) => (
+              item.id === charId
+                  ? { ...item, bodyImage: result.imageUrl || item.bodyImage }
+                  : item
+          )));
+          window.dispatchEvent(new Event('balance_updated'));
+          notify(
+              toolId === 'remove_bg_pro'
+                  ? 'Đã tách nền xong cho ảnh nhân vật.'
+                  : 'Đã làm nét xong cho ảnh nhân vật.',
+              'success',
+          );
+          await reviewCharacterUpload(charId, result.imageUrl);
+      } catch (error) {
+          console.error('[GenerationTool] Character assistant failed', error);
+          notify(error instanceof Error ? error.message : 'Không thể xử lý ảnh lúc này.', 'error');
+      } finally {
+          setAssistLoadingByCharId((prev) => ({ ...prev, [charId]: null }));
+      }
   };
 
   const handleGenerate = async () => {
@@ -669,7 +794,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
     }
 
     const missingCharacterSlots = characters
-        .filter((char) => !char.bodyImage && !char.faceImage)
+        .filter((char) => !char.bodyImage)
         .map((char) => char.id);
 
     if (missingCharacterSlots.length > 0) {
@@ -754,24 +879,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                             );
                             if (stagedBody) {
                                 references.push({ source: stagedBody, kind: 'body' });
-                            }
-                        }
-
-                        if (char.isFaceLocked && char.faceImage && char.faceImage !== char.bodyImage) {
-                            const stagedFace = await tryStageGenerationInput(
-                                char.faceImage,
-                                `inputs/generation/${activeMode}/character-${charIndex + 1}/face`,
-                            );
-                            if (stagedFace) {
-                                references.push({ source: stagedFace, kind: 'face' });
-                            }
-                        } else if (!char.bodyImage && char.faceImage) {
-                            const stagedFace = await tryStageGenerationInput(
-                                char.faceImage,
-                                `inputs/generation/${activeMode}/character-${charIndex + 1}/face`,
-                            );
-                            if (stagedFace) {
-                                references.push({ source: stagedFace, kind: 'face' });
                             }
                         }
 
@@ -1280,23 +1387,33 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                     <h3 className="font-bold text-white text-sm uppercase flex items-center gap-2">
                         <Icons.User className="w-4 h-4 text-audi-pink" /> 1. Upload Nhân Vật
                     </h3>
-                    <div className="flex gap-2 flex-wrap justify-end">
-                        {onNavigateToFeature && (
-                            <>
-                                <button
-                                    onClick={() => onNavigateToFeature('remove_bg_pro')}
-                                    className="flex items-center gap-1 text-[10px] font-bold text-white hover:scale-105 transition-transform bg-audi-cyan/20 px-3 py-1 rounded-full border border-audi-cyan/50"
-                                >
-                                    <Icons.Scissors className="w-3 h-3 text-audi-cyan" /> Tách Nền
-                                </button>
-                                <button
-                                    onClick={() => onNavigateToFeature('sharpen_upscale')}
-                                    className="flex items-center gap-1 text-[10px] font-bold text-white hover:scale-105 transition-transform bg-audi-pink/20 px-3 py-1 rounded-full border border-audi-pink/50"
-                                >
-                                    <Icons.Sparkles className="w-3 h-3 text-audi-pink" /> Làm Nét
-                                </button>
-                            </>
-                        )}
+                    <div className="relative flex gap-2 flex-wrap justify-end">
+                        <button
+                            onMouseEnter={() => setHoveredGuidePreview('character')}
+                            onMouseLeave={() => setHoveredGuidePreview((prev) => prev === 'character' ? null : prev)}
+                            onFocus={() => setHoveredGuidePreview('character')}
+                            onBlur={() => setHoveredGuidePreview((prev) => prev === 'character' ? null : prev)}
+                            className={`flex items-center gap-1 text-[10px] font-bold text-white hover:scale-105 transition-transform px-3 py-1 rounded-full border ${
+                                guideImages.characterUrl
+                                    ? 'bg-audi-cyan/20 border-audi-cyan/50'
+                                    : 'bg-white/5 border-white/10 opacity-60'
+                            }`}
+                        >
+                            <Icons.Image className="w-3 h-3 text-audi-cyan" /> VD Ảnh NV
+                        </button>
+                        <button
+                            onMouseEnter={() => setHoveredGuidePreview('sample')}
+                            onMouseLeave={() => setHoveredGuidePreview((prev) => prev === 'sample' ? null : prev)}
+                            onFocus={() => setHoveredGuidePreview('sample')}
+                            onBlur={() => setHoveredGuidePreview((prev) => prev === 'sample' ? null : prev)}
+                            className={`flex items-center gap-1 text-[10px] font-bold text-white hover:scale-105 transition-transform px-3 py-1 rounded-full border ${
+                                guideImages.sampleUrl
+                                    ? 'bg-audi-pink/20 border-audi-pink/50'
+                                    : 'bg-white/5 border-white/10 opacity-60'
+                            }`}
+                        >
+                            <Icons.Image className="w-3 h-3 text-audi-pink" /> VD Ảnh Mẫu
+                        </button>
                         {tutorialVideoUrl && (
                             <button
                                 onClick={() => setShowVideo(true)}
@@ -1312,6 +1429,32 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                         >
                             <Icons.Info className="w-3 h-3" /> Hướng dẫn
                         </button>
+                        {hoveredGuidePreview && (
+                            <div
+                                className="absolute top-full right-0 mt-2 w-40 rounded-2xl border border-white/10 bg-[#0b0b14] p-2 shadow-[0_0_30px_rgba(0,0,0,0.45)] z-20"
+                                onMouseEnter={() => setHoveredGuidePreview(hoveredGuidePreview)}
+                                onMouseLeave={() => setHoveredGuidePreview(null)}
+                            >
+                                {((hoveredGuidePreview === 'character' && guideImages.characterUrl) || (hoveredGuidePreview === 'sample' && guideImages.sampleUrl)) ? (
+                                    <>
+                                        <img
+                                            src={hoveredGuidePreview === 'character' ? guideImages.characterUrl : guideImages.sampleUrl}
+                                            alt={hoveredGuidePreview === 'character' ? 'Ví dụ ảnh nhân vật' : 'Ví dụ ảnh mẫu'}
+                                            className="w-full aspect-[3/4] object-cover rounded-xl border border-white/10"
+                                        />
+                                        <p className="mt-2 text-[10px] text-slate-300 leading-relaxed">
+                                            {hoveredGuidePreview === 'character'
+                                                ? 'Ảnh nhân vật đạt chuẩn: rõ mặt, rõ đồ, tách nền sạch.'
+                                                : 'Ảnh mẫu nên rõ bố cục, góc máy và tư thế.'}
+                                        </p>
+                                    </>
+                                ) : (
+                                    <p className="text-[10px] text-slate-400 leading-relaxed">
+                                        Chưa có ảnh ví dụ trong phần cài đặt admin.
+                                    </p>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -1335,45 +1478,95 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                 )}
 
                 <div className="flex flex-wrap justify-center gap-4 w-full">
-                    {characters.map((char) => (
-                        <div
-                            key={char.id}
-                            className={`w-full md:w-[220px] bg-[#12121a] border border-white/10 rounded-2xl p-4 hover:border-white/20 transition-colors relative group shrink-0 shadow-lg ${
-                                char.id === activeCharTab ? 'block' : 'hidden md:block'
-                            }`}
-                        >
-                            <div className="flex justify-between items-center mb-3">
-                                <span className="text-xs font-bold text-white bg-white/10 px-2 py-1 rounded">NV {char.id}</span>
-                                <div className="flex bg-black/40 rounded-lg p-0.5 border border-white/10">
-                                    <button onClick={() => toggleGender(char.id, 'female')} className={`px-2 py-0.5 rounded text-[9px] font-bold ${char.gender === 'female' ? 'bg-audi-pink text-white' : 'text-slate-500'}`}>Nữ</button>
-                                    <button onClick={() => toggleGender(char.id, 'male')} className={`px-2 py-0.5 rounded text-[9px] font-bold ${char.gender === 'male' ? 'bg-blue-500 text-white' : 'text-slate-500'}`}>Nam</button>
-                                </div>
-                            </div>
+                    {characters.map((char) => {
+                        const review = characterReviews[char.id];
+                        const reviewMessage = buildCharacterReviewMessage(review);
+                        const isReviewing = !!reviewLoadingByCharId[char.id];
+                        const activeAssist = assistLoadingByCharId[char.id];
+                        const hasCleanStatus = !!review && !reviewMessage;
 
-                            <div className="space-y-3">
-                                <div onClick={() => handleUploadClick(char.id, 'body')} className="w-full h-64 bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-pink cursor-pointer relative overflow-hidden group/item transition-all flex flex-col items-center justify-center">
-                                    {char.bodyImage ? (
-                                        <img src={char.bodyImage} className="w-full h-full object-contain" alt="Body" />
-                                    ) : (
-                                        <div className="flex flex-col items-center text-slate-500 group-hover/item:text-audi-pink transition-colors">
-                                            <Icons.User className="w-8 h-8 mb-1" />
-                                            <span className="text-[10px] uppercase font-bold">Ảnh Nhân Vật</span>
+                        return (
+                            <div
+                                key={char.id}
+                                className={`w-full md:w-[220px] bg-[#12121a] border border-white/10 rounded-2xl p-4 hover:border-white/20 transition-colors relative group shrink-0 shadow-lg ${
+                                    char.id === activeCharTab ? 'block' : 'hidden md:block'
+                                }`}
+                            >
+                                <div className="flex justify-between items-center mb-3">
+                                    <span className="text-xs font-bold text-white bg-white/10 px-2 py-1 rounded">NV {char.id}</span>
+                                    <div className="flex bg-black/40 rounded-lg p-0.5 border border-white/10">
+                                        <button onClick={() => toggleGender(char.id, 'female')} className={`px-2 py-0.5 rounded text-[9px] font-bold ${char.gender === 'female' ? 'bg-audi-pink text-white' : 'text-slate-500'}`}>Nữ</button>
+                                        <button onClick={() => toggleGender(char.id, 'male')} className={`px-2 py-0.5 rounded text-[9px] font-bold ${char.gender === 'male' ? 'bg-blue-500 text-white' : 'text-slate-500'}`}>Nam</button>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                    {isReviewing && (
+                                        <div className="rounded-xl border border-audi-yellow/30 bg-audi-yellow/10 px-3 py-2 flex items-start gap-2">
+                                            <Icons.Loader className="w-3.5 h-3.5 text-audi-yellow animate-spin shrink-0 mt-0.5" />
+                                            <p className="text-[10px] leading-relaxed text-yellow-200">Đang quét nhanh độ nét và nền ảnh nhân vật...</p>
                                         </div>
                                     )}
-                                </div>
+                                    {!isReviewing && reviewMessage && (
+                                        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 flex items-start gap-2">
+                                            <Icons.AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
+                                            <p className="text-[10px] leading-relaxed text-red-300">{reviewMessage}</p>
+                                        </div>
+                                    )}
+                                    {!isReviewing && hasCleanStatus && (
+                                        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 flex items-start gap-2">
+                                            <Icons.Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                                            <p className="text-[10px] leading-relaxed text-emerald-300">Ảnh nhân vật đang đủ rõ và nền đã sạch để AI bám đúng khuôn mặt, tóc và trang phục.</p>
+                                        </div>
+                                    )}
 
-                                <div className="flex justify-center">
-                                    <div
-                                        onClick={(e) => { e.stopPropagation(); toggleFaceLock(char.id); }}
-                                        className={`px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1.5 shadow-xl transition-all cursor-pointer border ${char.isFaceLocked ? 'bg-audi-cyan text-black border-white' : 'bg-red-500/90 text-white border-red-400'}`}
-                                    >
-                                        {char.isFaceLocked ? <Icons.Lock className="w-3 h-3" /> : <Icons.Unlock className="w-3 h-3" />}
-                                        {char.isFaceLocked ? (lang === 'vi' ? 'Khóa Mặt: BẬT' : 'Face Lock: ON') : (lang === 'vi' ? 'Khóa Mặt: TẮT' : 'Face Lock: OFF')}
+                                    <div onClick={() => handleUploadClick(char.id)} className="w-full h-64 bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-pink cursor-pointer relative overflow-hidden group/item transition-all flex flex-col items-center justify-center">
+                                        {char.bodyImage ? (
+                                            <img src={char.bodyImage} className="w-full h-full object-contain" alt="Body" />
+                                        ) : (
+                                            <div className="flex flex-col items-center text-slate-500 group-hover/item:text-audi-pink transition-colors">
+                                                <Icons.User className="w-8 h-8 mb-1" />
+                                                <span className="text-[10px] uppercase font-bold">Ảnh Nhân Vật</span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <button
+                                            type="button"
+                                            disabled={!char.bodyImage || activeAssist !== null || !removeBgCost.available}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                void handleCharacterAssistant(char.id, 'remove_bg_pro');
+                                            }}
+                                            className="px-2 py-2 rounded-xl text-[10px] font-bold border border-audi-cyan/40 bg-audi-cyan/10 text-audi-cyan disabled:opacity-50 disabled:cursor-not-allowed flex flex-col items-center gap-1"
+                                        >
+                                            {activeAssist === 'remove_bg_pro' ? <Icons.Loader className="w-3.5 h-3.5 animate-spin" /> : <Icons.Scissors className="w-3.5 h-3.5" />}
+                                            <span>Tách Nền</span>
+                                            <span className="flex items-center gap-1 text-[9px] text-white/80">
+                                                {CHARACTER_ASSISTANT_RESOLUTION} <Icons.Gem className="w-3 h-3 text-audi-yellow" /> {removeBgCost.vcoin}
+                                            </span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            disabled={!char.bodyImage || activeAssist !== null || !sharpenCost.available}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                void handleCharacterAssistant(char.id, 'sharpen_upscale');
+                                            }}
+                                            className="px-2 py-2 rounded-xl text-[10px] font-bold border border-audi-pink/40 bg-audi-pink/10 text-audi-pink disabled:opacity-50 disabled:cursor-not-allowed flex flex-col items-center gap-1"
+                                        >
+                                            {activeAssist === 'sharpen_upscale' ? <Icons.Loader className="w-3.5 h-3.5 animate-spin" /> : <Icons.Sparkles className="w-3.5 h-3.5" />}
+                                            <span>Làm Nét</span>
+                                            <span className="flex items-center gap-1 text-[9px] text-white/80">
+                                                {CHARACTER_ASSISTANT_RESOLUTION} <Icons.Gem className="w-3 h-3 text-audi-yellow" /> {sharpenCost.vcoin}
+                                            </span>
+                                        </button>
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
 
                 <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 shadow-lg">

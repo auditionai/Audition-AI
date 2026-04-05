@@ -189,6 +189,8 @@ const IMAGE_NEGATIVE_PROMPT =
   'low quality, bad anatomy, worst quality, blur, grain, watermark, text, signature, bad hands, bad face, mixed backgrounds, conflicting styles, extra characters, unwanted people from style reference, real people, photorealistic humans, photograph, realistic photography, real life, semi-realistic human, cinematic human portrait, live action, realistic skin pores, natural skin texture, DSLR, realistic male model, realistic female model, hyperreal face, realistic eyelashes, realistic fabric, anime, cartoon, 2d, flat shading, floating character, disconnected limbs, hands in the air, feet not touching the ground, floating objects, unnatural posture, floating in mid-air, levitating, hovering, disconnected from background, bad perspective, illogical physics, panel layout, split screen, tiled image, image grid, collage, storyboard, diptych, triptych, quadrants, four panels, four-up layout, contact sheet';
 const IMAGE_ROLE_LOCK_CONSTRAINTS =
   'STRICT ROLE LOCK: CHARACTER REFERENCES are the only source of truth for face, hair, skin tone, head shape, body structure, outfit, shoes, accessories, gender, and overall identity. Each CHARACTER slot is a required final subject. If multiple CHARACTER REFERENCE images belong to the same character slot, they all describe the SAME final character and must be merged into one identity, never split into extra people. CHARACTER REFERENCES are NOT pose references and must never preserve their original standing pose, limb placement, framing, or background. SAMPLE IMAGE is a processed pose/composition reference and is the only source for pose, camera angle, framing, hand placement, spacing between subjects, left-to-right arrangement, relative heights, body lean, limb placement, and background composition. The renderer must transplant the exact uploaded character from each character slot into the sample composition, rather than returning a near-unchanged copy of any uploaded character reference. STYLE IMAGE may influence only render quality, lighting behavior, material response, color grading, stylized skin shading, broad adult 3D proportions, hand/face topology language, and final artistic finish. STYLE IMAGE must never transfer pose, clothing, hairstyle, accessories, face, character identity, gender presentation, number of characters, composition, panel layout, tiling, or black studio background. The final image must contain exactly the requested number of characters, no more and no less, and each final subject must map one-to-one to a distinct uploaded character slot. Never replace a missing slot with a duplicated character, a blended identity, a sample person, or a style person. If the sample image is a real human photo, translate only its composition into the stylized 3D game-avatar language from the character and style references. The final subject must stay a stylized 3D game character and must never drift toward a real human, semi-realistic portrait, or photographic anatomy. Preserve the game-avatar topology, stylized skin shading, stylized hands, stylized facial structure, and clean 3D render finish from the style reference. Do not humanize, beautify, reinterpret, invent facial structure, hair texture, skin texture, clothing details, invent a new group arrangement, or return a split-panel / grid / collage layout. For multi-character scenes, preserve the exact sample choreography instead of collapsing everyone into a default straight lineup.';
+const REDUCED_IMAGE_ROLE_LOCK_CONSTRAINTS_NO_SAMPLE =
+  'STRICT ROLE LOCK: No SAMPLE IMAGE is provided, so USER REQUEST is the primary source for pose, framing, action, scene layout, and background. CHARACTER REFERENCES still define identity only: face, hair, skin tone, head shape, body structure, outfit, shoes, accessories, tattoos, gender, and avatar topology. CHARACTER REFERENCES are NOT pose references. If multiple references belong to the same character slot, merge them into one final subject. STYLE IMAGE is style-only and may influence only render quality, lighting behavior, material response, color grading, stylized skin shading, facial/hand planes, and final 3D finish. STYLE IMAGE must never override identity, pose, composition, camera framing, gender presentation, or subject count. Keep the result as a stylized 3D game avatar, not a photorealistic or semi-realistic human.';
 const MAX_PROVIDER_PROMPT_LENGTH = 3200;
 
 const collapsePromptWhitespace = (value?: string | null) =>
@@ -431,14 +433,54 @@ const buildImageReferenceOrderDirective = (
   ].join('\n');
 };
 
-export const buildImageProviderPrompt = (
+const buildReducedImageReferenceOrderDirectiveWithoutSample = (
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'styleImage'>,
+) => {
+  const entries = getImageRenderReferenceEntries(payload);
+  const layeredSingleSubjectAllowed = allowsLayeredSingleSubjectComposition(payload);
+
+  if (entries.length === 0) {
+    return [
+      'DIRECT VISUAL REFERENCE ORDER:',
+      '- No direct reference images are available.',
+      '- USER REQUEST drives composition, camera, action, scene layout, and background.',
+    ].join('\n');
+  }
+
+  const roleLines = entries.map((entry, index) => {
+    const number = index + 1;
+
+    switch (entry.role) {
+      case 'character':
+        return `- Image ${number}: ${entry.indexLabel}. Identity only: face, hair, skin tone, body structure, outfit, shoes, accessories, and tattoos. This image is NOT a pose reference.`;
+      case 'style':
+        return `- Image ${number}: ${entry.indexLabel}. Render language only: lighting, material response, color grading, stylized skin shading, facial/hand planes, and final 3D finish.`;
+      default:
+        return `- Image ${number}: Direct reference image.`;
+    }
+  });
+
+  return [
+    'DIRECT VISUAL REFERENCE ORDER:',
+    ...roleLines,
+    '- COMPOSITION PRIORITY: USER REQUEST is the main source for pose, framing, action, scene layout, and background because no SAMPLE IMAGE is present.',
+    'SUBJECT RULES:',
+    layeredSingleSubjectAllowed
+      ? '- Keep exactly one underlying uploaded character slot. Prompt-requested double exposure / ghost overlays of that SAME character are allowed.'
+      : `- Render exactly ${Math.max(1, Math.floor(Number(payload.characterCount || getImageCharacterReferenceGroups(payload).length || 1)))} character(s) with one-to-one slot mapping.`,
+    layeredSingleSubjectAllowed
+      ? '- Do not invent a second distinct person.'
+      : '- Every uploaded CHARACTER slot is mandatory. Never add, remove, duplicate, blend, or replace a slot.',
+    '- STYLE IMAGE must never override identity, subject count, or composition.',
+    '- Never output a split-screen, image grid, collage, storyboard, or panel layout.',
+  ].join('\n');
+};
+
+const buildDetailedImageProviderPrompt = (
   synthesizedPrompt: string,
   payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
-  customNegativePrompt?: string,
+  mergedNegativePrompt: string,
 ) => {
-  const mergedNegativePrompt = customNegativePrompt?.trim()
-    ? `${IMAGE_NEGATIVE_PROMPT}, ${customNegativePrompt.trim()}`
-    : IMAGE_NEGATIVE_PROMPT;
   const referenceOrderDirective = buildImageReferenceOrderDirective(payload);
   const originalUserPrompt = payload.prompt?.trim() || '';
   const normalizedSynthesizedPrompt = synthesizedPrompt?.trim() || originalUserPrompt;
@@ -464,6 +506,54 @@ export const buildImageProviderPrompt = (
     '',
     `Negative Prompt: ${mergedNegativePrompt}`,
   ].join('\n');
+};
+
+const buildReducedImageProviderPromptWithoutSample = (
+  synthesizedPrompt: string,
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'styleImage'>,
+  mergedNegativePrompt: string,
+) => {
+  const referenceOrderDirective = buildReducedImageReferenceOrderDirectiveWithoutSample(payload);
+  const originalUserPrompt = payload.prompt?.trim() || '';
+  const normalizedSynthesizedPrompt = synthesizedPrompt?.trim() || originalUserPrompt;
+  const layeredSingleSubjectAllowed = allowsLayeredSingleSubjectComposition(payload);
+
+  return [
+    'STRICT RENDER DIRECTIVE:',
+    REDUCED_IMAGE_ROLE_LOCK_CONSTRAINTS_NO_SAMPLE,
+    '',
+    referenceOrderDirective,
+    layeredSingleSubjectAllowed
+      ? '\nLAYERED SINGLE-SUBJECT EXCEPTION:\n- Keep exactly one uploaded character identity.\n- Double exposure / ghost overlays / layered echoes of that SAME character are allowed.\n- Do not invent a second distinct person.'
+      : '',
+    '',
+    'USER ORIGINAL REQUEST (full prompt from the user, do not summarize or omit details):',
+    originalUserPrompt || 'No additional user prompt provided.',
+    '',
+    'DIRECTOR SYNTHESIS (supports the user request but must never overwrite or replace missing user details):',
+    normalizedSynthesizedPrompt || 'No director synthesis available.',
+    '',
+    'QUALITY TARGET:',
+    IMAGE_QUALITY_BOOSTERS,
+    '',
+    `Negative Prompt: ${mergedNegativePrompt}`,
+  ].join('\n');
+};
+
+export const buildImageProviderPrompt = (
+  synthesizedPrompt: string,
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
+  customNegativePrompt?: string,
+) => {
+  const mergedNegativePrompt = customNegativePrompt?.trim()
+    ? `${IMAGE_NEGATIVE_PROMPT}, ${customNegativePrompt.trim()}`
+    : IMAGE_NEGATIVE_PROMPT;
+
+  if (payload.sampleImage) {
+    return buildDetailedImageProviderPrompt(synthesizedPrompt, payload, mergedNegativePrompt);
+  }
+
+  return buildReducedImageProviderPromptWithoutSample(synthesizedPrompt, payload, mergedNegativePrompt);
 };
 
 export const getRecipeValidationPayload = (payload: QueueRecipePayload) => {

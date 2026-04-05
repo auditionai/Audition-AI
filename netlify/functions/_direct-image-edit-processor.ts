@@ -221,7 +221,7 @@ export const processDirectImageEditJob = async (jobId: string) => {
     return { status: 'skipped' as const, reason: 'wrong_queue_kind' };
   }
 
-  const leaseToken = `direct-edit:${randomUUID()}`;
+  const leaseToken = randomUUID();
   const claim = await tryClaimJob(job, leaseToken);
 
   if (!claim.claimed) {

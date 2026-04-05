@@ -44,7 +44,8 @@ export const getCharacterReviewFlags = (review: CharacterImageReviewResult | nul
     || review.issues.includes('noisy_subject')
     || review.issues.includes('low_detail');
   const strongSharpnessIssue =
-    review.subjectSharpness === 'blurry'
+    review.needsSharpen
+    || review.subjectSharpness === 'blurry'
     || review.noiseLevel === 'high'
     || review.detailLevel === 'poor'
     || explicitSharpnessIssue;

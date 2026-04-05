@@ -1,4 +1,5 @@
 import { runWithVertexCredentialFailover } from './_vertex-credentials';
+import sharp from 'sharp';
 
 const VERTEX_MODEL = 'gemini-3.1-pro-preview';
 
@@ -86,13 +87,27 @@ const extractJsonPayload = (text: string) => {
   return candidate.slice(start, end + 1);
 };
 
-const toInlineImagePart = async (source: string) => {
+type LoadedImageSource = {
+  mimeType: string;
+  base64Data: string;
+  buffer: Buffer;
+};
+
+type PixelQualityMetrics = {
+  width: number;
+  height: number;
+  minSide: number;
+  centerLaplacianVariance: number;
+};
+
+const loadImageSource = async (source: string): Promise<LoadedImageSource> => {
   if (!source) {
     throw new Error('Missing image source');
   }
 
   let mimeType = 'image/jpeg';
   let base64Data = source;
+  let buffer: Buffer;
 
   if (source.startsWith('http')) {
     const response = await fetch(source, { signal: AbortSignal.timeout(60000) });
@@ -101,20 +116,71 @@ const toInlineImagePart = async (source: string) => {
     }
     const arrayBuffer = await response.arrayBuffer();
     mimeType = response.headers.get('content-type') || mimeType;
-    base64Data = Buffer.from(arrayBuffer).toString('base64');
+    buffer = Buffer.from(arrayBuffer);
+    base64Data = buffer.toString('base64');
   } else if (source.startsWith('data:')) {
     const [header, body] = source.split(',', 2);
     base64Data = body || '';
     mimeType = header.match(/^data:(.*?);base64$/)?.[1] || mimeType;
+    buffer = Buffer.from(base64Data, 'base64');
   } else {
     base64Data = source.replace(/^data:[^;]+;base64,/, '');
+    buffer = Buffer.from(base64Data, 'base64');
   }
 
   return {
-    inlineData: {
-      data: base64Data,
-      mimeType,
-    },
+    mimeType,
+    base64Data,
+    buffer,
+  };
+};
+
+const toInlineImagePart = ({ mimeType, base64Data }: LoadedImageSource) => ({
+  inlineData: {
+    data: base64Data,
+    mimeType,
+  },
+});
+
+const analyzePixelQuality = async (buffer: Buffer): Promise<PixelQualityMetrics> => {
+  const metadata = await sharp(buffer).metadata();
+  const width = metadata.width || 0;
+  const height = metadata.height || 0;
+  const resized = await sharp(buffer)
+    .resize({ width: 256, height: 256, fit: 'inside' })
+    .greyscale()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const data = resized.data;
+  const sampleWidth = resized.info.width;
+  const sampleHeight = resized.info.height;
+  const x0 = Math.max(1, Math.floor(sampleWidth * 0.2));
+  const x1 = Math.min(sampleWidth - 1, Math.floor(sampleWidth * 0.8));
+  const y0 = Math.max(1, Math.floor(sampleHeight * 0.15));
+  const y1 = Math.min(sampleHeight - 1, Math.floor(sampleHeight * 0.9));
+
+  let sum = 0;
+  let sumSq = 0;
+  let count = 0;
+
+  for (let y = y0; y < y1; y += 1) {
+    for (let x = x0; x < x1; x += 1) {
+      const index = y * sampleWidth + x;
+      const laplacian = 4 * data[index] - data[index - 1] - data[index + 1] - data[index - sampleWidth] - data[index + sampleWidth];
+      sum += laplacian;
+      sumSq += laplacian * laplacian;
+      count += 1;
+    }
+  }
+
+  const mean = count > 0 ? sum / count : 0;
+  const variance = count > 0 ? (sumSq / count) - (mean * mean) : 0;
+
+  return {
+    width,
+    height,
+    minSide: Math.min(width || 0, height || 0),
+    centerLaplacianVariance: variance,
   };
 };
 
@@ -167,7 +233,7 @@ const normalizeIssues = (value: unknown): CharacterImageReviewIssue[] =>
         .filter((entry): entry is CharacterImageReviewIssue => REVIEW_ISSUES.has(entry))
     : [];
 
-const normalizeReviewResult = (raw: any): CharacterImageReviewResult => {
+const normalizeReviewResult = (raw: any, pixelMetrics?: PixelQualityMetrics): CharacterImageReviewResult => {
   const subjectSharpness = String(raw?.subjectSharpness || '').trim().toLowerCase() as SubjectSharpness;
   const noiseLevel = String(raw?.noiseLevel || '').trim().toLowerCase() as NoiseLevel;
   const detailLevel = String(raw?.detailLevel || '').trim().toLowerCase() as DetailLevel;
@@ -205,17 +271,38 @@ const normalizeReviewResult = (raw: any): CharacterImageReviewResult => {
     !safeBackground
     || issues.includes('background_not_removed')
     || issues.includes('busy_background');
+  const pixelSuggestsSharpenStrong =
+    !!pixelMetrics
+    && (
+      pixelMetrics.centerLaplacianVariance < 1200
+      || (pixelMetrics.centerLaplacianVariance < 1550 && pixelMetrics.minSide < 450)
+    );
+  const pixelSuggestsSharpenModerate =
+    !!pixelMetrics
+    && heuristicNeedsBackgroundRemoval
+    && (
+      pixelMetrics.centerLaplacianVariance < 1700
+      || (pixelMetrics.centerLaplacianVariance < 1900 && pixelMetrics.minSide < 350)
+    );
   const backgroundOnlyLikely =
     heuristicNeedsBackgroundRemoval
     && !strongSharpnessIssue
     && normalizedDetail === 'clear'
-    && normalizedNoise !== 'high';
+    && normalizedNoise !== 'high'
+    && !pixelSuggestsSharpenStrong
+    && !pixelSuggestsSharpenModerate;
   const heuristicNeedsSharpen =
     strongSharpnessIssue
-    || (moderateSharpnessIssue && !backgroundOnlyLikely);
+    || (moderateSharpnessIssue && !backgroundOnlyLikely)
+    || pixelSuggestsSharpenStrong
+    || (!backgroundOnlyLikely && pixelSuggestsSharpenModerate);
   const normalizedNeedsSharpen =
     (raw?.needsSharpen === true || heuristicNeedsSharpen)
     && !backgroundOnlyLikely;
+  const mergedIssues = [...issues];
+  if (normalizedNeedsSharpen && !mergedIssues.includes('low_detail') && (pixelSuggestsSharpenStrong || pixelSuggestsSharpenModerate)) {
+    mergedIssues.push('low_detail');
+  }
 
   return {
     summary: typeof raw?.summary === 'string' ? raw.summary.trim() : '',
@@ -229,14 +316,16 @@ const normalizeReviewResult = (raw: any): CharacterImageReviewResult => {
     backgroundStatus: normalizedBackground,
     needsSharpen: normalizedNeedsSharpen,
     needsBackgroundRemoval: raw?.needsBackgroundRemoval === true || heuristicNeedsBackgroundRemoval,
-    issues,
+    issues: mergedIssues,
   };
 };
 
 export const reviewCharacterImage = async (
   imageSource: string,
 ): Promise<CharacterImageReviewResult> => {
-  const imagePart = await toInlineImagePart(imageSource);
+  const loadedImage = await loadImageSource(imageSource);
+  const imagePart = toInlineImagePart(loadedImage);
+  const pixelMetrics = await analyzePixelQuality(loadedImage.buffer);
   const promptPart = { text: buildReviewInstruction() };
 
   return runWithVertexCredentialFailover({
@@ -274,7 +363,7 @@ export const reviewCharacterImage = async (
         throw new Error('Vertex AI did not return a character image review result.');
       }
 
-      return normalizeReviewResult(JSON.parse(extractJsonPayload(text)));
+      return normalizeReviewResult(JSON.parse(extractJsonPayload(text)), pixelMetrics);
     },
   });
 };

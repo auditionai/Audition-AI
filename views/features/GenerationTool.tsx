@@ -768,6 +768,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
               toolId,
               costVcoin: pricing.vcoin,
               storageFolder: `inputs/character-assist/${toolId}/character-${charId}`,
+              showInGenerationHistory: false,
           });
 
           if (!result.imageUrl) {

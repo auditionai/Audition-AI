@@ -272,6 +272,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
       updatedAt: Date.now(),
       assetType: 'image',
       queueKind: DIRECT_IMAGE_EDIT_QUEUE_KIND,
+      showInGenerationHistory: true,
       toolId: feature.id,
       toolName: feature.name.en,
       engine: engineLabel,
@@ -329,6 +330,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
           toolName: feature.name.en,
           engine: engineLabel,
           costVcoin: selectedGenerationCost.vcoin,
+          showInGenerationHistory: true,
           queuePayload,
         });
 

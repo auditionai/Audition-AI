@@ -43,8 +43,16 @@ let r2Client: S3Client | null = null;
 let galleryFetchPromise: Promise<GeneratedImage[]> | null = null;
 let galleryFetchCache: { userId: string; expiresAt: number; images: GeneratedImage[] } | null = null;
 
+const shouldShowInGenerationHistory = (image: Pick<GeneratedImage, 'queueKind' | 'showInGenerationHistory'>) => {
+    if (!isDirectImageEditQueueKind(image.queueKind)) {
+        return true;
+    }
+
+    return image.showInGenerationHistory === true;
+};
+
 const excludeDirectEditHistory = (images: GeneratedImage[]) =>
-    images.filter((image) => !isDirectImageEditQueueKind(image.queueKind));
+    images.filter((image) => shouldShowInGenerationHistory(image));
 
 export const invalidateGalleryCache = () => {
     galleryFetchPromise = null;
@@ -393,6 +401,12 @@ const mapGeneratedImageRow = (row: any, fallbackUserName: string, fallbackCost?:
   updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : new Date(row.created_at).getTime(),
   assetType: row.asset_type || inferAssetType(row.tool_id, row.model_used, row.image_url, row.queue_kind, row.tool_name),
   queueKind: row.queue_kind || undefined,
+  showInGenerationHistory:
+    row.queue_payload &&
+    typeof row.queue_payload === 'object' &&
+    typeof row.queue_payload.__showInGenerationHistory === 'boolean'
+      ? row.queue_payload.__showInGenerationHistory
+      : !isDirectImageEditQueueKind(row.queue_kind),
   toolId: row.tool_id || inferToolId(row.model_used, row.image_url),
   toolName: row.tool_name || mapEngineName(row.model_used),
   engine: mapEngineName(row.model_used),

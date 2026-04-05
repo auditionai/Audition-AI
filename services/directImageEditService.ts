@@ -8,6 +8,7 @@ export interface DirectImageEditRequest {
   toolName: string;
   engine: string;
   costVcoin: number;
+  showInGenerationHistory?: boolean;
   queuePayload: ImageEditRecipePayload;
 }
 

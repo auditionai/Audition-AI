@@ -24,6 +24,7 @@ type DirectImageEditBody = {
   toolName?: string;
   engine?: string;
   costVcoin?: number;
+  showInGenerationHistory?: boolean;
   queuePayload?: ImageEditRecipePayload;
 };
 
@@ -150,6 +151,7 @@ export const handler: Handler = async (event) => {
     const prompt = String(body.prompt || '').trim();
     const engine = String(body.engine || 'Vertex AI').trim();
     const costVcoin = Math.max(0, Number(body.costVcoin || 0));
+    const showInGenerationHistory = body.showInGenerationHistory === true;
     const queuePayload = body.queuePayload;
 
     if (!isDirectImageEditToolId(toolId)) {
@@ -216,10 +218,12 @@ export const handler: Handler = async (event) => {
     const runtimePayload: ImageEditRecipePayload & {
       __stage: 'queued';
       __logs: QueueProgressLogEntry[];
+      __showInGenerationHistory?: boolean;
     } = {
       ...queuePayload,
       __stage: 'queued',
       __logs: buildInitialQueueLogs(),
+      __showInGenerationHistory: showInGenerationHistory,
     };
 
     if (costVcoin > 0) {

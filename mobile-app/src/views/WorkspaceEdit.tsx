@@ -16,6 +16,7 @@ import type { GeneratedImage } from '../types';
 import { runDirectImageEdit } from '../../../services/directImageEditService';
 import { buildEnhancedVertexEditInstruction } from '../../../services/characterImageAssistService';
 import type { ImageEditRecipePayload } from '../../../shared/queueRecipes';
+import { DIRECT_IMAGE_EDIT_QUEUE_KIND } from '../../../shared/queueKinds';
 
 const loadImageWithTimeout = (url: string, timeoutMs: number = 10000): Promise<HTMLImageElement> => {
   return new Promise((resolve, reject) => {
@@ -215,6 +216,8 @@ export function WorkspaceEdit() {
       timestamp: Date.now(),
       updatedAt: Date.now(),
       assetType: 'image',
+      queueKind: DIRECT_IMAGE_EDIT_QUEUE_KIND,
+      showInGenerationHistory: true,
       toolId: featureId,
       toolName: toolConfig.name,
       engine: engineLabel,
@@ -256,6 +259,7 @@ export function WorkspaceEdit() {
           toolName: toolConfig.name,
           engine: engineLabel,
           costVcoin: selectedCost.vcoin,
+          showInGenerationHistory: true,
           queuePayload,
         });
 

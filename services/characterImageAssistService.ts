@@ -71,12 +71,14 @@ export const runCharacterAssistantAction = async ({
   costVcoin,
   storageFolder,
   resolution = CHARACTER_ASSISTANT_RESOLUTION,
+  showInGenerationHistory = false,
 }: {
   sourceImage: string;
   toolId: CharacterAssistantToolId;
   costVcoin: number;
   storageFolder: string;
   resolution?: AssistantResolution;
+  showInGenerationHistory?: boolean;
 }) => {
   const metadata = TOOL_META[toolId];
   const jobId = crypto.randomUUID();
@@ -109,6 +111,7 @@ export const runCharacterAssistantAction = async ({
     toolName: metadata.toolName,
     engine: `Vertex Flash ${resolution}`,
     costVcoin,
+    showInGenerationHistory,
     queuePayload,
   });
 };

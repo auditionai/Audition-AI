@@ -644,6 +644,7 @@ export function WorkspaceImage() {
         toolId,
         costVcoin: pricing.vcoin,
         storageFolder: `inputs/character-assist/${toolId}/mobile-character-${charId}`,
+        showInGenerationHistory: false,
       });
 
       if (!result.imageUrl) {

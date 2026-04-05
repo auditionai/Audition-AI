@@ -61,7 +61,13 @@ export const handler: Handler = async (event) => {
       throw error;
     }
 
-    const rows = (data || []).filter((row: any) => !isDirectImageEditQueueKind(row?.queue_kind));
+    const rows = (data || []).filter((row: any) => {
+      if (!isDirectImageEditQueueKind(row?.queue_kind)) {
+        return true;
+      }
+
+      return row?.queue_payload?.__showInGenerationHistory === true;
+    });
     const idsMissingCost = rows
       .filter((row: any) => !Number.isFinite(Number(row?.cost_vcoin)))
       .map((row: any) => row.id)

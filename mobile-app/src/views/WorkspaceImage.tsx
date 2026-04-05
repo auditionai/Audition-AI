@@ -961,7 +961,7 @@ export function WorkspaceImage() {
               >
                 {char.bodyImage ? (
                   <>
-                    <img src={char.bodyImage} alt="Ảnh nhân vật" className="w-full h-full object-cover" />
+                    <img src={char.bodyImage} alt="Ảnh nhân vật" className="w-full h-full object-contain bg-black/5 dark:bg-black/20" />
                     <div className="absolute bottom-3 left-3 right-3 bg-black/60 rounded-xl px-3 py-2 text-white text-xs font-bold backdrop-blur-md">
                       Ảnh nhân vật {char.id}
                     </div>

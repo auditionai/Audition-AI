@@ -179,15 +179,13 @@ const normalizeReviewResult = (raw: any): CharacterImageReviewResult => {
   const heuristicNeedsSharpen =
     normalizedSharpness === 'soft'
     || normalizedSharpness === 'blurry'
-    || normalizedNoise === 'medium'
     || normalizedNoise === 'high'
-    || normalizedDetail === 'partial'
     || normalizedDetail === 'poor'
     || issues.includes('blurry_subject')
     || issues.includes('noisy_subject')
     || issues.includes('low_detail')
-    || issues.includes('too_dark')
-    || issues.includes('too_bright');
+    || (normalizedSharpness === 'unknown' && normalizedNoise === 'high')
+    || (normalizedSharpness === 'unknown' && normalizedDetail === 'poor');
   const heuristicNeedsBackgroundRemoval =
     !safeBackground
     || issues.includes('background_not_removed')

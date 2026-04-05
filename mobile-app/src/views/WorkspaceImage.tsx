@@ -303,14 +303,29 @@ export function WorkspaceImage() {
       return 'Ảnh đang có nhiều nhân vật hoặc quá nhiều chủ thể nổi bật. Hãy cắt lại chỉ còn đúng 1 nhân vật.';
     }
 
-    if (review.needsSharpen && review.needsBackgroundRemoval) {
+    const hasRealSharpnessIssue =
+      review.subjectSharpness === 'soft'
+      || review.subjectSharpness === 'blurry'
+      || review.noiseLevel === 'high'
+      || review.detailLevel === 'poor'
+      || review.issues.includes('blurry_subject')
+      || review.issues.includes('noisy_subject')
+      || review.issues.includes('low_detail');
+    const hasBackgroundIssue =
+      review.needsBackgroundRemoval
+      || review.backgroundStatus === 'mixed'
+      || review.backgroundStatus === 'busy'
+      || review.issues.includes('background_not_removed')
+      || review.issues.includes('busy_background');
+
+    if (hasRealSharpnessIssue && hasBackgroundIssue) {
       return 'Ảnh nhân vật của bạn hiện chưa nét và cũng chưa tách nền sạch. Nên bấm Làm Nét trước, sau đó bấm Tách Nền để AI lấy đúng nhân vật, mặt và trang phục.';
     }
-    if (review.needsSharpen) {
-      return 'Ảnh nhân vật của bạn đã đủ tách nền hoặc nền không phải vấn đề chính, nhưng ảnh còn mờ hoặc thiếu chi tiết. Nên bấm Làm Nét để tăng độ rõ trước khi tạo ảnh.';
+    if (hasRealSharpnessIssue) {
+      return 'Ảnh nhân vật của bạn đang bị mờ, nhiễu mạnh hoặc thiếu chi tiết thật sự. Nên bấm Làm Nét để tăng độ rõ trước khi tạo ảnh.';
     }
-    if (review.needsBackgroundRemoval) {
-      return 'Ảnh nhân vật của bạn đã đủ nét hơn phần nền, nhưng nền vẫn chưa được tách sạch. Nên bấm Tách Nền để AI lấy đúng nhân vật và trang phục.';
+    if (hasBackgroundIssue) {
+      return 'Ảnh nhân vật của bạn đã đủ nét, nhưng nền vẫn chưa được tách sạch. Nên bấm Tách Nền để AI lấy đúng nhân vật và trang phục.';
     }
 
     if (review.summary?.trim()) {

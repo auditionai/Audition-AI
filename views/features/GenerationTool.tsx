@@ -1,5 +1,5 @@
 ﻿
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Feature, Language, GeneratedImage, ViewId } from '../../types';
 import { Icons } from '../../components/Icons';
 import {
@@ -176,6 +176,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const [tutorialVideoUrl, setTutorialVideoUrl] = useState<string | null>(null);
   const [guideImages, setGuideImages] = useState<GenerationGuideImagesConfig>({ characterUrl: '', sampleUrl: '' });
   const [hoveredGuidePreview, setHoveredGuidePreview] = useState<'character' | 'sample' | null>(null);
+  const [guidePreviewCacheKey] = useState(() => Date.now());
 
   const [resultImage, setResultImage] = useState<string | null>(null);
   const [characterReviews, setCharacterReviews] = useState<Record<number, CharacterImageReviewResult | null>>({});
@@ -187,6 +188,14 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       character: null,
       sample: null,
   });
+  const guidePreviewUrls = useMemo(() => ({
+      character: guideImages.characterUrl
+          ? `${guideImages.characterUrl}${guideImages.characterUrl.includes('?') ? '&' : '?'}guide_preview=${guidePreviewCacheKey}`
+          : '',
+      sample: guideImages.sampleUrl
+          ? `${guideImages.sampleUrl}${guideImages.sampleUrl.includes('?') ? '&' : '?'}guide_preview=${guidePreviewCacheKey}`
+          : '',
+  }), [guideImages.characterUrl, guideImages.sampleUrl, guidePreviewCacheKey]);
 
   // --- NEW: COOLDOWN STATE ---
   const [cooldownRemaining, setCooldownRemaining] = useState(() => {
@@ -331,15 +340,14 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       }
 
       const warnings: string[] = [];
+      if (review.needsSharpen && review.needsBackgroundRemoval) {
+          return 'Ảnh nhân vật của bạn hiện chưa nét và cũng chưa tách nền sạch. Nên bấm Làm Nét trước, sau đó bấm Tách Nền để AI lấy đúng nhân vật, mặt và trang phục.';
+      }
       if (review.needsSharpen) {
-          warnings.push('Ảnh nhân vật của bạn đang bị mờ hoặc thiếu chi tiết, nên làm nét ảnh để khi tạo ảnh có kết quả đẹp và đúng mặt hơn.');
+          return 'Ảnh nhân vật của bạn đã đủ tách nền hoặc nền không phải vấn đề chính, nhưng ảnh còn mờ hoặc thiếu chi tiết. Nên bấm Làm Nét để tăng độ rõ trước khi tạo ảnh.';
       }
       if (review.needsBackgroundRemoval) {
-          warnings.push('Ảnh của bạn đang chưa tách nền sạch, nên tách nền để AI lấy đúng nhân vật và trang phục.');
-      }
-
-      if (warnings.length > 0) {
-          return warnings.join(' ');
+          return 'Ảnh nhân vật của bạn đã đủ nét hơn phần nền, nhưng nền vẫn chưa được tách sạch. Nên bấm Tách Nền để AI lấy đúng nhân vật và trang phục.';
       }
 
       if (review.summary?.trim()) {
@@ -426,8 +434,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
   useEffect(() => {
       const entries: Array<['character' | 'sample', string]> = [
-          ['character', guideImages.characterUrl],
-          ['sample', guideImages.sampleUrl],
+          ['character', guidePreviewUrls.character],
+          ['sample', guidePreviewUrls.sample],
       ];
 
       entries.forEach(([key, source]) => {
@@ -448,7 +456,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           };
           image.src = source;
       });
-  }, [guideImages.characterUrl, guideImages.sampleUrl]);
+  }, [guidePreviewUrls.character, guidePreviewUrls.sample]);
   // -------------------------------
 
   // --- COOLDOWN TIMER EFFECT ---
@@ -1499,7 +1507,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                     <>
                                         <div className="w-full h-80 rounded-xl border border-white/10 bg-black/40 flex items-center justify-center overflow-hidden">
                                             <img
-                                                src={hoveredGuidePreview === 'character' ? guideImages.characterUrl : guideImages.sampleUrl}
+                                                src={hoveredGuidePreview === 'character' ? guidePreviewUrls.character : guidePreviewUrls.sample}
                                                 alt={hoveredGuidePreview === 'character' ? 'Ví dụ ảnh nhân vật' : 'Ví dụ ảnh mẫu'}
                                                 className="max-w-full max-h-full object-contain rounded-xl"
                                             />
@@ -1610,12 +1618,15 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                         <div className="grid grid-cols-2 gap-2">
                                             <button
                                                 type="button"
-                                                disabled={activeAssist !== null}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
+                                                    if (activeAssist !== null) return;
                                                     void handleCharacterAssistant(char.id, 'remove_bg_pro');
                                                 }}
-                                                className="px-2 py-2 rounded-xl text-[10px] font-bold border border-audi-cyan/40 bg-audi-cyan/10 text-audi-cyan disabled:opacity-60 disabled:cursor-not-allowed flex flex-col items-center gap-1 min-h-[76px]"
+                                                aria-disabled={activeAssist !== null}
+                                                className={`px-2 py-2 rounded-xl text-[10px] font-bold border border-audi-cyan/40 bg-audi-cyan/10 text-audi-cyan flex flex-col items-center gap-1 min-h-[76px] relative z-10 pointer-events-auto ${
+                                                    activeAssist !== null ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:bg-audi-cyan/15'
+                                                }`}
                                             >
                                                 {activeAssist === 'remove_bg_pro' ? <Icons.Loader className="w-3.5 h-3.5 animate-spin" /> : <Icons.Scissors className="w-3.5 h-3.5" />}
                                                 <span>{activeAssist === 'remove_bg_pro' ? 'Đang Tách...' : 'Tách Nền'}</span>
@@ -1627,12 +1638,15 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                             </button>
                                             <button
                                                 type="button"
-                                                disabled={activeAssist !== null}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
+                                                    if (activeAssist !== null) return;
                                                     void handleCharacterAssistant(char.id, 'sharpen_upscale');
                                                 }}
-                                                className="px-2 py-2 rounded-xl text-[10px] font-bold border border-audi-pink/40 bg-audi-pink/10 text-audi-pink disabled:opacity-60 disabled:cursor-not-allowed flex flex-col items-center gap-1 min-h-[76px]"
+                                                aria-disabled={activeAssist !== null}
+                                                className={`px-2 py-2 rounded-xl text-[10px] font-bold border border-audi-pink/40 bg-audi-pink/10 text-audi-pink flex flex-col items-center gap-1 min-h-[76px] relative z-10 pointer-events-auto ${
+                                                    activeAssist !== null ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:bg-audi-pink/15'
+                                                }`}
                                             >
                                                 {activeAssist === 'sharpen_upscale' ? <Icons.Loader className="w-3.5 h-3.5 animate-spin" /> : <Icons.Sparkles className="w-3.5 h-3.5" />}
                                                 <span>{activeAssist === 'sharpen_upscale' ? 'Đang Nét...' : 'Làm Nét'}</span>

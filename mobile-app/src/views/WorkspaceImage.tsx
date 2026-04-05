@@ -4,7 +4,7 @@
  * Features: TST catalog, pricing, character upload, prompt, queue submission
  */
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   Sparkles, ImagePlus, Coins,
   X, User, Zap, Crown, RefreshCw, Loader, AlertTriangle, Wand2, Scissors, CheckCircle2,
@@ -191,6 +191,7 @@ export function WorkspaceImage() {
   const [availableStyles, setAvailableStyles] = useState<any[]>([]);
   const [showSampleModal, setShowSampleModal] = useState(false);
   const [previewGuide, setPreviewGuide] = useState<'character' | 'sample' | null>(null);
+  const [guidePreviewCacheKey] = useState(() => Date.now());
   const [samplePrompts, setSamplePrompts] = useState<SamplePrompt[]>([]);
   const [loadingSamples, setLoadingSamples] = useState(false);
   const [samplePage, setSamplePage] = useState(0);
@@ -210,6 +211,14 @@ export function WorkspaceImage() {
     character: null,
     sample: null,
   });
+  const guidePreviewUrls = useMemo(() => ({
+    character: guideImages.characterUrl
+      ? `${guideImages.characterUrl}${guideImages.characterUrl.includes('?') ? '&' : '?'}guide_preview=${guidePreviewCacheKey}`
+      : '',
+    sample: guideImages.sampleUrl
+      ? `${guideImages.sampleUrl}${guideImages.sampleUrl.includes('?') ? '&' : '?'}guide_preview=${guidePreviewCacheKey}`
+      : '',
+  }), [guideImages.characterUrl, guideImages.sampleUrl, guidePreviewCacheKey]);
 
   const [currentTipIdx, setCurrentTipIdx] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -287,16 +296,14 @@ export function WorkspaceImage() {
       return 'Ảnh đang có nhiều nhân vật hoặc quá nhiều chủ thể nổi bật. Hãy cắt lại chỉ còn đúng 1 nhân vật.';
     }
 
-    const warnings: string[] = [];
+    if (review.needsSharpen && review.needsBackgroundRemoval) {
+      return 'Ảnh nhân vật của bạn hiện chưa nét và cũng chưa tách nền sạch. Nên bấm Làm Nét trước, sau đó bấm Tách Nền để AI lấy đúng nhân vật, mặt và trang phục.';
+    }
     if (review.needsSharpen) {
-      warnings.push('Ảnh nhân vật của bạn đang bị mờ hoặc nhiễu, nên làm nét để AI giữ đúng khuôn mặt và chi tiết quần áo.');
+      return 'Ảnh nhân vật của bạn đã đủ tách nền hoặc nền không phải vấn đề chính, nhưng ảnh còn mờ hoặc thiếu chi tiết. Nên bấm Làm Nét để tăng độ rõ trước khi tạo ảnh.';
     }
     if (review.needsBackgroundRemoval) {
-      warnings.push('Ảnh của bạn chưa tách nền sạch, nên tách nền để AI nhận đúng nhân vật hơn.');
-    }
-
-    if (warnings.length > 0) {
-      return warnings.join(' ');
+      return 'Ảnh nhân vật của bạn đã đủ nét hơn phần nền, nhưng nền vẫn chưa được tách sạch. Nên bấm Tách Nền để AI lấy đúng nhân vật và trang phục.';
     }
 
     if (review.summary?.trim()) {
@@ -375,8 +382,8 @@ export function WorkspaceImage() {
 
   useEffect(() => {
     const entries: Array<['character' | 'sample', string]> = [
-      ['character', guideImages.characterUrl],
-      ['sample', guideImages.sampleUrl],
+      ['character', guidePreviewUrls.character],
+      ['sample', guidePreviewUrls.sample],
     ];
 
     entries.forEach(([key, source]) => {
@@ -397,7 +404,7 @@ export function WorkspaceImage() {
       };
       image.src = source;
     });
-  }, [guideImages.characterUrl, guideImages.sampleUrl]);
+  }, [guidePreviewUrls.character, guidePreviewUrls.sample]);
 
   // --- Cooldown Timer ---
   useEffect(() => {
@@ -995,9 +1002,14 @@ export function WorkspaceImage() {
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
-                    disabled={activeAssist !== null}
-                    onClick={() => void handleCharacterAssistant(char.id, 'remove_bg_pro')}
-                    className="rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-cyan-700 dark:border-cyan-500/20 dark:bg-cyan-500/10 dark:text-cyan-200 disabled:opacity-60 min-h-[82px]"
+                    aria-disabled={activeAssist !== null}
+                    onClick={() => {
+                      if (activeAssist !== null) return;
+                      void handleCharacterAssistant(char.id, 'remove_bg_pro');
+                    }}
+                    className={`rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-cyan-700 dark:border-cyan-500/20 dark:bg-cyan-500/10 dark:text-cyan-200 min-h-[82px] ${
+                      activeAssist !== null ? 'opacity-60' : ''
+                    }`}
                   >
                     <div className="flex items-center justify-center gap-2 text-xs font-bold">
                       {activeAssist === 'remove_bg_pro' ? <Loader className="w-4 h-4 animate-spin" /> : <Scissors className="w-4 h-4" />}
@@ -1009,9 +1021,14 @@ export function WorkspaceImage() {
                   </button>
                   <button
                     type="button"
-                    disabled={activeAssist !== null}
-                    onClick={() => void handleCharacterAssistant(char.id, 'sharpen_upscale')}
-                    className="rounded-2xl border border-pink-200 bg-pink-50 px-4 py-3 text-pink-700 dark:border-pink-500/20 dark:bg-pink-500/10 dark:text-pink-200 disabled:opacity-60 min-h-[82px]"
+                    aria-disabled={activeAssist !== null}
+                    onClick={() => {
+                      if (activeAssist !== null) return;
+                      void handleCharacterAssistant(char.id, 'sharpen_upscale');
+                    }}
+                    className={`rounded-2xl border border-pink-200 bg-pink-50 px-4 py-3 text-pink-700 dark:border-pink-500/20 dark:bg-pink-500/10 dark:text-pink-200 min-h-[82px] ${
+                      activeAssist !== null ? 'opacity-60' : ''
+                    }`}
                   >
                     <div className="flex items-center justify-center gap-2 text-xs font-bold">
                       {activeAssist === 'sharpen_upscale' ? <Loader className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
@@ -1300,7 +1317,7 @@ export function WorkspaceImage() {
               <>
                 <div className="mt-4 h-[28rem] w-full rounded-[24px] border border-gray-100 bg-black/5 dark:border-white/10 dark:bg-black/20 flex items-center justify-center overflow-hidden">
                   <img
-                    src={previewGuide === 'character' ? guideImages.characterUrl : guideImages.sampleUrl}
+                    src={previewGuide === 'character' ? guidePreviewUrls.character : guidePreviewUrls.sample}
                     alt={previewGuide === 'character' ? 'Ví dụ ảnh nhân vật' : 'Ví dụ ảnh mẫu'}
                     className="max-w-full max-h-full object-contain"
                   />

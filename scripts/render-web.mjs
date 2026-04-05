@@ -22,6 +22,7 @@ import { handler as queueReconcileHandler } from '../netlify/functions/queue-rec
 import { handler as queueSubmitHandler } from '../netlify/functions/queue-submit.ts';
 import { handler as queueTickHandler } from '../netlify/functions/queue-tick.ts';
 import { handler as redeemGiftcodeHandler } from '../netlify/functions/redeem-giftcode.ts';
+import { handler as reviewCharacterImageHandler } from '../netlify/functions/review-character-image.ts';
 import { handler as tstGenerateHandler } from '../netlify/functions/tst-generate.ts';
 import { handler as tstModelsPricingHandler } from '../netlify/functions/tst-models-pricing.ts';
 import { handler as tstModelsHandler } from '../netlify/functions/tst-models.ts';
@@ -70,6 +71,7 @@ const handlerConfigs = [
   { fnName: 'payos-webhook', apiPath: '/api/payos-webhook', handler: payosWebhookHandler, extraApiPaths: ['/api/payment-webhook'] },
   { fnName: 'create_payment', apiPath: '/api/create-payment', handler: createPaymentHandler },
   { fnName: 'direct-image-edit', apiPath: '/api/direct-image-edit', handler: directImageEditHandler },
+  { fnName: 'review-character-image', apiPath: '/api/review-character-image', handler: reviewCharacterImageHandler },
 ];
 
 const toHeaderRecord = (headers) => {

@@ -1,20 +1,21 @@
 import { randomUUID } from 'node:crypto';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import type { Handler } from '@netlify/functions';
-import type { ImageEditRecipePayload, QueueProcessingStage, QueueProgressLogEntry } from '../../shared/queueRecipes';
+import type { ImageEditRecipePayload, QueueProgressLogEntry } from '../../shared/queueRecipes';
 import { DIRECT_IMAGE_EDIT_QUEUE_KIND, isDirectImageEditToolId } from '../../shared/queueKinds';
-import { runVertexImageEdit } from './_vertex-image-edit';
+import { triggerBackgroundFunction } from './_queue-launcher';
 import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 
 const headers = {
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const DIRECT_IMAGE_EDIT_BACKGROUND_PATH = '/.netlify/functions/direct-image-edit-background';
 
 type DirectImageEditBody = {
   id?: string;
@@ -26,95 +27,17 @@ type DirectImageEditBody = {
   queuePayload?: ImageEditRecipePayload;
 };
 
-const getEnv = (...keys: string[]) => {
-  for (const key of keys) {
-    const value = process.env[key];
-    if (value) return value;
-  }
-  return '';
-};
-
-const R2_ENDPOINT = getEnv('R2_ENDPOINT', 'VITE_R2_ENDPOINT');
-const R2_ACCESS_KEY_ID = getEnv('R2_ACCESS_KEY_ID', 'VITE_R2_ACCESS_KEY_ID');
-const R2_SECRET_ACCESS_KEY = getEnv('R2_SECRET_ACCESS_KEY', 'VITE_R2_SECRET_ACCESS_KEY');
-const R2_BUCKET_NAME = getEnv('R2_BUCKET_NAME', 'VITE_R2_BUCKET_NAME');
-const R2_PUBLIC_URL = getEnv('R2_PUBLIC_URL', 'VITE_R2_PUBLIC_URL');
-
-const r2Client =
-  R2_ENDPOINT && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY
-    ? new S3Client({
-        region: 'auto',
-        endpoint: R2_ENDPOINT,
-        credentials: {
-          accessKeyId: R2_ACCESS_KEY_ID,
-          secretAccessKey: R2_SECRET_ACCESS_KEY,
-        },
-      })
-    : null;
-
-const buildQueueLog = (
-  stage: QueueProcessingStage,
-  message: string,
-  level: QueueProgressLogEntry['level'] = 'info',
-): QueueProgressLogEntry => ({
-  at: new Date().toISOString(),
-  stage,
-  level,
-  message,
-});
-
-const appendQueueLog = (
-  payload: ImageEditRecipePayload,
-  stage: QueueProcessingStage,
-  message: string,
-  level: QueueProgressLogEntry['level'] = 'info',
-): ImageEditRecipePayload => ({
-  ...payload,
-  __stage: stage,
-  __logs: [...(((payload as any).__logs as QueueProgressLogEntry[] | undefined) || []), buildQueueLog(stage, message, level)],
-});
+const buildInitialQueueLogs = (): QueueProgressLogEntry[] => ([
+  {
+    at: new Date().toISOString(),
+    stage: 'queued',
+    level: 'info',
+    message: 'Da vao hang doi xu ly anh truc tiep.',
+  },
+]);
 
 const normalizeJobId = (value: unknown) => {
   return typeof value === 'string' && UUID_PATTERN.test(value) ? value : randomUUID();
-};
-
-const parseDataUrl = (value: string) => {
-  const match = value.match(/^data:(.*?);base64,(.*)$/);
-  if (!match) {
-    throw new Error('Invalid image payload returned by editor');
-  }
-
-  return {
-    mimeType: match[1] || 'image/png',
-    buffer: Buffer.from(match[2] || '', 'base64'),
-  };
-};
-
-const mimeTypeToExtension = (mimeType: string) => {
-  if (mimeType.includes('jpeg')) return 'jpg';
-  if (mimeType.includes('webp')) return 'webp';
-  return 'png';
-};
-
-const uploadEditedImage = async (userId: string, imageId: string, assetDataUrl: string) => {
-  if (!r2Client || !R2_BUCKET_NAME || !R2_PUBLIC_URL) {
-    return assetDataUrl;
-  }
-
-  const { mimeType, buffer } = parseDataUrl(assetDataUrl);
-  const extension = mimeTypeToExtension(mimeType);
-  const key = `edited/${userId}/${imageId}.${extension}`;
-
-  await r2Client.send(
-    new PutObjectCommand({
-      Bucket: R2_BUCKET_NAME,
-      Key: key,
-      Body: buffer,
-      ContentType: mimeType,
-    }),
-  );
-
-  return `${R2_PUBLIC_URL}/${key}`;
 };
 
 const mapError = (message: string) => {
@@ -129,28 +52,80 @@ const mapError = (message: string) => {
   return { statusCode: 400, error: message };
 };
 
-const updateDirectEditRecord = async (jobId: string, patch: Record<string, unknown>) => {
-  const admin = getServiceRoleClient();
-  await admin
-    .from('generated_images')
-    .update({
-      ...patch,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', jobId);
-};
+const triggerDirectImageEditBackground = async (rawUrl?: string | null, jobId?: string) => {
+  if (!jobId) {
+    return false;
+  }
 
-const refundCharge = async (jobId: string, reason: string) => {
-  const admin = getServiceRoleClient();
-  await admin.rpc('refund_generated_job', {
-    p_generated_image_id: jobId,
-    p_reason: reason,
-  });
+  try {
+    const launched = await triggerBackgroundFunction(DIRECT_IMAGE_EDIT_BACKGROUND_PATH, rawUrl, 1_500, {
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jobId }),
+    });
+    return launched;
+  } catch (error) {
+    console.error('[direct-image-edit] Failed to launch background processor:', error);
+    return false;
+  }
 };
 
 export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers, body: '' };
+  }
+
+  if (event.httpMethod === 'GET') {
+    try {
+      const { user } = await requireAuthenticatedUser(event);
+      const admin = getServiceRoleClient();
+      const requestedId = String(event.queryStringParameters?.id || '').trim();
+      if (!UUID_PATTERN.test(requestedId)) {
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({ error: 'Invalid direct edit job id' }),
+        };
+      }
+
+      const { data: existing, error: existingError } = await admin
+        .from('generated_images')
+        .select('id, user_id, status, image_url, error_message, updated_at')
+        .eq('id', requestedId)
+        .maybeSingle();
+
+      if (existingError) {
+        throw existingError;
+      }
+
+      if (!existing || existing.user_id !== user.id) {
+        return {
+          statusCode: 404,
+          headers,
+          body: JSON.stringify({ error: 'Direct edit job not found' }),
+        };
+      }
+
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          success: existing.status === 'completed',
+          id: existing.id,
+          status: existing.status,
+          imageUrl: existing.image_url || undefined,
+          error: existing.error_message || undefined,
+          updatedAt: existing.updated_at || undefined,
+        }),
+      };
+    } catch (error: any) {
+      const message = error?.message || 'Internal Server Error';
+      const statusCode = /Unauthorized/i.test(message) ? 401 : 500;
+      return {
+        statusCode,
+        headers,
+        body: JSON.stringify({ error: message }),
+      };
+    }
   }
 
   if (event.httpMethod !== 'POST') {
@@ -196,6 +171,10 @@ export const handler: Handler = async (event) => {
         throw new Error('JOB_ID_ALREADY_EXISTS');
       }
 
+      if (existing.status === 'queued' || existing.status === 'processing') {
+        await triggerDirectImageEditBackground(event.rawUrl, existing.id);
+      }
+
       return {
         statusCode: 200,
         headers,
@@ -230,11 +209,14 @@ export const handler: Handler = async (event) => {
 
     let chargeApplied = false;
     const createdAt = new Date().toISOString();
-    let runtimePayload = appendQueueLog(
-      appendQueueLog(queuePayload, 'preparing', 'Dang tai anh nguon va khoi tao tien trinh xu ly.'),
-      'dispatching',
-      'Dang gui yeu cau xu ly truc tiep toi Vertex AI.',
-    );
+    const runtimePayload: ImageEditRecipePayload & {
+      __stage: 'queued';
+      __logs: QueueProgressLogEntry[];
+    } = {
+      ...queuePayload,
+      __stage: 'queued',
+      __logs: buildInitialQueueLogs(),
+    };
 
     if (costVcoin > 0) {
       const { data: charged, error: chargeError } = await admin.rpc('apply_balance_transaction', {
@@ -274,8 +256,8 @@ export const handler: Handler = async (event) => {
       is_public: false,
       tool_id: toolId,
       tool_name: toolName,
-      status: 'processing',
-      progress: 15,
+      status: 'queued',
+      progress: 0,
       cost_vcoin: costVcoin,
       asset_type: 'image',
       updated_at: createdAt,
@@ -287,7 +269,7 @@ export const handler: Handler = async (event) => {
       lease_expires_at: null,
       next_poll_at: null,
       finished_at: null,
-      processing_started_at: createdAt,
+      processing_started_at: null,
       attempt_count: 0,
       last_error_at: null,
       error_message: null,
@@ -314,77 +296,37 @@ export const handler: Handler = async (event) => {
       throw insertError;
     }
 
-    await updateDirectEditRecord(jobId, {
-      progress: 55,
-      queue_payload: (runtimePayload = appendQueueLog(runtimePayload, 'building_payload', 'Dang xu ly hinh anh bang Vertex AI.')),
-    });
-
-    try {
-      const resultDataUrl = await runVertexImageEdit({
-        sourceImage: queuePayload.sourceImage,
-        instruction: queuePayload.prompt,
-        modelId: queuePayload.modelId,
-        mimeType: queuePayload.mimeType,
-        resolution: queuePayload.resolution,
-        aspectRatio: queuePayload.aspectRatio,
-      });
-
-      await updateDirectEditRecord(jobId, {
-        progress: 85,
-        queue_payload: (runtimePayload = appendQueueLog(runtimePayload, 'verifying_output', 'Dang luu ket qua da xu ly.')),
-      });
-
-      const resultUrl = await uploadEditedImage(user.id, jobId, resultDataUrl);
-      const completionPayload = appendQueueLog(runtimePayload, 'completed', 'Da hoan thanh xu ly truc tiep.', 'success');
-
-      await updateDirectEditRecord(jobId, {
-        status: 'completed',
-        image_url: resultUrl,
-        progress: 100,
-        error_message: null,
-        finished_at: new Date().toISOString(),
-        queue_payload: completionPayload,
-      });
-
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify({
-          success: true,
-          id: jobId,
-          status: 'completed',
-          imageUrl: resultUrl,
-          updatedAt: new Date().toISOString(),
-        }),
-      };
-    } catch (error: any) {
-      const errorMessage = error?.message || 'Direct image edit failed';
-      const failedPayload = appendQueueLog(runtimePayload, 'failed', errorMessage, 'error');
-
-      await updateDirectEditRecord(jobId, {
+    const launched = await triggerDirectImageEditBackground(event.rawUrl, jobId);
+    if (!launched) {
+      await admin.from('generated_images').update({
         status: 'failed',
-        progress: 0,
-        error_message: errorMessage,
+        progress: 100,
+        error_message: 'Failed to start direct edit background processor',
+        updated_at: new Date().toISOString(),
         finished_at: new Date().toISOString(),
-        queue_payload: failedPayload,
-      });
+      }).eq('id', jobId);
 
       if (chargeApplied && costVcoin > 0) {
-        await refundCharge(jobId, `Refund: ${toolName} direct edit failed`);
+        await admin.rpc('refund_generated_job', {
+          p_generated_image_id: jobId,
+          p_reason: `Refund: ${toolName} background launch failed`,
+        });
       }
 
-      return {
-        statusCode: 500,
-        headers,
-        body: JSON.stringify({
-          success: false,
-          id: jobId,
-          status: 'failed',
-          error: errorMessage,
-          updatedAt: new Date().toISOString(),
-        }),
-      };
+      throw new Error('Failed to start direct edit background processor');
     }
+
+    return {
+      statusCode: 202,
+      headers,
+      body: JSON.stringify({
+        success: true,
+        accepted: true,
+        id: jobId,
+        status: 'queued',
+        updatedAt: createdAt,
+      }),
+    };
   } catch (error: any) {
     const mapped = mapError(error?.message || 'Internal Server Error');
     return {

@@ -15,14 +15,16 @@ const resolveBaseUrl = (rawUrl?: string | null) => {
   return process.env.URL || process.env.DEPLOY_URL || process.env.SITE_URL || '';
 };
 
-export const triggerBackgroundQueueWorker = async (
+export const triggerBackgroundFunction = async (
+  path: string,
   rawUrl?: string | null,
   timeoutMs = DEFAULT_LAUNCH_TIMEOUT_MS,
+  init?: {
+    method?: string;
+    headers?: Record<string, string>;
+    body?: string;
+  },
 ) => {
-  if (isDedicatedQueueWorkerMode()) {
-    return false;
-  }
-
   const baseUrl = resolveBaseUrl(rawUrl);
   if (!baseUrl) {
     return false;
@@ -32,8 +34,10 @@ export const triggerBackgroundQueueWorker = async (
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(new URL(BACKGROUND_WORKER_PATH, baseUrl).toString(), {
-      method: 'POST',
+    const response = await fetch(new URL(path, baseUrl).toString(), {
+      method: init?.method || 'POST',
+      headers: init?.headers,
+      body: init?.body,
       signal: controller.signal,
     });
 
@@ -43,7 +47,23 @@ export const triggerBackgroundQueueWorker = async (
     }
 
     return true;
+  } catch (error: any) {
+    if (error?.name === 'AbortError') {
+      return true;
+    }
+    throw error;
   } finally {
     clearTimeout(timeoutId);
   }
+};
+
+export const triggerBackgroundQueueWorker = async (
+  rawUrl?: string | null,
+  timeoutMs = DEFAULT_LAUNCH_TIMEOUT_MS,
+) => {
+  if (isDedicatedQueueWorkerMode()) {
+    return false;
+  }
+
+  return triggerBackgroundFunction(BACKGROUND_WORKER_PATH, rawUrl, timeoutMs);
 };

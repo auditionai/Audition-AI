@@ -47,11 +47,6 @@ export const triggerBackgroundFunction = async (
     }
 
     return true;
-  } catch (error: any) {
-    if (error?.name === 'AbortError') {
-      return true;
-    }
-    throw error;
   } finally {
     clearTimeout(timeoutId);
   }

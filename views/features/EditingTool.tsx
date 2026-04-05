@@ -13,6 +13,7 @@ import type { ImageEditRecipePayload } from '../../shared/queueRecipes';
 import { DIRECT_IMAGE_EDIT_QUEUE_KIND } from '../../shared/queueKinds';
 import { runDirectImageEdit } from '../../services/directImageEditService';
 import { calculateAspectRatioString, loadImageWithTimeout } from '../../utils/imageProcessor';
+import { buildEnhancedVertexEditInstruction } from '../../services/characterImageAssistService';
 
 interface EditingToolProps {
   feature: Feature;
@@ -82,10 +83,10 @@ CRITICAL RULES:
   }
 
   if (featureId === 'sharpen_upscale') {
-    return `Upscale this image to ${resolution}. CRITICAL: restore detail, sharpen edges, and preserve the original face, body, outfit, and stylized character structure. Do not redesign, reimagine, or add new elements.`;
+    return buildEnhancedVertexEditInstruction('sharpen_upscale', resolution);
   }
 
-  return 'Remove the background completely and place the subject on a pure BLACK background (#000000). CRITICAL: preserve the exact subject identity, image resolution, edges, and details. Do not blur, crop, downscale, or alter the subject.';
+  return buildEnhancedVertexEditInstruction('remove_bg_pro', resolution);
 };
 
 const getGradient = (featureId: string) => {
@@ -271,6 +272,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
       updatedAt: Date.now(),
       assetType: 'image',
       queueKind: DIRECT_IMAGE_EDIT_QUEUE_KIND,
+      showInGenerationHistory: true,
       toolId: feature.id,
       toolName: feature.name.en,
       engine: engineLabel,
@@ -328,6 +330,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
           toolName: feature.name.en,
           engine: engineLabel,
           costVcoin: selectedGenerationCost.vcoin,
+          showInGenerationHistory: true,
           queuePayload,
         });
 

@@ -139,6 +139,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/review-character-image"
+  to = "/.netlify/functions/review-character-image"
+  status = 200
+
+[[redirects]]
   from = "/api/download-proxy"
   to = "/.netlify/functions/download_proxy"
   status = 200

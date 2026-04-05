@@ -4,24 +4,31 @@
  * Features: TST catalog, pricing, character upload, prompt, queue submission
  */
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   Sparkles, ImagePlus, Coins,
-  X, User, Zap, Crown, RefreshCw, Loader, AlertTriangle, Wand2,
+  X, User, Zap, Crown, RefreshCw, Loader, AlertTriangle, Wand2, Scissors, CheckCircle2,
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../components/NotificationSystem';
 import { APP_CONFIG } from '../constants';
-import { getUserProfile, getStylePresets, getModelPricing, getTstServerAvailabilityConfig } from '../services/economyService';
+import {
+  getUserProfile,
+  getStylePresets,
+  getModelPricing,
+  getTstServerAvailabilityConfig,
+  getGenerationGuideImages,
+  type GenerationGuideImagesConfig,
+} from '../services/economyService';
 import { useConcurrency, CONCURRENCY_LIMITS } from '../services/concurrencyService';
 import { enqueueServerJob } from '../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../services/storageService';
 import {
   fetchTstPricing, fetchTstModels,
   getCompatibleGenerationResolutions, getCompatibleGenerationServers, getCompatibleGenerationSpeeds,
-  getGenerationCostBreakdown, getGenerationModelId,
+  getGenerationCostBreakdown, getGenerationModelId, getVertexEditToolCostBreakdown,
   applyServerAvailabilityToRuntimeModels, sanitizePricingEntriesWithRuntimeModels,
   uiSpeedToTst, uiServerToTst, tstServerToUi,
   type TstPricingEntry, type TstRuntimeModel, type AuditionPricingOverride, type TstResolution,
@@ -31,6 +38,17 @@ import type { GeneratedImage } from '../types';
 import { caulenhauClient } from '../services/supabaseClient';
 import type { CharacterReferenceGroup, ImageGenerateRecipePayload } from '../../../shared/queueRecipes';
 import { createSolidFence, createStyleOnlyReference, optimizePayload } from '../../../utils/imageProcessor';
+import {
+  CHARACTER_ASSISTANT_RESOLUTION,
+  runCharacterAssistantAction,
+  type CharacterAssistantToolId,
+} from '../../../services/characterImageAssistService';
+import {
+  runCharacterImageReview,
+  buildCharacterReviewMessage,
+  getCharacterReviewFlags,
+  type CharacterImageReviewResult,
+} from '../../../services/characterImageReviewService';
 
 type GenMode = 'single' | 'couple' | 'trio' | 'squad';
 type Stage = 'input' | 'submitting';
@@ -174,6 +192,8 @@ export function WorkspaceImage() {
   const [activeStylePreset, setActiveStylePreset] = useState<string | null>(null);
   const [availableStyles, setAvailableStyles] = useState<any[]>([]);
   const [showSampleModal, setShowSampleModal] = useState(false);
+  const [previewGuide, setPreviewGuide] = useState<'character' | 'sample' | null>(null);
+  const [guidePreviewCacheKey] = useState(() => Date.now());
   const [samplePrompts, setSamplePrompts] = useState<SamplePrompt[]>([]);
   const [loadingSamples, setLoadingSamples] = useState(false);
   const [samplePage, setSamplePage] = useState(0);
@@ -183,6 +203,24 @@ export function WorkspaceImage() {
   const [submissionMessage, setSubmissionMessage] = useState('');
   const [estimatedSeconds, setEstimatedSeconds] = useState(24);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [guideImages, setGuideImages] = useState<GenerationGuideImagesConfig>({ characterUrl: '', sampleUrl: '' });
+  const [characterReviews, setCharacterReviews] = useState<Record<number, CharacterImageReviewResult | null>>({});
+  const [reviewLoadingByCharId, setReviewLoadingByCharId] = useState<Record<number, boolean>>({});
+  const [assistLoadingByCharId, setAssistLoadingByCharId] = useState<Record<number, CharacterAssistantToolId | null>>({});
+  const [reviewErrorByCharId, setReviewErrorByCharId] = useState<Record<number, string | null>>({});
+  const [assistantErrorByCharId, setAssistantErrorByCharId] = useState<Record<number, string | null>>({});
+  const [guideImageMeta, setGuideImageMeta] = useState<Record<'character' | 'sample', { width: number; height: number } | null>>({
+    character: null,
+    sample: null,
+  });
+  const guidePreviewUrls = useMemo(() => ({
+    character: guideImages.characterUrl
+      ? `${guideImages.characterUrl}${guideImages.characterUrl.includes('?') ? '&' : '?'}guide_preview=${guidePreviewCacheKey}`
+      : '',
+    sample: guideImages.sampleUrl
+      ? `${guideImages.sampleUrl}${guideImages.sampleUrl.includes('?') ? '&' : '?'}guide_preview=${guidePreviewCacheKey}`
+      : '',
+  }), [guideImages.characterUrl, guideImages.sampleUrl, guidePreviewCacheKey]);
 
   const [currentTipIdx, setCurrentTipIdx] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -234,10 +272,29 @@ export function WorkspaceImage() {
   const isProAvailable = runtimeImageModelIds.has(getGenerationModelId('pro'))
     && pricingEntries.some((e) => e.model.trim().toLowerCase() === getGenerationModelId('pro'));
   const isCatalogReady = !catalogLoading && !catalogError && pricingEntries.length > 0 && runtimeModels.length > 0;
+  const hasCharacterImagesReady = characters.every((char) => !!char.bodyImage);
+  const isAnyCharacterReviewRunning = characters.some((char) => !!reviewLoadingByCharId[char.id]);
+  const isAnyCharacterAssistRunning = characters.some((char) => !!assistLoadingByCharId[char.id]);
+  const hasCompletedCharacterReviews = characters.every((char) => !char.bodyImage || !!characterReviews[char.id]);
   const isGenerateDisabled = cooldownRemaining > 0 || !isCatalogReady || !selectedCost.available
     || !prompt.trim()
-    || characters.some((char) => !char.bodyImage)
+    || !hasCharacterImagesReady
+    || isAnyCharacterReviewRunning
+    || isAnyCharacterAssistRunning
+    || !hasCompletedCharacterReviews
     || (aiModel === 'flash' ? !isFlashAvailable : !isProAvailable);
+  const removeBgCost = getVertexEditToolCostBreakdown({
+    toolId: 'remove_bg_pro',
+    tier: 'flash',
+    resolution: CHARACTER_ASSISTANT_RESOLUTION,
+    pricingOverrides,
+  });
+  const sharpenCost = getVertexEditToolCostBreakdown({
+    toolId: 'sharpen_upscale',
+    tier: 'flash',
+    resolution: CHARACTER_ASSISTANT_RESOLUTION,
+    pricingOverrides,
+  });
 
   useEffect(() => {
     if (!refImage) return;
@@ -294,7 +351,39 @@ export function WorkspaceImage() {
       if (def) setActiveStylePreset(def.image_url);
     };
     loadStyles();
+
+    const loadGuideImages = async () => {
+      const config = await getGenerationGuideImages();
+      setGuideImages(config);
+    };
+    loadGuideImages();
   }, []);
+
+  useEffect(() => {
+    const entries: Array<['character' | 'sample', string]> = [
+      ['character', guidePreviewUrls.character],
+      ['sample', guidePreviewUrls.sample],
+    ];
+
+    entries.forEach(([key, source]) => {
+      if (!source) {
+        setGuideImageMeta((prev) => ({ ...prev, [key]: null }));
+        return;
+      }
+
+      const image = new Image();
+      image.onload = () => {
+        setGuideImageMeta((prev) => ({
+          ...prev,
+          [key]: { width: image.naturalWidth, height: image.naturalHeight },
+        }));
+      };
+      image.onerror = () => {
+        setGuideImageMeta((prev) => ({ ...prev, [key]: null }));
+      };
+      image.src = source;
+    });
+  }, [guidePreviewUrls.character, guidePreviewUrls.sample]);
 
   // --- Cooldown Timer ---
   useEffect(() => {
@@ -437,6 +526,13 @@ export function WorkspaceImage() {
       }
       return nextChars;
     });
+    setCharacterReviews((prev) => {
+      const next: Record<number, CharacterImageReviewResult | null> = {};
+      for (let i = 1; i <= count; i += 1) {
+        next[i] = prev[i] ?? null;
+      }
+      return next;
+    });
   }, []);
 
   useEffect(() => {
@@ -479,6 +575,25 @@ export function WorkspaceImage() {
     fileInputRef.current?.click();
   };
 
+  const reviewCharacterUpload = async (charId: number, imageSource: string) => {
+    setReviewLoadingByCharId((prev) => ({ ...prev, [charId]: true }));
+    try {
+      const review = await runCharacterImageReview(imageSource);
+      setCharacterReviews((prev) => ({ ...prev, [charId]: review }));
+      setReviewErrorByCharId((prev) => ({ ...prev, [charId]: null }));
+    } catch (error) {
+      console.warn('[WorkspaceImage] Failed to review character image', error);
+      setCharacterReviews((prev) => ({ ...prev, [charId]: null }));
+      setReviewErrorByCharId((prev) => ({
+        ...prev,
+        [charId]: error instanceof Error ? error.message : 'Không thể quét ảnh nhân vật.',
+      }));
+      notify('Quét ảnh nhân vật thất bại. Kiểm tra lại kết nối hoặc cấu hình Vertex AI.', 'warning');
+    } finally {
+      setReviewLoadingByCharId((prev) => ({ ...prev, [charId]: false }));
+    }
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !activeUploadType.current) return;
@@ -492,10 +607,69 @@ export function WorkspaceImage() {
         setRefImage(result);
       } else if (currentType?.charId && currentType.type === 'body') {
         setCharacters((prev) => prev.map((c) => (c.id === currentType.charId ? { ...c, bodyImage: result } : c)));
+        setCharacterReviews((prev) => ({ ...prev, [currentType.charId!]: null }));
+        setReviewErrorByCharId((prev) => ({ ...prev, [currentType.charId!]: null }));
+        setAssistantErrorByCharId((prev) => ({ ...prev, [currentType.charId!]: null }));
+        void reviewCharacterUpload(currentType.charId, result);
       }
     };
     reader.readAsDataURL(file);
     e.target.value = '';
+  };
+
+  const handleCharacterAssistant = async (charId: number, toolId: CharacterAssistantToolId) => {
+    const character = characters.find((item) => item.id === charId);
+    if (!character?.bodyImage) {
+      notify('Vui lòng tải ảnh nhân vật trước.', 'warning');
+      return;
+    }
+
+    const pricing = toolId === 'remove_bg_pro' ? removeBgCost : sharpenCost;
+    if (!pricing.available) {
+      notify('Công cụ này hiện chưa khả dụng.', 'error');
+      return;
+    }
+
+    const profile = await getUserProfile();
+    if ((profile.vcoin_balance || 0) < pricing.vcoin) {
+      notify(`Số dư không đủ, cần ${pricing.vcoin} Vcoin.`, 'error');
+      return;
+    }
+
+    setAssistLoadingByCharId((prev) => ({ ...prev, [charId]: toolId }));
+    setAssistantErrorByCharId((prev) => ({ ...prev, [charId]: null }));
+    try {
+      const result = await runCharacterAssistantAction({
+        sourceImage: character.bodyImage,
+        toolId,
+        costVcoin: pricing.vcoin,
+        storageFolder: `inputs/character-assist/${toolId}/mobile-character-${charId}`,
+        showInGenerationHistory: false,
+      });
+
+      if (!result.imageUrl) {
+        throw new Error('Vertex AI không trả về ảnh kết quả.');
+      }
+
+      const refreshedUrl = result.imageUrl.includes('?')
+        ? `${result.imageUrl}&t=${Date.now()}`
+        : `${result.imageUrl}?t=${Date.now()}`;
+      setCharacters((prev) => prev.map((item) => (
+        item.id === charId ? { ...item, bodyImage: refreshedUrl || item.bodyImage } : item
+      )));
+      window.dispatchEvent(new Event('balance_updated'));
+      notify(toolId === 'remove_bg_pro' ? 'Đã tách nền xong.' : 'Đã làm nét xong.', 'success');
+      await reviewCharacterUpload(charId, refreshedUrl);
+    } catch (error) {
+      console.error('[WorkspaceImage] Character assistant failed', error);
+      setAssistantErrorByCharId((prev) => ({
+        ...prev,
+        [charId]: error instanceof Error ? error.message : 'Không thể xử lý ảnh lúc này.',
+      }));
+      notify(error instanceof Error ? error.message : 'Không thể xử lý ảnh lúc này.', 'error');
+    } finally {
+      setAssistLoadingByCharId((prev) => ({ ...prev, [charId]: null }));
+    }
   };
 
   // --- GENERATE ---
@@ -693,6 +867,25 @@ export function WorkspaceImage() {
           ))}
         </div>
 
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={() => setPreviewGuide('character')}
+            className="rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-left text-cyan-700 dark:border-cyan-500/20 dark:bg-cyan-500/10 dark:text-cyan-200"
+          >
+            <div className="text-[11px] font-bold uppercase tracking-wide">VD Ảnh NV</div>
+            <div className="mt-1 text-xs leading-relaxed opacity-80">Xem ảnh nhân vật đạt chuẩn để AI bám đúng mặt và trang phục.</div>
+          </button>
+          <button
+            type="button"
+            onClick={() => setPreviewGuide('sample')}
+            className="rounded-2xl border border-pink-200 bg-pink-50 px-4 py-3 text-left text-pink-700 dark:border-pink-500/20 dark:bg-pink-500/10 dark:text-pink-200"
+          >
+            <div className="text-[11px] font-bold uppercase tracking-wide">VD Ảnh Mẫu</div>
+            <div className="mt-1 text-xs leading-relaxed opacity-80">Xem ảnh mẫu bố cục, góc máy và tư thế nên dùng.</div>
+          </button>
+        </div>
+
         {/* Character Tabs */}
         {activeMode !== 'single' && (
           <div className="flex gap-2">
@@ -711,47 +904,132 @@ export function WorkspaceImage() {
         )}
 
         {/* Character Upload Cards */}
-        {characters.filter((c) => c.id === activeCharTab).map((char) => (
-          <div key={char.id} className="space-y-3">
-            <div className="flex gap-2 justify-center">
-              {(['female', 'male'] as const).map((g) => (
-                <button
-                  key={g}
-                  onClick={() => setCharacters((prev) => prev.map((c) => c.id === char.id ? { ...c, gender: g } : c))}
-                  className={`px-6 py-2 rounded-full text-xs font-bold transition-all ${
-                    char.gender === g ? 'bg-gray-900 text-white ring-2 ring-gray-900 ring-offset-1' : 'bg-white dark:bg-[#18181B] border border-gray-200 dark:border-zinc-700 text-gray-500 dark:text-zinc-400'
-                  }`}
-                >
-                  {g === 'female' ? 'Nữ' : 'Nam'}
-                </button>
-              ))}
-            </div>
+        {characters.filter((c) => c.id === activeCharTab).map((char) => {
+          const review = characterReviews[char.id];
+          const reviewMessage = buildCharacterReviewMessage(review);
+          const reviewError = reviewErrorByCharId[char.id];
+          const assistantError = assistantErrorByCharId[char.id];
+          const isReviewing = !!reviewLoadingByCharId[char.id];
+          const activeAssist = assistLoadingByCharId[char.id];
+          const isAssistRunning = !!activeAssist;
+          const hasCleanStatus = !!review && getCharacterReviewFlags(review).isClean;
 
-            <button
-              onClick={() => handleUploadClick(char.id)}
-              className="w-full aspect-square md:aspect-video rounded-3xl border-2 border-dashed border-gray-200 dark:border-zinc-700 bg-white dark:bg-[#18181B] flex flex-col items-center justify-center gap-3 overflow-hidden hover:border-gray-400 transition-colors relative shadow-sm"
-            >
-              {char.bodyImage ? (
-                <>
-                  <img src={char.bodyImage} alt="Ảnh nhân vật" className="w-full h-full object-cover" />
-                  <div className="absolute bottom-3 left-3 right-3 bg-black/60 rounded-xl px-3 py-2 text-white text-xs font-bold backdrop-blur-md">
-                    Ảnh nhân vật {char.id}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="w-16 h-16 bg-gray-50 dark:bg-[#27272A] rounded-full flex items-center justify-center">
-                    <User className="w-8 h-8 text-gray-300" />
-                  </div>
-                  <div className="text-center">
-                    <span className="block text-sm font-bold text-gray-700 dark:text-zinc-200">Tải ảnh nhân vật lên</span>
-                    <span className="block text-xs text-gray-400 dark:text-zinc-500 mt-1">Dùng 1 ảnh đủ mặt và trang phục, không cần ảnh mặt riêng.</span>
-                  </div>
-                </>
+          return (
+            <div key={char.id} className="space-y-3">
+              <div className="flex gap-2 justify-center">
+                {(['female', 'male'] as const).map((g) => (
+                  <button
+                    key={g}
+                    onClick={() => setCharacters((prev) => prev.map((c) => c.id === char.id ? { ...c, gender: g } : c))}
+                    className={`px-6 py-2 rounded-full text-xs font-bold transition-all ${
+                      char.gender === g ? 'bg-gray-900 text-white ring-2 ring-gray-900 ring-offset-1' : 'bg-white dark:bg-[#18181B] border border-gray-200 dark:border-zinc-700 text-gray-500 dark:text-zinc-400'
+                    }`}
+                  >
+                    {g === 'female' ? 'Nữ' : 'Nam'}
+                  </button>
+                ))}
+              </div>
+
+              {isReviewing && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200 flex items-start gap-2">
+                  <Loader className="w-4 h-4 animate-spin shrink-0 mt-0.5" />
+                  <span>Đang quét nhanh độ nét và nền của ảnh nhân vật...</span>
+                </div>
               )}
-            </button>
-          </div>
-        ))}
+              {!isReviewing && reviewError && (
+                <div className="rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-xs text-orange-700 dark:border-orange-500/20 dark:bg-orange-500/10 dark:text-orange-200 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>Không thể quét ảnh nhân vật tự động: {reviewError}</span>
+                </div>
+              )}
+              {!isReviewing && reviewMessage && (
+                <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-200 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{reviewMessage}</span>
+                </div>
+              )}
+              {!isReviewing && hasCleanStatus && (
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200 flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>Ảnh nhân vật đang đủ rõ và nền đã sạch để AI bám đúng nhận diện.</span>
+                </div>
+              )}
+
+              <button
+                onClick={() => handleUploadClick(char.id)}
+                className="w-full aspect-square md:aspect-video rounded-3xl border-2 border-dashed border-gray-200 dark:border-zinc-700 bg-white dark:bg-[#18181B] flex flex-col items-center justify-center gap-3 overflow-hidden hover:border-gray-400 transition-colors relative shadow-sm"
+              >
+                {char.bodyImage ? (
+                  <>
+                    <img src={char.bodyImage} alt="Ảnh nhân vật" className="w-full h-full object-contain bg-black/5 dark:bg-black/20" />
+                    <div className="absolute bottom-3 left-3 right-3 bg-black/60 rounded-xl px-3 py-2 text-white text-xs font-bold backdrop-blur-md">
+                      Ảnh nhân vật {char.id}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-16 h-16 bg-gray-50 dark:bg-[#27272A] rounded-full flex items-center justify-center">
+                      <User className="w-8 h-8 text-gray-300" />
+                    </div>
+                    <div className="text-center">
+                      <span className="block text-sm font-bold text-gray-700 dark:text-zinc-200">Tải ảnh nhân vật lên</span>
+                      <span className="block text-xs text-gray-400 dark:text-zinc-500 mt-1">Dùng 1 ảnh đủ mặt và trang phục, hệ thống sẽ tự khóa mặt.</span>
+                    </div>
+                  </>
+                )}
+              </button>
+
+              {char.bodyImage && (
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    aria-disabled={isAssistRunning}
+                    onClick={() => {
+                      if (isAssistRunning) return;
+                      void handleCharacterAssistant(char.id, 'remove_bg_pro');
+                    }}
+                    className={`rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-cyan-700 dark:border-cyan-500/20 dark:bg-cyan-500/10 dark:text-cyan-200 min-h-[82px] ${
+                      isAssistRunning ? 'opacity-60' : ''
+                    }`}
+                  >
+                    <div className="flex items-center justify-center gap-2 text-xs font-bold">
+                      {activeAssist === 'remove_bg_pro' ? <Loader className="w-4 h-4 animate-spin" /> : <Scissors className="w-4 h-4" />}
+                      <span>{activeAssist === 'remove_bg_pro' ? 'Đang Tách...' : 'Tách Nền'}</span>
+                    </div>
+                    <div className="mt-1 text-[11px] opacity-80">
+                      {activeAssist === 'remove_bg_pro' ? 'Vertex AI đang xử lý' : `${CHARACTER_ASSISTANT_RESOLUTION} • ${removeBgCost.vcoin} Vcoin`}
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    aria-disabled={isAssistRunning}
+                    onClick={() => {
+                      if (isAssistRunning) return;
+                      void handleCharacterAssistant(char.id, 'sharpen_upscale');
+                    }}
+                    className={`rounded-2xl border border-pink-200 bg-pink-50 px-4 py-3 text-pink-700 dark:border-pink-500/20 dark:bg-pink-500/10 dark:text-pink-200 min-h-[82px] ${
+                      isAssistRunning ? 'opacity-60' : ''
+                    }`}
+                  >
+                    <div className="flex items-center justify-center gap-2 text-xs font-bold">
+                      {activeAssist === 'sharpen_upscale' ? <Loader className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                      <span>{activeAssist === 'sharpen_upscale' ? 'Đang Nét...' : 'Làm Nét'}</span>
+                    </div>
+                    <div className="mt-1 text-[11px] opacity-80">
+                      {activeAssist === 'sharpen_upscale' ? 'Vertex AI đang xử lý' : `${CHARACTER_ASSISTANT_RESOLUTION} • ${sharpenCost.vcoin} Vcoin`}
+                    </div>
+                  </button>
+                </div>
+              )}
+              {!isReviewing && assistantError && (
+                <div className="rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-xs text-orange-700 dark:border-orange-500/20 dark:bg-orange-500/10 dark:text-orange-200 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>Lỗi xử lý ảnh: {assistantError}</span>
+                </div>
+              )}
+            </div>
+          );
+        })}
 
         {/* Prompt & Ref Image */}
         <div className="relative group space-y-3">
@@ -999,6 +1277,41 @@ export function WorkspaceImage() {
         className="hidden"
         onChange={handleFileChange}
       />
+
+      {previewGuide && (
+        <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/50 p-5 backdrop-blur-sm" onClick={() => setPreviewGuide(null)}>
+          <div className="w-full max-w-md rounded-[28px] border border-gray-200 bg-white p-4 shadow-2xl dark:border-zinc-800 dark:bg-[#12121A]" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-gray-900 dark:text-white">{previewGuide === 'character' ? 'Ví Dụ Ảnh Nhân Vật' : 'Ví Dụ Ảnh Mẫu'}</h3>
+                <p className="mt-1 text-xs text-gray-400 dark:text-zinc-500">
+                  {previewGuide === 'character'
+                    ? 'Ảnh rõ mặt, rõ đồ, nền sạch.'
+                    : 'Ảnh rõ tư thế, bố cục và góc máy.'}
+                </p>
+              </div>
+              <button onClick={() => setPreviewGuide(null)} className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-500 dark:bg-zinc-800 dark:text-zinc-400">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            {(previewGuide === 'character' ? guideImages.characterUrl : guideImages.sampleUrl) ? (
+              <>
+                <div className="mt-4 h-[28rem] w-full rounded-[24px] border border-gray-100 bg-black/5 dark:border-white/10 dark:bg-black/20 flex items-center justify-center overflow-hidden">
+                  <img
+                    src={previewGuide === 'character' ? guidePreviewUrls.character : guidePreviewUrls.sample}
+                    alt={previewGuide === 'character' ? 'Ví dụ ảnh nhân vật' : 'Ví dụ ảnh mẫu'}
+                    className="max-w-full max-h-full object-contain"
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="mt-4 rounded-[24px] border border-dashed border-gray-200 px-4 py-10 text-center text-xs text-gray-400 dark:border-zinc-700 dark:text-zinc-500">
+                Admin chưa cấu hình ảnh ví dụ cho mục này.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {showSampleModal && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm" onClick={() => setShowSampleModal(false)}>

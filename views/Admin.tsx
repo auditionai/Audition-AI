@@ -17,6 +17,8 @@ import {
     saveGiftcodePromoConfig, 
     getTutorialVideo,
     saveTutorialVideo,
+    getGenerationGuideImages,
+    saveGenerationGuideImages,
     savePromotion, 
     deletePromotion,
     adminApproveTransaction, 
@@ -456,6 +458,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
   // Tutorial Video Config
   const [tutorialVideo, setTutorialVideo] = useState({ url: '', isActive: true });
+  const [generationGuideImages, setGenerationGuideImages] = useState({ characterUrl: '', sampleUrl: '' });
 
   // Search States
   const [userSearchEmail, setUserSearchEmail] = useState('');
@@ -611,6 +614,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
       const tutorialConfig = await getTutorialVideo();
       setTutorialVideo(tutorialConfig);
+
+      const guideImagesConfig = await getGenerationGuideImages();
+      setGenerationGuideImages(guideImagesConfig);
 
       const styles = await getStylePresets();
       setStylePresets(styles || []);
@@ -1444,6 +1450,18 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       const result = await saveTutorialVideo(tutorialVideo.url, tutorialVideo.isActive);
       if (result.success) {
           showToast('Đã lưu link video hướng dẫn thành công!');
+      } else {
+          showToast('Lỗi lưu: ' + result.error, 'error');
+      }
+  }
+
+  const handleSaveGenerationGuideImages = async () => {
+      const result = await saveGenerationGuideImages(
+          generationGuideImages.characterUrl,
+          generationGuideImages.sampleUrl,
+      );
+      if (result.success) {
+          showToast('Đã lưu ảnh ví dụ cho trình tạo ảnh!');
       } else {
           showToast('Lỗi lưu: ' + result.error, 'error');
       }
@@ -2831,6 +2849,50 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                               />
                               <p className="text-xs text-slate-500 mt-2">
                                   Hỗ trợ các định dạng link: youtube.com/watch?v=..., youtu.be/..., youtube.com/embed/...
+                              </p>
+                          </div>
+                      </div>
+                  </div>
+
+                  <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
+                      <div className="flex justify-between items-center mb-4">
+                          <h3 className="font-bold text-lg text-white flex items-center gap-2">
+                              <Icons.Image className="w-5 h-5 text-audi-cyan" />
+                              Ảnh Ví Dụ Upload Nhân Vật
+                          </h3>
+                          <button
+                              onClick={handleSaveGenerationGuideImages}
+                              className="px-4 py-2 bg-audi-cyan/20 text-audi-cyan font-bold rounded-lg text-sm hover:bg-audi-cyan hover:text-black transition-colors border border-audi-cyan/30"
+                          >
+                              Lưu Cấu Hình
+                          </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                              <label className="text-xs text-slate-400 mb-1 block">Link VD Ảnh Nhân Vật</label>
+                              <input
+                                  type="text"
+                                  value={generationGuideImages.characterUrl}
+                                  onChange={(e) => setGenerationGuideImages({ ...generationGuideImages, characterUrl: e.target.value })}
+                                  className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-white"
+                                  placeholder="https://..."
+                              />
+                              <p className="text-xs text-slate-500 mt-2">
+                                  Ảnh mẫu dùng cho nút "VD Ảnh NV" ở desktop và mobile.
+                              </p>
+                          </div>
+                          <div>
+                              <label className="text-xs text-slate-400 mb-1 block">Link VD Ảnh Mẫu</label>
+                              <input
+                                  type="text"
+                                  value={generationGuideImages.sampleUrl}
+                                  onChange={(e) => setGenerationGuideImages({ ...generationGuideImages, sampleUrl: e.target.value })}
+                                  className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-white"
+                                  placeholder="https://..."
+                              />
+                              <p className="text-xs text-slate-500 mt-2">
+                                  Ảnh mẫu dùng cho nút "VD Ảnh Mẫu" để người dùng xem bố cục mẫu phù hợp.
                               </p>
                           </div>
                       </div>

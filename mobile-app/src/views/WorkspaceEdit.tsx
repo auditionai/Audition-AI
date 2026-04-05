@@ -6,7 +6,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../components/NotificationSystem';
 import { getUserProfile, getModelPricing } from '../services/economyService';
 import { useConcurrency, CONCURRENCY_LIMITS } from '../services/concurrencyService';
-import { enqueueServerJob } from '../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../services/storageService';
 import {
   getVertexEditToolCostBreakdown,
@@ -14,17 +13,10 @@ import {
   type AuditionPricingOverride,
 } from '../services/tstCatalog';
 import type { GeneratedImage } from '../types';
-
-interface ImageEditRecipePayload {
-  recipeType: string;
-  modelId: string;
-  prompt: string;
-  sourceImage: string;
-  mimeType?: string;
-  resolution: string;
-  aspectRatio: string;
-  [key: string]: unknown;
-}
+import { runDirectImageEdit } from '../../../services/directImageEditService';
+import { buildEnhancedVertexEditInstruction } from '../../../services/characterImageAssistService';
+import type { ImageEditRecipePayload } from '../../../shared/queueRecipes';
+import { DIRECT_IMAGE_EDIT_QUEUE_KIND } from '../../../shared/queueKinds';
 
 const loadImageWithTimeout = (url: string, timeoutMs: number = 10000): Promise<HTMLImageElement> => {
   return new Promise((resolve, reject) => {
@@ -68,10 +60,10 @@ CRITICAL RULES:
   }
 
   if (featureId === 'sharpen_upscale') {
-    return `Upscale this image to ${resolution}. CRITICAL: restore detail, sharpen edges, and preserve the original face, body, outfit, and stylized character structure. Do not redesign, reimagine, or add new elements.`;
+    return buildEnhancedVertexEditInstruction('sharpen_upscale', resolution);
   }
 
-  return 'Remove the background completely and place the subject on a pure BLACK background (#000000). CRITICAL: preserve the exact subject identity, image resolution, edges, and details. Do not blur, crop, downscale, or alter the subject.';
+  return buildEnhancedVertexEditInstruction('remove_bg_pro', resolution);
 };
 
 const tryStageInputToStorage = async (source: string, folder: string) => {
@@ -224,6 +216,8 @@ export function WorkspaceEdit() {
       timestamp: Date.now(),
       updatedAt: Date.now(),
       assetType: 'image',
+      queueKind: DIRECT_IMAGE_EDIT_QUEUE_KIND,
+      showInGenerationHistory: true,
       toolId: featureId,
       toolName: toolConfig.name,
       engine: engineLabel,
@@ -258,20 +252,28 @@ export function WorkspaceEdit() {
           aspectRatio,
         };
 
-        await enqueueServerJob({
+        const result = await runDirectImageEdit({
           id: jobId,
           prompt: displayPrompt,
           toolId: featureId,
           toolName: toolConfig.name,
           engine: engineLabel,
-          assetType: 'image',
           costVcoin: selectedCost.vcoin,
-          queueKind: 'image_generate',
-          clientPlatform: 'mobile',
+          showInGenerationHistory: true,
           queuePayload,
         });
 
         window.dispatchEvent(new Event('balance_updated'));
+
+        try {
+          await saveImageToLocalCache({
+            ...placeholderImage,
+            url: result.imageUrl || '',
+            status: 'completed',
+            updatedAt: result.updatedAt ? new Date(result.updatedAt).getTime() : Date.now(),
+            progress: 100,
+          });
+        } catch { }
         
         // Return to Gallery
         navigate('/gallery');

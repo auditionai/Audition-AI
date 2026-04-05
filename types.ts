@@ -73,6 +73,7 @@ export interface GeneratedImage {
   updatedAt?: number;
   assetType?: 'image' | 'video';
   queueKind?: string;
+  showInGenerationHistory?: boolean;
   toolId: string;
   toolName: string;
   engine: string;

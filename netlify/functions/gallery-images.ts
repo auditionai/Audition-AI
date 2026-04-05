@@ -1,5 +1,6 @@
 import type { Handler } from '@netlify/functions';
 import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
+import { isDirectImageEditQueueKind } from '../../shared/queueKinds';
 
 const headers = {
   'Content-Type': 'application/json',
@@ -60,7 +61,13 @@ export const handler: Handler = async (event) => {
       throw error;
     }
 
-    const rows = data || [];
+    const rows = (data || []).filter((row: any) => {
+      if (!isDirectImageEditQueueKind(row?.queue_kind)) {
+        return true;
+      }
+
+      return row?.queue_payload?.__showInGenerationHistory === true;
+    });
     const idsMissingCost = rows
       .filter((row: any) => !Number.isFinite(Number(row?.cost_vcoin)))
       .map((row: any) => row.id)

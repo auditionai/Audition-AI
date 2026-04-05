@@ -183,6 +183,10 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const [assistLoadingByCharId, setAssistLoadingByCharId] = useState<Record<number, CharacterAssistantToolId | null>>({});
   const [reviewErrorByCharId, setReviewErrorByCharId] = useState<Record<number, string | null>>({});
   const [assistantErrorByCharId, setAssistantErrorByCharId] = useState<Record<number, string | null>>({});
+  const [guideImageMeta, setGuideImageMeta] = useState<Record<'character' | 'sample', { width: number; height: number } | null>>({
+      character: null,
+      sample: null,
+  });
 
   // --- NEW: COOLDOWN STATE ---
   const [cooldownRemaining, setCooldownRemaining] = useState(() => {
@@ -419,6 +423,32 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       };
       loadGuideImages();
   }, []);
+
+  useEffect(() => {
+      const entries: Array<['character' | 'sample', string]> = [
+          ['character', guideImages.characterUrl],
+          ['sample', guideImages.sampleUrl],
+      ];
+
+      entries.forEach(([key, source]) => {
+          if (!source) {
+              setGuideImageMeta((prev) => ({ ...prev, [key]: null }));
+              return;
+          }
+
+          const image = new Image();
+          image.onload = () => {
+              setGuideImageMeta((prev) => ({
+                  ...prev,
+                  [key]: { width: image.naturalWidth, height: image.naturalHeight },
+              }));
+          };
+          image.onerror = () => {
+              setGuideImageMeta((prev) => ({ ...prev, [key]: null }));
+          };
+          image.src = source;
+      });
+  }, [guideImages.characterUrl, guideImages.sampleUrl]);
   // -------------------------------
 
   // --- COOLDOWN TIMER EFFECT ---
@@ -1461,22 +1491,29 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                         </button>
                         {hoveredGuidePreview && (
                             <div
-                                className="absolute top-full right-0 mt-2 w-40 rounded-2xl border border-white/10 bg-[#0b0b14] p-2 shadow-[0_0_30px_rgba(0,0,0,0.45)] z-20"
+                                className="absolute top-full right-0 mt-2 w-64 rounded-2xl border border-white/10 bg-[#0b0b14] p-3 shadow-[0_0_30px_rgba(0,0,0,0.45)] z-20"
                                 onMouseEnter={() => setHoveredGuidePreview(hoveredGuidePreview)}
                                 onMouseLeave={() => setHoveredGuidePreview(null)}
                             >
                                 {((hoveredGuidePreview === 'character' && guideImages.characterUrl) || (hoveredGuidePreview === 'sample' && guideImages.sampleUrl)) ? (
                                     <>
-                                        <img
-                                            src={hoveredGuidePreview === 'character' ? guideImages.characterUrl : guideImages.sampleUrl}
-                                            alt={hoveredGuidePreview === 'character' ? 'Ví dụ ảnh nhân vật' : 'Ví dụ ảnh mẫu'}
-                                            className="w-full aspect-[3/4] object-cover rounded-xl border border-white/10"
-                                        />
+                                        <div className="w-full h-80 rounded-xl border border-white/10 bg-black/40 flex items-center justify-center overflow-hidden">
+                                            <img
+                                                src={hoveredGuidePreview === 'character' ? guideImages.characterUrl : guideImages.sampleUrl}
+                                                alt={hoveredGuidePreview === 'character' ? 'Ví dụ ảnh nhân vật' : 'Ví dụ ảnh mẫu'}
+                                                className="max-w-full max-h-full object-contain rounded-xl"
+                                            />
+                                        </div>
                                         <p className="mt-2 text-[10px] text-slate-300 leading-relaxed">
                                             {hoveredGuidePreview === 'character'
                                                 ? 'Ảnh nhân vật đạt chuẩn: rõ mặt, rõ đồ, tách nền sạch.'
                                                 : 'Ảnh mẫu nên rõ bố cục, góc máy và tư thế.'}
                                         </p>
+                                        {guideImageMeta[hoveredGuidePreview] && (
+                                            <p className="mt-1 text-[10px] text-slate-400">
+                                                Kích thước gốc: {guideImageMeta[hoveredGuidePreview]?.width} x {guideImageMeta[hoveredGuidePreview]?.height}
+                                            </p>
+                                        )}
                                     </>
                                 ) : (
                                     <p className="text-[10px] text-slate-400 leading-relaxed">
@@ -1573,32 +1610,36 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                         <div className="grid grid-cols-2 gap-2">
                                             <button
                                                 type="button"
-                                                disabled={activeAssist !== null || !removeBgCost.available}
+                                                disabled={activeAssist !== null}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     void handleCharacterAssistant(char.id, 'remove_bg_pro');
                                                 }}
-                                                className="px-2 py-2 rounded-xl text-[10px] font-bold border border-audi-cyan/40 bg-audi-cyan/10 text-audi-cyan disabled:opacity-50 disabled:cursor-not-allowed flex flex-col items-center gap-1"
+                                                className="px-2 py-2 rounded-xl text-[10px] font-bold border border-audi-cyan/40 bg-audi-cyan/10 text-audi-cyan disabled:opacity-60 disabled:cursor-not-allowed flex flex-col items-center gap-1 min-h-[76px]"
                                             >
                                                 {activeAssist === 'remove_bg_pro' ? <Icons.Loader className="w-3.5 h-3.5 animate-spin" /> : <Icons.Scissors className="w-3.5 h-3.5" />}
-                                                <span>Tách Nền</span>
+                                                <span>{activeAssist === 'remove_bg_pro' ? 'Đang Tách...' : 'Tách Nền'}</span>
                                                 <span className="flex items-center gap-1 text-[9px] text-white/80">
-                                                    {CHARACTER_ASSISTANT_RESOLUTION} <Icons.Gem className="w-3 h-3 text-audi-yellow" /> {removeBgCost.vcoin}
+                                                    {activeAssist === 'remove_bg_pro'
+                                                        ? 'Vertex AI đang xử lý'
+                                                        : <>{CHARACTER_ASSISTANT_RESOLUTION} <Icons.Gem className="w-3 h-3 text-audi-yellow" /> {removeBgCost.vcoin}</>}
                                                 </span>
                                             </button>
                                             <button
                                                 type="button"
-                                                disabled={activeAssist !== null || !sharpenCost.available}
+                                                disabled={activeAssist !== null}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     void handleCharacterAssistant(char.id, 'sharpen_upscale');
                                                 }}
-                                                className="px-2 py-2 rounded-xl text-[10px] font-bold border border-audi-pink/40 bg-audi-pink/10 text-audi-pink disabled:opacity-50 disabled:cursor-not-allowed flex flex-col items-center gap-1"
+                                                className="px-2 py-2 rounded-xl text-[10px] font-bold border border-audi-pink/40 bg-audi-pink/10 text-audi-pink disabled:opacity-60 disabled:cursor-not-allowed flex flex-col items-center gap-1 min-h-[76px]"
                                             >
                                                 {activeAssist === 'sharpen_upscale' ? <Icons.Loader className="w-3.5 h-3.5 animate-spin" /> : <Icons.Sparkles className="w-3.5 h-3.5" />}
-                                                <span>Làm Nét</span>
+                                                <span>{activeAssist === 'sharpen_upscale' ? 'Đang Nét...' : 'Làm Nét'}</span>
                                                 <span className="flex items-center gap-1 text-[9px] text-white/80">
-                                                    {CHARACTER_ASSISTANT_RESOLUTION} <Icons.Gem className="w-3 h-3 text-audi-yellow" /> {sharpenCost.vcoin}
+                                                    {activeAssist === 'sharpen_upscale'
+                                                        ? 'Vertex AI đang xử lý'
+                                                        : <>{CHARACTER_ASSISTANT_RESOLUTION} <Icons.Gem className="w-3 h-3 text-audi-yellow" /> {sharpenCost.vcoin}</>}
                                                 </span>
                                             </button>
                                         </div>

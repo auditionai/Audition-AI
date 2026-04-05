@@ -206,6 +206,10 @@ export function WorkspaceImage() {
   const [assistLoadingByCharId, setAssistLoadingByCharId] = useState<Record<number, CharacterAssistantToolId | null>>({});
   const [reviewErrorByCharId, setReviewErrorByCharId] = useState<Record<number, string | null>>({});
   const [assistantErrorByCharId, setAssistantErrorByCharId] = useState<Record<number, string | null>>({});
+  const [guideImageMeta, setGuideImageMeta] = useState<Record<'character' | 'sample', { width: number; height: number } | null>>({
+    character: null,
+    sample: null,
+  });
 
   const [currentTipIdx, setCurrentTipIdx] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -368,6 +372,32 @@ export function WorkspaceImage() {
     };
     loadGuideImages();
   }, []);
+
+  useEffect(() => {
+    const entries: Array<['character' | 'sample', string]> = [
+      ['character', guideImages.characterUrl],
+      ['sample', guideImages.sampleUrl],
+    ];
+
+    entries.forEach(([key, source]) => {
+      if (!source) {
+        setGuideImageMeta((prev) => ({ ...prev, [key]: null }));
+        return;
+      }
+
+      const image = new Image();
+      image.onload = () => {
+        setGuideImageMeta((prev) => ({
+          ...prev,
+          [key]: { width: image.naturalWidth, height: image.naturalHeight },
+        }));
+      };
+      image.onerror = () => {
+        setGuideImageMeta((prev) => ({ ...prev, [key]: null }));
+      };
+      image.src = source;
+    });
+  }, [guideImages.characterUrl, guideImages.sampleUrl]);
 
   // --- Cooldown Timer ---
   useEffect(() => {
@@ -965,27 +995,31 @@ export function WorkspaceImage() {
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
-                    disabled={activeAssist !== null || !removeBgCost.available}
+                    disabled={activeAssist !== null}
                     onClick={() => void handleCharacterAssistant(char.id, 'remove_bg_pro')}
-                    className="rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-cyan-700 dark:border-cyan-500/20 dark:bg-cyan-500/10 dark:text-cyan-200 disabled:opacity-50"
+                    className="rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-cyan-700 dark:border-cyan-500/20 dark:bg-cyan-500/10 dark:text-cyan-200 disabled:opacity-60 min-h-[82px]"
                   >
                     <div className="flex items-center justify-center gap-2 text-xs font-bold">
                       {activeAssist === 'remove_bg_pro' ? <Loader className="w-4 h-4 animate-spin" /> : <Scissors className="w-4 h-4" />}
-                      <span>Tách Nền</span>
+                      <span>{activeAssist === 'remove_bg_pro' ? 'Đang Tách...' : 'Tách Nền'}</span>
                     </div>
-                    <div className="mt-1 text-[11px] opacity-80">{CHARACTER_ASSISTANT_RESOLUTION} • {removeBgCost.vcoin} Vcoin</div>
+                    <div className="mt-1 text-[11px] opacity-80">
+                      {activeAssist === 'remove_bg_pro' ? 'Vertex AI đang xử lý' : `${CHARACTER_ASSISTANT_RESOLUTION} • ${removeBgCost.vcoin} Vcoin`}
+                    </div>
                   </button>
                   <button
                     type="button"
-                    disabled={activeAssist !== null || !sharpenCost.available}
+                    disabled={activeAssist !== null}
                     onClick={() => void handleCharacterAssistant(char.id, 'sharpen_upscale')}
-                    className="rounded-2xl border border-pink-200 bg-pink-50 px-4 py-3 text-pink-700 dark:border-pink-500/20 dark:bg-pink-500/10 dark:text-pink-200 disabled:opacity-50"
+                    className="rounded-2xl border border-pink-200 bg-pink-50 px-4 py-3 text-pink-700 dark:border-pink-500/20 dark:bg-pink-500/10 dark:text-pink-200 disabled:opacity-60 min-h-[82px]"
                   >
                     <div className="flex items-center justify-center gap-2 text-xs font-bold">
                       {activeAssist === 'sharpen_upscale' ? <Loader className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                      <span>Làm Nét</span>
+                      <span>{activeAssist === 'sharpen_upscale' ? 'Đang Nét...' : 'Làm Nét'}</span>
                     </div>
-                    <div className="mt-1 text-[11px] opacity-80">{CHARACTER_ASSISTANT_RESOLUTION} • {sharpenCost.vcoin} Vcoin</div>
+                    <div className="mt-1 text-[11px] opacity-80">
+                      {activeAssist === 'sharpen_upscale' ? 'Vertex AI đang xử lý' : `${CHARACTER_ASSISTANT_RESOLUTION} • ${sharpenCost.vcoin} Vcoin`}
+                    </div>
                   </button>
                 </div>
               )}
@@ -1248,7 +1282,7 @@ export function WorkspaceImage() {
 
       {previewGuide && (
         <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/50 p-5 backdrop-blur-sm" onClick={() => setPreviewGuide(null)}>
-          <div className="w-full max-w-sm rounded-[28px] border border-gray-200 bg-white p-4 shadow-2xl dark:border-zinc-800 dark:bg-[#12121A]" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-md rounded-[28px] border border-gray-200 bg-white p-4 shadow-2xl dark:border-zinc-800 dark:bg-[#12121A]" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-bold text-gray-900 dark:text-white">{previewGuide === 'character' ? 'Ví Dụ Ảnh Nhân Vật' : 'Ví Dụ Ảnh Mẫu'}</h3>
@@ -1263,11 +1297,20 @@ export function WorkspaceImage() {
               </button>
             </div>
             {(previewGuide === 'character' ? guideImages.characterUrl : guideImages.sampleUrl) ? (
-              <img
-                src={previewGuide === 'character' ? guideImages.characterUrl : guideImages.sampleUrl}
-                alt={previewGuide === 'character' ? 'Ví dụ ảnh nhân vật' : 'Ví dụ ảnh mẫu'}
-                className="mt-4 w-full rounded-[24px] border border-gray-100 object-cover dark:border-white/10"
-              />
+              <>
+                <div className="mt-4 h-[28rem] w-full rounded-[24px] border border-gray-100 bg-black/5 dark:border-white/10 dark:bg-black/20 flex items-center justify-center overflow-hidden">
+                  <img
+                    src={previewGuide === 'character' ? guideImages.characterUrl : guideImages.sampleUrl}
+                    alt={previewGuide === 'character' ? 'Ví dụ ảnh nhân vật' : 'Ví dụ ảnh mẫu'}
+                    className="max-w-full max-h-full object-contain"
+                  />
+                </div>
+                {guideImageMeta[previewGuide] && (
+                  <p className="mt-3 text-xs text-gray-500 dark:text-zinc-400">
+                    Kích thước gốc: {guideImageMeta[previewGuide]?.width} x {guideImageMeta[previewGuide]?.height}
+                  </p>
+                )}
+              </>
             ) : (
               <div className="mt-4 rounded-[24px] border border-dashed border-gray-200 px-4 py-10 text-center text-xs text-gray-400 dark:border-zinc-700 dark:text-zinc-500">
                 Admin chưa cấu hình ảnh ví dụ cho mục này.

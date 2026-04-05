@@ -181,6 +181,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const [characterReviews, setCharacterReviews] = useState<Record<number, CharacterImageReviewResult | null>>({});
   const [reviewLoadingByCharId, setReviewLoadingByCharId] = useState<Record<number, boolean>>({});
   const [assistLoadingByCharId, setAssistLoadingByCharId] = useState<Record<number, CharacterAssistantToolId | null>>({});
+  const [reviewErrorByCharId, setReviewErrorByCharId] = useState<Record<number, string | null>>({});
 
   // --- NEW: COOLDOWN STATE ---
   const [cooldownRemaining, setCooldownRemaining] = useState(() => {
@@ -332,7 +333,19 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           warnings.push('Ảnh của bạn đang chưa tách nền sạch, nên tách nền để AI lấy đúng nhân vật và trang phục.');
       }
 
-      return warnings.length > 0 ? warnings.join(' ') : null;
+      if (warnings.length > 0) {
+          return warnings.join(' ');
+      }
+
+      if (review.summary?.trim()) {
+          const normalized = review.summary.trim();
+          const summaryLooksClean = /đạt|ổn|tốt|sạch/i.test(normalized) && !/mờ|nền|nhiễu|noise|ui|không/i.test(normalized);
+          if (!summaryLooksClean) {
+              return normalized;
+          }
+      }
+
+      return null;
   };
 
   useEffect(() => {
@@ -636,9 +649,15 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       try {
           const review = await runCharacterImageReview(imageSource);
           setCharacterReviews((prev) => ({ ...prev, [charId]: review }));
+          setReviewErrorByCharId((prev) => ({ ...prev, [charId]: null }));
       } catch (error) {
           console.warn('[GenerationTool] Failed to review character image', error);
           setCharacterReviews((prev) => ({ ...prev, [charId]: null }));
+          setReviewErrorByCharId((prev) => ({
+              ...prev,
+              [charId]: error instanceof Error ? error.message : 'Không thể quét ảnh nhân vật.',
+          }));
+          notify('Quét ảnh nhân vật thất bại. Kiểm tra lại kết nối hoặc cấu hình Vertex AI.', 'warning');
       } finally {
           setReviewLoadingByCharId((prev) => ({ ...prev, [charId]: false }));
       }
@@ -658,6 +677,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           } else if (currentType?.charId && currentType.type === 'body') {
               setCharacters(prev => prev.map(c => c.id === currentType.charId ? { ...c, bodyImage: result } : c));
               setCharacterReviews((prev) => ({ ...prev, [currentType.charId!]: null }));
+              setReviewErrorByCharId((prev) => ({ ...prev, [currentType.charId!]: null }));
               void reviewCharacterUpload(currentType.charId, result);
           }
       };
@@ -733,9 +753,12 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
               throw new Error('Vertex AI không trả về ảnh kết quả.');
           }
 
+          const refreshedUrl = result.imageUrl.includes('?')
+              ? `${result.imageUrl}&t=${Date.now()}`
+              : `${result.imageUrl}?t=${Date.now()}`;
           setCharacters((prev) => prev.map((item) => (
               item.id === charId
-                  ? { ...item, bodyImage: result.imageUrl || item.bodyImage }
+                  ? { ...item, bodyImage: refreshedUrl || item.bodyImage }
                   : item
           )));
           window.dispatchEvent(new Event('balance_updated'));
@@ -745,7 +768,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                   : 'Đã làm nét xong cho ảnh nhân vật.',
               'success',
           );
-          await reviewCharacterUpload(charId, result.imageUrl);
+          await reviewCharacterUpload(charId, refreshedUrl);
       } catch (error) {
           console.error('[GenerationTool] Character assistant failed', error);
           notify(error instanceof Error ? error.message : 'Không thể xử lý ảnh lúc này.', 'error');
@@ -1481,6 +1504,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                     {characters.map((char) => {
                         const review = characterReviews[char.id];
                         const reviewMessage = buildCharacterReviewMessage(review);
+                        const reviewError = reviewErrorByCharId[char.id];
                         const isReviewing = !!reviewLoadingByCharId[char.id];
                         const activeAssist = assistLoadingByCharId[char.id];
                         const hasCleanStatus = !!review && !reviewMessage;
@@ -1507,6 +1531,12 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                             <p className="text-[10px] leading-relaxed text-yellow-200">Đang quét nhanh độ nét và nền ảnh nhân vật...</p>
                                         </div>
                                     )}
+                                    {!isReviewing && reviewError && (
+                                        <div className="rounded-xl border border-orange-500/30 bg-orange-500/10 px-3 py-2 flex items-start gap-2">
+                                            <Icons.AlertTriangle className="w-3.5 h-3.5 text-orange-300 shrink-0 mt-0.5" />
+                                            <p className="text-[10px] leading-relaxed text-orange-200">Không thể quét ảnh nhân vật tự động: {reviewError}</p>
+                                        </div>
+                                    )}
                                     {!isReviewing && reviewMessage && (
                                         <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 flex items-start gap-2">
                                             <Icons.AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
@@ -1531,38 +1561,40 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                         )}
                                     </div>
 
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <button
-                                            type="button"
-                                            disabled={!char.bodyImage || activeAssist !== null || !removeBgCost.available}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                void handleCharacterAssistant(char.id, 'remove_bg_pro');
-                                            }}
-                                            className="px-2 py-2 rounded-xl text-[10px] font-bold border border-audi-cyan/40 bg-audi-cyan/10 text-audi-cyan disabled:opacity-50 disabled:cursor-not-allowed flex flex-col items-center gap-1"
-                                        >
-                                            {activeAssist === 'remove_bg_pro' ? <Icons.Loader className="w-3.5 h-3.5 animate-spin" /> : <Icons.Scissors className="w-3.5 h-3.5" />}
-                                            <span>Tách Nền</span>
-                                            <span className="flex items-center gap-1 text-[9px] text-white/80">
-                                                {CHARACTER_ASSISTANT_RESOLUTION} <Icons.Gem className="w-3 h-3 text-audi-yellow" /> {removeBgCost.vcoin}
-                                            </span>
-                                        </button>
-                                        <button
-                                            type="button"
-                                            disabled={!char.bodyImage || activeAssist !== null || !sharpenCost.available}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                void handleCharacterAssistant(char.id, 'sharpen_upscale');
-                                            }}
-                                            className="px-2 py-2 rounded-xl text-[10px] font-bold border border-audi-pink/40 bg-audi-pink/10 text-audi-pink disabled:opacity-50 disabled:cursor-not-allowed flex flex-col items-center gap-1"
-                                        >
-                                            {activeAssist === 'sharpen_upscale' ? <Icons.Loader className="w-3.5 h-3.5 animate-spin" /> : <Icons.Sparkles className="w-3.5 h-3.5" />}
-                                            <span>Làm Nét</span>
-                                            <span className="flex items-center gap-1 text-[9px] text-white/80">
-                                                {CHARACTER_ASSISTANT_RESOLUTION} <Icons.Gem className="w-3 h-3 text-audi-yellow" /> {sharpenCost.vcoin}
-                                            </span>
-                                        </button>
-                                    </div>
+                                    {char.bodyImage && (
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <button
+                                                type="button"
+                                                disabled={activeAssist !== null || !removeBgCost.available}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    void handleCharacterAssistant(char.id, 'remove_bg_pro');
+                                                }}
+                                                className="px-2 py-2 rounded-xl text-[10px] font-bold border border-audi-cyan/40 bg-audi-cyan/10 text-audi-cyan disabled:opacity-50 disabled:cursor-not-allowed flex flex-col items-center gap-1"
+                                            >
+                                                {activeAssist === 'remove_bg_pro' ? <Icons.Loader className="w-3.5 h-3.5 animate-spin" /> : <Icons.Scissors className="w-3.5 h-3.5" />}
+                                                <span>Tách Nền</span>
+                                                <span className="flex items-center gap-1 text-[9px] text-white/80">
+                                                    {CHARACTER_ASSISTANT_RESOLUTION} <Icons.Gem className="w-3 h-3 text-audi-yellow" /> {removeBgCost.vcoin}
+                                                </span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                disabled={activeAssist !== null || !sharpenCost.available}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    void handleCharacterAssistant(char.id, 'sharpen_upscale');
+                                                }}
+                                                className="px-2 py-2 rounded-xl text-[10px] font-bold border border-audi-pink/40 bg-audi-pink/10 text-audi-pink disabled:opacity-50 disabled:cursor-not-allowed flex flex-col items-center gap-1"
+                                            >
+                                                {activeAssist === 'sharpen_upscale' ? <Icons.Loader className="w-3.5 h-3.5 animate-spin" /> : <Icons.Sparkles className="w-3.5 h-3.5" />}
+                                                <span>Làm Nét</span>
+                                                <span className="flex items-center gap-1 text-[9px] text-white/80">
+                                                    {CHARACTER_ASSISTANT_RESOLUTION} <Icons.Gem className="w-3 h-3 text-audi-yellow" /> {sharpenCost.vcoin}
+                                                </span>
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         );

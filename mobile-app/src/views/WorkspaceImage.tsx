@@ -204,6 +204,7 @@ export function WorkspaceImage() {
   const [characterReviews, setCharacterReviews] = useState<Record<number, CharacterImageReviewResult | null>>({});
   const [reviewLoadingByCharId, setReviewLoadingByCharId] = useState<Record<number, boolean>>({});
   const [assistLoadingByCharId, setAssistLoadingByCharId] = useState<Record<number, CharacterAssistantToolId | null>>({});
+  const [reviewErrorByCharId, setReviewErrorByCharId] = useState<Record<number, string | null>>({});
 
   const [currentTipIdx, setCurrentTipIdx] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -289,7 +290,19 @@ export function WorkspaceImage() {
       warnings.push('Ảnh của bạn chưa tách nền sạch, nên tách nền để AI nhận đúng nhân vật hơn.');
     }
 
-    return warnings.length > 0 ? warnings.join(' ') : null;
+    if (warnings.length > 0) {
+      return warnings.join(' ');
+    }
+
+    if (review.summary?.trim()) {
+      const normalized = review.summary.trim();
+      const summaryLooksClean = /đạt|ổn|tốt|sạch/i.test(normalized) && !/mờ|nền|nhiễu|noise|ui|không/i.test(normalized);
+      if (!summaryLooksClean) {
+        return normalized;
+      }
+    }
+
+    return null;
   };
 
   useEffect(() => {
@@ -550,9 +563,15 @@ export function WorkspaceImage() {
     try {
       const review = await runCharacterImageReview(imageSource);
       setCharacterReviews((prev) => ({ ...prev, [charId]: review }));
+      setReviewErrorByCharId((prev) => ({ ...prev, [charId]: null }));
     } catch (error) {
       console.warn('[WorkspaceImage] Failed to review character image', error);
       setCharacterReviews((prev) => ({ ...prev, [charId]: null }));
+      setReviewErrorByCharId((prev) => ({
+        ...prev,
+        [charId]: error instanceof Error ? error.message : 'Không thể quét ảnh nhân vật.',
+      }));
+      notify('Quét ảnh nhân vật thất bại. Kiểm tra lại kết nối hoặc cấu hình Vertex AI.', 'warning');
     } finally {
       setReviewLoadingByCharId((prev) => ({ ...prev, [charId]: false }));
     }
@@ -572,6 +591,7 @@ export function WorkspaceImage() {
       } else if (currentType?.charId && currentType.type === 'body') {
         setCharacters((prev) => prev.map((c) => (c.id === currentType.charId ? { ...c, bodyImage: result } : c)));
         setCharacterReviews((prev) => ({ ...prev, [currentType.charId!]: null }));
+        setReviewErrorByCharId((prev) => ({ ...prev, [currentType.charId!]: null }));
         void reviewCharacterUpload(currentType.charId, result);
       }
     };
@@ -611,12 +631,15 @@ export function WorkspaceImage() {
         throw new Error('Vertex AI không trả về ảnh kết quả.');
       }
 
+      const refreshedUrl = result.imageUrl.includes('?')
+        ? `${result.imageUrl}&t=${Date.now()}`
+        : `${result.imageUrl}?t=${Date.now()}`;
       setCharacters((prev) => prev.map((item) => (
-        item.id === charId ? { ...item, bodyImage: result.imageUrl || item.bodyImage } : item
+        item.id === charId ? { ...item, bodyImage: refreshedUrl || item.bodyImage } : item
       )));
       window.dispatchEvent(new Event('balance_updated'));
       notify(toolId === 'remove_bg_pro' ? 'Đã tách nền xong.' : 'Đã làm nét xong.', 'success');
-      await reviewCharacterUpload(charId, result.imageUrl);
+      await reviewCharacterUpload(charId, refreshedUrl);
     } catch (error) {
       console.error('[WorkspaceImage] Character assistant failed', error);
       notify(error instanceof Error ? error.message : 'Không thể xử lý ảnh lúc này.', 'error');
@@ -860,6 +883,7 @@ export function WorkspaceImage() {
         {characters.filter((c) => c.id === activeCharTab).map((char) => {
           const review = characterReviews[char.id];
           const reviewMessage = buildCharacterReviewMessage(review);
+          const reviewError = reviewErrorByCharId[char.id];
           const isReviewing = !!reviewLoadingByCharId[char.id];
           const activeAssist = assistLoadingByCharId[char.id];
           const hasCleanStatus = !!review && !reviewMessage;
@@ -884,6 +908,12 @@ export function WorkspaceImage() {
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200 flex items-start gap-2">
                   <Loader className="w-4 h-4 animate-spin shrink-0 mt-0.5" />
                   <span>Đang quét nhanh độ nét và nền của ảnh nhân vật...</span>
+                </div>
+              )}
+              {!isReviewing && reviewError && (
+                <div className="rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-xs text-orange-700 dark:border-orange-500/20 dark:bg-orange-500/10 dark:text-orange-200 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>Không thể quét ảnh nhân vật tự động: {reviewError}</span>
                 </div>
               )}
               {!isReviewing && reviewMessage && (
@@ -923,32 +953,34 @@ export function WorkspaceImage() {
                 )}
               </button>
 
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  disabled={!char.bodyImage || activeAssist !== null || !removeBgCost.available}
-                  onClick={() => void handleCharacterAssistant(char.id, 'remove_bg_pro')}
-                  className="rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-cyan-700 dark:border-cyan-500/20 dark:bg-cyan-500/10 dark:text-cyan-200 disabled:opacity-50"
-                >
-                  <div className="flex items-center justify-center gap-2 text-xs font-bold">
-                    {activeAssist === 'remove_bg_pro' ? <Loader className="w-4 h-4 animate-spin" /> : <Scissors className="w-4 h-4" />}
-                    <span>Tách Nền</span>
-                  </div>
-                  <div className="mt-1 text-[11px] opacity-80">{CHARACTER_ASSISTANT_RESOLUTION} • {removeBgCost.vcoin} Vcoin</div>
-                </button>
-                <button
-                  type="button"
-                  disabled={!char.bodyImage || activeAssist !== null || !sharpenCost.available}
-                  onClick={() => void handleCharacterAssistant(char.id, 'sharpen_upscale')}
-                  className="rounded-2xl border border-pink-200 bg-pink-50 px-4 py-3 text-pink-700 dark:border-pink-500/20 dark:bg-pink-500/10 dark:text-pink-200 disabled:opacity-50"
-                >
-                  <div className="flex items-center justify-center gap-2 text-xs font-bold">
-                    {activeAssist === 'sharpen_upscale' ? <Loader className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                    <span>Làm Nét</span>
-                  </div>
-                  <div className="mt-1 text-[11px] opacity-80">{CHARACTER_ASSISTANT_RESOLUTION} • {sharpenCost.vcoin} Vcoin</div>
-                </button>
-              </div>
+              {char.bodyImage && (
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    disabled={activeAssist !== null || !removeBgCost.available}
+                    onClick={() => void handleCharacterAssistant(char.id, 'remove_bg_pro')}
+                    className="rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-cyan-700 dark:border-cyan-500/20 dark:bg-cyan-500/10 dark:text-cyan-200 disabled:opacity-50"
+                  >
+                    <div className="flex items-center justify-center gap-2 text-xs font-bold">
+                      {activeAssist === 'remove_bg_pro' ? <Loader className="w-4 h-4 animate-spin" /> : <Scissors className="w-4 h-4" />}
+                      <span>Tách Nền</span>
+                    </div>
+                    <div className="mt-1 text-[11px] opacity-80">{CHARACTER_ASSISTANT_RESOLUTION} • {removeBgCost.vcoin} Vcoin</div>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={activeAssist !== null || !sharpenCost.available}
+                    onClick={() => void handleCharacterAssistant(char.id, 'sharpen_upscale')}
+                    className="rounded-2xl border border-pink-200 bg-pink-50 px-4 py-3 text-pink-700 dark:border-pink-500/20 dark:bg-pink-500/10 dark:text-pink-200 disabled:opacity-50"
+                  >
+                    <div className="flex items-center justify-center gap-2 text-xs font-bold">
+                      {activeAssist === 'sharpen_upscale' ? <Loader className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                      <span>Làm Nét</span>
+                    </div>
+                    <div className="mt-1 text-[11px] opacity-80">{CHARACTER_ASSISTANT_RESOLUTION} • {sharpenCost.vcoin} Vcoin</div>
+                  </button>
+                </div>
+              )}
             </div>
           );
         })}

@@ -47,6 +47,8 @@ import {
 } from '../../services/characterImageAssistService';
 import {
   runCharacterImageReview,
+  buildCharacterReviewMessage,
+  getCharacterReviewFlags,
   type CharacterImageReviewResult,
 } from '../../services/characterImageReviewService';
 
@@ -338,51 +340,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       resolution: CHARACTER_ASSISTANT_RESOLUTION,
       pricingOverrides,
   });
-
-  const buildCharacterReviewMessage = (review: CharacterImageReviewResult | null) => {
-      if (!review) return null;
-      if (review.detectedCharacterCount === 0) {
-          return 'Không thấy rõ nhân vật chính trong ảnh. Hãy tải lại ảnh chỉ chứa 1 nhân vật rõ mặt và trang phục.';
-      }
-      if ((review.detectedCharacterCount || 0) > 1) {
-          return 'Ảnh đang có nhiều hơn 1 nhân vật hoặc nhiều chủ thể nổi bật. Hãy cắt lại chỉ còn đúng 1 nhân vật.';
-      }
-
-      const hasRealSharpnessIssue =
-          review.subjectSharpness === 'soft'
-          || review.subjectSharpness === 'blurry'
-          || review.noiseLevel === 'high'
-          || review.detailLevel === 'poor'
-          || review.issues.includes('blurry_subject')
-          || review.issues.includes('noisy_subject')
-          || review.issues.includes('low_detail');
-      const hasBackgroundIssue =
-          review.needsBackgroundRemoval
-          || review.backgroundStatus === 'mixed'
-          || review.backgroundStatus === 'busy'
-          || review.issues.includes('background_not_removed')
-          || review.issues.includes('busy_background');
-
-      if (hasRealSharpnessIssue && hasBackgroundIssue) {
-          return 'Ảnh nhân vật của bạn hiện chưa nét và cũng chưa tách nền sạch. Nên bấm Làm Nét trước, sau đó bấm Tách Nền để AI lấy đúng nhân vật, mặt và trang phục.';
-      }
-      if (hasRealSharpnessIssue) {
-          return 'Ảnh nhân vật của bạn đang bị mờ, nhiễu mạnh hoặc thiếu chi tiết thật sự. Nên bấm Làm Nét để tăng độ rõ trước khi tạo ảnh.';
-      }
-      if (hasBackgroundIssue) {
-          return 'Ảnh nhân vật của bạn đã đủ nét, nhưng nền vẫn chưa được tách sạch. Nên bấm Tách Nền để AI lấy đúng nhân vật và trang phục.';
-      }
-
-      if (review.summary?.trim()) {
-          const normalized = review.summary.trim();
-          const summaryLooksClean = /đạt|ổn|tốt|sạch/i.test(normalized) && !/mờ|nền|nhiễu|noise|ui|không/i.test(normalized);
-          if (!summaryLooksClean) {
-              return normalized;
-          }
-      }
-
-      return null;
-  };
 
   useEffect(() => {
       // Load Default Style Preset
@@ -1579,7 +1536,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                         const isReviewing = !!reviewLoadingByCharId[char.id];
                         const activeAssist = assistLoadingByCharId[char.id];
                         const isAssistRunning = !!activeAssist;
-                        const hasCleanStatus = !!review && !reviewMessage;
+                        const hasCleanStatus = !!review && getCharacterReviewFlags(review).isClean;
 
                         return (
                             <div

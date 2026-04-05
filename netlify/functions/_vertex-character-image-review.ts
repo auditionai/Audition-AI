@@ -122,8 +122,8 @@ const buildReviewInstruction = () => {
   const sections = [
     'You are a strict quality reviewer for uploaded character images used in a paid AI image-generation pipeline.',
     'Review exactly one uploaded image and decide whether it needs sharpening and/or background removal before generation.',
-    'Be conservative. If the image is not clearly production-ready for identity locking, flag it.',
-    'Phone photos of a game screen, blurry screenshots, noisy captures, images with visible UI, and images where the character sits inside a game card or frame must be flagged.',
+    'Be conservative, but do not over-flag sharpening when the character itself is already readable.',
+    'Phone photos of a game screen, blurry screenshots, noisy captures, images with visible UI, and images where the character sits inside a game card or frame must be flagged for background removal.',
     '',
     'RULES:',
     '- Count the visible main character subjects. Reject clean status if there are 0 or 2+ distinct main characters.',
@@ -131,11 +131,17 @@ const buildReviewInstruction = () => {
     '- Determine whether the background is already clean enough for identity locking.',
     '- Treat these as already background-removed or background-safe: transparent-like cutout, solid black background, solid white background, or very clean studio/plain background with strong subject separation.',
     '- Treat these as NOT background-removed: game scene, UI panels, text, buttons, menus, profile cards, lobby windows, room/interior, outdoor environment, clutter, or mixed complex backgrounds.',
-    '- If the image is a photo of a monitor or phone screen, or shows moire/compression/noise, it is not clean and should usually need sharpening.',
+    '- Do NOT set needsSharpen=true only because the image contains UI, a game card, a shopping mall frame, menus, buttons, or screenshot context.',
+    '- If the character face, outfit edges, and accessories are still clearly readable, classify sharpness as clear enough even if the image is still inside a game UI.',
+    '- If the image is a photo of a monitor or phone screen and the character becomes visibly soft, smeared, noisy, or low-detail, then set needsSharpen=true.',
     '- If the character is inside a purple profile card, shopping mall card, game frame, or any UI container, set needsBackgroundRemoval=true.',
-    '- If the image is blurry, soft, noisy, low-detail, hard to read around face/clothes/accessories, or visually degraded by screenshot/monitor capture artifacts, set needsSharpen=true.',
+    '- Set needsSharpen=true only when the subject is truly blurry/soft/noisy/low-detail enough that identity or outfit details are harder to lock.',
     '- If the background is not already isolated/clean, set needsBackgroundRemoval=true.',
-    '- Prefer false negatives over false positives only if the image is clearly sharp and already isolated. Otherwise flag it.',
+    '',
+    'REFERENCE CASES:',
+    '- Case A: a sharp game screenshot with visible UI or purple profile card, but the character face, hair, outfit, and shoes are still readable -> needsSharpen=false, needsBackgroundRemoval=true.',
+    '- Case B: a soft or noisy screenshot/phone photo where the face and outfit details look smeared or degraded -> needsSharpen=true, needsBackgroundRemoval=true.',
+    '- Case C: a crisp cutout on black/white/transparent-like/plain clean background -> needsSharpen=false, needsBackgroundRemoval=false.',
     '',
     'Return JSON only with this exact schema:',
     '{',
@@ -176,20 +182,40 @@ const normalizeReviewResult = (raw: any): CharacterImageReviewResult => {
     || normalizedBackground === 'solid_black'
     || normalizedBackground === 'solid_white'
     || normalizedBackground === 'clean_studio';
-  const heuristicNeedsSharpen =
-    normalizedSharpness === 'soft'
-    || normalizedSharpness === 'blurry'
+  const explicitSharpnessIssue =
+    issues.includes('blurry_subject')
+    || issues.includes('noisy_subject')
+    || issues.includes('low_detail');
+  const strongSharpnessIssue =
+    normalizedSharpness === 'blurry'
     || normalizedNoise === 'high'
     || normalizedDetail === 'poor'
-    || issues.includes('blurry_subject')
-    || issues.includes('noisy_subject')
-    || issues.includes('low_detail')
+    || explicitSharpnessIssue
     || (normalizedSharpness === 'unknown' && normalizedNoise === 'high')
     || (normalizedSharpness === 'unknown' && normalizedDetail === 'poor');
+  const moderateSharpnessIssue =
+    normalizedSharpness === 'soft'
+    && (
+      normalizedNoise === 'medium'
+      || normalizedDetail === 'partial'
+      || normalizedNoise === 'unknown'
+      || normalizedDetail === 'unknown'
+    );
   const heuristicNeedsBackgroundRemoval =
     !safeBackground
     || issues.includes('background_not_removed')
     || issues.includes('busy_background');
+  const backgroundOnlyLikely =
+    heuristicNeedsBackgroundRemoval
+    && !strongSharpnessIssue
+    && normalizedDetail === 'clear'
+    && normalizedNoise !== 'high';
+  const heuristicNeedsSharpen =
+    strongSharpnessIssue
+    || (moderateSharpnessIssue && !backgroundOnlyLikely);
+  const normalizedNeedsSharpen =
+    (raw?.needsSharpen === true || heuristicNeedsSharpen)
+    && !backgroundOnlyLikely;
 
   return {
     summary: typeof raw?.summary === 'string' ? raw.summary.trim() : '',
@@ -201,7 +227,7 @@ const normalizeReviewResult = (raw: any): CharacterImageReviewResult => {
     noiseLevel: normalizedNoise,
     detailLevel: normalizedDetail,
     backgroundStatus: normalizedBackground,
-    needsSharpen: raw?.needsSharpen === true || heuristicNeedsSharpen,
+    needsSharpen: normalizedNeedsSharpen,
     needsBackgroundRemoval: raw?.needsBackgroundRemoval === true || heuristicNeedsBackgroundRemoval,
     issues,
   };

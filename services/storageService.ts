@@ -4,6 +4,7 @@ import type { QueueProgressLogEntry } from '../shared/queueRecipes';
 import { normalizeQueueProgressLogs, repairVietnameseMojibake } from '../shared/queueLogText';
 import { classifyQueueError, isTerminalRescueFailureMessage, normalizeQueueErrorMessage, pickQueueFailureMessage } from '../shared/queueErrorClassifier';
 import { hasFailedRescuePending } from '../shared/queueRescueState';
+import { isDirectImageEditQueueKind } from '../shared/queueKinds';
 import { getSupabaseAuthHeader, getSupabaseUser, supabase } from './supabaseClient';
 import { getUserProfile } from './economyService';
 import { S3Client, PutObjectCommand, DeleteObjectCommand, DeleteObjectsCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
@@ -41,6 +42,9 @@ const R2_PUBLIC_URL = getEnv('VITE_R2_PUBLIC_URL');
 let r2Client: S3Client | null = null;
 let galleryFetchPromise: Promise<GeneratedImage[]> | null = null;
 let galleryFetchCache: { userId: string; expiresAt: number; images: GeneratedImage[] } | null = null;
+
+const excludeDirectEditHistory = (images: GeneratedImage[]) =>
+    images.filter((image) => !isDirectImageEditQueueKind(image.queueKind));
 
 export const invalidateGalleryCache = () => {
     galleryFetchPromise = null;
@@ -146,7 +150,7 @@ const readLocalImages = async (): Promise<GeneratedImage[]> => {
         toolName: mapEngineName(img.toolName),
         engine: mapEngineName(img.engine)
       }));
-      resolve(mappedResults.sort((a, b) => b.timestamp - a.timestamp));
+      resolve(excludeDirectEditHistory(mappedResults).sort((a, b) => b.timestamp - a.timestamp));
     };
     request.onerror = () => reject(request.error);
   });
@@ -851,7 +855,7 @@ export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
 
               if (response.ok && Array.isArray(payload?.images)) {
                   const cloudImages = payload.images.map((row: any) => mapGeneratedImageRow(row, 'Me'));
-                  const mergedImages = mergeCloudAndLocalImages(cloudImages, localImagesForUser);
+                  const mergedImages = excludeDirectEditHistory(mergeCloudAndLocalImages(cloudImages, localImagesForUser));
                   galleryFetchCache = {
                     userId: user.id,
                     expiresAt:
@@ -871,12 +875,13 @@ export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
                 console.warn('[Storage] Gallery API failed, using local cache only', payload?.error || response.statusText);
               }
 
+              const filteredLocalImages = excludeDirectEditHistory(localImagesForUser);
               galleryFetchCache = {
                 userId: user.id,
                 expiresAt: Date.now() + ACTIVE_GALLERY_CLIENT_CACHE_TTL_MS,
-                images: localImagesForUser,
+                images: filteredLocalImages,
               };
-              return localImagesForUser;
+              return filteredLocalImages;
             })();
 
             try {
@@ -891,7 +896,7 @@ export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
   }
 
   // 2. INDEXED DB
-  return localImages;
+  return excludeDirectEditHistory(localImages);
 };
 
 export const getUserImagesFromStorage = async (userId: string): Promise<GeneratedImage[]> => {
@@ -911,7 +916,9 @@ export const getUserImagesFromStorage = async (userId: string): Promise<Generate
             .map((row: any) => row.id)
             .filter((value: any): value is string => typeof value === 'string' && value.length > 0);
         const chargeMap = await getGeneratedImageChargeMap(userId, missingCostIds);
-        return data.map((row: any) => mapGeneratedImageRow(row, 'User', chargeMap.get(row.id)));
+        return data
+            .map((row: any) => mapGeneratedImageRow(row, 'User', chargeMap.get(row.id)))
+            .filter((image: GeneratedImage) => !isDirectImageEditQueueKind(image.queueKind));
     } catch (e) {
         console.error("User Images Fetch Error", e);
         return [];

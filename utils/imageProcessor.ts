@@ -72,17 +72,58 @@ export const createSolidFence = async (base64Str: string, targetAspectRatio: str
         const drawH = img.height * scale;
         const x = (canvasW - drawW) / 2;
         const y = (canvasH - drawH) / 2;
-        
-        ctx.drawImage(img, x, y, drawW, drawH);
-        
+
         if (isPoseRef) {
-            ctx.strokeStyle = '#00FF00';
-            ctx.lineWidth = 5; 
-            ctx.strokeRect(x, y, drawW, drawH); 
-            
-            ctx.font = "bold 30px Arial";
-            ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
-            ctx.fillText("POSE_REFERENCE_ONLY", x + 10, y + 40);
+            // Convert the sample into a composition guide instead of a copyable identity source.
+            ctx.save();
+            ctx.filter = 'grayscale(1) saturate(0) contrast(1.12) brightness(0.92) blur(1.5px)';
+            ctx.drawImage(img, x, y, drawW, drawH);
+            ctx.restore();
+
+            ctx.fillStyle = 'rgba(12, 18, 20, 0.28)';
+            ctx.fillRect(x, y, drawW, drawH);
+
+            ctx.save();
+            ctx.strokeStyle = 'rgba(0, 255, 170, 0.9)';
+            ctx.lineWidth = 4;
+            ctx.setLineDash([18, 10]);
+            ctx.strokeRect(x, y, drawW, drawH);
+
+            ctx.setLineDash([10, 14]);
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = 'rgba(0, 255, 170, 0.28)';
+            ctx.beginPath();
+            ctx.moveTo(x + drawW / 3, y);
+            ctx.lineTo(x + drawW / 3, y + drawH);
+            ctx.moveTo(x + (drawW * 2) / 3, y);
+            ctx.lineTo(x + (drawW * 2) / 3, y + drawH);
+            ctx.moveTo(x, y + drawH / 3);
+            ctx.lineTo(x + drawW, y + drawH / 3);
+            ctx.moveTo(x, y + (drawH * 2) / 3);
+            ctx.lineTo(x + drawW, y + (drawH * 2) / 3);
+            ctx.stroke();
+
+            ctx.setLineDash([]);
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = 'rgba(0, 255, 170, 0.45)';
+            const corner = Math.max(28, Math.min(drawW, drawH) * 0.08);
+            ctx.beginPath();
+            ctx.moveTo(x, y + corner);
+            ctx.lineTo(x, y);
+            ctx.lineTo(x + corner, y);
+            ctx.moveTo(x + drawW - corner, y);
+            ctx.lineTo(x + drawW, y);
+            ctx.lineTo(x + drawW, y + corner);
+            ctx.moveTo(x, y + drawH - corner);
+            ctx.lineTo(x, y + drawH);
+            ctx.lineTo(x + corner, y + drawH);
+            ctx.moveTo(x + drawW - corner, y + drawH);
+            ctx.lineTo(x + drawW, y + drawH);
+            ctx.lineTo(x + drawW, y + drawH - corner);
+            ctx.stroke();
+            ctx.restore();
+        } else {
+            ctx.drawImage(img, x, y, drawW, drawH);
         }
   
         return canvas.toDataURL('image/jpeg', 0.95);

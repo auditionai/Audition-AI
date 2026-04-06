@@ -11,6 +11,7 @@ import {
   uploadImageToTst,
 } from './_queue-recipes';
 import { runVertexImageEdit } from './_vertex-image-edit';
+import { verifyGeneratedImageOutput } from './_vertex-image-verify';
 import {
   inspectMotionVideoDurationSeconds,
   reviewMotionCharacterInput,
@@ -20,6 +21,7 @@ import {
 } from './_vertex-video-input-review';
 import {
   buildImageProviderPrompt,
+  getImageCharacterReferenceGroups,
   getImageDirectorSources,
   validateImageGenerateReferenceIntegrity,
   getImageRenderReferenceSources,
@@ -36,6 +38,7 @@ import {
 import { classifyQueueError, isTerminalRescueFailureMessage, normalizeQueueErrorMessage, pickQueueFailureMessage } from '../../shared/queueErrorClassifier';
 import { repairVietnameseMojibake } from '../../shared/queueLogText';
 import { clearFailedRescueMeta, hasFailedRescueFinalized, hasManualStopFlag } from '../../shared/queueRescueState';
+import sharp from 'sharp';
 
 type QueueJobRow = {
   id: string;
@@ -145,6 +148,7 @@ const MAX_SINGLE_IMAGE_PROCESSING_AGE_MS = 30 * 60 * 1000;
 const MAX_COUPLE_IMAGE_PROCESSING_AGE_MS = 30 * 60 * 1000;
 const MAX_GROUP3_IMAGE_PROCESSING_AGE_MS = 30 * 60 * 1000;
 const MAX_GROUP4_IMAGE_PROCESSING_AGE_MS = 30 * 60 * 1000;
+const MAX_OUTPUT_VERIFICATION_RETRIES = 2;
 const FAILED_RESULT_RESCUE_SCAN_LIMIT = 10;
 const FAILED_RESULT_RESCUE_LOOKBACK_MS = 24 * 60 * 60 * 1000;
 const FAILED_RESULT_RESCUE_MAX_ATTEMPTS = 8;
@@ -168,6 +172,8 @@ const STALE_RECOVERY_SCAN_LIMIT = 50;
 const STALE_RECOVERY_MIN_AGE_MS = 45_000;
 const STALE_VERIFYING_OUTPUT_RECOVERY_MIN_AGE_MS = 90_000;
 const STALE_PROVIDER_POLL_RECOVERY_MIN_AGE_MS = 45_000;
+const REFERENCE_ECHO_HASH_SIZE = 32;
+const REFERENCE_ECHO_HAMMING_THRESHOLD = 220;
 const AMBIGUOUS_DISPATCH_DUPLICATE_PROTECTION_MESSAGE =
   'Khong nhan duoc xac nhan provider job goc sau loi mang/timeout. Job da dung de tranh tao them provider moi.';
 
@@ -341,6 +347,11 @@ const getStoredImageGenerateRecipePayload = (
   }
 
   return null;
+};
+
+const getOutputVerificationRetryCount = (payload?: Record<string, unknown> | ImageGenerateRecipePayload | null) => {
+  const recipePayload = getStoredImageGenerateRecipePayload(payload);
+  return Math.max(0, Number(recipePayload?.__outputVerificationRetryCount || 0));
 };
 
 const getFailedRescueAttemptCount = (payload?: Record<string, unknown> | ImageGenerateRecipePayload | null) =>
@@ -585,6 +596,86 @@ const extractResultUrlFromValue = (value: unknown): string | null => {
 
 const extractResultUrl = (data: any): string | null => {
   return extractResultUrlFromValue(data);
+};
+
+const fetchImageFingerprintBits = async (source: string) => {
+  const response = await fetch(source, { signal: AbortSignal.timeout(60000) });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch image for similarity check: ${await parseErrorMessage(response)}`);
+  }
+
+  const input = Buffer.from(await response.arrayBuffer());
+  const grayscale = await sharp(input)
+    .resize(REFERENCE_ECHO_HASH_SIZE, REFERENCE_ECHO_HASH_SIZE, { fit: 'fill' })
+    .grayscale()
+    .raw()
+    .toBuffer();
+
+  let total = 0;
+  for (const value of grayscale) {
+    total += value;
+  }
+
+  const average = total / grayscale.length;
+  return Array.from(grayscale, (value) => (value >= average ? 1 : 0));
+};
+
+const getHammingDistance = (left: number[], right: number[]) => {
+  const limit = Math.min(left.length, right.length);
+  let distance = Math.abs(left.length - right.length);
+  for (let index = 0; index < limit; index += 1) {
+    if (left[index] !== right[index]) {
+      distance += 1;
+    }
+  }
+  return distance;
+};
+
+const detectSuspiciousReferenceEcho = async (
+  payload: ImageGenerateRecipePayload,
+  resultImageUrl: string,
+) => {
+  const candidates: Array<{ label: string; source: string }> = [];
+
+  if (payload.sampleImage) {
+    candidates.push({ label: 'SAMPLE IMAGE', source: payload.sampleImage });
+  }
+
+  getImageCharacterReferenceGroups(payload).forEach((group) => {
+    group.references.forEach((reference, referenceIndex) => {
+      const kindLabel =
+        reference.kind === 'face'
+          ? 'FACE LOCK'
+          : reference.kind === 'body'
+            ? 'BODY'
+            : `REFERENCE ${referenceIndex + 1}`;
+      candidates.push({
+        label: `CHARACTER ${group.characterIndex} ${kindLabel}`,
+        source: reference.source,
+      });
+    });
+  });
+
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  const resultBits = await fetchImageFingerprintBits(resultImageUrl);
+  let closestMatch: { label: string; distance: number } | null = null;
+
+  for (const candidate of candidates) {
+    const candidateBits = await fetchImageFingerprintBits(candidate.source);
+    const distance = getHammingDistance(resultBits, candidateBits);
+    if (!closestMatch || distance < closestMatch.distance) {
+      closestMatch = { label: candidate.label, distance };
+    }
+  }
+
+  if (closestMatch && closestMatch.distance <= REFERENCE_ECHO_HAMMING_THRESHOLD) {
+    return `Identity guard failed: output is too similar to ${closestMatch.label} (${closestMatch.distance}/${resultBits.length} perceptual bits differ).`;
+  }
+
+  return null;
 };
 
 const getRetryDelaySeconds = (attemptCount: number) => {
@@ -1805,12 +1896,136 @@ const completePolledJobWithResultUrl = async (
       ? getStoredImageGenerateRecipePayload(job.queue_payload)
       : null;
   if (storedImageRecipe) {
-    completionPayload = withQueueLog(
+    const verifyingPayload = await persistQueueLog(
+      job.id,
       completionPayload,
       'verifying_output',
-      'Bo qua toan bo hau kiem. Dong bo ngay ket qua dau tien tu provider.',
-      'info',
+      'Dang hau kiem ket qua AI de bao toan identity.',
     );
+
+    try {
+      const echoFailureMessage = await detectSuspiciousReferenceEcho(storedImageRecipe, resultUrl);
+      if (echoFailureMessage) {
+        const nextVerifyRetryCount = getOutputVerificationRetryCount(storedImageRecipe) + 1;
+        const retryPayload = {
+          ...storedImageRecipe,
+          __stage: 'verifying_output',
+          __logs: getQueueLogs(verifyingPayload),
+          __notifyInputMedia: buildNotificationMediaEntries(verifyingPayload),
+          __outputVerificationRetryCount: nextVerifyRetryCount,
+          __lastOutputVerificationSummary: echoFailureMessage,
+        } as ImageGenerateRecipePayload & Record<string, unknown>;
+
+        if (nextVerifyRetryCount >= MAX_OUTPUT_VERIFICATION_RETRIES) {
+          await markFailedRespectingRefundPolicy(
+            {
+              ...job,
+              queue_payload: retryPayload,
+            },
+            `${echoFailureMessage} Retry limit reached.`,
+          );
+          return 'failed' as const;
+        }
+
+        return requeueJob(
+          {
+            ...job,
+            queue_payload: retryPayload,
+          },
+          echoFailureMessage,
+        );
+      }
+
+      const verificationResult = await verifyGeneratedImageOutput(storedImageRecipe, resultUrl);
+      const verificationSummary =
+        verificationResult.summary ||
+        verificationResult.issues.join('; ') ||
+        'Identity guard completed.';
+
+      if (!verificationResult.pass) {
+        const nextVerifyRetryCount = getOutputVerificationRetryCount(storedImageRecipe) + 1;
+        const retryPayload = {
+          ...storedImageRecipe,
+          __stage: 'verifying_output',
+          __logs: getQueueLogs(verifyingPayload),
+          __notifyInputMedia: buildNotificationMediaEntries(verifyingPayload),
+          __outputVerificationRetryCount: nextVerifyRetryCount,
+          __lastOutputVerificationSummary: verificationSummary,
+        } as ImageGenerateRecipePayload & Record<string, unknown>;
+        const retryMessage = `Identity guard failed: ${verificationSummary}`;
+
+        if (nextVerifyRetryCount >= MAX_OUTPUT_VERIFICATION_RETRIES) {
+          await markFailedRespectingRefundPolicy(
+            {
+              ...job,
+              queue_payload: retryPayload,
+            },
+            `${retryMessage}. Retry limit reached.`,
+          );
+          return 'failed' as const;
+        }
+
+        return requeueJob(
+          {
+            ...job,
+            queue_payload: retryPayload,
+          },
+          retryMessage,
+        );
+      }
+
+      completionPayload = withQueueLog(
+        verifyingPayload,
+        'verifying_output',
+        `Identity guard passed: ${verificationSummary}`,
+        'success',
+      );
+    } catch (verificationError) {
+      const verificationMessage =
+        verificationError instanceof Error ? verificationError.message : String(verificationError || 'Unknown verification error');
+      const shouldFailClosed =
+        Boolean(storedImageRecipe.sampleImage) ||
+        getImageRecipeCharacterCount(job, storedImageRecipe) >= 2;
+
+      if (shouldFailClosed) {
+        const nextVerifyRetryCount = getOutputVerificationRetryCount(storedImageRecipe) + 1;
+        const retryPayload = {
+          ...storedImageRecipe,
+          __stage: 'verifying_output',
+          __logs: getQueueLogs(verifyingPayload),
+          __notifyInputMedia: buildNotificationMediaEntries(verifyingPayload),
+          __outputVerificationRetryCount: nextVerifyRetryCount,
+          __lastOutputVerificationSummary: verificationMessage,
+        } as ImageGenerateRecipePayload & Record<string, unknown>;
+        const retryMessage = `Identity guard unavailable: ${verificationMessage}`;
+
+        if (nextVerifyRetryCount >= MAX_OUTPUT_VERIFICATION_RETRIES) {
+          await markFailedRespectingRefundPolicy(
+            {
+              ...job,
+              queue_payload: retryPayload,
+            },
+            `${retryMessage}. Retry limit reached.`,
+          );
+          return 'failed' as const;
+        }
+
+        return requeueJob(
+          {
+            ...job,
+            queue_payload: retryPayload,
+          },
+          retryMessage,
+        );
+      }
+
+      completionPayload = withQueueLog(
+        verifyingPayload,
+        'verifying_output',
+        `Identity guard unavailable, completing without auto-retry: ${verificationMessage}`,
+        'warning',
+      );
+    }
   }
 
   await admin

@@ -1,4 +1,4 @@
--- Ensure generated_images is fully published to Supabase Realtime.
+/* -- Ensure generated_images is fully published to Supabase Realtime.
 -- Run this in Supabase SQL Editor on the current project.
 --
 -- Why:
@@ -30,3 +30,4 @@ from pg_publication_tables
 where pubname = 'supabase_realtime'
   and schemaname = 'public'
   and tablename = 'generated_images';
+ */

@@ -30,6 +30,9 @@ export interface CharacterReviewFlags {
   isClean: boolean;
 }
 
+const TEMPORARY_REVIEW_CAPACITY_PATTERN =
+  /no available vertex ai credentials|all vertex ai credentials failed|resource has been exhausted|quota|rate limit|temporarily exhausted/i;
+
 export const getCharacterReviewFlags = (review: CharacterImageReviewResult | null): CharacterReviewFlags => {
   if (!review) {
     return {
@@ -107,6 +110,29 @@ export const buildCharacterReviewMessage = (review: CharacterImageReviewResult |
   }
 
   return null;
+};
+
+export const formatCharacterReviewErrorMessage = (error: unknown) => {
+  const rawMessage =
+    error instanceof Error
+      ? error.message.trim()
+      : typeof error === 'string'
+        ? error.trim()
+        : '';
+
+  if (!rawMessage) {
+    return 'He thong quet anh nhan vat dang ban tam thoi. Ban co the thu lai sau it phut.';
+  }
+
+  if (TEMPORARY_REVIEW_CAPACITY_PATTERN.test(rawMessage)) {
+    return 'He thong quet anh nhan vat dang ban tam thoi. Anh van da duoc tai len, ban co the thu quet lai sau it phut.';
+  }
+
+  if (/missing image payload/i.test(rawMessage)) {
+    return 'Khong nhan duoc du lieu anh de quet. Hay tai lai anh mot lan nua.';
+  }
+
+  return rawMessage;
 };
 
 export const runCharacterImageReview = async (image: string): Promise<CharacterImageReviewResult> => {

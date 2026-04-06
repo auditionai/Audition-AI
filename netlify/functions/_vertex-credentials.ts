@@ -19,6 +19,7 @@ type VertexSession = {
 type ReserveVertexCredentialOptions = {
   excludedIds?: string[];
   normalCooldownMs?: number;
+  allowCoolingFallback?: boolean;
 };
 
 type RunWithVertexCredentialFailoverOptions<T> = {
@@ -105,14 +106,14 @@ const claimVertexCredential = async (row: VertexCredentialRow, claimedAtIso: str
 const reserveVertexCredential = async ({
   excludedIds = [],
   normalCooldownMs = VERTEX_KEY_NORMAL_COOLDOWN_MS,
+  allowCoolingFallback = true,
 }: ReserveVertexCredentialOptions = {}): Promise<VertexCredentialRow | null> => {
   const nowMs = Date.now();
   const claimedAtIso = new Date(nowMs).toISOString();
   const rows = await getActiveVertexCredentialRows();
 
-  const availableRows = rows.filter(
-    (row) => !excludedIds.includes(row.id) && !isCoolingDownAfterFailure(row, nowMs),
-  );
+  const eligibleRows = rows.filter((row) => !excludedIds.includes(row.id));
+  const availableRows = eligibleRows.filter((row) => !isCoolingDownAfterFailure(row, nowMs));
 
   const sortedRows = sortVertexCredentials(availableRows, nowMs, normalCooldownMs);
 
@@ -123,6 +124,24 @@ const reserveVertexCredential = async ({
         ...row,
         last_used_at: claimedAtIso,
       };
+    }
+  }
+
+  if (allowCoolingFallback && eligibleRows.length > 0) {
+    const fallbackRows = sortVertexCredentials(eligibleRows, nowMs, normalCooldownMs);
+
+    for (const row of fallbackRows) {
+      const claimed = await claimVertexCredential(row, claimedAtIso);
+      if (claimed) {
+        console.warn(
+          `[vertex-credentials] Reusing cooling credential ${row.name || row.id} because the pool is temporarily exhausted.`,
+        );
+
+        return {
+          ...row,
+          last_used_at: claimedAtIso,
+        };
+      }
     }
   }
 

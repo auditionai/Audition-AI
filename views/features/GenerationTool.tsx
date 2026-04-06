@@ -48,6 +48,7 @@ import {
 import {
   runCharacterImageReview,
   buildCharacterReviewMessage,
+  formatCharacterReviewErrorMessage,
   getCharacterReviewFlags,
   type CharacterImageReviewResult,
 } from '../../services/characterImageReviewService';
@@ -670,13 +671,14 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           setCharacterReviews((prev) => ({ ...prev, [charId]: review }));
           setReviewErrorByCharId((prev) => ({ ...prev, [charId]: null }));
       } catch (error) {
+          const reviewErrorMessage = formatCharacterReviewErrorMessage(error);
           console.warn('[GenerationTool] Failed to review character image', error);
           setCharacterReviews((prev) => ({ ...prev, [charId]: null }));
           setReviewErrorByCharId((prev) => ({
               ...prev,
-              [charId]: error instanceof Error ? error.message : 'Không thể quét ảnh nhân vật.',
+              [charId]: reviewErrorMessage,
           }));
-          notify('Quét ảnh nhân vật thất bại. Kiểm tra lại kết nối hoặc cấu hình Vertex AI.', 'warning');
+          notify(reviewErrorMessage, 'warning');
       } finally {
           setReviewLoadingByCharId((prev) => ({ ...prev, [charId]: false }));
       }

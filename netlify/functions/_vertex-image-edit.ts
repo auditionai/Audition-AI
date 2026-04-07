@@ -84,6 +84,64 @@ const normalizeAspectRatio = (value?: string) => {
   return supportedAspectRatios.has(normalized) ? normalized : undefined;
 };
 
+const extractInlineImageFromResponse = (data: any) => {
+  const candidates = Array.isArray(data?.candidates) ? data.candidates : [];
+  for (const candidate of candidates) {
+    const parts = Array.isArray(candidate?.content?.parts) ? candidate.content.parts : [];
+    for (const part of parts) {
+      const inlineData = part?.inlineData || part?.inline_data;
+      if (typeof inlineData?.data === 'string' && inlineData.data.trim()) {
+        return {
+          mimeType: inlineData.mimeType || inlineData.mime_type || 'image/png',
+          data: inlineData.data,
+        };
+      }
+    }
+  }
+
+  return null;
+};
+
+const extractResponseText = (data: any) => {
+  const candidates = Array.isArray(data?.candidates) ? data.candidates : [];
+  const texts: string[] = [];
+
+  for (const candidate of candidates) {
+    const parts = Array.isArray(candidate?.content?.parts) ? candidate.content.parts : [];
+    for (const part of parts) {
+      if (typeof part?.text === 'string' && part.text.trim()) {
+        texts.push(part.text.trim());
+      }
+    }
+  }
+
+  return texts.join(' ').trim();
+};
+
+const buildMissingImageError = (data: any, modelName: string) => {
+  const promptFeedback = data?.promptFeedback || data?.prompt_feedback;
+  const blockReason =
+    promptFeedback?.blockReason ||
+    promptFeedback?.block_reason ||
+    data?.candidates?.[0]?.finishReason ||
+    data?.candidates?.[0]?.finish_reason;
+  const blockMessage =
+    promptFeedback?.blockReasonMessage ||
+    promptFeedback?.block_reason_message ||
+    '';
+  const responseText = extractResponseText(data);
+
+  const details = [
+    blockReason ? `finish reason: ${String(blockReason).trim()}` : '',
+    blockMessage ? `detail: ${String(blockMessage).trim()}` : '',
+    responseText ? `text: ${responseText.slice(0, 220)}` : '',
+  ].filter(Boolean);
+
+  return details.length > 0
+    ? `Vertex AI did not return an edited image (${modelName}); ${details.join(' | ')}`
+    : `Vertex AI did not return an edited image (${modelName}).`;
+};
+
 export const runVertexImageEdit = async ({
   sourceImage,
   instruction,
@@ -105,7 +163,7 @@ export const runVertexImageEdit = async ({
     taskName: `image editing (${modelName})`,
     operation: async ({ projectId, accessToken }) => {
       const response = await fetch(
-        `https://aiplatform.googleapis.com/v1/projects/${projectId}/locations/global/publishers/google/models/${modelName}:generateContent`,
+        `https://aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/global/publishers/google/models/${modelName}:generateContent`,
         {
           method: 'POST',
           headers: {
@@ -139,15 +197,12 @@ export const runVertexImageEdit = async ({
       }
 
       const data = await response.json();
-      const imagePart = data?.candidates?.[0]?.content?.parts?.find((part: any) => part?.inlineData?.data);
-      const inlineData = imagePart?.inlineData;
-
-      if (!inlineData?.data) {
-        throw new Error('Vertex AI image editing did not return image data.');
+      const inlineImage = extractInlineImageFromResponse(data);
+      if (!inlineImage?.data) {
+        throw new Error(buildMissingImageError(data, modelName));
       }
 
-      const outputMimeType = inlineData.mimeType || 'image/png';
-      return `data:${outputMimeType};base64,${inlineData.data}`;
+      return `data:${inlineImage.mimeType || 'image/png'};base64,${inlineImage.data}`;
     },
   });
 };

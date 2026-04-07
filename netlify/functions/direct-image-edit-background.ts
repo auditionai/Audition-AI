@@ -10,16 +10,7 @@ const getJobIdFromRequest = async (request: Request) => {
   return String(body.jobId || '').trim();
 };
 
-export default async (request: Request) => {
-  if (request.method !== 'POST') {
-    throw new Error('Method Not Allowed');
-  }
-
-  const jobId = await getJobIdFromRequest(request);
-  if (!jobId) {
-    throw new Error('Missing jobId');
-  }
-
+const runDirectImageEditBackground = async (jobId: string) => {
   try {
     await processDirectImageEditJob(jobId);
   } catch (error: any) {
@@ -28,7 +19,7 @@ export default async (request: Request) => {
   }
 };
 
-export const localHandler: Handler = async (event) => {
+export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return {
       statusCode: 204,
@@ -53,7 +44,7 @@ export const localHandler: Handler = async (event) => {
       };
     }
 
-    await processDirectImageEditJob(jobId);
+    await runDirectImageEditBackground(jobId);
     return {
       statusCode: 200,
       body: JSON.stringify({ success: true }),
@@ -64,4 +55,20 @@ export const localHandler: Handler = async (event) => {
       body: JSON.stringify({ error: error?.message || 'Internal Server Error' }),
     };
   }
+};
+
+// Keep local dev imports working while exposing the standard Netlify function entrypoint.
+export const localHandler = handler;
+
+export default async (request: Request) => {
+  if (request.method !== 'POST') {
+    throw new Error('Method Not Allowed');
+  }
+
+  const jobId = await getJobIdFromRequest(request);
+  if (!jobId) {
+    throw new Error('Missing jobId');
+  }
+
+  await runDirectImageEditBackground(jobId);
 };

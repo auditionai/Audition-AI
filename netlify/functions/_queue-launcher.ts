@@ -15,23 +15,16 @@ const parseOrigin = (value?: string | null) => {
   }
 };
 
-const resolveBaseUrl = (rawUrl?: string | null) => {
-  // On Netlify, prefer deploy-native URLs so internal background launches do not
-  // bounce through custom-domain proxies such as Cloudflare.
-  const netlifyInternalOrigin =
-    parseOrigin(process.env.DEPLOY_PRIME_URL) ||
-    parseOrigin(process.env.DEPLOY_URL);
+const resolveBaseUrls = (rawUrl?: string | null) => {
+  const candidates = [
+    parseOrigin(process.env.DEPLOY_PRIME_URL),
+    parseOrigin(process.env.DEPLOY_URL),
+    parseOrigin(rawUrl),
+    parseOrigin(process.env.URL),
+    parseOrigin(process.env.SITE_URL),
+  ].filter(Boolean);
 
-  if (netlifyInternalOrigin) {
-    return netlifyInternalOrigin;
-  }
-
-  return (
-    parseOrigin(rawUrl) ||
-    parseOrigin(process.env.URL) ||
-    parseOrigin(process.env.SITE_URL) ||
-    ''
-  );
+  return Array.from(new Set(candidates));
 };
 
 export const triggerBackgroundFunction = async (
@@ -44,31 +37,54 @@ export const triggerBackgroundFunction = async (
     body?: string;
   },
 ) => {
-  const baseUrl = resolveBaseUrl(rawUrl);
-  if (!baseUrl) {
+  const baseUrls = resolveBaseUrls(rawUrl);
+  if (baseUrls.length === 0) {
     return false;
   }
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const startedAt = Date.now();
+  let lastError: Error | null = null;
 
-  try {
-    const response = await fetch(new URL(path, baseUrl).toString(), {
-      method: init?.method || 'POST',
-      headers: init?.headers,
-      body: init?.body,
-      signal: controller.signal,
-    });
-
-    if (!response.ok && response.status !== 202) {
-      const body = await response.text().catch(() => '');
-      throw new Error(body || `Background worker launch failed with ${response.status}`);
+  for (const baseUrl of baseUrls) {
+    const remainingMs = timeoutMs - (Date.now() - startedAt);
+    if (remainingMs <= 0) {
+      break;
     }
 
-    return true;
-  } finally {
-    clearTimeout(timeoutId);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), remainingMs);
+
+    try {
+      const response = await fetch(new URL(path, baseUrl).toString(), {
+        method: init?.method || 'POST',
+        headers: init?.headers,
+        body: init?.body,
+        signal: controller.signal,
+      });
+
+      if (!response.ok && response.status !== 202) {
+        const body = await response.text().catch(() => '');
+        throw new Error(body || `Background worker launch failed with ${response.status}`);
+      }
+
+      return true;
+    } catch (error: any) {
+      lastError = error instanceof Error ? error : new Error(String(error || 'Background worker launch failed'));
+      console.warn('[queue-launcher] background launch attempt failed:', {
+        baseUrl,
+        path,
+        error: lastError.message,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
+
+  if (lastError) {
+    throw lastError;
+  }
+
+  return false;
 };
 
 export const triggerBackgroundQueueWorker = async (

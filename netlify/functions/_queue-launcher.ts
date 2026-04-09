@@ -3,16 +3,35 @@ import { isDedicatedQueueWorkerMode } from './_queue-runtime-mode';
 const DEFAULT_LAUNCH_TIMEOUT_MS = 10_000;
 const BACKGROUND_WORKER_PATH = '/.netlify/functions/queue-worker-background';
 
-const resolveBaseUrl = (rawUrl?: string | null) => {
-  if (rawUrl) {
-    try {
-      return new URL(rawUrl).origin;
-    } catch {
-      // Ignore invalid URL and fall through to envs.
-    }
+const parseOrigin = (value?: string | null) => {
+  if (!value) {
+    return '';
   }
 
-  return process.env.URL || process.env.DEPLOY_URL || process.env.SITE_URL || '';
+  try {
+    return new URL(value).origin;
+  } catch {
+    return '';
+  }
+};
+
+const resolveBaseUrl = (rawUrl?: string | null) => {
+  // On Netlify, prefer deploy-native URLs so internal background launches do not
+  // bounce through custom-domain proxies such as Cloudflare.
+  const netlifyInternalOrigin =
+    parseOrigin(process.env.DEPLOY_PRIME_URL) ||
+    parseOrigin(process.env.DEPLOY_URL);
+
+  if (netlifyInternalOrigin) {
+    return netlifyInternalOrigin;
+  }
+
+  return (
+    parseOrigin(rawUrl) ||
+    parseOrigin(process.env.URL) ||
+    parseOrigin(process.env.SITE_URL) ||
+    ''
+  );
 };
 
 export const triggerBackgroundFunction = async (

@@ -15,11 +15,26 @@ const parseOrigin = (value?: string | null) => {
   }
 };
 
+const isNetlifyOrigin = (origin?: string | null) => {
+  try {
+    const hostname = new URL(String(origin || '')).hostname.toLowerCase();
+    return hostname.endsWith('.netlify.app');
+  } catch {
+    return false;
+  }
+};
+
+const getSiteNameOrigin = () => {
+  const siteName = String(process.env.SITE_NAME || '').trim();
+  return siteName ? `https://${siteName}.netlify.app` : '';
+};
+
 const resolveBaseUrls = (rawUrl?: string | null) => {
+  const rawOrigin = parseOrigin(rawUrl);
   const candidates = [
-    parseOrigin(process.env.DEPLOY_PRIME_URL),
-    parseOrigin(process.env.DEPLOY_URL),
-    parseOrigin(rawUrl),
+    isNetlifyOrigin(rawOrigin) ? rawOrigin : '',
+    getSiteNameOrigin(),
+    rawOrigin,
     parseOrigin(process.env.URL),
     parseOrigin(process.env.SITE_URL),
   ].filter(Boolean);

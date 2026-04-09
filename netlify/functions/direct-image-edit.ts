@@ -55,7 +55,7 @@ const mapError = (message: string) => {
 
 const triggerDirectImageEditBackground = async (rawUrl?: string | null, jobId?: string) => {
   if (!jobId) {
-    return false;
+    return { launched: false, errorMessage: 'Missing job id for background launch' };
   }
 
   try {
@@ -63,10 +63,13 @@ const triggerDirectImageEditBackground = async (rawUrl?: string | null, jobId?: 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ jobId }),
     });
-    return launched;
-  } catch (error) {
+    return { launched, errorMessage: launched ? null : 'Background launch returned false' };
+  } catch (error: any) {
     console.error('[direct-image-edit] Failed to launch background processor:', error);
-    return false;
+    return {
+      launched: false,
+      errorMessage: error?.message || 'Background launch threw an unknown error',
+    };
   }
 };
 
@@ -304,12 +307,13 @@ export const handler: Handler = async (event) => {
       throw insertError;
     }
 
-    const launched = await triggerDirectImageEditBackground(event.rawUrl, jobId);
-    if (!launched) {
+    const launchResult = await triggerDirectImageEditBackground(event.rawUrl, jobId);
+    if (!launchResult.launched) {
+      const launchErrorMessage = launchResult.errorMessage || 'Failed to start direct edit background processor';
       await admin.from('generated_images').update({
         status: 'failed',
         progress: 100,
-        error_message: 'Failed to start direct edit background processor',
+        error_message: `Failed to start direct edit background processor: ${launchErrorMessage}`,
         updated_at: new Date().toISOString(),
         finished_at: new Date().toISOString(),
       }).eq('id', jobId);
@@ -321,7 +325,7 @@ export const handler: Handler = async (event) => {
         });
       }
 
-      throw new Error('Failed to start direct edit background processor');
+      throw new Error(`Failed to start direct edit background processor: ${launchErrorMessage}`);
     }
 
     return {

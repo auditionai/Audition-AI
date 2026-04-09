@@ -19,6 +19,11 @@ const runDirectImageEditBackground = async (jobId: string) => {
   }
 };
 
+const parseJobIdFromEventBody = (body?: string | null) => {
+  const parsed = JSON.parse(body || '{}') as DirectImageEditBackgroundBody;
+  return String(parsed.jobId || '').trim();
+};
+
 export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return {
@@ -35,8 +40,7 @@ export const handler: Handler = async (event) => {
   }
 
   try {
-    const body = JSON.parse(event.body || '{}') as DirectImageEditBackgroundBody;
-    const jobId = String(body.jobId || '').trim();
+    const jobId = parseJobIdFromEventBody(event.body);
     if (!jobId) {
       return {
         statusCode: 400,
@@ -58,7 +62,47 @@ export const handler: Handler = async (event) => {
 };
 
 // Keep local dev imports working while exposing the standard Netlify function entrypoint.
-export const localHandler = handler;
+export const localHandler: Handler = async (event) => {
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 204,
+      body: '',
+    };
+  }
+
+  if (event.httpMethod !== 'POST') {
+    return {
+      statusCode: 405,
+      body: JSON.stringify({ error: 'Method Not Allowed' }),
+    };
+  }
+
+  try {
+    const jobId = parseJobIdFromEventBody(event.body);
+    if (!jobId) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: 'Missing jobId' }),
+      };
+    }
+
+    // Render web runs in a persistent Node process, so detach the processor and
+    // acknowledge immediately instead of blocking the launcher request.
+    setImmediate(() => {
+      void runDirectImageEditBackground(jobId);
+    });
+
+    return {
+      statusCode: 202,
+      body: JSON.stringify({ success: true, accepted: true }),
+    };
+  } catch (error: any) {
+    return {
+      statusCode: /Method Not Allowed/i.test(String(error?.message || '')) ? 405 : 500,
+      body: JSON.stringify({ error: error?.message || 'Internal Server Error' }),
+    };
+  }
+};
 
 export default async (request: Request) => {
   if (request.method !== 'POST') {

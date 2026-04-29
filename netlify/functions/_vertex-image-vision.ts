@@ -258,12 +258,13 @@ export const analyzeImageGenerationVision = async (
   }
 
   let sample: SampleVisionAnalysis | undefined;
-  if (payload.sampleImage) {
+  const sampleAnalysisSource = payload.sampleAnalysisImage || payload.sampleImage;
+  if (sampleAnalysisSource) {
     try {
       sample = normalizeSampleVision(
         await generateVisionJson<any>(
           'sample image analysis',
-          [await toInlineImagePart(payload.sampleImage)],
+          [await toInlineImagePart(sampleAnalysisSource)],
           buildSampleVisionPrompt(),
           options?.onDiagnostic,
         ),

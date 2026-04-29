@@ -775,9 +775,11 @@ export function WorkspaceImage() {
         const stagedCharacterImages = stagedCharacterGroups.flatMap((g) => g.references.map((r) => r.source));
 
         let stagedSampleImage: string | null = null;
+        let stagedSampleAnalysisImage: string | null = null;
         if (refImage) {
           addSubmissionLog('Đang chuẩn hóa ảnh mẫu để giữ bố cục và tư thế.');
           stagedSampleImage = await tryStageSampleReferenceInput(refImage, `inputs/generation/${activeMode}/sample`, aspectRatio);
+          stagedSampleAnalysisImage = await tryStageGenerationInput(refImage, `inputs/generation/${activeMode}/sample-analysis`);
         }
 
         const stagedStyleImage = activeStylePreset
@@ -834,6 +836,7 @@ export function WorkspaceImage() {
           characterReferenceGroups: stagedCharacterGroups,
           characterImages: stagedCharacterImages,
           sampleImage: stagedSampleImage,
+          sampleAnalysisImage: stagedSampleAnalysisImage || stagedSampleImage,
           styleImage: stagedStyleImage,
           stylePrompt: styleMetadata?.trigger_prompt || styleMetadata?.name || null,
           __notifyInputMedia: notifyInputMedia,

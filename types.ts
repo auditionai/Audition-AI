@@ -259,7 +259,6 @@ export interface HistoryItem {
     status: 'success' | 'pending' | 'failed';
     code?: string;
 }
-
 export interface CheckinConfig {
   day: number;
   reward: number;

@@ -18,7 +18,7 @@ import { CONCURRENCY_LIMITS, useConcurrency } from '../../services/concurrencySe
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import { downloadAssetToBrowser } from '../../services/downloadService';
-import { createSolidFence, createStyleOnlyReference, optimizePayload } from '../../utils/imageProcessor';
+import { createFaceLockReference, createPoseOnlyReference, optimizePayload } from '../../utils/imageProcessor';
 import { APP_CONFIG } from '../../constants';
 import {
   type AuditionPricingOverride,
@@ -117,25 +117,28 @@ const tryStageSampleReferenceInput = async (source: string, folder: string, aspe
     if (!source) return null;
 
     try {
-        const poseOnlyReference = await createSolidFence(source, aspectRatio, true);
+        const poseOnlyReference = await createPoseOnlyReference(source, aspectRatio);
         const optimizedSource = await optimizePayload(poseOnlyReference, 2048);
         return await uploadFileToR2(optimizedSource, folder);
     } catch (error) {
-        console.warn('[GenerationTool] Failed to stage sample reference through pose-only fence.', error);
+        console.warn('[GenerationTool] Failed to stage sample reference.', error);
         throw new Error('Không thể chuẩn hóa ảnh mẫu trước khi tạo ảnh. Vui lòng thử lại.');
     }
 };
 
-const tryStageStyleReferenceInput = async (source: string, folder: string) => {
+const tryStageFaceLockReferenceInput = async (source: string, folder: string) => {
     if (!source) return null;
 
     try {
-        const styleOnlyReference = await createStyleOnlyReference(source);
-        const optimizedSource = await optimizePayload(styleOnlyReference, 1536);
+        const faceLockReference = await createFaceLockReference(source);
+        if (faceLockReference === source) {
+            return null;
+        }
+        const optimizedSource = await optimizePayload(faceLockReference, 1536);
         return await uploadFileToR2(optimizedSource, folder);
     } catch (error) {
-        console.warn('[GenerationTool] Failed to stage style reference.', error);
-        throw new Error('Không thể chuẩn hóa ảnh style trước khi tạo ảnh. Vui lòng thử lại.');
+        console.warn('[GenerationTool] Failed to stage face-lock reference.', error);
+        throw new Error('Không thể khóa gương mặt nhân vật trước khi tạo ảnh. Vui lòng thử lại.');
     }
 };
 
@@ -924,6 +927,14 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                         const references: CharacterReferenceGroup['references'] = [];
 
                         if (char.bodyImage) {
+                            const stagedFaceLock = await tryStageFaceLockReferenceInput(
+                                char.bodyImage,
+                                `inputs/generation/${activeMode}/character-${charIndex + 1}/face`,
+                            );
+                            if (stagedFaceLock) {
+                                references.push({ source: stagedFaceLock, kind: 'face' });
+                            }
+
                             const stagedBody = await tryStageGenerationInput(
                                 char.bodyImage,
                                 `inputs/generation/${activeMode}/character-${charIndex + 1}/body`,
@@ -951,9 +962,26 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
             const stagedSampleImage = refImage
                 ? await tryStageSampleReferenceInput(refImage, `inputs/generation/${activeMode}/sample`, aspectRatio)
                 : null;
-            const stagedStyleImage = activeStylePreset
-                ? await tryStageStyleReferenceInput(activeStylePreset, `inputs/generation/${activeMode}/style`)
-                : null;
+            // Style presets stay text-only to avoid leaking preset character identity into the final render.
+            const stagedStyleImage = null;
+            const notifyInputMedia = [
+                ...stagedCharacterGroups.flatMap((group) =>
+                    group.references.map((reference) => ({
+                        url: reference.source,
+                        role: 'character' as const,
+                        kind: 'image' as const,
+                        userProvided: true,
+                    })),
+                ),
+                ...(stagedSampleImage
+                    ? [{
+                        url: stagedSampleImage,
+                        role: 'sample' as const,
+                        kind: 'image' as const,
+                        userProvided: true,
+                    }]
+                    : []),
+            ];
 
             const queuePayload: ImageGenerateRecipePayload = {
                 recipeType: 'image_generate_recipe_v1',
@@ -972,6 +1000,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                 sampleImage: stagedSampleImage || null,
                 styleImage: stagedStyleImage || null,
                 stylePrompt: styleMetadata?.trigger_prompt || styleMetadata?.name || null,
+                __notifyInputMedia: notifyInputMedia,
             };
 
             await enqueueServerJob({

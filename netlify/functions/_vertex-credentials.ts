@@ -19,6 +19,8 @@ type VertexSession = {
 type ReserveVertexCredentialOptions = {
   excludedIds?: string[];
   normalCooldownMs?: number;
+  recentReuseBlockMs?: number;
+  usageWindowMs?: number;
   allowCoolingFallback?: boolean;
 };
 
@@ -33,9 +35,14 @@ const VERTEX_SCOPE = 'https://www.googleapis.com/auth/cloud-platform';
 
 export const VERTEX_KEY_NORMAL_COOLDOWN_MS = 2 * 60_000;
 export const VERTEX_KEY_FAILURE_COOLDOWN_MS = 10 * 60_000;
+export const VERTEX_KEY_QUOTA_COOLDOWN_MS = 20 * 60_000;
+export const VERTEX_KEY_RECENT_REUSE_BLOCK_MS = 15_000;
+export const VERTEX_KEY_USAGE_WINDOW_MS = 10 * 60_000;
 
 export const isVertexServiceAccountJson = (value: string) =>
   value.includes('project_id') && value.includes('private_key') && value.includes('client_email');
+
+const vertexCredentialRecentUsage = new Map<string, number[]>();
 
 const getTimestampMs = (value?: string | null) => {
   if (!value) return 0;
@@ -45,22 +52,78 @@ const getTimestampMs = (value?: string | null) => {
 
 const isCoolingDownAfterFailure = (row: VertexCredentialRow, nowMs: number) => getTimestampMs(row.last_used_at) > nowMs;
 
+const pruneVertexCredentialUsage = (credentialId: string, nowMs: number, usageWindowMs: number) => {
+  const entries = vertexCredentialRecentUsage.get(credentialId) || [];
+  const nextEntries = entries.filter((value) => nowMs - value < usageWindowMs);
+
+  if (nextEntries.length > 0) {
+    vertexCredentialRecentUsage.set(credentialId, nextEntries);
+  } else {
+    vertexCredentialRecentUsage.delete(credentialId);
+  }
+
+  return nextEntries;
+};
+
+const getVertexCredentialRecentUsageCount = (
+  credentialId: string,
+  nowMs: number,
+  usageWindowMs: number,
+) => pruneVertexCredentialUsage(credentialId, nowMs, usageWindowMs).length;
+
+const recordVertexCredentialUsage = (
+  credentialId: string,
+  usedAtMs: number,
+  usageWindowMs: number,
+) => {
+  const nextEntries = [
+    ...pruneVertexCredentialUsage(credentialId, usedAtMs, usageWindowMs),
+    usedAtMs,
+  ];
+  vertexCredentialRecentUsage.set(credentialId, nextEntries);
+};
+
+const isRecentlyReserved = (
+  row: VertexCredentialRow,
+  nowMs: number,
+  recentReuseBlockMs: number,
+) => {
+  const lastUsedMs = getTimestampMs(row.last_used_at);
+  if (lastUsedMs > 0 && lastUsedMs <= nowMs && nowMs - lastUsedMs < recentReuseBlockMs) {
+    return true;
+  }
+
+  const localRecentEntries = vertexCredentialRecentUsage.get(row.id) || [];
+  return localRecentEntries.some((value) => nowMs - value < recentReuseBlockMs);
+};
+
 const sortVertexCredentials = (
   rows: VertexCredentialRow[],
   nowMs: number,
   normalCooldownMs: number,
+  usageWindowMs: number,
 ) => {
   return [...rows].sort((a, b) => {
     const aLastUsedMs = getTimestampMs(a.last_used_at);
     const bLastUsedMs = getTimestampMs(b.last_used_at);
+    const aRecentUsageCount = getVertexCredentialRecentUsageCount(a.id, nowMs, usageWindowMs);
+    const bRecentUsageCount = getVertexCredentialRecentUsageCount(b.id, nowMs, usageWindowMs);
     const aIsWarm = aLastUsedMs > 0 && nowMs - aLastUsedMs < normalCooldownMs;
     const bIsWarm = bLastUsedMs > 0 && nowMs - bLastUsedMs < normalCooldownMs;
+
+    if (aRecentUsageCount !== bRecentUsageCount) {
+      return aRecentUsageCount - bRecentUsageCount;
+    }
 
     if (aIsWarm !== bIsWarm) {
       return aIsWarm ? 1 : -1;
     }
 
-    return aLastUsedMs - bLastUsedMs;
+    if (aLastUsedMs !== bLastUsedMs) {
+      return aLastUsedMs - bLastUsedMs;
+    }
+
+    return String(a.name || a.id).localeCompare(String(b.name || b.id));
   });
 };
 
@@ -106,6 +169,8 @@ const claimVertexCredential = async (row: VertexCredentialRow, claimedAtIso: str
 const reserveVertexCredential = async ({
   excludedIds = [],
   normalCooldownMs = VERTEX_KEY_NORMAL_COOLDOWN_MS,
+  recentReuseBlockMs = VERTEX_KEY_RECENT_REUSE_BLOCK_MS,
+  usageWindowMs = VERTEX_KEY_USAGE_WINDOW_MS,
   allowCoolingFallback = true,
 }: ReserveVertexCredentialOptions = {}): Promise<VertexCredentialRow | null> => {
   const nowMs = Date.now();
@@ -113,13 +178,15 @@ const reserveVertexCredential = async ({
   const rows = await getActiveVertexCredentialRows();
 
   const eligibleRows = rows.filter((row) => !excludedIds.includes(row.id));
-  const availableRows = eligibleRows.filter((row) => !isCoolingDownAfterFailure(row, nowMs));
+  const nonCoolingRows = eligibleRows.filter((row) => !isCoolingDownAfterFailure(row, nowMs));
+  const preferredRows = nonCoolingRows.filter((row) => !isRecentlyReserved(row, nowMs, recentReuseBlockMs));
 
-  const sortedRows = sortVertexCredentials(availableRows, nowMs, normalCooldownMs);
+  const sortedRows = sortVertexCredentials(preferredRows, nowMs, normalCooldownMs, usageWindowMs);
 
   for (const row of sortedRows) {
     const claimed = await claimVertexCredential(row, claimedAtIso);
     if (claimed) {
+      recordVertexCredentialUsage(row.id, nowMs, usageWindowMs);
       return {
         ...row,
         last_used_at: claimedAtIso,
@@ -127,12 +194,32 @@ const reserveVertexCredential = async ({
     }
   }
 
-  if (allowCoolingFallback && eligibleRows.length > 0) {
-    const fallbackRows = sortVertexCredentials(eligibleRows, nowMs, normalCooldownMs);
+  if (allowCoolingFallback && nonCoolingRows.length > 0) {
+    const fallbackRows = sortVertexCredentials(nonCoolingRows, nowMs, normalCooldownMs, usageWindowMs);
 
     for (const row of fallbackRows) {
       const claimed = await claimVertexCredential(row, claimedAtIso);
       if (claimed) {
+        recordVertexCredentialUsage(row.id, nowMs, usageWindowMs);
+        console.warn(
+          `[vertex-credentials] Reusing recently active credential ${row.name || row.id} because all colder credentials are busy.`,
+        );
+
+        return {
+          ...row,
+          last_used_at: claimedAtIso,
+        };
+      }
+    }
+  }
+
+  if (allowCoolingFallback && eligibleRows.length > 0) {
+    const coolingFallbackRows = sortVertexCredentials(eligibleRows, nowMs, normalCooldownMs, usageWindowMs);
+
+    for (const row of coolingFallbackRows) {
+      const claimed = await claimVertexCredential(row, claimedAtIso);
+      if (claimed) {
+        recordVertexCredentialUsage(row.id, nowMs, usageWindowMs);
         console.warn(
           `[vertex-credentials] Reusing cooling credential ${row.name || row.id} because the pool is temporarily exhausted.`,
         );
@@ -196,6 +283,17 @@ export const isVertexCredentialRetryableError = (error: unknown) => {
   );
 };
 
+export const isVertexQuotaOrRateLimitError = (error: unknown) => {
+  const message = toError(error).message.toLowerCase();
+
+  return (
+    message.includes('429') ||
+    message.includes('resource has been exhausted') ||
+    message.includes('quota') ||
+    message.includes('rate limit')
+  );
+};
+
 const buildVertexSession = async (row: VertexCredentialRow): Promise<VertexSession> => {
   const credentials = JSON.parse(row.key_value || '{}');
   const projectId = typeof credentials.project_id === 'string' ? credentials.project_id : '';
@@ -256,7 +354,12 @@ export const runWithVertexCredentialFailover = async <T>({
       lastRetryableError = normalizedError;
 
       try {
-        await markVertexCredentialCooldown(row.id, failureCooldownMs);
+        await markVertexCredentialCooldown(
+          row.id,
+          isVertexQuotaOrRateLimitError(normalizedError)
+            ? VERTEX_KEY_QUOTA_COOLDOWN_MS
+            : failureCooldownMs,
+        );
       } catch (cooldownError) {
         console.warn('[vertex-credentials] Failed to apply cooldown:', cooldownError);
       }

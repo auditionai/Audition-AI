@@ -3,14 +3,14 @@
  * Profile data from AuthContext, functional logout
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Palette, LifeBuoy, FileText, LogOut, ChevronRight, Coins, Info, Key, Gift, CircleUser, X, Loader, Shield } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../components/NotificationSystem';
 import { useTheme } from '../contexts/ThemeContext';
 import { supabase } from '../services/supabaseClient';
-import { redeemGiftcode, updateMyProfile } from '../services/economyService';
+import { getGiftcodePromoConfig, redeemGiftcode, updateMyProfile } from '../services/economyService';
 import { uploadFileToR2 } from '../services/storageService';
 
 export function Settings() {
@@ -30,6 +30,7 @@ export function Settings() {
 
   // Giftcode State
   const [giftcode, setGiftcode] = useState('');
+  const [giftcodePromo, setGiftcodePromo] = useState({ text: '', isActive: false });
 
   // Avatar Upload Ref
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -64,6 +65,29 @@ export function Settings() {
     if (t === 'dark') return 'Tối (Dark)';
     return 'Hệ thống (System)';
   };
+
+  useEffect(() => {
+    let disposed = false;
+
+    const loadGiftcodePromo = async () => {
+      try {
+        const nextPromo = await getGiftcodePromoConfig();
+        if (!disposed) {
+          setGiftcodePromo(nextPromo);
+        }
+      } catch {
+        if (!disposed) {
+          setGiftcodePromo({ text: '', isActive: false });
+        }
+      }
+    };
+
+    void loadGiftcodePromo();
+
+    return () => {
+      disposed = true;
+    };
+  }, []);
 
   // --- ACTIONS ---
 
@@ -308,6 +332,20 @@ export function Settings() {
               </div>
               
               <div className="space-y-4">
+                {giftcodePromo.isActive && giftcodePromo.text.trim() && (
+                  <div className="rounded-[20px] border border-violet-200 bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-500 px-4 py-4 text-white shadow-lg shadow-fuchsia-500/20">
+                    <div className="flex items-start gap-3">
+                      <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/15">
+                        <Gift className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-white/70">Khuyến mại hiện tại</p>
+                        <p className="mt-1 text-sm font-semibold leading-5">{giftcodePromo.text.trim()}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 dark:text-zinc-300 mb-2">Mã Giftcode</label>
                   <input

@@ -45,6 +45,148 @@ export const loadImageWithTimeout = (src: string, timeoutMs = 5000): Promise<HTM
 };
 
 // Chế độ Solid Fence: Xử lý ảnh Pose để AI không copy y nguyên pixel
+const getReferenceCanvasSize = (targetAspectRatio: string = '1:1') => {
+    if (targetAspectRatio === '9:16') return { width: 768, height: 1344 };
+    if (targetAspectRatio === '16:9') return { width: 1344, height: 768 };
+    if (targetAspectRatio === '3:4') return { width: 896, height: 1152 };
+    if (targetAspectRatio === '4:3') return { width: 1152, height: 896 };
+    return { width: 1024, height: 1024 };
+};
+
+const drawContainedImage = (
+    ctx: CanvasRenderingContext2D,
+    img: HTMLImageElement,
+    canvasWidth: number,
+    canvasHeight: number,
+) => {
+    const scale = Math.min(canvasWidth / img.width, canvasHeight / img.height);
+    const drawW = img.width * scale;
+    const drawH = img.height * scale;
+    const x = (canvasWidth - drawW) / 2;
+    const y = (canvasHeight - drawH) / 2;
+    ctx.drawImage(img, x, y, drawW, drawH);
+    return { x, y, drawW, drawH };
+};
+
+const drawCoverCrop = (
+    ctx: CanvasRenderingContext2D,
+    img: HTMLImageElement,
+    sx: number,
+    sy: number,
+    sw: number,
+    sh: number,
+    dx: number,
+    dy: number,
+    dw: number,
+    dh: number,
+) => {
+    ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
+};
+
+const getFaceLockCrop = (img: HTMLImageElement) => {
+    const cropWidth = img.width * 0.58;
+    const cropHeight = img.height * 0.48;
+    const sx = Math.max(0, (img.width - cropWidth) / 2);
+    const sy = Math.max(0, img.height * 0.04);
+
+    return {
+        sx,
+        sy,
+        sw: Math.min(img.width - sx, cropWidth),
+        sh: Math.min(img.height - sy, cropHeight),
+    };
+};
+
+export const createPoseOnlyReference = async (
+    source: string,
+    targetAspectRatio: string = '1:1',
+): Promise<string> => {
+    try {
+        const img = await loadImageWithTimeout(source, 10000);
+        const { width: canvasW, height: canvasH } = getReferenceCanvasSize(targetAspectRatio);
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return source;
+
+        canvas.width = canvasW;
+        canvas.height = canvasH;
+
+        ctx.fillStyle = '#181818';
+        ctx.fillRect(0, 0, canvasW, canvasH);
+
+        ctx.save();
+        ctx.filter = 'grayscale(1) saturate(0) contrast(1.05) brightness(0.96) blur(1.6px)';
+        const { x, y, drawW, drawH } = drawContainedImage(ctx, img, canvasW, canvasH);
+        ctx.restore();
+
+        // Blur the upper band harder to suppress sample-face identity while keeping pose and framing.
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(x, y, drawW, drawH * 0.42);
+        ctx.clip();
+        ctx.filter = 'grayscale(1) saturate(0) contrast(1.02) brightness(0.93) blur(7px)';
+        drawContainedImage(ctx, img, canvasW, canvasH);
+        ctx.restore();
+
+        ctx.fillStyle = 'rgba(10, 10, 10, 0.14)';
+        ctx.fillRect(x, y, drawW, drawH);
+
+        return canvas.toDataURL('image/jpeg', 0.92);
+    } catch (error) {
+        console.warn('Pose-only reference generation failed:', error);
+        return source;
+    }
+};
+
+export const createFaceLockReference = async (source: string): Promise<string> => {
+    try {
+        const img = await loadImageWithTimeout(source, 10000);
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return source;
+
+        const size = 1024;
+        const padding = 28;
+        const { sx, sy, sw, sh } = getFaceLockCrop(img);
+
+        canvas.width = size;
+        canvas.height = size;
+
+        ctx.fillStyle = '#111111';
+        ctx.fillRect(0, 0, size, size);
+
+        ctx.save();
+        ctx.filter = 'blur(18px) brightness(0.72)';
+        drawCoverCrop(ctx, img, sx, sy, sw, sh, 0, 0, size, size);
+        ctx.restore();
+
+        ctx.save();
+        ctx.filter = 'contrast(1.08) saturate(1.03)';
+        drawCoverCrop(
+            ctx,
+            img,
+            sx,
+            sy,
+            sw,
+            sh,
+            padding,
+            padding,
+            size - padding * 2,
+            size - padding * 2,
+        );
+        ctx.restore();
+
+        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(padding, padding, size - padding * 2, size - padding * 2);
+
+        return canvas.toDataURL('image/jpeg', 0.94);
+    } catch (error) {
+        console.warn('Face-lock reference generation failed:', error);
+        return source;
+    }
+};
+
 export const createSolidFence = async (base64Str: string, targetAspectRatio: string = "1:1", isPoseRef: boolean = false): Promise<string> => {
     try {
         const img = await loadImageWithTimeout(base64Str);

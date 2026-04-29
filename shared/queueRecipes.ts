@@ -83,6 +83,17 @@ export interface ImageGenerateRecipePayload {
   __notifyInputMedia?: QueueNotificationMediaEntry[];
 }
 
+const CHARACTER_REFERENCE_KIND_PRIORITY: Record<CharacterReferenceKind, number> = {
+  face: 0,
+  body: 1,
+  reference: 2,
+};
+
+const sortCharacterReferences = (references: CharacterReferenceSourceEntry[]) =>
+  [...references].sort(
+    (a, b) => CHARACTER_REFERENCE_KIND_PRIORITY[a.kind] - CHARACTER_REFERENCE_KIND_PRIORITY[b.kind],
+  );
+
 const LAYERED_SINGLE_SUBJECT_PROMPT_PATTERNS = [
   /\bdouble exposure\b/i,
   /\bdouble-exposure\b/i,
@@ -190,9 +201,9 @@ const COMPACT_IMAGE_QUALITY_BOOSTERS =
 const IMAGE_NEGATIVE_PROMPT =
   'low quality, bad anatomy, worst quality, blur, grain, watermark, text, signature, bad hands, bad face, mixed backgrounds, conflicting styles, extra characters, unwanted people from style reference, real people, photorealistic humans, photograph, realistic photography, real life, semi-realistic human, cinematic human portrait, live action, realistic skin pores, natural skin texture, DSLR, realistic male model, realistic female model, hyperreal face, realistic eyelashes, realistic fabric, anime, cartoon, 2d, flat shading, floating character, disconnected limbs, hands in the air, feet not touching the ground, floating objects, unnatural posture, floating in mid-air, levitating, hovering, disconnected from background, bad perspective, illogical physics, panel layout, split screen, tiled image, image grid, collage, storyboard, diptych, triptych, quadrants, four panels, four-up layout, contact sheet';
 const IMAGE_ROLE_LOCK_CONSTRAINTS =
-  'STRICT ROLE LOCK: CHARACTER REFERENCES are the only identity source for face, hair, skin tone, head shape, body structure, outfit, shoes, accessories, tattoos, gender, and overall avatar identity. CHARACTER REFERENCES are NOT pose references. SAMPLE IMAGE is composition-only and controls pose, camera angle, framing, subject placement, body lean, hand placement, spacing, scene layout, and background composition only. Never reproduce SAMPLE IMAGE as the final output, never borrow its identity, outfit, or realism, and never return any uploaded reference nearly unchanged. STYLE IMAGE is style-only and may influence only render quality, lighting behavior, material response, color grading, stylized skin shading, broad adult 3D body language, and final finish. STYLE IMAGE must never override identity, subject count, pose, composition, or outfit. The final image must keep one-to-one slot mapping for all uploaded characters, remain a stylized 3D game avatar, and never become a photorealistic or semi-realistic human.';
+  'STRICT ROLE LOCK: CHARACTER REFERENCES are the only identity source for face, hair, skin tone, head shape, body structure, outfit, shoes, accessories, tattoos, gender, and overall avatar identity. FACE LOCK references, when present, are the highest-priority source for eyes, eyebrows, nose, lips, jawline, hairline, bangs, makeup, glasses, and facial likeness. CHARACTER REFERENCES are NOT pose references. SAMPLE IMAGE is composition-only and controls pose, camera angle, framing, subject placement, body lean, hand placement, spacing, scene layout, and background composition only. SAMPLE IMAGE must never contribute face identity, hairstyle identity, makeup identity, or facial expression identity, even if the sample face is large, sharp, centered, or visually dominant. Never reproduce SAMPLE IMAGE as the final output, never borrow its identity, outfit, or realism, and never return any uploaded reference nearly unchanged. STYLE IMAGE is style-only and may influence only render quality, lighting behavior, material response, color grading, stylized skin shading, broad adult 3D body language, and final finish. STYLE IMAGE must never override identity, subject count, pose, composition, or outfit. The final image must keep one-to-one slot mapping for all uploaded characters, remain a stylized 3D game avatar, and never become a photorealistic or semi-realistic human.';
 const REDUCED_IMAGE_ROLE_LOCK_CONSTRAINTS_NO_SAMPLE =
-  'STRICT ROLE LOCK: No SAMPLE IMAGE is provided, so USER REQUEST is the primary source for pose, framing, action, scene layout, and background. CHARACTER REFERENCES still define identity only and are NOT pose references. STYLE IMAGE is style-only and may influence only render quality, lighting behavior, material response, color grading, stylized skin shading, facial and hand planes, and final 3D finish. STYLE IMAGE must never override identity, pose, composition, camera framing, gender presentation, subject count, or outfit. Never return any uploaded reference nearly unchanged when the USER REQUEST asks for a different pose, scene, framing, or environment. Keep the result as a stylized 3D game avatar, not a photorealistic or semi-realistic human.';
+  'STRICT ROLE LOCK: No SAMPLE IMAGE is provided, so USER REQUEST is the primary source for pose, framing, action, scene layout, and background. CHARACTER REFERENCES still define identity only and are NOT pose references. FACE LOCK references, when present, are the highest-priority source for eyes, eyebrows, nose, lips, jawline, hairline, bangs, makeup, glasses, and facial likeness. STYLE IMAGE is style-only and may influence only render quality, lighting behavior, material response, color grading, stylized skin shading, facial and hand planes, and final 3D finish. STYLE IMAGE must never override identity, pose, composition, camera framing, gender presentation, subject count, or outfit. Never return any uploaded reference nearly unchanged when the USER REQUEST asks for a different pose, scene, framing, or environment. Keep the result as a stylized 3D game avatar, not a photorealistic or semi-realistic human.';
 const MAX_PROVIDER_PROMPT_LENGTH = 3200;
 const MAX_NEGATIVE_PROMPT_LENGTH = 900;
 
@@ -245,8 +256,14 @@ const trimPromptText = (value: string, maxLength: number) => {
   return `${value.slice(0, maxLength - 1).trimEnd()}…`;
 };
 
-export const shouldLockSampleCompositionForMultiCharacter = (payload: Pick<ImageGenerateRecipePayload, 'characterImages' | 'sampleImage'>) =>
-  Boolean(payload.sampleImage) && (payload.characterImages?.length || 0) >= 2;
+export const shouldLockSampleCompositionForMultiCharacter = (
+  payload: Pick<ImageGenerateRecipePayload, 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage'>,
+) =>
+  Boolean(payload.sampleImage) &&
+  Math.max(
+    0,
+    Math.floor(Number(payload.characterCount || getImageCharacterReferenceGroups(payload).length || 0)),
+  ) >= 2;
 
 const buildFallbackCharacterReferenceGroups = (
   payload: Pick<ImageGenerateRecipePayload, 'characterImages' | 'characterCount'>,
@@ -294,6 +311,10 @@ export const getImageCharacterReferenceGroups = (
           typeof entry.source === 'string' &&
           entry.source.trim().length > 0,
       ),
+    }))
+    .map((group) => ({
+      ...group,
+      references: sortCharacterReferences(group.references),
     }))
     .filter((group) => group.references.length > 0)
     .sort((a, b) => a.characterIndex - b.characterIndex);
@@ -434,9 +455,11 @@ const buildImageReferenceOrderDirective = (
 
     switch (entry.role) {
       case 'sample':
-        return `- Image ${number}: ${entry.indexLabel}. This is the PRIMARY composition anchor. It has already been processed into a composition-only guide. Copy pose, camera angle, framing, hand placement, body lean, environment layout, and background composition from this image only. Do not copy identity, outfit, facial anatomy, skin texture, text overlays, or realism from it. Never reproduce this reference as the final image.`;
+        return `- Image ${number}: ${entry.indexLabel}. This is the PRIMARY composition anchor. It has already been processed into a composition-only guide. Copy pose, camera angle, framing, hand placement, body lean, environment layout, and background composition from this image only. Do not copy identity, outfit, facial anatomy, facial expression identity, hair identity, skin texture, text overlays, or realism from it. Never reproduce this reference as the final image.`;
       case 'character':
-        return `- Image ${number}: ${entry.indexLabel}. Copy identity only: face, hair, head shape, skin tone, body structure, outfit, shoes, accessories, and tattoos. This image is NOT a pose reference. Ignore its current standing pose, limb placement, framing, and background.`;
+        return entry.indexLabel.includes('FACE LOCK')
+          ? `- Image ${number}: ${entry.indexLabel}. This is the highest-priority face identity anchor. Copy exact eyes, eyebrows, nose, lips, jawline, hairline, bangs, makeup, glasses, and facial likeness from this image. Override any conflicting face information from SAMPLE IMAGE, STYLE IMAGE, BODY references, or prompt phrasing.`
+          : `- Image ${number}: ${entry.indexLabel}. Copy identity only: face, hair, head shape, skin tone, body structure, outfit, shoes, accessories, and tattoos. This image is NOT a pose reference. Ignore its current standing pose, limb placement, framing, and background.`;
       case 'style':
         return `- Image ${number}: ${entry.indexLabel}. Copy only render language: render quality, shader behavior, lighting response, material quality, stylized skin shading, stylized facial/hand planes, and broad adult game-avatar body language. Do not copy pose, outfit, hairstyle, identity, gender, character count, or composition.`;
       default:
@@ -489,7 +512,9 @@ const buildReducedImageReferenceOrderDirectiveWithoutSample = (
 
     switch (entry.role) {
       case 'character':
-        return `- Image ${number}: ${entry.indexLabel}. Identity only: face, hair, skin tone, body structure, outfit, shoes, accessories, and tattoos. This image is NOT a pose reference.`;
+        return entry.indexLabel.includes('FACE LOCK')
+          ? `- Image ${number}: ${entry.indexLabel}. Highest-priority face identity only: eyes, eyebrows, nose, lips, jawline, hairline, bangs, makeup, glasses, and facial likeness.`
+          : `- Image ${number}: ${entry.indexLabel}. Identity only: face, hair, skin tone, body structure, outfit, shoes, accessories, and tattoos. This image is NOT a pose reference.`;
       case 'style':
         return `- Image ${number}: ${entry.indexLabel}. Render language only: lighting, material response, color grading, stylized skin shading, facial/hand planes, and final 3D finish.`;
       default:
@@ -526,9 +551,11 @@ const buildCompactProviderReferenceSummary = (
 
     switch (entry.role) {
       case 'character':
-        return `- Image ${number} = ${entry.indexLabel}: identity only, never pose.`;
+        return entry.indexLabel.includes('FACE LOCK')
+          ? `- Image ${number} = ${entry.indexLabel}: highest-priority face identity only, never pose.`
+          : `- Image ${number} = ${entry.indexLabel}: identity only, never pose.`;
       case 'sample':
-        return `- Image ${number} = ${entry.indexLabel}: composition only, never identity or final output.`;
+        return `- Image ${number} = ${entry.indexLabel}: composition only, never face identity, never outfit identity, never final output.`;
       case 'style':
         return `- Image ${number} = ${entry.indexLabel}: render style only, never pose, identity, outfit, or composition.`;
       default:
@@ -563,7 +590,7 @@ const buildDetailedImageProviderPrompt = (
       ? '\nLAYERED SINGLE-SUBJECT EXCEPTION:\n- The user intentionally requests a double-exposure / ghost-overlay / superimposed-self composition.\n- Keep exactly one underlying uploaded character identity, but layered echoes of that SAME person are allowed when they are part of the requested artistic effect.\n- Do not invent a second distinct person.'
       : '',
     '',
-    'DIRECTOR COMMAND:',
+    'DIRECTOR JSON SPEC (authoritative, English):',
     normalizedSynthesizedPrompt || 'No director synthesis available.',
     '',
     `QUALITY: ${COMPACT_IMAGE_QUALITY_BOOSTERS}`,
@@ -598,7 +625,7 @@ const buildReducedImageProviderPromptWithoutSample = (
       ? '\nLAYERED SINGLE-SUBJECT EXCEPTION:\n- Keep exactly one uploaded character identity.\n- Double exposure / ghost overlays / layered echoes of that SAME character are allowed.\n- Do not invent a second distinct person.'
       : '',
     '',
-    'DIRECTOR COMMAND:',
+    'DIRECTOR JSON SPEC (authoritative, English):',
     normalizedSynthesizedPrompt || 'No director synthesis available.',
     '',
     `QUALITY: ${COMPACT_IMAGE_QUALITY_BOOSTERS}`,

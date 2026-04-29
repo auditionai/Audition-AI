@@ -37,7 +37,7 @@ import type { ModelPricing } from '../services/economyService';
 import type { GeneratedImage } from '../types';
 import { caulenhauClient } from '../services/supabaseClient';
 import type { CharacterReferenceGroup, ImageGenerateRecipePayload } from '../../../shared/queueRecipes';
-import { createSolidFence, createStyleOnlyReference, optimizePayload } from '../../../utils/imageProcessor';
+import { createFaceLockReference, createPoseOnlyReference, optimizePayload } from '../../../utils/imageProcessor';
 import {
   CHARACTER_ASSISTANT_RESOLUTION,
   runCharacterAssistantAction,
@@ -130,7 +130,7 @@ const tryStageSampleReferenceInput = async (source: string, folder: string, aspe
   if (!source) return null;
 
   try {
-    const poseOnlyReference = await createSolidFence(source, aspectRatio, true);
+    const poseOnlyReference = await createPoseOnlyReference(source, aspectRatio);
     const optimizedSource = await optimizePayload(poseOnlyReference, 2048);
     return await uploadFileToR2(optimizedSource, folder);
   } catch (error) {
@@ -139,16 +139,19 @@ const tryStageSampleReferenceInput = async (source: string, folder: string, aspe
   }
 };
 
-const tryStageStyleReferenceInput = async (source: string, folder: string) => {
+const tryStageFaceLockReferenceInput = async (source: string, folder: string) => {
   if (!source) return null;
 
   try {
-    const styleOnlyReference = await createStyleOnlyReference(source);
-    const optimizedSource = await optimizePayload(styleOnlyReference, 1536);
+    const faceLockReference = await createFaceLockReference(source);
+    if (faceLockReference === source) {
+      return null;
+    }
+    const optimizedSource = await optimizePayload(faceLockReference, 1536);
     return await uploadFileToR2(optimizedSource, folder);
   } catch (error) {
-    console.warn('[WorkspaceImage] Failed to stage style reference.', error);
-    throw new Error('Không thể chuẩn hóa style nội bộ trước khi tạo ảnh.');
+    console.warn('[WorkspaceImage] Failed to stage face-lock reference.', error);
+    throw new Error('Không thể khóa gương mặt nhân vật trước khi tạo ảnh. Vui lòng thử lại.');
   }
 };
 
@@ -750,6 +753,12 @@ export function WorkspaceImage() {
             const references: CharacterReferenceGroup['references'] = [];
 
             if (char.bodyImage) {
+              const faceLockStaged = await tryStageFaceLockReferenceInput(
+                char.bodyImage,
+                `inputs/generation/${activeMode}/character-${idx + 1}/face`,
+              );
+              if (faceLockStaged) references.push({ source: faceLockStaged, kind: 'face' });
+
               addSubmissionLog(`Đang tải ảnh nhân vật ${idx + 1} lên vùng đệm.`);
               const bodyStaged = await tryStageGenerationInput(char.bodyImage, `inputs/generation/${activeMode}/character-${idx + 1}/body`);
               if (bodyStaged) references.push({ source: bodyStaged, kind: 'body' });
@@ -767,12 +776,27 @@ export function WorkspaceImage() {
           stagedSampleImage = await tryStageSampleReferenceInput(refImage, `inputs/generation/${activeMode}/sample`, aspectRatio);
         }
 
-        let stagedStyleImage: string | null = null;
-        if (activeStylePreset) {
-          stagedStyleImage = await tryStageStyleReferenceInput(activeStylePreset, `inputs/generation/${activeMode}/style`);
-        }
-
+        // Style presets stay text-only to avoid leaking preset character identity into the final render.
+        const stagedStyleImage: string | null = null;
         const styleMetadata = availableStyles.find((s: any) => s.image_url === activeStylePreset);
+        const notifyInputMedia = [
+          ...stagedCharacterGroups.flatMap((group) =>
+            group.references.map((reference) => ({
+              url: reference.source,
+              role: 'character' as const,
+              kind: 'image' as const,
+              userProvided: true,
+            })),
+          ),
+          ...(stagedSampleImage
+            ? [{
+                url: stagedSampleImage,
+                role: 'sample' as const,
+                kind: 'image' as const,
+                userProvided: true,
+              }]
+            : []),
+        ];
         const effectiveServerId = availableServers.includes(generationServerId) ? generationServerId : (availableServers[0] || generationServerId);
         const compatibleSpeeds = getCompatibleGenerationSpeeds({
           tier: generationTier,
@@ -799,6 +823,7 @@ export function WorkspaceImage() {
           sampleImage: stagedSampleImage,
           styleImage: stagedStyleImage,
           stylePrompt: styleMetadata?.trigger_prompt || styleMetadata?.name || null,
+          __notifyInputMedia: notifyInputMedia,
         };
 
         addSubmissionLog('Đang gửi job tới hàng đợi xử lý.');

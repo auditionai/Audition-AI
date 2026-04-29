@@ -36,6 +36,7 @@ import {
 import type { ModelPricing } from '../services/economyService';
 import type { GeneratedImage } from '../types';
 import { caulenhauClient } from '../services/supabaseClient';
+import { DEFAULT_IMAGE_NEGATIVE_PROMPT } from '../../../shared/imagePromptDefaults';
 import type { CharacterReferenceGroup, ImageGenerateRecipePayload } from '../../../shared/queueRecipes';
 import { createFaceLockReference, createPoseOnlyReference, optimizePayload } from '../../../utils/imageProcessor';
 import {
@@ -67,7 +68,6 @@ const SMART_TIPS = [
   'Lưu ý: 4K rất nét nhưng thường chậm hơn 1K hoặc 2K.',
 ];
 
-const NEGATIVE_PROMPT = 'crowd, extra people, audience, bystanders, deformed, bad anatomy, disfigured, poorly drawn face, mutation, mutated, extra limb, ugly, disgusting, poorly drawn hands, missing limb, floating limbs, disconnected limbs, malformed hands, blur, out of focus, long neck, long body, mutated hands and fingers, out of frame, blender, doll, cropped, low-res, close-up, poorly-drawn face, out of frame double, two heads, blurred, ugly, disfigured, too many fingers, deformed, repetitive, black and white, grainy, extra limbs, bad anatomy, duplicate, photorealistic, realistic photo, sketch, cartoon, drawing, art, 2d';
 const SAMPLE_IMAGE_PROMPT_LOCK = 'Giữ nguyên 100% quần áo, trang phục, kiểu tóc, gương mặt, lớp hoá trang makeup trên gương mặt, biểu cảm trên gương mặt, phụ kiện như kính, khuyên tai trên mũ tóc, giày dép của ảnh tham chiếu nam và nữ tải lên. Không sử dụng quần áo, trang phục, kiểu tóc, gương mặt, lớp hoá trang makeup, biểu cảm, phụ kiện, giày dép của ảnh mẫu. Không được tự động xoá các chi tiết trên người của ảnh tham chiếu nam và nữ tải lên, không được tự động sáng tạo gương mặt và biểu cảm.';
 
 const MODE_TO_FEATURE_ID: Record<GenMode, string> = {
@@ -166,7 +166,7 @@ export function WorkspaceImage() {
   const [refImage, setRefImage] = useState<string | null>(null);
   const [aspectRatio, setAspectRatio] = useState('3:4');
   const [resolution, setResolution] = useState<TstResolution>('1K');
-  const [speed, setSpeed] = useState<'Nhanh' | 'Tiết kiệm'>('Nhanh');
+  const [speed, setSpeed] = useState<'Nhanh' | 'Tiết Kiệm'>('Nhanh');
   const [server, setServer] = useState('VIP 1');
   const [aiModel, setAiModel] = useState<'flash' | 'pro'>('flash');
 
@@ -232,30 +232,20 @@ export function WorkspaceImage() {
   const availableResolutions = getCompatibleGenerationResolutions({
     tier: generationTier, pricingEntries, serverId: generationServerId, speed: generationSpeedId,
   });
-  const speedCandidateServers = getCompatibleGenerationServers({
+  const availableServers = getCompatibleGenerationServers({
+    tier: generationTier, pricingEntries, speed: generationSpeedId, resolution,
+  });
+  const availableSpeeds = getCompatibleGenerationSpeeds({
     tier: generationTier,
     pricingEntries,
     resolution,
   });
-  const availableServers = getCompatibleGenerationServers({
-    tier: generationTier, pricingEntries, speed: generationSpeedId, resolution,
-  });
-  const availableSpeeds = Array.from(new Set(
-    (speedCandidateServers.length > 0 ? speedCandidateServers : [generationServerId]).flatMap((serverId) =>
-      getCompatibleGenerationSpeeds({
-        tier: generationTier,
-        pricingEntries,
-        serverId,
-        resolution,
-      }),
-    ),
-  ));
   const selectedCost = getGenerationCostBreakdown({
     tier: generationTier, resolution, speed: generationSpeedId,
     serverId: generationServerId, pricingEntries, pricingOverrides,
   });
   const activeFeature = APP_CONFIG.main_features.find((feature) => feature.id === MODE_TO_FEATURE_ID[activeMode]) ?? APP_CONFIG.main_features[0];
-  const availableSpeedLabels = availableSpeeds.map((speedId) => (speedId === 'slow' ? 'Tiết kiệm' : 'Nhanh'));
+  const availableSpeedLabels = availableSpeeds.map((speedId) => (speedId === 'slow' ? 'Tiết Kiệm' : 'Nhanh'));
   const availableServerLabels = availableServers.map((serverId) => ({ id: serverId, label: tstServerToUi(serverId) || serverId.toUpperCase() }));
 
   const runtimeImageModelIds = new Set(
@@ -402,16 +392,44 @@ export function WorkspaceImage() {
   }, [availableResolutions, resolution]);
 
   useEffect(() => {
-    if (availableServerLabels.length > 0 && !availableServerLabels.some((item) => item.label === server)) {
-      setServer(availableServerLabels[0].label);
-    }
-  }, [availableServerLabels, server]);
+    const tier = aiModel === 'flash' ? 'flash' : 'pro';
+    const requestedSpeedId = uiSpeedToTst(speed) || 'fast';
+    const requestedServerId = uiServerToTst(server) || 'fast';
+    const compatibleServers = getCompatibleGenerationServers({
+      tier,
+      pricingEntries,
+      speed: requestedSpeedId,
+      resolution,
+    });
+    const nextServerId = compatibleServers.includes(requestedServerId)
+      ? requestedServerId
+      : compatibleServers[0];
 
-  useEffect(() => {
-    if (availableSpeedLabels.length > 0 && !availableSpeedLabels.includes(speed)) {
-      setSpeed(availableSpeedLabels[0]);
+    if (nextServerId && nextServerId !== requestedServerId) {
+      const nextServerLabel = tstServerToUi(nextServerId);
+      if (nextServerLabel !== server) {
+        setServer(nextServerLabel);
+        return;
+      }
     }
-  }, [availableSpeedLabels, speed]);
+
+    const compatibleSpeeds = getCompatibleGenerationSpeeds({
+      tier,
+      pricingEntries,
+      serverId: nextServerId || requestedServerId,
+      resolution,
+    });
+    const nextSpeedId = compatibleSpeeds.includes(requestedSpeedId)
+      ? requestedSpeedId
+      : compatibleSpeeds[0];
+
+    if (nextSpeedId) {
+      const nextSpeedLabel = nextSpeedId === 'slow' ? 'Tiết Kiệm' : 'Nhanh';
+      if (nextSpeedLabel !== speed) {
+        setSpeed(nextSpeedLabel);
+      }
+    }
+  }, [aiModel, pricingEntries, resolution, server, speed]);
 
   // --- Rotating tips ---
   useEffect(() => {
@@ -723,6 +741,10 @@ export function WorkspaceImage() {
           }),
         );
 
+        if (stagedCharacterGroups.length !== characters.length) {
+          throw new Error(`CRITICAL FAILURE: Expected ${characters.length} character reference groups but only prepared ${stagedCharacterGroups.length}.`);
+        }
+
         const stagedCharacterImages = stagedCharacterGroups.flatMap((g) => g.references.map((r) => r.source));
 
         let stagedSampleImage: string | null = null;
@@ -731,8 +753,9 @@ export function WorkspaceImage() {
           stagedSampleImage = await tryStageSampleReferenceInput(refImage, `inputs/generation/${activeMode}/sample`, aspectRatio);
         }
 
-        // Style presets stay text-only to avoid leaking preset character identity into the final render.
-        const stagedStyleImage: string | null = null;
+        const stagedStyleImage = activeStylePreset
+          ? await tryStageGenerationInput(activeStylePreset, `inputs/generation/${activeMode}/style`)
+          : null;
         const styleMetadata = availableStyles.find((s: any) => s.image_url === activeStylePreset);
         const notifyInputMedia = [
           ...stagedCharacterGroups.flatMap((group) =>
@@ -751,6 +774,14 @@ export function WorkspaceImage() {
                 userProvided: true,
               }]
             : []),
+          ...(stagedStyleImage
+            ? [{
+                url: stagedStyleImage,
+                role: 'style' as const,
+                kind: 'image' as const,
+                userProvided: false,
+              }]
+            : []),
         ];
         const effectiveServerId = availableServers.includes(generationServerId) ? generationServerId : (availableServers[0] || generationServerId);
         const compatibleSpeeds = getCompatibleGenerationSpeeds({
@@ -767,7 +798,7 @@ export function WorkspaceImage() {
           prompt: basePrompt,
           userPromptInput: prompt.trim(),
           systemPromptPrefix: activeFeature.defaultPrompt || '',
-          negativePrompt: NEGATIVE_PROMPT,
+          negativePrompt: DEFAULT_IMAGE_NEGATIVE_PROMPT,
           characterCount: characters.length,
           resolution,
           aspectRatio,
@@ -1024,6 +1055,7 @@ export function WorkspaceImage() {
               <span className="text-[10px] text-gray-300 font-mono font-bold">{prompt.length}/2000</span>
             </div>
           </div>
+
         </div>
 
         {/* Aspect Ratio */}

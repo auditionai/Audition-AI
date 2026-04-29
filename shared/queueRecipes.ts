@@ -744,7 +744,7 @@ const buildDetailedImageProviderPrompt = (
     'DIRECTOR JSON SPEC (authoritative, English):',
     normalizedSynthesizedPrompt || 'No director synthesis available.',
     '',
-    `QUALITY: ${COMPACT_IMAGE_QUALITY_BOOSTERS}`,
+    `QUALITY: ${IMAGE_QUALITY_BOOSTERS}`,
     '',
     `NEGATIVE: ${compactNegativePrompt}`,
   ].join('\n'));
@@ -778,7 +778,7 @@ const buildReducedImageProviderPromptWithoutSample = (
     'DIRECTOR JSON SPEC (authoritative, English):',
     normalizedSynthesizedPrompt || 'No director synthesis available.',
     '',
-    `QUALITY: ${COMPACT_IMAGE_QUALITY_BOOSTERS}`,
+    `QUALITY: ${IMAGE_QUALITY_BOOSTERS}`,
     '',
     `NEGATIVE: ${compactNegativePrompt}`,
   ].join('\n'));

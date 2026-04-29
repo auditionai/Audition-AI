@@ -20,6 +20,7 @@ import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageSer
 import { downloadAssetToBrowser } from '../../services/downloadService';
 import { createFaceLockReference, createPoseOnlyReference, optimizePayload } from '../../utils/imageProcessor';
 import { APP_CONFIG } from '../../constants';
+import { DEFAULT_IMAGE_NEGATIVE_PROMPT } from '../../shared/imagePromptDefaults';
 import {
   type AuditionPricingOverride,
   fetchTstModels,
@@ -150,7 +151,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
   const [refImage, setRefImage] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
-  const [negativePrompt, setNegativePrompt] = useState('crowd, extra people, audience, bystanders, deformed, bad anatomy, disfigured, poorly drawn face, mutation, mutated, extra limb, ugly, disgusting, poorly drawn hands, missing limb, floating limbs, disconnected limbs, malformed hands, blur, out of focus, long neck, long body, mutated hands and fingers, out of frame, blender, doll, cropped, low-res, close-up, poorly-drawn face, out of frame double, two heads, blurred, ugly, disfigured, too many fingers, deformed, repetitive, black and white, grainy, extra limbs, bad anatomy, duplicate, photorealistic, realistic photo, sketch, cartoon, drawing, art, 2d');
 
   const [showSampleModal, setShowSampleModal] = useState(false);
   const [samplePrompts, setSamplePrompts] = useState<SamplePrompt[]>([]);
@@ -917,8 +917,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
             const stagedSampleImage = refImage
                 ? await tryStageSampleReferenceInput(refImage, `inputs/generation/${activeMode}/sample`, aspectRatio)
                 : null;
-            // Style presets stay text-only to avoid leaking preset character identity into the final render.
-            const stagedStyleImage = null;
+            const stagedStyleImage = activeStylePreset
+                ? await tryStageGenerationInput(activeStylePreset, `inputs/generation/${activeMode}/style`)
+                : null;
             const notifyInputMedia = [
                 ...stagedCharacterGroups.flatMap((group) =>
                     group.references.map((reference) => ({
@@ -936,6 +937,14 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                         userProvided: true,
                     }]
                     : []),
+                ...(stagedStyleImage
+                    ? [{
+                        url: stagedStyleImage,
+                        role: 'style' as const,
+                        kind: 'image' as const,
+                        userProvided: false,
+                    }]
+                    : []),
             ];
 
             const queuePayload: ImageGenerateRecipePayload = {
@@ -949,7 +958,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                 aspectRatio,
                 speed: effectiveSpeedId,
                 serverId: effectiveServerId,
-                negativePrompt: negativePrompt.trim() || undefined,
+                negativePrompt: DEFAULT_IMAGE_NEGATIVE_PROMPT,
                 characterReferenceGroups: stagedCharacterGroups,
                 characterImages: stagedCharacterImages,
                 sampleImage: stagedSampleImage || null,

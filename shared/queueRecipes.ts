@@ -152,6 +152,35 @@ const LAYERED_SINGLE_SUBJECT_PROMPT_PATTERNS = [
 
 const normalizeValue = (value?: string | null) => (value || '').trim().toLowerCase();
 
+const PORTRAIT_HEADSHOT_PROMPT_PATTERNS = [
+  /\bclose[\s-]?up\b/i,
+  /\bhead[\s-]?shot\b/i,
+  /\bportrait\b/i,
+  /\bface[\s-]?shot\b/i,
+  /\bbeauty shot\b/i,
+  /\btight portrait\b/i,
+  /\bmacro face\b/i,
+  /cận mặt/i,
+  /cận cảnh khuôn mặt/i,
+  /góc mặt cận/i,
+  /đặc tả gương mặt/i,
+  /chân dung/i,
+  /chân dung cận/i,
+  /ảnh thẻ/i,
+  /gương mặt là trung tâm/i,
+];
+
+export const resolveCharacterFacePriorityMode = (prompt?: string | null): CharacterFacePriorityMode | undefined => {
+  const normalizedPrompt = collapsePromptWhitespace(prompt || '');
+  if (!normalizedPrompt) {
+    return undefined;
+  }
+
+  return PORTRAIT_HEADSHOT_PROMPT_PATTERNS.some((pattern) => pattern.test(normalizedPrompt))
+    ? 'portrait_headshot'
+    : undefined;
+};
+
 export const getEffectiveImageGenerationResolution = (
   modelId?: string | null,
   speed?: string | null,
@@ -232,11 +261,13 @@ export const isQueueRecipePayload = (payload: unknown): payload is QueueRecipePa
 };
 
 const IMAGE_QUALITY_BOOSTERS =
-  'masterpiece, best quality, ultra-detailed, 8k, premium stylized 3D game render, Korean MMO 3D style, clean high-fidelity game-engine materials, refined facial detail, adult-proportioned avatar anatomy, natural limb flow, believable weight distribution, non-photorealistic 3D character, ray tracing, hdr, cinematic lighting, unreal engine 5 render';
+  'masterpiece, best quality, ultra-detailed, 8k, premium stylized 3D fashion-game render, Korean MMO 3D style, crisp anti-aliased edges, clean high-fidelity game-engine materials, refined facial detail, sharp eye makeup detail, polished skin shading, premium cloth texture detail, clean accessory detail, adult-proportioned avatar anatomy, natural limb flow, believable weight distribution, non-photorealistic 3D character, ray tracing, hdr, cinematic lighting, unreal engine 5 render';
 const COMPACT_IMAGE_QUALITY_BOOSTERS =
-  'ultra-detailed, stylized 3D game render, Korean MMO 3D style, adult-proportioned avatar anatomy, natural limb flow, unreal engine 5 render, cinematic lighting, ray tracing, hdr';
+  'ultra-detailed, stylized 3D fashion-game render, Korean MMO 3D style, crisp edges, polished materials, adult-proportioned avatar anatomy, natural limb flow, unreal engine 5 render, cinematic lighting, ray tracing, hdr';
 const IMAGE_NEGATIVE_PROMPT =
-  'low quality, bad anatomy, worst quality, blur, grain, watermark, text, signature, bad hands, bad face, mixed backgrounds, conflicting styles, extra characters, unwanted people from style reference, real people, photorealistic humans, photograph, realistic photography, real life, semi-realistic human, cinematic human portrait, live action, realistic skin pores, natural skin texture, DSLR, realistic male model, realistic female model, hyperreal face, realistic eyelashes, realistic fabric, anime, cartoon, 2d, flat shading, floating character, disconnected limbs, hands in the air, feet not touching the ground, floating objects, unnatural posture, floating in mid-air, levitating, hovering, disconnected from background, bad perspective, illogical physics, doll face, mannequin face, mannequin body, waxy skin, plastic skin, yellow skin, orange skin, muddy skin tone, chibi proportions, giant eyes, baby face, stiff pose, rigid pose, stiff limbs, frozen posture, uncanny face, over-smoothed face, panel layout, split screen, tiled image, image grid, collage, storyboard, diptych, triptych, quadrants, four panels, four-up layout, contact sheet';
+  'low quality, bad anatomy, worst quality, blur, grain, watermark, text, signature, bad hands, bad face, mixed backgrounds, conflicting styles, extra characters, unwanted people from style reference, real people, photorealistic humans, photograph, realistic photography, real life, semi-realistic human, cinematic human portrait, live action, realistic skin pores, natural skin texture, DSLR, realistic male model, realistic female model, hyperreal face, realistic eyelashes, realistic fabric, anime, cartoon, 2d, flat shading, floating character, disconnected limbs, hands in the air, feet not touching the ground, floating objects, unnatural posture, floating in mid-air, levitating, hovering, disconnected from background, bad perspective, illogical physics, extra arm, extra arms, extra hand, extra hands, extra leg, extra legs, extra foot, extra feet, duplicate hand, duplicate hands, duplicate foot, duplicate feet, duplicated limb, duplicated limbs, malformed feet, merged fingers, fused fingers, six fingers, seven fingers, broken wrist, twisted arm, twisted leg, doll face, mannequin face, mannequin body, waxy skin, plastic skin, yellow skin, orange skin, muddy skin tone, chibi proportions, giant eyes, baby face, stiff pose, rigid pose, stiff limbs, frozen posture, uncanny face, over-smoothed face, panel layout, split screen, tiled image, image grid, collage, storyboard, diptych, triptych, quadrants, four panels, four-up layout, contact sheet';
+const IMAGE_ANATOMY_GUARD_CONSTRAINTS =
+  'ANATOMY GUARD: Keep exactly one coherent body per character slot with natural adult-proportioned 3D anatomy. Never invent extra arms, extra hands, extra legs, extra feet, duplicated limbs, duplicated hands, duplicated feet, fused fingers, or malformed joints. Each visible hand must read as one coherent hand. Each visible foot must read as one coherent foot. If a hand, foot, or limb is partially hidden, keep it hidden naturally instead of hallucinating additional anatomy. Respect gravity, chair contact, ground contact, and believable joint bending.';
 const IMAGE_ROLE_LOCK_CONSTRAINTS =
   'STRICT ROLE LOCK: CHARACTER REFERENCES are the only identity source for face, hair, skin tone, head shape, body structure, outfit, shoes, accessories, tattoos, gender, and overall avatar identity. FACE LOCK references, when present, are the highest-priority source for eyes, eyebrows, nose, lips, jawline, hairline, bangs, makeup, glasses, facial proportions, and facial likeness. Preserve uploaded skin tone exactly; do not warm it, tan it, yellow it, orange it, or shift it to a different complexion. Preserve believable adult 3D anatomy from the character references; avoid doll-like proportions, rigid limbs, inflated eyes, or mannequin posture. CHARACTER REFERENCES are NOT pose references. SAMPLE IMAGE is composition-only and controls pose, camera angle, framing, subject placement, body lean, hand placement, spacing, scene layout, and background composition only. SAMPLE IMAGE must never contribute face identity, hairstyle identity, makeup identity, or facial expression identity, even if the sample face is large, sharp, centered, or visually dominant. Never reproduce SAMPLE IMAGE as the final output, never borrow its identity, outfit, or realism, and never return any uploaded reference nearly unchanged. STYLE IMAGE is style-only and may influence only render quality, lighting behavior, material response, restrained color grading, and final finish. STYLE IMAGE must never override identity, skin tone, anatomy, subject count, pose, composition, or outfit. The final image must keep one-to-one slot mapping for all uploaded characters, remain a stylized 3D game avatar, and never become a photorealistic or semi-realistic human.';
 const REDUCED_IMAGE_ROLE_LOCK_CONSTRAINTS_NO_SAMPLE =
@@ -753,6 +784,7 @@ const buildDetailedImageProviderPrompt = (
   return trimProviderPrompt([
     'RENDER ONE NEW FINAL IMAGE. Never return any uploaded reference unchanged.',
     IMAGE_ROLE_LOCK_CONSTRAINTS,
+    IMAGE_ANATOMY_GUARD_CONSTRAINTS,
     `CHARACTER COUNT: EXACTLY ${characterCount}. One-to-one slot mapping is mandatory.`,
     '',
     'PRIMARY USER REQUEST:',
@@ -787,6 +819,7 @@ const buildReducedImageProviderPromptWithoutSample = (
   return trimProviderPrompt([
     'RENDER ONE NEW FINAL IMAGE. Never return any uploaded reference unchanged.',
     REDUCED_IMAGE_ROLE_LOCK_CONSTRAINTS_NO_SAMPLE,
+    IMAGE_ANATOMY_GUARD_CONSTRAINTS,
     `CHARACTER COUNT: EXACTLY ${characterCount}. One-to-one slot mapping is mandatory.`,
     '',
     'PRIMARY USER REQUEST:',

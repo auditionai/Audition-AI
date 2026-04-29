@@ -92,12 +92,6 @@ type FaceBoundingBox = {
     height: number;
 };
 
-export interface CharacterReferenceProfile {
-    facePriorityMode?: 'portrait_headshot';
-    primaryFaceAreaRatio?: number;
-    primaryFaceHeightRatio?: number;
-}
-
 const normalizeFaceBoundingBox = (value: any): FaceBoundingBox | null => {
     const x = Number(value?.x);
     const y = Number(value?.y);
@@ -188,34 +182,6 @@ const buildDetailCropFromFaceBox = (box: FaceBoundingBox, imageWidth: number, im
         sw: Math.min(imageWidth - sx, cropWidth),
         sh: Math.min(imageHeight - sy, cropHeight),
     };
-};
-
-export const analyzeCharacterReferenceProfile = async (source: string): Promise<CharacterReferenceProfile> => {
-    try {
-        const img = await loadImageWithTimeout(source, 10000);
-        const detectedFaces = await detectCandidateFaceBoxes(img);
-        if (detectedFaces.length === 0) {
-            return {};
-        }
-
-        const bestFace = [...detectedFaces].sort(
-            (a, b) => scoreCandidateFaceBox(b, img.width, img.height) - scoreCandidateFaceBox(a, img.width, img.height),
-        )[0];
-        const primaryFaceAreaRatio = (bestFace.width * bestFace.height) / (img.width * img.height);
-        const primaryFaceHeightRatio = bestFace.height / img.height;
-        const facePriorityMode = primaryFaceHeightRatio >= 0.25 || primaryFaceAreaRatio >= 0.09
-            ? 'portrait_headshot'
-            : undefined;
-
-        return {
-            facePriorityMode,
-            primaryFaceAreaRatio,
-            primaryFaceHeightRatio,
-        };
-    } catch (error) {
-        console.warn('Character reference profile analysis failed:', error);
-        return {};
-    }
 };
 
 const getFaceLockCrop = (img: HTMLImageElement) => {

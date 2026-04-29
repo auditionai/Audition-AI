@@ -4,6 +4,23 @@
  * Giúp Flash 2.5 phân biệt rõ đâu là Cấu trúc (Pose), đâu là Giao diện (Skin/Clothes)
  */
 
+import { FilesetResolver, PoseLandmarker, type NormalizedLandmark } from '@mediapipe/tasks-vision';
+
+const MEDIAPIPE_VISION_WASM_ROOT = '/mediapipe/wasm';
+const MEDIAPIPE_POSE_MODEL_PATH = '/mediapipe/models/pose_landmarker_lite.task';
+const POSE_VISIBILITY_THRESHOLD = 0.3;
+
+type PoseOverlayDetection = {
+    landmarks: NormalizedLandmark[];
+    segmentationMask?: {
+        data: Float32Array;
+        width: number;
+        height: number;
+    };
+};
+
+let poseLandmarkerPromise: Promise<PoseLandmarker | null> | null = null;
+
 export const urlToBase64 = async (url: string): Promise<string | null> => {
     try {
         const response = await fetch(url);
@@ -345,6 +362,232 @@ export const analyzeCharacterAppearanceProfile = async (source: string): Promise
     }
 };
 
+const getPoseLandmarker = async (): Promise<PoseLandmarker | null> => {
+    if (typeof window === 'undefined') {
+        return null;
+    }
+
+    if (!poseLandmarkerPromise) {
+        poseLandmarkerPromise = (async () => {
+            try {
+                const vision = await FilesetResolver.forVisionTasks(MEDIAPIPE_VISION_WASM_ROOT);
+                return await PoseLandmarker.createFromOptions(vision, {
+                    baseOptions: {
+                        modelAssetPath: MEDIAPIPE_POSE_MODEL_PATH,
+                    },
+                    runningMode: 'IMAGE',
+                    numPoses: 1,
+                    outputSegmentationMasks: true,
+                    minPoseDetectionConfidence: 0.45,
+                    minPosePresenceConfidence: 0.45,
+                    minTrackingConfidence: 0.45,
+                });
+            } catch (error) {
+                console.warn('Pose landmarker initialization failed:', error);
+                return null;
+            }
+        })();
+    }
+
+    return poseLandmarkerPromise;
+};
+
+const detectPoseOverlay = async (img: HTMLImageElement): Promise<PoseOverlayDetection | null> => {
+    try {
+        const poseLandmarker = await getPoseLandmarker();
+        if (!poseLandmarker) return null;
+
+        const result = poseLandmarker.detect(img);
+        const landmarks = Array.isArray(result.landmarks?.[0]) ? result.landmarks[0] : null;
+        if (!landmarks || landmarks.length === 0) {
+            result.close();
+            return null;
+        }
+
+        const segmentation = result.segmentationMasks?.[0];
+        const segmentationMask = segmentation
+            ? {
+                data: segmentation.getAsFloat32Array(),
+                width: segmentation.width,
+                height: segmentation.height,
+            }
+            : undefined;
+        result.close();
+
+        return {
+            landmarks,
+            segmentationMask,
+        };
+    } catch (error) {
+        console.warn('Pose overlay detection failed:', error);
+        return null;
+    }
+};
+
+const createFallbackPoseGuide = (
+    ctx: CanvasRenderingContext2D,
+    img: HTMLImageElement,
+    canvasW: number,
+    canvasH: number,
+) => {
+    ctx.fillStyle = '#121212';
+    ctx.fillRect(0, 0, canvasW, canvasH);
+
+    const { x, y, drawW, drawH } = drawContainedImage(ctx, img, canvasW, canvasH);
+
+    const offscreen = document.createElement('canvas');
+    offscreen.width = canvasW;
+    offscreen.height = canvasH;
+    const offCtx = offscreen.getContext('2d');
+    if (!offCtx) {
+        return { x, y, drawW, drawH };
+    }
+
+    offCtx.fillStyle = '#121212';
+    offCtx.fillRect(0, 0, canvasW, canvasH);
+    offCtx.filter = 'grayscale(1) saturate(0) contrast(1.28) brightness(0.9) blur(1.2px)';
+    drawContainedImage(offCtx, img, canvasW, canvasH);
+    offCtx.filter = 'none';
+
+    const imageData = offCtx.getImageData(0, 0, canvasW, canvasH);
+    const { data } = imageData;
+    for (let i = 0; i < data.length; i += 4) {
+        const luminance = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+        const quantized = luminance > 168 ? 222 : luminance > 104 ? 126 : 28;
+        data[i] = quantized;
+        data[i + 1] = quantized;
+        data[i + 2] = quantized;
+    }
+    offCtx.putImageData(imageData, 0, 0);
+    ctx.drawImage(offscreen, 0, 0);
+
+    return { x, y, drawW, drawH };
+};
+
+const isVisiblePoseLandmark = (landmark?: NormalizedLandmark | null) =>
+    Boolean(landmark) && Number((landmark as any).visibility ?? 1) >= POSE_VISIBILITY_THRESHOLD;
+
+const mapPoseLandmarkToCanvas = (
+    landmark: NormalizedLandmark,
+    x: number,
+    y: number,
+    drawW: number,
+    drawH: number,
+) => ({
+    x: x + landmark.x * drawW,
+    y: y + landmark.y * drawH,
+});
+
+const drawPoseSegmentationGuide = (
+    ctx: CanvasRenderingContext2D,
+    segmentationMask: NonNullable<PoseOverlayDetection['segmentationMask']>,
+    x: number,
+    y: number,
+    drawW: number,
+    drawH: number,
+) => {
+    const maskCanvas = document.createElement('canvas');
+    maskCanvas.width = segmentationMask.width;
+    maskCanvas.height = segmentationMask.height;
+    const maskCtx = maskCanvas.getContext('2d');
+    if (!maskCtx) return;
+
+    const imageData = maskCtx.createImageData(segmentationMask.width, segmentationMask.height);
+    for (let i = 0; i < segmentationMask.data.length; i += 1) {
+        const alpha = clamp(segmentationMask.data[i] * 255, 0, 255);
+        const idx = i * 4;
+        imageData.data[idx] = 236;
+        imageData.data[idx + 1] = 236;
+        imageData.data[idx + 2] = 236;
+        imageData.data[idx + 3] = alpha > 76 ? alpha : 0;
+    }
+    maskCtx.putImageData(imageData, 0, 0);
+
+    ctx.save();
+    ctx.globalAlpha = 0.82;
+    ctx.filter = 'blur(1.2px) contrast(1.05)';
+    ctx.drawImage(maskCanvas, x, y, drawW, drawH);
+    ctx.restore();
+};
+
+const drawPoseSkeletonGuide = (
+    ctx: CanvasRenderingContext2D,
+    landmarks: NormalizedLandmark[],
+    x: number,
+    y: number,
+    drawW: number,
+    drawH: number,
+) => {
+    const connections = PoseLandmarker.POSE_CONNECTIONS || [];
+
+    ctx.save();
+    ctx.strokeStyle = 'rgba(0, 255, 188, 0.9)';
+    ctx.lineWidth = Math.max(3, Math.min(drawW, drawH) * 0.008);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    for (const connection of connections) {
+        const fromIndex = Number((connection as any).start);
+        const toIndex = Number((connection as any).end);
+        const from = landmarks[fromIndex];
+        const to = landmarks[toIndex];
+        if (!isVisiblePoseLandmark(from) || !isVisiblePoseLandmark(to)) continue;
+        const p1 = mapPoseLandmarkToCanvas(from, x, y, drawW, drawH);
+        const p2 = mapPoseLandmarkToCanvas(to, x, y, drawW, drawH);
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+    }
+
+    ctx.fillStyle = 'rgba(255,255,255,0.96)';
+    for (const landmark of landmarks) {
+        if (!isVisiblePoseLandmark(landmark)) continue;
+        const point = mapPoseLandmarkToCanvas(landmark, x, y, drawW, drawH);
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, Math.max(3, Math.min(drawW, drawH) * 0.007), 0, Math.PI * 2);
+        ctx.fill();
+    }
+    ctx.restore();
+};
+
+const suppressPoseGuideFaceRegion = (
+    ctx: CanvasRenderingContext2D,
+    landmarks: NormalizedLandmark[],
+    x: number,
+    y: number,
+    drawW: number,
+    drawH: number,
+) => {
+    const facialIndexes = [0, 2, 5, 7, 8];
+    const facialPoints = facialIndexes
+        .map((index) => landmarks[index])
+        .filter((landmark) => isVisiblePoseLandmark(landmark))
+        .map((landmark) => mapPoseLandmarkToCanvas(landmark as NormalizedLandmark, x, y, drawW, drawH));
+
+    if (facialPoints.length === 0) {
+        return;
+    }
+
+    const xs = facialPoints.map((point) => point.x);
+    const ys = facialPoints.map((point) => point.y);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+    const width = Math.max(42, (maxX - minX) * 2.8);
+    const height = Math.max(52, (maxY - minY) * 3.2);
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2 + height * 0.02;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(18,18,18,0.96)';
+    ctx.beginPath();
+    ctx.ellipse(centerX, centerY, width / 2, height / 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+};
+
 const getFaceLockCrop = (img: HTMLImageElement) => {
     const cropWidth = img.width * 0.58;
     const cropHeight = img.height * 0.48;
@@ -373,24 +616,53 @@ export const createPoseOnlyReference = async (
         canvas.width = canvasW;
         canvas.height = canvasH;
 
-        ctx.fillStyle = '#181818';
-        ctx.fillRect(0, 0, canvasW, canvasH);
+        const poseOverlay = await detectPoseOverlay(img);
+        const { x, y, drawW, drawH } = createFallbackPoseGuide(ctx, img, canvasW, canvasH);
+
+        if (poseOverlay) {
+            if (poseOverlay.segmentationMask) {
+                drawPoseSegmentationGuide(ctx, poseOverlay.segmentationMask, x, y, drawW, drawH);
+            }
+            suppressPoseGuideFaceRegion(ctx, poseOverlay.landmarks, x, y, drawW, drawH);
+            drawPoseSkeletonGuide(ctx, poseOverlay.landmarks, x, y, drawW, drawH);
+        } else {
+            const detectedFaces = await detectCandidateFaceBoxes(img);
+            const faceBox = detectedFaces.length > 0
+                ? [...detectedFaces].sort(
+                    (a, b) => scoreCandidateFaceBox(b, img.width, img.height) - scoreCandidateFaceBox(a, img.width, img.height),
+                )[0]
+                : null;
+
+            if (faceBox) {
+                const scale = Math.min(canvasW / img.width, canvasH / img.height);
+                const drawOffsetX = (canvasW - img.width * scale) / 2;
+                const drawOffsetY = (canvasH - img.height * scale) / 2;
+                const maskX = drawOffsetX + faceBox.x * scale - faceBox.width * scale * 0.18;
+                const maskY = drawOffsetY + faceBox.y * scale - faceBox.height * scale * 0.12;
+                const maskW = faceBox.width * scale * 1.36;
+                const maskH = faceBox.height * scale * 1.18;
+
+                ctx.save();
+                ctx.fillStyle = 'rgba(18, 18, 18, 0.94)';
+                ctx.beginPath();
+                ctx.roundRect(maskX, maskY, maskW, maskH, Math.max(18, Math.min(maskW, maskH) * 0.18));
+                ctx.fill();
+                ctx.restore();
+            } else {
+                ctx.save();
+                ctx.fillStyle = 'rgba(18, 18, 18, 0.6)';
+                ctx.fillRect(x, y, drawW, drawH * 0.3);
+                ctx.restore();
+            }
+        }
 
         ctx.save();
-        ctx.filter = 'grayscale(1) saturate(0) contrast(1.05) brightness(0.96) blur(1.6px)';
-        const { x, y, drawW, drawH } = drawContainedImage(ctx, img, canvasW, canvasH);
+        ctx.strokeStyle = poseOverlay ? 'rgba(0,255,188,0.28)' : 'rgba(255,255,255,0.26)';
+        ctx.lineWidth = Math.max(2, Math.min(canvasW, canvasH) * 0.004);
+        ctx.strokeRect(x, y, drawW, drawH);
         ctx.restore();
 
-        // Blur the upper band harder to suppress sample-face identity while keeping pose and framing.
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(x, y, drawW, drawH * 0.42);
-        ctx.clip();
-        ctx.filter = 'grayscale(1) saturate(0) contrast(1.02) brightness(0.93) blur(7px)';
-        drawContainedImage(ctx, img, canvasW, canvasH);
-        ctx.restore();
-
-        ctx.fillStyle = 'rgba(10, 10, 10, 0.14)';
+        ctx.fillStyle = 'rgba(10, 10, 10, 0.1)';
         ctx.fillRect(x, y, drawW, drawH);
 
         return canvas.toDataURL('image/jpeg', 0.92);

@@ -176,11 +176,14 @@ const buildFallbackSynthesizedPrompt = (payload: ImageGenerateRecipePayload) => 
       hasSample
         ? 'Never copy facial identity, outfit identity, or realism from the sample image.'
         : 'Do not default to a plain black standing portrait unless explicitly requested.',
+      hasSample
+        ? 'Treat the sample as a structural composition guide only. Preserve pose intent, but repair ambiguous or broken limbs into one natural coherent body.'
+        : 'Keep anatomy natural and composition driven by the merged prompt text.',
     ],
     scene_rules: combinedPrompt ? [combinedPrompt] : ['Generate the image using the provided references exactly.'],
     style_rules: stylePrompt ? [stylePrompt] : [],
     camera_rules: hasSample
-      ? ['Re-pose the final character into the sample composition exactly.']
+      ? ['Match the sample composition closely, including pose, framing, and contact points, but repair any ambiguous limb geometry into natural anatomy.']
       : ['Infer camera and framing from the merged prompt text.'],
     must_keep: [
       'Stylized 3D game-avatar topology.',

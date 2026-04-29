@@ -152,7 +152,7 @@ const buildCharacterVisionPrompt = (characterIndex: number) => [
 const buildSampleVisionPrompt = () => [
   'Analyze the uploaded sample image for composition only.',
   'Return one compact JSON object in English only.',
-  'Focus on pose, camera, framing, placement, background, and lighting.',
+  'Focus on pose, camera, framing, placement, background, lighting, limb layout, support contact, and occlusion structure.',
   'Do not describe face identity or outfit identity as something to copy.',
   'Schema:',
   '{',
@@ -162,7 +162,10 @@ const buildSampleVisionPrompt = () => [
   '  "framing": "string",',
   '  "subjectPlacement": "string",',
   '  "background": "string",',
-  '  "lighting": "string"',
+  '  "lighting": "string",',
+  '  "limbLayout": "string",',
+  '  "supportContact": "string",',
+  '  "occlusionNotes": "string"',
   '}',
 ].join('\n');
 
@@ -207,6 +210,9 @@ const normalizeSampleVision = (raw: any): SampleVisionAnalysis => ({
   subjectPlacement: typeof raw?.subjectPlacement === 'string' ? raw.subjectPlacement.trim() : undefined,
   background: typeof raw?.background === 'string' ? raw.background.trim() : undefined,
   lighting: typeof raw?.lighting === 'string' ? raw.lighting.trim() : undefined,
+  limbLayout: typeof raw?.limbLayout === 'string' ? raw.limbLayout.trim() : undefined,
+  supportContact: typeof raw?.supportContact === 'string' ? raw.supportContact.trim() : undefined,
+  occlusionNotes: typeof raw?.occlusionNotes === 'string' ? raw.occlusionNotes.trim() : undefined,
 });
 
 const normalizeStyleVision = (raw: any): StyleVisionAnalysis => ({

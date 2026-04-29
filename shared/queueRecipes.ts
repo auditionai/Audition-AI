@@ -102,6 +102,9 @@ export interface SampleVisionAnalysis {
   subjectPlacement?: string;
   background?: string;
   lighting?: string;
+  limbLayout?: string;
+  supportContact?: string;
+  occlusionNotes?: string;
 }
 
 export interface StyleVisionAnalysis {
@@ -164,16 +167,37 @@ export interface ImageGenerateRecipePayload {
   __vertexDiagnostics?: QueueVertexDiagnosticEntry[];
 }
 
-const CHARACTER_REFERENCE_KIND_PRIORITY: Record<CharacterReferenceKind, number> = {
-  face_detail: 0,
-  face: 1,
-  body: 2,
-  reference: 3,
+const getCharacterReferenceKindPriority = (
+  kind: CharacterReferenceKind,
+  facePriorityMode?: CharacterFacePriorityMode,
+) => {
+  if (facePriorityMode === 'portrait_headshot') {
+    const portraitPriority: Record<CharacterReferenceKind, number> = {
+      face_detail: 0,
+      face: 1,
+      body: 2,
+      reference: 3,
+    };
+    return portraitPriority[kind];
+  }
+
+  const defaultPriority: Record<CharacterReferenceKind, number> = {
+    body: 0,
+    face: 1,
+    face_detail: 2,
+    reference: 3,
+  };
+  return defaultPriority[kind];
 };
 
-const sortCharacterReferences = (references: CharacterReferenceSourceEntry[]) =>
+const sortCharacterReferences = (
+  references: CharacterReferenceSourceEntry[],
+  facePriorityMode?: CharacterFacePriorityMode,
+) =>
   [...references].sort(
-    (a, b) => CHARACTER_REFERENCE_KIND_PRIORITY[a.kind] - CHARACTER_REFERENCE_KIND_PRIORITY[b.kind],
+    (a, b) =>
+      getCharacterReferenceKindPriority(a.kind, facePriorityMode) -
+      getCharacterReferenceKindPriority(b.kind, facePriorityMode),
   );
 
 const LAYERED_SINGLE_SUBJECT_PROMPT_PATTERNS = [
@@ -397,9 +421,9 @@ const getShotAwareRenderProfile = (shotType: ImageRoleContract['shotType']) => {
   return `${AUDITION_SOFT_BEAUTY_RENDER_PROFILE} HALF-BODY WEIGHTING: balance facial fidelity, torso flow, hand quality, material detail, and soft beauty shading.`;
 };
 const IMAGE_ROLE_LOCK_CONSTRAINTS =
-  'STRICT ROLE LOCK: CHARACTER REFERENCES are the only identity source for face, hair, skin tone, head shape, body structure, outfit, shoes, accessories, tattoos, gender, and overall avatar identity. FACE LOCK references, when present, are the highest-priority source for eyes, eyebrows, nose, lips, jawline, hairline, bangs, makeup, glasses, facial proportions, and facial likeness. Preserve uploaded skin tone exactly; do not warm it, tan it, yellow it, orange it, or shift it to a different complexion. Preserve believable adult 3D anatomy from the character references; avoid doll-like proportions, rigid limbs, inflated eyes, or mannequin posture. CHARACTER REFERENCES are NOT pose references. SAMPLE IMAGE is composition-only and controls pose, camera angle, framing, subject placement, body lean, hand placement, spacing, scene layout, and background composition only. SAMPLE IMAGE must never contribute face identity, hairstyle identity, makeup identity, or facial expression identity, even if the sample face is large, sharp, centered, or visually dominant. Never reproduce SAMPLE IMAGE as the final output, never borrow its identity, outfit, or realism, and never return any uploaded reference nearly unchanged. STYLE IMAGE is style-only and may influence only render quality, lighting behavior, material response, restrained color grading, and final finish. STYLE IMAGE must never override identity, skin tone, anatomy, subject count, pose, composition, or outfit. The final image must keep one-to-one slot mapping for all uploaded characters, remain a stylized 3D game avatar, and never become a photorealistic or semi-realistic human.';
+  'STRICT ROLE LOCK: CHARACTER REFERENCES are the only identity source for face, hair, skin tone, head shape, body structure, outfit, shoes, accessories, tattoos, gender, and overall avatar identity. For non-portrait shots, BODY references are the primary source for full-body complexion, limb anatomy, and overall body proportions. FACE LOCK references, when present, are the highest-priority source for eyes, eyebrows, nose, lips, jawline, hairline, bangs, makeup, glasses, facial proportions, and facial likeness. Preserve uploaded skin tone exactly; do not warm it, tan it, yellow it, orange it, or shift it to a different complexion. Preserve believable adult 3D anatomy from the character references; avoid doll-like proportions, rigid limbs, inflated eyes, or mannequin posture. CHARACTER REFERENCES are NOT pose references. SAMPLE IMAGE is composition-only and controls pose, camera angle, framing, subject placement, body lean, hand placement, spacing, scene layout, and background composition only. SAMPLE IMAGE must never contribute face identity, hairstyle identity, makeup identity, or facial expression identity, even if the sample face is large, sharp, centered, or visually dominant. Treat SAMPLE IMAGE as a structural guide, not a literal body copy. If the sample pose would create broken anatomy, repair the anatomy while preserving the composition. Never reproduce SAMPLE IMAGE as the final output, never borrow its identity, outfit, or realism, and never return any uploaded reference nearly unchanged. STYLE IMAGE is style-only and may influence only render quality, lighting behavior, material response, restrained color grading, and final finish. STYLE IMAGE must never override identity, skin tone, anatomy, subject count, pose, composition, or outfit. The final image must keep one-to-one slot mapping for all uploaded characters, remain a stylized 3D game avatar, and never become a photorealistic or semi-realistic human.';
 const REDUCED_IMAGE_ROLE_LOCK_CONSTRAINTS_NO_SAMPLE =
-  'STRICT ROLE LOCK: No SAMPLE IMAGE is provided, so USER REQUEST is the primary source for pose, framing, action, scene layout, and background. CHARACTER REFERENCES still define identity only and are NOT pose references. FACE LOCK references, when present, are the highest-priority source for eyes, eyebrows, nose, lips, jawline, hairline, bangs, makeup, glasses, facial proportions, and facial likeness. Preserve uploaded skin tone exactly; do not warm it, tan it, yellow it, orange it, or shift it to a different complexion. Preserve believable adult 3D anatomy from the character references; avoid doll-like proportions, rigid limbs, inflated eyes, or mannequin posture. STYLE IMAGE is style-only and may influence only render quality, lighting behavior, material response, restrained color grading, and final 3D finish. STYLE IMAGE must never override identity, skin tone, anatomy, pose, composition, camera framing, gender presentation, subject count, or outfit. Never return any uploaded reference nearly unchanged when the USER REQUEST asks for a different pose, scene, framing, or environment. Keep the result as a stylized 3D game avatar, not a photorealistic or semi-realistic human.';
+  'STRICT ROLE LOCK: No SAMPLE IMAGE is provided, so USER REQUEST is the primary source for pose, framing, action, scene layout, and background. CHARACTER REFERENCES still define identity only and are NOT pose references. For non-portrait shots, BODY references are the primary source for full-body complexion, limb anatomy, and overall body proportions. FACE LOCK references, when present, are the highest-priority source for eyes, eyebrows, nose, lips, jawline, hairline, bangs, makeup, glasses, facial proportions, and facial likeness. Preserve uploaded skin tone exactly; do not warm it, tan it, yellow it, orange it, or shift it to a different complexion. Preserve believable adult 3D anatomy from the character references; avoid doll-like proportions, rigid limbs, inflated eyes, or mannequin posture. STYLE IMAGE is style-only and may influence only render quality, lighting behavior, material response, restrained color grading, and final 3D finish. STYLE IMAGE must never override identity, skin tone, anatomy, pose, composition, camera framing, gender presentation, subject count, or outfit. Never return any uploaded reference nearly unchanged when the USER REQUEST asks for a different pose, scene, framing, or environment. Keep the result as a stylized 3D game avatar, not a photorealistic or semi-realistic human.';
 const MAX_PROVIDER_PROMPT_LENGTH = 3200;
 const MAX_NEGATIVE_PROMPT_LENGTH = 900;
 
@@ -500,7 +524,9 @@ export const getImageCharacterReferenceGroups = (
     .map((group, index) => ({
       characterIndex: Math.max(1, Math.floor(Number(group.characterIndex || index + 1))),
       gender: group.gender === 'female' || group.gender === 'male' ? group.gender : undefined,
-      facePriorityMode: group.facePriorityMode === 'portrait_headshot' ? 'portrait_headshot' : undefined,
+      facePriorityMode: group.facePriorityMode === 'portrait_headshot'
+        ? ('portrait_headshot' as const)
+        : undefined,
       appearanceProfile: group.appearanceProfile && typeof group.appearanceProfile === 'object'
         ? {
             skinToneHex: typeof group.appearanceProfile.skinToneHex === 'string' ? group.appearanceProfile.skinToneHex : undefined,
@@ -517,7 +543,7 @@ export const getImageCharacterReferenceGroups = (
     }))
     .map((group) => ({
       ...group,
-      references: sortCharacterReferences(group.references),
+      references: sortCharacterReferences(group.references, group.facePriorityMode),
     }))
     .filter((group) => group.references.length > 0)
     .sort((a, b) => a.characterIndex - b.characterIndex);
@@ -691,6 +717,7 @@ export const buildImageRoleContract = (
     `Render exactly ${characterCount} character(s) with strict one-to-one slot mapping.`,
     'Character references define identity only: face, hair, body structure, skin tone, outfit, shoes, accessories, tattoos, and gender.',
     'Preserve the uploaded skin tone exactly. Do not warm it, tan it, yellow it, orange it, or shift it to a different complexion.',
+    'For non-portrait shots, BODY references are the primary source for full-body complexion, limb anatomy, and overall body proportions. FACE LOCK references refine facial identity only.',
     ...skinToneAnchors,
     ...characterVisionNotes,
     'Preserve believable adult-proportioned anatomy from the uploaded character references. Keep the neck, shoulders, torso, arms, hands, hips, and legs natural instead of rigid or mannequin-like.',
@@ -710,7 +737,8 @@ export const buildImageRoleContract = (
     ? [
         'Sample image controls composition only: pose, camera angle, framing, subject placement, spacing, scene layout, and background.',
         'Never borrow face identity, hair identity, outfit identity, makeup identity, or realism from the sample image.',
-        'If identity conflicts with sample composition, keep identity from character references and re-pose the final subject to match the sample.',
+        'If identity conflicts with sample composition, keep identity from character references and adapt the final subject to the sample composition without breaking anatomy.',
+        'Treat the sample as a structural guide, not a literal body copy. Preserve natural limb count, joint bending, balance, and clean silhouette even when the sample pose is complex or partially occluded.',
       ]
     : [
         'User prompt is the primary composition source because no sample image is present.',
@@ -726,6 +754,9 @@ export const buildImageRoleContract = (
       sampleVision.framing ? `framing: ${sampleVision.framing}` : '',
       sampleVision.subjectPlacement ? `placement: ${sampleVision.subjectPlacement}` : '',
       sampleVision.background ? `background: ${sampleVision.background}` : '',
+      sampleVision.limbLayout ? `limbs: ${sampleVision.limbLayout}` : '',
+      sampleVision.supportContact ? `support/contact: ${sampleVision.supportContact}` : '',
+      sampleVision.occlusionNotes ? `occlusion: ${sampleVision.occlusionNotes}` : '',
     ].filter(Boolean);
     if (sampleSignals.length > 0) {
       compositionRules.push(`Sample composition anchor: ${sampleSignals.join('; ')}.`);
@@ -866,13 +897,13 @@ const buildImageReferenceOrderDirective = (
 
     switch (entry.role) {
       case 'sample':
-        return `- Image ${number}: ${entry.indexLabel}. This is the PRIMARY composition anchor. It has already been processed into a composition-only guide. Copy pose, camera angle, framing, hand placement, body lean, environment layout, and background composition from this image only. Do not copy identity, outfit, facial anatomy, facial expression identity, hair identity, skin texture, text overlays, or realism from it. Never reproduce this reference as the final image.`;
+        return `- Image ${number}: ${entry.indexLabel}. This is the PRIMARY composition anchor. It has already been processed into a composition-only guide. Copy pose, camera angle, framing, hand placement, body lean, chair/ground contact, environment layout, and background composition from this image only. Do not copy identity, outfit, facial anatomy, facial expression identity, hair identity, skin texture, text overlays, or realism from it. If the sample pose is ambiguous, partially occluded, or would cause broken anatomy, keep the composition but repair the limbs into one natural coherent body. Never reproduce this reference as the final image.`;
       case 'character':
         return entry.indexLabel.includes('FACE DETAIL LOCK')
           ? `- Image ${number}: ${entry.indexLabel}. This is the highest-priority micro face anchor. Copy exact eye shape, eyelash styling, eyebrow shape, nose shape, lip shape, makeup placement, blush placement, freckles, beauty marks, face jewelry, face decals, and all fine facial likeness cues from this image. Override any conflicting face detail from SAMPLE IMAGE, STYLE IMAGE, BODY references, or prompt phrasing.${entry.facePriorityMode === 'portrait_headshot' ? ' Portrait/headshot priority mode is active: this image must dominate the full facial outcome for this slot.' : ''}`
           : entry.indexLabel.includes('FACE LOCK')
-          ? `- Image ${number}: ${entry.indexLabel}. This is the high-priority overall face identity anchor. Copy exact eyes, eyebrows, nose, lips, jawline, hairline, bangs, makeup, glasses, skin tone, facial proportions, and facial likeness from this image. Override any conflicting face information from SAMPLE IMAGE, STYLE IMAGE, BODY references, or prompt phrasing.${entry.facePriorityMode === 'portrait_headshot' ? ' Portrait/headshot priority mode is active: use BODY only as a secondary support source for non-face identity.' : ''}`
-          : `- Image ${number}: ${entry.indexLabel}. Copy identity only: face, hair, head shape, skin tone, body structure, outfit, shoes, accessories, and tattoos. Preserve the uploaded complexion exactly and keep adult-proportioned anatomy.${entry.facePriorityMode === 'portrait_headshot' ? ' Portrait/headshot priority mode is active: this BODY image may inform only hairstyle mass, outfit, accessories, and visible upper-body silhouette. It must never redefine eye shape, nose shape, lip shape, makeup, facial proportions, or facial accessories.' : ''} This image is NOT a pose reference. Ignore its current standing pose, limb placement, framing, and background.`;
+          ? `- Image ${number}: ${entry.indexLabel}. This is the high-priority overall face identity anchor. Copy exact eyes, eyebrows, nose, lips, jawline, hairline, bangs, makeup, glasses, facial proportions, and facial likeness from this image. Use it to lock the face, not to recolor the full body. Override any conflicting face information from SAMPLE IMAGE, STYLE IMAGE, BODY references, or prompt phrasing.${entry.facePriorityMode === 'portrait_headshot' ? ' Portrait/headshot priority mode is active: use BODY only as a secondary support source for non-face identity.' : ''}`
+          : `- Image ${number}: ${entry.indexLabel}. Copy identity only: face, hair, head shape, full-body skin tone, body structure, outfit, shoes, accessories, and tattoos. This is the primary anchor for complexion and anatomy across the whole character. Preserve the uploaded complexion exactly and keep adult-proportioned anatomy.${entry.facePriorityMode === 'portrait_headshot' ? ' Portrait/headshot priority mode is active: this BODY image may inform only hairstyle mass, outfit, accessories, and visible upper-body silhouette. It must never redefine eye shape, nose shape, lip shape, makeup, facial proportions, or facial accessories.' : ''} This image is NOT a pose reference. Ignore its current standing pose, limb placement, framing, and background.`;
       case 'style':
         return `- Image ${number}: ${entry.indexLabel}. Copy only render language: render quality, shader behavior, lighting response, material quality, restrained color grading, and final finish. Do not copy pose, outfit, hairstyle, identity, skin tone, anatomy, gender, character count, or composition.`;
       default:
@@ -896,7 +927,7 @@ const buildImageReferenceOrderDirective = (
     '- If multiple CHARACTER REFERENCE images share the same CHARACTER number, they all belong to the same final subject and must be merged into one identity.',
     '- Never duplicate one uploaded character to fill another slot. Never omit a slot and replace it with a sample person, style person, or invented/blended subject.',
     hasSample
-      ? '- If CHARACTER REFERENCES conflict with the SAMPLE IMAGE, keep identity/outfit from CHARACTER REFERENCES but re-pose the final character to match the SAMPLE IMAGE exactly.'
+      ? '- If CHARACTER REFERENCES conflict with the SAMPLE IMAGE, keep identity/outfit from CHARACTER REFERENCES but adapt the final character to the SAMPLE IMAGE composition without copying broken anatomy or sample identity.'
       : '- Without a SAMPLE IMAGE, never ignore the PRIMARY COMMAND PROMPT and fall back to a default standing pose or empty black background unless the prompt explicitly asks for that.',
     hasSample
       ? '- The final image must never be a near-unchanged copy of a standing CHARACTER REFERENCE unless the SAMPLE IMAGE itself is also a standing front-view pose.'
@@ -928,8 +959,8 @@ const buildReducedImageReferenceOrderDirectiveWithoutSample = (
         return entry.indexLabel.includes('FACE DETAIL LOCK')
           ? `- Image ${number}: ${entry.indexLabel}. Highest-priority face detail only: eye shape, eyelashes, eyebrows, nose shape, lip shape, makeup placement, face accessories, facial decals, and micro facial likeness.${entry.facePriorityMode === 'portrait_headshot' ? ' Portrait/headshot priority mode is active for this slot.' : ''}`
           : entry.indexLabel.includes('FACE LOCK')
-          ? `- Image ${number}: ${entry.indexLabel}. High-priority overall face identity only: eyes, eyebrows, nose, lips, jawline, hairline, bangs, makeup, glasses, skin tone, and facial likeness.${entry.facePriorityMode === 'portrait_headshot' ? ' Portrait/headshot priority mode is active for this slot.' : ''}`
-          : `- Image ${number}: ${entry.indexLabel}. Identity only: face, hair, skin tone, body structure, outfit, shoes, accessories, and tattoos. Preserve the uploaded complexion exactly and keep adult-proportioned anatomy.${entry.facePriorityMode === 'portrait_headshot' ? ' Portrait/headshot priority slot: use BODY only as a secondary support source for non-face identity.' : ''} This image is NOT a pose reference.`;
+          ? `- Image ${number}: ${entry.indexLabel}. High-priority overall face identity only: eyes, eyebrows, nose, lips, jawline, hairline, bangs, makeup, glasses, and facial likeness.${entry.facePriorityMode === 'portrait_headshot' ? ' Portrait/headshot priority mode is active for this slot.' : ''}`
+          : `- Image ${number}: ${entry.indexLabel}. Identity only: face, hair, full-body skin tone, body structure, outfit, shoes, accessories, and tattoos. This is the primary complexion and anatomy anchor. Preserve the uploaded complexion exactly and keep adult-proportioned anatomy.${entry.facePriorityMode === 'portrait_headshot' ? ' Portrait/headshot priority slot: use BODY only as a secondary support source for non-face identity.' : ''} This image is NOT a pose reference.`;
       case 'style':
         return `- Image ${number}: ${entry.indexLabel}. Render language only: lighting, material response, restrained color grading, and final 3D finish.`;
       default:

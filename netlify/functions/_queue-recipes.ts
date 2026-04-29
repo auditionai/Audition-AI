@@ -118,6 +118,11 @@ export const uploadVideoToTst = async (input: string, fallbackMimeType?: string)
 
 const isRecoverablePromptSynthesisError = (error: unknown) => {
   const message = error instanceof Error ? error.message.toLowerCase() : String(error || '').toLowerCase();
+  const isLegacyOrGenericVertexPromptFailure =
+    message.includes('all vertex ai credentials failed for image prompt synthesis') ||
+    message.includes('vertex ai did not return a synthesized image prompt') ||
+    (message.includes('vertex ai') && message.includes('prompt synthesis')) ||
+    (message.includes('vertex ai') && message.includes('synthesized image prompt'));
 
   return (
     message.includes('resource has been exhausted') ||
@@ -130,7 +135,8 @@ const isRecoverablePromptSynthesisError = (error: unknown) => {
     message.includes('vertex ai returned no prompt text for image prompt synthesis') ||
     message.includes('vertex ai returned an empty prompt synthesis payload') ||
     message.includes('vertex ai did not return a valid json object for prompt synthesis') ||
-    message.includes('vertex ai prompt synthesis json must be an object')
+    message.includes('vertex ai prompt synthesis json must be an object') ||
+    isLegacyOrGenericVertexPromptFailure
   );
 };
 
@@ -210,7 +216,9 @@ export const synthesizeImageGeneratePrompt = async (
         task: 'image_prompt_synthesis',
         status: 'warning',
         model: 'gemini-3.1-pro-preview',
-        message: 'Vertex prompt synthesis fell back to the local JSON prompt builder.',
+        message: `Vertex prompt synthesis fell back to the local JSON prompt builder. Original error: ${
+          error instanceof Error ? error.message : String(error || 'Unknown error')
+        }`,
       });
     }
 

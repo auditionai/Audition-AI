@@ -4,6 +4,7 @@ import {
   getEffectiveImageGenerationResolution,
   getImageRenderReferenceSources,
   type ImageGenerateRecipePayload,
+  type QueueVertexDiagnosticEntry,
   type QueueRecipePayload,
 } from '../../shared/queueRecipes';
 import {
@@ -125,7 +126,11 @@ const isRecoverablePromptSynthesisError = (error: unknown) => {
     message.includes('429') ||
     message.includes('overloaded') ||
     message.includes('deadline exceeded') ||
-    message.includes('failed to initialize vertex ai credentials')
+    message.includes('failed to initialize vertex ai credentials') ||
+    message.includes('vertex ai returned no prompt text for image prompt synthesis') ||
+    message.includes('vertex ai returned an empty prompt synthesis payload') ||
+    message.includes('vertex ai did not return a valid json object for prompt synthesis') ||
+    message.includes('vertex ai prompt synthesis json must be an object')
   );
 };
 
@@ -182,12 +187,31 @@ const buildFallbackSynthesizedPrompt = (payload: ImageGenerateRecipePayload) => 
   });
 };
 
-export const synthesizeImageGeneratePrompt = async (payload: ImageGenerateRecipePayload) => {
+type VertexPromptPreparationOptions = {
+  onVertexDiagnostic?: (entry: QueueVertexDiagnosticEntry) => Promise<void> | void;
+};
+
+export const synthesizeImageGeneratePrompt = async (
+  payload: ImageGenerateRecipePayload,
+  options?: VertexPromptPreparationOptions,
+) => {
   try {
-    return await synthesizeStrictImagePrompt(payload);
+    return await synthesizeStrictImagePrompt(payload, {
+      onDiagnostic: options?.onVertexDiagnostic,
+    });
   } catch (error) {
     if (!isRecoverablePromptSynthesisError(error)) {
       throw error;
+    }
+
+    if (options?.onVertexDiagnostic) {
+      await options.onVertexDiagnostic({
+        at: new Date().toISOString(),
+        task: 'image_prompt_synthesis',
+        status: 'warning',
+        model: 'gemini-3.1-pro-preview',
+        message: 'Vertex prompt synthesis fell back to the local JSON prompt builder.',
+      });
     }
 
     console.warn('[queue-recipes] Vertex prompt synthesis unavailable, falling back to base prompt:', error);
@@ -275,9 +299,10 @@ export type ImageGeneratePromptPreparation = {
 
 export const prepareImageGeneratePromptWithinLimit = async (
   payload: ImageGenerateRecipePayload,
+  options?: VertexPromptPreparationOptions,
 ): Promise<ImageGeneratePromptPreparation> => {
   let workingPayload: ImageGenerateRecipePayload = { ...payload };
-  let synthesizedPrompt = await synthesizeImageGeneratePrompt(workingPayload);
+  let synthesizedPrompt = await synthesizeImageGeneratePrompt(workingPayload, options);
   let providerPrompt = buildImageProviderPrompt(synthesizedPrompt, workingPayload, workingPayload.negativePrompt);
 
   if (providerPrompt.length <= TST_PROMPT_MAX_CHARACTERS) {
@@ -306,7 +331,12 @@ export const prepareImageGeneratePromptWithinLimit = async (
       sourcePromptForRewrite.length - overflow - PROMPT_REWRITE_SAFETY_MARGIN,
     );
     const rewrittenPrompt = normalizePromptWhitespace(
-      await rewriteUserPromptToFitLimit(originalUserPromptInput, targetCharacters, 'image generation'),
+      await rewriteUserPromptToFitLimit(
+        originalUserPromptInput,
+        targetCharacters,
+        'image generation',
+        options?.onVertexDiagnostic,
+      ),
     );
 
     if (!rewrittenPrompt) {
@@ -319,7 +349,7 @@ export const prepareImageGeneratePromptWithinLimit = async (
       userPromptInput: rewrittenPrompt,
       systemPromptPrefix,
     };
-    synthesizedPrompt = await synthesizeImageGeneratePrompt(workingPayload);
+    synthesizedPrompt = await synthesizeImageGeneratePrompt(workingPayload, options);
     providerPrompt = buildImageProviderPrompt(synthesizedPrompt, workingPayload, workingPayload.negativePrompt);
 
     if (providerPrompt.length <= TST_PROMPT_MAX_CHARACTERS) {

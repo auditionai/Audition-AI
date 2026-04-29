@@ -1,8 +1,30 @@
-import { getImageCharacterReferenceGroups, getImageDirectorSources, type ImageGenerateRecipePayload } from '../../shared/queueRecipes';
+import {
+  getImageCharacterReferenceGroups,
+  getImageDirectorSources,
+  type ImageGenerateRecipePayload,
+  type QueueVertexDiagnosticEntry,
+} from '../../shared/queueRecipes';
 import { runWithVertexCredentialFailover } from './_vertex-credentials';
 
 const VERTEX_MODEL = 'gemini-3.1-pro-preview';
 const normalizePromptWhitespace = (value: string) => value.replace(/\s+/g, ' ').trim();
+type VertexDiagnosticTask = QueueVertexDiagnosticEntry['task'];
+type VertexDiagnosticCallback = (entry: QueueVertexDiagnosticEntry) => Promise<void> | void;
+
+const collectFinishReasons = (data: any) =>
+  (Array.isArray(data?.candidates) ? data.candidates : [])
+    .map((candidate: any) => candidate?.finishReason)
+    .filter((value: unknown): value is string => typeof value === 'string' && value.trim().length > 0);
+
+const collectSafetyRatings = (data: any) =>
+  (Array.isArray(data?.candidates) ? data.candidates : [])
+    .flatMap((candidate: any) => (Array.isArray(candidate?.safetyRatings) ? candidate.safetyRatings : []))
+    .map((rating: any) => {
+      const category = typeof rating?.category === 'string' ? rating.category : '';
+      const blocked = rating?.blocked === true ? ':blocked' : '';
+      return `${category}${blocked}`.trim();
+    })
+    .filter((value: string) => value.length > 0);
 
 const extractJsonPayload = (value: string) => {
   const trimmed = value.trim();
@@ -35,6 +57,73 @@ const normalizePromptJsonPayload = (value: string) => {
   }
 
   return JSON.stringify(parsed);
+};
+
+const extractCandidateText = (data: any) => {
+  const candidates = Array.isArray(data?.candidates) ? data.candidates : [];
+
+  for (const candidate of candidates) {
+    const parts = Array.isArray(candidate?.content?.parts) ? candidate.content.parts : [];
+    const text = parts
+      .map((part: any) => (typeof part?.text === 'string' ? part.text : ''))
+      .join('\n')
+      .trim();
+
+    if (text) {
+      return text;
+    }
+  }
+
+  return '';
+};
+
+const extractPromptFeedback = (data: any) => {
+  const promptFeedback = data?.promptFeedback && typeof data.promptFeedback === 'object'
+    ? data.promptFeedback
+    : null;
+  const promptBlockReason = typeof promptFeedback?.blockReason === 'string'
+    ? promptFeedback.blockReason
+    : '';
+  const promptBlockMessage = typeof promptFeedback?.blockReasonMessage === 'string'
+    ? promptFeedback.blockReasonMessage
+    : '';
+  return {
+    blockReason: promptBlockReason || undefined,
+    blockReasonMessage: promptBlockMessage || undefined,
+  };
+};
+
+const summarizeVertexPromptSynthesisFailure = (data: any) => {
+  const promptFeedback = extractPromptFeedback(data);
+  const finishReasons = collectFinishReasons(data);
+  const safetyRatings = collectSafetyRatings(data);
+  const details = [
+    promptFeedback.blockReason ? `prompt_block=${promptFeedback.blockReason}` : '',
+    promptFeedback.blockReasonMessage ? `prompt_message=${promptFeedback.blockReasonMessage}` : '',
+    finishReasons.length > 0 ? `finish_reasons=${finishReasons.join(',')}` : '',
+    safetyRatings.length > 0 ? `safety=${safetyRatings.join(',')}` : '',
+  ].filter(Boolean);
+
+  return details.length > 0
+    ? `Vertex AI returned no prompt text for image prompt synthesis. ${details.join(' | ')}`
+    : 'Vertex AI returned no prompt text for image prompt synthesis.';
+};
+
+const emitVertexDiagnostic = async (
+  callback: VertexDiagnosticCallback | undefined,
+  task: VertexDiagnosticTask,
+  partial: Omit<QueueVertexDiagnosticEntry, 'at' | 'task' | 'model'>,
+) => {
+  if (!callback) {
+    return;
+  }
+
+  await callback({
+    at: new Date().toISOString(),
+    task,
+    model: VERTEX_MODEL,
+    ...partial,
+  });
 };
 
 const parseErrorMessage = async (response: Response) => {
@@ -181,7 +270,12 @@ const buildStrictImageDirectorInstruction = (
   return sections.join('\n');
 };
 
-export const synthesizeStrictImagePrompt = async (payload: ImageGenerateRecipePayload) => {
+export const synthesizeStrictImagePrompt = async (
+  payload: ImageGenerateRecipePayload,
+  options?: {
+    onDiagnostic?: VertexDiagnosticCallback;
+  },
+) => {
   const characterImages = payload.characterImages || [];
   const hasCharacters = characterImages.length > 0;
   const hasSample = Boolean(payload.sampleImage);
@@ -200,7 +294,18 @@ export const synthesizeStrictImagePrompt = async (payload: ImageGenerateRecipePa
 
   return runWithVertexCredentialFailover({
     taskName: 'image prompt synthesis',
-    operation: async ({ projectId, accessToken }) => {
+    onAttemptFailure: async ({ credentialName, projectId, error, retryable }) => {
+      if (!retryable) {
+        return;
+      }
+      await emitVertexDiagnostic(options?.onDiagnostic, 'image_prompt_synthesis', {
+        status: 'error',
+        message: error.message,
+        credentialName: credentialName || undefined,
+        projectId,
+      });
+    },
+    operation: async ({ projectId, accessToken, credentialName }) => {
       const response = await fetch(
         `https://aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/global/publishers/google/models/${VERTEX_MODEL}:generateContent`,
         {
@@ -226,13 +331,50 @@ export const synthesizeStrictImagePrompt = async (payload: ImageGenerateRecipePa
       }
 
       const data = await response.json();
-      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+      const text = extractCandidateText(data);
+      const finishReasons = collectFinishReasons(data);
+      const promptFeedback = extractPromptFeedback(data);
+      const safetyRatings = collectSafetyRatings(data);
 
       if (!text) {
-        throw new Error('Vertex AI did not return a synthesized image prompt.');
+        const message = summarizeVertexPromptSynthesisFailure(data);
+        await emitVertexDiagnostic(options?.onDiagnostic, 'image_prompt_synthesis', {
+          status: 'error',
+          message,
+          credentialName: credentialName || undefined,
+          projectId,
+          finishReasons,
+          promptFeedback,
+          safetyRatings,
+        });
+        throw new Error(message);
       }
 
-      return normalizePromptJsonPayload(text);
+      try {
+        const normalized = normalizePromptJsonPayload(text);
+        await emitVertexDiagnostic(options?.onDiagnostic, 'image_prompt_synthesis', {
+          status: 'success',
+          message: 'Vertex AI synthesized the English JSON prompt successfully.',
+          credentialName: credentialName || undefined,
+          projectId,
+          finishReasons,
+          promptFeedback,
+          safetyRatings,
+        });
+        return normalized;
+      } catch (error) {
+        const normalizedError = error instanceof Error ? error : new Error(String(error));
+        await emitVertexDiagnostic(options?.onDiagnostic, 'image_prompt_synthesis', {
+          status: 'error',
+          message: normalizedError.message,
+          credentialName: credentialName || undefined,
+          projectId,
+          finishReasons,
+          promptFeedback,
+          safetyRatings,
+        });
+        throw normalizedError;
+      }
     },
   });
 };
@@ -241,6 +383,7 @@ export const rewriteUserPromptToFitLimit = async (
   prompt: string,
   maxCharacters: number,
   pipelineLabel = 'generation',
+  onDiagnostic?: VertexDiagnosticCallback,
 ) => {
   const normalizedPrompt = normalizePromptWhitespace(prompt);
   if (!normalizedPrompt) {
@@ -268,7 +411,18 @@ export const rewriteUserPromptToFitLimit = async (
 
   return runWithVertexCredentialFailover({
     taskName: 'image prompt compression',
-    operation: async ({ projectId, accessToken }) => {
+    onAttemptFailure: async ({ credentialName, projectId, error, retryable }) => {
+      if (!retryable) {
+        return;
+      }
+      await emitVertexDiagnostic(onDiagnostic, 'image_prompt_compression', {
+        status: 'error',
+        message: error.message,
+        credentialName: credentialName || undefined,
+        projectId,
+      });
+    },
+    operation: async ({ projectId, accessToken, credentialName }) => {
       const response = await fetch(
         `https://aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/global/publishers/google/models/${VERTEX_MODEL}:generateContent`,
         {
@@ -296,9 +450,28 @@ export const rewriteUserPromptToFitLimit = async (
       const data = await response.json();
       const text = normalizePromptWhitespace(String(data?.candidates?.[0]?.content?.parts?.[0]?.text || ''));
       if (!text) {
-        throw new Error('Vertex AI did not return a compressed user prompt.');
+        const message = 'Vertex AI did not return a compressed user prompt.';
+        await emitVertexDiagnostic(onDiagnostic, 'image_prompt_compression', {
+          status: 'error',
+          message,
+          credentialName: credentialName || undefined,
+          projectId,
+          finishReasons: collectFinishReasons(data),
+          promptFeedback: extractPromptFeedback(data),
+          safetyRatings: collectSafetyRatings(data),
+        });
+        throw new Error(message);
       }
 
+      await emitVertexDiagnostic(onDiagnostic, 'image_prompt_compression', {
+        status: 'success',
+        message: `Vertex AI compressed the ${pipelineLabel} prompt successfully.`,
+        credentialName: credentialName || undefined,
+        projectId,
+        finishReasons: collectFinishReasons(data),
+        promptFeedback: extractPromptFeedback(data),
+        safetyRatings: collectSafetyRatings(data),
+      });
       return text;
     },
   });

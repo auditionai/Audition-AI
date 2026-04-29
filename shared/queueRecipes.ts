@@ -24,6 +24,22 @@ export interface QueueProgressLogEntry {
   message: string;
 }
 
+export interface QueueVertexDiagnosticEntry {
+  at: string;
+  task: 'image_prompt_synthesis' | 'image_prompt_compression';
+  status: 'success' | 'warning' | 'error';
+  message: string;
+  credentialName?: string;
+  projectId?: string;
+  model?: string;
+  finishReasons?: string[];
+  promptFeedback?: {
+    blockReason?: string;
+    blockReasonMessage?: string;
+  };
+  safetyRatings?: string[];
+}
+
 export interface QueueNotificationMediaEntry {
   url: string;
   role: 'character' | 'sample' | 'style' | 'source' | 'keyframe' | 'motion' | 'reference';
@@ -81,6 +97,7 @@ export interface ImageGenerateRecipePayload {
   __outputVerificationRetryCount?: number;
   __lastOutputVerificationSummary?: string;
   __notifyInputMedia?: QueueNotificationMediaEntry[];
+  __vertexDiagnostics?: QueueVertexDiagnosticEntry[];
 }
 
 const CHARACTER_REFERENCE_KIND_PRIORITY: Record<CharacterReferenceKind, number> = {

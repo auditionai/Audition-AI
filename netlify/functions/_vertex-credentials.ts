@@ -29,6 +29,13 @@ type RunWithVertexCredentialFailoverOptions<T> = {
   normalCooldownMs?: number;
   failureCooldownMs?: number;
   operation: (session: VertexSession) => Promise<T>;
+  onAttemptFailure?: (info: {
+    credentialId: string;
+    credentialName: string | null;
+    projectId?: string;
+    error: Error;
+    retryable: boolean;
+  }) => Promise<void> | void;
 };
 
 const VERTEX_SCOPE = 'https://www.googleapis.com/auth/cloud-platform';
@@ -141,6 +148,15 @@ const getActiveVertexCredentialRows = async () => {
   return ((data || []) as VertexCredentialRow[]).filter((row) =>
     typeof row.key_value === 'string' && isVertexServiceAccountJson(row.key_value),
   );
+};
+
+const getVertexCredentialProjectId = (row: VertexCredentialRow) => {
+  try {
+    const parsed = JSON.parse(row.key_value || '{}');
+    return typeof parsed?.project_id === 'string' ? parsed.project_id : undefined;
+  } catch {
+    return undefined;
+  }
 };
 
 const claimVertexCredential = async (row: VertexCredentialRow, claimedAtIso: string) => {
@@ -325,6 +341,7 @@ export const runWithVertexCredentialFailover = async <T>({
   normalCooldownMs = VERTEX_KEY_NORMAL_COOLDOWN_MS,
   failureCooldownMs = VERTEX_KEY_FAILURE_COOLDOWN_MS,
   operation,
+  onAttemptFailure,
 }: RunWithVertexCredentialFailoverOptions<T>): Promise<T> => {
   const attemptedCredentialIds = new Set<string>();
   let lastRetryableError: Error | null = null;
@@ -346,8 +363,23 @@ export const runWithVertexCredentialFailover = async <T>({
       return await operation(session);
     } catch (error) {
       const normalizedError = toError(error);
+      const retryable = isVertexCredentialRetryableError(normalizedError);
 
-      if (!isVertexCredentialRetryableError(normalizedError)) {
+      if (onAttemptFailure) {
+        try {
+          await onAttemptFailure({
+            credentialId: row.id,
+            credentialName: row.name,
+            projectId: getVertexCredentialProjectId(row),
+            error: normalizedError,
+            retryable,
+          });
+        } catch (callbackError) {
+          console.warn('[vertex-credentials] onAttemptFailure callback errored:', callbackError);
+        }
+      }
+
+      if (!retryable) {
         throw normalizedError;
       }
 

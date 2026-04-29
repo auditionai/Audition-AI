@@ -1,6 +1,6 @@
 import type { Handler } from '@netlify/functions';
 import type { AdminQueueJob, AdminQueueSummary } from '../../types';
-import type { QueueProgressLogEntry } from '../../shared/queueRecipes';
+import type { QueueProgressLogEntry, QueueVertexDiagnosticEntry } from '../../shared/queueRecipes';
 import { normalizeQueueProgressLogs } from '../../shared/queueLogText';
 import { isSystemQueueKind } from '../../shared/queueKinds';
 import { classifyQueueError, isTerminalRescueFailureMessage, normalizeQueueErrorMessage, pickQueueFailureMessage } from '../../shared/queueErrorClassifier';
@@ -37,6 +37,23 @@ const normalizeQueueLogs = (payload: Record<string, unknown> | null | undefined)
       typeof (entry as QueueProgressLogEntry).level === 'string' &&
       typeof (entry as QueueProgressLogEntry).message === 'string',
   ));
+};
+
+const normalizeVertexDiagnostics = (payload: Record<string, unknown> | null | undefined): QueueVertexDiagnosticEntry[] => {
+  const rawDiagnostics = payload && typeof payload === 'object' ? (payload as Record<string, unknown>).__vertexDiagnostics : null;
+  if (!Array.isArray(rawDiagnostics)) {
+    return [];
+  }
+
+  return rawDiagnostics.filter(
+    (entry): entry is QueueVertexDiagnosticEntry =>
+      Boolean(entry) &&
+      typeof entry === 'object' &&
+      typeof (entry as QueueVertexDiagnosticEntry).at === 'string' &&
+      typeof (entry as QueueVertexDiagnosticEntry).task === 'string' &&
+      typeof (entry as QueueVertexDiagnosticEntry).status === 'string' &&
+      typeof (entry as QueueVertexDiagnosticEntry).message === 'string',
+  );
 };
 
 const getQueueStage = (payload: Record<string, unknown> | null | undefined) => {
@@ -222,6 +239,7 @@ export const handler: Handler = async (event) => {
       const lastQueueLog = getLastQueueLog(payload);
       const normalizedStatus = String(row.status || 'queued').toLowerCase();
       const queueLogs = normalizeQueueLogs(payload);
+      const vertexDiagnostics = normalizeVertexDiagnostics(payload);
       const displayErrorSource = pickQueueFailureMessage(row.error_message || undefined, queueLogs);
       const errorInfo = classifyQueueError(displayErrorSource || row.error_message || undefined);
 
@@ -252,6 +270,7 @@ export const handler: Handler = async (event) => {
         progress: typeof row.progress === 'number' ? row.progress : undefined,
         queueStage: getQueueStage(payload),
         queueLogs,
+        vertexDiagnostics,
         lastLogMessage: lastQueueLog?.message || undefined,
         lastLogAt: lastQueueLog?.at || undefined,
         error: normalizeQueueErrorMessage(displayErrorSource || row.error_message || undefined) || undefined,

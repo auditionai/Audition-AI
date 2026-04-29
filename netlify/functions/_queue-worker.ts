@@ -28,6 +28,7 @@ import {
   type QueueProcessingStage,
   type QueueProgressLogEntry,
   type QueueNotificationMediaEntry,
+  type QueueVertexDiagnosticEntry,
   type ImageEditRecipePayload,
   type ImageGenerateRecipePayload,
   type MotionGenerateRecipePayload,
@@ -160,6 +161,7 @@ const DISPATCH_CONCURRENCY_LIMIT = parsePositiveIntEnv('QUEUE_DISPATCH_CONCURREN
 const POLL_CONCURRENCY_LIMIT = parsePositiveIntEnv('QUEUE_POLL_CONCURRENCY_LIMIT', 12);
 const WORKER_TICK_BUDGET_MS = 8_000;
 const MAX_QUEUE_LOG_ENTRIES = 80;
+const MAX_VERTEX_DIAGNOSTIC_ENTRIES = 24;
 const ORPHAN_CLAIM_GRACE_MS = 30_000;
 const AMBIGUOUS_DISPATCH_RECOVERY_GRACE_MS = 3 * 60 * 1000;
 const LEASE_HEARTBEAT_INTERVAL_MS = 30_000;
@@ -389,6 +391,25 @@ const getQueueLogs = (payload?: Record<string, unknown> | ImageGenerateRecipePay
   );
 };
 
+const getQueueVertexDiagnostics = (
+  payload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
+): QueueVertexDiagnosticEntry[] => {
+  const rawDiagnostics = toQueuePayloadObject(payload).__vertexDiagnostics;
+  if (!Array.isArray(rawDiagnostics)) {
+    return [];
+  }
+
+  return rawDiagnostics.filter(
+    (entry): entry is QueueVertexDiagnosticEntry =>
+      Boolean(entry) &&
+      typeof entry === 'object' &&
+      typeof (entry as QueueVertexDiagnosticEntry).at === 'string' &&
+      typeof (entry as QueueVertexDiagnosticEntry).task === 'string' &&
+      typeof (entry as QueueVertexDiagnosticEntry).status === 'string' &&
+      typeof (entry as QueueVertexDiagnosticEntry).message === 'string',
+  );
+};
+
 const buildQueueLogEntry = (
   stage: QueueProcessingStage,
   message: string,
@@ -423,6 +444,41 @@ const withQueueLog = (
   };
 };
 
+const formatVertexDiagnosticLogMessage = (entry: QueueVertexDiagnosticEntry) => {
+  const taskLabel = entry.task === 'image_prompt_compression'
+    ? 'Vertex prompt compression'
+    : 'Vertex prompt synthesis';
+  const location = [entry.credentialName, entry.projectId].filter(Boolean).join(' / ');
+  const details = [
+    location ? `key=${location}` : '',
+    entry.promptFeedback?.blockReason ? `prompt_block=${entry.promptFeedback.blockReason}` : '',
+    entry.promptFeedback?.blockReasonMessage ? `prompt_msg=${entry.promptFeedback.blockReasonMessage}` : '',
+    entry.finishReasons && entry.finishReasons.length > 0 ? `finish=${entry.finishReasons.join(',')}` : '',
+  ].filter(Boolean);
+
+  return details.length > 0
+    ? `${taskLabel}: ${entry.message} (${details.join(' | ')})`
+    : `${taskLabel}: ${entry.message}`;
+};
+
+const withVertexDiagnostic = (
+  payload: Record<string, unknown> | ImageGenerateRecipePayload | null | undefined,
+  entry: QueueVertexDiagnosticEntry,
+  stage: QueueProcessingStage = 'synthesizing_prompt',
+) => {
+  const nextPayload = withQueueLog(
+    payload,
+    stage,
+    formatVertexDiagnosticLogMessage(entry),
+    entry.status === 'error' ? 'error' : entry.status === 'warning' ? 'warning' : 'info',
+  );
+
+  return {
+    ...nextPayload,
+    __vertexDiagnostics: [...getQueueVertexDiagnostics(nextPayload), entry].slice(-MAX_VERTEX_DIAGNOSTIC_ENTRIES),
+  };
+};
+
 const withQueueMeta = (
   providerPayload: Record<string, unknown>,
   previousPayload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
@@ -440,6 +496,11 @@ const withQueueMeta = (
   const previousNotifyInputMedia = buildNotificationMediaEntries(previousPayload);
   if (previousNotifyInputMedia.length > 0) {
     nextPayload.__notifyInputMedia = previousNotifyInputMedia;
+  }
+
+  const previousVertexDiagnostics = getQueueVertexDiagnostics(previousPayload);
+  if (previousVertexDiagnostics.length > 0) {
+    nextPayload.__vertexDiagnostics = previousVertexDiagnostics;
   }
 
   const previousTstTouched = toQueuePayloadObject(previousPayload).__tstTouched;
@@ -488,6 +549,21 @@ const persistQueueLog = async (
   level: QueueProgressLogEntry['level'] = 'info',
 ) => {
   const nextPayload = withQueueLog(payload, stage, message, level);
+  await updateGeneratedImageRecord(jobId, {
+    queue_payload: nextPayload,
+    updated_at: new Date().toISOString(),
+  });
+
+  return nextPayload;
+};
+
+const persistVertexDiagnostic = async (
+  jobId: string,
+  payload: Record<string, unknown> | ImageGenerateRecipePayload | null | undefined,
+  entry: QueueVertexDiagnosticEntry,
+  stage: QueueProcessingStage = 'synthesizing_prompt',
+) => {
+  const nextPayload = withVertexDiagnostic(payload, entry, stage);
   await updateGeneratedImageRecord(jobId, {
     queue_payload: nextPayload,
     updated_at: new Date().toISOString(),
@@ -1708,9 +1784,21 @@ const prepareImageRecipeInStages = async (
       'synthesizing_prompt',
       `Đang phân tích ${directorSources.length} ảnh để tổng hợp prompt.`,
     ) as ImageGenerateRecipePayload;
-    const promptPreparation = await prepareImageGeneratePromptWithinLimit(recipePayload);
+    let promptPayloadWithDiagnostics = recipePayload;
+    const promptPreparation = await prepareImageGeneratePromptWithinLimit(recipePayload, {
+      onVertexDiagnostic: async (entry) => {
+        promptPayloadWithDiagnostics = await persistVertexDiagnostic(
+          job.id,
+          promptPayloadWithDiagnostics,
+          entry,
+          'synthesizing_prompt',
+        ) as ImageGenerateRecipePayload;
+      },
+    });
     const nextPayload: ImageGenerateRecipePayload = {
       ...promptPreparation.optimizedPayload,
+      __logs: getQueueLogs(promptPayloadWithDiagnostics),
+      __vertexDiagnostics: getQueueVertexDiagnostics(promptPayloadWithDiagnostics),
       __synthesizedPrompt: promptPreparation.synthesizedPrompt,
       __stage: 'building_payload',
       __uploadSources: renderSources,
@@ -1747,7 +1835,25 @@ const prepareImageRecipeInStages = async (
           synthesizedPrompt: existingSynthesizedPrompt,
           providerPrompt: existingProviderPrompt,
         }
-      : await prepareImageGeneratePromptWithinLimit(recipePayload);
+      : await (async () => {
+          let promptPayloadWithDiagnostics = recipePayload;
+          const prepared = await prepareImageGeneratePromptWithinLimit(recipePayload, {
+            onVertexDiagnostic: async (entry) => {
+              promptPayloadWithDiagnostics = await persistVertexDiagnostic(
+                job.id,
+                promptPayloadWithDiagnostics,
+                entry,
+                'building_payload',
+              ) as ImageGenerateRecipePayload;
+            },
+          });
+          recipePayload = {
+            ...recipePayload,
+            __logs: getQueueLogs(promptPayloadWithDiagnostics),
+            __vertexDiagnostics: getQueueVertexDiagnostics(promptPayloadWithDiagnostics),
+          };
+          return prepared;
+        })();
   const providerPayload = buildImageGenerateProviderPayload(
     promptPreparation.optimizedPayload,
     uploadedUrls,

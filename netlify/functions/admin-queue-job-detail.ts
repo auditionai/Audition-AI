@@ -1,6 +1,6 @@
 import type { Handler } from '@netlify/functions';
 import type { AdminQueueInputMedia, AdminQueueJob, AdminQueueJobDetail, AdminQueueMediaSection } from '../../types';
-import type { QueueProgressLogEntry, QueueNotificationMediaEntry } from '../../shared/queueRecipes';
+import type { QueueProgressLogEntry, QueueNotificationMediaEntry, QueueVertexDiagnosticEntry } from '../../shared/queueRecipes';
 import { normalizeQueueProgressLogs, repairVietnameseMojibake } from '../../shared/queueLogText';
 import { classifyQueueError, isTerminalRescueFailureMessage, normalizeQueueErrorMessage, pickQueueFailureMessage } from '../../shared/queueErrorClassifier';
 import { isFailedRescueStillActive } from '../../shared/queueRescueState';
@@ -33,6 +33,23 @@ const normalizeQueueLogs = (payload: Record<string, unknown> | null | undefined)
   ));
 };
 
+const normalizeVertexDiagnostics = (payload: Record<string, unknown> | null | undefined): QueueVertexDiagnosticEntry[] => {
+  const rawDiagnostics = payload && typeof payload === 'object' ? (payload as Record<string, unknown>).__vertexDiagnostics : null;
+  if (!Array.isArray(rawDiagnostics)) {
+    return [];
+  }
+
+  return rawDiagnostics.filter(
+    (entry): entry is QueueVertexDiagnosticEntry =>
+      Boolean(entry) &&
+      typeof entry === 'object' &&
+      typeof (entry as QueueVertexDiagnosticEntry).at === 'string' &&
+      typeof (entry as QueueVertexDiagnosticEntry).task === 'string' &&
+      typeof (entry as QueueVertexDiagnosticEntry).status === 'string' &&
+      typeof (entry as QueueVertexDiagnosticEntry).message === 'string',
+  );
+};
+
 const getQueueStage = (payload: Record<string, unknown> | null | undefined) => {
   const rawStage = payload && typeof payload === 'object' ? (payload as Record<string, unknown>).__stage : null;
   return typeof rawStage === 'string' && rawStage.trim() ? rawStage.trim() : undefined;
@@ -52,6 +69,7 @@ const toAdminJob = (row: any, profile?: { email?: string; displayName?: string }
     ? row.queue_payload as Record<string, unknown>
     : null;
   const queueLogs = normalizeQueueLogs(payload);
+  const vertexDiagnostics = normalizeVertexDiagnostics(payload);
   const displayErrorSource = pickQueueFailureMessage(row.error_message || undefined, queueLogs);
   const errorInfo = classifyQueueError(displayErrorSource || row.error_message || undefined);
   const displayStatus =
@@ -79,6 +97,7 @@ const toAdminJob = (row: any, profile?: { email?: string; displayName?: string }
     progress: typeof row.progress === 'number' ? row.progress : undefined,
     queueStage: getQueueStage(payload),
     queueLogs,
+    vertexDiagnostics,
     error: normalizeQueueErrorMessage(displayErrorSource || row.error_message || undefined) || undefined,
     errorCategory: errorInfo.category,
     errorRaw: repairVietnameseMojibake(row.error_message || undefined) || undefined,

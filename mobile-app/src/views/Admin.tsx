@@ -162,6 +162,28 @@ const getQueueMediaSectionTone = (key: AdminQueueMediaSection['key']) => {
 
 const getQueueMediaMeta = (media: AdminQueueInputMedia) => `${media.kind} · ${media.sourceType}${media.userProvided === false ? ' · hệ thống' : ''}`;
 
+const getVertexTaskLabel = (task?: string) => {
+  switch (task) {
+    case 'image_prompt_compression':
+      return 'Vertex nén prompt';
+    case 'image_prompt_synthesis':
+      return 'Vertex tổng hợp prompt';
+    default:
+      return task || 'Vertex';
+  }
+};
+
+const getVertexStatusTone = (status?: string) => {
+  switch (status) {
+    case 'error':
+      return 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-300';
+    case 'warning':
+      return 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300';
+    default:
+      return 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300';
+  }
+};
+
 const getPaymentStatusLabel = (status?: string) => {
   switch (status) {
     case 'pending':
@@ -852,6 +874,48 @@ export function AdminView() {
                         </div>
                       </div>
                     )) : null}
+
+                    {(selectedQueueJobDetail.job.vertexDiagnostics || []).length > 0 ? (
+                      <div className="rounded-[24px] bg-gray-50 px-4 py-4 dark:bg-zinc-800/80">
+                        <div className="mb-3 flex items-center justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-black text-gray-900 dark:text-white">Chẩn đoán Vertex AI</div>
+                            <div className="mt-1 text-[11px] text-gray-500 dark:text-zinc-400">promptFeedback, finishReason, credential và project của từng lần Vertex chạy</div>
+                          </div>
+                          <div className="text-[11px] text-gray-500 dark:text-zinc-400">{selectedQueueJobDetail.job.vertexDiagnostics?.length || 0} dòng</div>
+                        </div>
+                        <div className="space-y-3">
+                          {(selectedQueueJobDetail.job.vertexDiagnostics || []).map((entry, index) => (
+                            <div key={`${entry.at}-${index}`} className="rounded-2xl bg-white px-3 py-3 dark:bg-zinc-900">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <div className="text-sm font-bold text-gray-900 dark:text-white">{getVertexTaskLabel(entry.task)}</div>
+                                  <div className="mt-1 text-[11px] text-gray-500 dark:text-zinc-400">{formatDateTime(entry.at)}</div>
+                                </div>
+                                <div className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${getVertexStatusTone(entry.status)}`}>{entry.status?.toUpperCase?.() || 'INFO'}</div>
+                              </div>
+                              <div className="mt-3 text-sm text-gray-700 dark:text-zinc-200">{entry.message}</div>
+                              <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                                {[
+                                  ['Credential', entry.credentialName || '-'],
+                                  ['Project', entry.projectId || '-'],
+                                  ['Model', entry.model || '-'],
+                                  ['Finish', entry.finishReasons && entry.finishReasons.length > 0 ? entry.finishReasons.join(', ') : '-'],
+                                  ['Prompt Block', entry.promptFeedback?.blockReason || '-'],
+                                  ['Prompt Msg', entry.promptFeedback?.blockReasonMessage || '-'],
+                                  ['Safety', entry.safetyRatings && entry.safetyRatings.length > 0 ? entry.safetyRatings.join(', ') : '-'],
+                                ].map(([label, value]) => (
+                                  <div key={`${entry.at}-${String(label)}`} className="rounded-2xl bg-gray-50 px-3 py-3 dark:bg-[#18181B]">
+                                    <div className="text-gray-400 dark:text-zinc-500">{label}</div>
+                                    <div className="mt-1 break-words text-sm font-semibold text-gray-900 dark:text-white">{value}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
 
                     {(selectedQueueJobDetail.job.error || selectedQueueJobDetail.job.errorRaw) ? (
                       <div className="rounded-[24px] bg-gray-50 px-4 py-4 dark:bg-zinc-800/80">

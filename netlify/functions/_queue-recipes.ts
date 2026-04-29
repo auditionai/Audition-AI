@@ -1,5 +1,6 @@
 import {
   buildImageProviderPrompt,
+  buildImageRoleContractText,
   getImageDirectorSources,
   getEffectiveImageGenerationResolution,
   getImageRenderReferenceSources,
@@ -17,6 +18,10 @@ export const TST_PROMPT_MAX_CHARACTERS = 10_000;
 const PROMPT_REWRITE_SAFETY_MARGIN = 400;
 const MIN_USER_PROMPT_REWRITE_CHARACTERS = 180;
 const MAX_PROMPT_REWRITE_ATTEMPTS = 3;
+const VERTEX_SYNTH_BYPASS_PROMPT_LENGTH = 700;
+const VERTEX_SYNTH_BYPASS_NEGATIVE_LENGTH = 450;
+const VERTEX_SYNTH_BYPASS_ROLE_CONTRACT_LENGTH = 2200;
+const VERTEX_SYNTH_BYPASS_REFERENCE_COUNT = 4;
 
 const cleanBase64 = (value: string) => value.replace(/^data:[^;]+;base64,/, '');
 
@@ -197,10 +202,46 @@ type VertexPromptPreparationOptions = {
   onVertexDiagnostic?: (entry: QueueVertexDiagnosticEntry) => Promise<void> | void;
 };
 
+const shouldBypassVertexPromptSynthesis = (payload: ImageGenerateRecipePayload) => {
+  const mergedPromptLength = String(payload.prompt || '').trim().length;
+  const negativePromptLength = String(payload.negativePrompt || '').trim().length;
+  const roleContractLength = buildImageRoleContractText(payload).length;
+  const referenceCount = getImageDirectorSources(payload).length;
+
+  const reasons: string[] = [];
+  if (mergedPromptLength >= VERTEX_SYNTH_BYPASS_PROMPT_LENGTH) reasons.push(`prompt_length=${mergedPromptLength}`);
+  if (negativePromptLength >= VERTEX_SYNTH_BYPASS_NEGATIVE_LENGTH) reasons.push(`negative_length=${negativePromptLength}`);
+  if (roleContractLength >= VERTEX_SYNTH_BYPASS_ROLE_CONTRACT_LENGTH) reasons.push(`role_contract_length=${roleContractLength}`);
+  if (referenceCount >= VERTEX_SYNTH_BYPASS_REFERENCE_COUNT) reasons.push(`reference_count=${referenceCount}`);
+
+  return {
+    bypass: reasons.length > 0,
+    reasons,
+    mergedPromptLength,
+    negativePromptLength,
+    roleContractLength,
+    referenceCount,
+  };
+};
+
 export const synthesizeImageGeneratePrompt = async (
   payload: ImageGenerateRecipePayload,
   options?: VertexPromptPreparationOptions,
 ) => {
+  const bypassDecision = shouldBypassVertexPromptSynthesis(payload);
+  if (bypassDecision.bypass) {
+    if (options?.onVertexDiagnostic) {
+      await options.onVertexDiagnostic({
+        at: new Date().toISOString(),
+        task: 'image_prompt_synthesis',
+        status: 'warning',
+        model: 'gemini-3.1-pro-preview',
+        message: `Skipped Vertex prompt synthesis and used the local JSON prompt builder. Reasons: ${bypassDecision.reasons.join(', ')}`,
+      });
+    }
+    return buildFallbackSynthesizedPrompt(payload);
+  }
+
   try {
     return await synthesizeStrictImagePrompt(payload, {
       onDiagnostic: options?.onVertexDiagnostic,

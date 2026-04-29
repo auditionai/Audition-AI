@@ -55,6 +55,22 @@ export interface ImageRenderReferenceEntry {
   indexLabel: string;
 }
 
+export interface ImageRoleContractLayer {
+  name: 'identity' | 'composition' | 'style';
+  priority: number;
+  title: string;
+  summary: string;
+  rules: string[];
+}
+
+export interface ImageRoleContract {
+  characterCount: number;
+  layeredSingleSubjectAllowed: boolean;
+  renderEntries: ImageRenderReferenceEntry[];
+  layers: ImageRoleContractLayer[];
+  globalRules: string[];
+}
+
 export type CharacterReferenceKind = 'body' | 'face' | 'reference';
 export type CharacterReferenceGender = 'female' | 'male';
 
@@ -449,6 +465,125 @@ export const getImageRenderReferenceSources = (
   payload: Pick<ImageGenerateRecipePayload, 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
 ) => getImageRenderReferenceEntries(payload).map((entry) => entry.source);
 
+export const buildImageRoleContract = (
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
+): ImageRoleContract => {
+  const renderEntries = getImageRenderReferenceEntries(payload);
+  const characterGroups = getImageCharacterReferenceGroups(payload);
+  const characterCount = Math.max(1, Math.floor(Number(payload.characterCount || characterGroups.length || 1)));
+  const layeredSingleSubjectAllowed = allowsLayeredSingleSubjectComposition(payload);
+  const hasSample = Boolean(payload.sampleImage);
+  const hasStyle = Boolean(payload.styleImage);
+  const hasFaceLock = characterGroups.some((group) => group.references.some((reference) => reference.kind === 'face'));
+
+  const identityRules = [
+    `Render exactly ${characterCount} character(s) with strict one-to-one slot mapping.`,
+    'Character references define identity only: face, hair, body structure, skin tone, outfit, shoes, accessories, tattoos, and gender.',
+    'Character references are never pose references.',
+    hasFaceLock
+      ? 'Face-lock references have the highest identity priority for facial likeness and override body/sample/style conflicts for the face.'
+      : 'When only body references are present, preserve the uploaded identity exactly without inventing a new face.',
+    layeredSingleSubjectAllowed
+      ? 'Layered echoes of the same uploaded character are allowed only when the prompt explicitly requests a double-exposure or ghost-overlay effect.'
+      : 'Never add, remove, duplicate, or blend subjects.',
+  ];
+
+  const compositionRules = hasSample
+    ? [
+        'Sample image controls composition only: pose, camera angle, framing, subject placement, spacing, scene layout, and background.',
+        'Never borrow face identity, hair identity, outfit identity, makeup identity, or realism from the sample image.',
+        'If identity conflicts with sample composition, keep identity from character references and re-pose the final subject to match the sample.',
+      ]
+    : [
+        'User prompt is the primary composition source because no sample image is present.',
+        'Infer pose, framing, camera angle, scene action, and background from the merged prompt text.',
+        'Do not fall back to a plain standing portrait unless the prompt explicitly asks for it.',
+      ];
+
+  const styleRules = hasStyle
+    ? [
+        'Style image controls render language only: quality, lighting, materials, color grading, stylized skin shading, facial/hand planes, and final finish.',
+        'Style image must never override identity, outfit, subject count, pose, or composition.',
+      ]
+    : [
+        'Without a style image, keep the final output as a clean stylized 3D game-avatar render driven by the prompt and identity references.',
+      ];
+
+  return {
+    characterCount,
+    layeredSingleSubjectAllowed,
+    renderEntries,
+    layers: [
+      {
+        name: 'identity',
+        priority: 1,
+        title: 'IDENTITY LAYER',
+        summary: 'Identity comes only from uploaded character references.',
+        rules: identityRules,
+      },
+      {
+        name: 'composition',
+        priority: 2,
+        title: 'COMPOSITION LAYER',
+        summary: hasSample
+          ? 'Composition comes from the sample image.'
+          : 'Composition comes from the merged prompt text.',
+        rules: compositionRules,
+      },
+      {
+        name: 'style',
+        priority: 3,
+        title: 'STYLE LAYER',
+        summary: hasStyle
+          ? 'Style comes from the style reference only.'
+          : 'Style falls back to the built-in stylized 3D render direction.',
+        rules: styleRules,
+      },
+    ],
+    globalRules: [
+      'Never output a split-screen, image grid, collage, storyboard, or panel layout.',
+      'Never return an uploaded reference nearly unchanged as the final output.',
+      'Keep the final result as a stylized 3D game avatar, not a photorealistic human.',
+    ],
+  };
+};
+
+export const buildImageRoleContractText = (
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
+) => {
+  const contract = buildImageRoleContract(payload);
+  const referenceLines = contract.renderEntries.length > 0
+    ? contract.renderEntries.map((entry, index) => {
+        const number = index + 1;
+        switch (entry.role) {
+          case 'character':
+            return entry.indexLabel.includes('FACE LOCK')
+              ? `- Image ${number}: ${entry.indexLabel}. Identity only, highest-priority face lock, never pose.`
+              : `- Image ${number}: ${entry.indexLabel}. Identity only, never pose.`;
+          case 'sample':
+            return `- Image ${number}: ${entry.indexLabel}. Composition only, never identity.`;
+          case 'style':
+            return `- Image ${number}: ${entry.indexLabel}. Style only, never identity or composition.`;
+          default:
+            return `- Image ${number}: ${entry.indexLabel}.`;
+        }
+      })
+    : ['- No direct reference images are available.'];
+
+  return [
+    'ROLE CONTRACT:',
+    ...contract.layers.flatMap((layer) => [
+      `${layer.title} (priority ${layer.priority})`,
+      `- ${layer.summary}`,
+      ...layer.rules.map((rule) => `- ${rule}`),
+    ]),
+    'REFERENCE ORDER:',
+    ...referenceLines,
+    'GLOBAL RULES:',
+    ...contract.globalRules.map((rule) => `- ${rule}`),
+  ].join('\n');
+};
+
 const buildImageReferenceOrderDirective = (
   payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
 ) => {
@@ -586,7 +721,7 @@ const buildDetailedImageProviderPrompt = (
   payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
   mergedNegativePrompt: string,
 ) => {
-  const referenceSummary = buildCompactProviderReferenceSummary(payload);
+  const roleContractText = buildImageRoleContractText(payload);
   const originalUserPrompt = getPrimaryUserRequestText(payload);
   const normalizedSynthesizedPrompt = synthesizedPrompt?.trim() || originalUserPrompt;
   const layeredSingleSubjectAllowed = allowsLayeredSingleSubjectComposition(payload);
@@ -601,8 +736,7 @@ const buildDetailedImageProviderPrompt = (
     'PRIMARY USER REQUEST:',
     originalUserPrompt || 'No additional user prompt provided.',
     '',
-    'REFERENCE ORDER:',
-    referenceSummary,
+    roleContractText,
     layeredSingleSubjectAllowed
       ? '\nLAYERED SINGLE-SUBJECT EXCEPTION:\n- The user intentionally requests a double-exposure / ghost-overlay / superimposed-self composition.\n- Keep exactly one underlying uploaded character identity, but layered echoes of that SAME person are allowed when they are part of the requested artistic effect.\n- Do not invent a second distinct person.'
       : '',
@@ -621,7 +755,7 @@ const buildReducedImageProviderPromptWithoutSample = (
   payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'styleImage'>,
   mergedNegativePrompt: string,
 ) => {
-  const referenceSummary = buildCompactProviderReferenceSummary(payload);
+  const roleContractText = buildImageRoleContractText(payload);
   const originalUserPrompt = getPrimaryUserRequestText(payload);
   const normalizedSynthesizedPrompt = synthesizedPrompt?.trim() || originalUserPrompt;
   const layeredSingleSubjectAllowed = allowsLayeredSingleSubjectComposition(payload);
@@ -636,8 +770,7 @@ const buildReducedImageProviderPromptWithoutSample = (
     'PRIMARY USER REQUEST:',
     originalUserPrompt || 'No additional user prompt provided.',
     '',
-    'REFERENCE ORDER:',
-    referenceSummary,
+    roleContractText,
     layeredSingleSubjectAllowed
       ? '\nLAYERED SINGLE-SUBJECT EXCEPTION:\n- Keep exactly one uploaded character identity.\n- Double exposure / ghost overlays / layered echoes of that SAME character are allowed.\n- Do not invent a second distinct person.'
       : '',

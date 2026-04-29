@@ -114,7 +114,7 @@ const getQueueStageLabel = (stage?: string) => {
     case 'uploading_refs':
       return 'Đang tải ảnh tham chiếu';
     case 'synthesizing_prompt':
-      return 'Đang tổng hợp prompt';
+      return 'Đang xử lý prompt text + role metadata';
     case 'building_payload':
       return 'Đang dựng payload';
     case 'dispatching':

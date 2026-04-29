@@ -1210,11 +1210,13 @@ const markFailed = async (
   errorMessage: string,
   options?: {
     refund?: boolean;
+    payloadOverride?: Record<string, unknown> | ImageGenerateRecipePayload | null;
   },
 ) => {
   const admin = getServiceRoleClient();
   const shouldRefund = options?.refund !== false;
-  const nextPayload = withQueueLog(job.queue_payload, 'failed', errorMessage, 'error');
+  const basePayload = options?.payloadOverride ?? job.queue_payload;
+  const nextPayload = withQueueLog(basePayload, 'failed', errorMessage, 'error');
   const finishedAt = new Date().toISOString();
   await updateGeneratedImageRecord(job.id, {
     status: 'failed',
@@ -1257,10 +1259,19 @@ const markFailedRespectingRefundPolicy = async (
   job: QueueJobRow,
   errorMessage: string,
   payloadOverride?: Record<string, unknown> | ImageGenerateRecipePayload | null,
-) =>
-  markFailed(job, errorMessage, {
-    refund: shouldRefundFailure(job, payloadOverride),
+) => {
+  const latestRuntimeState = await getJobRuntimeState(job.id).catch(() => null);
+  const latestPayload =
+    payloadOverride ??
+    (latestRuntimeState?.queue_payload && typeof latestRuntimeState.queue_payload === 'object'
+      ? latestRuntimeState.queue_payload as Record<string, unknown>
+      : job.queue_payload);
+
+  return markFailed(job, errorMessage, {
+    refund: shouldRefundFailure(job, latestPayload),
+    payloadOverride: latestPayload,
   });
+};
 
 const markFailedAndRefund = async (job: QueueJobRow, errorMessage: string) =>
   markFailed(job, errorMessage, { refund: true });

@@ -949,6 +949,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
             const stagedSampleImage = refImage
                 ? await tryStageSampleReferenceInput(refImage, `inputs/generation/${activeMode}/sample`, aspectRatio)
                 : null;
+            const stagedSampleAnalysisImage = refImage
+                ? await tryStageGenerationInput(refImage, `inputs/generation/${activeMode}/sample-analysis`)
+                : null;
             const stagedStyleImage = activeStylePreset
                 ? await tryStageGenerationInput(activeStylePreset, `inputs/generation/${activeMode}/style`)
                 : null;
@@ -994,6 +997,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                 characterReferenceGroups: stagedCharacterGroups,
                 characterImages: stagedCharacterImages,
                 sampleImage: stagedSampleImage || null,
+                sampleAnalysisImage: stagedSampleAnalysisImage || stagedSampleImage || null,
                 styleImage: stagedStyleImage || null,
                 stylePrompt: styleMetadata?.trigger_prompt || styleMetadata?.name || null,
                 __notifyInputMedia: notifyInputMedia,

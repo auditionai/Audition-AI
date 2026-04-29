@@ -150,6 +150,7 @@ export interface ImageGenerateRecipePayload {
   characterImages?: string[];
   characterReferenceGroups?: CharacterReferenceGroup[];
   sampleImage?: string | null;
+  sampleAnalysisImage?: string | null;
   styleImage?: string | null;
   stylePrompt?: string | null;
   visionAnalysis?: ImageVisionAnalysis;

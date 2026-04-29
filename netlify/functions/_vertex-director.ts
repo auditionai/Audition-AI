@@ -270,6 +270,119 @@ const buildStrictImageDirectorInstruction = (
   return sections.join('\n');
 };
 
+const buildCompactImageDirectorInstruction = (
+  payload: ImageGenerateRecipePayload,
+  hasCharacters: boolean,
+  hasSample: boolean,
+  hasStyle: boolean,
+) => {
+  const characterGroups = getImageCharacterReferenceGroups(payload);
+  const characterCount = payload.characterCount || characterGroups.length || 1;
+  const sections: string[] = [
+    'Return ONLY one valid JSON object in English for the renderer.',
+    'No markdown. No code fences. No commentary.',
+    `USER CORE REQUEST: ${payload.prompt}`,
+  ];
+
+  if (payload.stylePrompt?.trim()) {
+    sections.push(`STYLE PRESET KEYWORDS: ${payload.stylePrompt.trim()}`);
+  }
+
+  if (payload.negativePrompt?.trim()) {
+    sections.push(`USER NEGATIVE CONSTRAINTS: ${payload.negativePrompt.trim()}`);
+  }
+
+  sections.push('', `FINAL CHARACTER COUNT: EXACTLY ${characterCount}.`);
+
+  if (hasCharacters) {
+    characterGroups.forEach((group) => {
+      const hasFaceLock = group.references.some((reference) => reference.kind === 'face');
+      const referenceKinds = group.references
+        .map((reference) => (reference.kind === 'face' ? 'FACE LOCK' : reference.kind === 'body' ? 'BODY' : 'REFERENCE'))
+        .join(', ');
+      sections.push(
+        `CHARACTER ${group.characterIndex}: ${referenceKinds}. Identity only. Mandatory once. Copy face, hair, body, skin tone, outfit, shoes, accessories, gender exactly. Not a pose reference.${hasFaceLock ? ' FACE LOCK overrides all other face conflicts.' : ''}`,
+      );
+    });
+  }
+
+  sections.push(
+    hasSample
+      ? 'SAMPLE IMAGE: pose, framing, camera, spacing, scene layout, and background only. Never borrow face identity, hair identity, outfit identity, or realism from sample.'
+      : 'NO SAMPLE IMAGE: infer pose, framing, scene action, and background from the merged prompt text.',
+  );
+
+  if (hasStyle) {
+    sections.push(
+      'STYLE IMAGE: style only. May affect render quality, lighting, materials, color grading, stylized skin shading, stylized facial planes, stylized hand treatment, and final finish. Never override identity, outfit, subject count, or composition.',
+    );
+  }
+
+  sections.push(
+    'Keep the result as a stylized 3D game avatar, not a photorealistic human.',
+    'Forbid extra characters, identity blending, outfit swaps, split-screen, panels, tiles, grids, collage layouts, and realistic humanization.',
+    'Use this schema:',
+    '{',
+    '  "language": "en",',
+    '  "system_prompt_en": "string",',
+    '  "user_prompt_en": "string",',
+    '  "merged_prompt_en": "string",',
+    '  "character_count": number,',
+    '  "identity_rules": ["string"],',
+    '  "face_lock_rules": ["string"],',
+    '  "composition_rules": ["string"],',
+    '  "scene_rules": ["string"],',
+    '  "style_rules": ["string"],',
+    '  "camera_rules": ["string"],',
+    '  "must_keep": ["string"],',
+    '  "must_avoid": ["string"],',
+    '  "negative_constraints_en": ["string"]',
+    '}',
+  );
+
+  return sections.join('\n');
+};
+
+const requestVertexPromptSynthesis = async (
+  projectId: string,
+  accessToken: string,
+  parts: Array<Record<string, unknown>>,
+) => {
+  const response = await fetch(
+    `https://aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/global/publishers/google/models/${VERTEX_MODEL}:generateContent`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts }],
+        generationConfig: {
+          temperature: 0.0,
+          topP: 0.1,
+          maxOutputTokens: 2048,
+          responseMimeType: 'application/json',
+        },
+      }),
+      signal: AbortSignal.timeout(180000),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response));
+  }
+
+  const data = await response.json();
+  return {
+    data,
+    text: extractCandidateText(data),
+    finishReasons: collectFinishReasons(data),
+    promptFeedback: extractPromptFeedback(data),
+    safetyRatings: collectSafetyRatings(data),
+  };
+};
+
 export const synthesizeStrictImagePrompt = async (
   payload: ImageGenerateRecipePayload,
   options?: {
@@ -286,11 +399,9 @@ export const synthesizeStrictImagePrompt = async (
   }
 
   const orderedSources = getImageDirectorSources(payload);
-  const parts: Array<Record<string, unknown>> = await Promise.all(orderedSources.map((image) => toInlineImagePart(image)));
-
-  parts.push({
-    text: buildStrictImageDirectorInstruction(payload, hasCharacters, hasSample, hasStyle),
-  });
+  const baseParts: Array<Record<string, unknown>> = await Promise.all(orderedSources.map((image) => toInlineImagePart(image)));
+  const primaryInstruction = buildStrictImageDirectorInstruction(payload, hasCharacters, hasSample, hasStyle);
+  const compactInstruction = buildCompactImageDirectorInstruction(payload, hasCharacters, hasSample, hasStyle);
 
   return runWithVertexCredentialFailover({
     taskName: 'image prompt synthesis',
@@ -306,74 +417,139 @@ export const synthesizeStrictImagePrompt = async (
       });
     },
     operation: async ({ projectId, accessToken, credentialName }) => {
-      const response = await fetch(
-        `https://aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/global/publishers/google/models/${VERTEX_MODEL}:generateContent`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            contents: [{ role: 'user', parts }],
-            generationConfig: {
-              temperature: 0.2,
-              topP: 0.8,
-              maxOutputTokens: 2048,
-            },
-          }),
-          signal: AbortSignal.timeout(180000),
-        },
-      );
+      const primaryAttempt = await requestVertexPromptSynthesis(projectId, accessToken, [
+        ...baseParts,
+        { text: primaryInstruction },
+      ]);
 
-      if (!response.ok) {
-        throw new Error(await parseErrorMessage(response));
+      const tryNormalize = (text: string) => normalizePromptJsonPayload(text);
+
+      if (primaryAttempt.text) {
+        try {
+          const normalized = tryNormalize(primaryAttempt.text);
+          await emitVertexDiagnostic(options?.onDiagnostic, 'image_prompt_synthesis', {
+            status: 'success',
+            message: 'Vertex AI synthesized the English JSON prompt successfully.',
+            credentialName: credentialName || undefined,
+            projectId,
+            finishReasons: primaryAttempt.finishReasons,
+            promptFeedback: primaryAttempt.promptFeedback,
+            safetyRatings: primaryAttempt.safetyRatings,
+          });
+          return normalized;
+        } catch (error) {
+          const primaryError = error instanceof Error ? error : new Error(String(error));
+          await emitVertexDiagnostic(options?.onDiagnostic, 'image_prompt_synthesis', {
+            status: 'warning',
+            message: `Primary synthesis JSON was invalid. Retrying with compact director. First error: ${primaryError.message}`,
+            credentialName: credentialName || undefined,
+            projectId,
+            finishReasons: primaryAttempt.finishReasons,
+            promptFeedback: primaryAttempt.promptFeedback,
+            safetyRatings: primaryAttempt.safetyRatings,
+          });
+
+          const compactAttempt = await requestVertexPromptSynthesis(projectId, accessToken, [
+            ...baseParts,
+            { text: compactInstruction },
+          ]);
+
+          if (!compactAttempt.text) {
+            const compactError = new Error(summarizeVertexPromptSynthesisFailure(compactAttempt.data));
+            await emitVertexDiagnostic(options?.onDiagnostic, 'image_prompt_synthesis', {
+              status: 'error',
+              message: `Compact director retry failed after invalid primary JSON. First error: ${primaryError.message}. Retry error: ${compactError.message}`,
+              credentialName: credentialName || undefined,
+              projectId,
+              finishReasons: compactAttempt.finishReasons,
+              promptFeedback: compactAttempt.promptFeedback,
+              safetyRatings: compactAttempt.safetyRatings,
+            });
+            throw compactError;
+          }
+
+          try {
+            const normalized = tryNormalize(compactAttempt.text);
+            await emitVertexDiagnostic(options?.onDiagnostic, 'image_prompt_synthesis', {
+              status: 'success',
+              message: 'Compact director retry produced a valid English JSON prompt.',
+              credentialName: credentialName || undefined,
+              projectId,
+              finishReasons: compactAttempt.finishReasons,
+              promptFeedback: compactAttempt.promptFeedback,
+              safetyRatings: compactAttempt.safetyRatings,
+            });
+            return normalized;
+          } catch (error) {
+            const compactError = error instanceof Error ? error : new Error(String(error));
+            await emitVertexDiagnostic(options?.onDiagnostic, 'image_prompt_synthesis', {
+              status: 'error',
+              message: `Compact director retry returned invalid JSON. First error: ${primaryError.message}. Retry error: ${compactError.message}`,
+              credentialName: credentialName || undefined,
+              projectId,
+              finishReasons: compactAttempt.finishReasons,
+              promptFeedback: compactAttempt.promptFeedback,
+              safetyRatings: compactAttempt.safetyRatings,
+            });
+            throw compactError;
+          }
+        }
       }
 
-      const data = await response.json();
-      const text = extractCandidateText(data);
-      const finishReasons = collectFinishReasons(data);
-      const promptFeedback = extractPromptFeedback(data);
-      const safetyRatings = collectSafetyRatings(data);
+      const primaryNoTextError = new Error(summarizeVertexPromptSynthesisFailure(primaryAttempt.data));
+      await emitVertexDiagnostic(options?.onDiagnostic, 'image_prompt_synthesis', {
+        status: 'warning',
+        message: `Primary synthesis returned no usable JSON text. Retrying with compact director. First error: ${primaryNoTextError.message}`,
+        credentialName: credentialName || undefined,
+        projectId,
+        finishReasons: primaryAttempt.finishReasons,
+        promptFeedback: primaryAttempt.promptFeedback,
+        safetyRatings: primaryAttempt.safetyRatings,
+      });
 
-      if (!text) {
-        const message = summarizeVertexPromptSynthesisFailure(data);
+      const compactAttempt = await requestVertexPromptSynthesis(projectId, accessToken, [
+        ...baseParts,
+        { text: compactInstruction },
+      ]);
+
+      if (!compactAttempt.text) {
+        const compactError = new Error(summarizeVertexPromptSynthesisFailure(compactAttempt.data));
         await emitVertexDiagnostic(options?.onDiagnostic, 'image_prompt_synthesis', {
           status: 'error',
-          message,
+          message: `Compact director retry also returned no usable JSON text. First error: ${primaryNoTextError.message}. Retry error: ${compactError.message}`,
           credentialName: credentialName || undefined,
           projectId,
-          finishReasons,
-          promptFeedback,
-          safetyRatings,
+          finishReasons: compactAttempt.finishReasons,
+          promptFeedback: compactAttempt.promptFeedback,
+          safetyRatings: compactAttempt.safetyRatings,
         });
-        throw new Error(message);
+        throw compactError;
       }
 
       try {
-        const normalized = normalizePromptJsonPayload(text);
+        const normalized = tryNormalize(compactAttempt.text);
         await emitVertexDiagnostic(options?.onDiagnostic, 'image_prompt_synthesis', {
           status: 'success',
-          message: 'Vertex AI synthesized the English JSON prompt successfully.',
+          message: 'Compact director retry produced a valid English JSON prompt.',
           credentialName: credentialName || undefined,
           projectId,
-          finishReasons,
-          promptFeedback,
-          safetyRatings,
+          finishReasons: compactAttempt.finishReasons,
+          promptFeedback: compactAttempt.promptFeedback,
+          safetyRatings: compactAttempt.safetyRatings,
         });
         return normalized;
       } catch (error) {
-        const normalizedError = error instanceof Error ? error : new Error(String(error));
+        const compactError = error instanceof Error ? error : new Error(String(error));
         await emitVertexDiagnostic(options?.onDiagnostic, 'image_prompt_synthesis', {
           status: 'error',
-          message: normalizedError.message,
+          message: `Compact director retry returned invalid JSON after no-text primary attempt. First error: ${primaryNoTextError.message}. Retry error: ${compactError.message}`,
           credentialName: credentialName || undefined,
           projectId,
-          finishReasons,
-          promptFeedback,
-          safetyRatings,
+          finishReasons: compactAttempt.finishReasons,
+          promptFeedback: compactAttempt.promptFeedback,
+          safetyRatings: compactAttempt.safetyRatings,
         });
-        throw normalizedError;
+        throw compactError;
       }
     },
   });

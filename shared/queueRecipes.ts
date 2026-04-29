@@ -152,6 +152,7 @@ export interface ImageGenerateRecipePayload {
   sampleImage?: string | null;
   sampleAnalysisImage?: string | null;
   styleImage?: string | null;
+  styleAnalysisImage?: string | null;
   stylePrompt?: string | null;
   visionAnalysis?: ImageVisionAnalysis;
   referenceImages?: string[];

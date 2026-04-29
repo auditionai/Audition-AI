@@ -38,7 +38,7 @@ import type { GeneratedImage } from '../types';
 import { caulenhauClient } from '../services/supabaseClient';
 import { DEFAULT_IMAGE_NEGATIVE_PROMPT } from '../../../shared/imagePromptDefaults';
 import { resolveCharacterFacePriorityMode, type CharacterReferenceGroup, type ImageGenerateRecipePayload } from '../../../shared/queueRecipes';
-import { analyzeCharacterAppearanceProfile, createFaceDetailReference, createFaceLockReference, createPoseOnlyReference, optimizePayload } from '../../../utils/imageProcessor';
+import { analyzeCharacterAppearanceProfile, createFaceDetailReference, createFaceLockReference, createPoseOnlyReference, createStyleOnlyReference, optimizePayload } from '../../../utils/imageProcessor';
 import {
   CHARACTER_ASSISTANT_RESOLUTION,
   runCharacterAssistantAction,
@@ -782,8 +782,14 @@ export function WorkspaceImage() {
           stagedSampleAnalysisImage = await tryStageGenerationInput(refImage, `inputs/generation/${activeMode}/sample-analysis`);
         }
 
-        const stagedStyleImage = activeStylePreset
-          ? await tryStageGenerationInput(activeStylePreset, `inputs/generation/${activeMode}/style`)
+        const stagedStyleGuide = activeStylePreset
+          ? await tryStageGenerationInput(
+              await createStyleOnlyReference(activeStylePreset),
+              `inputs/generation/${activeMode}/style`,
+            )
+          : null;
+        const stagedStyleAnalysisImage = activeStylePreset
+          ? await tryStageGenerationInput(activeStylePreset, `inputs/generation/${activeMode}/style-analysis`)
           : null;
         const styleMetadata = availableStyles.find((s: any) => s.image_url === activeStylePreset);
         const notifyInputMedia = [
@@ -803,9 +809,9 @@ export function WorkspaceImage() {
                 userProvided: true,
               }]
             : []),
-          ...(stagedStyleImage
+          ...(stagedStyleGuide
             ? [{
-                url: stagedStyleImage,
+                url: stagedStyleGuide,
                 role: 'style' as const,
                 kind: 'image' as const,
                 userProvided: false,
@@ -837,7 +843,8 @@ export function WorkspaceImage() {
           characterImages: stagedCharacterImages,
           sampleImage: stagedSampleImage,
           sampleAnalysisImage: stagedSampleAnalysisImage || stagedSampleImage,
-          styleImage: stagedStyleImage,
+          styleImage: stagedStyleGuide,
+          styleAnalysisImage: stagedStyleAnalysisImage || stagedStyleGuide,
           stylePrompt: styleMetadata?.trigger_prompt || styleMetadata?.name || null,
           __notifyInputMedia: notifyInputMedia,
         };

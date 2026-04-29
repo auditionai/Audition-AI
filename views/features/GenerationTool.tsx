@@ -18,7 +18,7 @@ import { CONCURRENCY_LIMITS, useConcurrency } from '../../services/concurrencySe
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import { downloadAssetToBrowser } from '../../services/downloadService';
-import { analyzeCharacterAppearanceProfile, createFaceDetailReference, createFaceLockReference, createPoseOnlyReference, optimizePayload } from '../../utils/imageProcessor';
+import { analyzeCharacterAppearanceProfile, createFaceDetailReference, createFaceLockReference, createPoseOnlyReference, createStyleOnlyReference, optimizePayload } from '../../utils/imageProcessor';
 import { APP_CONFIG } from '../../constants';
 import { DEFAULT_IMAGE_NEGATIVE_PROMPT } from '../../shared/imagePromptDefaults';
 import { resolveCharacterFacePriorityMode } from '../../shared/queueRecipes';
@@ -952,8 +952,14 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
             const stagedSampleAnalysisImage = refImage
                 ? await tryStageGenerationInput(refImage, `inputs/generation/${activeMode}/sample-analysis`)
                 : null;
-            const stagedStyleImage = activeStylePreset
-                ? await tryStageGenerationInput(activeStylePreset, `inputs/generation/${activeMode}/style`)
+            const stagedStyleGuide = activeStylePreset
+                ? await tryStageGenerationInput(
+                    await createStyleOnlyReference(activeStylePreset),
+                    `inputs/generation/${activeMode}/style`,
+                )
+                : null;
+            const stagedStyleAnalysisImage = activeStylePreset
+                ? await tryStageGenerationInput(activeStylePreset, `inputs/generation/${activeMode}/style-analysis`)
                 : null;
             const notifyInputMedia = [
                 ...stagedCharacterGroups.flatMap((group) =>
@@ -972,9 +978,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                         userProvided: true,
                     }]
                     : []),
-                ...(stagedStyleImage
+                ...(stagedStyleGuide
                     ? [{
-                        url: stagedStyleImage,
+                        url: stagedStyleGuide,
                         role: 'style' as const,
                         kind: 'image' as const,
                         userProvided: false,
@@ -998,7 +1004,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                 characterImages: stagedCharacterImages,
                 sampleImage: stagedSampleImage || null,
                 sampleAnalysisImage: stagedSampleAnalysisImage || stagedSampleImage || null,
-                styleImage: stagedStyleImage || null,
+                styleImage: stagedStyleGuide || null,
+                styleAnalysisImage: stagedStyleAnalysisImage || stagedStyleGuide || null,
                 stylePrompt: styleMetadata?.trigger_prompt || styleMetadata?.name || null,
                 __notifyInputMedia: notifyInputMedia,
             };

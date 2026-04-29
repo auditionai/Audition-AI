@@ -617,15 +617,78 @@ export const createPoseOnlyReference = async (
         canvas.height = canvasH;
 
         const poseOverlay = await detectPoseOverlay(img);
-        const { x, y, drawW, drawH } = createFallbackPoseGuide(ctx, img, canvasW, canvasH);
 
-        if (poseOverlay) {
-            if (poseOverlay.segmentationMask) {
-                drawPoseSegmentationGuide(ctx, poseOverlay.segmentationMask, x, y, drawW, drawH);
+        ctx.fillStyle = '#121212';
+        ctx.fillRect(0, 0, canvasW, canvasH);
+        const { x, y, drawW, drawH } = drawContainedImage(ctx, img, canvasW, canvasH);
+
+        if (poseOverlay?.segmentationMask) {
+            const maskCanvas = document.createElement('canvas');
+            maskCanvas.width = canvasW;
+            maskCanvas.height = canvasH;
+            const maskCtx = maskCanvas.getContext('2d');
+
+            const processedCanvas = document.createElement('canvas');
+            processedCanvas.width = canvasW;
+            processedCanvas.height = canvasH;
+            const processedCtx = processedCanvas.getContext('2d');
+
+            if (maskCtx && processedCtx) {
+                const rawMaskCanvas = document.createElement('canvas');
+                rawMaskCanvas.width = poseOverlay.segmentationMask.width;
+                rawMaskCanvas.height = poseOverlay.segmentationMask.height;
+                const rawMaskCtx = rawMaskCanvas.getContext('2d');
+
+                if (rawMaskCtx) {
+                    const imageData = rawMaskCtx.createImageData(
+                        poseOverlay.segmentationMask.width,
+                        poseOverlay.segmentationMask.height,
+                    );
+                    for (let i = 0; i < poseOverlay.segmentationMask.data.length; i += 1) {
+                        const alpha = poseOverlay.segmentationMask.data[i] > 0.18 ? 255 : 0;
+                        const idx = i * 4;
+                        imageData.data[idx] = 255;
+                        imageData.data[idx + 1] = 255;
+                        imageData.data[idx + 2] = 255;
+                        imageData.data[idx + 3] = alpha;
+                    }
+                    rawMaskCtx.putImageData(imageData, 0, 0);
+
+                    maskCtx.filter = 'blur(2px)';
+                    maskCtx.drawImage(rawMaskCanvas, x, y, drawW, drawH);
+                    maskCtx.filter = 'none';
+
+                    processedCtx.fillStyle = '#121212';
+                    processedCtx.fillRect(0, 0, canvasW, canvasH);
+                    processedCtx.filter = 'grayscale(1) saturate(0) contrast(1.1) brightness(0.94) blur(1.4px)';
+                    processedCtx.drawImage(img, x, y, drawW, drawH);
+                    processedCtx.filter = 'none';
+
+                    processedCtx.globalCompositeOperation = 'destination-in';
+                    processedCtx.drawImage(maskCanvas, 0, 0);
+                    processedCtx.globalCompositeOperation = 'source-over';
+
+                    ctx.save();
+                    ctx.globalAlpha = 0.86;
+                    ctx.drawImage(processedCanvas, 0, 0);
+                    ctx.restore();
+
+                    ctx.save();
+                    ctx.strokeStyle = 'rgba(0,255,188,0.22)';
+                    ctx.lineWidth = Math.max(2, Math.min(canvasW, canvasH) * 0.004);
+                    ctx.strokeRect(x, y, drawW, drawH);
+                    ctx.restore();
+
+                    suppressPoseGuideFaceRegion(ctx, poseOverlay.landmarks, x, y, drawW, drawH);
+                    drawPoseSkeletonGuide(ctx, poseOverlay.landmarks, x, y, drawW, drawH);
+                }
             }
-            suppressPoseGuideFaceRegion(ctx, poseOverlay.landmarks, x, y, drawW, drawH);
-            drawPoseSkeletonGuide(ctx, poseOverlay.landmarks, x, y, drawW, drawH);
+        } else if (poseOverlay) {
+            const fallback = createFallbackPoseGuide(ctx, img, canvasW, canvasH);
+            suppressPoseGuideFaceRegion(ctx, poseOverlay.landmarks, fallback.x, fallback.y, fallback.drawW, fallback.drawH);
+            drawPoseSkeletonGuide(ctx, poseOverlay.landmarks, fallback.x, fallback.y, fallback.drawW, fallback.drawH);
         } else {
+            createFallbackPoseGuide(ctx, img, canvasW, canvasH);
             const detectedFaces = await detectCandidateFaceBoxes(img);
             const faceBox = detectedFaces.length > 0
                 ? [...detectedFaces].sort(
@@ -657,13 +720,9 @@ export const createPoseOnlyReference = async (
         }
 
         ctx.save();
-        ctx.strokeStyle = poseOverlay ? 'rgba(0,255,188,0.28)' : 'rgba(255,255,255,0.26)';
-        ctx.lineWidth = Math.max(2, Math.min(canvasW, canvasH) * 0.004);
-        ctx.strokeRect(x, y, drawW, drawH);
-        ctx.restore();
-
-        ctx.fillStyle = 'rgba(10, 10, 10, 0.1)';
+        ctx.fillStyle = 'rgba(8, 10, 12, 0.06)';
         ctx.fillRect(x, y, drawW, drawH);
+        ctx.restore();
 
         return canvas.toDataURL('image/jpeg', 0.92);
     } catch (error) {

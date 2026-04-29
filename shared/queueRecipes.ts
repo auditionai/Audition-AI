@@ -628,6 +628,14 @@ export const getImageRenderReferenceEntries = (
 ): ImageRenderReferenceEntry[] => {
   const entries: ImageRenderReferenceEntry[] = [];
 
+  if (payload.sampleImage) {
+    entries.push({
+      role: 'sample',
+      source: payload.sampleImage,
+      indexLabel: 'SAMPLE IMAGE',
+    });
+  }
+
   getImageCharacterReferenceGroups(payload).forEach((group) => {
     group.references.forEach((reference, referenceIndex) => {
       const kindLabel =
@@ -647,14 +655,6 @@ export const getImageRenderReferenceEntries = (
       });
     });
   });
-
-  if (payload.sampleImage) {
-    entries.push({
-      role: 'sample',
-      source: payload.sampleImage,
-      indexLabel: 'SAMPLE IMAGE',
-    });
-  }
 
   if (payload.styleImage) {
     entries.push({

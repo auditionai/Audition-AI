@@ -38,7 +38,7 @@ import type { GeneratedImage } from '../types';
 import { caulenhauClient } from '../services/supabaseClient';
 import { DEFAULT_IMAGE_NEGATIVE_PROMPT } from '../../../shared/imagePromptDefaults';
 import type { CharacterReferenceGroup, ImageGenerateRecipePayload } from '../../../shared/queueRecipes';
-import { createFaceLockReference, createPoseOnlyReference, optimizePayload } from '../../../utils/imageProcessor';
+import { analyzeCharacterReferenceProfile, createFaceDetailReference, createFaceLockReference, createPoseOnlyReference, optimizePayload } from '../../../utils/imageProcessor';
 import {
   CHARACTER_ASSISTANT_RESOLUTION,
   runCharacterAssistantAction,
@@ -145,6 +145,22 @@ const tryStageFaceLockReferenceInput = async (source: string, folder: string) =>
   } catch (error) {
     console.warn('[WorkspaceImage] Failed to stage face-lock reference.', error);
     throw new Error('Không thể khóa gương mặt nhân vật trước khi tạo ảnh. Vui lòng thử lại.');
+  }
+};
+
+const tryStageFaceDetailReferenceInput = async (source: string, folder: string) => {
+  if (!source) return null;
+
+  try {
+    const faceDetailReference = await createFaceDetailReference(source);
+    if (faceDetailReference === source) {
+      return null;
+    }
+    const optimizedSource = await optimizePayload(faceDetailReference, 1536);
+    return await uploadFileToR2(optimizedSource, folder);
+  } catch (error) {
+    console.warn('[WorkspaceImage] Failed to stage face-detail reference.', error);
+    throw new Error('Không thể khóa chi tiết gương mặt nhân vật trước khi tạo ảnh. Vui lòng thử lại.');
   }
 };
 
@@ -724,8 +740,17 @@ export function WorkspaceImage() {
         const stagedCharacterGroups = await Promise.all(
           characters.map(async (char, idx) => {
             const references: CharacterReferenceGroup['references'] = [];
+            let facePriorityMode: CharacterReferenceGroup['facePriorityMode'];
 
             if (char.bodyImage) {
+              const referenceProfile = await analyzeCharacterReferenceProfile(char.bodyImage);
+              facePriorityMode = referenceProfile?.facePriorityMode;
+              const faceDetailStaged = await tryStageFaceDetailReferenceInput(
+                char.bodyImage,
+                `inputs/generation/${activeMode}/character-${idx + 1}/face-detail`,
+              );
+              if (faceDetailStaged) references.push({ source: faceDetailStaged, kind: 'face_detail' });
+
               const faceLockStaged = await tryStageFaceLockReferenceInput(
                 char.bodyImage,
                 `inputs/generation/${activeMode}/character-${idx + 1}/face`,
@@ -737,7 +762,7 @@ export function WorkspaceImage() {
               if (bodyStaged) references.push({ source: bodyStaged, kind: 'body' });
             }
 
-            return { characterIndex: idx + 1, gender: char.gender, references };
+            return { characterIndex: idx + 1, gender: char.gender, facePriorityMode, references };
           }),
         );
 

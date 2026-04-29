@@ -18,7 +18,7 @@ import { CONCURRENCY_LIMITS, useConcurrency } from '../../services/concurrencySe
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import { downloadAssetToBrowser } from '../../services/downloadService';
-import { createFaceLockReference, createPoseOnlyReference, optimizePayload } from '../../utils/imageProcessor';
+import { analyzeCharacterReferenceProfile, createFaceDetailReference, createFaceLockReference, createPoseOnlyReference, optimizePayload } from '../../utils/imageProcessor';
 import { APP_CONFIG } from '../../constants';
 import { DEFAULT_IMAGE_NEGATIVE_PROMPT } from '../../shared/imagePromptDefaults';
 import {
@@ -133,6 +133,22 @@ const tryStageFaceLockReferenceInput = async (source: string, folder: string) =>
     } catch (error) {
         console.warn('[GenerationTool] Failed to stage face-lock reference.', error);
         throw new Error('Không thể khóa gương mặt nhân vật trước khi tạo ảnh. Vui lòng thử lại.');
+    }
+};
+
+const tryStageFaceDetailReferenceInput = async (source: string, folder: string) => {
+    if (!source) return null;
+
+    try {
+        const faceDetailReference = await createFaceDetailReference(source);
+        if (faceDetailReference === source) {
+            return null;
+        }
+        const optimizedSource = await optimizePayload(faceDetailReference, 1536);
+        return await uploadFileToR2(optimizedSource, folder);
+    } catch (error) {
+        console.warn('[GenerationTool] Failed to stage face-detail reference.', error);
+        throw new Error('Không thể khóa chi tiết gương mặt nhân vật trước khi tạo ảnh. Vui lòng thử lại.');
     }
 };
 
@@ -880,8 +896,19 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                 await Promise.all(
                     characters.map(async (char, charIndex) => {
                         const references: CharacterReferenceGroup['references'] = [];
+                        let facePriorityMode: CharacterReferenceGroup['facePriorityMode'];
 
                         if (char.bodyImage) {
+                            const referenceProfile = await analyzeCharacterReferenceProfile(char.bodyImage);
+                            facePriorityMode = referenceProfile?.facePriorityMode;
+                            const stagedFaceDetail = await tryStageFaceDetailReferenceInput(
+                                char.bodyImage,
+                                `inputs/generation/${activeMode}/character-${charIndex + 1}/face-detail`,
+                            );
+                            if (stagedFaceDetail) {
+                                references.push({ source: stagedFaceDetail, kind: 'face_detail' });
+                            }
+
                             const stagedFaceLock = await tryStageFaceLockReferenceInput(
                                 char.bodyImage,
                                 `inputs/generation/${activeMode}/character-${charIndex + 1}/face`,
@@ -902,6 +929,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                         return {
                             characterIndex: charIndex + 1,
                             gender: char.gender,
+                            facePriorityMode,
                             references,
                         } satisfies CharacterReferenceGroup;
                     })

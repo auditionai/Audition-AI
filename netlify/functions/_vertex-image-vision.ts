@@ -279,12 +279,13 @@ export const analyzeImageGenerationVision = async (
   }
 
   let style: StyleVisionAnalysis | undefined;
-  if (payload.styleImage) {
+  const styleAnalysisSource = payload.styleAnalysisImage || payload.styleImage;
+  if (styleAnalysisSource) {
     try {
       style = normalizeStyleVision(
         await generateVisionJson<any>(
           'style image analysis',
-          [await toInlineImagePart(payload.styleImage)],
+          [await toInlineImagePart(styleAnalysisSource)],
           buildStyleVisionPrompt(),
           options?.onDiagnostic,
         ),

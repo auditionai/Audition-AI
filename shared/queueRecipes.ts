@@ -26,7 +26,7 @@ export interface QueueProgressLogEntry {
 
 export interface QueueVertexDiagnosticEntry {
   at: string;
-  task: 'image_prompt_synthesis' | 'image_prompt_compression';
+  task: 'image_prompt_synthesis' | 'image_prompt_compression' | 'image_reference_analysis';
   status: 'success' | 'warning' | 'error';
   message: string;
   credentialName?: string;
@@ -77,6 +77,48 @@ export interface ImageRoleContract {
 export type CharacterReferenceKind = 'body' | 'face' | 'face_detail' | 'reference';
 export type CharacterReferenceGender = 'female' | 'male';
 
+export interface CharacterAppearanceProfile {
+  skinToneHex?: string;
+  skinToneDescriptor?: string;
+}
+
+export interface CharacterVisionAnalysis {
+  characterIndex: number;
+  summary?: string;
+  skinToneDescriptor?: string;
+  skinToneHexApprox?: string;
+  faceIdentityNotes?: string[];
+  makeupNotes?: string[];
+  faceAccessoryNotes?: string[];
+  hairNotes?: string[];
+  outfitNotes?: string[];
+}
+
+export interface SampleVisionAnalysis {
+  summary?: string;
+  pose?: string;
+  camera?: string;
+  framing?: string;
+  subjectPlacement?: string;
+  background?: string;
+  lighting?: string;
+}
+
+export interface StyleVisionAnalysis {
+  summary?: string;
+  renderStyle?: string;
+  materialStyle?: string;
+  lightingStyle?: string;
+  colorGrading?: string;
+  finish?: string;
+}
+
+export interface ImageVisionAnalysis {
+  characters: CharacterVisionAnalysis[];
+  sample?: SampleVisionAnalysis;
+  style?: StyleVisionAnalysis;
+}
+
 export interface CharacterReferenceSourceEntry {
   source: string;
   kind: CharacterReferenceKind;
@@ -86,6 +128,7 @@ export interface CharacterReferenceGroup {
   characterIndex: number;
   gender?: CharacterReferenceGender;
   facePriorityMode?: CharacterFacePriorityMode;
+  appearanceProfile?: CharacterAppearanceProfile;
   references: CharacterReferenceSourceEntry[];
 }
 
@@ -106,6 +149,7 @@ export interface ImageGenerateRecipePayload {
   sampleImage?: string | null;
   styleImage?: string | null;
   stylePrompt?: string | null;
+  visionAnalysis?: ImageVisionAnalysis;
   referenceImages?: string[];
   __stage?: QueueProcessingStage;
   __logs?: QueueProgressLogEntry[];
@@ -333,9 +377,11 @@ const IMAGE_QUALITY_BOOSTERS =
 const COMPACT_IMAGE_QUALITY_BOOSTERS =
   'ultra-detailed, stylized 3D fashion-game render, Korean MMO 3D style, crisp edges, polished materials, adult-proportioned avatar anatomy, natural limb flow, unreal engine 5 render, cinematic lighting, ray tracing, hdr';
 const IMAGE_NEGATIVE_PROMPT =
-  'low quality, bad anatomy, worst quality, blur, grain, watermark, text, signature, bad hands, bad face, mixed backgrounds, conflicting styles, extra characters, unwanted people from style reference, real people, photorealistic humans, photograph, realistic photography, real life, semi-realistic human, cinematic human portrait, live action, realistic skin pores, natural skin texture, DSLR, realistic male model, realistic female model, hyperreal face, realistic eyelashes, realistic fabric, anime, cartoon, 2d, flat shading, floating character, disconnected limbs, hands in the air, feet not touching the ground, floating objects, unnatural posture, floating in mid-air, levitating, hovering, disconnected from background, bad perspective, illogical physics, extra arm, extra arms, extra hand, extra hands, extra leg, extra legs, extra foot, extra feet, duplicate hand, duplicate hands, duplicate foot, duplicate feet, duplicated limb, duplicated limbs, malformed feet, merged fingers, fused fingers, six fingers, seven fingers, broken wrist, twisted arm, twisted leg, doll face, mannequin face, mannequin body, waxy skin, plastic skin, yellow skin, orange skin, muddy skin tone, chibi proportions, giant eyes, baby face, stiff pose, rigid pose, stiff limbs, frozen posture, uncanny face, over-smoothed face, panel layout, split screen, tiled image, image grid, collage, storyboard, diptych, triptych, quadrants, four panels, four-up layout, contact sheet';
+  'low quality, bad anatomy, worst quality, blur, grain, watermark, text, signature, bad hands, bad face, mixed backgrounds, conflicting styles, extra characters, unwanted people from style reference, real people, photorealistic humans, photograph, realistic photography, real life, semi-realistic human, cinematic human portrait, live action, realistic skin pores, natural skin texture, DSLR, realistic male model, realistic female model, hyperreal face, realistic eyelashes, realistic fabric, anime, cartoon, 2d, flat shading, floating character, disconnected limbs, hands in the air, feet not touching the ground, floating objects, unnatural posture, floating in mid-air, levitating, hovering, disconnected from background, bad perspective, illogical physics, extra arm, extra arms, extra hand, extra hands, extra leg, extra legs, extra foot, extra feet, duplicate hand, duplicate hands, duplicate foot, duplicate feet, duplicated limb, duplicated limbs, malformed feet, merged fingers, fused fingers, six fingers, seven fingers, broken wrist, twisted arm, twisted leg, doll face, mannequin face, mannequin body, waxy skin, plastic skin, dark skin, darker skin, tanned skin, bronzed skin, yellow skin, orange skin, muddy skin tone, incorrect skin tone, skin tone shift, chibi proportions, giant eyes, baby face, stiff pose, rigid pose, stiff limbs, frozen posture, uncanny face, over-smoothed face, panel layout, split screen, tiled image, image grid, collage, storyboard, diptych, triptych, quadrants, four panels, four-up layout, contact sheet';
 const IMAGE_ANATOMY_GUARD_CONSTRAINTS =
   'ANATOMY GUARD: Keep exactly one coherent body per character slot with natural adult-proportioned 3D anatomy. Never invent extra arms, extra hands, extra legs, extra feet, duplicated limbs, duplicated hands, duplicated feet, fused fingers, or malformed joints. Each visible hand must read as one coherent hand. Each visible foot must read as one coherent foot. If a hand, foot, or limb is partially hidden, keep it hidden naturally instead of hallucinating additional anatomy. Respect gravity, chair contact, ground contact, and believable joint bending.';
+const IMAGE_SKIN_TONE_LOCK_CONSTRAINTS =
+  'SKIN TONE LOCK: Match the exposed skin tone, brightness, and undertone from the uploaded character references exactly. Never darken the skin, never tan it, never bronze it, never shift it toward brown, never add warm orange cast, and never reinterpret complexion because of scene lighting or style. If the reference skin is fair/light, keep it fair/light in the final render while still preserving believable scene lighting.';
 const AUDITION_SOFT_BEAUTY_RENDER_PROFILE =
   'SOFT BEAUTY RENDER PROFILE: Aim for premium Audition-fashion 3D beauty rendering with soft tonal transitions, natural facial shading, clean eye and lip definition, controlled saturation, elegant specular response, refined cloth and accessory separation, and expressive but non-rigid body flow. Avoid toy-like hardness, crushed contrast, oversaturated colors, thick plastic highlights, and frozen mannequin expression.';
 
@@ -455,6 +501,12 @@ export const getImageCharacterReferenceGroups = (
       characterIndex: Math.max(1, Math.floor(Number(group.characterIndex || index + 1))),
       gender: group.gender === 'female' || group.gender === 'male' ? group.gender : undefined,
       facePriorityMode: group.facePriorityMode === 'portrait_headshot' ? 'portrait_headshot' : undefined,
+      appearanceProfile: group.appearanceProfile && typeof group.appearanceProfile === 'object'
+        ? {
+            skinToneHex: typeof group.appearanceProfile.skinToneHex === 'string' ? group.appearanceProfile.skinToneHex : undefined,
+            skinToneDescriptor: typeof group.appearanceProfile.skinToneDescriptor === 'string' ? group.appearanceProfile.skinToneDescriptor : undefined,
+          }
+        : undefined,
       references: (group.references || []).filter(
         (entry): entry is CharacterReferenceSourceEntry =>
           Boolean(entry) &&
@@ -475,6 +527,11 @@ export const getImageCharacterReferenceGroups = (
   }
 
   return buildFallbackCharacterReferenceGroups(payload);
+};
+
+const getCharacterVisionAnalysisMap = (payload: Pick<ImageGenerateRecipePayload, 'visionAnalysis'>) => {
+  const entries = Array.isArray(payload.visionAnalysis?.characters) ? payload.visionAnalysis?.characters : [];
+  return new Map(entries.map((entry) => [entry.characterIndex, entry]));
 };
 
 export const allowsLayeredSingleSubjectComposition = (
@@ -587,10 +644,11 @@ export const getImageRenderReferenceSources = (
 ) => getImageRenderReferenceEntries(payload).map((entry) => entry.source);
 
 export const buildImageRoleContract = (
-  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio'>,
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio' | 'visionAnalysis'>,
 ): ImageRoleContract => {
   const renderEntries = getImageRenderReferenceEntries(payload);
   const characterGroups = getImageCharacterReferenceGroups(payload);
+  const characterVisionMap = getCharacterVisionAnalysisMap(payload);
   const characterCount = Math.max(1, Math.floor(Number(payload.characterCount || characterGroups.length || 1)));
   const layeredSingleSubjectAllowed = allowsLayeredSingleSubjectComposition(payload);
   const shotType = resolveImageShotType(payload);
@@ -598,11 +656,43 @@ export const buildImageRoleContract = (
   const hasStyle = Boolean(payload.styleImage);
   const hasFaceLock = characterGroups.some((group) => group.references.some((reference) => reference.kind === 'face'));
   const hasPortraitPriorityFace = characterGroups.some((group) => group.facePriorityMode === 'portrait_headshot');
+  const skinToneAnchors = characterGroups
+    .map((group) => {
+      const visionEntry = characterVisionMap.get(group.characterIndex);
+      const hex = group.appearanceProfile?.skinToneHex?.trim();
+      const descriptor = group.appearanceProfile?.skinToneDescriptor?.trim();
+      const visionHex = visionEntry?.skinToneHexApprox?.trim();
+      const visionDescriptor = visionEntry?.skinToneDescriptor?.trim();
+      const resolvedHex = visionHex || hex;
+      const resolvedDescriptor = visionDescriptor || descriptor;
+      if (!resolvedHex && !resolvedDescriptor) {
+        return '';
+      }
+      return `Character ${group.characterIndex} skin-tone anchor:${resolvedHex ? ` ${resolvedHex}` : ''}${resolvedDescriptor ? ` (${resolvedDescriptor})` : ''}. Match this complexion exactly.`;
+    })
+    .filter(Boolean);
+
+  const characterVisionNotes = characterGroups
+    .map((group) => {
+      const visionEntry = characterVisionMap.get(group.characterIndex);
+      if (!visionEntry) return '';
+      const parts = [
+        visionEntry.summary?.trim(),
+        ...(visionEntry.faceIdentityNotes || []).slice(0, 2),
+        ...(visionEntry.makeupNotes || []).slice(0, 2),
+        ...(visionEntry.faceAccessoryNotes || []).slice(0, 2),
+      ].filter(Boolean);
+      if (parts.length === 0) return '';
+      return `Character ${group.characterIndex} visual identity anchor: ${parts.join('; ')}.`;
+    })
+    .filter(Boolean);
 
   const identityRules = [
     `Render exactly ${characterCount} character(s) with strict one-to-one slot mapping.`,
     'Character references define identity only: face, hair, body structure, skin tone, outfit, shoes, accessories, tattoos, and gender.',
     'Preserve the uploaded skin tone exactly. Do not warm it, tan it, yellow it, orange it, or shift it to a different complexion.',
+    ...skinToneAnchors,
+    ...characterVisionNotes,
     'Preserve believable adult-proportioned anatomy from the uploaded character references. Keep the neck, shoulders, torso, arms, hands, hips, and legs natural instead of rigid or mannequin-like.',
     'Character references are never pose references.',
     hasFaceLock
@@ -628,6 +718,20 @@ export const buildImageRoleContract = (
         'Do not fall back to a plain standing portrait unless the prompt explicitly asks for it.',
       ];
 
+  const sampleVision = payload.visionAnalysis?.sample;
+  if (sampleVision) {
+    const sampleSignals = [
+      sampleVision.pose ? `pose: ${sampleVision.pose}` : '',
+      sampleVision.camera ? `camera: ${sampleVision.camera}` : '',
+      sampleVision.framing ? `framing: ${sampleVision.framing}` : '',
+      sampleVision.subjectPlacement ? `placement: ${sampleVision.subjectPlacement}` : '',
+      sampleVision.background ? `background: ${sampleVision.background}` : '',
+    ].filter(Boolean);
+    if (sampleSignals.length > 0) {
+      compositionRules.push(`Sample composition anchor: ${sampleSignals.join('; ')}.`);
+    }
+  }
+
   if (shotType === 'close_up') {
     identityRules.push('Close-up shot weighting is active. Facial detail, makeup, eye rendering, lip shape, and face accessories are top priority for the final image.');
     compositionRules.push('Close-up framing is intentional. Do not widen the camera to reveal unnecessary body area.');
@@ -646,6 +750,20 @@ export const buildImageRoleContract = (
     : [
         'Without a style image, keep the final output as a clean stylized 3D game-avatar render driven by the prompt and identity references.',
       ];
+
+  const styleVision = payload.visionAnalysis?.style;
+  if (styleVision) {
+    const styleSignals = [
+      styleVision.renderStyle ? `render style: ${styleVision.renderStyle}` : '',
+      styleVision.materialStyle ? `materials: ${styleVision.materialStyle}` : '',
+      styleVision.lightingStyle ? `lighting: ${styleVision.lightingStyle}` : '',
+      styleVision.colorGrading ? `color grade: ${styleVision.colorGrading}` : '',
+      styleVision.finish ? `finish: ${styleVision.finish}` : '',
+    ].filter(Boolean);
+    if (styleSignals.length > 0) {
+      styleRules.push(`Style visual anchor: ${styleSignals.join('; ')}.`);
+    }
+  }
 
   return {
     characterCount,
@@ -880,6 +998,7 @@ const buildDetailedImageProviderPrompt = (
   return trimProviderPrompt([
     'RENDER ONE NEW FINAL IMAGE. Never return any uploaded reference unchanged.',
     IMAGE_ROLE_LOCK_CONSTRAINTS,
+    IMAGE_SKIN_TONE_LOCK_CONSTRAINTS,
     IMAGE_ANATOMY_GUARD_CONSTRAINTS,
     `CHARACTER COUNT: EXACTLY ${characterCount}. One-to-one slot mapping is mandatory.`,
     '',
@@ -920,6 +1039,7 @@ const buildReducedImageProviderPromptWithoutSample = (
   return trimProviderPrompt([
     'RENDER ONE NEW FINAL IMAGE. Never return any uploaded reference unchanged.',
     REDUCED_IMAGE_ROLE_LOCK_CONSTRAINTS_NO_SAMPLE,
+    IMAGE_SKIN_TONE_LOCK_CONSTRAINTS,
     IMAGE_ANATOMY_GUARD_CONSTRAINTS,
     `CHARACTER COUNT: EXACTLY ${characterCount}. One-to-one slot mapping is mandatory.`,
     '',

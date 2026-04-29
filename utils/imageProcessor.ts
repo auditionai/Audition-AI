@@ -184,6 +184,167 @@ const buildDetailCropFromFaceBox = (box: FaceBoundingBox, imageWidth: number, im
     };
 };
 
+const rgbToHex = (r: number, g: number, b: number) =>
+    `#${[r, g, b].map((value) => clamp(Math.round(value), 0, 255).toString(16).padStart(2, '0')).join('')}`;
+
+const describeSkinTone = (r: number, g: number, b: number) => {
+    const brightness = (r * 0.299 + g * 0.587 + b * 0.114) / 255;
+    const warmth = r - b;
+
+    if (brightness >= 0.82) {
+        return warmth >= 18 ? 'very fair warm skin' : 'very fair neutral skin';
+    }
+    if (brightness >= 0.72) {
+        return warmth >= 18 ? 'fair warm skin' : 'fair neutral skin';
+    }
+    if (brightness >= 0.58) {
+        return warmth >= 16 ? 'light medium warm skin' : 'light medium neutral skin';
+    }
+    if (brightness >= 0.44) {
+        return warmth >= 14 ? 'medium warm skin' : 'medium neutral skin';
+    }
+
+    return warmth >= 12 ? 'deep warm skin' : 'deep neutral skin';
+};
+
+const isLikelySkinPixel = (r: number, g: number, b: number) => {
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const diff = max - min;
+    const brightness = (r + g + b) / 3;
+
+    if (brightness < 45 || brightness > 245) {
+        return false;
+    }
+
+    if (diff < 8) {
+        return false;
+    }
+
+    if (r < 40 || g < 25 || b < 20) {
+        return false;
+    }
+
+    if (r < g * 0.92) {
+        return false;
+    }
+
+    if (g < b * 0.78) {
+        return false;
+    }
+
+    return true;
+};
+
+const sampleSkinToneFromRegion = (
+    ctx: CanvasRenderingContext2D,
+    sx: number,
+    sy: number,
+    sw: number,
+    sh: number,
+) => {
+    try {
+        const imageData = ctx.getImageData(
+            Math.max(0, Math.floor(sx)),
+            Math.max(0, Math.floor(sy)),
+            Math.max(1, Math.floor(sw)),
+            Math.max(1, Math.floor(sh)),
+        );
+        const { data, width, height } = imageData;
+        let count = 0;
+        let totalR = 0;
+        let totalG = 0;
+        let totalB = 0;
+
+        for (let y = 0; y < height; y += 3) {
+            for (let x = 0; x < width; x += 3) {
+                const idx = (y * width + x) * 4;
+                const alpha = data[idx + 3];
+                if (alpha < 200) continue;
+
+                const r = data[idx];
+                const g = data[idx + 1];
+                const b = data[idx + 2];
+                if (!isLikelySkinPixel(r, g, b)) continue;
+
+                totalR += r;
+                totalG += g;
+                totalB += b;
+                count += 1;
+            }
+        }
+
+        if (count < 24) {
+            return null;
+        }
+
+        const avgR = totalR / count;
+        const avgG = totalG / count;
+        const avgB = totalB / count;
+        return {
+            hex: rgbToHex(avgR, avgG, avgB),
+            descriptor: describeSkinTone(avgR, avgG, avgB),
+        };
+    } catch (error) {
+        console.warn('Skin tone sampling failed:', error);
+        return null;
+    }
+};
+
+export const analyzeCharacterAppearanceProfile = async (source: string): Promise<{ skinToneHex?: string; skinToneDescriptor?: string }> => {
+    try {
+        const img = await loadImageWithTimeout(source, 10000);
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return {};
+
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0, img.width, img.height);
+
+        const detectedFaces = await detectCandidateFaceBoxes(img);
+        const bestFace = detectedFaces.length > 0
+            ? [...detectedFaces].sort(
+                (a, b) => scoreCandidateFaceBox(b, img.width, img.height) - scoreCandidateFaceBox(a, img.width, img.height),
+            )[0]
+            : null;
+
+        const regions = bestFace
+            ? [
+                buildCropFromFaceBox(bestFace, img.width, img.height),
+                {
+                    sx: clamp(bestFace.x + bestFace.width * 0.18, 0, img.width),
+                    sy: clamp(bestFace.y + bestFace.height * 0.24, 0, img.height),
+                    sw: clamp(bestFace.width * 0.64, 1, img.width),
+                    sh: clamp(bestFace.height * 0.58, 1, img.height),
+                },
+              ]
+            : [
+                {
+                    sx: img.width * 0.28,
+                    sy: img.height * 0.14,
+                    sw: img.width * 0.44,
+                    sh: img.height * 0.46,
+                },
+              ];
+
+        for (const region of regions) {
+            const sampled = sampleSkinToneFromRegion(ctx, region.sx, region.sy, region.sw, region.sh);
+            if (sampled) {
+                return {
+                    skinToneHex: sampled.hex,
+                    skinToneDescriptor: sampled.descriptor,
+                };
+            }
+        }
+
+        return {};
+    } catch (error) {
+        console.warn('Character appearance profile analysis failed:', error);
+        return {};
+    }
+};
+
 const getFaceLockCrop = (img: HTMLImageElement) => {
     const cropWidth = img.width * 0.58;
     const cropHeight = img.height * 0.48;

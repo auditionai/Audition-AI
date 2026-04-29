@@ -12,6 +12,7 @@ import {
   rewriteUserPromptToFitLimit,
   synthesizeStrictImagePrompt,
 } from './_vertex-director';
+import { analyzeImageGenerationVision } from './_vertex-image-vision';
 
 const TST_API_BASE = 'https://api.tramsangtao.com/v1';
 export const TST_PROMPT_MAX_CHARACTERS = 10_000;
@@ -374,6 +375,35 @@ export const prepareImageGeneratePromptWithinLimit = async (
   options?: VertexPromptPreparationOptions,
 ): Promise<ImageGeneratePromptPreparation> => {
   let workingPayload: ImageGenerateRecipePayload = { ...payload };
+  if (!workingPayload.visionAnalysis && getImageDirectorSources(workingPayload).length > 0) {
+    try {
+      const visionAnalysis = await analyzeImageGenerationVision(workingPayload, {
+        onDiagnostic: options?.onVertexDiagnostic,
+      });
+      if (
+        (visionAnalysis.characters || []).length > 0 ||
+        visionAnalysis.sample ||
+        visionAnalysis.style
+      ) {
+        workingPayload = {
+          ...workingPayload,
+          visionAnalysis,
+        };
+      }
+    } catch (error) {
+      if (options?.onVertexDiagnostic) {
+        await options.onVertexDiagnostic({
+          at: new Date().toISOString(),
+          task: 'image_reference_analysis',
+          status: 'warning',
+          model: 'gemini-3.1-pro-preview',
+          message: `Vertex vision analysis fell back to rule-based prompting only. Original error: ${
+            error instanceof Error ? error.message : String(error || 'Unknown error')
+          }`,
+        });
+      }
+    }
+  }
   let synthesizedPrompt = await synthesizeImageGeneratePromptWithLastResortFallback(workingPayload, options);
   let providerPrompt = buildImageProviderPrompt(synthesizedPrompt, workingPayload, workingPayload.negativePrompt);
 

@@ -743,11 +743,13 @@ export function WorkspaceImage() {
             const references: CharacterReferenceGroup['references'] = [];
 
             if (char.bodyImage) {
-              const faceDetailStaged = await tryStageFaceDetailReferenceInput(
-                char.bodyImage,
-                `inputs/generation/${activeMode}/character-${idx + 1}/face-detail`,
-              );
-              if (faceDetailStaged) references.push({ source: faceDetailStaged, kind: 'face_detail' });
+              if (facePriorityMode === 'portrait_headshot') {
+                const faceDetailStaged = await tryStageFaceDetailReferenceInput(
+                  char.bodyImage,
+                  `inputs/generation/${activeMode}/character-${idx + 1}/face-detail`,
+                );
+                if (faceDetailStaged) references.push({ source: faceDetailStaged, kind: 'face_detail' });
+              }
 
               const faceLockStaged = await tryStageFaceLockReferenceInput(
                 char.bodyImage,

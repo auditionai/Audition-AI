@@ -900,12 +900,14 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                         const references: CharacterReferenceGroup['references'] = [];
 
                         if (char.bodyImage) {
-                            const stagedFaceDetail = await tryStageFaceDetailReferenceInput(
-                                char.bodyImage,
-                                `inputs/generation/${activeMode}/character-${charIndex + 1}/face-detail`,
-                            );
-                            if (stagedFaceDetail) {
-                                references.push({ source: stagedFaceDetail, kind: 'face_detail' });
+                            if (facePriorityMode === 'portrait_headshot') {
+                                const stagedFaceDetail = await tryStageFaceDetailReferenceInput(
+                                    char.bodyImage,
+                                    `inputs/generation/${activeMode}/character-${charIndex + 1}/face-detail`,
+                                );
+                                if (stagedFaceDetail) {
+                                    references.push({ source: stagedFaceDetail, kind: 'face_detail' });
+                                }
                             }
 
                             const stagedFaceLock = await tryStageFaceLockReferenceInput(

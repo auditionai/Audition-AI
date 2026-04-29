@@ -7,7 +7,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   Sparkles, ImagePlus, Coins,
-  X, User, Zap, Crown, RefreshCw, Loader, AlertTriangle, Wand2, Scissors, CheckCircle2,
+  X, User, Zap, Crown, RefreshCw, Loader, AlertTriangle, Wand2, Scissors,
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -43,13 +43,6 @@ import {
   runCharacterAssistantAction,
   type CharacterAssistantToolId,
 } from '../../../services/characterImageAssistService';
-import {
-  runCharacterImageReview,
-  buildCharacterReviewMessage,
-  formatCharacterReviewErrorMessage,
-  getCharacterReviewFlags,
-  type CharacterImageReviewResult,
-} from '../../../services/characterImageReviewService';
 
 type GenMode = 'single' | 'couple' | 'trio' | 'squad';
 type Stage = 'input' | 'submitting';
@@ -208,10 +201,7 @@ export function WorkspaceImage() {
   const [estimatedSeconds, setEstimatedSeconds] = useState(24);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [guideImages, setGuideImages] = useState<GenerationGuideImagesConfig>({ characterUrl: '', sampleUrl: '' });
-  const [characterReviews, setCharacterReviews] = useState<Record<number, CharacterImageReviewResult | null>>({});
-  const [reviewLoadingByCharId, setReviewLoadingByCharId] = useState<Record<number, boolean>>({});
   const [assistLoadingByCharId, setAssistLoadingByCharId] = useState<Record<number, CharacterAssistantToolId | null>>({});
-  const [reviewErrorByCharId, setReviewErrorByCharId] = useState<Record<number, string | null>>({});
   const [assistantErrorByCharId, setAssistantErrorByCharId] = useState<Record<number, string | null>>({});
   const [guideImageMeta, setGuideImageMeta] = useState<Record<'character' | 'sample', { width: number; height: number } | null>>({
     character: null,
@@ -277,15 +267,11 @@ export function WorkspaceImage() {
     && pricingEntries.some((e) => e.model.trim().toLowerCase() === getGenerationModelId('pro'));
   const isCatalogReady = !catalogLoading && !catalogError && pricingEntries.length > 0 && runtimeModels.length > 0;
   const hasCharacterImagesReady = characters.every((char) => !!char.bodyImage);
-  const isAnyCharacterReviewRunning = characters.some((char) => !!reviewLoadingByCharId[char.id]);
   const isAnyCharacterAssistRunning = characters.some((char) => !!assistLoadingByCharId[char.id]);
-  const hasCompletedCharacterReviews = characters.every((char) => !char.bodyImage || !!characterReviews[char.id]);
   const isGenerateDisabled = cooldownRemaining > 0 || !isCatalogReady || !selectedCost.available
     || !prompt.trim()
     || !hasCharacterImagesReady
-    || isAnyCharacterReviewRunning
     || isAnyCharacterAssistRunning
-    || !hasCompletedCharacterReviews
     || (aiModel === 'flash' ? !isFlashAvailable : !isProAvailable);
   const removeBgCost = getVertexEditToolCostBreakdown({
     toolId: 'remove_bg_pro',
@@ -530,13 +516,6 @@ export function WorkspaceImage() {
       }
       return nextChars;
     });
-    setCharacterReviews((prev) => {
-      const next: Record<number, CharacterImageReviewResult | null> = {};
-      for (let i = 1; i <= count; i += 1) {
-        next[i] = prev[i] ?? null;
-      }
-      return next;
-    });
   }, []);
 
   useEffect(() => {
@@ -579,26 +558,6 @@ export function WorkspaceImage() {
     fileInputRef.current?.click();
   };
 
-  const reviewCharacterUpload = async (charId: number, imageSource: string) => {
-    setReviewLoadingByCharId((prev) => ({ ...prev, [charId]: true }));
-    try {
-      const review = await runCharacterImageReview(imageSource);
-      setCharacterReviews((prev) => ({ ...prev, [charId]: review }));
-      setReviewErrorByCharId((prev) => ({ ...prev, [charId]: null }));
-    } catch (error) {
-      const reviewErrorMessage = formatCharacterReviewErrorMessage(error);
-      console.warn('[WorkspaceImage] Failed to review character image', error);
-      setCharacterReviews((prev) => ({ ...prev, [charId]: null }));
-      setReviewErrorByCharId((prev) => ({
-        ...prev,
-        [charId]: reviewErrorMessage,
-      }));
-      notify(reviewErrorMessage, 'warning');
-    } finally {
-      setReviewLoadingByCharId((prev) => ({ ...prev, [charId]: false }));
-    }
-  };
-
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !activeUploadType.current) return;
@@ -612,10 +571,7 @@ export function WorkspaceImage() {
         setRefImage(result);
       } else if (currentType?.charId && currentType.type === 'body') {
         setCharacters((prev) => prev.map((c) => (c.id === currentType.charId ? { ...c, bodyImage: result } : c)));
-        setCharacterReviews((prev) => ({ ...prev, [currentType.charId!]: null }));
-        setReviewErrorByCharId((prev) => ({ ...prev, [currentType.charId!]: null }));
         setAssistantErrorByCharId((prev) => ({ ...prev, [currentType.charId!]: null }));
-        void reviewCharacterUpload(currentType.charId, result);
       }
     };
     reader.readAsDataURL(file);
@@ -664,7 +620,6 @@ export function WorkspaceImage() {
       )));
       window.dispatchEvent(new Event('balance_updated'));
       notify(toolId === 'remove_bg_pro' ? 'Đã tách nền xong.' : 'Đã làm nét xong.', 'success');
-      await reviewCharacterUpload(charId, refreshedUrl);
     } catch (error) {
       console.error('[WorkspaceImage] Character assistant failed', error);
       setAssistantErrorByCharId((prev) => ({
@@ -932,14 +887,9 @@ export function WorkspaceImage() {
 
         {/* Character Upload Cards */}
         {characters.filter((c) => c.id === activeCharTab).map((char) => {
-          const review = characterReviews[char.id];
-          const reviewMessage = buildCharacterReviewMessage(review);
-          const reviewError = reviewErrorByCharId[char.id];
           const assistantError = assistantErrorByCharId[char.id];
-          const isReviewing = !!reviewLoadingByCharId[char.id];
           const activeAssist = assistLoadingByCharId[char.id];
           const isAssistRunning = !!activeAssist;
-          const hasCleanStatus = !!review && getCharacterReviewFlags(review).isClean;
 
           return (
             <div key={char.id} className="space-y-3">
@@ -956,31 +906,6 @@ export function WorkspaceImage() {
                   </button>
                 ))}
               </div>
-
-              {isReviewing && (
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200 flex items-start gap-2">
-                  <Loader className="w-4 h-4 animate-spin shrink-0 mt-0.5" />
-                  <span>Đang quét nhanh độ nét và nền của ảnh nhân vật...</span>
-                </div>
-              )}
-              {!isReviewing && reviewError && (
-                <div className="rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-xs text-orange-700 dark:border-orange-500/20 dark:bg-orange-500/10 dark:text-orange-200 flex items-start gap-2">
-                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <span>Không thể quét ảnh nhân vật tự động: {reviewError}</span>
-                </div>
-              )}
-              {!isReviewing && reviewMessage && (
-                <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-200 flex items-start gap-2">
-                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <span>{reviewMessage}</span>
-                </div>
-              )}
-              {!isReviewing && hasCleanStatus && (
-                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200 flex items-start gap-2">
-                  <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
-                  <span>Ảnh nhân vật đang đủ rõ và nền đã sạch để AI bám đúng nhận diện.</span>
-                </div>
-              )}
 
               <button
                 onClick={() => handleUploadClick(char.id)}
@@ -1048,7 +973,7 @@ export function WorkspaceImage() {
                   </button>
                 </div>
               )}
-              {!isReviewing && assistantError && (
+              {assistantError && (
                 <div className="rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-xs text-orange-700 dark:border-orange-500/20 dark:bg-orange-500/10 dark:text-orange-200 flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
                   <span>Lỗi xử lý ảnh: {assistantError}</span>

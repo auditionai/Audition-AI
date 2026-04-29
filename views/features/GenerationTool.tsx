@@ -18,9 +18,10 @@ import { CONCURRENCY_LIMITS, useConcurrency } from '../../services/concurrencySe
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import { downloadAssetToBrowser } from '../../services/downloadService';
-import { analyzeCharacterReferenceProfile, createFaceDetailReference, createFaceLockReference, createPoseOnlyReference, optimizePayload } from '../../utils/imageProcessor';
+import { createFaceDetailReference, createFaceLockReference, createPoseOnlyReference, optimizePayload } from '../../utils/imageProcessor';
 import { APP_CONFIG } from '../../constants';
 import { DEFAULT_IMAGE_NEGATIVE_PROMPT } from '../../shared/imagePromptDefaults';
+import { resolveCharacterFacePriorityMode } from '../../shared/queueRecipes';
 import {
   type AuditionPricingOverride,
   fetchTstModels,
@@ -892,15 +893,13 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
     void (async () => {
         try {
+            const facePriorityMode = resolveCharacterFacePriorityMode(prompt);
             const stagedCharacterGroups = (
                 await Promise.all(
                     characters.map(async (char, charIndex) => {
                         const references: CharacterReferenceGroup['references'] = [];
-                        let facePriorityMode: CharacterReferenceGroup['facePriorityMode'];
 
                         if (char.bodyImage) {
-                            const referenceProfile = await analyzeCharacterReferenceProfile(char.bodyImage);
-                            facePriorityMode = referenceProfile?.facePriorityMode;
                             const stagedFaceDetail = await tryStageFaceDetailReferenceInput(
                                 char.bodyImage,
                                 `inputs/generation/${activeMode}/character-${charIndex + 1}/face-detail`,

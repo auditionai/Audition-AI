@@ -37,8 +37,8 @@ import type { ModelPricing } from '../services/economyService';
 import type { GeneratedImage } from '../types';
 import { caulenhauClient } from '../services/supabaseClient';
 import { DEFAULT_IMAGE_NEGATIVE_PROMPT } from '../../../shared/imagePromptDefaults';
-import type { CharacterReferenceGroup, ImageGenerateRecipePayload } from '../../../shared/queueRecipes';
-import { analyzeCharacterReferenceProfile, createFaceDetailReference, createFaceLockReference, createPoseOnlyReference, optimizePayload } from '../../../utils/imageProcessor';
+import { resolveCharacterFacePriorityMode, type CharacterReferenceGroup, type ImageGenerateRecipePayload } from '../../../shared/queueRecipes';
+import { createFaceDetailReference, createFaceLockReference, createPoseOnlyReference, optimizePayload } from '../../../utils/imageProcessor';
 import {
   CHARACTER_ASSISTANT_RESOLUTION,
   runCharacterAssistantAction,
@@ -736,15 +736,13 @@ export function WorkspaceImage() {
     void (async () => {
       try {
         addSubmissionLog('Đang chuẩn hóa ảnh nhân vật và ảnh mẫu.');
+        const facePriorityMode = resolveCharacterFacePriorityMode(prompt);
 
         const stagedCharacterGroups = await Promise.all(
           characters.map(async (char, idx) => {
             const references: CharacterReferenceGroup['references'] = [];
-            let facePriorityMode: CharacterReferenceGroup['facePriorityMode'];
 
             if (char.bodyImage) {
-              const referenceProfile = await analyzeCharacterReferenceProfile(char.bodyImage);
-              facePriorityMode = referenceProfile?.facePriorityMode;
               const faceDetailStaged = await tryStageFaceDetailReferenceInput(
                 char.bodyImage,
                 `inputs/generation/${activeMode}/character-${idx + 1}/face-detail`,

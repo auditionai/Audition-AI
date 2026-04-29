@@ -18,7 +18,7 @@ import { CONCURRENCY_LIMITS, useConcurrency } from '../../services/concurrencySe
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import { downloadAssetToBrowser } from '../../services/downloadService';
-import { createFaceDetailReference, createFaceLockReference, createPoseOnlyReference, optimizePayload } from '../../utils/imageProcessor';
+import { analyzeCharacterAppearanceProfile, createFaceDetailReference, createFaceLockReference, createPoseOnlyReference, optimizePayload } from '../../utils/imageProcessor';
 import { APP_CONFIG } from '../../constants';
 import { DEFAULT_IMAGE_NEGATIVE_PROMPT } from '../../shared/imagePromptDefaults';
 import { resolveCharacterFacePriorityMode } from '../../shared/queueRecipes';
@@ -898,8 +898,10 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                 await Promise.all(
                     characters.map(async (char, charIndex) => {
                         const references: CharacterReferenceGroup['references'] = [];
+                        let appearanceProfile: CharacterReferenceGroup['appearanceProfile'];
 
                         if (char.bodyImage) {
+                            appearanceProfile = await analyzeCharacterAppearanceProfile(char.bodyImage);
                             if (facePriorityMode === 'portrait_headshot') {
                                 const stagedFaceDetail = await tryStageFaceDetailReferenceInput(
                                     char.bodyImage,
@@ -931,6 +933,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                             characterIndex: charIndex + 1,
                             gender: char.gender,
                             facePriorityMode,
+                            appearanceProfile,
                             references,
                         } satisfies CharacterReferenceGroup;
                     })

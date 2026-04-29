@@ -38,7 +38,7 @@ import type { GeneratedImage } from '../types';
 import { caulenhauClient } from '../services/supabaseClient';
 import { DEFAULT_IMAGE_NEGATIVE_PROMPT } from '../../../shared/imagePromptDefaults';
 import { resolveCharacterFacePriorityMode, type CharacterReferenceGroup, type ImageGenerateRecipePayload } from '../../../shared/queueRecipes';
-import { createFaceDetailReference, createFaceLockReference, createPoseOnlyReference, optimizePayload } from '../../../utils/imageProcessor';
+import { analyzeCharacterAppearanceProfile, createFaceDetailReference, createFaceLockReference, createPoseOnlyReference, optimizePayload } from '../../../utils/imageProcessor';
 import {
   CHARACTER_ASSISTANT_RESOLUTION,
   runCharacterAssistantAction,
@@ -741,8 +741,10 @@ export function WorkspaceImage() {
         const stagedCharacterGroups = await Promise.all(
           characters.map(async (char, idx) => {
             const references: CharacterReferenceGroup['references'] = [];
+            let appearanceProfile: CharacterReferenceGroup['appearanceProfile'];
 
             if (char.bodyImage) {
+              appearanceProfile = await analyzeCharacterAppearanceProfile(char.bodyImage);
               if (facePriorityMode === 'portrait_headshot') {
                 const faceDetailStaged = await tryStageFaceDetailReferenceInput(
                   char.bodyImage,
@@ -762,7 +764,7 @@ export function WorkspaceImage() {
               if (bodyStaged) references.push({ source: bodyStaged, kind: 'body' });
             }
 
-            return { characterIndex: idx + 1, gender: char.gender, facePriorityMode, references };
+            return { characterIndex: idx + 1, gender: char.gender, facePriorityMode, appearanceProfile, references };
           }),
         );
 

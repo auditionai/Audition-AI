@@ -1,9 +1,11 @@
 import {
   buildImageProviderPrompt,
+  buildImageRoleContractText,
   getImageDirectorSources,
   getEffectiveImageGenerationResolution,
   getImageRenderReferenceSources,
   type ImageGenerateRecipePayload,
+  type QueueVertexDiagnosticEntry,
   type QueueRecipePayload,
 } from '../../shared/queueRecipes';
 import {
@@ -16,6 +18,10 @@ export const TST_PROMPT_MAX_CHARACTERS = 10_000;
 const PROMPT_REWRITE_SAFETY_MARGIN = 400;
 const MIN_USER_PROMPT_REWRITE_CHARACTERS = 180;
 const MAX_PROMPT_REWRITE_ATTEMPTS = 3;
+const VERTEX_SYNTH_BYPASS_PROMPT_LENGTH = 700;
+const VERTEX_SYNTH_BYPASS_NEGATIVE_LENGTH = 450;
+const VERTEX_SYNTH_BYPASS_ROLE_CONTRACT_LENGTH = 2200;
+const VERTEX_SYNTH_BYPASS_REFERENCE_COUNT = 4;
 
 const cleanBase64 = (value: string) => value.replace(/^data:[^;]+;base64,/, '');
 
@@ -117,6 +123,11 @@ export const uploadVideoToTst = async (input: string, fallbackMimeType?: string)
 
 const isRecoverablePromptSynthesisError = (error: unknown) => {
   const message = error instanceof Error ? error.message.toLowerCase() : String(error || '').toLowerCase();
+  const isLegacyOrGenericVertexPromptFailure =
+    message.includes('all vertex ai credentials failed for image prompt synthesis') ||
+    message.includes('vertex ai did not return a synthesized image prompt') ||
+    (message.includes('vertex ai') && message.includes('prompt synthesis')) ||
+    (message.includes('vertex ai') && message.includes('synthesized image prompt'));
 
   return (
     message.includes('resource has been exhausted') ||
@@ -125,54 +136,131 @@ const isRecoverablePromptSynthesisError = (error: unknown) => {
     message.includes('429') ||
     message.includes('overloaded') ||
     message.includes('deadline exceeded') ||
-    message.includes('failed to initialize vertex ai credentials')
+    message.includes('failed to initialize vertex ai credentials') ||
+    message.includes('vertex ai returned no prompt text for image prompt synthesis') ||
+    message.includes('vertex ai returned an empty prompt synthesis payload') ||
+    message.includes('vertex ai did not return a valid json object for prompt synthesis') ||
+    message.includes('vertex ai prompt synthesis json must be an object') ||
+    isLegacyOrGenericVertexPromptFailure
   );
 };
 
 const buildFallbackSynthesizedPrompt = (payload: ImageGenerateRecipePayload) => {
-  const basePrompt = payload.prompt?.trim() || '';
+  const combinedPrompt = payload.prompt?.trim() || '';
+  const systemPromptPrefix = payload.systemPromptPrefix?.trim() || '';
+  const userPrompt = payload.userPromptInput?.trim() || combinedPrompt;
   const stylePrompt = payload.stylePrompt?.trim() || '';
   const hasSample = Boolean(payload.sampleImage);
   const characterCount = Math.max(1, Math.floor(Number(payload.characterCount || 0)) || (payload.characterReferenceGroups?.length || 0) || 1);
-  const fallbackRoleLock = [
-    'ROLE LOCK:',
-    `0. Final image must contain exactly ${characterCount} character(s). Never add or remove subjects.`,
-    '0b. Each uploaded character slot is mandatory and must appear exactly once. No missing slots, no duplicated slots, no substitutions.',
-    '1. Character reference images define identity only: face, hair, body structure, skin tone, outfit, shoes, accessories, and gender. They are NOT pose references.',
-    '1b. If multiple reference images belong to the same character slot, they all describe the same subject and must be merged into one identity.',
-    '1c. Never replace any missing character slot with a duplicated uploaded character, a sample person, a style person, or an invented blended identity.',
-    hasSample
-      ? '2. Sample image is a processed pose/composition reference. It defines pose, framing, camera angle, spacing, and background only.'
-      : '2. There is NO sample image. Therefore pose, camera angle, framing, scene action, and background must be derived from the USER REQUEST text, not from any character or style reference.',
-    '3. Style image is a processed style-only visual reference for the renderer. It may control only render quality, lighting, shader response, material quality, color grading, and broad adult 3D body-proportion language.',
-    '4. Do not copy pose, outfit, hairstyle, accessories, face, gender presentation, number of characters, or composition from the style image.',
-    hasSample
-      ? '5. Re-pose the character from the character reference into the sample composition exactly. Never return a near-unchanged copy of the standing character reference unless the sample itself is also standing.'
-      : '5. Without a sample image, follow the USER REQUEST text as the main source for composition, body pose, framing, environment, and background. Do not default to a plain black standing portrait unless the USER REQUEST explicitly asks for that.',
-    '6. Keep the final result as a stylized Audition-like 3D game character, not photorealistic, not childlike, and not chibi unless the user explicitly asks for that.',
-  ].join('\n');
-
-  if (basePrompt && stylePrompt) {
-    return `${fallbackRoleLock}\n\nUSER REQUEST:\n${basePrompt}\n\nSTYLE KEYWORDS:\n${stylePrompt}`;
-  }
-
-  if (basePrompt) {
-    return `${fallbackRoleLock}\n\nUSER REQUEST:\n${basePrompt}`;
-  }
-
-  if (stylePrompt) {
-    return `${fallbackRoleLock}\n\nSTYLE KEYWORDS:\n${stylePrompt}`;
-  }
-
-  return `${fallbackRoleLock}\n\nGenerate the image using the provided references exactly.`;
+  return JSON.stringify({
+    language: 'en',
+    system_prompt_en: systemPromptPrefix,
+    user_prompt_en: userPrompt,
+    merged_prompt_en: combinedPrompt || `${systemPromptPrefix} ${userPrompt}`.trim() || 'Generate the image using the provided references exactly.',
+    character_count: characterCount,
+    identity_rules: [
+      `Render exactly ${characterCount} character(s). Never add or remove subjects.`,
+      'Each uploaded character slot is mandatory and must appear exactly once.',
+      'Character references define identity only: face, hair, body structure, skin tone, outfit, shoes, accessories, and gender.',
+      'If multiple reference images belong to the same character slot, they describe the same subject and must be merged into one identity.',
+    ],
+    face_lock_rules: [
+      'If face-lock references are present, they are the highest-priority source for the final face.',
+      'Never let sample, style, or body references override the final facial identity.',
+    ],
+    composition_rules: [
+      hasSample
+        ? 'Sample image controls pose, framing, camera angle, spacing, and background only.'
+        : 'No sample image is present, so composition must come from the merged prompt text.',
+      hasSample
+        ? 'Never copy facial identity, outfit identity, or realism from the sample image.'
+        : 'Do not default to a plain black standing portrait unless explicitly requested.',
+    ],
+    scene_rules: combinedPrompt ? [combinedPrompt] : ['Generate the image using the provided references exactly.'],
+    style_rules: stylePrompt ? [stylePrompt] : [],
+    camera_rules: hasSample
+      ? ['Re-pose the final character into the sample composition exactly.']
+      : ['Infer camera and framing from the merged prompt text.'],
+    must_keep: [
+      'Stylized 3D game-avatar topology.',
+      'One-to-one slot preservation.',
+    ],
+    must_avoid: [
+      'Extra characters.',
+      'Identity blending.',
+      'Split-screen or collage layouts.',
+      'Photorealistic humanization.',
+    ],
+    negative_constraints_en: (payload.negativePrompt || '')
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean),
+  });
 };
 
-export const synthesizeImageGeneratePrompt = async (payload: ImageGenerateRecipePayload) => {
+type VertexPromptPreparationOptions = {
+  onVertexDiagnostic?: (entry: QueueVertexDiagnosticEntry) => Promise<void> | void;
+};
+
+const shouldBypassVertexPromptSynthesis = (payload: ImageGenerateRecipePayload) => {
+  const mergedPromptLength = String(payload.prompt || '').trim().length;
+  const negativePromptLength = String(payload.negativePrompt || '').trim().length;
+  const roleContractLength = buildImageRoleContractText(payload).length;
+  const referenceCount = getImageDirectorSources(payload).length;
+
+  const reasons: string[] = [];
+  if (mergedPromptLength >= VERTEX_SYNTH_BYPASS_PROMPT_LENGTH) reasons.push(`prompt_length=${mergedPromptLength}`);
+  if (negativePromptLength >= VERTEX_SYNTH_BYPASS_NEGATIVE_LENGTH) reasons.push(`negative_length=${negativePromptLength}`);
+  if (roleContractLength >= VERTEX_SYNTH_BYPASS_ROLE_CONTRACT_LENGTH) reasons.push(`role_contract_length=${roleContractLength}`);
+  if (referenceCount >= VERTEX_SYNTH_BYPASS_REFERENCE_COUNT) reasons.push(`reference_count=${referenceCount}`);
+
+  return {
+    bypass: reasons.length > 0,
+    reasons,
+    mergedPromptLength,
+    negativePromptLength,
+    roleContractLength,
+    referenceCount,
+  };
+};
+
+export const synthesizeImageGeneratePrompt = async (
+  payload: ImageGenerateRecipePayload,
+  options?: VertexPromptPreparationOptions,
+) => {
+  const bypassDecision = shouldBypassVertexPromptSynthesis(payload);
+  if (bypassDecision.bypass) {
+    if (options?.onVertexDiagnostic) {
+      await options.onVertexDiagnostic({
+        at: new Date().toISOString(),
+        task: 'image_prompt_synthesis',
+        status: 'warning',
+        model: 'gemini-3.1-pro-preview',
+        message: `Skipped Vertex prompt synthesis and used the local JSON prompt builder. Reasons: ${bypassDecision.reasons.join(', ')}`,
+      });
+    }
+    return buildFallbackSynthesizedPrompt(payload);
+  }
+
   try {
-    return await synthesizeStrictImagePrompt(payload);
+    return await synthesizeStrictImagePrompt(payload, {
+      onDiagnostic: options?.onVertexDiagnostic,
+    });
   } catch (error) {
     if (!isRecoverablePromptSynthesisError(error)) {
       throw error;
+    }
+
+    if (options?.onVertexDiagnostic) {
+      await options.onVertexDiagnostic({
+        at: new Date().toISOString(),
+        task: 'image_prompt_synthesis',
+        status: 'warning',
+        model: 'gemini-3.1-pro-preview',
+        message: `Vertex prompt synthesis fell back to the local JSON prompt builder. Original error: ${
+          error instanceof Error ? error.message : String(error || 'Unknown error')
+        }`,
+      });
     }
 
     console.warn('[queue-recipes] Vertex prompt synthesis unavailable, falling back to base prompt:', error);
@@ -258,11 +346,35 @@ export type ImageGeneratePromptPreparation = {
   providerPrompt: string;
 };
 
+const synthesizeImageGeneratePromptWithLastResortFallback = async (
+  payload: ImageGenerateRecipePayload,
+  options?: VertexPromptPreparationOptions,
+) => {
+  try {
+    return await synthesizeImageGeneratePrompt(payload, options);
+  } catch (error) {
+    if (options?.onVertexDiagnostic) {
+      await options.onVertexDiagnostic({
+        at: new Date().toISOString(),
+        task: 'image_prompt_synthesis',
+        status: 'warning',
+        model: 'gemini-3.1-pro-preview',
+        message: `Vertex prompt synthesis hit the last-resort local JSON fallback. Original error: ${
+          error instanceof Error ? error.message : String(error || 'Unknown error')
+        }`,
+      });
+    }
+
+    return buildFallbackSynthesizedPrompt(payload);
+  }
+};
+
 export const prepareImageGeneratePromptWithinLimit = async (
   payload: ImageGenerateRecipePayload,
+  options?: VertexPromptPreparationOptions,
 ): Promise<ImageGeneratePromptPreparation> => {
   let workingPayload: ImageGenerateRecipePayload = { ...payload };
-  let synthesizedPrompt = await synthesizeImageGeneratePrompt(workingPayload);
+  let synthesizedPrompt = await synthesizeImageGeneratePromptWithLastResortFallback(workingPayload, options);
   let providerPrompt = buildImageProviderPrompt(synthesizedPrompt, workingPayload, workingPayload.negativePrompt);
 
   if (providerPrompt.length <= TST_PROMPT_MAX_CHARACTERS) {
@@ -291,7 +403,12 @@ export const prepareImageGeneratePromptWithinLimit = async (
       sourcePromptForRewrite.length - overflow - PROMPT_REWRITE_SAFETY_MARGIN,
     );
     const rewrittenPrompt = normalizePromptWhitespace(
-      await rewriteUserPromptToFitLimit(originalUserPromptInput, targetCharacters, 'image generation'),
+      await rewriteUserPromptToFitLimit(
+        originalUserPromptInput,
+        targetCharacters,
+        'image generation',
+        options?.onVertexDiagnostic,
+      ),
     );
 
     if (!rewrittenPrompt) {
@@ -304,7 +421,7 @@ export const prepareImageGeneratePromptWithinLimit = async (
       userPromptInput: rewrittenPrompt,
       systemPromptPrefix,
     };
-    synthesizedPrompt = await synthesizeImageGeneratePrompt(workingPayload);
+    synthesizedPrompt = await synthesizeImageGeneratePromptWithLastResortFallback(workingPayload, options);
     providerPrompt = buildImageProviderPrompt(synthesizedPrompt, workingPayload, workingPayload.negativePrompt);
 
     if (providerPrompt.length <= TST_PROMPT_MAX_CHARACTERS) {

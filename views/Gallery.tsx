@@ -321,7 +321,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
           case 'rescuing': return lang === 'vi' ? 'Đang cứu kết quả' : 'Rescuing result';
           case 'preparing': return lang === 'vi' ? 'Đang chuẩn bị' : 'Preparing';
           case 'uploading_refs': return lang === 'vi' ? 'Đang tải ảnh tham chiếu' : 'Uploading references';
-          case 'synthesizing_prompt': return lang === 'vi' ? 'Đang tổng hợp prompt' : 'Synthesizing prompt';
+          case 'synthesizing_prompt': return lang === 'vi' ? 'Đang xử lý prompt text + role metadata' : 'Processing prompt text + role metadata';
           case 'building_payload': return lang === 'vi' ? 'Đang dựng payload' : 'Building payload';
           case 'dispatching': return lang === 'vi' ? 'Đang gửi provider' : 'Dispatching';
           case 'submitted': return lang === 'vi' ? 'Provider đã nhận job' : 'Submitted';

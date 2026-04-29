@@ -18,7 +18,7 @@ import { CONCURRENCY_LIMITS, useConcurrency } from '../../services/concurrencySe
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import { downloadAssetToBrowser } from '../../services/downloadService';
-import { createSolidFence, createStyleOnlyReference, optimizePayload } from '../../utils/imageProcessor';
+import { createFaceLockReference, createPoseOnlyReference, optimizePayload } from '../../utils/imageProcessor';
 import { APP_CONFIG } from '../../constants';
 import {
   type AuditionPricingOverride,
@@ -45,13 +45,6 @@ import {
   runCharacterAssistantAction,
   type CharacterAssistantToolId,
 } from '../../services/characterImageAssistService';
-import {
-  runCharacterImageReview,
-  buildCharacterReviewMessage,
-  formatCharacterReviewErrorMessage,
-  getCharacterReviewFlags,
-  type CharacterImageReviewResult,
-} from '../../services/characterImageReviewService';
 
 interface GenerationToolProps {
   feature: Feature;
@@ -117,25 +110,28 @@ const tryStageSampleReferenceInput = async (source: string, folder: string, aspe
     if (!source) return null;
 
     try {
-        const poseOnlyReference = await createSolidFence(source, aspectRatio, true);
+        const poseOnlyReference = await createPoseOnlyReference(source, aspectRatio);
         const optimizedSource = await optimizePayload(poseOnlyReference, 2048);
         return await uploadFileToR2(optimizedSource, folder);
     } catch (error) {
-        console.warn('[GenerationTool] Failed to stage sample reference through pose-only fence.', error);
+        console.warn('[GenerationTool] Failed to stage sample reference.', error);
         throw new Error('Không thể chuẩn hóa ảnh mẫu trước khi tạo ảnh. Vui lòng thử lại.');
     }
 };
 
-const tryStageStyleReferenceInput = async (source: string, folder: string) => {
+const tryStageFaceLockReferenceInput = async (source: string, folder: string) => {
     if (!source) return null;
 
     try {
-        const styleOnlyReference = await createStyleOnlyReference(source);
-        const optimizedSource = await optimizePayload(styleOnlyReference, 1536);
+        const faceLockReference = await createFaceLockReference(source);
+        if (faceLockReference === source) {
+            return null;
+        }
+        const optimizedSource = await optimizePayload(faceLockReference, 1536);
         return await uploadFileToR2(optimizedSource, folder);
     } catch (error) {
-        console.warn('[GenerationTool] Failed to stage style reference.', error);
-        throw new Error('Không thể chuẩn hóa ảnh style trước khi tạo ảnh. Vui lòng thử lại.');
+        console.warn('[GenerationTool] Failed to stage face-lock reference.', error);
+        throw new Error('Không thể khóa gương mặt nhân vật trước khi tạo ảnh. Vui lòng thử lại.');
     }
 };
 
@@ -182,10 +178,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const [guidePreviewCacheKey] = useState(() => Date.now());
 
   const [resultImage, setResultImage] = useState<string | null>(null);
-  const [characterReviews, setCharacterReviews] = useState<Record<number, CharacterImageReviewResult | null>>({});
-  const [reviewLoadingByCharId, setReviewLoadingByCharId] = useState<Record<number, boolean>>({});
   const [assistLoadingByCharId, setAssistLoadingByCharId] = useState<Record<number, CharacterAssistantToolId | null>>({});
-  const [reviewErrorByCharId, setReviewErrorByCharId] = useState<Record<number, string | null>>({});
   const [assistantErrorByCharId, setAssistantErrorByCharId] = useState<Record<number, string | null>>({});
   const [guideImageMeta, setGuideImageMeta] = useState<Record<'character' | 'sample', { width: number; height: number } | null>>({
       character: null,
@@ -314,18 +307,14 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       pricingEntries.some((entry) => entry.model.trim().toLowerCase() === getGenerationModelId('pro'));
   const isCatalogReady = !catalogLoading && !catalogError && pricingEntries.length > 0 && runtimeModels.length > 0;
   const hasCharacterImagesReady = characters.every((char) => !!char.bodyImage);
-  const isAnyCharacterReviewRunning = characters.some((char) => !!reviewLoadingByCharId[char.id]);
   const isAnyCharacterAssistRunning = characters.some((char) => !!assistLoadingByCharId[char.id]);
-  const hasCompletedCharacterReviews = characters.every((char) => !char.bodyImage || !!characterReviews[char.id]);
   const isGenerateDisabled =
       cooldownRemaining > 0 ||
       !isCatalogReady ||
       !selectedGenerationCost.available ||
       !prompt.trim() ||
       !hasCharacterImagesReady ||
-      isAnyCharacterReviewRunning ||
       isAnyCharacterAssistRunning ||
-      !hasCompletedCharacterReviews ||
       (aiModel === 'flash' ? !isFlashAvailable : !isProAvailable);
   const availableSpeedLabels = availableSpeeds.map((speedId) => speedId === 'slow' ? 'Tiết Kiệm' : 'Nhanh');
   const availableServerLabels = availableServers.map((serverId) => tstServerToUi(serverId));
@@ -564,13 +553,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           }
           return newChars;
       });
-      setCharacterReviews((prev) => {
-          const next: Record<number, CharacterImageReviewResult | null> = {};
-          for (let i = 1; i <= count; i += 1) {
-              next[i] = prev[i] ?? null;
-          }
-          return next;
-      });
   };
 
   const fetchSamplePrompts = async (isLoadMore = false) => {
@@ -664,26 +646,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       fileInputRef.current?.click();
   };
 
-  const reviewCharacterUpload = async (charId: number, imageSource: string) => {
-      setReviewLoadingByCharId((prev) => ({ ...prev, [charId]: true }));
-      try {
-          const review = await runCharacterImageReview(imageSource);
-          setCharacterReviews((prev) => ({ ...prev, [charId]: review }));
-          setReviewErrorByCharId((prev) => ({ ...prev, [charId]: null }));
-      } catch (error) {
-          const reviewErrorMessage = formatCharacterReviewErrorMessage(error);
-          console.warn('[GenerationTool] Failed to review character image', error);
-          setCharacterReviews((prev) => ({ ...prev, [charId]: null }));
-          setReviewErrorByCharId((prev) => ({
-              ...prev,
-              [charId]: reviewErrorMessage,
-          }));
-          notify(reviewErrorMessage, 'warning');
-      } finally {
-          setReviewLoadingByCharId((prev) => ({ ...prev, [charId]: false }));
-      }
-  };
-
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file || !activeUploadType.current) return;
@@ -697,10 +659,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
              setRefImage(result);
           } else if (currentType?.charId && currentType.type === 'body') {
               setCharacters(prev => prev.map(c => c.id === currentType.charId ? { ...c, bodyImage: result } : c));
-              setCharacterReviews((prev) => ({ ...prev, [currentType.charId!]: null }));
-              setReviewErrorByCharId((prev) => ({ ...prev, [currentType.charId!]: null }));
               setAssistantErrorByCharId((prev) => ({ ...prev, [currentType.charId!]: null }));
-              void reviewCharacterUpload(currentType.charId, result);
           }
       };
       reader.readAsDataURL(file);
@@ -792,7 +751,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                   : 'Đã làm nét xong cho ảnh nhân vật.',
               'success',
           );
-          await reviewCharacterUpload(charId, refreshedUrl);
       } catch (error) {
           console.error('[GenerationTool] Character assistant failed', error);
           setAssistantErrorByCharId((prev) => ({
@@ -924,6 +882,14 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                         const references: CharacterReferenceGroup['references'] = [];
 
                         if (char.bodyImage) {
+                            const stagedFaceLock = await tryStageFaceLockReferenceInput(
+                                char.bodyImage,
+                                `inputs/generation/${activeMode}/character-${charIndex + 1}/face`,
+                            );
+                            if (stagedFaceLock) {
+                                references.push({ source: stagedFaceLock, kind: 'face' });
+                            }
+
                             const stagedBody = await tryStageGenerationInput(
                                 char.bodyImage,
                                 `inputs/generation/${activeMode}/character-${charIndex + 1}/body`,
@@ -951,9 +917,26 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
             const stagedSampleImage = refImage
                 ? await tryStageSampleReferenceInput(refImage, `inputs/generation/${activeMode}/sample`, aspectRatio)
                 : null;
-            const stagedStyleImage = activeStylePreset
-                ? await tryStageStyleReferenceInput(activeStylePreset, `inputs/generation/${activeMode}/style`)
-                : null;
+            // Style presets stay text-only to avoid leaking preset character identity into the final render.
+            const stagedStyleImage = null;
+            const notifyInputMedia = [
+                ...stagedCharacterGroups.flatMap((group) =>
+                    group.references.map((reference) => ({
+                        url: reference.source,
+                        role: 'character' as const,
+                        kind: 'image' as const,
+                        userProvided: true,
+                    })),
+                ),
+                ...(stagedSampleImage
+                    ? [{
+                        url: stagedSampleImage,
+                        role: 'sample' as const,
+                        kind: 'image' as const,
+                        userProvided: true,
+                    }]
+                    : []),
+            ];
 
             const queuePayload: ImageGenerateRecipePayload = {
                 recipeType: 'image_generate_recipe_v1',
@@ -972,6 +955,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                 sampleImage: stagedSampleImage || null,
                 styleImage: stagedStyleImage || null,
                 stylePrompt: styleMetadata?.trigger_prompt || styleMetadata?.name || null,
+                __notifyInputMedia: notifyInputMedia,
             };
 
             await enqueueServerJob({
@@ -1532,14 +1516,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
                 <div className="flex flex-wrap justify-center gap-4 w-full">
                     {characters.map((char) => {
-                        const review = characterReviews[char.id];
-                        const reviewMessage = buildCharacterReviewMessage(review);
-                        const reviewError = reviewErrorByCharId[char.id];
                         const assistantError = assistantErrorByCharId[char.id];
-                        const isReviewing = !!reviewLoadingByCharId[char.id];
                         const activeAssist = assistLoadingByCharId[char.id];
                         const isAssistRunning = !!activeAssist;
-                        const hasCleanStatus = !!review && getCharacterReviewFlags(review).isClean;
 
                         return (
                             <div
@@ -1557,31 +1536,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                 </div>
 
                                 <div className="space-y-3">
-                                    {isReviewing && (
-                                        <div className="rounded-xl border border-audi-yellow/30 bg-audi-yellow/10 px-3 py-2 flex items-start gap-2">
-                                            <Icons.Loader className="w-3.5 h-3.5 text-audi-yellow animate-spin shrink-0 mt-0.5" />
-                                            <p className="text-[10px] leading-relaxed text-yellow-200">Đang quét nhanh độ nét và nền ảnh nhân vật...</p>
-                                        </div>
-                                    )}
-                                    {!isReviewing && reviewError && (
-                                        <div className="rounded-xl border border-orange-500/30 bg-orange-500/10 px-3 py-2 flex items-start gap-2">
-                                            <Icons.AlertTriangle className="w-3.5 h-3.5 text-orange-300 shrink-0 mt-0.5" />
-                                            <p className="text-[10px] leading-relaxed text-orange-200">Không thể quét ảnh nhân vật tự động: {reviewError}</p>
-                                        </div>
-                                    )}
-                                    {!isReviewing && reviewMessage && (
-                                        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 flex items-start gap-2">
-                                            <Icons.AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
-                                            <p className="text-[10px] leading-relaxed text-red-300">{reviewMessage}</p>
-                                        </div>
-                                    )}
-                                    {!isReviewing && hasCleanStatus && (
-                                        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 flex items-start gap-2">
-                                            <Icons.Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                                            <p className="text-[10px] leading-relaxed text-emerald-300">Ảnh nhân vật đang đủ rõ và nền đã sạch để AI bám đúng khuôn mặt, tóc và trang phục.</p>
-                                        </div>
-                                    )}
-
                                     <div onClick={() => handleUploadClick(char.id)} className="w-full h-64 bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-pink cursor-pointer relative overflow-hidden group/item transition-all flex flex-col items-center justify-center">
                                         {char.bodyImage ? (
                                             <img src={char.bodyImage} className="w-full h-full object-contain" alt="Body" />
@@ -1637,7 +1591,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                             </button>
                                         </div>
                                     )}
-                                    {!isReviewing && assistantError && (
+                                    {assistantError && (
                                         <div className="rounded-xl border border-orange-500/30 bg-orange-500/10 px-3 py-2 flex items-start gap-2">
                                             <Icons.AlertTriangle className="w-3.5 h-3.5 text-orange-300 shrink-0 mt-0.5" />
                                             <p className="text-[10px] leading-relaxed text-orange-200">Lỗi xử lý ảnh: {assistantError}</p>

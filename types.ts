@@ -1,4 +1,4 @@
-import type { QueueProgressLogEntry } from './shared/queueRecipes';
+import type { QueueProgressLogEntry, QueueVertexDiagnosticEntry } from './shared/queueRecipes';
 import type { QueueErrorCategory } from './shared/queueErrorClassifier';
 
 export type Language = 'vi' | 'en';
@@ -86,6 +86,7 @@ export interface GeneratedImage {
   progress?: number;
   queueStage?: string;
   queueLogs?: QueueProgressLogEntry[];
+  vertexDiagnostics?: QueueVertexDiagnosticEntry[];
   error?: string;
   errorCategory?: QueueErrorCategory;
   errorRaw?: string;
@@ -111,6 +112,7 @@ export interface AdminQueueJob {
   lastLogMessage?: string;
   lastLogAt?: string;
   queueLogs?: QueueProgressLogEntry[];
+  vertexDiagnostics?: QueueVertexDiagnosticEntry[];
   error?: string;
   errorCategory?: QueueErrorCategory;
   errorRaw?: string;
@@ -259,7 +261,6 @@ export interface HistoryItem {
     status: 'success' | 'pending' | 'failed';
     code?: string;
 }
-
 export interface CheckinConfig {
   day: number;
   reward: number;

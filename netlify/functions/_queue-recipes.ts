@@ -305,12 +305,35 @@ export type ImageGeneratePromptPreparation = {
   providerPrompt: string;
 };
 
+const synthesizeImageGeneratePromptWithLastResortFallback = async (
+  payload: ImageGenerateRecipePayload,
+  options?: VertexPromptPreparationOptions,
+) => {
+  try {
+    return await synthesizeImageGeneratePrompt(payload, options);
+  } catch (error) {
+    if (options?.onVertexDiagnostic) {
+      await options.onVertexDiagnostic({
+        at: new Date().toISOString(),
+        task: 'image_prompt_synthesis',
+        status: 'warning',
+        model: 'gemini-3.1-pro-preview',
+        message: `Vertex prompt synthesis hit the last-resort local JSON fallback. Original error: ${
+          error instanceof Error ? error.message : String(error || 'Unknown error')
+        }`,
+      });
+    }
+
+    return buildFallbackSynthesizedPrompt(payload);
+  }
+};
+
 export const prepareImageGeneratePromptWithinLimit = async (
   payload: ImageGenerateRecipePayload,
   options?: VertexPromptPreparationOptions,
 ): Promise<ImageGeneratePromptPreparation> => {
   let workingPayload: ImageGenerateRecipePayload = { ...payload };
-  let synthesizedPrompt = await synthesizeImageGeneratePrompt(workingPayload, options);
+  let synthesizedPrompt = await synthesizeImageGeneratePromptWithLastResortFallback(workingPayload, options);
   let providerPrompt = buildImageProviderPrompt(synthesizedPrompt, workingPayload, workingPayload.negativePrompt);
 
   if (providerPrompt.length <= TST_PROMPT_MAX_CHARACTERS) {
@@ -357,7 +380,7 @@ export const prepareImageGeneratePromptWithinLimit = async (
       userPromptInput: rewrittenPrompt,
       systemPromptPrefix,
     };
-    synthesizedPrompt = await synthesizeImageGeneratePrompt(workingPayload, options);
+    synthesizedPrompt = await synthesizeImageGeneratePromptWithLastResortFallback(workingPayload, options);
     providerPrompt = buildImageProviderPrompt(synthesizedPrompt, workingPayload, workingPayload.negativePrompt);
 
     if (providerPrompt.length <= TST_PROMPT_MAX_CHARACTERS) {

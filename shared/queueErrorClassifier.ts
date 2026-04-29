@@ -25,10 +25,7 @@ export const pickQueueFailureMessage = (
     .reverse()
     .find((entry) => entry && typeof entry.message === 'string' && entry.stage === 'failed');
 
-  if (
-    latestFailedLog?.message &&
-    (latestFailedLog.message.toLowerCase().includes('rescue tst') || isTerminalRescueFailureMessage(latestFailedLog.message))
-  ) {
+  if (latestFailedLog?.message) {
     return latestFailedLog.message;
   }
 

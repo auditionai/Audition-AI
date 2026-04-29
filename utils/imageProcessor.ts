@@ -83,6 +83,141 @@ const drawCoverCrop = (
     ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
 };
 
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+type FaceBoundingBox = {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+};
+
+export interface CharacterReferenceProfile {
+    facePriorityMode?: 'portrait_headshot';
+    primaryFaceAreaRatio?: number;
+    primaryFaceHeightRatio?: number;
+}
+
+const normalizeFaceBoundingBox = (value: any): FaceBoundingBox | null => {
+    const x = Number(value?.x);
+    const y = Number(value?.y);
+    const width = Number(value?.width);
+    const height = Number(value?.height);
+
+    if (![x, y, width, height].every((entry) => Number.isFinite(entry))) {
+        return null;
+    }
+
+    if (width <= 0 || height <= 0) {
+        return null;
+    }
+
+    return { x, y, width, height };
+};
+
+const detectCandidateFaceBoxes = async (img: HTMLImageElement): Promise<FaceBoundingBox[]> => {
+    try {
+        const FaceDetectorCtor = (globalThis as any)?.FaceDetector;
+        if (!FaceDetectorCtor) {
+            return [];
+        }
+
+        const detector = new FaceDetectorCtor({
+            fastMode: true,
+            maxDetectedFaces: 5,
+        });
+        const detections = await detector.detect(img);
+        if (!Array.isArray(detections)) {
+            return [];
+        }
+
+        return detections
+            .map((detection) => normalizeFaceBoundingBox(detection?.boundingBox))
+            .filter((box): box is FaceBoundingBox => Boolean(box));
+    } catch (error) {
+        console.warn('Face detection for face-lock reference failed:', error);
+        return [];
+    }
+};
+
+const scoreCandidateFaceBox = (box: FaceBoundingBox, imageWidth: number, imageHeight: number) => {
+    const centerX = box.x + box.width / 2;
+    const centerY = box.y + box.height / 2;
+    const areaRatio = (box.width * box.height) / (imageWidth * imageHeight);
+    const heightRatio = box.height / imageHeight;
+    const normalizedCenterDistance = Math.hypot(
+        (centerX - imageWidth / 2) / imageWidth,
+        (centerY - imageHeight / 2) / imageHeight,
+    );
+
+    const centerScore = clamp(1.1 - normalizedCenterDistance * 2.1, 0, 1.1);
+    const sizeScore = clamp(areaRatio * 10.5, 0, 1.15);
+    const lowerHalfBonus = clamp((centerY / imageHeight - 0.28) * 0.7, 0, 0.38);
+    const oversizePenalty = heightRatio > 0.34 ? (heightRatio - 0.34) * 3.2 : 0;
+
+    return centerScore + sizeScore + lowerHalfBonus - oversizePenalty;
+};
+
+const buildCropFromFaceBox = (box: FaceBoundingBox, imageWidth: number, imageHeight: number) => {
+    const centerX = box.x + box.width / 2;
+    const centerY = box.y + box.height * 0.9;
+    const cropWidth = clamp(box.width * 2.6, imageWidth * 0.34, imageWidth * 0.74);
+    const cropHeight = clamp(box.height * 3.3, imageHeight * 0.34, imageHeight * 0.82);
+    const sx = clamp(centerX - cropWidth / 2, 0, Math.max(0, imageWidth - cropWidth));
+    const sy = clamp(centerY - cropHeight / 2, 0, Math.max(0, imageHeight - cropHeight));
+
+    return {
+        sx,
+        sy,
+        sw: Math.min(imageWidth - sx, cropWidth),
+        sh: Math.min(imageHeight - sy, cropHeight),
+    };
+};
+
+const buildDetailCropFromFaceBox = (box: FaceBoundingBox, imageWidth: number, imageHeight: number) => {
+    const centerX = box.x + box.width / 2;
+    const centerY = box.y + box.height * 0.72;
+    const cropWidth = clamp(box.width * 1.95, imageWidth * 0.22, imageWidth * 0.5);
+    const cropHeight = clamp(box.height * 2.2, imageHeight * 0.22, imageHeight * 0.56);
+    const sx = clamp(centerX - cropWidth / 2, 0, Math.max(0, imageWidth - cropWidth));
+    const sy = clamp(centerY - cropHeight / 2, 0, Math.max(0, imageHeight - cropHeight));
+
+    return {
+        sx,
+        sy,
+        sw: Math.min(imageWidth - sx, cropWidth),
+        sh: Math.min(imageHeight - sy, cropHeight),
+    };
+};
+
+export const analyzeCharacterReferenceProfile = async (source: string): Promise<CharacterReferenceProfile> => {
+    try {
+        const img = await loadImageWithTimeout(source, 10000);
+        const detectedFaces = await detectCandidateFaceBoxes(img);
+        if (detectedFaces.length === 0) {
+            return {};
+        }
+
+        const bestFace = [...detectedFaces].sort(
+            (a, b) => scoreCandidateFaceBox(b, img.width, img.height) - scoreCandidateFaceBox(a, img.width, img.height),
+        )[0];
+        const primaryFaceAreaRatio = (bestFace.width * bestFace.height) / (img.width * img.height);
+        const primaryFaceHeightRatio = bestFace.height / img.height;
+        const facePriorityMode = primaryFaceHeightRatio >= 0.25 || primaryFaceAreaRatio >= 0.09
+            ? 'portrait_headshot'
+            : undefined;
+
+        return {
+            facePriorityMode,
+            primaryFaceAreaRatio,
+            primaryFaceHeightRatio,
+        };
+    } catch (error) {
+        console.warn('Character reference profile analysis failed:', error);
+        return {};
+    }
+};
+
 const getFaceLockCrop = (img: HTMLImageElement) => {
     const cropWidth = img.width * 0.58;
     const cropHeight = img.height * 0.48;
@@ -147,21 +282,31 @@ export const createFaceLockReference = async (source: string): Promise<string> =
 
         const size = 1024;
         const padding = 28;
-        const { sx, sy, sw, sh } = getFaceLockCrop(img);
+        const detectedFaces = await detectCandidateFaceBoxes(img);
+        const detectedCrop = detectedFaces.length > 0
+            ? buildCropFromFaceBox(
+                [...detectedFaces].sort(
+                    (a, b) => scoreCandidateFaceBox(b, img.width, img.height) - scoreCandidateFaceBox(a, img.width, img.height),
+                )[0],
+                img.width,
+                img.height,
+            )
+            : null;
+        const { sx, sy, sw, sh } = detectedCrop || getFaceLockCrop(img);
 
         canvas.width = size;
         canvas.height = size;
 
-        ctx.fillStyle = '#111111';
+        ctx.fillStyle = '#151515';
         ctx.fillRect(0, 0, size, size);
 
         ctx.save();
-        ctx.filter = 'blur(18px) brightness(0.72)';
+        ctx.filter = 'blur(18px) brightness(0.84) saturate(0.96)';
         drawCoverCrop(ctx, img, sx, sy, sw, sh, 0, 0, size, size);
         ctx.restore();
 
         ctx.save();
-        ctx.filter = 'contrast(1.08) saturate(1.03)';
+        ctx.filter = 'contrast(1.01) saturate(1.0) brightness(1.0)';
         drawCoverCrop(
             ctx,
             img,
@@ -183,6 +328,74 @@ export const createFaceLockReference = async (source: string): Promise<string> =
         return canvas.toDataURL('image/jpeg', 0.94);
     } catch (error) {
         console.warn('Face-lock reference generation failed:', error);
+        return source;
+    }
+};
+
+export const createFaceDetailReference = async (source: string): Promise<string> => {
+    try {
+        const img = await loadImageWithTimeout(source, 10000);
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return source;
+
+        const size = 1024;
+        const padding = 20;
+        const detectedFaces = await detectCandidateFaceBoxes(img);
+        const detailCrop = detectedFaces.length > 0
+            ? buildDetailCropFromFaceBox(
+                [...detectedFaces].sort(
+                    (a, b) => scoreCandidateFaceBox(b, img.width, img.height) - scoreCandidateFaceBox(a, img.width, img.height),
+                )[0],
+                img.width,
+                img.height,
+            )
+            : (() => {
+                const baseCrop = getFaceLockCrop(img);
+                return {
+                    sx: baseCrop.sx + baseCrop.sw * 0.1,
+                    sy: baseCrop.sy + baseCrop.sh * 0.02,
+                    sw: baseCrop.sw * 0.8,
+                    sh: baseCrop.sh * 0.78,
+                };
+            })();
+
+        const { sx, sy, sw, sh } = detailCrop;
+
+        canvas.width = size;
+        canvas.height = size;
+
+        ctx.fillStyle = '#181818';
+        ctx.fillRect(0, 0, size, size);
+
+        ctx.save();
+        ctx.filter = 'blur(16px) brightness(0.9) saturate(0.98)';
+        drawCoverCrop(ctx, img, sx, sy, sw, sh, 0, 0, size, size);
+        ctx.restore();
+
+        ctx.save();
+        ctx.filter = 'contrast(1.02) saturate(1.01) brightness(1.01)';
+        drawCoverCrop(
+            ctx,
+            img,
+            sx,
+            sy,
+            sw,
+            sh,
+            padding,
+            padding,
+            size - padding * 2,
+            size - padding * 2,
+        );
+        ctx.restore();
+
+        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(padding, padding, size - padding * 2, size - padding * 2);
+
+        return canvas.toDataURL('image/jpeg', 0.95);
+    } catch (error) {
+        console.warn('Face-detail reference generation failed:', error);
         return source;
     }
 };

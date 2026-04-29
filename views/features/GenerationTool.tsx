@@ -18,8 +18,9 @@ import { CONCURRENCY_LIMITS, useConcurrency } from '../../services/concurrencySe
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import { downloadAssetToBrowser } from '../../services/downloadService';
-import { createFaceLockReference, createPoseOnlyReference, optimizePayload } from '../../utils/imageProcessor';
+import { analyzeCharacterReferenceProfile, createFaceDetailReference, createFaceLockReference, createPoseOnlyReference, optimizePayload } from '../../utils/imageProcessor';
 import { APP_CONFIG } from '../../constants';
+import { DEFAULT_IMAGE_NEGATIVE_PROMPT } from '../../shared/imagePromptDefaults';
 import {
   type AuditionPricingOverride,
   fetchTstModels,
@@ -135,6 +136,22 @@ const tryStageFaceLockReferenceInput = async (source: string, folder: string) =>
     }
 };
 
+const tryStageFaceDetailReferenceInput = async (source: string, folder: string) => {
+    if (!source) return null;
+
+    try {
+        const faceDetailReference = await createFaceDetailReference(source);
+        if (faceDetailReference === source) {
+            return null;
+        }
+        const optimizedSource = await optimizePayload(faceDetailReference, 1536);
+        return await uploadFileToR2(optimizedSource, folder);
+    } catch (error) {
+        console.warn('[GenerationTool] Failed to stage face-detail reference.', error);
+        throw new Error('Không thể khóa chi tiết gương mặt nhân vật trước khi tạo ảnh. Vui lòng thử lại.');
+    }
+};
+
 export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, onNavigateToFeature, onNavigateView }) => {
   const { notify } = useNotification();
   const { userId, queueStats, triggerPoll } = useConcurrency();
@@ -150,7 +167,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
   const [refImage, setRefImage] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
-  const [negativePrompt, setNegativePrompt] = useState('crowd, extra people, audience, bystanders, deformed, bad anatomy, disfigured, poorly drawn face, mutation, mutated, extra limb, ugly, disgusting, poorly drawn hands, missing limb, floating limbs, disconnected limbs, malformed hands, blur, out of focus, long neck, long body, mutated hands and fingers, out of frame, blender, doll, cropped, low-res, close-up, poorly-drawn face, out of frame double, two heads, blurred, ugly, disfigured, too many fingers, deformed, repetitive, black and white, grainy, extra limbs, bad anatomy, duplicate, photorealistic, realistic photo, sketch, cartoon, drawing, art, 2d');
 
   const [showSampleModal, setShowSampleModal] = useState(false);
   const [samplePrompts, setSamplePrompts] = useState<SamplePrompt[]>([]);
@@ -880,8 +896,19 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                 await Promise.all(
                     characters.map(async (char, charIndex) => {
                         const references: CharacterReferenceGroup['references'] = [];
+                        let facePriorityMode: CharacterReferenceGroup['facePriorityMode'];
 
                         if (char.bodyImage) {
+                            const referenceProfile = await analyzeCharacterReferenceProfile(char.bodyImage);
+                            facePriorityMode = referenceProfile?.facePriorityMode;
+                            const stagedFaceDetail = await tryStageFaceDetailReferenceInput(
+                                char.bodyImage,
+                                `inputs/generation/${activeMode}/character-${charIndex + 1}/face-detail`,
+                            );
+                            if (stagedFaceDetail) {
+                                references.push({ source: stagedFaceDetail, kind: 'face_detail' });
+                            }
+
                             const stagedFaceLock = await tryStageFaceLockReferenceInput(
                                 char.bodyImage,
                                 `inputs/generation/${activeMode}/character-${charIndex + 1}/face`,
@@ -902,6 +929,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                         return {
                             characterIndex: charIndex + 1,
                             gender: char.gender,
+                            facePriorityMode,
                             references,
                         } satisfies CharacterReferenceGroup;
                     })
@@ -917,8 +945,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
             const stagedSampleImage = refImage
                 ? await tryStageSampleReferenceInput(refImage, `inputs/generation/${activeMode}/sample`, aspectRatio)
                 : null;
-            // Style presets stay text-only to avoid leaking preset character identity into the final render.
-            const stagedStyleImage = null;
+            const stagedStyleImage = activeStylePreset
+                ? await tryStageGenerationInput(activeStylePreset, `inputs/generation/${activeMode}/style`)
+                : null;
             const notifyInputMedia = [
                 ...stagedCharacterGroups.flatMap((group) =>
                     group.references.map((reference) => ({
@@ -936,6 +965,14 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                         userProvided: true,
                     }]
                     : []),
+                ...(stagedStyleImage
+                    ? [{
+                        url: stagedStyleImage,
+                        role: 'style' as const,
+                        kind: 'image' as const,
+                        userProvided: false,
+                    }]
+                    : []),
             ];
 
             const queuePayload: ImageGenerateRecipePayload = {
@@ -949,7 +986,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                 aspectRatio,
                 speed: effectiveSpeedId,
                 serverId: effectiveServerId,
-                negativePrompt: negativePrompt.trim() || undefined,
+                negativePrompt: DEFAULT_IMAGE_NEGATIVE_PROMPT,
                 characterReferenceGroups: stagedCharacterGroups,
                 characterImages: stagedCharacterImages,
                 sampleImage: stagedSampleImage || null,

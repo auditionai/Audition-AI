@@ -378,7 +378,10 @@ export const prepareImageGeneratePromptWithinLimit = async (
   options?: VertexPromptPreparationOptions,
 ): Promise<ImageGeneratePromptPreparation> => {
   let workingPayload: ImageGenerateRecipePayload = { ...payload };
-  if (!workingPayload.visionAnalysis && getImageDirectorSources(workingPayload).length > 0) {
+  if (
+    !workingPayload.visionAnalysis &&
+    getImageDirectorSources(workingPayload).length > 0
+  ) {
     try {
       const visionAnalysis = await analyzeImageGenerationVision(workingPayload, {
         onDiagnostic: options?.onVertexDiagnostic,

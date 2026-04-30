@@ -353,7 +353,7 @@ export const buildImageRoleWeights = (
       characterBodyIdentity: 0.62,
       characterFaceIdentity: 0.98,
       characterFaceDetail: 1,
-      styleRender: 0.72,
+      styleRender: 0.84,
     };
   }
 
@@ -364,7 +364,7 @@ export const buildImageRoleWeights = (
       characterBodyIdentity: 0.96,
       characterFaceIdentity: 0.74,
       characterFaceDetail: 0.42,
-      styleRender: 0.7,
+      styleRender: 0.82,
     };
   }
 
@@ -374,7 +374,7 @@ export const buildImageRoleWeights = (
     characterBodyIdentity: 0.9,
     characterFaceIdentity: 0.9,
     characterFaceDetail: 0.68,
-    styleRender: 0.7,
+    styleRender: 0.82,
   };
 };
 
@@ -464,7 +464,7 @@ const IMAGE_QUALITY_BOOSTERS =
 const COMPACT_IMAGE_QUALITY_BOOSTERS =
   'ultra-detailed, stylized 3D fashion-game render, Korean MMO 3D style, crisp edges, polished materials, adult-proportioned avatar anatomy, natural limb flow, unreal engine 5 render, cinematic lighting, ray tracing, hdr';
 const IMAGE_NEGATIVE_PROMPT =
-  'low quality, bad anatomy, worst quality, blur, grain, watermark, text, signature, bad hands, bad face, mixed backgrounds, conflicting styles, extra characters, unwanted people from style reference, real people, photorealistic humans, photograph, realistic photography, real life, semi-realistic human, cinematic human portrait, live action, realistic skin pores, natural skin texture, DSLR, realistic male model, realistic female model, hyperreal face, realistic eyelashes, realistic fabric, anime, cartoon, 2d, flat shading, floating character, disconnected limbs, hands in the air, feet not touching the ground, floating objects, unnatural posture, floating in mid-air, levitating, hovering, disconnected from background, bad perspective, illogical physics, extra arm, extra arms, extra hand, extra hands, extra leg, extra legs, extra foot, extra feet, duplicate hand, duplicate hands, duplicate foot, duplicate feet, duplicated limb, duplicated limbs, malformed feet, merged fingers, fused fingers, six fingers, seven fingers, broken wrist, twisted arm, twisted leg, doll face, mannequin face, mannequin body, waxy skin, plastic skin, dark skin, darker skin, tanned skin, bronzed skin, yellow skin, orange skin, muddy skin tone, incorrect skin tone, skin tone shift, chibi proportions, giant eyes, baby face, stiff pose, rigid pose, stiff limbs, frozen posture, uncanny face, over-smoothed face, panel layout, split screen, tiled image, image grid, collage, storyboard, diptych, triptych, quadrants, four panels, four-up layout, contact sheet';
+  'low quality, bad anatomy, worst quality, blur, grain, watermark, text, signature, bad hands, bad face, mixed backgrounds, conflicting styles, extra characters, unwanted people from style reference, real people, photorealistic humans, photograph, realistic photography, real life, semi-realistic human, cinematic human portrait, live action, realistic skin pores, natural skin texture, DSLR, realistic male model, realistic female model, hyperreal face, realistic eyelashes, realistic fabric, anime, cartoon, 2d, flat shading, floating character, disconnected limbs, hands in the air, feet not touching the ground, floating objects, unnatural posture, floating in mid-air, levitating, hovering, disconnected from background, bad perspective, illogical physics, extra arm, extra arms, extra hand, extra hands, extra leg, extra legs, extra foot, extra feet, duplicate hand, duplicate hands, duplicate foot, duplicate feet, duplicated limb, duplicated limbs, malformed feet, merged fingers, fused fingers, six fingers, seven fingers, broken wrist, twisted arm, twisted leg, doll face, mannequin face, mannequin body, waxy skin, plastic skin, toy-like plastic sheen, glossy mannequin skin, hard specular skin, harsh facial planes, dark skin, darker skin, tanned skin, bronzed skin, yellow skin, orange skin, muddy skin tone, incorrect skin tone, skin tone shift, chibi proportions, giant eyes, baby face, stiff pose, rigid pose, stiff limbs, frozen posture, uncanny face, over-smoothed face, panel layout, split screen, tiled image, image grid, collage, storyboard, diptych, triptych, quadrants, four panels, four-up layout, contact sheet';
 const IMAGE_ANATOMY_GUARD_CONSTRAINTS =
   'ANATOMY GUARD: Keep exactly one coherent body per character slot with natural adult-proportioned 3D anatomy. Never invent extra arms, extra hands, extra legs, extra feet, duplicated limbs, duplicated hands, duplicated feet, fused fingers, or malformed joints. Each visible hand must read as one coherent hand. Each visible foot must read as one coherent foot. If a hand, foot, or limb is partially hidden, keep it hidden naturally instead of hallucinating additional anatomy. Respect gravity, chair contact, ground contact, and believable joint bending.';
 const IMAGE_SKIN_TONE_LOCK_CONSTRAINTS =
@@ -1194,7 +1194,8 @@ const buildProStructuredProviderPrompt = (
     normalizedSynthesizedPrompt || 'No director synthesis available.',
     '',
     getShotAwareRenderProfile(roleContract.shotType),
-    `QUALITY: ${COMPACT_IMAGE_QUALITY_BOOSTERS}`,
+    `QUALITY: ${IMAGE_QUALITY_BOOSTERS}`,
+    'SOFTNESS RULE: prioritize soft beauty shading, natural material transitions, controlled highlights, softer facial planes, and non-plastic skin response. Avoid toy-like rigidity, glossy mannequin sheen, or stiff body flow.',
     'SKIN TONE LOCK: match the uploaded character complexion exactly.',
     'ANATOMY GUARD: keep one coherent natural body with no extra limbs.',
     `NEGATIVE: ${compactNegativePrompt}`,

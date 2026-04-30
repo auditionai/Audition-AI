@@ -169,6 +169,26 @@ export interface ImageGenerateRecipePayload {
   __vertexDiagnostics?: QueueVertexDiagnosticEntry[];
 }
 
+const isProImageGenerationModel = (modelId?: string | null) =>
+  String(modelId || '').trim().toLowerCase() === 'nano-banana-pro';
+
+const sanitizeProviderSensitiveVisionText = (value?: string | null) => {
+  const normalized = String(value || '').trim();
+  if (!normalized) return '';
+
+  return normalized
+    .replace(/\bcigarette\b/gi, 'handheld prop')
+    .replace(/\bsmoking\b/gi, 'holding a prop')
+    .replace(/\bsmoke\b/gi, 'atmospheric haze')
+    .replace(/\bflames?\b/gi, 'dramatic warm light')
+    .replace(/\bfiery\b/gi, 'dramatically lit')
+    .replace(/\bfire\b/gi, 'dramatic backlight')
+    .replace(/\bengulfed in flames\b/gi, 'dramatically backlit')
+    .replace(/\bexplosion\b/gi, 'bright burst of light')
+    .replace(/\blingerie\b/gi, 'fashion outfit')
+    .replace(/\bcleavage\b/gi, 'upper outfit detail');
+};
+
 const getCharacterReferenceKindPriority = (
   kind: CharacterReferenceKind,
   facePriorityMode?: CharacterFacePriorityMode,
@@ -624,9 +644,10 @@ export const getImageDirectorSources = (
   ].filter((value): value is string => Boolean(value));
 
 export const getImageRenderReferenceEntries = (
-  payload: Pick<ImageGenerateRecipePayload, 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
+  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
 ): ImageRenderReferenceEntry[] => {
   const entries: ImageRenderReferenceEntry[] = [];
+  const allowStyleRenderRef = !isProImageGenerationModel(payload.modelId);
 
   if (payload.sampleImage) {
     entries.push({
@@ -656,7 +677,7 @@ export const getImageRenderReferenceEntries = (
     });
   });
 
-  if (payload.styleImage) {
+  if (payload.styleImage && allowStyleRenderRef) {
     entries.push({
       role: 'style',
       source: payload.styleImage,
@@ -668,11 +689,11 @@ export const getImageRenderReferenceEntries = (
 };
 
 export const getImageRenderReferenceSources = (
-  payload: Pick<ImageGenerateRecipePayload, 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
+  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
 ) => getImageRenderReferenceEntries(payload).map((entry) => entry.source);
 
 export const buildImageRoleContract = (
-  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio' | 'visionAnalysis'>,
+  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio' | 'visionAnalysis'>,
 ): ImageRoleContract => {
   const renderEntries = getImageRenderReferenceEntries(payload);
   const characterGroups = getImageCharacterReferenceGroups(payload);
@@ -749,16 +770,19 @@ export const buildImageRoleContract = (
       ];
 
   const sampleVision = payload.visionAnalysis?.sample;
+  const sanitizeVisionText = isProImageGenerationModel(payload.modelId)
+    ? sanitizeProviderSensitiveVisionText
+    : (value?: string | null) => String(value || '').trim();
   if (sampleVision) {
     const sampleSignals = [
-      sampleVision.pose ? `pose: ${sampleVision.pose}` : '',
-      sampleVision.camera ? `camera: ${sampleVision.camera}` : '',
-      sampleVision.framing ? `framing: ${sampleVision.framing}` : '',
-      sampleVision.subjectPlacement ? `placement: ${sampleVision.subjectPlacement}` : '',
-      sampleVision.background ? `background: ${sampleVision.background}` : '',
-      sampleVision.limbLayout ? `limbs: ${sampleVision.limbLayout}` : '',
-      sampleVision.supportContact ? `support/contact: ${sampleVision.supportContact}` : '',
-      sampleVision.occlusionNotes ? `occlusion: ${sampleVision.occlusionNotes}` : '',
+      sampleVision.pose ? `pose: ${sanitizeVisionText(sampleVision.pose)}` : '',
+      sampleVision.camera ? `camera: ${sanitizeVisionText(sampleVision.camera)}` : '',
+      sampleVision.framing ? `framing: ${sanitizeVisionText(sampleVision.framing)}` : '',
+      sampleVision.subjectPlacement ? `placement: ${sanitizeVisionText(sampleVision.subjectPlacement)}` : '',
+      sampleVision.background ? `background: ${sanitizeVisionText(sampleVision.background)}` : '',
+      sampleVision.limbLayout ? `limbs: ${sanitizeVisionText(sampleVision.limbLayout)}` : '',
+      sampleVision.supportContact ? `support/contact: ${sanitizeVisionText(sampleVision.supportContact)}` : '',
+      sampleVision.occlusionNotes ? `occlusion: ${sanitizeVisionText(sampleVision.occlusionNotes)}` : '',
     ].filter(Boolean);
     if (sampleSignals.length > 0) {
       compositionRules.push(`Sample composition anchor: ${sampleSignals.join('; ')}.`);
@@ -787,11 +811,11 @@ export const buildImageRoleContract = (
   const styleVision = payload.visionAnalysis?.style;
   if (styleVision) {
     const styleSignals = [
-      styleVision.renderStyle ? `render style: ${styleVision.renderStyle}` : '',
-      styleVision.materialStyle ? `materials: ${styleVision.materialStyle}` : '',
-      styleVision.lightingStyle ? `lighting: ${styleVision.lightingStyle}` : '',
-      styleVision.colorGrading ? `color grade: ${styleVision.colorGrading}` : '',
-      styleVision.finish ? `finish: ${styleVision.finish}` : '',
+      styleVision.renderStyle ? `render style: ${sanitizeVisionText(styleVision.renderStyle)}` : '',
+      styleVision.materialStyle ? `materials: ${sanitizeVisionText(styleVision.materialStyle)}` : '',
+      styleVision.lightingStyle ? `lighting: ${sanitizeVisionText(styleVision.lightingStyle)}` : '',
+      styleVision.colorGrading ? `color grade: ${sanitizeVisionText(styleVision.colorGrading)}` : '',
+      styleVision.finish ? `finish: ${sanitizeVisionText(styleVision.finish)}` : '',
     ].filter(Boolean);
     if (styleSignals.length > 0) {
       styleRules.push(`Style visual anchor: ${styleSignals.join('; ')}.`);
@@ -839,7 +863,7 @@ export const buildImageRoleContract = (
 };
 
 export const buildImageRoleContractText = (
-  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio'>,
+  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio' | 'visionAnalysis'>,
 ) => {
   const contract = buildImageRoleContract(payload);
   const referenceLines = contract.renderEntries.length > 0
@@ -877,7 +901,7 @@ export const buildImageRoleContractText = (
 };
 
 const buildImageReferenceOrderDirective = (
-  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
+  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
 ) => {
   const entries = getImageRenderReferenceEntries(payload);
   const hasSample = Boolean(payload.sampleImage);
@@ -940,7 +964,7 @@ const buildImageReferenceOrderDirective = (
 };
 
 const buildReducedImageReferenceOrderDirectiveWithoutSample = (
-  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'styleImage'>,
+  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'styleImage'>,
 ) => {
   const entries = getImageRenderReferenceEntries(payload);
   const layeredSingleSubjectAllowed = allowsLayeredSingleSubjectComposition(payload);
@@ -987,7 +1011,7 @@ const buildReducedImageReferenceOrderDirectiveWithoutSample = (
 };
 
 const buildCompactProviderReferenceSummary = (
-  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
+  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
 ) => {
   const entries = getImageRenderReferenceEntries(payload);
   if (entries.length === 0) {
@@ -1016,7 +1040,7 @@ const buildCompactProviderReferenceSummary = (
 
 const buildDetailedImageProviderPrompt = (
   synthesizedPrompt: string,
-  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio'>,
+  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio' | 'visionAnalysis'>,
   mergedNegativePrompt: string,
 ) => {
   const roleContract = buildImageRoleContract(payload);
@@ -1057,7 +1081,7 @@ const buildDetailedImageProviderPrompt = (
 
 const buildReducedImageProviderPromptWithoutSample = (
   synthesizedPrompt: string,
-  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'styleImage' | 'aspectRatio'>,
+  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'styleImage' | 'aspectRatio' | 'visionAnalysis'>,
   mergedNegativePrompt: string,
 ) => {
   const roleContract = buildImageRoleContract(payload);
@@ -1098,7 +1122,7 @@ const buildReducedImageProviderPromptWithoutSample = (
 
 export const buildImageProviderPrompt = (
   synthesizedPrompt: string,
-  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio'>,
+  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio' | 'visionAnalysis'>,
   customNegativePrompt?: string,
 ) => {
   const mergedNegativePrompt = dedupeCsvPromptTerms(IMAGE_NEGATIVE_PROMPT, customNegativePrompt);

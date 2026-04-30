@@ -5,6 +5,7 @@ import {
   getEffectiveImageGenerationResolution,
   getImageRenderReferenceEntries,
   getImageRenderReferenceSources,
+  isProImageGenerationModel,
   type ImageGenerateRecipePayload,
   type QueueVertexDiagnosticEntry,
   type QueueRecipePayload,

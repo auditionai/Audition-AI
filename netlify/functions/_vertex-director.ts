@@ -1,6 +1,7 @@
 import {
   buildImageRoleContractText,
   getImageCharacterReferenceGroups,
+  isProImageGenerationModel,
   type ImageGenerateRecipePayload,
   type QueueVertexDiagnosticEntry,
 } from '../../shared/queueRecipes';
@@ -230,6 +231,42 @@ const buildCompactImageDirectorInstruction = (
   hasSample: boolean,
   hasStyle: boolean,
 ) => {
+  if (isProImageGenerationModel(payload.modelId)) {
+    const characterCount = payload.characterCount || getImageCharacterReferenceGroups(payload).length || 1;
+    const sections: string[] = [
+      'Return ONLY one compact valid JSON object in English for the renderer.',
+      'No markdown. No commentary. No code fences.',
+      `USER CORE REQUEST: ${normalizePromptWhitespace(payload.prompt || '').slice(0, 700)}`,
+      `FINAL CHARACTER COUNT: EXACTLY ${characterCount}.`,
+      hasSample
+        ? 'SAMPLE = scene plate only. Keep background, pose, contact points, framing, props, and camera.'
+        : 'No sample image is present. Derive composition from the user request.',
+      'CHARACTER = identity only. Keep face, skin tone, outfit, body structure, and avatar details from character refs.',
+      hasStyle ? 'STYLE = render finish only. Never use it for pose, outfit, or identity.' : 'No style image is present.',
+      payload.stylePrompt?.trim() ? `STYLE KEYWORDS: ${normalizePromptWhitespace(payload.stylePrompt).slice(0, 220)}` : '',
+      payload.negativePrompt?.trim() ? `NEGATIVE CONSTRAINTS: ${normalizePromptWhitespace(payload.negativePrompt).slice(0, 260)}` : '',
+      'Schema:',
+      '{',
+      '  "language": "en",',
+      '  "system_prompt_en": "string",',
+      '  "user_prompt_en": "string",',
+      '  "merged_prompt_en": "string",',
+      '  "character_count": number,',
+      '  "identity_rules": ["string"],',
+      '  "face_lock_rules": ["string"],',
+      '  "composition_rules": ["string"],',
+      '  "scene_rules": ["string"],',
+      '  "style_rules": ["string"],',
+      '  "camera_rules": ["string"],',
+      '  "must_keep": ["string"],',
+      '  "must_avoid": ["string"],',
+      '  "negative_constraints_en": ["string"]',
+      '}',
+    ];
+
+    return sections.filter(Boolean).join('\n');
+  }
+
   const characterGroups = getImageCharacterReferenceGroups(payload);
   const characterCount = payload.characterCount || characterGroups.length || 1;
   const roleContractText = buildImageRoleContractText(payload);
@@ -332,8 +369,10 @@ export const synthesizeStrictImagePrompt = async (
     throw new Error('CRITICAL FAILURE: Character reference images are missing.');
   }
 
-  const primaryInstruction = buildStrictImageDirectorInstruction(payload, hasCharacters, hasSample, hasStyle);
   const compactInstruction = buildCompactImageDirectorInstruction(payload, hasCharacters, hasSample, hasStyle);
+  const primaryInstruction = isProImageGenerationModel(payload.modelId)
+    ? compactInstruction
+    : buildStrictImageDirectorInstruction(payload, hasCharacters, hasSample, hasStyle);
 
   return runWithVertexCredentialFailover({
     taskName: 'image prompt synthesis',

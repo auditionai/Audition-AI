@@ -3,6 +3,7 @@ import {
   buildImageRoleContractText,
   getImageDirectorSources,
   getEffectiveImageGenerationResolution,
+  getImageRenderReferenceEntries,
   getImageRenderReferenceSources,
   type ImageGenerateRecipePayload,
   type QueueVertexDiagnosticEntry,
@@ -147,6 +148,7 @@ const isRecoverablePromptSynthesisError = (error: unknown) => {
 };
 
 const buildFallbackSynthesizedPrompt = (payload: ImageGenerateRecipePayload) => {
+  const isProModel = isProImageGenerationModel(payload.modelId);
   const combinedPrompt = payload.prompt?.trim() || '';
   const systemPromptPrefix = payload.systemPromptPrefix?.trim() || '';
   const userPrompt = payload.userPromptInput?.trim() || combinedPrompt;
@@ -211,12 +213,13 @@ const shouldBypassVertexPromptSynthesis = (payload: ImageGenerateRecipePayload) 
   const negativePromptLength = String(payload.negativePrompt || '').trim().length;
   const roleContractLength = buildImageRoleContractText(payload).length;
   const referenceCount = getImageDirectorSources(payload).length;
+  const stylePromptLength = String(payload.stylePrompt || '').trim().length;
+  const estimatedSynthesisInputLength =
+    mergedPromptLength + negativePromptLength + roleContractLength + stylePromptLength;
 
   const reasons: string[] = [];
-  if (mergedPromptLength >= VERTEX_SYNTH_BYPASS_PROMPT_LENGTH) reasons.push(`prompt_length=${mergedPromptLength}`);
-  if (negativePromptLength >= VERTEX_SYNTH_BYPASS_NEGATIVE_LENGTH) reasons.push(`negative_length=${negativePromptLength}`);
-  if (roleContractLength >= VERTEX_SYNTH_BYPASS_ROLE_CONTRACT_LENGTH) reasons.push(`role_contract_length=${roleContractLength}`);
-  if (referenceCount >= VERTEX_SYNTH_BYPASS_REFERENCE_COUNT) reasons.push(`reference_count=${referenceCount}`);
+  if (estimatedSynthesisInputLength >= 9500) reasons.push(`estimated_input_length=${estimatedSynthesisInputLength}`);
+  if (referenceCount >= 12) reasons.push(`reference_count=${referenceCount}`);
 
   return {
     bypass: reasons.length > 0,
@@ -225,6 +228,7 @@ const shouldBypassVertexPromptSynthesis = (payload: ImageGenerateRecipePayload) 
     negativePromptLength,
     roleContractLength,
     referenceCount,
+    estimatedSynthesisInputLength,
   };
 };
 
@@ -278,6 +282,15 @@ export const buildImageGenerateProviderPayload = (
   synthesizedPrompt: string,
   providerPromptOverride?: string,
 ) => {
+  const expectedRenderEntries = getImageRenderReferenceEntries(payload);
+  if (expectedRenderEntries.length > 0 && uploadedUrls.length !== expectedRenderEntries.length) {
+    throw new Error(
+      `CRITICAL FAILURE: Expected ${expectedRenderEntries.length} uploaded render references but received ${uploadedUrls.length}. Required refs: ${expectedRenderEntries
+        .map((entry) => entry.indexLabel)
+        .join(', ')}`,
+    );
+  }
+
   const effectiveResolution = getEffectiveImageGenerationResolution(
     payload.modelId,
     payload.speed,

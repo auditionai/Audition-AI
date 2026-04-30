@@ -487,8 +487,8 @@ const IMAGE_ROLE_LOCK_CONSTRAINTS =
   'STRICT ROLE LOCK: CHARACTER REFERENCES are the only identity source for face, hair, skin tone, head shape, body structure, outfit, shoes, accessories, tattoos, gender, and overall avatar identity. For non-portrait shots, BODY references are the primary source for full-body complexion, limb anatomy, and overall body proportions. FACE LOCK references, when present, are the highest-priority source for eyes, eyebrows, nose, lips, jawline, hairline, bangs, makeup, glasses, facial proportions, and facial likeness. Preserve uploaded skin tone exactly; do not warm it, tan it, yellow it, orange it, or shift it to a different complexion. Preserve believable adult 3D anatomy from the character references; avoid doll-like proportions, rigid limbs, inflated eyes, or mannequin posture. CHARACTER REFERENCES are NOT pose references. SAMPLE IMAGE is composition-only and controls pose, camera angle, framing, subject placement, body lean, hand placement, spacing, scene layout, and background composition only. SAMPLE IMAGE must never contribute face identity, hairstyle identity, makeup identity, or facial expression identity, even if the sample face is large, sharp, centered, or visually dominant. Treat SAMPLE IMAGE as a structural guide, not a literal body copy. If the sample pose would create broken anatomy, repair the anatomy while preserving the composition. Never reproduce SAMPLE IMAGE as the final output, never borrow its identity, outfit, or realism, and never return any uploaded reference nearly unchanged. STYLE IMAGE is style-only and may influence only render quality, lighting behavior, material response, restrained color grading, and final finish. STYLE IMAGE must never override identity, skin tone, anatomy, subject count, pose, composition, or outfit. The final image must keep one-to-one slot mapping for all uploaded characters, remain a stylized 3D game avatar, and never become a photorealistic or semi-realistic human.';
 const REDUCED_IMAGE_ROLE_LOCK_CONSTRAINTS_NO_SAMPLE =
   'STRICT ROLE LOCK: No SAMPLE IMAGE is provided, so USER REQUEST is the primary source for pose, framing, action, scene layout, and background. CHARACTER REFERENCES still define identity only and are NOT pose references. For non-portrait shots, BODY references are the primary source for full-body complexion, limb anatomy, and overall body proportions. FACE LOCK references, when present, are the highest-priority source for eyes, eyebrows, nose, lips, jawline, hairline, bangs, makeup, glasses, facial proportions, and facial likeness. Preserve uploaded skin tone exactly; do not warm it, tan it, yellow it, orange it, or shift it to a different complexion. Preserve believable adult 3D anatomy from the character references; avoid doll-like proportions, rigid limbs, inflated eyes, or mannequin posture. STYLE IMAGE is style-only and may influence only render quality, lighting behavior, material response, restrained color grading, and final 3D finish. STYLE IMAGE must never override identity, skin tone, anatomy, pose, composition, camera framing, gender presentation, subject count, or outfit. Never return any uploaded reference nearly unchanged when the USER REQUEST asks for a different pose, scene, framing, or environment. Keep the result as a stylized 3D game avatar, not a photorealistic or semi-realistic human.';
-const MAX_PROVIDER_PROMPT_LENGTH = 3200;
-const MAX_NEGATIVE_PROMPT_LENGTH = 900;
+const MAX_PROVIDER_PROMPT_LENGTH = 9999;
+const MAX_NEGATIVE_PROMPT_LENGTH = 9999;
 
 const collapsePromptWhitespace = (value?: string | null) =>
   String(value || '')
@@ -1082,18 +1082,23 @@ const normalizeVisionTags = (tags?: string[] | null, limit = 4) =>
     .slice(0, limit);
 
 const buildProCharacterVisionLine = (
-  payload: Pick<ImageGenerateRecipePayload, 'visionAnalysis'>,
+  payload: Pick<ImageGenerateRecipePayload, 'visionAnalysis' | 'characterReferenceGroups' | 'characterImages' | 'characterCount'>,
   characterIndex: number,
 ) => {
   const entry = getCharacterVisionAnalysisMap(payload).get(characterIndex);
-  if (!entry) return null;
+  const group = getImageCharacterReferenceGroups(payload).find((candidate) => candidate.characterIndex === characterIndex);
+  if (!entry && !group?.appearanceProfile) return null;
 
   const segments = [
-    entry.skinToneHexApprox ? `skin_hex=${entry.skinToneHexApprox}` : null,
-    entry.skinToneDescriptor ? `skin=${entry.skinToneDescriptor}` : null,
-    normalizeVisionTags(entry.proIdentityTags).length > 0 ? `identity_tags=${normalizeVisionTags(entry.proIdentityTags).join(' | ')}` : null,
-    normalizeVisionTags(entry.proFaceTags).length > 0 ? `face_tags=${normalizeVisionTags(entry.proFaceTags).join(' | ')}` : null,
-    normalizeVisionTags(entry.proAppearanceTags).length > 0 ? `appearance_tags=${normalizeVisionTags(entry.proAppearanceTags).join(' | ')}` : null,
+    entry?.skinToneHexApprox || group?.appearanceProfile?.skinToneHex
+      ? `skin_hex=${entry?.skinToneHexApprox || group?.appearanceProfile?.skinToneHex}`
+      : null,
+    entry?.skinToneDescriptor || group?.appearanceProfile?.skinToneDescriptor
+      ? `skin=${entry?.skinToneDescriptor || group?.appearanceProfile?.skinToneDescriptor}`
+      : null,
+    normalizeVisionTags(entry?.proIdentityTags).length > 0 ? `identity_tags=${normalizeVisionTags(entry?.proIdentityTags).join(' | ')}` : null,
+    normalizeVisionTags(entry?.proFaceTags).length > 0 ? `face_tags=${normalizeVisionTags(entry?.proFaceTags).join(' | ')}` : null,
+    normalizeVisionTags(entry?.proAppearanceTags).length > 0 ? `appearance_tags=${normalizeVisionTags(entry?.proAppearanceTags).join(' | ')}` : null,
   ].filter(Boolean);
 
   return segments.length > 0 ? `- character_${characterIndex}: ${segments.join('; ')}` : null;
@@ -1156,10 +1161,9 @@ const buildProStructuredProviderPrompt = (
   mergedNegativePrompt: string,
 ) => {
   const roleContract = buildImageRoleContract(payload);
-  const originalUserPrompt = getPrimaryUserRequestText(payload);
-  const normalizedSynthesizedPrompt = synthesizedPrompt?.trim() || originalUserPrompt;
+  const normalizedSynthesizedPrompt = synthesizedPrompt?.trim() || getPrimaryUserRequestText(payload);
   const characterCount = Math.max(1, Math.floor(Number(payload.characterCount || getImageCharacterReferenceGroups(payload).length || 1)));
-  const compactNegativePrompt = trimPromptText(mergedNegativePrompt, 700);
+  const compactNegativePrompt = trimPromptText(mergedNegativePrompt, MAX_NEGATIVE_PROMPT_LENGTH);
   const weightedPlan = buildProWeightedReferencePlan(payload);
   const structuredVisionLines = [
     ...getImageCharacterReferenceGroups(payload)
@@ -1169,16 +1173,12 @@ const buildProStructuredProviderPrompt = (
     buildProStyleVisionLine(payload),
   ].filter((value): value is string => Boolean(value));
 
-  return trimProviderPrompt([
+  return trimPromptText([
     'RENDER ONE NEW FINAL IMAGE. Never return any uploaded reference unchanged.',
     `MODEL PATH: ${payload.modelId || 'unknown'}. Use structured weighting instead of averaging all references together.`,
     `CHARACTER COUNT: EXACTLY ${characterCount}. One-to-one slot mapping is mandatory.`,
     `SHOT TYPE: ${roleContract.shotType}`,
     weightedPlan,
-    '',
-    'PRIMARY USER REQUEST:',
-    originalUserPrompt || 'No additional user prompt provided.',
-    '',
     payload.sampleImage
       ? 'SCENE PLATE RULE: SAMPLE IMAGE is the primary scene plate. Preserve the full sample background, furniture, props, camera angle, framing, object layout, contact points, and subject orientation. Replace only the sample person with the uploaded character identity.'
       : 'SCENE PLATE RULE: No sample image is present, so derive composition from the primary user request.',
@@ -1195,10 +1195,10 @@ const buildProStructuredProviderPrompt = (
     '',
     getShotAwareRenderProfile(roleContract.shotType),
     `QUALITY: ${COMPACT_IMAGE_QUALITY_BOOSTERS}`,
-    IMAGE_SKIN_TONE_LOCK_CONSTRAINTS,
-    IMAGE_ANATOMY_GUARD_CONSTRAINTS,
+    'SKIN TONE LOCK: match the uploaded character complexion exactly.',
+    'ANATOMY GUARD: keep one coherent natural body with no extra limbs.',
     `NEGATIVE: ${compactNegativePrompt}`,
-  ].join('\n'));
+  ].join('\n'), MAX_PROVIDER_PROMPT_LENGTH);
 };
 
 const buildDetailedImageProviderPrompt = (

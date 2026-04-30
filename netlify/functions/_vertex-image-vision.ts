@@ -232,6 +232,19 @@ const normalizeStringArray = (value: unknown) =>
     ? value.map((entry) => String(entry || '').trim()).filter(Boolean).slice(0, 4)
     : [];
 
+const buildCharacterAnalysisAttemptSets = (
+  references: Array<{ source: string; kind: string }>,
+) => {
+  const allRefs = references.slice(0, 3);
+  const faceRefs = references.filter((reference) => reference.kind === 'face_detail' || reference.kind === 'face').slice(0, 2);
+  const bodyRefs = references.filter((reference) => reference.kind === 'body').slice(0, 1);
+  const firstRef = references.slice(0, 1);
+
+  return [allRefs, faceRefs, bodyRefs, firstRef]
+    .filter((set) => set.length > 0)
+    .filter((set, index, all) => index === all.findIndex((candidate) => JSON.stringify(candidate) === JSON.stringify(set)));
+};
+
 const normalizeCharacterVision = (characterIndex: number, raw: any): CharacterVisionAnalysis => ({
   characterIndex,
   summary: typeof raw?.summary === 'string' ? raw.summary.trim() : undefined,
@@ -284,30 +297,46 @@ export const analyzeImageGenerationVision = async (
   const characters: CharacterVisionAnalysis[] = [];
 
   for (const group of characterGroups) {
-    const parts: any[] = [];
-    for (const reference of group.references.slice(0, 3)) {
-      parts.push({ text: `${reference.kind.toUpperCase()} REFERENCE:` });
-      parts.push(await toInlineImagePart(reference.source));
+    const attemptSets = buildCharacterAnalysisAttemptSets(group.references);
+    let normalizedCharacter: CharacterVisionAnalysis | null = null;
+    let lastError: unknown = null;
+
+    for (let attemptIndex = 0; attemptIndex < attemptSets.length; attemptIndex += 1) {
+      const attemptSet = attemptSets[attemptIndex];
+      const parts: any[] = [];
+      for (const reference of attemptSet) {
+        parts.push({ text: `${reference.kind.toUpperCase()} REFERENCE:` });
+        parts.push(await toInlineImagePart(reference.source));
+      }
+
+      if (parts.length === 0) {
+        continue;
+      }
+
+      try {
+        const raw = await generateVisionJson<any>(
+          `character reference analysis slot ${group.characterIndex}${attemptIndex > 0 ? ` retry ${attemptIndex}` : ''}`,
+          parts,
+          mode === 'pro_structured'
+            ? buildProCharacterVisionPrompt(group.characterIndex)
+            : buildCharacterVisionPrompt(group.characterIndex),
+          mode,
+          options?.onDiagnostic,
+        );
+        normalizedCharacter = normalizeCharacterVision(group.characterIndex, raw);
+        break;
+      } catch (error) {
+        lastError = error;
+      }
     }
 
-    if (parts.length === 0) continue;
-
-    try {
-      const raw = await generateVisionJson<any>(
-        `character reference analysis slot ${group.characterIndex}`,
-        parts,
-        mode === 'pro_structured'
-          ? buildProCharacterVisionPrompt(group.characterIndex)
-          : buildCharacterVisionPrompt(group.characterIndex),
-        mode,
-        options?.onDiagnostic,
-      );
-      characters.push(normalizeCharacterVision(group.characterIndex, raw));
-    } catch (error) {
+    if (normalizedCharacter) {
+      characters.push(normalizedCharacter);
+    } else {
       await emitDiagnostic(
         options?.onDiagnostic,
         'warning',
-        `Character reference analysis for slot ${group.characterIndex} failed: ${error instanceof Error ? error.message : String(error || 'Unknown error')}`,
+        `Character reference analysis for slot ${group.characterIndex} failed: ${lastError instanceof Error ? lastError.message : String(lastError || 'Unknown error')}`,
       );
     }
   }

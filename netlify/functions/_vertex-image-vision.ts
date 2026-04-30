@@ -1,5 +1,6 @@
 import {
   getImageCharacterReferenceGroups,
+  isProImageGenerationModel,
   type CharacterVisionAnalysis,
   type ImageGenerateRecipePayload,
   type ImageVisionAnalysis,
@@ -12,6 +13,7 @@ import { runWithVertexCredentialFailover } from './_vertex-credentials';
 const VERTEX_MODEL = 'gemini-3.1-pro-preview';
 
 type VertexDiagnosticCallback = (entry: QueueVertexDiagnosticEntry) => Promise<void> | void;
+type VisionAnalysisMode = 'default' | 'pro_structured';
 
 const parseErrorMessage = async (response: Response) => {
   try {
@@ -87,6 +89,7 @@ const generateVisionJson = async <T>(
   taskName: string,
   parts: any[],
   outputSchemaPrompt: string,
+  mode: VisionAnalysisMode,
   onDiagnostic?: VertexDiagnosticCallback,
 ): Promise<T> => {
   return runWithVertexCredentialFailover({
@@ -105,7 +108,7 @@ const generateVisionJson = async <T>(
             generationConfig: {
               temperature: 0.0,
               topP: 0.1,
-              maxOutputTokens: 900,
+              maxOutputTokens: mode === 'pro_structured' ? 420 : 900,
               responseMimeType: 'application/json',
             },
           }),
@@ -149,6 +152,21 @@ const buildCharacterVisionPrompt = (characterIndex: number) => [
   '}',
 ].join('\n');
 
+const buildProCharacterVisionPrompt = (characterIndex: number) => [
+  'Analyze the uploaded character reference images for one stylized 3D fashion-game avatar.',
+  `This is character slot ${characterIndex}.`,
+  'Return one short JSON object in English only.',
+  'Focus on persistent identity. Ignore pose and background.',
+  'Schema:',
+  '{',
+  '  "skinToneHexApprox": "string",',
+  '  "skinToneDescriptor": "string",',
+  '  "proIdentityTags": ["string"],',
+  '  "proFaceTags": ["string"],',
+  '  "proAppearanceTags": ["string"]',
+  '}',
+].join('\n');
+
 const buildSampleVisionPrompt = () => [
   'Analyze the uploaded sample image for composition only.',
   'Return one compact JSON object in English only.',
@@ -169,6 +187,18 @@ const buildSampleVisionPrompt = () => [
   '}',
 ].join('\n');
 
+const buildProSampleVisionPrompt = () => [
+  'Analyze the uploaded sample image as a scene plate only.',
+  'Return one short JSON object in English only.',
+  'Focus on scene/background, pose, body orientation, support contact, and prop layout.',
+  'Schema:',
+  '{',
+  '  "proSceneTags": ["string"],',
+  '  "proPoseTags": ["string"],',
+  '  "proContactTags": ["string"]',
+  '}',
+].join('\n');
+
 const buildStyleVisionPrompt = () => [
   'Analyze the uploaded style image for render style only.',
   'Return one compact JSON object in English only.',
@@ -182,6 +212,18 @@ const buildStyleVisionPrompt = () => [
   '  "lightingStyle": "string",',
   '  "colorGrading": "string",',
   '  "finish": "string"',
+  '}',
+].join('\n');
+
+const buildProStyleVisionPrompt = () => [
+  'Analyze the uploaded style image for render language only.',
+  'Return one short JSON object in English only.',
+  'Focus on style, materials, lighting, and finish. Ignore pose, identity, and outfit.',
+  'Schema:',
+  '{',
+  '  "proStyleTags": ["string"],',
+  '  "proMaterialTags": ["string"],',
+  '  "proLightingTags": ["string"]',
   '}',
 ].join('\n');
 
@@ -200,6 +242,9 @@ const normalizeCharacterVision = (characterIndex: number, raw: any): CharacterVi
   faceAccessoryNotes: normalizeStringArray(raw?.faceAccessoryNotes),
   hairNotes: normalizeStringArray(raw?.hairNotes),
   outfitNotes: normalizeStringArray(raw?.outfitNotes),
+  proIdentityTags: normalizeStringArray(raw?.proIdentityTags),
+  proFaceTags: normalizeStringArray(raw?.proFaceTags),
+  proAppearanceTags: normalizeStringArray(raw?.proAppearanceTags),
 });
 
 const normalizeSampleVision = (raw: any): SampleVisionAnalysis => ({
@@ -213,6 +258,9 @@ const normalizeSampleVision = (raw: any): SampleVisionAnalysis => ({
   limbLayout: typeof raw?.limbLayout === 'string' ? raw.limbLayout.trim() : undefined,
   supportContact: typeof raw?.supportContact === 'string' ? raw.supportContact.trim() : undefined,
   occlusionNotes: typeof raw?.occlusionNotes === 'string' ? raw.occlusionNotes.trim() : undefined,
+  proSceneTags: normalizeStringArray(raw?.proSceneTags),
+  proPoseTags: normalizeStringArray(raw?.proPoseTags),
+  proContactTags: normalizeStringArray(raw?.proContactTags),
 });
 
 const normalizeStyleVision = (raw: any): StyleVisionAnalysis => ({
@@ -222,12 +270,16 @@ const normalizeStyleVision = (raw: any): StyleVisionAnalysis => ({
   lightingStyle: typeof raw?.lightingStyle === 'string' ? raw.lightingStyle.trim() : undefined,
   colorGrading: typeof raw?.colorGrading === 'string' ? raw.colorGrading.trim() : undefined,
   finish: typeof raw?.finish === 'string' ? raw.finish.trim() : undefined,
+  proStyleTags: normalizeStringArray(raw?.proStyleTags),
+  proMaterialTags: normalizeStringArray(raw?.proMaterialTags),
+  proLightingTags: normalizeStringArray(raw?.proLightingTags),
 });
 
 export const analyzeImageGenerationVision = async (
   payload: ImageGenerateRecipePayload,
   options?: { onDiagnostic?: VertexDiagnosticCallback },
 ): Promise<ImageVisionAnalysis> => {
+  const mode: VisionAnalysisMode = isProImageGenerationModel(payload.modelId) ? 'pro_structured' : 'default';
   const characterGroups = getImageCharacterReferenceGroups(payload);
   const characters: CharacterVisionAnalysis[] = [];
 
@@ -244,7 +296,10 @@ export const analyzeImageGenerationVision = async (
       const raw = await generateVisionJson<any>(
         `character reference analysis slot ${group.characterIndex}`,
         parts,
-        buildCharacterVisionPrompt(group.characterIndex),
+        mode === 'pro_structured'
+          ? buildProCharacterVisionPrompt(group.characterIndex)
+          : buildCharacterVisionPrompt(group.characterIndex),
+        mode,
         options?.onDiagnostic,
       );
       characters.push(normalizeCharacterVision(group.characterIndex, raw));
@@ -265,7 +320,8 @@ export const analyzeImageGenerationVision = async (
         await generateVisionJson<any>(
           'sample image analysis',
           [await toInlineImagePart(sampleAnalysisSource)],
-          buildSampleVisionPrompt(),
+          mode === 'pro_structured' ? buildProSampleVisionPrompt() : buildSampleVisionPrompt(),
+          mode,
           options?.onDiagnostic,
         ),
       );
@@ -286,7 +342,8 @@ export const analyzeImageGenerationVision = async (
         await generateVisionJson<any>(
           'style image analysis',
           [await toInlineImagePart(styleAnalysisSource)],
-          buildStyleVisionPrompt(),
+          mode === 'pro_structured' ? buildProStyleVisionPrompt() : buildStyleVisionPrompt(),
+          mode,
           options?.onDiagnostic,
         ),
       );

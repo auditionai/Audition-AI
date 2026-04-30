@@ -74,6 +74,15 @@ export interface ImageRoleContract {
   globalRules: string[];
 }
 
+export interface ImageRoleWeights {
+  sampleComposition: number;
+  sampleBackground: number;
+  characterBodyIdentity: number;
+  characterFaceIdentity: number;
+  characterFaceDetail: number;
+  styleRender: number;
+}
+
 export type CharacterReferenceKind = 'body' | 'face' | 'face_detail' | 'reference';
 export type CharacterReferenceGender = 'female' | 'male';
 
@@ -92,6 +101,9 @@ export interface CharacterVisionAnalysis {
   faceAccessoryNotes?: string[];
   hairNotes?: string[];
   outfitNotes?: string[];
+  proIdentityTags?: string[];
+  proFaceTags?: string[];
+  proAppearanceTags?: string[];
 }
 
 export interface SampleVisionAnalysis {
@@ -105,6 +117,9 @@ export interface SampleVisionAnalysis {
   limbLayout?: string;
   supportContact?: string;
   occlusionNotes?: string;
+  proSceneTags?: string[];
+  proPoseTags?: string[];
+  proContactTags?: string[];
 }
 
 export interface StyleVisionAnalysis {
@@ -114,6 +129,9 @@ export interface StyleVisionAnalysis {
   lightingStyle?: string;
   colorGrading?: string;
   finish?: string;
+  proStyleTags?: string[];
+  proMaterialTags?: string[];
+  proLightingTags?: string[];
 }
 
 export interface ImageVisionAnalysis {
@@ -169,26 +187,6 @@ export interface ImageGenerateRecipePayload {
   __vertexDiagnostics?: QueueVertexDiagnosticEntry[];
 }
 
-const isProImageGenerationModel = (modelId?: string | null) =>
-  String(modelId || '').trim().toLowerCase() === 'nano-banana-pro';
-
-const sanitizeProviderSensitiveVisionText = (value?: string | null) => {
-  const normalized = String(value || '').trim();
-  if (!normalized) return '';
-
-  return normalized
-    .replace(/\bcigarette\b/gi, 'handheld prop')
-    .replace(/\bsmoking\b/gi, 'holding a prop')
-    .replace(/\bsmoke\b/gi, 'atmospheric haze')
-    .replace(/\bflames?\b/gi, 'dramatic warm light')
-    .replace(/\bfiery\b/gi, 'dramatically lit')
-    .replace(/\bfire\b/gi, 'dramatic backlight')
-    .replace(/\bengulfed in flames\b/gi, 'dramatically backlit')
-    .replace(/\bexplosion\b/gi, 'bright burst of light')
-    .replace(/\blingerie\b/gi, 'fashion outfit')
-    .replace(/\bcleavage\b/gi, 'upper outfit detail');
-};
-
 const getCharacterReferenceKindPriority = (
   kind: CharacterReferenceKind,
   facePriorityMode?: CharacterFacePriorityMode,
@@ -242,6 +240,9 @@ const LAYERED_SINGLE_SUBJECT_PROMPT_PATTERNS = [
 ];
 
 const normalizeValue = (value?: string | null) => (value || '').trim().toLowerCase();
+
+export const isProImageGenerationModel = (modelId?: string | null) =>
+  normalizeValue(modelId) === 'nano-banana-pro';
 
 const PORTRAIT_HEADSHOT_PROMPT_PATTERNS = [
   /\bclose[\s-]?up\b/i,
@@ -338,6 +339,46 @@ const resolveImageShotType = (
 
   return 'half_body';
 };
+
+export const buildImageRoleWeights = (
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'sampleImage' | 'aspectRatio'>,
+): ImageRoleWeights => {
+  const shotType = resolveImageShotType(payload);
+  const hasSample = Boolean(payload.sampleImage);
+
+  if (shotType === 'close_up') {
+    return {
+      sampleComposition: hasSample ? 0.88 : 0,
+      sampleBackground: hasSample ? 0.8 : 0,
+      characterBodyIdentity: 0.62,
+      characterFaceIdentity: 0.98,
+      characterFaceDetail: 1,
+      styleRender: 0.72,
+    };
+  }
+
+  if (shotType === 'full_body') {
+    return {
+      sampleComposition: hasSample ? 1 : 0,
+      sampleBackground: hasSample ? 1 : 0,
+      characterBodyIdentity: 0.96,
+      characterFaceIdentity: 0.74,
+      characterFaceDetail: 0.42,
+      styleRender: 0.7,
+    };
+  }
+
+  return {
+    sampleComposition: hasSample ? 0.96 : 0,
+    sampleBackground: hasSample ? 0.94 : 0,
+    characterBodyIdentity: 0.9,
+    characterFaceIdentity: 0.9,
+    characterFaceDetail: 0.68,
+    styleRender: 0.7,
+  };
+};
+
+const formatWeight = (value: number) => value.toFixed(2);
 
 export const getEffectiveImageGenerationResolution = (
   modelId?: string | null,
@@ -644,10 +685,9 @@ export const getImageDirectorSources = (
   ].filter((value): value is string => Boolean(value));
 
 export const getImageRenderReferenceEntries = (
-  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
+  payload: Pick<ImageGenerateRecipePayload, 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
 ): ImageRenderReferenceEntry[] => {
   const entries: ImageRenderReferenceEntry[] = [];
-  const allowStyleRenderRef = !isProImageGenerationModel(payload.modelId);
 
   if (payload.sampleImage) {
     entries.push({
@@ -677,7 +717,7 @@ export const getImageRenderReferenceEntries = (
     });
   });
 
-  if (payload.styleImage && allowStyleRenderRef) {
+  if (payload.styleImage) {
     entries.push({
       role: 'style',
       source: payload.styleImage,
@@ -689,11 +729,11 @@ export const getImageRenderReferenceEntries = (
 };
 
 export const getImageRenderReferenceSources = (
-  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
+  payload: Pick<ImageGenerateRecipePayload, 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
 ) => getImageRenderReferenceEntries(payload).map((entry) => entry.source);
 
 export const buildImageRoleContract = (
-  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio' | 'visionAnalysis'>,
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio' | 'visionAnalysis'>,
 ): ImageRoleContract => {
   const renderEntries = getImageRenderReferenceEntries(payload);
   const characterGroups = getImageCharacterReferenceGroups(payload);
@@ -770,19 +810,16 @@ export const buildImageRoleContract = (
       ];
 
   const sampleVision = payload.visionAnalysis?.sample;
-  const sanitizeVisionText = isProImageGenerationModel(payload.modelId)
-    ? sanitizeProviderSensitiveVisionText
-    : (value?: string | null) => String(value || '').trim();
   if (sampleVision) {
     const sampleSignals = [
-      sampleVision.pose ? `pose: ${sanitizeVisionText(sampleVision.pose)}` : '',
-      sampleVision.camera ? `camera: ${sanitizeVisionText(sampleVision.camera)}` : '',
-      sampleVision.framing ? `framing: ${sanitizeVisionText(sampleVision.framing)}` : '',
-      sampleVision.subjectPlacement ? `placement: ${sanitizeVisionText(sampleVision.subjectPlacement)}` : '',
-      sampleVision.background ? `background: ${sanitizeVisionText(sampleVision.background)}` : '',
-      sampleVision.limbLayout ? `limbs: ${sanitizeVisionText(sampleVision.limbLayout)}` : '',
-      sampleVision.supportContact ? `support/contact: ${sanitizeVisionText(sampleVision.supportContact)}` : '',
-      sampleVision.occlusionNotes ? `occlusion: ${sanitizeVisionText(sampleVision.occlusionNotes)}` : '',
+      sampleVision.pose ? `pose: ${sampleVision.pose}` : '',
+      sampleVision.camera ? `camera: ${sampleVision.camera}` : '',
+      sampleVision.framing ? `framing: ${sampleVision.framing}` : '',
+      sampleVision.subjectPlacement ? `placement: ${sampleVision.subjectPlacement}` : '',
+      sampleVision.background ? `background: ${sampleVision.background}` : '',
+      sampleVision.limbLayout ? `limbs: ${sampleVision.limbLayout}` : '',
+      sampleVision.supportContact ? `support/contact: ${sampleVision.supportContact}` : '',
+      sampleVision.occlusionNotes ? `occlusion: ${sampleVision.occlusionNotes}` : '',
     ].filter(Boolean);
     if (sampleSignals.length > 0) {
       compositionRules.push(`Sample composition anchor: ${sampleSignals.join('; ')}.`);
@@ -811,11 +848,11 @@ export const buildImageRoleContract = (
   const styleVision = payload.visionAnalysis?.style;
   if (styleVision) {
     const styleSignals = [
-      styleVision.renderStyle ? `render style: ${sanitizeVisionText(styleVision.renderStyle)}` : '',
-      styleVision.materialStyle ? `materials: ${sanitizeVisionText(styleVision.materialStyle)}` : '',
-      styleVision.lightingStyle ? `lighting: ${sanitizeVisionText(styleVision.lightingStyle)}` : '',
-      styleVision.colorGrading ? `color grade: ${sanitizeVisionText(styleVision.colorGrading)}` : '',
-      styleVision.finish ? `finish: ${sanitizeVisionText(styleVision.finish)}` : '',
+      styleVision.renderStyle ? `render style: ${styleVision.renderStyle}` : '',
+      styleVision.materialStyle ? `materials: ${styleVision.materialStyle}` : '',
+      styleVision.lightingStyle ? `lighting: ${styleVision.lightingStyle}` : '',
+      styleVision.colorGrading ? `color grade: ${styleVision.colorGrading}` : '',
+      styleVision.finish ? `finish: ${styleVision.finish}` : '',
     ].filter(Boolean);
     if (styleSignals.length > 0) {
       styleRules.push(`Style visual anchor: ${styleSignals.join('; ')}.`);
@@ -863,7 +900,7 @@ export const buildImageRoleContract = (
 };
 
 export const buildImageRoleContractText = (
-  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio' | 'visionAnalysis'>,
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio'>,
 ) => {
   const contract = buildImageRoleContract(payload);
   const referenceLines = contract.renderEntries.length > 0
@@ -901,7 +938,7 @@ export const buildImageRoleContractText = (
 };
 
 const buildImageReferenceOrderDirective = (
-  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
 ) => {
   const entries = getImageRenderReferenceEntries(payload);
   const hasSample = Boolean(payload.sampleImage);
@@ -964,7 +1001,7 @@ const buildImageReferenceOrderDirective = (
 };
 
 const buildReducedImageReferenceOrderDirectiveWithoutSample = (
-  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'styleImage'>,
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'styleImage'>,
 ) => {
   const entries = getImageRenderReferenceEntries(payload);
   const layeredSingleSubjectAllowed = allowsLayeredSingleSubjectComposition(payload);
@@ -1011,7 +1048,7 @@ const buildReducedImageReferenceOrderDirectiveWithoutSample = (
 };
 
 const buildCompactProviderReferenceSummary = (
-  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
 ) => {
   const entries = getImageRenderReferenceEntries(payload);
   if (entries.length === 0) {
@@ -1038,9 +1075,135 @@ const buildCompactProviderReferenceSummary = (
   }).join('\n');
 };
 
-const buildDetailedImageProviderPrompt = (
+const normalizeVisionTags = (tags?: string[] | null, limit = 4) =>
+  (Array.isArray(tags) ? tags : [])
+    .map((entry) => collapsePromptWhitespace(entry))
+    .filter(Boolean)
+    .slice(0, limit);
+
+const buildProCharacterVisionLine = (
+  payload: Pick<ImageGenerateRecipePayload, 'visionAnalysis'>,
+  characterIndex: number,
+) => {
+  const entry = getCharacterVisionAnalysisMap(payload).get(characterIndex);
+  if (!entry) return null;
+
+  const segments = [
+    entry.skinToneHexApprox ? `skin_hex=${entry.skinToneHexApprox}` : null,
+    entry.skinToneDescriptor ? `skin=${entry.skinToneDescriptor}` : null,
+    normalizeVisionTags(entry.proIdentityTags).length > 0 ? `identity_tags=${normalizeVisionTags(entry.proIdentityTags).join(' | ')}` : null,
+    normalizeVisionTags(entry.proFaceTags).length > 0 ? `face_tags=${normalizeVisionTags(entry.proFaceTags).join(' | ')}` : null,
+    normalizeVisionTags(entry.proAppearanceTags).length > 0 ? `appearance_tags=${normalizeVisionTags(entry.proAppearanceTags).join(' | ')}` : null,
+  ].filter(Boolean);
+
+  return segments.length > 0 ? `- character_${characterIndex}: ${segments.join('; ')}` : null;
+};
+
+const buildProSampleVisionLine = (
+  payload: Pick<ImageGenerateRecipePayload, 'visionAnalysis'>,
+) => {
+  const sample = payload.visionAnalysis?.sample;
+  if (!sample) return null;
+
+  const segments = [
+    normalizeVisionTags(sample.proSceneTags).length > 0 ? `scene_tags=${normalizeVisionTags(sample.proSceneTags).join(' | ')}` : null,
+    normalizeVisionTags(sample.proPoseTags).length > 0 ? `pose_tags=${normalizeVisionTags(sample.proPoseTags).join(' | ')}` : null,
+    normalizeVisionTags(sample.proContactTags).length > 0 ? `contact_tags=${normalizeVisionTags(sample.proContactTags).join(' | ')}` : null,
+  ].filter(Boolean);
+
+  return segments.length > 0 ? `- sample_scene: ${segments.join('; ')}` : null;
+};
+
+const buildProStyleVisionLine = (
+  payload: Pick<ImageGenerateRecipePayload, 'visionAnalysis'>,
+) => {
+  const style = payload.visionAnalysis?.style;
+  if (!style) return null;
+
+  const segments = [
+    normalizeVisionTags(style.proStyleTags).length > 0 ? `style_tags=${normalizeVisionTags(style.proStyleTags).join(' | ')}` : null,
+    normalizeVisionTags(style.proMaterialTags).length > 0 ? `material_tags=${normalizeVisionTags(style.proMaterialTags).join(' | ')}` : null,
+    normalizeVisionTags(style.proLightingTags).length > 0 ? `lighting_tags=${normalizeVisionTags(style.proLightingTags).join(' | ')}` : null,
+  ].filter(Boolean);
+
+  return segments.length > 0 ? `- style_render: ${segments.join('; ')}` : null;
+};
+
+const buildProWeightedReferencePlan = (
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'aspectRatio'>,
+) => {
+  const weights = buildImageRoleWeights(payload);
+  const groups = getImageCharacterReferenceGroups(payload);
+  const faceModeActive = groups.some((group) => group.facePriorityMode === 'portrait_headshot');
+
+  return [
+    'PRO STRUCTURED WEIGHT PLAN:',
+    `- sample_composition_weight=${formatWeight(weights.sampleComposition)}`,
+    `- sample_background_weight=${formatWeight(weights.sampleBackground)}`,
+    `- character_body_identity_weight=${formatWeight(weights.characterBodyIdentity)}`,
+    `- character_face_identity_weight=${formatWeight(weights.characterFaceIdentity)}`,
+    `- character_face_detail_weight=${formatWeight(weights.characterFaceDetail)}`,
+    `- style_render_weight=${formatWeight(weights.styleRender)}`,
+    faceModeActive
+      ? '- portrait_face_priority=enabled_for_prompt_requested_close_face_shots_only'
+      : '- portrait_face_priority=disabled_for_general_shots',
+  ].join('\n');
+};
+
+const buildProStructuredProviderPrompt = (
   synthesizedPrompt: string,
   payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio' | 'visionAnalysis'>,
+  mergedNegativePrompt: string,
+) => {
+  const roleContract = buildImageRoleContract(payload);
+  const originalUserPrompt = getPrimaryUserRequestText(payload);
+  const normalizedSynthesizedPrompt = synthesizedPrompt?.trim() || originalUserPrompt;
+  const characterCount = Math.max(1, Math.floor(Number(payload.characterCount || getImageCharacterReferenceGroups(payload).length || 1)));
+  const compactNegativePrompt = trimPromptText(mergedNegativePrompt, 700);
+  const weightedPlan = buildProWeightedReferencePlan(payload);
+  const structuredVisionLines = [
+    ...getImageCharacterReferenceGroups(payload)
+      .map((group) => buildProCharacterVisionLine(payload, group.characterIndex))
+      .filter((value): value is string => Boolean(value)),
+    buildProSampleVisionLine(payload),
+    buildProStyleVisionLine(payload),
+  ].filter((value): value is string => Boolean(value));
+
+  return trimProviderPrompt([
+    'RENDER ONE NEW FINAL IMAGE. Never return any uploaded reference unchanged.',
+    `MODEL PATH: ${payload.modelId || 'unknown'}. Use structured weighting instead of averaging all references together.`,
+    `CHARACTER COUNT: EXACTLY ${characterCount}. One-to-one slot mapping is mandatory.`,
+    `SHOT TYPE: ${roleContract.shotType}`,
+    weightedPlan,
+    '',
+    'PRIMARY USER REQUEST:',
+    originalUserPrompt || 'No additional user prompt provided.',
+    '',
+    payload.sampleImage
+      ? 'SCENE PLATE RULE: SAMPLE IMAGE is the primary scene plate. Preserve the full sample background, furniture, props, camera angle, framing, object layout, contact points, and subject orientation. Replace only the sample person with the uploaded character identity.'
+      : 'SCENE PLATE RULE: No sample image is present, so derive composition from the primary user request.',
+    'IDENTITY RULE: CHARACTER REFERENCES define the final avatar identity. BODY references define outfit, skin tone, body proportions, and full-body anatomy. FACE LOCK references refine face identity. FACE DETAIL LOCK references refine makeup and micro facial features, but only as strongly as the shot weighting allows.',
+    'STYLE RULE: STYLE IMAGE influences only render quality, material response, lighting feel, restrained color grading, and final finish. STYLE IMAGE must never override pose, background, outfit, or identity.',
+    'CONFLICT RULE: When references disagree, keep SAMPLE for scene/pose/background, keep CHARACTER for identity/body/skin tone, and keep STYLE for render finish only.',
+    '',
+    structuredVisionLines.length > 0
+      ? ['PRO STRUCTURED VISION FIELDS:', ...structuredVisionLines].join('\n')
+      : 'PRO STRUCTURED VISION FIELDS:\n- unavailable',
+    '',
+    'DIRECTOR JSON SPEC (authoritative, English):',
+    normalizedSynthesizedPrompt || 'No director synthesis available.',
+    '',
+    getShotAwareRenderProfile(roleContract.shotType),
+    `QUALITY: ${COMPACT_IMAGE_QUALITY_BOOSTERS}`,
+    IMAGE_SKIN_TONE_LOCK_CONSTRAINTS,
+    IMAGE_ANATOMY_GUARD_CONSTRAINTS,
+    `NEGATIVE: ${compactNegativePrompt}`,
+  ].join('\n'));
+};
+
+const buildDetailedImageProviderPrompt = (
+  synthesizedPrompt: string,
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio'>,
   mergedNegativePrompt: string,
 ) => {
   const roleContract = buildImageRoleContract(payload);
@@ -1081,7 +1244,7 @@ const buildDetailedImageProviderPrompt = (
 
 const buildReducedImageProviderPromptWithoutSample = (
   synthesizedPrompt: string,
-  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'styleImage' | 'aspectRatio' | 'visionAnalysis'>,
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'styleImage' | 'aspectRatio'>,
   mergedNegativePrompt: string,
 ) => {
   const roleContract = buildImageRoleContract(payload);
@@ -1126,6 +1289,10 @@ export const buildImageProviderPrompt = (
   customNegativePrompt?: string,
 ) => {
   const mergedNegativePrompt = dedupeCsvPromptTerms(IMAGE_NEGATIVE_PROMPT, customNegativePrompt);
+
+  if (isProImageGenerationModel(payload.modelId)) {
+    return buildProStructuredProviderPrompt(synthesizedPrompt, payload, mergedNegativePrompt);
+  }
 
   if (payload.sampleImage) {
     return buildDetailedImageProviderPrompt(synthesizedPrompt, payload, mergedNegativePrompt);

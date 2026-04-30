@@ -430,36 +430,16 @@ const createFallbackPoseGuide = (
     canvasW: number,
     canvasH: number,
 ) => {
-    ctx.fillStyle = '#121212';
+    ctx.fillStyle = '#0f1114';
     ctx.fillRect(0, 0, canvasW, canvasH);
 
     const { x, y, drawW, drawH } = drawContainedImage(ctx, img, canvasW, canvasH);
 
-    const offscreen = document.createElement('canvas');
-    offscreen.width = canvasW;
-    offscreen.height = canvasH;
-    const offCtx = offscreen.getContext('2d');
-    if (!offCtx) {
-        return { x, y, drawW, drawH };
-    }
-
-    offCtx.fillStyle = '#121212';
-    offCtx.fillRect(0, 0, canvasW, canvasH);
-    offCtx.filter = 'grayscale(1) saturate(0) contrast(1.28) brightness(0.9) blur(1.2px)';
-    drawContainedImage(offCtx, img, canvasW, canvasH);
-    offCtx.filter = 'none';
-
-    const imageData = offCtx.getImageData(0, 0, canvasW, canvasH);
-    const { data } = imageData;
-    for (let i = 0; i < data.length; i += 4) {
-        const luminance = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-        const quantized = luminance > 168 ? 222 : luminance > 104 ? 126 : 28;
-        data[i] = quantized;
-        data[i + 1] = quantized;
-        data[i + 2] = quantized;
-    }
-    offCtx.putImageData(imageData, 0, 0);
-    ctx.drawImage(offscreen, 0, 0);
+    ctx.save();
+    ctx.globalAlpha = 0.16;
+    ctx.fillStyle = 'rgba(10, 12, 16, 0.42)';
+    ctx.fillRect(x, y, drawW, drawH);
+    ctx.restore();
 
     return { x, y, drawW, drawH };
 };
@@ -618,7 +598,7 @@ export const createPoseOnlyReference = async (
 
         const poseOverlay = await detectPoseOverlay(img);
 
-        ctx.fillStyle = '#121212';
+        ctx.fillStyle = '#0f1114';
         ctx.fillRect(0, 0, canvasW, canvasH);
         const { x, y, drawW, drawH } = drawContainedImage(ctx, img, canvasW, canvasH);
 
@@ -654,13 +634,12 @@ export const createPoseOnlyReference = async (
                     }
                     rawMaskCtx.putImageData(imageData, 0, 0);
 
-                    maskCtx.filter = 'blur(2px)';
+                    maskCtx.filter = 'blur(3px)';
                     maskCtx.drawImage(rawMaskCanvas, x, y, drawW, drawH);
                     maskCtx.filter = 'none';
 
-                    processedCtx.fillStyle = '#121212';
-                    processedCtx.fillRect(0, 0, canvasW, canvasH);
-                    processedCtx.filter = 'grayscale(1) saturate(0) contrast(1.1) brightness(0.94) blur(1.4px)';
+                    processedCtx.clearRect(0, 0, canvasW, canvasH);
+                    processedCtx.filter = 'saturate(0.72) contrast(0.96) brightness(0.98) blur(1.8px)';
                     processedCtx.drawImage(img, x, y, drawW, drawH);
                     processedCtx.filter = 'none';
 
@@ -669,14 +648,8 @@ export const createPoseOnlyReference = async (
                     processedCtx.globalCompositeOperation = 'source-over';
 
                     ctx.save();
-                    ctx.globalAlpha = 0.86;
+                    ctx.globalAlpha = 0.44;
                     ctx.drawImage(processedCanvas, 0, 0);
-                    ctx.restore();
-
-                    ctx.save();
-                    ctx.strokeStyle = 'rgba(0,255,188,0.22)';
-                    ctx.lineWidth = Math.max(2, Math.min(canvasW, canvasH) * 0.004);
-                    ctx.strokeRect(x, y, drawW, drawH);
                     ctx.restore();
 
                     suppressPoseGuideFaceRegion(ctx, poseOverlay.landmarks, x, y, drawW, drawH);
@@ -720,7 +693,7 @@ export const createPoseOnlyReference = async (
         }
 
         ctx.save();
-        ctx.fillStyle = 'rgba(8, 10, 12, 0.06)';
+        ctx.fillStyle = 'rgba(8, 10, 12, 0.04)';
         ctx.fillRect(x, y, drawW, drawH);
         ctx.restore();
 

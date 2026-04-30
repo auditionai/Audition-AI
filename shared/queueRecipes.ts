@@ -737,10 +737,10 @@ export const buildImageRoleContract = (
 
   const compositionRules = hasSample
     ? [
-        'Sample image controls composition only: pose, camera angle, framing, subject placement, spacing, scene layout, and background.',
-        'Never borrow face identity, hair identity, outfit identity, makeup identity, or realism from the sample image.',
-        'If identity conflicts with sample composition, keep identity from character references and adapt the final subject to the sample composition without breaking anatomy.',
-        'Treat the sample as a structural guide, not a literal body copy. Preserve natural limb count, joint bending, balance, and clean silhouette even when the sample pose is complex or partially occluded.',
+        'Sample image is the primary scene plate. Preserve the sample scene, background, furniture, props, object layout, contact points, camera angle, framing, and spatial composition exactly.',
+        'Replace only the sample person with the uploaded character identity. Keep the sample pose, body orientation, chair/ground contact, hand placement, occlusion pattern, and scene interaction as closely as possible.',
+        'Never borrow face identity, hair identity, outfit identity, makeup identity, or realism from the sample person.',
+        'If identity conflicts with sample composition, keep identity from character references but still preserve the sample scene plate and pose. Repair only broken or ambiguous anatomy; do not redesign the composition.',
       ]
     : [
         'User prompt is the primary composition source because no sample image is present.',
@@ -853,7 +853,7 @@ export const buildImageRoleContractText = (
               ? `- Image ${number}: ${entry.indexLabel}. Identity only, high-priority overall face lock.${entry.facePriorityMode === 'portrait_headshot' ? ' Portrait/headshot priority mode is active for this slot.' : ''} Never pose.`
               : `- Image ${number}: ${entry.indexLabel}. Identity only,${entry.facePriorityMode === 'portrait_headshot' ? ' portrait/headshot priority slot: use this mainly for hair, outfit, accessories, and upper-body silhouette, never to redefine the face,' : ''} never pose.`;
           case 'sample':
-            return `- Image ${number}: ${entry.indexLabel}. Composition only, never identity.`;
+            return `- Image ${number}: ${entry.indexLabel}. Primary scene plate. Preserve the full sample background and composition exactly; replace only the sample person with the uploaded character identity.`;
           case 'style':
             return `- Image ${number}: ${entry.indexLabel}. Style only, never identity or composition.`;
           default:
@@ -899,7 +899,7 @@ const buildImageReferenceOrderDirective = (
 
     switch (entry.role) {
       case 'sample':
-        return `- Image ${number}: ${entry.indexLabel}. This is the PRIMARY composition anchor. It has already been processed into a composition-only guide. Copy pose, camera angle, framing, hand placement, body lean, chair/ground contact, environment layout, and background composition from this image only. Do not copy identity, outfit, facial anatomy, facial expression identity, hair identity, skin texture, text overlays, or realism from it. If the sample pose is ambiguous, partially occluded, or would cause broken anatomy, keep the composition but repair the limbs into one natural coherent body. Never reproduce this reference as the final image.`;
+        return `- Image ${number}: ${entry.indexLabel}. This is the PRIMARY scene plate and highest-priority composition anchor. Preserve the sample background, environment, furniture, props, lighting placement, object positions, chair/ground contact, body orientation, framing, camera angle, and overall scene layout as closely as possible to the sample. Replace only the sample person with the uploaded character identity. Do not copy the sample person's face, hair identity, outfit identity, makeup identity, or realism. If the sample pose is partially occluded or anatomically ambiguous, repair the limbs into one natural coherent body while keeping the same visible pose intent and same scene layout. Never collapse this into an empty backdrop or a default studio render.`;
       case 'character':
         return entry.indexLabel.includes('FACE DETAIL LOCK')
           ? `- Image ${number}: ${entry.indexLabel}. This is the highest-priority micro face anchor. Copy exact eye shape, eyelash styling, eyebrow shape, nose shape, lip shape, makeup placement, blush placement, freckles, beauty marks, face jewelry, face decals, and all fine facial likeness cues from this image. Override any conflicting face detail from SAMPLE IMAGE, STYLE IMAGE, BODY references, or prompt phrasing.${entry.facePriorityMode === 'portrait_headshot' ? ' Portrait/headshot priority mode is active: this image must dominate the full facial outcome for this slot.' : ''}`
@@ -917,7 +917,7 @@ const buildImageReferenceOrderDirective = (
     'DIRECT VISUAL REFERENCE ORDER (the renderer receives these reference images in this exact order):',
     ...roleLines,
     hasSample
-      ? '- COMPOSITION PRIORITY: SAMPLE IMAGE first, then PRIMARY COMMAND PROMPT for secondary scene details that do not break the sample composition.'
+      ? '- COMPOSITION PRIORITY: SAMPLE IMAGE first and dominant. Recreate the sample scene plate and replace only the subject identity. PRIMARY COMMAND PROMPT may add only secondary details that do not change the sample scene, pose, framing, or prop layout.'
       : '- COMPOSITION PRIORITY: No SAMPLE IMAGE is present, so PRIMARY COMMAND PROMPT is the main source for pose, framing, action, scene layout, and background.',
     'HARD CONFLICT RULES:',
     layeredSingleSubjectAllowed
@@ -929,7 +929,7 @@ const buildImageReferenceOrderDirective = (
     '- If multiple CHARACTER REFERENCE images share the same CHARACTER number, they all belong to the same final subject and must be merged into one identity.',
     '- Never duplicate one uploaded character to fill another slot. Never omit a slot and replace it with a sample person, style person, or invented/blended subject.',
     hasSample
-      ? '- If CHARACTER REFERENCES conflict with the SAMPLE IMAGE, keep identity/outfit from CHARACTER REFERENCES but adapt the final character to the SAMPLE IMAGE composition without copying broken anatomy or sample identity.'
+      ? '- If CHARACTER REFERENCES conflict with the SAMPLE IMAGE, keep identity/outfit from CHARACTER REFERENCES but preserve the SAMPLE IMAGE scene plate, background, prop layout, and pose. Replace the sample person only.'
       : '- Without a SAMPLE IMAGE, never ignore the PRIMARY COMMAND PROMPT and fall back to a default standing pose or empty black background unless the prompt explicitly asks for that.',
     hasSample
       ? '- The final image must never be a near-unchanged copy of a standing CHARACTER REFERENCE unless the SAMPLE IMAGE itself is also a standing front-view pose.'

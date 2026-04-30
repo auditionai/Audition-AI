@@ -954,7 +954,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                 : null;
             const stagedStyleGuide = activeStylePreset
                 ? await tryStageGenerationInput(
-                    await createStyleOnlyReference(activeStylePreset),
+                    aiModel === 'pro'
+                        ? activeStylePreset
+                        : await createStyleOnlyReference(activeStylePreset),
                     `inputs/generation/${activeMode}/style`,
                 )
                 : null;

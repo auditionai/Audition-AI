@@ -85,6 +85,21 @@ const drawContainedImage = (
     return { x, y, drawW, drawH };
 };
 
+const drawCoveredImage = (
+    ctx: CanvasRenderingContext2D,
+    img: HTMLImageElement,
+    canvasWidth: number,
+    canvasHeight: number,
+) => {
+    const scale = Math.max(canvasWidth / img.width, canvasHeight / img.height);
+    const drawW = img.width * scale;
+    const drawH = img.height * scale;
+    const x = (canvasWidth - drawW) / 2;
+    const y = (canvasHeight - drawH) / 2;
+    ctx.drawImage(img, x, y, drawW, drawH);
+    return { x, y, drawW, drawH };
+};
+
 const drawCoverCrop = (
     ctx: CanvasRenderingContext2D,
     img: HTMLImageElement,
@@ -598,9 +613,7 @@ export const createPoseOnlyReference = async (
 
         const poseOverlay = await detectPoseOverlay(img);
 
-        ctx.fillStyle = '#0f1114';
-        ctx.fillRect(0, 0, canvasW, canvasH);
-        const { x, y, drawW, drawH } = drawContainedImage(ctx, img, canvasW, canvasH);
+        const { x, y, drawW, drawH } = drawCoveredImage(ctx, img, canvasW, canvasH);
 
         if (poseOverlay?.segmentationMask) {
             const maskCanvas = document.createElement('canvas');
@@ -648,7 +661,7 @@ export const createPoseOnlyReference = async (
                     processedCtx.globalCompositeOperation = 'source-over';
 
                     ctx.save();
-                    ctx.globalAlpha = 0.44;
+                    ctx.globalAlpha = 0.32;
                     ctx.drawImage(processedCanvas, 0, 0);
                     ctx.restore();
 
@@ -693,8 +706,8 @@ export const createPoseOnlyReference = async (
         }
 
         ctx.save();
-        ctx.fillStyle = 'rgba(8, 10, 12, 0.04)';
-        ctx.fillRect(x, y, drawW, drawH);
+        ctx.fillStyle = 'rgba(8, 10, 12, 0.015)';
+        ctx.fillRect(0, 0, canvasW, canvasH);
         ctx.restore();
 
         return canvas.toDataURL('image/jpeg', 0.92);
@@ -839,45 +852,25 @@ export const createStyleOnlyReference = async (source: string): Promise<string> 
         if (!ctx) return source;
 
         const size = 1024;
-        const gap = 18;
-        const panel = Math.floor((size - gap * 3) / 2);
         canvas.width = size;
         canvas.height = size;
 
         ctx.fillStyle = '#111111';
         ctx.fillRect(0, 0, size, size);
 
-        const crops = [
-            { sx: img.width * 0.08, sy: img.height * 0.06, sw: img.width * 0.36, sh: img.height * 0.32, dx: gap, dy: gap, blur: 6 },
-            { sx: img.width * 0.42, sy: img.height * 0.1, sw: img.width * 0.32, sh: img.height * 0.3, dx: gap * 2 + panel, dy: gap, blur: 8 },
-            { sx: img.width * 0.14, sy: img.height * 0.42, sw: img.width * 0.34, sh: img.height * 0.3, dx: gap, dy: gap * 2 + panel, blur: 8 },
-            { sx: img.width * 0.46, sy: img.height * 0.46, sw: img.width * 0.3, sh: img.height * 0.28, dx: gap * 2 + panel, dy: gap * 2 + panel, blur: 10 },
-        ];
-
-        for (const crop of crops) {
-            ctx.save();
-            ctx.beginPath();
-            ctx.roundRect(crop.dx, crop.dy, panel, panel, 24);
-            ctx.clip();
-            ctx.filter = `blur(${crop.blur}px) saturate(1.02) brightness(0.98) contrast(1.04)`;
-            drawCoverCrop(ctx, img, crop.sx, crop.sy, crop.sw, crop.sh, crop.dx, crop.dy, panel, panel);
-            ctx.restore();
-
-            ctx.save();
-            ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(crop.dx, crop.dy, panel, panel);
-            ctx.restore();
-        }
-
         ctx.save();
-        ctx.globalAlpha = 0.22;
-        ctx.filter = 'blur(30px) saturate(1.04)';
-        drawCoverCrop(ctx, img, 0, 0, img.width, img.height, 0, 0, size, size);
+        ctx.filter = 'blur(24px) saturate(1.04) brightness(0.97) contrast(1.03)';
+        drawCoveredImage(ctx, img, size, size);
         ctx.restore();
 
         ctx.save();
-        ctx.fillStyle = 'rgba(0,0,0,0.18)';
+        ctx.globalAlpha = 0.38;
+        ctx.filter = 'blur(6px) saturate(0.98) brightness(0.99)';
+        drawCoveredImage(ctx, img, size, size);
+        ctx.restore();
+
+        ctx.save();
+        ctx.fillStyle = 'rgba(0,0,0,0.08)';
         ctx.fillRect(0, 0, size, size);
         ctx.restore();
 

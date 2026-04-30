@@ -784,7 +784,9 @@ export function WorkspaceImage() {
 
         const stagedStyleGuide = activeStylePreset
           ? await tryStageGenerationInput(
-              await createStyleOnlyReference(activeStylePreset),
+              aiModel === 'pro'
+                ? activeStylePreset
+                : await createStyleOnlyReference(activeStylePreset),
               `inputs/generation/${activeMode}/style`,
             )
           : null;

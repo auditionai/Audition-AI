@@ -2683,8 +2683,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                   </td>
                                                   <td className="px-4 py-3 text-white">{tstSpeedToUi(row.speed) || '-'}</td>
                                                   <td className="px-4 py-3 text-center text-white">{row.audio ? 'Có' : '-'}</td>
-                                                  <td className="px-4 py-3 text-right font-mono text-audi-cyan">{row.type === 'edit' ? '-' : row.credits}</td>
-                                                  <td className="px-4 py-3 text-right font-mono text-slate-200">{row.type === 'edit' ? '-' : `${row.vcoin} VC`}</td>
+                                                  <td className="px-4 py-3 text-right font-mono text-audi-cyan">
+                                                      {row.type === 'edit' ? '-' : `${Number(row.credits || 0).toLocaleString('vi-VN', { maximumFractionDigits: 4 })}${row.billingUnit === 'second' ? '/s' : ''}`}
+                                                  </td>
+                                                  <td className="px-4 py-3 text-right font-mono text-slate-200">
+                                                      {row.type === 'edit' ? '-' : `${row.vcoin} ${row.billingUnit === 'second' ? 'VC/s' : 'VC'}`}
+                                                  </td>
                                                   <td className="px-4 py-3">
                                                       <div className="flex items-center justify-end gap-2">
                                                           <input

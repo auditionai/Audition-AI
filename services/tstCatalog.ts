@@ -1640,12 +1640,16 @@ export const getPricingRows = async (forceRefresh = false): Promise<TstPricingRo
       audio: entry.audio,
     });
     const seconds = parseDurationSeconds(entry.duration);
+    const unitCredits = seconds > 0 ? Number((entry.credits / seconds).toFixed(4)) : Number(entry.credits || 0);
     const flatVcoin = creditsToVcoin(entry.credits);
     const unitVcoin = seconds > 0 ? Math.max(1, Math.ceil(flatVcoin / seconds)) : Math.max(1, flatVcoin);
     const existing = perSecondRows.get(key);
     const nextDefault = existing?.defaultAuditionVcoin
       ? Math.min(existing.defaultAuditionVcoin, unitVcoin)
       : unitVcoin;
+    const nextCredits = existing?.credits
+      ? Math.min(existing.credits, unitCredits)
+      : unitCredits;
 
     perSecondRows.set(key, {
       type: type || 'video',
@@ -1657,8 +1661,8 @@ export const getPricingRows = async (forceRefresh = false): Promise<TstPricingRo
       duration: 'per_second',
       speed: normalizeCatalogSpeed(entry.speed) || undefined,
       audio: entry.audio,
-      credits: 0,
-      vcoin: nextDefault,
+      credits: nextCredits,
+      vcoin: creditsToVcoin(nextCredits),
       configKey: key,
       defaultAuditionVcoin: nextDefault,
       billingUnit: 'second',

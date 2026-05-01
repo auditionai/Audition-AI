@@ -1,7 +1,7 @@
 import { optimizePayload } from '../utils/imageProcessor';
 
 const TST_IMAGE_UPLOAD_MAX_WIDTH = 1280;
-const TST_VIDEO_AND_MOTION_POLL_INTERVAL_MS = 10 * 60 * 1000;
+const TST_VIDEO_AND_MOTION_POLL_INTERVAL_MS = 60 * 1000;
 const TST_DEFAULT_TIMEOUT_MS = 120 * 60 * 1000;
 
 const cleanBase64 = (b64: string) => b64.replace(/^data:image\/\w+;base64,/, '');

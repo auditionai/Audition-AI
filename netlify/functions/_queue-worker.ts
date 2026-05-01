@@ -137,7 +137,7 @@ const activeWorkerRuns = new Map<QueueWorkerLane, Promise<QueueWorkerSummary>>()
 const TST_API_KEY = process.env.TST_API_KEY || '';
 const TST_API_BASE = 'https://api.tramsangtao.com/v1';
 const POLL_INTERVAL_SECONDS = parsePositiveIntEnv('QUEUE_POLL_INTERVAL_SECONDS', 5);
-const VIDEO_POLL_INTERVAL_SECONDS = parsePositiveIntEnv('QUEUE_VIDEO_POLL_INTERVAL_SECONDS', 10 * 60);
+const VIDEO_POLL_INTERVAL_SECONDS = parsePositiveIntEnv('QUEUE_VIDEO_POLL_INTERVAL_SECONDS', 60);
 const PROVIDER_FAILURE_GRACE_SECONDS = parsePositiveIntEnv('QUEUE_PROVIDER_FAILURE_GRACE_SECONDS', 90, 5);
 const MAX_DISPATCH_RETRIES = 6;
 const MAX_POLL_FAILURES = 8;
@@ -232,6 +232,24 @@ const isTerminalProviderPollFailureMessage = (message?: string | null) => {
   const normalized = repairVietnameseMojibake(message || '').trim().toLowerCase();
   if (!normalized || isAmbiguousDispatchError(normalized)) return false;
   return (
+    normalized.includes('401') ||
+    normalized.includes('403') ||
+    normalized.includes('unauthorized') ||
+    normalized.includes('forbidden') ||
+    normalized.includes('auth') ||
+    normalized.includes('credential') ||
+    normalized.includes('api key') ||
+    normalized.includes('apikey') ||
+    normalized.includes('invalid token') ||
+    normalized.includes('access token') ||
+    normalized.includes('xac thuc') ||
+    normalized.includes('xác thực') ||
+    normalized.includes('wrong_endpoint') ||
+    normalized.includes('wrong endpoint') ||
+    normalized.includes('requires post') ||
+    normalized.includes('invalid payload') ||
+    normalized.includes('invalid_tst_payload') ||
+    normalized.includes('bad request') ||
     normalized.includes('prompt hoac anh vi pham') ||
     normalized.includes('prompt hoặc ảnh vi phạm') ||
     normalized.includes('vi pham') ||

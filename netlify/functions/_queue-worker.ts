@@ -1293,12 +1293,20 @@ const isJobManuallyStopped = async (jobId: string) => {
   return String(state?.status || '').toLowerCase() === 'failed' && hasManualStopFlag((state as any)?.queue_payload);
 };
 
-const getGenerateEndpoint = (queueKind: string) => {
+const getGenerateEndpoint = (queueKind: string, providerPayload?: Record<string, unknown>) => {
+  const modelId = String(providerPayload?.model || '').trim().toLowerCase();
   switch (queueKind) {
     case 'image_generate':
       return `${TST_API_BASE}/image/generate`;
-    case 'video_generate':
+    case 'video_generate': {
+      if (modelId.startsWith('seedance')) {
+        return `${TST_API_BASE}/seedance/generate`;
+      }
+      if (modelId.startsWith('grok')) {
+        return `${TST_API_BASE}/grok/generate`;
+      }
       return `${TST_API_BASE}/video/generate`;
+    }
     case 'motion_generate':
       return `${TST_API_BASE}/motion/generate`;
     default:
@@ -1317,7 +1325,7 @@ const submitProviderJob = async (queueKind: string, providerPayload: Record<stri
   const outboundPayload = normalizeTstOutboundPayload(stripInternalQueueMeta(providerPayload));
   assertRequiredProviderMediaPayload(queueKind, outboundPayload);
 
-  const response = await fetch(getGenerateEndpoint(queueKind), {
+  const response = await fetch(getGenerateEndpoint(queueKind, outboundPayload), {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${TST_API_KEY}`,

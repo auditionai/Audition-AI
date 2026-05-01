@@ -6,6 +6,17 @@ const jsonHeaders = {
   'Access-Control-Allow-Origin': '*',
 };
 
+const getVideoGenerateEndpoint = (payload: Record<string, unknown>) => {
+  const modelId = String(payload.model || '').trim().toLowerCase();
+  if (modelId.startsWith('seedance')) {
+    return 'https://api.tramsangtao.com/v1/seedance/generate';
+  }
+  if (modelId.startsWith('grok')) {
+    return 'https://api.tramsangtao.com/v1/grok/generate';
+  }
+  return 'https://api.tramsangtao.com/v1/video/generate';
+};
+
 export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return {
@@ -34,7 +45,7 @@ export const handler: Handler = async (event) => {
     }
 
     const payload = normalizeTstOutboundPayload(JSON.parse(event.body || '{}'));
-    const response = await fetch('https://api.tramsangtao.com/v1/video/generate', {
+    const response = await fetch(getVideoGenerateEndpoint(payload), {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${TST_API_KEY}`,

@@ -1081,6 +1081,72 @@ const normalizeVisionTags = (tags?: string[] | null, limit = 4) =>
     .filter(Boolean)
     .slice(0, limit);
 
+const sanitizeProProviderText = (value: string) =>
+  collapsePromptWhitespace(value)
+    .replace(/\bholding\s+(?:a\s+)?cigarette\b/gi, 'one hand raised with a small handheld prop')
+    .replace(/\bcigarette\b/gi, 'small handheld prop')
+    .replace(/\bsmoking\b/gi, 'holding a small prop')
+    .replace(/\bexplosion\b/gi, 'dramatic bright background effect')
+    .replace(/\bfire\b/gi, 'warm bright background light')
+    .replace(/\bflames?\b/gi, 'warm bright background lights')
+    .replace(/\bsmoke\b/gi, 'soft haze');
+
+const normalizeProVisionTags = (tags?: string[] | null, limit = 4) =>
+  normalizeVisionTags(tags, limit)
+    .map((entry) => sanitizeProProviderText(entry))
+    .filter(Boolean);
+
+const safeJsonParse = (value?: string | null) => {
+  if (!value) return null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+};
+
+const normalizeDirectorJsonList = (value: unknown, limit = 8) =>
+  (Array.isArray(value) ? value : [])
+    .map((entry) => collapsePromptWhitespace(typeof entry === 'string' ? entry : ''))
+    .filter(Boolean)
+    .slice(0, limit);
+
+const renderDirectorSpecForProvider = (synthesizedPrompt?: string | null) => {
+  const normalized = collapsePromptWhitespace(synthesizedPrompt || '');
+  if (!normalized) {
+    return 'No director synthesis available.';
+  }
+
+  const parsed = safeJsonParse(normalized);
+  if (!parsed || typeof parsed !== 'object') {
+    return normalized;
+  }
+
+  const systemPrompt = collapsePromptWhitespace((parsed as any).system_prompt_en || '');
+  const userPrompt = collapsePromptWhitespace((parsed as any).user_prompt_en || '');
+  const mergedPrompt = collapsePromptWhitespace((parsed as any).merged_prompt_en || '');
+  const identityRules = normalizeDirectorJsonList((parsed as any).identity_rules);
+  const compositionRules = normalizeDirectorJsonList((parsed as any).composition_rules);
+  const styleRules = normalizeDirectorJsonList((parsed as any).style_rules);
+  const mustKeep = normalizeDirectorJsonList((parsed as any).must_keep);
+  const mustAvoid = normalizeDirectorJsonList((parsed as any).must_avoid);
+  const negativeConstraints = collapsePromptWhitespace((parsed as any).negative_constraints_en || '');
+
+  const sections = [
+    systemPrompt ? `system=${systemPrompt}` : null,
+    userPrompt ? `user=${userPrompt}` : null,
+    mergedPrompt ? `merged=${mergedPrompt}` : null,
+    identityRules.length ? `identity_rules=${identityRules.join(' | ')}` : null,
+    compositionRules.length ? `composition_rules=${compositionRules.join(' | ')}` : null,
+    styleRules.length ? `style_rules=${styleRules.join(' | ')}` : null,
+    mustKeep.length ? `must_keep=${mustKeep.join(' | ')}` : null,
+    mustAvoid.length ? `must_avoid=${mustAvoid.join(' | ')}` : null,
+    negativeConstraints ? `negative_constraints=${negativeConstraints}` : null,
+  ].filter(Boolean);
+
+  return sections.join('\n');
+};
+
 const buildProCharacterVisionLine = (
   payload: Pick<ImageGenerateRecipePayload, 'visionAnalysis' | 'characterReferenceGroups' | 'characterImages' | 'characterCount'>,
   characterIndex: number,
@@ -1096,9 +1162,9 @@ const buildProCharacterVisionLine = (
     entry?.skinToneDescriptor || group?.appearanceProfile?.skinToneDescriptor
       ? `skin=${entry?.skinToneDescriptor || group?.appearanceProfile?.skinToneDescriptor}`
       : null,
-    normalizeVisionTags(entry?.proIdentityTags).length > 0 ? `identity_tags=${normalizeVisionTags(entry?.proIdentityTags).join(' | ')}` : null,
-    normalizeVisionTags(entry?.proFaceTags).length > 0 ? `face_tags=${normalizeVisionTags(entry?.proFaceTags).join(' | ')}` : null,
-    normalizeVisionTags(entry?.proAppearanceTags).length > 0 ? `appearance_tags=${normalizeVisionTags(entry?.proAppearanceTags).join(' | ')}` : null,
+    normalizeProVisionTags(entry?.proIdentityTags).length > 0 ? `identity_tags=${normalizeProVisionTags(entry?.proIdentityTags).join(' | ')}` : null,
+    normalizeProVisionTags(entry?.proFaceTags).length > 0 ? `face_tags=${normalizeProVisionTags(entry?.proFaceTags).join(' | ')}` : null,
+    normalizeProVisionTags(entry?.proAppearanceTags).length > 0 ? `appearance_tags=${normalizeProVisionTags(entry?.proAppearanceTags).join(' | ')}` : null,
   ].filter(Boolean);
 
   return segments.length > 0 ? `- character_${characterIndex}: ${segments.join('; ')}` : null;
@@ -1111,9 +1177,8 @@ const buildProSampleVisionLine = (
   if (!sample) return null;
 
   const segments = [
-    normalizeVisionTags(sample.proSceneTags).length > 0 ? `scene_tags=${normalizeVisionTags(sample.proSceneTags).join(' | ')}` : null,
-    normalizeVisionTags(sample.proPoseTags).length > 0 ? `pose_tags=${normalizeVisionTags(sample.proPoseTags).join(' | ')}` : null,
-    normalizeVisionTags(sample.proContactTags).length > 0 ? `contact_tags=${normalizeVisionTags(sample.proContactTags).join(' | ')}` : null,
+    normalizeProVisionTags(sample.proPoseTags).length > 0 ? `pose_tags=${normalizeProVisionTags(sample.proPoseTags).join(' | ')}` : null,
+    normalizeProVisionTags(sample.proContactTags).length > 0 ? `contact_tags=${normalizeProVisionTags(sample.proContactTags).join(' | ')}` : null,
   ].filter(Boolean);
 
   return segments.length > 0 ? `- sample_scene: ${segments.join('; ')}` : null;
@@ -1126,9 +1191,9 @@ const buildProStyleVisionLine = (
   if (!style) return null;
 
   const segments = [
-    normalizeVisionTags(style.proStyleTags).length > 0 ? `style_tags=${normalizeVisionTags(style.proStyleTags).join(' | ')}` : null,
-    normalizeVisionTags(style.proMaterialTags).length > 0 ? `material_tags=${normalizeVisionTags(style.proMaterialTags).join(' | ')}` : null,
-    normalizeVisionTags(style.proLightingTags).length > 0 ? `lighting_tags=${normalizeVisionTags(style.proLightingTags).join(' | ')}` : null,
+    normalizeProVisionTags(style.proStyleTags).length > 0 ? `style_tags=${normalizeProVisionTags(style.proStyleTags).join(' | ')}` : null,
+    normalizeProVisionTags(style.proMaterialTags).length > 0 ? `material_tags=${normalizeProVisionTags(style.proMaterialTags).join(' | ')}` : null,
+    normalizeProVisionTags(style.proLightingTags).length > 0 ? `lighting_tags=${normalizeProVisionTags(style.proLightingTags).join(' | ')}` : null,
   ].filter(Boolean);
 
   return segments.length > 0 ? `- style_render: ${segments.join('; ')}` : null;
@@ -1161,7 +1226,9 @@ const buildProStructuredProviderPrompt = (
   mergedNegativePrompt: string,
 ) => {
   const roleContract = buildImageRoleContract(payload);
-  const normalizedSynthesizedPrompt = synthesizedPrompt?.trim() || getPrimaryUserRequestText(payload);
+  const normalizedSynthesizedPrompt = sanitizeProProviderText(renderDirectorSpecForProvider(
+    synthesizedPrompt?.trim() || getPrimaryUserRequestText(payload),
+  ));
   const characterCount = Math.max(1, Math.floor(Number(payload.characterCount || getImageCharacterReferenceGroups(payload).length || 1)));
   const compactNegativePrompt = trimPromptText(mergedNegativePrompt, MAX_NEGATIVE_PROMPT_LENGTH);
   const weightedPlan = buildProWeightedReferencePlan(payload);
@@ -1173,7 +1240,7 @@ const buildProStructuredProviderPrompt = (
     buildProStyleVisionLine(payload),
   ].filter((value): value is string => Boolean(value));
 
-  return trimPromptText([
+  return trimPromptText(sanitizeProProviderText([
     'RENDER ONE NEW FINAL IMAGE. Never return any uploaded reference unchanged.',
     `MODEL PATH: ${payload.modelId || 'unknown'}. Use structured weighting instead of averaging all references together.`,
     `CHARACTER COUNT: EXACTLY ${characterCount}. One-to-one slot mapping is mandatory.`,
@@ -1199,7 +1266,7 @@ const buildProStructuredProviderPrompt = (
     'SKIN TONE LOCK: match the uploaded character complexion exactly.',
     'ANATOMY GUARD: keep one coherent natural body with no extra limbs.',
     `NEGATIVE: ${compactNegativePrompt}`,
-  ].join('\n'), MAX_PROVIDER_PROMPT_LENGTH);
+  ].join('\n')), MAX_PROVIDER_PROMPT_LENGTH);
 };
 
 const buildDetailedImageProviderPrompt = (

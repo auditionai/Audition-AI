@@ -227,6 +227,27 @@ const parseErrorMessage = async (response: Response) => {
   }
 };
 
+const isTerminalProviderPollFailureMessage = (message?: string | null) => {
+  const normalized = repairVietnameseMojibake(message || '').trim().toLowerCase();
+  if (!normalized || isAmbiguousDispatchError(normalized)) return false;
+  return (
+    normalized.includes('prompt hoac anh vi pham') ||
+    normalized.includes('prompt hoặc ảnh vi phạm') ||
+    normalized.includes('vi pham') ||
+    normalized.includes('vi phạm') ||
+    normalized.includes('violat') ||
+    normalized.includes('moderation') ||
+    normalized.includes('prohibited') ||
+    normalized.includes('blocked') ||
+    normalized.includes('rejected') ||
+    normalized.includes('khong duyet') ||
+    normalized.includes('không duyệt') ||
+    normalized.includes('failed') ||
+    normalized.includes('that bai') ||
+    normalized.includes('thất bại')
+  );
+};
+
 const toQueuePayloadObject = (
   payload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
 ): Record<string, unknown> =>
@@ -661,6 +682,149 @@ const extractResultUrlFromValue = (value: unknown): string | null => {
 
 const extractResultUrl = (data: any): string | null => {
   return extractResultUrlFromValue(data);
+};
+
+const PROVIDER_COMPLETED_STATUSES = new Set(['completed', 'complete', 'succeeded', 'success', 'done', 'finished']);
+const PROVIDER_ACTIVE_STATUSES = new Set(['processing', 'queued', 'queue', 'pending', 'submitted', 'running', 'created', 'in_progress']);
+const PROVIDER_FAILED_STATUSES = new Set([
+  'failed',
+  'fail',
+  'error',
+  'errored',
+  'cancelled',
+  'canceled',
+  'rejected',
+  'blocked',
+  'moderated',
+  'expired',
+  'timeout',
+  'timed_out',
+]);
+
+const normalizeProviderStatusValue = (value: unknown) =>
+  String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_');
+
+const extractProviderStatusFromValue = (value: unknown, depth = 0): string => {
+  if (!value || depth > 4) return '';
+  if (typeof value === 'string') {
+    const normalized = normalizeProviderStatusValue(value);
+    return PROVIDER_COMPLETED_STATUSES.has(normalized) ||
+      PROVIDER_ACTIVE_STATUSES.has(normalized) ||
+      PROVIDER_FAILED_STATUSES.has(normalized)
+      ? normalized
+      : '';
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const nested = extractProviderStatusFromValue(item, depth + 1);
+      if (nested) return nested;
+    }
+    return '';
+  }
+  if (typeof value !== 'object') return '';
+
+  const objectValue = value as Record<string, unknown>;
+  const statusKeys = ['status', 'state', 'job_status', 'jobStatus', 'task_status', 'taskStatus', 'phase'];
+  for (const key of statusKeys) {
+    const normalized = normalizeProviderStatusValue(objectValue[key]);
+    if (
+      PROVIDER_COMPLETED_STATUSES.has(normalized) ||
+      PROVIDER_ACTIVE_STATUSES.has(normalized) ||
+      PROVIDER_FAILED_STATUSES.has(normalized)
+    ) {
+      return normalized;
+    }
+  }
+
+  const nestedKeys = ['data', 'job', 'task', 'result', 'detail', 'details', 'response'];
+  for (const key of nestedKeys) {
+    const nested = extractProviderStatusFromValue(objectValue[key], depth + 1);
+    if (nested) return nested;
+  }
+
+  return '';
+};
+
+const extractProviderFailureMessageFromValue = (value: unknown, depth = 0): string => {
+  if (!value || depth > 4) return '';
+  if (typeof value === 'string') {
+    return repairVietnameseMojibake(value.trim());
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const nested = extractProviderFailureMessageFromValue(item, depth + 1);
+      if (nested) return nested;
+    }
+    return '';
+  }
+  if (typeof value !== 'object') return '';
+
+  const objectValue = value as Record<string, unknown>;
+  const messageKeys = [
+    'error',
+    'error_message',
+    'errorMessage',
+    'failure_reason',
+    'failureReason',
+    'fail_reason',
+    'reason',
+    'message',
+    'detail',
+    'details',
+  ];
+  for (const key of messageKeys) {
+    const raw = objectValue[key];
+    if (raw == null || raw === false) continue;
+    if (typeof raw === 'string' && raw.trim()) {
+      return repairVietnameseMojibake(raw.trim());
+    }
+    if (typeof raw === 'object') {
+      const nested = extractProviderFailureMessageFromValue(raw, depth + 1);
+      if (nested) return nested;
+    }
+  }
+
+  const nestedKeys = ['data', 'job', 'task', 'response'];
+  for (const key of nestedKeys) {
+    const nested = extractProviderFailureMessageFromValue(objectValue[key], depth + 1);
+    if (nested) return nested;
+  }
+
+  return '';
+};
+
+const getProviderStatus = (providerData: unknown) => extractProviderStatusFromValue(providerData);
+const isProviderCompletedStatus = (status: string) => PROVIDER_COMPLETED_STATUSES.has(normalizeProviderStatusValue(status));
+const isProviderActiveStatus = (status: string) => PROVIDER_ACTIVE_STATUSES.has(normalizeProviderStatusValue(status));
+const isProviderFailedStatus = (status: string) => PROVIDER_FAILED_STATUSES.has(normalizeProviderStatusValue(status));
+
+const getProviderFailureMessage = (providerData: unknown) =>
+  extractProviderFailureMessageFromValue(providerData) || 'Provider job failed';
+
+const hasProviderErrorLikeField = (value: unknown, depth = 0): boolean => {
+  if (!value || depth > 4 || typeof value !== 'object') return false;
+  if (Array.isArray(value)) return value.some((item) => hasProviderErrorLikeField(item, depth + 1));
+  const objectValue = value as Record<string, unknown>;
+  const errorKeys = ['error', 'error_message', 'errorMessage', 'failure_reason', 'failureReason', 'fail_reason'];
+  for (const key of errorKeys) {
+    const raw = objectValue[key];
+    if (raw == null || raw === false || raw === '') continue;
+    return true;
+  }
+  return ['data', 'job', 'task', 'detail', 'details', 'response'].some((key) =>
+    hasProviderErrorLikeField(objectValue[key], depth + 1),
+  );
+};
+
+const hasProviderFailureSignal = (providerData: unknown, providerStatus?: string) => {
+  if (isProviderFailedStatus(providerStatus || getProviderStatus(providerData))) return true;
+  if (!providerData || typeof providerData !== 'object') return false;
+  const objectValue = providerData as Record<string, unknown>;
+  if (objectValue.success === false || objectValue.ok === false) return true;
+  return hasProviderErrorLikeField(providerData);
 };
 
 const getRetryDelaySeconds = (attemptCount: number) => {
@@ -2091,13 +2255,13 @@ const rescueFailedJobsWithProviderResults = async () => {
   for (const job of candidates as QueueJobRow[]) {
     try {
       const providerData = await pollProviderJob(String(job.job_id || ''));
-      const providerStatus = String(providerData?.status || '').toLowerCase();
+      const providerStatus = getProviderStatus(providerData);
       const resultUrl = extractResultUrl(providerData);
 
       if (resultUrl) {
         const state = await completePolledJobWithResultUrl(job, resultUrl, {
           completionMessage:
-            providerStatus === 'failed' || providerStatus === 'error' || providerStatus === 'cancelled' || providerStatus === 'canceled'
+            isProviderFailedStatus(providerStatus)
               ? `Rescue TST: provider từng báo lỗi nhưng vẫn trả về kết quả hợp lệ. Đã tự động lưu kết quả.`
               : 'Rescue TST: đã tìm lại kết quả hợp lệ và đồng bộ thành công.',
           completionLevel: 'warning',
@@ -2108,29 +2272,24 @@ const rescueFailedJobsWithProviderResults = async () => {
         continue;
       }
 
-      if (providerStatus === 'processing' || providerStatus === 'queued' || providerStatus === 'pending' || providerStatus === 'submitted') {
+      if (isProviderActiveStatus(providerStatus)) {
         await reviveFailedJobToProcessing(job, providerData);
         rescued += 1;
         continue;
       }
 
-      if (
-        providerStatus === 'failed' ||
-        providerStatus === 'error' ||
-        providerStatus === 'cancelled' ||
-        providerStatus === 'canceled'
-      ) {
+      if (hasProviderFailureSignal(providerData, providerStatus)) {
         await finalizeFailedRescue(
           job,
-          String(providerData?.error || providerData?.message || 'Provider job failed'),
+          getProviderFailureMessage(providerData),
         );
         continue;
       }
 
-      if (isTerminalRescueFailureMessage(String(providerData?.error || providerData?.message || providerStatus || ''))) {
+      if (isTerminalRescueFailureMessage(String(getProviderFailureMessage(providerData) || providerStatus || ''))) {
         await finalizeFailedRescue(
           job,
-          String(providerData?.error || providerData?.message || providerStatus || 'Job not found from provider'),
+          String(getProviderFailureMessage(providerData) || providerStatus || 'Job not found from provider'),
         );
         continue;
       }
@@ -2163,24 +2322,27 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
   }
 
   const admin = getServiceRoleClient();
-  const providerStatus = String(providerData?.status || '').toLowerCase();
+  const providerStatus = getProviderStatus(providerData);
   const providerProgress = typeof providerData?.progress === 'number' ? providerData.progress : 0;
   const progress = Math.max(60, providerProgress);
   const currentState = await getJobRuntimeState(job.id);
   const startedAt = currentState?.processing_started_at || currentState?.created_at || new Date().toISOString();
   const processingAgeMs = Date.now() - new Date(startedAt).getTime();
+  const resultUrl = extractResultUrl(providerData);
 
-  if (providerStatus === 'completed') {
-    const resultUrl = extractResultUrl(providerData);
+  if (resultUrl && (isProviderCompletedStatus(providerStatus) || !hasProviderFailureSignal(providerData, providerStatus))) {
+    return completePolledJobWithResultUrl(job, resultUrl);
+  }
+
+  if (isProviderCompletedStatus(providerStatus)) {
     if (!resultUrl) {
       throw new Error(`Job completed but no result URL returned: ${JSON.stringify(providerData)}`);
     }
     return completePolledJobWithResultUrl(job, resultUrl);
   }
 
-  if (providerStatus === 'failed' || providerStatus === 'error' || providerStatus === 'cancelled' || providerStatus === 'canceled') {
-    const failureMessage = providerData?.error || providerData?.message || 'Provider job failed';
-    const resultUrl = extractResultUrl(providerData);
+  if (hasProviderFailureSignal(providerData, providerStatus)) {
+    const failureMessage = getProviderFailureMessage(providerData);
     if (resultUrl) {
       return completePolledJobWithResultUrl(job, resultUrl, {
         completionMessage: `Provider báo "${failureMessage}" nhưng vẫn trả về kết quả hợp lệ. Đã lưu kết quả thay vì đánh thất bại.`,
@@ -2189,15 +2351,6 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
     }
     if (isTerminalRescueFailureMessage(String(failureMessage))) {
       return handleLostProviderJobSignal(job, String(failureMessage), currentState);
-    }
-    const nextAttemptCount = Number(currentState?.attempt_count || 0) + 1;
-    if (
-      isGenericProviderFailure(String(failureMessage)) &&
-      nextAttemptCount < MAX_POLL_FAILURES &&
-      processingAgeMs < PROVIDER_FAILURE_GRACE_SECONDS * 1000
-    ) {
-      await requeueProviderSoftFailure(job, String(failureMessage), nextAttemptCount, providerStatus);
-      return 'requeued';
     }
     await markFailedRespectingRefundPolicy(job, failureMessage);
     return 'failed';
@@ -2216,7 +2369,7 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
       queue_payload: withQueueLog(
         clearProviderLostJobConfirmationMeta(job.queue_payload),
         'polling',
-        `Provider đang xử lý${providerProgress > 0 ? ` (${providerProgress}%)` : ''}.`,
+        `Provider đang xử lý${providerProgress > 0 ? ` (${providerProgress}%)` : ''}${providerStatus ? ` - ${providerStatus}` : ''}.`,
       ),
       progress,
       error_message: null,
@@ -2242,10 +2395,16 @@ const handlePollFailure = async (job: QueueJobRow, errorMessage: string) => {
   const startedAt = state?.processing_started_at || state?.created_at || new Date().toISOString();
   const processingAgeMs = Date.now() - new Date(startedAt).getTime();
   const isTerminalPollFailure = isTerminalRescueFailureMessage(errorMessage);
+  const isTerminalProviderPollFailure = isTerminalProviderPollFailureMessage(errorMessage);
   const isVideoOrMotionJob = job.queue_kind === 'video_generate' || job.queue_kind === 'motion_generate';
 
   if (isTerminalPollFailure) {
     return handleLostProviderJobSignal(job, errorMessage, state);
+  }
+
+  if (isTerminalProviderPollFailure) {
+    await markFailedRespectingRefundPolicy(job, errorMessage);
+    return 'failed';
   }
 
   if (

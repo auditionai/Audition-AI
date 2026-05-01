@@ -19,6 +19,7 @@ import { getUserProfile, getModelPricing, getTstServerAvailabilityConfig } from 
 import { useConcurrency, CONCURRENCY_LIMITS } from '../services/concurrencyService';
 import { enqueueServerJob } from '../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../services/storageService';
+import { generateVideoScriptWithVertex } from '../services/videoScriptDirectorService';
 import {
   fetchTstPricing, fetchTstModels,
   getMotionCompatibleServers, getMotionCompatibleSpeeds, getMotionCostBreakdown, getMotionModelSpecs,
@@ -75,6 +76,7 @@ export function WorkspaceVideo() {
 
   // Video AI State
   const [prompt, setPrompt] = useState('');
+  const [isGeneratingVideoScript, setIsGeneratingVideoScript] = useState(false);
   const [keyframeImage, setKeyframeImage] = useState<string | null>(null);
   const [videoModel, setVideoModel] = useState('');
   const [aspectRatio, setAspectRatio] = useState('16:9');
@@ -428,6 +430,29 @@ export function WorkspaceVideo() {
     }
   };
 
+  const handleGenerateVideoScript = async () => {
+    if (activeMode !== 'video_ai') return;
+    if (!keyframeImage) {
+      notify('Vui lòng tải ảnh tham chiếu trước khi tạo kịch bản AI.', 'error');
+      return;
+    }
+
+    setIsGeneratingVideoScript(true);
+    try {
+      const script = await generateVideoScriptWithVertex({
+        imageSource: keyframeImage,
+        durationSeconds: duration,
+        userPrompt: prompt,
+      });
+      setPrompt(script);
+      notify('Đã tạo kịch bản video bằng Vertex AI.', 'success');
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Không thể tạo kịch bản video.', 'error');
+    } finally {
+      setIsGeneratingVideoScript(false);
+    }
+  };
+
   const handleGenerate = async () => {
     if (stage === 'submitting') return;
     if (!isCatalogReady) { notify('TST đang bảo trì.', 'error'); return; }
@@ -613,6 +638,19 @@ export function WorkspaceVideo() {
 
             {/* Prompt */}
             <div className="relative group">
+              <div className="mb-2 flex items-center justify-end gap-2">
+                <button
+                  onClick={handleGenerateVideoScript}
+                  disabled={isGeneratingVideoScript || !keyframeImage || activeMode !== 'video_ai'}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-cyan-400 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-cyan-950 shadow-lg shadow-cyan-500/20 disabled:opacity-50 disabled:shadow-none"
+                >
+                  {isGeneratingVideoScript ? <Loader className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                  Tạo Kịch Bản AI
+                </button>
+              </div>
+              <div className="mb-2 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-3 py-2 text-[11px] font-semibold leading-relaxed text-cyan-900 dark:text-cyan-100">
+                Hãy chọn số giây muốn tạo video và ấn nút Tạo Kịch Bản AI để AI viết sẵn kịch bản video cho bạn.
+              </div>
               <h3 className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider ml-1 mb-2">Chuyển động mong muốn</h3>
               <div className="relative bg-white dark:bg-[#18181B] rounded-[20px] p-4 shadow-[0_4px_20px_rgb(0,0,0,0.04)] ring-1 ring-gray-100 dark:ring-zinc-800 focus-within:ring-2 focus-within:ring-purple-400">
                 <textarea

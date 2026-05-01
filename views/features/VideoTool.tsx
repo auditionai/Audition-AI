@@ -7,6 +7,7 @@ import { CONCURRENCY_LIMITS, useConcurrency } from '../../services/concurrencySe
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import { downloadAssetToBrowser } from '../../services/downloadService';
+import { generateVideoScriptWithVertex } from '../../services/videoScriptDirectorService';
 import type { MotionGenerateRecipePayload, VideoGenerateRecipePayload } from '../../shared/queueRecipes';
 import {
   type AuditionPricingOverride,
@@ -137,6 +138,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
 
   // Video AI State
   const [prompt, setPrompt] = useState('');
+  const [isGeneratingVideoScript, setIsGeneratingVideoScript] = useState(false);
   const [keyframeImage, setKeyframeImage] = useState<string | null>(null);
   const [videoModel, setVideoModel] = useState('');
   const [aspectRatio, setAspectRatio] = useState('16:9');
@@ -513,6 +515,29 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
       setUploadTarget(null);
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleGenerateVideoScript = async () => {
+    if (activeMode !== 'video_ai') return;
+    if (!keyframeImage) {
+      notify('Vui lòng tải ảnh tham chiếu trước khi tạo kịch bản AI.', 'error');
+      return;
+    }
+
+    setIsGeneratingVideoScript(true);
+    try {
+      const script = await generateVideoScriptWithVertex({
+        imageSource: keyframeImage,
+        durationSeconds: duration,
+        userPrompt: prompt,
+      });
+      setPrompt(script);
+      notify('Đã tạo kịch bản video bằng Vertex AI.', 'success');
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Không thể tạo kịch bản video.', 'error');
+    } finally {
+      setIsGeneratingVideoScript(false);
+    }
   };
 
   const triggerUpload = (target: 'keyframe' | 'character' | 'motion') => {
@@ -948,9 +973,24 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                       <Icons.MessageCircle className="w-4 h-4" /> 2. Mô tả
                   </label>
                   <div className="flex gap-2">
+                      {activeMode === 'video_ai' && (
+                          <button
+                              onClick={handleGenerateVideoScript}
+                              disabled={isGeneratingVideoScript || !keyframeImage}
+                              className="text-[10px] font-bold text-black bg-audi-cyan hover:bg-cyan-300 disabled:opacity-50 disabled:cursor-not-allowed px-2 py-1 rounded border border-cyan-300/40 flex items-center gap-1"
+                          >
+                              {isGeneratingVideoScript ? <Icons.Loader className="w-3 h-3 animate-spin" /> : <Icons.Sparkles className="w-3 h-3" />}
+                              Tạo Kịch Bản AI
+                          </button>
+                      )}
                       <button onClick={() => activeMode === 'video_ai' ? setPrompt('') : setMotionPrompt('')} className="text-[10px] font-bold text-slate-500 hover:text-white transition-colors bg-white/5 px-2 py-1 rounded border border-white/10">Xóa</button>
                   </div>
               </div>
+              {activeMode === 'video_ai' && (
+                  <div className="mb-3 rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-3 py-2 text-[11px] font-semibold leading-relaxed text-cyan-100">
+                      Hãy chọn số giây muốn tạo video và ấn nút Tạo Kịch Bản AI để AI viết sẵn kịch bản video cho bạn.
+                  </div>
+              )}
               
               <div className="flex flex-col md:flex-row gap-4">
                   <textarea 

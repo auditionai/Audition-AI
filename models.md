@@ -38,6 +38,14 @@ All models available via the API. Credits are deducted per generation.
 | `sora-2.0` | Sora 2.0 | vip1 | — | 10s, 15s, 25s | 16:9, 9:16 | No | 20–50 |
 | `veo3.1-low` | Veo 3.1 LOW | fast | — | 8s | 16:9, 9:16 | No | 10 |
 
+### Video Endpoint Routing
+
+| Model family | TST endpoint |
+|--------------|--------------|
+| `seedance-*` | `POST /v1/seedance/generate` |
+| `grok-*` | `POST /v1/grok/generate` |
+| Other video models | `POST /v1/video/generate` |
+
 ## Motion Control Models
 
 | Model | Display Name | Servers | Resolution | Credits |

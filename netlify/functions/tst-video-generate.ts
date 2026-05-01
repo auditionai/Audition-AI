@@ -1,21 +1,14 @@
 import type { Handler } from '@netlify/functions';
 import { normalizeTstOutboundPayload } from './_tst-payload-normalizer';
+import { getTstVideoGeneratePath } from './_tst-generate-endpoints';
 
 const jsonHeaders = {
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': '*',
 };
 
-const getVideoGenerateEndpoint = (payload: Record<string, unknown>) => {
-  const modelId = String(payload.model || '').trim().toLowerCase();
-  if (modelId.startsWith('seedance')) {
-    return 'https://api.tramsangtao.com/v1/seedance/generate';
-  }
-  if (modelId.startsWith('grok')) {
-    return 'https://api.tramsangtao.com/v1/grok/generate';
-  }
-  return 'https://api.tramsangtao.com/v1/video/generate';
-};
+const getVideoGenerateEndpoint = (payload: Record<string, unknown>) =>
+  `https://api.tramsangtao.com/v1${getTstVideoGeneratePath(payload.model)}`;
 
 export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {

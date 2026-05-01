@@ -3,6 +3,7 @@ import { getServiceRoleClient } from './_supabase';
 import { fireTelegramJobNotification } from './_telegram-notify';
 import { validateQueuePayloadAgainstLiveCatalog } from './_tst-live-catalog';
 import { normalizeTstOutboundPayload } from './_tst-payload-normalizer';
+import { getTstGeneratePath } from './_tst-generate-endpoints';
 import {
   buildImageGenerateProviderPayload,
   prepareImageGeneratePromptWithinLimit,
@@ -1293,26 +1294,8 @@ const isJobManuallyStopped = async (jobId: string) => {
   return String(state?.status || '').toLowerCase() === 'failed' && hasManualStopFlag((state as any)?.queue_payload);
 };
 
-const getGenerateEndpoint = (queueKind: string, providerPayload?: Record<string, unknown>) => {
-  const modelId = String(providerPayload?.model || '').trim().toLowerCase();
-  switch (queueKind) {
-    case 'image_generate':
-      return `${TST_API_BASE}/image/generate`;
-    case 'video_generate': {
-      if (modelId.startsWith('seedance')) {
-        return `${TST_API_BASE}/seedance/generate`;
-      }
-      if (modelId.startsWith('grok')) {
-        return `${TST_API_BASE}/grok/generate`;
-      }
-      return `${TST_API_BASE}/video/generate`;
-    }
-    case 'motion_generate':
-      return `${TST_API_BASE}/motion/generate`;
-    default:
-      throw new Error(`Unsupported queue kind: ${queueKind}`);
-  }
-};
+const getGenerateEndpoint = (queueKind: string, providerPayload?: Record<string, unknown>) =>
+  `${TST_API_BASE}${getTstGeneratePath(queueKind, providerPayload)}`;
 
 const submitProviderJob = async (queueKind: string, providerPayload: Record<string, unknown>) => {
   if (!TST_API_KEY) {
@@ -1324,8 +1307,15 @@ const submitProviderJob = async (queueKind: string, providerPayload: Record<stri
 
   const outboundPayload = normalizeTstOutboundPayload(stripInternalQueueMeta(providerPayload));
   assertRequiredProviderMediaPayload(queueKind, outboundPayload);
+  const endpoint = getGenerateEndpoint(queueKind, outboundPayload);
+  console.info('[queue-worker] Dispatching TST job', {
+    queueKind,
+    model: outboundPayload.model,
+    endpoint,
+    media: summarizeProviderMediaPayload(queueKind, outboundPayload),
+  });
 
-  const response = await fetch(getGenerateEndpoint(queueKind, outboundPayload), {
+  const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${TST_API_KEY}`,

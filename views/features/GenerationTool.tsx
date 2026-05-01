@@ -32,6 +32,7 @@ import {
   getGenerationCostBreakdown,
   getVertexEditToolCostBreakdown,
   getGenerationModelId,
+  GPT_IMAGE_2_QUALITY_OPTIONS,
   getResolutionCostMap,
   applyServerAvailabilityToRuntimeModels,
   sanitizePricingEntriesWithRuntimeModels,
@@ -40,6 +41,8 @@ import {
   uiSpeedToTst,
   type TstPricingEntry,
   type TstRuntimeModel,
+  type TstGenerationTier,
+  type TstImageQuality,
 } from '../../services/tstCatalog';
 import type { CharacterReferenceGroup, ImageGenerateRecipePayload } from '../../shared/queueRecipes';
 import {
@@ -58,6 +61,7 @@ interface GenerationToolProps {
 type GenMode = 'single' | 'couple' | 'group3' | 'group4';
 type Stage = 'input' | 'processing' | 'result';
 type Resolution = '1K' | '2K' | '4K';
+type GenerationAiModel = TstGenerationTier;
 
 const MODE_TO_FEATURE_ID: Record<GenMode, string> = {
     single: 'single_photo_gen',
@@ -182,9 +186,10 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   // Default Resolution 1K
   const [aspectRatio, setAspectRatio] = useState('3:4');
   const [resolution, setResolution] = useState<Resolution>('1K');
+  const [imageQuality, setImageQuality] = useState<TstImageQuality>('high');
   const [speed, setSpeed] = useState('Nhanh');
   const [server, setServer] = useState('VIP 1');
-  const [aiModel, setAiModel] = useState<'flash' | 'pro'>('flash');
+  const [aiModel, setAiModel] = useState<GenerationAiModel>('flash');
 
   const [guideTopic, setGuideTopic] = useState<'chars' | 'settings' | null>(null);
   const [currentTipIdx, setCurrentTipIdx] = useState(0);
@@ -263,7 +268,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
   const generationSpeedId = uiSpeedToTst(speed) || 'fast';
   const generationServerId = uiServerToTst(server) || 'fast';
-  const generationTier = aiModel === 'flash' ? 'flash' : 'pro';
+  const generationTier: TstGenerationTier = aiModel;
+  const activeModelLabel = aiModel === 'flash' ? 'Flash' : aiModel === 'pro' ? 'Pro' : 'GPT';
+  const activeEngineLabel = `${activeModelLabel} Engine ${resolution}`;
   const availableResolutions = getCompatibleGenerationResolutions({
       tier: generationTier,
       pricingEntries,
@@ -303,6 +310,13 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       pricingEntries,
       pricingOverrides
   });
+  const gptResolutionCosts = getResolutionCostMap({
+      tier: 'gpt',
+      speed: generationSpeedId,
+      serverId: generationServerId,
+      pricingEntries,
+      pricingOverrides
+  });
   const prices = {
       flash_1k: flashResolutionCosts['1K'].vcoin,
       flash_2k: flashResolutionCosts['2K'].vcoin,
@@ -310,6 +324,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       pro_1k: proResolutionCosts['1K'].vcoin,
       pro_2k: proResolutionCosts['2K'].vcoin,
       pro_4k: proResolutionCosts['4K'].vcoin,
+      gpt_1k: gptResolutionCosts['1K'].vcoin,
+      gpt_2k: gptResolutionCosts['2K'].vcoin,
+      gpt_4k: gptResolutionCosts['4K'].vcoin,
   };
   const runtimeImageModelIds = new Set(
       runtimeModels
@@ -322,6 +339,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const isProAvailable =
       runtimeImageModelIds.has(getGenerationModelId('pro')) &&
       pricingEntries.some((entry) => entry.model.trim().toLowerCase() === getGenerationModelId('pro'));
+  const isGptAvailable =
+      runtimeImageModelIds.has(getGenerationModelId('gpt')) &&
+      pricingEntries.some((entry) => entry.model.trim().toLowerCase() === getGenerationModelId('gpt'));
   const isCatalogReady = !catalogLoading && !catalogError && pricingEntries.length > 0 && runtimeModels.length > 0;
   const hasCharacterImagesReady = characters.every((char) => !!char.bodyImage);
   const isAnyCharacterAssistRunning = characters.some((char) => !!assistLoadingByCharId[char.id]);
@@ -332,7 +352,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       !prompt.trim() ||
       !hasCharacterImagesReady ||
       isAnyCharacterAssistRunning ||
-      (aiModel === 'flash' ? !isFlashAvailable : !isProAvailable);
+      (aiModel === 'flash' ? !isFlashAvailable : aiModel === 'pro' ? !isProAvailable : !isGptAvailable);
   const availableSpeedLabels = availableSpeeds.map((speedId) => speedId === 'slow' ? 'Tiết Kiệm' : 'Nhanh');
   const availableServerLabels = availableServers.map((serverId) => tstServerToUi(serverId));
   const removeBgCost = getVertexEditToolCostBreakdown({
@@ -495,12 +515,10 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   }, [stage]);
 
   useEffect(() => {
-      if (aiModel === 'flash' && !isFlashAvailable && isProAvailable) {
-          setAiModel('pro');
-      } else if (aiModel === 'pro' && !isProAvailable && isFlashAvailable) {
-          setAiModel('flash');
-      }
-  }, [aiModel, isFlashAvailable, isProAvailable]);
+      if (aiModel === 'flash' && !isFlashAvailable) setAiModel(isProAvailable ? 'pro' : 'gpt');
+      else if (aiModel === 'pro' && !isProAvailable) setAiModel(isFlashAvailable ? 'flash' : 'gpt');
+      else if (aiModel === 'gpt' && !isGptAvailable) setAiModel(isProAvailable ? 'pro' : 'flash');
+  }, [aiModel, isFlashAvailable, isGptAvailable, isProAvailable]);
 
   useEffect(() => {
       if (availableResolutions.length > 0 && !availableResolutions.includes(resolution)) {
@@ -509,7 +527,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   }, [availableResolutions, resolution]);
 
   useEffect(() => {
-      const tier = aiModel === 'flash' ? 'flash' : 'pro';
+      const tier = aiModel;
       const requestedSpeedId = uiSpeedToTst(speed) || 'fast';
       const requestedServerId = uiServerToTst(server) || 'fast';
       const compatibleServers = getCompatibleGenerationServers({
@@ -850,7 +868,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
     const requestedSpeedId = uiSpeedToTst(speed) || 'fast';
     const requestedServerId = uiServerToTst(server) || 'fast';
     const compatibleServers = getCompatibleGenerationServers({
-        tier: aiModel === 'flash' ? 'flash' : 'pro',
+        tier: aiModel,
         pricingEntries,
         speed: requestedSpeedId,
         resolution,
@@ -859,7 +877,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
         ? requestedServerId
         : (compatibleServers[0] || requestedServerId);
     const compatibleSpeeds = getCompatibleGenerationSpeeds({
-        tier: aiModel === 'flash' ? 'flash' : 'pro',
+        tier: aiModel,
         pricingEntries,
         serverId: effectiveServerId,
         resolution,
@@ -876,7 +894,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
         assetType: 'image',
         toolId: activeFeature.id,
         toolName: activeFeature.name['en'],
-        engine: aiModel === 'flash' ? `Flash Engine ${resolution}` : `Pro Engine ${resolution}`,
+        engine: activeEngineLabel,
         status: 'queued',
         jobId: queuedJobId,
         progress: 0,
@@ -996,6 +1014,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                 systemPromptPrefix: activeFeature.defaultPrompt || '',
                 characterCount: characters.length,
                 resolution,
+                quality: aiModel === 'gpt' ? imageQuality : undefined,
                 aspectRatio,
                 speed: effectiveSpeedId,
                 serverId: effectiveServerId,
@@ -1015,7 +1034,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                 prompt: basePrompt,
                 toolId: activeFeature.id,
                 toolName: activeFeature.name['en'],
-                engine: aiModel === 'flash' ? `Flash Engine ${resolution}` : `Pro Engine ${resolution}`,
+                engine: activeEngineLabel,
                 assetType: 'image',
                 costVcoin: cost,
                 queueKind: 'image_generate',
@@ -1059,6 +1078,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       { id: '16:9', label: '16:9', desc: 'Cinema' },
       { id: '3:4', label: '3:4', desc: 'Dọc' },
       { id: '4:3', label: '4:3', desc: 'Ngang' },
+      { id: '2:3', label: '2:3', desc: 'Dọc' },
+      { id: '3:2', label: '3:2', desc: 'Ngang' },
   ];
 
   const renderGuideContent = () => {
@@ -1757,6 +1778,19 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                 <Icons.Crown className={`w-4 h-4 ${aiModel === 'pro' ? 'text-white' : 'text-slate-400'}`} />
                                 Pro
                             </button>
+
+                            <button
+                                onClick={() => setAiModel('gpt')}
+                                disabled={!isGptAvailable}
+                                className={`flex-1 py-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                                    aiModel === 'gpt'
+                                    ? 'bg-audi-purple text-white shadow-lg'
+                                    : 'text-slate-500 hover:text-white hover:bg-white/5'
+                                } ${!isGptAvailable ? 'opacity-40 cursor-not-allowed hover:bg-transparent hover:text-slate-500' : ''}`}
+                            >
+                                <Icons.Sparkles className={`w-4 h-4 ${aiModel === 'gpt' ? 'text-white' : 'text-slate-400'}`} />
+                                GPT
+                            </button>
                         </div>
                     </div>
 
@@ -1789,6 +1823,23 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                             ))}
                         </div>
                     </div>
+
+                    {aiModel === 'gpt' && (
+                        <div className="space-y-3 animate-fade-in">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase">Chất lượng ảnh GPT</label>
+                            <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
+                                {GPT_IMAGE_2_QUALITY_OPTIONS.map(q => (
+                                    <button
+                                        key={q}
+                                        onClick={() => setImageQuality(q)}
+                                        className={`flex-1 py-3 rounded-lg text-xs font-bold uppercase transition-all ${imageQuality === q ? 'bg-audi-purple text-white shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}
+                                    >
+                                        {q}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     <div className={`${availableSpeedLabels.length === 0 ? 'hidden ' : ''}space-y-3 animate-fade-in`}>
                         <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
@@ -1979,6 +2030,12 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                 <span className={resolution === '1K' ? 'text-white font-bold' : ''}>1K: {prices.pro_1k}VC</span>
                                 <span className={resolution === '2K' ? 'text-white font-bold' : ''}>2K: {prices.pro_2k}VC</span>
                                 <span className={resolution === '4K' ? 'text-white font-bold' : ''}>4K: {prices.pro_4k}VC</span>
+                            </div>
+                        ) : aiModel === 'gpt' ? (
+                            <div className="flex justify-between text-[9px] text-slate-500 mt-2 font-mono border-t border-white/5 pt-2">
+                                <span className={resolution === '1K' ? 'text-white font-bold' : ''}>1K: {prices.gpt_1k}VC</span>
+                                <span className={resolution === '2K' ? 'text-white font-bold' : ''}>2K: {prices.gpt_2k}VC</span>
+                                <span className={resolution === '4K' ? 'text-white font-bold' : ''}>4K: {prices.gpt_4k}VC</span>
                             </div>
                         ) : (
                             <div className="flex justify-between text-[9px] text-slate-500 mt-2 font-mono border-t border-white/5 pt-2">

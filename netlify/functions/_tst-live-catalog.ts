@@ -24,6 +24,7 @@ type TstProviderModel = {
     durations?: string[] | null;
     aspect_ratios?: string[] | null;
     aspectRatios?: string[] | null;
+    qualities?: string[] | null;
     slow_mode?: boolean;
     audio?: boolean;
   };
@@ -246,6 +247,7 @@ export const validateQueuePayloadAgainstLiveCatalog = async (
   const speed = normalizeSpeed(String(queuePayload.speed || ''));
   const audio = typeof queuePayload.audio === 'boolean' ? queuePayload.audio : undefined;
   const aspectRatio = String(queuePayload.aspect_ratio || '').trim();
+  const quality = normalize(String(queuePayload.quality || ''));
 
   if (serverId && !isServerAllowedBySnapshot(serverAvailabilityConfig, modelId, serverId, speed)) {
     throw new Error(`INVALID_TST_CONFIG: Server ${serverId} đang tạm ẩn do quá tải ở chế độ ${speed || 'default'}. Vui lòng chọn server khác.`);
@@ -280,6 +282,13 @@ export const validateQueuePayloadAgainstLiveCatalog = async (
 
   if (audio === true && model.capabilities?.audio !== true) {
     throw new Error(`INVALID_TST_CONFIG: Audio is disabled for ${modelId}`);
+  }
+
+  if (quality && Array.isArray(model.capabilities?.qualities) && model.capabilities!.qualities!.length > 0) {
+    const availableQualities = model.capabilities!.qualities!.map((value) => normalize(value));
+    if (!availableQualities.includes(quality)) {
+      throw new Error(`INVALID_TST_CONFIG: Quality ${quality} is disabled for ${modelId}`);
+    }
   }
 
   const aspectRatios = getAspectRatios(model);

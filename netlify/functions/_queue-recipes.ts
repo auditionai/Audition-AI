@@ -305,6 +305,7 @@ export const buildImageGenerateProviderPayload = (
 
   if (uploadedUrls.length > 0) providerPayload.img_url = uploadedUrls;
   if (effectiveResolution) providerPayload.resolution = effectiveResolution.toLowerCase();
+  if (payload.quality) providerPayload.quality = payload.quality.toLowerCase();
   if (payload.aspectRatio) providerPayload.aspect_ratio = payload.aspectRatio;
   if (payload.speed) providerPayload.speed = payload.speed;
   if (payload.serverId) providerPayload.server_id = payload.serverId;

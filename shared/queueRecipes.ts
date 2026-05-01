@@ -161,6 +161,7 @@ export interface ImageGenerateRecipePayload {
   systemPromptPrefix?: string | null;
   characterCount?: number;
   resolution?: string;
+  quality?: string;
   aspectRatio?: string;
   speed?: string;
   serverId?: string;
@@ -243,6 +244,11 @@ const normalizeValue = (value?: string | null) => (value || '').trim().toLowerCa
 
 export const isProImageGenerationModel = (modelId?: string | null) =>
   normalizeValue(modelId) === 'nano-banana-pro';
+
+export const isGptImageGenerationModel = (modelId?: string | null) =>
+  normalizeValue(modelId) === 'image-gpt-2';
+
+const GPT_IMAGE_GENERATION_MAX_RENDER_REFERENCES = 5;
 
 const PORTRAIT_HEADSHOT_PROMPT_PATTERNS = [
   /\bclose[\s-]?up\b/i,
@@ -685,8 +691,9 @@ export const getImageDirectorSources = (
   ].filter((value): value is string => Boolean(value));
 
 export const getImageRenderReferenceEntries = (
-  payload: Pick<ImageGenerateRecipePayload, 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
+  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
 ): ImageRenderReferenceEntry[] => {
+  const isGptImage2 = isGptImageGenerationModel(payload.modelId);
   const entries: ImageRenderReferenceEntry[] = [];
 
   if (payload.sampleImage) {
@@ -725,15 +732,15 @@ export const getImageRenderReferenceEntries = (
     });
   }
 
-  return entries;
+  return isGptImage2 ? entries.slice(0, GPT_IMAGE_GENERATION_MAX_RENDER_REFERENCES) : entries;
 };
 
 export const getImageRenderReferenceSources = (
-  payload: Pick<ImageGenerateRecipePayload, 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
+  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
 ) => getImageRenderReferenceEntries(payload).map((entry) => entry.source);
 
 export const buildImageRoleContract = (
-  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio' | 'visionAnalysis'>,
+  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio' | 'visionAnalysis'>,
 ): ImageRoleContract => {
   const renderEntries = getImageRenderReferenceEntries(payload);
   const characterGroups = getImageCharacterReferenceGroups(payload);
@@ -900,7 +907,7 @@ export const buildImageRoleContract = (
 };
 
 export const buildImageRoleContractText = (
-  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio'>,
+  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio'>,
 ) => {
   const contract = buildImageRoleContract(payload);
   const referenceLines = contract.renderEntries.length > 0
@@ -938,7 +945,7 @@ export const buildImageRoleContractText = (
 };
 
 const buildImageReferenceOrderDirective = (
-  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
+  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
 ) => {
   const entries = getImageRenderReferenceEntries(payload);
   const hasSample = Boolean(payload.sampleImage);
@@ -1001,7 +1008,7 @@ const buildImageReferenceOrderDirective = (
 };
 
 const buildReducedImageReferenceOrderDirectiveWithoutSample = (
-  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'styleImage'>,
+  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'styleImage'>,
 ) => {
   const entries = getImageRenderReferenceEntries(payload);
   const layeredSingleSubjectAllowed = allowsLayeredSingleSubjectComposition(payload);
@@ -1048,7 +1055,7 @@ const buildReducedImageReferenceOrderDirectiveWithoutSample = (
 };
 
 const buildCompactProviderReferenceSummary = (
-  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
+  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
 ) => {
   const entries = getImageRenderReferenceEntries(payload);
   if (entries.length === 0) {
@@ -1271,7 +1278,7 @@ const buildProStructuredProviderPrompt = (
 
 const buildDetailedImageProviderPrompt = (
   synthesizedPrompt: string,
-  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio'>,
+  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio'>,
   mergedNegativePrompt: string,
 ) => {
   const roleContract = buildImageRoleContract(payload);
@@ -1312,7 +1319,7 @@ const buildDetailedImageProviderPrompt = (
 
 const buildReducedImageProviderPromptWithoutSample = (
   synthesizedPrompt: string,
-  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'styleImage' | 'aspectRatio'>,
+  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'styleImage' | 'aspectRatio'>,
   mergedNegativePrompt: string,
 ) => {
   const roleContract = buildImageRoleContract(payload);
@@ -1375,6 +1382,7 @@ export const getRecipeValidationPayload = (payload: QueueRecipePayload) => {
       return {
         model: payload.modelId,
         resolution: getEffectiveImageGenerationResolution(payload.modelId, payload.speed, payload.resolution)?.toLowerCase(),
+        quality: payload.quality?.toLowerCase(),
         aspect_ratio: payload.aspectRatio,
         speed: payload.speed,
         server_id: payload.serverId,

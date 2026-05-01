@@ -1,8 +1,9 @@
 import modelsMarkdown from '../models.md?raw';
 
-export type TstGenerationTier = 'flash' | 'pro';
+export type TstGenerationTier = 'flash' | 'pro' | 'gpt';
 export type TstGenerationSpeed = 'fast' | 'slow';
 export type TstResolution = '1K' | '2K' | '4K';
+export type TstImageQuality = 'low' | 'medium' | 'high';
 export type TstMediaType = 'image' | 'video' | 'motion-control' | 'edit';
 
 export interface TstPricingEntry {
@@ -27,6 +28,7 @@ export interface TstRuntimeModel {
     durations?: string[] | null;
     aspect_ratios?: string[] | null;
     aspectRatios?: string[] | null;
+    qualities?: string[] | null;
     i2v?: boolean;
     slow_mode?: boolean;
     audio?: boolean;
@@ -141,7 +143,10 @@ const DURATION_ORDER = ['3s', '5s', '8s', '10s', '15s', '25s'];
 const tierToModelId: Record<TstGenerationTier, string> = {
   flash: 'nano-banana-2',
   pro: 'nano-banana-pro',
+  gpt: 'image-gpt-2',
 };
+
+export const GPT_IMAGE_2_QUALITY_OPTIONS: TstImageQuality[] = ['low', 'medium', 'high'];
 
 const uiServerMap: Record<string, string> = {
   FAST: 'fast',
@@ -327,6 +332,7 @@ export const DEFAULT_TST_SERVER_AVAILABILITY_CONFIG: TstServerAvailabilityConfig
 export const ADMIN_MANAGED_MODEL_LABELS = [
   'Nano Banana 2',
   'Nano Banana PRO',
+  'GPT Image 2',
   'Kling 2.5 Turbo',
   'Kling 2.6',
   'Kling 3.0',
@@ -340,6 +346,7 @@ export const ADMIN_MANAGED_MODEL_LABELS = [
 const ADMIN_MANAGED_MODEL_IDS = [
   'nano-banana-2',
   'nano-banana-pro',
+  'image-gpt-2',
   'kling-2.5-turbo',
   'kling-2.6',
   'kling-3.0-video',
@@ -661,9 +668,11 @@ const isCacheFresh = (fetchedAt: number) => fetchedAt > 0 && Date.now() - fetche
 
 const getFallbackImageSpec = (tier: TstGenerationTier): TstImageModelSpec => {
   const modelId = tierToModelId[tier];
+  const displayName =
+    tier === 'flash' ? 'Nano Banana 2' : tier === 'pro' ? 'Nano Banana PRO' : 'GPT Image 2';
   return {
     modelId,
-    displayName: tier === 'flash' ? 'Nano Banana 2' : 'Nano Banana PRO',
+    displayName,
     servers: [],
     resolutions: [],
     speeds: [],

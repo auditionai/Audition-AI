@@ -2674,7 +2674,13 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                           </div>
                                                       )}
                                                   </td>
-                                                  <td className="px-4 py-3 text-white uppercase">{row.duration || '-'}</td>
+                                                  <td className="px-4 py-3 text-white uppercase">
+                                                      {row.billingUnit === 'second' ? (
+                                                          <span className="rounded-full border border-audi-cyan/30 bg-audi-cyan/10 px-2 py-1 text-[10px] font-black text-audi-cyan">
+                                                              Theo giây
+                                                          </span>
+                                                      ) : (row.duration || '-')}
+                                                  </td>
                                                   <td className="px-4 py-3 text-white">{tstSpeedToUi(row.speed) || '-'}</td>
                                                   <td className="px-4 py-3 text-center text-white">{row.audio ? 'Có' : '-'}</td>
                                                   <td className="px-4 py-3 text-right font-mono text-audi-cyan">{row.type === 'edit' ? '-' : row.credits}</td>
@@ -2697,7 +2703,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                                       : 'border-white/10 focus:ring-audi-cyan/40'
                                                               }`}
                                                           />
-                                                          <span className="text-xs font-bold text-audi-yellow">VC</span>
+                                                          <span className="text-xs font-bold text-audi-yellow">{row.billingUnit === 'second' ? 'VC/s' : 'VC'}</span>
                                                           <button
                                                               onClick={() => handleSavePricingRow(row)}
                                                               disabled={!rowIsDirty}

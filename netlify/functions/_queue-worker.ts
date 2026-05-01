@@ -956,7 +956,7 @@ const getPreparationTimeoutUserMessage = (job: Pick<QueueJobRow, 'tool_id'>, pay
 
 const getMaxProcessingAgeMs = (job: Pick<QueueJobRow, 'queue_kind'>) => {
   if (job.queue_kind === 'video_generate' || job.queue_kind === 'motion_generate') {
-    return MAX_VIDEO_PROCESSING_AGE_MS;
+    return Number.POSITIVE_INFINITY;
   }
 
   return MAX_PROCESSING_AGE_MS;
@@ -1004,7 +1004,7 @@ const getProviderProcessingTimeoutMs = (
   payload?: QueueJobRow['queue_payload'],
 ) => {
   if (job.queue_kind === 'video_generate' || job.queue_kind === 'motion_generate') {
-    return MAX_VIDEO_PROCESSING_AGE_MS;
+    return Number.POSITIVE_INFINITY;
   }
 
   return getImageProcessingAgeMs(job, payload);
@@ -2242,6 +2242,7 @@ const handlePollFailure = async (job: QueueJobRow, errorMessage: string) => {
   const startedAt = state?.processing_started_at || state?.created_at || new Date().toISOString();
   const processingAgeMs = Date.now() - new Date(startedAt).getTime();
   const isTerminalPollFailure = isTerminalRescueFailureMessage(errorMessage);
+  const isVideoOrMotionJob = job.queue_kind === 'video_generate' || job.queue_kind === 'motion_generate';
 
   if (isTerminalPollFailure) {
     return handleLostProviderJobSignal(job, errorMessage, state);
@@ -2249,8 +2250,8 @@ const handlePollFailure = async (job: QueueJobRow, errorMessage: string) => {
 
   if (
     isTerminalPollFailure ||
-    nextAttemptCount >= MAX_POLL_FAILURES ||
-    processingAgeMs >= getProviderProcessingTimeoutMs(job, job.queue_payload)
+    (!isVideoOrMotionJob && nextAttemptCount >= MAX_POLL_FAILURES) ||
+    (!isVideoOrMotionJob && processingAgeMs >= getProviderProcessingTimeoutMs(job, job.queue_payload))
   ) {
     const finalMessage =
       isTerminalPollFailure

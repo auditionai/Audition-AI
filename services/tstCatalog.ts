@@ -75,6 +75,9 @@ export interface TstGenerationCostBreakdown {
   vcoin: number;
   configKey?: string;
   modelId?: string;
+  billingUnit?: 'flat' | 'second';
+  unitVcoin?: number;
+  billedSeconds?: number;
 }
 
 export interface AuditionPricingOverride {
@@ -116,6 +119,7 @@ export interface TstPricingRow {
   vcoin: number;
   configKey: string;
   defaultAuditionVcoin?: number;
+  billingUnit?: 'flat' | 'second';
 }
 
 type ParsedMarkdownModel = {
@@ -190,6 +194,51 @@ const normalizeCatalogResolution = (value?: string) => (value || '').trim().toLo
 const normalizeCatalogDuration = (value?: string) => (value || '').trim().toLowerCase();
 const cleanCell = (value: string) => value.replace(/`/g, '').trim();
 const isDashValue = (value: string) => ['—', '-', '–', ''].includes(cleanCell(value));
+
+export const isPerSecondVideoBillingModel = (modelId?: string | null) => {
+  const normalized = normalizeModelId(String(modelId || ''));
+  return normalized.startsWith('kling-');
+};
+
+export const isPerSecondMotionBillingModel = (modelId?: string | null) => {
+  const normalized = normalizeModelId(String(modelId || ''));
+  return normalized.startsWith('motion-control-');
+};
+
+export const isPerSecondBillingModel = (modelId?: string | null, type?: TstMediaType | string | null) =>
+  isPerSecondVideoBillingModel(modelId) || type === 'motion-control' || isPerSecondMotionBillingModel(modelId);
+
+const parseDurationSeconds = (duration?: string | number | null) => {
+  if (typeof duration === 'number') {
+    return Number.isFinite(duration) && duration > 0 ? duration : 0;
+  }
+  const match = String(duration || '').trim().toLowerCase().match(/(\d+(?:\.\d+)?)\s*s?/);
+  return match ? Number(match[1]) : 0;
+};
+
+export const getPerSecondPricingKey = ({
+  modelId,
+  server,
+  resolution,
+  speed,
+  audio,
+}: {
+  modelId: string;
+  server?: string;
+  resolution?: string;
+  speed?: string;
+  audio?: boolean;
+}) =>
+  [
+    'per_second',
+    normalizeModelId(modelId),
+    normalizeServer(server),
+    normalizeResolution(resolution),
+    normalizeSpeed(speed),
+    audio ? 'audio' : '',
+  ]
+    .filter(Boolean)
+    .join('|');
 
 const extractSection = (markdown: string, title: string): string => {
   const match = markdown.match(new RegExp(`## ${escapeRegex(title)}([\\s\\S]*?)(?=\\n## |$)`));
@@ -885,6 +934,32 @@ const getAuditionPrice = (
   return override?.auditionPriceVcoin ?? fallbackVcoin;
 };
 
+const getPerSecondUnitVcoin = ({
+  modelId,
+  server,
+  resolution,
+  speed,
+  audio,
+  fallbackEntry,
+  pricingOverrides,
+}: {
+  modelId: string;
+  server?: string;
+  resolution?: string;
+  speed?: string;
+  audio?: boolean;
+  fallbackEntry?: TstPricingEntry | null;
+  pricingOverrides?: AuditionPricingOverride[];
+}) => {
+  const perSecondKey = getPerSecondPricingKey({ modelId, server, resolution, speed, audio });
+  const fallbackSeconds = parseDurationSeconds(fallbackEntry?.duration);
+  const fallbackFlatVcoin = fallbackEntry ? creditsToVcoin(fallbackEntry.credits) : 0;
+  const fallbackUnitVcoin = fallbackSeconds > 0
+    ? Math.max(1, Math.ceil(fallbackFlatVcoin / fallbackSeconds))
+    : Math.max(1, fallbackFlatVcoin);
+  return getAuditionPrice(modelId, perSecondKey, fallbackUnitVcoin, pricingOverrides);
+};
+
 export const getServerDescription = (serverId: string) => serverDescriptions[normalizeServer(serverId)] ?? '';
 
 export const fetchTstPricing = async (forceRefresh = false): Promise<TstPricingEntry[]> => {
@@ -1113,6 +1188,7 @@ export const getGenerationCostBreakdown = ({
       vcoin: getAuditionPrice(modelId, exactEntry.config_key, fallbackVcoin, pricingOverrides),
       configKey: exactEntry.config_key,
       modelId,
+      billingUnit: 'flat',
     };
   }
 
@@ -1368,12 +1444,35 @@ export const getVideoCostBreakdown = ({
 
   if (exactEntry) {
     const fallbackVcoin = creditsToVcoin(exactEntry.credits);
+    if (isPerSecondVideoBillingModel(modelId)) {
+      const billedSeconds = Math.max(1, Math.ceil(parseDurationSeconds(duration)));
+      const unitVcoin = getPerSecondUnitVcoin({
+        modelId,
+        server: exactEntry.server || serverId,
+        resolution: exactEntry.resolution || resolution,
+        speed: exactEntry.speed || speed,
+        audio: exactEntry.audio,
+        fallbackEntry: exactEntry,
+        pricingOverrides,
+      });
+      return {
+        available: true,
+        credits: exactEntry.credits,
+        vcoin: unitVcoin * billedSeconds,
+        configKey: exactEntry.config_key,
+        modelId,
+        billingUnit: 'second',
+        unitVcoin,
+        billedSeconds,
+      };
+    }
     return {
       available: true,
       credits: exactEntry.credits,
       vcoin: getAuditionPrice(modelId, exactEntry.config_key, fallbackVcoin, pricingOverrides),
       configKey: exactEntry.config_key,
       modelId,
+      billingUnit: 'flat',
     };
   }
 
@@ -1442,6 +1541,7 @@ export const getMotionCostBreakdown = ({
   serverId,
   resolution,
   speed = 'fast',
+  durationSeconds,
   pricingEntries = [],
   pricingOverrides = [],
 }: {
@@ -1449,6 +1549,7 @@ export const getMotionCostBreakdown = ({
   serverId: string;
   resolution: string;
   speed?: string;
+  durationSeconds?: number | null;
   pricingEntries?: TstPricingEntry[];
   pricingOverrides?: AuditionPricingOverride[];
 }): TstGenerationCostBreakdown => {
@@ -1478,12 +1579,34 @@ export const getMotionCostBreakdown = ({
 
   if (exactEntry) {
     const fallbackVcoin = creditsToVcoin(exactEntry.credits);
+    if (isPerSecondMotionBillingModel(modelId)) {
+      const billedSeconds = Math.max(1, Math.ceil(Number(durationSeconds || 0) || parseDurationSeconds(exactEntry.duration) || 1));
+      const unitVcoin = getPerSecondUnitVcoin({
+        modelId,
+        server: exactEntry.server || serverId,
+        resolution: exactEntry.resolution || resolution,
+        speed: exactEntry.speed || speed,
+        fallbackEntry: exactEntry,
+        pricingOverrides,
+      });
+      return {
+        available: true,
+        credits: exactEntry.credits,
+        vcoin: unitVcoin * billedSeconds,
+        configKey: exactEntry.config_key,
+        modelId,
+        billingUnit: 'second',
+        unitVcoin,
+        billedSeconds,
+      };
+    }
     return {
       available: true,
       credits: exactEntry.credits,
       vcoin: getAuditionPrice(modelId, exactEntry.config_key, fallbackVcoin, pricingOverrides),
       configKey: exactEntry.config_key,
       modelId,
+      billingUnit: 'flat',
     };
   }
 
@@ -1494,7 +1617,55 @@ export const getPricingRows = async (forceRefresh = false): Promise<TstPricingRo
   const [rawPricingEntries, runtimeModels] = await Promise.all([fetchTstPricing(forceRefresh), fetchTstModels(forceRefresh)]);
   const pricingEntries = sanitizePricingEntriesWithRuntimeModels(rawPricingEntries, runtimeModels);
   const modelMap = new Map(runtimeModels.map((model) => [normalizeModelId(model.model), model]));
-  const rows: Array<TstPricingRow | null> = pricingEntries.map((entry) => {
+  const perSecondRows = new Map<string, TstPricingRow>();
+  const flatEntries: TstPricingEntry[] = [];
+
+  pricingEntries.forEach((entry) => {
+    const model = modelMap.get(normalizeModelId(entry.model));
+    const type = (model?.type === 'motion-control' ? 'motion-control' : model?.type) as TstMediaType | undefined;
+    if (!model || !isAdminManagedPricingModel(model.model)) {
+      return;
+    }
+
+    if (!isPerSecondBillingModel(entry.model, type)) {
+      flatEntries.push(entry);
+      return;
+    }
+
+    const key = getPerSecondPricingKey({
+      modelId: entry.model,
+      server: entry.server,
+      resolution: entry.resolution,
+      speed: entry.speed,
+      audio: entry.audio,
+    });
+    const seconds = parseDurationSeconds(entry.duration);
+    const flatVcoin = creditsToVcoin(entry.credits);
+    const unitVcoin = seconds > 0 ? Math.max(1, Math.ceil(flatVcoin / seconds)) : Math.max(1, flatVcoin);
+    const existing = perSecondRows.get(key);
+    const nextDefault = existing?.defaultAuditionVcoin
+      ? Math.min(existing.defaultAuditionVcoin, unitVcoin)
+      : unitVcoin;
+
+    perSecondRows.set(key, {
+      type: type || 'video',
+      modelId: entry.model,
+      modelName: model.name || entry.model,
+      server: normalizeCatalogServer(entry.server),
+      resolution: entry.resolution,
+      quality: entry.quality,
+      duration: 'per_second',
+      speed: normalizeCatalogSpeed(entry.speed) || undefined,
+      audio: entry.audio,
+      credits: 0,
+      vcoin: nextDefault,
+      configKey: key,
+      defaultAuditionVcoin: nextDefault,
+      billingUnit: 'second',
+    });
+  });
+
+  const rows: Array<TstPricingRow | null> = flatEntries.map((entry) => {
     const model = modelMap.get(normalizeModelId(entry.model));
     if (!model || !isAdminManagedPricingModel(model.model)) {
       return null;
@@ -1514,10 +1685,11 @@ export const getPricingRows = async (forceRefresh = false): Promise<TstPricingRo
       credits: entry.credits,
       vcoin: creditsToVcoin(entry.credits),
       configKey: entry.config_key,
+      billingUnit: 'flat',
     };
   });
 
-  return [...rows.filter((row): row is TstPricingRow => row !== null), ...getVertexEditPricingRows()]
+  return [...rows.filter((row): row is TstPricingRow => row !== null), ...perSecondRows.values(), ...getVertexEditPricingRows()]
     .sort((a, b) => {
       if (a.type !== b.type) return a.type.localeCompare(b.type);
       if (a.modelName !== b.modelName) return a.modelName.localeCompare(b.modelName);

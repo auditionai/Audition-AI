@@ -47,6 +47,7 @@ interface AIModelOption {
     id: string;
     name: string;
     price: number;
+    billingUnit?: 'flat' | 'second';
     badges?: { text: string; type: 'blue' | 'outline' | 'speed' | 'duration' | 'server' }[];
 }
 
@@ -58,6 +59,11 @@ const SMART_TIPS = [
     { icon: Icons.Image, text: "📸 Mẹo: Ảnh gốc rõ nét sẽ cho ra video chất lượng cao hơn." },
     { icon: Icons.Activity, text: "🏃 Tip: Motion Control giúp bạn điều khiển chuyển động nhân vật theo video mẫu." },
     { icon: Icons.ExternalLink, text: "👗 Mẹo: Truy cập AuMix3D.com để mix đồ và chụp ảnh nhân vật tách nền cực nét làm nguyên liệu cho AI!" }
+];
+
+const VIDEO_NOTICE_MESSAGES = [
+    'Tạo video có thể mất 30-60 phút. Vui lòng kiên nhẫn chờ đến khi hệ thống xử lý xong, không cần tạo lại nhiều lần.',
+    'Hãy tải ảnh nhân vật rõ nét, nhập prompt chi tiết và dùng video mẫu dưới 30 giây. Video mẫu trên 30 giây sẽ không tạo được.',
 ];
 
 const OptionDropdown = ({ label, value, options, onChange, icon: Icon }: any) => {
@@ -113,11 +119,19 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
   const [activeMode, setActiveMode] = useState<VideoMode>(feature.id === 'motion_control_gen' ? 'motion_control' : 'video_ai');
   
   const [currentTipIdx, setCurrentTipIdx] = useState(0);
+  const [videoNoticeIdx, setVideoNoticeIdx] = useState(0);
 
   useEffect(() => {
       const interval = setInterval(() => {
           setCurrentTipIdx(prev => (prev + 1) % SMART_TIPS.length);
       }, 5000);
+      return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+      const interval = setInterval(() => {
+          setVideoNoticeIdx(prev => (prev + 1) % VIDEO_NOTICE_MESSAGES.length);
+      }, 3000);
       return () => clearInterval(interval);
   }, []);
 
@@ -177,10 +191,8 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                   auditionPriceVcoin: row.audition_price_vcoin,
               }));
 
-              const liveVideoModels = getVideoModelSpecs(livePricing, models).map((spec) => ({
-                  id: spec.modelId,
-                  name: spec.displayName,
-                  price: getVideoCostBreakdown({
+              const liveVideoModels = getVideoModelSpecs(livePricing, models).map((spec) => {
+                  const priceBreakdown = getVideoCostBreakdown({
                       modelId: spec.modelId,
                       serverId: spec.servers[0] || 'fast',
                       resolution: spec.resolutions[0] || '720p',
@@ -189,19 +201,29 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                       audio: false,
                       pricingEntries: livePricing,
                       pricingOverrides: overrideRows
-                  }).vcoin
-              }));
-              const liveMotionModels = getMotionModelSpecs(livePricing, models).map((spec) => ({
-                  id: spec.modelId,
-                  name: spec.displayName,
-                  price: getMotionCostBreakdown({
+                  });
+                  return {
+                      id: spec.modelId,
+                      name: spec.displayName,
+                      price: priceBreakdown.billingUnit === 'second' ? (priceBreakdown.unitVcoin || priceBreakdown.vcoin) : priceBreakdown.vcoin,
+                      billingUnit: priceBreakdown.billingUnit,
+                  };
+              });
+              const liveMotionModels = getMotionModelSpecs(livePricing, models).map((spec) => {
+                  const priceBreakdown = getMotionCostBreakdown({
                       modelId: spec.modelId,
                       serverId: spec.servers[0] || 'vip2',
                       resolution: spec.resolutions[0] || '720p',
                       pricingEntries: livePricing,
                       pricingOverrides: overrideRows
-                  }).vcoin
-              }));
+                  });
+                  return {
+                      id: spec.modelId,
+                      name: spec.displayName,
+                      price: priceBreakdown.billingUnit === 'second' ? (priceBreakdown.unitVcoin || priceBreakdown.vcoin) : priceBreakdown.vcoin,
+                      billingUnit: priceBreakdown.billingUnit,
+                  };
+              });
 
               if (liveVideoModels.length > 0) {
                   setVideoModelOptions(liveVideoModels);
@@ -242,6 +264,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
           serverId: uiServerToTst(server) || 'vip2',
           resolution: quality.toLowerCase(),
           speed: uiSpeedToTst(speed) || 'fast',
+          durationSeconds: motionVideoDurationSeconds,
           pricingEntries,
           pricingOverrides
         })
@@ -259,6 +282,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
   const calculateCost = () => {
       return currentCostBreakdown.vcoin;
   };
+  const isPerSecondBilling = currentCostBreakdown.billingUnit === 'second';
 
   const getModelOptions = () => {
       if (activeMode === 'motion_control') {
@@ -800,6 +824,22 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
           </div>
       </a>
 
+      <div className="w-full mb-4 md:mb-6 rounded-2xl border border-audi-cyan/25 bg-gradient-to-r from-audi-cyan/10 via-audi-purple/10 to-audi-pink/10 p-3 md:p-4 shadow-[0_0_22px_rgba(33,212,253,0.08)] overflow-hidden">
+          <div className="flex items-start gap-3">
+              <div className="shrink-0 mt-0.5 rounded-xl bg-audi-cyan/15 border border-audi-cyan/30 p-2">
+                  <Icons.Info className="w-4 h-4 text-audi-cyan" />
+              </div>
+              <div className="min-w-0">
+                  <div className="text-[10px] font-black uppercase tracking-[0.18em] text-audi-cyan mb-1">
+                      Thông báo tạo video
+                  </div>
+                  <p key={videoNoticeIdx} className="text-xs md:text-sm font-semibold text-slate-100 leading-relaxed animate-fade-in">
+                      {VIDEO_NOTICE_MESSAGES[videoNoticeIdx]}
+                  </p>
+              </div>
+          </div>
+      </div>
+
       <div className="w-full grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4 md:mt-0">
         {/* LEFT PANEL: CONFIGURATION */}
         <div className="lg:col-span-2 space-y-4">
@@ -985,7 +1025,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                                         )}
                                     </span>
                                     <div className="flex items-center gap-1 text-xs font-bold text-audi-cyan whitespace-nowrap">
-                                        Từ {model.price} VC <Icons.Gem className="w-3 h-3" />
+                                        Từ {model.price} {model.billingUnit === 'second' ? 'VC/s' : 'VC'} <Icons.Gem className="w-3 h-3" />
                                     </div>
                                 </div>
                                 
@@ -1210,6 +1250,12 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                           <span className="text-[10px] font-bold text-audi-yellow mb-1">VCOIN</span>
                       </div>
                   </div>
+                  {isPerSecondBilling && (
+                      <div className="mt-3 rounded-lg border border-audi-cyan/20 bg-audi-cyan/10 px-3 py-2 text-[10px] font-bold text-audi-cyan">
+                          Tính theo giây: {currentCostBreakdown.unitVcoin || 0} VC/s
+                          {currentCostBreakdown.billedSeconds ? ` × ${currentCostBreakdown.billedSeconds}s = ${calculateCost()} VC` : ''}
+                      </div>
+                  )}
                   {activeMode === 'video_ai' && modelOptions.durations.length > 0 ? (
                       <div className="flex justify-between text-[9px] text-slate-500 mt-2 font-mono border-t border-white/5 pt-2">
                           {modelOptions.durations.map(d => {
@@ -1219,7 +1265,9 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                                   resolution: quality.toLowerCase(),
                                   duration: d.toLowerCase(),
                                   speed: uiSpeedToTst(speed) || 'fast',
-                                  pricingEntries
+                                  audio: sound,
+                                  pricingEntries,
+                                  pricingOverrides
                                 }).vcoin;
                           return (
                               <span key={d} className={duration === d ? 'text-white font-bold' : ''}>{d}: {durationPrice}VC</span>

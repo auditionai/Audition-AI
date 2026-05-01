@@ -37,6 +37,7 @@ interface AIModelOption {
   id: string;
   name: string;
   price: number;
+  billingUnit?: 'flat' | 'second';
 }
 
 const SMART_TIPS = [
@@ -46,6 +47,11 @@ const SMART_TIPS = [
   '🎨 Mẹo: Mô tả chi tiết hành động (ví dụ: đang đi bộ, mỉm cười) để AI hiểu rõ.',
   '📸 Mẹo: Ảnh gốc rõ nét sẽ cho ra video chất lượng cao hơn.',
   '🏃 Tip: Motion Control giúp bạn điều khiển chuyển động nhân vật theo video mẫu.'
+];
+
+const VIDEO_NOTICE_MESSAGES = [
+  'Tạo video có thể mất 30-60 phút. Vui lòng chờ đến khi hệ thống xử lý xong.',
+  'Hãy tải ảnh rõ nét, nhập prompt chi tiết và dùng video mẫu dưới 30 giây.',
 ];
 
 const tryStageInputToR2 = async (source: File | Blob | string, folder: string) => {
@@ -95,6 +101,7 @@ export function WorkspaceVideo() {
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [currentTipIdx, setCurrentTipIdx] = useState(0);
+  const [videoNoticeIdx, setVideoNoticeIdx] = useState(0);
 
   const lastAutoSelectedVideoModelRef = useRef<string | null>(null);
 
@@ -123,10 +130,8 @@ export function WorkspaceVideo() {
           auditionPriceVcoin: row.audition_price_vcoin,
         }));
 
-        const liveVideoModels = getVideoModelSpecs(livePricing, models).map((spec: any) => ({
-          id: spec.modelId,
-          name: spec.displayName,
-          price: getVideoCostBreakdown({
+        const liveVideoModels = getVideoModelSpecs(livePricing, models).map((spec: any) => {
+          const priceBreakdown = getVideoCostBreakdown({
             modelId: spec.modelId,
             serverId: spec.servers[0] || 'fast',
             resolution: spec.resolutions[0] || '720p',
@@ -135,20 +140,30 @@ export function WorkspaceVideo() {
             audio: false,
             pricingEntries: livePricing,
             pricingOverrides: overrideRows
-          }).vcoin
-        }));
+          });
+          return {
+            id: spec.modelId,
+            name: spec.displayName,
+            price: priceBreakdown.billingUnit === 'second' ? (priceBreakdown.unitVcoin || priceBreakdown.vcoin) : priceBreakdown.vcoin,
+            billingUnit: priceBreakdown.billingUnit,
+          };
+        });
 
-        const liveMotionModels = getMotionModelSpecs(livePricing, models).map((spec: any) => ({
-          id: spec.modelId,
-          name: spec.displayName,
-          price: getMotionCostBreakdown({
+        const liveMotionModels = getMotionModelSpecs(livePricing, models).map((spec: any) => {
+          const priceBreakdown = getMotionCostBreakdown({
             modelId: spec.modelId,
             serverId: spec.servers[0] || 'vip2',
             resolution: spec.resolutions[0] || '720p',
             pricingEntries: livePricing,
             pricingOverrides: overrideRows
-          }).vcoin
-        }));
+          });
+          return {
+            id: spec.modelId,
+            name: spec.displayName,
+            price: priceBreakdown.billingUnit === 'second' ? (priceBreakdown.unitVcoin || priceBreakdown.vcoin) : priceBreakdown.vcoin,
+            billingUnit: priceBreakdown.billingUnit,
+          };
+        });
 
         if (liveVideoModels.length > 0) {
           setVideoModelOptions(liveVideoModels);
@@ -179,6 +194,7 @@ export function WorkspaceVideo() {
         serverId: uiServerToTst(server) || 'vip2',
         resolution: quality.toLowerCase(),
         speed: uiSpeedToTst(speed) || 'fast',
+        durationSeconds: motionVideoDurationSeconds,
         pricingEntries,
         pricingOverrides
       })
@@ -346,11 +362,17 @@ export function WorkspaceVideo() {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    const interval = setInterval(() => setVideoNoticeIdx((prev) => (prev + 1) % VIDEO_NOTICE_MESSAGES.length), 3000);
+    return () => clearInterval(interval);
+  }, []);
+
   // --- Validation ---
   const isCatalogReady = !catalogLoading && !catalogError && pricingEntries.length > 0 && runtimeModels.length > 0
     && (activeMode === 'video_ai' ? videoModelOptions.length > 0 : motionModelOptions.length > 0);
 
   const calculateCost = () => currentCostBreakdown.vcoin;
+  const isPerSecondBilling = currentCostBreakdown.billingUnit === 'second';
 
   const getVideoDurationSeconds = async (file: File) => {
     const objectUrl = URL.createObjectURL(file);
@@ -551,6 +573,18 @@ export function WorkspaceVideo() {
           ))}
         </div>
 
+        <div className="rounded-[18px] border border-cyan-200 bg-cyan-50/80 p-3 dark:border-cyan-500/25 dark:bg-cyan-500/10">
+          <div className="flex items-start gap-2">
+            <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-cyan-600 dark:text-cyan-300" />
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-cyan-700 dark:text-cyan-300">Thông báo tạo video</p>
+              <p key={videoNoticeIdx} className="mt-1 text-xs font-semibold leading-relaxed text-cyan-950 dark:text-cyan-50">
+                {VIDEO_NOTICE_MESSAGES[videoNoticeIdx]}
+              </p>
+            </div>
+          </div>
+        </div>
+
         {activeMode === 'video_ai' ? (
           <div className="space-y-6">
             {/* Keyframe Upload */}
@@ -622,7 +656,10 @@ export function WorkspaceVideo() {
                         videoModel === m.id ? 'bg-purple-50 dark:bg-purple-500/10 text-purple-700 border border-purple-200 dark:border-purple-500/30' : 'bg-white dark:bg-[#18181B] border border-gray-100 text-gray-500 dark:text-zinc-400'
                       }`}
                     >
-                      {m.name}
+                      <span className="block font-bold">{m.name}</span>
+                      <span className="mt-1 block text-[10px] opacity-70">
+                        Từ {m.price} {m.billingUnit === 'second' ? 'VC/s' : 'VC'}
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -785,7 +822,10 @@ export function WorkspaceVideo() {
                         motionModel === m.id ? 'bg-purple-50 dark:bg-purple-500/10 text-purple-700 border border-purple-200 dark:border-purple-500/30' : 'bg-white dark:bg-[#18181B] border border-gray-100 text-gray-500 dark:text-zinc-400'
                       }`}
                     >
-                      {m.name}
+                      <span className="block font-bold">{m.name}</span>
+                      <span className="mt-1 block text-[10px] opacity-70">
+                        Từ {m.price} {m.billingUnit === 'second' ? 'VC/s' : 'VC'}
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -890,10 +930,18 @@ export function WorkspaceVideo() {
           )}
 
           <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-black/20 px-2.5 py-1 rounded-full backdrop-blur-md">
-            <span className="text-[12px] font-bold text-white">{isCatalogReady ? calculateCost() : '...'}</span>
+            <span className="text-[12px] font-bold text-white">
+              {isCatalogReady ? calculateCost() : '...'}{isPerSecondBilling ? ' VC' : ''}
+            </span>
             <Coins className="w-3 h-3 text-yellow-300" />
           </div>
         </Button>
+        {isCatalogReady && isPerSecondBilling && (
+          <p className="mt-2 text-center text-[11px] font-semibold text-cyan-600 dark:text-cyan-300">
+            Tính theo giây: {currentCostBreakdown.unitVcoin || 0} VC/s
+            {currentCostBreakdown.billedSeconds ? ` × ${currentCostBreakdown.billedSeconds}s` : ''}
+          </p>
+        )}
       </div>
 
       <input

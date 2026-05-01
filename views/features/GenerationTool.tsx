@@ -291,6 +291,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const selectedGenerationCost = getGenerationCostBreakdown({
       tier: generationTier,
       resolution,
+      quality: aiModel === 'gpt' ? imageQuality : undefined,
       speed: generationSpeedId,
       serverId: generationServerId,
       pricingEntries,
@@ -312,6 +313,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   });
   const gptResolutionCosts = getResolutionCostMap({
       tier: 'gpt',
+      quality: imageQuality,
       speed: generationSpeedId,
       serverId: generationServerId,
       pricingEntries,

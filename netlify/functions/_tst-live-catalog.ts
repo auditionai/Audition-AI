@@ -9,6 +9,7 @@ type TstProviderPricingEntry = {
   config_key?: string;
   credits?: number;
   resolution?: string;
+  quality?: string;
   speed?: string;
   duration?: string;
   audio?: boolean;
@@ -42,6 +43,7 @@ const normalizeSpeed = (value?: string | null) => normalize(value || 'fast');
 const normalizeResolution = (value?: string | null) => normalize(value);
 const normalizeDuration = (value?: string | null) => normalize(value);
 const normalizeServer = (value?: string | null) => normalize(value);
+const normalizeQuality = (value?: string | null) => normalize(value);
 const isFresh = (timestamp: number) => timestamp > 0 && Date.now() - timestamp < TST_LIVE_CATALOG_TTL_MS;
 
 const getApiKey = () => {
@@ -168,6 +170,21 @@ const matchesFastSpeed = (entrySpeed?: string, requestedSpeed?: string) => {
   return normalizedRequested === 'fast' && !normalize(entrySpeed);
 };
 
+const parseGptImage2ConfigKey = (configKey?: string) => {
+  const match = normalize(configKey).match(/^(1k|2k|4k)-(low|medium|high)(?:-|$)/);
+  return match ? { resolution: match[1], quality: match[2] } : null;
+};
+
+const getPricingResolution = (entry: TstProviderPricingEntry) =>
+  normalize(entry.model) === 'image-gpt-2'
+    ? parseGptImage2ConfigKey(entry.config_key)?.resolution || normalizeResolution(entry.resolution)
+    : normalizeResolution(entry.resolution);
+
+const getPricingQuality = (entry: TstProviderPricingEntry) =>
+  normalize(entry.model) === 'image-gpt-2'
+    ? parseGptImage2ConfigKey(entry.config_key)?.quality || normalizeQuality(entry.quality)
+    : normalizeQuality(entry.quality);
+
 const getAspectRatios = (model: TstProviderModel) => {
   const ratios = [
     ...((model.capabilities?.aspect_ratios || []) as string[]),
@@ -183,17 +200,20 @@ const findPricingMatch = (
     resolution,
     duration,
     speed,
+    quality,
     audio,
   }: {
     serverId?: string;
     resolution?: string;
     duration?: string;
     speed?: string;
+    quality?: string;
     audio?: boolean;
   },
 ) => entries.find((entry) => {
   if (serverId && normalizeServer(entry.server) !== normalizeServer(serverId)) return false;
-  if (resolution && normalizeResolution(entry.resolution) !== normalizeResolution(resolution)) return false;
+  if (resolution && getPricingResolution(entry) !== normalizeResolution(resolution)) return false;
+  if (quality && getPricingQuality(entry) !== normalizeQuality(quality)) return false;
   if (duration && normalizeDuration(entry.duration) !== normalizeDuration(duration)) return false;
   if (!matchesFastSpeed(entry.speed, speed)) return false;
   if (typeof audio === 'boolean' && typeof entry.audio === 'boolean' && entry.audio !== audio) return false;
@@ -301,6 +321,7 @@ export const validateQueuePayloadAgainstLiveCatalog = async (
     resolution: resolution || undefined,
     duration: duration || undefined,
     speed: speed || undefined,
+    quality: quality || undefined,
     audio,
   });
 

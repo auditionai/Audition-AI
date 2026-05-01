@@ -55,6 +55,8 @@ export interface ImageRenderReferenceEntry {
   source: string;
   indexLabel: string;
   facePriorityMode?: CharacterFacePriorityMode;
+  characterIndex?: number;
+  referenceKind?: CharacterReferenceKind;
 }
 
 export interface ImageRoleContractLayer {
@@ -248,7 +250,18 @@ export const isProImageGenerationModel = (modelId?: string | null) =>
 export const isGptImageGenerationModel = (modelId?: string | null) =>
   normalizeValue(modelId) === 'image-gpt-2';
 
-const GPT_IMAGE_GENERATION_MAX_RENDER_REFERENCES = 5;
+export const getImageGenerationRenderReferenceLimit = (modelId?: string | null) => {
+  const normalizedModelId = normalizeValue(modelId);
+  if (
+    normalizedModelId === 'nano-banana-2' ||
+    normalizedModelId === 'nano-banana-pro' ||
+    normalizedModelId === 'image-gpt-2'
+  ) {
+    return 5;
+  }
+
+  return 5;
+};
 
 const PORTRAIT_HEADSHOT_PROMPT_PATTERNS = [
   /\bclose[\s-]?up\b/i,
@@ -693,46 +706,138 @@ export const getImageDirectorSources = (
 export const getImageRenderReferenceEntries = (
   payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
 ): ImageRenderReferenceEntry[] => {
-  const isGptImage2 = isGptImageGenerationModel(payload.modelId);
-  const entries: ImageRenderReferenceEntry[] = [];
+  const groups = getImageCharacterReferenceGroups(payload);
+  const characterCount = Math.max(
+    1,
+    Math.floor(Number(payload.characterCount || groups.length || 1)),
+  );
+  const renderLimit = getImageGenerationRenderReferenceLimit(payload.modelId);
+  const selected: ImageRenderReferenceEntry[] = [];
+  const seenSources = new Set<string>();
+
+  const addEntry = (entry?: ImageRenderReferenceEntry | null) => {
+    if (!entry || !entry.source || seenSources.has(entry.source) || selected.length >= renderLimit) {
+      return;
+    }
+    seenSources.add(entry.source);
+    selected.push(entry);
+  };
+
+  const createSampleEntry = (): ImageRenderReferenceEntry | null =>
+    payload.sampleImage
+      ? {
+          role: 'sample',
+          source: payload.sampleImage,
+          indexLabel: 'SAMPLE IMAGE',
+        }
+      : null;
+
+  const createStyleEntry = (): ImageRenderReferenceEntry | null =>
+    payload.styleImage
+      ? {
+          role: 'style',
+          source: payload.styleImage,
+          indexLabel: 'STYLE IMAGE',
+        }
+      : null;
+
+  const createCharacterEntry = (
+    group: CharacterReferenceGroup,
+    reference: CharacterReferenceSourceEntry,
+    referenceIndex: number,
+  ): ImageRenderReferenceEntry => {
+    const kindLabel =
+      reference.kind === 'body'
+        ? 'BODY'
+        : reference.kind === 'face_detail'
+          ? 'FACE DETAIL LOCK'
+        : reference.kind === 'face'
+          ? 'FACE LOCK'
+          : `REFERENCE ${referenceIndex + 1}`;
+    const genderLabel = group.gender ? ` ${group.gender.toUpperCase()}` : '';
+
+    return {
+      role: 'character',
+      source: reference.source,
+      indexLabel: `CHARACTER ${group.characterIndex}${genderLabel} ${kindLabel}`,
+      facePriorityMode: group.facePriorityMode === 'portrait_headshot' ? 'portrait_headshot' : undefined,
+      characterIndex: group.characterIndex,
+      referenceKind: reference.kind,
+    };
+  };
+
+  const findCharacterEntry = (
+    group: CharacterReferenceGroup,
+    preferredKinds: CharacterReferenceKind[],
+  ): ImageRenderReferenceEntry | null => {
+    const references = sortCharacterReferences(group.references, group.facePriorityMode);
+    for (const kind of preferredKinds) {
+      const referenceIndex = references.findIndex((reference) => reference.kind === kind);
+      if (referenceIndex >= 0) {
+        return createCharacterEntry(group, references[referenceIndex], referenceIndex);
+      }
+    }
+
+    const fallback = references[0];
+    return fallback ? createCharacterEntry(group, fallback, 0) : null;
+  };
+
+  const bodyEntryFor = (group: CharacterReferenceGroup) =>
+    findCharacterEntry(group, ['body', 'reference', 'face', 'face_detail']);
+
+  const faceEntryFor = (group: CharacterReferenceGroup) =>
+    findCharacterEntry(
+      group,
+      group.facePriorityMode === 'portrait_headshot'
+        ? ['face_detail', 'face', 'body', 'reference']
+        : ['face', 'face_detail', 'body', 'reference'],
+    );
+
+  const addBodyEntries = (limit = groups.length) => {
+    groups.slice(0, limit).forEach((group) => addEntry(bodyEntryFor(group)));
+  };
+
+  const addFaceEntries = (limit = groups.length) => {
+    groups.slice(0, limit).forEach((group) => addEntry(faceEntryFor(group)));
+  };
+
+  if (characterCount <= 1) {
+    addEntry(createSampleEntry());
+    addBodyEntries(1);
+    addFaceEntries(1);
+    addEntry(createStyleEntry());
+    return selected;
+  }
+
+  if (characterCount === 2) {
+    if (payload.sampleImage) {
+      addEntry(createSampleEntry());
+      addBodyEntries(2);
+      addEntry(createStyleEntry());
+    } else {
+      addBodyEntries(2);
+      addFaceEntries(2);
+      addEntry(createStyleEntry());
+    }
+    return selected;
+  }
+
+  if (characterCount === 3) {
+    addEntry(createSampleEntry());
+    addBodyEntries(3);
+    addEntry(createStyleEntry());
+    return selected;
+  }
 
   if (payload.sampleImage) {
-    entries.push({
-      role: 'sample',
-      source: payload.sampleImage,
-      indexLabel: 'SAMPLE IMAGE',
-    });
+    addEntry(createSampleEntry());
+    addBodyEntries(4);
+  } else {
+    addBodyEntries(4);
+    addEntry(createStyleEntry());
   }
 
-  getImageCharacterReferenceGroups(payload).forEach((group) => {
-    group.references.forEach((reference, referenceIndex) => {
-      const kindLabel =
-        reference.kind === 'body'
-          ? 'BODY'
-          : reference.kind === 'face_detail'
-            ? 'FACE DETAIL LOCK'
-          : reference.kind === 'face'
-            ? 'FACE LOCK'
-            : `REFERENCE ${referenceIndex + 1}`;
-      const genderLabel = group.gender ? ` ${group.gender.toUpperCase()}` : '';
-      entries.push({
-        role: 'character',
-        source: reference.source,
-        indexLabel: `CHARACTER ${group.characterIndex}${genderLabel} ${kindLabel}`,
-        facePriorityMode: group.facePriorityMode === 'portrait_headshot' ? 'portrait_headshot' : undefined,
-      });
-    });
-  });
-
-  if (payload.styleImage) {
-    entries.push({
-      role: 'style',
-      source: payload.styleImage,
-      indexLabel: 'STYLE IMAGE',
-    });
-  }
-
-  return isGptImage2 ? entries.slice(0, GPT_IMAGE_GENERATION_MAX_RENDER_REFERENCES) : entries;
+  return selected;
 };
 
 export const getImageRenderReferenceSources = (
@@ -748,10 +853,12 @@ export const buildImageRoleContract = (
   const characterCount = Math.max(1, Math.floor(Number(payload.characterCount || characterGroups.length || 1)));
   const layeredSingleSubjectAllowed = allowsLayeredSingleSubjectComposition(payload);
   const shotType = resolveImageShotType(payload);
-  const hasSample = Boolean(payload.sampleImage);
-  const hasStyle = Boolean(payload.styleImage);
-  const hasFaceLock = characterGroups.some((group) => group.references.some((reference) => reference.kind === 'face'));
-  const hasPortraitPriorityFace = characterGroups.some((group) => group.facePriorityMode === 'portrait_headshot');
+  const hasSample = renderEntries.some((entry) => entry.role === 'sample');
+  const hasStyle = renderEntries.some((entry) => entry.role === 'style');
+  const hasFaceLock = renderEntries.some(
+    (entry) => entry.role === 'character' && (entry.referenceKind === 'face' || entry.referenceKind === 'face_detail'),
+  );
+  const hasPortraitPriorityFace = renderEntries.some((entry) => entry.facePriorityMode === 'portrait_headshot');
   const skinToneAnchors = characterGroups
     .map((group) => {
       const visionEntry = characterVisionMap.get(group.characterIndex);
@@ -949,6 +1056,7 @@ const buildImageReferenceOrderDirective = (
 ) => {
   const entries = getImageRenderReferenceEntries(payload);
   const hasSample = Boolean(payload.sampleImage);
+  const hasRenderedStyle = entries.some((entry) => entry.role === 'style');
   const layeredSingleSubjectAllowed = allowsLayeredSingleSubjectComposition(payload);
   if (entries.length === 0) {
     return hasSample
@@ -1002,7 +1110,9 @@ const buildImageReferenceOrderDirective = (
     hasSample
       ? '- The final image must never be a near-unchanged copy of a standing CHARACTER REFERENCE unless the SAMPLE IMAGE itself is also a standing front-view pose.'
       : '- The final image must never be a near-unchanged copy of a standing CHARACTER REFERENCE when the PRIMARY COMMAND PROMPT asks for a different pose, scene, framing, or background.',
-    '- STYLE IMAGE may improve render quality only. It must not override pose, composition, identity, outfit, or subject count.',
+    hasRenderedStyle
+      ? '- STYLE IMAGE may improve render quality only. It must not override pose, composition, identity, outfit, or subject count.'
+      : '- No direct STYLE IMAGE is sent in the render payload for this job. Apply style only from the text/style analysis fields and never sacrifice sample composition or character identity to recover style.',
     '- Never output a split-screen, image grid, collage, storyboard, or panel layout. Always render one single continuous final frame.',
   ].join('\n');
 };
@@ -1012,6 +1122,7 @@ const buildReducedImageReferenceOrderDirectiveWithoutSample = (
 ) => {
   const entries = getImageRenderReferenceEntries(payload);
   const layeredSingleSubjectAllowed = allowsLayeredSingleSubjectComposition(payload);
+  const hasRenderedStyle = entries.some((entry) => entry.role === 'style');
 
   if (entries.length === 0) {
     return [
@@ -1049,7 +1160,9 @@ const buildReducedImageReferenceOrderDirectiveWithoutSample = (
     layeredSingleSubjectAllowed
       ? '- Do not invent a second distinct person.'
       : '- Every uploaded CHARACTER slot is mandatory. Never add, remove, duplicate, blend, or replace a slot.',
-    '- STYLE IMAGE must never override identity, subject count, or composition.',
+    hasRenderedStyle
+      ? '- STYLE IMAGE must never override identity, subject count, or composition.'
+      : '- No direct STYLE IMAGE is sent in the render payload for this job. Apply style only from text/style analysis fields.',
     '- Never output a split-screen, image grid, collage, storyboard, or panel layout.',
   ].join('\n');
 };

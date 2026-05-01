@@ -12,6 +12,7 @@ export interface TstPricingEntry {
   config_key: string;
   credits: number;
   resolution?: string;
+  quality?: string;
   speed?: string;
   duration?: string;
   audio?: boolean;
@@ -107,6 +108,7 @@ export interface TstPricingRow {
   modelName: string;
   server: string;
   resolution?: string;
+  quality?: string;
   duration?: string;
   speed?: string;
   audio?: boolean;
@@ -181,6 +183,7 @@ const normalizeServer = (value?: string) => (value || 'fast').trim().toLowerCase
 const normalizeSpeed = (value?: string) => (value || 'fast').trim().toLowerCase();
 const normalizeResolution = (value?: string) => (value || 'default').trim().toLowerCase();
 const normalizeDuration = (value?: string) => (value || '').trim().toLowerCase();
+const normalizeQuality = (value?: string) => (value || '').trim().toLowerCase();
 const normalizeCatalogServer = (value?: string) => (value || '').trim().toLowerCase();
 const normalizeCatalogSpeed = (value?: string) => (value || '').trim().toLowerCase();
 const normalizeCatalogResolution = (value?: string) => (value || '').trim().toLowerCase();
@@ -708,16 +711,30 @@ const getFallbackMotionSpec = (modelId: string, name?: string): TstMotionModelSp
   };
 };
 
-const mapPricingEntry = (entry: any): TstPricingEntry => ({
-  model: String(entry.model || ''),
-  server: String(entry.server || ''),
-  config_key: String(entry.config_key || ''),
-  credits: Number(entry.credits || 0),
-  resolution: entry.resolution ? String(entry.resolution) : undefined,
-  speed: entry.speed ? String(entry.speed) : undefined,
-  duration: entry.duration ? String(entry.duration) : undefined,
-  audio: entry.audio === true,
-});
+const parseGptImage2ConfigKey = (configKey?: string) => {
+  const match = String(configKey || '').trim().toLowerCase().match(/^(1k|2k|4k)-(low|medium|high)(?:-|$)/);
+  return match ? { resolution: match[1], quality: match[2] } : null;
+};
+
+const mapPricingEntry = (entry: any): TstPricingEntry => {
+  const model = String(entry.model || '');
+  const configKey = String(entry.config_key || '');
+  const gptImage2Config = normalizeModelId(model) === 'image-gpt-2'
+    ? parseGptImage2ConfigKey(configKey)
+    : null;
+
+  return {
+    model,
+    server: String(entry.server || ''),
+    config_key: configKey,
+    credits: Number(entry.credits || 0),
+    resolution: gptImage2Config?.resolution || (entry.resolution ? String(entry.resolution) : undefined),
+    quality: gptImage2Config?.quality,
+    speed: entry.speed ? String(entry.speed) : (gptImage2Config ? 'fast' : undefined),
+    duration: entry.duration ? String(entry.duration) : undefined,
+    audio: entry.audio === true,
+  };
+};
 
 const mapRuntimeModel = (entry: any): TstRuntimeModel => ({
   model: String(entry.model || ''),
@@ -738,6 +755,7 @@ const getMatchingEntries = ({
   speed,
   serverId,
   duration,
+  quality,
 }: {
   modelId: string;
   pricingEntries: TstPricingEntry[];
@@ -745,17 +763,20 @@ const getMatchingEntries = ({
   speed?: string;
   serverId?: string;
   duration?: string;
+  quality?: string;
 }) => {
   const normalizedResolution = resolution ? normalizeResolution(resolution) : null;
   const normalizedSpeed = speed ? normalizeSpeed(speed) : null;
   const normalizedServer = serverId ? normalizeServer(serverId) : null;
   const normalizedDuration = duration ? normalizeDuration(duration) : null;
+  const normalizedQuality = quality ? normalizeQuality(quality) : null;
 
   return getPricingEntriesForModel(modelId, pricingEntries).filter((entry) => {
     if (normalizedResolution && normalizeResolution(entry.resolution) !== normalizedResolution) return false;
     if (normalizedSpeed && normalizeSpeed(entry.speed) !== normalizedSpeed) return false;
     if (normalizedServer && normalizeServer(entry.server) !== normalizedServer) return false;
     if (normalizedDuration && normalizeDuration(entry.duration) !== normalizedDuration) return false;
+    if (normalizedQuality && normalizeQuality(entry.quality) !== normalizedQuality) return false;
     return true;
   });
 };
@@ -1022,6 +1043,7 @@ export const getCompatibleGenerationResolutions = ({
 export const getGenerationCostBreakdown = ({
   tier,
   resolution,
+  quality,
   speed,
   serverId,
   pricingEntries = [],
@@ -1029,6 +1051,7 @@ export const getGenerationCostBreakdown = ({
 }: {
   tier: TstGenerationTier;
   resolution: TstResolution;
+  quality?: TstImageQuality;
   speed: string;
   serverId: string;
   pricingEntries?: TstPricingEntry[];
@@ -1037,6 +1060,7 @@ export const getGenerationCostBreakdown = ({
   const modelId = tierToModelId[tier];
   const modelEntries = getPricingEntriesForModel(modelId, pricingEntries);
   const normalizedResolution = normalizeResolution(resolution);
+  const normalizedQuality = normalizeQuality(quality);
   const normalizedSpeed = normalizeSpeed(speed);
   const normalizedServer = normalizeServer(serverId);
 
@@ -1044,17 +1068,21 @@ export const getGenerationCostBreakdown = ({
     (entry) =>
       normalizeServer(entry.server) === normalizedServer &&
       normalizeResolution(entry.resolution) === normalizedResolution &&
+      (!normalizedQuality || normalizeQuality(entry.quality) === normalizedQuality) &&
       normalizeSpeed(entry.speed) === normalizedSpeed,
     (entry) =>
       normalizeServer(entry.server) === normalizedServer &&
       normalizeResolution(entry.resolution) === normalizedResolution &&
+      (!normalizedQuality || normalizeQuality(entry.quality) === normalizedQuality) &&
       normalizedSpeed === 'fast' &&
       !entry.speed,
     (entry) =>
       normalizeResolution(entry.resolution) === normalizedResolution &&
+      (!normalizedQuality || normalizeQuality(entry.quality) === normalizedQuality) &&
       normalizeSpeed(entry.speed) === normalizedSpeed,
     (entry) =>
       normalizeResolution(entry.resolution) === normalizedResolution &&
+      (!normalizedQuality || normalizeQuality(entry.quality) === normalizedQuality) &&
       normalizedSpeed === 'fast' &&
       !entry.speed,
   ]);
@@ -1080,12 +1108,14 @@ export const getGenerationCostBreakdown = ({
 
 export const getResolutionCostMap = ({
   tier,
+  quality,
   speed,
   serverId,
   pricingEntries = [],
   pricingOverrides = [],
 }: {
   tier: TstGenerationTier;
+  quality?: TstImageQuality;
   speed: string;
   serverId: string;
   pricingEntries?: TstPricingEntry[];
@@ -1094,7 +1124,7 @@ export const getResolutionCostMap = ({
   Object.fromEntries(
     (['1K', '2K', '4K'] as TstResolution[]).map((resolution) => [
       resolution,
-      getGenerationCostBreakdown({ tier, resolution, speed, serverId, pricingEntries, pricingOverrides }),
+      getGenerationCostBreakdown({ tier, resolution, quality, speed, serverId, pricingEntries, pricingOverrides }),
     ]),
   ) as Record<TstResolution, TstGenerationCostBreakdown>;
 
@@ -1459,6 +1489,7 @@ export const getPricingRows = async (forceRefresh = false): Promise<TstPricingRo
       modelName: model.name || entry.model,
       server: normalizeCatalogServer(entry.server),
       resolution: entry.resolution,
+      quality: entry.quality,
       duration: entry.duration,
       speed: normalizeCatalogSpeed(entry.speed) || undefined,
       audio: entry.audio,

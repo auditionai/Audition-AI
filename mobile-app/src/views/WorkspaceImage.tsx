@@ -260,7 +260,7 @@ export function WorkspaceImage() {
     resolution,
   });
   const selectedCost = getGenerationCostBreakdown({
-    tier: generationTier, resolution, speed: generationSpeedId,
+    tier: generationTier, resolution, quality: aiModel === 'gpt' ? imageQuality : undefined, speed: generationSpeedId,
     serverId: generationServerId, pricingEntries, pricingOverrides,
   });
   const activeFeature = APP_CONFIG.main_features.find((feature) => feature.id === MODE_TO_FEATURE_ID[activeMode]) ?? APP_CONFIG.main_features[0];

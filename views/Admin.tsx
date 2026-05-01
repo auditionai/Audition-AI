@@ -2666,7 +2666,14 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                           )}
                                                       </div>
                                                   </td>
-                                                  <td className="px-4 py-3 text-white uppercase">{row.resolution || '-'}</td>
+                                                  <td className="px-4 py-3 text-white uppercase">
+                                                      <div>{row.resolution || '-'}</div>
+                                                      {row.quality && (
+                                                          <div className="mt-1 text-[10px] font-bold text-audi-cyan">
+                                                              {row.quality}
+                                                          </div>
+                                                      )}
+                                                  </td>
                                                   <td className="px-4 py-3 text-white uppercase">{row.duration || '-'}</td>
                                                   <td className="px-4 py-3 text-white">{tstSpeedToUi(row.speed) || '-'}</td>
                                                   <td className="px-4 py-3 text-center text-white">{row.audio ? 'Có' : '-'}</td>

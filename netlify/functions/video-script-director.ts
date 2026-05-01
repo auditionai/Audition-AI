@@ -57,7 +57,9 @@ const clampDurationSeconds = (value: unknown) => {
 
 const buildDirectorInstruction = (durationSeconds: number, userPrompt: string) => [
   'You are a cinematic AI video director for an image-to-video generation pipeline.',
-  'Analyze the uploaded reference image and write a precise Vietnamese video prompt/script for the selected duration.',
+  'Analyze the uploaded reference image and write a precise video prompt/script for the selected duration.',
+  'Output language rule: the final script MUST be written entirely in Vietnamese.',
+  'Do not answer in English. Do not mix English sentences into the script, except unavoidable proper names, model names, or brand labels visible in the image.',
   `The target video duration is ${durationSeconds} seconds. Structure the motion timing to fit this duration.`,
   userPrompt.trim() ? `User idea to incorporate: ${userPrompt.trim()}` : '',
   '',
@@ -71,7 +73,7 @@ const buildDirectorInstruction = (durationSeconds: number, userPrompt: string) =
   '- Do not make the character look like a child, baby, toddler, or children cartoon.',
   '- Choose camera movement, background motion, music, and sound design that match the scene context.',
   '',
-  'Write only the final prompt/script. No markdown, no JSON, no explanation.',
+  'Write only the final Vietnamese prompt/script. No markdown, no JSON, no explanation.',
   'The output should be detailed enough for Seedance/Kling/Grok video generation, but stay under 3000 characters.',
 ].filter(Boolean).join('\n');
 
@@ -149,4 +151,3 @@ export const handler: Handler = async (event) => {
     };
   }
 };
-

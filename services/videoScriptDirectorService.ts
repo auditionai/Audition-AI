@@ -7,18 +7,33 @@ export const generateVideoScriptWithVertex = async ({
   durationSeconds: number | string;
   userPrompt?: string;
 }) => {
-  const response = await fetch('/api/video-script-director', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      imageSource,
-      durationSeconds,
-      userPrompt: userPrompt || '',
-    }),
+  const requestBody = JSON.stringify({
+    imageSource,
+    durationSeconds,
+    userPrompt: userPrompt || '',
   });
 
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
+  const endpoints = ['/api/video-script-director', '/.netlify/functions/video-script-director'];
+  let response: Response | null = null;
+  let payload: any = {};
+
+  for (const endpoint of endpoints) {
+    response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: requestBody,
+    });
+
+    payload = await response.json().catch(() => ({}));
+
+    if (response.status === 404 && endpoint !== endpoints[endpoints.length - 1]) {
+      continue;
+    }
+
+    break;
+  }
+
+  if (!response?.ok) {
     throw new Error(payload?.error || 'Không thể tạo kịch bản video bằng Vertex AI.');
   }
 
@@ -29,4 +44,3 @@ export const generateVideoScriptWithVertex = async ({
 
   return script;
 };
-

@@ -48,6 +48,15 @@ const SMART_TIPS = [
   '🏃 Tip: Motion Control giúp bạn điều khiển chuyển động nhân vật theo video mẫu.'
 ];
 
+const tryStageInputToR2 = async (source: File | Blob | string, folder: string) => {
+  try {
+    return await uploadFileToR2(source, folder);
+  } catch (error) {
+    console.warn('[WorkspaceVideo] Failed to stage input to R2.', error);
+    throw new Error('Không thể tải tệp tham chiếu lên vùng đệm. Vui lòng thử lại.');
+  }
+};
+
 export function WorkspaceVideo() {
   const navigate = useNavigate();
   useAuth();
@@ -87,16 +96,7 @@ export function WorkspaceVideo() {
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [currentTipIdx, setCurrentTipIdx] = useState(0);
 
-  // --- Cooldown ---
-  const [cooldownRemaining, setCooldownRemaining] = useState(() => {
-    const saved = localStorage.getItem('video_gen_cooldown_end');
-    if (saved) {
-      const end = parseInt(saved, 10);
-      const now = Date.now();
-      if (end > now) return Math.ceil((end - now) / 1000);
-    }
-    return 0;
-  });
+  const lastAutoSelectedVideoModelRef = useRef<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadTarget, setUploadTarget] = useState<'keyframe' | 'character' | 'motion' | null>(null);
@@ -244,6 +244,80 @@ export function WorkspaceVideo() {
         modelId: motionModel, pricingEntries, resolution: quality.toLowerCase()
       }).map((speedId: string) => ({ label: tstSpeedToUi(speedId), value: tstSpeedToUi(speedId) }));
 
+  const pickPreferredVideoServer = () => {
+    const compatibleServers = getVideoCompatibleServers({
+      modelId: videoModel,
+      pricingEntries,
+      duration: duration.toLowerCase(),
+      speed: uiSpeedToTst(speed) || 'fast',
+      audio: sound
+    });
+
+    if (compatibleServers.length === 0) return null;
+
+    const preferredServerOrder = ['fast', 'vip1', 'vip2', 'standard', 'default', 'cheap'];
+    const rankedServers = [...compatibleServers].sort((a, b) => {
+      const resolutionsA = getVideoCompatibleResolutions({
+        modelId: videoModel,
+        pricingEntries,
+        serverId: a,
+        duration: duration.toLowerCase(),
+        speed: uiSpeedToTst(speed) || 'fast',
+        audio: sound
+      }).length;
+      const resolutionsB = getVideoCompatibleResolutions({
+        modelId: videoModel,
+        pricingEntries,
+        serverId: b,
+        duration: duration.toLowerCase(),
+        speed: uiSpeedToTst(speed) || 'fast',
+        audio: sound
+      }).length;
+
+      if (resolutionsA !== resolutionsB) return resolutionsB - resolutionsA;
+
+      const durationsA = getVideoCompatibleDurations({
+        modelId: videoModel,
+        pricingEntries,
+        serverId: a,
+        speed: uiSpeedToTst(speed) || 'fast',
+        audio: sound
+      }).length;
+      const durationsB = getVideoCompatibleDurations({
+        modelId: videoModel,
+        pricingEntries,
+        serverId: b,
+        speed: uiSpeedToTst(speed) || 'fast',
+        audio: sound
+      }).length;
+
+      if (durationsA !== durationsB) return durationsB - durationsA;
+
+      const rankA = preferredServerOrder.indexOf(a);
+      const rankB = preferredServerOrder.indexOf(b);
+      return (rankA >= 0 ? rankA : preferredServerOrder.length) - (rankB >= 0 ? rankB : preferredServerOrder.length);
+    });
+
+    return rankedServers[0] || compatibleServers[0];
+  };
+
+  useEffect(() => {
+    if (activeMode !== 'video_ai' || !videoModel) return;
+
+    const preferredServer = pickPreferredVideoServer();
+    if (!preferredServer) return;
+
+    const preferredServerUi = tstServerToUi(preferredServer);
+    const serverStillValid = serverOptions.some((option) => option.value === server);
+    const shouldAutoSelect =
+      lastAutoSelectedVideoModelRef.current !== videoModel || !serverStillValid || !server;
+
+    if (shouldAutoSelect && preferredServerUi && preferredServerUi !== server) {
+      setServer(preferredServerUi);
+    }
+    lastAutoSelectedVideoModelRef.current = videoModel;
+  }, [activeMode, videoModel, pricingEntries, server, serverOptions]);
+
   // --- Auto-adjust Options ---
   useEffect(() => {
     if (modelOptions.showAspectRatio && modelOptions.aspectRatios.length > 0 && !modelOptions.aspectRatios.includes(aspectRatio)) {
@@ -266,19 +340,7 @@ export function WorkspaceVideo() {
     }
   }, [activeMode, aspectRatio, duration, modelOptions, quality, server, serverOptions, sound, speed, speedOptions]);
 
-  // --- Cooldown & Tips ---
-  useEffect(() => {
-    if (cooldownRemaining > 0) {
-      const timer = setInterval(() => {
-        setCooldownRemaining((prev) => {
-          if (prev <= 1) { localStorage.removeItem('video_gen_cooldown_end'); return 0; }
-          return prev - 1;
-        });
-      }, 1000);
-      return () => clearInterval(timer);
-    }
-  }, [cooldownRemaining]);
-
+  // --- Tips ---
   useEffect(() => {
     const interval = setInterval(() => setCurrentTipIdx((prev) => (prev + 1) % SMART_TIPS.length), 5000);
     return () => clearInterval(interval);
@@ -346,7 +408,6 @@ export function WorkspaceVideo() {
 
   const handleGenerate = async () => {
     if (stage === 'submitting') return;
-    if (cooldownRemaining > 0) { notify(`Vui lòng đợi ${cooldownRemaining}s`, 'warning'); return; }
     if (!isCatalogReady) { notify('TST đang bảo trì.', 'error'); return; }
     if (!currentCostBreakdown.available) { notify('Cấu hình không khả dụng.', 'error'); return; }
 
@@ -356,6 +417,10 @@ export function WorkspaceVideo() {
     }
     if (activeMode === 'motion_control' && (!characterImage || !motionVideoFile)) {
       notify('Vui lòng tải lên cả ảnh nhân vật và video chuyển động.', 'error');
+      return;
+    }
+    if (activeMode === 'motion_control' && motionVideoDurationSeconds === null) {
+      notify('Không thể đọc thời lượng video chuyển động. Vui lòng dùng video từ 3 đến 30 giây.', 'error');
       return;
     }
     if (activeMode === 'motion_control' && motionVideoDurationSeconds !== null && (motionVideoDurationSeconds < 3 || motionVideoDurationSeconds > 30)) {
@@ -414,11 +479,11 @@ export function WorkspaceVideo() {
         let stagedMotionVideoUrl = null;
 
         if (activeMode === 'video_ai' && keyframeImage) {
-          stagedKeyframeImage = await uploadFileToR2(keyframeImage, 'inputs/video-generate/keyframe');
+          stagedKeyframeImage = await tryStageInputToR2(keyframeImage, 'inputs/video-generate/keyframe');
         }
         if (activeMode === 'motion_control' && characterImage && motionVideoFile) {
-          stagedCharacterImage = await uploadFileToR2(characterImage, 'inputs/motion-control');
-          stagedMotionVideoUrl = await uploadFileToR2(motionVideoFile, 'inputs/motion-control');
+          stagedCharacterImage = await tryStageInputToR2(characterImage, 'inputs/motion-control');
+          stagedMotionVideoUrl = await tryStageInputToR2(motionVideoFile, 'inputs/motion-control');
         }
 
         const queuePayload = activeMode === 'video_ai'
@@ -443,8 +508,6 @@ export function WorkspaceVideo() {
 
         window.dispatchEvent(new Event('balance_updated'));
         notify('Đã tạo job. Kết quả sẽ cập nhật trong Lịch sử.', 'success');
-        localStorage.setItem('video_gen_cooldown_end', (Date.now() + 60000).toString());
-        setCooldownRemaining(60);
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : 'Lỗi không xác định';
         try { await saveImageToLocalCache({ ...queuedVideo, status: 'failed', error: errorMsg, updatedAt: Date.now(), progress: 0 }); } catch (_) {}
@@ -454,7 +517,7 @@ export function WorkspaceVideo() {
     })();
   };
 
-  const isGenerateDisabled = cooldownRemaining > 0 || !isCatalogReady || !currentCostBreakdown.available
+  const isGenerateDisabled = !isCatalogReady || !currentCostBreakdown.available
     || (activeMode === 'video_ai' && !keyframeImage)
     || (activeMode === 'motion_control' && (!characterImage || !motionVideoFile));
 
@@ -684,7 +747,17 @@ export function WorkspaceVideo() {
                 >
                   {motionVideoUrl ? (
                     <>
-                      <video src={motionVideoUrl} className="w-full h-full object-cover opacity-80" autoPlay loop muted playsInline />
+                      <video
+                        key={motionVideoUrl}
+                        src={motionVideoUrl}
+                        className="absolute inset-0 w-full h-full object-cover opacity-80"
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                        preload="metadata"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-black/15 pointer-events-none" />
                       <div className="absolute inset-0 flex items-center justify-center">
                         <div className="bg-white dark:bg-[#18181B]/20 backdrop-blur-sm p-3 rounded-full"><Play className="w-5 h-5 text-white ml-0.5" /></div>
                       </div>
@@ -809,8 +882,6 @@ export function WorkspaceVideo() {
         >
           {stage === 'submitting' ? (
             <Loader className="w-5 h-5 animate-spin" />
-          ) : cooldownRemaining > 0 ? (
-            <span className="text-sm font-semibold">Đợi {cooldownRemaining}s</span>
           ) : (
             <>
               <Video className="w-5 h-5 text-white/90" />

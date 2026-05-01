@@ -137,10 +137,10 @@ export const TST_CATALOG_CACHE_TTL_MS = 60_000;
 const TST_CATALOG_FETCH_TIMEOUT_MS = 15_000;
 const TST_CATALOG_FETCH_RETRIES = 1;
 const TST_CATALOG_FETCH_RETRY_DELAY_MS = 750;
-const SERVER_ORDER = ['cheap', 'fast', 'vip2', 'vip1'];
+const SERVER_ORDER = ['cheap', 'fast', 'standard', 'default', 'vip2', 'vip1'];
 const SPEED_ORDER = ['fast', 'slow'];
-const RESOLUTION_ORDER = ['default', '1k', '2k', '4k', '720p', '1080p'];
-const DURATION_ORDER = ['3s', '5s', '8s', '10s', '15s', '25s'];
+const RESOLUTION_ORDER = ['default', '480p', '720p', '1080p', '1k', '2k', '4k'];
+const DURATION_ORDER = ['3s', '5s', '6s', '8s', '10s', '15s', '25s'];
 
 const tierToModelId: Record<TstGenerationTier, string> = {
   flash: 'nano-banana-2',
@@ -339,6 +339,9 @@ export const ADMIN_MANAGED_MODEL_LABELS = [
   'Kling 2.5 Turbo',
   'Kling 2.6',
   'Kling 3.0',
+  'Seedance 2.0',
+  'Seedance 2.0 Fast',
+  'Grok Video',
   'Motion Control 2.6',
   'Motion Control 3.0',
   'Chỉnh sửa ảnh',
@@ -353,6 +356,9 @@ const ADMIN_MANAGED_MODEL_IDS = [
   'kling-2.5-turbo',
   'kling-2.6',
   'kling-3.0-video',
+  'seedance-2.0',
+  'seedance-2.0-fast',
+  'grok-i2v',
   'motion-control-2.6',
   'motion-control-3.0',
   'magic_editor_pro',
@@ -716,23 +722,35 @@ const parseGptImage2ConfigKey = (configKey?: string) => {
   return match ? { resolution: match[1], quality: match[2] } : null;
 };
 
+const parseVideoConfigKey = (configKey?: string) => {
+  const normalized = String(configKey || '').trim().toLowerCase();
+  const resolution = normalized.match(/(?:^|-)(480p|720p|1080p)(?:-|$)/)?.[1];
+  const durationMatch = normalized.match(/(?:^|-)(\d{1,2})s?(?:-|$)/);
+  const duration = durationMatch ? `${durationMatch[1]}s` : undefined;
+  const speed = normalized.match(/(?:^|-)(fast|slow)(?:-|$)/)?.[1];
+  const audio = /(?:^|-)audio(?:-|$)/.test(normalized) ? true : undefined;
+
+  return { resolution, duration, speed, audio };
+};
+
 const mapPricingEntry = (entry: any): TstPricingEntry => {
   const model = String(entry.model || '');
   const configKey = String(entry.config_key || '');
   const gptImage2Config = normalizeModelId(model) === 'image-gpt-2'
     ? parseGptImage2ConfigKey(configKey)
     : null;
+  const videoConfig = parseVideoConfigKey(configKey);
 
   return {
     model,
     server: String(entry.server || ''),
     config_key: configKey,
     credits: Number(entry.credits || 0),
-    resolution: gptImage2Config?.resolution || (entry.resolution ? String(entry.resolution) : undefined),
+    resolution: gptImage2Config?.resolution || (entry.resolution ? String(entry.resolution) : videoConfig.resolution),
     quality: gptImage2Config?.quality,
-    speed: entry.speed ? String(entry.speed) : (gptImage2Config ? 'fast' : undefined),
-    duration: entry.duration ? String(entry.duration) : undefined,
-    audio: entry.audio === true,
+    speed: entry.speed ? String(entry.speed) : (gptImage2Config ? 'fast' : videoConfig.speed),
+    duration: entry.duration ? String(entry.duration) : videoConfig.duration,
+    audio: entry.audio === true || videoConfig.audio === true,
   };
 };
 

@@ -32,6 +32,9 @@ All models available via the API. Credits are deducted per generation.
 | `kling-2.6` | Kling 2.6 | fast, vip1, vip2 | 1080p, 720p | 5s, 10s | 16:9, 9:16, 1:1 | Yes | 15–640 |
 | `kling-3.0-video` | Kling 3.0 Video | fast, vip1 | 1080p, 720p | 3s, 5s, 10s, 15s | 16:9, 9:16, 1:1 | Yes | 15–720 |
 | `kling-o1-video` | Kling O1 Video | vip2 | 1080p, 720p | 5s, 10s | 16:9, 9:16, 1:1 | No | 60–600 |
+| `grok-i2v` | Grok Video | default | 480p, 720p | 6s, 10s | — | No | 5–15 |
+| `seedance-2.0` | Seedance 2.0 | standard | 480p, 720p | 5s, 8s, 10s, 15s | — | Yes | 200–900 |
+| `seedance-2.0-fast` | Seedance 2.0 Fast | fast | 480p, 720p | 5s, 8s, 10s, 15s | — | Yes | 80–530 |
 | `sora-2.0` | Sora 2.0 | vip1 | — | 10s, 15s, 25s | 16:9, 9:16 | No | 20–50 |
 | `veo3.1-low` | Veo 3.1 LOW | fast | — | 8s | 16:9, 9:16 | No | 10 |
 
@@ -55,6 +58,8 @@ All models available via the API. Credits are deducted per generation.
 | `vip1` | Premium — fastest, highest priority |
 | `vip2` | Standard — reliable, moderate speed |
 | `fast` | Economy — lower cost, may be slightly slower |
+| `standard` | Standard video queue for Seedance |
+| `default` | Default provider queue for Grok Video |
 | `Cheap` | Budget — lowest cost (motion control only) |
 
 When `server_id` is not specified, the system auto-selects the best available server.

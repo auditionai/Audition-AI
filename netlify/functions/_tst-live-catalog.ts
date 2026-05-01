@@ -175,15 +175,35 @@ const parseGptImage2ConfigKey = (configKey?: string) => {
   return match ? { resolution: match[1], quality: match[2] } : null;
 };
 
+const parseVideoConfigKey = (configKey?: string) => {
+  const normalized = normalize(configKey);
+  const resolution = normalized.match(/(?:^|-)(480p|720p|1080p)(?:-|$)/)?.[1];
+  const durationMatch = normalized.match(/(?:^|-)(\d{1,2})s?(?:-|$)/);
+  const duration = durationMatch ? `${durationMatch[1]}s` : '';
+  const speed = normalized.match(/(?:^|-)(fast|slow)(?:-|$)/)?.[1] || '';
+  const audio = /(?:^|-)audio(?:-|$)/.test(normalized) ? true : undefined;
+
+  return { resolution, duration, speed, audio };
+};
+
 const getPricingResolution = (entry: TstProviderPricingEntry) =>
   normalize(entry.model) === 'image-gpt-2'
     ? parseGptImage2ConfigKey(entry.config_key)?.resolution || normalizeResolution(entry.resolution)
-    : normalizeResolution(entry.resolution);
+    : normalizeResolution(entry.resolution) || parseVideoConfigKey(entry.config_key).resolution || '';
 
 const getPricingQuality = (entry: TstProviderPricingEntry) =>
   normalize(entry.model) === 'image-gpt-2'
     ? parseGptImage2ConfigKey(entry.config_key)?.quality || normalizeQuality(entry.quality)
     : normalizeQuality(entry.quality);
+
+const getPricingDuration = (entry: TstProviderPricingEntry) =>
+  normalizeDuration(entry.duration) || parseVideoConfigKey(entry.config_key).duration;
+
+const getPricingSpeed = (entry: TstProviderPricingEntry) =>
+  normalizeSpeed(entry.speed || parseVideoConfigKey(entry.config_key).speed || 'fast');
+
+const getPricingAudio = (entry: TstProviderPricingEntry) =>
+  entry.audio === true || parseVideoConfigKey(entry.config_key).audio === true;
 
 const getAspectRatios = (model: TstProviderModel) => {
   const ratios = [
@@ -214,9 +234,9 @@ const findPricingMatch = (
   if (serverId && normalizeServer(entry.server) !== normalizeServer(serverId)) return false;
   if (resolution && getPricingResolution(entry) !== normalizeResolution(resolution)) return false;
   if (quality && getPricingQuality(entry) !== normalizeQuality(quality)) return false;
-  if (duration && normalizeDuration(entry.duration) !== normalizeDuration(duration)) return false;
-  if (!matchesFastSpeed(entry.speed, speed)) return false;
-  if (typeof audio === 'boolean' && typeof entry.audio === 'boolean' && entry.audio !== audio) return false;
+  if (duration && getPricingDuration(entry) !== normalizeDuration(duration)) return false;
+  if (!matchesFastSpeed(getPricingSpeed(entry), speed)) return false;
+  if (typeof audio === 'boolean' && getPricingAudio(entry) !== audio) return false;
   return true;
 });
 

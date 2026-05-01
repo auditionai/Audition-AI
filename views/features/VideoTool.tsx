@@ -426,7 +426,10 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
       if (speedOptions.length > 0 && !speedOptions.some((option) => option.value === speed)) {
           setSpeed(speedOptions[0].value);
       }
-  }, [activeMode, aspectRatio, duration, modelOptions, quality, server, serverOptions, speed, speedOptions]);
+      if (!modelOptions.supportsAudio && sound) {
+          setSound(false);
+      }
+  }, [activeMode, aspectRatio, duration, modelOptions, quality, server, serverOptions, sound, speed, speedOptions]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadTarget, setUploadTarget] = useState<'keyframe' | 'character' | 'motion' | null>(null);
@@ -871,7 +874,17 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                       <div onClick={() => triggerUpload('motion')} className="w-full h-64 bg-black/40 rounded-xl border-2 border-dashed border-audi-pink hover:border-pink-400 cursor-pointer relative overflow-hidden group/item transition-all flex flex-col items-center justify-center">
                           {motionVideo ? (
                               <>
-                                  <video src={motionVideo} className="w-full h-full object-contain opacity-80 group-hover/item:opacity-40 transition-opacity" autoPlay loop muted playsInline />
+                                  <video
+                                      key={motionVideo}
+                                      src={motionVideo}
+                                      className="absolute inset-0 w-full h-full object-cover opacity-80 transition-opacity group-hover/item:opacity-55"
+                                      autoPlay
+                                      loop
+                                      muted
+                                      playsInline
+                                      preload="metadata"
+                                  />
+                                  <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-black/20 pointer-events-none" />
                                   <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/item:opacity-100 transition-opacity">
                                       <span className="text-[10px] font-bold text-white bg-black/50 px-2 py-1 rounded">Đổi Video</span>
                                   </div>

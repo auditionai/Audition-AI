@@ -256,6 +256,51 @@ const toQueuePayloadObject = (
 const stripInternalQueueMeta = (payload: Record<string, unknown> | ImageGenerateRecipePayload) =>
   Object.fromEntries(Object.entries(payload).filter(([key]) => !key.startsWith('__')));
 
+const normalizeProviderMediaUrl = (value: unknown) => {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return typeof raw === 'string' ? raw.trim() : '';
+};
+
+const isHttpProviderMediaUrl = (value: unknown) => /^https?:\/\//i.test(normalizeProviderMediaUrl(value));
+
+const summarizeProviderMediaPayload = (queueKind: string, payload?: Record<string, unknown> | null) => {
+  if (!payload || typeof payload !== 'object') return 'media=missing';
+  if (queueKind === 'video_generate') {
+    return `img_url=${isHttpProviderMediaUrl(payload.img_url) ? 'ok' : 'missing'}`;
+  }
+  if (queueKind === 'motion_generate') {
+    return [
+      `character_image_url=${isHttpProviderMediaUrl(payload.character_image_url) ? 'ok' : 'missing'}`,
+      `motion_video_url=${isHttpProviderMediaUrl(payload.motion_video_url) ? 'ok' : 'missing'}`,
+      `mode=${String(payload.mode || '').trim() || 'missing'}`,
+    ].join(', ');
+  }
+  if (queueKind === 'image_generate') {
+    const refs = Array.isArray(payload.img_url) ? payload.img_url.length : payload.img_url ? 1 : 0;
+    return `img_url=${refs}`;
+  }
+  return 'media=not_required';
+};
+
+const assertRequiredProviderMediaPayload = (queueKind: string, payload: Record<string, unknown>) => {
+  if (queueKind === 'video_generate' && !isHttpProviderMediaUrl(payload.img_url)) {
+    throw new Error('INVALID_TST_PAYLOAD: Video AI thiếu img_url hợp lệ sau bước upload ảnh keyframe lên TST.');
+  }
+
+  if (queueKind === 'motion_generate') {
+    if (!isHttpProviderMediaUrl(payload.character_image_url)) {
+      throw new Error('INVALID_TST_PAYLOAD: Motion Control thiếu character_image_url hợp lệ sau bước upload ảnh nhân vật lên TST.');
+    }
+    if (!isHttpProviderMediaUrl(payload.motion_video_url)) {
+      throw new Error('INVALID_TST_PAYLOAD: Motion Control thiếu motion_video_url hợp lệ sau bước upload video mẫu lên TST.');
+    }
+    const mode = String(payload.mode || '').trim().toLowerCase();
+    if (mode && mode !== 'std' && mode !== 'pro') {
+      throw new Error(`INVALID_TST_PAYLOAD: Motion Control mode không hợp lệ (${mode}). TST chỉ nhận std hoặc pro.`);
+    }
+  }
+};
+
 const normalizeNotificationMediaEntry = (
   entry: unknown,
 ): QueueNotificationMediaEntry | null => {
@@ -1270,6 +1315,7 @@ const submitProviderJob = async (queueKind: string, providerPayload: Record<stri
   }
 
   const outboundPayload = normalizeTstOutboundPayload(stripInternalQueueMeta(providerPayload));
+  assertRequiredProviderMediaPayload(queueKind, outboundPayload);
 
   const response = await fetch(getGenerateEndpoint(queueKind), {
     method: 'POST',
@@ -1616,7 +1662,11 @@ const markQueuedStage = async (jobId: string, progress: number) => {
   });
 };
 
-const markSubmittingPreparedPayload = async (jobId: string, payload?: Record<string, unknown> | null) => {
+const markSubmittingPreparedPayload = async (
+  jobId: string,
+  payload?: Record<string, unknown> | null,
+  queueKind = '',
+) => {
   const nextPayload = withQueueLog(
     {
       ...toQueuePayloadObject(payload),
@@ -1624,7 +1674,7 @@ const markSubmittingPreparedPayload = async (jobId: string, payload?: Record<str
       __dispatchConfirmationPending: true,
     },
     'dispatching',
-    'Đang gửi yêu cầu tới provider TST.',
+    `Đang gửi yêu cầu tới provider TST. ${summarizeProviderMediaPayload(queueKind, payload)}`,
   );
   await updateGeneratedImageRecord(jobId, {
     status: 'processing',
@@ -1642,6 +1692,7 @@ const markSubmittingPreparedPayloadWithOwnership = async (
   jobId: string,
   payload: Record<string, unknown> | null | undefined,
   dispatchAttemptId: string,
+  queueKind = '',
 ) => {
   const nextPayload = withQueueLog(
     {
@@ -1651,7 +1702,7 @@ const markSubmittingPreparedPayloadWithOwnership = async (
       __dispatchAttemptId: dispatchAttemptId,
     },
     'dispatching',
-    'Đang gửi yêu cầu tới provider TST.',
+    `Đang gửi yêu cầu tới provider TST. ${summarizeProviderMediaPayload(queueKind, payload)}`,
   );
   await updateGeneratedImageRecord(jobId, {
     status: 'processing',
@@ -3033,7 +3084,7 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
     }
 
     const dispatchAttemptId = randomUUID();
-    job.queue_payload = await markSubmittingPreparedPayloadWithOwnership(job.id, job.queue_payload, dispatchAttemptId);
+    job.queue_payload = await markSubmittingPreparedPayloadWithOwnership(job.id, job.queue_payload, dispatchAttemptId, job.queue_kind);
     if (!(await confirmDispatchAttemptOwnership(job.id, dispatchAttemptId))) {
       await releaseLease(job.id);
       return {};
@@ -3411,7 +3462,7 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
         job.queue_payload = await persistPreparedPayload(job.id, providerPayloadForSubmit, job.queue_payload || currentPayload);
       }
 
-      job.queue_payload = await markSubmittingPreparedPayload(job.id, job.queue_payload);
+      job.queue_payload = await markSubmittingPreparedPayload(job.id, job.queue_payload, job.queue_kind);
       providerDispatchStarted = true;
       const providerJobId = await submitProviderJob(job.queue_kind, providerPayloadForSubmit);
       job.queue_payload = await markSubmitted(job, providerJobId);

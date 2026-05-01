@@ -92,6 +92,9 @@ const uploadMediaToTst = async (
 ) => {
   const apiKey = getTstApiKey();
   const { blob, filename } = await normalizeSourceToBlob(input, kind, fallbackMimeType);
+  if (!blob.size) {
+    throw new Error(`Cannot upload empty ${kind} file to TST`);
+  }
   const formData = new FormData();
   formData.append('file', blob, filename);
 
@@ -115,6 +118,9 @@ const uploadMediaToTst = async (
   const url = data?.url || data?.data?.url;
   if (!url) {
     throw new Error(`Upload response missing URL: ${JSON.stringify(data)}`);
+  }
+  if (!/^https?:\/\//i.test(String(url))) {
+    throw new Error(`Upload response returned an invalid URL: ${JSON.stringify(data)}`);
   }
 
   return String(url);
@@ -561,7 +567,6 @@ export const prepareProviderPayloadFromQueueRecipe = async (payload: QueueRecipe
       if (payload.keyframeImage) {
         const uploadedKeyframeUrl = await uploadImageToTst(payload.keyframeImage);
         providerPayload.img_url = uploadedKeyframeUrl;
-        providerPayload.image_url = uploadedKeyframeUrl;
         if (payload.modelId === 'kling-2.5-turbo') {
           providerPayload.mode = 'i2v';
         }
@@ -581,13 +586,12 @@ export const prepareProviderPayloadFromQueueRecipe = async (payload: QueueRecipe
 
       const providerPayload: Record<string, unknown> = {
         model: payload.modelId,
-        mode: payload.modelId,
+        mode: String(payload.resolution || '').toLowerCase().includes('1080') ? 'pro' : 'std',
         character_image_url: characterImageUrl,
         motion_video_url: motionVideoUrl,
       };
 
       if (providerPrompt) providerPayload.prompt = providerPrompt;
-      if (payload.resolution) providerPayload.resolution = payload.resolution.toLowerCase();
       if (payload.speed) providerPayload.speed = payload.speed;
       if (payload.serverId) providerPayload.server_id = payload.serverId;
 

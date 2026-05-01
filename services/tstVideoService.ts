@@ -177,7 +177,6 @@ export const prepareTramsangtaoVideoJob = async ({
   if (keyframe) {
     const uploadedKeyframeUrl = await uploadMedia(keyframe, 'image', onLog);
     payload.img_url = uploadedKeyframeUrl;
-    payload.image_url = uploadedKeyframeUrl;
     if (modelId === 'kling-2.5-turbo') {
       payload.mode = 'i2v';
     }
@@ -212,13 +211,12 @@ export const prepareTramsangtaoMotionJob = async ({
 
   const payload: Record<string, unknown> = {
     model: modelId,
-    mode: modelId,
+    mode: String(resolution || '').toLowerCase().includes('1080') ? 'pro' : 'std',
     character_image_url: characterImageUrl,
     motion_video_url: motionVideoUrl,
   };
 
   if (prompt?.trim()) payload.prompt = prompt.trim();
-  if (resolution) payload.resolution = resolution.toLowerCase();
   if (speed) payload.speed = speed;
   if (serverId) payload.server_id = serverId;
 

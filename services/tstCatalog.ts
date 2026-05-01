@@ -192,8 +192,8 @@ const normalizeCatalogServer = (value?: string) => (value || '').trim().toLowerC
 const normalizeCatalogSpeed = (value?: string) => (value || '').trim().toLowerCase();
 const normalizeCatalogResolution = (value?: string) => (value || '').trim().toLowerCase();
 const normalizeCatalogDuration = (value?: string) => (value || '').trim().toLowerCase();
-const cleanCell = (value: string) => value.replace(/`/g, '').trim();
-const isDashValue = (value: string) => ['—', '-', '–', ''].includes(cleanCell(value));
+const cleanCell = (value?: string | null) => String(value || '').replace(/`/g, '').trim();
+const isDashValue = (value?: string | null) => ['—', '-', '–', ''].includes(cleanCell(value));
 
 export const isPerSecondVideoBillingModel = (modelId?: string | null) => {
   const normalized = normalizeModelId(String(modelId || ''));

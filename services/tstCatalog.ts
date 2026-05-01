@@ -145,6 +145,14 @@ const SERVER_ORDER = ['cheap', 'fast', 'standard', 'default', 'vip2', 'vip1'];
 const SPEED_ORDER = ['fast', 'slow'];
 const RESOLUTION_ORDER = ['default', '480p', '720p', '1080p', '1k', '2k', '4k'];
 const DURATION_ORDER = ['3s', '5s', '6s', '8s', '10s', '15s', '25s'];
+const ASPECT_RATIO_ORDER = ['16:9', '9:16', '4:3', '3:4', '1:1', '21:9'];
+const TST_DOCS_VIDEO_ASPECT_RATIO_FALLBACKS: Record<string, string[]> = {
+  'seedance-2.0-fast': ['16:9', '9:16', '4:3', '3:4', '1:1', '21:9'],
+  'seedance-2.0': ['16:9', '9:16', '4:3', '3:4', '1:1', '21:9'],
+  'grok-i2v': ['9:16', '16:9', '1:1'],
+  'kling-o1-video': ['9:16', '16:9', '1:1'],
+  'kling-3.0-video': ['16:9', '9:16', '1:1'],
+};
 
 const tierToModelId: Record<TstGenerationTier, string> = {
   flash: 'nano-banana-2',
@@ -867,11 +875,18 @@ const getUniqueSpeeds = (entries: TstPricingEntry[]) =>
     SPEED_ORDER,
   );
 
-const getCapabilityAspectRatios = (model: TstRuntimeModel) =>
-  unique([
+const getCapabilityAspectRatios = (model: TstRuntimeModel) => {
+  const modelId = normalizeModelId(model.model);
+  const runtimeAspectRatios = unique([
     ...((model.capabilities?.aspect_ratios || []) as string[]),
     ...((model.capabilities?.aspectRatios || []) as string[]),
   ]);
+  const aspectRatios = runtimeAspectRatios.length > 0
+    ? runtimeAspectRatios
+    : TST_DOCS_VIDEO_ASPECT_RATIO_FALLBACKS[modelId] || [];
+
+  return sortByOrder(unique(aspectRatios), ASPECT_RATIO_ORDER);
+};
 
 const pickExactEntry = (entries: TstPricingEntry[], filters: Array<(entry: TstPricingEntry) => boolean>) => {
   for (const filter of filters) {

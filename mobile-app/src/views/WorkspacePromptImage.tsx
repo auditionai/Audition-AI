@@ -19,6 +19,7 @@ import {
   type TstGenerationTier,
   type TstPricingEntry,
   type TstResolution,
+  type AuditionPricingOverride,
 } from '../services/tstCatalog';
 import { optimizePayload } from '../../../utils/imageProcessor';
 import type { GeneratedImage } from '../types';
@@ -57,6 +58,15 @@ export function WorkspacePromptImage() {
   const [pricingOverrides, setPricingOverrides] = useState<ModelPricing[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { queueStats } = useConcurrency();
+  const pricingOverrideRows: AuditionPricingOverride[] = useMemo(
+    () =>
+      pricingOverrides.map((row) => ({
+        modelId: row.model_id,
+        optionId: row.option_id,
+        auditionPriceVcoin: row.audition_price_vcoin,
+      })),
+    [pricingOverrides],
+  );
 
   useEffect(() => {
     let alive = true;
@@ -124,7 +134,7 @@ export function WorkspacePromptImage() {
     speed: generationSpeedId,
     serverId: generationServerId,
     pricingEntries,
-    pricingOverrides: pricingOverrides as any,
+    pricingOverrides: pricingOverrideRows,
   });
 
   const pickImage = (index: number) => {

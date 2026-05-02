@@ -18,6 +18,7 @@ import {
   type TstGenerationTier,
   type TstPricingEntry,
   type TstResolution,
+  type AuditionPricingOverride,
 } from '../../services/tstCatalog';
 import { optimizePayload } from '../../utils/imageProcessor';
 import type { Feature, GeneratedImage, Language, ViewId } from '../../types';
@@ -64,6 +65,15 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, lang,
   const [pricingOverrides, setPricingOverrides] = useState<ModelPricing[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { queueStats } = useConcurrency();
+  const pricingOverrideRows: AuditionPricingOverride[] = useMemo(
+    () =>
+      pricingOverrides.map((row) => ({
+        modelId: row.model_id,
+        optionId: row.option_id,
+        auditionPriceVcoin: row.audition_price_vcoin,
+      })),
+    [pricingOverrides],
+  );
 
   useEffect(() => {
     let alive = true;
@@ -131,7 +141,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, lang,
     speed: generationSpeedId,
     serverId: generationServerId,
     pricingEntries,
-    pricingOverrides: pricingOverrides as any,
+    pricingOverrides: pricingOverrideRows,
   });
 
   const handlePickImage = (index: number) => {

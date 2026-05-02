@@ -1,5 +1,6 @@
 export type QueueRecipeKind =
   | 'image_generate_recipe_v1'
+  | 'prompt_image_generate_recipe_v1'
   | 'image_edit_recipe_v1'
   | 'video_generate_recipe_v1'
   | 'motion_generate_recipe_v1';
@@ -185,6 +186,20 @@ export interface ImageGenerateRecipePayload {
   __lastOutputVerificationSummary?: string;
   __notifyInputMedia?: QueueNotificationMediaEntry[];
   __vertexDiagnostics?: QueueVertexDiagnosticEntry[];
+}
+
+export interface PromptImageGenerateRecipePayload {
+  recipeType: 'prompt_image_generate_recipe_v1';
+  modelId: string;
+  prompt: string;
+  referenceImages?: string[];
+  resolution?: string;
+  aspectRatio?: string;
+  speed?: string;
+  serverId?: string;
+  __stage?: QueueProcessingStage;
+  __logs?: QueueProgressLogEntry[];
+  __notifyInputMedia?: QueueNotificationMediaEntry[];
 }
 
 const getCharacterReferenceKindPriority = (
@@ -439,12 +454,14 @@ export interface MotionGenerateRecipePayload {
 
 export type QueueRecipePayload =
   | ImageGenerateRecipePayload
+  | PromptImageGenerateRecipePayload
   | ImageEditRecipePayload
   | VideoGenerateRecipePayload
   | MotionGenerateRecipePayload;
 
 const RECIPE_TYPES = new Set<QueueRecipeKind>([
   'image_generate_recipe_v1',
+  'prompt_image_generate_recipe_v1',
   'image_edit_recipe_v1',
   'video_generate_recipe_v1',
   'motion_generate_recipe_v1',
@@ -1372,6 +1389,14 @@ export const buildImageProviderPrompt = (
 export const getRecipeValidationPayload = (payload: QueueRecipePayload) => {
   switch (payload.recipeType) {
     case 'image_generate_recipe_v1':
+      return {
+        model: payload.modelId,
+        resolution: getEffectiveImageGenerationResolution(payload.modelId, payload.speed, payload.resolution)?.toLowerCase(),
+        aspect_ratio: payload.aspectRatio,
+        speed: payload.speed,
+        server_id: payload.serverId,
+      };
+    case 'prompt_image_generate_recipe_v1':
       return {
         model: payload.modelId,
         resolution: getEffectiveImageGenerationResolution(payload.modelId, payload.speed, payload.resolution)?.toLowerCase(),

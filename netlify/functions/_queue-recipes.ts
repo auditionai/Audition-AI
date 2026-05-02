@@ -524,6 +524,35 @@ export const prepareProviderPayloadFromQueueRecipe = async (payload: QueueRecipe
       );
     }
 
+    case 'prompt_image_generate_recipe_v1': {
+      const providerPrompt = await prepareDirectPromptWithinLimit(
+        payload.prompt || 'Create an image',
+        'prompt image generation',
+      );
+      const referenceImages = Array.isArray(payload.referenceImages)
+        ? payload.referenceImages.filter((value): value is string => Boolean(value)).slice(0, 4)
+        : [];
+      const uploadedUrls = await Promise.all(referenceImages.map((source) => uploadImageToTst(source)));
+      const providerPayload: Record<string, unknown> = {
+        prompt: providerPrompt,
+        model: payload.modelId,
+      };
+
+      if (uploadedUrls.length > 0) providerPayload.img_url = uploadedUrls;
+      if (payload.resolution) {
+        providerPayload.resolution = getEffectiveImageGenerationResolution(
+          payload.modelId,
+          payload.speed,
+          payload.resolution,
+        )?.toLowerCase() || payload.resolution.toLowerCase();
+      }
+      if (payload.aspectRatio) providerPayload.aspect_ratio = payload.aspectRatio;
+      if (payload.speed) providerPayload.speed = payload.speed;
+      if (payload.serverId) providerPayload.server_id = payload.serverId;
+
+      return providerPayload;
+    }
+
     case 'image_edit_recipe_v1': {
       const providerPrompt = await prepareDirectPromptWithinLimit(payload.prompt, 'image editing');
       const uploadedUrl = await uploadImageToTst(payload.sourceImage);

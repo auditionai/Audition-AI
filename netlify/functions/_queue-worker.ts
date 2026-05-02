@@ -32,6 +32,7 @@ import {
   type ImageEditRecipePayload,
   type ImageGenerateRecipePayload,
   type MotionGenerateRecipePayload,
+  type PromptImageGenerateRecipePayload,
   type VideoGenerateRecipePayload,
 } from '../../shared/queueRecipes';
 import { classifyQueueError, isTerminalRescueFailureMessage, normalizeQueueErrorMessage, pickQueueFailureMessage } from '../../shared/queueErrorClassifier';
@@ -301,6 +302,9 @@ const buildNotificationMediaEntries = (
         (raw.characterImages || []).forEach((value) => push(value, 'character', 'image', true));
         push(raw.sampleImage, 'sample', 'image', true);
         push(raw.styleImage, 'style', 'image', false);
+        (raw.referenceImages || []).forEach((value) => push(value, 'reference', 'image', true));
+        break;
+      case 'prompt_image_generate_recipe_v1':
         (raw.referenceImages || []).forEach((value) => push(value, 'reference', 'image', true));
         break;
       case 'image_edit_recipe_v1':
@@ -2780,7 +2784,50 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
       job.queue_payload = stagedResult.storedPayload;
     }
 
-    if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType !== 'image_generate_recipe_v1') {
+    if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'prompt_image_generate_recipe_v1') {
+      await updatePreProviderStage(job.id, 20);
+      job.queue_payload = await persistQueueLog(
+        job.id,
+        job.queue_payload || currentPayload,
+        'building_payload',
+        'Đang chuẩn bị payload tạo ảnh AI thuần prompt.',
+      );
+      job.queue_payload = await markTstTouched(
+        job.id,
+        job.queue_payload,
+        'Đã bắt đầu chuẩn bị payload và gửi dữ liệu lên hệ thống TST.',
+      );
+      const providerPayload = await withTimeout(
+        withLeaseHeartbeat(
+          job.id,
+          prepareProviderPayloadFromQueueRecipe((job.queue_payload || currentPayload) as PromptImageGenerateRecipePayload),
+          preparationLeaseSeconds,
+        ),
+        preparationTimeoutMs,
+        'Queue preparation timed out before dispatching to provider.',
+      );
+      const preparedValidationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, providerPayload);
+      const validatedProviderPayload = applyLivePricingConfigToPayload(
+        job.queue_kind,
+        providerPayload,
+        preparedValidationResult,
+      );
+      job.queue_payload = await persistPreparedPayload(job.id, validatedProviderPayload, job.queue_payload || currentPayload);
+      job.queue_payload = await persistQueueLog(
+        job.id,
+        job.queue_payload,
+        'dispatching',
+        'Payload đã sẵn sàng. Chờ gửi provider.',
+        'success',
+      );
+      await markPreparedForDispatch(job.id);
+      return { requeued: 1 };
+    }
+
+    if (
+      isQueueRecipePayload(currentPayload) &&
+      (currentPayload.recipeType === 'video_generate_recipe_v1' || currentPayload.recipeType === 'motion_generate_recipe_v1')
+    ) {
       await updatePreProviderStage(job.id, 20);
       const reviewStartMessage =
         currentPayload.recipeType === 'video_generate_recipe_v1'

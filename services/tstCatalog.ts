@@ -11,6 +11,7 @@ export interface TstPricingEntry {
   config_key: string;
   credits: number;
   resolution?: string;
+  quality?: string;
   speed?: string;
   duration?: string;
   audio?: boolean;
@@ -136,6 +137,7 @@ const TST_CATALOG_FETCH_RETRY_DELAY_MS = 750;
 const SERVER_ORDER = ['cheap', 'fast', 'vip2', 'vip1'];
 const SPEED_ORDER = ['fast', 'slow'];
 const RESOLUTION_ORDER = ['default', '1k', '2k', '4k', '720p', '1080p'];
+const GPT_IMAGE_QUALITY_VALUES = ['low', 'medium', 'high'];
 const DURATION_ORDER = ['3s', '5s', '8s', '10s', '15s', '25s'];
 
 const tierToModelId: Record<TstGenerationTier, string> = {
@@ -176,6 +178,7 @@ const normalizeModelId = (value: string) => value.trim().toLowerCase();
 const normalizeServer = (value?: string) => (value || 'fast').trim().toLowerCase();
 const normalizeSpeed = (value?: string) => (value || 'fast').trim().toLowerCase();
 const normalizeResolution = (value?: string) => (value || 'default').trim().toLowerCase();
+const normalizeQuality = (value?: string) => (value || '').trim().toLowerCase();
 const normalizeDuration = (value?: string) => (value || '').trim().toLowerCase();
 const normalizeCatalogServer = (value?: string) => (value || '').trim().toLowerCase();
 const normalizeCatalogSpeed = (value?: string) => (value || '').trim().toLowerCase();

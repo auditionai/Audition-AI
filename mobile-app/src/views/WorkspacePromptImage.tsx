@@ -185,6 +185,13 @@ export function WorkspacePromptImage() {
     pricingOverrides: pricingOverrideRows,
   });
   const totalCost = selectedCost.available ? selectedCost.vcoin * modeCountForPrice : 0;
+  const availableSpeedLabels = availableSpeeds.map((value) => speedIdToLabel(value));
+  const availableServerLabels = availableServers.map((value) => ({
+    id: value,
+    label: tstServerToUi(value),
+  }));
+  const costDisplay = selectedCost.available ? totalCost : '?';
+  const isGenerateDisabled = isSubmitting || !prompt.trim() || !selectedCost.available || totalCost <= 0;
 
   const pickImage = (index: number) => {
     setActiveUploadIndex(index);
@@ -361,7 +368,174 @@ export function WorkspacePromptImage() {
         <div className="text-right text-[11px] text-gray-400 dark:text-zinc-500 mt-1">{prompt.length}/9999</div>
       </section>
 
-      <section className="rounded-[28px] border border-gray-200 dark:border-zinc-800 bg-white dark:bg-[#18181B] p-4 space-y-4 shadow-sm">
+      <div className="space-y-5">
+        <div className="space-y-2">
+          <h3 className="ml-1 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-zinc-500">KHUNG HÌNH</h3>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {ASPECT_RATIOS.map((ratio) => (
+              <button
+                key={ratio}
+                type="button"
+                onClick={() => setAspectRatio(ratio)}
+                className={`shrink-0 rounded-full px-4 py-2 text-xs font-medium transition-all ${
+                  aspectRatio === ratio
+                    ? 'bg-gray-900 text-white shadow-md dark:bg-white dark:text-gray-950'
+                    : 'border border-gray-100 bg-white text-gray-500 dark:border-zinc-800 dark:bg-[#18181B] dark:text-zinc-400'
+                }`}
+              >
+                {ratio}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <h3 className="ml-1 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-zinc-500">MODEL AI</h3>
+          <div className="grid grid-cols-3 gap-2">
+            {MODEL_TABS.map(({ tier, label, icon: Icon }) => (
+              <button
+                key={tier}
+                type="button"
+                onClick={() => setAiModel(tier)}
+                className={`rounded-2xl py-3 text-sm font-medium transition-all ${
+                  aiModel === tier
+                    ? 'bg-gray-900 text-white shadow-md dark:bg-white dark:text-gray-950'
+                    : 'border border-gray-100 bg-white text-gray-500 dark:border-zinc-800 dark:bg-[#18181B] dark:text-zinc-400'
+                }`}
+              >
+                <Icon className="mx-auto mb-1 h-4 w-4" />
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {availableResolutions.length > 0 && (
+          <div className="space-y-2">
+            <h3 className="ml-1 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-zinc-500">ĐỘ PHÂN GIẢI</h3>
+            <div className="flex gap-2">
+              {availableResolutions.map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setResolution(value)}
+                  className={`flex-1 rounded-xl py-2.5 text-xs font-bold transition-all ${
+                    resolution === value
+                      ? 'border border-indigo-200 bg-indigo-50 text-indigo-700 shadow-sm dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-200'
+                      : 'border border-gray-100 bg-white text-gray-500 dark:border-zinc-800 dark:bg-[#18181B] dark:text-zinc-400'
+                  }`}
+                >
+                  {value}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {aiModel === 'gpt' && (
+          <div className="space-y-2">
+            <h3 className="ml-1 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-zinc-500">CHẤT LƯỢNG ẢNH GPT</h3>
+            <div className="grid grid-cols-3 gap-2">
+              {(['low', 'medium', 'high'] as const).map((quality) => (
+                <button
+                  key={quality}
+                  type="button"
+                  onClick={() => setGptQuality(quality)}
+                  className={`rounded-xl py-2.5 text-xs font-bold uppercase transition-all ${
+                    gptQuality === quality
+                      ? 'border border-indigo-200 bg-indigo-50 text-indigo-700 shadow-sm dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-200'
+                      : 'border border-gray-100 bg-white text-gray-500 dark:border-zinc-800 dark:bg-[#18181B] dark:text-zinc-400'
+                  }`}
+                >
+                  {quality}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {availableSpeedLabels.length > 0 && (
+          <div className="space-y-2">
+            <h3 className="ml-1 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-zinc-500">TỐC ĐỘ XỬ LÝ</h3>
+            <div className="flex gap-2">
+              {availableSpeedLabels.map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setSpeed(value)}
+                  className={`flex-1 rounded-xl py-2 text-xs font-bold transition-all ${
+                    speed === value
+                      ? 'border border-orange-200 bg-orange-50 text-orange-700 shadow-sm dark:border-orange-500/30 dark:bg-orange-500/10 dark:text-orange-200'
+                      : 'border border-gray-100 bg-white text-gray-500 dark:border-zinc-800 dark:bg-[#18181B] dark:text-zinc-400'
+                  }`}
+                >
+                  {value}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {availableServerLabels.length > 0 && (
+          <div className="space-y-2">
+            <h3 className="ml-1 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-zinc-500">MÁY CHỦ</h3>
+            <div className="flex flex-wrap gap-2">
+              {availableServerLabels.map((value) => (
+                <button
+                  key={value.id}
+                  type="button"
+                  onClick={() => setServer(value.label)}
+                  className={`flex-grow rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+                    server === value.label
+                      ? 'border border-red-200 bg-red-50 text-red-700 shadow-sm dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200'
+                      : 'border border-gray-100 bg-white text-gray-500 dark:border-zinc-800 dark:bg-[#18181B] dark:text-zinc-400'
+                  }`}
+                >
+                  {value.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="rounded-[24px] border border-gray-100 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-[#18181B]">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-bold text-gray-800 dark:text-zinc-100">Luồng xử lý</h3>
+              <p className="mt-1 text-xs leading-relaxed text-gray-400 dark:text-zinc-500">
+                Mobile dùng cùng queue/provider với desktop. Prompt và ảnh tham chiếu được gửi trực tiếp sang TST, không chèn prompt hệ thống Audition.
+              </p>
+            </div>
+            <div className="rounded-2xl bg-gray-50 px-3 py-2 text-right dark:bg-[#27272A]">
+              <div className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-zinc-500">Chi phí</div>
+              <div className="mt-1 flex items-center justify-end gap-1 text-sm font-bold text-gray-900 dark:text-white">
+                {costDisplay}
+                <Coins className="h-3.5 w-3.5 text-[var(--color-accent)]" />
+              </div>
+            </div>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+            <div className="rounded-2xl bg-gray-50 p-3 dark:bg-[#27272A]">
+              <p className="text-gray-400 dark:text-zinc-500">Model</p>
+              <p className="mt-1 font-semibold text-gray-700 dark:text-zinc-200">{getModelLabel(aiModel)}</p>
+            </div>
+            <div className="rounded-2xl bg-gray-50 p-3 dark:bg-[#27272A]">
+              <p className="text-gray-400 dark:text-zinc-500">Queue</p>
+              <p className="mt-1 font-semibold text-gray-700 dark:text-zinc-200">{queueStats.myImageProcessing} đang xử lý • {queueStats.myQueued} chờ</p>
+            </div>
+            <div className="rounded-2xl bg-gray-50 p-3 dark:bg-[#27272A]">
+              <p className="text-gray-400 dark:text-zinc-500">Server</p>
+              <p className="mt-1 font-semibold text-gray-700 dark:text-zinc-200">{server}</p>
+            </div>
+            <div className="rounded-2xl bg-gray-50 p-3 dark:bg-[#27272A]">
+              <p className="text-gray-400 dark:text-zinc-500">Output</p>
+              <p className="mt-1 font-semibold text-gray-700 dark:text-zinc-200">{resolution} • {aspectRatio}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <section className="hidden">
         <h2 className="text-sm font-black text-gray-950 dark:text-white">3. Cấu hình</h2>
         <div className="grid grid-cols-3 gap-1 rounded-2xl bg-gray-100 dark:bg-black/40 p-1">
           {MODEL_TABS.map(({ tier, label, icon: Icon }) => (
@@ -448,7 +622,7 @@ export function WorkspacePromptImage() {
       <button
         type="button"
         onClick={submit}
-        disabled={isSubmitting}
+        disabled={isGenerateDisabled}
         className="fixed left-5 right-5 bottom-24 z-20 rounded-2xl bg-gradient-to-r from-fuchsia-600 to-cyan-500 py-4 text-white font-black shadow-2xl flex items-center justify-center gap-2 disabled:opacity-60"
       >
         {isSubmitting ? <Loader className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}

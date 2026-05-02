@@ -185,6 +185,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const [resolution, setResolution] = useState<Resolution>('1K');
   const [speed, setSpeed] = useState('Nhanh');
   const [server, setServer] = useState('VIP 1');
+  const [gptQuality, setGptQuality] = useState<'low' | 'medium' | 'high'>('high');
   const [aiModel, setAiModel] = useState<TstGenerationTier>('flash');
 
   const [guideTopic, setGuideTopic] = useState<'chars' | 'settings' | null>(null);
@@ -265,23 +266,32 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const generationSpeedId = uiSpeedToTst(speed) || 'fast';
   const generationServerId = uiServerToTst(server) || 'fast';
   const generationTier = aiModel;
-  const availableResolutions = getCompatibleGenerationResolutions({
+  const catalogAvailableResolutions = getCompatibleGenerationResolutions({
       tier: generationTier,
       pricingEntries,
       serverId: generationServerId,
       speed: generationSpeedId
   });
-  const availableSpeeds = getCompatibleGenerationSpeeds({
+  const availableResolutions = aiModel === 'gpt' && catalogAvailableResolutions.length === 0
+      ? (['1K', '2K', '4K'] as Resolution[])
+      : catalogAvailableResolutions;
+  const catalogAvailableSpeeds = getCompatibleGenerationSpeeds({
       tier: generationTier,
       pricingEntries,
       resolution
   });
-  const availableServers = getCompatibleGenerationServers({
+  const availableSpeeds = aiModel === 'gpt' && catalogAvailableSpeeds.length === 0
+      ? (['fast'] as const)
+      : catalogAvailableSpeeds;
+  const catalogAvailableServers = getCompatibleGenerationServers({
       tier: generationTier,
       pricingEntries,
       speed: generationSpeedId,
       resolution
   });
+  const availableServers = aiModel === 'gpt' && catalogAvailableServers.length === 0
+      ? ['vip1']
+      : catalogAvailableServers;
   const selectedGenerationCost = getGenerationCostBreakdown({
       tier: generationTier,
       resolution,
@@ -1026,6 +1036,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                 characterCount: characters.length,
                 resolution,
                 aspectRatio,
+                quality: aiModel === 'gpt' ? gptQuality : undefined,
                 speed: effectiveSpeedId,
                 serverId: effectiveServerId,
                 negativePrompt: DEFAULT_IMAGE_NEGATIVE_PROMPT,
@@ -1831,6 +1842,27 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                             ))}
                         </div>
                     </div>
+
+                    {aiModel === 'gpt' && (
+                        <div className="space-y-3 animate-fade-in">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase">Chất lượng ảnh GPT</label>
+                            <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
+                                {(['low', 'medium', 'high'] as const).map((quality) => (
+                                    <button
+                                        key={quality}
+                                        onClick={() => setGptQuality(quality)}
+                                        className={`flex-1 py-3 rounded-lg text-[10px] font-bold uppercase transition-all ${
+                                            gptQuality === quality
+                                                ? 'bg-audi-purple text-white shadow-lg'
+                                                : 'text-slate-500 hover:text-white hover:bg-white/5'
+                                        }`}
+                                    >
+                                        {quality}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     <div className={`${availableSpeedLabels.length === 0 ? 'hidden ' : ''}space-y-3 animate-fade-in`}>
                         <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">

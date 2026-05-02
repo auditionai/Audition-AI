@@ -381,6 +381,9 @@ const VERTEX_EDIT_PRICING_CONFIG = [
 const buildVertexEditPricingKey = (tier: string, resolution: TstResolution) =>
   `${tier}|${resolution.toLowerCase()}`;
 
+const buildGenerationPricingKey = (serverId: string, speed: string, resolution: TstResolution) =>
+  `${normalizeServer(serverId)}|${normalizeSpeed(speed)}|${resolution.toLowerCase()}`;
+
 const parseVertexEditPricingKey = (configKey: string) => {
   const [tier, resolution] = configKey.split('|');
   return {
@@ -1064,6 +1067,28 @@ export const getGenerationCostBreakdown = ({
       credits: exactEntry.credits,
       vcoin: getAuditionPrice(modelId, exactEntry.config_key, fallbackVcoin, pricingOverrides),
       configKey: exactEntry.config_key,
+      modelId,
+    };
+  }
+
+  if (tier === 'gpt') {
+    const fallbackCreditsByResolution: Record<TstResolution, number> = {
+      '1K': 8,
+      '2K': 20,
+      '4K': 40,
+    };
+    const fallbackCredits = fallbackCreditsByResolution[resolution] ?? fallbackCreditsByResolution['2K'];
+    const fallbackVcoin = creditsToVcoin(fallbackCredits);
+    return {
+      available: true,
+      credits: fallbackCredits,
+      vcoin: getAuditionPrice(
+        modelId,
+        buildGenerationPricingKey(serverId, speed, resolution),
+        fallbackVcoin,
+        pricingOverrides,
+      ),
+      configKey: buildGenerationPricingKey(serverId, speed, resolution),
       modelId,
     };
   }

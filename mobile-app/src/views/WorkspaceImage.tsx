@@ -184,6 +184,7 @@ export function WorkspaceImage() {
   const [resolution, setResolution] = useState<TstResolution>('1K');
   const [speed, setSpeed] = useState<'Nhanh' | 'Tiết Kiệm'>('Nhanh');
   const [server, setServer] = useState('VIP 1');
+  const [gptQuality, setGptQuality] = useState<'low' | 'medium' | 'high'>('high');
   const [aiModel, setAiModel] = useState<TstGenerationTier>('flash');
 
   const [pricingEntries, setPricingEntries] = useState<TstPricingEntry[]>([]);
@@ -245,17 +246,26 @@ export function WorkspaceImage() {
   const generationSpeedId = uiSpeedToTst(speed) || 'fast';
   const generationServerId = uiServerToTst(server) || 'fast';
   const generationTier = aiModel;
-  const availableResolutions = getCompatibleGenerationResolutions({
+  const catalogAvailableResolutions = getCompatibleGenerationResolutions({
     tier: generationTier, pricingEntries, serverId: generationServerId, speed: generationSpeedId,
   });
-  const availableServers = getCompatibleGenerationServers({
+  const availableResolutions = aiModel === 'gpt' && catalogAvailableResolutions.length === 0
+    ? (['1K', '2K', '4K'] as TstResolution[])
+    : catalogAvailableResolutions;
+  const catalogAvailableServers = getCompatibleGenerationServers({
     tier: generationTier, pricingEntries, speed: generationSpeedId, resolution,
   });
-  const availableSpeeds = getCompatibleGenerationSpeeds({
+  const availableServers = aiModel === 'gpt' && catalogAvailableServers.length === 0
+    ? ['vip1']
+    : catalogAvailableServers;
+  const catalogAvailableSpeeds = getCompatibleGenerationSpeeds({
     tier: generationTier,
     pricingEntries,
     resolution,
   });
+  const availableSpeeds = aiModel === 'gpt' && catalogAvailableSpeeds.length === 0
+    ? (['fast'] as const)
+    : catalogAvailableSpeeds;
   const selectedCost = getGenerationCostBreakdown({
     tier: generationTier, resolution, speed: generationSpeedId,
     serverId: generationServerId, pricingEntries, pricingOverrides,
@@ -848,6 +858,7 @@ export function WorkspaceImage() {
           characterCount: characters.length,
           resolution,
           aspectRatio,
+          quality: aiModel === 'gpt' ? gptQuality : undefined,
           speed: effectiveSpeedId,
           serverId: effectiveServerId,
           characterReferenceGroups: stagedCharacterGroups,
@@ -1171,6 +1182,25 @@ export function WorkspaceImage() {
                   }`}
                 >
                   {res}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {aiModel === 'gpt' && (
+          <div className="space-y-2">
+            <h3 className="text-xs font-semibold text-gray-400 dark:text-zinc-500 tracking-wider ml-1">CHẤT LƯỢNG ẢNH GPT</h3>
+            <div className="grid grid-cols-3 gap-2">
+              {(['low', 'medium', 'high'] as const).map((quality) => (
+                <button
+                  key={quality}
+                  onClick={() => setGptQuality(quality)}
+                  className={`py-2.5 rounded-xl text-xs font-bold uppercase transition-all ${
+                    gptQuality === quality ? 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 border border-indigo-200 dark:border-indigo-500/30 shadow-sm' : 'bg-white dark:bg-[#18181B] text-gray-500 dark:text-zinc-400 border border-gray-100 dark:border-zinc-800'
+                  }`}
+                >
+                  {quality}
                 </button>
               ))}
             </div>

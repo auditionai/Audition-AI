@@ -163,6 +163,7 @@ export interface ImageGenerateRecipePayload {
   characterCount?: number;
   resolution?: string;
   aspectRatio?: string;
+  quality?: string;
   speed?: string;
   serverId?: string;
   negativePrompt?: string;
@@ -195,6 +196,7 @@ export interface PromptImageGenerateRecipePayload {
   referenceImages?: string[];
   resolution?: string;
   aspectRatio?: string;
+  quality?: string;
   speed?: string;
   serverId?: string;
   __stage?: QueueProcessingStage;
@@ -1485,6 +1487,7 @@ export const getRecipeValidationPayload = (payload: QueueRecipePayload) => {
         model: payload.modelId,
         resolution: getEffectiveImageGenerationResolution(payload.modelId, payload.speed, payload.resolution)?.toLowerCase(),
         aspect_ratio: payload.aspectRatio,
+        quality: payload.quality,
         speed: payload.speed,
         server_id: payload.serverId,
       };
@@ -1493,6 +1496,7 @@ export const getRecipeValidationPayload = (payload: QueueRecipePayload) => {
         model: payload.modelId,
         resolution: getEffectiveImageGenerationResolution(payload.modelId, payload.speed, payload.resolution)?.toLowerCase(),
         aspect_ratio: payload.aspectRatio,
+        quality: payload.quality,
         speed: payload.speed,
         server_id: payload.serverId,
       };

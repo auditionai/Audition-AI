@@ -2,12 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Bot, Coins, Crown, ImagePlus, Loader, Plus, Sparkles, X, Zap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../components/NotificationSystem';
-import { getModelPricing, getUserProfile } from '../services/economyService';
+import { getModelPricing, getTstServerAvailabilityConfig, getUserProfile } from '../services/economyService';
 import { useConcurrency, CONCURRENCY_LIMITS } from '../services/concurrencyService';
 import { enqueueServerJob } from '../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../services/storageService';
 import {
   fetchTstPricing,
+  fetchTstModels,
   getCompatibleGenerationResolutions,
   getCompatibleGenerationServers,
   getCompatibleGenerationSpeeds,
@@ -17,6 +18,8 @@ import {
   tstServerToUi,
   uiServerToTst,
   uiSpeedToTst,
+  applyServerAvailabilityToRuntimeModels,
+  sanitizePricingEntriesWithRuntimeModels,
   type TstGenerationTier,
   type TstPricingEntry,
   type TstResolution,
@@ -87,10 +90,20 @@ export function WorkspacePromptImage() {
 
   useEffect(() => {
     let alive = true;
-    Promise.all([fetchTstPricing().catch(() => []), getModelPricing().catch(() => [])]).then(([tstPricing, adminPricing]) => {
+    Promise.all([
+      fetchTstPricing().catch(() => []),
+      fetchTstModels().catch(() => []),
+      getModelPricing().catch(() => []),
+      getTstServerAvailabilityConfig().catch(() => null),
+    ]).then(([tstPricing, runtimeModels, adminPricing, serverAvailabilityConfig]) => {
       if (!alive) return;
-      setPricingEntries(tstPricing);
+      const filteredModels = applyServerAvailabilityToRuntimeModels(runtimeModels, serverAvailabilityConfig);
+      setPricingEntries(sanitizePricingEntriesWithRuntimeModels(tstPricing, filteredModels, serverAvailabilityConfig));
       setPricingOverrides(adminPricing);
+    }).catch(() => {
+      if (!alive) return;
+      setPricingEntries([]);
+      setPricingOverrides([]);
     });
     return () => {
       alive = false;

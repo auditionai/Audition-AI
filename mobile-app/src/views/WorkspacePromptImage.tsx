@@ -249,18 +249,25 @@ export function WorkspacePromptImage() {
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[11px] font-black text-white">Ảnh {index + 1}</span>
                 {referenceImages.length > 1 && (
-                  <button onClick={() => setReferenceImages((prev) => prev.filter((_, idx) => idx !== index))} className="text-zinc-500">
+                  <button type="button" onClick={() => setReferenceImages((prev) => {
+                    const safeSlots = Array.isArray(prev) && prev.length > 0 ? prev : [null];
+                    const next = safeSlots.filter((_, idx) => idx !== index);
+                    return next.length > 0 ? next : [null];
+                  })} className="text-zinc-500">
                     <X className="w-4 h-4" />
                   </button>
                 )}
               </div>
-              <button onClick={() => pickImage(index)} className="w-full aspect-[3/4] rounded-xl border border-dashed border-zinc-700 overflow-hidden flex items-center justify-center text-zinc-500">
+              <button type="button" onClick={() => pickImage(index)} className="w-full aspect-[3/4] rounded-xl border border-dashed border-zinc-700 overflow-hidden flex items-center justify-center text-zinc-500">
                 {image ? <img src={image} className="w-full h-full object-cover" alt={`Ảnh ${index + 1}`} /> : <ImagePlus className="w-8 h-8" />}
               </button>
             </div>
           ))}
           {referenceImages.length < MAX_REFERENCE_IMAGES && (
-            <button onClick={() => setReferenceImages((prev) => [...prev, null])} className="min-h-[190px] rounded-2xl border border-dashed border-zinc-700 text-zinc-400 flex flex-col items-center justify-center gap-2">
+            <button type="button" onClick={() => setReferenceImages((prev) => {
+              const safeSlots = Array.isArray(prev) && prev.length > 0 ? prev : [null];
+              return safeSlots.length >= MAX_REFERENCE_IMAGES ? safeSlots : [...safeSlots, null];
+            })} className="min-h-[190px] rounded-2xl border border-dashed border-zinc-700 text-zinc-400 flex flex-col items-center justify-center gap-2">
               <Plus className="w-7 h-7" />
               <span className="text-xs font-bold">Thêm ảnh</span>
             </button>

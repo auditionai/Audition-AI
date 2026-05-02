@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Icons } from '../../components/Icons';
+import { Cpu, Image as ImageIcon, Loader, MessageSquare, Plus, Sparkles, Upload, X } from 'lucide-react';
 import { useNotification } from '../../components/NotificationSystem';
 import { getModelPricing, getUserProfile } from '../../services/economyService';
 import { useConcurrency, CONCURRENCY_LIMITS } from '../../services/concurrencyService';
@@ -156,12 +156,16 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, lang,
   };
 
   const addImageSlot = () => {
-    setReferenceImages((prev) => (prev.length >= MAX_REFERENCE_IMAGES ? prev : [...prev, null]));
+    setReferenceImages((prev) => {
+      const safeSlots = Array.isArray(prev) && prev.length > 0 ? prev : [null];
+      return safeSlots.length >= MAX_REFERENCE_IMAGES ? safeSlots : [...safeSlots, null];
+    });
   };
 
   const removeImageSlot = (index: number) => {
     setReferenceImages((prev) => {
-      const next = prev.filter((_, idx) => idx !== index);
+      const safeSlots = Array.isArray(prev) && prev.length > 0 ? prev : [null];
+      const next = safeSlots.filter((_, idx) => idx !== index);
       return next.length > 0 ? next : [null];
     });
   };
@@ -263,7 +267,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, lang,
         <section>
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-black text-white flex items-center gap-2">
-              <Icons.Upload className="w-5 h-5 text-audi-pink" />
+              <Upload className="w-5 h-5 text-audi-pink" />
               1. Upload ảnh tham chiếu
             </h3>
             <span className="text-xs text-slate-400">{referenceImages.length}/{MAX_REFERENCE_IMAGES} ảnh</span>
@@ -274,8 +278,8 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, lang,
                 <div className="flex items-center justify-between mb-2">
                   <span className="px-3 py-1 rounded-lg bg-white/10 text-xs font-bold text-white">Ảnh {index + 1}</span>
                   {referenceImages.length > 1 && (
-                    <button onClick={() => removeImageSlot(index)} className="p-1 rounded-lg text-slate-400 hover:text-red-300 hover:bg-red-500/10">
-                      <Icons.X className="w-4 h-4" />
+                    <button type="button" onClick={() => removeImageSlot(index)} className="p-1 rounded-lg text-slate-400 hover:text-red-300 hover:bg-red-500/10">
+                      <X className="w-4 h-4" />
                     </button>
                   )}
                 </div>
@@ -288,7 +292,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, lang,
                     <img src={image} alt={`Ảnh ${index + 1}`} className="w-full h-full object-cover" />
                   ) : (
                     <>
-                      <Icons.Image className="w-10 h-10 mb-2" />
+                      <ImageIcon className="w-10 h-10 mb-2" />
                       <span className="text-xs font-bold">Upload ảnh {index + 1}</span>
                     </>
                   )}
@@ -301,7 +305,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, lang,
                 onClick={addImageSlot}
                 className="min-h-[260px] rounded-2xl border border-dashed border-white/20 bg-white/5 hover:bg-white/10 text-slate-300 flex flex-col items-center justify-center gap-3 transition-colors"
               >
-                <Icons.Plus className="w-8 h-8" />
+                <Plus className="w-8 h-8" />
                 <span className="text-sm font-bold">Thêm ảnh</span>
               </button>
             )}
@@ -310,7 +314,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, lang,
 
         <section className="rounded-2xl border border-white/10 bg-[#11121a] p-4">
           <h3 className="text-lg font-black text-white mb-3 flex items-center gap-2">
-            <Icons.MessageSquare className="w-5 h-5 text-cyan-300" />
+            <MessageSquare className="w-5 h-5 text-cyan-300" />
             2. Prompt
           </h3>
           <textarea
@@ -326,7 +330,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, lang,
 
       <aside className="h-fit rounded-3xl border border-white/10 bg-[#11121a] p-5 sticky top-4">
         <h3 className="text-xl font-black text-white flex items-center gap-2 mb-5">
-          <Icons.Cpu className="w-5 h-5 text-slate-400" />
+          <Cpu className="w-5 h-5 text-slate-400" />
           3. Cấu hình
         </h3>
 
@@ -399,7 +403,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, lang,
             disabled={isSubmitting}
             className="w-full rounded-2xl bg-gradient-to-r from-audi-pink to-audi-purple py-4 text-white font-black shadow-lg disabled:opacity-60 flex items-center justify-center gap-2"
           >
-            {isSubmitting ? <Icons.Loader className="w-5 h-5 animate-spin" /> : <Icons.Sparkles className="w-5 h-5" />}
+            {isSubmitting ? <Loader className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
             {isSubmitting ? 'Đang gửi job...' : `Tạo ảnh ${selectedCost.available ? `${selectedCost.vcoin} Vcoin` : ''}`}
           </button>
         </div>

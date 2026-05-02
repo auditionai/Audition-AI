@@ -33,6 +33,7 @@ import {
   getVertexEditToolCostBreakdown,
   getGenerationModelId,
   getResolutionCostMap,
+  resolveGenerationSelection,
   applyServerAvailabilityToRuntimeModels,
   sanitizePricingEntriesWithRuntimeModels,
   tstServerToUi,
@@ -266,32 +267,23 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const generationSpeedId = uiSpeedToTst(speed) || 'fast';
   const generationServerId = uiServerToTst(server) || 'fast';
   const generationTier = aiModel;
-  const catalogAvailableResolutions = getCompatibleGenerationResolutions({
+  const availableResolutions = getCompatibleGenerationResolutions({
       tier: generationTier,
       pricingEntries,
       serverId: generationServerId,
       speed: generationSpeedId
   });
-  const availableResolutions = aiModel === 'gpt' && catalogAvailableResolutions.length === 0
-      ? (['1K', '2K', '4K'] as Resolution[])
-      : catalogAvailableResolutions;
-  const catalogAvailableSpeeds = getCompatibleGenerationSpeeds({
+  const availableSpeeds = getCompatibleGenerationSpeeds({
       tier: generationTier,
       pricingEntries,
       resolution
   });
-  const availableSpeeds = aiModel === 'gpt' && catalogAvailableSpeeds.length === 0
-      ? (['fast'] as const)
-      : catalogAvailableSpeeds;
-  const catalogAvailableServers = getCompatibleGenerationServers({
+  const availableServers = getCompatibleGenerationServers({
       tier: generationTier,
       pricingEntries,
       speed: generationSpeedId,
       resolution
   });
-  const availableServers = aiModel === 'gpt' && catalogAvailableServers.length === 0
-      ? ['vip1']
-      : catalogAvailableServers;
   const selectedGenerationCost = getGenerationCostBreakdown({
       tier: generationTier,
       resolution,
@@ -529,48 +521,30 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   }, [aiModel, isFlashAvailable, isGptAvailable, isProAvailable]);
 
   useEffect(() => {
-      if (availableResolutions.length > 0 && !availableResolutions.includes(resolution)) {
-          setResolution(availableResolutions[0]);
-      }
-  }, [availableResolutions, resolution]);
-
-  useEffect(() => {
-      const tier = aiModel;
       const requestedSpeedId = uiSpeedToTst(speed) || 'fast';
       const requestedServerId = uiServerToTst(server) || 'fast';
-      const compatibleServers = getCompatibleGenerationServers({
-          tier,
+      const nextSelection = resolveGenerationSelection({
+          tier: aiModel,
           pricingEntries,
+          resolution,
           speed: requestedSpeedId,
-          resolution
+          serverId: requestedServerId,
       });
-      const nextServerId = compatibleServers.includes(requestedServerId)
-          ? requestedServerId
-          : compatibleServers[0];
-
-      if (nextServerId && nextServerId !== requestedServerId) {
-          const nextServerLabel = tstServerToUi(nextServerId);
-          if (nextServerLabel !== server) {
-              setServer(nextServerLabel);
-              return;
-          }
+      if (!nextSelection.available) {
+          return;
       }
-
-      const compatibleSpeeds = getCompatibleGenerationSpeeds({
-          tier,
-          pricingEntries,
-          serverId: nextServerId || requestedServerId,
-          resolution
-      });
-      const nextSpeedId = compatibleSpeeds.includes(requestedSpeedId)
-          ? requestedSpeedId
-          : compatibleSpeeds[0];
-
-      if (nextSpeedId) {
-          const nextSpeedLabel = nextSpeedId === 'slow' ? 'Tiết Kiệm' : 'Nhanh';
-          if (nextSpeedLabel !== speed) {
-              setSpeed(nextSpeedLabel);
-          }
+      if (nextSelection.resolution !== resolution) {
+          setResolution(nextSelection.resolution as Resolution);
+          return;
+      }
+      const nextServerLabel = tstServerToUi(nextSelection.serverId);
+      if (nextServerLabel !== server) {
+          setServer(nextServerLabel);
+          return;
+      }
+      const nextSpeedLabel = nextSelection.speed === 'slow' ? 'Tiết Kiệm' : 'Nhanh';
+      if (nextSpeedLabel !== speed) {
+          setSpeed(nextSpeedLabel);
       }
   }, [aiModel, pricingEntries, resolution, server, speed]);
 

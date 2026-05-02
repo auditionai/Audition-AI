@@ -13,6 +13,7 @@ import {
   getCompatibleGenerationSpeeds,
   getGenerationCostBreakdown,
   getGenerationModelId,
+  resolveGenerationSelection,
   tstServerToUi,
   uiServerToTst,
   uiSpeedToTst,
@@ -68,6 +69,7 @@ export function WorkspacePromptImage() {
   const [resolution, setResolution] = useState<TstResolution>('1K');
   const [speed, setSpeed] = useState('Nhanh');
   const [server, setServer] = useState('VIP 1');
+  const [gptQuality, setGptQuality] = useState<'low' | 'medium' | 'high'>('high');
   const [pricingEntries, setPricingEntries] = useState<TstPricingEntry[]>([]);
   const [pricingOverrides, setPricingOverrides] = useState<ModelPricing[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -108,7 +110,7 @@ export function WorkspacePromptImage() {
       serverId: generationServerId,
       speed: generationSpeedId,
     });
-    return values.length > 0 ? values : (['1K', '2K', '4K'] as TstResolution[]);
+    return values;
   }, [aiModel, generationServerId, generationSpeedId, pricingEntries]);
 
   const availableServers = useMemo(() => {
@@ -118,7 +120,7 @@ export function WorkspacePromptImage() {
       speed: generationSpeedId,
       resolution,
     });
-    return values.length > 0 ? values : ['fast'];
+    return values;
   }, [aiModel, generationSpeedId, pricingEntries, resolution]);
 
   const availableSpeeds = useMemo(() => {
@@ -128,23 +130,34 @@ export function WorkspacePromptImage() {
       serverId: generationServerId,
       resolution,
     });
-    return values.length > 0 ? values : ['fast'];
+    return values;
   }, [aiModel, generationServerId, pricingEntries, resolution]);
 
   useEffect(() => {
-    if (!availableResolutions.includes(resolution)) {
-      setResolution(availableResolutions[0] || '1K');
+    const nextSelection = resolveGenerationSelection({
+      tier: aiModel,
+      pricingEntries,
+      resolution,
+      speed: generationSpeedId,
+      serverId: generationServerId,
+    });
+    if (!nextSelection.available) {
+      return;
     }
-  }, [availableResolutions, resolution]);
-
-  useEffect(() => {
-    if (!availableServers.includes(generationServerId)) {
-      setServer(tstServerToUi(availableServers[0] || 'fast'));
+    if (nextSelection.resolution !== resolution) {
+      setResolution(nextSelection.resolution);
+      return;
     }
-    if (!availableSpeeds.includes(generationSpeedId as any)) {
-      setSpeed(speedIdToLabel(availableSpeeds[0] || 'fast'));
+    const nextServerLabel = tstServerToUi(nextSelection.serverId);
+    if (nextServerLabel !== server) {
+      setServer(nextServerLabel);
+      return;
     }
-  }, [availableServers, availableSpeeds, generationServerId, generationSpeedId]);
+    const nextSpeedLabel = speedIdToLabel(nextSelection.speed);
+    if (nextSpeedLabel !== speed) {
+      setSpeed(nextSpeedLabel);
+    }
+  }, [aiModel, generationServerId, generationSpeedId, pricingEntries, resolution, server, speed]);
 
   const selectedCost = getGenerationCostBreakdown({
     tier: aiModel,
@@ -226,6 +239,7 @@ export function WorkspacePromptImage() {
         referenceImages: stagedImages,
         resolution,
         aspectRatio,
+        quality: aiModel === 'gpt' ? gptQuality : undefined,
         speed: generationSpeedId,
         serverId: generationServerId,
       };
@@ -376,6 +390,22 @@ export function WorkspacePromptImage() {
             </button>
           ))}
         </div>
+        {aiModel === 'gpt' && (
+          <div className="grid grid-cols-3 gap-2">
+            {(['low', 'medium', 'high'] as const).map((quality) => (
+              <button
+                key={quality}
+                type="button"
+                onClick={() => setGptQuality(quality)}
+                className={`py-3 rounded-xl text-xs font-black uppercase ${
+                  gptQuality === quality ? 'bg-fuchsia-600 text-white' : 'bg-gray-100 text-gray-500 dark:bg-black/40 dark:text-zinc-500'
+                }`}
+              >
+                {quality}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <select
             value={speed}

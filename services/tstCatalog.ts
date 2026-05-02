@@ -381,9 +381,6 @@ const VERTEX_EDIT_PRICING_CONFIG = [
 const buildVertexEditPricingKey = (tier: string, resolution: TstResolution) =>
   `${tier}|${resolution.toLowerCase()}`;
 
-const buildGenerationPricingKey = (serverId: string, speed: string, resolution: TstResolution) =>
-  `${normalizeServer(serverId)}|${normalizeSpeed(speed)}|${resolution.toLowerCase()}`;
-
 const parseVertexEditPricingKey = (configKey: string) => {
   const [tier, resolution] = configKey.split('|');
   return {
@@ -1020,6 +1017,56 @@ export const getCompatibleGenerationResolutions = ({
   return getUniqueResolutions(entries).map((value) => value.toUpperCase()) as TstResolution[];
 };
 
+export const resolveGenerationSelection = ({
+  tier,
+  pricingEntries = [],
+  resolution,
+  speed,
+  serverId,
+}: {
+  tier: TstGenerationTier;
+  pricingEntries?: TstPricingEntry[];
+  resolution: TstResolution;
+  speed: string;
+  serverId: string;
+}) => {
+  const modelId = tierToModelId[tier];
+  const modelEntries = getPricingEntriesForModel(modelId, pricingEntries);
+  if (modelEntries.length === 0) {
+    return { resolution, speed, serverId, available: false };
+  }
+
+  const normalizedResolution = normalizeResolution(resolution);
+  const normalizedSpeed = normalizeSpeed(speed);
+  const normalizedServer = normalizeServer(serverId);
+  const exactEntry = modelEntries.find(
+    (entry) =>
+      normalizeResolution(entry.resolution) === normalizedResolution &&
+      normalizeSpeed(entry.speed) === normalizedSpeed &&
+      normalizeServer(entry.server) === normalizedServer,
+  );
+
+  if (exactEntry) {
+    return { resolution, speed, serverId, available: true };
+  }
+
+  const nextEntry =
+    modelEntries.find(
+      (entry) =>
+        normalizeResolution(entry.resolution) === normalizedResolution &&
+        normalizeSpeed(entry.speed) === normalizedSpeed,
+    ) ||
+    modelEntries.find((entry) => normalizeResolution(entry.resolution) === normalizedResolution) ||
+    modelEntries[0];
+
+  return {
+    resolution: (normalizeResolution(nextEntry.resolution).toUpperCase() || resolution) as TstResolution,
+    speed: normalizeSpeed(nextEntry.speed) || speed,
+    serverId: normalizeServer(nextEntry.server) || serverId,
+    available: true,
+  };
+};
+
 export const getGenerationCostBreakdown = ({
   tier,
   resolution,
@@ -1067,28 +1114,6 @@ export const getGenerationCostBreakdown = ({
       credits: exactEntry.credits,
       vcoin: getAuditionPrice(modelId, exactEntry.config_key, fallbackVcoin, pricingOverrides),
       configKey: exactEntry.config_key,
-      modelId,
-    };
-  }
-
-  if (tier === 'gpt') {
-    const fallbackCreditsByResolution: Record<TstResolution, number> = {
-      '1K': 8,
-      '2K': 20,
-      '4K': 40,
-    };
-    const fallbackCredits = fallbackCreditsByResolution[resolution] ?? fallbackCreditsByResolution['2K'];
-    const fallbackVcoin = creditsToVcoin(fallbackCredits);
-    return {
-      available: true,
-      credits: fallbackCredits,
-      vcoin: getAuditionPrice(
-        modelId,
-        buildGenerationPricingKey(serverId, speed, resolution),
-        fallbackVcoin,
-        pricingOverrides,
-      ),
-      configKey: buildGenerationPricingKey(serverId, speed, resolution),
       modelId,
     };
   }

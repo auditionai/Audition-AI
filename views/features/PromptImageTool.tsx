@@ -12,6 +12,7 @@ import {
   getCompatibleGenerationSpeeds,
   getGenerationCostBreakdown,
   getGenerationModelId,
+  resolveGenerationSelection,
   tstServerToUi,
   uiServerToTst,
   uiSpeedToTst,
@@ -74,6 +75,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
   const [resolution, setResolution] = useState<TstResolution>('1K');
   const [speed, setSpeed] = useState('Nhanh');
   const [server, setServer] = useState('VIP 1');
+  const [gptQuality, setGptQuality] = useState<'low' | 'medium' | 'high'>('high');
   const [pricingEntries, setPricingEntries] = useState<TstPricingEntry[]>([]);
   const [pricingOverrides, setPricingOverrides] = useState<ModelPricing[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -115,7 +117,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
       serverId: generationServerId,
       speed: generationSpeedId,
     });
-    return values.length > 0 ? values : (['1K', '2K', '4K'] as TstResolution[]);
+    return values;
   }, [aiModel, generationServerId, generationSpeedId, pricingEntries]);
 
   const availableServers = useMemo(() => {
@@ -125,7 +127,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
       speed: generationSpeedId,
       resolution,
     });
-    return values.length > 0 ? values : ['fast'];
+    return values;
   }, [aiModel, generationSpeedId, pricingEntries, resolution]);
 
   const availableSpeeds = useMemo(() => {
@@ -135,23 +137,34 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
       serverId: generationServerId,
       resolution,
     });
-    return values.length > 0 ? values : ['fast'];
+    return values;
   }, [aiModel, generationServerId, pricingEntries, resolution]);
 
   useEffect(() => {
-    if (!availableResolutions.includes(resolution)) {
-      setResolution(availableResolutions[0] || '1K');
+    const nextSelection = resolveGenerationSelection({
+      tier: aiModel,
+      pricingEntries,
+      resolution,
+      speed: generationSpeedId,
+      serverId: generationServerId,
+    });
+    if (!nextSelection.available) {
+      return;
     }
-  }, [availableResolutions, resolution]);
-
-  useEffect(() => {
-    if (!availableServers.includes(generationServerId)) {
-      setServer(tstServerToUi(availableServers[0] || 'fast'));
+    if (nextSelection.resolution !== resolution) {
+      setResolution(nextSelection.resolution);
+      return;
     }
-    if (!availableSpeeds.includes(generationSpeedId as any)) {
-      setSpeed(speedIdToLabel(availableSpeeds[0] || 'fast'));
+    const nextServerLabel = tstServerToUi(nextSelection.serverId);
+    if (nextServerLabel !== server) {
+      setServer(nextServerLabel);
+      return;
     }
-  }, [availableServers, availableSpeeds, generationServerId, generationSpeedId]);
+    const nextSpeedLabel = speedIdToLabel(nextSelection.speed);
+    if (nextSpeedLabel !== speed) {
+      setSpeed(nextSpeedLabel);
+    }
+  }, [aiModel, generationServerId, generationSpeedId, pricingEntries, resolution, server, speed]);
 
   const selectedCost = getGenerationCostBreakdown({
     tier: aiModel,
@@ -251,6 +264,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
         referenceImages: stagedImages,
         resolution,
         aspectRatio,
+        quality: aiModel === 'gpt' ? gptQuality : undefined,
         speed: generationSpeedId,
         serverId: generationServerId,
       };
@@ -436,6 +450,26 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
                 ))}
               </div>
             </div>
+
+            {aiModel === 'gpt' && (
+              <div className="space-y-3 animate-fade-in">
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Chất lượng ảnh GPT</label>
+                <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
+                  {(['low', 'medium', 'high'] as const).map((quality) => (
+                    <button
+                      key={quality}
+                      type="button"
+                      onClick={() => setGptQuality(quality)}
+                      className={`flex-1 py-3 rounded-lg text-[10px] font-bold uppercase transition-all ${
+                        gptQuality === quality ? 'bg-audi-purple text-white shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      {quality}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className={`${availableSpeedLabels.length === 0 ? 'hidden ' : ''}space-y-3 animate-fade-in`}>
               <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">

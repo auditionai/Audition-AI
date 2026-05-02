@@ -3210,7 +3210,51 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
         job.queue_payload = stagedResult.storedPayload;
       }
 
-      if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType !== 'image_generate_recipe_v1') {
+      if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'prompt_image_generate_recipe_v1') {
+        await updatePreProviderStage(job.id, 20);
+        job.queue_payload = await persistQueueLog(
+          job.id,
+          job.queue_payload || currentPayload,
+          'building_payload',
+          'Đang chuẩn bị payload tạo ảnh AI thuần prompt.',
+        );
+        job.queue_payload = await markTstTouched(
+          job.id,
+          job.queue_payload,
+          'Đã bắt đầu chuẩn bị payload và gửi dữ liệu lên hệ thống TST.',
+        );
+        const providerPayload = await withTimeout(
+          withLeaseHeartbeat(
+            job.id,
+            prepareProviderPayloadFromQueueRecipe((job.queue_payload || currentPayload) as PromptImageGenerateRecipePayload),
+            preparationLeaseSeconds,
+          ),
+          preparationTimeoutMs,
+          'Queue preparation timed out before dispatching to provider.',
+        );
+        const preparedValidationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, providerPayload);
+        const validatedProviderPayload = applyLivePricingConfigToPayload(
+          job.queue_kind,
+          providerPayload,
+          preparedValidationResult,
+        );
+        job.queue_payload = await persistPreparedPayload(job.id, validatedProviderPayload, job.queue_payload || currentPayload);
+        job.queue_payload = await persistQueueLog(
+          job.id,
+          job.queue_payload,
+          'dispatching',
+          'Payload đã sẵn sàng. Chờ gửi provider.',
+          'success',
+        );
+        await markPreparedForDispatch(job.id);
+        summary.requeued += 1;
+        continue;
+      }
+
+      if (
+        isQueueRecipePayload(currentPayload) &&
+        (currentPayload.recipeType === 'video_generate_recipe_v1' || currentPayload.recipeType === 'motion_generate_recipe_v1')
+      ) {
         await updatePreProviderStage(job.id, 20);
         const reviewStartMessage =
           currentPayload.recipeType === 'video_generate_recipe_v1'

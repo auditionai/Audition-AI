@@ -5,6 +5,7 @@ import { Icons } from '../components/Icons';
 import { GenerationTool } from './features/GenerationTool';
 import { EditingTool } from './features/EditingTool';
 import { VideoTool } from './features/VideoTool';
+import { PromptImageTool } from './features/PromptImageTool';
 
 interface ToolWorkspaceProps {
   feature: Feature;
@@ -20,6 +21,10 @@ export const ToolWorkspace: React.FC<ToolWorkspaceProps> = ({ feature, lang, onB
   // ensuring separation of concerns.
 
   const renderTool = () => {
+    if (feature.id === 'ai_image_tool') {
+        return <PromptImageTool key={feature.id} feature={feature} lang={lang} onNavigateView={onNavigateView} />;
+    }
+
     switch (feature.toolType) {
         case 'generation':
             return <GenerationTool key={feature.id} feature={feature} lang={lang} onNavigateToFeature={onNavigateToFeature} onNavigateView={onNavigateView} />;

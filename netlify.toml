@@ -59,11 +59,6 @@
   status = 200
 
 [[redirects]]
-  from = "/api/video-script-director"
-  to = "/.netlify/functions/video-script-director"
-  status = 200
-
-[[redirects]]
   from = "/api/queue-enqueue"
   to = "/.netlify/functions/queue-enqueue"
   status = 200

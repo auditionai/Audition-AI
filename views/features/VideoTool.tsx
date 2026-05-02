@@ -7,7 +7,6 @@ import { CONCURRENCY_LIMITS, useConcurrency } from '../../services/concurrencySe
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import { downloadAssetToBrowser } from '../../services/downloadService';
-import { generateVideoScriptWithVertex } from '../../services/videoScriptDirectorService';
 import type { MotionGenerateRecipePayload, VideoGenerateRecipePayload } from '../../shared/queueRecipes';
 import {
   type AuditionPricingOverride,
@@ -48,7 +47,6 @@ interface AIModelOption {
     id: string;
     name: string;
     price: number;
-    billingUnit?: 'flat' | 'second';
     badges?: { text: string; type: 'blue' | 'outline' | 'speed' | 'duration' | 'server' }[];
 }
 
@@ -60,11 +58,6 @@ const SMART_TIPS = [
     { icon: Icons.Image, text: "📸 Mẹo: Ảnh gốc rõ nét sẽ cho ra video chất lượng cao hơn." },
     { icon: Icons.Activity, text: "🏃 Tip: Motion Control giúp bạn điều khiển chuyển động nhân vật theo video mẫu." },
     { icon: Icons.ExternalLink, text: "👗 Mẹo: Truy cập AuMix3D.com để mix đồ và chụp ảnh nhân vật tách nền cực nét làm nguyên liệu cho AI!" }
-];
-
-const VIDEO_NOTICE_MESSAGES = [
-    'Tạo video có thể mất 30-60 phút. Vui lòng kiên nhẫn chờ đến khi hệ thống xử lý xong, không cần tạo lại nhiều lần.',
-    'Hãy tải ảnh nhân vật rõ nét, nhập prompt chi tiết và dùng video mẫu dưới 30 giây. Video mẫu trên 30 giây sẽ không tạo được.',
 ];
 
 const OptionDropdown = ({ label, value, options, onChange, icon: Icon }: any) => {
@@ -120,7 +113,6 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
   const [activeMode, setActiveMode] = useState<VideoMode>(feature.id === 'motion_control_gen' ? 'motion_control' : 'video_ai');
   
   const [currentTipIdx, setCurrentTipIdx] = useState(0);
-  const [videoNoticeIdx, setVideoNoticeIdx] = useState(0);
 
   useEffect(() => {
       const interval = setInterval(() => {
@@ -129,16 +121,8 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
       return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-      const interval = setInterval(() => {
-          setVideoNoticeIdx(prev => (prev + 1) % VIDEO_NOTICE_MESSAGES.length);
-      }, 3000);
-      return () => clearInterval(interval);
-  }, []);
-
   // Video AI State
   const [prompt, setPrompt] = useState('');
-  const [isGeneratingVideoScript, setIsGeneratingVideoScript] = useState(false);
   const [keyframeImage, setKeyframeImage] = useState<string | null>(null);
   const [videoModel, setVideoModel] = useState('');
   const [aspectRatio, setAspectRatio] = useState('16:9');
@@ -193,8 +177,10 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                   auditionPriceVcoin: row.audition_price_vcoin,
               }));
 
-              const liveVideoModels = getVideoModelSpecs(livePricing, models).map((spec) => {
-                  const priceBreakdown = getVideoCostBreakdown({
+              const liveVideoModels = getVideoModelSpecs(livePricing, models).map((spec) => ({
+                  id: spec.modelId,
+                  name: spec.displayName,
+                  price: getVideoCostBreakdown({
                       modelId: spec.modelId,
                       serverId: spec.servers[0] || 'fast',
                       resolution: spec.resolutions[0] || '720p',
@@ -203,29 +189,19 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                       audio: false,
                       pricingEntries: livePricing,
                       pricingOverrides: overrideRows
-                  });
-                  return {
-                      id: spec.modelId,
-                      name: spec.displayName,
-                      price: priceBreakdown.billingUnit === 'second' ? (priceBreakdown.unitVcoin || priceBreakdown.vcoin) : priceBreakdown.vcoin,
-                      billingUnit: priceBreakdown.billingUnit,
-                  };
-              });
-              const liveMotionModels = getMotionModelSpecs(livePricing, models).map((spec) => {
-                  const priceBreakdown = getMotionCostBreakdown({
+                  }).vcoin
+              }));
+              const liveMotionModels = getMotionModelSpecs(livePricing, models).map((spec) => ({
+                  id: spec.modelId,
+                  name: spec.displayName,
+                  price: getMotionCostBreakdown({
                       modelId: spec.modelId,
                       serverId: spec.servers[0] || 'vip2',
                       resolution: spec.resolutions[0] || '720p',
                       pricingEntries: livePricing,
                       pricingOverrides: overrideRows
-                  });
-                  return {
-                      id: spec.modelId,
-                      name: spec.displayName,
-                      price: priceBreakdown.billingUnit === 'second' ? (priceBreakdown.unitVcoin || priceBreakdown.vcoin) : priceBreakdown.vcoin,
-                      billingUnit: priceBreakdown.billingUnit,
-                  };
-              });
+                  }).vcoin
+              }));
 
               if (liveVideoModels.length > 0) {
                   setVideoModelOptions(liveVideoModels);
@@ -266,7 +242,6 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
           serverId: uiServerToTst(server) || 'vip2',
           resolution: quality.toLowerCase(),
           speed: uiSpeedToTst(speed) || 'fast',
-          durationSeconds: motionVideoDurationSeconds,
           pricingEntries,
           pricingOverrides
         })
@@ -284,7 +259,6 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
   const calculateCost = () => {
       return currentCostBreakdown.vcoin;
   };
-  const isPerSecondBilling = currentCostBreakdown.billingUnit === 'second';
 
   const getModelOptions = () => {
       if (activeMode === 'motion_control') {
@@ -452,10 +426,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
       if (speedOptions.length > 0 && !speedOptions.some((option) => option.value === speed)) {
           setSpeed(speedOptions[0].value);
       }
-      if (!modelOptions.supportsAudio && sound) {
-          setSound(false);
-      }
-  }, [activeMode, aspectRatio, duration, modelOptions, quality, server, serverOptions, sound, speed, speedOptions]);
+  }, [activeMode, aspectRatio, duration, modelOptions, quality, server, serverOptions, speed, speedOptions]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadTarget, setUploadTarget] = useState<'keyframe' | 'character' | 'motion' | null>(null);
@@ -515,29 +486,6 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
       setUploadTarget(null);
     };
     reader.readAsDataURL(file);
-  };
-
-  const handleGenerateVideoScript = async () => {
-    if (activeMode !== 'video_ai') return;
-    if (!keyframeImage) {
-      notify('Vui lòng tải ảnh tham chiếu trước khi tạo kịch bản AI.', 'error');
-      return;
-    }
-
-    setIsGeneratingVideoScript(true);
-    try {
-      const script = await generateVideoScriptWithVertex({
-        imageSource: keyframeImage,
-        durationSeconds: duration,
-        userPrompt: prompt,
-      });
-      setPrompt(script);
-      notify('Đã tạo kịch bản video bằng Vertex AI.', 'success');
-    } catch (error) {
-      notify(error instanceof Error ? error.message : 'Không thể tạo kịch bản video.', 'error');
-    } finally {
-      setIsGeneratingVideoScript(false);
-    }
   };
 
   const triggerUpload = (target: 'keyframe' | 'character' | 'motion') => {
@@ -849,22 +797,6 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
           </div>
       </a>
 
-      <div className="w-full mb-4 md:mb-6 rounded-2xl border border-audi-cyan/25 bg-gradient-to-r from-audi-cyan/10 via-audi-purple/10 to-audi-pink/10 p-3 md:p-4 shadow-[0_0_22px_rgba(33,212,253,0.08)] overflow-hidden">
-          <div className="flex items-start gap-3">
-              <div className="shrink-0 mt-0.5 rounded-xl bg-audi-cyan/15 border border-audi-cyan/30 p-2">
-                  <Icons.Info className="w-4 h-4 text-audi-cyan" />
-              </div>
-              <div className="min-w-0">
-                  <div className="text-[10px] font-black uppercase tracking-[0.18em] text-audi-cyan mb-1">
-                      Thông báo tạo video
-                  </div>
-                  <p key={videoNoticeIdx} className="text-xs md:text-sm font-semibold text-slate-100 leading-relaxed animate-fade-in">
-                      {VIDEO_NOTICE_MESSAGES[videoNoticeIdx]}
-                  </p>
-              </div>
-          </div>
-      </div>
-
       <div className="w-full grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4 md:mt-0">
         {/* LEFT PANEL: CONFIGURATION */}
         <div className="lg:col-span-2 space-y-4">
@@ -939,17 +871,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                       <div onClick={() => triggerUpload('motion')} className="w-full h-64 bg-black/40 rounded-xl border-2 border-dashed border-audi-pink hover:border-pink-400 cursor-pointer relative overflow-hidden group/item transition-all flex flex-col items-center justify-center">
                           {motionVideo ? (
                               <>
-                                  <video
-                                      key={motionVideo}
-                                      src={motionVideo}
-                                      className="absolute inset-0 w-full h-full object-cover opacity-80 transition-opacity group-hover/item:opacity-55"
-                                      autoPlay
-                                      loop
-                                      muted
-                                      playsInline
-                                      preload="metadata"
-                                  />
-                                  <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-black/20 pointer-events-none" />
+                                  <video src={motionVideo} className="w-full h-full object-contain opacity-80 group-hover/item:opacity-40 transition-opacity" autoPlay loop muted playsInline />
                                   <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/item:opacity-100 transition-opacity">
                                       <span className="text-[10px] font-bold text-white bg-black/50 px-2 py-1 rounded">Đổi Video</span>
                                   </div>
@@ -973,24 +895,9 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                       <Icons.MessageCircle className="w-4 h-4" /> 2. Mô tả
                   </label>
                   <div className="flex gap-2">
-                      {activeMode === 'video_ai' && (
-                          <button
-                              onClick={handleGenerateVideoScript}
-                              disabled={isGeneratingVideoScript || !keyframeImage}
-                              className="text-[10px] font-bold text-black bg-audi-cyan hover:bg-cyan-300 disabled:opacity-50 disabled:cursor-not-allowed px-2 py-1 rounded border border-cyan-300/40 flex items-center gap-1"
-                          >
-                              {isGeneratingVideoScript ? <Icons.Loader className="w-3 h-3 animate-spin" /> : <Icons.Sparkles className="w-3 h-3" />}
-                              Tạo Kịch Bản AI
-                          </button>
-                      )}
                       <button onClick={() => activeMode === 'video_ai' ? setPrompt('') : setMotionPrompt('')} className="text-[10px] font-bold text-slate-500 hover:text-white transition-colors bg-white/5 px-2 py-1 rounded border border-white/10">Xóa</button>
                   </div>
               </div>
-              {activeMode === 'video_ai' && (
-                  <div className="mb-3 rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-3 py-2 text-[11px] font-semibold leading-relaxed text-cyan-100">
-                      Hãy chọn số giây muốn tạo video và ấn nút Tạo Kịch Bản AI để AI viết sẵn kịch bản video cho bạn.
-                  </div>
-              )}
               
               <div className="flex flex-col md:flex-row gap-4">
                   <textarea 
@@ -1065,7 +972,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                                         )}
                                     </span>
                                     <div className="flex items-center gap-1 text-xs font-bold text-audi-cyan whitespace-nowrap">
-                                        Từ {model.price} {model.billingUnit === 'second' ? 'VC/s' : 'VC'} <Icons.Gem className="w-3 h-3" />
+                                        Từ {model.price} VC <Icons.Gem className="w-3 h-3" />
                                     </div>
                                 </div>
                                 
@@ -1290,12 +1197,6 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                           <span className="text-[10px] font-bold text-audi-yellow mb-1">VCOIN</span>
                       </div>
                   </div>
-                  {isPerSecondBilling && (
-                      <div className="mt-3 rounded-lg border border-audi-cyan/20 bg-audi-cyan/10 px-3 py-2 text-[10px] font-bold text-audi-cyan">
-                          Tính theo giây: {currentCostBreakdown.unitVcoin || 0} VC/s
-                          {currentCostBreakdown.billedSeconds ? ` × ${currentCostBreakdown.billedSeconds}s = ${calculateCost()} VC` : ''}
-                      </div>
-                  )}
                   {activeMode === 'video_ai' && modelOptions.durations.length > 0 ? (
                       <div className="flex justify-between text-[9px] text-slate-500 mt-2 font-mono border-t border-white/5 pt-2">
                           {modelOptions.durations.map(d => {
@@ -1305,9 +1206,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                                   resolution: quality.toLowerCase(),
                                   duration: d.toLowerCase(),
                                   speed: uiSpeedToTst(speed) || 'fast',
-                                  audio: sound,
-                                  pricingEntries,
-                                  pricingOverrides
+                                  pricingEntries
                                 }).vcoin;
                           return (
                               <span key={d} className={duration === d ? 'text-white font-bold' : ''}>{d}: {durationPrice}VC</span>

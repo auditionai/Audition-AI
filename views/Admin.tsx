@@ -2613,6 +2613,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       <th className="px-4 py-3 font-bold">Model</th>
                                       <th className="px-4 py-3 font-bold">Server</th>
                                       <th className="px-4 py-3 font-bold">Độ phân giải</th>
+                                      <th className="px-4 py-3 font-bold">Chất lượng</th>
                                       <th className="px-4 py-3 font-bold">Thời lượng</th>
                                       <th className="px-4 py-3 font-bold">Tốc độ</th>
                                       <th className="px-4 py-3 font-bold text-center">Audio</th>
@@ -2626,7 +2627,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                               <tbody className="divide-y divide-white/5">
                                   {pricingRows.length === 0 ? (
                                       <tr>
-                                          <td colSpan={12} className="px-4 py-8 text-center text-slate-500">
+                                          <td colSpan={13} className="px-4 py-8 text-center text-slate-500">
                                               Chưa tải được bảng giá live từ Trạm Sáng Tạo.
                                           </td>
                                       </tr>
@@ -2666,29 +2667,13 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                           )}
                                                       </div>
                                                   </td>
-                                                  <td className="px-4 py-3 text-white uppercase">
-                                                      <div>{row.resolution || '-'}</div>
-                                                      {row.quality && (
-                                                          <div className="mt-1 text-[10px] font-bold text-audi-cyan">
-                                                              {row.quality}
-                                                          </div>
-                                                      )}
-                                                  </td>
-                                                  <td className="px-4 py-3 text-white uppercase">
-                                                      {row.billingUnit === 'second' ? (
-                                                          <span className="rounded-full border border-audi-cyan/30 bg-audi-cyan/10 px-2 py-1 text-[10px] font-black text-audi-cyan">
-                                                              Theo giây
-                                                          </span>
-                                                      ) : (row.duration || '-')}
-                                                  </td>
+                                                  <td className="px-4 py-3 text-white uppercase">{row.resolution || '-'}</td>
+                                                  <td className="px-4 py-3 text-white uppercase">{row.quality || '-'}</td>
+                                                  <td className="px-4 py-3 text-white uppercase">{row.duration || '-'}</td>
                                                   <td className="px-4 py-3 text-white">{tstSpeedToUi(row.speed) || '-'}</td>
                                                   <td className="px-4 py-3 text-center text-white">{row.audio ? 'Có' : '-'}</td>
-                                                  <td className="px-4 py-3 text-right font-mono text-audi-cyan">
-                                                      {row.type === 'edit' ? '-' : `${Number(row.credits || 0).toLocaleString('vi-VN', { maximumFractionDigits: 4 })}${row.billingUnit === 'second' ? '/s' : ''}`}
-                                                  </td>
-                                                  <td className="px-4 py-3 text-right font-mono text-slate-200">
-                                                      {row.type === 'edit' ? '-' : `${row.vcoin} ${row.billingUnit === 'second' ? 'VC/s' : 'VC'}`}
-                                                  </td>
+                                                  <td className="px-4 py-3 text-right font-mono text-audi-cyan">{row.type === 'edit' ? '-' : row.credits}</td>
+                                                  <td className="px-4 py-3 text-right font-mono text-slate-200">{row.type === 'edit' ? '-' : `${row.vcoin} VC`}</td>
                                                   <td className="px-4 py-3">
                                                       <div className="flex items-center justify-end gap-2">
                                                           <input
@@ -2707,7 +2692,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                                       : 'border-white/10 focus:ring-audi-cyan/40'
                                                               }`}
                                                           />
-                                                          <span className="text-xs font-bold text-audi-yellow">{row.billingUnit === 'second' ? 'VC/s' : 'VC'}</span>
+                                                          <span className="text-xs font-bold text-audi-yellow">VC</span>
                                                           <button
                                                               onClick={() => handleSavePricingRow(row)}
                                                               disabled={!rowIsDirty}

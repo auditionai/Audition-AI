@@ -25,7 +25,6 @@ type TstProviderModel = {
     durations?: string[] | null;
     aspect_ratios?: string[] | null;
     aspectRatios?: string[] | null;
-    qualities?: string[] | null;
     slow_mode?: boolean;
     audio?: boolean;
   };
@@ -41,9 +40,9 @@ let modelsPromise: Promise<TstProviderModel[]> | null = null;
 const normalize = (value?: string | null) => String(value || '').trim().toLowerCase();
 const normalizeSpeed = (value?: string | null) => normalize(value || 'fast');
 const normalizeResolution = (value?: string | null) => normalize(value);
+const normalizeQuality = (value?: string | null) => normalize(value);
 const normalizeDuration = (value?: string | null) => normalize(value);
 const normalizeServer = (value?: string | null) => normalize(value);
-const normalizeQuality = (value?: string | null) => normalize(value);
 const isFresh = (timestamp: number) => timestamp > 0 && Date.now() - timestamp < TST_LIVE_CATALOG_TTL_MS;
 
 const getApiKey = () => {
@@ -80,6 +79,28 @@ const fetchCatalogEndpoint = async (path: string) => {
   return response.json();
 };
 
+const parseGptImage2ConfigKey = (configKey?: string) => {
+  const match = String(configKey || '').trim().toLowerCase().match(/^(1k|2k|4k)-(low|medium|high)(?:-(fast|slow))?/);
+  return {
+    resolution: match?.[1],
+    quality: match?.[2],
+    speed: match?.[3],
+  };
+};
+
+const normalizePricingEntryForValidation = (entry: TstProviderPricingEntry): TstProviderPricingEntry => {
+  if (normalize(entry.model) !== 'image-gpt-2') {
+    return entry;
+  }
+  const parsed = parseGptImage2ConfigKey(entry.config_key);
+  return {
+    ...entry,
+    resolution: parsed.resolution || entry.resolution,
+    quality: parsed.quality || entry.quality || entry.resolution,
+    speed: entry.speed || parsed.speed,
+  };
+};
+
 export const getTstCatalogMetadata = () => ({
   ttlMs: TST_LIVE_CATALOG_TTL_MS,
   pricingFetchedAt: pricingFetchedAt || null,
@@ -111,7 +132,7 @@ export const getTstProviderPricing = async (forceRefresh = false): Promise<TstPr
   if (!pricingPromise) {
     pricingPromise = fetchCatalogEndpoint('/models/pricing')
       .then((data) => {
-        pricingCache = Array.isArray(data?.pricing) ? data.pricing : [];
+        pricingCache = Array.isArray(data?.pricing) ? data.pricing.map(normalizePricingEntryForValidation) : [];
         pricingFetchedAt = Date.now();
         return pricingCache;
       })
@@ -170,41 +191,6 @@ const matchesFastSpeed = (entrySpeed?: string, requestedSpeed?: string) => {
   return normalizedRequested === 'fast' && !normalize(entrySpeed);
 };
 
-const parseGptImage2ConfigKey = (configKey?: string) => {
-  const match = normalize(configKey).match(/^(1k|2k|4k)-(low|medium|high)(?:-|$)/);
-  return match ? { resolution: match[1], quality: match[2] } : null;
-};
-
-const parseVideoConfigKey = (configKey?: string) => {
-  const normalized = normalize(configKey);
-  const resolution = normalized.match(/(?:^|-)(480p|720p|1080p)(?:-|$)/)?.[1];
-  const durationMatch = normalized.match(/(?:^|-)(\d{1,2})s?(?:-|$)/);
-  const duration = durationMatch ? `${durationMatch[1]}s` : '';
-  const speed = normalized.match(/(?:^|-)(fast|slow)(?:-|$)/)?.[1] || '';
-  const audio = /(?:^|-)audio(?:-|$)/.test(normalized) ? true : undefined;
-
-  return { resolution, duration, speed, audio };
-};
-
-const getPricingResolution = (entry: TstProviderPricingEntry) =>
-  normalize(entry.model) === 'image-gpt-2'
-    ? parseGptImage2ConfigKey(entry.config_key)?.resolution || normalizeResolution(entry.resolution)
-    : normalizeResolution(entry.resolution) || parseVideoConfigKey(entry.config_key).resolution || '';
-
-const getPricingQuality = (entry: TstProviderPricingEntry) =>
-  normalize(entry.model) === 'image-gpt-2'
-    ? parseGptImage2ConfigKey(entry.config_key)?.quality || normalizeQuality(entry.quality)
-    : normalizeQuality(entry.quality);
-
-const getPricingDuration = (entry: TstProviderPricingEntry) =>
-  normalizeDuration(entry.duration) || parseVideoConfigKey(entry.config_key).duration;
-
-const getPricingSpeed = (entry: TstProviderPricingEntry) =>
-  normalizeSpeed(entry.speed || parseVideoConfigKey(entry.config_key).speed || 'fast');
-
-const getPricingAudio = (entry: TstProviderPricingEntry) =>
-  entry.audio === true || parseVideoConfigKey(entry.config_key).audio === true;
-
 const getAspectRatios = (model: TstProviderModel) => {
   const ratios = [
     ...((model.capabilities?.aspect_ratios || []) as string[]),
@@ -218,25 +204,25 @@ const findPricingMatch = (
   {
     serverId,
     resolution,
+    quality,
     duration,
     speed,
-    quality,
     audio,
   }: {
     serverId?: string;
     resolution?: string;
+    quality?: string;
     duration?: string;
     speed?: string;
-    quality?: string;
     audio?: boolean;
   },
 ) => entries.find((entry) => {
   if (serverId && normalizeServer(entry.server) !== normalizeServer(serverId)) return false;
-  if (resolution && getPricingResolution(entry) !== normalizeResolution(resolution)) return false;
-  if (quality && getPricingQuality(entry) !== normalizeQuality(quality)) return false;
-  if (duration && getPricingDuration(entry) !== normalizeDuration(duration)) return false;
-  if (!matchesFastSpeed(getPricingSpeed(entry), speed)) return false;
-  if (typeof audio === 'boolean' && getPricingAudio(entry) !== audio) return false;
+  if (resolution && normalizeResolution(entry.resolution) !== normalizeResolution(resolution)) return false;
+  if (quality && normalizeQuality(entry.quality) !== normalizeQuality(quality)) return false;
+  if (duration && normalizeDuration(entry.duration) !== normalizeDuration(duration)) return false;
+  if (!matchesFastSpeed(entry.speed, speed)) return false;
+  if (typeof audio === 'boolean' && typeof entry.audio === 'boolean' && entry.audio !== audio) return false;
   return true;
 });
 
@@ -253,7 +239,7 @@ export const validateQueuePayloadAgainstLiveCatalog = async (
     getTstProviderPricing(),
     getServerAvailabilityConfig(),
   ]);
-  const modelId = normalize(String(queuePayload.model || ''));
+  const modelId = normalize(String(queuePayload.model || queuePayload.modelId || ''));
 
   if (!modelId) {
     throw new Error('INVALID_TST_CONFIG: Missing model id');
@@ -281,13 +267,13 @@ export const validateQueuePayloadAgainstLiveCatalog = async (
     throw new Error(`INVALID_TST_CONFIG: Model ${modelId} has no live pricing on TST`);
   }
 
-  const serverId = normalizeServer(String(queuePayload.server_id || ''));
+  const serverId = normalizeServer(String(queuePayload.server_id || queuePayload.serverId || ''));
   const resolution = normalizeResolution(String(queuePayload.resolution || ''));
+  const quality = normalizeQuality(String(queuePayload.quality || ''));
   const duration = normalizeDuration(String(queuePayload.duration || ''));
   const speed = normalizeSpeed(String(queuePayload.speed || ''));
   const audio = typeof queuePayload.audio === 'boolean' ? queuePayload.audio : undefined;
-  const aspectRatio = String(queuePayload.aspect_ratio || '').trim();
-  const quality = normalize(String(queuePayload.quality || ''));
+  const aspectRatio = String(queuePayload.aspect_ratio || queuePayload.aspectRatio || '').trim();
 
   if (serverId && !isServerAllowedBySnapshot(serverAvailabilityConfig, modelId, serverId, speed)) {
     throw new Error(`INVALID_TST_CONFIG: Server ${serverId} đang tạm ẩn do quá tải ở chế độ ${speed || 'default'}. Vui lòng chọn server khác.`);
@@ -324,13 +310,6 @@ export const validateQueuePayloadAgainstLiveCatalog = async (
     throw new Error(`INVALID_TST_CONFIG: Audio is disabled for ${modelId}`);
   }
 
-  if (quality && Array.isArray(model.capabilities?.qualities) && model.capabilities!.qualities!.length > 0) {
-    const availableQualities = model.capabilities!.qualities!.map((value) => normalize(value));
-    if (!availableQualities.includes(quality)) {
-      throw new Error(`INVALID_TST_CONFIG: Quality ${quality} is disabled for ${modelId}`);
-    }
-  }
-
   const aspectRatios = getAspectRatios(model);
   if (aspectRatio && aspectRatios.length > 0 && !aspectRatios.includes(aspectRatio)) {
     throw new Error(`INVALID_TST_CONFIG: Aspect ratio ${aspectRatio} is disabled for ${modelId}`);
@@ -339,9 +318,9 @@ export const validateQueuePayloadAgainstLiveCatalog = async (
   const pricingMatch = findPricingMatch(modelPricing, {
     serverId: serverId || undefined,
     resolution: resolution || undefined,
+    quality: quality || undefined,
     duration: duration || undefined,
     speed: speed || undefined,
-    quality: quality || undefined,
     audio,
   });
 

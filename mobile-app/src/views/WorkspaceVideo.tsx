@@ -19,7 +19,6 @@ import { getUserProfile, getModelPricing, getTstServerAvailabilityConfig } from 
 import { useConcurrency, CONCURRENCY_LIMITS } from '../services/concurrencyService';
 import { enqueueServerJob } from '../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../services/storageService';
-import { generateVideoScriptWithVertex } from '../services/videoScriptDirectorService';
 import {
   fetchTstPricing, fetchTstModels,
   getMotionCompatibleServers, getMotionCompatibleSpeeds, getMotionCostBreakdown, getMotionModelSpecs,
@@ -38,7 +37,6 @@ interface AIModelOption {
   id: string;
   name: string;
   price: number;
-  billingUnit?: 'flat' | 'second';
 }
 
 const SMART_TIPS = [
@@ -49,20 +47,6 @@ const SMART_TIPS = [
   '📸 Mẹo: Ảnh gốc rõ nét sẽ cho ra video chất lượng cao hơn.',
   '🏃 Tip: Motion Control giúp bạn điều khiển chuyển động nhân vật theo video mẫu.'
 ];
-
-const VIDEO_NOTICE_MESSAGES = [
-  'Tạo video có thể mất 30-60 phút. Vui lòng chờ đến khi hệ thống xử lý xong.',
-  'Hãy tải ảnh rõ nét, nhập prompt chi tiết và dùng video mẫu dưới 30 giây.',
-];
-
-const tryStageInputToR2 = async (source: File | Blob | string, folder: string) => {
-  try {
-    return await uploadFileToR2(source, folder);
-  } catch (error) {
-    console.warn('[WorkspaceVideo] Failed to stage input to R2.', error);
-    throw new Error('Không thể tải tệp tham chiếu lên vùng đệm. Vui lòng thử lại.');
-  }
-};
 
 export function WorkspaceVideo() {
   const navigate = useNavigate();
@@ -76,7 +60,6 @@ export function WorkspaceVideo() {
 
   // Video AI State
   const [prompt, setPrompt] = useState('');
-  const [isGeneratingVideoScript, setIsGeneratingVideoScript] = useState(false);
   const [keyframeImage, setKeyframeImage] = useState<string | null>(null);
   const [videoModel, setVideoModel] = useState('');
   const [aspectRatio, setAspectRatio] = useState('16:9');
@@ -103,9 +86,17 @@ export function WorkspaceVideo() {
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [currentTipIdx, setCurrentTipIdx] = useState(0);
-  const [videoNoticeIdx, setVideoNoticeIdx] = useState(0);
 
-  const lastAutoSelectedVideoModelRef = useRef<string | null>(null);
+  // --- Cooldown ---
+  const [cooldownRemaining, setCooldownRemaining] = useState(() => {
+    const saved = localStorage.getItem('video_gen_cooldown_end');
+    if (saved) {
+      const end = parseInt(saved, 10);
+      const now = Date.now();
+      if (end > now) return Math.ceil((end - now) / 1000);
+    }
+    return 0;
+  });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadTarget, setUploadTarget] = useState<'keyframe' | 'character' | 'motion' | null>(null);
@@ -132,8 +123,10 @@ export function WorkspaceVideo() {
           auditionPriceVcoin: row.audition_price_vcoin,
         }));
 
-        const liveVideoModels = getVideoModelSpecs(livePricing, models).map((spec: any) => {
-          const priceBreakdown = getVideoCostBreakdown({
+        const liveVideoModels = getVideoModelSpecs(livePricing, models).map((spec: any) => ({
+          id: spec.modelId,
+          name: spec.displayName,
+          price: getVideoCostBreakdown({
             modelId: spec.modelId,
             serverId: spec.servers[0] || 'fast',
             resolution: spec.resolutions[0] || '720p',
@@ -142,30 +135,20 @@ export function WorkspaceVideo() {
             audio: false,
             pricingEntries: livePricing,
             pricingOverrides: overrideRows
-          });
-          return {
-            id: spec.modelId,
-            name: spec.displayName,
-            price: priceBreakdown.billingUnit === 'second' ? (priceBreakdown.unitVcoin || priceBreakdown.vcoin) : priceBreakdown.vcoin,
-            billingUnit: priceBreakdown.billingUnit,
-          };
-        });
+          }).vcoin
+        }));
 
-        const liveMotionModels = getMotionModelSpecs(livePricing, models).map((spec: any) => {
-          const priceBreakdown = getMotionCostBreakdown({
+        const liveMotionModels = getMotionModelSpecs(livePricing, models).map((spec: any) => ({
+          id: spec.modelId,
+          name: spec.displayName,
+          price: getMotionCostBreakdown({
             modelId: spec.modelId,
             serverId: spec.servers[0] || 'vip2',
             resolution: spec.resolutions[0] || '720p',
             pricingEntries: livePricing,
             pricingOverrides: overrideRows
-          });
-          return {
-            id: spec.modelId,
-            name: spec.displayName,
-            price: priceBreakdown.billingUnit === 'second' ? (priceBreakdown.unitVcoin || priceBreakdown.vcoin) : priceBreakdown.vcoin,
-            billingUnit: priceBreakdown.billingUnit,
-          };
-        });
+          }).vcoin
+        }));
 
         if (liveVideoModels.length > 0) {
           setVideoModelOptions(liveVideoModels);
@@ -196,7 +179,6 @@ export function WorkspaceVideo() {
         serverId: uiServerToTst(server) || 'vip2',
         resolution: quality.toLowerCase(),
         speed: uiSpeedToTst(speed) || 'fast',
-        durationSeconds: motionVideoDurationSeconds,
         pricingEntries,
         pricingOverrides
       })
@@ -262,80 +244,6 @@ export function WorkspaceVideo() {
         modelId: motionModel, pricingEntries, resolution: quality.toLowerCase()
       }).map((speedId: string) => ({ label: tstSpeedToUi(speedId), value: tstSpeedToUi(speedId) }));
 
-  const pickPreferredVideoServer = () => {
-    const compatibleServers = getVideoCompatibleServers({
-      modelId: videoModel,
-      pricingEntries,
-      duration: duration.toLowerCase(),
-      speed: uiSpeedToTst(speed) || 'fast',
-      audio: sound
-    });
-
-    if (compatibleServers.length === 0) return null;
-
-    const preferredServerOrder = ['fast', 'vip1', 'vip2', 'standard', 'default', 'cheap'];
-    const rankedServers = [...compatibleServers].sort((a, b) => {
-      const resolutionsA = getVideoCompatibleResolutions({
-        modelId: videoModel,
-        pricingEntries,
-        serverId: a,
-        duration: duration.toLowerCase(),
-        speed: uiSpeedToTst(speed) || 'fast',
-        audio: sound
-      }).length;
-      const resolutionsB = getVideoCompatibleResolutions({
-        modelId: videoModel,
-        pricingEntries,
-        serverId: b,
-        duration: duration.toLowerCase(),
-        speed: uiSpeedToTst(speed) || 'fast',
-        audio: sound
-      }).length;
-
-      if (resolutionsA !== resolutionsB) return resolutionsB - resolutionsA;
-
-      const durationsA = getVideoCompatibleDurations({
-        modelId: videoModel,
-        pricingEntries,
-        serverId: a,
-        speed: uiSpeedToTst(speed) || 'fast',
-        audio: sound
-      }).length;
-      const durationsB = getVideoCompatibleDurations({
-        modelId: videoModel,
-        pricingEntries,
-        serverId: b,
-        speed: uiSpeedToTst(speed) || 'fast',
-        audio: sound
-      }).length;
-
-      if (durationsA !== durationsB) return durationsB - durationsA;
-
-      const rankA = preferredServerOrder.indexOf(a);
-      const rankB = preferredServerOrder.indexOf(b);
-      return (rankA >= 0 ? rankA : preferredServerOrder.length) - (rankB >= 0 ? rankB : preferredServerOrder.length);
-    });
-
-    return rankedServers[0] || compatibleServers[0];
-  };
-
-  useEffect(() => {
-    if (activeMode !== 'video_ai' || !videoModel) return;
-
-    const preferredServer = pickPreferredVideoServer();
-    if (!preferredServer) return;
-
-    const preferredServerUi = tstServerToUi(preferredServer);
-    const serverStillValid = serverOptions.some((option) => option.value === server);
-    const shouldAutoSelect =
-      lastAutoSelectedVideoModelRef.current !== videoModel || !serverStillValid || !server;
-
-    if (shouldAutoSelect && preferredServerUi && preferredServerUi !== server) {
-      setServer(preferredServerUi);
-    }
-    lastAutoSelectedVideoModelRef.current = videoModel;
-  }, [activeMode, videoModel, pricingEntries, server, serverOptions]);
-
   // --- Auto-adjust Options ---
   useEffect(() => {
     if (modelOptions.showAspectRatio && modelOptions.aspectRatios.length > 0 && !modelOptions.aspectRatios.includes(aspectRatio)) {
@@ -358,14 +266,21 @@ export function WorkspaceVideo() {
     }
   }, [activeMode, aspectRatio, duration, modelOptions, quality, server, serverOptions, sound, speed, speedOptions]);
 
-  // --- Tips ---
+  // --- Cooldown & Tips ---
   useEffect(() => {
-    const interval = setInterval(() => setCurrentTipIdx((prev) => (prev + 1) % SMART_TIPS.length), 5000);
-    return () => clearInterval(interval);
-  }, []);
+    if (cooldownRemaining > 0) {
+      const timer = setInterval(() => {
+        setCooldownRemaining((prev) => {
+          if (prev <= 1) { localStorage.removeItem('video_gen_cooldown_end'); return 0; }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [cooldownRemaining]);
 
   useEffect(() => {
-    const interval = setInterval(() => setVideoNoticeIdx((prev) => (prev + 1) % VIDEO_NOTICE_MESSAGES.length), 3000);
+    const interval = setInterval(() => setCurrentTipIdx((prev) => (prev + 1) % SMART_TIPS.length), 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -374,7 +289,6 @@ export function WorkspaceVideo() {
     && (activeMode === 'video_ai' ? videoModelOptions.length > 0 : motionModelOptions.length > 0);
 
   const calculateCost = () => currentCostBreakdown.vcoin;
-  const isPerSecondBilling = currentCostBreakdown.billingUnit === 'second';
 
   const getVideoDurationSeconds = async (file: File) => {
     const objectUrl = URL.createObjectURL(file);
@@ -430,31 +344,9 @@ export function WorkspaceVideo() {
     }
   };
 
-  const handleGenerateVideoScript = async () => {
-    if (activeMode !== 'video_ai') return;
-    if (!keyframeImage) {
-      notify('Vui lòng tải ảnh tham chiếu trước khi tạo kịch bản AI.', 'error');
-      return;
-    }
-
-    setIsGeneratingVideoScript(true);
-    try {
-      const script = await generateVideoScriptWithVertex({
-        imageSource: keyframeImage,
-        durationSeconds: duration,
-        userPrompt: prompt,
-      });
-      setPrompt(script);
-      notify('Đã tạo kịch bản video bằng Vertex AI.', 'success');
-    } catch (error) {
-      notify(error instanceof Error ? error.message : 'Không thể tạo kịch bản video.', 'error');
-    } finally {
-      setIsGeneratingVideoScript(false);
-    }
-  };
-
   const handleGenerate = async () => {
     if (stage === 'submitting') return;
+    if (cooldownRemaining > 0) { notify(`Vui lòng đợi ${cooldownRemaining}s`, 'warning'); return; }
     if (!isCatalogReady) { notify('TST đang bảo trì.', 'error'); return; }
     if (!currentCostBreakdown.available) { notify('Cấu hình không khả dụng.', 'error'); return; }
 
@@ -464,10 +356,6 @@ export function WorkspaceVideo() {
     }
     if (activeMode === 'motion_control' && (!characterImage || !motionVideoFile)) {
       notify('Vui lòng tải lên cả ảnh nhân vật và video chuyển động.', 'error');
-      return;
-    }
-    if (activeMode === 'motion_control' && motionVideoDurationSeconds === null) {
-      notify('Không thể đọc thời lượng video chuyển động. Vui lòng dùng video từ 3 đến 30 giây.', 'error');
       return;
     }
     if (activeMode === 'motion_control' && motionVideoDurationSeconds !== null && (motionVideoDurationSeconds < 3 || motionVideoDurationSeconds > 30)) {
@@ -526,11 +414,11 @@ export function WorkspaceVideo() {
         let stagedMotionVideoUrl = null;
 
         if (activeMode === 'video_ai' && keyframeImage) {
-          stagedKeyframeImage = await tryStageInputToR2(keyframeImage, 'inputs/video-generate/keyframe');
+          stagedKeyframeImage = await uploadFileToR2(keyframeImage, 'inputs/video-generate/keyframe');
         }
         if (activeMode === 'motion_control' && characterImage && motionVideoFile) {
-          stagedCharacterImage = await tryStageInputToR2(characterImage, 'inputs/motion-control');
-          stagedMotionVideoUrl = await tryStageInputToR2(motionVideoFile, 'inputs/motion-control');
+          stagedCharacterImage = await uploadFileToR2(characterImage, 'inputs/motion-control');
+          stagedMotionVideoUrl = await uploadFileToR2(motionVideoFile, 'inputs/motion-control');
         }
 
         const queuePayload = activeMode === 'video_ai'
@@ -555,6 +443,8 @@ export function WorkspaceVideo() {
 
         window.dispatchEvent(new Event('balance_updated'));
         notify('Đã tạo job. Kết quả sẽ cập nhật trong Lịch sử.', 'success');
+        localStorage.setItem('video_gen_cooldown_end', (Date.now() + 60000).toString());
+        setCooldownRemaining(60);
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : 'Lỗi không xác định';
         try { await saveImageToLocalCache({ ...queuedVideo, status: 'failed', error: errorMsg, updatedAt: Date.now(), progress: 0 }); } catch (_) {}
@@ -564,7 +454,7 @@ export function WorkspaceVideo() {
     })();
   };
 
-  const isGenerateDisabled = !isCatalogReady || !currentCostBreakdown.available
+  const isGenerateDisabled = cooldownRemaining > 0 || !isCatalogReady || !currentCostBreakdown.available
     || (activeMode === 'video_ai' && !keyframeImage)
     || (activeMode === 'motion_control' && (!characterImage || !motionVideoFile));
 
@@ -598,18 +488,6 @@ export function WorkspaceVideo() {
           ))}
         </div>
 
-        <div className="rounded-[18px] border border-cyan-200 bg-cyan-50/80 p-3 dark:border-cyan-500/25 dark:bg-cyan-500/10">
-          <div className="flex items-start gap-2">
-            <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-cyan-600 dark:text-cyan-300" />
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-cyan-700 dark:text-cyan-300">Thông báo tạo video</p>
-              <p key={videoNoticeIdx} className="mt-1 text-xs font-semibold leading-relaxed text-cyan-950 dark:text-cyan-50">
-                {VIDEO_NOTICE_MESSAGES[videoNoticeIdx]}
-              </p>
-            </div>
-          </div>
-        </div>
-
         {activeMode === 'video_ai' ? (
           <div className="space-y-6">
             {/* Keyframe Upload */}
@@ -638,19 +516,6 @@ export function WorkspaceVideo() {
 
             {/* Prompt */}
             <div className="relative group">
-              <div className="mb-2 flex items-center justify-end gap-2">
-                <button
-                  onClick={handleGenerateVideoScript}
-                  disabled={isGeneratingVideoScript || !keyframeImage || activeMode !== 'video_ai'}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-cyan-400 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-cyan-950 shadow-lg shadow-cyan-500/20 disabled:opacity-50 disabled:shadow-none"
-                >
-                  {isGeneratingVideoScript ? <Loader className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
-                  Tạo Kịch Bản AI
-                </button>
-              </div>
-              <div className="mb-2 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-3 py-2 text-[11px] font-semibold leading-relaxed text-cyan-900 dark:text-cyan-100">
-                Hãy chọn số giây muốn tạo video và ấn nút Tạo Kịch Bản AI để AI viết sẵn kịch bản video cho bạn.
-              </div>
               <h3 className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider ml-1 mb-2">Chuyển động mong muốn</h3>
               <div className="relative bg-white dark:bg-[#18181B] rounded-[20px] p-4 shadow-[0_4px_20px_rgb(0,0,0,0.04)] ring-1 ring-gray-100 dark:ring-zinc-800 focus-within:ring-2 focus-within:ring-purple-400">
                 <textarea
@@ -694,10 +559,7 @@ export function WorkspaceVideo() {
                         videoModel === m.id ? 'bg-purple-50 dark:bg-purple-500/10 text-purple-700 border border-purple-200 dark:border-purple-500/30' : 'bg-white dark:bg-[#18181B] border border-gray-100 text-gray-500 dark:text-zinc-400'
                       }`}
                     >
-                      <span className="block font-bold">{m.name}</span>
-                      <span className="mt-1 block text-[10px] opacity-70">
-                        Từ {m.price} {m.billingUnit === 'second' ? 'VC/s' : 'VC'}
-                      </span>
+                      {m.name}
                     </button>
                   ))}
                 </div>
@@ -822,17 +684,7 @@ export function WorkspaceVideo() {
                 >
                   {motionVideoUrl ? (
                     <>
-                      <video
-                        key={motionVideoUrl}
-                        src={motionVideoUrl}
-                        className="absolute inset-0 w-full h-full object-cover opacity-80"
-                        autoPlay
-                        loop
-                        muted
-                        playsInline
-                        preload="metadata"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-black/15 pointer-events-none" />
+                      <video src={motionVideoUrl} className="w-full h-full object-cover opacity-80" autoPlay loop muted playsInline />
                       <div className="absolute inset-0 flex items-center justify-center">
                         <div className="bg-white dark:bg-[#18181B]/20 backdrop-blur-sm p-3 rounded-full"><Play className="w-5 h-5 text-white ml-0.5" /></div>
                       </div>
@@ -860,10 +712,7 @@ export function WorkspaceVideo() {
                         motionModel === m.id ? 'bg-purple-50 dark:bg-purple-500/10 text-purple-700 border border-purple-200 dark:border-purple-500/30' : 'bg-white dark:bg-[#18181B] border border-gray-100 text-gray-500 dark:text-zinc-400'
                       }`}
                     >
-                      <span className="block font-bold">{m.name}</span>
-                      <span className="mt-1 block text-[10px] opacity-70">
-                        Từ {m.price} {m.billingUnit === 'second' ? 'VC/s' : 'VC'}
-                      </span>
+                      {m.name}
                     </button>
                   ))}
                 </div>
@@ -960,6 +809,8 @@ export function WorkspaceVideo() {
         >
           {stage === 'submitting' ? (
             <Loader className="w-5 h-5 animate-spin" />
+          ) : cooldownRemaining > 0 ? (
+            <span className="text-sm font-semibold">Đợi {cooldownRemaining}s</span>
           ) : (
             <>
               <Video className="w-5 h-5 text-white/90" />
@@ -968,18 +819,10 @@ export function WorkspaceVideo() {
           )}
 
           <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-black/20 px-2.5 py-1 rounded-full backdrop-blur-md">
-            <span className="text-[12px] font-bold text-white">
-              {isCatalogReady ? calculateCost() : '...'}{isPerSecondBilling ? ' VC' : ''}
-            </span>
+            <span className="text-[12px] font-bold text-white">{isCatalogReady ? calculateCost() : '...'}</span>
             <Coins className="w-3 h-3 text-yellow-300" />
           </div>
         </Button>
-        {isCatalogReady && isPerSecondBilling && (
-          <p className="mt-2 text-center text-[11px] font-semibold text-cyan-600 dark:text-cyan-300">
-            Tính theo giây: {currentCostBreakdown.unitVcoin || 0} VC/s
-            {currentCostBreakdown.billedSeconds ? ` × ${currentCostBreakdown.billedSeconds}s` : ''}
-          </p>
-        )}
       </div>
 
       <input

@@ -3,7 +3,6 @@ import modelsMarkdown from '../models.md?raw';
 export type TstGenerationTier = 'flash' | 'pro' | 'gpt';
 export type TstGenerationSpeed = 'fast' | 'slow';
 export type TstResolution = '1K' | '2K' | '4K';
-export type TstImageQuality = 'low' | 'medium' | 'high';
 export type TstMediaType = 'image' | 'video' | 'motion-control' | 'edit';
 
 export interface TstPricingEntry {
@@ -29,7 +28,6 @@ export interface TstRuntimeModel {
     durations?: string[] | null;
     aspect_ratios?: string[] | null;
     aspectRatios?: string[] | null;
-    qualities?: string[] | null;
     i2v?: boolean;
     slow_mode?: boolean;
     audio?: boolean;
@@ -75,9 +73,6 @@ export interface TstGenerationCostBreakdown {
   vcoin: number;
   configKey?: string;
   modelId?: string;
-  billingUnit?: 'flat' | 'second';
-  unitVcoin?: number;
-  billedSeconds?: number;
 }
 
 export interface AuditionPricingOverride {
@@ -119,7 +114,6 @@ export interface TstPricingRow {
   vcoin: number;
   configKey: string;
   defaultAuditionVcoin?: number;
-  billingUnit?: 'flat' | 'second';
 }
 
 type ParsedMarkdownModel = {
@@ -141,26 +135,17 @@ export const TST_CATALOG_CACHE_TTL_MS = 60_000;
 const TST_CATALOG_FETCH_TIMEOUT_MS = 15_000;
 const TST_CATALOG_FETCH_RETRIES = 1;
 const TST_CATALOG_FETCH_RETRY_DELAY_MS = 750;
-const SERVER_ORDER = ['cheap', 'fast', 'standard', 'default', 'vip2', 'vip1'];
+const SERVER_ORDER = ['cheap', 'fast', 'vip2', 'vip1'];
 const SPEED_ORDER = ['fast', 'slow'];
-const RESOLUTION_ORDER = ['default', '480p', '720p', '1080p', '1k', '2k', '4k'];
-const DURATION_ORDER = ['3s', '5s', '6s', '8s', '10s', '15s', '25s'];
-const ASPECT_RATIO_ORDER = ['16:9', '9:16', '4:3', '3:4', '1:1', '21:9'];
-const TST_DOCS_VIDEO_ASPECT_RATIO_FALLBACKS: Record<string, string[]> = {
-  'seedance-2.0-fast': ['16:9', '9:16', '4:3', '3:4', '1:1', '21:9'],
-  'seedance-2.0': ['16:9', '9:16', '4:3', '3:4', '1:1', '21:9'],
-  'grok-i2v': ['9:16', '16:9', '1:1'],
-  'kling-o1-video': ['9:16', '16:9', '1:1'],
-  'kling-3.0-video': ['16:9', '9:16', '1:1'],
-};
+const RESOLUTION_ORDER = ['default', '1k', '2k', '4k', '720p', '1080p'];
+const GPT_IMAGE_QUALITY_VALUES = ['low', 'medium', 'high'];
+const DURATION_ORDER = ['3s', '5s', '8s', '10s', '15s', '25s'];
 
 const tierToModelId: Record<TstGenerationTier, string> = {
   flash: 'nano-banana-2',
   pro: 'nano-banana-pro',
   gpt: 'image-gpt-2',
 };
-
-export const GPT_IMAGE_2_QUALITY_OPTIONS: TstImageQuality[] = ['low', 'medium', 'high'];
 
 const uiServerMap: Record<string, string> = {
   FAST: 'fast',
@@ -194,59 +179,14 @@ const normalizeModelId = (value: string) => value.trim().toLowerCase();
 const normalizeServer = (value?: string) => (value || 'fast').trim().toLowerCase();
 const normalizeSpeed = (value?: string) => (value || 'fast').trim().toLowerCase();
 const normalizeResolution = (value?: string) => (value || 'default').trim().toLowerCase();
-const normalizeDuration = (value?: string) => (value || '').trim().toLowerCase();
 const normalizeQuality = (value?: string) => (value || '').trim().toLowerCase();
+const normalizeDuration = (value?: string) => (value || '').trim().toLowerCase();
 const normalizeCatalogServer = (value?: string) => (value || '').trim().toLowerCase();
 const normalizeCatalogSpeed = (value?: string) => (value || '').trim().toLowerCase();
 const normalizeCatalogResolution = (value?: string) => (value || '').trim().toLowerCase();
 const normalizeCatalogDuration = (value?: string) => (value || '').trim().toLowerCase();
-const cleanCell = (value?: string | null) => String(value || '').replace(/`/g, '').trim();
-const isDashValue = (value?: string | null) => ['—', '-', '–', ''].includes(cleanCell(value));
-
-export const isPerSecondVideoBillingModel = (modelId?: string | null) => {
-  const normalized = normalizeModelId(String(modelId || ''));
-  return normalized.startsWith('kling-');
-};
-
-export const isPerSecondMotionBillingModel = (modelId?: string | null) => {
-  const normalized = normalizeModelId(String(modelId || ''));
-  return normalized.startsWith('motion-control-');
-};
-
-export const isPerSecondBillingModel = (modelId?: string | null, type?: TstMediaType | string | null) =>
-  isPerSecondVideoBillingModel(modelId) || type === 'motion-control' || isPerSecondMotionBillingModel(modelId);
-
-const parseDurationSeconds = (duration?: string | number | null) => {
-  if (typeof duration === 'number') {
-    return Number.isFinite(duration) && duration > 0 ? duration : 0;
-  }
-  const match = String(duration || '').trim().toLowerCase().match(/(\d+(?:\.\d+)?)\s*s?/);
-  return match ? Number(match[1]) : 0;
-};
-
-export const getPerSecondPricingKey = ({
-  modelId,
-  server,
-  resolution,
-  speed,
-  audio,
-}: {
-  modelId: string;
-  server?: string;
-  resolution?: string;
-  speed?: string;
-  audio?: boolean;
-}) =>
-  [
-    'per_second',
-    normalizeModelId(modelId),
-    normalizeServer(server),
-    normalizeResolution(resolution),
-    normalizeSpeed(speed),
-    audio ? 'audio' : '',
-  ]
-    .filter(Boolean)
-    .join('|');
+const cleanCell = (value: string) => value.replace(/`/g, '').trim();
+const isDashValue = (value: string) => ['—', '-', '–', ''].includes(cleanCell(value));
 
 const extractSection = (markdown: string, title: string): string => {
   const match = markdown.match(new RegExp(`## ${escapeRegex(title)}([\\s\\S]*?)(?=\\n## |$)`));
@@ -396,9 +336,6 @@ export const ADMIN_MANAGED_MODEL_LABELS = [
   'Kling 2.5 Turbo',
   'Kling 2.6',
   'Kling 3.0',
-  'Seedance 2.0',
-  'Seedance 2.0 Fast',
-  'Grok Video',
   'Motion Control 2.6',
   'Motion Control 3.0',
   'Chỉnh sửa ảnh',
@@ -413,9 +350,6 @@ const ADMIN_MANAGED_MODEL_IDS = [
   'kling-2.5-turbo',
   'kling-2.6',
   'kling-3.0-video',
-  'seedance-2.0',
-  'seedance-2.0-fast',
-  'grok-i2v',
   'motion-control-2.6',
   'motion-control-3.0',
   'magic_editor_pro',
@@ -735,7 +669,9 @@ const isCacheFresh = (fetchedAt: number) => fetchedAt > 0 && Date.now() - fetche
 const getFallbackImageSpec = (tier: TstGenerationTier): TstImageModelSpec => {
   const modelId = tierToModelId[tier];
   const displayName =
-    tier === 'flash' ? 'Nano Banana 2' : tier === 'pro' ? 'Nano Banana PRO' : 'GPT Image 2';
+    tier === 'flash' ? 'Nano Banana 2' :
+    tier === 'pro' ? 'Nano Banana PRO' :
+    'GPT Image 2';
   return {
     modelId,
     displayName,
@@ -775,39 +711,47 @@ const getFallbackMotionSpec = (modelId: string, name?: string): TstMotionModelSp
 };
 
 const parseGptImage2ConfigKey = (configKey?: string) => {
-  const match = String(configKey || '').trim().toLowerCase().match(/^(1k|2k|4k)-(low|medium|high)(?:-|$)/);
-  return match ? { resolution: match[1], quality: match[2] } : null;
-};
-
-const parseVideoConfigKey = (configKey?: string) => {
-  const normalized = String(configKey || '').trim().toLowerCase();
-  const resolution = normalized.match(/(?:^|-)(480p|720p|1080p)(?:-|$)/)?.[1];
-  const durationMatch = normalized.match(/(?:^|-)(\d{1,2})s?(?:-|$)/);
-  const duration = durationMatch ? `${durationMatch[1]}s` : undefined;
-  const speed = normalized.match(/(?:^|-)(fast|slow)(?:-|$)/)?.[1];
-  const audio = /(?:^|-)audio(?:-|$)/.test(normalized) ? true : undefined;
-
-  return { resolution, duration, speed, audio };
+  const match = String(configKey || '').trim().toLowerCase().match(/^(1k|2k|4k)-(low|medium|high)(?:-(fast|slow))?/);
+  return {
+    resolution: match?.[1],
+    quality: match?.[2],
+    speed: match?.[3],
+  };
 };
 
 const mapPricingEntry = (entry: any): TstPricingEntry => {
   const model = String(entry.model || '');
   const configKey = String(entry.config_key || '');
-  const gptImage2Config = normalizeModelId(model) === 'image-gpt-2'
-    ? parseGptImage2ConfigKey(configKey)
-    : null;
-  const videoConfig = parseVideoConfigKey(configKey);
+  let resolution = entry.resolution ? String(entry.resolution) : undefined;
+  let quality = entry.quality ? String(entry.quality) : undefined;
+  let speed = entry.speed ? String(entry.speed) : undefined;
+
+  if (normalizeModelId(model) === 'image-gpt-2') {
+    const parsed = parseGptImage2ConfigKey(configKey);
+    if (parsed.resolution) {
+      resolution = parsed.resolution;
+    }
+    if (parsed.quality) {
+      quality = parsed.quality;
+    } else if (resolution && GPT_IMAGE_QUALITY_VALUES.includes(normalizeQuality(resolution))) {
+      quality = resolution;
+      resolution = undefined;
+    }
+    if (!speed && parsed.speed) {
+      speed = parsed.speed;
+    }
+  }
 
   return {
     model,
     server: String(entry.server || ''),
     config_key: configKey,
     credits: Number(entry.credits || 0),
-    resolution: gptImage2Config?.resolution || (entry.resolution ? String(entry.resolution) : videoConfig.resolution),
-    quality: gptImage2Config?.quality,
-    speed: entry.speed ? String(entry.speed) : (gptImage2Config ? 'fast' : videoConfig.speed),
-    duration: entry.duration ? String(entry.duration) : videoConfig.duration,
-    audio: entry.audio === true || videoConfig.audio === true,
+    resolution,
+    quality,
+    speed,
+    duration: entry.duration ? String(entry.duration) : undefined,
+    audio: entry.audio === true,
   };
 };
 
@@ -827,31 +771,31 @@ const getMatchingEntries = ({
   modelId,
   pricingEntries,
   resolution,
+  quality,
   speed,
   serverId,
   duration,
-  quality,
 }: {
   modelId: string;
   pricingEntries: TstPricingEntry[];
   resolution?: string;
+  quality?: string;
   speed?: string;
   serverId?: string;
   duration?: string;
-  quality?: string;
 }) => {
   const normalizedResolution = resolution ? normalizeResolution(resolution) : null;
+  const normalizedQuality = quality ? normalizeQuality(quality) : null;
   const normalizedSpeed = speed ? normalizeSpeed(speed) : null;
   const normalizedServer = serverId ? normalizeServer(serverId) : null;
   const normalizedDuration = duration ? normalizeDuration(duration) : null;
-  const normalizedQuality = quality ? normalizeQuality(quality) : null;
 
   return getPricingEntriesForModel(modelId, pricingEntries).filter((entry) => {
     if (normalizedResolution && normalizeResolution(entry.resolution) !== normalizedResolution) return false;
+    if (normalizedQuality && normalizeQuality(entry.quality) !== normalizedQuality) return false;
     if (normalizedSpeed && normalizeSpeed(entry.speed) !== normalizedSpeed) return false;
     if (normalizedServer && normalizeServer(entry.server) !== normalizedServer) return false;
     if (normalizedDuration && normalizeDuration(entry.duration) !== normalizedDuration) return false;
-    if (normalizedQuality && normalizeQuality(entry.quality) !== normalizedQuality) return false;
     return true;
   });
 };
@@ -875,18 +819,11 @@ const getUniqueSpeeds = (entries: TstPricingEntry[]) =>
     SPEED_ORDER,
   );
 
-const getCapabilityAspectRatios = (model: TstRuntimeModel) => {
-  const modelId = normalizeModelId(model.model);
-  const runtimeAspectRatios = unique([
+const getCapabilityAspectRatios = (model: TstRuntimeModel) =>
+  unique([
     ...((model.capabilities?.aspect_ratios || []) as string[]),
     ...((model.capabilities?.aspectRatios || []) as string[]),
   ]);
-  const aspectRatios = runtimeAspectRatios.length > 0
-    ? runtimeAspectRatios
-    : TST_DOCS_VIDEO_ASPECT_RATIO_FALLBACKS[modelId] || [];
-
-  return sortByOrder(unique(aspectRatios), ASPECT_RATIO_ORDER);
-};
 
 const pickExactEntry = (entries: TstPricingEntry[], filters: Array<(entry: TstPricingEntry) => boolean>) => {
   for (const filter of filters) {
@@ -947,32 +884,6 @@ const getAuditionPrice = (
   );
 
   return override?.auditionPriceVcoin ?? fallbackVcoin;
-};
-
-const getPerSecondUnitVcoin = ({
-  modelId,
-  server,
-  resolution,
-  speed,
-  audio,
-  fallbackEntry,
-  pricingOverrides,
-}: {
-  modelId: string;
-  server?: string;
-  resolution?: string;
-  speed?: string;
-  audio?: boolean;
-  fallbackEntry?: TstPricingEntry | null;
-  pricingOverrides?: AuditionPricingOverride[];
-}) => {
-  const perSecondKey = getPerSecondPricingKey({ modelId, server, resolution, speed, audio });
-  const fallbackSeconds = parseDurationSeconds(fallbackEntry?.duration);
-  const fallbackFlatVcoin = fallbackEntry ? creditsToVcoin(fallbackEntry.credits) : 0;
-  const fallbackUnitVcoin = fallbackSeconds > 0
-    ? Math.max(1, Math.ceil(fallbackFlatVcoin / fallbackSeconds))
-    : Math.max(1, fallbackFlatVcoin);
-  return getAuditionPrice(modelId, perSecondKey, fallbackUnitVcoin, pricingOverrides);
 };
 
 export const getServerDescription = (serverId: string) => serverDescriptions[normalizeServer(serverId)] ?? '';
@@ -1079,17 +990,20 @@ export const getCompatibleGenerationServers = ({
   pricingEntries = [],
   speed,
   resolution,
+  quality,
 }: {
   tier: TstGenerationTier;
   pricingEntries?: TstPricingEntry[];
   speed?: string;
   resolution?: TstResolution;
+  quality?: string;
 }) => {
   const entries = getMatchingEntries({
     modelId: tierToModelId[tier],
     pricingEntries,
     speed,
     resolution,
+    quality,
   });
   if (entries.length === 0) {
     return [];
@@ -1106,17 +1020,20 @@ export const getCompatibleGenerationSpeeds = ({
   pricingEntries = [],
   serverId,
   resolution,
+  quality,
 }: {
   tier: TstGenerationTier;
   pricingEntries?: TstPricingEntry[];
   serverId?: string;
   resolution?: TstResolution;
+  quality?: string;
 }) => {
   const entries = getMatchingEntries({
     modelId: tierToModelId[tier],
     pricingEntries,
     serverId,
     resolution,
+    quality,
   });
   if (entries.length === 0) {
     return [];
@@ -1130,22 +1047,84 @@ export const getCompatibleGenerationResolutions = ({
   pricingEntries = [],
   serverId,
   speed,
+  quality,
 }: {
   tier: TstGenerationTier;
   pricingEntries?: TstPricingEntry[];
   serverId?: string;
   speed?: string;
+  quality?: string;
 }) => {
   const entries = getMatchingEntries({
     modelId: tierToModelId[tier],
     pricingEntries,
     serverId,
     speed,
+    quality,
   });
   if (entries.length === 0) {
     return [];
   }
   return getUniqueResolutions(entries).map((value) => value.toUpperCase()) as TstResolution[];
+};
+
+export const resolveGenerationSelection = ({
+  tier,
+  pricingEntries = [],
+  resolution,
+  quality,
+  speed,
+  serverId,
+}: {
+  tier: TstGenerationTier;
+  pricingEntries?: TstPricingEntry[];
+  resolution: TstResolution;
+  quality?: string;
+  speed: string;
+  serverId: string;
+}) => {
+  const modelId = tierToModelId[tier];
+  const modelEntries = getPricingEntriesForModel(modelId, pricingEntries);
+  if (modelEntries.length === 0) {
+    return { resolution, speed, serverId, available: false };
+  }
+
+  const normalizedResolution = normalizeResolution(resolution);
+  const normalizedQuality = normalizeQuality(quality);
+  const normalizedSpeed = normalizeSpeed(speed);
+  const normalizedServer = normalizeServer(serverId);
+  const exactEntry = modelEntries.find(
+    (entry) =>
+      normalizeResolution(entry.resolution) === normalizedResolution &&
+      (!normalizedQuality || normalizeQuality(entry.quality) === normalizedQuality) &&
+      normalizeSpeed(entry.speed) === normalizedSpeed &&
+      normalizeServer(entry.server) === normalizedServer,
+  );
+
+  if (exactEntry) {
+    return { resolution, speed, serverId, available: true };
+  }
+
+  const nextEntry =
+    modelEntries.find(
+      (entry) =>
+        normalizeResolution(entry.resolution) === normalizedResolution &&
+        (!normalizedQuality || normalizeQuality(entry.quality) === normalizedQuality) &&
+        normalizeSpeed(entry.speed) === normalizedSpeed,
+    ) ||
+    modelEntries.find((entry) =>
+      normalizeResolution(entry.resolution) === normalizedResolution &&
+      (!normalizedQuality || normalizeQuality(entry.quality) === normalizedQuality)
+    ) ||
+    modelEntries.find((entry) => !normalizedQuality || normalizeQuality(entry.quality) === normalizedQuality) ||
+    modelEntries[0];
+
+  return {
+    resolution: (normalizeResolution(nextEntry.resolution).toUpperCase() || resolution) as TstResolution,
+    speed: normalizeSpeed(nextEntry.speed) || speed,
+    serverId: normalizeServer(nextEntry.server) || serverId,
+    available: true,
+  };
 };
 
 export const getGenerationCostBreakdown = ({
@@ -1159,7 +1138,7 @@ export const getGenerationCostBreakdown = ({
 }: {
   tier: TstGenerationTier;
   resolution: TstResolution;
-  quality?: TstImageQuality;
+  quality?: string;
   speed: string;
   serverId: string;
   pricingEntries?: TstPricingEntry[];
@@ -1203,7 +1182,6 @@ export const getGenerationCostBreakdown = ({
       vcoin: getAuditionPrice(modelId, exactEntry.config_key, fallbackVcoin, pricingOverrides),
       configKey: exactEntry.config_key,
       modelId,
-      billingUnit: 'flat',
     };
   }
 
@@ -1224,7 +1202,7 @@ export const getResolutionCostMap = ({
   pricingOverrides = [],
 }: {
   tier: TstGenerationTier;
-  quality?: TstImageQuality;
+  quality?: string;
   speed: string;
   serverId: string;
   pricingEntries?: TstPricingEntry[];
@@ -1459,35 +1437,12 @@ export const getVideoCostBreakdown = ({
 
   if (exactEntry) {
     const fallbackVcoin = creditsToVcoin(exactEntry.credits);
-    if (isPerSecondVideoBillingModel(modelId)) {
-      const billedSeconds = Math.max(1, Math.ceil(parseDurationSeconds(duration)));
-      const unitVcoin = getPerSecondUnitVcoin({
-        modelId,
-        server: exactEntry.server || serverId,
-        resolution: exactEntry.resolution || resolution,
-        speed: exactEntry.speed || speed,
-        audio: exactEntry.audio,
-        fallbackEntry: exactEntry,
-        pricingOverrides,
-      });
-      return {
-        available: true,
-        credits: exactEntry.credits,
-        vcoin: unitVcoin * billedSeconds,
-        configKey: exactEntry.config_key,
-        modelId,
-        billingUnit: 'second',
-        unitVcoin,
-        billedSeconds,
-      };
-    }
     return {
       available: true,
       credits: exactEntry.credits,
       vcoin: getAuditionPrice(modelId, exactEntry.config_key, fallbackVcoin, pricingOverrides),
       configKey: exactEntry.config_key,
       modelId,
-      billingUnit: 'flat',
     };
   }
 
@@ -1556,7 +1511,6 @@ export const getMotionCostBreakdown = ({
   serverId,
   resolution,
   speed = 'fast',
-  durationSeconds,
   pricingEntries = [],
   pricingOverrides = [],
 }: {
@@ -1564,7 +1518,6 @@ export const getMotionCostBreakdown = ({
   serverId: string;
   resolution: string;
   speed?: string;
-  durationSeconds?: number | null;
   pricingEntries?: TstPricingEntry[];
   pricingOverrides?: AuditionPricingOverride[];
 }): TstGenerationCostBreakdown => {
@@ -1594,34 +1547,12 @@ export const getMotionCostBreakdown = ({
 
   if (exactEntry) {
     const fallbackVcoin = creditsToVcoin(exactEntry.credits);
-    if (isPerSecondMotionBillingModel(modelId)) {
-      const billedSeconds = Math.max(1, Math.ceil(Number(durationSeconds || 0) || parseDurationSeconds(exactEntry.duration) || 1));
-      const unitVcoin = getPerSecondUnitVcoin({
-        modelId,
-        server: exactEntry.server || serverId,
-        resolution: exactEntry.resolution || resolution,
-        speed: exactEntry.speed || speed,
-        fallbackEntry: exactEntry,
-        pricingOverrides,
-      });
-      return {
-        available: true,
-        credits: exactEntry.credits,
-        vcoin: unitVcoin * billedSeconds,
-        configKey: exactEntry.config_key,
-        modelId,
-        billingUnit: 'second',
-        unitVcoin,
-        billedSeconds,
-      };
-    }
     return {
       available: true,
       credits: exactEntry.credits,
       vcoin: getAuditionPrice(modelId, exactEntry.config_key, fallbackVcoin, pricingOverrides),
       configKey: exactEntry.config_key,
       modelId,
-      billingUnit: 'flat',
     };
   }
 
@@ -1632,59 +1563,7 @@ export const getPricingRows = async (forceRefresh = false): Promise<TstPricingRo
   const [rawPricingEntries, runtimeModels] = await Promise.all([fetchTstPricing(forceRefresh), fetchTstModels(forceRefresh)]);
   const pricingEntries = sanitizePricingEntriesWithRuntimeModels(rawPricingEntries, runtimeModels);
   const modelMap = new Map(runtimeModels.map((model) => [normalizeModelId(model.model), model]));
-  const perSecondRows = new Map<string, TstPricingRow>();
-  const flatEntries: TstPricingEntry[] = [];
-
-  pricingEntries.forEach((entry) => {
-    const model = modelMap.get(normalizeModelId(entry.model));
-    const type = (model?.type === 'motion-control' ? 'motion-control' : model?.type) as TstMediaType | undefined;
-    if (!model || !isAdminManagedPricingModel(model.model)) {
-      return;
-    }
-
-    if (!isPerSecondBillingModel(entry.model, type)) {
-      flatEntries.push(entry);
-      return;
-    }
-
-    const key = getPerSecondPricingKey({
-      modelId: entry.model,
-      server: entry.server,
-      resolution: entry.resolution,
-      speed: entry.speed,
-      audio: entry.audio,
-    });
-    const seconds = parseDurationSeconds(entry.duration);
-    const unitCredits = seconds > 0 ? Number((entry.credits / seconds).toFixed(4)) : Number(entry.credits || 0);
-    const flatVcoin = creditsToVcoin(entry.credits);
-    const unitVcoin = seconds > 0 ? Math.max(1, Math.ceil(flatVcoin / seconds)) : Math.max(1, flatVcoin);
-    const existing = perSecondRows.get(key);
-    const nextDefault = existing?.defaultAuditionVcoin
-      ? Math.min(existing.defaultAuditionVcoin, unitVcoin)
-      : unitVcoin;
-    const nextCredits = existing?.credits
-      ? Math.min(existing.credits, unitCredits)
-      : unitCredits;
-
-    perSecondRows.set(key, {
-      type: type || 'video',
-      modelId: entry.model,
-      modelName: model.name || entry.model,
-      server: normalizeCatalogServer(entry.server),
-      resolution: entry.resolution,
-      quality: entry.quality,
-      duration: 'per_second',
-      speed: normalizeCatalogSpeed(entry.speed) || undefined,
-      audio: entry.audio,
-      credits: nextCredits,
-      vcoin: creditsToVcoin(nextCredits),
-      configKey: key,
-      defaultAuditionVcoin: nextDefault,
-      billingUnit: 'second',
-    });
-  });
-
-  const rows: Array<TstPricingRow | null> = flatEntries.map((entry) => {
+  const rows: Array<TstPricingRow | null> = pricingEntries.map((entry) => {
     const model = modelMap.get(normalizeModelId(entry.model));
     if (!model || !isAdminManagedPricingModel(model.model)) {
       return null;
@@ -1704,16 +1583,16 @@ export const getPricingRows = async (forceRefresh = false): Promise<TstPricingRo
       credits: entry.credits,
       vcoin: creditsToVcoin(entry.credits),
       configKey: entry.config_key,
-      billingUnit: 'flat',
     };
   });
 
-  return [...rows.filter((row): row is TstPricingRow => row !== null), ...perSecondRows.values(), ...getVertexEditPricingRows()]
+  return [...rows.filter((row): row is TstPricingRow => row !== null), ...getVertexEditPricingRows()]
     .sort((a, b) => {
       if (a.type !== b.type) return a.type.localeCompare(b.type);
       if (a.modelName !== b.modelName) return a.modelName.localeCompare(b.modelName);
       if ((a.server || '') !== (b.server || '')) return (a.server || '').localeCompare(b.server || '');
       if ((a.resolution || '') !== (b.resolution || '')) return (a.resolution || '').localeCompare(b.resolution || '');
+      if ((a.quality || '') !== (b.quality || '')) return (a.quality || '').localeCompare(b.quality || '');
       if ((a.duration || '') !== (b.duration || '')) return (a.duration || '').localeCompare(b.duration || '');
       return a.credits - b.credits;
     });

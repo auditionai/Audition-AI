@@ -92,9 +92,6 @@ const uploadMediaToTst = async (
 ) => {
   const apiKey = getTstApiKey();
   const { blob, filename } = await normalizeSourceToBlob(input, kind, fallbackMimeType);
-  if (!blob.size) {
-    throw new Error(`Cannot upload empty ${kind} file to TST`);
-  }
   const formData = new FormData();
   formData.append('file', blob, filename);
 
@@ -118,9 +115,6 @@ const uploadMediaToTst = async (
   const url = data?.url || data?.data?.url;
   if (!url) {
     throw new Error(`Upload response missing URL: ${JSON.stringify(data)}`);
-  }
-  if (!/^https?:\/\//i.test(String(url))) {
-    throw new Error(`Upload response returned an invalid URL: ${JSON.stringify(data)}`);
   }
 
   return String(url);
@@ -311,8 +305,8 @@ export const buildImageGenerateProviderPayload = (
 
   if (uploadedUrls.length > 0) providerPayload.img_url = uploadedUrls;
   if (effectiveResolution) providerPayload.resolution = effectiveResolution.toLowerCase();
-  if (payload.quality) providerPayload.quality = payload.quality.toLowerCase();
   if (payload.aspectRatio) providerPayload.aspect_ratio = payload.aspectRatio;
+  if (payload.quality) providerPayload.quality = payload.quality;
   if (payload.speed) providerPayload.speed = payload.speed;
   if (payload.serverId) providerPayload.server_id = payload.serverId;
 
@@ -531,6 +525,36 @@ export const prepareProviderPayloadFromQueueRecipe = async (payload: QueueRecipe
       );
     }
 
+    case 'prompt_image_generate_recipe_v1': {
+      const providerPrompt = await prepareDirectPromptWithinLimit(
+        payload.prompt || 'Create an image',
+        'prompt image generation',
+      );
+      const referenceImages = Array.isArray(payload.referenceImages)
+        ? payload.referenceImages.filter((value): value is string => Boolean(value)).slice(0, 4)
+        : [];
+      const uploadedUrls = await Promise.all(referenceImages.map((source) => uploadImageToTst(source)));
+      const providerPayload: Record<string, unknown> = {
+        prompt: providerPrompt,
+        model: payload.modelId,
+      };
+
+      if (uploadedUrls.length > 0) providerPayload.img_url = uploadedUrls;
+      if (payload.resolution) {
+        providerPayload.resolution = getEffectiveImageGenerationResolution(
+          payload.modelId,
+          payload.speed,
+          payload.resolution,
+        )?.toLowerCase() || payload.resolution.toLowerCase();
+      }
+      if (payload.aspectRatio) providerPayload.aspect_ratio = payload.aspectRatio;
+      if (payload.quality) providerPayload.quality = payload.quality;
+      if (payload.speed) providerPayload.speed = payload.speed;
+      if (payload.serverId) providerPayload.server_id = payload.serverId;
+
+      return providerPayload;
+    }
+
     case 'image_edit_recipe_v1': {
       const providerPrompt = await prepareDirectPromptWithinLimit(payload.prompt, 'image editing');
       const uploadedUrl = await uploadImageToTst(payload.sourceImage);
@@ -567,6 +591,7 @@ export const prepareProviderPayloadFromQueueRecipe = async (payload: QueueRecipe
       if (payload.keyframeImage) {
         const uploadedKeyframeUrl = await uploadImageToTst(payload.keyframeImage);
         providerPayload.img_url = uploadedKeyframeUrl;
+        providerPayload.image_url = uploadedKeyframeUrl;
         if (payload.modelId === 'kling-2.5-turbo') {
           providerPayload.mode = 'i2v';
         }
@@ -586,12 +611,13 @@ export const prepareProviderPayloadFromQueueRecipe = async (payload: QueueRecipe
 
       const providerPayload: Record<string, unknown> = {
         model: payload.modelId,
-        mode: String(payload.resolution || '').toLowerCase().includes('1080') ? 'pro' : 'std',
+        mode: payload.modelId,
         character_image_url: characterImageUrl,
         motion_video_url: motionVideoUrl,
       };
 
       if (providerPrompt) providerPayload.prompt = providerPrompt;
+      if (payload.resolution) providerPayload.resolution = payload.resolution.toLowerCase();
       if (payload.speed) providerPayload.speed = payload.speed;
       if (payload.serverId) providerPayload.server_id = payload.serverId;
 

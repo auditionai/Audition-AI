@@ -89,6 +89,21 @@ export const APP_CONFIG: AppConfig = {
 
     // --- EDITING TOOLS (Chỉnh sửa) ---
     {
+      id: "ai_image_tool",
+      name: {vi: "Tạo Ảnh AI", en: "AI Image Creator"},
+      description: {
+        vi: "Tạo ảnh thuần từ prompt và tối đa 4 ảnh tham chiếu, không dùng prompt hệ thống Audition.",
+        en: "Create prompt-only images with up to 4 references, without Audition system prompts."
+      },
+      engine: "TST Image API",
+      preview_image: "https://picsum.photos/400/308?grayscale",
+      toolType: 'editing',
+      defaultPrompt: "",
+      category: 'editing',
+      tag: "NEW",
+      isPremium: true
+    },
+    {
       id: "magic_editor_pro",
       name: {vi: "Chỉnh Sửa Ảnh (AI)", en: "Photo Editor AI"},
       description: {

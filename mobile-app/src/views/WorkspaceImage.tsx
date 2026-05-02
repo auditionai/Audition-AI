@@ -249,17 +249,20 @@ export function WorkspaceImage() {
   const generationTier = aiModel;
   const availableResolutions = getCompatibleGenerationResolutions({
     tier: generationTier, pricingEntries, serverId: generationServerId, speed: generationSpeedId,
+    quality: aiModel === 'gpt' ? gptQuality : undefined,
   });
   const availableServers = getCompatibleGenerationServers({
     tier: generationTier, pricingEntries, speed: generationSpeedId, resolution,
+    quality: aiModel === 'gpt' ? gptQuality : undefined,
   });
   const availableSpeeds = getCompatibleGenerationSpeeds({
     tier: generationTier,
     pricingEntries,
     resolution,
+    quality: aiModel === 'gpt' ? gptQuality : undefined,
   });
   const selectedCost = getGenerationCostBreakdown({
-    tier: generationTier, resolution, speed: generationSpeedId,
+    tier: generationTier, resolution, quality: aiModel === 'gpt' ? gptQuality : undefined, speed: generationSpeedId,
     serverId: generationServerId, pricingEntries, pricingOverrides,
   });
   const activeFeature = APP_CONFIG.main_features.find((feature) => feature.id === MODE_TO_FEATURE_ID[activeMode]) ?? APP_CONFIG.main_features[0];
@@ -412,6 +415,7 @@ export function WorkspaceImage() {
       tier: aiModel,
       pricingEntries,
       resolution,
+      quality: aiModel === 'gpt' ? gptQuality : undefined,
       speed: requestedSpeedId,
       serverId: requestedServerId,
     });
@@ -431,7 +435,7 @@ export function WorkspaceImage() {
     if (nextSpeedLabel !== speed) {
       setSpeed(nextSpeedLabel);
     }
-  }, [aiModel, pricingEntries, resolution, server, speed]);
+  }, [aiModel, gptQuality, pricingEntries, resolution, server, speed]);
 
   // --- Rotating tips ---
   useEffect(() => {
@@ -818,6 +822,7 @@ export function WorkspaceImage() {
           pricingEntries,
           serverId: effectiveServerId,
           resolution,
+          quality: aiModel === 'gpt' ? gptQuality : undefined,
         });
         const effectiveSpeedId = compatibleSpeeds.includes(generationSpeedId) ? generationSpeedId : (compatibleSpeeds[0] || generationSpeedId);
 

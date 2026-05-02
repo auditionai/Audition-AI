@@ -116,9 +116,10 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
       pricingEntries,
       serverId: generationServerId,
       speed: generationSpeedId,
+      quality: aiModel === 'gpt' ? gptQuality : undefined,
     });
     return values;
-  }, [aiModel, generationServerId, generationSpeedId, pricingEntries]);
+  }, [aiModel, generationServerId, generationSpeedId, gptQuality, pricingEntries]);
 
   const availableServers = useMemo(() => {
     const values = getCompatibleGenerationServers({
@@ -126,9 +127,10 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
       pricingEntries,
       speed: generationSpeedId,
       resolution,
+      quality: aiModel === 'gpt' ? gptQuality : undefined,
     });
     return values;
-  }, [aiModel, generationSpeedId, pricingEntries, resolution]);
+  }, [aiModel, generationSpeedId, gptQuality, pricingEntries, resolution]);
 
   const availableSpeeds = useMemo(() => {
     const values = getCompatibleGenerationSpeeds({
@@ -136,15 +138,17 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
       pricingEntries,
       serverId: generationServerId,
       resolution,
+      quality: aiModel === 'gpt' ? gptQuality : undefined,
     });
     return values;
-  }, [aiModel, generationServerId, pricingEntries, resolution]);
+  }, [aiModel, generationServerId, gptQuality, pricingEntries, resolution]);
 
   useEffect(() => {
     const nextSelection = resolveGenerationSelection({
       tier: aiModel,
       pricingEntries,
       resolution,
+      quality: aiModel === 'gpt' ? gptQuality : undefined,
       speed: generationSpeedId,
       serverId: generationServerId,
     });
@@ -164,11 +168,12 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
     if (nextSpeedLabel !== speed) {
       setSpeed(nextSpeedLabel);
     }
-  }, [aiModel, generationServerId, generationSpeedId, pricingEntries, resolution, server, speed]);
+  }, [aiModel, generationServerId, generationSpeedId, gptQuality, pricingEntries, resolution, server, speed]);
 
   const selectedCost = getGenerationCostBreakdown({
     tier: aiModel,
     resolution,
+    quality: aiModel === 'gpt' ? gptQuality : undefined,
     speed: generationSpeedId,
     serverId: generationServerId,
     pricingEntries,
@@ -183,6 +188,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
           getGenerationCostBreakdown({
             tier: aiModel,
             resolution: item,
+            quality: aiModel === 'gpt' ? gptQuality : undefined,
             speed: generationSpeedId,
             serverId: generationServerId,
             pricingEntries,
@@ -190,7 +196,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
           }).vcoin * modeCountForPrice,
         ]),
       ) as Record<TstResolution, number>,
-    [aiModel, generationServerId, generationSpeedId, modeCountForPrice, pricingEntries, pricingOverrideRows],
+    [aiModel, generationServerId, generationSpeedId, gptQuality, modeCountForPrice, pricingEntries, pricingOverrideRows],
   );
   const availableSpeedLabels = availableSpeeds.map((speedId) => speedIdToLabel(speedId));
   const availableServerLabels = availableServers.map((serverId) => tstServerToUi(serverId));

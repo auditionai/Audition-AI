@@ -2613,6 +2613,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       <th className="px-4 py-3 font-bold">Model</th>
                                       <th className="px-4 py-3 font-bold">Server</th>
                                       <th className="px-4 py-3 font-bold">Độ phân giải</th>
+                                      <th className="px-4 py-3 font-bold">Chất lượng</th>
                                       <th className="px-4 py-3 font-bold">Thời lượng</th>
                                       <th className="px-4 py-3 font-bold">Tốc độ</th>
                                       <th className="px-4 py-3 font-bold text-center">Audio</th>
@@ -2626,7 +2627,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                               <tbody className="divide-y divide-white/5">
                                   {pricingRows.length === 0 ? (
                                       <tr>
-                                          <td colSpan={12} className="px-4 py-8 text-center text-slate-500">
+                                          <td colSpan={13} className="px-4 py-8 text-center text-slate-500">
                                               Chưa tải được bảng giá live từ Trạm Sáng Tạo.
                                           </td>
                                       </tr>
@@ -2667,6 +2668,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                       </div>
                                                   </td>
                                                   <td className="px-4 py-3 text-white uppercase">{row.resolution || '-'}</td>
+                                                  <td className="px-4 py-3 text-white uppercase">{row.quality || '-'}</td>
                                                   <td className="px-4 py-3 text-white uppercase">{row.duration || '-'}</td>
                                                   <td className="px-4 py-3 text-white">{tstSpeedToUi(row.speed) || '-'}</td>
                                                   <td className="px-4 py-3 text-center text-white">{row.audio ? 'Có' : '-'}</td>

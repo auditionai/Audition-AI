@@ -9,6 +9,7 @@ type TstProviderPricingEntry = {
   config_key?: string;
   credits?: number;
   resolution?: string;
+  quality?: string;
   speed?: string;
   duration?: string;
   audio?: boolean;
@@ -39,6 +40,7 @@ let modelsPromise: Promise<TstProviderModel[]> | null = null;
 const normalize = (value?: string | null) => String(value || '').trim().toLowerCase();
 const normalizeSpeed = (value?: string | null) => normalize(value || 'fast');
 const normalizeResolution = (value?: string | null) => normalize(value);
+const normalizeQuality = (value?: string | null) => normalize(value);
 const normalizeDuration = (value?: string | null) => normalize(value);
 const normalizeServer = (value?: string | null) => normalize(value);
 const isFresh = (timestamp: number) => timestamp > 0 && Date.now() - timestamp < TST_LIVE_CATALOG_TTL_MS;
@@ -77,6 +79,28 @@ const fetchCatalogEndpoint = async (path: string) => {
   return response.json();
 };
 
+const parseGptImage2ConfigKey = (configKey?: string) => {
+  const match = String(configKey || '').trim().toLowerCase().match(/^(1k|2k|4k)-(low|medium|high)(?:-(fast|slow))?/);
+  return {
+    resolution: match?.[1],
+    quality: match?.[2],
+    speed: match?.[3],
+  };
+};
+
+const normalizePricingEntryForValidation = (entry: TstProviderPricingEntry): TstProviderPricingEntry => {
+  if (normalize(entry.model) !== 'image-gpt-2') {
+    return entry;
+  }
+  const parsed = parseGptImage2ConfigKey(entry.config_key);
+  return {
+    ...entry,
+    resolution: parsed.resolution || entry.resolution,
+    quality: parsed.quality || entry.quality || entry.resolution,
+    speed: entry.speed || parsed.speed,
+  };
+};
+
 export const getTstCatalogMetadata = () => ({
   ttlMs: TST_LIVE_CATALOG_TTL_MS,
   pricingFetchedAt: pricingFetchedAt || null,
@@ -108,7 +132,7 @@ export const getTstProviderPricing = async (forceRefresh = false): Promise<TstPr
   if (!pricingPromise) {
     pricingPromise = fetchCatalogEndpoint('/models/pricing')
       .then((data) => {
-        pricingCache = Array.isArray(data?.pricing) ? data.pricing : [];
+        pricingCache = Array.isArray(data?.pricing) ? data.pricing.map(normalizePricingEntryForValidation) : [];
         pricingFetchedAt = Date.now();
         return pricingCache;
       })
@@ -180,12 +204,14 @@ const findPricingMatch = (
   {
     serverId,
     resolution,
+    quality,
     duration,
     speed,
     audio,
   }: {
     serverId?: string;
     resolution?: string;
+    quality?: string;
     duration?: string;
     speed?: string;
     audio?: boolean;
@@ -193,6 +219,7 @@ const findPricingMatch = (
 ) => entries.find((entry) => {
   if (serverId && normalizeServer(entry.server) !== normalizeServer(serverId)) return false;
   if (resolution && normalizeResolution(entry.resolution) !== normalizeResolution(resolution)) return false;
+  if (quality && normalizeQuality(entry.quality) !== normalizeQuality(quality)) return false;
   if (duration && normalizeDuration(entry.duration) !== normalizeDuration(duration)) return false;
   if (!matchesFastSpeed(entry.speed, speed)) return false;
   if (typeof audio === 'boolean' && typeof entry.audio === 'boolean' && entry.audio !== audio) return false;
@@ -242,6 +269,7 @@ export const validateQueuePayloadAgainstLiveCatalog = async (
 
   const serverId = normalizeServer(String(queuePayload.server_id || ''));
   const resolution = normalizeResolution(String(queuePayload.resolution || ''));
+  const quality = normalizeQuality(String(queuePayload.quality || ''));
   const duration = normalizeDuration(String(queuePayload.duration || ''));
   const speed = normalizeSpeed(String(queuePayload.speed || ''));
   const audio = typeof queuePayload.audio === 'boolean' ? queuePayload.audio : undefined;
@@ -290,6 +318,7 @@ export const validateQueuePayloadAgainstLiveCatalog = async (
   const pricingMatch = findPricingMatch(modelPricing, {
     serverId: serverId || undefined,
     resolution: resolution || undefined,
+    quality: quality || undefined,
     duration: duration || undefined,
     speed: speed || undefined,
     audio,

@@ -106,6 +106,7 @@ export interface TstPricingRow {
   modelName: string;
   server: string;
   resolution?: string;
+  quality?: string;
   duration?: string;
   speed?: string;
   audio?: boolean;
@@ -709,16 +710,50 @@ const getFallbackMotionSpec = (modelId: string, name?: string): TstMotionModelSp
   };
 };
 
-const mapPricingEntry = (entry: any): TstPricingEntry => ({
-  model: String(entry.model || ''),
-  server: String(entry.server || ''),
-  config_key: String(entry.config_key || ''),
-  credits: Number(entry.credits || 0),
-  resolution: entry.resolution ? String(entry.resolution) : undefined,
-  speed: entry.speed ? String(entry.speed) : undefined,
-  duration: entry.duration ? String(entry.duration) : undefined,
-  audio: entry.audio === true,
-});
+const parseGptImage2ConfigKey = (configKey?: string) => {
+  const match = String(configKey || '').trim().toLowerCase().match(/^(1k|2k|4k)-(low|medium|high)(?:-(fast|slow))?/);
+  return {
+    resolution: match?.[1],
+    quality: match?.[2],
+    speed: match?.[3],
+  };
+};
+
+const mapPricingEntry = (entry: any): TstPricingEntry => {
+  const model = String(entry.model || '');
+  const configKey = String(entry.config_key || '');
+  let resolution = entry.resolution ? String(entry.resolution) : undefined;
+  let quality = entry.quality ? String(entry.quality) : undefined;
+  let speed = entry.speed ? String(entry.speed) : undefined;
+
+  if (normalizeModelId(model) === 'image-gpt-2') {
+    const parsed = parseGptImage2ConfigKey(configKey);
+    if (parsed.resolution) {
+      resolution = parsed.resolution;
+    }
+    if (parsed.quality) {
+      quality = parsed.quality;
+    } else if (resolution && GPT_IMAGE_QUALITY_VALUES.includes(normalizeQuality(resolution))) {
+      quality = resolution;
+      resolution = undefined;
+    }
+    if (!speed && parsed.speed) {
+      speed = parsed.speed;
+    }
+  }
+
+  return {
+    model,
+    server: String(entry.server || ''),
+    config_key: configKey,
+    credits: Number(entry.credits || 0),
+    resolution,
+    quality,
+    speed,
+    duration: entry.duration ? String(entry.duration) : undefined,
+    audio: entry.audio === true,
+  };
+};
 
 const mapRuntimeModel = (entry: any): TstRuntimeModel => ({
   model: String(entry.model || ''),
@@ -736,6 +771,7 @@ const getMatchingEntries = ({
   modelId,
   pricingEntries,
   resolution,
+  quality,
   speed,
   serverId,
   duration,
@@ -743,17 +779,20 @@ const getMatchingEntries = ({
   modelId: string;
   pricingEntries: TstPricingEntry[];
   resolution?: string;
+  quality?: string;
   speed?: string;
   serverId?: string;
   duration?: string;
 }) => {
   const normalizedResolution = resolution ? normalizeResolution(resolution) : null;
+  const normalizedQuality = quality ? normalizeQuality(quality) : null;
   const normalizedSpeed = speed ? normalizeSpeed(speed) : null;
   const normalizedServer = serverId ? normalizeServer(serverId) : null;
   const normalizedDuration = duration ? normalizeDuration(duration) : null;
 
   return getPricingEntriesForModel(modelId, pricingEntries).filter((entry) => {
     if (normalizedResolution && normalizeResolution(entry.resolution) !== normalizedResolution) return false;
+    if (normalizedQuality && normalizeQuality(entry.quality) !== normalizedQuality) return false;
     if (normalizedSpeed && normalizeSpeed(entry.speed) !== normalizedSpeed) return false;
     if (normalizedServer && normalizeServer(entry.server) !== normalizedServer) return false;
     if (normalizedDuration && normalizeDuration(entry.duration) !== normalizedDuration) return false;
@@ -951,17 +990,20 @@ export const getCompatibleGenerationServers = ({
   pricingEntries = [],
   speed,
   resolution,
+  quality,
 }: {
   tier: TstGenerationTier;
   pricingEntries?: TstPricingEntry[];
   speed?: string;
   resolution?: TstResolution;
+  quality?: string;
 }) => {
   const entries = getMatchingEntries({
     modelId: tierToModelId[tier],
     pricingEntries,
     speed,
     resolution,
+    quality,
   });
   if (entries.length === 0) {
     return [];
@@ -978,17 +1020,20 @@ export const getCompatibleGenerationSpeeds = ({
   pricingEntries = [],
   serverId,
   resolution,
+  quality,
 }: {
   tier: TstGenerationTier;
   pricingEntries?: TstPricingEntry[];
   serverId?: string;
   resolution?: TstResolution;
+  quality?: string;
 }) => {
   const entries = getMatchingEntries({
     modelId: tierToModelId[tier],
     pricingEntries,
     serverId,
     resolution,
+    quality,
   });
   if (entries.length === 0) {
     return [];
@@ -1002,17 +1047,20 @@ export const getCompatibleGenerationResolutions = ({
   pricingEntries = [],
   serverId,
   speed,
+  quality,
 }: {
   tier: TstGenerationTier;
   pricingEntries?: TstPricingEntry[];
   serverId?: string;
   speed?: string;
+  quality?: string;
 }) => {
   const entries = getMatchingEntries({
     modelId: tierToModelId[tier],
     pricingEntries,
     serverId,
     speed,
+    quality,
   });
   if (entries.length === 0) {
     return [];
@@ -1024,12 +1072,14 @@ export const resolveGenerationSelection = ({
   tier,
   pricingEntries = [],
   resolution,
+  quality,
   speed,
   serverId,
 }: {
   tier: TstGenerationTier;
   pricingEntries?: TstPricingEntry[];
   resolution: TstResolution;
+  quality?: string;
   speed: string;
   serverId: string;
 }) => {
@@ -1040,11 +1090,13 @@ export const resolveGenerationSelection = ({
   }
 
   const normalizedResolution = normalizeResolution(resolution);
+  const normalizedQuality = normalizeQuality(quality);
   const normalizedSpeed = normalizeSpeed(speed);
   const normalizedServer = normalizeServer(serverId);
   const exactEntry = modelEntries.find(
     (entry) =>
       normalizeResolution(entry.resolution) === normalizedResolution &&
+      (!normalizedQuality || normalizeQuality(entry.quality) === normalizedQuality) &&
       normalizeSpeed(entry.speed) === normalizedSpeed &&
       normalizeServer(entry.server) === normalizedServer,
   );
@@ -1057,9 +1109,14 @@ export const resolveGenerationSelection = ({
     modelEntries.find(
       (entry) =>
         normalizeResolution(entry.resolution) === normalizedResolution &&
+        (!normalizedQuality || normalizeQuality(entry.quality) === normalizedQuality) &&
         normalizeSpeed(entry.speed) === normalizedSpeed,
     ) ||
-    modelEntries.find((entry) => normalizeResolution(entry.resolution) === normalizedResolution) ||
+    modelEntries.find((entry) =>
+      normalizeResolution(entry.resolution) === normalizedResolution &&
+      (!normalizedQuality || normalizeQuality(entry.quality) === normalizedQuality)
+    ) ||
+    modelEntries.find((entry) => !normalizedQuality || normalizeQuality(entry.quality) === normalizedQuality) ||
     modelEntries[0];
 
   return {
@@ -1073,6 +1130,7 @@ export const resolveGenerationSelection = ({
 export const getGenerationCostBreakdown = ({
   tier,
   resolution,
+  quality,
   speed,
   serverId,
   pricingEntries = [],
@@ -1080,6 +1138,7 @@ export const getGenerationCostBreakdown = ({
 }: {
   tier: TstGenerationTier;
   resolution: TstResolution;
+  quality?: string;
   speed: string;
   serverId: string;
   pricingEntries?: TstPricingEntry[];
@@ -1088,6 +1147,7 @@ export const getGenerationCostBreakdown = ({
   const modelId = tierToModelId[tier];
   const modelEntries = getPricingEntriesForModel(modelId, pricingEntries);
   const normalizedResolution = normalizeResolution(resolution);
+  const normalizedQuality = normalizeQuality(quality);
   const normalizedSpeed = normalizeSpeed(speed);
   const normalizedServer = normalizeServer(serverId);
 
@@ -1095,17 +1155,21 @@ export const getGenerationCostBreakdown = ({
     (entry) =>
       normalizeServer(entry.server) === normalizedServer &&
       normalizeResolution(entry.resolution) === normalizedResolution &&
+      (!normalizedQuality || normalizeQuality(entry.quality) === normalizedQuality) &&
       normalizeSpeed(entry.speed) === normalizedSpeed,
     (entry) =>
       normalizeServer(entry.server) === normalizedServer &&
       normalizeResolution(entry.resolution) === normalizedResolution &&
+      (!normalizedQuality || normalizeQuality(entry.quality) === normalizedQuality) &&
       normalizedSpeed === 'fast' &&
       !entry.speed,
     (entry) =>
       normalizeResolution(entry.resolution) === normalizedResolution &&
+      (!normalizedQuality || normalizeQuality(entry.quality) === normalizedQuality) &&
       normalizeSpeed(entry.speed) === normalizedSpeed,
     (entry) =>
       normalizeResolution(entry.resolution) === normalizedResolution &&
+      (!normalizedQuality || normalizeQuality(entry.quality) === normalizedQuality) &&
       normalizedSpeed === 'fast' &&
       !entry.speed,
   ]);
@@ -1131,12 +1195,14 @@ export const getGenerationCostBreakdown = ({
 
 export const getResolutionCostMap = ({
   tier,
+  quality,
   speed,
   serverId,
   pricingEntries = [],
   pricingOverrides = [],
 }: {
   tier: TstGenerationTier;
+  quality?: string;
   speed: string;
   serverId: string;
   pricingEntries?: TstPricingEntry[];
@@ -1145,7 +1211,7 @@ export const getResolutionCostMap = ({
   Object.fromEntries(
     (['1K', '2K', '4K'] as TstResolution[]).map((resolution) => [
       resolution,
-      getGenerationCostBreakdown({ tier, resolution, speed, serverId, pricingEntries, pricingOverrides }),
+      getGenerationCostBreakdown({ tier, resolution, quality, speed, serverId, pricingEntries, pricingOverrides }),
     ]),
   ) as Record<TstResolution, TstGenerationCostBreakdown>;
 
@@ -1510,6 +1576,7 @@ export const getPricingRows = async (forceRefresh = false): Promise<TstPricingRo
       modelName: model.name || entry.model,
       server: normalizeCatalogServer(entry.server),
       resolution: entry.resolution,
+      quality: entry.quality,
       duration: entry.duration,
       speed: normalizeCatalogSpeed(entry.speed) || undefined,
       audio: entry.audio,
@@ -1525,6 +1592,7 @@ export const getPricingRows = async (forceRefresh = false): Promise<TstPricingRo
       if (a.modelName !== b.modelName) return a.modelName.localeCompare(b.modelName);
       if ((a.server || '') !== (b.server || '')) return (a.server || '').localeCompare(b.server || '');
       if ((a.resolution || '') !== (b.resolution || '')) return (a.resolution || '').localeCompare(b.resolution || '');
+      if ((a.quality || '') !== (b.quality || '')) return (a.quality || '').localeCompare(b.quality || '');
       if ((a.duration || '') !== (b.duration || '')) return (a.duration || '').localeCompare(b.duration || '');
       return a.credits - b.credits;
     });

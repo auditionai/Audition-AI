@@ -271,22 +271,26 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       tier: generationTier,
       pricingEntries,
       serverId: generationServerId,
-      speed: generationSpeedId
+      speed: generationSpeedId,
+      quality: aiModel === 'gpt' ? gptQuality : undefined,
   });
   const availableSpeeds = getCompatibleGenerationSpeeds({
       tier: generationTier,
       pricingEntries,
-      resolution
+      resolution,
+      quality: aiModel === 'gpt' ? gptQuality : undefined,
   });
   const availableServers = getCompatibleGenerationServers({
       tier: generationTier,
       pricingEntries,
       speed: generationSpeedId,
-      resolution
+      resolution,
+      quality: aiModel === 'gpt' ? gptQuality : undefined,
   });
   const selectedGenerationCost = getGenerationCostBreakdown({
       tier: generationTier,
       resolution,
+      quality: aiModel === 'gpt' ? gptQuality : undefined,
       speed: generationSpeedId,
       serverId: generationServerId,
       pricingEntries,
@@ -308,6 +312,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   });
   const gptResolutionCosts = getResolutionCostMap({
       tier: 'gpt',
+      quality: gptQuality,
       speed: generationSpeedId,
       serverId: generationServerId,
       pricingEntries,
@@ -527,6 +532,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           tier: aiModel,
           pricingEntries,
           resolution,
+          quality: aiModel === 'gpt' ? gptQuality : undefined,
           speed: requestedSpeedId,
           serverId: requestedServerId,
       });
@@ -546,7 +552,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       if (nextSpeedLabel !== speed) {
           setSpeed(nextSpeedLabel);
       }
-  }, [aiModel, pricingEntries, resolution, server, speed]);
+  }, [aiModel, gptQuality, pricingEntries, resolution, server, speed]);
 
   const formatTime = (seconds: number) => {
       const mins = Math.floor(seconds / 60);
@@ -865,6 +871,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
         pricingEntries,
         speed: requestedSpeedId,
         resolution,
+        quality: aiModel === 'gpt' ? gptQuality : undefined,
     });
     const effectiveServerId = compatibleServers.includes(requestedServerId)
         ? requestedServerId
@@ -874,6 +881,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
         pricingEntries,
         serverId: effectiveServerId,
         resolution,
+        quality: aiModel === 'gpt' ? gptQuality : undefined,
     });
     const effectiveSpeedId = compatibleSpeeds.includes(requestedSpeedId)
         ? requestedSpeedId

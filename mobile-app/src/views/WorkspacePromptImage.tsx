@@ -310,20 +310,20 @@ export function WorkspacePromptImage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-[#09090B] pb-28 px-5 pt-4 space-y-5">
+    <div className="min-h-screen bg-gray-50 dark:bg-[#09090B] pb-28 px-4 pt-3 space-y-4">
       <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileSelected} />
 
-      <header className="space-y-3">
-        <p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-500">Tools</p>
-        <h1 className="text-3xl font-black text-gray-950 dark:text-white">Tạo Ảnh AI</h1>
+      <header className="space-y-1">
+        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-cyan-500">Tools</p>
+        <h1 className="text-xl font-black text-gray-950 dark:text-white">Tạo Ảnh AI</h1>
       </header>
 
-      <section className="rounded-[28px] border border-gray-200 dark:border-zinc-800 bg-white dark:bg-[#18181B] p-4 shadow-sm">
-        <div className="flex items-center justify-between mb-3">
+      <section className="rounded-[24px] border border-gray-200 dark:border-zinc-800 bg-white dark:bg-[#18181B] p-3 shadow-sm">
+        <div className="flex items-center justify-between mb-2.5">
           <h2 className="text-sm font-black text-gray-950 dark:text-white">1. Upload ảnh</h2>
           <span className="text-[11px] font-bold text-gray-400 dark:text-zinc-500">{uploadedCount}/{MAX_REFERENCE_IMAGES}</span>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-2.5">
           {referenceImages.map((image, index) => (
             <div key={index} className="relative rounded-2xl border border-gray-200 dark:border-zinc-800 bg-gray-50 dark:bg-black/30 p-2">
               <div className="flex items-center justify-between mb-2">
@@ -339,7 +339,7 @@ export function WorkspacePromptImage() {
                 onClick={() => pickImage(index)}
                 className="w-full aspect-[3/4] rounded-xl border border-dashed border-gray-300 dark:border-zinc-700 overflow-hidden flex items-center justify-center text-gray-400 dark:text-zinc-500"
               >
-                {image ? <img src={image} className="w-full h-full object-cover" alt={`Ảnh ${index + 1}`} /> : <ImagePlus className="w-8 h-8" />}
+                {image ? <img src={image} className="w-full h-full object-cover" alt={`Ảnh ${index + 1}`} /> : <ImagePlus className="w-7 h-7" />}
               </button>
             </div>
           ))}
@@ -347,28 +347,28 @@ export function WorkspacePromptImage() {
             <button
               type="button"
               onClick={addImageSlot}
-              className="min-h-[190px] rounded-2xl border border-dashed border-gray-300 dark:border-zinc-700 text-gray-500 dark:text-zinc-400 flex flex-col items-center justify-center gap-2"
+              className="min-h-[150px] rounded-2xl border border-dashed border-gray-300 dark:border-zinc-700 text-gray-500 dark:text-zinc-400 flex flex-col items-center justify-center gap-2"
             >
-              <Plus className="w-7 h-7" />
+              <Plus className="w-6 h-6" />
               <span className="text-xs font-bold">Thêm ảnh</span>
             </button>
           )}
         </div>
       </section>
 
-      <section className="rounded-[28px] border border-gray-200 dark:border-zinc-800 bg-white dark:bg-[#18181B] p-4 shadow-sm">
+      <section className="rounded-[24px] border border-gray-200 dark:border-zinc-800 bg-white dark:bg-[#18181B] p-3 shadow-sm">
         <h2 className="text-sm font-black text-gray-950 dark:text-white mb-3">2. Mô tả</h2>
         <textarea
           value={prompt}
           onChange={(event) => setPrompt(event.target.value)}
           maxLength={9999}
           placeholder="Nhập prompt tạo ảnh..."
-          className="w-full min-h-[150px] rounded-2xl bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-zinc-800 p-4 text-sm text-gray-950 dark:text-white outline-none resize-none placeholder:text-gray-400 dark:placeholder:text-zinc-500"
+          className="w-full min-h-[120px] rounded-2xl bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-zinc-800 p-3 text-sm text-gray-950 dark:text-white outline-none resize-none placeholder:text-gray-400 dark:placeholder:text-zinc-500"
         />
         <div className="text-right text-[11px] text-gray-400 dark:text-zinc-500 mt-1">{prompt.length}/9999</div>
       </section>
 
-      <div className="space-y-5">
+      <div className="space-y-4">
         <div className="space-y-2">
           <h3 className="ml-1 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-zinc-500">KHUNG HÌNH</h3>
           <div className="flex gap-2 overflow-x-auto pb-1">
@@ -377,7 +377,7 @@ export function WorkspacePromptImage() {
                 key={ratio}
                 type="button"
                 onClick={() => setAspectRatio(ratio)}
-                className={`shrink-0 rounded-full px-4 py-2 text-xs font-medium transition-all ${
+                className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium transition-all ${
                   aspectRatio === ratio
                     ? 'bg-gray-900 text-white shadow-md dark:bg-white dark:text-gray-950'
                     : 'border border-gray-100 bg-white text-gray-500 dark:border-zinc-800 dark:bg-[#18181B] dark:text-zinc-400'
@@ -397,7 +397,7 @@ export function WorkspacePromptImage() {
                 key={tier}
                 type="button"
                 onClick={() => setAiModel(tier)}
-                className={`rounded-2xl py-3 text-sm font-medium transition-all ${
+                className={`rounded-2xl py-2.5 text-sm font-medium transition-all ${
                   aiModel === tier
                     ? 'bg-gray-900 text-white shadow-md dark:bg-white dark:text-gray-950'
                     : 'border border-gray-100 bg-white text-gray-500 dark:border-zinc-800 dark:bg-[#18181B] dark:text-zinc-400'
@@ -419,7 +419,7 @@ export function WorkspacePromptImage() {
                   key={value}
                   type="button"
                   onClick={() => setResolution(value)}
-                  className={`flex-1 rounded-xl py-2.5 text-xs font-bold transition-all ${
+                  className={`flex-1 rounded-xl py-2 text-xs font-bold transition-all ${
                     resolution === value
                       ? 'border border-indigo-200 bg-indigo-50 text-indigo-700 shadow-sm dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-200'
                       : 'border border-gray-100 bg-white text-gray-500 dark:border-zinc-800 dark:bg-[#18181B] dark:text-zinc-400'
@@ -441,7 +441,7 @@ export function WorkspacePromptImage() {
                   key={quality}
                   type="button"
                   onClick={() => setGptQuality(quality)}
-                  className={`rounded-xl py-2.5 text-xs font-bold uppercase transition-all ${
+                  className={`rounded-xl py-2 text-xs font-bold uppercase transition-all ${
                     gptQuality === quality
                       ? 'border border-indigo-200 bg-indigo-50 text-indigo-700 shadow-sm dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-200'
                       : 'border border-gray-100 bg-white text-gray-500 dark:border-zinc-800 dark:bg-[#18181B] dark:text-zinc-400'
@@ -498,15 +498,15 @@ export function WorkspacePromptImage() {
           </div>
         )}
 
-        <div className="rounded-[24px] border border-gray-100 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-[#18181B]">
-          <div className="flex items-start justify-between gap-4">
+        <div className="rounded-[22px] border border-gray-100 bg-white p-3 shadow-sm dark:border-zinc-800 dark:bg-[#18181B]">
+          <div className="flex items-start justify-between gap-3">
             <div>
               <h3 className="text-sm font-bold text-gray-800 dark:text-zinc-100">Luồng xử lý</h3>
               <p className="mt-1 text-xs leading-relaxed text-gray-400 dark:text-zinc-500">
                 Mobile dùng cùng queue/provider với desktop. Prompt và ảnh tham chiếu được gửi trực tiếp sang TST, không chèn prompt hệ thống Audition.
               </p>
             </div>
-            <div className="rounded-2xl bg-gray-50 px-3 py-2 text-right dark:bg-[#27272A]">
+            <div className="rounded-2xl bg-gray-50 px-2.5 py-2 text-right dark:bg-[#27272A]">
               <div className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-zinc-500">Chi phí</div>
               <div className="mt-1 flex items-center justify-end gap-1 text-sm font-bold text-gray-900 dark:text-white">
                 {costDisplay}
@@ -514,20 +514,20 @@ export function WorkspacePromptImage() {
               </div>
             </div>
           </div>
-          <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-            <div className="rounded-2xl bg-gray-50 p-3 dark:bg-[#27272A]">
+          <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+            <div className="rounded-2xl bg-gray-50 p-2.5 dark:bg-[#27272A]">
               <p className="text-gray-400 dark:text-zinc-500">Model</p>
               <p className="mt-1 font-semibold text-gray-700 dark:text-zinc-200">{getModelLabel(aiModel)}</p>
             </div>
-            <div className="rounded-2xl bg-gray-50 p-3 dark:bg-[#27272A]">
+            <div className="rounded-2xl bg-gray-50 p-2.5 dark:bg-[#27272A]">
               <p className="text-gray-400 dark:text-zinc-500">Queue</p>
               <p className="mt-1 font-semibold text-gray-700 dark:text-zinc-200">{queueStats.myImageProcessing} đang xử lý • {queueStats.myQueued} chờ</p>
             </div>
-            <div className="rounded-2xl bg-gray-50 p-3 dark:bg-[#27272A]">
+            <div className="rounded-2xl bg-gray-50 p-2.5 dark:bg-[#27272A]">
               <p className="text-gray-400 dark:text-zinc-500">Server</p>
               <p className="mt-1 font-semibold text-gray-700 dark:text-zinc-200">{server}</p>
             </div>
-            <div className="rounded-2xl bg-gray-50 p-3 dark:bg-[#27272A]">
+            <div className="rounded-2xl bg-gray-50 p-2.5 dark:bg-[#27272A]">
               <p className="text-gray-400 dark:text-zinc-500">Output</p>
               <p className="mt-1 font-semibold text-gray-700 dark:text-zinc-200">{resolution} • {aspectRatio}</p>
             </div>
@@ -535,95 +535,11 @@ export function WorkspacePromptImage() {
         </div>
       </div>
 
-      <section className="hidden">
-        <h2 className="text-sm font-black text-gray-950 dark:text-white">3. Cấu hình</h2>
-        <div className="grid grid-cols-3 gap-1 rounded-2xl bg-gray-100 dark:bg-black/40 p-1">
-          {MODEL_TABS.map(({ tier, label, icon: Icon }) => (
-            <button
-              key={tier}
-              type="button"
-              onClick={() => setAiModel(tier)}
-              className={`py-3 rounded-xl text-sm font-black flex items-center justify-center gap-1.5 ${
-                aiModel === tier ? 'bg-fuchsia-600 text-white' : 'text-gray-500 dark:text-zinc-500'
-              }`}
-            >
-              <Icon className="w-4 h-4" />
-              {label}
-            </button>
-          ))}
-        </div>
-        <div className="grid grid-cols-4 gap-2">
-          {ASPECT_RATIOS.map((ratio) => (
-            <button
-              key={ratio}
-              type="button"
-              onClick={() => setAspectRatio(ratio)}
-              className={`py-2 rounded-xl text-[11px] font-bold ${
-                aspectRatio === ratio ? 'bg-fuchsia-600 text-white' : 'bg-gray-100 text-gray-500 dark:bg-black/40 dark:text-zinc-500'
-              }`}
-            >
-              {ratio}
-            </button>
-          ))}
-        </div>
-        <div className="grid grid-cols-3 gap-2">
-          {availableResolutions.map((value) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setResolution(value)}
-              className={`py-3 rounded-xl text-xs font-black ${
-                resolution === value ? 'bg-fuchsia-600 text-white' : 'bg-gray-100 text-gray-500 dark:bg-black/40 dark:text-zinc-500'
-              }`}
-            >
-              {value}
-            </button>
-          ))}
-        </div>
-        {aiModel === 'gpt' && (
-          <div className="grid grid-cols-3 gap-2">
-            {(['low', 'medium', 'high'] as const).map((quality) => (
-              <button
-                key={quality}
-                type="button"
-                onClick={() => setGptQuality(quality)}
-                className={`py-3 rounded-xl text-xs font-black uppercase ${
-                  gptQuality === quality ? 'bg-fuchsia-600 text-white' : 'bg-gray-100 text-gray-500 dark:bg-black/40 dark:text-zinc-500'
-                }`}
-              >
-                {quality}
-              </button>
-            ))}
-          </div>
-        )}
-        <div className="grid grid-cols-2 gap-3">
-          <select
-            value={speed}
-            onChange={(event) => setSpeed(event.target.value)}
-            className="rounded-2xl bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-zinc-800 p-3 text-sm text-gray-950 dark:text-white"
-          >
-            {availableSpeeds.map((value) => (
-              <option key={value}>{speedIdToLabel(value)}</option>
-            ))}
-          </select>
-          <select
-            value={server}
-            onChange={(event) => setServer(event.target.value)}
-            className="rounded-2xl bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-zinc-800 p-3 text-sm text-gray-950 dark:text-white"
-          >
-            {availableServers.map((value) => <option key={value}>{tstServerToUi(value)}</option>)}
-          </select>
-        </div>
-        <div className="rounded-2xl bg-gray-50 dark:bg-black/30 p-3 text-xs text-gray-500 dark:text-zinc-400">
-          Giá: {selectedCost.available ? `${selectedCost.vcoin} x ${modeCountForPrice} = ${totalCost} Vcoin` : 'chưa có giá'}
-        </div>
-      </section>
-
       <button
         type="button"
         onClick={submit}
         disabled={isGenerateDisabled}
-        className="fixed left-5 right-5 bottom-24 z-20 rounded-2xl bg-gradient-to-r from-fuchsia-600 to-cyan-500 py-4 text-white font-black shadow-2xl flex items-center justify-center gap-2 disabled:opacity-60"
+        className="fixed left-4 right-4 bottom-24 z-20 rounded-2xl bg-gradient-to-r from-fuchsia-600 to-cyan-500 py-3.5 text-white font-black shadow-2xl flex items-center justify-center gap-2 disabled:opacity-60"
       >
         {isSubmitting ? <Loader className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
         {isSubmitting ? 'Đang gửi job...' : <span className="flex items-center gap-1">Tạo ảnh {selectedCost.available ? totalCost : '?'} <Coins className="w-4 h-4" /></span>}

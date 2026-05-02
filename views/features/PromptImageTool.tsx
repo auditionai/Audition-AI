@@ -334,18 +334,18 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
       <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileSelected} />
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6">
-        <div className="space-y-5">
+        <div className="space-y-4">
           <section>
-            <div className="flex items-center justify-between mb-4 px-1">
-              <h3 className="text-lg font-black text-white flex items-center gap-2">
-                <Upload className="w-5 h-5 text-audi-pink" />
+            <div className="flex items-center justify-between mb-3 px-1">
+              <h3 className="text-sm font-bold uppercase text-white flex items-center gap-2">
+                <Upload className="w-4 h-4 text-audi-pink" />
                 1. Upload ảnh tham chiếu
               </h3>
               <span className="text-xs font-bold text-slate-400">{uploadedCount}/{MAX_REFERENCE_IMAGES} ảnh đã tải</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
               {referenceImages.map((image, index) => (
-                <div key={index} className="relative rounded-2xl border border-white/10 bg-[#11121a] p-3 shadow-xl">
+                <div key={index} className="relative rounded-2xl border border-white/10 bg-[#11121a] p-2.5 shadow-lg">
                   <div className="flex items-center justify-between mb-2">
                     <span className="px-3 py-1 rounded-lg bg-white/10 text-xs font-bold text-white">Ảnh {index + 1}</span>
                     {referenceImages.length > 1 && (
@@ -367,7 +367,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
                       <img src={image} alt={`Ảnh ${index + 1}`} className="w-full h-full object-cover" />
                     ) : (
                       <>
-                        <ImageIcon className="w-10 h-10 mb-2" />
+                        <ImageIcon className="w-8 h-8 mb-2" />
                         <span className="text-xs font-bold">Upload ảnh {index + 1}</span>
                       </>
                     )}
@@ -378,18 +378,18 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
                 <button
                   type="button"
                   onClick={addImageSlot}
-                  className="min-h-[260px] rounded-2xl border border-dashed border-white/20 bg-white/5 hover:bg-white/10 text-slate-300 flex flex-col items-center justify-center gap-3 transition-colors"
+                  className="min-h-[220px] rounded-2xl border border-dashed border-white/20 bg-white/5 hover:bg-white/10 text-slate-300 flex flex-col items-center justify-center gap-2 transition-colors"
                 >
-                  <Plus className="w-8 h-8" />
-                  <span className="text-sm font-bold">Thêm ảnh</span>
+                  <Plus className="w-7 h-7" />
+                  <span className="text-xs font-bold">Thêm ảnh</span>
                 </button>
               )}
             </div>
           </section>
 
-          <section className="rounded-2xl border border-white/10 bg-[#11121a] p-4 shadow-xl">
-            <h3 className="text-lg font-black text-white mb-3 flex items-center gap-2">
-              <MessageSquare className="w-5 h-5 text-cyan-300" />
+          <section className="rounded-2xl border border-white/10 bg-[#11121a] p-4 shadow-lg">
+            <h3 className="text-sm font-bold uppercase text-white mb-3 flex items-center gap-2">
+              <MessageSquare className="w-4 h-4 text-cyan-300" />
               2. Mô tả
             </h3>
             <textarea
@@ -397,7 +397,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
               onChange={(event) => setPrompt(event.target.value)}
               maxLength={9999}
               placeholder="Nhập prompt tạo ảnh. Hệ thống chỉ gửi prompt này và ảnh tham chiếu lên TST, không chèn prompt hệ thống Audition."
-              className="w-full min-h-[180px] rounded-xl border border-white/10 bg-black/40 p-4 text-sm text-white outline-none focus:border-audi-pink resize-none placeholder:text-slate-500"
+              className="w-full min-h-[120px] rounded-xl border border-white/10 bg-black/40 p-3 text-sm text-white outline-none focus:border-audi-pink resize-none placeholder:text-slate-500"
             />
             <div className="mt-2 text-right text-xs text-slate-500">{prompt.length}/9999</div>
           </section>

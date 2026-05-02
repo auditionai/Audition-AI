@@ -1,5 +1,6 @@
 export type QueueRecipeKind =
   | 'image_generate_recipe_v1'
+  | 'prompt_image_generate_recipe_v1'
   | 'image_edit_recipe_v1'
   | 'video_generate_recipe_v1'
   | 'motion_generate_recipe_v1';
@@ -55,8 +56,6 @@ export interface ImageRenderReferenceEntry {
   source: string;
   indexLabel: string;
   facePriorityMode?: CharacterFacePriorityMode;
-  characterIndex?: number;
-  referenceKind?: CharacterReferenceKind;
 }
 
 export interface ImageRoleContractLayer {
@@ -163,8 +162,8 @@ export interface ImageGenerateRecipePayload {
   systemPromptPrefix?: string | null;
   characterCount?: number;
   resolution?: string;
-  quality?: string;
   aspectRatio?: string;
+  quality?: string;
   speed?: string;
   serverId?: string;
   negativePrompt?: string;
@@ -188,6 +187,21 @@ export interface ImageGenerateRecipePayload {
   __lastOutputVerificationSummary?: string;
   __notifyInputMedia?: QueueNotificationMediaEntry[];
   __vertexDiagnostics?: QueueVertexDiagnosticEntry[];
+}
+
+export interface PromptImageGenerateRecipePayload {
+  recipeType: 'prompt_image_generate_recipe_v1';
+  modelId: string;
+  prompt: string;
+  referenceImages?: string[];
+  resolution?: string;
+  aspectRatio?: string;
+  quality?: string;
+  speed?: string;
+  serverId?: string;
+  __stage?: QueueProcessingStage;
+  __logs?: QueueProgressLogEntry[];
+  __notifyInputMedia?: QueueNotificationMediaEntry[];
 }
 
 const getCharacterReferenceKindPriority = (
@@ -246,22 +260,6 @@ const normalizeValue = (value?: string | null) => (value || '').trim().toLowerCa
 
 export const isProImageGenerationModel = (modelId?: string | null) =>
   normalizeValue(modelId) === 'nano-banana-pro';
-
-export const isGptImageGenerationModel = (modelId?: string | null) =>
-  normalizeValue(modelId) === 'image-gpt-2';
-
-export const getImageGenerationRenderReferenceLimit = (modelId?: string | null) => {
-  const normalizedModelId = normalizeValue(modelId);
-  if (
-    normalizedModelId === 'nano-banana-2' ||
-    normalizedModelId === 'nano-banana-pro' ||
-    normalizedModelId === 'image-gpt-2'
-  ) {
-    return 5;
-  }
-
-  return 5;
-};
 
 const PORTRAIT_HEADSHOT_PROMPT_PATTERNS = [
   /\bclose[\s-]?up\b/i,
@@ -458,12 +456,14 @@ export interface MotionGenerateRecipePayload {
 
 export type QueueRecipePayload =
   | ImageGenerateRecipePayload
+  | PromptImageGenerateRecipePayload
   | ImageEditRecipePayload
   | VideoGenerateRecipePayload
   | MotionGenerateRecipePayload;
 
 const RECIPE_TYPES = new Set<QueueRecipeKind>([
   'image_generate_recipe_v1',
+  'prompt_image_generate_recipe_v1',
   'image_edit_recipe_v1',
   'video_generate_recipe_v1',
   'motion_generate_recipe_v1',
@@ -483,9 +483,11 @@ const IMAGE_QUALITY_BOOSTERS =
 const COMPACT_IMAGE_QUALITY_BOOSTERS =
   'ultra-detailed, stylized 3D fashion-game render, Korean MMO 3D style, crisp edges, polished materials, adult-proportioned avatar anatomy, natural limb flow, unreal engine 5 render, cinematic lighting, ray tracing, hdr';
 const IMAGE_NEGATIVE_PROMPT =
-  'low quality, bad anatomy, worst quality, blur, grain, watermark, text, signature, bad hands, bad face, mixed backgrounds, conflicting styles, extra characters, unwanted people from style reference, real people, photorealistic humans, photograph, realistic photography, real life, semi-realistic human, cinematic human portrait, live action, realistic skin pores, natural skin texture, DSLR, realistic male model, realistic female model, hyperreal face, realistic eyelashes, realistic fabric, anime, cartoon, 2d, flat shading, floating character, disconnected limbs, hands in the air, feet not touching the ground, floating objects, unnatural posture, floating in mid-air, levitating, hovering, disconnected from background, bad perspective, illogical physics, extra arm, extra arms, extra hand, extra hands, extra leg, extra legs, extra foot, extra feet, duplicate hand, duplicate hands, duplicate foot, duplicate feet, duplicated limb, duplicated limbs, malformed feet, merged fingers, fused fingers, six fingers, seven fingers, broken wrist, twisted arm, twisted leg, doll face, mannequin face, mannequin body, waxy skin, plastic skin, toy-like plastic sheen, glossy mannequin skin, hard specular skin, harsh facial planes, dark skin, darker skin, tanned skin, bronzed skin, yellow skin, orange skin, muddy skin tone, incorrect skin tone, skin tone shift, chibi proportions, giant eyes, baby face, stiff pose, rigid pose, stiff limbs, frozen posture, uncanny face, over-smoothed face, panel layout, split screen, tiled image, image grid, collage, storyboard, diptych, triptych, quadrants, four panels, four-up layout, contact sheet';
+  'low quality, bad anatomy, worst quality, blur, grain, watermark, text, signature, bad hands, bad face, mixed backgrounds, conflicting styles, extra characters, unwanted people from style reference, real people, photorealistic humans, photograph, realistic photography, real life, semi-realistic human, cinematic human portrait, live action, realistic skin pores, natural skin texture, DSLR, realistic male model, realistic female model, hyperreal face, realistic eyelashes, realistic fabric, anime, cartoon, 2d, flat shading, floating character, disconnected limbs, hands in the air, feet not touching the ground, floating objects, unnatural posture, floating in mid-air, levitating, hovering, disconnected from background, bad perspective, illogical physics, extra arm, extra arms, extra hand, extra hands, extra leg, extra legs, extra foot, extra feet, duplicate hand, duplicate hands, duplicate foot, duplicate feet, duplicated limb, duplicated limbs, malformed feet, merged fingers, fused fingers, six fingers, seven fingers, broken wrist, twisted arm, twisted leg, long neck, elongated neck, stretched neck, giraffe neck, thin stretched neck, lowered shoulders, detached head, doll face, mannequin face, mannequin body, waxy skin, plastic skin, toy-like plastic sheen, glossy mannequin skin, hard specular skin, harsh facial planes, dark skin, darker skin, tanned skin, bronzed skin, yellow skin, orange skin, muddy skin tone, incorrect skin tone, skin tone shift, chibi proportions, giant eyes, baby face, stiff pose, rigid pose, stiff limbs, frozen posture, uncanny face, over-smoothed face, panel layout, split screen, tiled image, image grid, collage, storyboard, diptych, triptych, quadrants, four panels, four-up layout, contact sheet';
 const IMAGE_ANATOMY_GUARD_CONSTRAINTS =
   'ANATOMY GUARD: Keep exactly one coherent body per character slot with natural adult-proportioned 3D anatomy. Never invent extra arms, extra hands, extra legs, extra feet, duplicated limbs, duplicated hands, duplicated feet, fused fingers, or malformed joints. Each visible hand must read as one coherent hand. Each visible foot must read as one coherent foot. If a hand, foot, or limb is partially hidden, keep it hidden naturally instead of hallucinating additional anatomy. Respect gravity, chair contact, ground contact, and believable joint bending.';
+const IMAGE_NECK_SHOULDER_PROPORTION_LOCK_CONSTRAINTS =
+  'NECK AND SHOULDER PROPORTION LOCK: Preserve the uploaded character reference head-to-neck-to-shoulder proportions exactly. Keep the same neck length, neck thickness, chin-to-collarbone distance, shoulder height, shoulder width, trapezius slope, and head placement relative to the torso. Never lengthen or stretch the neck for elegance, fashion posing, beauty stylization, camera angle, or style transfer. Do not lower the shoulders to create a longer neck. The head must sit naturally on the original short Audition-style 3D avatar neck.';
 const IMAGE_SKIN_TONE_LOCK_CONSTRAINTS =
   'SKIN TONE LOCK: Match the exposed skin tone, brightness, and undertone from the uploaded character references exactly. Never darken the skin, never tan it, never bronze it, never shift it toward brown, never add warm orange cast, and never reinterpret complexion because of scene lighting or style. If the reference skin is fair/light, keep it fair/light in the final render while still preserving believable scene lighting.';
 const AUDITION_SOFT_BEAUTY_RENDER_PROFILE =
@@ -704,44 +706,11 @@ export const getImageDirectorSources = (
   ].filter((value): value is string => Boolean(value));
 
 export const getImageRenderReferenceEntries = (
-  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
+  payload: Pick<ImageGenerateRecipePayload, 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'> & {
+    modelId?: string | null;
+  },
 ): ImageRenderReferenceEntry[] => {
-  const groups = getImageCharacterReferenceGroups(payload);
-  const characterCount = Math.max(
-    1,
-    Math.floor(Number(payload.characterCount || groups.length || 1)),
-  );
-  const renderLimit = getImageGenerationRenderReferenceLimit(payload.modelId);
-  const selected: ImageRenderReferenceEntry[] = [];
-  const seenSources = new Set<string>();
-
-  const addEntry = (entry?: ImageRenderReferenceEntry | null) => {
-    if (!entry || !entry.source || seenSources.has(entry.source) || selected.length >= renderLimit) {
-      return;
-    }
-    seenSources.add(entry.source);
-    selected.push(entry);
-  };
-
-  const createSampleEntry = (): ImageRenderReferenceEntry | null =>
-    payload.sampleImage
-      ? {
-          role: 'sample',
-          source: payload.sampleImage,
-          indexLabel: 'SAMPLE IMAGE',
-        }
-      : null;
-
-  const createStyleEntry = (): ImageRenderReferenceEntry | null =>
-    payload.styleImage
-      ? {
-          role: 'style',
-          source: payload.styleImage,
-          indexLabel: 'STYLE IMAGE',
-        }
-      : null;
-
-  const createCharacterEntry = (
+  const buildCharacterEntry = (
     group: CharacterReferenceGroup,
     reference: CharacterReferenceSourceEntry,
     referenceIndex: number,
@@ -755,97 +724,129 @@ export const getImageRenderReferenceEntries = (
           ? 'FACE LOCK'
           : `REFERENCE ${referenceIndex + 1}`;
     const genderLabel = group.gender ? ` ${group.gender.toUpperCase()}` : '';
-
     return {
       role: 'character',
       source: reference.source,
       indexLabel: `CHARACTER ${group.characterIndex}${genderLabel} ${kindLabel}`,
       facePriorityMode: group.facePriorityMode === 'portrait_headshot' ? 'portrait_headshot' : undefined,
-      characterIndex: group.characterIndex,
-      referenceKind: reference.kind,
     };
   };
 
-  const findCharacterEntry = (
-    group: CharacterReferenceGroup,
-    preferredKinds: CharacterReferenceKind[],
-  ): ImageRenderReferenceEntry | null => {
-    const references = sortCharacterReferences(group.references, group.facePriorityMode);
-    for (const kind of preferredKinds) {
-      const referenceIndex = references.findIndex((reference) => reference.kind === kind);
-      if (referenceIndex >= 0) {
-        return createCharacterEntry(group, references[referenceIndex], referenceIndex);
+  const buildSampleEntry = (): ImageRenderReferenceEntry | null =>
+    payload.sampleImage
+      ? {
+          role: 'sample',
+          source: payload.sampleImage,
+          indexLabel: 'SAMPLE IMAGE',
+        }
+      : null;
+
+  const buildStyleEntry = (): ImageRenderReferenceEntry | null =>
+    payload.styleImage
+      ? {
+          role: 'style',
+          source: payload.styleImage,
+          indexLabel: 'STYLE IMAGE',
+        }
+      : null;
+
+  const characterGroups = getImageCharacterReferenceGroups(payload);
+  const normalizedModelId = normalizeValue(payload.modelId);
+
+  if (normalizedModelId === 'image-gpt-2') {
+    const sampleEntry = buildSampleEntry();
+    const styleEntry = buildStyleEntry();
+    const bodyEntries = characterGroups
+      .map((group) => {
+        const bodyReference = group.references.find((reference) => reference.kind === 'body') || group.references[0];
+        return bodyReference ? buildCharacterEntry(group, bodyReference, 0) : null;
+      })
+      .filter((entry): entry is ImageRenderReferenceEntry => Boolean(entry));
+    const faceEntries = characterGroups
+      .map((group) => {
+        const faceReference =
+          group.references.find((reference) => reference.kind === 'face_detail') ||
+          group.references.find((reference) => reference.kind === 'face');
+        return faceReference ? buildCharacterEntry(group, faceReference, 1) : null;
+      })
+      .filter((entry): entry is ImageRenderReferenceEntry => Boolean(entry));
+
+    if (characterGroups.length <= 1) {
+      return [
+        ...bodyEntries.slice(0, 1),
+        ...faceEntries.slice(0, 1),
+        ...(sampleEntry ? [sampleEntry] : []),
+        ...(styleEntry ? [styleEntry] : []),
+      ].slice(0, 5);
+    }
+
+    if (characterGroups.length === 2) {
+      if (sampleEntry) {
+        return [
+          sampleEntry,
+          ...bodyEntries.slice(0, 2),
+          ...(styleEntry ? [styleEntry] : []),
+        ].slice(0, 5);
       }
+
+      const characterPairs = characterGroups.flatMap((group) => {
+        const bodyReference = group.references.find((reference) => reference.kind === 'body') || group.references[0];
+        const faceReference =
+          group.references.find((reference) => reference.kind === 'face_detail') ||
+          group.references.find((reference) => reference.kind === 'face');
+        return [
+          bodyReference ? buildCharacterEntry(group, bodyReference, 0) : null,
+          faceReference ? buildCharacterEntry(group, faceReference, 1) : null,
+        ].filter((entry): entry is ImageRenderReferenceEntry => Boolean(entry));
+      });
+      return [
+        ...characterPairs,
+        ...(styleEntry ? [styleEntry] : []),
+      ].slice(0, 5);
     }
 
-    const fallback = references[0];
-    return fallback ? createCharacterEntry(group, fallback, 0) : null;
-  };
-
-  const bodyEntryFor = (group: CharacterReferenceGroup) =>
-    findCharacterEntry(group, ['body', 'reference', 'face', 'face_detail']);
-
-  const faceEntryFor = (group: CharacterReferenceGroup) =>
-    findCharacterEntry(
-      group,
-      group.facePriorityMode === 'portrait_headshot'
-        ? ['face_detail', 'face', 'body', 'reference']
-        : ['face', 'face_detail', 'body', 'reference'],
-    );
-
-  const addBodyEntries = (limit = groups.length) => {
-    groups.slice(0, limit).forEach((group) => addEntry(bodyEntryFor(group)));
-  };
-
-  const addFaceEntries = (limit = groups.length) => {
-    groups.slice(0, limit).forEach((group) => addEntry(faceEntryFor(group)));
-  };
-
-  if (characterCount <= 1) {
-    addEntry(createSampleEntry());
-    addBodyEntries(1);
-    addFaceEntries(1);
-    addEntry(createStyleEntry());
-    return selected;
-  }
-
-  if (characterCount === 2) {
-    if (payload.sampleImage) {
-      addEntry(createSampleEntry());
-      addBodyEntries(2);
-      addEntry(createStyleEntry());
-    } else {
-      addBodyEntries(2);
-      addFaceEntries(2);
-      addEntry(createStyleEntry());
+    if (characterGroups.length === 3) {
+      return [
+        ...(sampleEntry ? [sampleEntry] : []),
+        ...bodyEntries.slice(0, 3),
+        ...(styleEntry ? [styleEntry] : []),
+      ].slice(0, 5);
     }
-    return selected;
+
+    return [
+      ...(sampleEntry ? [sampleEntry] : []),
+      ...bodyEntries.slice(0, 4),
+      ...(!sampleEntry && styleEntry ? [styleEntry] : []),
+    ].slice(0, 5);
   }
 
-  if (characterCount === 3) {
-    addEntry(createSampleEntry());
-    addBodyEntries(3);
-    addEntry(createStyleEntry());
-    return selected;
+  const entries: ImageRenderReferenceEntry[] = [];
+
+  const sampleEntry = buildSampleEntry();
+  if (sampleEntry) {
+    entries.push(sampleEntry);
   }
 
-  if (payload.sampleImage) {
-    addEntry(createSampleEntry());
-    addBodyEntries(4);
-  } else {
-    addBodyEntries(4);
-    addEntry(createStyleEntry());
+  characterGroups.forEach((group) => {
+    group.references.forEach((reference, referenceIndex) => {
+      entries.push(buildCharacterEntry(group, reference, referenceIndex));
+    });
+  });
+
+  const styleEntry = buildStyleEntry();
+  if (styleEntry) {
+    entries.push(styleEntry);
   }
 
-  return selected;
+  return entries;
 };
 
 export const getImageRenderReferenceSources = (
-  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
+  payload: Pick<ImageGenerateRecipePayload, 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
 ) => getImageRenderReferenceEntries(payload).map((entry) => entry.source);
 
 export const buildImageRoleContract = (
-  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio' | 'visionAnalysis'>,
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio' | 'visionAnalysis'>,
 ): ImageRoleContract => {
   const renderEntries = getImageRenderReferenceEntries(payload);
   const characterGroups = getImageCharacterReferenceGroups(payload);
@@ -853,12 +854,10 @@ export const buildImageRoleContract = (
   const characterCount = Math.max(1, Math.floor(Number(payload.characterCount || characterGroups.length || 1)));
   const layeredSingleSubjectAllowed = allowsLayeredSingleSubjectComposition(payload);
   const shotType = resolveImageShotType(payload);
-  const hasSample = renderEntries.some((entry) => entry.role === 'sample');
-  const hasStyle = renderEntries.some((entry) => entry.role === 'style');
-  const hasFaceLock = renderEntries.some(
-    (entry) => entry.role === 'character' && (entry.referenceKind === 'face' || entry.referenceKind === 'face_detail'),
-  );
-  const hasPortraitPriorityFace = renderEntries.some((entry) => entry.facePriorityMode === 'portrait_headshot');
+  const hasSample = Boolean(payload.sampleImage);
+  const hasStyle = Boolean(payload.styleImage);
+  const hasFaceLock = characterGroups.some((group) => group.references.some((reference) => reference.kind === 'face'));
+  const hasPortraitPriorityFace = characterGroups.some((group) => group.facePriorityMode === 'portrait_headshot');
   const skinToneAnchors = characterGroups
     .map((group) => {
       const visionEntry = characterVisionMap.get(group.characterIndex);
@@ -1014,7 +1013,7 @@ export const buildImageRoleContract = (
 };
 
 export const buildImageRoleContractText = (
-  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio'>,
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio'>,
 ) => {
   const contract = buildImageRoleContract(payload);
   const referenceLines = contract.renderEntries.length > 0
@@ -1052,11 +1051,10 @@ export const buildImageRoleContractText = (
 };
 
 const buildImageReferenceOrderDirective = (
-  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
 ) => {
   const entries = getImageRenderReferenceEntries(payload);
   const hasSample = Boolean(payload.sampleImage);
-  const hasRenderedStyle = entries.some((entry) => entry.role === 'style');
   const layeredSingleSubjectAllowed = allowsLayeredSingleSubjectComposition(payload);
   if (entries.length === 0) {
     return hasSample
@@ -1110,19 +1108,16 @@ const buildImageReferenceOrderDirective = (
     hasSample
       ? '- The final image must never be a near-unchanged copy of a standing CHARACTER REFERENCE unless the SAMPLE IMAGE itself is also a standing front-view pose.'
       : '- The final image must never be a near-unchanged copy of a standing CHARACTER REFERENCE when the PRIMARY COMMAND PROMPT asks for a different pose, scene, framing, or background.',
-    hasRenderedStyle
-      ? '- STYLE IMAGE may improve render quality only. It must not override pose, composition, identity, outfit, or subject count.'
-      : '- No direct STYLE IMAGE is sent in the render payload for this job. Apply style only from the text/style analysis fields and never sacrifice sample composition or character identity to recover style.',
+    '- STYLE IMAGE may improve render quality only. It must not override pose, composition, identity, outfit, or subject count.',
     '- Never output a split-screen, image grid, collage, storyboard, or panel layout. Always render one single continuous final frame.',
   ].join('\n');
 };
 
 const buildReducedImageReferenceOrderDirectiveWithoutSample = (
-  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'styleImage'>,
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'styleImage'>,
 ) => {
   const entries = getImageRenderReferenceEntries(payload);
   const layeredSingleSubjectAllowed = allowsLayeredSingleSubjectComposition(payload);
-  const hasRenderedStyle = entries.some((entry) => entry.role === 'style');
 
   if (entries.length === 0) {
     return [
@@ -1160,15 +1155,13 @@ const buildReducedImageReferenceOrderDirectiveWithoutSample = (
     layeredSingleSubjectAllowed
       ? '- Do not invent a second distinct person.'
       : '- Every uploaded CHARACTER slot is mandatory. Never add, remove, duplicate, blend, or replace a slot.',
-    hasRenderedStyle
-      ? '- STYLE IMAGE must never override identity, subject count, or composition.'
-      : '- No direct STYLE IMAGE is sent in the render payload for this job. Apply style only from text/style analysis fields.',
+    '- STYLE IMAGE must never override identity, subject count, or composition.',
     '- Never output a split-screen, image grid, collage, storyboard, or panel layout.',
   ].join('\n');
 };
 
 const buildCompactProviderReferenceSummary = (
-  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
 ) => {
   const entries = getImageRenderReferenceEntries(payload);
   if (entries.length === 0) {
@@ -1391,7 +1384,7 @@ const buildProStructuredProviderPrompt = (
 
 const buildDetailedImageProviderPrompt = (
   synthesizedPrompt: string,
-  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio'>,
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio'>,
   mergedNegativePrompt: string,
 ) => {
   const roleContract = buildImageRoleContract(payload);
@@ -1408,6 +1401,7 @@ const buildDetailedImageProviderPrompt = (
     IMAGE_ROLE_LOCK_CONSTRAINTS,
     IMAGE_SKIN_TONE_LOCK_CONSTRAINTS,
     IMAGE_ANATOMY_GUARD_CONSTRAINTS,
+    IMAGE_NECK_SHOULDER_PROPORTION_LOCK_CONSTRAINTS,
     `CHARACTER COUNT: EXACTLY ${characterCount}. One-to-one slot mapping is mandatory.`,
     '',
     'PRIMARY USER REQUEST:',
@@ -1432,7 +1426,7 @@ const buildDetailedImageProviderPrompt = (
 
 const buildReducedImageProviderPromptWithoutSample = (
   synthesizedPrompt: string,
-  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'styleImage' | 'aspectRatio'>,
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'styleImage' | 'aspectRatio'>,
   mergedNegativePrompt: string,
 ) => {
   const roleContract = buildImageRoleContract(payload);
@@ -1449,6 +1443,7 @@ const buildReducedImageProviderPromptWithoutSample = (
     REDUCED_IMAGE_ROLE_LOCK_CONSTRAINTS_NO_SAMPLE,
     IMAGE_SKIN_TONE_LOCK_CONSTRAINTS,
     IMAGE_ANATOMY_GUARD_CONSTRAINTS,
+    IMAGE_NECK_SHOULDER_PROPORTION_LOCK_CONSTRAINTS,
     `CHARACTER COUNT: EXACTLY ${characterCount}. One-to-one slot mapping is mandatory.`,
     '',
     'PRIMARY USER REQUEST:',
@@ -1495,8 +1490,17 @@ export const getRecipeValidationPayload = (payload: QueueRecipePayload) => {
       return {
         model: payload.modelId,
         resolution: getEffectiveImageGenerationResolution(payload.modelId, payload.speed, payload.resolution)?.toLowerCase(),
-        quality: payload.quality?.toLowerCase(),
         aspect_ratio: payload.aspectRatio,
+        quality: payload.quality,
+        speed: payload.speed,
+        server_id: payload.serverId,
+      };
+    case 'prompt_image_generate_recipe_v1':
+      return {
+        model: payload.modelId,
+        resolution: getEffectiveImageGenerationResolution(payload.modelId, payload.speed, payload.resolution)?.toLowerCase(),
+        aspect_ratio: payload.aspectRatio,
+        quality: payload.quality,
         speed: payload.speed,
         server_id: payload.serverId,
       };

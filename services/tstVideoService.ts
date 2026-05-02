@@ -1,7 +1,7 @@
 import { optimizePayload } from '../utils/imageProcessor';
 
 const TST_IMAGE_UPLOAD_MAX_WIDTH = 1280;
-const TST_VIDEO_AND_MOTION_POLL_INTERVAL_MS = 60 * 1000;
+const TST_VIDEO_AND_MOTION_POLL_INTERVAL_MS = 10 * 60 * 1000;
 const TST_DEFAULT_TIMEOUT_MS = 120 * 60 * 1000;
 
 const cleanBase64 = (b64: string) => b64.replace(/^data:image\/\w+;base64,/, '');
@@ -177,6 +177,7 @@ export const prepareTramsangtaoVideoJob = async ({
   if (keyframe) {
     const uploadedKeyframeUrl = await uploadMedia(keyframe, 'image', onLog);
     payload.img_url = uploadedKeyframeUrl;
+    payload.image_url = uploadedKeyframeUrl;
     if (modelId === 'kling-2.5-turbo') {
       payload.mode = 'i2v';
     }
@@ -211,12 +212,13 @@ export const prepareTramsangtaoMotionJob = async ({
 
   const payload: Record<string, unknown> = {
     model: modelId,
-    mode: String(resolution || '').toLowerCase().includes('1080') ? 'pro' : 'std',
+    mode: modelId,
     character_image_url: characterImageUrl,
     motion_video_url: motionVideoUrl,
   };
 
   if (prompt?.trim()) payload.prompt = prompt.trim();
+  if (resolution) payload.resolution = resolution.toLowerCase();
   if (speed) payload.speed = speed;
   if (serverId) payload.server_id = serverId;
 

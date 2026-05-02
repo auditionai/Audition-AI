@@ -1,9 +1,13 @@
 ﻿import { getSupabaseAuthHeader, getSupabaseUser, supabase } from './supabaseClient';
 import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, HistoryItem, VcoinLog, AdminQueueJob, AdminQueueSummary, AdminQueueJobDetail } from '../types';
 import {
+  creditsToVcoin,
+  fetchTstModels,
+  fetchTstPricing,
+  filterAdminManagedPricingEntries,
   getVertexEditPricingRows,
-  getPricingRows,
   isAdminManagedPricingModel,
+  sanitizePricingEntriesWithRuntimeModels,
   type TstServerAvailabilityConfig,
   DEFAULT_TST_SERVER_AVAILABILITY_CONFIG,
 } from './tstCatalog';
@@ -545,24 +549,34 @@ export const syncTSTPrices = async (): Promise<{success: boolean, error?: string
   if (!supabase) return { success: false, error: "No Database" };
 
   try {
-    const pricingRows = await getPricingRows(true);
+    const [rawPricing, runtimeModels] = await Promise.all([fetchTstPricing(true), fetchTstModels(true)]);
+    const livePricing = filterAdminManagedPricingEntries(
+      sanitizePricingEntriesWithRuntimeModels(rawPricing, runtimeModels),
+    );
     const currentPricing = await getModelPricing({ force: true });
     const currentPricingMap = new Map(
       currentPricing.map((row) => [`${row.model_id}::${row.option_id}`, row]),
     );
 
-    const rows = pricingRows
-      .filter((row) => row.type !== 'edit')
-      .map((row) => ({
-        model_id: row.modelId,
-        option_id: row.configKey,
-        tst_price_credits: row.credits,
+    const rows = livePricing.map((entry) => {
+      const optionId = entry.config_key || [
+        entry.server,
+        entry.resolution,
+        entry.duration,
+        entry.speed,
+        entry.audio ? 'audio' : ''
+      ].filter(Boolean).join('|');
+
+      return {
+        model_id: entry.model,
+        option_id: optionId,
+        tst_price_credits: entry.credits,
         audition_price_vcoin:
-          currentPricingMap.get(`${row.modelId}::${row.configKey}`)?.audition_price_vcoin ??
-          row.defaultAuditionVcoin ??
-          row.vcoin,
+          currentPricingMap.get(`${entry.model}::${optionId}`)?.audition_price_vcoin ??
+          creditsToVcoin(entry.credits),
         updated_at: new Date().toISOString()
-      }));
+      };
+    });
 
     const manualVertexRows = getVertexEditPricingRows().map((row) => ({
       model_id: row.modelId,

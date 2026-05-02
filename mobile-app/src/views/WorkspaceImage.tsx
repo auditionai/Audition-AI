@@ -28,10 +28,11 @@ import { saveImageToLocalCache, uploadFileToR2 } from '../services/storageServic
 import {
   fetchTstPricing, fetchTstModels,
   getCompatibleGenerationResolutions, getCompatibleGenerationServers, getCompatibleGenerationSpeeds,
-  getGenerationCostBreakdown, getGenerationModelId, getVertexEditToolCostBreakdown, GPT_IMAGE_2_QUALITY_OPTIONS,
+  getGenerationCostBreakdown, getGenerationModelId, getVertexEditToolCostBreakdown,
+  resolveGenerationSelection,
   applyServerAvailabilityToRuntimeModels, sanitizePricingEntriesWithRuntimeModels,
   uiSpeedToTst, uiServerToTst, tstServerToUi,
-  type TstPricingEntry, type TstRuntimeModel, type AuditionPricingOverride, type TstResolution, type TstGenerationTier, type TstImageQuality,
+  type TstPricingEntry, type TstRuntimeModel, type AuditionPricingOverride, type TstResolution, type TstGenerationTier,
 } from '../services/tstCatalog';
 import type { ModelPricing } from '../services/economyService';
 import type { GeneratedImage } from '../types';
@@ -182,9 +183,9 @@ export function WorkspaceImage() {
   const [refImage, setRefImage] = useState<string | null>(null);
   const [aspectRatio, setAspectRatio] = useState('3:4');
   const [resolution, setResolution] = useState<TstResolution>('1K');
-  const [imageQuality, setImageQuality] = useState<TstImageQuality>('high');
   const [speed, setSpeed] = useState<'Nhanh' | 'Tiết Kiệm'>('Nhanh');
   const [server, setServer] = useState('VIP 1');
+  const [gptQuality, setGptQuality] = useState<'low' | 'medium' | 'high'>('high');
   const [aiModel, setAiModel] = useState<TstGenerationTier>('flash');
 
   const [pricingEntries, setPricingEntries] = useState<TstPricingEntry[]>([]);
@@ -245,22 +246,23 @@ export function WorkspaceImage() {
 
   const generationSpeedId = uiSpeedToTst(speed) || 'fast';
   const generationServerId = uiServerToTst(server) || 'fast';
-  const generationTier: TstGenerationTier = aiModel;
-  const activeModelLabel = aiModel === 'flash' ? 'Flash' : aiModel === 'pro' ? 'Pro' : 'GPT';
-  const activeEngineLabel = `${activeModelLabel} Engine ${resolution}`;
+  const generationTier = aiModel;
   const availableResolutions = getCompatibleGenerationResolutions({
     tier: generationTier, pricingEntries, serverId: generationServerId, speed: generationSpeedId,
+    quality: aiModel === 'gpt' ? gptQuality : undefined,
   });
   const availableServers = getCompatibleGenerationServers({
     tier: generationTier, pricingEntries, speed: generationSpeedId, resolution,
+    quality: aiModel === 'gpt' ? gptQuality : undefined,
   });
   const availableSpeeds = getCompatibleGenerationSpeeds({
     tier: generationTier,
     pricingEntries,
     resolution,
+    quality: aiModel === 'gpt' ? gptQuality : undefined,
   });
   const selectedCost = getGenerationCostBreakdown({
-    tier: generationTier, resolution, quality: aiModel === 'gpt' ? imageQuality : undefined, speed: generationSpeedId,
+    tier: generationTier, resolution, quality: aiModel === 'gpt' ? gptQuality : undefined, speed: generationSpeedId,
     serverId: generationServerId, pricingEntries, pricingOverrides,
   });
   const activeFeature = APP_CONFIG.main_features.find((feature) => feature.id === MODE_TO_FEATURE_ID[activeMode]) ?? APP_CONFIG.main_features[0];
@@ -401,57 +403,39 @@ export function WorkspaceImage() {
 
   // --- Auto-adjust model availability ---
   useEffect(() => {
-    if (aiModel === 'flash' && !isFlashAvailable) setAiModel(isProAvailable ? 'pro' : 'gpt');
-    else if (aiModel === 'pro' && !isProAvailable) setAiModel(isFlashAvailable ? 'flash' : 'gpt');
-    else if (aiModel === 'gpt' && !isGptAvailable) setAiModel(isProAvailable ? 'pro' : 'flash');
+    if (aiModel === 'flash' && !isFlashAvailable && isProAvailable) setAiModel('pro');
+    else if (aiModel === 'pro' && !isProAvailable && isFlashAvailable) setAiModel('flash');
+    else if (aiModel === 'gpt' && !isGptAvailable && isProAvailable) setAiModel('pro');
   }, [aiModel, isFlashAvailable, isGptAvailable, isProAvailable]);
 
-  // --- Auto-adjust resolution ---
   useEffect(() => {
-    if (availableResolutions.length > 0 && !availableResolutions.includes(resolution)) {
-      setResolution(availableResolutions[0]);
-    }
-  }, [availableResolutions, resolution]);
-
-  useEffect(() => {
-    const tier = aiModel;
     const requestedSpeedId = uiSpeedToTst(speed) || 'fast';
     const requestedServerId = uiServerToTst(server) || 'fast';
-    const compatibleServers = getCompatibleGenerationServers({
-      tier,
+    const nextSelection = resolveGenerationSelection({
+      tier: aiModel,
       pricingEntries,
+      resolution,
+      quality: aiModel === 'gpt' ? gptQuality : undefined,
       speed: requestedSpeedId,
-      resolution,
+      serverId: requestedServerId,
     });
-    const nextServerId = compatibleServers.includes(requestedServerId)
-      ? requestedServerId
-      : compatibleServers[0];
-
-    if (nextServerId && nextServerId !== requestedServerId) {
-      const nextServerLabel = tstServerToUi(nextServerId);
-      if (nextServerLabel !== server) {
-        setServer(nextServerLabel);
-        return;
-      }
+    if (!nextSelection.available) {
+      return;
     }
-
-    const compatibleSpeeds = getCompatibleGenerationSpeeds({
-      tier,
-      pricingEntries,
-      serverId: nextServerId || requestedServerId,
-      resolution,
-    });
-    const nextSpeedId = compatibleSpeeds.includes(requestedSpeedId)
-      ? requestedSpeedId
-      : compatibleSpeeds[0];
-
-    if (nextSpeedId) {
-      const nextSpeedLabel = nextSpeedId === 'slow' ? 'Tiết Kiệm' : 'Nhanh';
-      if (nextSpeedLabel !== speed) {
-        setSpeed(nextSpeedLabel);
-      }
+    if (nextSelection.resolution !== resolution) {
+      setResolution(nextSelection.resolution);
+      return;
     }
-  }, [aiModel, pricingEntries, resolution, server, speed]);
+    const nextServerLabel = tstServerToUi(nextSelection.serverId);
+    if (nextServerLabel !== server) {
+      setServer(nextServerLabel);
+      return;
+    }
+    const nextSpeedLabel = nextSelection.speed === 'slow' ? 'Tiết Kiệm' : 'Nhanh';
+    if (nextSpeedLabel !== speed) {
+      setSpeed(nextSpeedLabel);
+    }
+  }, [aiModel, gptQuality, pricingEntries, resolution, server, speed]);
 
   // --- Rotating tips ---
   useEffect(() => {
@@ -705,6 +689,12 @@ export function WorkspaceImage() {
       return;
     }
 
+    const characterBodySources = characters.map((char) => char.bodyImage).filter((value): value is string => Boolean(value));
+    if (new Set(characterBodySources).size !== characterBodySources.length) {
+      notify('Có ít nhất 2 slot nhân vật đang dùng cùng một ảnh. Vui lòng kiểm tra lại ảnh NV1/NV2 trước khi tạo.', 'error');
+      return;
+    }
+
     const cost = calculateCost();
     const profile = await getUserProfile();
     if ((profile.vcoin_balance || 0) < cost) {
@@ -729,7 +719,7 @@ export function WorkspaceImage() {
       assetType: 'image',
       toolId: activeFeature.id,
       toolName: activeFeature.name.en,
-      engine: activeEngineLabel,
+      engine: aiModel === 'flash' ? `Flash Engine ${resolution}` : aiModel === 'pro' ? `Pro Engine ${resolution}` : `GPT Engine ${resolution}`,
       status: 'queued',
       jobId,
       progress: 0,
@@ -799,14 +789,6 @@ export function WorkspaceImage() {
           : null;
         const styleMetadata = availableStyles.find((s: any) => s.image_url === activeStylePreset);
         const notifyInputMedia = [
-          ...stagedCharacterGroups.flatMap((group) =>
-            group.references.map((reference) => ({
-              url: reference.source,
-              role: 'character' as const,
-              kind: 'image' as const,
-              userProvided: true,
-            })),
-          ),
           ...(stagedSampleImage
             ? [{
                 url: stagedSampleImage,
@@ -815,6 +797,16 @@ export function WorkspaceImage() {
                 userProvided: true,
               }]
             : []),
+          ...stagedCharacterGroups.flatMap((group) => {
+            const bodyReferences = group.references.filter((reference) => reference.kind === 'body');
+            const faceReferences = group.references.filter((reference) => reference.kind !== 'body');
+            return [...bodyReferences, ...faceReferences].map((reference) => ({
+              url: reference.source,
+              role: 'character' as const,
+              kind: 'image' as const,
+              userProvided: true,
+            }));
+          }),
           ...(stagedStyleGuide
             ? [{
                 url: stagedStyleGuide,
@@ -830,6 +822,7 @@ export function WorkspaceImage() {
           pricingEntries,
           serverId: effectiveServerId,
           resolution,
+          quality: aiModel === 'gpt' ? gptQuality : undefined,
         });
         const effectiveSpeedId = compatibleSpeeds.includes(generationSpeedId) ? generationSpeedId : (compatibleSpeeds[0] || generationSpeedId);
 
@@ -842,8 +835,8 @@ export function WorkspaceImage() {
           negativePrompt: DEFAULT_IMAGE_NEGATIVE_PROMPT,
           characterCount: characters.length,
           resolution,
-          quality: aiModel === 'gpt' ? imageQuality : undefined,
           aspectRatio,
+          quality: aiModel === 'gpt' ? gptQuality : undefined,
           speed: effectiveSpeedId,
           serverId: effectiveServerId,
           characterReferenceGroups: stagedCharacterGroups,
@@ -862,7 +855,7 @@ export function WorkspaceImage() {
           prompt: basePrompt,
           toolId: activeFeature.id,
           toolName: activeFeature.name.en,
-          engine: activeEngineLabel,
+          engine: aiModel === 'flash' ? `Flash Engine ${resolution}` : aiModel === 'pro' ? `Pro Engine ${resolution}` : `GPT Engine ${resolution}`,
           assetType: 'image',
           costVcoin: cost,
           queueKind: 'image_generate',
@@ -891,7 +884,7 @@ export function WorkspaceImage() {
 
   const costDisplay = isCatalogReady ? calculateCost() : '...';
 
-  const ratios = ['1:1', '3:4', '4:3', '9:16', '16:9', '2:3', '3:2'];
+  const ratios = ['1:1', '3:4', '4:3', '9:16', '16:9'];
 
   return (
     <div className="flex flex-col h-full bg-[#FAFAFA] dark:bg-[#09090B]">
@@ -903,7 +896,7 @@ export function WorkspaceImage() {
             <Sparkles className="w-4 h-4 text-[var(--color-accent)]" /> Tạo ảnh AI
           </h2>
           <p className="text-xs text-gray-400 dark:text-zinc-500 mt-1">
-            {catalogLoading ? 'Đang tải catalog...' : catalogError || `${activeModelLabel} Engine • ${resolution}`}
+            {catalogLoading ? 'Đang tải catalog...' : catalogError || `${aiModel === 'flash' ? 'Flash' : aiModel === 'pro' ? 'Pro' : 'GPT'} Engine • ${resolution}`}
           </p>
         </div>
 
@@ -1176,16 +1169,16 @@ export function WorkspaceImage() {
         {aiModel === 'gpt' && (
           <div className="space-y-2">
             <h3 className="text-xs font-semibold text-gray-400 dark:text-zinc-500 tracking-wider ml-1">CHẤT LƯỢNG ẢNH GPT</h3>
-            <div className="flex gap-2">
-              {GPT_IMAGE_2_QUALITY_OPTIONS.map((q) => (
+            <div className="grid grid-cols-3 gap-2">
+              {(['low', 'medium', 'high'] as const).map((quality) => (
                 <button
-                  key={q}
-                  onClick={() => setImageQuality(q)}
-                  className={`flex-1 py-2.5 rounded-xl text-xs font-bold uppercase transition-all ${
-                    imageQuality === q ? 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 border border-indigo-200 dark:border-indigo-500/30 shadow-sm' : 'bg-white dark:bg-[#18181B] text-gray-500 dark:text-zinc-400 border border-gray-100 dark:border-zinc-800'
+                  key={quality}
+                  onClick={() => setGptQuality(quality)}
+                  className={`py-2.5 rounded-xl text-xs font-bold uppercase transition-all ${
+                    gptQuality === quality ? 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 border border-indigo-200 dark:border-indigo-500/30 shadow-sm' : 'bg-white dark:bg-[#18181B] text-gray-500 dark:text-zinc-400 border border-gray-100 dark:border-zinc-800'
                   }`}
                 >
-                  {q}
+                  {quality}
                 </button>
               ))}
             </div>
@@ -1232,7 +1225,6 @@ export function WorkspaceImage() {
           <div className="flex items-start justify-between gap-4">
             <div>
               <h3 className="text-sm font-bold text-gray-800 dark:text-zinc-100">Luồng xử lý</h3>
-              <p className="mt-1 text-xs leading-relaxed text-gray-400 dark:text-zinc-500">Mobile đang dùng cùng queue recipe với desktop: chuẩn hóa input, stage ảnh, dựng payload, rồi gửi sang worker hiện tại của hệ thống.</p>
             </div>
             <div className="rounded-2xl bg-gray-50 px-3 py-2 text-right dark:bg-[#27272A]">
               <div className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-zinc-500">Chi phí</div>
@@ -1243,7 +1235,7 @@ export function WorkspaceImage() {
             </div>
           </div>
           <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-            <div className="rounded-2xl bg-gray-50 p-3 dark:bg-[#27272A]"><p className="text-gray-400 dark:text-zinc-500">Model</p><p className="mt-1 font-semibold text-gray-700 dark:text-zinc-200">{activeModelLabel}</p></div>
+            <div className="rounded-2xl bg-gray-50 p-3 dark:bg-[#27272A]"><p className="text-gray-400 dark:text-zinc-500">Model</p><p className="mt-1 font-semibold text-gray-700 dark:text-zinc-200">{aiModel === 'flash' ? 'Flash' : aiModel === 'pro' ? 'Pro' : 'GPT'}</p></div>
             <div className="rounded-2xl bg-gray-50 p-3 dark:bg-[#27272A]"><p className="text-gray-400 dark:text-zinc-500">Queue</p><p className="mt-1 font-semibold text-gray-700 dark:text-zinc-200">{queueStats.myImageProcessing} đang xử lý • {queueStats.myQueued} chờ</p></div>
             <div className="rounded-2xl bg-gray-50 p-3 dark:bg-[#27272A]"><p className="text-gray-400 dark:text-zinc-500">Server</p><p className="mt-1 font-semibold text-gray-700 dark:text-zinc-200">{server}</p></div>
             <div className="rounded-2xl bg-gray-50 p-3 dark:bg-[#27272A]"><p className="text-gray-400 dark:text-zinc-500">Output</p><p className="mt-1 font-semibold text-gray-700 dark:text-zinc-200">{resolution} • {aspectRatio}</p></div>

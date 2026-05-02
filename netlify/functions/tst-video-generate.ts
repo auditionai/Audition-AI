@@ -1,14 +1,10 @@
 import type { Handler } from '@netlify/functions';
 import { normalizeTstOutboundPayload } from './_tst-payload-normalizer';
-import { getTstVideoGeneratePath } from './_tst-generate-endpoints';
 
 const jsonHeaders = {
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': '*',
 };
-
-const getVideoGenerateEndpoint = (payload: Record<string, unknown>) =>
-  `https://api.tramsangtao.com/v1${getTstVideoGeneratePath(payload.model)}`;
 
 export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
@@ -38,7 +34,7 @@ export const handler: Handler = async (event) => {
     }
 
     const payload = normalizeTstOutboundPayload(JSON.parse(event.body || '{}'));
-    const response = await fetch(getVideoGenerateEndpoint(payload), {
+    const response = await fetch('https://api.tramsangtao.com/v1/video/generate', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${TST_API_KEY}`,

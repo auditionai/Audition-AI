@@ -32,17 +32,16 @@ import {
   getGenerationCostBreakdown,
   getVertexEditToolCostBreakdown,
   getGenerationModelId,
-  GPT_IMAGE_2_QUALITY_OPTIONS,
   getResolutionCostMap,
+  resolveGenerationSelection,
   applyServerAvailabilityToRuntimeModels,
   sanitizePricingEntriesWithRuntimeModels,
   tstServerToUi,
   uiServerToTst,
   uiSpeedToTst,
+  type TstGenerationTier,
   type TstPricingEntry,
   type TstRuntimeModel,
-  type TstGenerationTier,
-  type TstImageQuality,
 } from '../../services/tstCatalog';
 import type { CharacterReferenceGroup, ImageGenerateRecipePayload } from '../../shared/queueRecipes';
 import {
@@ -61,7 +60,6 @@ interface GenerationToolProps {
 type GenMode = 'single' | 'couple' | 'group3' | 'group4';
 type Stage = 'input' | 'processing' | 'result';
 type Resolution = '1K' | '2K' | '4K';
-type GenerationAiModel = TstGenerationTier;
 
 const MODE_TO_FEATURE_ID: Record<GenMode, string> = {
     single: 'single_photo_gen',
@@ -186,10 +184,10 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   // Default Resolution 1K
   const [aspectRatio, setAspectRatio] = useState('3:4');
   const [resolution, setResolution] = useState<Resolution>('1K');
-  const [imageQuality, setImageQuality] = useState<TstImageQuality>('high');
   const [speed, setSpeed] = useState('Nhanh');
   const [server, setServer] = useState('VIP 1');
-  const [aiModel, setAiModel] = useState<GenerationAiModel>('flash');
+  const [gptQuality, setGptQuality] = useState<'low' | 'medium' | 'high'>('high');
+  const [aiModel, setAiModel] = useState<TstGenerationTier>('flash');
 
   const [guideTopic, setGuideTopic] = useState<'chars' | 'settings' | null>(null);
   const [currentTipIdx, setCurrentTipIdx] = useState(0);
@@ -268,30 +266,31 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
   const generationSpeedId = uiSpeedToTst(speed) || 'fast';
   const generationServerId = uiServerToTst(server) || 'fast';
-  const generationTier: TstGenerationTier = aiModel;
-  const activeModelLabel = aiModel === 'flash' ? 'Flash' : aiModel === 'pro' ? 'Pro' : 'GPT';
-  const activeEngineLabel = `${activeModelLabel} Engine ${resolution}`;
+  const generationTier = aiModel;
   const availableResolutions = getCompatibleGenerationResolutions({
       tier: generationTier,
       pricingEntries,
       serverId: generationServerId,
-      speed: generationSpeedId
+      speed: generationSpeedId,
+      quality: aiModel === 'gpt' ? gptQuality : undefined,
   });
   const availableSpeeds = getCompatibleGenerationSpeeds({
       tier: generationTier,
       pricingEntries,
-      resolution
+      resolution,
+      quality: aiModel === 'gpt' ? gptQuality : undefined,
   });
   const availableServers = getCompatibleGenerationServers({
       tier: generationTier,
       pricingEntries,
       speed: generationSpeedId,
-      resolution
+      resolution,
+      quality: aiModel === 'gpt' ? gptQuality : undefined,
   });
   const selectedGenerationCost = getGenerationCostBreakdown({
       tier: generationTier,
       resolution,
-      quality: aiModel === 'gpt' ? imageQuality : undefined,
+      quality: aiModel === 'gpt' ? gptQuality : undefined,
       speed: generationSpeedId,
       serverId: generationServerId,
       pricingEntries,
@@ -313,7 +312,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   });
   const gptResolutionCosts = getResolutionCostMap({
       tier: 'gpt',
-      quality: imageQuality,
+      quality: gptQuality,
       speed: generationSpeedId,
       serverId: generationServerId,
       pricingEntries,
@@ -517,56 +516,43 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   }, [stage]);
 
   useEffect(() => {
-      if (aiModel === 'flash' && !isFlashAvailable) setAiModel(isProAvailable ? 'pro' : 'gpt');
-      else if (aiModel === 'pro' && !isProAvailable) setAiModel(isFlashAvailable ? 'flash' : 'gpt');
-      else if (aiModel === 'gpt' && !isGptAvailable) setAiModel(isProAvailable ? 'pro' : 'flash');
+      if (aiModel === 'flash' && !isFlashAvailable && isProAvailable) {
+          setAiModel('pro');
+      } else if (aiModel === 'pro' && !isProAvailable && isFlashAvailable) {
+          setAiModel('flash');
+      } else if (aiModel === 'gpt' && !isGptAvailable && isProAvailable) {
+          setAiModel('pro');
+      }
   }, [aiModel, isFlashAvailable, isGptAvailable, isProAvailable]);
 
   useEffect(() => {
-      if (availableResolutions.length > 0 && !availableResolutions.includes(resolution)) {
-          setResolution(availableResolutions[0]);
-      }
-  }, [availableResolutions, resolution]);
-
-  useEffect(() => {
-      const tier = aiModel;
       const requestedSpeedId = uiSpeedToTst(speed) || 'fast';
       const requestedServerId = uiServerToTst(server) || 'fast';
-      const compatibleServers = getCompatibleGenerationServers({
-          tier,
+      const nextSelection = resolveGenerationSelection({
+          tier: aiModel,
           pricingEntries,
+          resolution,
+          quality: aiModel === 'gpt' ? gptQuality : undefined,
           speed: requestedSpeedId,
-          resolution
+          serverId: requestedServerId,
       });
-      const nextServerId = compatibleServers.includes(requestedServerId)
-          ? requestedServerId
-          : compatibleServers[0];
-
-      if (nextServerId && nextServerId !== requestedServerId) {
-          const nextServerLabel = tstServerToUi(nextServerId);
-          if (nextServerLabel !== server) {
-              setServer(nextServerLabel);
-              return;
-          }
+      if (!nextSelection.available) {
+          return;
       }
-
-      const compatibleSpeeds = getCompatibleGenerationSpeeds({
-          tier,
-          pricingEntries,
-          serverId: nextServerId || requestedServerId,
-          resolution
-      });
-      const nextSpeedId = compatibleSpeeds.includes(requestedSpeedId)
-          ? requestedSpeedId
-          : compatibleSpeeds[0];
-
-      if (nextSpeedId) {
-          const nextSpeedLabel = nextSpeedId === 'slow' ? 'Tiết Kiệm' : 'Nhanh';
-          if (nextSpeedLabel !== speed) {
-              setSpeed(nextSpeedLabel);
-          }
+      if (nextSelection.resolution !== resolution) {
+          setResolution(nextSelection.resolution as Resolution);
+          return;
       }
-  }, [aiModel, pricingEntries, resolution, server, speed]);
+      const nextServerLabel = tstServerToUi(nextSelection.serverId);
+      if (nextServerLabel !== server) {
+          setServer(nextServerLabel);
+          return;
+      }
+      const nextSpeedLabel = nextSelection.speed === 'slow' ? 'Tiết Kiệm' : 'Nhanh';
+      if (nextSpeedLabel !== speed) {
+          setSpeed(nextSpeedLabel);
+      }
+  }, [aiModel, gptQuality, pricingEntries, resolution, server, speed]);
 
   const formatTime = (seconds: number) => {
       const mins = Math.floor(seconds / 60);
@@ -853,6 +839,17 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
         return;
     }
 
+    const characterBodySources = characters.map((char) => char.bodyImage).filter((value): value is string => Boolean(value));
+    if (new Set(characterBodySources).size !== characterBodySources.length) {
+        notify(
+            lang === 'vi'
+                ? 'Có ít nhất 2 slot nhân vật đang dùng cùng một ảnh. Vui lòng kiểm tra lại ảnh NV1/NV2 trước khi tạo.'
+                : 'At least 2 character slots are using the same image. Please check the uploaded characters.',
+            'error',
+        );
+        return;
+    }
+
     const cost = calculateCost();
     const user = await getUserProfile();
 
@@ -874,6 +871,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
         pricingEntries,
         speed: requestedSpeedId,
         resolution,
+        quality: aiModel === 'gpt' ? gptQuality : undefined,
     });
     const effectiveServerId = compatibleServers.includes(requestedServerId)
         ? requestedServerId
@@ -883,6 +881,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
         pricingEntries,
         serverId: effectiveServerId,
         resolution,
+        quality: aiModel === 'gpt' ? gptQuality : undefined,
     });
     const effectiveSpeedId = compatibleSpeeds.includes(requestedSpeedId)
         ? requestedSpeedId
@@ -896,7 +895,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
         assetType: 'image',
         toolId: activeFeature.id,
         toolName: activeFeature.name['en'],
-        engine: activeEngineLabel,
+        engine: aiModel === 'flash' ? `Flash Engine ${resolution}` : aiModel === 'pro' ? `Pro Engine ${resolution}` : `GPT Engine ${resolution}`,
         status: 'queued',
         jobId: queuedJobId,
         progress: 0,
@@ -982,14 +981,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                 ? await tryStageGenerationInput(activeStylePreset, `inputs/generation/${activeMode}/style-analysis`)
                 : null;
             const notifyInputMedia = [
-                ...stagedCharacterGroups.flatMap((group) =>
-                    group.references.map((reference) => ({
-                        url: reference.source,
-                        role: 'character' as const,
-                        kind: 'image' as const,
-                        userProvided: true,
-                    })),
-                ),
                 ...(stagedSampleImage
                     ? [{
                         url: stagedSampleImage,
@@ -998,6 +989,16 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                         userProvided: true,
                     }]
                     : []),
+                ...stagedCharacterGroups.flatMap((group) => {
+                    const bodyReferences = group.references.filter((reference) => reference.kind === 'body');
+                    const faceReferences = group.references.filter((reference) => reference.kind !== 'body');
+                    return [...bodyReferences, ...faceReferences].map((reference) => ({
+                        url: reference.source,
+                        role: 'character' as const,
+                        kind: 'image' as const,
+                        userProvided: true,
+                    }));
+                }),
                 ...(stagedStyleGuide
                     ? [{
                         url: stagedStyleGuide,
@@ -1016,8 +1017,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                 systemPromptPrefix: activeFeature.defaultPrompt || '',
                 characterCount: characters.length,
                 resolution,
-                quality: aiModel === 'gpt' ? imageQuality : undefined,
                 aspectRatio,
+                quality: aiModel === 'gpt' ? gptQuality : undefined,
                 speed: effectiveSpeedId,
                 serverId: effectiveServerId,
                 negativePrompt: DEFAULT_IMAGE_NEGATIVE_PROMPT,
@@ -1036,7 +1037,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                 prompt: basePrompt,
                 toolId: activeFeature.id,
                 toolName: activeFeature.name['en'],
-                engine: activeEngineLabel,
+                engine: aiModel === 'flash' ? `Flash Engine ${resolution}` : aiModel === 'pro' ? `Pro Engine ${resolution}` : `GPT Engine ${resolution}`,
                 assetType: 'image',
                 costVcoin: cost,
                 queueKind: 'image_generate',
@@ -1080,8 +1081,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       { id: '16:9', label: '16:9', desc: 'Cinema' },
       { id: '3:4', label: '3:4', desc: 'Dọc' },
       { id: '4:3', label: '4:3', desc: 'Ngang' },
-      { id: '2:3', label: '2:3', desc: 'Dọc' },
-      { id: '3:2', label: '3:2', desc: 'Ngang' },
   ];
 
   const renderGuideContent = () => {
@@ -1830,13 +1829,17 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                         <div className="space-y-3 animate-fade-in">
                             <label className="text-[10px] font-bold text-slate-400 uppercase">Chất lượng ảnh GPT</label>
                             <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
-                                {GPT_IMAGE_2_QUALITY_OPTIONS.map(q => (
+                                {(['low', 'medium', 'high'] as const).map((quality) => (
                                     <button
-                                        key={q}
-                                        onClick={() => setImageQuality(q)}
-                                        className={`flex-1 py-3 rounded-lg text-xs font-bold uppercase transition-all ${imageQuality === q ? 'bg-audi-purple text-white shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}
+                                        key={quality}
+                                        onClick={() => setGptQuality(quality)}
+                                        className={`flex-1 py-3 rounded-lg text-[10px] font-bold uppercase transition-all ${
+                                            gptQuality === quality
+                                                ? 'bg-audi-purple text-white shadow-lg'
+                                                : 'text-slate-500 hover:text-white hover:bg-white/5'
+                                        }`}
                                     >
-                                        {q}
+                                        {quality}
                                     </button>
                                 ))}
                             </div>

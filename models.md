@@ -12,8 +12,7 @@ All models available via the API. Credits are deducted per generation.
 | `flux-2-pro` | Flux 2 Pro | fast, vip1 | 1k, 2k | fast, slow | 10–30 |
 | `grok-image` | Grok Image | fast | default | fast | 20 |
 | `image-4.0` | Imagen 4.0 | fast | default | fast | 4 |
-| `image-gpt` | Chat GPT Image | vip1 | default | fast, slow | 8–40 |
-| `image-gpt-2` | GPT Image 2 | fast | 1k, 2k, 4k | fast | 20–60 |
+| `image-gpt-2` | GPT Image 2 | vip1, vip2, fast | 1k, 2k, 4k | fast | 8–40 |
 | `imagen-4` | Imagen 4 | fast | default | fast | 20 |
 | `imagen-4-fast` | Imagen 4 Fast | fast | default | fast | 20 |
 | `imagen-4-ultra` | Imagen 4 Ultra | fast | default | fast | 30 |
@@ -32,19 +31,8 @@ All models available via the API. Credits are deducted per generation.
 | `kling-2.6` | Kling 2.6 | fast, vip1, vip2 | 1080p, 720p | 5s, 10s | 16:9, 9:16, 1:1 | Yes | 15–640 |
 | `kling-3.0-video` | Kling 3.0 Video | fast, vip1 | 1080p, 720p | 3s, 5s, 10s, 15s | 16:9, 9:16, 1:1 | Yes | 15–720 |
 | `kling-o1-video` | Kling O1 Video | vip2 | 1080p, 720p | 5s, 10s | 16:9, 9:16, 1:1 | No | 60–600 |
-| `grok-i2v` | Grok Video | default | 480p, 720p | 6s, 10s | — | No | 5–15 |
-| `seedance-2.0` | Seedance 2.0 | standard | 480p, 720p | 5s, 8s, 10s, 15s | — | Yes | 200–900 |
-| `seedance-2.0-fast` | Seedance 2.0 Fast | fast | 480p, 720p | 5s, 8s, 10s, 15s | — | Yes | 80–530 |
 | `sora-2.0` | Sora 2.0 | vip1 | — | 10s, 15s, 25s | 16:9, 9:16 | No | 20–50 |
 | `veo3.1-low` | Veo 3.1 LOW | fast | — | 8s | 16:9, 9:16 | No | 10 |
-
-### Video Endpoint Routing
-
-| Model family | TST endpoint |
-|--------------|--------------|
-| `seedance-*` | `POST /v1/seedance/generate` |
-| `grok-*` | `POST /v1/grok/generate` |
-| Other video models | `POST /v1/video/generate` |
 
 ## Motion Control Models
 
@@ -66,8 +54,6 @@ All models available via the API. Credits are deducted per generation.
 | `vip1` | Premium — fastest, highest priority |
 | `vip2` | Standard — reliable, moderate speed |
 | `fast` | Economy — lower cost, may be slightly slower |
-| `standard` | Standard video queue for Seedance |
-| `default` | Default provider queue for Grok Video |
 | `Cheap` | Budget — lowest cost (motion control only) |
 
 When `server_id` is not specified, the system auto-selects the best available server.

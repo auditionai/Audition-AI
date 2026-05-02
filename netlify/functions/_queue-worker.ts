@@ -3,7 +3,6 @@ import { getServiceRoleClient } from './_supabase';
 import { fireTelegramJobNotification } from './_telegram-notify';
 import { validateQueuePayloadAgainstLiveCatalog } from './_tst-live-catalog';
 import { normalizeTstOutboundPayload } from './_tst-payload-normalizer';
-import { getTstGeneratePath } from './_tst-generate-endpoints';
 import {
   buildImageGenerateProviderPayload,
   prepareImageGeneratePromptWithinLimit,
@@ -33,6 +32,7 @@ import {
   type ImageEditRecipePayload,
   type ImageGenerateRecipePayload,
   type MotionGenerateRecipePayload,
+  type PromptImageGenerateRecipePayload,
   type VideoGenerateRecipePayload,
 } from '../../shared/queueRecipes';
 import { classifyQueueError, isTerminalRescueFailureMessage, normalizeQueueErrorMessage, pickQueueFailureMessage } from '../../shared/queueErrorClassifier';
@@ -137,7 +137,7 @@ const activeWorkerRuns = new Map<QueueWorkerLane, Promise<QueueWorkerSummary>>()
 const TST_API_KEY = process.env.TST_API_KEY || '';
 const TST_API_BASE = 'https://api.tramsangtao.com/v1';
 const POLL_INTERVAL_SECONDS = parsePositiveIntEnv('QUEUE_POLL_INTERVAL_SECONDS', 5);
-const VIDEO_POLL_INTERVAL_SECONDS = parsePositiveIntEnv('QUEUE_VIDEO_POLL_INTERVAL_SECONDS', 60);
+const VIDEO_POLL_INTERVAL_SECONDS = parsePositiveIntEnv('QUEUE_VIDEO_POLL_INTERVAL_SECONDS', 10 * 60);
 const PROVIDER_FAILURE_GRACE_SECONDS = parsePositiveIntEnv('QUEUE_PROVIDER_FAILURE_GRACE_SECONDS', 90, 5);
 const MAX_DISPATCH_RETRIES = 6;
 const MAX_POLL_FAILURES = 8;
@@ -228,45 +228,6 @@ const parseErrorMessage = async (response: Response) => {
   }
 };
 
-const isTerminalProviderPollFailureMessage = (message?: string | null) => {
-  const normalized = repairVietnameseMojibake(message || '').trim().toLowerCase();
-  if (!normalized || isAmbiguousDispatchError(normalized)) return false;
-  return (
-    normalized.includes('401') ||
-    normalized.includes('403') ||
-    normalized.includes('unauthorized') ||
-    normalized.includes('forbidden') ||
-    normalized.includes('auth') ||
-    normalized.includes('credential') ||
-    normalized.includes('api key') ||
-    normalized.includes('apikey') ||
-    normalized.includes('invalid token') ||
-    normalized.includes('access token') ||
-    normalized.includes('xac thuc') ||
-    normalized.includes('xác thực') ||
-    normalized.includes('wrong_endpoint') ||
-    normalized.includes('wrong endpoint') ||
-    normalized.includes('requires post') ||
-    normalized.includes('invalid payload') ||
-    normalized.includes('invalid_tst_payload') ||
-    normalized.includes('bad request') ||
-    normalized.includes('prompt hoac anh vi pham') ||
-    normalized.includes('prompt hoặc ảnh vi phạm') ||
-    normalized.includes('vi pham') ||
-    normalized.includes('vi phạm') ||
-    normalized.includes('violat') ||
-    normalized.includes('moderation') ||
-    normalized.includes('prohibited') ||
-    normalized.includes('blocked') ||
-    normalized.includes('rejected') ||
-    normalized.includes('khong duyet') ||
-    normalized.includes('không duyệt') ||
-    normalized.includes('failed') ||
-    normalized.includes('that bai') ||
-    normalized.includes('thất bại')
-  );
-};
-
 const toQueuePayloadObject = (
   payload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
 ): Record<string, unknown> =>
@@ -274,51 +235,6 @@ const toQueuePayloadObject = (
 
 const stripInternalQueueMeta = (payload: Record<string, unknown> | ImageGenerateRecipePayload) =>
   Object.fromEntries(Object.entries(payload).filter(([key]) => !key.startsWith('__')));
-
-const normalizeProviderMediaUrl = (value: unknown) => {
-  const raw = Array.isArray(value) ? value[0] : value;
-  return typeof raw === 'string' ? raw.trim() : '';
-};
-
-const isHttpProviderMediaUrl = (value: unknown) => /^https?:\/\//i.test(normalizeProviderMediaUrl(value));
-
-const summarizeProviderMediaPayload = (queueKind: string, payload?: Record<string, unknown> | null) => {
-  if (!payload || typeof payload !== 'object') return 'media=missing';
-  if (queueKind === 'video_generate') {
-    return `img_url=${isHttpProviderMediaUrl(payload.img_url) ? 'ok' : 'missing'}`;
-  }
-  if (queueKind === 'motion_generate') {
-    return [
-      `character_image_url=${isHttpProviderMediaUrl(payload.character_image_url) ? 'ok' : 'missing'}`,
-      `motion_video_url=${isHttpProviderMediaUrl(payload.motion_video_url) ? 'ok' : 'missing'}`,
-      `mode=${String(payload.mode || '').trim() || 'missing'}`,
-    ].join(', ');
-  }
-  if (queueKind === 'image_generate') {
-    const refs = Array.isArray(payload.img_url) ? payload.img_url.length : payload.img_url ? 1 : 0;
-    return `img_url=${refs}`;
-  }
-  return 'media=not_required';
-};
-
-const assertRequiredProviderMediaPayload = (queueKind: string, payload: Record<string, unknown>) => {
-  if (queueKind === 'video_generate' && !isHttpProviderMediaUrl(payload.img_url)) {
-    throw new Error('INVALID_TST_PAYLOAD: Video AI thiếu img_url hợp lệ sau bước upload ảnh keyframe lên TST.');
-  }
-
-  if (queueKind === 'motion_generate') {
-    if (!isHttpProviderMediaUrl(payload.character_image_url)) {
-      throw new Error('INVALID_TST_PAYLOAD: Motion Control thiếu character_image_url hợp lệ sau bước upload ảnh nhân vật lên TST.');
-    }
-    if (!isHttpProviderMediaUrl(payload.motion_video_url)) {
-      throw new Error('INVALID_TST_PAYLOAD: Motion Control thiếu motion_video_url hợp lệ sau bước upload video mẫu lên TST.');
-    }
-    const mode = String(payload.mode || '').trim().toLowerCase();
-    if (mode && mode !== 'std' && mode !== 'pro') {
-      throw new Error(`INVALID_TST_PAYLOAD: Motion Control mode không hợp lệ (${mode}). TST chỉ nhận std hoặc pro.`);
-    }
-  }
-};
 
 const normalizeNotificationMediaEntry = (
   entry: unknown,
@@ -386,6 +302,9 @@ const buildNotificationMediaEntries = (
         (raw.characterImages || []).forEach((value) => push(value, 'character', 'image', true));
         push(raw.sampleImage, 'sample', 'image', true);
         push(raw.styleImage, 'style', 'image', false);
+        (raw.referenceImages || []).forEach((value) => push(value, 'reference', 'image', true));
+        break;
+      case 'prompt_image_generate_recipe_v1':
         (raw.referenceImages || []).forEach((value) => push(value, 'reference', 'image', true));
         break;
       case 'image_edit_recipe_v1':
@@ -748,149 +667,6 @@ const extractResultUrl = (data: any): string | null => {
   return extractResultUrlFromValue(data);
 };
 
-const PROVIDER_COMPLETED_STATUSES = new Set(['completed', 'complete', 'succeeded', 'success', 'done', 'finished']);
-const PROVIDER_ACTIVE_STATUSES = new Set(['processing', 'queued', 'queue', 'pending', 'submitted', 'running', 'created', 'in_progress']);
-const PROVIDER_FAILED_STATUSES = new Set([
-  'failed',
-  'fail',
-  'error',
-  'errored',
-  'cancelled',
-  'canceled',
-  'rejected',
-  'blocked',
-  'moderated',
-  'expired',
-  'timeout',
-  'timed_out',
-]);
-
-const normalizeProviderStatusValue = (value: unknown) =>
-  String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, '_');
-
-const extractProviderStatusFromValue = (value: unknown, depth = 0): string => {
-  if (!value || depth > 4) return '';
-  if (typeof value === 'string') {
-    const normalized = normalizeProviderStatusValue(value);
-    return PROVIDER_COMPLETED_STATUSES.has(normalized) ||
-      PROVIDER_ACTIVE_STATUSES.has(normalized) ||
-      PROVIDER_FAILED_STATUSES.has(normalized)
-      ? normalized
-      : '';
-  }
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const nested = extractProviderStatusFromValue(item, depth + 1);
-      if (nested) return nested;
-    }
-    return '';
-  }
-  if (typeof value !== 'object') return '';
-
-  const objectValue = value as Record<string, unknown>;
-  const statusKeys = ['status', 'state', 'job_status', 'jobStatus', 'task_status', 'taskStatus', 'phase'];
-  for (const key of statusKeys) {
-    const normalized = normalizeProviderStatusValue(objectValue[key]);
-    if (
-      PROVIDER_COMPLETED_STATUSES.has(normalized) ||
-      PROVIDER_ACTIVE_STATUSES.has(normalized) ||
-      PROVIDER_FAILED_STATUSES.has(normalized)
-    ) {
-      return normalized;
-    }
-  }
-
-  const nestedKeys = ['data', 'job', 'task', 'result', 'detail', 'details', 'response'];
-  for (const key of nestedKeys) {
-    const nested = extractProviderStatusFromValue(objectValue[key], depth + 1);
-    if (nested) return nested;
-  }
-
-  return '';
-};
-
-const extractProviderFailureMessageFromValue = (value: unknown, depth = 0): string => {
-  if (!value || depth > 4) return '';
-  if (typeof value === 'string') {
-    return repairVietnameseMojibake(value.trim());
-  }
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const nested = extractProviderFailureMessageFromValue(item, depth + 1);
-      if (nested) return nested;
-    }
-    return '';
-  }
-  if (typeof value !== 'object') return '';
-
-  const objectValue = value as Record<string, unknown>;
-  const messageKeys = [
-    'error',
-    'error_message',
-    'errorMessage',
-    'failure_reason',
-    'failureReason',
-    'fail_reason',
-    'reason',
-    'message',
-    'detail',
-    'details',
-  ];
-  for (const key of messageKeys) {
-    const raw = objectValue[key];
-    if (raw == null || raw === false) continue;
-    if (typeof raw === 'string' && raw.trim()) {
-      return repairVietnameseMojibake(raw.trim());
-    }
-    if (typeof raw === 'object') {
-      const nested = extractProviderFailureMessageFromValue(raw, depth + 1);
-      if (nested) return nested;
-    }
-  }
-
-  const nestedKeys = ['data', 'job', 'task', 'response'];
-  for (const key of nestedKeys) {
-    const nested = extractProviderFailureMessageFromValue(objectValue[key], depth + 1);
-    if (nested) return nested;
-  }
-
-  return '';
-};
-
-const getProviderStatus = (providerData: unknown) => extractProviderStatusFromValue(providerData);
-const isProviderCompletedStatus = (status: string) => PROVIDER_COMPLETED_STATUSES.has(normalizeProviderStatusValue(status));
-const isProviderActiveStatus = (status: string) => PROVIDER_ACTIVE_STATUSES.has(normalizeProviderStatusValue(status));
-const isProviderFailedStatus = (status: string) => PROVIDER_FAILED_STATUSES.has(normalizeProviderStatusValue(status));
-
-const getProviderFailureMessage = (providerData: unknown) =>
-  extractProviderFailureMessageFromValue(providerData) || 'Provider job failed';
-
-const hasProviderErrorLikeField = (value: unknown, depth = 0): boolean => {
-  if (!value || depth > 4 || typeof value !== 'object') return false;
-  if (Array.isArray(value)) return value.some((item) => hasProviderErrorLikeField(item, depth + 1));
-  const objectValue = value as Record<string, unknown>;
-  const errorKeys = ['error', 'error_message', 'errorMessage', 'failure_reason', 'failureReason', 'fail_reason'];
-  for (const key of errorKeys) {
-    const raw = objectValue[key];
-    if (raw == null || raw === false || raw === '') continue;
-    return true;
-  }
-  return ['data', 'job', 'task', 'detail', 'details', 'response'].some((key) =>
-    hasProviderErrorLikeField(objectValue[key], depth + 1),
-  );
-};
-
-const hasProviderFailureSignal = (providerData: unknown, providerStatus?: string) => {
-  if (isProviderFailedStatus(providerStatus || getProviderStatus(providerData))) return true;
-  if (!providerData || typeof providerData !== 'object') return false;
-  const objectValue = providerData as Record<string, unknown>;
-  if (objectValue.success === false || objectValue.ok === false) return true;
-  return hasProviderErrorLikeField(providerData);
-};
-
 const getRetryDelaySeconds = (attemptCount: number) => {
   if (attemptCount <= 0) return POLL_INTERVAL_SECONDS;
   return Math.min(300, 15 * 2 ** Math.min(attemptCount - 1, 4));
@@ -1184,7 +960,7 @@ const getPreparationTimeoutUserMessage = (job: Pick<QueueJobRow, 'tool_id'>, pay
 
 const getMaxProcessingAgeMs = (job: Pick<QueueJobRow, 'queue_kind'>) => {
   if (job.queue_kind === 'video_generate' || job.queue_kind === 'motion_generate') {
-    return Number.POSITIVE_INFINITY;
+    return MAX_VIDEO_PROCESSING_AGE_MS;
   }
 
   return MAX_PROCESSING_AGE_MS;
@@ -1232,7 +1008,7 @@ const getProviderProcessingTimeoutMs = (
   payload?: QueueJobRow['queue_payload'],
 ) => {
   if (job.queue_kind === 'video_generate' || job.queue_kind === 'motion_generate') {
-    return Number.POSITIVE_INFINITY;
+    return MAX_VIDEO_PROCESSING_AGE_MS;
   }
 
   return getImageProcessingAgeMs(job, payload);
@@ -1312,8 +1088,18 @@ const isJobManuallyStopped = async (jobId: string) => {
   return String(state?.status || '').toLowerCase() === 'failed' && hasManualStopFlag((state as any)?.queue_payload);
 };
 
-const getGenerateEndpoint = (queueKind: string, providerPayload?: Record<string, unknown>) =>
-  `${TST_API_BASE}${getTstGeneratePath(queueKind, providerPayload)}`;
+const getGenerateEndpoint = (queueKind: string) => {
+  switch (queueKind) {
+    case 'image_generate':
+      return `${TST_API_BASE}/image/generate`;
+    case 'video_generate':
+      return `${TST_API_BASE}/video/generate`;
+    case 'motion_generate':
+      return `${TST_API_BASE}/motion/generate`;
+    default:
+      throw new Error(`Unsupported queue kind: ${queueKind}`);
+  }
+};
 
 const submitProviderJob = async (queueKind: string, providerPayload: Record<string, unknown>) => {
   if (!TST_API_KEY) {
@@ -1324,16 +1110,8 @@ const submitProviderJob = async (queueKind: string, providerPayload: Record<stri
   }
 
   const outboundPayload = normalizeTstOutboundPayload(stripInternalQueueMeta(providerPayload));
-  assertRequiredProviderMediaPayload(queueKind, outboundPayload);
-  const endpoint = getGenerateEndpoint(queueKind, outboundPayload);
-  console.info('[queue-worker] Dispatching TST job', {
-    queueKind,
-    model: outboundPayload.model,
-    endpoint,
-    media: summarizeProviderMediaPayload(queueKind, outboundPayload),
-  });
 
-  const response = await fetch(endpoint, {
+  const response = await fetch(getGenerateEndpoint(queueKind), {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${TST_API_KEY}`,
@@ -1678,11 +1456,7 @@ const markQueuedStage = async (jobId: string, progress: number) => {
   });
 };
 
-const markSubmittingPreparedPayload = async (
-  jobId: string,
-  payload?: Record<string, unknown> | null,
-  queueKind = '',
-) => {
+const markSubmittingPreparedPayload = async (jobId: string, payload?: Record<string, unknown> | null) => {
   const nextPayload = withQueueLog(
     {
       ...toQueuePayloadObject(payload),
@@ -1690,7 +1464,7 @@ const markSubmittingPreparedPayload = async (
       __dispatchConfirmationPending: true,
     },
     'dispatching',
-    `Đang gửi yêu cầu tới provider TST. ${summarizeProviderMediaPayload(queueKind, payload)}`,
+    'Đang gửi yêu cầu tới provider TST.',
   );
   await updateGeneratedImageRecord(jobId, {
     status: 'processing',
@@ -1708,7 +1482,6 @@ const markSubmittingPreparedPayloadWithOwnership = async (
   jobId: string,
   payload: Record<string, unknown> | null | undefined,
   dispatchAttemptId: string,
-  queueKind = '',
 ) => {
   const nextPayload = withQueueLog(
     {
@@ -1718,7 +1491,7 @@ const markSubmittingPreparedPayloadWithOwnership = async (
       __dispatchAttemptId: dispatchAttemptId,
     },
     'dispatching',
-    `Đang gửi yêu cầu tới provider TST. ${summarizeProviderMediaPayload(queueKind, payload)}`,
+    'Đang gửi yêu cầu tới provider TST.',
   );
   await updateGeneratedImageRecord(jobId, {
     status: 'processing',
@@ -2322,13 +2095,13 @@ const rescueFailedJobsWithProviderResults = async () => {
   for (const job of candidates as QueueJobRow[]) {
     try {
       const providerData = await pollProviderJob(String(job.job_id || ''));
-      const providerStatus = getProviderStatus(providerData);
+      const providerStatus = String(providerData?.status || '').toLowerCase();
       const resultUrl = extractResultUrl(providerData);
 
       if (resultUrl) {
         const state = await completePolledJobWithResultUrl(job, resultUrl, {
           completionMessage:
-            isProviderFailedStatus(providerStatus)
+            providerStatus === 'failed' || providerStatus === 'error' || providerStatus === 'cancelled' || providerStatus === 'canceled'
               ? `Rescue TST: provider từng báo lỗi nhưng vẫn trả về kết quả hợp lệ. Đã tự động lưu kết quả.`
               : 'Rescue TST: đã tìm lại kết quả hợp lệ và đồng bộ thành công.',
           completionLevel: 'warning',
@@ -2339,24 +2112,29 @@ const rescueFailedJobsWithProviderResults = async () => {
         continue;
       }
 
-      if (isProviderActiveStatus(providerStatus)) {
+      if (providerStatus === 'processing' || providerStatus === 'queued' || providerStatus === 'pending' || providerStatus === 'submitted') {
         await reviveFailedJobToProcessing(job, providerData);
         rescued += 1;
         continue;
       }
 
-      if (hasProviderFailureSignal(providerData, providerStatus)) {
+      if (
+        providerStatus === 'failed' ||
+        providerStatus === 'error' ||
+        providerStatus === 'cancelled' ||
+        providerStatus === 'canceled'
+      ) {
         await finalizeFailedRescue(
           job,
-          getProviderFailureMessage(providerData),
+          String(providerData?.error || providerData?.message || 'Provider job failed'),
         );
         continue;
       }
 
-      if (isTerminalRescueFailureMessage(String(getProviderFailureMessage(providerData) || providerStatus || ''))) {
+      if (isTerminalRescueFailureMessage(String(providerData?.error || providerData?.message || providerStatus || ''))) {
         await finalizeFailedRescue(
           job,
-          String(getProviderFailureMessage(providerData) || providerStatus || 'Job not found from provider'),
+          String(providerData?.error || providerData?.message || providerStatus || 'Job not found from provider'),
         );
         continue;
       }
@@ -2389,27 +2167,24 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
   }
 
   const admin = getServiceRoleClient();
-  const providerStatus = getProviderStatus(providerData);
+  const providerStatus = String(providerData?.status || '').toLowerCase();
   const providerProgress = typeof providerData?.progress === 'number' ? providerData.progress : 0;
   const progress = Math.max(60, providerProgress);
   const currentState = await getJobRuntimeState(job.id);
   const startedAt = currentState?.processing_started_at || currentState?.created_at || new Date().toISOString();
   const processingAgeMs = Date.now() - new Date(startedAt).getTime();
-  const resultUrl = extractResultUrl(providerData);
 
-  if (resultUrl && (isProviderCompletedStatus(providerStatus) || !hasProviderFailureSignal(providerData, providerStatus))) {
-    return completePolledJobWithResultUrl(job, resultUrl);
-  }
-
-  if (isProviderCompletedStatus(providerStatus)) {
+  if (providerStatus === 'completed') {
+    const resultUrl = extractResultUrl(providerData);
     if (!resultUrl) {
       throw new Error(`Job completed but no result URL returned: ${JSON.stringify(providerData)}`);
     }
     return completePolledJobWithResultUrl(job, resultUrl);
   }
 
-  if (hasProviderFailureSignal(providerData, providerStatus)) {
-    const failureMessage = getProviderFailureMessage(providerData);
+  if (providerStatus === 'failed' || providerStatus === 'error' || providerStatus === 'cancelled' || providerStatus === 'canceled') {
+    const failureMessage = providerData?.error || providerData?.message || 'Provider job failed';
+    const resultUrl = extractResultUrl(providerData);
     if (resultUrl) {
       return completePolledJobWithResultUrl(job, resultUrl, {
         completionMessage: `Provider báo "${failureMessage}" nhưng vẫn trả về kết quả hợp lệ. Đã lưu kết quả thay vì đánh thất bại.`,
@@ -2418,6 +2193,15 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
     }
     if (isTerminalRescueFailureMessage(String(failureMessage))) {
       return handleLostProviderJobSignal(job, String(failureMessage), currentState);
+    }
+    const nextAttemptCount = Number(currentState?.attempt_count || 0) + 1;
+    if (
+      isGenericProviderFailure(String(failureMessage)) &&
+      nextAttemptCount < MAX_POLL_FAILURES &&
+      processingAgeMs < PROVIDER_FAILURE_GRACE_SECONDS * 1000
+    ) {
+      await requeueProviderSoftFailure(job, String(failureMessage), nextAttemptCount, providerStatus);
+      return 'requeued';
     }
     await markFailedRespectingRefundPolicy(job, failureMessage);
     return 'failed';
@@ -2436,7 +2220,7 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
       queue_payload: withQueueLog(
         clearProviderLostJobConfirmationMeta(job.queue_payload),
         'polling',
-        `Provider đang xử lý${providerProgress > 0 ? ` (${providerProgress}%)` : ''}${providerStatus ? ` - ${providerStatus}` : ''}.`,
+        `Provider đang xử lý${providerProgress > 0 ? ` (${providerProgress}%)` : ''}.`,
       ),
       progress,
       error_message: null,
@@ -2462,22 +2246,15 @@ const handlePollFailure = async (job: QueueJobRow, errorMessage: string) => {
   const startedAt = state?.processing_started_at || state?.created_at || new Date().toISOString();
   const processingAgeMs = Date.now() - new Date(startedAt).getTime();
   const isTerminalPollFailure = isTerminalRescueFailureMessage(errorMessage);
-  const isTerminalProviderPollFailure = isTerminalProviderPollFailureMessage(errorMessage);
-  const isVideoOrMotionJob = job.queue_kind === 'video_generate' || job.queue_kind === 'motion_generate';
 
   if (isTerminalPollFailure) {
     return handleLostProviderJobSignal(job, errorMessage, state);
   }
 
-  if (isTerminalProviderPollFailure) {
-    await markFailedRespectingRefundPolicy(job, errorMessage);
-    return 'failed';
-  }
-
   if (
     isTerminalPollFailure ||
-    (!isVideoOrMotionJob && nextAttemptCount >= MAX_POLL_FAILURES) ||
-    (!isVideoOrMotionJob && processingAgeMs >= getProviderProcessingTimeoutMs(job, job.queue_payload))
+    nextAttemptCount >= MAX_POLL_FAILURES ||
+    processingAgeMs >= getProviderProcessingTimeoutMs(job, job.queue_payload)
   ) {
     const finalMessage =
       isTerminalPollFailure
@@ -3007,7 +2784,50 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
       job.queue_payload = stagedResult.storedPayload;
     }
 
-    if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType !== 'image_generate_recipe_v1') {
+    if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'prompt_image_generate_recipe_v1') {
+      await updatePreProviderStage(job.id, 20);
+      job.queue_payload = await persistQueueLog(
+        job.id,
+        job.queue_payload || currentPayload,
+        'building_payload',
+        'Đang chuẩn bị payload tạo ảnh AI thuần prompt.',
+      );
+      job.queue_payload = await markTstTouched(
+        job.id,
+        job.queue_payload,
+        'Đã bắt đầu chuẩn bị payload và gửi dữ liệu lên hệ thống TST.',
+      );
+      const providerPayload = await withTimeout(
+        withLeaseHeartbeat(
+          job.id,
+          prepareProviderPayloadFromQueueRecipe((job.queue_payload || currentPayload) as PromptImageGenerateRecipePayload),
+          preparationLeaseSeconds,
+        ),
+        preparationTimeoutMs,
+        'Queue preparation timed out before dispatching to provider.',
+      );
+      const preparedValidationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, providerPayload);
+      const validatedProviderPayload = applyLivePricingConfigToPayload(
+        job.queue_kind,
+        providerPayload,
+        preparedValidationResult,
+      );
+      job.queue_payload = await persistPreparedPayload(job.id, validatedProviderPayload, job.queue_payload || currentPayload);
+      job.queue_payload = await persistQueueLog(
+        job.id,
+        job.queue_payload,
+        'dispatching',
+        'Payload đã sẵn sàng. Chờ gửi provider.',
+        'success',
+      );
+      await markPreparedForDispatch(job.id);
+      return { requeued: 1 };
+    }
+
+    if (
+      isQueueRecipePayload(currentPayload) &&
+      (currentPayload.recipeType === 'video_generate_recipe_v1' || currentPayload.recipeType === 'motion_generate_recipe_v1')
+    ) {
       await updatePreProviderStage(job.id, 20);
       const reviewStartMessage =
         currentPayload.recipeType === 'video_generate_recipe_v1'
@@ -3100,7 +2920,7 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
     }
 
     const dispatchAttemptId = randomUUID();
-    job.queue_payload = await markSubmittingPreparedPayloadWithOwnership(job.id, job.queue_payload, dispatchAttemptId, job.queue_kind);
+    job.queue_payload = await markSubmittingPreparedPayloadWithOwnership(job.id, job.queue_payload, dispatchAttemptId);
     if (!(await confirmDispatchAttemptOwnership(job.id, dispatchAttemptId))) {
       await releaseLease(job.id);
       return {};
@@ -3390,7 +3210,51 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
         job.queue_payload = stagedResult.storedPayload;
       }
 
-      if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType !== 'image_generate_recipe_v1') {
+      if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'prompt_image_generate_recipe_v1') {
+        await updatePreProviderStage(job.id, 20);
+        job.queue_payload = await persistQueueLog(
+          job.id,
+          job.queue_payload || currentPayload,
+          'building_payload',
+          'Đang chuẩn bị payload tạo ảnh AI thuần prompt.',
+        );
+        job.queue_payload = await markTstTouched(
+          job.id,
+          job.queue_payload,
+          'Đã bắt đầu chuẩn bị payload và gửi dữ liệu lên hệ thống TST.',
+        );
+        const providerPayload = await withTimeout(
+          withLeaseHeartbeat(
+            job.id,
+            prepareProviderPayloadFromQueueRecipe((job.queue_payload || currentPayload) as PromptImageGenerateRecipePayload),
+            preparationLeaseSeconds,
+          ),
+          preparationTimeoutMs,
+          'Queue preparation timed out before dispatching to provider.',
+        );
+        const preparedValidationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, providerPayload);
+        const validatedProviderPayload = applyLivePricingConfigToPayload(
+          job.queue_kind,
+          providerPayload,
+          preparedValidationResult,
+        );
+        job.queue_payload = await persistPreparedPayload(job.id, validatedProviderPayload, job.queue_payload || currentPayload);
+        job.queue_payload = await persistQueueLog(
+          job.id,
+          job.queue_payload,
+          'dispatching',
+          'Payload đã sẵn sàng. Chờ gửi provider.',
+          'success',
+        );
+        await markPreparedForDispatch(job.id);
+        summary.requeued += 1;
+        continue;
+      }
+
+      if (
+        isQueueRecipePayload(currentPayload) &&
+        (currentPayload.recipeType === 'video_generate_recipe_v1' || currentPayload.recipeType === 'motion_generate_recipe_v1')
+      ) {
         await updatePreProviderStage(job.id, 20);
         const reviewStartMessage =
           currentPayload.recipeType === 'video_generate_recipe_v1'
@@ -3478,7 +3342,7 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
         job.queue_payload = await persistPreparedPayload(job.id, providerPayloadForSubmit, job.queue_payload || currentPayload);
       }
 
-      job.queue_payload = await markSubmittingPreparedPayload(job.id, job.queue_payload, job.queue_kind);
+      job.queue_payload = await markSubmittingPreparedPayload(job.id, job.queue_payload);
       providerDispatchStarted = true;
       const providerJobId = await submitProviderJob(job.queue_kind, providerPayloadForSubmit);
       job.queue_payload = await markSubmitted(job, providerJobId);

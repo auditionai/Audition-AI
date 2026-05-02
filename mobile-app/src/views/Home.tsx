@@ -159,7 +159,19 @@ export function Home() {
         </div>
 
         {/* 3 Tools Grid */}
-        <div className="flex gap-3">
+        <div className="grid grid-cols-2 gap-3">
+          <div
+            onClick={() => navigate('/tools/ai-image')}
+            className="bg-white dark:bg-[#18181B] rounded-[24px] p-4 flex flex-col items-center justify-center text-center gap-3 border border-gray-100 dark:border-zinc-800 shadow-sm active:translate-y-1 transition-all duration-150 cursor-pointer group relative overflow-hidden"
+          >
+            <div className="absolute top-0 inset-x-0 h-1/2 bg-gradient-to-b from-cyan-50/50 to-transparent pointer-events-none"></div>
+            <div className="w-11 h-11 bg-gradient-to-br from-cyan-100 via-cyan-50 to-white rounded-full flex items-center justify-center group-hover:scale-110 transition-transform shadow-[inset_0_2px_4px_rgba(255,255,255,0.8),0_4px_8px_rgba(6,182,212,0.15)] ring-1 ring-cyan-100">
+              <ImageIcon className="w-[22px] h-[22px] text-cyan-500 drop-shadow-sm" />
+            </div>
+            <div className="relative z-10 mt-0.5">
+              <h4 className="text-[11px] font-extrabold text-gray-900 dark:text-white leading-tight">Tạo Ảnh<br /><span className="text-cyan-500">AI</span></h4>
+            </div>
+          </div>
           {/* Chỉnh sửa Ảnh */}
           <div
             onClick={() => navigate('/tools/edit')}

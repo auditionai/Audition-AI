@@ -10,6 +10,7 @@ import { Home } from './views/Home';
 import { WorkspaceImage } from './views/WorkspaceImage';
 import { WorkspaceVideo } from './views/WorkspaceVideo';
 import { WorkspaceEdit } from './views/WorkspaceEdit';
+import { WorkspacePromptImage } from './views/WorkspacePromptImage';
 import { Gallery } from './views/Gallery';
 import { TopUp } from './views/TopUp';
 import { Settings } from './views/Settings';
@@ -50,6 +51,7 @@ function AppRoutes() {
             <Route path="/home" element={<Home />} />
             <Route path="/generate/image" element={<WorkspaceImage />} />
             <Route path="/generate/video" element={<WorkspaceVideo />} />
+            <Route path="/tools/ai-image" element={<WorkspacePromptImage />} />
             <Route path="/tools/:toolId" element={<WorkspaceEdit />} />
             <Route path="/gallery" element={<Gallery />} />
             <Route path="/topup" element={<TopUp />} />

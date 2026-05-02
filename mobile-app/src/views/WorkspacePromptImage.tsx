@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ImagePlus, Loader, Plus, Sparkles, X, Zap, Crown, Coins } from 'lucide-react';
+import { Bot, Coins, Crown, ImagePlus, Loader, Plus, Sparkles, X, Zap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../components/NotificationSystem';
 import { getModelPricing, getUserProfile } from '../services/economyService';
@@ -28,6 +28,17 @@ import type { PromptImageGenerateRecipePayload } from '../../../shared/queueReci
 
 const MAX_REFERENCE_IMAGES = 4;
 const ASPECT_RATIOS = ['1:1', '9:16', '16:9', '3:4', '4:3', '2:3', '3:2'];
+const MODE_TABS = [
+  { count: 1, label: 'Đơn' },
+  { count: 2, label: 'Đôi' },
+  { count: 3, label: 'Nhóm 3' },
+  { count: 4, label: 'Nhóm 4' },
+] as const;
+const MODEL_TABS: Array<{ tier: TstGenerationTier; label: string; icon: typeof Zap }> = [
+  { tier: 'flash', label: 'Flash', icon: Zap },
+  { tier: 'pro', label: 'Pro', icon: Crown },
+  { tier: 'gpt', label: 'GPT', icon: Bot },
+];
 
 const readFileAsDataUrl = (file: File) =>
   new Promise<string>((resolve, reject) => {
@@ -41,6 +52,15 @@ const stageReferenceImage = async (source: string, index: number) => {
   const optimized = await optimizePayload(source, 2048);
   return uploadFileToR2(optimized, `inputs/prompt-image/mobile-ref-${index + 1}`);
 };
+
+const getModelLabel = (tier: TstGenerationTier) => {
+  if (tier === 'flash') return 'Flash';
+  if (tier === 'pro') return 'Pro';
+  return 'GPT';
+};
+
+const speedLabelToTst = (label: string) => uiSpeedToTst(label) || 'fast';
+const speedIdToLabel = (speedId: string) => (speedId === 'slow' ? 'Tiết Kiệm' : 'Nhanh');
 
 export function WorkspacePromptImage() {
   const navigate = useNavigate();
@@ -58,6 +78,7 @@ export function WorkspacePromptImage() {
   const [pricingOverrides, setPricingOverrides] = useState<ModelPricing[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { queueStats } = useConcurrency();
+
   const pricingOverrideRows: AuditionPricingOverride[] = useMemo(
     () =>
       pricingOverrides.map((row) => ({
@@ -80,7 +101,11 @@ export function WorkspacePromptImage() {
     };
   }, []);
 
-  const generationSpeedId = uiSpeedToTst(speed) || 'fast';
+  const uploadedImages = referenceImages.filter((value): value is string => Boolean(value));
+  const uploadedCount = uploadedImages.length;
+  const modeCountForPrice = Math.max(1, Math.min(MAX_REFERENCE_IMAGES, uploadedCount));
+  const activeModeCount = Math.max(1, Math.min(MAX_REFERENCE_IMAGES, referenceImages.length));
+  const generationSpeedId = speedLabelToTst(speed);
   const generationServerId = uiServerToTst(server) || 'fast';
 
   const availableResolutions = useMemo(() => {
@@ -124,7 +149,7 @@ export function WorkspacePromptImage() {
       setServer(tstServerToUi(availableServers[0] || 'fast'));
     }
     if (!availableSpeeds.includes(generationSpeedId as any)) {
-      setSpeed((availableSpeeds[0] || 'fast') === 'slow' ? 'Chậm' : 'Nhanh');
+      setSpeed(speedIdToLabel(availableSpeeds[0] || 'fast'));
     }
   }, [availableServers, availableSpeeds, generationServerId, generationSpeedId]);
 
@@ -136,6 +161,15 @@ export function WorkspacePromptImage() {
     pricingEntries,
     pricingOverrides: pricingOverrideRows,
   });
+  const totalCost = selectedCost.available ? selectedCost.vcoin * modeCountForPrice : 0;
+
+  const setSlotCount = (count: number) => {
+    const normalizedCount = Math.max(1, Math.min(MAX_REFERENCE_IMAGES, count));
+    setReferenceImages((prev) => {
+      const safeSlots = Array.isArray(prev) && prev.length > 0 ? prev : [null];
+      return Array.from({ length: normalizedCount }, (_, index) => safeSlots[index] ?? null);
+    });
+  };
 
   const pickImage = (index: number) => {
     setActiveUploadIndex(index);
@@ -158,6 +192,21 @@ export function WorkspacePromptImage() {
     }
   };
 
+  const addImageSlot = () => {
+    setReferenceImages((prev) => {
+      const safeSlots = Array.isArray(prev) && prev.length > 0 ? prev : [null];
+      return safeSlots.length >= MAX_REFERENCE_IMAGES ? safeSlots : [...safeSlots, null];
+    });
+  };
+
+  const removeImageSlot = (index: number) => {
+    setReferenceImages((prev) => {
+      const safeSlots = Array.isArray(prev) && prev.length > 0 ? prev : [null];
+      const next = safeSlots.filter((_, idx) => idx !== index);
+      return next.length > 0 ? next : [null];
+    });
+  };
+
   const submit = async () => {
     const userPrompt = prompt.trim();
     if (!userPrompt) {
@@ -168,7 +217,7 @@ export function WorkspacePromptImage() {
       notify('Bạn đang có quá nhiều job ảnh đang chạy.', 'error');
       return;
     }
-    if (!selectedCost.available || selectedCost.vcoin <= 0) {
+    if (!selectedCost.available || totalCost <= 0) {
       notify('Cấu hình giá model này chưa khả dụng.', 'error');
       return;
     }
@@ -176,15 +225,15 @@ export function WorkspacePromptImage() {
     setIsSubmitting(true);
     try {
       const profile = await getUserProfile({ force: true });
-      if ((profile.vcoin_balance || 0) < selectedCost.vcoin) {
-        notify(`Bạn cần ${selectedCost.vcoin} Vcoin để tạo ảnh.`, 'error');
+      if ((profile.vcoin_balance || 0) < totalCost) {
+        notify(`Bạn cần ${totalCost} Vcoin để tạo ảnh.`, 'error');
         return;
       }
 
-      const localImages = referenceImages.filter((value): value is string => Boolean(value));
-      const stagedImages = await Promise.all(localImages.map((value, index) => stageReferenceImage(value, index)));
+      const stagedImages = await Promise.all(uploadedImages.map((value, index) => stageReferenceImage(value, index)));
       const queuedJobId = crypto.randomUUID();
-      const engine = `${aiModel === 'flash' ? 'Flash' : 'Pro'} Prompt Image ${resolution}`;
+      const modelLabel = getModelLabel(aiModel);
+      const engine = `${modelLabel} Prompt Image ${resolution}`;
       const queuePayload: PromptImageGenerateRecipePayload = {
         recipeType: 'prompt_image_generate_recipe_v1',
         modelId: getGenerationModelId(aiModel),
@@ -197,7 +246,7 @@ export function WorkspacePromptImage() {
       };
       const queuedImage: GeneratedImage = {
         id: queuedJobId,
-        url: localImages[0] || '',
+        url: uploadedImages[0] || '',
         prompt: userPrompt,
         timestamp: Date.now(),
         updatedAt: Date.now(),
@@ -210,7 +259,7 @@ export function WorkspacePromptImage() {
         queueKind: 'image_generate',
         jobId: queuedJobId,
         progress: 0,
-        cost: selectedCost.vcoin,
+        cost: totalCost,
       };
 
       await saveImageToLocalCache(queuedImage);
@@ -221,7 +270,7 @@ export function WorkspacePromptImage() {
         toolName: 'AI Image Creator',
         engine,
         assetType: 'image',
-        costVcoin: selectedCost.vcoin,
+        costVcoin: totalCost,
         queueKind: 'image_generate',
         clientPlatform: 'mobile',
         queuePayload,
@@ -239,45 +288,59 @@ export function WorkspacePromptImage() {
   };
 
   return (
-    <div className="min-h-screen pb-28 px-5 pt-4 space-y-5">
+    <div className="min-h-screen bg-gray-50 dark:bg-[#09090B] pb-28 px-5 pt-4 space-y-5">
       <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileSelected} />
 
-      <header>
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-400">Tools</p>
-        <h1 className="text-2xl font-black text-white mt-1">Tạo Ảnh AI</h1>
-        <p className="text-sm text-zinc-400 mt-2">Prompt-only, tối đa 4 ảnh tham chiếu, không chèn prompt hệ thống Audition.</p>
+      <header className="space-y-3">
+        <p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-500">Tools</p>
+        <h1 className="text-3xl font-black text-gray-950 dark:text-white">Tạo Ảnh AI</h1>
+        <div className="grid grid-cols-4 gap-1 rounded-2xl bg-white dark:bg-[#18181B] p-1 shadow-sm border border-gray-200 dark:border-zinc-800">
+          {MODE_TABS.map((tab) => (
+            <button
+              key={tab.count}
+              type="button"
+              onClick={() => setSlotCount(tab.count)}
+              className={`py-2 rounded-xl text-xs font-black ${
+                activeModeCount === tab.count ? 'bg-gray-950 text-white dark:bg-white dark:text-black' : 'text-gray-500 dark:text-zinc-500'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </header>
 
-      <section className="rounded-[28px] border border-zinc-800 bg-[#18181B] p-4">
+      <section className="rounded-[28px] border border-gray-200 dark:border-zinc-800 bg-white dark:bg-[#18181B] p-4 shadow-sm">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-black text-white">1. Upload ảnh</h2>
-          <span className="text-[11px] text-zinc-500">{referenceImages.length}/{MAX_REFERENCE_IMAGES}</span>
+          <h2 className="text-sm font-black text-gray-950 dark:text-white">1. Upload ảnh</h2>
+          <span className="text-[11px] font-bold text-gray-400 dark:text-zinc-500">{uploadedCount}/{MAX_REFERENCE_IMAGES}</span>
         </div>
         <div className="grid grid-cols-2 gap-3">
           {referenceImages.map((image, index) => (
-            <div key={index} className="relative rounded-2xl border border-zinc-800 bg-black/30 p-2">
+            <div key={index} className="relative rounded-2xl border border-gray-200 dark:border-zinc-800 bg-gray-50 dark:bg-black/30 p-2">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-black text-white">Ảnh {index + 1}</span>
+                <span className="text-[11px] font-black text-gray-900 dark:text-white">Ảnh {index + 1}</span>
                 {referenceImages.length > 1 && (
-                  <button type="button" onClick={() => setReferenceImages((prev) => {
-                    const safeSlots = Array.isArray(prev) && prev.length > 0 ? prev : [null];
-                    const next = safeSlots.filter((_, idx) => idx !== index);
-                    return next.length > 0 ? next : [null];
-                  })} className="text-zinc-500">
+                  <button type="button" onClick={() => removeImageSlot(index)} className="text-gray-400 dark:text-zinc-500">
                     <X className="w-4 h-4" />
                   </button>
                 )}
               </div>
-              <button type="button" onClick={() => pickImage(index)} className="w-full aspect-[3/4] rounded-xl border border-dashed border-zinc-700 overflow-hidden flex items-center justify-center text-zinc-500">
+              <button
+                type="button"
+                onClick={() => pickImage(index)}
+                className="w-full aspect-[3/4] rounded-xl border border-dashed border-gray-300 dark:border-zinc-700 overflow-hidden flex items-center justify-center text-gray-400 dark:text-zinc-500"
+              >
                 {image ? <img src={image} className="w-full h-full object-cover" alt={`Ảnh ${index + 1}`} /> : <ImagePlus className="w-8 h-8" />}
               </button>
             </div>
           ))}
           {referenceImages.length < MAX_REFERENCE_IMAGES && (
-            <button type="button" onClick={() => setReferenceImages((prev) => {
-              const safeSlots = Array.isArray(prev) && prev.length > 0 ? prev : [null];
-              return safeSlots.length >= MAX_REFERENCE_IMAGES ? safeSlots : [...safeSlots, null];
-            })} className="min-h-[190px] rounded-2xl border border-dashed border-zinc-700 text-zinc-400 flex flex-col items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={addImageSlot}
+              className="min-h-[190px] rounded-2xl border border-dashed border-gray-300 dark:border-zinc-700 text-gray-500 dark:text-zinc-400 flex flex-col items-center justify-center gap-2"
+            >
               <Plus className="w-7 h-7" />
               <span className="text-xs font-bold">Thêm ảnh</span>
             </button>
@@ -285,56 +348,94 @@ export function WorkspacePromptImage() {
         </div>
       </section>
 
-      <section className="rounded-[28px] border border-zinc-800 bg-[#18181B] p-4">
-        <h2 className="text-sm font-black text-white mb-3">2. Prompt</h2>
+      <section className="rounded-[28px] border border-gray-200 dark:border-zinc-800 bg-white dark:bg-[#18181B] p-4 shadow-sm">
+        <h2 className="text-sm font-black text-gray-950 dark:text-white mb-3">2. Mô tả</h2>
         <textarea
           value={prompt}
           onChange={(event) => setPrompt(event.target.value)}
           maxLength={9999}
           placeholder="Nhập prompt tạo ảnh..."
-          className="w-full min-h-[150px] rounded-2xl bg-black/40 border border-zinc-800 p-4 text-sm text-white outline-none resize-none"
+          className="w-full min-h-[150px] rounded-2xl bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-zinc-800 p-4 text-sm text-gray-950 dark:text-white outline-none resize-none placeholder:text-gray-400 dark:placeholder:text-zinc-500"
         />
-        <div className="text-right text-[11px] text-zinc-500 mt-1">{prompt.length}/9999</div>
+        <div className="text-right text-[11px] text-gray-400 dark:text-zinc-500 mt-1">{prompt.length}/9999</div>
       </section>
 
-      <section className="rounded-[28px] border border-zinc-800 bg-[#18181B] p-4 space-y-4">
-        <h2 className="text-sm font-black text-white">3. Cấu hình</h2>
-        <div className="grid grid-cols-2 gap-2 rounded-2xl bg-black/40 p-1">
-          <button onClick={() => setAiModel('flash')} className={`py-3 rounded-xl text-sm font-black flex items-center justify-center gap-2 ${aiModel === 'flash' ? 'bg-fuchsia-600 text-white' : 'text-zinc-500'}`}>
-            <Zap className="w-4 h-4" /> Flash
-          </button>
-          <button onClick={() => setAiModel('pro')} className={`py-3 rounded-xl text-sm font-black flex items-center justify-center gap-2 ${aiModel === 'pro' ? 'bg-fuchsia-600 text-white' : 'text-zinc-500'}`}>
-            <Crown className="w-4 h-4" /> Pro
-          </button>
+      <section className="rounded-[28px] border border-gray-200 dark:border-zinc-800 bg-white dark:bg-[#18181B] p-4 space-y-4 shadow-sm">
+        <h2 className="text-sm font-black text-gray-950 dark:text-white">3. Cấu hình</h2>
+        <div className="grid grid-cols-3 gap-1 rounded-2xl bg-gray-100 dark:bg-black/40 p-1">
+          {MODEL_TABS.map(({ tier, label, icon: Icon }) => (
+            <button
+              key={tier}
+              type="button"
+              onClick={() => setAiModel(tier)}
+              className={`py-3 rounded-xl text-sm font-black flex items-center justify-center gap-1.5 ${
+                aiModel === tier ? 'bg-fuchsia-600 text-white' : 'text-gray-500 dark:text-zinc-500'
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              {label}
+            </button>
+          ))}
         </div>
         <div className="grid grid-cols-4 gap-2">
           {ASPECT_RATIOS.map((ratio) => (
-            <button key={ratio} onClick={() => setAspectRatio(ratio)} className={`py-2 rounded-xl text-[11px] font-bold ${aspectRatio === ratio ? 'bg-fuchsia-600 text-white' : 'bg-black/40 text-zinc-500'}`}>{ratio}</button>
+            <button
+              key={ratio}
+              type="button"
+              onClick={() => setAspectRatio(ratio)}
+              className={`py-2 rounded-xl text-[11px] font-bold ${
+                aspectRatio === ratio ? 'bg-fuchsia-600 text-white' : 'bg-gray-100 text-gray-500 dark:bg-black/40 dark:text-zinc-500'
+              }`}
+            >
+              {ratio}
+            </button>
           ))}
         </div>
         <div className="grid grid-cols-3 gap-2">
           {availableResolutions.map((value) => (
-            <button key={value} onClick={() => setResolution(value)} className={`py-3 rounded-xl text-xs font-black ${resolution === value ? 'bg-fuchsia-600 text-white' : 'bg-black/40 text-zinc-500'}`}>{value}</button>
+            <button
+              key={value}
+              type="button"
+              onClick={() => setResolution(value)}
+              className={`py-3 rounded-xl text-xs font-black ${
+                resolution === value ? 'bg-fuchsia-600 text-white' : 'bg-gray-100 text-gray-500 dark:bg-black/40 dark:text-zinc-500'
+              }`}
+            >
+              {value}
+            </button>
           ))}
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <select value={speed} onChange={(event) => setSpeed(event.target.value)} className="rounded-2xl bg-black/40 border border-zinc-800 p-3 text-sm text-white">
-            <option>Nhanh</option>
-            <option>Chậm</option>
+          <select
+            value={speed}
+            onChange={(event) => setSpeed(event.target.value)}
+            className="rounded-2xl bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-zinc-800 p-3 text-sm text-gray-950 dark:text-white"
+          >
+            {availableSpeeds.map((value) => (
+              <option key={value}>{speedIdToLabel(value)}</option>
+            ))}
           </select>
-          <select value={server} onChange={(event) => setServer(event.target.value)} className="rounded-2xl bg-black/40 border border-zinc-800 p-3 text-sm text-white">
+          <select
+            value={server}
+            onChange={(event) => setServer(event.target.value)}
+            className="rounded-2xl bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-zinc-800 p-3 text-sm text-gray-950 dark:text-white"
+          >
             {availableServers.map((value) => <option key={value}>{tstServerToUi(value)}</option>)}
           </select>
+        </div>
+        <div className="rounded-2xl bg-gray-50 dark:bg-black/30 p-3 text-xs text-gray-500 dark:text-zinc-400">
+          Giá: {selectedCost.available ? `${selectedCost.vcoin} x ${modeCountForPrice} = ${totalCost} Vcoin` : 'chưa có giá'}
         </div>
       </section>
 
       <button
+        type="button"
         onClick={submit}
         disabled={isSubmitting}
         className="fixed left-5 right-5 bottom-24 z-20 rounded-2xl bg-gradient-to-r from-fuchsia-600 to-cyan-500 py-4 text-white font-black shadow-2xl flex items-center justify-center gap-2 disabled:opacity-60"
       >
         {isSubmitting ? <Loader className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
-        {isSubmitting ? 'Đang gửi job...' : <span className="flex items-center gap-1">Tạo ảnh {selectedCost.available ? selectedCost.vcoin : '?'} <Coins className="w-4 h-4" /></span>}
+        {isSubmitting ? 'Đang gửi job...' : <span className="flex items-center gap-1">Tạo ảnh {selectedCost.available ? totalCost : '?'} <Coins className="w-4 h-4" /></span>}
       </button>
     </div>
   );

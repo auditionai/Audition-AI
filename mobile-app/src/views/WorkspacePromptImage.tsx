@@ -28,7 +28,6 @@ import {
 import { optimizePayload } from '../../../utils/imageProcessor';
 import type { GeneratedImage } from '../types';
 import type { ModelPricing } from '../services/economyService';
-import type { PromptImageGenerateRecipePayload } from '../../../shared/queueRecipes';
 
 const MAX_REFERENCE_IMAGES = 4;
 const ASPECT_RATIOS = ['1:1', '9:16', '16:9', '3:4', '4:3', '2:3', '3:2'];
@@ -250,17 +249,16 @@ export function WorkspacePromptImage() {
       const queuedJobId = crypto.randomUUID();
       const modelLabel = getModelLabel(aiModel);
       const engine = `${modelLabel} Prompt Image ${resolution}`;
-      const queuePayload: PromptImageGenerateRecipePayload = {
-        recipeType: 'prompt_image_generate_recipe_v1',
-        modelId: getGenerationModelId(aiModel),
+      const queuePayload: Record<string, unknown> = {
+        model: getGenerationModelId(aiModel),
         prompt: userPrompt,
-        referenceImages: stagedImages,
-        resolution,
-        aspectRatio,
-        quality: aiModel === 'gpt' ? gptQuality : undefined,
+        resolution: resolution.toLowerCase(),
+        aspect_ratio: aspectRatio,
         speed: generationSpeedId,
-        serverId: generationServerId,
+        server_id: generationServerId,
       };
+      if (stagedImages.length > 0) queuePayload.img_url = stagedImages;
+      if (aiModel === 'gpt') queuePayload.quality = gptQuality;
       const queuedImage: GeneratedImage = {
         id: queuedJobId,
         url: uploadedImages[0] || '',

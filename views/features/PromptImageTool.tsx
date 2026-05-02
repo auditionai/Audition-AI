@@ -27,7 +27,6 @@ import {
 import { optimizePayload } from '../../utils/imageProcessor';
 import type { Feature, GeneratedImage, Language, ViewId } from '../../types';
 import type { ModelPricing } from '../../services/economyService';
-import type { PromptImageGenerateRecipePayload } from '../../shared/queueRecipes';
 
 interface PromptImageToolProps {
   feature: Feature;
@@ -276,17 +275,16 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
       const stagedImages = await Promise.all(uploadedImages.map((value, index) => stageReferenceImage(value, index)));
       const queuedJobId = crypto.randomUUID();
       const modelLabel = getModelLabel(aiModel);
-      const queuePayload: PromptImageGenerateRecipePayload = {
-        recipeType: 'prompt_image_generate_recipe_v1',
-        modelId: getGenerationModelId(aiModel),
+      const queuePayload: Record<string, unknown> = {
+        model: getGenerationModelId(aiModel),
         prompt: userPrompt,
-        referenceImages: stagedImages,
-        resolution,
-        aspectRatio,
-        quality: aiModel === 'gpt' ? gptQuality : undefined,
+        resolution: resolution.toLowerCase(),
+        aspect_ratio: aspectRatio,
         speed: generationSpeedId,
-        serverId: generationServerId,
+        server_id: generationServerId,
       };
+      if (stagedImages.length > 0) queuePayload.img_url = stagedImages;
+      if (aiModel === 'gpt') queuePayload.quality = gptQuality;
 
       const queuedImage: GeneratedImage = {
         id: queuedJobId,

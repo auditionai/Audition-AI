@@ -239,7 +239,7 @@ export const validateQueuePayloadAgainstLiveCatalog = async (
     getTstProviderPricing(),
     getServerAvailabilityConfig(),
   ]);
-  const modelId = normalize(String(queuePayload.model || ''));
+  const modelId = normalize(String(queuePayload.model || queuePayload.modelId || ''));
 
   if (!modelId) {
     throw new Error('INVALID_TST_CONFIG: Missing model id');
@@ -267,13 +267,13 @@ export const validateQueuePayloadAgainstLiveCatalog = async (
     throw new Error(`INVALID_TST_CONFIG: Model ${modelId} has no live pricing on TST`);
   }
 
-  const serverId = normalizeServer(String(queuePayload.server_id || ''));
+  const serverId = normalizeServer(String(queuePayload.server_id || queuePayload.serverId || ''));
   const resolution = normalizeResolution(String(queuePayload.resolution || ''));
   const quality = normalizeQuality(String(queuePayload.quality || ''));
   const duration = normalizeDuration(String(queuePayload.duration || ''));
   const speed = normalizeSpeed(String(queuePayload.speed || ''));
   const audio = typeof queuePayload.audio === 'boolean' ? queuePayload.audio : undefined;
-  const aspectRatio = String(queuePayload.aspect_ratio || '').trim();
+  const aspectRatio = String(queuePayload.aspect_ratio || queuePayload.aspectRatio || '').trim();
 
   if (serverId && !isServerAllowedBySnapshot(serverAvailabilityConfig, modelId, serverId, speed)) {
     throw new Error(`INVALID_TST_CONFIG: Server ${serverId} đang tạm ẩn do quá tải ở chế độ ${speed || 'default'}. Vui lòng chọn server khác.`);

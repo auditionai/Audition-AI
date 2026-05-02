@@ -502,9 +502,6 @@ export function WorkspacePromptImage() {
           <div className="flex items-start justify-between gap-3">
             <div>
               <h3 className="text-sm font-bold text-gray-800 dark:text-zinc-100">Luồng xử lý</h3>
-              <p className="mt-1 text-xs leading-relaxed text-gray-400 dark:text-zinc-500">
-                Mobile dùng cùng queue/provider với desktop. Prompt và ảnh tham chiếu được gửi trực tiếp sang TST, không chèn prompt hệ thống Audition.
-              </p>
             </div>
             <div className="rounded-2xl bg-gray-50 px-2.5 py-2 text-right dark:bg-[#27272A]">
               <div className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-zinc-500">Chi phí</div>

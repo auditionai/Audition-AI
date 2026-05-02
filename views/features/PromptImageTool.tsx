@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, Cpu, Crown, Image as ImageIcon, Loader, MessageSquare, Plus, Sparkles, Upload, X, Zap } from 'lucide-react';
+import { Activity, Bot, ChevronDown, ChevronUp, Crown, Database, Image as ImageIcon, Info, Loader, MessageSquare, Plus, RefreshCw, Sparkles, Upload, Wand2, X, Zap } from 'lucide-react';
 import { useNotification } from '../../components/NotificationSystem';
 import { getModelPricing, getUserProfile } from '../../services/economyService';
 import { useConcurrency, CONCURRENCY_LIMITS } from '../../services/concurrencyService';
@@ -35,12 +35,6 @@ type PromptImageSlot = string | null;
 
 const MAX_REFERENCE_IMAGES = 4;
 const ASPECT_RATIOS = ['1:1', '9:16', '16:9', '3:4', '4:3', '2:3', '3:2'];
-const MODE_TABS = [
-  { count: 1, label: 'Đơn' },
-  { count: 2, label: 'Đôi' },
-  { count: 3, label: 'Nhóm 3' },
-  { count: 4, label: 'Nhóm 4' },
-] as const;
 const MODEL_TABS: Array<{ tier: TstGenerationTier; label: string; icon: React.ElementType }> = [
   { tier: 'flash', label: 'Flash', icon: Zap },
   { tier: 'pro', label: 'Pro', icon: Crown },
@@ -83,7 +77,8 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
   const [pricingEntries, setPricingEntries] = useState<TstPricingEntry[]>([]);
   const [pricingOverrides, setPricingOverrides] = useState<ModelPricing[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { queueStats } = useConcurrency();
+  const { queueStats, triggerPoll } = useConcurrency();
+  const [isConcurrencyExpanded, setIsConcurrencyExpanded] = useState(false);
 
   const pricingOverrideRows: AuditionPricingOverride[] = useMemo(
     () =>
@@ -110,7 +105,6 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
   const uploadedImages = referenceImages.filter((value): value is string => Boolean(value));
   const uploadedCount = uploadedImages.length;
   const modeCountForPrice = Math.max(1, Math.min(MAX_REFERENCE_IMAGES, uploadedCount));
-  const activeModeCount = Math.max(1, Math.min(MAX_REFERENCE_IMAGES, referenceImages.length));
   const generationSpeedId = speedLabelToTst(speed);
   const generationServerId = uiServerToTst(server) || 'fast';
 
@@ -168,14 +162,25 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
     pricingOverrides: pricingOverrideRows,
   });
   const totalCost = selectedCost.available ? selectedCost.vcoin * modeCountForPrice : 0;
-
-  const setSlotCount = (count: number) => {
-    const normalizedCount = Math.max(1, Math.min(MAX_REFERENCE_IMAGES, count));
-    setReferenceImages((prev) => {
-      const safeSlots = Array.isArray(prev) && prev.length > 0 ? prev : [null];
-      return Array.from({ length: normalizedCount }, (_, index) => safeSlots[index] ?? null);
-    });
-  };
+  const resolutionCostMap = useMemo(
+    () =>
+      Object.fromEntries(
+        (['1K', '2K', '4K'] as TstResolution[]).map((item) => [
+          item,
+          getGenerationCostBreakdown({
+            tier: aiModel,
+            resolution: item,
+            speed: generationSpeedId,
+            serverId: generationServerId,
+            pricingEntries,
+            pricingOverrides: pricingOverrideRows,
+          }).vcoin * modeCountForPrice,
+        ]),
+      ) as Record<TstResolution, number>,
+    [aiModel, generationServerId, generationSpeedId, modeCountForPrice, pricingEntries, pricingOverrideRows],
+  );
+  const availableSpeedLabels = availableSpeeds.map((speedId) => speedIdToLabel(speedId));
+  const availableServerLabels = availableServers.map((serverId) => tstServerToUi(serverId));
 
   const handlePickImage = (index: number) => {
     setActiveUploadIndex(index);
@@ -297,23 +302,6 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
     <div className="w-full pb-24">
       <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileSelected} />
 
-      <div className="flex justify-center mb-4">
-        <div className="inline-flex items-center gap-1 rounded-2xl border border-white/10 bg-[#11121a] p-1.5 shadow-xl">
-          {MODE_TABS.map((tab) => (
-            <button
-              key={tab.count}
-              type="button"
-              onClick={() => setSlotCount(tab.count)}
-              className={`px-5 py-2.5 rounded-xl text-sm font-black transition-all ${
-                activeModeCount === tab.count ? 'bg-white text-black shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6">
         <div className="space-y-5">
           <section>
@@ -384,42 +372,45 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
           </section>
         </div>
 
-        <aside className="h-fit rounded-3xl border border-white/10 bg-[#11121a] p-5 sticky top-4 shadow-2xl">
-          <h3 className="text-xl font-black text-white flex items-center gap-2 mb-5">
-            <Cpu className="w-5 h-5 text-slate-400" />
-            3. Cấu hình
-          </h3>
+        <aside className="h-fit rounded-2xl border border-white/10 bg-[#12121a] p-5 sticky top-4 shadow-lg">
+          <div className="flex items-center justify-between border-b border-white/10 pb-3">
+            <h3 className="font-bold text-white flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-slate-400" />
+              3. Cấu Hình
+            </h3>
+            <Info className="w-4 h-4 text-audi-yellow" />
+          </div>
 
-          <div className="space-y-5">
-            <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Mô hình AI</label>
-              <div className="grid grid-cols-3 gap-1.5 mt-2 rounded-xl bg-black/40 p-1.5">
+          <div className="space-y-5 mt-5">
+            <div className="space-y-3">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Mô hình AI</label>
+              <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
                 {MODEL_TABS.map(({ tier, label, icon: Icon }) => (
                   <button
                     key={tier}
                     type="button"
                     onClick={() => setAiModel(tier)}
-                    className={`py-3 rounded-lg text-sm font-black transition-all flex items-center justify-center gap-1.5 ${
-                      aiModel === tier ? 'bg-audi-purple text-white shadow-lg' : 'text-slate-400 hover:text-white'
+                    className={`flex-1 py-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                      aiModel === tier ? 'bg-audi-purple text-white shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'
                     }`}
                   >
-                    <Icon className="w-4 h-4" />
+                    <Icon className={`w-4 h-4 ${aiModel === tier ? 'text-white' : 'text-slate-400'}`} />
                     {label}
                   </button>
                 ))}
               </div>
             </div>
 
-            <div>
+            <div className="space-y-3">
               <label className="text-[10px] font-bold text-slate-400 uppercase">Tỷ lệ khung hình</label>
-              <div className="grid grid-cols-4 gap-2 mt-2">
+              <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
                 {ASPECT_RATIOS.map((ratio) => (
                   <button
                     key={ratio}
                     type="button"
                     onClick={() => setAspectRatio(ratio)}
-                    className={`py-2 rounded-lg text-xs font-bold ${
-                      aspectRatio === ratio ? 'bg-audi-purple text-white shadow-lg' : 'bg-black/40 text-slate-400 hover:text-white'
+                    className={`flex-1 py-3 rounded-lg text-[10px] font-bold transition-all flex items-center justify-center ${
+                      aspectRatio === ratio ? 'bg-audi-purple text-white shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'
                     }`}
                   >
                     {ratio}
@@ -428,16 +419,16 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
               </div>
             </div>
 
-            <div>
+            <div className={`${availableResolutions.length === 0 ? 'hidden ' : ''}space-y-3 animate-fade-in`}>
               <label className="text-[10px] font-bold text-slate-400 uppercase">Độ phân giải</label>
-              <div className="grid grid-cols-3 gap-2 mt-2">
+              <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
                 {availableResolutions.map((value) => (
                   <button
                     key={value}
                     type="button"
                     onClick={() => setResolution(value)}
-                    className={`py-3 rounded-lg text-xs font-black ${
-                      resolution === value ? 'bg-audi-purple text-white shadow-lg' : 'bg-black/40 text-slate-400 hover:text-white'
+                    className={`flex-1 py-3 rounded-lg text-xs font-bold transition-all ${
+                      resolution === value ? 'bg-audi-purple text-white shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'
                     }`}
                   >
                     {value}
@@ -446,45 +437,112 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase">Tốc độ</label>
-                <select
-                  value={speed}
-                  onChange={(event) => setSpeed(event.target.value)}
-                  className="mt-2 w-full rounded-xl bg-black/40 border border-white/10 p-3 text-sm text-white outline-none"
-                >
-                  {availableSpeeds.map((value) => (
-                    <option key={value}>{speedIdToLabel(value)}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase">Server</label>
-                <select
-                  value={server}
-                  onChange={(event) => setServer(event.target.value)}
-                  className="mt-2 w-full rounded-xl bg-black/40 border border-white/10 p-3 text-sm text-white outline-none"
-                >
-                  {availableServers.map((value) => (
-                    <option key={value}>{tstServerToUi(value)}</option>
-                  ))}
-                </select>
+            <div className={`${availableSpeedLabels.length === 0 ? 'hidden ' : ''}space-y-3 animate-fade-in`}>
+              <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
+                <Zap className="w-3 h-3" />
+                Tốc độ xử lý
+              </label>
+              <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
+                {availableSpeedLabels.map((label) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => setSpeed(label)}
+                    className={`flex-1 py-3 rounded-lg text-xs font-bold transition-all ${
+                      speed === label ? 'bg-audi-purple text-white shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-black/30 p-3 text-xs text-slate-400">
-              Giá tính theo số ảnh đã tải: {selectedCost.available ? `${selectedCost.vcoin} x ${modeCountForPrice} = ${totalCost} Vcoin` : 'chưa có giá'}
+            <div className={`${availableServerLabels.length === 0 ? 'hidden ' : ''}space-y-3 animate-fade-in`}>
+              <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
+                <Database className="w-3 h-3" />
+                Server
+              </label>
+              <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
+                {availableServerLabels.map((label) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => setServer(label)}
+                    className={`flex-1 py-3 rounded-lg text-xs font-bold transition-all ${
+                      server === label ? 'bg-audi-cyan text-black shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-3 pt-4 border-t border-white/10">
+              <div
+                className="cursor-pointer hover:bg-white/5 p-3 rounded-xl transition-colors border border-white/5 bg-[#0a0a0f]"
+                onClick={() => setIsConcurrencyExpanded(!isConcurrencyExpanded)}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase">
+                    <Activity className="w-3 h-3 text-audi-cyan" />
+                    Luồng xử lý
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={(event) => { event.stopPropagation(); triggerPoll(); }} className="text-slate-500 hover:text-white transition-colors">
+                      <RefreshCw className="w-3 h-3" />
+                    </button>
+                    {isConcurrencyExpanded ? <ChevronUp className="w-4 h-4 text-slate-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
+                  </div>
+                </div>
+
+                {!isConcurrencyExpanded && (
+                  <div className="space-y-3 text-[10px] text-slate-400 mt-2">
+                    <div>
+                      <div className="font-bold text-audi-cyan mb-1">Luồng Của Bạn</div>
+                      <div className="flex gap-1.5">
+                        <span>Ảnh <span className="text-white font-mono">{queueStats.myImageProcessing}/{CONCURRENCY_LIMITS.user.imageProcessing}</span></span>
+                        <span>- Video <span className="text-white font-mono">{queueStats.myVideoProcessing}/{CONCURRENCY_LIMITS.user.videoProcessing}</span></span>
+                        <span>- Hàng Chờ <span className="text-white font-mono">{queueStats.myQueued}/{CONCURRENCY_LIMITS.user.queued}</span></span>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="font-bold text-slate-300 mb-1">Luồng Hệ Thống</div>
+                      <div className="flex gap-1.5">
+                        <span>Ảnh <span className="text-white font-mono">{queueStats.systemImageProcessing}/{CONCURRENCY_LIMITS.system.imageProcessing}</span></span>
+                        <span>- Video <span className="text-white font-mono">{queueStats.systemVideoProcessing}/{CONCURRENCY_LIMITS.system.videoProcessing}</span></span>
+                        <span>- Hàng Chờ <span className="text-white font-mono">{queueStats.systemQueued}/{CONCURRENCY_LIMITS.system.queued}</span></span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-audi-purple/20 to-audi-pink/20 border border-white/10 p-3 mt-4">
+              <div className="flex justify-between items-center relative z-10">
+                <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Giá hiện tại</span>
+                <div className="flex items-end gap-1">
+                  <span className="text-xl font-black text-white font-game drop-shadow-md">{totalCost}</span>
+                  <span className="text-[10px] font-bold text-audi-yellow mb-1">VCOIN</span>
+                </div>
+              </div>
+              <div className="flex justify-between text-[9px] text-slate-500 mt-2 font-mono border-t border-white/5 pt-2">
+                <span className={resolution === '1K' ? 'text-white font-bold' : ''}>1K: {resolutionCostMap['1K']}VC</span>
+                <span className={resolution === '2K' ? 'text-white font-bold' : ''}>2K: {resolutionCostMap['2K']}VC</span>
+                <span className={resolution === '4K' ? 'text-white font-bold' : ''}>4K: {resolutionCostMap['4K']}VC</span>
+              </div>
             </div>
 
             <button
               type="button"
               onClick={handleSubmit}
               disabled={isSubmitting}
-              className="w-full rounded-2xl bg-gradient-to-r from-audi-pink to-audi-purple py-4 text-white font-black shadow-lg disabled:opacity-60 flex items-center justify-center gap-2"
+              className="w-full py-3.5 mt-auto rounded-xl font-bold text-white shadow-[0_0_20px_rgba(255,0,153,0.4)] transition-all flex items-center justify-center gap-2 bg-gradient-to-r from-audi-pink to-audi-purple hover:scale-[1.02] disabled:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-70 disabled:shadow-none disabled:hover:scale-100"
             >
-              {isSubmitting ? <Loader className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
-              {isSubmitting ? 'Đang gửi job...' : `Tạo ảnh ${selectedCost.available ? `${totalCost} Vcoin` : ''}`}
+              {isSubmitting ? <Loader className="w-5 h-5 animate-spin" /> : <Wand2 className="w-5 h-5" />}
+              {isSubmitting ? 'ĐANG GỬI JOB...' : 'TẠO ẢNH NGAY'}
             </button>
           </div>
         </aside>

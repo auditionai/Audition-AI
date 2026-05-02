@@ -31,7 +31,7 @@ import {
   getGenerationCostBreakdown, getGenerationModelId, getVertexEditToolCostBreakdown,
   applyServerAvailabilityToRuntimeModels, sanitizePricingEntriesWithRuntimeModels,
   uiSpeedToTst, uiServerToTst, tstServerToUi,
-  type TstPricingEntry, type TstRuntimeModel, type AuditionPricingOverride, type TstResolution,
+  type TstPricingEntry, type TstRuntimeModel, type AuditionPricingOverride, type TstResolution, type TstGenerationTier,
 } from '../services/tstCatalog';
 import type { ModelPricing } from '../services/economyService';
 import type { GeneratedImage } from '../types';
@@ -184,7 +184,7 @@ export function WorkspaceImage() {
   const [resolution, setResolution] = useState<TstResolution>('1K');
   const [speed, setSpeed] = useState<'Nhanh' | 'Tiết Kiệm'>('Nhanh');
   const [server, setServer] = useState('VIP 1');
-  const [aiModel, setAiModel] = useState<'flash' | 'pro'>('flash');
+  const [aiModel, setAiModel] = useState<TstGenerationTier>('flash');
 
   const [pricingEntries, setPricingEntries] = useState<TstPricingEntry[]>([]);
   const [auditionPricing, setAuditionPricing] = useState<ModelPricing[]>([]);
@@ -244,7 +244,7 @@ export function WorkspaceImage() {
 
   const generationSpeedId = uiSpeedToTst(speed) || 'fast';
   const generationServerId = uiServerToTst(server) || 'fast';
-  const generationTier = aiModel === 'flash' ? 'flash' : 'pro';
+  const generationTier = aiModel;
   const availableResolutions = getCompatibleGenerationResolutions({
     tier: generationTier, pricingEntries, serverId: generationServerId, speed: generationSpeedId,
   });
@@ -271,6 +271,8 @@ export function WorkspaceImage() {
     && pricingEntries.some((e) => e.model.trim().toLowerCase() === getGenerationModelId('flash'));
   const isProAvailable = runtimeImageModelIds.has(getGenerationModelId('pro'))
     && pricingEntries.some((e) => e.model.trim().toLowerCase() === getGenerationModelId('pro'));
+  const isGptAvailable = runtimeImageModelIds.has(getGenerationModelId('gpt'))
+    && pricingEntries.some((e) => e.model.trim().toLowerCase() === getGenerationModelId('gpt'));
   const isCatalogReady = !catalogLoading && !catalogError && pricingEntries.length > 0 && runtimeModels.length > 0;
   const hasCharacterImagesReady = characters.every((char) => !!char.bodyImage);
   const isAnyCharacterAssistRunning = characters.some((char) => !!assistLoadingByCharId[char.id]);
@@ -278,7 +280,7 @@ export function WorkspaceImage() {
     || !prompt.trim()
     || !hasCharacterImagesReady
     || isAnyCharacterAssistRunning
-    || (aiModel === 'flash' ? !isFlashAvailable : !isProAvailable);
+    || (aiModel === 'flash' ? !isFlashAvailable : aiModel === 'pro' ? !isProAvailable : !isGptAvailable);
   const removeBgCost = getVertexEditToolCostBreakdown({
     toolId: 'remove_bg_pro',
     tier: 'flash',
@@ -398,7 +400,8 @@ export function WorkspaceImage() {
   useEffect(() => {
     if (aiModel === 'flash' && !isFlashAvailable && isProAvailable) setAiModel('pro');
     else if (aiModel === 'pro' && !isProAvailable && isFlashAvailable) setAiModel('flash');
-  }, [aiModel, isFlashAvailable, isProAvailable]);
+    else if (aiModel === 'gpt' && !isGptAvailable && isProAvailable) setAiModel('pro');
+  }, [aiModel, isFlashAvailable, isGptAvailable, isProAvailable]);
 
   // --- Auto-adjust resolution ---
   useEffect(() => {
@@ -408,7 +411,7 @@ export function WorkspaceImage() {
   }, [availableResolutions, resolution]);
 
   useEffect(() => {
-    const tier = aiModel === 'flash' ? 'flash' : 'pro';
+    const tier = aiModel;
     const requestedSpeedId = uiSpeedToTst(speed) || 'fast';
     const requestedServerId = uiServerToTst(server) || 'fast';
     const compatibleServers = getCompatibleGenerationServers({
@@ -723,7 +726,7 @@ export function WorkspaceImage() {
       assetType: 'image',
       toolId: activeFeature.id,
       toolName: activeFeature.name.en,
-      engine: aiModel === 'flash' ? `Flash Engine ${resolution}` : `Pro Engine ${resolution}`,
+      engine: aiModel === 'flash' ? `Flash Engine ${resolution}` : aiModel === 'pro' ? `Pro Engine ${resolution}` : `GPT Engine ${resolution}`,
       status: 'queued',
       jobId,
       progress: 0,
@@ -855,7 +858,7 @@ export function WorkspaceImage() {
           prompt: basePrompt,
           toolId: activeFeature.id,
           toolName: activeFeature.name.en,
-          engine: aiModel === 'flash' ? `Flash Engine ${resolution}` : `Pro Engine ${resolution}`,
+          engine: aiModel === 'flash' ? `Flash Engine ${resolution}` : aiModel === 'pro' ? `Pro Engine ${resolution}` : `GPT Engine ${resolution}`,
           assetType: 'image',
           costVcoin: cost,
           queueKind: 'image_generate',
@@ -896,7 +899,7 @@ export function WorkspaceImage() {
             <Sparkles className="w-4 h-4 text-[var(--color-accent)]" /> Tạo ảnh AI
           </h2>
           <p className="text-xs text-gray-400 dark:text-zinc-500 mt-1">
-            {catalogLoading ? 'Đang tải catalog...' : catalogError || `${aiModel === 'flash' ? 'Flash' : 'Pro'} Engine • ${resolution}`}
+            {catalogLoading ? 'Đang tải catalog...' : catalogError || `${aiModel === 'flash' ? 'Flash' : aiModel === 'pro' ? 'Pro' : 'GPT'} Engine • ${resolution}`}
           </p>
         </div>
 
@@ -1116,7 +1119,7 @@ export function WorkspaceImage() {
         {/* Model Toggle */}
         <div className="space-y-2">
           <h3 className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider ml-1">Model AI</h3>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <button
               onClick={() => isFlashAvailable && setAiModel('flash')}
               disabled={!isFlashAvailable}
@@ -1134,6 +1137,15 @@ export function WorkspaceImage() {
               } ${!isProAvailable ? 'opacity-40 cursor-not-allowed' : ''}`}
             >
               <Crown className="w-4 h-4 mx-auto mb-1" /> Pro
+            </button>
+            <button
+              onClick={() => isGptAvailable && setAiModel('gpt')}
+              disabled={!isGptAvailable}
+              className={`py-3 rounded-2xl text-sm font-medium transition-all ${
+                aiModel === 'gpt' ? 'bg-gray-900 text-white shadow-md' : 'bg-white dark:bg-[#18181B] text-gray-500 dark:text-zinc-400 border border-gray-100 dark:border-zinc-800'
+              } ${!isGptAvailable ? 'opacity-40 cursor-not-allowed' : ''}`}
+            >
+              <Sparkles className="w-4 h-4 mx-auto mb-1" /> GPT
             </button>
           </div>
         </div>
@@ -1208,7 +1220,7 @@ export function WorkspaceImage() {
             </div>
           </div>
           <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-            <div className="rounded-2xl bg-gray-50 p-3 dark:bg-[#27272A]"><p className="text-gray-400 dark:text-zinc-500">Model</p><p className="mt-1 font-semibold text-gray-700 dark:text-zinc-200">{aiModel === 'flash' ? 'Flash' : 'Pro'}</p></div>
+            <div className="rounded-2xl bg-gray-50 p-3 dark:bg-[#27272A]"><p className="text-gray-400 dark:text-zinc-500">Model</p><p className="mt-1 font-semibold text-gray-700 dark:text-zinc-200">{aiModel === 'flash' ? 'Flash' : aiModel === 'pro' ? 'Pro' : 'GPT'}</p></div>
             <div className="rounded-2xl bg-gray-50 p-3 dark:bg-[#27272A]"><p className="text-gray-400 dark:text-zinc-500">Queue</p><p className="mt-1 font-semibold text-gray-700 dark:text-zinc-200">{queueStats.myImageProcessing} đang xử lý • {queueStats.myQueued} chờ</p></div>
             <div className="rounded-2xl bg-gray-50 p-3 dark:bg-[#27272A]"><p className="text-gray-400 dark:text-zinc-500">Server</p><p className="mt-1 font-semibold text-gray-700 dark:text-zinc-200">{server}</p></div>
             <div className="rounded-2xl bg-gray-50 p-3 dark:bg-[#27272A]"><p className="text-gray-400 dark:text-zinc-500">Output</p><p className="mt-1 font-semibold text-gray-700 dark:text-zinc-200">{resolution} • {aspectRatio}</p></div>

@@ -28,12 +28,6 @@ import type { PromptImageGenerateRecipePayload } from '../../../shared/queueReci
 
 const MAX_REFERENCE_IMAGES = 4;
 const ASPECT_RATIOS = ['1:1', '9:16', '16:9', '3:4', '4:3', '2:3', '3:2'];
-const MODE_TABS = [
-  { count: 1, label: 'Đơn' },
-  { count: 2, label: 'Đôi' },
-  { count: 3, label: 'Nhóm 3' },
-  { count: 4, label: 'Nhóm 4' },
-] as const;
 const MODEL_TABS: Array<{ tier: TstGenerationTier; label: string; icon: typeof Zap }> = [
   { tier: 'flash', label: 'Flash', icon: Zap },
   { tier: 'pro', label: 'Pro', icon: Crown },
@@ -104,7 +98,6 @@ export function WorkspacePromptImage() {
   const uploadedImages = referenceImages.filter((value): value is string => Boolean(value));
   const uploadedCount = uploadedImages.length;
   const modeCountForPrice = Math.max(1, Math.min(MAX_REFERENCE_IMAGES, uploadedCount));
-  const activeModeCount = Math.max(1, Math.min(MAX_REFERENCE_IMAGES, referenceImages.length));
   const generationSpeedId = speedLabelToTst(speed);
   const generationServerId = uiServerToTst(server) || 'fast';
 
@@ -162,14 +155,6 @@ export function WorkspacePromptImage() {
     pricingOverrides: pricingOverrideRows,
   });
   const totalCost = selectedCost.available ? selectedCost.vcoin * modeCountForPrice : 0;
-
-  const setSlotCount = (count: number) => {
-    const normalizedCount = Math.max(1, Math.min(MAX_REFERENCE_IMAGES, count));
-    setReferenceImages((prev) => {
-      const safeSlots = Array.isArray(prev) && prev.length > 0 ? prev : [null];
-      return Array.from({ length: normalizedCount }, (_, index) => safeSlots[index] ?? null);
-    });
-  };
 
   const pickImage = (index: number) => {
     setActiveUploadIndex(index);
@@ -294,20 +279,6 @@ export function WorkspacePromptImage() {
       <header className="space-y-3">
         <p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-500">Tools</p>
         <h1 className="text-3xl font-black text-gray-950 dark:text-white">Tạo Ảnh AI</h1>
-        <div className="grid grid-cols-4 gap-1 rounded-2xl bg-white dark:bg-[#18181B] p-1 shadow-sm border border-gray-200 dark:border-zinc-800">
-          {MODE_TABS.map((tab) => (
-            <button
-              key={tab.count}
-              type="button"
-              onClick={() => setSlotCount(tab.count)}
-              className={`py-2 rounded-xl text-xs font-black ${
-                activeModeCount === tab.count ? 'bg-gray-950 text-white dark:bg-white dark:text-black' : 'text-gray-500 dark:text-zinc-500'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
       </header>
 
       <section className="rounded-[28px] border border-gray-200 dark:border-zinc-800 bg-white dark:bg-[#18181B] p-4 shadow-sm">

@@ -702,44 +702,136 @@ export const getImageDirectorSources = (
   ].filter((value): value is string => Boolean(value));
 
 export const getImageRenderReferenceEntries = (
-  payload: Pick<ImageGenerateRecipePayload, 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
+  payload: Pick<ImageGenerateRecipePayload, 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'> & {
+    modelId?: string | null;
+  },
 ): ImageRenderReferenceEntry[] => {
-  const entries: ImageRenderReferenceEntry[] = [];
+  const buildCharacterEntry = (
+    group: CharacterReferenceGroup,
+    reference: CharacterReferenceSourceEntry,
+    referenceIndex: number,
+  ): ImageRenderReferenceEntry => {
+    const kindLabel =
+      reference.kind === 'body'
+        ? 'BODY'
+        : reference.kind === 'face_detail'
+          ? 'FACE DETAIL LOCK'
+        : reference.kind === 'face'
+          ? 'FACE LOCK'
+          : `REFERENCE ${referenceIndex + 1}`;
+    const genderLabel = group.gender ? ` ${group.gender.toUpperCase()}` : '';
+    return {
+      role: 'character',
+      source: reference.source,
+      indexLabel: `CHARACTER ${group.characterIndex}${genderLabel} ${kindLabel}`,
+      facePriorityMode: group.facePriorityMode === 'portrait_headshot' ? 'portrait_headshot' : undefined,
+    };
+  };
 
-  if (payload.sampleImage) {
-    entries.push({
-      role: 'sample',
-      source: payload.sampleImage,
-      indexLabel: 'SAMPLE IMAGE',
-    });
+  const buildSampleEntry = (): ImageRenderReferenceEntry | null =>
+    payload.sampleImage
+      ? {
+          role: 'sample',
+          source: payload.sampleImage,
+          indexLabel: 'SAMPLE IMAGE',
+        }
+      : null;
+
+  const buildStyleEntry = (): ImageRenderReferenceEntry | null =>
+    payload.styleImage
+      ? {
+          role: 'style',
+          source: payload.styleImage,
+          indexLabel: 'STYLE IMAGE',
+        }
+      : null;
+
+  const characterGroups = getImageCharacterReferenceGroups(payload);
+  const normalizedModelId = normalizeValue(payload.modelId);
+
+  if (normalizedModelId === 'image-gpt-2') {
+    const sampleEntry = buildSampleEntry();
+    const styleEntry = buildStyleEntry();
+    const bodyEntries = characterGroups
+      .map((group) => {
+        const bodyReference = group.references.find((reference) => reference.kind === 'body') || group.references[0];
+        return bodyReference ? buildCharacterEntry(group, bodyReference, 0) : null;
+      })
+      .filter((entry): entry is ImageRenderReferenceEntry => Boolean(entry));
+    const faceEntries = characterGroups
+      .map((group) => {
+        const faceReference =
+          group.references.find((reference) => reference.kind === 'face_detail') ||
+          group.references.find((reference) => reference.kind === 'face');
+        return faceReference ? buildCharacterEntry(group, faceReference, 1) : null;
+      })
+      .filter((entry): entry is ImageRenderReferenceEntry => Boolean(entry));
+
+    if (characterGroups.length <= 1) {
+      return [
+        ...bodyEntries.slice(0, 1),
+        ...faceEntries.slice(0, 1),
+        ...(sampleEntry ? [sampleEntry] : []),
+        ...(styleEntry ? [styleEntry] : []),
+      ].slice(0, 5);
+    }
+
+    if (characterGroups.length === 2) {
+      if (sampleEntry) {
+        return [
+          sampleEntry,
+          ...bodyEntries.slice(0, 2),
+          ...(styleEntry ? [styleEntry] : []),
+        ].slice(0, 5);
+      }
+
+      const characterPairs = characterGroups.flatMap((group) => {
+        const bodyReference = group.references.find((reference) => reference.kind === 'body') || group.references[0];
+        const faceReference =
+          group.references.find((reference) => reference.kind === 'face_detail') ||
+          group.references.find((reference) => reference.kind === 'face');
+        return [
+          bodyReference ? buildCharacterEntry(group, bodyReference, 0) : null,
+          faceReference ? buildCharacterEntry(group, faceReference, 1) : null,
+        ].filter((entry): entry is ImageRenderReferenceEntry => Boolean(entry));
+      });
+      return [
+        ...characterPairs,
+        ...(styleEntry ? [styleEntry] : []),
+      ].slice(0, 5);
+    }
+
+    if (characterGroups.length === 3) {
+      return [
+        ...(sampleEntry ? [sampleEntry] : []),
+        ...bodyEntries.slice(0, 3),
+        ...(styleEntry ? [styleEntry] : []),
+      ].slice(0, 5);
+    }
+
+    return [
+      ...(sampleEntry ? [sampleEntry] : []),
+      ...bodyEntries.slice(0, 4),
+      ...(!sampleEntry && styleEntry ? [styleEntry] : []),
+    ].slice(0, 5);
   }
 
-  getImageCharacterReferenceGroups(payload).forEach((group) => {
+  const entries: ImageRenderReferenceEntry[] = [];
+
+  const sampleEntry = buildSampleEntry();
+  if (sampleEntry) {
+    entries.push(sampleEntry);
+  }
+
+  characterGroups.forEach((group) => {
     group.references.forEach((reference, referenceIndex) => {
-      const kindLabel =
-        reference.kind === 'body'
-          ? 'BODY'
-          : reference.kind === 'face_detail'
-            ? 'FACE DETAIL LOCK'
-          : reference.kind === 'face'
-            ? 'FACE LOCK'
-            : `REFERENCE ${referenceIndex + 1}`;
-      const genderLabel = group.gender ? ` ${group.gender.toUpperCase()}` : '';
-      entries.push({
-        role: 'character',
-        source: reference.source,
-        indexLabel: `CHARACTER ${group.characterIndex}${genderLabel} ${kindLabel}`,
-        facePriorityMode: group.facePriorityMode === 'portrait_headshot' ? 'portrait_headshot' : undefined,
-      });
+      entries.push(buildCharacterEntry(group, reference, referenceIndex));
     });
   });
 
-  if (payload.styleImage) {
-    entries.push({
-      role: 'style',
-      source: payload.styleImage,
-      indexLabel: 'STYLE IMAGE',
-    });
+  const styleEntry = buildStyleEntry();
+  if (styleEntry) {
+    entries.push(styleEntry);
   }
 
   return entries;

@@ -141,7 +141,7 @@ const DURATION_ORDER = ['3s', '5s', '8s', '10s', '15s', '25s'];
 const tierToModelId: Record<TstGenerationTier, string> = {
   flash: 'nano-banana-2',
   pro: 'nano-banana-pro',
-  gpt: 'gpt-image-2',
+  gpt: 'image-gpt-2',
 };
 
 const uiServerMap: Record<string, string> = {
@@ -342,7 +342,7 @@ export const ADMIN_MANAGED_MODEL_LABELS = [
 const ADMIN_MANAGED_MODEL_IDS = [
   'nano-banana-2',
   'nano-banana-pro',
-  'gpt-image-2',
+  'image-gpt-2',
   'kling-2.5-turbo',
   'kling-2.6',
   'kling-3.0-video',

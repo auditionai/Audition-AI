@@ -702,6 +702,12 @@ export function WorkspaceImage() {
       return;
     }
 
+    const characterBodySources = characters.map((char) => char.bodyImage).filter((value): value is string => Boolean(value));
+    if (new Set(characterBodySources).size !== characterBodySources.length) {
+      notify('Có ít nhất 2 slot nhân vật đang dùng cùng một ảnh. Vui lòng kiểm tra lại ảnh NV1/NV2 trước khi tạo.', 'error');
+      return;
+    }
+
     const cost = calculateCost();
     const profile = await getUserProfile();
     if ((profile.vcoin_balance || 0) < cost) {
@@ -796,14 +802,6 @@ export function WorkspaceImage() {
           : null;
         const styleMetadata = availableStyles.find((s: any) => s.image_url === activeStylePreset);
         const notifyInputMedia = [
-          ...stagedCharacterGroups.flatMap((group) =>
-            group.references.map((reference) => ({
-              url: reference.source,
-              role: 'character' as const,
-              kind: 'image' as const,
-              userProvided: true,
-            })),
-          ),
           ...(stagedSampleImage
             ? [{
                 url: stagedSampleImage,
@@ -812,6 +810,16 @@ export function WorkspaceImage() {
                 userProvided: true,
               }]
             : []),
+          ...stagedCharacterGroups.flatMap((group) => {
+            const bodyReferences = group.references.filter((reference) => reference.kind === 'body');
+            const faceReferences = group.references.filter((reference) => reference.kind !== 'body');
+            return [...bodyReferences, ...faceReferences].map((reference) => ({
+              url: reference.source,
+              role: 'character' as const,
+              kind: 'image' as const,
+              userProvided: true,
+            }));
+          }),
           ...(stagedStyleGuide
             ? [{
                 url: stagedStyleGuide,

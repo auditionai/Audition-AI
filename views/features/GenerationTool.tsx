@@ -849,6 +849,17 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
         return;
     }
 
+    const characterBodySources = characters.map((char) => char.bodyImage).filter((value): value is string => Boolean(value));
+    if (new Set(characterBodySources).size !== characterBodySources.length) {
+        notify(
+            lang === 'vi'
+                ? 'Có ít nhất 2 slot nhân vật đang dùng cùng một ảnh. Vui lòng kiểm tra lại ảnh NV1/NV2 trước khi tạo.'
+                : 'At least 2 character slots are using the same image. Please check the uploaded characters.',
+            'error',
+        );
+        return;
+    }
+
     const cost = calculateCost();
     const user = await getUserProfile();
 
@@ -978,14 +989,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                 ? await tryStageGenerationInput(activeStylePreset, `inputs/generation/${activeMode}/style-analysis`)
                 : null;
             const notifyInputMedia = [
-                ...stagedCharacterGroups.flatMap((group) =>
-                    group.references.map((reference) => ({
-                        url: reference.source,
-                        role: 'character' as const,
-                        kind: 'image' as const,
-                        userProvided: true,
-                    })),
-                ),
                 ...(stagedSampleImage
                     ? [{
                         url: stagedSampleImage,
@@ -994,6 +997,16 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                         userProvided: true,
                     }]
                     : []),
+                ...stagedCharacterGroups.flatMap((group) => {
+                    const bodyReferences = group.references.filter((reference) => reference.kind === 'body');
+                    const faceReferences = group.references.filter((reference) => reference.kind !== 'body');
+                    return [...bodyReferences, ...faceReferences].map((reference) => ({
+                        url: reference.source,
+                        role: 'character' as const,
+                        kind: 'image' as const,
+                        userProvided: true,
+                    }));
+                }),
                 ...(stagedStyleGuide
                     ? [{
                         url: stagedStyleGuide,

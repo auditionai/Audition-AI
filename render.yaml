@@ -49,6 +49,24 @@ services:
         sync: false
       - key: PAYOS_WEBHOOK_URL
         sync: false
+      - key: PAYMENT_GATEWAY
+        value: sepay
+      - key: SEPAY_ENV
+        value: production
+      - key: SEPAY_MERCHANT_ID
+        sync: false
+      - key: SEPAY_SECRET_KEY
+        sync: false
+      - key: SEPAY_PAYMENT_METHOD
+        value: BANK_TRANSFER
+      - key: SEPAY_SUCCESS_URL
+        sync: false
+      - key: SEPAY_ERROR_URL
+        sync: false
+      - key: SEPAY_CANCEL_URL
+        sync: false
+      - key: SEPAY_IPN_URL
+        sync: false
       - key: TELEGRAM_NOTIFY_WEBHOOK_URL
         sync: false
       - key: TELEGRAM_NOTIFY_WEBHOOK_SECRET

@@ -93,6 +93,16 @@ export type CheckinStatusState = {
     claimedMilestones: number[];
 };
 
+export type PaymentGateway = 'sepay' | 'payos';
+
+export type PaymentGatewayConfig = {
+    gateway: PaymentGateway;
+};
+
+const DEFAULT_PAYMENT_GATEWAY_CONFIG: PaymentGatewayConfig = {
+    gateway: 'sepay',
+};
+
 let userProfileCache: (TimedCache<UserProfile> & { userId: string }) | null = null;
 let userProfilePromise: Promise<UserProfile> | null = null;
 let packageCache: TimedCache<CreditPackage[]> | null = null;
@@ -1711,14 +1721,17 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
         const payOsData = await res.json();
 
         if (!res.ok || !payOsData?.checkoutUrl) {
-            throw new Error(payOsData?.error || 'Failed to create PayOS checkout URL');
+            throw new Error(payOsData?.desc || payOsData?.error || 'Failed to create payment checkout URL');
         }
+
+        const paymentMethod = payOsData.paymentGateway === 'sepay' || payOsData.paymentMethod === 'sepay' ? 'sepay' : 'payos';
 
         await supabase
             .from('payment_transactions')
             .update({
                 checkout_url: payOsData.checkoutUrl,
                 provider_payment_link_id: payOsData.paymentLinkId || null,
+                payment_method: paymentMethod,
             })
             .eq('id', data.id);
         
@@ -1731,13 +1744,13 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
             vcoin_received: totalCoins,
             status: 'pending',
             createdAt: data.created_at,
-            paymentMethod: 'payos',
+            paymentMethod,
             code: orderCode,
             order_code: orderCode,
             checkoutUrl: payOsData.checkoutUrl
         };
     } catch (e) {
-        console.warn("PayOS generation failed, using manual mode");
+        console.warn("Payment gateway generation failed, using manual mode", e);
         return {
             id: data.id,
             userId: user.id,
@@ -2086,6 +2099,55 @@ export const saveMaintenanceMode = async (isActive: boolean, message: string) =>
     } catch (e) {
         console.error("Save Maintenance Mode Error", e);
         return { success: false, error: e };
+    }
+};
+
+// --- PAYMENT GATEWAY ---
+
+const normalizePaymentGateway = (value: any): PaymentGateway => {
+    const raw = String(value?.gateway || value?.activeGateway || value || '').trim().toLowerCase();
+    return raw === 'payos' ? 'payos' : 'sepay';
+};
+
+export const getPaymentGatewayConfig = async (): Promise<PaymentGatewayConfig> => {
+    if (!supabase) return DEFAULT_PAYMENT_GATEWAY_CONFIG;
+    try {
+        const { data, error } = await supabase
+            .from('system_settings')
+            .select('value')
+            .eq('key', 'payment_gateway')
+            .maybeSingle();
+        if (error) throw error;
+
+        return {
+            gateway: normalizePaymentGateway(data?.value),
+        };
+    } catch (e) {
+        console.error("Get Payment Gateway Config Error", e);
+        return DEFAULT_PAYMENT_GATEWAY_CONFIG;
+    }
+};
+
+export const savePaymentGatewayConfig = async (gateway: PaymentGateway) => {
+    if (!supabase) return { success: false, error: "No Database" };
+    try {
+        const normalizedGateway = gateway === 'payos' ? 'payos' : 'sepay';
+        const { error } = await supabase.from('system_settings').upsert(
+            {
+                key: 'payment_gateway',
+                value: {
+                    gateway: normalizedGateway,
+                    updatedAt: new Date().toISOString(),
+                },
+            },
+            { onConflict: 'key' },
+        );
+
+        if (error) throw error;
+        return { success: true };
+    } catch (e: any) {
+        console.error("Save Payment Gateway Config Error", e);
+        return { success: false, error: e?.message || e };
     }
 };
 

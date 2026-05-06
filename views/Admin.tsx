@@ -38,6 +38,9 @@ import {
     getGiftcodeUsages,
     getMaintenanceMode,
     saveMaintenanceMode,
+    getPaymentGatewayConfig,
+    savePaymentGatewayConfig,
+    PaymentGateway,
     getModelPricing,
     saveModelPricing,
     syncTSTPrices,
@@ -445,6 +448,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [editingStyle, setEditingStyle] = useState<StylePreset | null>(null);
   
   const [maintenanceMode, setMaintenanceMode] = useState({ isActive: false, message: "Hệ thống đang bảo trì, vui lòng quay lại sau." });
+  const [paymentGateway, setPaymentGateway] = useState<PaymentGateway>('sepay');
 
   // API Key States
   const [apiKey, setApiKey] = useState('');
@@ -623,6 +627,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
       const maintenance = await getMaintenanceMode();
       setMaintenanceMode(maintenance);
+
+      const paymentGatewayConfig = await getPaymentGatewayConfig();
+      setPaymentGateway(paymentGatewayConfig.gateway);
 
       const pricing = await getModelPricing();
       setModelPricing((pricing || []).filter((row) => isAdminManagedPricingModel(row.model_id)));
@@ -1464,6 +1471,15 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           showToast('Đã lưu ảnh ví dụ cho trình tạo ảnh!');
       } else {
           showToast('Lỗi lưu: ' + result.error, 'error');
+      }
+  }
+
+  const handleSavePaymentGateway = async () => {
+      const result = await savePaymentGatewayConfig(paymentGateway);
+      if (result.success) {
+          showToast(`Đã chuyển cổng thanh toán sang ${paymentGateway === 'sepay' ? 'SePay' : 'PayOS'}!`);
+      } else {
+          showToast('Lỗi lưu cổng thanh toán: ' + result.error, 'error');
       }
   }
 
@@ -2897,6 +2913,56 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   Ảnh mẫu dùng cho nút "VD Ảnh Mẫu" để người dùng xem bố cục mẫu phù hợp.
                               </p>
                           </div>
+                      </div>
+                  </div>
+
+                  {/* Payment Gateway Configuration */}
+                  <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
+                      <div className="flex justify-between items-center mb-4">
+                          <h3 className="font-bold text-lg text-white flex items-center gap-2">
+                              <Icons.QrCode className="w-5 h-5 text-emerald-400" />
+                              Cổng thanh toán
+                          </h3>
+                          <button
+                              onClick={handleSavePaymentGateway}
+                              className="px-4 py-2 bg-emerald-500/20 text-emerald-300 font-bold rounded-lg text-sm hover:bg-emerald-500 hover:text-black transition-colors border border-emerald-500/30"
+                          >
+                              Lưu Cổng
+                          </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {([
+                              { id: 'sepay' as PaymentGateway, title: 'SePay', desc: 'Cổng đang dùng tạm thời. Redirect qua form checkout SePay, giữ PayOS dự phòng.' },
+                              { id: 'payos' as PaymentGateway, title: 'PayOS', desc: 'Cổng cũ. Có thể bật lại nhanh khi PayOS hoạt động ổn định.' },
+                          ]).map((gatewayOption) => {
+                              const active = paymentGateway === gatewayOption.id;
+                              return (
+                                  <button
+                                      key={gatewayOption.id}
+                                      onClick={() => setPaymentGateway(gatewayOption.id)}
+                                      className={`rounded-2xl border p-4 text-left transition-all ${
+                                          active
+                                              ? 'border-emerald-400 bg-emerald-500/15 shadow-[0_0_24px_rgba(16,185,129,0.18)]'
+                                              : 'border-white/10 bg-black/20 hover:border-white/25'
+                                      }`}
+                                  >
+                                      <div className="flex items-center justify-between gap-3">
+                                          <div className="font-black text-white">{gatewayOption.title}</div>
+                                          <span className={`text-[10px] font-black uppercase px-2 py-1 rounded-full ${
+                                              active ? 'bg-emerald-400 text-black' : 'bg-white/10 text-slate-400'
+                                          }`}>
+                                              {active ? 'Đang bật' : 'Dự phòng'}
+                                          </span>
+                                      </div>
+                                      <p className="mt-2 text-xs leading-relaxed text-slate-400">{gatewayOption.desc}</p>
+                                  </button>
+                              );
+                          })}
+                      </div>
+
+                      <div className="mt-4 rounded-xl border border-yellow-500/20 bg-yellow-500/10 p-3 text-xs leading-relaxed text-yellow-100">
+                          SePay cần cấu hình biến môi trường <code>SEPAY_MERCHANT_ID</code> và <code>SEPAY_SECRET_KEY</code> trên Netlify/Render. PayOS vẫn giữ các biến <code>PAYOS_CLIENT_ID</code>, <code>PAYOS_API_KEY</code>, <code>PAYOS_CHECKSUM_KEY</code>.
                       </div>
                   </div>
 

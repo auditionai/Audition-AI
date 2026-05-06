@@ -41,6 +41,9 @@ import {
     getPaymentGatewayConfig,
     savePaymentGatewayConfig,
     PaymentGateway,
+    getSystemAnnouncementConfig,
+    saveSystemAnnouncementConfig,
+    SystemAnnouncementConfig,
     getModelPricing,
     saveModelPricing,
     syncTSTPrices,
@@ -449,6 +452,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   
   const [maintenanceMode, setMaintenanceMode] = useState({ isActive: false, message: "Hệ thống đang bảo trì, vui lòng quay lại sau." });
   const [paymentGateway, setPaymentGateway] = useState<PaymentGateway>('sepay');
+  const [systemAnnouncement, setSystemAnnouncement] = useState<SystemAnnouncementConfig>({
+      isActive: false,
+      title: 'Thông báo từ AUDITION AI',
+      message: 'Chào mừng bạn quay lại AUDITION AI.',
+      variant: 'info',
+  });
 
   // API Key States
   const [apiKey, setApiKey] = useState('');
@@ -630,6 +639,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
       const paymentGatewayConfig = await getPaymentGatewayConfig();
       setPaymentGateway(paymentGatewayConfig.gateway);
+
+      const announcementConfig = await getSystemAnnouncementConfig();
+      setSystemAnnouncement(announcementConfig);
 
       const pricing = await getModelPricing();
       setModelPricing((pricing || []).filter((row) => isAdminManagedPricingModel(row.model_id)));
@@ -1480,6 +1492,15 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           showToast(`Đã chuyển cổng thanh toán sang ${paymentGateway === 'sepay' ? 'SePay' : 'PayOS'}!`);
       } else {
           showToast('Lỗi lưu cổng thanh toán: ' + result.error, 'error');
+      }
+  }
+
+  const handleSaveSystemAnnouncement = async () => {
+      const result = await saveSystemAnnouncementConfig(systemAnnouncement);
+      if (result.success) {
+          showToast('Đã lưu thông báo hệ thống!');
+      } else {
+          showToast('Lỗi lưu thông báo hệ thống: ' + result.error, 'error');
       }
   }
 
@@ -2911,6 +2932,71 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                               />
                               <p className="text-xs text-slate-500 mt-2">
                                   Ảnh mẫu dùng cho nút "VD Ảnh Mẫu" để người dùng xem bố cục mẫu phù hợp.
+                              </p>
+                          </div>
+                      </div>
+                  </div>
+
+                  <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
+                      <div className="flex justify-between items-center mb-4">
+                          <h3 className="font-bold text-lg text-white flex items-center gap-2">
+                              <Icons.Bell className="w-5 h-5 text-audi-cyan" />
+                              Thông báo khi mở ứng dụng
+                          </h3>
+                          <button
+                              onClick={handleSaveSystemAnnouncement}
+                              className="px-4 py-2 bg-audi-cyan/20 text-audi-cyan font-bold rounded-lg text-sm hover:bg-audi-cyan hover:text-black transition-colors border border-audi-cyan/30"
+                          >
+                              Lưu Thông Báo
+                          </button>
+                      </div>
+
+                      <div className="space-y-4">
+                          <label className="flex items-center gap-3 text-sm font-bold text-white">
+                              <input
+                                  type="checkbox"
+                                  checked={systemAnnouncement.isActive}
+                                  onChange={(e) => setSystemAnnouncement({ ...systemAnnouncement, isActive: e.target.checked })}
+                                  className="w-5 h-5 accent-audi-cyan"
+                              />
+                              Bật cửa sổ thông báo khi người dùng truy cập hoặc tải lại ứng dụng
+                          </label>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                  <label className="text-xs text-slate-400 mb-1 block">Tiêu đề</label>
+                                  <input
+                                      type="text"
+                                      value={systemAnnouncement.title}
+                                      onChange={(e) => setSystemAnnouncement({ ...systemAnnouncement, title: e.target.value })}
+                                      className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-white"
+                                      placeholder="Thông báo từ AUDITION AI"
+                                  />
+                              </div>
+                              <div>
+                                  <label className="text-xs text-slate-400 mb-1 block">Kiểu hiển thị</label>
+                                  <select
+                                      value={systemAnnouncement.variant}
+                                      onChange={(e) => setSystemAnnouncement({ ...systemAnnouncement, variant: e.target.value as SystemAnnouncementConfig['variant'] })}
+                                      className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-white"
+                                  >
+                                      <option value="info">Thông tin</option>
+                                      <option value="promo">Khuyến mại</option>
+                                      <option value="warning">Cảnh báo</option>
+                                  </select>
+                              </div>
+                          </div>
+
+                          <div>
+                              <label className="text-xs text-slate-400 mb-1 block">Nội dung</label>
+                              <textarea
+                                  value={systemAnnouncement.message}
+                                  onChange={(e) => setSystemAnnouncement({ ...systemAnnouncement, message: e.target.value })}
+                                  className="w-full min-h-[120px] bg-black/40 border border-white/10 rounded-lg p-3 text-white leading-relaxed"
+                                  placeholder="Nhập nội dung thông báo sẽ hiển thị cho người dùng..."
+                              />
+                              <p className="text-xs text-slate-500 mt-2">
+                                  Người dùng đóng thông báo thì thông báo sẽ ẩn trong phiên hiện tại. Tải lại ứng dụng sẽ hiển thị lại nếu cấu hình đang bật.
                               </p>
                           </div>
                       </div>

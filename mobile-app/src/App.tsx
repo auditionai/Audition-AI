@@ -1,5 +1,6 @@
 ﻿import { useEffect, useRef } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { useCallback, useState } from 'react';
 import { AlertTriangle, Loader } from 'lucide-react';
 import { NotificationProvider, useNotification } from './components/NotificationSystem';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -20,6 +21,9 @@ import { Guide } from './views/Guide';
 import { AdminView } from './views/Admin';
 import { PaymentGatewayView } from './views/PaymentGateway';
 import { syncPayOSTransaction } from './services/serverQueueService';
+import { getSystemAnnouncementConfig, type SystemAnnouncementConfig } from './services/economyService';
+import { getSupabaseUser, supabase } from './services/supabaseClient';
+import { AppEventPopup, type AppEventPopupData, SystemAnnouncementModal } from '../../components/AppNotificationPopups';
 import './mobile-shell.css';
 
 function AppRoutes() {
@@ -77,6 +81,43 @@ function MobileRuntimeEffects() {
   const { isAuthenticated, maintenanceMode, userRole } = useAuth();
 
   const handledPayOsReturnRef = useRef<string | null>(null);
+  const notifiedTerminalJobsRef = useRef<Set<string>>(new Set());
+  const [systemAnnouncement, setSystemAnnouncement] = useState<SystemAnnouncementConfig | null>(null);
+  const [showSystemAnnouncement, setShowSystemAnnouncement] = useState(false);
+  const [eventPopup, setEventPopup] = useState<AppEventPopupData | null>(null);
+
+  const readPendingPaymentMeta = useCallback((orderCode?: string | null) => {
+    if (!orderCode || typeof window === 'undefined') return null;
+    try {
+      const storageKey = `auditionai:pending-payment:${orderCode}`;
+      const raw = window.sessionStorage.getItem(storageKey);
+      if (!raw) return null;
+      window.sessionStorage.removeItem(storageKey);
+      return JSON.parse(raw) as { amount?: number; vcoin?: number; packageName?: string };
+    } catch (error) {
+      console.warn('[Mobile] Failed to read pending payment metadata', error);
+      return null;
+    }
+  }, []);
+
+  const showPaymentSuccessPopup = useCallback((orderCode?: string | null) => {
+    const meta = readPendingPaymentMeta(orderCode);
+    const amountText = typeof meta?.amount === 'number' ? `${meta.amount.toLocaleString('vi-VN')}đ` : 'giao dịch';
+    const vcoinText = typeof meta?.vcoin === 'number' ? `${meta.vcoin.toLocaleString('vi-VN')} Vcoin` : 'Vcoin';
+    setEventPopup({
+      type: 'payment_success',
+      title: 'Nạp tiền thành công',
+      message: `Bạn đã nạp thành công ${amountText}, hệ thống đã cộng ${vcoinText} vào tài khoản.`,
+      actionLabel: 'Xem giao dịch',
+    });
+  }, [readPendingPaymentMeta]);
+
+  useEffect(() => {
+    getSystemAnnouncementConfig().then((config) => {
+      setSystemAnnouncement(config);
+      setShowSystemAnnouncement(!!config.isActive);
+    });
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -95,12 +136,14 @@ function MobileRuntimeEffects() {
           try {
             await syncPayOSTransaction(orderCode);
             window.dispatchEvent(new Event('balance_updated'));
+            showPaymentSuccessPopup(orderCode);
             notify('Thanh toán thành công! Vcoin đã được cộng tự động.', 'success');
           } catch (error) {
             console.error('Failed to sync PayOS transaction on mobile return:', error);
             notify('Thanh toán đã ghi nhận. Hệ thống đang đồng bộ giao dịch...', 'info');
           }
         } else {
+          showPaymentSuccessPopup(orderCode);
           notify('Thanh toán thành công! Vcoin sẽ được cộng trong giây lát.', 'success');
         }
         navigate('/topup', { replace: true });
@@ -117,30 +160,111 @@ function MobileRuntimeEffects() {
     };
 
     void handleReturn();
-  }, [location.pathname, location.search, navigate, notify]);
+  }, [location.pathname, location.search, navigate, notify, showPaymentSuccessPopup]);
 
-  if (!(isAuthenticated && maintenanceMode.isActive && userRole !== 'admin')) {
+  useEffect(() => {
+    if (!isAuthenticated || !supabase) return;
+
+    let isDisposed = false;
+    let channel: any = null;
+
+    getSupabaseUser().then((authUser: any) => {
+      if (isDisposed || !authUser?.id) return;
+
+      channel = supabase
+        .channel(`mobile-terminal-events:${authUser.id}:${Date.now()}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'generated_images',
+            filter: `user_id=eq.${authUser.id}`,
+          },
+          (payload: any) => {
+            const row = payload?.new || {};
+            const status = row.status;
+            if (status !== 'completed' && status !== 'failed') return;
+
+            const eventKey = `${row.id || row.job_id || payload.commit_timestamp}:${status}`;
+            if (notifiedTerminalJobsRef.current.has(eventKey)) return;
+            notifiedTerminalJobsRef.current.add(eventKey);
+
+            const assetLabel = row.asset_type === 'video' ? 'Video' : 'Ảnh';
+            if (status === 'completed') {
+              setEventPopup({
+                type: 'generation_success',
+                title: `${assetLabel} đã tạo thành công`,
+                message: `${assetLabel} của bạn đã tạo thành công bởi AUDITION AI.`,
+                actionLabel: 'Xem kết quả',
+              });
+              return;
+            }
+
+            setEventPopup({
+              type: 'generation_failed',
+              title: `${assetLabel} tạo thất bại`,
+              message: row.error_message || `${assetLabel} của bạn tạo thất bại. Vui lòng kiểm tra lịch sử tạo để xem chi tiết.`,
+              actionLabel: 'Xem lịch sử',
+            });
+          },
+        )
+        .subscribe((status: string) => {
+          if (status === 'CHANNEL_ERROR') {
+            console.warn('[Mobile] Realtime terminal event subscription failed.');
+          }
+        });
+    });
+
+    return () => {
+      isDisposed = true;
+      if (channel) {
+        void supabase.removeChannel(channel);
+      }
+    };
+  }, [isAuthenticated]);
+
+  if (!isAuthenticated) {
     return null;
   }
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/75 backdrop-blur-md p-5">
-      <div className="w-full max-w-sm rounded-[32px] border border-red-500/20 bg-white p-6 text-center shadow-2xl animate-slide-up dark:bg-[#18181B]">
-        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-50 dark:bg-red-500/10 flex items-center justify-center">
-          <AlertTriangle className="w-8 h-8 text-red-500" />
+    <>
+      <SystemAnnouncementModal
+        config={showSystemAnnouncement ? systemAnnouncement : null}
+        mode="mobile"
+        onClose={() => setShowSystemAnnouncement(false)}
+      />
+      <AppEventPopup
+        data={eventPopup}
+        mode="mobile"
+        onClose={() => setEventPopup(null)}
+        onAction={() => {
+          const target = eventPopup?.type === 'payment_success' ? '/topup' : '/gallery';
+          setEventPopup(null);
+          navigate(target);
+        }}
+      />
+      {maintenanceMode.isActive && userRole !== 'admin' && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/75 backdrop-blur-md p-5">
+          <div className="w-full max-w-sm rounded-[32px] border border-red-500/20 bg-white p-6 text-center shadow-2xl animate-slide-up dark:bg-[#18181B]">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-50 dark:bg-red-500/10 flex items-center justify-center">
+              <AlertTriangle className="w-8 h-8 text-red-500" />
+            </div>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-3">Hệ thống đang bảo trì</h2>
+            <p className="text-sm text-gray-500 dark:text-zinc-400 leading-relaxed mb-6">
+              {maintenanceMode.message || 'Hệ thống đang bảo trì, vui lòng quay lại sau.'}
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="w-full rounded-2xl bg-gray-900 dark:bg-white text-white dark:text-black py-3 text-sm font-semibold"
+            >
+              Tải lại trang
+            </button>
+          </div>
         </div>
-        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-3">Hệ thống đang bảo trì</h2>
-        <p className="text-sm text-gray-500 dark:text-zinc-400 leading-relaxed mb-6">
-          {maintenanceMode.message || 'Hệ thống đang bảo trì, vui lòng quay lại sau.'}
-        </p>
-        <button
-          onClick={() => window.location.reload()}
-          className="w-full rounded-2xl bg-gray-900 dark:bg-white text-white dark:text-black py-3 text-sm font-semibold"
-        >
-          Tải lại trang
-        </button>
-      </div>
-    </div>
+      )}
+    </>
   );
 }
 

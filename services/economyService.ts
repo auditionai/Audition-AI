@@ -99,8 +99,23 @@ export type PaymentGatewayConfig = {
     gateway: PaymentGateway;
 };
 
+export type SystemAnnouncementConfig = {
+    isActive: boolean;
+    title: string;
+    message: string;
+    variant: 'info' | 'promo' | 'warning';
+    updatedAt?: string;
+};
+
 const DEFAULT_PAYMENT_GATEWAY_CONFIG: PaymentGatewayConfig = {
     gateway: 'sepay',
+};
+
+export const DEFAULT_SYSTEM_ANNOUNCEMENT_CONFIG: SystemAnnouncementConfig = {
+    isActive: false,
+    title: 'Thông báo từ AUDITION AI',
+    message: 'Chào mừng bạn quay lại AUDITION AI.',
+    variant: 'info',
 };
 
 let userProfileCache: (TimedCache<UserProfile> & { userId: string }) | null = null;
@@ -1725,6 +1740,22 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
         }
 
         const paymentMethod = payOsData.paymentGateway === 'sepay' || payOsData.paymentMethod === 'sepay' ? 'sepay' : 'payos';
+        if (typeof window !== 'undefined') {
+            try {
+                window.sessionStorage.setItem(
+                    `auditionai:pending-payment:${orderCode}`,
+                    JSON.stringify({
+                        orderCode,
+                        amount: pkg.price,
+                        vcoin: totalCoins,
+                        packageName: pkg.name,
+                        paymentMethod,
+                    }),
+                );
+            } catch (storageError) {
+                console.warn('Failed to persist pending payment metadata', storageError);
+            }
+        }
 
         await supabase
             .from('payment_transactions')
@@ -2153,6 +2184,59 @@ export const savePaymentGatewayConfig = async (gateway: PaymentGateway) => {
         return { success: true };
     } catch (e: any) {
         console.error("Save Payment Gateway Config Error", e);
+        return { success: false, error: e?.message || e };
+    }
+};
+
+// --- SYSTEM ANNOUNCEMENT ---
+
+const normalizeSystemAnnouncement = (value: any): SystemAnnouncementConfig => {
+    const variant = String(value?.variant || '').toLowerCase();
+    return {
+        isActive: !!value?.isActive,
+        title: String(value?.title || DEFAULT_SYSTEM_ANNOUNCEMENT_CONFIG.title).trim() || DEFAULT_SYSTEM_ANNOUNCEMENT_CONFIG.title,
+        message: String(value?.message || DEFAULT_SYSTEM_ANNOUNCEMENT_CONFIG.message).trim() || DEFAULT_SYSTEM_ANNOUNCEMENT_CONFIG.message,
+        variant: variant === 'promo' || variant === 'warning' ? variant : 'info',
+        updatedAt: typeof value?.updatedAt === 'string' ? value.updatedAt : undefined,
+    };
+};
+
+export const getSystemAnnouncementConfig = async (): Promise<SystemAnnouncementConfig> => {
+    if (!supabase) return DEFAULT_SYSTEM_ANNOUNCEMENT_CONFIG;
+    try {
+        const { data, error } = await supabase
+            .from('system_settings')
+            .select('value')
+            .eq('key', 'system_announcement')
+            .maybeSingle();
+        if (error) throw error;
+
+        return normalizeSystemAnnouncement(data?.value);
+    } catch (e) {
+        console.error("Get System Announcement Config Error", e);
+        return DEFAULT_SYSTEM_ANNOUNCEMENT_CONFIG;
+    }
+};
+
+export const saveSystemAnnouncementConfig = async (config: SystemAnnouncementConfig) => {
+    if (!supabase) return { success: false, error: "No Database" };
+    try {
+        const normalizedConfig = normalizeSystemAnnouncement(config);
+        const { error } = await supabase.from('system_settings').upsert(
+            {
+                key: 'system_announcement',
+                value: {
+                    ...normalizedConfig,
+                    updatedAt: new Date().toISOString(),
+                },
+            },
+            { onConflict: 'key' },
+        );
+
+        if (error) throw error;
+        return { success: true };
+    } catch (e: any) {
+        console.error("Save System Announcement Config Error", e);
         return { success: false, error: e?.message || e };
     }
 };

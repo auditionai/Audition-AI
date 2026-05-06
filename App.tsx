@@ -15,8 +15,9 @@ import { PayOSGateway } from './views/PayOSGateway';
 import { Language, Theme, ViewId, Feature } from './types';
 import { APP_CONFIG } from './constants';
 import { getSupabaseSession, getSupabaseUser, supabase } from './services/supabaseClient';
-import { getUserProfile, logVisit, updateLastActive, subscribeMaintenanceMode } from './services/economyService';
+import { getUserProfile, logVisit, updateLastActive, subscribeMaintenanceMode, getSystemAnnouncementConfig, type SystemAnnouncementConfig } from './services/economyService';
 import { NotificationProvider, useNotification } from './components/NotificationSystem';
+import { AppEventPopup, AppEventPopupData, SystemAnnouncementModal } from './components/AppNotificationPopups';
 import { Icons } from './components/Icons';
 import { syncPayOSTransaction } from './services/serverQueueService';
 import MobileApp from './mobile-app/src/App';
@@ -162,6 +163,7 @@ const buildDesktopPath = (view: ViewId, selectedFeature: Feature | null) => {
 
 function AppContent() {
   const desktopHistoryModeRef = useRef<'replace' | 'push'>('replace');
+  const notifiedTerminalJobsRef = useRef<Set<string>>(new Set());
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userRole, setUserRole] = useState<'user' | 'admin'>('user');
   const [lang, setLang] = useState<Language>(APP_CONFIG.ui.default_language);
@@ -177,9 +179,38 @@ function AppContent() {
 
   // Maintenance Mode State
   const [maintenanceMode, setMaintenanceMode] = useState({ isActive: false, message: "" });
+  const [systemAnnouncement, setSystemAnnouncement] = useState<SystemAnnouncementConfig | null>(null);
+  const [showSystemAnnouncement, setShowSystemAnnouncement] = useState(false);
+  const [eventPopup, setEventPopup] = useState<AppEventPopupData | null>(null);
 
   // Custom Notification Hook
   const { notify } = useNotification();
+
+  const readPendingPaymentMeta = useCallback((orderCode?: string | null) => {
+    if (!orderCode || typeof window === 'undefined') return null;
+    try {
+      const storageKey = `auditionai:pending-payment:${orderCode}`;
+      const raw = window.sessionStorage.getItem(storageKey);
+      if (!raw) return null;
+      window.sessionStorage.removeItem(storageKey);
+      return JSON.parse(raw) as { amount?: number; vcoin?: number; packageName?: string };
+    } catch (error) {
+      console.warn('Failed to read pending payment metadata', error);
+      return null;
+    }
+  }, []);
+
+  const showPaymentSuccessPopup = useCallback((orderCode?: string | null) => {
+    const meta = readPendingPaymentMeta(orderCode);
+    const amountText = typeof meta?.amount === 'number' ? `${meta.amount.toLocaleString('vi-VN')}đ` : 'giao dịch';
+    const vcoinText = typeof meta?.vcoin === 'number' ? `${meta.vcoin.toLocaleString('vi-VN')} Vcoin` : 'Vcoin';
+    setEventPopup({
+      type: 'payment_success',
+      title: 'Nạp tiền thành công',
+      message: `Bạn đã nạp thành công ${amountText}, hệ thống đã cộng ${vcoinText} vào tài khoản.`,
+      actionLabel: 'Xem giao dịch',
+    });
+  }, [readPendingPaymentMeta]);
 
   const applyDesktopRouteFromLocation = useCallback(() => {
     const resolved = resolveDesktopRoute();
@@ -199,6 +230,10 @@ function AppContent() {
     // Log Visit (Tracks every reload)
     logVisit();
     updateLastActive();
+    getSystemAnnouncementConfig().then((config) => {
+        setSystemAnnouncement(config);
+        setShowSystemAnnouncement(!!config.isActive);
+    });
 
     // Update last active every 5 minutes
     const activeInterval = setInterval(() => {
@@ -261,6 +296,7 @@ function AppContent() {
                  syncPayOSTransaction(orderCode)
                     .then(() => {
                         window.dispatchEvent(new Event('balance_updated'));
+                        showPaymentSuccessPopup(orderCode);
                         notify(
                             lang === 'vi' ? 'Thanh to\u00e1n th\u00e0nh c\u00f4ng! Vcoin \u0111\u00e3 \u0111\u01b0\u1ee3c c\u1ed9ng t\u1ef1 \u0111\u1ed9ng.' : 'Payment successful! Vcoin has been added automatically.',
                             'success'
@@ -274,6 +310,7 @@ function AppContent() {
                         );
                     });
              } else {
+                 showPaymentSuccessPopup(orderCode);
                  notify(
                      lang === 'vi' ? 'Thanh to\u00e1n th\u00e0nh c\u00f4ng! Vcoin s\u1ebd \u0111\u01b0\u1ee3c c\u1ed9ng trong gi\u00e2y l\u00e1t.' : 'Payment successful! Vcoin will be added shortly.',
                      'success'
@@ -289,7 +326,7 @@ function AppContent() {
              setCurrentView('topup');
         }
     }
-  }, [lang, notify]);
+  }, [lang, notify, showPaymentSuccessPopup]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -305,6 +342,68 @@ function AppContent() {
       window.removeEventListener('popstate', handlePopState);
     };
   }, [applyDesktopRouteFromLocation, isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !supabase) return;
+
+    let isDisposed = false;
+    let channel: any = null;
+
+    getSupabaseUser().then((authUser: any) => {
+      if (isDisposed || !authUser?.id) return;
+
+      channel = supabase
+        .channel(`app-terminal-events:${authUser.id}:${Date.now()}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'generated_images',
+            filter: `user_id=eq.${authUser.id}`,
+          },
+          (payload: any) => {
+            const row = payload?.new || {};
+            const status = row.status;
+            if (status !== 'completed' && status !== 'failed') return;
+
+            const eventKey = `${row.id || row.job_id || payload.commit_timestamp}:${status}`;
+            if (notifiedTerminalJobsRef.current.has(eventKey)) return;
+            notifiedTerminalJobsRef.current.add(eventKey);
+
+            const assetLabel = row.asset_type === 'video' ? 'Video' : 'Ảnh';
+            if (status === 'completed') {
+              setEventPopup({
+                type: 'generation_success',
+                title: `${assetLabel} đã tạo thành công`,
+                message: `${assetLabel} của bạn đã tạo thành công bởi AUDITION AI.`,
+                actionLabel: 'Xem kết quả',
+              });
+              return;
+            }
+
+            setEventPopup({
+              type: 'generation_failed',
+              title: `${assetLabel} tạo thất bại`,
+              message: row.error_message || `${assetLabel} của bạn tạo thất bại. Vui lòng kiểm tra lịch sử tạo để xem chi tiết.`,
+              actionLabel: 'Xem lịch sử',
+            });
+          },
+        )
+        .subscribe((status: string) => {
+          if (status === 'CHANNEL_ERROR') {
+            console.warn('[App] Realtime terminal event subscription failed.');
+          }
+        });
+    });
+
+    return () => {
+      isDisposed = true;
+      if (channel) {
+        void supabase.removeChannel(channel);
+      }
+    };
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -440,6 +539,20 @@ function AppContent() {
       showCheckin={showCheckin}
       setShowCheckin={setShowCheckin}
     >
+      <SystemAnnouncementModal
+        config={showSystemAnnouncement ? systemAnnouncement : null}
+        mode="desktop"
+        onClose={() => setShowSystemAnnouncement(false)}
+      />
+      <AppEventPopup
+        data={eventPopup}
+        mode="desktop"
+        onClose={() => setEventPopup(null)}
+        onAction={() => {
+          setEventPopup(null);
+          handleNavigate(eventPopup?.type === 'payment_success' ? 'topup' : 'gallery');
+        }}
+      />
       {/* Maintenance Modal Overlay */}
       {maintenanceMode.isActive && userRole !== 'admin' && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">

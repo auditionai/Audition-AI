@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Icons } from './Icons';
 import type { SystemAnnouncementConfig } from '../services/economyService';
 
@@ -37,15 +38,67 @@ const eventStyles = {
 };
 
 const NOTIFICATION_SOUND_URL = '/audio/notification-ting.mp3';
+let notificationAudio: HTMLAudioElement | null = null;
+let soundUnlockListenersAttached = false;
 
-const playNotificationSound = () => {
-  if (typeof window === 'undefined') return;
+const getNotificationAudio = () => {
+  if (typeof window === 'undefined') return null;
+  if (!notificationAudio) {
+    notificationAudio = new Audio(NOTIFICATION_SOUND_URL);
+    notificationAudio.preload = 'auto';
+    notificationAudio.volume = 0.55;
+  }
+  return notificationAudio;
+};
+
+const unlockNotificationSound = () => {
+  const audio = getNotificationAudio();
+  if (!audio) return;
 
   try {
-    const audio = new Audio(NOTIFICATION_SOUND_URL);
+    const previousVolume = audio.volume;
+    audio.volume = 0;
+    void audio.play()
+      .then(() => {
+        audio.pause();
+        audio.currentTime = 0;
+        audio.volume = previousVolume;
+      })
+      .catch(() => {
+        audio.volume = previousVolume;
+      });
+  } catch {
+    // Ignore audio unlock failures.
+  }
+};
+
+const ensureNotificationSoundUnlock = () => {
+  if (typeof window === 'undefined' || soundUnlockListenersAttached) return;
+  soundUnlockListenersAttached = true;
+
+  const unlockOnce = () => {
+    unlockNotificationSound();
+    window.removeEventListener('pointerdown', unlockOnce);
+    window.removeEventListener('keydown', unlockOnce);
+    window.removeEventListener('touchstart', unlockOnce);
+  };
+
+  window.addEventListener('pointerdown', unlockOnce, { passive: true });
+  window.addEventListener('keydown', unlockOnce);
+  window.addEventListener('touchstart', unlockOnce, { passive: true });
+};
+
+const playNotificationSound = () => {
+  const audio = getNotificationAudio();
+  if (!audio) return;
+
+  try {
+    audio.pause();
+    audio.currentTime = 0;
     audio.volume = 0.55;
     void audio.play().catch(() => {
       // Browser autoplay policies may block sound before the first user gesture.
+      ensureNotificationSoundUnlock();
     });
   } catch {
     // Sound is cosmetic; popup behavior must not depend on audio support.
@@ -62,8 +115,9 @@ export function SystemAnnouncementModal({
   onClose: () => void;
 }) {
   useEffect(() => {
+    ensureNotificationSoundUnlock();
     if (config?.isActive) {
-      playNotificationSound();
+      window.setTimeout(playNotificationSound, 0);
     }
   }, [config?.isActive, config?.title, config?.message, config?.updatedAt]);
 
@@ -72,8 +126,8 @@ export function SystemAnnouncementModal({
   const style = variantStyles[config.variant || 'info'];
   const isMobile = mode === 'mobile';
 
-  return (
-    <div className={`fixed inset-0 z-[10020] flex items-center justify-center bg-black/70 backdrop-blur-md ${isMobile ? 'p-5' : 'p-6'}`}>
+  const modal = (
+    <div className={`fixed inset-0 z-[10020] flex bg-black/70 backdrop-blur-md ${isMobile ? 'items-center justify-center p-5' : 'items-start justify-center px-6 pt-[112px] pb-6'}`}>
       <div
         className={`relative w-full overflow-hidden border bg-gradient-to-br ${style} shadow-[0_24px_80px_rgba(0,0,0,0.55)] animate-fade-in ${
           isMobile ? 'max-w-[340px] rounded-[30px] p-5' : 'max-w-[460px] rounded-[28px] p-6'
@@ -115,6 +169,8 @@ export function SystemAnnouncementModal({
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modal, document.body) : modal;
 }
 
 export function AppEventPopup({
@@ -129,8 +185,9 @@ export function AppEventPopup({
   onAction?: () => void;
 }) {
   useEffect(() => {
+    ensureNotificationSoundUnlock();
     if (data) {
-      playNotificationSound();
+      window.setTimeout(playNotificationSound, 0);
     }
   }, [data]);
 
@@ -140,7 +197,7 @@ export function AppEventPopup({
   const Icon = style.icon;
   const isMobile = mode === 'mobile';
 
-  return (
+  const popup = (
     <div className={`fixed z-[10010] ${isMobile ? 'inset-x-4 bottom-24' : 'right-6 top-24 w-[380px]'}`}>
       <div className="relative overflow-hidden rounded-[26px] border border-white/12 bg-[#10111a]/95 p-4 shadow-[0_22px_70px_rgba(0,0,0,0.55)] backdrop-blur-xl animate-slide-in-right">
         <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-audi-pink via-audi-purple to-audi-cyan" />
@@ -175,4 +232,6 @@ export function AppEventPopup({
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(popup, document.body) : popup;
 }

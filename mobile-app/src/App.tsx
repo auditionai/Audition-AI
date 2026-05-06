@@ -26,6 +26,42 @@ import { getSupabaseUser, supabase } from './services/supabaseClient';
 import { AppEventPopup, type AppEventPopupData, SystemAnnouncementModal } from '../../components/AppNotificationPopups';
 import './mobile-shell.css';
 
+const SYSTEM_ANNOUNCEMENT_DISMISS_STORAGE_KEY = 'auditionai:system-announcement-dismissed';
+const SYSTEM_ANNOUNCEMENT_DISMISS_MS = 12 * 60 * 60 * 1000;
+
+const shouldShowSystemAnnouncement = (config: SystemAnnouncementConfig | null) => {
+  if (!config?.isActive) return false;
+  if (typeof window === 'undefined') return true;
+
+  try {
+    const raw = window.localStorage.getItem(SYSTEM_ANNOUNCEMENT_DISMISS_STORAGE_KEY);
+    if (!raw) return true;
+
+    const parsed = JSON.parse(raw) as { dismissedAt?: number; updatedAt?: string };
+    if (parsed.updatedAt !== (config.updatedAt || '')) return true;
+    if (!parsed.dismissedAt) return true;
+
+    return Date.now() - parsed.dismissedAt >= SYSTEM_ANNOUNCEMENT_DISMISS_MS;
+  } catch {
+    return true;
+  }
+};
+
+const dismissSystemAnnouncementForTwelveHours = (config: SystemAnnouncementConfig | null) => {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(
+      SYSTEM_ANNOUNCEMENT_DISMISS_STORAGE_KEY,
+      JSON.stringify({
+        dismissedAt: Date.now(),
+        updatedAt: config?.updatedAt || '',
+      }),
+    );
+  } catch {
+    // Ignore storage failures.
+  }
+};
+
 function AppRoutes() {
   const { isAuthenticated, isLoading } = useAuth();
 
@@ -115,7 +151,7 @@ function MobileRuntimeEffects() {
   useEffect(() => {
     getSystemAnnouncementConfig().then((config) => {
       setSystemAnnouncement(config);
-      setShowSystemAnnouncement(!!config.isActive);
+      setShowSystemAnnouncement(shouldShowSystemAnnouncement(config));
     });
   }, []);
 
@@ -233,7 +269,10 @@ function MobileRuntimeEffects() {
       <SystemAnnouncementModal
         config={showSystemAnnouncement ? systemAnnouncement : null}
         mode="mobile"
-        onClose={() => setShowSystemAnnouncement(false)}
+        onClose={() => {
+          dismissSystemAnnouncementForTwelveHours(systemAnnouncement);
+          setShowSystemAnnouncement(false);
+        }}
       />
       <AppEventPopup
         data={eventPopup}

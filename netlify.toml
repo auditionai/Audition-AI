@@ -134,6 +134,21 @@
   status = 200
 
 [[redirects]]
+  from = "/api/sepay-checkout"
+  to = "/.netlify/functions/sepay-checkout"
+  status = 200
+
+[[redirects]]
+  from = "/api/sepay-ipn"
+  to = "/.netlify/functions/sepay-ipn"
+  status = 200
+
+[[redirects]]
+  from = "/api/sepay-webhook"
+  to = "/.netlify/functions/sepay-ipn"
+  status = 200
+
+[[redirects]]
   from = "/api/direct-image-edit"
   to = "/.netlify/functions/direct-image-edit"
   status = 200

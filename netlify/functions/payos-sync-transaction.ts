@@ -1,6 +1,7 @@
 import type { Handler } from '@netlify/functions';
 import { getPayOSEnv } from './_payos';
 import { getServiceRoleClient } from './_supabase';
+import { normalizeSePayOrderStatus, retrieveSePayOrder } from './_sepay';
 
 const headers = {
   'Content-Type': 'application/json',
@@ -28,6 +29,52 @@ export const handler: Handler = async (event) => {
       };
     }
 
+    const admin = getServiceRoleClient();
+    const { data: existingTransaction, error: existingTransactionError } = await admin
+      .from('payment_transactions')
+      .select('id, payment_method')
+      .or(`provider_order_code.eq.${orderCode},order_code.eq.${String(orderCode)}`)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existingTransactionError) {
+      throw existingTransactionError;
+    }
+
+    const paymentMethod = String(existingTransaction?.payment_method || 'payos').toLowerCase();
+
+    if (paymentMethod === 'sepay') {
+      const result = await retrieveSePayOrder(orderCode);
+      if (!result.ok) {
+        return {
+          statusCode: result.status || 400,
+          headers,
+          body: JSON.stringify(result.payload || { error: 'Failed to retrieve SePay order' }),
+        };
+      }
+
+      const providerStatus = normalizeSePayOrderStatus(result.payload);
+      const { data, error } = await admin.rpc('settle_payment_transaction_by_order_code', {
+        p_provider_order_code: orderCode,
+        p_provider_status: providerStatus,
+        p_provider_payload: {
+          gateway: 'sepay',
+          ...result.payload,
+        },
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({ success: true, gateway: 'sepay', payment: result.payload?.data || result.payload, transaction: data }),
+      };
+    }
+
     const { clientId, apiKey } = getPayOSEnv();
     const response = await fetch(`https://api-merchant.payos.vn/v2/payment-requests/${orderCode}`, {
       method: 'GET',
@@ -51,7 +98,6 @@ export const handler: Handler = async (event) => {
     const normalizedStatus =
       providerStatus === 'PAID' ? 'PAID' : providerStatus === 'CANCELLED' ? 'CANCELLED' : providerStatus;
 
-    const admin = getServiceRoleClient();
     const { data, error } = await admin.rpc('settle_payment_transaction_by_order_code', {
       p_provider_order_code: orderCode,
       p_provider_status: normalizedStatus,

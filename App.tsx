@@ -25,6 +25,41 @@ import MobileApp from './mobile-app/src/App';
 const PHONE_USER_AGENT_PATTERN = /iphone|ipod|android.+mobile|windows phone|blackberry|opera mini|mobile safari/i;
 const SHELL_OVERRIDE_STORAGE_KEY = 'auditionai:shell-override';
 const LEGACY_SHELL_PREFERENCE_STORAGE_KEY = 'auditionai:shell-preference';
+const SYSTEM_ANNOUNCEMENT_DISMISS_STORAGE_KEY = 'auditionai:system-announcement-dismissed';
+const SYSTEM_ANNOUNCEMENT_DISMISS_MS = 12 * 60 * 60 * 1000;
+
+const shouldShowSystemAnnouncement = (config: SystemAnnouncementConfig | null) => {
+  if (!config?.isActive) return false;
+  if (typeof window === 'undefined') return true;
+
+  try {
+    const raw = window.localStorage.getItem(SYSTEM_ANNOUNCEMENT_DISMISS_STORAGE_KEY);
+    if (!raw) return true;
+
+    const parsed = JSON.parse(raw) as { dismissedAt?: number; updatedAt?: string };
+    if (parsed.updatedAt !== (config.updatedAt || '')) return true;
+    if (!parsed.dismissedAt) return true;
+
+    return Date.now() - parsed.dismissedAt >= SYSTEM_ANNOUNCEMENT_DISMISS_MS;
+  } catch {
+    return true;
+  }
+};
+
+const dismissSystemAnnouncementForTwelveHours = (config: SystemAnnouncementConfig | null) => {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(
+      SYSTEM_ANNOUNCEMENT_DISMISS_STORAGE_KEY,
+      JSON.stringify({
+        dismissedAt: Date.now(),
+        updatedAt: config?.updatedAt || '',
+      }),
+    );
+  } catch {
+    // Ignore storage failures; the modal can still be closed for this render.
+  }
+};
 
 const clearLegacyShellPreference = () => {
   if (typeof window === 'undefined') return;
@@ -232,7 +267,7 @@ function AppContent() {
     updateLastActive();
     getSystemAnnouncementConfig().then((config) => {
         setSystemAnnouncement(config);
-        setShowSystemAnnouncement(!!config.isActive);
+        setShowSystemAnnouncement(shouldShowSystemAnnouncement(config));
     });
 
     // Update last active every 5 minutes
@@ -542,7 +577,10 @@ function AppContent() {
       <SystemAnnouncementModal
         config={showSystemAnnouncement ? systemAnnouncement : null}
         mode="desktop"
-        onClose={() => setShowSystemAnnouncement(false)}
+        onClose={() => {
+          dismissSystemAnnouncementForTwelveHours(systemAnnouncement);
+          setShowSystemAnnouncement(false);
+        }}
       />
       <AppEventPopup
         data={eventPopup}

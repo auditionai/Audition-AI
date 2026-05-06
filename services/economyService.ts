@@ -1870,7 +1870,7 @@ export const getUnifiedHistory = async (targetUserId?: string): Promise<HistoryI
         history.push({
             id: t.id,
             createdAt: t.created_at,
-            description: `Náº¡p Vcoin (${t.order_code})`,
+            description: `Nạp Vcoin (${t.order_code})`,
             vcoinChange: t.vcoin_received,
             amountVnd: t.amount_vnd,
             type: t.status === 'paid' ? 'topup' : 'pending_topup',
@@ -1880,10 +1880,16 @@ export const getUnifiedHistory = async (targetUserId?: string): Promise<HistoryI
     });
 
     logs?.forEach((l: any) => {
+        // Top-up logs are already represented by payment_transactions.
+        // Showing both creates duplicate successful top-up rows in the Vcoin history.
+        if (String(l.type || '').toLowerCase() === 'topup') {
+            return;
+        }
+
         history.push({
             id: l.id,
             createdAt: l.created_at,
-            description: l.description || l.reason || l.note || l.action || l.details || 'Giao dá»‹ch há»‡ thá»‘ng', // Fallback to note or default
+            description: l.description || l.reason || l.note || l.action || l.details || 'Giao dịch hệ thống',
             vcoinChange: l.amount, // Amount is already signed (negative for usage)
             type: l.type || 'usage', // Fallback to usage if type is missing (for legacy logs)
             status: 'success'

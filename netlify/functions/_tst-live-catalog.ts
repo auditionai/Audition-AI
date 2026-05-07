@@ -44,6 +44,24 @@ const normalizeQuality = (value?: string | null) => normalize(value);
 const normalizeDuration = (value?: string | null) => normalize(value);
 const normalizeServer = (value?: string | null) => normalize(value);
 const isFresh = (timestamp: number) => timestamp > 0 && Date.now() - timestamp < TST_LIVE_CATALOG_TTL_MS;
+const ASPECT_RATIO_ORDER = ['16:9', '9:16', '4:3', '3:4', '1:1', '21:9'];
+const TST_DOCS_VIDEO_ASPECT_RATIO_FALLBACKS: Record<string, string[]> = {
+  'seedance-2.0-fast': ['16:9', '9:16', '4:3', '3:4', '1:1', '21:9'],
+  'seedance-2.0': ['16:9', '9:16', '4:3', '3:4', '1:1', '21:9'],
+  'grok-i2v': ['9:16', '16:9', '1:1'],
+  'kling-o1-video': ['9:16', '16:9', '1:1'],
+  'kling-3.0-video': ['16:9', '9:16', '1:1'],
+};
+
+const sortByOrder = (values: string[], order: string[]) =>
+  [...values].sort((a, b) => {
+    const rankA = order.indexOf(a);
+    const rankB = order.indexOf(b);
+    const resolvedRankA = rankA === -1 ? order.length : rankA;
+    const resolvedRankB = rankB === -1 ? order.length : rankB;
+    if (resolvedRankA !== resolvedRankB) return resolvedRankA - resolvedRankB;
+    return a.localeCompare(b);
+  });
 
 const getApiKey = () => {
   const apiKey = process.env.TST_API_KEY;
@@ -88,16 +106,38 @@ const parseGptImage2ConfigKey = (configKey?: string) => {
   };
 };
 
+const parseVideoConfigKey = (configKey?: string) => {
+  const normalized = String(configKey || '').trim().toLowerCase();
+  const resolution = normalized.match(/(?:^|[-_|])(480p|720p|1080p|1k|2k|4k)(?:$|[-_|])/)?.[1];
+  const duration = normalized.match(/(?:^|[-_|])(\d+s)(?:$|[-_|])/)?.[1];
+  const speed = normalized.match(/(?:^|[-_|])(fast|slow)(?:$|[-_|])/)?.[1];
+  const audioToken = normalized.match(/(?:^|[-_|])audio[-_]?(on|off|true|false)(?:$|[-_|])/)?.[1];
+  return {
+    resolution,
+    duration,
+    speed,
+    audio: audioToken ? ['on', 'true'].includes(audioToken) : undefined,
+  };
+};
+
 const normalizePricingEntryForValidation = (entry: TstProviderPricingEntry): TstProviderPricingEntry => {
-  if (normalize(entry.model) !== 'image-gpt-2') {
-    return entry;
+  if (normalize(entry.model) === 'image-gpt-2') {
+    const parsed = parseGptImage2ConfigKey(entry.config_key);
+    return {
+      ...entry,
+      resolution: parsed.resolution || entry.resolution,
+      quality: parsed.quality || entry.quality || entry.resolution,
+      speed: entry.speed || parsed.speed,
+    };
   }
-  const parsed = parseGptImage2ConfigKey(entry.config_key);
+
+  const parsed = parseVideoConfigKey(entry.config_key);
   return {
     ...entry,
     resolution: parsed.resolution || entry.resolution,
-    quality: parsed.quality || entry.quality || entry.resolution,
+    duration: parsed.duration || entry.duration,
     speed: entry.speed || parsed.speed,
+    audio: entry.audio === true || parsed.audio === true,
   };
 };
 
@@ -195,11 +235,13 @@ const getAspectRatios = (model: TstProviderModel) => {
   const ratios = [
     ...((model.capabilities?.aspect_ratios || []) as string[]),
     ...((model.capabilities?.aspectRatios || []) as string[]),
+    ...(TST_DOCS_VIDEO_ASPECT_RATIO_FALLBACKS[normalize(model.model)] || []),
   ].map((value) => String(value).trim());
-  return Array.from(new Set(ratios.filter(Boolean)));
+  return sortByOrder(Array.from(new Set(ratios.filter(Boolean))), ASPECT_RATIO_ORDER);
 };
 
 const findPricingMatch = (
+  modelId: string,
   entries: TstProviderPricingEntry[],
   {
     serverId,
@@ -220,7 +262,10 @@ const findPricingMatch = (
   if (serverId && normalizeServer(entry.server) !== normalizeServer(serverId)) return false;
   if (resolution && normalizeResolution(entry.resolution) !== normalizeResolution(resolution)) return false;
   if (quality && normalizeQuality(entry.quality) !== normalizeQuality(quality)) return false;
-  if (duration && normalizeDuration(entry.duration) !== normalizeDuration(duration)) return false;
+  if (duration && normalizeDuration(entry.duration) !== normalizeDuration(duration)) {
+    const perSecondModel = normalize(modelId).startsWith('kling-') || normalize(modelId).startsWith('motion-control-');
+    if (!perSecondModel || normalizeDuration(entry.duration)) return false;
+  }
   if (!matchesFastSpeed(entry.speed, speed)) return false;
   if (typeof audio === 'boolean' && typeof entry.audio === 'boolean' && entry.audio !== audio) return false;
   return true;
@@ -315,7 +360,7 @@ export const validateQueuePayloadAgainstLiveCatalog = async (
     throw new Error(`INVALID_TST_CONFIG: Aspect ratio ${aspectRatio} is disabled for ${modelId}`);
   }
 
-  const pricingMatch = findPricingMatch(modelPricing, {
+  const pricingMatch = findPricingMatch(modelId, modelPricing, {
     serverId: serverId || undefined,
     resolution: resolution || undefined,
     quality: quality || undefined,

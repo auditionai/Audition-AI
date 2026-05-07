@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { getServiceRoleClient } from './_supabase';
 import { fireTelegramJobNotification } from './_telegram-notify';
 import { validateQueuePayloadAgainstLiveCatalog } from './_tst-live-catalog';
+import { getTstGeneratePath } from './_tst-generate-endpoints';
 import { normalizeTstOutboundPayload } from './_tst-payload-normalizer';
 import {
   buildImageGenerateProviderPayload,
@@ -11,13 +12,6 @@ import {
   uploadImageToTst,
 } from './_queue-recipes';
 import { runVertexImageEdit } from './_vertex-image-edit';
-import {
-  inspectMotionVideoDurationSeconds,
-  reviewMotionCharacterInput,
-  reviewVideoKeyframeInput,
-  type VideoInputReviewIssue,
-  type VideoInputReviewResult,
-} from './_vertex-video-input-review';
 import {
   buildImageProviderPrompt,
   getImageDirectorSources,
@@ -1030,42 +1024,11 @@ const shouldRefundFailure = (
   job: Pick<QueueJobRow, 'queue_kind' | 'queue_payload'>,
   payloadOverride?: Record<string, unknown> | ImageGenerateRecipePayload | null,
 ) => {
-  if (job.queue_kind !== 'video_generate' && job.queue_kind !== 'motion_generate') {
+  if (job.queue_kind === 'video_generate' || job.queue_kind === 'motion_generate') {
     return true;
   }
 
   return !hasTstBeenTouched(payloadOverride ?? job.queue_payload);
-};
-
-const buildReviewIssueMessages = (issues: VideoInputReviewIssue[]) => {
-  const unique = [...new Set(issues)];
-  const messages: string[] = [];
-
-  if (unique.includes('no_character')) messages.push('không tìm thấy nhân vật rõ ràng trong ảnh');
-  if (unique.includes('multiple_characters')) messages.push('ảnh có từ 2 nhân vật trở lên');
-  if (unique.includes('blurry_subject')) messages.push('nhân vật bị mờ, nhìn không đủ rõ nét');
-  if (unique.includes('small_subject')) messages.push('nhân vật quá nhỏ trong khung hình');
-  if (unique.includes('occluded_subject')) messages.push('nhân vật bị che khuất quá nhiều');
-  if (unique.includes('missing_character_details')) messages.push('không tách được chi tiết nhân vật');
-  if (unique.includes('unclear_background')) messages.push('bối cảnh hậu cảnh không rõ ràng');
-  if (unique.includes('missing_scene_details')) messages.push('không lấy được chi tiết bối cảnh');
-  if (unique.includes('too_dark')) messages.push('ảnh quá tối');
-  if (unique.includes('too_bright')) messages.push('ảnh quá sáng hoặc cháy sáng');
-  if (unique.includes('uncertain')) messages.push('hệ thống không đủ tự tin để phê duyệt');
-
-  return messages;
-};
-
-const summarizeInputReviewFailure = (
-  prefix: string,
-  review: VideoInputReviewResult,
-) => {
-  const issueMessages = buildReviewIssueMessages(review.issues);
-  const detail = issueMessages.length > 0
-    ? issueMessages.join('; ')
-    : (review.summary || 'dữ liệu đầu vào không đạt yêu cầu');
-
-  return `${prefix}: ${detail}.`;
 };
 
 const getJobRuntimeState = async (jobId: string) => {
@@ -1088,16 +1051,42 @@ const isJobManuallyStopped = async (jobId: string) => {
   return String(state?.status || '').toLowerCase() === 'failed' && hasManualStopFlag((state as any)?.queue_payload);
 };
 
-const getGenerateEndpoint = (queueKind: string) => {
-  switch (queueKind) {
-    case 'image_generate':
-      return `${TST_API_BASE}/image/generate`;
-    case 'video_generate':
-      return `${TST_API_BASE}/video/generate`;
-    case 'motion_generate':
-      return `${TST_API_BASE}/motion/generate`;
-    default:
-      throw new Error(`Unsupported queue kind: ${queueKind}`);
+const getGenerateEndpoint = (queueKind: string, providerPayload?: Record<string, unknown>) =>
+  `${TST_API_BASE}${getTstGeneratePath(queueKind, providerPayload)}`;
+
+const normalizeProviderMediaUrl = (value: unknown) => {
+  if (Array.isArray(value)) {
+    return value.map(normalizeProviderMediaUrl).find(Boolean) || '';
+  }
+  return typeof value === 'string' ? value.trim() : '';
+};
+
+const isHttpProviderMediaUrl = (value: unknown) => /^https?:\/\//i.test(normalizeProviderMediaUrl(value));
+
+const summarizeProviderMediaPayload = (payload: Record<string, unknown>) => ({
+  model: payload.model,
+  endpointRole:
+    String(payload.model || '').trim().toLowerCase().startsWith('seedance') ? 'seedance' :
+    String(payload.model || '').trim().toLowerCase().startsWith('grok') ? 'grok' :
+    'default',
+  hasImgUrl: isHttpProviderMediaUrl(payload.img_url),
+  hasImageUrl: isHttpProviderMediaUrl(payload.image_url),
+  hasCharacterImageUrl: isHttpProviderMediaUrl(payload.character_image_url),
+  hasMotionVideoUrl: isHttpProviderMediaUrl(payload.motion_video_url),
+});
+
+const assertRequiredProviderMediaPayload = (queueKind: string, payload: Record<string, unknown>) => {
+  if (queueKind === 'video_generate' && !isHttpProviderMediaUrl(payload.img_url) && !isHttpProviderMediaUrl(payload.image_url)) {
+    throw new Error('Payload video thiếu ảnh tham chiếu hợp lệ trước khi gửi TST.');
+  }
+
+  if (queueKind === 'motion_generate') {
+    if (!isHttpProviderMediaUrl(payload.character_image_url)) {
+      throw new Error('Payload Motion Control thiếu ảnh nhân vật hợp lệ trước khi gửi TST.');
+    }
+    if (!isHttpProviderMediaUrl(payload.motion_video_url)) {
+      throw new Error('Payload Motion Control thiếu video mẫu hợp lệ trước khi gửi TST.');
+    }
   }
 };
 
@@ -1110,8 +1099,14 @@ const submitProviderJob = async (queueKind: string, providerPayload: Record<stri
   }
 
   const outboundPayload = normalizeTstOutboundPayload(stripInternalQueueMeta(providerPayload));
+  assertRequiredProviderMediaPayload(queueKind, outboundPayload);
+  logQueueWorkerEvent('Dispatching provider payload.', {
+    queueKind,
+    endpoint: getGenerateEndpoint(queueKind, outboundPayload),
+    media: summarizeProviderMediaPayload(outboundPayload),
+  });
 
-  const response = await fetch(getGenerateEndpoint(queueKind), {
+  const response = await fetch(getGenerateEndpoint(queueKind, outboundPayload), {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${TST_API_KEY}`,
@@ -1390,52 +1385,30 @@ const markTstTouched = async (
   return nextPayload;
 };
 
-const reviewVideoInputsBeforeTst = async (
-  job: QueueJobRow,
+const prepareVideoInputsForDirectTstDispatch = async (
+  _job: QueueJobRow,
   payload: VideoGenerateRecipePayload | MotionGenerateRecipePayload,
 ) => {
   if (payload.recipeType === 'video_generate_recipe_v1') {
     if (!payload.keyframeImage) {
-      throw new Error(
-        'Không duyệt video: vui lòng tải lên ảnh keyframe rõ nét có nhân vật và bối cảnh rõ ràng.',
-      );
-    }
-
-    const review = await reviewVideoKeyframeInput(payload.keyframeImage);
-    if (!review.approved) {
-      throw new Error(summarizeInputReviewFailure('Không duyệt video', review));
+      throw new Error('Payload video thiếu ảnh keyframe trước khi gửi TST.');
     }
 
     return {
-      successMessage:
-        review.detectedPersonCount && review.detectedPersonCount > 1
-          ? `Ảnh keyframe đạt duyệt. Hệ thống nhận diện ${review.detectedPersonCount} nhân vật rõ ràng và tiếp tục tạo payload video.`
-          : 'Ảnh keyframe đạt duyệt. Tiếp tục tạo payload video.',
+      successMessage: 'Đã bỏ kiểm duyệt Vertex. Đang dựng payload video và gửi trực tiếp sang TST.',
     };
   }
 
-  const durationSeconds = await inspectMotionVideoDurationSeconds(
-    payload.motionVideoDataUrl,
-    payload.motionVideoDurationSeconds,
-  );
-
-  if (!durationSeconds || durationSeconds < 3 || durationSeconds > 30) {
-    throw new Error(
-      'Không duyệt motion control: video chuyển động phải dài từ 3 giây đến 30 giây.',
-    );
+  if (!payload.characterImage) {
+    throw new Error('Payload Motion Control thiếu ảnh nhân vật trước khi gửi TST.');
   }
 
-  const review = await reviewMotionCharacterInput(payload.characterImage);
-  if (!review.approved) {
-    throw new Error(summarizeInputReviewFailure('Không duyệt motion control', review));
-  }
-
-  if (review.detectedPersonCount !== null && review.detectedPersonCount !== 1) {
-    throw new Error('Không duyệt motion control: ảnh nhân vật phải chỉ có đúng 1 nhân vật rõ ràng.');
+  if (!payload.motionVideoDataUrl) {
+    throw new Error('Payload Motion Control thiếu video mẫu trước khi gửi TST.');
   }
 
   return {
-    successMessage: `Ảnh motion control đạt duyệt và video tham chiếu ${durationSeconds.toFixed(1)}s hợp lệ. Tiếp tục tạo payload motion.`,
+    successMessage: 'Đã bỏ kiểm duyệt Vertex. Đang dựng payload Motion Control và gửi trực tiếp sang TST.',
   };
 };
 
@@ -2831,8 +2804,8 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
       await updatePreProviderStage(job.id, 20);
       const reviewStartMessage =
         currentPayload.recipeType === 'video_generate_recipe_v1'
-          ? 'Đang kiểm duyệt ảnh keyframe trước khi gửi dữ liệu lên TST.'
-          : 'Đang kiểm duyệt ảnh nhân vật và video motion trước khi gửi dữ liệu lên TST.';
+          ? 'Đang dựng payload video. Bỏ kiểm duyệt Vertex và gửi dữ liệu trực tiếp lên TST.'
+          : 'Đang dựng payload Motion Control. Bỏ kiểm duyệt Vertex và gửi dữ liệu trực tiếp lên TST.';
       job.queue_payload = await persistQueueLog(
         job.id,
         job.queue_payload || currentPayload,
@@ -2842,7 +2815,7 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
       const reviewResult = await withTimeout(
         withLeaseHeartbeat(
           job.id,
-          reviewVideoInputsBeforeTst(
+          prepareVideoInputsForDirectTstDispatch(
             job,
             currentPayload as VideoGenerateRecipePayload | MotionGenerateRecipePayload,
           ),
@@ -3255,11 +3228,11 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
         isQueueRecipePayload(currentPayload) &&
         (currentPayload.recipeType === 'video_generate_recipe_v1' || currentPayload.recipeType === 'motion_generate_recipe_v1')
       ) {
-        await updatePreProviderStage(job.id, 20);
-        const reviewStartMessage =
-          currentPayload.recipeType === 'video_generate_recipe_v1'
-            ? 'Đang kiểm duyệt ảnh keyframe trước khi gửi dữ liệu lên TST.'
-            : 'Đang kiểm duyệt ảnh nhân vật và video motion trước khi gửi dữ liệu lên TST.';
+      await updatePreProviderStage(job.id, 20);
+      const reviewStartMessage =
+        currentPayload.recipeType === 'video_generate_recipe_v1'
+            ? 'Đang dựng payload video. Bỏ kiểm duyệt Vertex và gửi dữ liệu trực tiếp lên TST.'
+            : 'Đang dựng payload Motion Control. Bỏ kiểm duyệt Vertex và gửi dữ liệu trực tiếp lên TST.';
         job.queue_payload = await persistQueueLog(
           job.id,
           job.queue_payload || currentPayload,
@@ -3269,7 +3242,7 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
         const reviewResult = await withTimeout(
           withLeaseHeartbeat(
             job.id,
-            reviewVideoInputsBeforeTst(
+            prepareVideoInputsForDirectTstDispatch(
               job,
               currentPayload as VideoGenerateRecipePayload | MotionGenerateRecipePayload,
             ),

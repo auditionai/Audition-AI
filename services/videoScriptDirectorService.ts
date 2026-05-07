@@ -1,16 +1,27 @@
+export type VideoScriptDirectorOptions = {
+  style?: string;
+  theme?: string;
+  soundMood?: string;
+  voiceDialogue?: boolean;
+  targetModel?: string;
+};
+
 export const generateVideoScriptWithVertex = async ({
   imageSource,
   durationSeconds,
   userPrompt,
+  scriptOptions,
 }: {
   imageSource: string;
   durationSeconds: number | string;
   userPrompt?: string;
+  scriptOptions?: VideoScriptDirectorOptions;
 }) => {
   const requestBody = JSON.stringify({
     imageSource,
     durationSeconds,
     userPrompt: userPrompt || '',
+    scriptOptions: scriptOptions || {},
   });
 
   const endpoints = ['/api/video-script-director', '/.netlify/functions/video-script-director'];

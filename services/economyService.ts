@@ -1719,6 +1719,7 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
                 amount: pkg.price,
                 description: `AI${String(providerOrderCode).slice(-7)}`,
                 orderCode: providerOrderCode,
+                transactionId: data.id,
                 returnUrl,
                 cancelUrl,
                 buyerName: user.username,

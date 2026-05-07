@@ -30,9 +30,10 @@ export const handler: Handler = async (event) => {
     }
 
     const admin = getServiceRoleClient();
+    const requestedGateway = String(event.queryStringParameters?.gateway || '').trim().toLowerCase();
     const { data: existingTransaction, error: existingTransactionError } = await admin
       .from('payment_transactions')
-      .select('id, payment_method')
+      .select('id, payment_method, provider_payment_link_id')
       .or(`provider_order_code.eq.${orderCode},order_code.eq.${String(orderCode)}`)
       .order('created_at', { ascending: false })
       .limit(1)
@@ -42,9 +43,14 @@ export const handler: Handler = async (event) => {
       throw existingTransactionError;
     }
 
-    const paymentMethod = String(existingTransaction?.payment_method || 'payos').toLowerCase();
+    const paymentMethod = String(existingTransaction?.payment_method || '').toLowerCase();
+    const providerPaymentLinkId = String(existingTransaction?.provider_payment_link_id || '').toLowerCase();
+    const shouldUseSePay =
+      requestedGateway === 'sepay' ||
+      paymentMethod === 'sepay' ||
+      providerPaymentLinkId.startsWith('sepay:');
 
-    if (paymentMethod === 'sepay') {
+    if (shouldUseSePay) {
       const result = await retrieveSePayOrder(orderCode);
       if (!result.ok) {
         return {

@@ -321,6 +321,7 @@ function AppContent() {
     const params = new URLSearchParams(window.location.search);
     const status = params.get('status');
     const orderCode = params.get('orderCode');
+    const gateway = params.get('gateway');
 
     if (status) {
         window.history.replaceState({}, '', window.location.pathname);
@@ -328,7 +329,7 @@ function AppContent() {
         if (status === 'PAID') {
              desktopHistoryModeRef.current = 'replace';
              if (orderCode) {
-                 syncPayOSTransaction(orderCode)
+                 syncPayOSTransaction(orderCode, gateway)
                     .then(() => {
                         window.dispatchEvent(new Event('balance_updated'));
                         showPaymentSuccessPopup(orderCode);

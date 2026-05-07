@@ -159,6 +159,7 @@ function MobileRuntimeEffects() {
     const params = new URLSearchParams(location.search);
     const status = params.get('status');
     const orderCode = params.get('orderCode');
+    const gateway = params.get('gateway');
 
     if (!status) return;
 
@@ -170,7 +171,7 @@ function MobileRuntimeEffects() {
       if (status === 'PAID') {
         if (orderCode) {
           try {
-            await syncPayOSTransaction(orderCode);
+            await syncPayOSTransaction(orderCode, gateway);
             window.dispatchEvent(new Event('balance_updated'));
             showPaymentSuccessPopup(orderCode);
             notify('Thanh toán thành công! Vcoin đã được cộng tự động.', 'success');

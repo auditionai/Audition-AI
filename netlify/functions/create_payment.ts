@@ -162,6 +162,45 @@ const createSePayPayment = async (event: Parameters<Handler>[0], input: any) => 
   };
 };
 
+const persistPaymentGatewayMetadata = async (input: any, data: any, gateway: PaymentGateway) => {
+  try {
+    const admin = getServiceRoleClient();
+    const transactionId = String(input.transactionId || '').trim();
+    const orderCode = String(input.orderCode || '').trim();
+    const providerOrderCode = Number(input.orderCode);
+    const updatePayload = {
+      checkout_url: data.checkoutUrl || data.checkout_url || null,
+      provider_payment_link_id: data.paymentLinkId || data.payment_link_id || null,
+      payment_method: gateway,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (transactionId) {
+      const { error } = await admin
+        .from('payment_transactions')
+        .update(updatePayload)
+        .eq('id', transactionId);
+      if (error) throw error;
+      return;
+    }
+
+    const query = admin
+      .from('payment_transactions')
+      .update(updatePayload);
+
+    if (Number.isFinite(providerOrderCode)) {
+      const { error } = await query.or(`provider_order_code.eq.${providerOrderCode},order_code.eq.${orderCode}`);
+      if (error) throw error;
+      return;
+    }
+
+    const { error } = await query.eq('order_code', orderCode);
+    if (error) throw error;
+  } catch (error) {
+    console.warn('[create-payment] Failed to persist payment gateway metadata:', error);
+  }
+};
+
 export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers, body: '' };
@@ -184,6 +223,7 @@ export const handler: Handler = async (event) => {
       buyerPhone,
       items,
       expiredAt,
+      transactionId,
     } = body;
 
     if (!Number.isFinite(Number(amount)) || !orderCode || !description) {
@@ -206,11 +246,14 @@ export const handler: Handler = async (event) => {
       buyerPhone,
       items,
       expiredAt,
+      transactionId,
     };
 
     const data = gateway === 'payos'
       ? await createPayOSPayment(input)
       : await createSePayPayment(event, input);
+
+    await persistPaymentGatewayMetadata(input, data, gateway);
 
     return {
       statusCode: 200,

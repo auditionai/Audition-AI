@@ -108,8 +108,13 @@ export const triggerServerQueueTick = async (_force = false) => {
   return QUEUE_TICK_NOOP_RESULT;
 };
 
-export const syncPayOSTransaction = async (orderCode: string | number) => {
-  const response = await fetch(`/api/payos-sync-transaction?orderCode=${encodeURIComponent(String(orderCode))}`, {
+export const syncPayOSTransaction = async (orderCode: string | number, gateway?: string | null) => {
+  const params = new URLSearchParams({ orderCode: String(orderCode) });
+  if (gateway) {
+    params.set('gateway', gateway);
+  }
+
+  const response = await fetch(`/api/payos-sync-transaction?${params.toString()}`, {
     method: 'GET',
   });
 

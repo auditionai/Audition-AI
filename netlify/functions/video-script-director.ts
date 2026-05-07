@@ -55,13 +55,40 @@ const clampDurationSeconds = (value: unknown) => {
   return Math.min(30, Math.max(3, Math.round(parsed)));
 };
 
-const buildDirectorInstruction = (durationSeconds: number, userPrompt: string) => [
+const normalizeOption = (value: unknown, fallback = 'tự động theo ảnh') => {
+  const text = String(value || '').trim();
+  return text || fallback;
+};
+
+const buildDirectorInstruction = (
+  durationSeconds: number,
+  userPrompt: string,
+  scriptOptions: Record<string, unknown>,
+) => {
+  const style = normalizeOption(scriptOptions.style, 'cinematic tự nhiên');
+  const theme = normalizeOption(scriptOptions.theme, 'tự động theo ảnh');
+  const soundMood = normalizeOption(scriptOptions.soundMood, 'phù hợp bối cảnh');
+  const targetModel = normalizeOption(scriptOptions.targetModel, 'model video người dùng chọn');
+  const voiceDialogue = Boolean(scriptOptions.voiceDialogue);
+
+  return [
   'You are a cinematic AI video director for an image-to-video generation pipeline.',
   'Analyze the uploaded reference image and write a precise video prompt/script for the selected duration.',
   'Output language rule: the final script MUST be written entirely in Vietnamese.',
   'Do not answer in English. Do not mix English sentences into the script, except unavoidable proper names, model names, or brand labels visible in the image.',
   `The target video duration is ${durationSeconds} seconds. Structure the motion timing to fit this duration.`,
+  `Selected target model: ${targetModel}. Optimize the script for this model's likely image-to-video behavior and avoid complex impossible motion.`,
+  `Requested style: ${style}.`,
+  `Requested theme: ${theme}.`,
+  `Requested sound/music mood: ${soundMood}.`,
+  voiceDialogue
+    ? 'Dialogue/voice rule: include short, natural Vietnamese voice-over or spoken lines only when it fits the scene. The voice must be standard Vietnamese.'
+    : 'Dialogue/voice rule: do NOT include any spoken dialogue, voice-over, or narrated speech. Use only visual action, ambience, music, and sound effects.',
   userPrompt.trim() ? `User idea to incorporate: ${userPrompt.trim()}` : '',
+  '',
+  'Image analysis requirements:',
+  '- Identify how many visible characters are in the uploaded image, their apparent gender presentation if visible, scene context, outfit, face details, accessories, and mood.',
+  '- Build the script around those observed details. Do not replace the subject with a different person or a real human actor.',
   '',
   'Hard constraints that must be included in the final script:',
   '- Do not create a real human video.',
@@ -75,7 +102,8 @@ const buildDirectorInstruction = (durationSeconds: number, userPrompt: string) =
   '',
   'Write only the final Vietnamese prompt/script. No markdown, no JSON, no explanation.',
   'The output should be detailed enough for Seedance/Kling/Grok video generation, but stay under 3000 characters.',
-].filter(Boolean).join('\n');
+  ].filter(Boolean).join('\n');
+};
 
 export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
@@ -99,8 +127,12 @@ export const handler: Handler = async (event) => {
     const imageSource = String(body.imageSource || '').trim();
     const durationSeconds = clampDurationSeconds(body.durationSeconds);
     const userPrompt = String(body.userPrompt || '').trim();
+    const scriptOptions =
+      body.scriptOptions && typeof body.scriptOptions === 'object'
+        ? body.scriptOptions as Record<string, unknown>
+        : {};
     const imagePart = await toInlineImagePart(imageSource);
-    const promptPart = { text: buildDirectorInstruction(durationSeconds, userPrompt) };
+    const promptPart = { text: buildDirectorInstruction(durationSeconds, userPrompt, scriptOptions) };
 
     const script = await runWithVertexCredentialFailover({
       taskName: 'video script director',

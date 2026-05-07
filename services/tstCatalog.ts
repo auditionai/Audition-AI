@@ -28,6 +28,7 @@ export interface TstRuntimeModel {
     durations?: string[] | null;
     aspect_ratios?: string[] | null;
     aspectRatios?: string[] | null;
+    qualities?: string[] | null;
     i2v?: boolean;
     slow_mode?: boolean;
     audio?: boolean;
@@ -73,6 +74,9 @@ export interface TstGenerationCostBreakdown {
   vcoin: number;
   configKey?: string;
   modelId?: string;
+  billingUnit?: 'flat' | 'second';
+  unitVcoin?: number;
+  billedSeconds?: number;
 }
 
 export interface AuditionPricingOverride {
@@ -114,6 +118,7 @@ export interface TstPricingRow {
   vcoin: number;
   configKey: string;
   defaultAuditionVcoin?: number;
+  billingUnit?: 'flat' | 'second';
 }
 
 type ParsedMarkdownModel = {
@@ -135,11 +140,19 @@ export const TST_CATALOG_CACHE_TTL_MS = 60_000;
 const TST_CATALOG_FETCH_TIMEOUT_MS = 15_000;
 const TST_CATALOG_FETCH_RETRIES = 1;
 const TST_CATALOG_FETCH_RETRY_DELAY_MS = 750;
-const SERVER_ORDER = ['cheap', 'fast', 'vip2', 'vip1'];
+const SERVER_ORDER = ['cheap', 'fast', 'standard', 'default', 'vip2', 'vip1'];
 const SPEED_ORDER = ['fast', 'slow'];
-const RESOLUTION_ORDER = ['default', '1k', '2k', '4k', '720p', '1080p'];
+const RESOLUTION_ORDER = ['default', '480p', '720p', '1080p', '1k', '2k', '4k'];
 const GPT_IMAGE_QUALITY_VALUES = ['low', 'medium', 'high'];
-const DURATION_ORDER = ['3s', '5s', '8s', '10s', '15s', '25s'];
+const DURATION_ORDER = ['3s', '5s', '6s', '8s', '10s', '15s', '25s'];
+const ASPECT_RATIO_ORDER = ['16:9', '9:16', '4:3', '3:4', '1:1', '21:9'];
+const TST_DOCS_VIDEO_ASPECT_RATIO_FALLBACKS: Record<string, string[]> = {
+  'seedance-2.0-fast': ['16:9', '9:16', '4:3', '3:4', '1:1', '21:9'],
+  'seedance-2.0': ['16:9', '9:16', '4:3', '3:4', '1:1', '21:9'],
+  'grok-i2v': ['9:16', '16:9', '1:1'],
+  'kling-o1-video': ['9:16', '16:9', '1:1'],
+  'kling-3.0-video': ['16:9', '9:16', '1:1'],
+};
 
 const tierToModelId: Record<TstGenerationTier, string> = {
   flash: 'nano-banana-2',
@@ -336,6 +349,10 @@ export const ADMIN_MANAGED_MODEL_LABELS = [
   'Kling 2.5 Turbo',
   'Kling 2.6',
   'Kling 3.0',
+  'Kling O1 Video',
+  'Seedance 2.0',
+  'Seedance 2.0 Fast',
+  'Grok Video',
   'Motion Control 2.6',
   'Motion Control 3.0',
   'Chỉnh sửa ảnh',
@@ -350,6 +367,10 @@ const ADMIN_MANAGED_MODEL_IDS = [
   'kling-2.5-turbo',
   'kling-2.6',
   'kling-3.0-video',
+  'kling-o1-video',
+  'seedance-2.0',
+  'seedance-2.0-fast',
+  'grok-i2v',
   'motion-control-2.6',
   'motion-control-3.0',
   'magic_editor_pro',
@@ -719,12 +740,71 @@ const parseGptImage2ConfigKey = (configKey?: string) => {
   };
 };
 
+export const parseDurationSeconds = (value?: string | number | null) => {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  }
+  const match = String(value || '').trim().toLowerCase().match(/(\d+(?:\.\d+)?)/);
+  return match ? Number(match[1]) : 0;
+};
+
+export const isPerSecondVideoBillingModel = (modelId: string) =>
+  normalizeModelId(modelId).startsWith('kling-');
+
+export const isPerSecondMotionBillingModel = (modelId: string) =>
+  normalizeModelId(modelId).startsWith('motion-control-');
+
+export const isPerSecondBillingModel = (modelId: string, type?: TstMediaType) =>
+  type === 'motion-control'
+    ? isPerSecondMotionBillingModel(modelId)
+    : type === 'video'
+      ? isPerSecondVideoBillingModel(modelId)
+      : isPerSecondVideoBillingModel(modelId) || isPerSecondMotionBillingModel(modelId);
+
+export const getPerSecondPricingKey = ({
+  modelId,
+  serverId,
+  resolution,
+  speed,
+  audio,
+}: {
+  modelId: string;
+  serverId?: string;
+  resolution?: string;
+  speed?: string;
+  audio?: boolean;
+}) =>
+  [
+    normalizeModelId(modelId),
+    normalizeServer(serverId),
+    normalizeResolution(resolution),
+    normalizeSpeed(speed),
+    typeof audio === 'boolean' ? `audio-${audio ? 'on' : 'off'}` : '',
+    'per-second',
+  ].filter(Boolean).join('|');
+
+const parseVideoConfigKey = (configKey?: string) => {
+  const normalized = String(configKey || '').trim().toLowerCase();
+  const resolution = normalized.match(/(?:^|[-_|])(480p|720p|1080p|1k|2k|4k)(?:$|[-_|])/)?.[1];
+  const duration = normalized.match(/(?:^|[-_|])(\d+s)(?:$|[-_|])/)?.[1];
+  const speed = normalized.match(/(?:^|[-_|])(fast|slow)(?:$|[-_|])/)?.[1];
+  const audioToken = normalized.match(/(?:^|[-_|])audio[-_]?(on|off|true|false)(?:$|[-_|])/)?.[1];
+  return {
+    resolution,
+    duration,
+    speed,
+    audio: audioToken ? ['on', 'true'].includes(audioToken) : undefined,
+  };
+};
+
 const mapPricingEntry = (entry: any): TstPricingEntry => {
   const model = String(entry.model || '');
   const configKey = String(entry.config_key || '');
   let resolution = entry.resolution ? String(entry.resolution) : undefined;
   let quality = entry.quality ? String(entry.quality) : undefined;
   let speed = entry.speed ? String(entry.speed) : undefined;
+  let duration = entry.duration ? String(entry.duration) : undefined;
+  let audio = entry.audio === true;
 
   if (normalizeModelId(model) === 'image-gpt-2') {
     const parsed = parseGptImage2ConfigKey(configKey);
@@ -740,6 +820,12 @@ const mapPricingEntry = (entry: any): TstPricingEntry => {
     if (!speed && parsed.speed) {
       speed = parsed.speed;
     }
+  } else {
+    const parsed = parseVideoConfigKey(configKey);
+    resolution = resolution || parsed.resolution;
+    duration = duration || parsed.duration;
+    speed = speed || parsed.speed;
+    audio = entry.audio === true || parsed.audio === true;
   }
 
   return {
@@ -750,8 +836,8 @@ const mapPricingEntry = (entry: any): TstPricingEntry => {
     resolution,
     quality,
     speed,
-    duration: entry.duration ? String(entry.duration) : undefined,
-    audio: entry.audio === true,
+    duration,
+    audio,
   };
 };
 
@@ -795,7 +881,10 @@ const getMatchingEntries = ({
     if (normalizedQuality && normalizeQuality(entry.quality) !== normalizedQuality) return false;
     if (normalizedSpeed && normalizeSpeed(entry.speed) !== normalizedSpeed) return false;
     if (normalizedServer && normalizeServer(entry.server) !== normalizedServer) return false;
-    if (normalizedDuration && normalizeDuration(entry.duration) !== normalizedDuration) return false;
+    if (normalizedDuration && normalizeDuration(entry.duration) !== normalizedDuration) {
+      const perSecondModel = isPerSecondBillingModel(modelId, 'video');
+      if (!perSecondModel || normalizeDuration(entry.duration)) return false;
+    }
     return true;
   });
 };
@@ -820,10 +909,14 @@ const getUniqueSpeeds = (entries: TstPricingEntry[]) =>
   );
 
 const getCapabilityAspectRatios = (model: TstRuntimeModel) =>
-  unique([
-    ...((model.capabilities?.aspect_ratios || []) as string[]),
-    ...((model.capabilities?.aspectRatios || []) as string[]),
-  ]);
+  sortByOrder(
+    unique([
+      ...((model.capabilities?.aspect_ratios || []) as string[]),
+      ...((model.capabilities?.aspectRatios || []) as string[]),
+      ...(TST_DOCS_VIDEO_ASPECT_RATIO_FALLBACKS[normalizeModelId(model.model)] || []),
+    ].map((value) => String(value).trim()).filter(Boolean)),
+    ASPECT_RATIO_ORDER,
+  );
 
 const pickExactEntry = (entries: TstPricingEntry[], filters: Array<(entry: TstPricingEntry) => boolean>) => {
   for (const filter of filters) {
@@ -1229,6 +1322,10 @@ export const getVideoModelSpecs = (
     const fallback = getFallbackVideoSpec(model.model, model.name);
     const resolutions = getUniqueResolutions(entries);
     const durations = getUniqueDurations(entries);
+    const capabilityDurations = sortByOrder(
+      unique(((model.capabilities?.durations || []) as string[]).map((value) => normalizeCatalogDuration(value)).filter(Boolean)),
+      DURATION_ORDER,
+    );
     const speeds = getUniqueSpeeds(entries);
     const servers = sortByOrder(
       unique(entries.map((entry) => normalizeCatalogServer(entry.server)).filter(Boolean)),
@@ -1241,7 +1338,7 @@ export const getVideoModelSpecs = (
       displayName: model.name || fallback.displayName,
       servers,
       resolutions,
-      durations,
+      durations: durations.length > 0 ? durations : (capabilityDurations.length > 0 ? capabilityDurations : fallback.durations),
       aspectRatios: getCapabilityAspectRatios(model),
       speeds,
       supportsAudio: Boolean(model.capabilities?.audio ?? fallback.supportsAudio),
@@ -1437,6 +1534,22 @@ export const getVideoCostBreakdown = ({
 
   if (exactEntry) {
     const fallbackVcoin = creditsToVcoin(exactEntry.credits);
+    if (isPerSecondVideoBillingModel(modelId)) {
+      const billedSeconds = Math.max(1, parseDurationSeconds(duration));
+      const unitConfigKey = getPerSecondPricingKey({ modelId, serverId, resolution, speed, audio });
+      const unitFallbackVcoin = Math.max(1, Math.ceil(fallbackVcoin / billedSeconds));
+      const unitVcoin = getAuditionPrice(modelId, unitConfigKey, unitFallbackVcoin, pricingOverrides);
+      return {
+        available: true,
+        credits: exactEntry.credits,
+        vcoin: unitVcoin * billedSeconds,
+        configKey: unitConfigKey,
+        modelId,
+        billingUnit: 'second',
+        unitVcoin,
+        billedSeconds,
+      };
+    }
     return {
       available: true,
       credits: exactEntry.credits,
@@ -1511,6 +1624,7 @@ export const getMotionCostBreakdown = ({
   serverId,
   resolution,
   speed = 'fast',
+  durationSeconds,
   pricingEntries = [],
   pricingOverrides = [],
 }: {
@@ -1518,6 +1632,7 @@ export const getMotionCostBreakdown = ({
   serverId: string;
   resolution: string;
   speed?: string;
+  durationSeconds?: number | null;
   pricingEntries?: TstPricingEntry[];
   pricingOverrides?: AuditionPricingOverride[];
 }): TstGenerationCostBreakdown => {
@@ -1547,6 +1662,22 @@ export const getMotionCostBreakdown = ({
 
   if (exactEntry) {
     const fallbackVcoin = creditsToVcoin(exactEntry.credits);
+    if (isPerSecondMotionBillingModel(modelId)) {
+      const billedSeconds = Math.max(1, Math.ceil(durationSeconds || 1));
+      const unitConfigKey = getPerSecondPricingKey({ modelId, serverId, resolution, speed });
+      const unitFallbackVcoin = Math.max(1, Math.ceil(fallbackVcoin / billedSeconds));
+      const unitVcoin = getAuditionPrice(modelId, unitConfigKey, unitFallbackVcoin, pricingOverrides);
+      return {
+        available: true,
+        credits: exactEntry.credits,
+        vcoin: unitVcoin * billedSeconds,
+        configKey: unitConfigKey,
+        modelId,
+        billingUnit: 'second',
+        unitVcoin,
+        billedSeconds,
+      };
+    }
     return {
       available: true,
       credits: exactEntry.credits,
@@ -1570,6 +1701,9 @@ export const getPricingRows = async (forceRefresh = false): Promise<TstPricingRo
     }
 
     const type = (model.type === 'motion-control' ? 'motion-control' : model.type) as TstMediaType | undefined;
+    const perSecond = isPerSecondBillingModel(entry.model, type);
+    const defaultVcoin = creditsToVcoin(entry.credits);
+    const durationSeconds = Math.max(1, parseDurationSeconds(entry.duration) || 1);
     return {
       type: type || (normalizeModelId(entry.model).includes('motion-control') ? 'motion-control' : 'image'),
       modelId: entry.model,
@@ -1581,8 +1715,17 @@ export const getPricingRows = async (forceRefresh = false): Promise<TstPricingRo
       speed: normalizeCatalogSpeed(entry.speed) || undefined,
       audio: entry.audio,
       credits: entry.credits,
-      vcoin: creditsToVcoin(entry.credits),
-      configKey: entry.config_key,
+      vcoin: perSecond ? Math.max(1, Math.ceil(defaultVcoin / durationSeconds)) : defaultVcoin,
+      configKey: perSecond
+        ? getPerSecondPricingKey({
+            modelId: entry.model,
+            serverId: entry.server,
+            resolution: entry.resolution,
+            speed: entry.speed,
+            audio: entry.audio,
+          })
+        : entry.config_key,
+      billingUnit: perSecond ? 'second' : 'flat',
     };
   });
 

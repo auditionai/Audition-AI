@@ -7,6 +7,7 @@ import { CONCURRENCY_LIMITS, useConcurrency } from '../../services/concurrencySe
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import { downloadAssetToBrowser } from '../../services/downloadService';
+import { generateVideoScriptWithVertex } from '../../services/videoScriptDirectorService';
 import type { MotionGenerateRecipePayload, VideoGenerateRecipePayload } from '../../shared/queueRecipes';
 import {
   type AuditionPricingOverride,
@@ -149,6 +150,12 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [catalogLoading, setCatalogLoading] = useState(true);
+  const [isGeneratingScript, setIsGeneratingScript] = useState(false);
+  const [scriptStyle, setScriptStyle] = useState('Cinematic');
+  const [scriptTheme, setScriptTheme] = useState('Tự động theo ảnh');
+  const [scriptSoundMood, setScriptSoundMood] = useState('Phù hợp bối cảnh');
+  const [scriptVoiceDialogue, setScriptVoiceDialogue] = useState(false);
+  const [scriptTargetModel, setScriptTargetModel] = useState('');
 
   const pricingOverrides: AuditionPricingOverride[] = auditionPricing.map((row) => ({
       modelId: row.model_id,
@@ -242,6 +249,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
           serverId: uiServerToTst(server) || 'vip2',
           resolution: quality.toLowerCase(),
           speed: uiSpeedToTst(speed) || 'fast',
+          durationSeconds: motionVideoDurationSeconds || 1,
           pricingEntries,
           pricingOverrides
         })
@@ -313,7 +321,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
 
       if (compatibleServers.length === 0) return null;
 
-      const preferredServerOrder = ['fast', 'vip1', 'vip2', 'cheap'];
+      const preferredServerOrder = ['fast', 'standard', 'default', 'vip1', 'vip2', 'cheap'];
       const rankedServers = [...compatibleServers].sort((a, b) => {
           const resolutionsA = getVideoCompatibleResolutions({
               modelId: videoModel,
@@ -496,6 +504,37 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
     }
   };
 
+  const handleGenerateVideoScript = async () => {
+    if (activeMode !== 'video_ai') return;
+    if (!keyframeImage) {
+      notify('Vui lòng tải ảnh tham chiếu trước khi tạo kịch bản AI.', 'error');
+      return;
+    }
+
+    setIsGeneratingScript(true);
+    try {
+      const script = await generateVideoScriptWithVertex({
+        imageSource: keyframeImage,
+        durationSeconds: parseInt(duration, 10) || 5,
+        userPrompt: prompt,
+        scriptOptions: {
+          style: scriptStyle,
+          theme: scriptTheme,
+          soundMood: scriptSoundMood,
+          voiceDialogue: scriptVoiceDialogue,
+          targetModel: scriptTargetModel || videoModel,
+        },
+      });
+      setPrompt(script);
+      notify('Đã tạo kịch bản video bằng AI.', 'success');
+    } catch (error) {
+      console.error('[VideoTool] Video script director failed', error);
+      notify(error instanceof Error ? error.message : 'Không thể tạo kịch bản video bằng Vertex AI.', 'error');
+    } finally {
+      setIsGeneratingScript(false);
+    }
+  };
+
   const handleGenerate = async () => {
     if (!isCatalogReady) {
       notify(lang === 'vi' ? 'TST đang bảo trì hoặc không sẵn sàng.' : 'TST is unavailable.', 'error');
@@ -510,8 +549,8 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
     if (activeMode === 'video_ai' && !keyframeImage) {
       notify(
         lang === 'vi'
-          ? 'Video AI hiện yêu cầu ảnh keyframe rõ nét để hệ thống kiểm duyệt trước khi gửi lên TST.'
-          : 'Video AI now requires a clear keyframe image so the server can review it before sending to TST.',
+          ? 'Vui lòng tải ảnh keyframe trước khi gửi job tạo video lên TST.'
+          : 'Please upload a keyframe image before sending the video job to TST.',
         'error'
       );
       return;
@@ -997,6 +1036,94 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                     </>
                 )}
               </div>
+
+              {activeMode === 'video_ai' && (
+                <div className="rounded-2xl border border-audi-cyan/20 bg-audi-cyan/5 p-3 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-audi-cyan flex items-center gap-1">
+                        <Icons.Sparkles className="w-3 h-3" />
+                        Đạo diễn kịch bản AI
+                      </div>
+                      <p className="mt-1 text-[10px] leading-relaxed text-slate-400">
+                        Tải ảnh mẫu, chọn nhu cầu bên dưới rồi bấm tạo. Kịch bản sẽ được ghi vào ô prompt; hãy đọc và chỉnh lại trước khi tạo video.
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleGenerateVideoScript}
+                      disabled={isGeneratingScript || !keyframeImage}
+                      className="shrink-0 rounded-lg border border-audi-cyan/40 bg-audi-cyan px-2.5 py-2 text-[10px] font-bold text-black disabled:border-white/10 disabled:bg-white/10 disabled:text-slate-500"
+                    >
+                      {isGeneratingScript ? 'Đang viết...' : 'Tạo kịch bản'}
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <OptionDropdown
+                      label="Phong cách"
+                      value={scriptStyle}
+                      options={[
+                        { label: 'Cinematic', value: 'Cinematic' },
+                        { label: 'Thời trang', value: 'Thời trang' },
+                        { label: 'Hành động', value: 'Hành động' },
+                        { label: 'Lãng mạn', value: 'Lãng mạn' },
+                      ]}
+                      onChange={setScriptStyle}
+                      icon={Icons.Image}
+                    />
+                    <OptionDropdown
+                      label="Chủ đề"
+                      value={scriptTheme}
+                      options={[
+                        { label: 'Tự động theo ảnh', value: 'Tự động theo ảnh' },
+                        { label: 'Đời thường', value: 'Đời thường' },
+                        { label: 'Sân khấu', value: 'Sân khấu' },
+                        { label: 'Đường phố', value: 'Đường phố' },
+                      ]}
+                      onChange={setScriptTheme}
+                      icon={Icons.MessageCircle}
+                    />
+                    <OptionDropdown
+                      label="Âm thanh"
+                      value={scriptSoundMood}
+                      options={[
+                        { label: 'Phù hợp bối cảnh', value: 'Phù hợp bối cảnh' },
+                        { label: 'Lãng mạn vui vẻ', value: 'Lãng mạn vui vẻ' },
+                        { label: 'Sôi động hành động', value: 'Sôi động hành động' },
+                        { label: 'Sầu bi buồn bã', value: 'Sầu bi buồn bã' },
+                        { label: 'Vui tươi hài hước', value: 'Vui tươi hài hước' },
+                      ]}
+                      onChange={setScriptSoundMood}
+                      icon={Icons.Volume2}
+                    />
+                    <OptionDropdown
+                      label="Model kịch bản"
+                      value={scriptTargetModel || videoModel}
+                      options={(videoModelOptions.length > 0 ? videoModelOptions : [{ id: videoModel, name: videoModel || 'Model hiện tại', price: 0 }]).map((model) => ({
+                        label: model.name,
+                        value: model.id,
+                      }))}
+                      onChange={setScriptTargetModel}
+                      icon={Icons.Video}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+                    <div>
+                      <div className="text-[10px] font-bold uppercase text-slate-300">Lời thoại giọng nói</div>
+                      <div className="text-[10px] text-slate-500">
+                        {scriptVoiceDialogue ? 'Có thoại tiếng Việt chuẩn trong kịch bản.' : 'Không thêm lời thoại, chỉ mô tả hình ảnh và âm thanh.'}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setScriptVoiceDialogue((value) => !value)}
+                      className={`rounded-lg px-3 py-1.5 text-[10px] font-bold ${scriptVoiceDialogue ? 'bg-audi-purple text-white' : 'bg-white/10 text-slate-300'}`}
+                    >
+                      {scriptVoiceDialogue ? 'Có' : 'Không'}
+                    </button>
+                  </div>
+                </div>
+              )}
               
               {modelOptions.showAspectRatio && modelOptions.aspectRatios.length > 0 && (
                 <OptionDropdown

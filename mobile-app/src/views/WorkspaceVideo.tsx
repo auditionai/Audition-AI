@@ -19,6 +19,7 @@ import { getUserProfile, getModelPricing, getTstServerAvailabilityConfig } from 
 import { useConcurrency, CONCURRENCY_LIMITS } from '../services/concurrencyService';
 import { enqueueServerJob } from '../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../services/storageService';
+import { generateVideoScriptWithVertex } from '../services/videoScriptDirectorService';
 import {
   fetchTstPricing, fetchTstModels,
   getMotionCompatibleServers, getMotionCompatibleSpeeds, getMotionCostBreakdown, getMotionModelSpecs,
@@ -86,6 +87,12 @@ export function WorkspaceVideo() {
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [currentTipIdx, setCurrentTipIdx] = useState(0);
+  const [isGeneratingScript, setIsGeneratingScript] = useState(false);
+  const [scriptStyle, setScriptStyle] = useState('Cinematic');
+  const [scriptTheme, setScriptTheme] = useState('Tự động theo ảnh');
+  const [scriptSoundMood, setScriptSoundMood] = useState('Phù hợp bối cảnh');
+  const [scriptVoiceDialogue, setScriptVoiceDialogue] = useState(false);
+  const [scriptTargetModel, setScriptTargetModel] = useState('');
 
   // --- Cooldown ---
   const [cooldownRemaining, setCooldownRemaining] = useState(() => {
@@ -179,6 +186,7 @@ export function WorkspaceVideo() {
         serverId: uiServerToTst(server) || 'vip2',
         resolution: quality.toLowerCase(),
         speed: uiSpeedToTst(speed) || 'fast',
+        durationSeconds: motionVideoDurationSeconds || 1,
         pricingEntries,
         pricingOverrides
       })
@@ -344,6 +352,36 @@ export function WorkspaceVideo() {
     }
   };
 
+  const handleGenerateVideoScript = async () => {
+    if (activeMode !== 'video_ai') return;
+    if (!keyframeImage) {
+      notify('Vui lòng tải ảnh tham chiếu trước khi tạo kịch bản AI.', 'error');
+      return;
+    }
+
+    setIsGeneratingScript(true);
+    try {
+      const script = await generateVideoScriptWithVertex({
+        imageSource: keyframeImage,
+        durationSeconds: parseInt(duration, 10) || 5,
+        userPrompt: prompt,
+        scriptOptions: {
+          style: scriptStyle,
+          theme: scriptTheme,
+          soundMood: scriptSoundMood,
+          voiceDialogue: scriptVoiceDialogue,
+          targetModel: scriptTargetModel || videoModel,
+        },
+      });
+      setPrompt(script);
+      notify('Đã tạo kịch bản video bằng AI.', 'success');
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Không thể tạo kịch bản video bằng Vertex AI.', 'error');
+    } finally {
+      setIsGeneratingScript(false);
+    }
+  };
+
   const handleGenerate = async () => {
     if (stage === 'submitting') return;
     if (cooldownRemaining > 0) { notify(`Vui lòng đợi ${cooldownRemaining}s`, 'warning'); return; }
@@ -351,7 +389,7 @@ export function WorkspaceVideo() {
     if (!currentCostBreakdown.available) { notify('Cấu hình không khả dụng.', 'error'); return; }
 
     if (activeMode === 'video_ai' && !keyframeImage) {
-      notify('Video AI hiện yêu cầu ảnh keyframe rõ nét để server duyệt trước.', 'error');
+      notify('Vui lòng tải ảnh keyframe trước khi gửi job tạo video lên TST.', 'error');
       return;
     }
     if (activeMode === 'motion_control' && (!characterImage || !motionVideoFile)) {
@@ -632,6 +670,63 @@ export function WorkspaceVideo() {
                   ))}
                 </div>
               </div>
+            </div>
+
+            <div className="rounded-[22px] border border-cyan-200 bg-cyan-50/70 p-4 dark:border-cyan-500/30 dark:bg-cyan-500/10">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-1 text-[11px] font-black uppercase tracking-wide text-cyan-700 dark:text-cyan-200">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Tạo kịch bản AI
+                  </div>
+                  <p className="mt-1 text-[11px] leading-relaxed text-cyan-700/80 dark:text-cyan-100/80">
+                    AI sẽ quét ảnh, viết kịch bản theo model/thời lượng đang chọn. Hãy đọc và chỉnh lại prompt trước khi tạo video.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleGenerateVideoScript}
+                  disabled={isGeneratingScript || !keyframeImage}
+                  className="shrink-0 rounded-full bg-cyan-500 px-3 py-2 text-[11px] font-black text-white disabled:bg-gray-200 disabled:text-gray-400"
+                >
+                  {isGeneratingScript ? 'Đang viết...' : 'Tạo'}
+                </button>
+              </div>
+
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <select value={scriptStyle} onChange={(e) => setScriptStyle(e.target.value)} className="rounded-2xl border border-white/70 bg-white px-3 py-2 text-xs font-bold text-gray-700 dark:border-zinc-700 dark:bg-[#18181B] dark:text-zinc-100">
+                  <option>Cinematic</option>
+                  <option>Thời trang</option>
+                  <option>Hành động</option>
+                  <option>Lãng mạn</option>
+                </select>
+                <select value={scriptTheme} onChange={(e) => setScriptTheme(e.target.value)} className="rounded-2xl border border-white/70 bg-white px-3 py-2 text-xs font-bold text-gray-700 dark:border-zinc-700 dark:bg-[#18181B] dark:text-zinc-100">
+                  <option>Tự động theo ảnh</option>
+                  <option>Đời thường</option>
+                  <option>Sân khấu</option>
+                  <option>Đường phố</option>
+                </select>
+                <select value={scriptSoundMood} onChange={(e) => setScriptSoundMood(e.target.value)} className="rounded-2xl border border-white/70 bg-white px-3 py-2 text-xs font-bold text-gray-700 dark:border-zinc-700 dark:bg-[#18181B] dark:text-zinc-100">
+                  <option>Phù hợp bối cảnh</option>
+                  <option>Lãng mạn vui vẻ</option>
+                  <option>Sôi động hành động</option>
+                  <option>Sầu bi buồn bã</option>
+                  <option>Vui tươi hài hước</option>
+                </select>
+                <select value={scriptTargetModel || videoModel} onChange={(e) => setScriptTargetModel(e.target.value)} className="rounded-2xl border border-white/70 bg-white px-3 py-2 text-xs font-bold text-gray-700 dark:border-zinc-700 dark:bg-[#18181B] dark:text-zinc-100">
+                  {(videoModelOptions.length > 0 ? videoModelOptions : [{ id: videoModel, name: videoModel || 'Model hiện tại', price: 0 }]).map((model: AIModelOption) => (
+                    <option key={model.id} value={model.id}>{model.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setScriptVoiceDialogue((value) => !value)}
+                className={`mt-3 w-full rounded-2xl px-3 py-2 text-xs font-black ${scriptVoiceDialogue ? 'bg-purple-600 text-white' : 'bg-white text-gray-600 dark:bg-[#18181B] dark:text-zinc-300'}`}
+              >
+                {scriptVoiceDialogue ? 'Có lời thoại tiếng Việt chuẩn' : 'Không thêm lời thoại'}
+              </button>
             </div>
 
             {/* Audio Toggle */}

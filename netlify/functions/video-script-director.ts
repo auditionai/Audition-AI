@@ -65,7 +65,7 @@ const buildDirectorInstruction = (
   userPrompt: string,
   scriptOptions: Record<string, unknown>,
 ) => {
-  const style = normalizeOption(scriptOptions.style, 'Douyin/TikTok/CapCut Trend');
+  const style = normalizeOption(scriptOptions.style, 'Cinematic điện ảnh');
   const theme = normalizeOption(scriptOptions.theme, 'tự động theo ảnh');
   const soundMood = normalizeOption(scriptOptions.soundMood, 'phù hợp bối cảnh');
   const targetModel = normalizeOption(scriptOptions.targetModel, 'model video người dùng chọn');
@@ -90,8 +90,9 @@ const buildDirectorInstruction = (
   '- Identify how many visible characters are in the uploaded image, their apparent gender presentation if visible, scene context, outfit, face details, accessories, and mood.',
   '- Build the script around those observed details. Do not replace the subject with a different person or a real human actor.',
   '',
-  'Trend video direction requirements:',
-  '- Write the script as a modern Gen Z short-form trend video, similar to Douyin / TikTok / CapCut edits.',
+  'Mandatory cinematic trend-editing language:',
+  '- Apply modern Gen Z short-form editing language to EVERY selected style/theme. This is not a separate style option; it is the default directing grammar for all scripts.',
+  '- The result must feel cinematic, trendy, high-retention, and youth-oriented like Douyin / TikTok / CapCut edits.',
   '- The video MUST have at least 5 distinct shots/scenes and at least 5 different camera angles, even when the duration is short.',
   '- Use fast continuous transitions: whip pan, match cut, flash cut, zoom transition, speed ramp, motion blur, light leak, beat-synced cut, or camera shake where appropriate.',
   '- Include slow-motion highlight moments, close-up detail shots, medium shots, wide/environment shots, low-angle or high-angle shots, and dynamic push-in/pull-out movement.',

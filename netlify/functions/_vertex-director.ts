@@ -130,6 +130,29 @@ const extractPromptFeedback = (data: any) => {
   };
 };
 
+const parseErrorMessage = async (response: Response) => {
+  const fallback = `Vertex AI request failed with ${response.status} ${response.statusText}`.trim();
+
+  try {
+    const raw = await response.text();
+    if (!raw) {
+      return fallback;
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+      const message = parsed?.error?.message || parsed?.message || raw;
+      const status = parsed?.error?.status || parsed?.status || '';
+      const reason = parsed?.error?.details?.[0]?.reason || parsed?.reason || '';
+      return [message, status, reason].filter(Boolean).join(' | ') || fallback;
+    } catch {
+      return raw;
+    }
+  } catch {
+    return fallback;
+  }
+};
+
 const summarizeVertexPromptSynthesisFailure = (data: any) => {
   const promptFeedback = extractPromptFeedback(data);
   const finishReasons = collectFinishReasons(data);

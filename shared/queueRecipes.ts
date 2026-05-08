@@ -1297,6 +1297,16 @@ const sanitizeProProviderText = (value: string) =>
     .replace(/\bflames?\b/gi, 'warm bright background lights')
     .replace(/\bsmoke\b/gi, 'soft haze');
 
+const sanitizeGptImage2ProviderText = (value: string) =>
+  collapsePromptWhitespace(value)
+    .replace(/\bInstagram\b/gi, 'social media')
+    .replace(/\bSNS\b/gi, 'social network')
+    .replace(/\bDark\s+Love\s+Alice\s+Dreamland\b/gi, 'dark romantic fantasy dreamland')
+    .replace(/\bAlice\s+Dreamland\b/gi, 'storybook fantasy dreamland')
+    .replace(/\bAlice\b/gi, 'storybook heroine')
+    .replace(/\bBlack\s+Panther\b/gi, 'dark feline emblem')
+    .replace(/\bBlack\s+Lion\b/gi, 'dark lion emblem');
+
 const normalizeProVisionTags = (tags?: string[] | null, limit = 4) =>
   normalizeVisionTags(tags, limit)
     .map((entry) => sanitizeProProviderText(entry))
@@ -1585,8 +1595,8 @@ const buildGptPromptFirstProviderPromptWithoutSample = (
 
   const systemSectionCandidates: Array<ProviderPromptBudgetSection | null> = [
     { weight: 2, text: 'RENDER ONE NEW FINAL IMAGE. Never return any uploaded reference unchanged.' },
-    { weight: 2, text: `IMAGE ROLES: uploaded character image(s) are identity references. Keep them as the subject identity, not as background or style.` },
-    { weight: 2, text: `CHARACTER COUNT: EXACTLY ${characterCount}. One-to-one slot mapping is mandatory.` },
+    { weight: 2, text: `IMAGE ROLES: uploaded subject image(s) are identity references. Keep them as the final subject identity, not as background or style.` },
+    { weight: 2, text: `SUBJECT COUNT: EXACTLY ${characterCount}. One-to-one slot mapping is mandatory.` },
     !userMentionsIdentity ? { weight: 2, text: 'IDENTITY LOCK: preserve the uploaded character face structure, facial details, skin tone, outfit colors, hair, accessories, makeup, and game-fashion identity.' } : null,
     !userMentionsAnatomy ? { weight: 1, text: 'ANATOMY LOCK: preserve natural head-neck-shoulder proportions; do not elongate the neck; no extra limbs, duplicated hands, malformed fingers, or stiff doll posture.' } : null,
     { weight: 1, text: roleContractText },
@@ -1601,7 +1611,7 @@ const buildGptPromptFirstProviderPromptWithoutSample = (
   return buildProviderPromptWithinServerBudget([
     { locked: true, text: `USER PROMPT - HIGHEST PRIORITY, keep this request intact:\n${userPrompt}` },
     ...systemSections,
-  ], payload.serverId);
+  ], payload.serverId, sanitizeGptImage2ProviderText);
 };
 
 export const buildImageProviderPrompt = (

@@ -434,7 +434,10 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
       if (speedOptions.length > 0 && !speedOptions.some((option) => option.value === speed)) {
           setSpeed(speedOptions[0].value);
       }
-  }, [activeMode, aspectRatio, duration, modelOptions, quality, server, serverOptions, speed, speedOptions]);
+      if (activeMode === 'video_ai' && !modelOptions.supportsAudio && sound) {
+          setSound(false);
+      }
+  }, [activeMode, aspectRatio, duration, modelOptions, quality, server, serverOptions, sound, speed, speedOptions]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadTarget, setUploadTarget] = useState<'keyframe' | 'character' | 'motion' | null>(null);

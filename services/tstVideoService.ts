@@ -5,6 +5,7 @@ const TST_VIDEO_AND_MOTION_POLL_INTERVAL_MS = 10 * 60 * 1000;
 const TST_DEFAULT_TIMEOUT_MS = 120 * 60 * 1000;
 
 const cleanBase64 = (b64: string) => b64.replace(/^data:image\/\w+;base64,/, '');
+const isHttpUrl = (value: unknown) => /^https?:\/\//i.test(String(value || '').trim());
 
 const parseErrorMessage = async (response: Response): Promise<string> => {
   try {
@@ -175,9 +176,11 @@ export const prepareTramsangtaoVideoJob = async ({
   if (typeof audio === 'boolean') payload.audio = audio;
 
   if (keyframe) {
-    const uploadedKeyframeUrl = await uploadMedia(keyframe, 'image', onLog);
-    payload.img_url = uploadedKeyframeUrl;
-    payload.image_url = uploadedKeyframeUrl;
+    const keyframeUrl = typeof keyframe === 'string' && isHttpUrl(keyframe)
+      ? keyframe.trim()
+      : await uploadMedia(keyframe, 'image', onLog);
+    payload.img_url = keyframeUrl;
+    payload.image_url = keyframeUrl;
     if (modelId === 'kling-2.5-turbo') {
       payload.mode = 'i2v';
     }

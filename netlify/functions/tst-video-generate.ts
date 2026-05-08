@@ -1,5 +1,6 @@
 import type { Handler } from '@netlify/functions';
 import { normalizeTstOutboundPayload } from './_tst-payload-normalizer';
+import { getTstVideoGeneratePath } from './_tst-generate-endpoints';
 
 const jsonHeaders = {
   'Content-Type': 'application/json',
@@ -34,7 +35,7 @@ export const handler: Handler = async (event) => {
     }
 
     const payload = normalizeTstOutboundPayload(JSON.parse(event.body || '{}'));
-    const response = await fetch('https://api.tramsangtao.com/v1/video/generate', {
+    const response = await fetch(`https://api.tramsangtao.com/v1${getTstVideoGeneratePath(payload.model)}`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${TST_API_KEY}`,

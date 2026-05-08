@@ -1,11 +1,13 @@
 import {
   buildImageProviderPrompt,
   buildImageRoleContractText,
+  getProviderPromptMaxLength,
   getImageDirectorSources,
   getEffectiveImageGenerationResolution,
   getImageRenderReferenceEntries,
   getImageRenderReferenceSources,
   isProImageGenerationModel,
+  trimProviderPromptForServer,
   type ImageGenerateRecipePayload,
   type QueueVertexDiagnosticEntry,
   type QueueRecipePayload,
@@ -27,6 +29,7 @@ const VERTEX_SYNTH_BYPASS_ROLE_CONTRACT_LENGTH = 2200;
 const VERTEX_SYNTH_BYPASS_REFERENCE_COUNT = 4;
 
 const cleanBase64 = (value: string) => value.replace(/^data:[^;]+;base64,/, '');
+const isHttpUrl = (value: unknown) => /^https?:\/\//i.test(String(value || '').trim());
 
 const getTstApiKey = () => {
   const apiKey = process.env.TST_API_KEY;
@@ -51,7 +54,7 @@ const normalizeSourceToBlob = async (
   fallbackMimeType = kind === 'video' ? 'video/mp4' : 'image/jpeg',
 ) => {
   if (input.startsWith('http')) {
-    const response = await fetch(input, { signal: AbortSignal.timeout(kind === 'video' ? 120000 : 30000) });
+    const response = await fetch(input, { signal: AbortSignal.timeout(kind === 'video' ? 180000 : 120000) });
     if (!response.ok) {
       throw new Error(`Failed to fetch ${kind} source: ${await parseErrorMessage(response)}`);
     }
@@ -103,7 +106,7 @@ const uploadMediaToTst = async (
         Authorization: `Bearer ${apiKey}`,
       },
       body: formData,
-      signal: AbortSignal.timeout(kind === 'video' ? 180000 : 60000),
+      signal: AbortSignal.timeout(kind === 'video' ? 240000 : 180000),
     },
   );
 
@@ -299,7 +302,10 @@ export const buildImageGenerateProviderPayload = (
   );
 
   const providerPayload: Record<string, unknown> = {
-    prompt: providerPromptOverride || buildImageProviderPrompt(synthesizedPrompt, payload, payload.negativePrompt),
+    prompt: trimProviderPromptForServer(
+      providerPromptOverride || buildImageProviderPrompt(synthesizedPrompt, payload, payload.negativePrompt),
+      payload.serverId,
+    ),
     model: payload.modelId,
   };
 
@@ -321,20 +327,22 @@ const combineImageGeneratePrompt = (systemPromptPrefix: string, userPromptInput:
 const prepareDirectPromptWithinLimit = async (
   prompt: string,
   pipelineLabel: string,
+  serverId?: string | null,
 ) => {
   const normalizedPrompt = normalizePromptWhitespace(prompt);
+  const promptMaxCharacters = getProviderPromptMaxLength(serverId);
   if (!normalizedPrompt) {
     return '';
   }
 
-  if (normalizedPrompt.length <= TST_PROMPT_MAX_CHARACTERS) {
+  if (normalizedPrompt.length <= promptMaxCharacters) {
     return normalizedPrompt;
   }
 
   let sourcePromptForRewrite = normalizedPrompt;
 
   for (let attempt = 1; attempt <= MAX_PROMPT_REWRITE_ATTEMPTS; attempt += 1) {
-    const overflow = sourcePromptForRewrite.length - TST_PROMPT_MAX_CHARACTERS;
+    const overflow = sourcePromptForRewrite.length - promptMaxCharacters;
     const targetCharacters = Math.max(
       MIN_USER_PROMPT_REWRITE_CHARACTERS,
       sourcePromptForRewrite.length - overflow - PROMPT_REWRITE_SAFETY_MARGIN,
@@ -347,16 +355,14 @@ const prepareDirectPromptWithinLimit = async (
       break;
     }
 
-    if (rewrittenPrompt.length <= TST_PROMPT_MAX_CHARACTERS) {
+    if (rewrittenPrompt.length <= promptMaxCharacters) {
       return rewrittenPrompt;
     }
 
     sourcePromptForRewrite = rewrittenPrompt;
   }
 
-  throw new Error(
-    `Tong prompt gui sang provider van vuot ${TST_PROMPT_MAX_CHARACTERS} ky tu sau khi rut gon. Vui long rut ngan prompt va thu lai.`,
-  );
+  return trimProviderPromptForServer(sourcePromptForRewrite || normalizedPrompt, serverId);
 };
 
 export type ImageGeneratePromptPreparation = {
@@ -393,6 +399,7 @@ export const prepareImageGeneratePromptWithinLimit = async (
   options?: VertexPromptPreparationOptions,
 ): Promise<ImageGeneratePromptPreparation> => {
   let workingPayload: ImageGenerateRecipePayload = { ...payload };
+  const promptMaxCharacters = getProviderPromptMaxLength(workingPayload.serverId);
   if (
     !workingPayload.visionAnalysis &&
     getImageDirectorSources(workingPayload).length > 0
@@ -428,7 +435,9 @@ export const prepareImageGeneratePromptWithinLimit = async (
   let synthesizedPrompt = await synthesizeImageGeneratePromptWithLastResortFallback(workingPayload, options);
   let providerPrompt = buildImageProviderPrompt(synthesizedPrompt, workingPayload, workingPayload.negativePrompt);
 
-  if (providerPrompt.length <= TST_PROMPT_MAX_CHARACTERS) {
+  providerPrompt = trimProviderPromptForServer(providerPrompt, workingPayload.serverId);
+
+  if (providerPrompt.length <= promptMaxCharacters) {
     return {
       optimizedPayload: workingPayload,
       synthesizedPrompt,
@@ -442,13 +451,13 @@ export const prepareImageGeneratePromptWithinLimit = async (
     : '';
 
   if (!originalUserPromptInput) {
-    throw new Error(`Provider prompt vuot ${TST_PROMPT_MAX_CHARACTERS} ky tu va khong co noi dung prompt nguoi dung de rut gon.`);
+    throw new Error(`Provider prompt vuot ${promptMaxCharacters} ky tu va khong co noi dung prompt nguoi dung de rut gon.`);
   }
 
   let sourcePromptForRewrite = originalUserPromptInput;
 
   for (let attempt = 1; attempt <= MAX_PROMPT_REWRITE_ATTEMPTS; attempt += 1) {
-    const overflow = providerPrompt.length - TST_PROMPT_MAX_CHARACTERS;
+    const overflow = providerPrompt.length - promptMaxCharacters;
     const targetCharacters = Math.max(
       MIN_USER_PROMPT_REWRITE_CHARACTERS,
       sourcePromptForRewrite.length - overflow - PROMPT_REWRITE_SAFETY_MARGIN,
@@ -474,8 +483,9 @@ export const prepareImageGeneratePromptWithinLimit = async (
     };
     synthesizedPrompt = await synthesizeImageGeneratePromptWithLastResortFallback(workingPayload, options);
     providerPrompt = buildImageProviderPrompt(synthesizedPrompt, workingPayload, workingPayload.negativePrompt);
+    providerPrompt = trimProviderPromptForServer(providerPrompt, workingPayload.serverId);
 
-    if (providerPrompt.length <= TST_PROMPT_MAX_CHARACTERS) {
+    if (providerPrompt.length <= promptMaxCharacters) {
       return {
         optimizedPayload: workingPayload,
         synthesizedPrompt,
@@ -487,7 +497,7 @@ export const prepareImageGeneratePromptWithinLimit = async (
   }
 
   throw new Error(
-    `Tong prompt gui sang provider van vuot ${TST_PROMPT_MAX_CHARACTERS} ky tu sau khi rut gon. Vui long rut ngan prompt va thu lai.`,
+    `Tong prompt gui sang provider van vuot ${promptMaxCharacters} ky tu sau khi rut gon. Vui long rut ngan prompt va thu lai.`,
   );
 };
 
@@ -529,6 +539,7 @@ export const prepareProviderPayloadFromQueueRecipe = async (payload: QueueRecipe
       const providerPrompt = await prepareDirectPromptWithinLimit(
         payload.prompt || 'Create an image',
         'prompt image generation',
+        payload.serverId,
       );
       const referenceImages = Array.isArray(payload.referenceImages)
         ? payload.referenceImages.filter((value): value is string => Boolean(value)).slice(0, 4)
@@ -556,7 +567,7 @@ export const prepareProviderPayloadFromQueueRecipe = async (payload: QueueRecipe
     }
 
     case 'image_edit_recipe_v1': {
-      const providerPrompt = await prepareDirectPromptWithinLimit(payload.prompt, 'image editing');
+      const providerPrompt = await prepareDirectPromptWithinLimit(payload.prompt, 'image editing', payload.serverId);
       const uploadedUrl = await uploadImageToTst(payload.sourceImage);
       const providerPayload: Record<string, unknown> = {
         prompt: providerPrompt,
@@ -589,9 +600,11 @@ export const prepareProviderPayloadFromQueueRecipe = async (payload: QueueRecipe
       if (payload.serverId) providerPayload.server_id = payload.serverId;
       if (typeof payload.audio === 'boolean') providerPayload.audio = payload.audio;
       if (payload.keyframeImage) {
-        const uploadedKeyframeUrl = await uploadImageToTst(payload.keyframeImage);
-        providerPayload.img_url = uploadedKeyframeUrl;
-        providerPayload.image_url = uploadedKeyframeUrl;
+        const keyframeUrl = isHttpUrl(payload.keyframeImage)
+          ? String(payload.keyframeImage).trim()
+          : await uploadImageToTst(payload.keyframeImage);
+        providerPayload.img_url = keyframeUrl;
+        providerPayload.image_url = keyframeUrl;
         if (payload.modelId === 'kling-2.5-turbo') {
           providerPayload.mode = 'i2v';
         }

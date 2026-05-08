@@ -21,7 +21,7 @@ import { Guide } from './views/Guide';
 import { AdminView } from './views/Admin';
 import { PaymentGatewayView } from './views/PaymentGateway';
 import { syncPayOSTransaction } from './services/serverQueueService';
-import { getSystemAnnouncementConfig, type SystemAnnouncementConfig } from './services/economyService';
+import { getFeatureMaintenanceConfig, getSystemAnnouncementConfig, isFeatureInMaintenance, type FeatureMaintenanceConfig, type SystemAnnouncementConfig } from './services/economyService';
 import { getSupabaseUser, supabase } from './services/supabaseClient';
 import { AppEventPopup, type AppEventPopupData, SystemAnnouncementModal } from '../../components/AppNotificationPopups';
 import './mobile-shell.css';
@@ -62,6 +62,35 @@ const dismissSystemAnnouncementForTwelveHours = (config: SystemAnnouncementConfi
   }
 };
 
+const getMobileRouteFeatureId = (pathname: string) => {
+  if (pathname === '/generate/image') return 'single_photo_gen';
+  if (pathname === '/generate/video') return 'video_ai_gen';
+  if (pathname === '/tools/ai-image') return 'ai_image_tool';
+  if (pathname === '/tools/edit') return 'magic_editor_pro';
+  if (pathname === '/tools/remove-bg') return 'remove_bg_pro';
+  if (pathname === '/tools/enhance') return 'sharpen_upscale';
+  return null;
+};
+
+function FeatureMaintenanceGuard({ children }: { children: React.ReactElement }) {
+  const location = useLocation();
+  const { userRole } = useAuth();
+  const [featureMaintenance, setFeatureMaintenance] = useState<FeatureMaintenanceConfig>({ disabledFeatureIds: [] });
+
+  useEffect(() => {
+    getFeatureMaintenanceConfig().then(setFeatureMaintenance).catch(() => {
+      setFeatureMaintenance({ disabledFeatureIds: [] });
+    });
+  }, []);
+
+  const featureId = getMobileRouteFeatureId(location.pathname);
+  if (userRole !== 'admin' && isFeatureInMaintenance(featureMaintenance, featureId)) {
+    return <Navigate to="/home" replace />;
+  }
+
+  return children;
+}
+
 function AppRoutes() {
   const { isAuthenticated, isLoading } = useAuth();
 
@@ -89,10 +118,10 @@ function AppRoutes() {
         <>
           <Route element={<MobileLayout />}>
             <Route path="/home" element={<Home />} />
-            <Route path="/generate/image" element={<WorkspaceImage />} />
-            <Route path="/generate/video" element={<WorkspaceVideo />} />
-            <Route path="/tools/ai-image" element={<WorkspacePromptImage />} />
-            <Route path="/tools/:toolId" element={<WorkspaceEdit />} />
+            <Route path="/generate/image" element={<FeatureMaintenanceGuard><WorkspaceImage /></FeatureMaintenanceGuard>} />
+            <Route path="/generate/video" element={<FeatureMaintenanceGuard><WorkspaceVideo /></FeatureMaintenanceGuard>} />
+            <Route path="/tools/ai-image" element={<FeatureMaintenanceGuard><WorkspacePromptImage /></FeatureMaintenanceGuard>} />
+            <Route path="/tools/:toolId" element={<FeatureMaintenanceGuard><WorkspaceEdit /></FeatureMaintenanceGuard>} />
             <Route path="/gallery" element={<Gallery />} />
             <Route path="/topup" element={<TopUp />} />
             <Route path="/payment-gateway" element={<PaymentGatewayView />} />

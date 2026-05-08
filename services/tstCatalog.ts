@@ -140,7 +140,7 @@ export const TST_CATALOG_CACHE_TTL_MS = 60_000;
 const TST_CATALOG_FETCH_TIMEOUT_MS = 15_000;
 const TST_CATALOG_FETCH_RETRIES = 1;
 const TST_CATALOG_FETCH_RETRY_DELAY_MS = 750;
-const SERVER_ORDER = ['cheap', 'fast', 'standard', 'default', 'vip2', 'vip1'];
+const SERVER_ORDER = ['cheap', 'fast', 'standard', 'default', 'vip3', 'vip2', 'vip1'];
 const SPEED_ORDER = ['fast', 'slow'];
 const RESOLUTION_ORDER = ['default', '480p', '720p', '1080p', '1k', '2k', '4k'];
 const GPT_IMAGE_QUALITY_VALUES = ['low', 'medium', 'high'];
@@ -164,6 +164,7 @@ const uiServerMap: Record<string, string> = {
   FAST: 'fast',
   'VIP 1': 'vip1',
   'VIP 2': 'vip2',
+  'VIP 3': 'vip3',
   CHEAP: 'cheap',
 };
 
@@ -529,7 +530,12 @@ export const sanitizePricingEntriesWithRuntimeModels = (
     const normalizedServer = normalizeCatalogServer(entry.server);
     if (normalizedServer && Array.isArray(model.servers) && model.servers.length > 0) {
       const allowedServers = model.servers.map((value) => normalizeCatalogServer(value)).filter(Boolean);
-      if (allowedServers.length > 0 && !allowedServers.includes(normalizedServer)) {
+      const hasLivePricingForServer = pricingEntries.some(
+        (candidate) =>
+          normalizeModelId(candidate.model) === normalizeModelId(entry.model) &&
+          normalizeCatalogServer(candidate.server) === normalizedServer,
+      );
+      if (allowedServers.length > 0 && !allowedServers.includes(normalizedServer) && !hasLivePricingForServer) {
         return false;
       }
     }
@@ -831,7 +837,7 @@ const mapPricingEntry = (entry: any): TstPricingEntry => {
 
   return {
     model,
-    server: String(entry.server || ''),
+    server: String(entry.server || entry.server_id || entry.serverId || 'fast'),
     config_key: configKey,
     credits: Number(entry.credits || 0),
     resolution,
@@ -876,8 +882,22 @@ const getMatchingEntries = ({
   const normalizedSpeed = speed ? normalizeSpeed(speed) : null;
   const normalizedServer = serverId ? normalizeServer(serverId) : null;
   const normalizedDuration = duration ? normalizeDuration(duration) : null;
+  const normalizedModelId = normalizeModelId(modelId);
 
   return getPricingEntriesForModel(modelId, pricingEntries).filter((entry) => {
+    const isGptFastGenericEntry =
+      normalizedModelId === 'image-gpt-2' &&
+      normalizeServer(entry.server) === 'fast' &&
+      normalizeCatalogResolution(entry.resolution) === '' &&
+      normalizeQuality(entry.quality) === '' &&
+      normalizeSpeed(entry.speed) === 'fast';
+
+    if (isGptFastGenericEntry) {
+      if (normalizedServer && normalizedServer !== 'fast') return false;
+      if (normalizedSpeed && normalizedSpeed !== 'fast') return false;
+      return true;
+    }
+
     if (normalizedResolution && normalizeResolution(entry.resolution) !== normalizedResolution) return false;
     if (normalizedQuality && normalizeQuality(entry.quality) !== normalizedQuality) return false;
     if (normalizedSpeed && normalizeSpeed(entry.speed) !== normalizedSpeed) return false;
@@ -1251,6 +1271,13 @@ export const getGenerationCostBreakdown = ({
       normalizeResolution(entry.resolution) === normalizedResolution &&
       (!normalizedQuality || normalizeQuality(entry.quality) === normalizedQuality) &&
       normalizeSpeed(entry.speed) === normalizedSpeed,
+    (entry) =>
+      modelId === 'image-gpt-2' &&
+      normalizedServer === 'fast' &&
+      normalizedSpeed === 'fast' &&
+      normalizeServer(entry.server) === 'fast' &&
+      !normalizeResolution(entry.resolution) &&
+      !normalizeQuality(entry.quality),
     (entry) =>
       normalizeServer(entry.server) === normalizedServer &&
       normalizeResolution(entry.resolution) === normalizedResolution &&

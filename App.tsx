@@ -15,7 +15,7 @@ import { PayOSGateway } from './views/PayOSGateway';
 import { Language, Theme, ViewId, Feature } from './types';
 import { APP_CONFIG } from './constants';
 import { getSupabaseSession, getSupabaseUser, supabase } from './services/supabaseClient';
-import { getUserProfile, logVisit, updateLastActive, subscribeMaintenanceMode, getSystemAnnouncementConfig, type SystemAnnouncementConfig } from './services/economyService';
+import { getUserProfile, logVisit, updateLastActive, subscribeMaintenanceMode, getSystemAnnouncementConfig, getFeatureMaintenanceConfig, isFeatureInMaintenance, type FeatureMaintenanceConfig, type SystemAnnouncementConfig } from './services/economyService';
 import { NotificationProvider, useNotification } from './components/NotificationSystem';
 import { AppEventPopup, AppEventPopupData, SystemAnnouncementModal } from './components/AppNotificationPopups';
 import { Icons } from './components/Icons';
@@ -214,6 +214,7 @@ function AppContent() {
 
   // Maintenance Mode State
   const [maintenanceMode, setMaintenanceMode] = useState({ isActive: false, message: "" });
+  const [featureMaintenance, setFeatureMaintenance] = useState<FeatureMaintenanceConfig>({ disabledFeatureIds: [] });
   const [systemAnnouncement, setSystemAnnouncement] = useState<SystemAnnouncementConfig | null>(null);
   const [showSystemAnnouncement, setShowSystemAnnouncement] = useState(false);
   const [eventPopup, setEventPopup] = useState<AppEventPopupData | null>(null);
@@ -269,6 +270,7 @@ function AppContent() {
         setSystemAnnouncement(config);
         setShowSystemAnnouncement(shouldShowSystemAnnouncement(config));
     });
+    getFeatureMaintenanceConfig().then(setFeatureMaintenance);
 
     // Update last active every 5 minutes
     const activeInterval = setInterval(() => {
@@ -456,6 +458,15 @@ function AppContent() {
     desktopHistoryModeRef.current = 'replace';
   }, [currentView, isAuthenticated, selectedFeature]);
 
+  useEffect(() => {
+    if (!isAuthenticated || userRole === 'admin' || currentView !== 'tool_workspace' || !selectedFeature) return;
+    if (!isFeatureInMaintenance(featureMaintenance, selectedFeature.id)) return;
+
+    notify(featureMaintenance.message || 'Tính năng đang bảo trì. Vui lòng quay lại sau.', 'warning');
+    desktopHistoryModeRef.current = 'replace';
+    setCurrentView('home');
+  }, [currentView, featureMaintenance, isAuthenticated, notify, selectedFeature, userRole]);
+
   const checkAdminRole = async (userId: string) => {
       if (!supabase) return;
       
@@ -513,6 +524,10 @@ function AppContent() {
         notify(maintenanceMode.message, 'warning');
         return;
     }
+    if (userRole !== 'admin' && isFeatureInMaintenance(featureMaintenance, feature.id)) {
+        notify(featureMaintenance.message || 'Tính năng đang bảo trì. Vui lòng quay lại sau.', 'warning');
+        return;
+    }
     desktopHistoryModeRef.current = 'push';
     setSelectedFeature(feature);
     setCurrentView('tool_workspace');
@@ -529,7 +544,7 @@ function AppContent() {
   const renderContent = () => {
     switch (currentView) {
       case 'home':
-        return <Home lang={lang} onSelectFeature={handleSelectFeature} onNavigate={handleNavigate} onOpenCheckin={() => setShowCheckin(true)} isMaintenance={maintenanceMode.isActive && userRole !== 'admin'} maintenanceMessage={maintenanceMode.message} />;
+        return <Home lang={lang} onSelectFeature={handleSelectFeature} onNavigate={handleNavigate} onOpenCheckin={() => setShowCheckin(true)} isMaintenance={maintenanceMode.isActive && userRole !== 'admin'} maintenanceMessage={maintenanceMode.message} featureMaintenance={userRole !== 'admin' ? featureMaintenance : undefined} />;
       case 'admin':
         return <Admin lang={lang} isAdmin={userRole === 'admin'} />;
       case 'settings':
@@ -615,7 +630,9 @@ function AppContent() {
       
       {/* Tool Workspace - Kept mounted to preserve state */}
       <div style={{ display: currentView === 'tool_workspace' ? 'block' : 'none', height: '100%' }}>
-        {selectedFeature ? (
+        {selectedFeature && userRole !== 'admin' && isFeatureInMaintenance(featureMaintenance, selectedFeature.id) ? (
+          <Home lang={lang} onSelectFeature={handleSelectFeature} onNavigate={handleNavigate} onOpenCheckin={() => setShowCheckin(true)} isMaintenance={false} featureMaintenance={featureMaintenance} />
+        ) : selectedFeature ? (
           <ToolWorkspace 
             feature={selectedFeature} 
             lang={lang} 
@@ -624,7 +641,7 @@ function AppContent() {
             onNavigateView={handleNavigate}
           />
         ) : (
-          currentView === 'tool_workspace' && <Home lang={lang} onSelectFeature={handleSelectFeature} onNavigate={handleNavigate} onOpenCheckin={() => setShowCheckin(true)} isMaintenance={maintenanceMode.isActive && userRole !== 'admin'} maintenanceMessage={maintenanceMode.message} />
+          currentView === 'tool_workspace' && <Home lang={lang} onSelectFeature={handleSelectFeature} onNavigate={handleNavigate} onOpenCheckin={() => setShowCheckin(true)} isMaintenance={maintenanceMode.isActive && userRole !== 'admin'} maintenanceMessage={maintenanceMode.message} featureMaintenance={userRole !== 'admin' ? featureMaintenance : undefined} />
         )}
       </div>
 

@@ -123,17 +123,19 @@ const parseVideoConfigKey = (configKey?: string) => {
 const normalizePricingEntryForValidation = (entry: TstProviderPricingEntry): TstProviderPricingEntry => {
   if (normalize(entry.model) === 'image-gpt-2') {
     const parsed = parseGptImage2ConfigKey(entry.config_key);
-    return {
-      ...entry,
-      resolution: parsed.resolution || entry.resolution,
-      quality: parsed.quality || entry.quality || entry.resolution,
-      speed: entry.speed || parsed.speed,
+  return {
+    ...entry,
+    server: String((entry as any).server || (entry as any).server_id || (entry as any).serverId || 'fast'),
+    resolution: parsed.resolution || entry.resolution,
+    quality: parsed.quality || entry.quality || entry.resolution,
+    speed: entry.speed || parsed.speed,
     };
   }
 
   const parsed = parseVideoConfigKey(entry.config_key);
   return {
     ...entry,
+    server: String((entry as any).server || (entry as any).server_id || (entry as any).serverId || 'fast'),
     resolution: parsed.resolution || entry.resolution,
     duration: parsed.duration || entry.duration,
     speed: entry.speed || parsed.speed,
@@ -259,6 +261,19 @@ const findPricingMatch = (
     audio?: boolean;
   },
 ) => entries.find((entry) => {
+  const isGptFastGenericEntry =
+    normalize(modelId) === 'image-gpt-2' &&
+    normalizeServer(entry.server) === 'fast' &&
+    !normalizeResolution(entry.resolution) &&
+    !normalizeQuality(entry.quality) &&
+    normalizeSpeed(entry.speed) === 'fast';
+
+  if (isGptFastGenericEntry) {
+    if (serverId && normalizeServer(serverId) !== 'fast') return false;
+    if (speed && normalizeSpeed(speed) !== 'fast') return false;
+    return true;
+  }
+
   if (serverId && normalizeServer(entry.server) !== normalizeServer(serverId)) return false;
   if (resolution && normalizeResolution(entry.resolution) !== normalizeResolution(resolution)) return false;
   if (quality && normalizeQuality(entry.quality) !== normalizeQuality(quality)) return false;
@@ -328,7 +343,8 @@ export const validateQueuePayloadAgainstLiveCatalog = async (
     const availableServers = model.servers
       .map((value) => normalizeServer(value))
       .filter((value) => !(serverAvailabilityConfig.disabledByModel[modelId] || []).includes(value));
-    if (!availableServers.includes(serverId)) {
+    const hasLivePricingForServer = modelPricing.some((entry) => normalizeServer(entry.server) === serverId);
+    if (!availableServers.includes(serverId) && !hasLivePricingForServer) {
       throw new Error(`INVALID_TST_CONFIG: Server ${serverId} is disabled for ${modelId}`);
     }
   }

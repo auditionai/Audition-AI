@@ -232,6 +232,10 @@ export function WorkspaceVideo() {
     modelId: row.model_id, optionId: row.option_id, auditionPriceVcoin: row.audition_price_vcoin,
   }));
 
+  const selectedVideoSpec = getVideoModelSpecs(pricingEntries, runtimeModels).find((spec: any) => spec.modelId === videoModel);
+  const effectiveVideoAudio = activeMode === 'video_ai' && Boolean(selectedVideoSpec?.supportsAudio) && sound;
+  const defaultVideoServerId = videoModel.toLowerCase().startsWith('grok') ? 'default' : 'fast';
+
   const currentCostBreakdown = activeMode === 'motion_control'
     ? getMotionCostBreakdown({
         modelId: motionModel,
@@ -244,11 +248,11 @@ export function WorkspaceVideo() {
       })
     : getVideoCostBreakdown({
         modelId: videoModel,
-        serverId: uiServerToTst(server) || 'fast',
+        serverId: uiServerToTst(server) || defaultVideoServerId,
         resolution: quality.toLowerCase(),
         duration: duration.toLowerCase(),
         speed: uiSpeedToTst(speed) || 'fast',
-        audio: sound,
+        audio: effectiveVideoAudio,
         pricingEntries,
         pricingOverrides
       });
@@ -268,14 +272,14 @@ export function WorkspaceVideo() {
       };
     }
 
-    const videoSpec = getVideoModelSpecs(pricingEntries, runtimeModels).find((spec: any) => spec.modelId === videoModel);
+    const videoSpec = selectedVideoSpec;
     const compatibleResolutions = getVideoCompatibleResolutions({
       modelId: videoModel, pricingEntries, serverId: uiServerToTst(server),
-      duration: duration.toLowerCase(), speed: uiSpeedToTst(speed) || 'fast', audio: sound
+      duration: duration.toLowerCase(), speed: uiSpeedToTst(speed) || 'fast', audio: effectiveVideoAudio
     });
     const compatibleDurations = getVideoCompatibleDurations({
       modelId: videoModel, pricingEntries, serverId: uiServerToTst(server),
-      resolution: quality.toLowerCase(), speed: uiSpeedToTst(speed) || 'fast', audio: sound
+      resolution: quality.toLowerCase(), speed: uiSpeedToTst(speed) || 'fast', audio: effectiveVideoAudio
     });
     return {
       showAspectRatio: ((videoSpec?.aspectRatios as string[]) || []).length > 0,
@@ -291,7 +295,7 @@ export function WorkspaceVideo() {
   const serverOptions = (activeMode === 'video_ai'
     ? getVideoCompatibleServers({
         modelId: videoModel, pricingEntries, resolution: quality.toLowerCase(),
-        duration: duration.toLowerCase(), speed: uiSpeedToTst(speed) || 'fast', audio: sound
+        duration: duration.toLowerCase(), speed: uiSpeedToTst(speed) || 'fast', audio: effectiveVideoAudio
       })
     : getMotionCompatibleServers({
         modelId: motionModel, pricingEntries, resolution: quality.toLowerCase(), speed: uiSpeedToTst(speed) || 'fast'
@@ -301,7 +305,7 @@ export function WorkspaceVideo() {
   const speedOptions = activeMode === 'video_ai'
     ? getVideoCompatibleSpeeds({
         modelId: videoModel, pricingEntries, serverId: uiServerToTst(server),
-        resolution: quality.toLowerCase(), duration: duration.toLowerCase(), audio: sound
+        resolution: quality.toLowerCase(), duration: duration.toLowerCase(), audio: effectiveVideoAudio
       }).map((speedId: string) => ({ label: tstSpeedToUi(speedId), value: tstSpeedToUi(speedId) }))
     : getMotionCompatibleSpeeds({
         modelId: motionModel, pricingEntries, resolution: quality.toLowerCase()
@@ -529,13 +533,13 @@ export function WorkspaceVideo() {
 
     void (async () => {
       try {
-        const requestedServerId = uiServerToTst(server) || (activeMode === 'video_ai' ? 'fast' : 'vip2');
+        const requestedServerId = uiServerToTst(server) || (activeMode === 'video_ai' ? defaultVideoServerId : 'vip2');
         const requestedSpeedId = uiSpeedToTst(speed) || 'fast';
         const effectiveServerId = activeMode === 'video_ai'
-          ? (getVideoCompatibleServers({ modelId: videoModel, pricingEntries, resolution: quality.toLowerCase(), duration: duration.toLowerCase(), speed: requestedSpeedId, audio: sound }).includes(requestedServerId) ? requestedServerId : (getVideoCompatibleServers({ modelId: videoModel, pricingEntries, resolution: quality.toLowerCase(), duration: duration.toLowerCase(), speed: requestedSpeedId, audio: sound })[0] || requestedServerId))
+          ? (getVideoCompatibleServers({ modelId: videoModel, pricingEntries, resolution: quality.toLowerCase(), duration: duration.toLowerCase(), speed: requestedSpeedId, audio: effectiveVideoAudio }).includes(requestedServerId) ? requestedServerId : (getVideoCompatibleServers({ modelId: videoModel, pricingEntries, resolution: quality.toLowerCase(), duration: duration.toLowerCase(), speed: requestedSpeedId, audio: effectiveVideoAudio })[0] || requestedServerId))
           : (getMotionCompatibleServers({ modelId: motionModel, pricingEntries, resolution: quality.toLowerCase(), speed: requestedSpeedId }).includes(requestedServerId) ? requestedServerId : (getMotionCompatibleServers({ modelId: motionModel, pricingEntries, resolution: quality.toLowerCase(), speed: requestedSpeedId })[0] || requestedServerId));
         const effectiveSpeedId = activeMode === 'video_ai'
-          ? (getVideoCompatibleSpeeds({ modelId: videoModel, pricingEntries, serverId: effectiveServerId, resolution: quality.toLowerCase(), duration: duration.toLowerCase(), audio: sound }).includes(requestedSpeedId) ? requestedSpeedId : (getVideoCompatibleSpeeds({ modelId: videoModel, pricingEntries, serverId: effectiveServerId, resolution: quality.toLowerCase(), duration: duration.toLowerCase(), audio: sound })[0] || requestedSpeedId))
+          ? (getVideoCompatibleSpeeds({ modelId: videoModel, pricingEntries, serverId: effectiveServerId, resolution: quality.toLowerCase(), duration: duration.toLowerCase(), audio: effectiveVideoAudio }).includes(requestedSpeedId) ? requestedSpeedId : (getVideoCompatibleSpeeds({ modelId: videoModel, pricingEntries, serverId: effectiveServerId, resolution: quality.toLowerCase(), duration: duration.toLowerCase(), audio: effectiveVideoAudio })[0] || requestedSpeedId))
           : (getMotionCompatibleSpeeds({ modelId: motionModel, pricingEntries, serverId: effectiveServerId, resolution: quality.toLowerCase() }).includes(requestedSpeedId) ? requestedSpeedId : (getMotionCompatibleSpeeds({ modelId: motionModel, pricingEntries, serverId: effectiveServerId, resolution: quality.toLowerCase() })[0] || requestedSpeedId));
 
         let stagedKeyframeImage = null;
@@ -554,7 +558,7 @@ export function WorkspaceVideo() {
           ? {
               recipeType: 'video_generate_recipe_v1', modelId: videoModel, prompt: queuedPrompt,
               duration: duration.toLowerCase(), resolution: quality.toLowerCase(), aspectRatio,
-              speed: effectiveSpeedId, serverId: effectiveServerId, keyframeImage: stagedKeyframeImage, audio: sound,
+              speed: effectiveSpeedId, serverId: effectiveServerId, keyframeImage: stagedKeyframeImage, audio: effectiveVideoAudio,
             }
           : {
               recipeType: 'motion_generate_recipe_v1', modelId: motionModel, prompt: effectiveMotionPrompt,

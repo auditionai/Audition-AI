@@ -109,7 +109,8 @@ const parseGptImage2ConfigKey = (configKey?: string) => {
 const parseVideoConfigKey = (configKey?: string) => {
   const normalized = String(configKey || '').trim().toLowerCase();
   const resolution = normalized.match(/(?:^|[-_|])(480p|720p|1080p|1k|2k|4k)(?:$|[-_|])/)?.[1];
-  const duration = normalized.match(/(?:^|[-_|])(\d+s)(?:$|[-_|])/)?.[1];
+  const durationToken = normalized.match(/(?:^|[-_|])(\d+(?:\.\d+)?s?)(?:$|[-_|])/)?.[1];
+  const duration = durationToken ? (durationToken.endsWith('s') ? durationToken : `${durationToken}s`) : undefined;
   const speed = normalized.match(/(?:^|[-_|])(fast|slow)(?:$|[-_|])/)?.[1];
   const audioToken = normalized.match(/(?:^|[-_|])audio[-_]?(on|off|true|false)(?:$|[-_|])/)?.[1];
   return {
@@ -123,16 +124,35 @@ const parseVideoConfigKey = (configKey?: string) => {
 const getDefaultServerForModel = (modelId: string) =>
   normalize(modelId).startsWith('grok') ? 'default' : 'fast';
 
+const isGrokModel = (modelId: string) => normalize(modelId).startsWith('grok');
+
 const serversMatchForModel = (modelId: string, entryServer?: string, requestedServer?: string) => {
   const normalizedRequested = normalizeServer(requestedServer);
   if (!normalizedRequested) return true;
   const normalizedEntry = normalizeServer(entryServer);
   if (normalizedEntry === normalizedRequested) return true;
-  if (normalize(modelId).startsWith('grok')) {
+  if (isGrokModel(modelId)) {
     const grokServerAliases = new Set(['default', 'fast']);
     return grokServerAliases.has(normalizedEntry) && grokServerAliases.has(normalizedRequested);
   }
   return false;
+};
+
+const matchesResolutionForModel = (modelId: string, entryResolution?: string, requestedResolution?: string) => {
+  const normalizedRequested = normalizeResolution(requestedResolution);
+  if (!normalizedRequested) return true;
+  const normalizedEntry = normalizeResolution(entryResolution);
+  if (normalizedEntry === normalizedRequested) return true;
+  return isGrokModel(modelId) && !normalizedEntry;
+};
+
+const matchesDurationForModel = (modelId: string, entryDuration?: string, requestedDuration?: string) => {
+  const normalizedRequested = normalizeDuration(requestedDuration);
+  if (!normalizedRequested) return true;
+  const normalizedEntry = normalizeDuration(entryDuration);
+  if (normalizedEntry === normalizedRequested) return true;
+  const perSecondModel = normalize(modelId).startsWith('kling-') || normalize(modelId).startsWith('motion-control-');
+  return (isGrokModel(modelId) || perSecondModel) && !normalizedEntry;
 };
 
 const normalizePricingEntryForValidation = (entry: TstProviderPricingEntry): TstProviderPricingEntry => {
@@ -150,7 +170,7 @@ const normalizePricingEntryForValidation = (entry: TstProviderPricingEntry): Tst
   const parsed = parseVideoConfigKey(entry.config_key);
   return {
     ...entry,
-    server: String((entry as any).server || (entry as any).server_id || (entry as any).serverId || 'fast'),
+    server: String((entry as any).server || (entry as any).server_id || (entry as any).serverId || getDefaultServerForModel(entry.model)),
     resolution: parsed.resolution || entry.resolution,
     duration: parsed.duration || entry.duration,
     speed: entry.speed || parsed.speed,
@@ -290,12 +310,9 @@ const findPricingMatch = (
   }
 
   if (!serversMatchForModel(modelId, entry.server, serverId)) return false;
-  if (resolution && normalizeResolution(entry.resolution) !== normalizeResolution(resolution)) return false;
+  if (!matchesResolutionForModel(modelId, entry.resolution, resolution)) return false;
   if (quality && normalizeQuality(entry.quality) !== normalizeQuality(quality)) return false;
-  if (duration && normalizeDuration(entry.duration) !== normalizeDuration(duration)) {
-    const perSecondModel = normalize(modelId).startsWith('kling-') || normalize(modelId).startsWith('motion-control-');
-    if (!perSecondModel || normalizeDuration(entry.duration)) return false;
-  }
+  if (!matchesDurationForModel(modelId, entry.duration, duration)) return false;
   if (!matchesFastSpeed(entry.speed, speed)) return false;
   if (typeof audio === 'boolean' && typeof entry.audio === 'boolean' && entry.audio !== audio) return false;
   return true;
@@ -358,7 +375,7 @@ export const validateQueuePayloadAgainstLiveCatalog = async (
     const availableServers = model.servers
       .map((value) => normalizeServer(value))
       .filter((value) => !(serverAvailabilityConfig.disabledByModel[modelId] || []).includes(value));
-    const hasLivePricingForServer = modelPricing.some((entry) => normalizeServer(entry.server) === serverId);
+    const hasLivePricingForServer = modelPricing.some((entry) => serversMatchForModel(modelId, entry.server, serverId));
     if (!availableServers.includes(serverId) && !hasLivePricingForServer) {
       throw new Error(`INVALID_TST_CONFIG: Server ${serverId} is disabled for ${modelId}`);
     }

@@ -808,16 +808,32 @@ const parseVideoConfigKey = (configKey?: string) => {
 const getDefaultServerForModel = (modelId: string) =>
   normalizeModelId(modelId).startsWith('grok') ? 'default' : 'fast';
 
+const isGrokVideoModel = (modelId: string) => normalizeModelId(modelId).startsWith('grok');
+
 const serversMatchForModel = (modelId: string, entryServer?: string, requestedServer?: string | null) => {
   const normalizedRequested = requestedServer ? normalizeServer(requestedServer) : '';
   if (!normalizedRequested) return true;
   const normalizedEntry = normalizeServer(entryServer);
   if (normalizedEntry === normalizedRequested) return true;
-  if (normalizeModelId(modelId).startsWith('grok')) {
+  if (isGrokVideoModel(modelId)) {
     const grokServerAliases = new Set(['default', 'fast']);
     return grokServerAliases.has(normalizedEntry) && grokServerAliases.has(normalizedRequested);
   }
   return false;
+};
+
+const matchesVideoResolutionForModel = (modelId: string, entryResolution?: string, requestedResolution?: string | null) => {
+  if (!requestedResolution) return true;
+  const normalizedEntry = normalizeCatalogResolution(entryResolution);
+  if (normalizedEntry === requestedResolution) return true;
+  return isGrokVideoModel(modelId) && !normalizedEntry;
+};
+
+const matchesVideoDurationForModel = (modelId: string, entryDuration?: string, requestedDuration?: string | null) => {
+  if (!requestedDuration) return true;
+  const normalizedEntry = normalizeCatalogDuration(entryDuration);
+  if (normalizedEntry === requestedDuration) return true;
+  return (isGrokVideoModel(modelId) || isPerSecondBillingModel(modelId, 'video')) && !normalizedEntry;
 };
 
 const mapPricingEntry = (entry: any): TstPricingEntry => {
@@ -914,14 +930,11 @@ const getMatchingEntries = ({
       return true;
     }
 
-    if (normalizedResolution && normalizeResolution(entry.resolution) !== normalizedResolution) return false;
+    if (!matchesVideoResolutionForModel(modelId, entry.resolution, normalizedResolution)) return false;
     if (normalizedQuality && normalizeQuality(entry.quality) !== normalizedQuality) return false;
     if (normalizedSpeed && normalizeSpeed(entry.speed) !== normalizedSpeed) return false;
     if (!serversMatchForModel(modelId, entry.server, normalizedServer)) return false;
-    if (normalizedDuration && normalizeDuration(entry.duration) !== normalizedDuration) {
-      const perSecondModel = isPerSecondBillingModel(modelId, 'video');
-      if (!perSecondModel || normalizeDuration(entry.duration)) return false;
-    }
+    if (!matchesVideoDurationForModel(modelId, entry.duration, normalizedDuration)) return false;
     return true;
   });
 };
@@ -1365,6 +1378,10 @@ export const getVideoModelSpecs = (
     const entries = getPricingEntriesForModel(model.model, pricingEntries);
     const fallback = getFallbackVideoSpec(model.model, model.name);
     const resolutions = getUniqueResolutions(entries);
+    const capabilityResolutions = sortByOrder(
+      unique(((model.capabilities?.resolutions || []) as string[]).map((value) => normalizeCatalogResolution(value)).filter(Boolean)),
+      RESOLUTION_ORDER,
+    );
     const durations = getUniqueDurations(entries);
     const capabilityDurations = sortByOrder(
       unique(((model.capabilities?.durations || []) as string[]).map((value) => normalizeCatalogDuration(value)).filter(Boolean)),
@@ -1381,7 +1398,7 @@ export const getVideoModelSpecs = (
       modelId: model.model,
       displayName: model.name || fallback.displayName,
       servers,
-      resolutions,
+      resolutions: resolutions.length > 0 ? resolutions : (capabilityResolutions.length > 0 ? capabilityResolutions : fallback.resolutions),
       durations: durations.length > 0 ? durations : (capabilityDurations.length > 0 ? capabilityDurations : fallback.durations),
       aspectRatios: getCapabilityAspectRatios(model),
       speeds,
@@ -1549,31 +1566,32 @@ export const getVideoCostBreakdown = ({
   const normalizedServer = normalizeServer(serverId);
   const normalizedDuration = normalizeDuration(duration);
   const perSecondModel = isPerSecondVideoBillingModel(modelId);
+  const matchesVideoResolution = (entry: TstPricingEntry) =>
+    matchesVideoResolutionForModel(modelId, entry.resolution, normalizedResolution);
   const matchesVideoDuration = (entry: TstPricingEntry) =>
-    normalizeDuration(entry.duration) === normalizedDuration ||
-    (perSecondModel && !normalizeDuration(entry.duration));
+    matchesVideoDurationForModel(modelId, entry.duration, normalizedDuration);
 
   const exactEntry = pickExactEntry(modelEntries, [
     (entry) =>
       serversMatchForModel(modelId, entry.server, normalizedServer) &&
-      normalizeResolution(entry.resolution) === normalizedResolution &&
+      matchesVideoResolution(entry) &&
       matchesVideoDuration(entry) &&
       normalizeSpeed(entry.speed) === normalizedSpeed &&
       matchesAudioSelection(entry.audio, audio),
     (entry) =>
       serversMatchForModel(modelId, entry.server, normalizedServer) &&
-      normalizeResolution(entry.resolution) === normalizedResolution &&
+      matchesVideoResolution(entry) &&
       matchesVideoDuration(entry) &&
       normalizedSpeed === 'fast' &&
       !entry.speed &&
       matchesAudioSelection(entry.audio, audio),
     (entry) =>
-      normalizeResolution(entry.resolution) === normalizedResolution &&
+      matchesVideoResolution(entry) &&
       matchesVideoDuration(entry) &&
       normalizeSpeed(entry.speed) === normalizedSpeed &&
       matchesAudioSelection(entry.audio, audio),
     (entry) =>
-      normalizeResolution(entry.resolution) === normalizedResolution &&
+      matchesVideoResolution(entry) &&
       matchesVideoDuration(entry) &&
       normalizedSpeed === 'fast' &&
       !entry.speed &&

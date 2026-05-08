@@ -793,7 +793,8 @@ export const getPerSecondPricingKey = ({
 const parseVideoConfigKey = (configKey?: string) => {
   const normalized = String(configKey || '').trim().toLowerCase();
   const resolution = normalized.match(/(?:^|[-_|])(480p|720p|1080p|1k|2k|4k)(?:$|[-_|])/)?.[1];
-  const duration = normalized.match(/(?:^|[-_|])(\d+s)(?:$|[-_|])/)?.[1];
+  const durationToken = normalized.match(/(?:^|[-_|])(\d+(?:\.\d+)?s?)(?:$|[-_|])/)?.[1];
+  const duration = durationToken ? (durationToken.endsWith('s') ? durationToken : `${durationToken}s`) : undefined;
   const speed = normalized.match(/(?:^|[-_|])(fast|slow)(?:$|[-_|])/)?.[1];
   const audioToken = normalized.match(/(?:^|[-_|])audio[-_]?(on|off|true|false)(?:$|[-_|])/)?.[1];
   return {

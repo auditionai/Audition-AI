@@ -151,7 +151,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [isGeneratingScript, setIsGeneratingScript] = useState(false);
-  const [scriptStyle, setScriptStyle] = useState('Douyin/TikTok/CapCut Trend');
+  const [scriptStyle, setScriptStyle] = useState('Cinematic điện ảnh');
   const [scriptTheme, setScriptTheme] = useState('Tự động theo ảnh');
   const [scriptSoundMood, setScriptSoundMood] = useState('Phù hợp bối cảnh');
   const [scriptVoiceDialogue, setScriptVoiceDialogue] = useState(false);
@@ -1081,8 +1081,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                       label="Phong cách"
                       value={scriptStyle}
                       options={[
-                        { label: 'Douyin/TikTok/CapCut Trend', value: 'Douyin/TikTok/CapCut Trend' },
-                        { label: 'Cinematic', value: 'Cinematic' },
+                        { label: 'Cinematic điện ảnh', value: 'Cinematic điện ảnh' },
                         { label: 'Thời trang', value: 'Thời trang' },
                         { label: 'Hành động', value: 'Hành động' },
                         { label: 'Lãng mạn', value: 'Lãng mạn' },

@@ -68,5 +68,5 @@ When `server_id` is not specified, the system auto-selects the best available se
 | Model Pattern | Generate Endpoint |
 |---------------|-------------------|
 | `seedance*` | `POST /v1/seedance/generate` |
-| `grok*` | `POST /v1/grok/generate` |
+| `grok*` | `POST /v1/video/generate` |
 | other video models | `POST /v1/video/generate` |

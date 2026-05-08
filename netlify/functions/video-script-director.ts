@@ -65,7 +65,7 @@ const buildDirectorInstruction = (
   userPrompt: string,
   scriptOptions: Record<string, unknown>,
 ) => {
-  const style = normalizeOption(scriptOptions.style, 'cinematic tự nhiên');
+  const style = normalizeOption(scriptOptions.style, 'Douyin/TikTok/CapCut Trend');
   const theme = normalizeOption(scriptOptions.theme, 'tự động theo ảnh');
   const soundMood = normalizeOption(scriptOptions.soundMood, 'phù hợp bối cảnh');
   const targetModel = normalizeOption(scriptOptions.targetModel, 'model video người dùng chọn');
@@ -90,6 +90,22 @@ const buildDirectorInstruction = (
   '- Identify how many visible characters are in the uploaded image, their apparent gender presentation if visible, scene context, outfit, face details, accessories, and mood.',
   '- Build the script around those observed details. Do not replace the subject with a different person or a real human actor.',
   '',
+  'Trend video direction requirements:',
+  '- Write the script as a modern Gen Z short-form trend video, similar to Douyin / TikTok / CapCut edits.',
+  '- The video MUST have at least 5 distinct shots/scenes and at least 5 different camera angles, even when the duration is short.',
+  '- Use fast continuous transitions: whip pan, match cut, flash cut, zoom transition, speed ramp, motion blur, light leak, beat-synced cut, or camera shake where appropriate.',
+  '- Include slow-motion highlight moments, close-up detail shots, medium shots, wide/environment shots, low-angle or high-angle shots, and dynamic push-in/pull-out movement.',
+  '- Add text overlay instructions in Vietnamese: short trendy captions, lyric-style text, title card, or punchy Gen Z phrases. Text must not cover the face.',
+  '- Describe remix/music direction: beat drop, bass hit, riser, whoosh, sparkle SFX, camera shutter, or ambient SFX matching the scene.',
+  '- Keep the character identity locked across every shot. Camera and scene can change, but face, outfit, colors, accessories, and body proportions must remain consistent.',
+  '- For 5s video: create exactly 5 compact shots of about 1 second each. For 10s: create 6-8 shots. For 15s or longer: create 8-12 shots.',
+  '',
+  'Required final script format:',
+  '- Start with one concise overall direction sentence.',
+  '- Then write a numbered shot list by time range, for example: Cảnh 1 (0.0s-1.0s): ...',
+  '- Each shot must include camera angle, motion, subject action, transition, text overlay, and sound/music cue.',
+  '- End with a short negative instruction line preventing face/body/outfit deformation and unwanted extra limbs.',
+  '',
   'Hard constraints that must be included in the final script:',
   '- Do not create a real human video.',
   '- Do not invent a new character.',
@@ -100,8 +116,8 @@ const buildDirectorInstruction = (
   '- Do not make the character look like a child, baby, toddler, or children cartoon.',
   '- Choose camera movement, background motion, music, and sound design that match the scene context.',
   '',
-  'Write only the final Vietnamese prompt/script. No markdown, no JSON, no explanation.',
-  'The output should be detailed enough for Seedance/Kling/Grok video generation, but stay under 3000 characters.',
+  'Write only the final Vietnamese prompt/script. No JSON, no explanation.',
+  'The output should be detailed enough for Seedance/Kling/Grok video generation, but stay under 10000 characters.',
   ].filter(Boolean).join('\n');
 };
 
@@ -150,7 +166,7 @@ export const handler: Handler = async (event) => {
               generationConfig: {
                 temperature: 0.45,
                 topP: 0.8,
-                maxOutputTokens: 1600,
+                maxOutputTokens: 3600,
               },
             }),
             signal: AbortSignal.timeout(180000),
@@ -166,7 +182,7 @@ export const handler: Handler = async (event) => {
         if (!text) {
           throw new Error('Vertex AI did not return a video script.');
         }
-        return text.slice(0, 3000);
+        return text.slice(0, 10000);
       },
     });
 

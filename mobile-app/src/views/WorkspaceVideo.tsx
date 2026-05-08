@@ -88,7 +88,7 @@ export function WorkspaceVideo() {
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [currentTipIdx, setCurrentTipIdx] = useState(0);
   const [isGeneratingScript, setIsGeneratingScript] = useState(false);
-  const [scriptStyle, setScriptStyle] = useState('Cinematic');
+  const [scriptStyle, setScriptStyle] = useState('Douyin/TikTok/CapCut Trend');
   const [scriptTheme, setScriptTheme] = useState('Tự động theo ảnh');
   const [scriptSoundMood, setScriptSoundMood] = useState('Phù hợp bối cảnh');
   const [scriptVoiceDialogue, setScriptVoiceDialogue] = useState(false);
@@ -699,6 +699,7 @@ export function WorkspaceVideo() {
 
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <select value={scriptStyle} onChange={(e) => setScriptStyle(e.target.value)} className="rounded-2xl border border-white/70 bg-white px-3 py-2 text-xs font-bold text-gray-700 dark:border-zinc-700 dark:bg-[#18181B] dark:text-zinc-100">
+                  <option>Douyin/TikTok/CapCut Trend</option>
                   <option>Cinematic</option>
                   <option>Thời trang</option>
                   <option>Hành động</option>

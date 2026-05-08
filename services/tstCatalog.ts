@@ -752,7 +752,8 @@ export const isPerSecondVideoBillingModel = (modelId: string) =>
   normalizeModelId(modelId).startsWith('kling-');
 
 export const isPerSecondMotionBillingModel = (modelId: string) =>
-  normalizeModelId(modelId).startsWith('motion-control-');
+  normalizeModelId(modelId).startsWith('motion-control-') ||
+  normalizeModelId(modelId).startsWith('kling-');
 
 export const isPerSecondBillingModel = (modelId: string, type?: TstMediaType) =>
   type === 'motion-control'
@@ -1504,29 +1505,33 @@ export const getVideoCostBreakdown = ({
   const normalizedSpeed = normalizeSpeed(speed);
   const normalizedServer = normalizeServer(serverId);
   const normalizedDuration = normalizeDuration(duration);
+  const perSecondModel = isPerSecondVideoBillingModel(modelId);
+  const matchesVideoDuration = (entry: TstPricingEntry) =>
+    normalizeDuration(entry.duration) === normalizedDuration ||
+    (perSecondModel && !normalizeDuration(entry.duration));
 
   const exactEntry = pickExactEntry(modelEntries, [
     (entry) =>
       normalizeServer(entry.server) === normalizedServer &&
       normalizeResolution(entry.resolution) === normalizedResolution &&
-      normalizeDuration(entry.duration) === normalizedDuration &&
+      matchesVideoDuration(entry) &&
       normalizeSpeed(entry.speed) === normalizedSpeed &&
       matchesAudioSelection(entry.audio, audio),
     (entry) =>
       normalizeServer(entry.server) === normalizedServer &&
       normalizeResolution(entry.resolution) === normalizedResolution &&
-      normalizeDuration(entry.duration) === normalizedDuration &&
+      matchesVideoDuration(entry) &&
       normalizedSpeed === 'fast' &&
       !entry.speed &&
       matchesAudioSelection(entry.audio, audio),
     (entry) =>
       normalizeResolution(entry.resolution) === normalizedResolution &&
-      normalizeDuration(entry.duration) === normalizedDuration &&
+      matchesVideoDuration(entry) &&
       normalizeSpeed(entry.speed) === normalizedSpeed &&
       matchesAudioSelection(entry.audio, audio),
     (entry) =>
       normalizeResolution(entry.resolution) === normalizedResolution &&
-      normalizeDuration(entry.duration) === normalizedDuration &&
+      matchesVideoDuration(entry) &&
       normalizedSpeed === 'fast' &&
       !entry.speed &&
       matchesAudioSelection(entry.audio, audio),
@@ -1534,10 +1539,13 @@ export const getVideoCostBreakdown = ({
 
   if (exactEntry) {
     const fallbackVcoin = creditsToVcoin(exactEntry.credits);
-    if (isPerSecondVideoBillingModel(modelId)) {
+    if (perSecondModel) {
       const billedSeconds = Math.max(1, parseDurationSeconds(duration));
       const unitConfigKey = getPerSecondPricingKey({ modelId, serverId, resolution, speed, audio });
-      const unitFallbackVcoin = Math.max(1, Math.ceil(fallbackVcoin / billedSeconds));
+      const entryDurationSeconds = parseDurationSeconds(exactEntry.duration);
+      const unitFallbackVcoin = entryDurationSeconds > 1
+        ? Math.max(1, Math.ceil(fallbackVcoin / entryDurationSeconds))
+        : fallbackVcoin;
       const unitVcoin = getAuditionPrice(modelId, unitConfigKey, unitFallbackVcoin, pricingOverrides);
       return {
         available: true,
@@ -1665,7 +1673,10 @@ export const getMotionCostBreakdown = ({
     if (isPerSecondMotionBillingModel(modelId)) {
       const billedSeconds = Math.max(1, Math.ceil(durationSeconds || 1));
       const unitConfigKey = getPerSecondPricingKey({ modelId, serverId, resolution, speed });
-      const unitFallbackVcoin = Math.max(1, Math.ceil(fallbackVcoin / billedSeconds));
+      const entryDurationSeconds = parseDurationSeconds(exactEntry.duration);
+      const unitFallbackVcoin = entryDurationSeconds > 1
+        ? Math.max(1, Math.ceil(fallbackVcoin / entryDurationSeconds))
+        : fallbackVcoin;
       const unitVcoin = getAuditionPrice(modelId, unitConfigKey, unitFallbackVcoin, pricingOverrides);
       return {
         available: true,

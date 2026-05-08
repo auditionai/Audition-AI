@@ -1102,18 +1102,20 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                                         type="button"
                                         onClick={() => selectVideoFamily(family)}
                                         disabled={familyModels.length === 0}
-                                        className={`rounded-2xl border p-3 text-left transition-all ${
+                                        className={`group relative mt-3 rounded-2xl border px-3 pb-3 pt-5 text-left transition-all ${
                                             isActive
-                                                ? `bg-gradient-to-br ${meta.accent} shadow-[0_0_18px_rgba(34,211,238,0.16)]`
+                                                ? `bg-gradient-to-br ${meta.accent} shadow-[0_0_22px_rgba(34,211,238,0.22)] scale-[1.02]`
                                                 : 'border-white/10 bg-black/20 text-slate-400 hover:border-white/20 hover:bg-white/5'
                                         } ${familyModels.length === 0 ? 'opacity-40 cursor-not-allowed' : ''}`}
                                     >
-                                        <div className="flex items-center justify-between gap-1">
-                                            <span className="text-sm font-black text-white">{meta.label}</span>
-                                            <span className={`rounded-full px-1.5 py-0.5 text-[8px] font-black ${isActive ? 'bg-white/15 text-white' : 'bg-white/10 text-slate-300'}`}>
-                                                {meta.tag}
-                                            </span>
-                                        </div>
+                                        <span className={`absolute -top-3 left-2 rounded-full border px-2 py-1 text-[8px] font-black tracking-wider shadow-lg transition-transform ${
+                                            isActive
+                                                ? 'animate-pulse border-white/25 bg-gradient-to-r from-audi-pink to-audi-purple text-white group-hover:scale-105'
+                                                : 'border-white/10 bg-[#252534] text-slate-300'
+                                        }`}>
+                                            #{meta.tag}
+                                        </span>
+                                        <div className="text-sm font-black text-white">{meta.label}</div>
                                         <div className="mt-1 text-[10px] font-bold text-audi-cyan">{getFamilyPriceLabel(familyModels)}</div>
                                     </button>
                                 );

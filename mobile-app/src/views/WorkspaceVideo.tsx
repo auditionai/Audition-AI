@@ -687,16 +687,20 @@ export function WorkspaceVideo() {
                         type="button"
                         disabled={familyModels.length === 0}
                         onClick={() => selectVideoFamily(family)}
-                        className={`rounded-[16px] border p-2 text-left transition-all ${
+                        className={`relative mt-3 rounded-[16px] border px-2 pb-2 pt-5 text-left transition-all ${
                           isActive
-                            ? 'border-purple-300 bg-purple-50 text-purple-800 dark:border-purple-500/40 dark:bg-purple-500/15 dark:text-white'
+                            ? 'scale-[1.02] border-purple-300 bg-purple-50 text-purple-800 shadow-[0_8px_24px_rgba(168,85,247,0.18)] dark:border-purple-500/40 dark:bg-purple-500/15 dark:text-white'
                             : 'border-gray-100 bg-white text-gray-500 dark:border-zinc-800 dark:bg-[#18181B] dark:text-zinc-400'
                         } ${familyModels.length === 0 ? 'opacity-40' : ''}`}
                       >
-                        <div className="text-[12px] font-black">{meta.label}</div>
-                        <div className="mt-1 inline-flex rounded-full bg-black/5 px-1.5 py-0.5 text-[8px] font-black dark:bg-white/10">
-                          {meta.tag}
+                        <div className={`absolute -top-3 left-2 rounded-full border px-2 py-1 text-[8px] font-black tracking-wide ${
+                          isActive
+                            ? 'animate-pulse border-white/30 bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white'
+                            : 'border-gray-100 bg-gray-50 text-gray-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300'
+                        }`}>
+                          #{meta.tag}
                         </div>
+                        <div className="text-[12px] font-black">{meta.label}</div>
                         <div className="mt-1 text-[9px] font-black text-cyan-600 dark:text-cyan-300">{getFamilyPriceLabel(familyModels)}</div>
                       </button>
                     );

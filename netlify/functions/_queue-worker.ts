@@ -132,7 +132,7 @@ const activeWorkerRuns = new Map<QueueWorkerLane, Promise<QueueWorkerSummary>>()
 const TST_API_KEY = process.env.TST_API_KEY || '';
 const TST_API_BASE = 'https://api.tramsangtao.com/v1';
 const POLL_INTERVAL_SECONDS = parsePositiveIntEnv('QUEUE_POLL_INTERVAL_SECONDS', 5);
-const VIDEO_POLL_INTERVAL_SECONDS = parsePositiveIntEnv('QUEUE_VIDEO_POLL_INTERVAL_SECONDS', 10 * 60);
+const VIDEO_POLL_INTERVAL_SECONDS = parsePositiveIntEnv('QUEUE_VIDEO_POLL_INTERVAL_SECONDS', 60);
 const PROVIDER_FAILURE_GRACE_SECONDS = parsePositiveIntEnv('QUEUE_PROVIDER_FAILURE_GRACE_SECONDS', 90, 5);
 const MAX_DISPATCH_RETRIES = 6;
 const MAX_POLL_FAILURES = 8;
@@ -577,6 +577,7 @@ const extractJobId = (data: any): string | null => {
 };
 
 const INITIAL_POLL_DELAY_SECONDS = parsePositiveIntEnv('QUEUE_INITIAL_POLL_DELAY_SECONDS', 2);
+const INITIAL_VIDEO_POLL_DELAY_SECONDS = parsePositiveIntEnv('QUEUE_INITIAL_VIDEO_POLL_DELAY_SECONDS', 60);
 
 const getQueuePollIntervalSeconds = (job: Pick<QueueJobRow, 'queue_kind'>) => (
   job.queue_kind === 'video_generate' || job.queue_kind === 'motion_generate'
@@ -586,7 +587,7 @@ const getQueuePollIntervalSeconds = (job: Pick<QueueJobRow, 'queue_kind'>) => (
 
 const getInitialProcessingPollDelaySeconds = (job: Pick<QueueJobRow, 'queue_kind'>) => (
   job.queue_kind === 'video_generate' || job.queue_kind === 'motion_generate'
-    ? VIDEO_POLL_INTERVAL_SECONDS
+    ? INITIAL_VIDEO_POLL_DELAY_SECONDS
     : INITIAL_POLL_DELAY_SECONDS
 );
 

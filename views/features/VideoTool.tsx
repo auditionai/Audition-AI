@@ -51,6 +51,61 @@ interface AIModelOption {
     badges?: { text: string; type: 'blue' | 'outline' | 'speed' | 'duration' | 'server' }[];
 }
 
+type VideoModelFamily = 'grok' | 'seedance' | 'kling';
+
+const VIDEO_MODEL_FAMILY_ORDER: VideoModelFamily[] = ['grok', 'seedance', 'kling'];
+
+const VIDEO_MODEL_FAMILY_META: Record<VideoModelFamily, {
+    label: string;
+    tag: string;
+    description: string;
+    accent: string;
+}> = {
+    grok: {
+        label: 'Grok',
+        tag: 'GIÁ RẺ',
+        description: 'Chi phí thấp, phù hợp test nhanh. Chất lượng thường ở 480P/720P và có thể không đẹp bằng Seedance/Kling.',
+        accent: 'from-emerald-400/20 to-cyan-400/10 border-emerald-400/30 text-emerald-200',
+    },
+    seedance: {
+        label: 'Seedance',
+        tag: 'HOT',
+        description: 'Chất lượng đẹp gần Kling, giá hợp lý, có thể hỗ trợ 1080P tùy phiên bản và server TST.',
+        accent: 'from-cyan-400/20 to-blue-500/10 border-audi-cyan/40 text-audi-cyan',
+    },
+    kling: {
+        label: 'Kling',
+        tag: 'BEST',
+        description: 'Độ hoàn thiện và chuyển động tốt hơn. Một số model Kling tính phí theo giây video.',
+        accent: 'from-audi-yellow/20 to-orange-500/10 border-audi-yellow/40 text-audi-yellow',
+    },
+};
+
+const getVideoModelFamily = (model?: Pick<AIModelOption, 'id' | 'name'> | null): VideoModelFamily => {
+    const text = `${model?.id || ''} ${model?.name || ''}`.toLowerCase();
+    if (text.includes('grok')) return 'grok';
+    if (text.includes('kling')) return 'kling';
+    return 'seedance';
+};
+
+const getModelsByFamily = (models: AIModelOption[], family: VideoModelFamily) =>
+    models.filter((model) => getVideoModelFamily(model) === family);
+
+const getFamilyPriceLabel = (models: AIModelOption[]) => {
+    if (models.length === 0) return 'Không khả dụng';
+    const prices = models.map((model) => model.price).filter((price) => Number.isFinite(price));
+    if (prices.length === 0) return 'Đang đồng bộ';
+    return `Từ ${Math.min(...prices)} VC`;
+};
+
+const getVideoModelHint = (model: AIModelOption) => {
+    const text = `${model.id} ${model.name}`.toLowerCase();
+    if (text.includes('grok')) return 'Tiết kiệm chi phí, hợp test ý tưởng nhanh.';
+    if (text.includes('kling')) return 'Ưu tiên chuyển động, độ hoàn thiện và độ mượt.';
+    if (text.includes('fast')) return 'Xử lý nhanh hơn, phù hợp thử nhiều biến thể.';
+    return 'Cân bằng chất lượng, tốc độ và chi phí.';
+};
+
 const SMART_TIPS = [
     { icon: Icons.Video, text: "🎥 MỚI: Hỗ trợ tạo video từ ảnh tĩnh với độ mượt mà cao." },
     { icon: Icons.Zap, text: "⚡ Tip: Mô hình Kling cho chuyển động chân thực và tự nhiên nhất." },
@@ -147,7 +202,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
   const [motionModelOptions, setMotionModelOptions] = useState<AIModelOption[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [resultVideo, setResultVideo] = useState<string | null>(null);
-  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
+  const [videoModelFamily, setVideoModelFamily] = useState<VideoModelFamily>('seedance');
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [isGeneratingScript, setIsGeneratingScript] = useState(false);
@@ -184,7 +239,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                   auditionPriceVcoin: row.audition_price_vcoin,
               }));
 
-              const liveVideoModels = getVideoModelSpecs(livePricing, models).map((spec) => ({
+              const liveVideoModels = getVideoModelSpecs(livePricing, filteredModels).map((spec) => ({
                   id: spec.modelId,
                   name: spec.displayName,
                   price: getVideoCostBreakdown({
@@ -198,7 +253,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                       pricingOverrides: overrideRows
                   }).vcoin
               }));
-              const liveMotionModels = getMotionModelSpecs(livePricing, models).map((spec) => ({
+              const liveMotionModels = getMotionModelSpecs(livePricing, filteredModels).map((spec) => ({
                   id: spec.modelId,
                   name: spec.displayName,
                   price: getMotionCostBreakdown({
@@ -212,7 +267,11 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
 
               if (liveVideoModels.length > 0) {
                   setVideoModelOptions(liveVideoModels);
-                  setVideoModel((current) => liveVideoModels.some((model) => model.id === current) ? current : liveVideoModels[0].id);
+                  setVideoModel((current) => {
+                      const next = liveVideoModels.some((model) => model.id === current) ? current : liveVideoModels[0].id;
+                      setVideoModelFamily(getVideoModelFamily(liveVideoModels.find((model) => model.id === next) || liveVideoModels[0]));
+                      return next;
+                  });
               }
               if (liveMotionModels.length > 0) {
                   setMotionModelOptions(liveMotionModels);
@@ -243,6 +302,13 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
       (activeMode === 'video_ai' ? videoModelOptions.length > 0 : motionModelOptions.length > 0);
   const lastAutoSelectedVideoModelRef = useRef<string | null>(null);
 
+  useEffect(() => {
+      const selected = videoModelOptions.find((model) => model.id === videoModel);
+      if (selected) {
+          setVideoModelFamily(getVideoModelFamily(selected));
+      }
+  }, [videoModel, videoModelOptions]);
+
   const currentCostBreakdown = activeMode === 'motion_control'
       ? getMotionCostBreakdown({
           modelId: motionModel,
@@ -266,6 +332,34 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
 
   const calculateCost = () => {
       return currentCostBreakdown.vcoin;
+  };
+
+  const applyVideoModelConfig = (modelId: string) => {
+      const entries = pricingEntries.filter((entry) => entry.model === modelId);
+      const preferredEntry = entries.find((entry) => entry.audio !== true) || entries[0];
+      if (!preferredEntry) return;
+
+      const nextServer = tstServerToUi(preferredEntry.server);
+      const nextSpeed = tstSpeedToUi(preferredEntry.speed || 'fast');
+      if (nextServer) setServer(nextServer);
+      if (nextSpeed) setSpeed(nextSpeed);
+      if (preferredEntry.resolution) setQuality(preferredEntry.resolution.toUpperCase());
+      if (preferredEntry.duration) setDuration(preferredEntry.duration.toUpperCase());
+      setSound(Boolean(preferredEntry.audio));
+  };
+
+  const selectVideoModel = (modelId: string) => {
+      setVideoModel(modelId);
+      lastAutoSelectedVideoModelRef.current = null;
+      applyVideoModelConfig(modelId);
+  };
+
+  const selectVideoFamily = (family: VideoModelFamily) => {
+      setVideoModelFamily(family);
+      const firstModelInFamily = getModelsByFamily(videoModelOptions, family)[0];
+      if (firstModelInFamily && firstModelInFamily.id !== videoModel) {
+          selectVideoModel(firstModelInFamily.id);
+      }
   };
 
   const getModelOptions = () => {
@@ -991,70 +1085,96 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
 
             {/* Settings Grid */}
             <div className="flex flex-col gap-6">
-              <div className={`space-y-3 relative ${isModelDropdownOpen ? 'z-50' : 'z-10'}`}>
+              <div className="space-y-3 relative z-10">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                   Mô hình AI
                 </label>
-                <button 
-                    onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
-                    disabled={(activeMode === 'video_ai' ? videoModelOptions.length === 0 : motionModelOptions.length === 0)}
-                    className="w-full flex items-center justify-between bg-[#1a1a24] border border-audi-cyan/30 rounded-xl px-4 py-3 text-sm font-bold text-white hover:border-audi-cyan transition-colors"
-                >
-                    {activeMode === 'video_ai' 
-                        ? (videoModelOptions.find(m => m.id === videoModel)?.name || 'TST unavailable')
-                        : (motionModelOptions.find(m => m.id === motionModel)?.name || 'TST unavailable')}
-                    <Icons.ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isModelDropdownOpen ? 'rotate-180' : ''}`} />
-                </button>
+                {activeMode === 'video_ai' ? (
+                    <div className="space-y-3">
+                        <div className="grid grid-cols-3 gap-2">
+                            {VIDEO_MODEL_FAMILY_ORDER.map((family) => {
+                                const meta = VIDEO_MODEL_FAMILY_META[family];
+                                const familyModels = getModelsByFamily(videoModelOptions, family);
+                                const isActive = videoModelFamily === family;
+                                return (
+                                    <button
+                                        key={family}
+                                        type="button"
+                                        onClick={() => selectVideoFamily(family)}
+                                        disabled={familyModels.length === 0}
+                                        className={`rounded-2xl border p-3 text-left transition-all ${
+                                            isActive
+                                                ? `bg-gradient-to-br ${meta.accent} shadow-[0_0_18px_rgba(34,211,238,0.16)]`
+                                                : 'border-white/10 bg-black/20 text-slate-400 hover:border-white/20 hover:bg-white/5'
+                                        } ${familyModels.length === 0 ? 'opacity-40 cursor-not-allowed' : ''}`}
+                                    >
+                                        <div className="flex items-center justify-between gap-1">
+                                            <span className="text-sm font-black text-white">{meta.label}</span>
+                                            <span className={`rounded-full px-1.5 py-0.5 text-[8px] font-black ${isActive ? 'bg-white/15 text-white' : 'bg-white/10 text-slate-300'}`}>
+                                                {meta.tag}
+                                            </span>
+                                        </div>
+                                        <div className="mt-1 text-[10px] font-bold text-audi-cyan">{getFamilyPriceLabel(familyModels)}</div>
+                                    </button>
+                                );
+                            })}
+                        </div>
 
-                {isModelDropdownOpen && (
-                    <>
-                    <div className="fixed inset-0 z-40" onClick={() => setIsModelDropdownOpen(false)}></div>
-                    <div className="absolute top-full left-0 right-0 mt-2 bg-[#1a1a24] border border-white/10 rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden max-h-[350px] overflow-y-auto custom-scrollbar">
-                        {(activeMode === 'video_ai' ? videoModelOptions : motionModelOptions).map(model => (
+                        <div className={`rounded-2xl border bg-gradient-to-br p-3 ${VIDEO_MODEL_FAMILY_META[videoModelFamily].accent}`}>
+                            <div className="text-[10px] leading-relaxed text-slate-200/90">
+                                {VIDEO_MODEL_FAMILY_META[videoModelFamily].description}
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            {getModelsByFamily(videoModelOptions, videoModelFamily).map((model) => (
+                                <button
+                                    key={model.id}
+                                    type="button"
+                                    onClick={() => {
+                                        selectVideoModel(model.id);
+                                    }}
+                                    className={`w-full rounded-xl border px-3 py-2.5 text-left transition-all ${
+                                        videoModel === model.id
+                                            ? 'border-audi-cyan bg-audi-cyan/10'
+                                            : 'border-white/10 bg-[#1a1a24] hover:border-white/20 hover:bg-white/5'
+                                    }`}
+                                >
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div>
+                                            <div className="flex items-center gap-2 text-sm font-black text-white">
+                                                {model.name}
+                                                {videoModel === model.id && <Icons.Check className="h-4 w-4 text-audi-cyan" />}
+                                            </div>
+                                            <div className="mt-0.5 text-[10px] text-slate-500">{getVideoModelHint(model)}</div>
+                                        </div>
+                                        <div className="flex shrink-0 items-center gap-1 rounded-full bg-audi-cyan/10 px-2 py-1 text-[10px] font-black text-audi-cyan">
+                                            Từ {model.price} VC <Icons.Gem className="h-3 w-3" />
+                                        </div>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                ) : (
+                    <div className="space-y-2">
+                        {motionModelOptions.map((model) => (
                             <button
                                 key={model.id}
-                                onClick={() => {
-                                    if (activeMode === 'video_ai') setVideoModel(model.id);
-                                    else setMotionModel(model.id);
-                                    setIsModelDropdownOpen(false);
-                                }}
-                                className={`flex flex-col p-3 transition-colors border-b border-white/5 last:border-0 ${
-                                    (activeMode === 'video_ai' ? videoModel === model.id : motionModel === model.id)
-                                    ? 'bg-audi-cyan/10'
-                                    : 'hover:bg-white/5'
+                                onClick={() => setMotionModel(model.id)}
+                                className={`w-full rounded-xl border px-3 py-2.5 text-left transition-all ${
+                                    motionModel === model.id
+                                        ? 'border-audi-cyan bg-audi-cyan/10'
+                                        : 'border-white/10 bg-[#1a1a24] hover:border-white/20 hover:bg-white/5'
                                 }`}
                             >
-                                <div className="flex items-center justify-between w-full mb-1.5">
-                                    <span className="font-bold text-sm text-white flex items-center gap-2">
-                                        {model.name}
-                                        {(activeMode === 'video_ai' ? videoModel === model.id : motionModel === model.id) && (
-                                            <Icons.Check className="w-4 h-4 text-audi-cyan" />
-                                        )}
-                                    </span>
-                                    <div className="flex items-center gap-1 text-xs font-bold text-audi-cyan whitespace-nowrap">
-                                        Từ {model.price} VC <Icons.Gem className="w-3 h-3" />
-                                    </div>
+                                <div className="flex items-center justify-between gap-3">
+                                    <span className="text-sm font-black text-white">{model.name}</span>
+                                    <span className="text-[10px] font-black text-audi-cyan">Từ {model.price} VC</span>
                                 </div>
-                                
-                                {model.badges && (
-                                    <div className="flex flex-wrap items-center gap-1.5">
-                                        {model.badges.map((badge, idx) => (
-                                            <span key={idx} className={`text-[9px] px-1.5 py-0.5 rounded flex items-center gap-1 ${
-                                                badge.type === 'blue' ? 'bg-blue-500/20 text-blue-400 font-bold' :
-                                                badge.type === 'server' ? 'bg-white/5 text-slate-400 border border-white/10' :
-                                                badge.type === 'speed' ? 'bg-audi-cyan/10 text-audi-cyan border border-audi-cyan/20' :
-                                                'bg-white/5 text-slate-400 border border-white/10'
-                                            }`}>
-                                                {badge.type === 'speed' && <Icons.Zap className="w-3 h-3" />}
-                                                {badge.text}
-                                            </span>
-                                        ))}
-                                    </div>
-                                )}
                             </button>
                         ))}
                     </div>
-                    </>
                 )}
               </div>
 

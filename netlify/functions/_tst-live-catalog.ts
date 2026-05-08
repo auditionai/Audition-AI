@@ -120,12 +120,27 @@ const parseVideoConfigKey = (configKey?: string) => {
   };
 };
 
+const getDefaultServerForModel = (modelId: string) =>
+  normalize(modelId).startsWith('grok') ? 'default' : 'fast';
+
+const serversMatchForModel = (modelId: string, entryServer?: string, requestedServer?: string) => {
+  const normalizedRequested = normalizeServer(requestedServer);
+  if (!normalizedRequested) return true;
+  const normalizedEntry = normalizeServer(entryServer);
+  if (normalizedEntry === normalizedRequested) return true;
+  if (normalize(modelId).startsWith('grok')) {
+    const grokServerAliases = new Set(['default', 'fast']);
+    return grokServerAliases.has(normalizedEntry) && grokServerAliases.has(normalizedRequested);
+  }
+  return false;
+};
+
 const normalizePricingEntryForValidation = (entry: TstProviderPricingEntry): TstProviderPricingEntry => {
   if (normalize(entry.model) === 'image-gpt-2') {
     const parsed = parseGptImage2ConfigKey(entry.config_key);
   return {
     ...entry,
-    server: String((entry as any).server || (entry as any).server_id || (entry as any).serverId || 'fast'),
+    server: String((entry as any).server || (entry as any).server_id || (entry as any).serverId || getDefaultServerForModel(entry.model)),
     resolution: parsed.resolution || entry.resolution,
     quality: parsed.quality || entry.quality || entry.resolution,
     speed: entry.speed || parsed.speed,
@@ -274,7 +289,7 @@ const findPricingMatch = (
     return true;
   }
 
-  if (serverId && normalizeServer(entry.server) !== normalizeServer(serverId)) return false;
+  if (!serversMatchForModel(modelId, entry.server, serverId)) return false;
   if (resolution && normalizeResolution(entry.resolution) !== normalizeResolution(resolution)) return false;
   if (quality && normalizeQuality(entry.quality) !== normalizeQuality(quality)) return false;
   if (duration && normalizeDuration(entry.duration) !== normalizeDuration(duration)) {

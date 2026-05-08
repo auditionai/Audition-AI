@@ -301,6 +301,9 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
       runtimeModels.length > 0 &&
       (activeMode === 'video_ai' ? videoModelOptions.length > 0 : motionModelOptions.length > 0);
   const lastAutoSelectedVideoModelRef = useRef<string | null>(null);
+  const selectedVideoSpec = getVideoModelSpecs(pricingEntries, runtimeModels).find((spec) => spec.modelId === videoModel);
+  const effectiveVideoAudio = activeMode === 'video_ai' && Boolean(selectedVideoSpec?.supportsAudio) && sound;
+  const defaultVideoServerId = videoModel.toLowerCase().startsWith('grok') ? 'default' : 'fast';
 
   useEffect(() => {
       const selected = videoModelOptions.find((model) => model.id === videoModel);
@@ -321,11 +324,11 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
         })
       : getVideoCostBreakdown({
           modelId: videoModel,
-          serverId: uiServerToTst(server) || 'fast',
+          serverId: uiServerToTst(server) || defaultVideoServerId,
           resolution: quality.toLowerCase(),
           duration: duration.toLowerCase(),
           speed: uiSpeedToTst(speed) || 'fast',
-          audio: sound,
+          audio: effectiveVideoAudio,
           pricingEntries,
           pricingOverrides
         });
@@ -377,14 +380,14 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
           };
       }
 
-      const videoSpec = getVideoModelSpecs(pricingEntries, runtimeModels).find((spec) => spec.modelId === videoModel);
+      const videoSpec = selectedVideoSpec;
       const compatibleResolutions = getVideoCompatibleResolutions({
           modelId: videoModel,
           pricingEntries,
           serverId: uiServerToTst(server),
           duration: duration.toLowerCase(),
           speed: uiSpeedToTst(speed) || 'fast',
-          audio: sound
+          audio: effectiveVideoAudio
       });
       const compatibleDurations = getVideoCompatibleDurations({
           modelId: videoModel,
@@ -392,7 +395,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
           serverId: uiServerToTst(server),
           resolution: quality.toLowerCase(),
           speed: uiSpeedToTst(speed) || 'fast',
-          audio: sound
+          audio: effectiveVideoAudio
       });
       return {
           showAspectRatio: (videoSpec?.aspectRatios || []).length > 0,
@@ -413,7 +416,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
           pricingEntries,
           duration: duration.toLowerCase(),
           speed: uiSpeedToTst(speed) || 'fast',
-          audio: sound
+          audio: effectiveVideoAudio
       });
 
       if (compatibleServers.length === 0) return null;
@@ -426,7 +429,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
               serverId: a,
               duration: duration.toLowerCase(),
               speed: uiSpeedToTst(speed) || 'fast',
-              audio: sound
+              audio: effectiveVideoAudio
           }).length;
           const resolutionsB = getVideoCompatibleResolutions({
               modelId: videoModel,
@@ -434,7 +437,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
               serverId: b,
               duration: duration.toLowerCase(),
               speed: uiSpeedToTst(speed) || 'fast',
-              audio: sound
+              audio: effectiveVideoAudio
           }).length;
 
           if (resolutionsA !== resolutionsB) {
@@ -446,14 +449,14 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
               pricingEntries,
               serverId: a,
               speed: uiSpeedToTst(speed) || 'fast',
-              audio: sound
+              audio: effectiveVideoAudio
           }).length;
           const durationsB = getVideoCompatibleDurations({
               modelId: videoModel,
               pricingEntries,
               serverId: b,
               speed: uiSpeedToTst(speed) || 'fast',
-              audio: sound
+              audio: effectiveVideoAudio
           }).length;
 
           if (durationsA !== durationsB) {
@@ -474,7 +477,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
           resolution: quality.toLowerCase(),
           duration: duration.toLowerCase(),
           speed: uiSpeedToTst(speed) || 'fast',
-          audio: sound
+          audio: effectiveVideoAudio
         })
       : getMotionCompatibleServers({
           modelId: motionModel,
@@ -490,7 +493,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
           serverId: uiServerToTst(server),
           resolution: quality.toLowerCase(),
           duration: duration.toLowerCase(),
-          audio: sound
+          audio: effectiveVideoAudio
         }).map((speedId) => ({ label: tstSpeedToUi(speedId), value: tstSpeedToUi(speedId) }))
       : getMotionCompatibleSpeeds({
           modelId: motionModel,
@@ -732,7 +735,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
 
     void (async () => {
       try {
-        const requestedServerId = uiServerToTst(server) || (activeMode === 'video_ai' ? 'fast' : 'vip2');
+        const requestedServerId = uiServerToTst(server) || (activeMode === 'video_ai' ? defaultVideoServerId : 'vip2');
         const requestedSpeedId = uiSpeedToTst(speed) || 'fast';
         const effectiveServerId = activeMode === 'video_ai'
             ? (() => {
@@ -742,7 +745,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                     resolution: quality.toLowerCase(),
                     duration: duration.toLowerCase(),
                     speed: requestedSpeedId,
-                    audio: sound
+                    audio: effectiveVideoAudio
                 });
                 return compatibleServers.includes(requestedServerId) ? requestedServerId : (compatibleServers[0] || requestedServerId);
             })()
@@ -763,7 +766,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                     serverId: effectiveServerId,
                     resolution: quality.toLowerCase(),
                     duration: duration.toLowerCase(),
-                    audio: sound
+                    audio: effectiveVideoAudio
                 });
                 return compatibleSpeeds.includes(requestedSpeedId) ? requestedSpeedId : (compatibleSpeeds[0] || requestedSpeedId);
             })()
@@ -801,7 +804,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                 speed: effectiveSpeedId || 'fast',
                 serverId: effectiveServerId,
                 keyframeImage: stagedKeyframeImage,
-                audio: sound,
+                audio: effectiveVideoAudio,
             }
             : {
                 recipeType: 'motion_generate_recipe_v1',
@@ -1482,11 +1485,11 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                           {modelOptions.durations.map(d => {
                               const durationPrice = getVideoCostBreakdown({
                                   modelId: videoModel,
-                                  serverId: uiServerToTst(server) || 'fast',
+                                  serverId: uiServerToTst(server) || defaultVideoServerId,
                                   resolution: quality.toLowerCase(),
                                   duration: d.toLowerCase(),
                                   speed: uiSpeedToTst(speed) || 'fast',
-                                  audio: sound,
+                                  audio: effectiveVideoAudio,
                                   pricingEntries,
                                   pricingOverrides
                                 }).vcoin;

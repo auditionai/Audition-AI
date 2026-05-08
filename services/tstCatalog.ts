@@ -805,6 +805,21 @@ const parseVideoConfigKey = (configKey?: string) => {
   };
 };
 
+const getDefaultServerForModel = (modelId: string) =>
+  normalizeModelId(modelId).startsWith('grok') ? 'default' : 'fast';
+
+const serversMatchForModel = (modelId: string, entryServer?: string, requestedServer?: string | null) => {
+  const normalizedRequested = requestedServer ? normalizeServer(requestedServer) : '';
+  if (!normalizedRequested) return true;
+  const normalizedEntry = normalizeServer(entryServer);
+  if (normalizedEntry === normalizedRequested) return true;
+  if (normalizeModelId(modelId).startsWith('grok')) {
+    const grokServerAliases = new Set(['default', 'fast']);
+    return grokServerAliases.has(normalizedEntry) && grokServerAliases.has(normalizedRequested);
+  }
+  return false;
+};
+
 const mapPricingEntry = (entry: any): TstPricingEntry => {
   const model = String(entry.model || '');
   const configKey = String(entry.config_key || '');
@@ -838,7 +853,7 @@ const mapPricingEntry = (entry: any): TstPricingEntry => {
 
   return {
     model,
-    server: String(entry.server || entry.server_id || entry.serverId || 'fast'),
+    server: String(entry.server || entry.server_id || entry.serverId || getDefaultServerForModel(model)),
     config_key: configKey,
     credits: Number(entry.credits || 0),
     resolution,
@@ -902,7 +917,7 @@ const getMatchingEntries = ({
     if (normalizedResolution && normalizeResolution(entry.resolution) !== normalizedResolution) return false;
     if (normalizedQuality && normalizeQuality(entry.quality) !== normalizedQuality) return false;
     if (normalizedSpeed && normalizeSpeed(entry.speed) !== normalizedSpeed) return false;
-    if (normalizedServer && normalizeServer(entry.server) !== normalizedServer) return false;
+    if (!serversMatchForModel(modelId, entry.server, normalizedServer)) return false;
     if (normalizedDuration && normalizeDuration(entry.duration) !== normalizedDuration) {
       const perSecondModel = isPerSecondBillingModel(modelId, 'video');
       if (!perSecondModel || normalizeDuration(entry.duration)) return false;
@@ -1540,13 +1555,13 @@ export const getVideoCostBreakdown = ({
 
   const exactEntry = pickExactEntry(modelEntries, [
     (entry) =>
-      normalizeServer(entry.server) === normalizedServer &&
+      serversMatchForModel(modelId, entry.server, normalizedServer) &&
       normalizeResolution(entry.resolution) === normalizedResolution &&
       matchesVideoDuration(entry) &&
       normalizeSpeed(entry.speed) === normalizedSpeed &&
       matchesAudioSelection(entry.audio, audio),
     (entry) =>
-      normalizeServer(entry.server) === normalizedServer &&
+      serversMatchForModel(modelId, entry.server, normalizedServer) &&
       normalizeResolution(entry.resolution) === normalizedResolution &&
       matchesVideoDuration(entry) &&
       normalizedSpeed === 'fast' &&

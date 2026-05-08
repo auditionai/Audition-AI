@@ -333,6 +333,9 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
   const calculateCost = () => {
       return currentCostBreakdown.vcoin;
   };
+  const perSecondCostLabel = currentCostBreakdown.billingUnit === 'second'
+      ? `${currentCostBreakdown.unitVcoin || 0} Vcoin/s × ${currentCostBreakdown.billedSeconds || 0}s = ${currentCostBreakdown.vcoin || 0} Vcoin`
+      : '';
 
   const applyVideoModelConfig = (modelId: string) => {
       const entries = pricingEntries.filter((entry) => entry.model === modelId);
@@ -1459,7 +1462,14 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
 
               <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-audi-yellow/20 to-orange-500/20 border border-white/10 p-3">
                   <div className="flex justify-between items-center relative z-10">
-                      <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Giá hiện tại</span>
+                      <div>
+                          <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Giá hiện tại</span>
+                          {currentCostBreakdown.billingUnit === 'second' && (
+                              <div className="mt-1 inline-flex items-center rounded-full border border-audi-yellow/30 bg-black/25 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-audi-yellow">
+                                  Kling tính theo giây
+                              </div>
+                          )}
+                      </div>
                       <div className="flex items-end gap-1">
                           <span className="text-xl font-black text-white font-game drop-shadow-md">
                               {calculateCost()}
@@ -1476,7 +1486,9 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                                   resolution: quality.toLowerCase(),
                                   duration: d.toLowerCase(),
                                   speed: uiSpeedToTst(speed) || 'fast',
-                                  pricingEntries
+                                  audio: sound,
+                                  pricingEntries,
+                                  pricingOverrides
                                 }).vcoin;
                           return (
                               <span key={d} className={duration === d ? 'text-white font-bold' : ''}>{d}: {durationPrice}VC</span>
@@ -1486,7 +1498,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                   ) : null}
                   {currentCostBreakdown.billingUnit === 'second' && (
                       <div className="mt-2 rounded-lg border border-audi-yellow/20 bg-audi-yellow/10 px-2 py-1.5 text-[10px] font-bold text-audi-yellow">
-                          Tính theo giây: {currentCostBreakdown.unitVcoin || 0} Vcoin/s × {currentCostBreakdown.billedSeconds || 0}s
+                          Tính theo giây: {perSecondCostLabel}
                           {activeMode === 'motion_control' && motionVideoDurationSeconds !== null
                               ? ` (video mẫu ${motionVideoDurationSeconds.toFixed(1)}s)`
                               : ''}

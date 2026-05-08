@@ -3,7 +3,6 @@ const normalizeModelId = (value: unknown) => String(value || '').trim().toLowerC
 export const getTstVideoGeneratePath = (model: unknown) => {
   const modelId = normalizeModelId(model);
   if (modelId.startsWith('seedance')) return '/seedance/generate';
-  if (modelId.startsWith('grok')) return '/grok/generate';
   return '/video/generate';
 };
 

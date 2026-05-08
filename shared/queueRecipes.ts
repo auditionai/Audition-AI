@@ -648,6 +648,11 @@ const buildProviderPromptWithinServerBudget = (
   return trimProviderPromptForServer(budgetedPrompt, serverId);
 };
 
+const promptContainsAny = (promptText: string, terms: string[]) => {
+  const normalized = promptText.toLowerCase();
+  return terms.some((term) => normalized.includes(term));
+};
+
 export const shouldLockSampleCompositionForMultiCharacter = (
   payload: Pick<ImageGenerateRecipePayload, 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage'>,
 ) =>
@@ -1546,6 +1551,59 @@ const buildReducedImageProviderPromptWithoutSample = (
   ], payload.serverId);
 };
 
+const buildGptPromptFirstProviderPromptWithoutSample = (
+  synthesizedPrompt: string,
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'styleImage' | 'aspectRatio' | 'serverId'>,
+  mergedNegativePrompt: string,
+) => {
+  const roleContract = buildImageRoleContract(payload);
+  const roleContractText = buildImageRoleContractText(payload);
+  const originalUserPrompt = getPrimaryUserRequestText(payload);
+  const normalizedSynthesizedPrompt = synthesizedPrompt?.trim() || originalUserPrompt;
+  const userPrompt = originalUserPrompt || normalizedSynthesizedPrompt || 'Create one new image from the uploaded references.';
+  const characterCount = Math.max(1, Math.floor(Number(payload.characterCount || getImageCharacterReferenceGroups(payload).length || 1)));
+  const compactNegativePrompt = trimPromptText(mergedNegativePrompt, MAX_NEGATIVE_PROMPT_LENGTH);
+  const userMentionsIdentity = promptContainsAny(userPrompt, [
+    'face', 'identity', 'facial', 'skin tone', 'complexion', 'outfit', 'clothing',
+    'khuon mat', 'khuôn mặt', 'mau da', 'màu da', 'trang phuc', 'trang phục',
+    'giu nguyen', 'giữ nguyên', 'khong thay doi', 'không thay đổi',
+  ]);
+  const userMentionsAnatomy = promptContainsAny(userPrompt, [
+    'anatomy', 'proportion', 'neck', 'shoulder', 'limb', 'hand', 'foot', 'body',
+    'co ', 'cổ ', 'vai', 'tay', 'chan', 'chân', 'ti le', 'tỉ lệ', 'ty le', 'tỷ lệ',
+  ]);
+  const userMentionsQuality = promptContainsAny(userPrompt, [
+    'quality', 'render', 'detail', 'sharp', 'natural', 'realistic', 'cinematic',
+    'chat luong', 'chất lượng', 'sac net', 'sắc nét', 'tu nhien', 'tự nhiên',
+  ]);
+  const userMentionsNegative = promptContainsAny(userPrompt, [
+    'avoid', 'do not', 'khong', 'không', 'tranh', 'tránh', 'negative',
+  ]);
+  const directorBackup = normalizedSynthesizedPrompt && normalizedSynthesizedPrompt !== userPrompt
+    ? `DIRECTOR JSON BACKUP (lower priority, use only when it does not override the user prompt):\n${normalizedSynthesizedPrompt}`
+    : '';
+
+  const systemSectionCandidates: Array<ProviderPromptBudgetSection | null> = [
+    { weight: 2, text: 'RENDER ONE NEW FINAL IMAGE. Never return any uploaded reference unchanged.' },
+    { weight: 2, text: `IMAGE ROLES: uploaded character image(s) are identity references. Keep them as the subject identity, not as background or style.` },
+    { weight: 2, text: `CHARACTER COUNT: EXACTLY ${characterCount}. One-to-one slot mapping is mandatory.` },
+    !userMentionsIdentity ? { weight: 2, text: 'IDENTITY LOCK: preserve the uploaded character face structure, facial details, skin tone, outfit colors, hair, accessories, makeup, and game-fashion identity.' } : null,
+    !userMentionsAnatomy ? { weight: 1, text: 'ANATOMY LOCK: preserve natural head-neck-shoulder proportions; do not elongate the neck; no extra limbs, duplicated hands, malformed fingers, or stiff doll posture.' } : null,
+    { weight: 1, text: roleContractText },
+    { weight: 1, text: `SHOT TYPE: ${roleContract.shotType}` },
+    { weight: 1, text: getShotAwareRenderProfile(roleContract.shotType) },
+    !userMentionsQuality ? { weight: 1, text: `QUALITY: ${IMAGE_QUALITY_BOOSTERS}` } : null,
+    directorBackup ? { weight: 1, text: directorBackup } : null,
+    !userMentionsNegative ? { weight: 1, text: `NEGATIVE: ${compactNegativePrompt}` } : null,
+  ];
+  const systemSections = systemSectionCandidates.filter((section): section is ProviderPromptBudgetSection => Boolean(section));
+
+  return buildProviderPromptWithinServerBudget([
+    { locked: true, text: `USER PROMPT - HIGHEST PRIORITY, keep this request intact:\n${userPrompt}` },
+    ...systemSections,
+  ], payload.serverId);
+};
+
 export const buildImageProviderPrompt = (
   synthesizedPrompt: string,
   payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio' | 'visionAnalysis' | 'serverId'>,
@@ -1559,6 +1617,10 @@ export const buildImageProviderPrompt = (
 
   if (payload.sampleImage) {
     return buildDetailedImageProviderPrompt(synthesizedPrompt, payload, mergedNegativePrompt);
+  }
+
+  if (normalizeValue(payload.modelId) === 'image-gpt-2') {
+    return buildGptPromptFirstProviderPromptWithoutSample(synthesizedPrompt, payload, mergedNegativePrompt);
   }
 
   return buildReducedImageProviderPromptWithoutSample(synthesizedPrompt, payload, mergedNegativePrompt);

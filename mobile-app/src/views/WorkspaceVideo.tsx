@@ -40,6 +40,53 @@ interface AIModelOption {
   price: number;
 }
 
+type VideoModelFamily = 'grok' | 'seedance' | 'kling';
+
+const VIDEO_MODEL_FAMILY_ORDER: VideoModelFamily[] = ['grok', 'seedance', 'kling'];
+
+const VIDEO_MODEL_FAMILY_META: Record<VideoModelFamily, { label: string; tag: string; description: string }> = {
+  grok: {
+    label: 'Grok',
+    tag: 'GIÁ RẺ',
+    description: 'Rẻ, hợp test nhanh. Chất lượng thường 480P/720P và có thể kém đẹp hơn.',
+  },
+  seedance: {
+    label: 'Seedance',
+    tag: 'HOT',
+    description: 'Đẹp gần Kling, giá hợp lý, có thể hỗ trợ 1080P tùy cấu hình TST.',
+  },
+  kling: {
+    label: 'Kling',
+    tag: 'BEST',
+    description: 'Hoàn thiện tốt hơn, chuyển động mượt hơn. Một số model tính phí theo giây.',
+  },
+};
+
+const getVideoModelFamily = (model?: Pick<AIModelOption, 'id' | 'name'> | null): VideoModelFamily => {
+  const text = `${model?.id || ''} ${model?.name || ''}`.toLowerCase();
+  if (text.includes('grok')) return 'grok';
+  if (text.includes('kling')) return 'kling';
+  return 'seedance';
+};
+
+const getModelsByFamily = (models: AIModelOption[], family: VideoModelFamily) =>
+  models.filter((model) => getVideoModelFamily(model) === family);
+
+const getFamilyPriceLabel = (models: AIModelOption[]) => {
+  if (models.length === 0) return 'Bảo trì';
+  const prices = models.map((model) => model.price).filter((price) => Number.isFinite(price));
+  if (prices.length === 0) return 'Đang đồng bộ';
+  return `Từ ${Math.min(...prices)} VC`;
+};
+
+const getVideoModelHint = (model: AIModelOption) => {
+  const text = `${model.id} ${model.name}`.toLowerCase();
+  if (text.includes('grok')) return 'Tiết kiệm chi phí, hợp test ý tưởng.';
+  if (text.includes('kling')) return 'Ưu tiên chuyển động và độ mượt.';
+  if (text.includes('fast')) return 'Xử lý nhanh hơn.';
+  return 'Cân bằng chất lượng và chi phí.';
+};
+
 const SMART_TIPS = [
   '🎥 MỚI: Hỗ trợ tạo video từ ảnh tĩnh với độ mượt mà cao.',
   '⚡ Tip: Mô hình Kling cho chuyển động chân thực và tự nhiên nhất.',
@@ -84,6 +131,7 @@ export function WorkspaceVideo() {
   const [runtimeModels, setRuntimeModels] = useState<TstRuntimeModel[]>([]);
   const [videoModelOptions, setVideoModelOptions] = useState<AIModelOption[]>([]);
   const [motionModelOptions, setMotionModelOptions] = useState<AIModelOption[]>([]);
+  const [videoModelFamily, setVideoModelFamily] = useState<VideoModelFamily>('seedance');
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [currentTipIdx, setCurrentTipIdx] = useState(0);
@@ -130,7 +178,7 @@ export function WorkspaceVideo() {
           auditionPriceVcoin: row.audition_price_vcoin,
         }));
 
-        const liveVideoModels = getVideoModelSpecs(livePricing, models).map((spec: any) => ({
+        const liveVideoModels = getVideoModelSpecs(livePricing, filteredModels).map((spec: any) => ({
           id: spec.modelId,
           name: spec.displayName,
           price: getVideoCostBreakdown({
@@ -145,7 +193,7 @@ export function WorkspaceVideo() {
           }).vcoin
         }));
 
-        const liveMotionModels = getMotionModelSpecs(livePricing, models).map((spec: any) => ({
+        const liveMotionModels = getMotionModelSpecs(livePricing, filteredModels).map((spec: any) => ({
           id: spec.modelId,
           name: spec.displayName,
           price: getMotionCostBreakdown({
@@ -159,7 +207,11 @@ export function WorkspaceVideo() {
 
         if (liveVideoModels.length > 0) {
           setVideoModelOptions(liveVideoModels);
-          setVideoModel((current) => liveVideoModels.some((m: AIModelOption) => m.id === current) ? current : liveVideoModels[0].id);
+          setVideoModel((current) => {
+            const next = liveVideoModels.some((m: AIModelOption) => m.id === current) ? current : liveVideoModels[0].id;
+            setVideoModelFamily(getVideoModelFamily(liveVideoModels.find((m: AIModelOption) => m.id === next) || liveVideoModels[0]));
+            return next;
+          });
         }
         if (liveMotionModels.length > 0) {
           setMotionModelOptions(liveMotionModels);
@@ -297,6 +349,38 @@ export function WorkspaceVideo() {
     && (activeMode === 'video_ai' ? videoModelOptions.length > 0 : motionModelOptions.length > 0);
 
   const calculateCost = () => currentCostBreakdown.vcoin;
+
+  useEffect(() => {
+    const selected = videoModelOptions.find((model) => model.id === videoModel);
+    if (selected) setVideoModelFamily(getVideoModelFamily(selected));
+  }, [videoModel, videoModelOptions]);
+
+  const applyVideoModelConfig = (modelId: string) => {
+    const entries = pricingEntries.filter((entry) => entry.model === modelId);
+    const preferredEntry = entries.find((entry) => entry.audio !== true) || entries[0];
+    if (!preferredEntry) return;
+
+    const nextServer = tstServerToUi(preferredEntry.server);
+    const nextSpeed = tstSpeedToUi(preferredEntry.speed || 'fast');
+    if (nextServer) setServer(nextServer);
+    if (nextSpeed) setSpeed(nextSpeed);
+    if (preferredEntry.resolution) setQuality(preferredEntry.resolution.toUpperCase());
+    if (preferredEntry.duration) setDuration(preferredEntry.duration.toUpperCase());
+    setSound(Boolean(preferredEntry.audio));
+  };
+
+  const selectVideoModel = (modelId: string) => {
+    setVideoModel(modelId);
+    applyVideoModelConfig(modelId);
+  };
+
+  const selectVideoFamily = (family: VideoModelFamily) => {
+    setVideoModelFamily(family);
+    const firstModelInFamily = getModelsByFamily(videoModelOptions, family)[0];
+    if (firstModelInFamily && firstModelInFamily.id !== videoModel) {
+      selectVideoModel(firstModelInFamily.id);
+    }
+  };
 
   const getVideoDurationSeconds = async (file: File) => {
     const objectUrl = URL.createObjectURL(file);
@@ -590,18 +674,51 @@ export function WorkspaceVideo() {
               </div>
             )}
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <h3 className="text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider ml-1">Model</h3>
+              <div className="col-span-2 space-y-3">
+                <h3 className="text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider ml-1">Model AI</h3>
+                <div className="grid grid-cols-3 gap-2">
+                  {VIDEO_MODEL_FAMILY_ORDER.map((family) => {
+                    const meta = VIDEO_MODEL_FAMILY_META[family];
+                    const familyModels = getModelsByFamily(videoModelOptions, family);
+                    const isActive = videoModelFamily === family;
+                    return (
+                      <button
+                        key={family}
+                        type="button"
+                        disabled={familyModels.length === 0}
+                        onClick={() => selectVideoFamily(family)}
+                        className={`rounded-[16px] border p-2 text-left transition-all ${
+                          isActive
+                            ? 'border-purple-300 bg-purple-50 text-purple-800 dark:border-purple-500/40 dark:bg-purple-500/15 dark:text-white'
+                            : 'border-gray-100 bg-white text-gray-500 dark:border-zinc-800 dark:bg-[#18181B] dark:text-zinc-400'
+                        } ${familyModels.length === 0 ? 'opacity-40' : ''}`}
+                      >
+                        <div className="text-[12px] font-black">{meta.label}</div>
+                        <div className="mt-1 inline-flex rounded-full bg-black/5 px-1.5 py-0.5 text-[8px] font-black dark:bg-white/10">
+                          {meta.tag}
+                        </div>
+                        <div className="mt-1 text-[9px] font-black text-cyan-600 dark:text-cyan-300">{getFamilyPriceLabel(familyModels)}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="rounded-[18px] border border-cyan-100 bg-cyan-50/70 p-3 text-[11px] font-medium leading-relaxed text-cyan-800 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-100">
+                  {VIDEO_MODEL_FAMILY_META[videoModelFamily].description}
+                </div>
                 <div className="flex flex-col gap-2">
-                  {videoModelOptions.map((m: AIModelOption) => (
+                  {getModelsByFamily(videoModelOptions, videoModelFamily).map((m: AIModelOption) => (
                     <button
                       key={m.id}
-                      onClick={() => setVideoModel(m.id)}
-                      className={`text-xs p-2.5 rounded-[12px] font-medium transition-all text-left ${
-                        videoModel === m.id ? 'bg-purple-50 dark:bg-purple-500/10 text-purple-700 border border-purple-200 dark:border-purple-500/30' : 'bg-white dark:bg-[#18181B] border border-gray-100 text-gray-500 dark:text-zinc-400'
+                      onClick={() => selectVideoModel(m.id)}
+                      className={`rounded-[14px] border p-3 text-left transition-all ${
+                        videoModel === m.id ? 'bg-purple-50 dark:bg-purple-500/10 text-purple-700 border-purple-200 dark:border-purple-500/30' : 'bg-white dark:bg-[#18181B] border-gray-100 dark:border-zinc-800 text-gray-500 dark:text-zinc-400'
                       }`}
                     >
-                      {m.name}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-black">{m.name}</span>
+                        <span className="text-[10px] font-black text-cyan-600 dark:text-cyan-300">Từ {m.price} VC</span>
+                      </div>
+                      <div className="mt-1 text-[10px] text-gray-400 dark:text-zinc-500">{getVideoModelHint(m)}</div>
                     </button>
                   ))}
                 </div>

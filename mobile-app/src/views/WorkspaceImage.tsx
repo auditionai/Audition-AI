@@ -49,6 +49,44 @@ import {
 type GenMode = 'single' | 'couple' | 'trio' | 'squad';
 type Stage = 'input' | 'submitting';
 
+const IMAGE_MODEL_OPTIONS: Array<{
+  tier: TstGenerationTier;
+  label: string;
+  tag: string;
+  title: string;
+  description: string;
+  icon: typeof Zap;
+  accent: string;
+}> = [
+  {
+    tier: 'gpt',
+    label: 'GPT',
+    tag: 'BEST',
+    title: 'GPT Image 2',
+    description: 'ChatGPT mới nhất, hiểu prompt tốt hơn và hoàn thiện ảnh tốt nhất.',
+    icon: Sparkles,
+    accent: 'from-fuchsia-500 via-violet-500 to-cyan-400',
+  },
+  {
+    tier: 'flash',
+    label: 'Flash',
+    tag: 'GIÁ RẺ',
+    title: 'Nano Banana 2',
+    description: 'Gemini Flash, nhanh và tiết kiệm, phù hợp ảnh cơ bản.',
+    icon: Zap,
+    accent: 'from-cyan-400 via-sky-500 to-blue-500',
+  },
+  {
+    tier: 'pro',
+    label: 'Pro',
+    tag: 'HOT',
+    title: 'Nano Banana Pro',
+    description: 'Gemini Pro thông minh hơn Flash, chi tiết hơn và hỗ trợ 4K.',
+    icon: Crown,
+    accent: 'from-amber-300 via-orange-500 to-fuchsia-500',
+  },
+];
+
 interface CharacterInput {
   id: number;
   bodyImage: string | null;
@@ -278,6 +316,11 @@ export function WorkspaceImage() {
     && pricingEntries.some((e) => e.model.trim().toLowerCase() === getGenerationModelId('pro'));
   const isGptAvailable = runtimeImageModelIds.has(getGenerationModelId('gpt'))
     && pricingEntries.some((e) => e.model.trim().toLowerCase() === getGenerationModelId('gpt'));
+  const imageModelAvailability: Record<TstGenerationTier, boolean> = {
+    flash: isFlashAvailable,
+    pro: isProAvailable,
+    gpt: isGptAvailable,
+  };
   const isCatalogReady = !catalogLoading && !catalogError && pricingEntries.length > 0 && runtimeModels.length > 0;
   const hasCharacterImagesReady = characters.every((char) => !!char.bodyImage);
   const isAnyCharacterAssistRunning = characters.some((char) => !!assistLoadingByCharId[char.id]);
@@ -1116,34 +1159,42 @@ export function WorkspaceImage() {
         {/* Model Toggle */}
         <div className="space-y-2">
           <h3 className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider ml-1">Model AI</h3>
-          <div className="grid grid-cols-3 gap-2">
-            <button
-              onClick={() => isFlashAvailable && setAiModel('flash')}
-              disabled={!isFlashAvailable}
-              className={`py-3 rounded-2xl text-sm font-medium transition-all ${
-                aiModel === 'flash' ? 'bg-gray-900 text-white shadow-md' : 'bg-white dark:bg-[#18181B] text-gray-500 dark:text-zinc-400 border border-gray-100 dark:border-zinc-800'
-              } ${!isFlashAvailable ? 'opacity-40 cursor-not-allowed' : ''}`}
-            >
-              <Zap className="w-4 h-4 mx-auto mb-1" /> Flash
-            </button>
-            <button
-              onClick={() => isProAvailable && setAiModel('pro')}
-              disabled={!isProAvailable}
-              className={`py-3 rounded-2xl text-sm font-medium transition-all ${
-                aiModel === 'pro' ? 'bg-gray-900 text-white shadow-md' : 'bg-white dark:bg-[#18181B] text-gray-500 dark:text-zinc-400 border border-gray-100 dark:border-zinc-800'
-              } ${!isProAvailable ? 'opacity-40 cursor-not-allowed' : ''}`}
-            >
-              <Crown className="w-4 h-4 mx-auto mb-1" /> Pro
-            </button>
-            <button
-              onClick={() => isGptAvailable && setAiModel('gpt')}
-              disabled={!isGptAvailable}
-              className={`py-3 rounded-2xl text-sm font-medium transition-all ${
-                aiModel === 'gpt' ? 'bg-gray-900 text-white shadow-md' : 'bg-white dark:bg-[#18181B] text-gray-500 dark:text-zinc-400 border border-gray-100 dark:border-zinc-800'
-              } ${!isGptAvailable ? 'opacity-40 cursor-not-allowed' : ''}`}
-            >
-              <Sparkles className="w-4 h-4 mx-auto mb-1" /> GPT
-            </button>
+          <div className="grid gap-2">
+            {IMAGE_MODEL_OPTIONS.map((model) => {
+              const Icon = model.icon;
+              const available = imageModelAvailability[model.tier];
+              const selected = aiModel === model.tier;
+              return (
+                <button
+                  key={model.tier}
+                  onClick={() => available && setAiModel(model.tier)}
+                  disabled={!available}
+                  className={`relative overflow-hidden rounded-[18px] border p-3 text-left transition-all ${
+                    selected
+                      ? 'border-cyan-300 bg-cyan-50 shadow-sm dark:border-cyan-400/70 dark:bg-cyan-500/10'
+                      : 'border-gray-100 bg-white text-gray-500 dark:border-zinc-800 dark:bg-[#18181B] dark:text-zinc-400'
+                  } ${!available ? 'cursor-not-allowed opacity-40' : ''}`}
+                >
+                  <div className={`absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r ${model.accent}`} />
+                  <div className="flex items-start gap-3">
+                    <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br ${model.accent} text-white shadow-sm`}>
+                      <Icon className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-sm font-black ${selected ? 'text-gray-950 dark:text-white' : 'text-gray-800 dark:text-zinc-100'}`}>{model.label}</span>
+                        <span className={`rounded-full bg-gradient-to-r ${model.accent} px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-white`}>
+                          {model.tag}
+                        </span>
+                        {selected && <span className="ml-auto text-xs font-black text-cyan-500">✓</span>}
+                      </div>
+                      <div className="mt-1 text-[11px] font-bold text-gray-700 dark:text-zinc-200">{model.title}</div>
+                      <p className="mt-1 text-[10px] leading-relaxed text-gray-500 dark:text-zinc-500">{model.description}</p>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
 

@@ -31,10 +31,42 @@ import type { ModelPricing } from '../services/economyService';
 
 const MAX_REFERENCE_IMAGES = 4;
 const ASPECT_RATIOS = ['1:1', '9:16', '16:9', '3:4', '4:3', '2:3', '3:2'];
-const MODEL_TABS: Array<{ tier: TstGenerationTier; label: string; icon: typeof Zap }> = [
-  { tier: 'flash', label: 'Flash', icon: Zap },
-  { tier: 'pro', label: 'Pro', icon: Crown },
-  { tier: 'gpt', label: 'GPT', icon: Bot },
+const MODEL_TABS: Array<{
+  tier: TstGenerationTier;
+  label: string;
+  tag: string;
+  title: string;
+  description: string;
+  icon: typeof Zap;
+  accent: string;
+}> = [
+  {
+    tier: 'gpt',
+    label: 'GPT',
+    tag: 'BEST',
+    title: 'GPT Image 2',
+    description: 'ChatGPT mới nhất, hiểu prompt tốt hơn và hoàn thiện ảnh tốt nhất.',
+    icon: Bot,
+    accent: 'from-fuchsia-500 via-violet-500 to-cyan-400',
+  },
+  {
+    tier: 'flash',
+    label: 'Flash',
+    tag: 'GIÁ RẺ',
+    title: 'Nano Banana 2',
+    description: 'Gemini Flash, nhanh và tiết kiệm, phù hợp ảnh cơ bản.',
+    icon: Zap,
+    accent: 'from-cyan-400 via-sky-500 to-blue-500',
+  },
+  {
+    tier: 'pro',
+    label: 'Pro',
+    tag: 'HOT',
+    title: 'Nano Banana Pro',
+    description: 'Gemini Pro thông minh hơn Flash, chi tiết hơn và hỗ trợ 4K.',
+    icon: Crown,
+    accent: 'from-amber-300 via-orange-500 to-fuchsia-500',
+  },
 ];
 
 const readFileAsDataUrl = (file: File) =>
@@ -391,22 +423,40 @@ export function WorkspacePromptImage() {
 
         <div className="space-y-2">
           <h3 className="ml-1 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-zinc-500">MODEL AI</h3>
-          <div className="grid grid-cols-3 gap-2">
-            {MODEL_TABS.map(({ tier, label, icon: Icon }) => (
-              <button
-                key={tier}
-                type="button"
-                onClick={() => setAiModel(tier)}
-                className={`rounded-2xl py-2.5 text-sm font-medium transition-all ${
-                  aiModel === tier
-                    ? 'bg-gray-900 text-white shadow-md dark:bg-white dark:text-gray-950'
-                    : 'border border-gray-100 bg-white text-gray-500 dark:border-zinc-800 dark:bg-[#18181B] dark:text-zinc-400'
-                }`}
-              >
-                <Icon className="mx-auto mb-1 h-4 w-4" />
-                {label}
-              </button>
-            ))}
+          <div className="grid gap-2">
+            {MODEL_TABS.map(({ tier, label, tag, title, description, icon: Icon, accent }) => {
+              const selected = aiModel === tier;
+              return (
+                <button
+                  key={tier}
+                  type="button"
+                  onClick={() => setAiModel(tier)}
+                  className={`relative overflow-hidden rounded-[18px] border p-3 text-left transition-all ${
+                    selected
+                      ? 'border-cyan-300 bg-cyan-50 shadow-sm dark:border-cyan-400/70 dark:bg-cyan-500/10'
+                      : 'border-gray-100 bg-white text-gray-500 dark:border-zinc-800 dark:bg-[#18181B] dark:text-zinc-400'
+                  }`}
+                >
+                  <div className={`absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r ${accent}`} />
+                  <div className="flex items-start gap-3">
+                    <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br ${accent} text-white shadow-sm`}>
+                      <Icon className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-sm font-black ${selected ? 'text-gray-950 dark:text-white' : 'text-gray-800 dark:text-zinc-100'}`}>{label}</span>
+                        <span className={`rounded-full bg-gradient-to-r ${accent} px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-white`}>
+                          {tag}
+                        </span>
+                        {selected && <span className="ml-auto text-xs font-black text-cyan-500">✓</span>}
+                      </div>
+                      <div className="mt-1 text-[11px] font-bold text-gray-700 dark:text-zinc-200">{title}</div>
+                      <p className="mt-1 text-[10px] leading-relaxed text-gray-500 dark:text-zinc-500">{description}</p>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
 

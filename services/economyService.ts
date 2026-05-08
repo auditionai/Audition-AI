@@ -107,6 +107,12 @@ export type SystemAnnouncementConfig = {
     updatedAt?: string;
 };
 
+export type FeatureMaintenanceConfig = {
+    disabledFeatureIds: string[];
+    message?: string;
+    updatedAt?: string;
+};
+
 const DEFAULT_PAYMENT_GATEWAY_CONFIG: PaymentGatewayConfig = {
     gateway: 'sepay',
 };
@@ -116,6 +122,11 @@ export const DEFAULT_SYSTEM_ANNOUNCEMENT_CONFIG: SystemAnnouncementConfig = {
     title: 'Thông báo từ AUDITION AI',
     message: 'Chào mừng bạn quay lại AUDITION AI.',
     variant: 'info',
+};
+
+export const DEFAULT_FEATURE_MAINTENANCE_CONFIG: FeatureMaintenanceConfig = {
+    disabledFeatureIds: [],
+    message: 'Tính năng đang bảo trì. Vui lòng quay lại sau.',
 };
 
 let userProfileCache: (TimedCache<UserProfile> & { userId: string }) | null = null;
@@ -135,6 +146,7 @@ let checkinStatusAttentionCleanup: (() => void) | null = null;
 let lastCheckinStatusAttentionAt = 0;
 let modelPricingCache: TimedCache<ModelPricing[]> | null = null;
 let tstServerAvailabilityCache: TimedCache<TstServerAvailabilityConfig> | null = null;
+let featureMaintenanceCache: TimedCache<FeatureMaintenanceConfig> | null = null;
 const DEFAULT_MAINTENANCE_MODE = {
     isActive: false,
     message: "Há»‡ thá»‘ng Ä‘ang báº£o trÃ¬, vui lÃ²ng quay láº¡i sau."
@@ -170,6 +182,10 @@ export const invalidateModelPricingCache = () => {
 
 export const invalidateTstServerAvailabilityCache = () => {
     tstServerAvailabilityCache = null;
+};
+
+export const invalidateFeatureMaintenanceCache = () => {
+    featureMaintenanceCache = null;
 };
 
 export const invalidateMaintenanceModeCache = () => {
@@ -2138,6 +2154,78 @@ export const saveMaintenanceMode = async (isActive: boolean, message: string) =>
         console.error("Save Maintenance Mode Error", e);
         return { success: false, error: e };
     }
+};
+
+// --- FEATURE MAINTENANCE ---
+
+const normalizeFeatureMaintenanceConfig = (value: any): FeatureMaintenanceConfig => {
+    const disabledFeatureIds = Array.isArray(value?.disabledFeatureIds)
+        ? value.disabledFeatureIds
+            .map((entry: any) => String(entry || '').trim())
+            .filter(Boolean)
+        : [];
+
+    return {
+        disabledFeatureIds: Array.from(new Set(disabledFeatureIds)),
+        message: String(value?.message || DEFAULT_FEATURE_MAINTENANCE_CONFIG.message || '').trim() || DEFAULT_FEATURE_MAINTENANCE_CONFIG.message,
+        updatedAt: typeof value?.updatedAt === 'string' ? value.updatedAt : undefined,
+    };
+};
+
+export const getFeatureMaintenanceConfig = async (options?: { force?: boolean }): Promise<FeatureMaintenanceConfig> => {
+    if (!supabase) return DEFAULT_FEATURE_MAINTENANCE_CONFIG;
+    if (!options?.force && featureMaintenanceCache && featureMaintenanceCache.expiresAt > Date.now()) {
+        return featureMaintenanceCache.value;
+    }
+
+    try {
+        const { data, error } = await supabase
+            .from('system_settings')
+            .select('value')
+            .eq('key', 'feature_maintenance')
+            .maybeSingle();
+        if (error) throw error;
+
+        const normalized = normalizeFeatureMaintenanceConfig(data?.value);
+        featureMaintenanceCache = {
+            value: normalized,
+            expiresAt: Date.now() + MAINTENANCE_MODE_CACHE_TTL_MS,
+        };
+        return normalized;
+    } catch (e) {
+        console.error("Get Feature Maintenance Config Error", e);
+        return DEFAULT_FEATURE_MAINTENANCE_CONFIG;
+    }
+};
+
+export const saveFeatureMaintenanceConfig = async (config: FeatureMaintenanceConfig) => {
+    if (!supabase) return { success: false, error: "No Database" };
+    try {
+        const normalized = normalizeFeatureMaintenanceConfig(config);
+        const payload: FeatureMaintenanceConfig = {
+            ...normalized,
+            updatedAt: new Date().toISOString(),
+        };
+        const { error } = await supabase.from('system_settings').upsert(
+            { key: 'feature_maintenance', value: payload },
+            { onConflict: 'key' }
+        );
+
+        if (error) throw error;
+        featureMaintenanceCache = {
+            value: payload,
+            expiresAt: Date.now() + MAINTENANCE_MODE_CACHE_TTL_MS,
+        };
+        return { success: true };
+    } catch (e: any) {
+        console.error("Save Feature Maintenance Config Error", e);
+        return { success: false, error: e?.message || e };
+    }
+};
+
+export const isFeatureInMaintenance = (config: FeatureMaintenanceConfig | null | undefined, featureId?: string | null) => {
+    if (!featureId) return false;
+    return !!config?.disabledFeatureIds?.includes(featureId);
 };
 
 // --- PAYMENT GATEWAY ---

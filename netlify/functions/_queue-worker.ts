@@ -19,6 +19,7 @@ import {
   getImageRenderReferenceSources,
   getRecipeValidationPayload,
   isQueueRecipePayload,
+  trimProviderPromptForServer,
   type QueueProcessingStage,
   type QueueProgressLogEntry,
   type QueueNotificationMediaEntry,
@@ -136,7 +137,7 @@ const PROVIDER_FAILURE_GRACE_SECONDS = parsePositiveIntEnv('QUEUE_PROVIDER_FAILU
 const MAX_DISPATCH_RETRIES = 6;
 const MAX_POLL_FAILURES = 8;
 const MAX_PROCESSING_AGE_MS = 30 * 60 * 1000;
-const MAX_VIDEO_PROCESSING_AGE_MS = 120 * 60 * 1000;
+const MAX_VIDEO_PROCESSING_AGE_MS = Number.POSITIVE_INFINITY;
 const MAX_SINGLE_IMAGE_PROCESSING_AGE_MS = 30 * 60 * 1000;
 const MAX_COUPLE_IMAGE_PROCESSING_AGE_MS = 30 * 60 * 1000;
 const MAX_GROUP3_IMAGE_PROCESSING_AGE_MS = 30 * 60 * 1000;
@@ -1012,11 +1013,11 @@ const getProcessingTimeoutUserMessage = (
   job: Pick<QueueJobRow, 'queue_kind' | 'tool_id'>,
   payload?: QueueJobRow['queue_payload'],
 ) => {
-  const timeoutMinutes = Math.ceil(getProviderProcessingTimeoutMs(job, payload) / 60000);
   if (job.queue_kind === 'video_generate' || job.queue_kind === 'motion_generate') {
-    return `Video đã quá thời gian chờ ${timeoutMinutes} phút. Vui lòng tạo lại video mới.`;
+    return 'Video chỉ thất bại khi provider TST trả về trạng thái lỗi hoặc thất bại.';
   }
 
+  const timeoutMinutes = Math.ceil(getProviderProcessingTimeoutMs(job, payload) / 60000);
   return `Server tạo ảnh đang quá tải. Job đã chờ quá ${timeoutMinutes} phút nên hệ thống tự dừng. Vui lòng chọn server khác rồi tạo lại.`;
 };
 
@@ -1099,6 +1100,9 @@ const submitProviderJob = async (queueKind: string, providerPayload: Record<stri
   }
 
   const outboundPayload = normalizeTstOutboundPayload(stripInternalQueueMeta(providerPayload));
+  if (queueKind === 'image_generate' && typeof outboundPayload.prompt === 'string') {
+    outboundPayload.prompt = trimProviderPromptForServer(outboundPayload.prompt, String(outboundPayload.server_id || ''));
+  }
   assertRequiredProviderMediaPayload(queueKind, outboundPayload);
   logQueueWorkerEvent('Dispatching provider payload.', {
     queueKind,

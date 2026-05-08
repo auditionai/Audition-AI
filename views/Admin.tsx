@@ -41,6 +41,9 @@ import {
     getPaymentGatewayConfig,
     savePaymentGatewayConfig,
     PaymentGateway,
+    getFeatureMaintenanceConfig,
+    saveFeatureMaintenanceConfig,
+    FeatureMaintenanceConfig,
     getSystemAnnouncementConfig,
     saveSystemAnnouncementConfig,
     SystemAnnouncementConfig,
@@ -67,6 +70,7 @@ import {
     type TstServerAvailabilityConfig
 } from '../services/tstCatalog';
 import { Icons } from '../components/Icons';
+import { APP_CONFIG } from '../constants';
 import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, GeneratedImage, Language, StylePreset, HistoryItem, AdminQueueJob, AdminQueueSummary, AdminQueueJobDetail, AdminQueueInputMedia, AdminQueueMediaSection } from '../types';
 
 interface AdminProps {
@@ -451,6 +455,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [editingStyle, setEditingStyle] = useState<StylePreset | null>(null);
   
   const [maintenanceMode, setMaintenanceMode] = useState({ isActive: false, message: "Hệ thống đang bảo trì, vui lòng quay lại sau." });
+  const [featureMaintenance, setFeatureMaintenance] = useState<FeatureMaintenanceConfig>({
+      disabledFeatureIds: [],
+      message: 'Tính năng đang bảo trì. Vui lòng quay lại sau.',
+  });
   const [paymentGateway, setPaymentGateway] = useState<PaymentGateway>('sepay');
   const [systemAnnouncement, setSystemAnnouncement] = useState<SystemAnnouncementConfig>({
       isActive: false,
@@ -636,6 +644,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
       const maintenance = await getMaintenanceMode();
       setMaintenanceMode(maintenance);
+
+      const featureMaintenanceConfig = await getFeatureMaintenanceConfig();
+      setFeatureMaintenance(featureMaintenanceConfig);
 
       const paymentGatewayConfig = await getPaymentGatewayConfig();
       setPaymentGateway(paymentGatewayConfig.gateway);
@@ -1503,6 +1514,30 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           showToast('Lỗi lưu thông báo hệ thống: ' + result.error, 'error');
       }
   }
+
+  const handleToggleFeatureMaintenance = (featureId: string) => {
+      setFeatureMaintenance((current) => {
+          const currentIds = new Set(current.disabledFeatureIds || []);
+          if (currentIds.has(featureId)) {
+              currentIds.delete(featureId);
+          } else {
+              currentIds.add(featureId);
+          }
+          return {
+              ...current,
+              disabledFeatureIds: Array.from(currentIds),
+          };
+      });
+  };
+
+  const handleSaveFeatureMaintenance = async () => {
+      const result = await saveFeatureMaintenanceConfig(featureMaintenance);
+      if (result.success) {
+          showToast('Đã lưu cấu hình bảo trì chức năng!', 'success');
+      } else {
+          showToast('Lỗi lưu bảo trì chức năng: ' + result.error, 'error');
+      }
+  };
 
   const handleSavePromotion = async () => {
       if (editingPromotion) {
@@ -3091,6 +3126,68 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   placeholder="Hệ thống đang bảo trì, vui lòng quay lại sau."
                               />
                           </div>
+                      </div>
+                  </div>
+
+                  {/* Feature Maintenance Configuration */}
+                  <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
+                      <div className="flex justify-between items-center mb-4">
+                          <div>
+                              <h3 className="font-bold text-lg text-white flex items-center gap-2">
+                                  <Icons.Lock className="w-5 h-5 text-yellow-400" />
+                                  Bảo trì từng chức năng
+                              </h3>
+                              <p className="text-xs text-slate-500 mt-1">
+                                  Người dùng thường sẽ thấy nhãn Đang bảo trì và không mở được chức năng. Admin vẫn truy cập bình thường.
+                              </p>
+                          </div>
+                          <button
+                              onClick={handleSaveFeatureMaintenance}
+                              className="px-4 py-2 bg-yellow-500/20 text-yellow-300 font-bold rounded-lg text-sm hover:bg-yellow-500 hover:text-black transition-colors border border-yellow-500/30"
+                          >
+                              Lưu Bảo Trì
+                          </button>
+                      </div>
+
+                      <div className="mb-4">
+                          <label className="text-xs text-slate-400 mb-1 block">Thông báo khi người dùng mở chức năng đang bảo trì</label>
+                          <input
+                              type="text"
+                              value={featureMaintenance.message || ''}
+                              onChange={(e) => setFeatureMaintenance((current) => ({ ...current, message: e.target.value }))}
+                              className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-white"
+                              placeholder="Tính năng đang bảo trì. Vui lòng quay lại sau."
+                          />
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                          {APP_CONFIG.main_features.map((feature) => {
+                              const isLocked = featureMaintenance.disabledFeatureIds?.includes(feature.id);
+                              return (
+                                  <button
+                                      key={feature.id}
+                                      onClick={() => handleToggleFeatureMaintenance(feature.id)}
+                                      className={`rounded-2xl border p-4 text-left transition-all ${
+                                          isLocked
+                                              ? 'border-yellow-400 bg-yellow-500/15 shadow-[0_0_24px_rgba(234,179,8,0.16)]'
+                                              : 'border-white/10 bg-black/20 hover:border-white/25'
+                                      }`}
+                                  >
+                                      <div className="flex items-start justify-between gap-3">
+                                          <div>
+                                              <div className="font-black text-white">{feature.name.vi}</div>
+                                              <div className="mt-1 text-[10px] uppercase tracking-widest text-slate-500">{feature.id}</div>
+                                          </div>
+                                          <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-black uppercase ${
+                                              isLocked ? 'bg-yellow-400 text-black' : 'bg-emerald-500/15 text-emerald-300'
+                                          }`}>
+                                              {isLocked ? 'Bảo trì' : 'Đang mở'}
+                                          </span>
+                                      </div>
+                                      <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-slate-400">{feature.description.vi}</p>
+                                  </button>
+                              );
+                          })}
                       </div>
                   </div>
 

@@ -25,11 +25,15 @@ import {
   getAdminQueueJobDetail,
   getAdminQueueJobs,
   getAdminStats,
+  getFeatureMaintenanceConfig,
   getMaintenanceMode,
   runAdminQueueReconcile,
+  saveFeatureMaintenanceConfig,
   saveMaintenanceMode,
   stopAdminQueueJob,
 } from '../services/economyService';
+import { APP_CONFIG } from '../constants';
+import type { FeatureMaintenanceConfig } from '../services/economyService';
 import type { AdminQueueInputMedia, AdminQueueJob, AdminQueueJobDetail, AdminQueueMediaSection, AdminQueueSummary, Transaction } from '../types';
 
 type AdminTab = 'overview' | 'queue' | 'transactions' | 'users';
@@ -243,20 +247,27 @@ export function AdminView() {
   const [queueStuckOnly, setQueueStuckOnly] = useState(false);
   const [userSearch, setUserSearch] = useState('');
   const [maintenance, setMaintenance] = useState({ isActive: false, message: '' });
+  const [featureMaintenance, setFeatureMaintenance] = useState<FeatureMaintenanceConfig>({
+    disabledFeatureIds: [],
+    message: 'Tính năng đang bảo trì. Vui lòng quay lại sau.',
+  });
   const [savingMaintenance, setSavingMaintenance] = useState(false);
+  const [savingFeatureMaintenance, setSavingFeatureMaintenance] = useState(false);
 
   const loadStats = useCallback(async () => {
     setLoadingStats(true);
     try {
-      const [statsPayload, maintenancePayload] = await Promise.all([
+      const [statsPayload, maintenancePayload, featureMaintenancePayload] = await Promise.all([
         getAdminStats(),
         getMaintenanceMode(),
+        getFeatureMaintenanceConfig(),
       ]);
       setStats(statsPayload);
       setMaintenance({
         isActive: !!maintenancePayload.isActive,
         message: maintenancePayload.message || '',
       });
+      setFeatureMaintenance(featureMaintenancePayload);
     } catch (error) {
       console.error('[MobileAdmin] Failed to load stats', error);
       notify('Không thể tải tổng quan admin.', 'error');
@@ -476,6 +487,26 @@ export function AdminView() {
     notify('Đã lưu trạng thái bảo trì.', 'success');
   };
 
+  const toggleFeatureMaintenance = (featureId: string) => {
+    setFeatureMaintenance((current) => {
+      const ids = new Set(current.disabledFeatureIds || []);
+      if (ids.has(featureId)) ids.delete(featureId);
+      else ids.add(featureId);
+      return { ...current, disabledFeatureIds: Array.from(ids) };
+    });
+  };
+
+  const saveFeatureMaintenance = async () => {
+    setSavingFeatureMaintenance(true);
+    const result = await saveFeatureMaintenanceConfig(featureMaintenance);
+    setSavingFeatureMaintenance(false);
+    if (!result.success) {
+      notify('Không thể lưu bảo trì chức năng.', 'error');
+      return;
+    }
+    notify('Đã lưu bảo trì chức năng.', 'success');
+  };
+
   return (
     <div className="min-h-screen bg-[#F6F6F8] pb-10 dark:bg-[#09090B]">
       <div className="sticky top-0 z-40 border-b border-gray-100 bg-[#F6F6F8]/95 px-4 pb-4 pt-4 backdrop-blur-xl dark:border-zinc-800 dark:bg-[#09090B]/95">
@@ -562,6 +593,53 @@ export function AdminView() {
                 <div className="mb-4 flex items-start justify-between gap-3"><div className="flex items-start gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gray-100 dark:bg-zinc-800"><Settings2 className="h-5 w-5 text-gray-700 dark:text-white" /></div><div><h2 className="text-base font-black text-gray-900 dark:text-white">Bảo trì hệ thống</h2><p className="mt-1 text-xs text-gray-500 dark:text-zinc-400">Bật tắt maintenance và sửa thông báo</p></div></div><button onClick={() => setMaintenance((m) => ({ ...m, isActive: !m.isActive }))} className={`rounded-full px-3 py-1.5 text-[11px] font-bold ${maintenance.isActive ? 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-300' : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300'}`}>{maintenance.isActive ? 'Đang bật' : 'Đang tắt'}</button></div>
                 <textarea value={maintenance.message} onChange={(e) => setMaintenance((m) => ({ ...m, message: e.target.value }))} rows={4} className="w-full rounded-[24px] border border-gray-200 bg-gray-50 px-4 py-4 text-sm text-gray-800 outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-white" placeholder="Nhập thông báo bảo trì..." />
                 <button onClick={() => void saveMaintenance()} disabled={savingMaintenance} className="mt-3 flex w-full items-center justify-center gap-2 rounded-[24px] bg-gray-900 px-4 py-3.5 text-sm font-bold text-white disabled:opacity-60 dark:bg-white dark:text-black">{savingMaintenance ? <Loader className="h-4 w-4 animate-spin" /> : <Settings2 className="h-4 w-4" />}Lưu bảo trì</button>
+              </Card>
+
+              <Card>
+                <div className="mb-4 flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-50 dark:bg-amber-500/10">
+                      <AlertTriangle className="h-5 w-5 text-amber-500" />
+                    </div>
+                    <div>
+                      <h2 className="text-base font-black text-gray-900 dark:text-white">Bảo trì chức năng</h2>
+                      <p className="mt-1 text-xs text-gray-500 dark:text-zinc-400">Khóa từng công cụ cho user, admin vẫn dùng bình thường.</p>
+                    </div>
+                  </div>
+                </div>
+                <input
+                  value={featureMaintenance.message || ''}
+                  onChange={(event) => setFeatureMaintenance((current) => ({ ...current, message: event.target.value }))}
+                  className="mb-3 w-full rounded-[22px] border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-800 outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
+                  placeholder="Tính năng đang bảo trì. Vui lòng quay lại sau."
+                />
+                <div className="space-y-2">
+                  {APP_CONFIG.main_features.map((feature) => {
+                    const locked = featureMaintenance.disabledFeatureIds?.includes(feature.id);
+                    return (
+                      <button
+                        key={feature.id}
+                        onClick={() => toggleFeatureMaintenance(feature.id)}
+                        className={`flex w-full items-center justify-between gap-3 rounded-[22px] px-4 py-3 text-left ${
+                          locked
+                            ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-200'
+                            : 'bg-gray-50 text-gray-700 dark:bg-zinc-800/80 dark:text-zinc-200'
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-black">{feature.name.vi}</div>
+                          <div className="mt-0.5 truncate text-[10px] opacity-60">{feature.id}</div>
+                        </div>
+                        <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ${locked ? 'bg-amber-400 text-black' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'}`}>
+                          {locked ? 'Bảo trì' : 'Mở'}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <button onClick={() => void saveFeatureMaintenance()} disabled={savingFeatureMaintenance} className="mt-3 flex w-full items-center justify-center gap-2 rounded-[24px] bg-amber-500 px-4 py-3.5 text-sm font-bold text-black disabled:opacity-60">
+                  {savingFeatureMaintenance ? <Loader className="h-4 w-4 animate-spin" /> : <Settings2 className="h-4 w-4" />}Lưu bảo trì chức năng
+                </button>
               </Card>
             </>
           )

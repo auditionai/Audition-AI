@@ -8,16 +8,17 @@ import { Image as ImageIcon, Video, Wand2, CalendarDays, Scissors, Sparkles, Ext
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { getAllImagesFromStorage } from '../services/storageService';
-import { subscribeCheckinStatus } from '../services/economyService';
+import { getFeatureMaintenanceConfig, isFeatureInMaintenance, subscribeCheckinStatus, type FeatureMaintenanceConfig } from '../services/economyService';
 import { DailyCheckin } from '../components/DailyCheckin';
 import type { GeneratedImage } from '../types';
 
 export function Home() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, userRole } = useAuth();
   const [recentItems, setRecentItems] = useState<GeneratedImage[]>([]);
   const [showCheckin, setShowCheckin] = useState(false);
   const [isCheckedIn, setIsCheckedIn] = useState(true);
+  const [featureMaintenance, setFeatureMaintenance] = useState<FeatureMaintenanceConfig>({ disabledFeatureIds: [] });
 
   useEffect(() => {
     (async () => {
@@ -34,6 +35,24 @@ export function Home() {
       { force: true }
     );
   }, []);
+
+  useEffect(() => {
+    getFeatureMaintenanceConfig().then(setFeatureMaintenance).catch(() => {
+      setFeatureMaintenance({ disabledFeatureIds: [] });
+    });
+  }, []);
+
+  const isAdmin = userRole === 'admin';
+  const isLocked = (featureId: string) => !isAdmin && isFeatureInMaintenance(featureMaintenance, featureId);
+  const openFeature = (featureId: string, path: string) => {
+    if (isLocked(featureId)) return;
+    navigate(path);
+  };
+  const lockBadge = (
+    <span className="absolute right-3 top-3 z-20 rounded-full bg-amber-400 px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-black shadow-lg">
+      Bảo trì
+    </span>
+  );
 
   const greeting = (() => {
     const h = new Date().getHours();
@@ -106,9 +125,10 @@ export function Home() {
 
         {/* 1. Tạo Ảnh Audition AI */}
         <div
-          onClick={() => navigate('/generate/image')}
-          className="relative overflow-hidden rounded-[32px] p-6 flex flex-col justify-end min-h-[180px] cursor-pointer group transition-all duration-300 active:scale-[0.98] bg-gradient-to-br from-[#ff3385] via-[#ff0055] to-[#cc0044] border border-white/20 shadow-[0_15px_35px_-5px_rgba(255,0,85,0.3),0_6px_0_#990033,inset_0_2px_4px_rgba(255,255,255,0.2)] active:shadow-[0_5px_15px_rgba(255,0,85,0.2),0_1px_0_#990033,inset_0_2px_4px_rgba(255,255,255,0.1)] active:translate-y-1"
+          onClick={() => openFeature('single_photo_gen', '/generate/image')}
+          className={`relative overflow-hidden rounded-[32px] p-6 flex flex-col justify-end min-h-[180px] group transition-all duration-300 bg-gradient-to-br from-[#ff3385] via-[#ff0055] to-[#cc0044] border border-white/20 shadow-[0_15px_35px_-5px_rgba(255,0,85,0.3),0_6px_0_#990033,inset_0_2px_4px_rgba(255,255,255,0.2)] ${isLocked('single_photo_gen') ? 'cursor-not-allowed opacity-55' : 'cursor-pointer active:scale-[0.98] active:shadow-[0_5px_15px_rgba(255,0,85,0.2),0_1px_0_#990033,inset_0_2px_4px_rgba(255,255,255,0.1)] active:translate-y-1'}`}
         >
+          {isLocked('single_photo_gen') && lockBadge}
           {/* Abstract blobs */}
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/20 dark:bg-white/10 blur-[60px] rounded-full -mr-20 -mt-20 pointer-events-none" />
           <div className="absolute bottom-0 left-0 w-40 h-40 bg-purple-500/20 blur-[40px] rounded-full -ml-10 -mb-10 pointer-events-none" />
@@ -133,9 +153,10 @@ export function Home() {
 
         {/* 2. Tạo Video Audition AI */}
         <div
-          onClick={() => navigate('/generate/video')}
-          className="relative overflow-hidden rounded-[32px] p-6 flex flex-col justify-end min-h-[160px] cursor-pointer group transition-all duration-300 active:scale-[0.98] bg-gradient-to-br from-[#4A72FF] via-[#2F5BFF] to-[#0038FF] border border-white/20 shadow-[0_15px_35px_-5px_rgba(59,130,246,0.3),0_6px_0_#0024a8,inset_0_2px_4px_rgba(255,255,255,0.2)] active:shadow-[0_5px_15px_rgba(59,130,246,0.2),0_1px_0_#0024a8,inset_0_2px_4px_rgba(255,255,255,0.1)] active:translate-y-1"
+          onClick={() => openFeature('video_ai_gen', '/generate/video')}
+          className={`relative overflow-hidden rounded-[32px] p-6 flex flex-col justify-end min-h-[160px] group transition-all duration-300 bg-gradient-to-br from-[#4A72FF] via-[#2F5BFF] to-[#0038FF] border border-white/20 shadow-[0_15px_35px_-5px_rgba(59,130,246,0.3),0_6px_0_#0024a8,inset_0_2px_4px_rgba(255,255,255,0.2)] ${isLocked('video_ai_gen') ? 'cursor-not-allowed opacity-55' : 'cursor-pointer active:scale-[0.98] active:shadow-[0_5px_15px_rgba(59,130,246,0.2),0_1px_0_#0024a8,inset_0_2px_4px_rgba(255,255,255,0.1)] active:translate-y-1'}`}
         >
+          {isLocked('video_ai_gen') && lockBadge}
           {/* Abstract blobs */}
           <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-300/20 blur-[60px] rounded-full -mr-10 -mt-20 pointer-events-none" />
           <div className="absolute bottom-0 left-0 w-40 h-40 bg-indigo-500/20 blur-[40px] rounded-full -ml-10 -mb-10 pointer-events-none" />
@@ -161,9 +182,10 @@ export function Home() {
         {/* 3 Tools Grid */}
         <div className="grid grid-cols-2 gap-3">
           <div
-            onClick={() => navigate('/tools/ai-image')}
-            className="bg-white dark:bg-[#18181B] rounded-[24px] p-4 flex flex-col items-center justify-center text-center gap-3 border border-gray-100 dark:border-zinc-800 shadow-sm active:translate-y-1 transition-all duration-150 cursor-pointer group relative overflow-hidden"
+            onClick={() => openFeature('ai_image_tool', '/tools/ai-image')}
+            className={`bg-white dark:bg-[#18181B] rounded-[24px] p-4 flex flex-col items-center justify-center text-center gap-3 border border-gray-100 dark:border-zinc-800 shadow-sm transition-all duration-150 group relative overflow-hidden ${isLocked('ai_image_tool') ? 'cursor-not-allowed opacity-55' : 'active:translate-y-1 cursor-pointer'}`}
           >
+            {isLocked('ai_image_tool') && lockBadge}
             <div className="absolute top-0 inset-x-0 h-1/2 bg-gradient-to-b from-cyan-50/50 to-transparent pointer-events-none"></div>
             <div className="w-11 h-11 bg-gradient-to-br from-cyan-100 via-cyan-50 to-white rounded-full flex items-center justify-center group-hover:scale-110 transition-transform shadow-[inset_0_2px_4px_rgba(255,255,255,0.8),0_4px_8px_rgba(6,182,212,0.15)] ring-1 ring-cyan-100">
               <ImageIcon className="w-[22px] h-[22px] text-cyan-500 drop-shadow-sm" />
@@ -174,9 +196,10 @@ export function Home() {
           </div>
           {/* Chỉnh sửa Ảnh */}
           <div
-            onClick={() => navigate('/tools/edit')}
-            className="flex-1 bg-white dark:bg-[#18181B] rounded-[24px] p-4 flex flex-col items-center justify-center text-center gap-3 border border-gray-100 dark:border-zinc-800 shadow-sm active:translate-y-1 transition-all duration-150 cursor-pointer group relative overflow-hidden"
+            onClick={() => openFeature('magic_editor_pro', '/tools/edit')}
+            className={`flex-1 bg-white dark:bg-[#18181B] rounded-[24px] p-4 flex flex-col items-center justify-center text-center gap-3 border border-gray-100 dark:border-zinc-800 shadow-sm transition-all duration-150 group relative overflow-hidden ${isLocked('magic_editor_pro') ? 'cursor-not-allowed opacity-55' : 'active:translate-y-1 cursor-pointer'}`}
           >
+            {isLocked('magic_editor_pro') && lockBadge}
             {/* Soft inner glow */}
             <div className="absolute top-0 inset-x-0 h-1/2 bg-gradient-to-b from-purple-50/50 to-transparent pointer-events-none"></div>
 
@@ -190,9 +213,10 @@ export function Home() {
 
           {/* Tách Nền */}
           <div
-            onClick={() => navigate('/tools/remove-bg')}
-            className="flex-1 bg-white dark:bg-[#18181B] rounded-[24px] p-4 flex flex-col items-center justify-center text-center gap-3 border border-gray-100 dark:border-zinc-800 shadow-sm active:translate-y-1 transition-all duration-150 cursor-pointer group relative overflow-hidden"
+            onClick={() => openFeature('remove_bg_pro', '/tools/remove-bg')}
+            className={`flex-1 bg-white dark:bg-[#18181B] rounded-[24px] p-4 flex flex-col items-center justify-center text-center gap-3 border border-gray-100 dark:border-zinc-800 shadow-sm transition-all duration-150 group relative overflow-hidden ${isLocked('remove_bg_pro') ? 'cursor-not-allowed opacity-55' : 'active:translate-y-1 cursor-pointer'}`}
           >
+            {isLocked('remove_bg_pro') && lockBadge}
             {/* Soft inner glow */}
             <div className="absolute top-0 inset-x-0 h-1/2 bg-gradient-to-b from-emerald-50/50 to-transparent pointer-events-none"></div>
 
@@ -206,9 +230,10 @@ export function Home() {
 
           {/* Làm Nét */}
           <div
-            onClick={() => navigate('/tools/enhance')}
-            className="flex-1 bg-white dark:bg-[#18181B] rounded-[24px] p-4 flex flex-col items-center justify-center text-center gap-3 border border-gray-100 dark:border-zinc-800 shadow-sm active:translate-y-1 transition-all duration-150 cursor-pointer group relative overflow-hidden"
+            onClick={() => openFeature('sharpen_upscale', '/tools/enhance')}
+            className={`flex-1 bg-white dark:bg-[#18181B] rounded-[24px] p-4 flex flex-col items-center justify-center text-center gap-3 border border-gray-100 dark:border-zinc-800 shadow-sm transition-all duration-150 group relative overflow-hidden ${isLocked('sharpen_upscale') ? 'cursor-not-allowed opacity-55' : 'active:translate-y-1 cursor-pointer'}`}
           >
+            {isLocked('sharpen_upscale') && lockBadge}
             {/* Soft inner glow */}
             <div className="absolute top-0 inset-x-0 h-1/2 bg-gradient-to-b from-amber-50/50 to-transparent pointer-events-none"></div>
 

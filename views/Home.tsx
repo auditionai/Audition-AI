@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { APP_CONFIG } from '../constants';
 import { Language, Feature, ViewId } from '../types';
 import { Icons } from '../components/Icons';
-import { subscribeCheckinStatus } from '../services/economyService';
+import { subscribeCheckinStatus, isFeatureInMaintenance, type FeatureMaintenanceConfig } from '../services/economyService';
 
 interface HomeProps {
   lang: Language;
@@ -12,6 +12,7 @@ interface HomeProps {
   onOpenCheckin: () => void;
   isMaintenance?: boolean;
   maintenanceMessage?: string;
+  featureMaintenance?: FeatureMaintenanceConfig | null;
 }
 
 interface FeatureCardProps {
@@ -21,7 +22,7 @@ interface FeatureCardProps {
   idx: number;
 }
 
-const FeatureCard: React.FC<FeatureCardProps & { isMaintenance?: boolean }> = React.memo(({ feature, lang, onClick, idx, isMaintenance }) => {
+const FeatureCard: React.FC<FeatureCardProps & { isMaintenance?: boolean; maintenanceLabel?: string }> = React.memo(({ feature, lang, onClick, idx, isMaintenance, maintenanceLabel }) => {
     const isPremium = feature.isPremium;
     const tag = feature.tag;
     const isGen = feature.toolType === 'generation';
@@ -65,6 +66,11 @@ const FeatureCard: React.FC<FeatureCardProps & { isMaintenance?: boolean }> = Re
                 </div>
 
                 <div className="flex gap-2 flex-col items-end">
+                    {isMaintenance && (
+                        <span className="text-[9px] font-bold px-2.5 py-1 rounded-full bg-yellow-500/15 border border-yellow-400/50 text-yellow-300 backdrop-blur-md uppercase tracking-wider">
+                            {maintenanceLabel || (lang === 'vi' ? 'Đang bảo trì' : 'Maintenance')}
+                        </span>
+                    )}
                     <div className="flex gap-2">
                         <span className={`text-[9px] font-bold px-2.5 py-1 rounded-full backdrop-blur-md border tracking-wider uppercase ${isVideo ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400' : isGen ? 'bg-audi-cyan/10 border-audi-cyan/50 text-audi-cyan' : 'bg-audi-purple/10 border-audi-purple/50 text-audi-purple'}`}>
                             {isVideo ? 'VIDEO' : isGen ? 'GEN' : 'EDIT'}
@@ -105,7 +111,7 @@ const FeatureCard: React.FC<FeatureCardProps & { isMaintenance?: boolean }> = Re
     );
 });
 
-export const Home: React.FC<HomeProps> = ({ lang, onSelectFeature, onNavigate, onOpenCheckin, isMaintenance, maintenanceMessage }) => {
+export const Home: React.FC<HomeProps> = ({ lang, onSelectFeature, onNavigate, onOpenCheckin, isMaintenance, maintenanceMessage, featureMaintenance }) => {
 
   // Split features into categories
   const studioFeatures = APP_CONFIG.main_features.filter(f => f.toolType === 'generation');
@@ -236,7 +242,8 @@ export const Home: React.FC<HomeProps> = ({ lang, onSelectFeature, onNavigate, o
                     lang={lang}
                     onClick={() => onSelectFeature(feature)}
                     idx={idx}
-                    isMaintenance={isMaintenance}
+                    isMaintenance={isMaintenance || isFeatureInMaintenance(featureMaintenance, feature.id)}
+                    maintenanceLabel={isFeatureInMaintenance(featureMaintenance, feature.id) ? (lang === 'vi' ? 'Đang bảo trì' : 'Maintenance') : undefined}
                 />
             ))}
         </div>
@@ -268,7 +275,8 @@ export const Home: React.FC<HomeProps> = ({ lang, onSelectFeature, onNavigate, o
                       lang={lang}
                       onClick={() => onSelectFeature(feature)}
                       idx={idx}
-                      isMaintenance={isMaintenance}
+                      isMaintenance={isMaintenance || isFeatureInMaintenance(featureMaintenance, feature.id)}
+                      maintenanceLabel={isFeatureInMaintenance(featureMaintenance, feature.id) ? (lang === 'vi' ? 'Đang bảo trì' : 'Maintenance') : undefined}
                   />
               ))}
           </div>
@@ -300,7 +308,8 @@ export const Home: React.FC<HomeProps> = ({ lang, onSelectFeature, onNavigate, o
                     lang={lang}
                     onClick={() => onSelectFeature(feature)}
                     idx={idx}
-                    isMaintenance={isMaintenance}
+                    isMaintenance={isMaintenance || isFeatureInMaintenance(featureMaintenance, feature.id)}
+                    maintenanceLabel={isFeatureInMaintenance(featureMaintenance, feature.id) ? (lang === 'vi' ? 'Đang bảo trì' : 'Maintenance') : undefined}
                 />
             ))}
         </div>

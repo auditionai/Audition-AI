@@ -508,8 +508,23 @@ const IMAGE_ROLE_LOCK_CONSTRAINTS =
   'STRICT ROLE LOCK: CHARACTER REFERENCES are the only identity source for face, hair, skin tone, head shape, body structure, outfit, shoes, accessories, tattoos, gender, and overall avatar identity. For non-portrait shots, BODY references are the primary source for full-body complexion, limb anatomy, and overall body proportions. FACE LOCK references, when present, are the highest-priority source for eyes, eyebrows, nose, lips, jawline, hairline, bangs, makeup, glasses, facial proportions, and facial likeness. Preserve uploaded skin tone exactly; do not warm it, tan it, yellow it, orange it, or shift it to a different complexion. Preserve believable adult 3D anatomy from the character references; avoid doll-like proportions, rigid limbs, inflated eyes, or mannequin posture. CHARACTER REFERENCES are NOT pose references. SAMPLE IMAGE is composition-only and controls pose, camera angle, framing, subject placement, body lean, hand placement, spacing, scene layout, and background composition only. SAMPLE IMAGE must never contribute face identity, hairstyle identity, makeup identity, or facial expression identity, even if the sample face is large, sharp, centered, or visually dominant. Treat SAMPLE IMAGE as a structural guide, not a literal body copy. If the sample pose would create broken anatomy, repair the anatomy while preserving the composition. Never reproduce SAMPLE IMAGE as the final output, never borrow its identity, outfit, or realism, and never return any uploaded reference nearly unchanged. STYLE IMAGE is style-only and may influence only render quality, lighting behavior, material response, restrained color grading, and final finish. STYLE IMAGE must never override identity, skin tone, anatomy, subject count, pose, composition, or outfit. The final image must keep one-to-one slot mapping for all uploaded characters, remain a stylized 3D game avatar, and never become a photorealistic or semi-realistic human.';
 const REDUCED_IMAGE_ROLE_LOCK_CONSTRAINTS_NO_SAMPLE =
   'STRICT ROLE LOCK: No SAMPLE IMAGE is provided, so USER REQUEST is the primary source for pose, framing, action, scene layout, and background. CHARACTER REFERENCES still define identity only and are NOT pose references. For non-portrait shots, BODY references are the primary source for full-body complexion, limb anatomy, and overall body proportions. FACE LOCK references, when present, are the highest-priority source for eyes, eyebrows, nose, lips, jawline, hairline, bangs, makeup, glasses, facial proportions, and facial likeness. Preserve uploaded skin tone exactly; do not warm it, tan it, yellow it, orange it, or shift it to a different complexion. Preserve believable adult 3D anatomy from the character references; avoid doll-like proportions, rigid limbs, inflated eyes, or mannequin posture. STYLE IMAGE is style-only and may influence only render quality, lighting behavior, material response, restrained color grading, and final 3D finish. STYLE IMAGE must never override identity, skin tone, anatomy, pose, composition, camera framing, gender presentation, subject count, or outfit. Never return any uploaded reference nearly unchanged when the USER REQUEST asks for a different pose, scene, framing, or environment. Keep the result as a stylized 3D game avatar, not a photorealistic or semi-realistic human.';
-const MAX_PROVIDER_PROMPT_LENGTH = 9999;
+export const DEFAULT_PROVIDER_PROMPT_MAX_LENGTH = 9999;
+export const SERVER_3_PROVIDER_PROMPT_MAX_LENGTH = 3500;
 const MAX_NEGATIVE_PROMPT_LENGTH = 9999;
+
+const normalizeProviderServerId = (value?: string | null) =>
+  String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, '');
+
+export const isServer3PromptLimited = (serverId?: string | null) => {
+  const normalized = normalizeProviderServerId(serverId);
+  return normalized === '3' || normalized === 'vip3' || normalized === 'server3' || normalized === 'sv3';
+};
+
+export const getProviderPromptMaxLength = (serverId?: string | null) =>
+  isServer3PromptLimited(serverId) ? SERVER_3_PROVIDER_PROMPT_MAX_LENGTH : DEFAULT_PROVIDER_PROMPT_MAX_LENGTH;
 
 const collapsePromptWhitespace = (value?: string | null) =>
   String(value || '')
@@ -518,12 +533,13 @@ const collapsePromptWhitespace = (value?: string | null) =>
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 
-const trimProviderPrompt = (value: string) => {
-  if (value.length <= MAX_PROVIDER_PROMPT_LENGTH) {
+export const trimProviderPromptForServer = (value: string, serverId?: string | null) => {
+  const maxLength = getProviderPromptMaxLength(serverId);
+  if (value.length <= maxLength) {
     return value;
   }
 
-  return `${value.slice(0, MAX_PROVIDER_PROMPT_LENGTH - 1).trimEnd()}…`;
+  return `${value.slice(0, maxLength - 1).trimEnd()}…`;
 };
 
 const dedupeCsvPromptTerms = (...sources: Array<string | null | undefined>) => {
@@ -558,6 +574,78 @@ const trimPromptText = (value: string, maxLength: number) => {
   }
 
   return `${value.slice(0, maxLength - 1).trimEnd()}…`;
+};
+
+type ProviderPromptBudgetSection = {
+  text: string;
+  locked?: boolean;
+  weight?: number;
+};
+
+const trimProviderSection = (value: string, maxLength: number) => {
+  const normalized = collapsePromptWhitespace(value);
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+  if (maxLength <= 3) {
+    return normalized.slice(0, Math.max(0, maxLength));
+  }
+  return `${normalized.slice(0, maxLength - 3).trimEnd()}...`;
+};
+
+const buildProviderPromptWithinServerBudget = (
+  sections: ProviderPromptBudgetSection[],
+  serverId?: string | null,
+  transform?: (value: string) => string,
+) => {
+  const maxLength = getProviderPromptMaxLength(serverId);
+  const normalizedSections = sections
+    .map((section) => ({
+      ...section,
+      text: transform ? transform(section.text) : collapsePromptWhitespace(section.text),
+      weight: Math.max(0.25, Number(section.weight || 1)),
+    }))
+    .filter((section) => section.text);
+
+  const fullPrompt = normalizedSections.map((section) => section.text).join('\n\n');
+  if (fullPrompt.length <= maxLength) {
+    return fullPrompt;
+  }
+
+  const lockedSections = normalizedSections.filter((section) => section.locked);
+  const flexibleSections = normalizedSections.filter((section) => !section.locked);
+  const lockedPrompt = lockedSections.map((section) => section.text).join('\n\n');
+  if (!flexibleSections.length) {
+    return trimProviderPromptForServer(lockedPrompt || fullPrompt, serverId);
+  }
+
+  const separatorBudget = Math.max(0, (normalizedSections.length - 1) * 2);
+  const flexibleBudget = maxLength - lockedPrompt.length - separatorBudget;
+  if (flexibleBudget <= 0) {
+    return trimProviderPromptForServer(lockedPrompt || fullPrompt, serverId);
+  }
+
+  const totalWeight = flexibleSections.reduce((sum, section) => sum + (section.weight || 1), 0);
+  const flexibleByText = new Map<string, string>();
+  let usedFlexibleBudget = 0;
+  flexibleSections.forEach((section, index) => {
+    const isLast = index === flexibleSections.length - 1;
+    const remainingBudget = Math.max(0, flexibleBudget - usedFlexibleBudget);
+    const weightedBudget = isLast
+      ? remainingBudget
+      : Math.max(120, Math.floor((flexibleBudget * (section.weight || 1)) / totalWeight));
+    const sectionBudget = Math.min(section.text.length, Math.max(0, Math.min(weightedBudget, remainingBudget)));
+    const trimmed = trimProviderSection(section.text, sectionBudget);
+    flexibleByText.set(section.text, trimmed);
+    usedFlexibleBudget += trimmed.length;
+  });
+
+  const budgetedPrompt = normalizedSections
+    .map((section) => section.locked ? section.text : flexibleByText.get(section.text))
+    .filter((value): value is string => Boolean(value))
+    .join('\n\n');
+
+  return trimProviderPromptForServer(budgetedPrompt, serverId);
 };
 
 export const shouldLockSampleCompositionForMultiCharacter = (
@@ -1335,7 +1423,7 @@ const buildProWeightedReferencePlan = (
 
 const buildProStructuredProviderPrompt = (
   synthesizedPrompt: string,
-  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio' | 'visionAnalysis'>,
+  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio' | 'visionAnalysis' | 'serverId'>,
   mergedNegativePrompt: string,
 ) => {
   const roleContract = buildImageRoleContract(payload);
@@ -1353,38 +1441,40 @@ const buildProStructuredProviderPrompt = (
     buildProStyleVisionLine(payload),
   ].filter((value): value is string => Boolean(value));
 
-  return trimPromptText(sanitizeProProviderText([
-    'RENDER ONE NEW FINAL IMAGE. Never return any uploaded reference unchanged.',
-    `MODEL PATH: ${payload.modelId || 'unknown'}. Use structured weighting instead of averaging all references together.`,
-    `CHARACTER COUNT: EXACTLY ${characterCount}. One-to-one slot mapping is mandatory.`,
-    `SHOT TYPE: ${roleContract.shotType}`,
-    weightedPlan,
-    payload.sampleImage
-      ? 'SCENE PLATE RULE: SAMPLE IMAGE is the primary scene plate. Preserve the full sample background, furniture, props, camera angle, framing, object layout, contact points, and subject orientation. Replace only the sample person with the uploaded character identity.'
-      : 'SCENE PLATE RULE: No sample image is present, so derive composition from the primary user request.',
-    'IDENTITY RULE: CHARACTER REFERENCES define the final avatar identity. BODY references define outfit, skin tone, body proportions, and full-body anatomy. FACE LOCK references refine face identity. FACE DETAIL LOCK references refine makeup and micro facial features, but only as strongly as the shot weighting allows.',
-    'STYLE RULE: STYLE IMAGE influences only render quality, material response, lighting feel, restrained color grading, and final finish. STYLE IMAGE must never override pose, background, outfit, or identity.',
-    'CONFLICT RULE: When references disagree, keep SAMPLE for scene/pose/background, keep CHARACTER for identity/body/skin tone, and keep STYLE for render finish only.',
-    '',
-    structuredVisionLines.length > 0
-      ? ['PRO STRUCTURED VISION FIELDS:', ...structuredVisionLines].join('\n')
-      : 'PRO STRUCTURED VISION FIELDS:\n- unavailable',
-    '',
-    'DIRECTOR JSON SPEC (authoritative, English):',
-    normalizedSynthesizedPrompt || 'No director synthesis available.',
-    '',
-    getShotAwareRenderProfile(roleContract.shotType),
-    `QUALITY: ${IMAGE_QUALITY_BOOSTERS}`,
-    'SOFTNESS RULE: prioritize soft beauty shading, natural material transitions, controlled highlights, softer facial planes, and non-plastic skin response. Avoid toy-like rigidity, glossy mannequin sheen, or stiff body flow.',
-    'SKIN TONE LOCK: match the uploaded character complexion exactly.',
-    'ANATOMY GUARD: keep one coherent natural body with no extra limbs.',
-    `NEGATIVE: ${compactNegativePrompt}`,
-  ].join('\n')), MAX_PROVIDER_PROMPT_LENGTH);
+  return buildProviderPromptWithinServerBudget([
+    { locked: true, text: 'RENDER ONE NEW FINAL IMAGE. Never return any uploaded reference unchanged.' },
+    { locked: true, text: `MODEL PATH: ${payload.modelId || 'unknown'}. Use structured weighting instead of averaging all references together.` },
+    { locked: true, text: `CHARACTER COUNT: EXACTLY ${characterCount}. One-to-one slot mapping is mandatory.` },
+    { locked: true, text: `SHOT TYPE: ${roleContract.shotType}` },
+    { locked: true, text: weightedPlan },
+    {
+      locked: true,
+      text: payload.sampleImage
+        ? 'SCENE PLATE RULE: SAMPLE IMAGE is the primary scene plate. Preserve the full sample background, furniture, props, camera angle, framing, object layout, contact points, and subject orientation. Replace only the sample person with the uploaded character identity.'
+        : 'SCENE PLATE RULE: No sample image is present, so derive composition from the primary user request.',
+    },
+    { locked: true, text: 'IDENTITY RULE: CHARACTER REFERENCES define the final avatar identity. BODY references define outfit, skin tone, body proportions, and full-body anatomy. FACE LOCK references refine face identity. FACE DETAIL LOCK references refine makeup and micro facial features, but only as strongly as the shot weighting allows.' },
+    { locked: true, text: 'STYLE RULE: STYLE IMAGE influences only render quality, material response, lighting feel, restrained color grading, and final finish. STYLE IMAGE must never override pose, background, outfit, or identity.' },
+    { locked: true, text: 'CONFLICT RULE: When references disagree, keep SAMPLE for scene/pose/background, keep CHARACTER for identity/body/skin tone, and keep STYLE for render finish only.' },
+    {
+      weight: 2,
+      text: structuredVisionLines.length > 0
+        ? ['PRO STRUCTURED VISION FIELDS:', ...structuredVisionLines].join('\n')
+        : 'PRO STRUCTURED VISION FIELDS:\n- unavailable',
+    },
+    { weight: 3, text: `DIRECTOR JSON SPEC (authoritative, English):\n${normalizedSynthesizedPrompt || 'No director synthesis available.'}` },
+    { locked: true, text: getShotAwareRenderProfile(roleContract.shotType) },
+    { weight: 1, text: `QUALITY: ${IMAGE_QUALITY_BOOSTERS}` },
+    { locked: true, text: 'SOFTNESS RULE: prioritize soft beauty shading, natural material transitions, controlled highlights, softer facial planes, and non-plastic skin response. Avoid toy-like rigidity, glossy mannequin sheen, or stiff body flow.' },
+    { locked: true, text: 'SKIN TONE LOCK: match the uploaded character complexion exactly.' },
+    { locked: true, text: 'ANATOMY GUARD: keep one coherent natural body with no extra limbs.' },
+    { weight: 1, text: `NEGATIVE: ${compactNegativePrompt}` },
+  ], payload.serverId, sanitizeProProviderText);
 };
 
 const buildDetailedImageProviderPrompt = (
   synthesizedPrompt: string,
-  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio'>,
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio' | 'serverId'>,
   mergedNegativePrompt: string,
 ) => {
   const roleContract = buildImageRoleContract(payload);
@@ -1396,37 +1486,32 @@ const buildDetailedImageProviderPrompt = (
   const compactNegativePrompt = trimPromptText(mergedNegativePrompt, MAX_NEGATIVE_PROMPT_LENGTH);
   const shotAwareRenderProfile = getShotAwareRenderProfile(roleContract.shotType);
 
-  return trimProviderPrompt([
-    'RENDER ONE NEW FINAL IMAGE. Never return any uploaded reference unchanged.',
-    IMAGE_ROLE_LOCK_CONSTRAINTS,
-    IMAGE_SKIN_TONE_LOCK_CONSTRAINTS,
-    IMAGE_ANATOMY_GUARD_CONSTRAINTS,
-    IMAGE_NECK_SHOULDER_PROPORTION_LOCK_CONSTRAINTS,
-    `CHARACTER COUNT: EXACTLY ${characterCount}. One-to-one slot mapping is mandatory.`,
-    '',
-    'PRIMARY USER REQUEST:',
-    originalUserPrompt || 'No additional user prompt provided.',
-    '',
-    roleContractText,
-    layeredSingleSubjectAllowed
-      ? '\nLAYERED SINGLE-SUBJECT EXCEPTION:\n- The user intentionally requests a double-exposure / ghost-overlay / superimposed-self composition.\n- Keep exactly one underlying uploaded character identity, but layered echoes of that SAME person are allowed when they are part of the requested artistic effect.\n- Do not invent a second distinct person.'
-      : '',
-    '',
-    'DIRECTOR JSON SPEC (authoritative, English):',
-    normalizedSynthesizedPrompt || 'No director synthesis available.',
-    '',
-    `SHOT TYPE: ${roleContract.shotType}`,
-    shotAwareRenderProfile,
-    '',
-    `QUALITY: ${IMAGE_QUALITY_BOOSTERS}`,
-    '',
-    `NEGATIVE: ${compactNegativePrompt}`,
-  ].join('\n'));
+  return buildProviderPromptWithinServerBudget([
+    { locked: true, text: 'RENDER ONE NEW FINAL IMAGE. Never return any uploaded reference unchanged.' },
+    { locked: true, text: IMAGE_ROLE_LOCK_CONSTRAINTS },
+    { locked: true, text: IMAGE_SKIN_TONE_LOCK_CONSTRAINTS },
+    { locked: true, text: IMAGE_ANATOMY_GUARD_CONSTRAINTS },
+    { locked: true, text: IMAGE_NECK_SHOULDER_PROPORTION_LOCK_CONSTRAINTS },
+    { locked: true, text: `CHARACTER COUNT: EXACTLY ${characterCount}. One-to-one slot mapping is mandatory.` },
+    { weight: 3, text: `PRIMARY USER REQUEST:\n${originalUserPrompt || 'No additional user prompt provided.'}` },
+    { weight: 2, text: roleContractText },
+    {
+      locked: true,
+      text: layeredSingleSubjectAllowed
+        ? 'LAYERED SINGLE-SUBJECT EXCEPTION:\n- The user intentionally requests a double-exposure / ghost-overlay / superimposed-self composition.\n- Keep exactly one underlying uploaded character identity, but layered echoes of that SAME person are allowed when they are part of the requested artistic effect.\n- Do not invent a second distinct person.'
+        : '',
+    },
+    { weight: 3, text: `DIRECTOR JSON SPEC (authoritative, English):\n${normalizedSynthesizedPrompt || 'No director synthesis available.'}` },
+    { locked: true, text: `SHOT TYPE: ${roleContract.shotType}` },
+    { locked: true, text: shotAwareRenderProfile },
+    { weight: 1, text: `QUALITY: ${IMAGE_QUALITY_BOOSTERS}` },
+    { weight: 1, text: `NEGATIVE: ${compactNegativePrompt}` },
+  ], payload.serverId);
 };
 
 const buildReducedImageProviderPromptWithoutSample = (
   synthesizedPrompt: string,
-  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'styleImage' | 'aspectRatio'>,
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'styleImage' | 'aspectRatio' | 'serverId'>,
   mergedNegativePrompt: string,
 ) => {
   const roleContract = buildImageRoleContract(payload);
@@ -1438,37 +1523,32 @@ const buildReducedImageProviderPromptWithoutSample = (
   const compactNegativePrompt = trimPromptText(mergedNegativePrompt, MAX_NEGATIVE_PROMPT_LENGTH);
   const shotAwareRenderProfile = getShotAwareRenderProfile(roleContract.shotType);
 
-  return trimProviderPrompt([
-    'RENDER ONE NEW FINAL IMAGE. Never return any uploaded reference unchanged.',
-    REDUCED_IMAGE_ROLE_LOCK_CONSTRAINTS_NO_SAMPLE,
-    IMAGE_SKIN_TONE_LOCK_CONSTRAINTS,
-    IMAGE_ANATOMY_GUARD_CONSTRAINTS,
-    IMAGE_NECK_SHOULDER_PROPORTION_LOCK_CONSTRAINTS,
-    `CHARACTER COUNT: EXACTLY ${characterCount}. One-to-one slot mapping is mandatory.`,
-    '',
-    'PRIMARY USER REQUEST:',
-    originalUserPrompt || 'No additional user prompt provided.',
-    '',
-    roleContractText,
-    layeredSingleSubjectAllowed
-      ? '\nLAYERED SINGLE-SUBJECT EXCEPTION:\n- Keep exactly one uploaded character identity.\n- Double exposure / ghost overlays / layered echoes of that SAME character are allowed.\n- Do not invent a second distinct person.'
-      : '',
-    '',
-    'DIRECTOR JSON SPEC (authoritative, English):',
-    normalizedSynthesizedPrompt || 'No director synthesis available.',
-    '',
-    `SHOT TYPE: ${roleContract.shotType}`,
-    shotAwareRenderProfile,
-    '',
-    `QUALITY: ${IMAGE_QUALITY_BOOSTERS}`,
-    '',
-    `NEGATIVE: ${compactNegativePrompt}`,
-  ].join('\n'));
+  return buildProviderPromptWithinServerBudget([
+    { locked: true, text: 'RENDER ONE NEW FINAL IMAGE. Never return any uploaded reference unchanged.' },
+    { locked: true, text: REDUCED_IMAGE_ROLE_LOCK_CONSTRAINTS_NO_SAMPLE },
+    { locked: true, text: IMAGE_SKIN_TONE_LOCK_CONSTRAINTS },
+    { locked: true, text: IMAGE_ANATOMY_GUARD_CONSTRAINTS },
+    { locked: true, text: IMAGE_NECK_SHOULDER_PROPORTION_LOCK_CONSTRAINTS },
+    { locked: true, text: `CHARACTER COUNT: EXACTLY ${characterCount}. One-to-one slot mapping is mandatory.` },
+    { weight: 3, text: `PRIMARY USER REQUEST:\n${originalUserPrompt || 'No additional user prompt provided.'}` },
+    { weight: 2, text: roleContractText },
+    {
+      locked: true,
+      text: layeredSingleSubjectAllowed
+        ? 'LAYERED SINGLE-SUBJECT EXCEPTION:\n- Keep exactly one uploaded character identity.\n- Double exposure / ghost overlays / layered echoes of that SAME character are allowed.\n- Do not invent a second distinct person.'
+        : '',
+    },
+    { weight: 3, text: `DIRECTOR JSON SPEC (authoritative, English):\n${normalizedSynthesizedPrompt || 'No director synthesis available.'}` },
+    { locked: true, text: `SHOT TYPE: ${roleContract.shotType}` },
+    { locked: true, text: shotAwareRenderProfile },
+    { weight: 1, text: `QUALITY: ${IMAGE_QUALITY_BOOSTERS}` },
+    { weight: 1, text: `NEGATIVE: ${compactNegativePrompt}` },
+  ], payload.serverId);
 };
 
 export const buildImageProviderPrompt = (
   synthesizedPrompt: string,
-  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio' | 'visionAnalysis'>,
+  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio' | 'visionAnalysis' | 'serverId'>,
   customNegativePrompt?: string,
 ) => {
   const mergedNegativePrompt = dedupeCsvPromptTerms(IMAGE_NEGATIVE_PROMPT, customNegativePrompt);

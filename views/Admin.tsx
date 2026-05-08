@@ -2525,6 +2525,13 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       </div>
                   </div>
 
+                  <div className="rounded-2xl border border-audi-yellow/25 bg-audi-yellow/10 p-4 text-sm text-audi-yellow">
+                      <div className="font-black uppercase tracking-wider">Kling tính phí theo giây</div>
+                      <div className="mt-1 text-xs leading-relaxed text-yellow-100/80">
+                          Các model Kling Video và Kling/Motion Control dùng đơn vị <b>Vcoin/s</b>. Trong bảng bên dưới, ô AUDITION AI của các dòng này là giá mỗi giây, không phải giá trọn gói. Tổng phí người dùng trả = giá mỗi giây × số giây video.
+                      </div>
+                  </div>
+
                   <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 md:p-5">
                       <div className="flex items-center justify-between gap-3 mb-4">
                           <div>
@@ -2741,11 +2748,24 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                   </td>
                                                   <td className="px-4 py-3 text-white uppercase">{row.resolution || '-'}</td>
                                                   <td className="px-4 py-3 text-white uppercase">{row.quality || '-'}</td>
-                                                  <td className="px-4 py-3 text-white uppercase">{row.duration || '-'}</td>
+                                                  <td className="px-4 py-3 text-white uppercase">
+                                                      <div>{row.duration || '-'}</div>
+                                                      {row.billingUnit === 'second' && (
+                                                          <div className="mt-1 inline-flex rounded-full border border-audi-yellow/30 bg-audi-yellow/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-audi-yellow">
+                                                              Theo giây
+                                                          </div>
+                                                      )}
+                                                  </td>
                                                   <td className="px-4 py-3 text-white">{tstSpeedToUi(row.speed) || '-'}</td>
                                                   <td className="px-4 py-3 text-center text-white">{row.audio ? 'Có' : '-'}</td>
                                                   <td className="px-4 py-3 text-right font-mono text-audi-cyan">{row.type === 'edit' ? '-' : row.credits}</td>
-                                                  <td className="px-4 py-3 text-right font-mono text-slate-200">{row.type === 'edit' ? '-' : `${row.vcoin} VC`}</td>
+                                                  <td className="px-4 py-3 text-right font-mono text-slate-200">
+                                                      {row.type === 'edit'
+                                                          ? '-'
+                                                          : row.billingUnit === 'second'
+                                                              ? `${row.vcoin} VC/s`
+                                                              : `${row.vcoin} VC`}
+                                                  </td>
                                                   <td className="px-4 py-3">
                                                       <div className="flex items-center justify-end gap-2">
                                                           <input
@@ -2764,7 +2784,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                                       : 'border-white/10 focus:ring-audi-cyan/40'
                                                               }`}
                                                           />
-                                                          <span className="text-xs font-bold text-audi-yellow">VC</span>
+                                                          <span className="min-w-[34px] text-xs font-bold text-audi-yellow">
+                                                              {row.billingUnit === 'second' ? 'VC/s' : 'VC'}
+                                                          </span>
                                                           <button
                                                               onClick={() => handleSavePricingRow(row)}
                                                               disabled={!rowIsDirty}
@@ -2773,9 +2795,14 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                                Lưu
                                                           </button>
                                                       </div>
+                                                      {row.billingUnit === 'second' && (
+                                                          <div className="mt-1 text-right text-[10px] text-slate-500">
+                                                              Ví dụ: 5s = {(Number(pricingDrafts[draftKey] ?? savedPricing?.audition_price_vcoin ?? row.defaultAuditionVcoin ?? row.vcoin) || 0) * 5} VC
+                                                          </div>
+                                                      )}
                                                   </td>
                                                   <td className={`px-4 py-3 text-right font-mono font-bold ${grossProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                                      {grossProfit >= 0 ? '+' : ''}{grossProfit} VC
+                                                      {grossProfit >= 0 ? '+' : ''}{grossProfit} {row.billingUnit === 'second' ? 'VC/s' : 'VC'}
                                                   </td>
                                                   <td className="px-4 py-3">
                                                       <span className="px-2 py-1 bg-white/10 rounded text-[10px] font-mono break-all">{row.configKey}</span>

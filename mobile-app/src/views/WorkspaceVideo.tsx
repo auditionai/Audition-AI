@@ -252,6 +252,9 @@ export function WorkspaceVideo() {
         pricingEntries,
         pricingOverrides
       });
+  const perSecondCostLabel = currentCostBreakdown.billingUnit === 'second'
+    ? `${currentCostBreakdown.unitVcoin || 0} Vcoin/s x ${currentCostBreakdown.billedSeconds || 0}s = ${currentCostBreakdown.vcoin || 0} Vcoin`
+    : '';
 
   const getModelOptions = () => {
     if (activeMode === 'motion_control') {
@@ -1039,7 +1042,7 @@ export function WorkspaceVideo() {
       <div className="fixed bottom-[70px] left-0 right-0 p-5 pt-8 bg-gradient-to-t from-[#fcfcfc] via-[#fcfcfc] dark:from-[#09090b] dark:via-[#09090b] to-transparent max-w-md mx-auto xl:absolute xl:bottom-0">
         {currentCostBreakdown.billingUnit === 'second' && (
           <div className="mb-2 rounded-2xl border border-yellow-200 bg-yellow-50 px-3 py-2 text-center text-[11px] font-black text-yellow-700 dark:border-yellow-500/30 dark:bg-yellow-500/10 dark:text-yellow-200">
-            {currentCostBreakdown.unitVcoin || 0} Vcoin/s × {currentCostBreakdown.billedSeconds || 0}s
+            Kling tính theo giây: {perSecondCostLabel}
             {activeMode === 'motion_control' && motionVideoDurationSeconds !== null
               ? ` • video mẫu ${motionVideoDurationSeconds.toFixed(1)}s`
               : ''}

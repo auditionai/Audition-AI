@@ -190,7 +190,22 @@ const isTransientError = (message: string) => {
     normalized.includes('504') ||
     normalized.includes('525') ||
     normalized.includes('526') ||
-    normalized.includes('network')
+    normalized.includes('network') ||
+    normalized.includes('curl: (56)') ||
+    normalized.includes('libcurl') ||
+    normalized.includes('connection closed abruptly') ||
+    normalized.includes('failed to perform')
+  );
+};
+
+const isProviderDispatchRejectedBeforeJobId = (message: string) => {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes('dispatch error') ||
+    normalized.includes('curl: (56)') ||
+    normalized.includes('libcurl') ||
+    normalized.includes('connection closed abruptly') ||
+    normalized.includes('failed to perform')
   );
 };
 
@@ -1026,11 +1041,12 @@ const shouldRefundFailure = (
   job: Pick<QueueJobRow, 'queue_kind' | 'queue_payload'>,
   payloadOverride?: Record<string, unknown> | ImageGenerateRecipePayload | null,
 ) => {
-  if (job.queue_kind === 'video_generate' || job.queue_kind === 'motion_generate') {
-    return true;
-  }
-
-  return !hasTstBeenTouched(payloadOverride ?? job.queue_payload);
+  void job;
+  void payloadOverride;
+  // Any terminal failure after a paid queue job must refund the user.
+  // `refund_generated_job` is idempotent at the DB layer, so this is safer than
+  // trying to infer whether TST/provider was already touched.
+  return true;
 };
 
 const getJobRuntimeState = async (jobId: string) => {
@@ -1289,7 +1305,12 @@ const requeueJob = async (job: QueueJobRow, errorMessage: string) => {
       ? (state.queue_payload as Record<string, unknown>)
       : job.queue_payload;
 
-  if (hasProviderBeenCommitted(job, currentPayload)) {
+  const providerDispatchFailedBeforeJobId =
+    (job.queue_kind === 'video_generate' || job.queue_kind === 'motion_generate') &&
+    !String(job.job_id || '').trim() &&
+    isProviderDispatchRejectedBeforeJobId(errorMessage);
+
+  if (hasProviderBeenCommitted(job, currentPayload) && !providerDispatchFailedBeforeJobId) {
     await markFailedRespectingRefundPolicy(
       {
         ...job,
@@ -1311,7 +1332,16 @@ const requeueJob = async (job: QueueJobRow, errorMessage: string) => {
   const requeuePayload =
     job.queue_kind === 'image_generate' && restoredRecipePayload
       ? restoredRecipePayload
-      : toQueuePayloadObject(currentPayload);
+      : {
+          ...toQueuePayloadObject(currentPayload),
+          ...(providerDispatchFailedBeforeJobId
+            ? {
+                __tstTouched: false,
+                __dispatchConfirmationPending: false,
+                __lastDispatchError: errorMessage,
+              }
+            : {}),
+        };
 
   await updateGeneratedImageRecord(job.id, {
     status: 'queued',

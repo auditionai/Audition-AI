@@ -61,6 +61,44 @@ type GenMode = 'single' | 'couple' | 'group3' | 'group4';
 type Stage = 'input' | 'processing' | 'result';
 type Resolution = '1K' | '2K' | '4K';
 
+const IMAGE_MODEL_OPTIONS: Array<{
+  tier: TstGenerationTier;
+  label: string;
+  tag: string;
+  title: string;
+  description: string;
+  icon: React.ElementType;
+  accent: string;
+}> = [
+  {
+    tier: 'gpt',
+    label: 'GPT',
+    tag: 'BEST',
+    title: 'GPT Image 2',
+    description: 'ChatGPT mới nhất, hiểu prompt tốt hơn, chi tiết chính xác và độ hoàn thiện cao nhất.',
+    icon: Icons.Sparkles,
+    accent: 'from-fuchsia-500 via-violet-500 to-cyan-400',
+  },
+  {
+    tier: 'flash',
+    label: 'Flash',
+    tag: 'GIÁ RẺ',
+    title: 'Nano Banana 2',
+    description: 'Gemini Flash, tốc độ nhanh và tiết kiệm, phù hợp ảnh cơ bản/chất lượng trung bình.',
+    icon: Icons.Zap,
+    accent: 'from-cyan-400 via-sky-500 to-blue-500',
+  },
+  {
+    tier: 'pro',
+    label: 'Pro',
+    tag: 'HOT',
+    title: 'Nano Banana Pro',
+    description: 'Gemini Pro thông minh hơn Flash, ảnh chi tiết hơn, hỗ trợ hoàn thiện cao và 4K.',
+    icon: Icons.Crown,
+    accent: 'from-amber-300 via-orange-500 to-fuchsia-500',
+  },
+];
+
 const MODE_TO_FEATURE_ID: Record<GenMode, string> = {
     single: 'single_photo_gen',
     couple: 'couple_photo_gen',
@@ -343,6 +381,11 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const isGptAvailable =
       runtimeImageModelIds.has(getGenerationModelId('gpt')) &&
       pricingEntries.some((entry) => entry.model.trim().toLowerCase() === getGenerationModelId('gpt'));
+  const imageModelAvailability: Record<TstGenerationTier, boolean> = {
+      flash: isFlashAvailable,
+      pro: isProAvailable,
+      gpt: isGptAvailable,
+  };
   const isCatalogReady = !catalogLoading && !catalogError && pricingEntries.length > 0 && runtimeModels.length > 0;
   const hasCharacterImagesReady = characters.every((char) => !!char.bodyImage);
   const isAnyCharacterAssistRunning = characters.some((char) => !!assistLoadingByCharId[char.id]);
@@ -1753,45 +1796,43 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
                     <div className="space-y-3">
                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Mô hình AI</label>
-                        <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
-                            <button
-                                onClick={() => setAiModel('flash')}
-                                disabled={!isFlashAvailable}
-                                className={`flex-1 py-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-                                    aiModel === 'flash'
-                                    ? 'bg-audi-purple text-white shadow-lg'
-                                    : 'text-slate-500 hover:text-white hover:bg-white/5'
-                                } ${!isFlashAvailable ? 'opacity-40 cursor-not-allowed hover:bg-transparent hover:text-slate-500' : ''}`}
-                            >
-                                <Icons.Zap className={`w-4 h-4 ${aiModel === 'flash' ? 'text-white' : 'text-slate-400'}`} />
-                                Flash
-                            </button>
-
-                            <button
-                                onClick={() => setAiModel('pro')}
-                                disabled={!isProAvailable}
-                                className={`flex-1 py-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-                                    aiModel === 'pro'
-                                    ? 'bg-audi-purple text-white shadow-lg'
-                                    : 'text-slate-500 hover:text-white hover:bg-white/5'
-                                } ${!isProAvailable ? 'opacity-40 cursor-not-allowed hover:bg-transparent hover:text-slate-500' : ''}`}
-                            >
-                                <Icons.Crown className={`w-4 h-4 ${aiModel === 'pro' ? 'text-white' : 'text-slate-400'}`} />
-                                Pro
-                            </button>
-
-                            <button
-                                onClick={() => setAiModel('gpt')}
-                                disabled={!isGptAvailable}
-                                className={`flex-1 py-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-                                    aiModel === 'gpt'
-                                    ? 'bg-audi-purple text-white shadow-lg'
-                                    : 'text-slate-500 hover:text-white hover:bg-white/5'
-                                } ${!isGptAvailable ? 'opacity-40 cursor-not-allowed hover:bg-transparent hover:text-slate-500' : ''}`}
-                            >
-                                <Icons.Sparkles className={`w-4 h-4 ${aiModel === 'gpt' ? 'text-white' : 'text-slate-400'}`} />
-                                GPT
-                            </button>
+                        <div className="grid gap-2">
+                            {IMAGE_MODEL_OPTIONS.map((model) => {
+                                const Icon = model.icon;
+                                const available = imageModelAvailability[model.tier];
+                                const selected = aiModel === model.tier;
+                                return (
+                                    <button
+                                        key={model.tier}
+                                        type="button"
+                                        onClick={() => available && setAiModel(model.tier)}
+                                        disabled={!available}
+                                        className={`group relative overflow-hidden rounded-2xl border p-3 text-left transition-all ${
+                                            selected
+                                                ? 'border-audi-cyan/80 bg-audi-cyan/10 shadow-[0_0_22px_rgba(34,211,238,0.18)]'
+                                                : 'border-white/10 bg-black/30 hover:border-white/25 hover:bg-white/[0.04]'
+                                        } ${!available ? 'cursor-not-allowed opacity-40' : ''}`}
+                                    >
+                                        <div className={`absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r ${model.accent}`} />
+                                        <div className="flex items-start gap-3">
+                                            <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br ${model.accent} text-white shadow-lg`}>
+                                                <Icon className="h-4 w-4" />
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <span className="text-sm font-black text-white">{model.label}</span>
+                                                    <span className={`rounded-full bg-gradient-to-r ${model.accent} px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-white shadow-sm`}>
+                                                        {model.tag}
+                                                    </span>
+                                                    {selected && <Icons.Check className="h-3.5 w-3.5 text-audi-cyan" />}
+                                                </div>
+                                                <p className="mt-0.5 text-[10px] font-bold text-slate-300">{model.title}</p>
+                                                <p className="mt-1 text-[10px] leading-relaxed text-slate-500">{model.description}</p>
+                                            </div>
+                                        </div>
+                                    </button>
+                                );
+                            })}
                         </div>
                     </div>
 

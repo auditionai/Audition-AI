@@ -1,7 +1,13 @@
 import type { Handler } from '@netlify/functions';
 import { runWithVertexCredentialFailover } from './_vertex-credentials';
 
-const VERTEX_MODEL = 'gemini-3.1-pro-preview';
+const VERTEX_MODELS = Array.from(new Set([
+  process.env.VERTEX_VIDEO_SCRIPT_MODEL,
+  'gemini-3.1-flash-preview',
+  'gemini-3.1-pro-preview',
+].filter(Boolean))) as string[];
+const VERTEX_VIDEO_SCRIPT_TIMEOUT_MS = 16_000;
+const VIDEO_SCRIPT_DEADLINE_ERROR = 'VIDEO_SCRIPT_VERTEX_DEADLINE';
 
 const jsonHeaders = {
   'Content-Type': 'application/json',
@@ -61,6 +67,15 @@ const clampDurationSeconds = (value: unknown) => {
 const normalizeOption = (value: unknown, fallback = 'auto from reference image') => {
   const text = String(value || '').trim();
   return text || fallback;
+};
+
+const isModelUnavailableError = (message: string) => {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes('not found') ||
+    normalized.includes('model') && normalized.includes('not supported') ||
+    normalized.includes('publisher model') && normalized.includes('does not exist')
+  );
 };
 
 const buildDirectorInstruction = (
@@ -124,6 +139,56 @@ const buildDirectorInstruction = (
   ].filter(Boolean).join('\n');
 };
 
+const buildFallbackVideoScript = (
+  durationSeconds: number,
+  userPrompt: string,
+  scriptOptions: Record<string, unknown>,
+) => {
+  const style = normalizeOption(scriptOptions.style, 'cinematic');
+  const theme = normalizeOption(scriptOptions.theme, 'tự động theo ảnh tham chiếu');
+  const soundMood = normalizeOption(scriptOptions.soundMood, 'phù hợp bối cảnh');
+  const targetModel = normalizeOption(scriptOptions.targetModel, 'model video đang chọn');
+  const voiceDialogue = Boolean(scriptOptions.voiceDialogue);
+  const shotCount = durationSeconds <= 5 ? 5 : durationSeconds <= 10 ? 7 : 9;
+  const shotLength = Math.max(0.7, durationSeconds / shotCount);
+
+  const shots = Array.from({ length: shotCount }, (_, index) => {
+    const start = (index * shotLength).toFixed(1);
+    const end = Math.min(durationSeconds, (index + 1) * shotLength).toFixed(1);
+    const camera =
+      index % 5 === 0 ? 'cận cảnh khuôn mặt, dolly-in nhẹ' :
+      index % 5 === 1 ? 'góc trung cảnh ngang hông, whip pan theo nhịp' :
+      index % 5 === 2 ? 'góc thấp điện ảnh, slow-motion highlight' :
+      index % 5 === 3 ? 'góc rộng bối cảnh, speed ramp chuyển cảnh' :
+      'cận chi tiết outfit/phụ kiện, flash cut theo beat';
+    const action =
+      index % 5 === 0 ? 'nhân vật giữ thần thái tự tin, mắt và biểu cảm giữ đúng ảnh tham chiếu' :
+      index % 5 === 1 ? 'nhân vật đổi dáng tự nhiên, tay/chân chuyển động nhỏ, không thêm chi thừa' :
+      index % 5 === 2 ? 'tóc, ánh sáng và nền chuyển động nhẹ tạo cảm giác premium trend video' :
+      index % 5 === 3 ? 'bối cảnh có chiều sâu, hạt sáng và motion blur tạo nhịp Douyin/TikTok' :
+      'camera bắt chi tiết trang phục, màu sắc và chất liệu giữ nguyên thiết kế gốc';
+    const textOverlay =
+      index === 0 ? 'Text overlay: "AUDITION MOMENT"' :
+      index === shotCount - 1 ? 'Text overlay: "STAY ICONIC"' :
+      `Text overlay ngắn tiếng Việt theo chủ đề ${theme}, không che mặt`;
+    return `Cảnh ${index + 1} (${start}s-${end}s): ${camera}. ${action}. Chuyển cảnh bằng ${
+      index % 2 === 0 ? 'flash cut + light leak' : 'match cut + motion blur'
+    }. ${textOverlay}. Âm thanh: ${soundMood}, có whoosh/SFX theo nhịp.`;
+  });
+
+  return [
+    `Video ${durationSeconds}s phong cách ${style}, tối ưu cho ${targetModel}, dựng theo ngôn ngữ Douyin/TikTok/CapCut hiện đại, nhiều góc máy và chuyển cảnh nhanh.`,
+    userPrompt.trim() ? `Ý tưởng người dùng cần giữ: ${userPrompt.trim()}` : '',
+    `Chủ đề: ${theme}. Âm thanh: ${soundMood}.`,
+    voiceDialogue
+      ? 'Có lời thoại/voice tiếng Việt ngắn, tự nhiên, phù hợp bối cảnh; không lấn át nhạc.'
+      : 'Không có lời thoại hoặc voice-over; chỉ dùng hành động hình ảnh, nhạc nền và hiệu ứng âm thanh.',
+    'Bắt buộc dùng ảnh tham chiếu làm nguồn nhân vật duy nhất: không tạo người thật, không đổi nhân vật, không đổi mặt, không đổi outfit, không đổi màu trang phục, không làm trẻ con hóa nhân vật.',
+    ...shots,
+    'Negative/lock: giữ nguyên mặt, makeup, tỉ lệ cơ thể, outfit, phụ kiện và chất lượng nhân vật từ ảnh tham chiếu; không méo mặt, không thừa tay chân, không mất tay chân, không kéo dài cổ, không đổi màu da/trang phục, không thêm nhân vật lạ.',
+  ].filter(Boolean).join('\n').slice(0, 10000);
+};
+
 export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return {
@@ -157,36 +222,55 @@ export const handler: Handler = async (event) => {
     const script = await runWithVertexCredentialFailover({
       taskName: 'video script director',
       operation: async ({ projectId, accessToken }) => {
-        const response = await fetch(
-          `https://aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/global/publishers/google/models/${VERTEX_MODEL}:generateContent`,
-          {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              contents: [{ role: 'user', parts: [imagePart, promptPart] }],
-              generationConfig: {
-                temperature: 0.45,
-                topP: 0.8,
-                maxOutputTokens: 3600,
+        let lastModelError = '';
+
+        for (const modelName of VERTEX_MODELS) {
+          let response: Response;
+          try {
+            response = await fetch(
+              `https://aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/global/publishers/google/models/${modelName}:generateContent`,
+              {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${accessToken}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  contents: [{ role: 'user', parts: [imagePart, promptPart] }],
+                  generationConfig: {
+                    temperature: 0.35,
+                    topP: 0.75,
+                    maxOutputTokens: 2600,
+                  },
+                }),
+                signal: AbortSignal.timeout(VERTEX_VIDEO_SCRIPT_TIMEOUT_MS),
               },
-            }),
-            signal: AbortSignal.timeout(180000),
-          },
-        );
+            );
+          } catch (error: any) {
+            if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
+              throw new Error(VIDEO_SCRIPT_DEADLINE_ERROR);
+            }
+            throw error;
+          }
 
-        if (!response.ok) {
-          throw new Error(await parseErrorMessage(response));
+          if (!response.ok) {
+            const errorMessage = await parseErrorMessage(response);
+            lastModelError = `${modelName}: ${errorMessage}`;
+            if (isModelUnavailableError(errorMessage) && modelName !== VERTEX_MODELS[VERTEX_MODELS.length - 1]) {
+              continue;
+            }
+            throw new Error(errorMessage);
+          }
+
+          const data = await response.json();
+          const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+          if (!text) {
+            throw new Error('Vertex AI did not return a video script.');
+          }
+          return text.slice(0, 10000);
         }
 
-        const data = await response.json();
-        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-        if (!text) {
-          throw new Error('Vertex AI did not return a video script.');
-        }
-        return text.slice(0, 10000);
+        throw new Error(lastModelError || 'No Vertex AI model is available for video script director.');
       },
     });
 
@@ -196,6 +280,32 @@ export const handler: Handler = async (event) => {
       body: JSON.stringify({ script }),
     };
   } catch (error: any) {
+    const message = String(error?.message || '');
+    if (message.includes(VIDEO_SCRIPT_DEADLINE_ERROR)) {
+      const body = (() => {
+        try {
+          return JSON.parse(event.body || '{}');
+        } catch {
+          return {};
+        }
+      })();
+      const durationSeconds = clampDurationSeconds(body.durationSeconds);
+      const userPrompt = String(body.userPrompt || '').trim();
+      const scriptOptions =
+        body.scriptOptions && typeof body.scriptOptions === 'object'
+          ? body.scriptOptions as Record<string, unknown>
+          : {};
+      return {
+        statusCode: 200,
+        headers: jsonHeaders,
+        body: JSON.stringify({
+          script: buildFallbackVideoScript(durationSeconds, userPrompt, scriptOptions),
+          fallback: true,
+          warning: 'Vertex AI took too long, returned a safe fallback video script.',
+        }),
+      };
+    }
+
     return {
       statusCode: 500,
       headers: jsonHeaders,

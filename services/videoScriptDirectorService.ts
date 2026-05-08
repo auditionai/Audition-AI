@@ -6,9 +6,9 @@ export type VideoScriptDirectorOptions = {
   targetModel?: string;
 };
 
-const MAX_DIRECTOR_REQUEST_CHARS = 5_500_000;
-const DIRECTOR_IMAGE_MAX_SIDE = 1600;
-const DIRECTOR_IMAGE_QUALITY = 0.86;
+const MAX_DIRECTOR_REQUEST_CHARS = 2_200_000;
+const DIRECTOR_IMAGE_MAX_SIDE = 1024;
+const DIRECTOR_IMAGE_QUALITY = 0.78;
 
 const loadImage = (source: string) =>
   new Promise<HTMLImageElement>((resolve, reject) => {
@@ -52,7 +52,12 @@ const parseResponsePayload = async (response: Response) => {
   try {
     return JSON.parse(raw);
   } catch {
-    return { raw: raw.slice(0, 700) };
+    const looksLikeHtml = /<!doctype html|<html[\s>]/i.test(raw);
+    return {
+      raw: looksLikeHtml
+        ? `Video script director gateway error (${response.status}). Vui lòng thử lại sau ít phút.`
+        : raw.slice(0, 700),
+    };
   }
 };
 
@@ -95,6 +100,7 @@ export const generateVideoScriptWithVertex = async ({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: requestBody,
+      signal: AbortSignal.timeout(45_000),
     });
 
     payload = await parseResponsePayload(response);

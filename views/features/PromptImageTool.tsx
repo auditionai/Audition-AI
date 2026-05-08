@@ -38,10 +38,42 @@ type PromptImageSlot = string | null;
 
 const MAX_REFERENCE_IMAGES = 4;
 const ASPECT_RATIOS = ['1:1', '9:16', '16:9', '3:4', '4:3', '2:3', '3:2'];
-const MODEL_TABS: Array<{ tier: TstGenerationTier; label: string; icon: React.ElementType }> = [
-  { tier: 'flash', label: 'Flash', icon: Zap },
-  { tier: 'pro', label: 'Pro', icon: Crown },
-  { tier: 'gpt', label: 'GPT', icon: Bot },
+const MODEL_TABS: Array<{
+  tier: TstGenerationTier;
+  label: string;
+  tag: string;
+  title: string;
+  description: string;
+  icon: React.ElementType;
+  accent: string;
+}> = [
+  {
+    tier: 'gpt',
+    label: 'GPT',
+    tag: 'BEST',
+    title: 'GPT Image 2',
+    description: 'ChatGPT mới nhất, hiểu prompt tốt hơn, chi tiết chính xác và độ hoàn thiện cao nhất.',
+    icon: Bot,
+    accent: 'from-fuchsia-500 via-violet-500 to-cyan-400',
+  },
+  {
+    tier: 'flash',
+    label: 'Flash',
+    tag: 'GIÁ RẺ',
+    title: 'Nano Banana 2',
+    description: 'Gemini Flash, tốc độ nhanh và tiết kiệm, phù hợp ảnh cơ bản/chất lượng trung bình.',
+    icon: Zap,
+    accent: 'from-cyan-400 via-sky-500 to-blue-500',
+  },
+  {
+    tier: 'pro',
+    label: 'Pro',
+    tag: 'HOT',
+    title: 'Nano Banana Pro',
+    description: 'Gemini Pro thông minh hơn Flash, ảnh chi tiết hơn, hỗ trợ hoàn thiện cao và 4K.',
+    icon: Crown,
+    accent: 'from-amber-300 via-orange-500 to-fuchsia-500',
+  },
 ];
 
 const readFileAsDataUrl = (file: File) =>
@@ -415,20 +447,40 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
           <div className="space-y-5 mt-5">
             <div className="space-y-3">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Mô hình AI</label>
-              <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
-                {MODEL_TABS.map(({ tier, label, icon: Icon }) => (
-                  <button
-                    key={tier}
-                    type="button"
-                    onClick={() => setAiModel(tier)}
-                    className={`flex-1 py-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-                      aiModel === tier ? 'bg-audi-purple text-white shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    <Icon className={`w-4 h-4 ${aiModel === tier ? 'text-white' : 'text-slate-400'}`} />
-                    {label}
-                  </button>
-                ))}
+              <div className="grid gap-2">
+                {MODEL_TABS.map(({ tier, label, tag, title, description, icon: Icon, accent }) => {
+                  const selected = aiModel === tier;
+                  return (
+                    <button
+                      key={tier}
+                      type="button"
+                      onClick={() => setAiModel(tier)}
+                      className={`relative overflow-hidden rounded-2xl border p-3 text-left transition-all ${
+                        selected
+                          ? 'border-cyan-300/70 bg-cyan-500/10 shadow-[0_0_24px_rgba(34,211,238,0.16)]'
+                          : 'border-white/10 bg-black/25 hover:border-white/20 hover:bg-white/5'
+                      }`}
+                    >
+                      <div className={`absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r ${accent}`} />
+                      <div className="flex items-start gap-3">
+                        <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br ${accent} text-white shadow-lg`}>
+                          <Icon className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-black text-white">{label}</span>
+                            <span className={`rounded-full bg-gradient-to-r ${accent} px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-white`}>
+                              {tag}
+                            </span>
+                            {selected && <span className="ml-auto text-xs font-black text-cyan-300">✓</span>}
+                          </div>
+                          <div className="mt-1 text-[11px] font-bold text-slate-200">{title}</div>
+                          <p className="mt-1 text-[10px] leading-relaxed text-slate-500">{description}</p>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 

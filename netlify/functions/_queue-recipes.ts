@@ -620,6 +620,9 @@ export const prepareProviderPayloadFromQueueRecipe = async (payload: QueueRecipe
       if (payload.resolution) providerPayload.resolution = payload.resolution.toLowerCase();
       if (payload.speed) providerPayload.speed = payload.speed;
       if (payload.serverId) providerPayload.server_id = payload.serverId;
+      if (typeof payload.motionVideoDurationSeconds === 'number' && Number.isFinite(payload.motionVideoDurationSeconds)) {
+        providerPayload.duration_seconds = payload.motionVideoDurationSeconds;
+      }
 
       return providerPayload;
     }

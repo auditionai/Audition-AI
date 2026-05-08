@@ -8,7 +8,7 @@ import React, { useState, useRef, useEffect } from 'react';
 
 import {
   Sparkles, ImagePlus, Coins,
-  Play, Film, User, Loader, AlertTriangle,
+  Film, User, Loader, AlertTriangle,
   Video, Music, VolumeX 
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
@@ -396,6 +396,10 @@ export function WorkspaceVideo() {
       notify('Vui lòng tải lên cả ảnh nhân vật và video chuyển động.', 'error');
       return;
     }
+    if (activeMode === 'motion_control' && motionVideoDurationSeconds === null) {
+      notify('Không thể đọc thời lượng video chuyển động. Vui lòng tải lại video mẫu từ 3 đến 30 giây.', 'error');
+      return;
+    }
     if (activeMode === 'motion_control' && motionVideoDurationSeconds !== null && (motionVideoDurationSeconds < 3 || motionVideoDurationSeconds > 30)) {
       notify('Video chuyển động phải dài từ 3 đến 30 giây.', 'error');
       return;
@@ -779,9 +783,25 @@ export function WorkspaceVideo() {
                 >
                   {motionVideoUrl ? (
                     <>
-                      <video src={motionVideoUrl} className="w-full h-full object-cover opacity-80" autoPlay loop muted playsInline />
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="bg-white dark:bg-[#18181B]/20 backdrop-blur-sm p-3 rounded-full"><Play className="w-5 h-5 text-white ml-0.5" /></div>
+                      <video
+                        key={motionVideoUrl}
+                        src={motionVideoUrl}
+                        className="absolute inset-0 h-full w-full object-cover opacity-85"
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                        preload="metadata"
+                        onLoadedData={(event) => {
+                          event.currentTarget.play().catch(() => undefined);
+                        }}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-black/5 to-transparent" />
+                      <div className="absolute left-2 bottom-2 rounded-full bg-black/60 px-2 py-1 text-[10px] font-bold text-white backdrop-blur">
+                        {motionVideoDurationSeconds !== null ? `${motionVideoDurationSeconds.toFixed(1)}s` : 'Video mẫu'}
+                      </div>
+                      <div className="absolute right-2 top-2 rounded-full bg-black/50 p-2 text-white backdrop-blur-md">
+                        <ImagePlus className="h-4 w-4" />
                       </div>
                     </>
                   ) : (
@@ -896,6 +916,14 @@ export function WorkspaceVideo() {
 
       {/* Generate Button - Fixed Bottom */}
       <div className="fixed bottom-[70px] left-0 right-0 p-5 pt-8 bg-gradient-to-t from-[#fcfcfc] via-[#fcfcfc] dark:from-[#09090b] dark:via-[#09090b] to-transparent max-w-md mx-auto xl:absolute xl:bottom-0">
+        {currentCostBreakdown.billingUnit === 'second' && (
+          <div className="mb-2 rounded-2xl border border-yellow-200 bg-yellow-50 px-3 py-2 text-center text-[11px] font-black text-yellow-700 dark:border-yellow-500/30 dark:bg-yellow-500/10 dark:text-yellow-200">
+            {currentCostBreakdown.unitVcoin || 0} Vcoin/s × {currentCostBreakdown.billedSeconds || 0}s
+            {activeMode === 'motion_control' && motionVideoDurationSeconds !== null
+              ? ` • video mẫu ${motionVideoDurationSeconds.toFixed(1)}s`
+              : ''}
+          </div>
+        )}
         <Button
           size="lg"
           className="w-full shadow-[0_8px_30px_rgb(168,85,247,0.3)] flex items-center justify-center gap-3 bg-gradient-to-r from-purple-500 to-indigo-500 relative overflow-hidden group border-0 text-white rounded-[16px]"

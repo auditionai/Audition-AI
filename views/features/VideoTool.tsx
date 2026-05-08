@@ -910,7 +910,25 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                       <div onClick={() => triggerUpload('motion')} className="w-full h-64 bg-black/40 rounded-xl border-2 border-dashed border-audi-pink hover:border-pink-400 cursor-pointer relative overflow-hidden group/item transition-all flex flex-col items-center justify-center">
                           {motionVideo ? (
                               <>
-                                  <video src={motionVideo} className="w-full h-full object-contain opacity-80 group-hover/item:opacity-40 transition-opacity" autoPlay loop muted playsInline />
+                                  <video
+                                    key={motionVideo}
+                                    src={motionVideo}
+                                    className="absolute inset-0 w-full h-full object-cover opacity-80 group-hover/item:opacity-45 transition-opacity"
+                                    autoPlay
+                                    loop
+                                    muted
+                                    playsInline
+                                    preload="metadata"
+                                    onLoadedData={(event) => {
+                                      event.currentTarget.play().catch(() => undefined);
+                                    }}
+                                  />
+                                  <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-black/5 to-black/10 pointer-events-none" />
+                                  {motionVideoDurationSeconds !== null && (
+                                    <div className="absolute left-2 bottom-2 rounded-full bg-black/60 px-2 py-1 text-[10px] font-bold text-white backdrop-blur">
+                                      {motionVideoDurationSeconds.toFixed(1)}s
+                                    </div>
+                                  )}
                                   <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/item:opacity-100 transition-opacity">
                                       <span className="text-[10px] font-bold text-white bg-black/50 px-2 py-1 rounded">Đổi Video</span>
                                   </div>
@@ -1341,6 +1359,14 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                       })}
                   </div>
                   ) : null}
+                  {currentCostBreakdown.billingUnit === 'second' && (
+                      <div className="mt-2 rounded-lg border border-audi-yellow/20 bg-audi-yellow/10 px-2 py-1.5 text-[10px] font-bold text-audi-yellow">
+                          Tính theo giây: {currentCostBreakdown.unitVcoin || 0} Vcoin/s × {currentCostBreakdown.billedSeconds || 0}s
+                          {activeMode === 'motion_control' && motionVideoDurationSeconds !== null
+                              ? ` (video mẫu ${motionVideoDurationSeconds.toFixed(1)}s)`
+                              : ''}
+                      </div>
+                  )}
               </div>
 
               <button 

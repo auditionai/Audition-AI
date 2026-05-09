@@ -5,7 +5,9 @@ import {
   fetchTstModels,
   fetchTstPricing,
   filterAdminManagedPricingEntries,
+  getPerSecondPricingKey,
   getVertexEditPricingRows,
+  isPerSecondBillingModel,
   isAdminManagedPricingModel,
   sanitizePricingEntriesWithRuntimeModels,
   type TstServerAvailabilityConfig,
@@ -599,14 +601,25 @@ export const syncTSTPrices = async (): Promise<{success: boolean, error?: string
       currentPricing.map((row) => [`${row.model_id}::${row.option_id}`, row]),
     );
 
+    const runtimeTypeByModel = new Map(runtimeModels.map((model) => [model.model, model.type]));
     const rows = livePricing.map((entry) => {
-      const optionId = entry.config_key || [
-        entry.server,
-        entry.resolution,
-        entry.duration,
-        entry.speed,
-        entry.audio ? 'audio' : ''
-      ].filter(Boolean).join('|');
+      const type = runtimeTypeByModel.get(entry.model);
+      const isPerSecond = isPerSecondBillingModel(entry.model, type === 'motion-control' ? 'motion-control' : type === 'video' ? 'video' : undefined);
+      const optionId = isPerSecond
+        ? getPerSecondPricingKey({
+            modelId: entry.model,
+            serverId: entry.server,
+            resolution: entry.resolution,
+            speed: entry.speed,
+            audio: entry.audio,
+          })
+        : entry.config_key || [
+            entry.server,
+            entry.resolution,
+            entry.duration,
+            entry.speed,
+            entry.audio ? 'audio' : ''
+          ].filter(Boolean).join('|');
 
       return {
         model_id: entry.model,

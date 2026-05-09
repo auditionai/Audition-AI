@@ -224,7 +224,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
               const [pricing, models, pricingConfig, serverAvailabilityConfig] = await Promise.all([
                   fetchTstPricing(forceRefresh),
                   fetchTstModels(forceRefresh),
-                  getModelPricing(),
+                  getModelPricing({ force: true }),
                   getTstServerAvailabilityConfig()
               ]);
               const filteredModels = applyServerAvailabilityToRuntimeModels(models, serverAvailabilityConfig);

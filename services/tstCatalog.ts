@@ -1029,6 +1029,31 @@ const getAuditionPrice = (
   return override?.auditionPriceVcoin ?? fallbackVcoin;
 };
 
+const getAuditionPriceByConfigKeys = (
+  modelId: string,
+  configKeys: Array<string | undefined>,
+  fallbackVcoin: number,
+  pricingOverrides: AuditionPricingOverride[] = [],
+) => {
+  for (const configKey of configKeys) {
+    if (!configKey) continue;
+    const price = getAuditionPrice(modelId, configKey, Number.NaN, pricingOverrides);
+    if (Number.isFinite(price) && price > 0) {
+      return price;
+    }
+  }
+  return fallbackVcoin;
+};
+
+const getPerSecondPricingKeyFromEntry = (modelId: string, entry: TstPricingEntry) =>
+  getPerSecondPricingKey({
+    modelId,
+    serverId: entry.server,
+    resolution: entry.resolution,
+    speed: entry.speed,
+    audio: entry.audio,
+  });
+
 export const getServerDescription = (serverId: string) => serverDescriptions[normalizeServer(serverId)] ?? '';
 
 export const fetchTstPricing = async (forceRefresh = false): Promise<TstPricingEntry[]> => {
@@ -1602,17 +1627,23 @@ export const getVideoCostBreakdown = ({
     const fallbackVcoin = creditsToVcoin(exactEntry.credits);
     if (perSecondModel) {
       const billedSeconds = Math.max(1, parseDurationSeconds(duration));
-      const unitConfigKey = getPerSecondPricingKey({ modelId, serverId, resolution, speed, audio });
+      const entryUnitConfigKey = getPerSecondPricingKeyFromEntry(modelId, exactEntry);
+      const requestedUnitConfigKey = getPerSecondPricingKey({ modelId, serverId, resolution, speed, audio });
       const entryDurationSeconds = parseDurationSeconds(exactEntry.duration);
       const unitFallbackVcoin = entryDurationSeconds > 1
         ? Math.max(1, Math.ceil(fallbackVcoin / entryDurationSeconds))
         : fallbackVcoin;
-      const unitVcoin = getAuditionPrice(modelId, unitConfigKey, unitFallbackVcoin, pricingOverrides);
+      const unitVcoin = getAuditionPriceByConfigKeys(
+        modelId,
+        [entryUnitConfigKey, requestedUnitConfigKey],
+        unitFallbackVcoin,
+        pricingOverrides,
+      );
       return {
         available: true,
         credits: exactEntry.credits,
         vcoin: unitVcoin * billedSeconds,
-        configKey: unitConfigKey,
+        configKey: entryUnitConfigKey,
         modelId,
         billingUnit: 'second',
         unitVcoin,
@@ -1733,17 +1764,23 @@ export const getMotionCostBreakdown = ({
     const fallbackVcoin = creditsToVcoin(exactEntry.credits);
     if (isPerSecondMotionBillingModel(modelId)) {
       const billedSeconds = Math.max(1, Math.ceil(durationSeconds || 1));
-      const unitConfigKey = getPerSecondPricingKey({ modelId, serverId, resolution, speed });
+      const entryUnitConfigKey = getPerSecondPricingKeyFromEntry(modelId, exactEntry);
+      const requestedUnitConfigKey = getPerSecondPricingKey({ modelId, serverId, resolution, speed });
       const entryDurationSeconds = parseDurationSeconds(exactEntry.duration);
       const unitFallbackVcoin = entryDurationSeconds > 1
         ? Math.max(1, Math.ceil(fallbackVcoin / entryDurationSeconds))
         : fallbackVcoin;
-      const unitVcoin = getAuditionPrice(modelId, unitConfigKey, unitFallbackVcoin, pricingOverrides);
+      const unitVcoin = getAuditionPriceByConfigKeys(
+        modelId,
+        [entryUnitConfigKey, requestedUnitConfigKey],
+        unitFallbackVcoin,
+        pricingOverrides,
+      );
       return {
         available: true,
         credits: exactEntry.credits,
         vcoin: unitVcoin * billedSeconds,
-        configKey: unitConfigKey,
+        configKey: entryUnitConfigKey,
         modelId,
         billingUnit: 'second',
         unitVcoin,
@@ -1788,15 +1825,7 @@ export const getPricingRows = async (forceRefresh = false): Promise<TstPricingRo
       audio: entry.audio,
       credits: entry.credits,
       vcoin: perSecond ? Math.max(1, Math.ceil(defaultVcoin / durationSeconds)) : defaultVcoin,
-      configKey: perSecond
-        ? getPerSecondPricingKey({
-            modelId: entry.model,
-            serverId: entry.server,
-            resolution: entry.resolution,
-            speed: entry.speed,
-            audio: entry.audio,
-          })
-        : entry.config_key,
+      configKey: perSecond ? getPerSecondPricingKeyFromEntry(entry.model, entry) : entry.config_key,
       billingUnit: perSecond ? 'second' : 'flat',
     };
   });

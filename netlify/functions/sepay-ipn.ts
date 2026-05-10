@@ -1,6 +1,6 @@
 import type { Handler } from '@netlify/functions';
 import { getServiceRoleClient } from './_supabase';
-import { getSePayEnv, normalizeSePayOrderStatus } from './_sepay';
+import { extractSePayOrderCode, extractSePayPaidAmount, getSePayEnv, normalizeSePayOrderStatus } from './_sepay';
 
 const headers = {
   'Content-Type': 'application/json',
@@ -39,7 +39,7 @@ export const handler: Handler = async (event) => {
     }
 
     const payload = JSON.parse(event.body || '{}');
-    const orderCode = String(payload?.order?.order_invoice_number || payload?.order_invoice_number || '').trim();
+    const orderCode = extractSePayOrderCode(payload);
 
     if (!orderCode) {
       return {
@@ -53,7 +53,7 @@ export const handler: Handler = async (event) => {
     const providerOrderCode = Number(orderCode);
     const { data: existingTransaction, error: existingTransactionError } = await admin
       .from('payment_transactions')
-      .select('id, status')
+      .select('id, status, amount_vnd')
       .or(Number.isFinite(providerOrderCode)
         ? `provider_order_code.eq.${providerOrderCode},order_code.eq.${orderCode}`
         : `order_code.eq.${orderCode}`)
@@ -75,21 +75,47 @@ export const handler: Handler = async (event) => {
 
     const notificationType = String(payload?.notification_type || '').toUpperCase();
     const orderStatus = normalizeSePayOrderStatus(payload?.order || payload);
+    const transactionStatus = normalizeSePayOrderStatus(payload?.transaction || payload);
     const providerStatus =
       notificationType === 'ORDER_PAID'
         ? 'PAID'
         : notificationType === 'TRANSACTION_VOID'
           ? 'CANCELLED'
-          : orderStatus;
+          : orderStatus === 'PAID' || transactionStatus === 'PAID'
+            ? 'PAID'
+            : orderStatus;
 
-    const { data, error } = await admin.rpc('settle_payment_transaction_by_order_code', {
-      p_provider_order_code: Number.isFinite(providerOrderCode) ? providerOrderCode : Number(orderCode),
+    const paidAmount = extractSePayPaidAmount(payload);
+    if (providerStatus === 'PAID' && paidAmount != null && paidAmount !== Number(existingTransaction.amount_vnd)) {
+      return {
+        statusCode: 409,
+        headers,
+        body: JSON.stringify({
+          error: 'Amount mismatch',
+          orderCode,
+          expected: Number(existingTransaction.amount_vnd),
+          received: paidAmount,
+        }),
+      };
+    }
+
+    const providerPayload = {
+      gateway: 'sepay',
+      ...payload,
+    };
+    const rpcArgs = {
       p_provider_status: providerStatus,
-      p_provider_payload: {
-        gateway: 'sepay',
-        ...payload,
-      },
-    });
+      p_provider_payload: providerPayload,
+    };
+    const { data, error } = Number.isFinite(providerOrderCode)
+      ? await admin.rpc('settle_payment_transaction_by_order_code', {
+          p_provider_order_code: providerOrderCode,
+          ...rpcArgs,
+        })
+      : await admin.rpc('settle_payment_transaction_by_id', {
+          p_transaction_id: existingTransaction.id,
+          ...rpcArgs,
+        });
 
     if (error) {
       throw error;

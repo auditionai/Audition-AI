@@ -1,7 +1,7 @@
 import type { Handler } from '@netlify/functions';
 import { getPayOSEnv } from './_payos';
 import { getServiceRoleClient } from './_supabase';
-import { normalizeSePayOrderStatus, retrieveSePayOrder } from './_sepay';
+import { extractSePayPaidAmount, normalizeSePayOrderStatus, retrieveSePayOrder } from './_sepay';
 
 const headers = {
   'Content-Type': 'application/json',
@@ -20,8 +20,9 @@ export const handler: Handler = async (event) => {
   }
 
   try {
-    const orderCode = Number(event.queryStringParameters?.orderCode || '');
-    if (!Number.isFinite(orderCode)) {
+    const orderCodeText = String(event.queryStringParameters?.orderCode || '').trim();
+    const orderCode = Number(orderCodeText);
+    if (!orderCodeText) {
       return {
         statusCode: 400,
         headers,
@@ -33,14 +34,24 @@ export const handler: Handler = async (event) => {
     const requestedGateway = String(event.queryStringParameters?.gateway || '').trim().toLowerCase();
     const { data: existingTransaction, error: existingTransactionError } = await admin
       .from('payment_transactions')
-      .select('id, payment_method, provider_payment_link_id')
-      .or(`provider_order_code.eq.${orderCode},order_code.eq.${String(orderCode)}`)
+      .select('id, payment_method, provider_payment_link_id, amount_vnd')
+      .or(Number.isFinite(orderCode)
+        ? `provider_order_code.eq.${orderCode},order_code.eq.${orderCodeText}`
+        : `order_code.eq.${orderCodeText}`)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
 
     if (existingTransactionError) {
       throw existingTransactionError;
+    }
+
+    if (!existingTransaction) {
+      return {
+        statusCode: 404,
+        headers,
+        body: JSON.stringify({ error: 'Transaction not found', orderCode: orderCodeText }),
+      };
     }
 
     const paymentMethod = String(existingTransaction?.payment_method || '').toLowerCase();
@@ -51,7 +62,7 @@ export const handler: Handler = async (event) => {
       providerPaymentLinkId.startsWith('sepay:');
 
     if (shouldUseSePay) {
-      const result = await retrieveSePayOrder(orderCode);
+      const result = await retrieveSePayOrder(orderCodeText);
       if (!result.ok) {
         return {
           statusCode: result.status || 400,
@@ -61,14 +72,37 @@ export const handler: Handler = async (event) => {
       }
 
       const providerStatus = normalizeSePayOrderStatus(result.payload);
-      const { data, error } = await admin.rpc('settle_payment_transaction_by_order_code', {
-        p_provider_order_code: orderCode,
+      const paidAmount = extractSePayPaidAmount(result.payload);
+      if (providerStatus === 'PAID' && paidAmount != null && paidAmount !== Number(existingTransaction?.amount_vnd)) {
+        return {
+          statusCode: 409,
+          headers,
+          body: JSON.stringify({
+            error: 'Amount mismatch',
+            orderCode: orderCodeText,
+            expected: Number(existingTransaction?.amount_vnd),
+            received: paidAmount,
+          }),
+        };
+      }
+
+      const providerPayload = {
+        gateway: 'sepay',
+        ...result.payload,
+      };
+      const rpcArgs = {
         p_provider_status: providerStatus,
-        p_provider_payload: {
-          gateway: 'sepay',
-          ...result.payload,
-        },
-      });
+        p_provider_payload: providerPayload,
+      };
+      const { data, error } = Number.isFinite(orderCode)
+        ? await admin.rpc('settle_payment_transaction_by_order_code', {
+            p_provider_order_code: orderCode,
+            ...rpcArgs,
+          })
+        : await admin.rpc('settle_payment_transaction_by_id', {
+            p_transaction_id: existingTransaction?.id,
+            ...rpcArgs,
+          });
 
       if (error) {
         throw error;
@@ -78,6 +112,14 @@ export const handler: Handler = async (event) => {
         statusCode: 200,
         headers,
         body: JSON.stringify({ success: true, gateway: 'sepay', payment: result.payload?.data || result.payload, transaction: data }),
+      };
+    }
+
+    if (!Number.isFinite(orderCode)) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ error: 'Invalid PayOS orderCode', orderCode: orderCodeText }),
       };
     }
 

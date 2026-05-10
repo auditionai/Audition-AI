@@ -154,6 +154,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/sepay-reconcile-pending"
+  to = "/.netlify/functions/sepay-reconcile-pending"
+  status = 200
+
+[[redirects]]
   from = "/api/direct-image-edit"
   to = "/.netlify/functions/direct-image-edit"
   status = 200

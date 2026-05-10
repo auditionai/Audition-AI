@@ -8,23 +8,23 @@ export type SePayEnv = {
 };
 
 const SIGNED_FIELDS = [
-  'merchant',
-  'env',
-  'operation',
-  'payment_method',
   'order_amount',
+  'merchant',
   'currency',
-  'order_invoice_number',
+  'operation',
   'order_description',
+  'order_invoice_number',
   'customer_id',
+  'payment_method',
+  'success_url',
+  'error_url',
+  'cancel_url',
+  'env',
   'agreement_id',
   'agreement_name',
   'agreement_type',
   'agreement_payment_frequency',
   'agreement_amount_per_payment',
-  'success_url',
-  'error_url',
-  'cancel_url',
   'order_id',
 ];
 
@@ -49,8 +49,8 @@ export const getSePayApiBaseUrl = (env: SePayEnv['env']) =>
   env === 'sandbox' ? 'https://pgapi-sandbox.sepay.vn/v1' : 'https://pgapi.sepay.vn/v1';
 
 export const signSePayFields = (fields: Record<string, unknown>, secretKey: string) => {
-  const signed = Object.keys(fields)
-    .filter((field) => SIGNED_FIELDS.includes(field) && fields[field] !== undefined)
+  const signed = SIGNED_FIELDS
+    .filter((field) => fields[field] !== undefined)
     .map((field) => `${field}=${fields[field] ?? ''}`);
 
   return crypto.createHmac('sha256', secretKey).update(signed.join(',')).digest('base64');
@@ -123,12 +123,15 @@ export const normalizeSePayOrderStatus = (payload: any) => {
     payload?.data?.order_status ||
       payload?.data?.status ||
       payload?.data?.payment_status ||
+      payload?.data?.transaction_status ||
       payload?.order_status ||
       payload?.status ||
+      payload?.transaction_status ||
+      payload?.transaction?.transaction_status ||
       '',
   ).toUpperCase();
 
-  if (['PAID', 'SUCCESS', 'SUCCEEDED', 'COMPLETED', 'APPROVED', 'CAPTURED'].includes(rawStatus)) {
+  if (['PAID', 'SUCCESS', 'SUCCEEDED', 'COMPLETED', 'APPROVED', 'CAPTURED', 'SETTLED', 'AUTHORIZED'].includes(rawStatus)) {
     return 'PAID';
   }
   if (['CANCELLED', 'CANCELED', 'VOIDED'].includes(rawStatus)) {
@@ -139,4 +142,48 @@ export const normalizeSePayOrderStatus = (payload: any) => {
   }
 
   return rawStatus || 'PENDING';
+};
+
+export const parseSePayCustomData = (value: any) => {
+  if (!value) return null;
+  if (typeof value === 'object' && !Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const parsed = parseSePayCustomData(item);
+      if (parsed) return parsed;
+    }
+  }
+  return null;
+};
+
+export const extractSePayOrderCode = (payload: any) => {
+  const customData = parseSePayCustomData(payload?.order?.custom_data || payload?.custom_data || payload?.data?.custom_data);
+  return String(
+    payload?.order?.order_invoice_number ||
+      payload?.order_invoice_number ||
+      payload?.data?.order_invoice_number ||
+      customData?.orderCode ||
+      customData?.order_code ||
+      '',
+  ).trim();
+};
+
+export const extractSePayPaidAmount = (payload: any) => {
+  const raw =
+    payload?.order?.order_amount ||
+    payload?.transaction?.transaction_amount ||
+    payload?.data?.order_amount ||
+    payload?.data?.transaction_amount ||
+    payload?.amount ||
+    null;
+  if (raw == null || raw === '') return null;
+  const amount = Number(String(raw).replace(/,/g, ''));
+  return Number.isFinite(amount) ? amount : null;
 };

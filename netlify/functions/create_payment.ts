@@ -141,10 +141,6 @@ const createSePayPayment = async (event: Parameters<Handler>[0], input: any) => 
     successUrl,
     errorUrl,
     cancelUrl,
-    customData: JSON.stringify({
-      orderCode: String(input.orderCode),
-      package: input.items?.[0]?.name || '',
-    }),
   });
 
   const payload = encodeSePayCheckoutPayload({

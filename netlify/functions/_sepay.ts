@@ -19,13 +19,6 @@ const SIGNED_FIELDS = [
   'success_url',
   'error_url',
   'cancel_url',
-  'env',
-  'agreement_id',
-  'agreement_name',
-  'agreement_type',
-  'agreement_payment_frequency',
-  'agreement_amount_per_payment',
-  'order_id',
 ];
 
 export const getSePayEnv = (): SePayEnv => {
@@ -65,7 +58,6 @@ export const createSePayCheckoutFields = (
     successUrl: string;
     errorUrl: string;
     cancelUrl: string;
-    customData?: string;
   },
   config = getSePayEnv(),
 ) => {
@@ -81,13 +73,19 @@ export const createSePayCheckoutFields = (
     success_url: input.successUrl,
     error_url: input.errorUrl,
     cancel_url: input.cancelUrl,
-    ...(input.customData ? { custom_data: input.customData } : {}),
   };
+
+  const orderedFields = SIGNED_FIELDS.reduce<Record<string, string | number>>((result, field) => {
+    if (fields[field] !== undefined) {
+      result[field] = fields[field];
+    }
+    return result;
+  }, {});
 
   return {
     fields: {
-      ...fields,
-      signature: signSePayFields(fields, config.secretKey),
+      ...orderedFields,
+      signature: signSePayFields(orderedFields, config.secretKey),
     },
     checkoutUrl: getSePayCheckoutUrl(config.env),
     env: config.env,

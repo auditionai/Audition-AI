@@ -158,6 +158,42 @@ const createSePayPayment = async (event: Parameters<Handler>[0], input: any) => 
   };
 };
 
+const cancelSupersededPendingTransactions = async (transactionId: string) => {
+  if (!transactionId) return;
+
+  try {
+    const admin = getServiceRoleClient();
+    const { data: current, error: currentError } = await admin
+      .from('payment_transactions')
+      .select('id, user_id, created_at')
+      .eq('id', transactionId)
+      .maybeSingle();
+
+    if (currentError) throw currentError;
+    if (!current?.user_id) return;
+
+    const { error } = await admin
+      .from('payment_transactions')
+      .update({
+        status: 'cancelled',
+        provider_status: 'SUPERSEDED_BY_NEW_CHECKOUT',
+        provider_payload: {
+          superseded_by_transaction_id: current.id,
+          cancelled_at: new Date().toISOString(),
+        },
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', current.user_id)
+      .eq('status', 'pending')
+      .neq('id', current.id)
+      .lt('created_at', current.created_at);
+
+    if (error) throw error;
+  } catch (error) {
+    console.warn('[create-payment] Failed to cancel superseded pending transactions:', error);
+  }
+};
+
 const persistPaymentGatewayMetadata = async (input: any, data: any, gateway: PaymentGateway) => {
   try {
     const admin = getServiceRoleClient();
@@ -244,6 +280,10 @@ export const handler: Handler = async (event) => {
       expiredAt,
       transactionId,
     };
+
+    if (transactionId) {
+      await cancelSupersededPendingTransactions(String(transactionId));
+    }
 
     const data = gateway === 'payos'
       ? await createPayOSPayment(input)

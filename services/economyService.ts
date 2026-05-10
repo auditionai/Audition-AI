@@ -374,14 +374,35 @@ export const getUserProfile = async (options?: { force?: boolean }): Promise<Use
     }
 
     userProfilePromise = (async () => {
-        const { data, error } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', user.id)
-            .maybeSingle();
+        let data: any = null;
+        let error: { message?: string } | null = null;
+
+        try {
+            const response = await readWithRetry<{ data: any; error: { message?: string } | null }>(
+                () => supabase
+                    .from('users')
+                    .select('*')
+                    .eq('id', user.id)
+                    .maybeSingle(),
+                'Fetching user profile',
+            );
+            data = response.data;
+            error = response.error;
+        } catch (readError: any) {
+            console.error("Error fetching user profile:", readError);
+            const cachedProfile = userProfileCache;
+            if (cachedProfile && cachedProfile.userId === user.id) {
+                return cachedProfile.value;
+            }
+            throw new Error("Failed to fetch user profile: " + (readError?.message || 'Network error'));
+        }
 
         if (error) {
             console.error("Error fetching user profile:", error);
+            const cachedProfile = userProfileCache;
+            if (cachedProfile && cachedProfile.userId === user.id) {
+                return cachedProfile.value;
+            }
             throw new Error("Failed to fetch user profile: " + error.message);
         }
 

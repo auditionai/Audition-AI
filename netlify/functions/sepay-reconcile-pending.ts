@@ -28,7 +28,7 @@ const reconcilePendingSePay: Handler = async (event) => {
 
     const { data: transactions, error: listError } = await admin
       .from('payment_transactions')
-      .select('id, amount_vnd, order_code, provider_order_code, status, payment_method, provider_payment_link_id, created_at')
+      .select('id, user_id, amount_vnd, order_code, provider_order_code, status, payment_method, provider_payment_link_id, created_at')
       .eq('status', 'pending')
       .or('payment_method.eq.sepay,provider_payment_link_id.like.sepay:%')
       .lte('created_at', staleBefore)
@@ -63,6 +63,49 @@ const reconcilePendingSePay: Handler = async (event) => {
           received: paidAmount,
         });
         continue;
+      }
+
+      if (providerStatus !== 'PAID') {
+        const { data: newerTransaction, error: newerError } = await admin
+          .from('payment_transactions')
+          .select('id, status, created_at')
+          .eq('user_id', tx.user_id)
+          .gt('created_at', tx.created_at)
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+
+        if (newerError) {
+          results.push({ id: tx.id, orderCode, success: false, reason: newerError.message });
+          continue;
+        }
+
+        if (newerTransaction) {
+          const { error: cancelError } = await admin
+            .from('payment_transactions')
+            .update({
+              status: 'cancelled',
+              provider_status: 'SUPERSEDED_BY_NEW_CHECKOUT',
+              provider_payload: {
+                gateway: 'sepay',
+                reconciled: true,
+                superseded_by_transaction_id: newerTransaction.id,
+                cancelled_at: new Date().toISOString(),
+                ...lookup.payload,
+              },
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', tx.id)
+            .eq('status', 'pending');
+
+          if (cancelError) {
+            results.push({ id: tx.id, orderCode, success: false, reason: cancelError.message });
+            continue;
+          }
+
+          results.push({ id: tx.id, orderCode, success: true, providerStatus: 'SUPERSEDED_BY_NEW_CHECKOUT' });
+          continue;
+        }
       }
 
       const { data, error } = await admin.rpc('settle_payment_transaction_by_id', {

@@ -1723,7 +1723,47 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                 <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 shadow-lg">
                     <div className="flex justify-between items-center mb-3">
                         <label className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
-                            <Icons.MessageCircle className="w-4 h-4" /> 2. Mô tả
+                            <Icons.Image className="w-4 h-4" /> 2. Ảnh mẫu bố cục
+                        </label>
+                        {refImage && (
+                            <button
+                                type="button"
+                                onClick={() => setRefImage(null)}
+                                className="text-[10px] font-bold text-slate-400 hover:text-white transition-colors bg-white/5 px-3 py-1.5 rounded-full border border-white/10"
+                            >
+                                Xóa ảnh mẫu
+                            </button>
+                        )}
+                    </div>
+
+                    <button
+                        type="button"
+                        onClick={handleRefUploadClick}
+                        className="w-full md:w-[220px] h-64 bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-purple cursor-pointer relative overflow-hidden group flex flex-col items-center justify-center transition-all"
+                    >
+                        {refImage ? (
+                            <>
+                                <img src={refImage} className="w-full h-full object-contain opacity-90 bg-black/30" alt="Ref" />
+                                <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <span className="text-xs font-bold text-white uppercase tracking-wider">Thay ảnh mẫu</span>
+                                </div>
+                                <div className="absolute bottom-0 left-0 right-0 bg-audi-purple/80 text-white text-[10px] font-bold text-center py-2">
+                                    POSE REF
+                                </div>
+                            </>
+                        ) : (
+                            <div className="flex flex-col items-center text-slate-500 p-4 text-center">
+                                <Icons.Image className="w-8 h-8 mb-2" />
+                                <span className="text-[10px] font-bold uppercase leading-tight">Ảnh mẫu<br/>(Pose)</span>
+                            </div>
+                        )}
+                    </button>
+                </div>
+
+                <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 shadow-lg">
+                    <div className="flex justify-between items-center mb-3">
+                        <label className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
+                            <Icons.MessageCircle className="w-4 h-4" /> 3. Mô tả
                         </label>
                         <div className="flex gap-2">
                             <button
@@ -1742,47 +1782,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                         rows={12}
                         className="block w-full min-h-[340px] max-h-[760px] bg-black/20 border border-white/5 rounded-xl p-4 text-sm leading-relaxed text-white focus:border-audi-purple outline-none resize-y overflow-auto placeholder:text-slate-500"
                     />
-                </div>
-
-                <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 shadow-lg">
-                    <div className="flex justify-between items-center mb-3">
-                        <label className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
-                            <Icons.Image className="w-4 h-4" /> 3. Ảnh mẫu bố cục
-                        </label>
-                        {refImage && (
-                            <button
-                                type="button"
-                                onClick={() => setRefImage(null)}
-                                className="text-[10px] font-bold text-slate-400 hover:text-white transition-colors bg-white/5 px-3 py-1.5 rounded-full border border-white/10"
-                            >
-                                Xóa ảnh mẫu
-                            </button>
-                        )}
-                    </div>
-
-                    <button
-                        type="button"
-                        onClick={handleRefUploadClick}
-                        className="w-full min-h-[220px] bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-purple cursor-pointer relative overflow-hidden group flex items-center justify-center transition-all"
-                    >
-                        {refImage ? (
-                            <>
-                                <img src={refImage} className="w-full max-h-[420px] object-contain opacity-90 bg-black/30" alt="Ref" />
-                                <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <span className="text-xs font-bold text-white uppercase tracking-wider">Thay ảnh mẫu</span>
-                                </div>
-                                <div className="absolute bottom-0 left-0 right-0 bg-audi-purple/80 text-white text-[10px] font-bold text-center py-2">
-                                    POSE REF
-                                </div>
-                            </>
-                        ) : (
-                            <div className="flex flex-col items-center text-slate-500 p-6 text-center">
-                                <Icons.Image className="w-8 h-8 mb-2" />
-                                <span className="text-xs font-bold uppercase leading-tight">Tải ảnh mẫu bố cục lên</span>
-                                <span className="mt-1 text-[11px] text-slate-600">Tùy chọn, dùng để giữ pose hoặc khung hình</span>
-                            </div>
-                        )}
-                    </button>
                 </div>
 
             </div>

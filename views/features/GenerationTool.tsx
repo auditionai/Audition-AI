@@ -1720,7 +1720,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                     })}
                 </div>
 
-                <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 shadow-lg">
+                <div className="w-full md:w-[220px] bg-[#12121a] border border-white/10 rounded-2xl p-4 shadow-lg">
                     <div className="flex justify-between items-center mb-3">
                         <label className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
                             <Icons.Image className="w-4 h-4" /> 2. Ảnh mẫu bố cục
@@ -1739,7 +1739,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                     <button
                         type="button"
                         onClick={handleRefUploadClick}
-                        className="w-full md:w-[220px] h-64 bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-purple cursor-pointer relative overflow-hidden group flex flex-col items-center justify-center transition-all"
+                        className="w-full h-64 bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-purple cursor-pointer relative overflow-hidden group flex flex-col items-center justify-center transition-all"
                     >
                         {refImage ? (
                             <>

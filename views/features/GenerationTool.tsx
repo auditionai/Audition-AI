@@ -1720,44 +1720,46 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                     })}
                 </div>
 
-                <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 shadow-lg">
-                    <div className="flex justify-between items-center mb-3">
-                        <label className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
-                            <Icons.Image className="w-4 h-4" /> 2. Ảnh mẫu bố cục
-                        </label>
-                        {refImage && (
-                            <button
-                                type="button"
-                                onClick={() => setRefImage(null)}
-                                className="text-[10px] font-bold text-slate-400 hover:text-white transition-colors bg-white/5 px-3 py-1.5 rounded-full border border-white/10"
-                            >
-                                Xóa ảnh mẫu
-                            </button>
-                        )}
-                    </div>
+                <div className="flex justify-center w-full">
+                    <div className="w-full md:w-[220px] bg-[#12121a] border border-white/10 rounded-2xl p-4 shadow-lg">
+                        <div className="flex justify-between items-center mb-3">
+                            <label className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
+                                <Icons.Image className="w-4 h-4" /> 2. Ảnh mẫu bố cục
+                            </label>
+                            {refImage && (
+                                <button
+                                    type="button"
+                                    onClick={() => setRefImage(null)}
+                                    className="text-[10px] font-bold text-slate-400 hover:text-white transition-colors bg-white/5 px-3 py-1.5 rounded-full border border-white/10"
+                                >
+                                    Xóa ảnh mẫu
+                                </button>
+                            )}
+                        </div>
 
-                    <button
-                        type="button"
-                        onClick={handleRefUploadClick}
-                        className="w-full md:w-[220px] h-64 bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-purple cursor-pointer relative overflow-hidden group flex flex-col items-center justify-center transition-all"
-                    >
-                        {refImage ? (
-                            <>
-                                <img src={refImage} className="w-full h-full object-contain opacity-90 bg-black/30" alt="Ref" />
-                                <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <span className="text-xs font-bold text-white uppercase tracking-wider">Thay ảnh mẫu</span>
+                        <button
+                            type="button"
+                            onClick={handleRefUploadClick}
+                            className="w-full h-64 bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-purple cursor-pointer relative overflow-hidden group flex flex-col items-center justify-center transition-all"
+                        >
+                            {refImage ? (
+                                <>
+                                    <img src={refImage} className="w-full h-full object-contain opacity-90 bg-black/30" alt="Ref" />
+                                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <span className="text-xs font-bold text-white uppercase tracking-wider">Thay ảnh mẫu</span>
+                                    </div>
+                                    <div className="absolute bottom-0 left-0 right-0 bg-audi-purple/80 text-white text-[10px] font-bold text-center py-2">
+                                        POSE REF
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="flex flex-col items-center text-slate-500 p-4 text-center">
+                                    <Icons.Image className="w-8 h-8 mb-2" />
+                                    <span className="text-[10px] font-bold uppercase leading-tight">Ảnh mẫu<br/>(Pose)</span>
                                 </div>
-                                <div className="absolute bottom-0 left-0 right-0 bg-audi-purple/80 text-white text-[10px] font-bold text-center py-2">
-                                    POSE REF
-                                </div>
-                            </>
-                        ) : (
-                            <div className="flex flex-col items-center text-slate-500 p-4 text-center">
-                                <Icons.Image className="w-8 h-8 mb-2" />
-                                <span className="text-[10px] font-bold uppercase leading-tight">Ảnh mẫu<br/>(Pose)</span>
-                            </div>
-                        )}
-                    </button>
+                            )}
+                        </button>
+                    </div>
                 </div>
 
                 <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 shadow-lg">

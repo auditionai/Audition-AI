@@ -395,7 +395,7 @@ export function WorkspacePromptImage() {
           onChange={(event) => setPrompt(event.target.value)}
           maxLength={9999}
           placeholder="Nhập prompt tạo ảnh..."
-          className="w-full min-h-[120px] rounded-2xl bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-zinc-800 p-3 text-sm text-gray-950 dark:text-white outline-none resize-none placeholder:text-gray-400 dark:placeholder:text-zinc-500"
+          className="w-full min-h-[180px] max-h-[520px] rounded-2xl bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-zinc-800 p-3 text-sm leading-relaxed text-gray-950 dark:text-white outline-none resize-y overflow-auto placeholder:text-gray-400 dark:placeholder:text-zinc-500"
         />
         <div className="text-right text-[11px] text-gray-400 dark:text-zinc-500 mt-1">{prompt.length}/9999</div>
       </section>

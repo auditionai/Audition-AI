@@ -1121,7 +1121,7 @@ export function WorkspaceImage() {
               onChange={(e) => setPrompt(e.target.value)}
               maxLength={2000}
               placeholder="Nhập mô tả ảnh bạn muốn tạo. Ví dụ: Một cô gái mặc áo dài trắng đứng bên hồ sen, cinematic lighting..."
-              className="w-full h-28 bg-transparent text-[15px] leading-relaxed resize-none focus:outline-none placeholder:text-gray-300 text-gray-800 dark:text-zinc-100"
+              className="w-full min-h-[180px] max-h-[520px] bg-transparent text-[15px] leading-relaxed resize-y overflow-auto focus:outline-none placeholder:text-gray-300 text-gray-800 dark:text-zinc-100"
               disabled={stage === 'submitting'}
             />
             <div className="flex items-center justify-between border-t border-gray-100 dark:border-zinc-800 pt-3">

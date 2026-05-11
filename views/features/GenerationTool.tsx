@@ -1763,7 +1763,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
                             placeholder={lang === 'vi' ? "Mô tả chi tiết: trang phục, bối cảnh, ánh sáng..." : "Detailed prompt: clothes, scene, lighting..."}
-                            className="flex-1 bg-black/20 border border-white/5 rounded-xl p-3 text-sm text-white focus:border-audi-purple outline-none resize-none min-h-[100px]"
+                            className="flex-1 min-h-[180px] max-h-[520px] bg-black/20 border border-white/5 rounded-xl p-3 text-sm leading-relaxed text-white focus:border-audi-purple outline-none resize-y overflow-auto placeholder:text-slate-500"
                         />
                     </div>
                 </div>

@@ -429,7 +429,8 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
               onChange={(event) => setPrompt(event.target.value)}
               maxLength={9999}
               placeholder="Nhập prompt tạo ảnh. Hệ thống chỉ gửi prompt này và ảnh tham chiếu lên TST, không chèn prompt hệ thống Audition."
-              className="w-full min-h-[180px] max-h-[560px] rounded-xl border border-white/10 bg-black/40 p-3 text-sm leading-relaxed text-white outline-none focus:border-audi-pink resize-y overflow-auto placeholder:text-slate-500"
+              rows={12}
+              className="block w-full min-h-[340px] max-h-[760px] rounded-xl border border-white/10 bg-black/40 p-4 text-sm leading-relaxed text-white outline-none focus:border-audi-pink resize-y overflow-auto placeholder:text-slate-500"
             />
             <div className="mt-2 text-right text-xs text-slate-500">{prompt.length}/9999</div>
           </section>

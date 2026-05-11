@@ -1119,9 +1119,10 @@ export function WorkspaceImage() {
             <textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              maxLength={2000}
+              maxLength={9999}
               placeholder="Nhập mô tả ảnh bạn muốn tạo. Ví dụ: Một cô gái mặc áo dài trắng đứng bên hồ sen, cinematic lighting..."
-              className="w-full min-h-[180px] max-h-[520px] bg-transparent text-[15px] leading-relaxed resize-y overflow-auto focus:outline-none placeholder:text-gray-300 text-gray-800 dark:text-zinc-100"
+              rows={12}
+              className="block w-full min-h-[320px] max-h-[720px] bg-transparent text-[15px] leading-relaxed resize-y overflow-auto focus:outline-none placeholder:text-gray-300 text-gray-800 dark:text-zinc-100"
               disabled={stage === 'submitting'}
             />
             <div className="flex items-center justify-between border-t border-gray-100 dark:border-zinc-800 pt-3">
@@ -1132,7 +1133,7 @@ export function WorkspaceImage() {
               >
                 <Wand2 className="w-3.5 h-3.5" /> Sử dụng Prompt mẫu
               </button>
-              <span className="text-[10px] text-gray-300 font-mono font-bold">{prompt.length}/2000</span>
+              <span className="text-[10px] text-gray-300 font-mono font-bold">{prompt.length}/9999</span>
             </div>
           </div>
 

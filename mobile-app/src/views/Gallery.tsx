@@ -413,10 +413,21 @@ export const Gallery: React.FC = () => {
               {getStatusBadge(image)}
             </div>
 
-            {image.prompt ? (
+            {(image.userPrompt || image.prompt) ? (
               <p className="line-clamp-5 text-sm leading-relaxed text-gray-700 dark:text-zinc-200">
-                {summarizePrompt(image.prompt)}
+                {summarizePrompt(image.userPrompt || image.prompt)}
               </p>
+            ) : null}
+
+            {image.providerPrompt ? (
+              <details className="rounded-2xl border border-gray-100 bg-gray-50 p-3 dark:border-zinc-800 dark:bg-zinc-900/80">
+                <summary className="cursor-pointer select-none text-[11px] font-bold uppercase tracking-wide text-gray-400 dark:text-zinc-500">
+                  Prompt nội bộ / provider
+                </summary>
+                <p className="mt-2 max-h-44 overflow-y-auto whitespace-pre-wrap break-words font-mono text-[10px] leading-relaxed text-gray-500 dark:text-zinc-400">
+                  {image.providerPrompt}
+                </p>
+              </details>
             ) : null}
 
             {image.queueStage || (image.queueLogs?.length || 0) > 0 ? (
@@ -566,7 +577,7 @@ export const Gallery: React.FC = () => {
                     </div>
 
                     <div className="space-y-1.5 p-2.5">
-                      <p className="line-clamp-2 min-h-[2.5rem] text-[11px] font-medium text-gray-700 dark:text-zinc-200">{image.prompt || image.toolName || (isVideo ? 'Video AI' : 'Ảnh AI')}</p>
+                      <p className="line-clamp-2 min-h-[2.5rem] text-[11px] font-medium text-gray-700 dark:text-zinc-200">{image.userPrompt || image.prompt || image.toolName || (isVideo ? 'Video AI' : 'Ảnh AI')}</p>
                       <div className="flex items-center justify-between gap-2"><span className="truncate text-[10px] text-gray-400 dark:text-zinc-500">{formatDate(image.timestamp).split(',')[0]}</span>{getStatusBadge(image)}</div>
                     </div>
                   </button>

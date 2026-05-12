@@ -907,10 +907,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
     const styleMetadata = availableStyles.find((style: any) => style.image_url === activeStylePreset);
     const styleDirectivePrompt = buildAuditionKoreaMmoStylePrompt(styleMetadata?.trigger_prompt || styleMetadata?.name || null);
-    const basePrompt = [
-        `${activeFeature.defaultPrompt || ''}${prompt}`.trim(),
-        styleDirectivePrompt,
-    ].filter(Boolean).join('\n\n');
+    const basePrompt = `${activeFeature.defaultPrompt || ''}${prompt}`.trim();
     const requestedSpeedId = uiSpeedToTst(speed) || 'fast';
     const requestedServerId = uiServerToTst(server) || 'fast';
     const compatibleServers = getCompatibleGenerationServers({

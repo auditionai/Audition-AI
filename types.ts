@@ -69,6 +69,8 @@ export interface GeneratedImage {
   id: string;
   url: string; // Base64 data or Public URL
   prompt: string;
+  userPrompt?: string;
+  providerPrompt?: string;
   timestamp: number;
   updatedAt?: number;
   assetType?: 'image' | 'video';

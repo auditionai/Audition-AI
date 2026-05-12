@@ -754,11 +754,11 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                             {/* Prompt */}
                             <div>
                                 <div className="flex items-center justify-between mb-2">
-                                    <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">Prompt</div>
-                                    {viewingImage.prompt && (
+                                    <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">{lang === 'vi' ? 'Prompt người dùng' : 'User Prompt'}</div>
+                                    {(viewingImage.userPrompt || viewingImage.prompt) && (
                                         <button
                                             onClick={() => {
-                                                navigator.clipboard.writeText(viewingImage.prompt);
+                                                navigator.clipboard.writeText(viewingImage.userPrompt || viewingImage.prompt);
                                                 notify(lang === 'vi' ? 'Đã sao chép prompt!' : 'Prompt copied!', 'success');
                                             }}
                                             className="text-[10px] font-bold text-audi-cyan uppercase tracking-wider hover:text-white transition-colors flex items-center gap-1"
@@ -768,10 +768,21 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                         </button>
                                     )}
                                 </div>
-                                <div className="bg-black/30 border border-white/5 rounded-xl p-4 text-sm text-slate-300 leading-relaxed break-words line-clamp-3" title={viewingImage.prompt}>
-                                    {viewingImage.prompt || <span className="italic text-slate-600">No prompt provided</span>}
+                                <div className="bg-black/30 border border-white/5 rounded-xl p-4 text-sm text-slate-300 leading-relaxed break-words whitespace-pre-wrap max-h-40 overflow-y-auto custom-scrollbar" title={viewingImage.userPrompt || viewingImage.prompt}>
+                                    {viewingImage.userPrompt || viewingImage.prompt || <span className="italic text-slate-600">No prompt provided</span>}
                                 </div>
                             </div>
+
+                            {viewingImage.providerPrompt && (
+                                <details className="group rounded-xl border border-white/5 bg-black/20 p-4">
+                                    <summary className="cursor-pointer select-none text-xs font-bold uppercase tracking-wider text-slate-500 group-open:text-audi-cyan">
+                                        {lang === 'vi' ? 'Prompt nội bộ / provider' : 'Internal / Provider Prompt'}
+                                    </summary>
+                                    <div className="mt-3 max-h-56 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-black/30 p-3 font-mono text-[11px] leading-relaxed text-slate-400 custom-scrollbar">
+                                        {viewingImage.providerPrompt}
+                                    </div>
+                                </details>
+                            )}
 
                             {/* Meta Grid */}
                             <div className="grid grid-cols-2 gap-4">

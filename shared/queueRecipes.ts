@@ -498,39 +498,30 @@ export const isQueueRecipePayload = (payload: unknown): payload is QueueRecipePa
   return typeof recipeType === 'string' && RECIPE_TYPES.has(recipeType as QueueRecipeKind);
 };
 
-const IMAGE_QUALITY_BOOSTERS =
-  'masterpiece, best quality, ultra-detailed, 8k, premium stylized 3D fashion-game render, Korean MMO 3D style, crisp anti-aliased edges, clean high-fidelity game-engine materials, refined facial detail, sharp eye makeup detail, polished skin shading, premium cloth texture detail, clean accessory detail, adult-proportioned avatar anatomy, natural limb flow, believable weight distribution, non-photorealistic 3D character, ray tracing, hdr, cinematic lighting, unreal engine 5 render';
 const COMPACT_IMAGE_QUALITY_BOOSTERS =
   'ultra-detailed, stylized 3D fashion-game render, Korean MMO 3D style, crisp edges, polished materials, adult-proportioned avatar anatomy, natural limb flow, unreal engine 5 render, cinematic lighting, ray tracing, hdr';
 const IMAGE_NEGATIVE_PROMPT =
-  'low quality, bad anatomy, worst quality, blur, grain, watermark, text, signature, bad hands, bad face, mixed backgrounds, conflicting styles, extra characters, unwanted people from style reference, real people, photorealistic humans, photograph, realistic photography, real life, semi-realistic human, cinematic human portrait, live action, realistic skin pores, natural skin texture, DSLR, realistic male model, realistic female model, hyperreal face, realistic eyelashes, realistic fabric, flat anime drawing, flat cartoon, 2d, flat shading, floating character, disconnected limbs, hands in the air, feet not touching the ground, floating objects, unnatural posture, floating in mid-air, levitating, hovering, disconnected from background, bad perspective, illogical physics, extra arm, extra arms, extra hand, extra hands, extra leg, extra legs, extra foot, extra feet, duplicate hand, duplicate hands, duplicate foot, duplicate feet, duplicated limb, duplicated limbs, malformed feet, merged fingers, fused fingers, six fingers, seven fingers, broken wrist, twisted arm, twisted leg, long neck, elongated neck, stretched neck, giraffe neck, thin stretched neck, lowered shoulders, detached head, doll face, mannequin face, mannequin body, waxy skin, plastic skin, toy-like plastic sheen, glossy mannequin skin, hard specular skin, harsh facial planes, dark skin, darker skin, tanned skin, bronzed skin, yellow skin, orange skin, muddy skin tone, incorrect skin tone, skin tone shift, chibi proportions, giant eyes, baby face, stiff pose, rigid pose, stiff limbs, frozen posture, uncanny face, over-smoothed face, panel layout, split screen, tiled image, image grid, collage, storyboard, diptych, triptych, quadrants, four panels, four-up layout, contact sheet';
+  'wrong face, changed hairstyle, changed outfit, wrong skin tone, extra people, duplicate character, photorealistic human, flat 2d, flat cartoon, waxy plastic skin, doll face, mannequin body, chibi, childlike, oversized head, tiny body, long neck, broken anatomy, bad hands, extra limbs, floating limbs, collage, split screen, text, watermark, low quality, blurry';
 const IMAGE_ANATOMY_GUARD_CONSTRAINTS =
   'ANATOMY GUARD: Keep exactly one coherent body per character slot with natural adult-proportioned 3D anatomy. Never invent extra arms, extra hands, extra legs, extra feet, duplicated limbs, duplicated hands, duplicated feet, fused fingers, or malformed joints. Each visible hand must read as one coherent hand. Each visible foot must read as one coherent foot. If a hand, foot, or limb is partially hidden, keep it hidden naturally instead of hallucinating additional anatomy. Respect gravity, chair contact, ground contact, and believable joint bending.';
-const IMAGE_NECK_SHOULDER_PROPORTION_LOCK_CONSTRAINTS =
-  'NECK AND SHOULDER PROPORTION LOCK: Preserve the uploaded character reference head-to-neck-to-shoulder proportions exactly. Keep the same neck length, neck thickness, chin-to-collarbone distance, shoulder height, shoulder width, trapezius slope, and head placement relative to the torso. Never lengthen or stretch the neck for elegance, fashion posing, beauty stylization, camera angle, or style transfer. Do not lower the shoulders to create a longer neck. The head must sit naturally on the original short Audition-style 3D avatar neck.';
 const IMAGE_SKIN_TONE_LOCK_CONSTRAINTS =
   'SKIN TONE LOCK: Match the exposed skin tone, brightness, and undertone from the uploaded character references exactly. Never darken the skin, never tan it, never bronze it, never shift it toward brown, never add warm orange cast, and never reinterpret complexion because of scene lighting or style. If the reference skin is fair/light, keep it fair/light in the final render while still preserving believable scene lighting.';
 const AUDITION_SOFT_BEAUTY_RENDER_PROFILE =
-  'SOFT BEAUTY RENDER PROFILE: Aim for premium Audition-fashion 3D beauty rendering with soft tonal transitions, natural facial shading, clean eye and lip definition, controlled saturation, elegant specular response, refined cloth and accessory separation, and expressive but non-rigid body flow. Avoid toy-like hardness, crushed contrast, oversaturated colors, thick plastic highlights, and frozen mannequin expression.';
+  'Audition Korea MMO 3D beauty render: soft skin shading, crisp eyes/lips/makeup, polished cloth/accessories, controlled highlights, no toy-like plastic finish.';
 
 const getShotAwareRenderProfile = (shotType: ImageRoleContract['shotType']) => {
   if (shotType === 'close_up') {
-    return `${AUDITION_SOFT_BEAUTY_RENDER_PROFILE} CLOSE-UP WEIGHTING: prioritize eyes, lashes, brows, lips, skin transition, and subtle facial modeling from the uploaded FACE LOCK. Keep the camera tight on face/upper torso when requested; do not widen into a full-body standing pose unless the user explicitly asks for full body.`;
+    return `${AUDITION_SOFT_BEAUTY_RENDER_PROFILE} Close-up: prioritize uploaded face identity and keep framing tight on face/upper torso unless full body is explicitly requested.`;
   }
 
   if (shotType === 'full_body') {
-    return `${AUDITION_SOFT_BEAUTY_RENDER_PROFILE} FULL-BODY WEIGHTING: prioritize overall silhouette, natural limb flow, outfit texture, leg/arm coherence, and softer facial integration. Keep the face recognizable but do not overconcentrate detail into a stiff doll-like head.`;
+    return `${AUDITION_SOFT_BEAUTY_RENDER_PROFILE} Full-body: prioritize silhouette, outfit texture, natural limb flow, and recognizable face without stiff doll anatomy.`;
   }
 
-  return `${AUDITION_SOFT_BEAUTY_RENDER_PROFILE} HALF-BODY WEIGHTING: balance facial fidelity, torso flow, hand quality, material detail, and soft beauty shading. Keep the camera around portrait, bust, waist-up, or three-quarter framing when no full-body command is present; do not default to a far full-body standing render.`;
+  return `${AUDITION_SOFT_BEAUTY_RENDER_PROFILE} Half-body: balance face fidelity, torso flow, hands, materials, and avoid default far full-body standing framing.`;
 };
-const IMAGE_ROLE_LOCK_CONSTRAINTS =
-  'STRICT ROLE LOCK: CHARACTER REFERENCES are the only identity source for face, hair, skin tone, head shape, body structure, outfit, shoes, accessories, tattoos, gender, and overall avatar identity. For non-portrait shots, BODY references are the primary source for full-body complexion, limb anatomy, and overall body proportions. FACE LOCK references, when present, are the highest-priority source for eyes, eyebrows, nose, lips, jawline, hairline, bangs, makeup, glasses, facial proportions, and facial likeness. Preserve uploaded skin tone exactly; do not warm it, tan it, yellow it, orange it, or shift it to a different complexion. Preserve believable adult 3D anatomy from the character references; avoid doll-like proportions, rigid limbs, inflated eyes, or mannequin posture. CHARACTER REFERENCES are NOT pose references. SAMPLE IMAGE is composition-only and controls pose, camera angle, framing, subject placement, body lean, hand placement, spacing, scene layout, and background composition only. SAMPLE IMAGE must never contribute face identity, hairstyle identity, makeup identity, or facial expression identity, even if the sample face is large, sharp, centered, or visually dominant. Treat SAMPLE IMAGE as a structural guide, not a literal body copy. If the sample pose would create broken anatomy, repair the anatomy while preserving the composition. Never reproduce SAMPLE IMAGE as the final output, never borrow its identity, outfit, or realism, and never return any uploaded reference nearly unchanged. STYLE DIRECTIVES may influence only render quality, lighting behavior, material response, restrained color grading, and final finish. STYLE DIRECTIVES must never override identity, skin tone, anatomy, subject count, pose, composition, or outfit. The final image must keep one-to-one slot mapping for all uploaded characters, remain a stylized 3D game avatar, and never become a photorealistic or semi-realistic human.';
-const REDUCED_IMAGE_ROLE_LOCK_CONSTRAINTS_NO_SAMPLE =
-  'STRICT ROLE LOCK: No SAMPLE IMAGE is provided, so USER REQUEST is the primary source for pose, framing, action, scene layout, and background. CHARACTER REFERENCES still define identity only and are NOT pose references. For non-portrait shots, BODY references are the primary source for full-body complexion, limb anatomy, and overall body proportions. FACE LOCK references, when present, are the highest-priority source for eyes, eyebrows, nose, lips, jawline, hairline, bangs, makeup, glasses, facial proportions, and facial likeness. Preserve uploaded skin tone exactly; do not warm it, tan it, yellow it, orange it, or shift it to a different complexion. Preserve believable adult 3D anatomy from the character references; avoid doll-like proportions, rigid limbs, inflated eyes, or mannequin posture. STYLE DIRECTIVES may influence only render quality, lighting behavior, material response, restrained color grading, and final 3D finish. STYLE DIRECTIVES must never override identity, skin tone, anatomy, pose, composition, camera framing, gender presentation, subject count, or outfit. Never return any uploaded reference nearly unchanged when the USER REQUEST asks for a different pose, scene, framing, or environment. Keep the result as a stylized 3D game avatar, not a photorealistic or semi-realistic human.';
 export const DEFAULT_PROVIDER_PROMPT_MAX_LENGTH = 9999;
 export const SERVER_3_PROVIDER_PROMPT_MAX_LENGTH = 3500;
-const MAX_NEGATIVE_PROMPT_LENGTH = 9999;
 
 const normalizeProviderServerId = (value?: string | null) =>
   String(value || '')
@@ -594,6 +585,14 @@ const trimPromptText = (value: string, maxLength: number) => {
   }
 
   return `${value.slice(0, maxLength - 1).trimEnd()}…`;
+};
+
+const getProviderStyleQualityText = (stylePrompt?: string | null) => {
+  const normalized = trimPromptText(collapsePromptWhitespace(stylePrompt || ''), 320)
+    .replace(/^STYLE QUALITY:\s*/i, '')
+    .trim();
+
+  return normalized || 'premium Audition Korea MMO stylized 3D game-avatar render, clean materials, soft lighting, polished skin, detailed hair, cloth, leather, metal, and glass finish.';
 };
 
 type ProviderPromptBudgetSection = {
@@ -1466,16 +1465,14 @@ const buildProWeightedReferencePlan = (
 
 const buildProStructuredProviderPrompt = (
   synthesizedPrompt: string,
-  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio' | 'visionAnalysis' | 'serverId'>,
+  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'stylePrompt' | 'aspectRatio' | 'visionAnalysis' | 'serverId'>,
   mergedNegativePrompt: string,
 ) => {
   const roleContract = buildImageRoleContract(payload);
-  const normalizedSynthesizedPrompt = sanitizeProProviderText(renderDirectorSpecForProvider(
-    synthesizedPrompt?.trim() || getPrimaryUserRequestText(payload),
-  ));
+  void synthesizedPrompt;
   const characterCount = Math.max(1, Math.floor(Number(payload.characterCount || getImageCharacterReferenceGroups(payload).length || 1)));
-  const compactNegativePrompt = trimPromptText(mergedNegativePrompt, MAX_NEGATIVE_PROMPT_LENGTH);
-  const weightedPlan = buildProWeightedReferencePlan(payload);
+  const compactNegativePrompt = trimPromptText(mergedNegativePrompt, 420);
+  const stylePrompt = getProviderStyleQualityText(payload.stylePrompt);
   const structuredVisionLines = [
     ...getImageCharacterReferenceGroups(payload)
       .map((group) => buildProCharacterVisionLine(payload, group.characterIndex))
@@ -1486,178 +1483,122 @@ const buildProStructuredProviderPrompt = (
 
   return buildProviderPromptWithinServerBudget([
     { locked: true, text: 'RENDER ONE NEW FINAL IMAGE. Never return any uploaded reference unchanged.' },
-    { locked: true, text: `MODEL PATH: ${payload.modelId || 'unknown'}. Use structured weighting instead of averaging all references together.` },
-    { locked: true, text: `CHARACTER COUNT: EXACTLY ${characterCount}. One-to-one slot mapping is mandatory.` },
-    { locked: true, text: `SHOT TYPE: ${roleContract.shotType}` },
-    { locked: true, text: weightedPlan },
+    { locked: true, text: `USER PROMPT - highest priority:\n${getPrimaryUserRequestText(payload) || 'Create one new image from the uploaded references.'}` },
+    { locked: true, text: `CHARACTER REFERENCES: render exactly ${characterCount} character(s). Preserve the uploaded face identity, hair, skin tone, outfit, shoes, accessories, makeup, body structure, and gender presentation. Do not invent a new face, new outfit, or extra character.` },
     {
       locked: true,
       text: payload.sampleImage
-        ? 'SCENE PLATE RULE: SAMPLE IMAGE is the primary scene plate. Preserve the full sample background, furniture, props, camera angle, framing, object layout, contact points, and subject orientation. Replace only the sample person with the uploaded character identity.'
-        : 'SCENE PLATE RULE: No sample image is present, so derive composition from the primary user request.',
+        ? 'SAMPLE IMAGE COMPOSITION: use the sample only for pose, framing, camera angle, subject placement, background, props, and contact points. Never copy the sample identity, face, outfit, or hairstyle.'
+        : 'COMPOSITION: no sample image is present, so use the user prompt for pose, camera, framing, scene, and background. Do not fall back to a default standing studio pose.',
     },
-    { locked: true, text: 'IDENTITY RULE: CHARACTER REFERENCES define the final avatar identity. BODY references define outfit, skin tone, body proportions, and full-body anatomy. FACE LOCK references refine face identity. FACE DETAIL LOCK references refine makeup and micro facial features, but only as strongly as the shot weighting allows.' },
+    { locked: true, text: `STYLE QUALITY: ${stylePrompt}` },
     {
-      locked: true,
-      text: payload.styleImage
-        ? 'STYLE RULE: STYLE IMAGE influences only render quality, material response, lighting feel, restrained color grading, and final finish. STYLE IMAGE must never override pose, background, outfit, or identity.'
-        : 'STYLE RULE: Use TEXT STYLE DIRECTIVES only for render quality, material response, lighting feel, restrained color grading, and final finish. No uploaded style image is present.',
-    },
-    {
-      locked: true,
-      text: payload.styleImage
-        ? 'CONFLICT RULE: When references disagree, keep SAMPLE for scene/pose/background, keep CHARACTER for identity/body/skin tone, and keep STYLE for render finish only.'
-        : 'CONFLICT RULE: When references disagree, keep SAMPLE for scene/pose/background and keep CHARACTER for identity/body/skin tone. Text style directives affect finish only.',
-    },
-    {
-      weight: 2,
+      weight: 1,
       text: structuredVisionLines.length > 0
-        ? ['PRO STRUCTURED VISION FIELDS:', ...structuredVisionLines].join('\n')
-        : 'PRO STRUCTURED VISION FIELDS:\n- unavailable',
+        ? ['REFERENCE ANALYSIS:', ...structuredVisionLines].join('\n')
+        : '',
     },
-    { weight: 3, text: `DIRECTOR JSON SPEC (authoritative, English):\n${normalizedSynthesizedPrompt || 'No director synthesis available.'}` },
-    { locked: true, text: getShotAwareRenderProfile(roleContract.shotType) },
-    { weight: 1, text: `QUALITY: ${IMAGE_QUALITY_BOOSTERS}` },
-    { locked: true, text: 'SOFTNESS RULE: prioritize soft beauty shading, natural material transitions, controlled highlights, softer facial planes, and non-plastic skin response. Avoid toy-like rigidity, glossy mannequin sheen, or stiff body flow.' },
-    { locked: true, text: 'SKIN TONE LOCK: match the uploaded character complexion exactly.' },
-    { locked: true, text: 'ANATOMY GUARD: keep one coherent natural body with no extra limbs.' },
-    { weight: 1, text: `NEGATIVE: ${compactNegativePrompt}` },
+    { locked: true, text: `SHOT: ${roleContract.shotType}. ${getShotAwareRenderProfile(roleContract.shotType)}` },
+    { weight: 1, text: `QUALITY: ${COMPACT_IMAGE_QUALITY_BOOSTERS}` },
+    { weight: 1, text: `AVOID: ${compactNegativePrompt}` },
   ], payload.serverId, sanitizeProProviderText);
 };
 
 const buildDetailedImageProviderPrompt = (
   synthesizedPrompt: string,
-  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio' | 'serverId'>,
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'stylePrompt' | 'aspectRatio' | 'serverId'>,
   mergedNegativePrompt: string,
 ) => {
   const roleContract = buildImageRoleContract(payload);
-  const roleContractText = buildImageRoleContractText(payload);
+  void synthesizedPrompt;
   const originalUserPrompt = getPrimaryUserRequestText(payload);
-  const normalizedSynthesizedPrompt = synthesizedPrompt?.trim() || originalUserPrompt;
   const layeredSingleSubjectAllowed = allowsLayeredSingleSubjectComposition(payload);
   const characterCount = Math.max(1, Math.floor(Number(payload.characterCount || getImageCharacterReferenceGroups(payload).length || 1)));
-  const compactNegativePrompt = trimPromptText(mergedNegativePrompt, MAX_NEGATIVE_PROMPT_LENGTH);
+  const compactNegativePrompt = trimPromptText(mergedNegativePrompt, 420);
   const shotAwareRenderProfile = getShotAwareRenderProfile(roleContract.shotType);
+  const stylePrompt = getProviderStyleQualityText(payload.stylePrompt);
 
   return buildProviderPromptWithinServerBudget([
     { locked: true, text: 'RENDER ONE NEW FINAL IMAGE. Never return any uploaded reference unchanged.' },
-    { locked: true, text: IMAGE_ROLE_LOCK_CONSTRAINTS },
-    { locked: true, text: IMAGE_SKIN_TONE_LOCK_CONSTRAINTS },
-    { locked: true, text: IMAGE_ANATOMY_GUARD_CONSTRAINTS },
-    { locked: true, text: IMAGE_NECK_SHOULDER_PROPORTION_LOCK_CONSTRAINTS },
-    { locked: true, text: `CHARACTER COUNT: EXACTLY ${characterCount}. One-to-one slot mapping is mandatory.` },
-    { weight: 3, text: `PRIMARY USER REQUEST:\n${originalUserPrompt || 'No additional user prompt provided.'}` },
-    { weight: 2, text: roleContractText },
+    { locked: true, text: `USER PROMPT - highest priority:\n${originalUserPrompt || 'No additional user prompt provided.'}` },
+    { locked: true, text: `CHARACTER REFERENCES: render exactly ${characterCount} character(s). Preserve uploaded face identity, hairstyle, skin tone, outfit, shoes, accessories, makeup, body structure, and gender presentation. Do not invent a new face, new outfit, or extra character.` },
+    { locked: true, text: 'SAMPLE IMAGE COMPOSITION: use the sample only for pose, framing, camera angle, subject placement, background, props, and contact points. Never copy the sample identity, face, outfit, hairstyle, or realism.' },
+    { locked: true, text: `STYLE QUALITY: ${stylePrompt}` },
     {
       locked: true,
       text: layeredSingleSubjectAllowed
         ? 'LAYERED SINGLE-SUBJECT EXCEPTION:\n- The user intentionally requests a double-exposure / ghost-overlay / superimposed-self composition.\n- Keep exactly one underlying uploaded character identity, but layered echoes of that SAME person are allowed when they are part of the requested artistic effect.\n- Do not invent a second distinct person.'
         : '',
     },
-    { weight: 3, text: `DIRECTOR JSON SPEC (authoritative, English):\n${normalizedSynthesizedPrompt || 'No director synthesis available.'}` },
-    { locked: true, text: `SHOT TYPE: ${roleContract.shotType}` },
-    { locked: true, text: shotAwareRenderProfile },
-    { weight: 1, text: `QUALITY: ${IMAGE_QUALITY_BOOSTERS}` },
-    { weight: 1, text: `NEGATIVE: ${compactNegativePrompt}` },
+    { locked: true, text: `SHOT: ${roleContract.shotType}. ${shotAwareRenderProfile}` },
+    { weight: 1, text: `QUALITY: ${COMPACT_IMAGE_QUALITY_BOOSTERS}` },
+    { weight: 1, text: `AVOID: ${compactNegativePrompt}` },
   ], payload.serverId);
 };
 
 const buildReducedImageProviderPromptWithoutSample = (
   synthesizedPrompt: string,
-  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'styleImage' | 'aspectRatio' | 'serverId'>,
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'styleImage' | 'stylePrompt' | 'aspectRatio' | 'serverId'>,
   mergedNegativePrompt: string,
 ) => {
   const roleContract = buildImageRoleContract(payload);
-  const roleContractText = buildImageRoleContractText(payload);
+  void synthesizedPrompt;
   const originalUserPrompt = getPrimaryUserRequestText(payload);
-  const normalizedSynthesizedPrompt = synthesizedPrompt?.trim() || originalUserPrompt;
   const layeredSingleSubjectAllowed = allowsLayeredSingleSubjectComposition(payload);
   const characterCount = Math.max(1, Math.floor(Number(payload.characterCount || getImageCharacterReferenceGroups(payload).length || 1)));
-  const compactNegativePrompt = trimPromptText(mergedNegativePrompt, MAX_NEGATIVE_PROMPT_LENGTH);
+  const compactNegativePrompt = trimPromptText(mergedNegativePrompt, 420);
   const shotAwareRenderProfile = getShotAwareRenderProfile(roleContract.shotType);
+  const stylePrompt = getProviderStyleQualityText(payload.stylePrompt);
 
   return buildProviderPromptWithinServerBudget([
     { locked: true, text: 'RENDER ONE NEW FINAL IMAGE. Never return any uploaded reference unchanged.' },
-    { locked: true, text: REDUCED_IMAGE_ROLE_LOCK_CONSTRAINTS_NO_SAMPLE },
-    { locked: true, text: IMAGE_SKIN_TONE_LOCK_CONSTRAINTS },
-    { locked: true, text: IMAGE_ANATOMY_GUARD_CONSTRAINTS },
-    { locked: true, text: IMAGE_NECK_SHOULDER_PROPORTION_LOCK_CONSTRAINTS },
-    { locked: true, text: `CHARACTER COUNT: EXACTLY ${characterCount}. One-to-one slot mapping is mandatory.` },
-    { weight: 3, text: `PRIMARY USER REQUEST:\n${originalUserPrompt || 'No additional user prompt provided.'}` },
-    { weight: 2, text: roleContractText },
+    { locked: true, text: `USER PROMPT - highest priority:\n${originalUserPrompt || 'No additional user prompt provided.'}` },
+    { locked: true, text: `CHARACTER REFERENCES: render exactly ${characterCount} character(s). Preserve uploaded face identity, hairstyle, skin tone, outfit, shoes, accessories, makeup, body structure, and gender presentation. Do not invent a new face, new outfit, or extra character.` },
+    { locked: true, text: 'COMPOSITION: no sample image is present, so use the user prompt for pose, camera, framing, scene, and background. Do not fall back to a default standing studio pose.' },
+    { locked: true, text: `STYLE QUALITY: ${stylePrompt}` },
     {
       locked: true,
       text: layeredSingleSubjectAllowed
         ? 'LAYERED SINGLE-SUBJECT EXCEPTION:\n- Keep exactly one uploaded character identity.\n- Double exposure / ghost overlays / layered echoes of that SAME character are allowed.\n- Do not invent a second distinct person.'
         : '',
     },
-    { weight: 3, text: `DIRECTOR JSON SPEC (authoritative, English):\n${normalizedSynthesizedPrompt || 'No director synthesis available.'}` },
-    { locked: true, text: `SHOT TYPE: ${roleContract.shotType}` },
-    { locked: true, text: shotAwareRenderProfile },
-    { weight: 1, text: `QUALITY: ${IMAGE_QUALITY_BOOSTERS}` },
-    { weight: 1, text: `NEGATIVE: ${compactNegativePrompt}` },
+    { locked: true, text: `SHOT: ${roleContract.shotType}. ${shotAwareRenderProfile}` },
+    { weight: 1, text: `QUALITY: ${COMPACT_IMAGE_QUALITY_BOOSTERS}` },
+    { weight: 1, text: `AVOID: ${compactNegativePrompt}` },
   ], payload.serverId);
 };
 
 const buildGptPromptFirstProviderPromptWithoutSample = (
   synthesizedPrompt: string,
-  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'styleImage' | 'aspectRatio' | 'serverId'>,
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'styleImage' | 'stylePrompt' | 'aspectRatio' | 'serverId'>,
   mergedNegativePrompt: string,
 ) => {
   const roleContract = buildImageRoleContract(payload);
-  const roleContractText = buildImageRoleContractText(payload);
-  const originalUserPrompt = getPrimaryUserRequestText(payload);
-  const normalizedSynthesizedPrompt = synthesizedPrompt?.trim() || originalUserPrompt;
-  const userPrompt = originalUserPrompt || normalizedSynthesizedPrompt || 'Create one new image from the uploaded references.';
+  void synthesizedPrompt;
+  const userPrompt = getPrimaryUserRequestText(payload) || 'Create one new image from the uploaded references.';
   const characterCount = Math.max(1, Math.floor(Number(payload.characterCount || getImageCharacterReferenceGroups(payload).length || 1)));
-  const compactNegativePrompt = trimPromptText(mergedNegativePrompt, MAX_NEGATIVE_PROMPT_LENGTH);
-  const userMentionsIdentity = promptContainsAny(userPrompt, [
-    'face', 'identity', 'facial', 'skin tone', 'complexion', 'outfit', 'clothing',
-    'khuon mat', 'khuôn mặt', 'mau da', 'màu da', 'trang phuc', 'trang phục',
-    'giu nguyen', 'giữ nguyên', 'khong thay doi', 'không thay đổi',
-  ]);
-  const userMentionsAnatomy = promptContainsAny(userPrompt, [
-    'anatomy', 'proportion', 'neck', 'shoulder', 'limb', 'hand', 'foot', 'body',
-    'co ', 'cổ ', 'vai', 'tay', 'chan', 'chân', 'ti le', 'tỉ lệ', 'ty le', 'tỷ lệ',
-  ]);
-  const userMentionsQuality = promptContainsAny(userPrompt, [
-    'quality', 'render', 'detail', 'sharp', 'natural', 'realistic', 'cinematic',
-    'chat luong', 'chất lượng', 'sac net', 'sắc nét', 'tu nhien', 'tự nhiên',
-  ]);
-  const userMentionsNegative = promptContainsAny(userPrompt, [
-    'avoid', 'do not', 'khong', 'không', 'tranh', 'tránh', 'negative',
-  ]);
-  const directorBackup = normalizedSynthesizedPrompt && normalizedSynthesizedPrompt !== userPrompt
-    ? `DIRECTOR JSON BACKUP (lower priority, use only when it does not override the user prompt):\n${normalizedSynthesizedPrompt}`
-    : '';
-
-  const systemSectionCandidates: Array<ProviderPromptBudgetSection | null> = [
-    { weight: 2, text: 'RENDER ONE NEW FINAL IMAGE. Never return any uploaded reference unchanged.' },
-    { weight: 2, text: `IMAGE ROLES: uploaded subject image(s) are identity references. Keep them as the final subject identity, not as background or style.` },
-    { weight: 2, text: `SUBJECT COUNT: EXACTLY ${characterCount}. One-to-one slot mapping is mandatory.` },
-    !userMentionsIdentity ? { weight: 2, text: 'IDENTITY LOCK: preserve the uploaded character face structure, facial details, skin tone, outfit colors, hair, accessories, makeup, and game-fashion identity.' } : null,
-    !userMentionsAnatomy ? { weight: 1, text: 'ANATOMY LOCK: preserve natural head-neck-shoulder proportions; do not elongate the neck; no extra limbs, duplicated hands, malformed fingers, or stiff doll posture.' } : null,
-    { weight: 1, text: roleContractText },
-    { weight: 1, text: `SHOT TYPE: ${roleContract.shotType}` },
-    { weight: 1, text: getShotAwareRenderProfile(roleContract.shotType) },
-    !userMentionsQuality ? { weight: 1, text: `QUALITY: ${IMAGE_QUALITY_BOOSTERS}` } : null,
-    directorBackup ? { weight: 1, text: directorBackup } : null,
-    !userMentionsNegative ? { weight: 1, text: `NEGATIVE: ${compactNegativePrompt}` } : null,
-  ];
-  const systemSections = systemSectionCandidates.filter((section): section is ProviderPromptBudgetSection => Boolean(section));
+  const compactNegativePrompt = trimPromptText(mergedNegativePrompt, 420);
+  const stylePrompt = getProviderStyleQualityText(payload.stylePrompt);
 
   return buildProviderPromptWithinServerBudget([
     { locked: true, text: `USER PROMPT - HIGHEST PRIORITY, keep this request intact:\n${userPrompt}` },
-    ...systemSections,
+    { weight: 2, text: 'RENDER ONE NEW FINAL IMAGE. Never return any uploaded reference unchanged.' },
+    { weight: 2, text: `CHARACTER REFERENCES: render exactly ${characterCount} character(s). Preserve uploaded face identity, hair, skin tone, outfit, shoes, accessories, makeup, body structure, and gender presentation. Do not invent a new face, new outfit, or extra character.` },
+    { weight: 2, text: 'COMPOSITION: no sample image is present, so use the user prompt for pose, camera, framing, scene, and background. Do not fall back to a default standing studio pose.' },
+    { weight: 1, text: `STYLE QUALITY: ${stylePrompt}` },
+    { weight: 1, text: `SHOT: ${roleContract.shotType}. ${getShotAwareRenderProfile(roleContract.shotType)}` },
+    { weight: 1, text: `QUALITY: ${COMPACT_IMAGE_QUALITY_BOOSTERS}` },
+    { weight: 1, text: `AVOID: ${compactNegativePrompt}` },
   ], payload.serverId, sanitizeGptImage2ProviderText);
 };
 
 export const buildImageProviderPrompt = (
   synthesizedPrompt: string,
-  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio' | 'visionAnalysis' | 'serverId'>,
+  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'stylePrompt' | 'aspectRatio' | 'visionAnalysis' | 'serverId'>,
   customNegativePrompt?: string,
 ) => {
-  const mergedNegativePrompt = dedupeCsvPromptTerms(IMAGE_NEGATIVE_PROMPT, customNegativePrompt);
+  void customNegativePrompt;
+  const mergedNegativePrompt = IMAGE_NEGATIVE_PROMPT;
 
   if (isProImageGenerationModel(payload.modelId)) {
     return buildProStructuredProviderPrompt(synthesizedPrompt, payload, mergedNegativePrompt);

@@ -2,10 +2,8 @@ export const DEFAULT_IMAGE_NEGATIVE_PROMPT = 'crowd, extra people, audience, bys
 
 export const AUDITION_KOREA_MMO_STYLE_PROMPT = [
   'STYLE QUALITY: premium Audition Korea MMO 3D game-avatar render, high-end Korean stylized fashion-game character art, not a real human photo and not flat 2D cartoon art.',
-  'IDENTITY: preserve the uploaded character references exactly for face, hair, skin tone, body structure, outfit, shoes, accessories, makeup, gender presentation, and unique marks; never invent a new face or replace the avatar.',
-  'CHARACTER BUILD: adult stylized 3D avatar, elegant but normal proportions, natural short avatar neck, balanced shoulders and torso, clean limbs, believable hands and feet; no chibi body, child face, giant head, tiny body, mannequin pose, or doll anatomy.',
-  'MATERIALS: soft Korean MMO 3D skin shader, gentle subsurface scattering, clean stylized pores, refined eye gloss, crisp lashes/brows/makeup, detailed hair strands, cloth, leather, metal, and glass response; no waxy plastic skin or hard toy sheen.',
-  'RENDER: cinematic Unreal/Octane-like 3D lighting, soft global illumination, controlled depth of field, crisp facial details, vibrant restrained color grade, premium game-poster finish.',
+  'MATERIALS: soft Korean MMO 3D skin shader, gentle subsurface scattering, refined eye gloss, crisp lashes/brows/makeup, detailed hair strands, cloth, leather, metal, and glass response.',
+  'RENDER: cinematic Unreal/Octane-like 3D lighting, soft global illumination, controlled depth of field, crisp facial details, vibrant restrained color grade, premium game-poster finish, no waxy plastic skin.',
 ].join(' ');
 
 const sanitizeStylePresetText = (value?: string | null) => {

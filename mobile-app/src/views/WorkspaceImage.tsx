@@ -37,9 +37,9 @@ import {
 import type { ModelPricing } from '../services/economyService';
 import type { GeneratedImage } from '../types';
 import { caulenhauClient } from '../services/supabaseClient';
-import { DEFAULT_IMAGE_NEGATIVE_PROMPT } from '../../../shared/imagePromptDefaults';
+import { buildAuditionKoreaMmoStylePrompt, DEFAULT_IMAGE_NEGATIVE_PROMPT } from '../../../shared/imagePromptDefaults';
 import { resolveCharacterFacePriorityMode, type CharacterReferenceGroup, type ImageGenerateRecipePayload } from '../../../shared/queueRecipes';
-import { analyzeCharacterAppearanceProfile, createFaceDetailReference, createFaceLockReference, createPoseOnlyReference, createStyleOnlyReference, optimizePayload } from '../../../utils/imageProcessor';
+import { analyzeCharacterAppearanceProfile, createFaceDetailReference, createFaceLockReference, createPoseOnlyReference, optimizePayload } from '../../../utils/imageProcessor';
 import {
   CHARACTER_ASSISTANT_RESOLUTION,
   runCharacterAssistantAction,
@@ -752,7 +752,12 @@ export function WorkspaceImage() {
     addSubmissionLog('Đã kiểm tra cấu hình và số dư.');
 
     const jobId = crypto.randomUUID();
-    const basePrompt = `${activeFeature.defaultPrompt || ''}${prompt.trim()}`.trim();
+    const styleMetadata = availableStyles.find((s: any) => s.image_url === activeStylePreset);
+    const styleDirectivePrompt = buildAuditionKoreaMmoStylePrompt(styleMetadata?.trigger_prompt || styleMetadata?.name || null);
+    const basePrompt = [
+      `${activeFeature.defaultPrompt || ''}${prompt.trim()}`.trim(),
+      styleDirectivePrompt,
+    ].filter(Boolean).join('\n\n');
     const queuedImage: GeneratedImage = {
       id: jobId,
       url: '',
@@ -821,16 +826,6 @@ export function WorkspaceImage() {
           stagedSampleAnalysisImage = await tryStageGenerationInput(refImage, `inputs/generation/${activeMode}/sample-analysis`);
         }
 
-        const stagedStyleGuide = activeStylePreset
-          ? await tryStageGenerationInput(
-              await createStyleOnlyReference(activeStylePreset),
-              `inputs/generation/${activeMode}/style`,
-            )
-          : null;
-        const stagedStyleAnalysisImage = activeStylePreset
-          ? await tryStageGenerationInput(activeStylePreset, `inputs/generation/${activeMode}/style-analysis`)
-          : null;
-        const styleMetadata = availableStyles.find((s: any) => s.image_url === activeStylePreset);
         const notifyInputMedia = [
           ...(stagedSampleImage
             ? [{
@@ -850,14 +845,6 @@ export function WorkspaceImage() {
               userProvided: true,
             }));
           }),
-          ...(stagedStyleGuide
-            ? [{
-                url: stagedStyleGuide,
-                role: 'style' as const,
-                kind: 'image' as const,
-                userProvided: false,
-              }]
-            : []),
         ];
         const effectiveServerId = availableServers.includes(generationServerId) ? generationServerId : (availableServers[0] || generationServerId);
         const compatibleSpeeds = getCompatibleGenerationSpeeds({
@@ -886,9 +873,9 @@ export function WorkspaceImage() {
           characterImages: stagedCharacterImages,
           sampleImage: stagedSampleImage,
           sampleAnalysisImage: stagedSampleAnalysisImage || stagedSampleImage,
-          styleImage: stagedStyleGuide,
-          styleAnalysisImage: stagedStyleAnalysisImage || stagedStyleGuide,
-          stylePrompt: styleMetadata?.trigger_prompt || styleMetadata?.name || null,
+          styleImage: null,
+          styleAnalysisImage: null,
+          stylePrompt: styleDirectivePrompt,
           __notifyInputMedia: notifyInputMedia,
         };
 

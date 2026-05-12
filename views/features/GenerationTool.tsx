@@ -18,9 +18,9 @@ import { CONCURRENCY_LIMITS, useConcurrency } from '../../services/concurrencySe
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import { downloadAssetToBrowser } from '../../services/downloadService';
-import { analyzeCharacterAppearanceProfile, createFaceDetailReference, createFaceLockReference, createPoseOnlyReference, createStyleOnlyReference, optimizePayload } from '../../utils/imageProcessor';
+import { analyzeCharacterAppearanceProfile, createFaceDetailReference, createFaceLockReference, createPoseOnlyReference, optimizePayload } from '../../utils/imageProcessor';
 import { APP_CONFIG } from '../../constants';
-import { DEFAULT_IMAGE_NEGATIVE_PROMPT } from '../../shared/imagePromptDefaults';
+import { buildAuditionKoreaMmoStylePrompt, DEFAULT_IMAGE_NEGATIVE_PROMPT } from '../../shared/imagePromptDefaults';
 import { resolveCharacterFacePriorityMode } from '../../shared/queueRecipes';
 import {
   type AuditionPricingOverride,
@@ -905,8 +905,12 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
     setIsSubmitting(true);
     const queuedJobId = crypto.randomUUID();
 
-    const basePrompt = `${activeFeature.defaultPrompt || ''}${prompt}`.trim();
     const styleMetadata = availableStyles.find((style: any) => style.image_url === activeStylePreset);
+    const styleDirectivePrompt = buildAuditionKoreaMmoStylePrompt(styleMetadata?.trigger_prompt || styleMetadata?.name || null);
+    const basePrompt = [
+        `${activeFeature.defaultPrompt || ''}${prompt}`.trim(),
+        styleDirectivePrompt,
+    ].filter(Boolean).join('\n\n');
     const requestedSpeedId = uiSpeedToTst(speed) || 'fast';
     const requestedServerId = uiServerToTst(server) || 'fast';
     const compatibleServers = getCompatibleGenerationServers({
@@ -1014,15 +1018,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
             const stagedSampleAnalysisImage = refImage
                 ? await tryStageGenerationInput(refImage, `inputs/generation/${activeMode}/sample-analysis`)
                 : null;
-            const stagedStyleGuide = activeStylePreset
-                ? await tryStageGenerationInput(
-                    await createStyleOnlyReference(activeStylePreset),
-                    `inputs/generation/${activeMode}/style`,
-                )
-                : null;
-            const stagedStyleAnalysisImage = activeStylePreset
-                ? await tryStageGenerationInput(activeStylePreset, `inputs/generation/${activeMode}/style-analysis`)
-                : null;
             const notifyInputMedia = [
                 ...(stagedSampleImage
                     ? [{
@@ -1042,14 +1037,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                         userProvided: true,
                     }));
                 }),
-                ...(stagedStyleGuide
-                    ? [{
-                        url: stagedStyleGuide,
-                        role: 'style' as const,
-                        kind: 'image' as const,
-                        userProvided: false,
-                    }]
-                    : []),
             ];
 
             const queuePayload: ImageGenerateRecipePayload = {
@@ -1069,9 +1056,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                 characterImages: stagedCharacterImages,
                 sampleImage: stagedSampleImage || null,
                 sampleAnalysisImage: stagedSampleAnalysisImage || stagedSampleImage || null,
-                styleImage: stagedStyleGuide || null,
-                styleAnalysisImage: stagedStyleAnalysisImage || stagedStyleGuide || null,
-                stylePrompt: styleMetadata?.trigger_prompt || styleMetadata?.name || null,
+                styleImage: null,
+                styleAnalysisImage: null,
+                stylePrompt: styleDirectivePrompt,
                 __notifyInputMedia: notifyInputMedia,
             };
 

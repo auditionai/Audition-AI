@@ -372,11 +372,33 @@ const upsertImageMetadata = async (image: GeneratedImage, user: { id: string; us
 };
 
 const mapGeneratedImageRow = (row: any, fallbackUserName: string, fallbackCost?: number): GeneratedImage => {
+  const queuePayload =
+    row.queue_payload && typeof row.queue_payload === 'object'
+      ? row.queue_payload
+      : null;
+  const embeddedRecipe =
+    queuePayload &&
+    queuePayload.__recipePayload &&
+    typeof queuePayload.__recipePayload === 'object'
+      ? queuePayload.__recipePayload as Record<string, unknown>
+      : null;
+  const recipePayload =
+    embeddedRecipe ||
+    (queuePayload && typeof queuePayload.recipeType === 'string'
+      ? queuePayload as Record<string, unknown>
+      : null);
+  const userPrompt =
+    typeof recipePayload?.userPromptInput === 'string' && recipePayload.userPromptInput.trim()
+      ? recipePayload.userPromptInput.trim()
+      : undefined;
+  const providerPrompt =
+    typeof queuePayload?.prompt === 'string' && queuePayload.prompt.trim() && queuePayload.prompt.trim() !== String(row.prompt || '').trim()
+      ? queuePayload.prompt.trim()
+      : undefined;
   const queueLogs =
-    row.queue_payload &&
-    typeof row.queue_payload === 'object' &&
-    Array.isArray(row.queue_payload.__logs)
-      ? normalizeQueueProgressLogs(row.queue_payload.__logs.filter((entry: any): entry is QueueProgressLogEntry =>
+    queuePayload &&
+    Array.isArray(queuePayload.__logs)
+      ? normalizeQueueProgressLogs(queuePayload.__logs.filter((entry: any): entry is QueueProgressLogEntry =>
           entry &&
           typeof entry === 'object' &&
           typeof entry.at === 'string' &&
@@ -389,7 +411,7 @@ const mapGeneratedImageRow = (row: any, fallbackUserName: string, fallbackCost?:
   const errorInfo = classifyQueueError(displayErrorSource || row.error_message || undefined);
   const isRescuing =
     String(row.status || '') === 'failed' &&
-    hasFailedRescuePending(row.queue_payload && typeof row.queue_payload === 'object' ? row.queue_payload : null) &&
+    hasFailedRescuePending(queuePayload) &&
     !isTerminalRescueFailureMessage(displayErrorSource) &&
     (errorInfo.category === 'provider' || errorInfo.category === 'unknown');
 
@@ -397,15 +419,16 @@ const mapGeneratedImageRow = (row: any, fallbackUserName: string, fallbackCost?:
   id: row.id,
   url: row.image_url || '',
   prompt: row.prompt,
+  userPrompt,
+  providerPrompt,
   timestamp: new Date(row.created_at).getTime(),
   updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : new Date(row.created_at).getTime(),
   assetType: row.asset_type || inferAssetType(row.tool_id, row.model_used, row.image_url, row.queue_kind, row.tool_name),
   queueKind: row.queue_kind || undefined,
   showInGenerationHistory:
-    row.queue_payload &&
-    typeof row.queue_payload === 'object' &&
-    typeof row.queue_payload.__showInGenerationHistory === 'boolean'
-      ? row.queue_payload.__showInGenerationHistory
+    queuePayload &&
+    typeof queuePayload.__showInGenerationHistory === 'boolean'
+      ? queuePayload.__showInGenerationHistory
       : !isDirectImageEditQueueKind(row.queue_kind),
   toolId: row.tool_id || inferToolId(row.model_used, row.image_url),
   toolName: row.tool_name || mapEngineName(row.model_used),
@@ -418,10 +441,9 @@ const mapGeneratedImageRow = (row: any, fallbackUserName: string, fallbackCost?:
   jobId: row.job_id || undefined,
   progress: typeof row.progress === 'number' ? row.progress : undefined,
   queueStage:
-    row.queue_payload &&
-    typeof row.queue_payload === 'object' &&
-    typeof row.queue_payload.__stage === 'string'
-      ? row.queue_payload.__stage
+    queuePayload &&
+    typeof queuePayload.__stage === 'string'
+      ? queuePayload.__stage
       : undefined,
   queueLogs,
   error: normalizeQueueErrorMessage(displayErrorSource || row.error_message || undefined) || undefined,

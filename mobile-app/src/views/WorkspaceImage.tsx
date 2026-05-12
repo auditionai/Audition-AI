@@ -754,10 +754,7 @@ export function WorkspaceImage() {
     const jobId = crypto.randomUUID();
     const styleMetadata = availableStyles.find((s: any) => s.image_url === activeStylePreset);
     const styleDirectivePrompt = buildAuditionKoreaMmoStylePrompt(styleMetadata?.trigger_prompt || styleMetadata?.name || null);
-    const basePrompt = [
-      `${activeFeature.defaultPrompt || ''}${prompt.trim()}`.trim(),
-      styleDirectivePrompt,
-    ].filter(Boolean).join('\n\n');
+    const basePrompt = `${activeFeature.defaultPrompt || ''}${prompt.trim()}`.trim();
     const queuedImage: GeneratedImage = {
       id: jobId,
       url: '',

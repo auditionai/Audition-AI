@@ -206,7 +206,7 @@ const buildStrictImageDirectorInstruction = (
   );
 
   if (payload.stylePrompt?.trim()) {
-    sections.push(`STYLE PRESET KEYWORDS: ${payload.stylePrompt.trim()}`);
+    sections.push(`STYLE PRESET KEYWORDS: ${normalizePromptWhitespace(payload.stylePrompt).slice(0, 700)}`);
   }
 
   if (payload.negativePrompt?.trim()) {
@@ -301,7 +301,7 @@ const buildCompactImageDirectorInstruction = (
   ];
 
   if (payload.stylePrompt?.trim()) {
-    sections.push(`STYLE PRESET KEYWORDS: ${payload.stylePrompt.trim()}`);
+    sections.push(`STYLE PRESET KEYWORDS: ${normalizePromptWhitespace(payload.stylePrompt).slice(0, 700)}`);
   }
 
   if (payload.negativePrompt?.trim()) {

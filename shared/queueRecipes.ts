@@ -298,6 +298,16 @@ const CLOSE_UP_PROMPT_PATTERNS = [
   /\bface[\s-]?shot\b/i,
   /\bmacro face\b/i,
   /\bextreme close[\s-]?up\b/i,
+  /\bportrait\b/i,
+  /\bface close\b/i,
+  /\bclose portrait\b/i,
+  /\bcan mat\b/i,
+  /\bcan canh khuon mat\b/i,
+  /\bdac ta guong mat\b/i,
+  /\bgoc mat can\b/i,
+  /\bchan dung can\b/i,
+  /\bkhuon mat\b/i,
+  /\bguong mat\b/i,
   /cận mặt/i,
   /cận cảnh khuôn mặt/i,
   /đặc tả gương mặt/i,
@@ -313,6 +323,9 @@ const FULL_BODY_PROMPT_PATTERNS = [
   /\bhead[\s-]?to[\s-]?toe\b/i,
   /\bfrom head to toe\b/i,
   /\bstanding full\b/i,
+  /\btoan than\b/i,
+  /\bnguyen nguoi\b/i,
+  /\btu dau den chan\b/i,
   /toàn thân/i,
   /nguyên người/i,
   /từ đầu đến chân/i,
@@ -324,6 +337,10 @@ const HALF_BODY_PROMPT_PATTERNS = [
   /\bmid shot\b/i,
   /\bwaist up\b/i,
   /\bthree[\s-]?quarter\b/i,
+  /\bupper body\b/i,
+  /\bban than\b/i,
+  /\bnua nguoi\b/i,
+  /\btu eo tro len\b/i,
   /bán thân/i,
   /nửa người/i,
   /từ eo trở lên/i,
@@ -334,7 +351,10 @@ const resolveImageShotType = (
 ): ImageRoleContract['shotType'] => {
   const normalizedPrompt = collapsePromptWhitespace(
     [payload.userPromptInput, payload.prompt].filter(Boolean).join('\n'),
-  );
+  )
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
 
   if (CLOSE_UP_PROMPT_PATTERNS.some((pattern) => pattern.test(normalizedPrompt))) {
     return 'close_up';
@@ -483,7 +503,7 @@ const IMAGE_QUALITY_BOOSTERS =
 const COMPACT_IMAGE_QUALITY_BOOSTERS =
   'ultra-detailed, stylized 3D fashion-game render, Korean MMO 3D style, crisp edges, polished materials, adult-proportioned avatar anatomy, natural limb flow, unreal engine 5 render, cinematic lighting, ray tracing, hdr';
 const IMAGE_NEGATIVE_PROMPT =
-  'low quality, bad anatomy, worst quality, blur, grain, watermark, text, signature, bad hands, bad face, mixed backgrounds, conflicting styles, extra characters, unwanted people from style reference, real people, photorealistic humans, photograph, realistic photography, real life, semi-realistic human, cinematic human portrait, live action, realistic skin pores, natural skin texture, DSLR, realistic male model, realistic female model, hyperreal face, realistic eyelashes, realistic fabric, anime, cartoon, 2d, flat shading, floating character, disconnected limbs, hands in the air, feet not touching the ground, floating objects, unnatural posture, floating in mid-air, levitating, hovering, disconnected from background, bad perspective, illogical physics, extra arm, extra arms, extra hand, extra hands, extra leg, extra legs, extra foot, extra feet, duplicate hand, duplicate hands, duplicate foot, duplicate feet, duplicated limb, duplicated limbs, malformed feet, merged fingers, fused fingers, six fingers, seven fingers, broken wrist, twisted arm, twisted leg, long neck, elongated neck, stretched neck, giraffe neck, thin stretched neck, lowered shoulders, detached head, doll face, mannequin face, mannequin body, waxy skin, plastic skin, toy-like plastic sheen, glossy mannequin skin, hard specular skin, harsh facial planes, dark skin, darker skin, tanned skin, bronzed skin, yellow skin, orange skin, muddy skin tone, incorrect skin tone, skin tone shift, chibi proportions, giant eyes, baby face, stiff pose, rigid pose, stiff limbs, frozen posture, uncanny face, over-smoothed face, panel layout, split screen, tiled image, image grid, collage, storyboard, diptych, triptych, quadrants, four panels, four-up layout, contact sheet';
+  'low quality, bad anatomy, worst quality, blur, grain, watermark, text, signature, bad hands, bad face, mixed backgrounds, conflicting styles, extra characters, unwanted people from style reference, real people, photorealistic humans, photograph, realistic photography, real life, semi-realistic human, cinematic human portrait, live action, realistic skin pores, natural skin texture, DSLR, realistic male model, realistic female model, hyperreal face, realistic eyelashes, realistic fabric, flat anime drawing, flat cartoon, 2d, flat shading, floating character, disconnected limbs, hands in the air, feet not touching the ground, floating objects, unnatural posture, floating in mid-air, levitating, hovering, disconnected from background, bad perspective, illogical physics, extra arm, extra arms, extra hand, extra hands, extra leg, extra legs, extra foot, extra feet, duplicate hand, duplicate hands, duplicate foot, duplicate feet, duplicated limb, duplicated limbs, malformed feet, merged fingers, fused fingers, six fingers, seven fingers, broken wrist, twisted arm, twisted leg, long neck, elongated neck, stretched neck, giraffe neck, thin stretched neck, lowered shoulders, detached head, doll face, mannequin face, mannequin body, waxy skin, plastic skin, toy-like plastic sheen, glossy mannequin skin, hard specular skin, harsh facial planes, dark skin, darker skin, tanned skin, bronzed skin, yellow skin, orange skin, muddy skin tone, incorrect skin tone, skin tone shift, chibi proportions, giant eyes, baby face, stiff pose, rigid pose, stiff limbs, frozen posture, uncanny face, over-smoothed face, panel layout, split screen, tiled image, image grid, collage, storyboard, diptych, triptych, quadrants, four panels, four-up layout, contact sheet';
 const IMAGE_ANATOMY_GUARD_CONSTRAINTS =
   'ANATOMY GUARD: Keep exactly one coherent body per character slot with natural adult-proportioned 3D anatomy. Never invent extra arms, extra hands, extra legs, extra feet, duplicated limbs, duplicated hands, duplicated feet, fused fingers, or malformed joints. Each visible hand must read as one coherent hand. Each visible foot must read as one coherent foot. If a hand, foot, or limb is partially hidden, keep it hidden naturally instead of hallucinating additional anatomy. Respect gravity, chair contact, ground contact, and believable joint bending.';
 const IMAGE_NECK_SHOULDER_PROPORTION_LOCK_CONSTRAINTS =
@@ -495,19 +515,19 @@ const AUDITION_SOFT_BEAUTY_RENDER_PROFILE =
 
 const getShotAwareRenderProfile = (shotType: ImageRoleContract['shotType']) => {
   if (shotType === 'close_up') {
-    return `${AUDITION_SOFT_BEAUTY_RENDER_PROFILE} CLOSE-UP WEIGHTING: prioritize eyes, lashes, brows, lips, skin transition, and subtle facial modeling. Allow the face to feel soft and alive, not overlocked or mask-like.`;
+    return `${AUDITION_SOFT_BEAUTY_RENDER_PROFILE} CLOSE-UP WEIGHTING: prioritize eyes, lashes, brows, lips, skin transition, and subtle facial modeling from the uploaded FACE LOCK. Keep the camera tight on face/upper torso when requested; do not widen into a full-body standing pose unless the user explicitly asks for full body.`;
   }
 
   if (shotType === 'full_body') {
     return `${AUDITION_SOFT_BEAUTY_RENDER_PROFILE} FULL-BODY WEIGHTING: prioritize overall silhouette, natural limb flow, outfit texture, leg/arm coherence, and softer facial integration. Keep the face recognizable but do not overconcentrate detail into a stiff doll-like head.`;
   }
 
-  return `${AUDITION_SOFT_BEAUTY_RENDER_PROFILE} HALF-BODY WEIGHTING: balance facial fidelity, torso flow, hand quality, material detail, and soft beauty shading.`;
+  return `${AUDITION_SOFT_BEAUTY_RENDER_PROFILE} HALF-BODY WEIGHTING: balance facial fidelity, torso flow, hand quality, material detail, and soft beauty shading. Keep the camera around portrait, bust, waist-up, or three-quarter framing when no full-body command is present; do not default to a far full-body standing render.`;
 };
 const IMAGE_ROLE_LOCK_CONSTRAINTS =
-  'STRICT ROLE LOCK: CHARACTER REFERENCES are the only identity source for face, hair, skin tone, head shape, body structure, outfit, shoes, accessories, tattoos, gender, and overall avatar identity. For non-portrait shots, BODY references are the primary source for full-body complexion, limb anatomy, and overall body proportions. FACE LOCK references, when present, are the highest-priority source for eyes, eyebrows, nose, lips, jawline, hairline, bangs, makeup, glasses, facial proportions, and facial likeness. Preserve uploaded skin tone exactly; do not warm it, tan it, yellow it, orange it, or shift it to a different complexion. Preserve believable adult 3D anatomy from the character references; avoid doll-like proportions, rigid limbs, inflated eyes, or mannequin posture. CHARACTER REFERENCES are NOT pose references. SAMPLE IMAGE is composition-only and controls pose, camera angle, framing, subject placement, body lean, hand placement, spacing, scene layout, and background composition only. SAMPLE IMAGE must never contribute face identity, hairstyle identity, makeup identity, or facial expression identity, even if the sample face is large, sharp, centered, or visually dominant. Treat SAMPLE IMAGE as a structural guide, not a literal body copy. If the sample pose would create broken anatomy, repair the anatomy while preserving the composition. Never reproduce SAMPLE IMAGE as the final output, never borrow its identity, outfit, or realism, and never return any uploaded reference nearly unchanged. STYLE IMAGE is style-only and may influence only render quality, lighting behavior, material response, restrained color grading, and final finish. STYLE IMAGE must never override identity, skin tone, anatomy, subject count, pose, composition, or outfit. The final image must keep one-to-one slot mapping for all uploaded characters, remain a stylized 3D game avatar, and never become a photorealistic or semi-realistic human.';
+  'STRICT ROLE LOCK: CHARACTER REFERENCES are the only identity source for face, hair, skin tone, head shape, body structure, outfit, shoes, accessories, tattoos, gender, and overall avatar identity. For non-portrait shots, BODY references are the primary source for full-body complexion, limb anatomy, and overall body proportions. FACE LOCK references, when present, are the highest-priority source for eyes, eyebrows, nose, lips, jawline, hairline, bangs, makeup, glasses, facial proportions, and facial likeness. Preserve uploaded skin tone exactly; do not warm it, tan it, yellow it, orange it, or shift it to a different complexion. Preserve believable adult 3D anatomy from the character references; avoid doll-like proportions, rigid limbs, inflated eyes, or mannequin posture. CHARACTER REFERENCES are NOT pose references. SAMPLE IMAGE is composition-only and controls pose, camera angle, framing, subject placement, body lean, hand placement, spacing, scene layout, and background composition only. SAMPLE IMAGE must never contribute face identity, hairstyle identity, makeup identity, or facial expression identity, even if the sample face is large, sharp, centered, or visually dominant. Treat SAMPLE IMAGE as a structural guide, not a literal body copy. If the sample pose would create broken anatomy, repair the anatomy while preserving the composition. Never reproduce SAMPLE IMAGE as the final output, never borrow its identity, outfit, or realism, and never return any uploaded reference nearly unchanged. STYLE DIRECTIVES may influence only render quality, lighting behavior, material response, restrained color grading, and final finish. STYLE DIRECTIVES must never override identity, skin tone, anatomy, subject count, pose, composition, or outfit. The final image must keep one-to-one slot mapping for all uploaded characters, remain a stylized 3D game avatar, and never become a photorealistic or semi-realistic human.';
 const REDUCED_IMAGE_ROLE_LOCK_CONSTRAINTS_NO_SAMPLE =
-  'STRICT ROLE LOCK: No SAMPLE IMAGE is provided, so USER REQUEST is the primary source for pose, framing, action, scene layout, and background. CHARACTER REFERENCES still define identity only and are NOT pose references. For non-portrait shots, BODY references are the primary source for full-body complexion, limb anatomy, and overall body proportions. FACE LOCK references, when present, are the highest-priority source for eyes, eyebrows, nose, lips, jawline, hairline, bangs, makeup, glasses, facial proportions, and facial likeness. Preserve uploaded skin tone exactly; do not warm it, tan it, yellow it, orange it, or shift it to a different complexion. Preserve believable adult 3D anatomy from the character references; avoid doll-like proportions, rigid limbs, inflated eyes, or mannequin posture. STYLE IMAGE is style-only and may influence only render quality, lighting behavior, material response, restrained color grading, and final 3D finish. STYLE IMAGE must never override identity, skin tone, anatomy, pose, composition, camera framing, gender presentation, subject count, or outfit. Never return any uploaded reference nearly unchanged when the USER REQUEST asks for a different pose, scene, framing, or environment. Keep the result as a stylized 3D game avatar, not a photorealistic or semi-realistic human.';
+  'STRICT ROLE LOCK: No SAMPLE IMAGE is provided, so USER REQUEST is the primary source for pose, framing, action, scene layout, and background. CHARACTER REFERENCES still define identity only and are NOT pose references. For non-portrait shots, BODY references are the primary source for full-body complexion, limb anatomy, and overall body proportions. FACE LOCK references, when present, are the highest-priority source for eyes, eyebrows, nose, lips, jawline, hairline, bangs, makeup, glasses, facial proportions, and facial likeness. Preserve uploaded skin tone exactly; do not warm it, tan it, yellow it, orange it, or shift it to a different complexion. Preserve believable adult 3D anatomy from the character references; avoid doll-like proportions, rigid limbs, inflated eyes, or mannequin posture. STYLE DIRECTIVES may influence only render quality, lighting behavior, material response, restrained color grading, and final 3D finish. STYLE DIRECTIVES must never override identity, skin tone, anatomy, pose, composition, camera framing, gender presentation, subject count, or outfit. Never return any uploaded reference nearly unchanged when the USER REQUEST asks for a different pose, scene, framing, or environment. Keep the result as a stylized 3D game avatar, not a photorealistic or semi-realistic human.';
 export const DEFAULT_PROVIDER_PROMPT_MAX_LENGTH = 9999;
 export const SERVER_3_PROVIDER_PROMPT_MAX_LENGTH = 3500;
 const MAX_NEGATIVE_PROMPT_LENGTH = 9999;
@@ -1048,7 +1068,7 @@ export const buildImageRoleContract = (
         'Style image must never override identity, skin tone, facial proportions, anatomy, outfit, subject count, pose, or composition.',
       ]
     : [
-        'Without a style image, keep the final output as a clean stylized 3D game-avatar render driven by the prompt and identity references.',
+        'Use the built-in text style directives only; keep the final output as a clean stylized 3D game-avatar render driven by the prompt and identity references.',
       ];
 
   const styleVision = payload.visionAnalysis?.style;
@@ -1148,6 +1168,7 @@ const buildImageReferenceOrderDirective = (
 ) => {
   const entries = getImageRenderReferenceEntries(payload);
   const hasSample = Boolean(payload.sampleImage);
+  const hasStyle = Boolean(payload.styleImage);
   const layeredSingleSubjectAllowed = allowsLayeredSingleSubjectComposition(payload);
   if (entries.length === 0) {
     return hasSample
@@ -1157,7 +1178,9 @@ const buildImageReferenceOrderDirective = (
           '- No SAMPLE IMAGE is provided.',
           '- Use the PRIMARY COMMAND PROMPT as the highest-priority source for pose, camera angle, framing, action, scene layout, and background details.',
           '- CHARACTER REFERENCES still control identity only.',
-          '- STYLE IMAGE may affect render quality only and must never override prompt-driven composition.',
+          hasStyle
+            ? '- STYLE IMAGE may affect render quality only and must never override prompt-driven composition.'
+            : '- TEXT STYLE DIRECTIVES may affect render quality only and must never override prompt-driven composition.',
         ].join('\n');
   }
 
@@ -1201,7 +1224,9 @@ const buildImageReferenceOrderDirective = (
     hasSample
       ? '- The final image must never be a near-unchanged copy of a standing CHARACTER REFERENCE unless the SAMPLE IMAGE itself is also a standing front-view pose.'
       : '- The final image must never be a near-unchanged copy of a standing CHARACTER REFERENCE when the PRIMARY COMMAND PROMPT asks for a different pose, scene, framing, or background.',
-    '- STYLE IMAGE may improve render quality only. It must not override pose, composition, identity, outfit, or subject count.',
+    hasStyle
+      ? '- STYLE IMAGE may improve render quality only. It must not override pose, composition, identity, outfit, or subject count.'
+      : '- TEXT STYLE DIRECTIVES may improve render quality only. They must not override pose, composition, identity, outfit, or subject count.',
     '- Never output a split-screen, image grid, collage, storyboard, or panel layout. Always render one single continuous final frame.',
   ].join('\n');
 };
@@ -1210,6 +1235,7 @@ const buildReducedImageReferenceOrderDirectiveWithoutSample = (
   payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'styleImage'>,
 ) => {
   const entries = getImageRenderReferenceEntries(payload);
+  const hasStyle = Boolean(payload.styleImage);
   const layeredSingleSubjectAllowed = allowsLayeredSingleSubjectComposition(payload);
 
   if (entries.length === 0) {
@@ -1248,7 +1274,9 @@ const buildReducedImageReferenceOrderDirectiveWithoutSample = (
     layeredSingleSubjectAllowed
       ? '- Do not invent a second distinct person.'
       : '- Every uploaded CHARACTER slot is mandatory. Never add, remove, duplicate, blend, or replace a slot.',
-    '- STYLE IMAGE must never override identity, subject count, or composition.',
+    hasStyle
+      ? '- STYLE IMAGE must never override identity, subject count, or composition.'
+      : '- TEXT STYLE DIRECTIVES must never override identity, subject count, or composition.',
     '- Never output a split-screen, image grid, collage, storyboard, or panel layout.',
   ].join('\n');
 };
@@ -1469,8 +1497,18 @@ const buildProStructuredProviderPrompt = (
         : 'SCENE PLATE RULE: No sample image is present, so derive composition from the primary user request.',
     },
     { locked: true, text: 'IDENTITY RULE: CHARACTER REFERENCES define the final avatar identity. BODY references define outfit, skin tone, body proportions, and full-body anatomy. FACE LOCK references refine face identity. FACE DETAIL LOCK references refine makeup and micro facial features, but only as strongly as the shot weighting allows.' },
-    { locked: true, text: 'STYLE RULE: STYLE IMAGE influences only render quality, material response, lighting feel, restrained color grading, and final finish. STYLE IMAGE must never override pose, background, outfit, or identity.' },
-    { locked: true, text: 'CONFLICT RULE: When references disagree, keep SAMPLE for scene/pose/background, keep CHARACTER for identity/body/skin tone, and keep STYLE for render finish only.' },
+    {
+      locked: true,
+      text: payload.styleImage
+        ? 'STYLE RULE: STYLE IMAGE influences only render quality, material response, lighting feel, restrained color grading, and final finish. STYLE IMAGE must never override pose, background, outfit, or identity.'
+        : 'STYLE RULE: Use TEXT STYLE DIRECTIVES only for render quality, material response, lighting feel, restrained color grading, and final finish. No uploaded style image is present.',
+    },
+    {
+      locked: true,
+      text: payload.styleImage
+        ? 'CONFLICT RULE: When references disagree, keep SAMPLE for scene/pose/background, keep CHARACTER for identity/body/skin tone, and keep STYLE for render finish only.'
+        : 'CONFLICT RULE: When references disagree, keep SAMPLE for scene/pose/background and keep CHARACTER for identity/body/skin tone. Text style directives affect finish only.',
+    },
     {
       weight: 2,
       text: structuredVisionLines.length > 0

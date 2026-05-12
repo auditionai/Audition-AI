@@ -156,7 +156,7 @@ const buildFallbackSynthesizedPrompt = (payload: ImageGenerateRecipePayload) => 
   const combinedPrompt = payload.prompt?.trim() || '';
   const systemPromptPrefix = payload.systemPromptPrefix?.trim() || '';
   const userPrompt = payload.userPromptInput?.trim() || combinedPrompt;
-  const stylePrompt = payload.stylePrompt?.trim() || '';
+  const stylePrompt = (payload.stylePrompt?.trim() || '').slice(0, 900);
   const hasSample = Boolean(payload.sampleImage);
   const characterCount = Math.max(1, Math.floor(Number(payload.characterCount || 0)) || (payload.characterReferenceGroups?.length || 0) || 1);
   return JSON.stringify({

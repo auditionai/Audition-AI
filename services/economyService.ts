@@ -1,4 +1,4 @@
-﻿import { getSupabaseAuthHeader, getSupabaseUser, supabase } from './supabaseClient';
+import { getSupabaseAuthHeader, getSupabaseUser, supabase } from './supabaseClient';
 import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, HistoryItem, VcoinLog, AdminQueueJob, AdminQueueSummary, AdminQueueJobDetail } from '../types';
 import {
   creditsToVcoin,
@@ -151,7 +151,7 @@ let tstServerAvailabilityCache: TimedCache<TstServerAvailabilityConfig> | null =
 let featureMaintenanceCache: TimedCache<FeatureMaintenanceConfig> | null = null;
 const DEFAULT_MAINTENANCE_MODE = {
     isActive: false,
-    message: "Há»‡ thá»‘ng Ä‘ang báº£o trÃ¬, vui lÃ²ng quay láº¡i sau."
+    message: "Hệ thống đang bảo trì, vui lòng quay lại sau."
 };
 type MaintenanceModeState = typeof DEFAULT_MAINTENANCE_MODE;
 let maintenanceModeCache: TimedCache<MaintenanceModeState> | null = null;
@@ -2460,29 +2460,29 @@ export const saveGenerationGuideImages = async (characterUrl: string, sampleUrl:
 };
 
 export const getGiftcodePromoConfig = async () => {
-    if (!supabase) return { text: "Nháº­p CODE \"HELLO2026\" Ä‘á»ƒ nháº­n 20 Vcoin miá»…n phÃ­ !!!", isActive: true };
+    if (!supabase) return { text: "Nhập CODE \"HELLO2026\" để nhận 20 Vcoin miễn phí !!!", isActive: true };
     try {
         const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'giftcode_promo').maybeSingle();
         if (error) throw error;
 
         if (data?.value) {
             const parsedValue = parseSettingValue(data.value, {
-                text: "Nháº­p CODE \"HELLO2026\" Ä‘á»ƒ nháº­n 20 Vcoin miá»…n phÃ­ !!!",
+                text: "Nhập CODE \"HELLO2026\" để nhận 20 Vcoin miễn phí !!!",
                 isActive: true
             });
             return {
-                text: parsedValue.text || "Nháº­p CODE \"HELLO2026\" Ä‘á»ƒ nháº­n 20 Vcoin miá»…n phÃ­ !!!",
+                text: parsedValue.text || "Nhập CODE \"HELLO2026\" để nhận 20 Vcoin miễn phí !!!",
                 isActive: parsedValue.isActive !== undefined ? parsedValue.isActive : true
             };
         }
 
         return {
-            text: "Nháº­p CODE \"HELLO2026\" Ä‘á»ƒ nháº­n 20 Vcoin miá»…n phÃ­ !!!",
+            text: "Nhập CODE \"HELLO2026\" để nhận 20 Vcoin miễn phí !!!",
             isActive: true
         };
     } catch (e) {
         return {
-            text: "Nháº­p CODE \"HELLO2026\" Ä‘á»ƒ nháº­n 20 Vcoin miá»…n phÃ­ !!!",
+            text: "Nhập CODE \"HELLO2026\" để nhận 20 Vcoin miễn phí !!!",
             isActive: true
         };
     }
@@ -2642,6 +2642,33 @@ export const deleteStylePreset = async (id: string) => {
 
 // --- ADMIN STATS ---
 
+const normalizeAdminVietnameseText = (value: string) => {
+    const replacements: Array<[string, string]> = [
+        ['KhÃ¡c', 'Khác'],
+        ['nÃ¢ng cáº¥p', 'nâng cấp'],
+        ['lÃ m nÃ©t', 'làm nét'],
+        ['tÃ¡ch ná»n', 'tách nền'],
+        ['ngÆ°á»i', 'người'],
+        ['Ä‘Ã´i', 'đôi'],
+        ['táº¡o áº£nh', 'tạo ảnh'],
+        ['chÃ¢n dung', 'chân dung'],
+        ['áº£nh', 'ảnh'],
+        ['xá»­ lÃ½', 'xử lý'],
+        ['LÃ m NÃ©t áº¢nh', 'Làm Nét Ảnh'],
+        ['TÃ¡ch Ná»n', 'Tách Nền'],
+        ['Táº¡o áº¢nh', 'Tạo Ảnh'],
+        ['Táº¡o áº£nh', 'Tạo ảnh'],
+        ['NgÆ°á»i', 'Người'],
+        ['ÄÃ´i', 'Đôi'],
+        ['ÄÆ¡n', 'Đơn'],
+        ['Chá»‰nh Sá»­a', 'Chỉnh Sửa'],
+        ['Chá»‰nh sá»­a áº£nh', 'Chỉnh sửa ảnh'],
+        ['Xá»­ LÃ½ áº¢nh', 'Xử Lý Ảnh'],
+    ];
+
+    return replacements.reduce((text, [bad, good]) => text.split(bad).join(good), value);
+};
+
 export const getAdminStats = async () => {
     if (!supabase) return {
         dashboard: { visitsToday: 0, visitsTotal: 0, newUsersToday: 0, usersTotal: 0, imagesToday: 0, imagesTotal: 0, aiUsage: [] },
@@ -2765,36 +2792,36 @@ export const getAdminStats = async () => {
         }
 
         // Try to find the reason field from various potential column names
-        let rawFeature = log.reason || log.description || log.note || log.action || log.activity || log.details || 'KhÃ¡c';
+        let rawFeature = normalizeAdminVietnameseText(log.reason || log.description || log.note || log.action || log.activity || log.details || 'Khác');
         
-        // If still 'KhÃ¡c', try to find any property that looks like a feature name
-        if (rawFeature === 'KhÃ¡c') {
+        // If still 'Khác', try to find any property that looks like a feature name
+        if (rawFeature === 'Khác') {
             for (const key in log) {
                 if (typeof log[key] === 'string' && (log[key].startsWith('Gen') || log[key].startsWith('Edit') || log[key].includes(':'))) {
-                    rawFeature = log[key];
+                    rawFeature = normalizeAdminVietnameseText(log[key]);
                     break;
                 }
             }
         }
 
         // Grouping Logic
-        let feature = 'KhÃ¡c';
+        let feature = 'Khác';
         const lower = rawFeature.toLowerCase();
 
-        if (lower.includes('nÃ¢ng cáº¥p') || lower.includes('upscale') || lower.includes('lÃ m nÃ©t') || lower.includes('hd')) {
-            feature = 'LÃ m NÃ©t áº¢nh (Upscale)';
-        } else if (lower.includes('tÃ¡ch ná»n') || lower.includes('remove background') || lower.includes('background')) {
-            feature = 'TÃ¡ch Ná»n (Remove BG)';
-        } else if (lower.includes('4 ngÆ°á»i') || lower.includes('group of 4') || lower.includes('squad of 4')) {
-            feature = 'Táº¡o áº¢nh 4 NgÆ°á»i';
-        } else if (lower.includes('3 ngÆ°á»i') || lower.includes('group of 3') || lower.includes('squad of 3')) {
-            feature = 'Táº¡o áº¢nh 3 NgÆ°á»i';
-        } else if (lower.includes('2 ngÆ°á»i') || lower.includes('couple') || lower.includes('Ä‘Ã´i') || lower.includes('song ca')) {
-            feature = 'Táº¡o áº¢nh ÄÃ´i (Couple)';
-        } else if (lower.includes('táº¡o áº£nh') || lower.includes('gen:') || lower.includes('generate') || lower.includes('chÃ¢n dung') || lower.includes('1 áº£nh') || lower.includes('single')) {
-            feature = 'Táº¡o áº¢nh ÄÆ¡n (Single)';
-        } else if (lower.includes('xá»­ lÃ½') || lower.includes('edit') || lower.includes('face')) {
-             feature = 'Chá»‰nh Sá»­a / Xá»­ LÃ½ áº¢nh';
+        if (lower.includes('nâng cấp') || lower.includes('upscale') || lower.includes('làm nét') || lower.includes('hd')) {
+            feature = 'Làm Nét Ảnh (Upscale)';
+        } else if (lower.includes('tách nền') || lower.includes('remove background') || lower.includes('background')) {
+            feature = 'Tách Nền (Remove BG)';
+        } else if (lower.includes('4 người') || lower.includes('group of 4') || lower.includes('squad of 4')) {
+            feature = 'Tạo Ảnh 4 Người';
+        } else if (lower.includes('3 người') || lower.includes('group of 3') || lower.includes('squad of 3')) {
+            feature = 'Tạo Ảnh 3 Người';
+        } else if (lower.includes('2 người') || lower.includes('couple') || lower.includes('đôi') || lower.includes('song ca')) {
+            feature = 'Tạo Ảnh Đôi (Couple)';
+        } else if (lower.includes('tạo ảnh') || lower.includes('gen:') || lower.includes('generate') || lower.includes('chân dung') || lower.includes('1 ảnh') || lower.includes('single')) {
+            feature = 'Tạo Ảnh Đơn (Single)';
+        } else if (lower.includes('xử lý') || lower.includes('edit') || lower.includes('face')) {
+             feature = 'Chỉnh Sửa / Xử Lý Ảnh';
         } else {
             feature = rawFeature.length > 50 ? rawFeature.substring(0, 50) + '...' : rawFeature;
         }

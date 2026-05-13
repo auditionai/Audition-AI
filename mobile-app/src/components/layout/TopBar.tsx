@@ -22,7 +22,7 @@ export function TopBar() {
   const [giftcodePromo, setGiftcodePromo] = useState<{ text: string; isActive: boolean }>({ text: '', isActive: false });
 
   const hiddenRoutes = ['/', '/login', '/payment-gateway', '/admin'];
-  if (hiddenRoutes.includes(location.pathname)) return null;
+  const isHiddenRoute = hiddenRoutes.includes(location.pathname);
 
   useEffect(() => {
     let disposed = false;
@@ -95,6 +95,8 @@ export function TopBar() {
 
     return null;
   }, [giftcodePromo, promotion]);
+
+  if (isHiddenRoute) return null;
 
   const handlePromoClick = () => {
     if (!promoBanner) {

@@ -170,9 +170,9 @@ const uiServerMap: Record<string, string> = {
 
 const uiSpeedMap: Record<string, TstGenerationSpeed> = {
   Nhanh: 'fast',
-  'Tiết Kiệm': 'slow',
-  'Tiết kiệm': 'slow',
-  'Tiáº¿t Kiá»‡m': 'slow',
+  'Ti\u1ebft Ki\u1ec7m': 'slow',
+  'Ti\u1ebft ki\u1ec7m': 'slow',
+  'TiÃ¡ÂºÂ¿t KiÃ¡Â»â€¡m': 'slow',
 };
 
 const sortByOrder = (values: string[], order: string[]) =>
@@ -200,7 +200,7 @@ const normalizeCatalogSpeed = (value?: string) => (value || '').trim().toLowerCa
 const normalizeCatalogResolution = (value?: string) => (value || '').trim().toLowerCase();
 const normalizeCatalogDuration = (value?: string) => (value || '').trim().toLowerCase();
 const cleanCell = (value: string) => value.replace(/`/g, '').trim();
-const isDashValue = (value: string) => ['—', '-', '–', ''].includes(cleanCell(value));
+const isDashValue = (value: string) => ['-', '—', '–', 'â€”', 'â€“', ''].includes(cleanCell(value));
 
 const extractSection = (markdown: string, title: string): string => {
   const match = markdown.match(new RegExp(`## ${escapeRegex(title)}([\\s\\S]*?)(?=\\n## |$)`));
@@ -1000,7 +1000,7 @@ export const uiSpeedToTst = (value?: string): TstGenerationSpeed | undefined => 
 
 export const tstSpeedToUi = (value?: string) => {
   const normalized = normalizeCatalogSpeed(value) || 'fast';
-  if (normalized === 'slow') return 'Tiết kiệm';
+  if (normalized === 'slow') return 'Ti\u1ebft ki\u1ec7m';
   return 'Nhanh';
 };
 

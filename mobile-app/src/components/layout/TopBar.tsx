@@ -22,7 +22,7 @@ export function TopBar() {
   const [giftcodePromo, setGiftcodePromo] = useState<{ text: string; isActive: boolean }>({ text: '', isActive: false });
 
   const hiddenRoutes = ['/', '/login', '/payment-gateway', '/admin'];
-  if (hiddenRoutes.includes(location.pathname)) return null;
+  const isHiddenRoute = hiddenRoutes.includes(location.pathname);
 
   useEffect(() => {
     let disposed = false;
@@ -73,7 +73,7 @@ export function TopBar() {
 
   const promoBanner = useMemo<MobilePromoBanner | null>(() => {
     if (promotion?.isActive) {
-      const title = promotion.name?.trim() || 'Khuyến mại';
+      const title = promotion.name?.trim() || 'Khuyến mãi';
       const bonus = Number.isFinite(promotion.bonusPercent) ? promotion.bonusPercent : 0;
       const text = bonus > 0
         ? `${title}: nạp Vcoin nhận thêm +${bonus}%`
@@ -95,6 +95,8 @@ export function TopBar() {
 
     return null;
   }, [giftcodePromo, promotion]);
+
+  if (isHiddenRoute) return null;
 
   const handlePromoClick = () => {
     if (!promoBanner) {
@@ -155,7 +157,7 @@ export function TopBar() {
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 mb-0.5">
                 <span className="text-[9px] font-black uppercase tracking-[0.24em] text-white/75">
-                  {promoBanner.kind === 'promotion' ? 'Khuyến mại' : 'Giftcode'}
+                  {promoBanner.kind === 'promotion' ? 'Khuyến mãi' : 'Giftcode'}
                 </span>
                 {promoBanner.kind === 'promotion' && (
                   <span className="rounded-full bg-white/15 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-yellow-100">

@@ -1,5 +1,5 @@
 /**
- * BottomNav — Mobile navigation bar
+ * BottomNav - Mobile navigation bar
  * Clean Apple-style bottom nav with 5 essential tabs
  */
 

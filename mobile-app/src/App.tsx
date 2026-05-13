@@ -20,7 +20,7 @@ import { Support } from './views/Support';
 import { Guide } from './views/Guide';
 import { AdminView } from './views/Admin';
 import { PaymentGatewayView } from './views/PaymentGateway';
-import { syncPayOSTransaction } from './services/serverQueueService';
+import { syncPaymentTransaction } from './services/serverQueueService';
 import { getFeatureMaintenanceConfig, getSystemAnnouncementConfig, isFeatureInMaintenance, type FeatureMaintenanceConfig, type SystemAnnouncementConfig } from './services/economyService';
 import { getSupabaseUser, supabase } from './services/supabaseClient';
 import { AppEventPopup, type AppEventPopupData, SystemAnnouncementModal } from '../../components/AppNotificationPopups';
@@ -145,7 +145,7 @@ function MobileRuntimeEffects() {
   const { notify } = useNotification();
   const { isAuthenticated, maintenanceMode, userRole } = useAuth();
 
-  const handledPayOsReturnRef = useRef<string | null>(null);
+  const handledPaymentReturnRef = useRef<string | null>(null);
   const notifiedTerminalJobsRef = useRef<Set<string>>(new Set());
   const [systemAnnouncement, setSystemAnnouncement] = useState<SystemAnnouncementConfig | null>(null);
   const [showSystemAnnouncement, setShowSystemAnnouncement] = useState(false);
@@ -193,19 +193,19 @@ function MobileRuntimeEffects() {
     if (!status) return;
 
     const returnKey = `${status}:${orderCode || ''}`;
-    if (handledPayOsReturnRef.current === returnKey) return;
-    handledPayOsReturnRef.current = returnKey;
+    if (handledPaymentReturnRef.current === returnKey) return;
+    handledPaymentReturnRef.current = returnKey;
 
     const handleReturn = async () => {
       if (status === 'PAID') {
         if (orderCode) {
           try {
-            await syncPayOSTransaction(orderCode, gateway);
+            await syncPaymentTransaction(orderCode, gateway);
             window.dispatchEvent(new Event('balance_updated'));
             showPaymentSuccessPopup(orderCode);
             notify('Thanh toán thành công! Vcoin đã được cộng tự động.', 'success');
           } catch (error) {
-            console.error('Failed to sync PayOS transaction on mobile return:', error);
+            console.error('Failed to sync payment transaction on mobile return:', error);
             notify('Thanh toán đã ghi nhận. Hệ thống đang đồng bộ giao dịch...', 'info');
           }
         } else {

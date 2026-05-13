@@ -4,6 +4,7 @@ export type SePayEnv = {
   env: 'sandbox' | 'production';
   merchantId: string;
   secretKey: string;
+  apiToken: string;
   paymentMethod: 'BANK_TRANSFER' | 'NAPAS_BANK_TRANSFER';
 };
 
@@ -24,6 +25,7 @@ const SIGNED_FIELDS = [
 export const getSePayEnv = (): SePayEnv => {
   const merchantId = process.env.SEPAY_MERCHANT_ID || '';
   const secretKey = process.env.SEPAY_SECRET_KEY || '';
+  const apiToken = process.env.SEPAY_API_TOKEN || process.env.SEPAY_USER_API_TOKEN || '';
   const env = process.env.SEPAY_ENV === 'sandbox' ? 'sandbox' : 'production';
   const rawPaymentMethod = process.env.SEPAY_PAYMENT_METHOD || 'BANK_TRANSFER';
   const paymentMethod = rawPaymentMethod === 'NAPAS_BANK_TRANSFER' ? 'NAPAS_BANK_TRANSFER' : 'BANK_TRANSFER';
@@ -32,7 +34,7 @@ export const getSePayEnv = (): SePayEnv => {
     throw new Error('Missing SePay environment variables');
   }
 
-  return { env, merchantId, secretKey, paymentMethod };
+  return { env, merchantId, secretKey, apiToken, paymentMethod };
 };
 
 export const getSePayCheckoutUrl = (env: SePayEnv['env']) =>
@@ -40,6 +42,9 @@ export const getSePayCheckoutUrl = (env: SePayEnv['env']) =>
 
 export const getSePayApiBaseUrl = (env: SePayEnv['env']) =>
   env === 'sandbox' ? 'https://pgapi-sandbox.sepay.vn/v1' : 'https://pgapi.sepay.vn/v1';
+
+export const getSePayUserApiBaseUrl = (env: SePayEnv['env']) =>
+  env === 'sandbox' ? 'https://userapi-sandbox.sepay.vn/v2' : 'https://userapi.sepay.vn/v2';
 
 export const signSePayFields = (fields: Record<string, unknown>, secretKey: string) => {
   const signed = SIGNED_FIELDS
@@ -104,6 +109,38 @@ export const retrieveSePayOrder = async (orderCode: string | number, config = ge
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Basic ${Buffer.from(`${config.merchantId}:${config.secretKey}`).toString('base64')}`,
+    },
+    signal: AbortSignal.timeout(30000),
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    return { ok: false, status: response.status, payload };
+  }
+
+  return { ok: true, status: response.status, payload };
+};
+
+export const retrieveSePayTransactions = async (
+  params: Record<string, string | number | undefined | null>,
+  config = getSePayEnv(),
+) => {
+  if (!config.apiToken) {
+    return { ok: false, status: 500, payload: { error: 'Missing SEPAY_API_TOKEN' } };
+  }
+
+  const searchParams = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && String(value).trim() !== '') {
+      searchParams.set(key, String(value));
+    }
+  }
+
+  const response = await fetch(`${getSePayUserApiBaseUrl(config.env)}/transactions?${searchParams.toString()}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${config.apiToken}`,
     },
     signal: AbortSignal.timeout(30000),
   });
@@ -184,4 +221,76 @@ export const extractSePayPaidAmount = (payload: any) => {
   if (raw == null || raw === '') return null;
   const amount = Number(String(raw).replace(/,/g, ''));
   return Number.isFinite(amount) ? amount : null;
+};
+
+export const extractSePayBankAmountIn = (transaction: any) => {
+  const raw = transaction?.amount_in;
+  if (raw == null || raw === '') return null;
+  const amount = Number(String(raw).replace(/,/g, ''));
+  return Number.isFinite(amount) ? amount : null;
+};
+
+export const transactionContainsSePayOrderCode = (transaction: any, orderCode: string | number) => {
+  const needle = String(orderCode || '').trim().toLowerCase();
+  if (!needle) return false;
+
+  return [
+    transaction?.code,
+    transaction?.transaction_content,
+    transaction?.reference_number,
+  ].some((value) => String(value || '').toLowerCase().includes(needle));
+};
+
+const formatSePayQueryDate = (date: Date) =>
+  new Date(date.getTime() + 7 * 60 * 60_000).toISOString().slice(0, 19).replace('T', ' ');
+
+export const findSePayBankTransactionForOrder = async (input: {
+  orderCode: string | number;
+  amount: number;
+  createdAt?: string | null;
+}) => {
+  const orderCode = String(input.orderCode || '').trim();
+  if (!orderCode) {
+    return { ok: false, status: 400, payload: { error: 'Missing orderCode' }, transaction: null };
+  }
+
+  const createdAt = input.createdAt ? new Date(input.createdAt) : null;
+  const from = createdAt && Number.isFinite(createdAt.getTime())
+    ? new Date(createdAt.getTime() - 10 * 60_000)
+    : new Date(Date.now() - 24 * 60 * 60_000);
+  const to = new Date(Date.now() + 10 * 60_000);
+
+  const queries = [
+    { q: orderCode },
+    { transaction_content: orderCode },
+    { amount_in_min: input.amount, amount_in_max: input.amount },
+  ];
+
+  for (const query of queries) {
+    const result = await retrieveSePayTransactions({
+      ...query,
+      transfer_type: 'in',
+      transaction_date_from: formatSePayQueryDate(from),
+      transaction_date_to: formatSePayQueryDate(to),
+      transaction_date_sort: 'desc',
+      per_page: 100,
+      timestamp_format: 'iso8601',
+    });
+
+    if (!result.ok) {
+      return { ...result, transaction: null };
+    }
+
+    const transactions = Array.isArray(result.payload?.data) ? result.payload.data : [];
+    const matched = transactions.find((transaction: any) => {
+      const amountIn = extractSePayBankAmountIn(transaction);
+      return amountIn === Number(input.amount) && transactionContainsSePayOrderCode(transaction, orderCode);
+    });
+
+    if (matched) {
+      return { ok: true, status: result.status, payload: result.payload, transaction: matched };
+    }
+  }
+
+  return { ok: true, status: 200, payload: { status: 'success', data: [] }, transaction: null };
 };

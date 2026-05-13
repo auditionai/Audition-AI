@@ -1,6 +1,13 @@
 import type { Handler } from '@netlify/functions';
 import { getServiceRoleClient } from './_supabase';
-import { extractSePayOrderCode, extractSePayPaidAmount, getSePayEnv, normalizeSePayOrderStatus } from './_sepay';
+import {
+  extractSePayBankAmountIn,
+  extractSePayOrderCode,
+  extractSePayPaidAmount,
+  getSePayEnv,
+  normalizeSePayOrderStatus,
+  transactionContainsSePayOrderCode,
+} from './_sepay';
 
 const headers = {
   'Content-Type': 'application/json',
@@ -41,25 +48,39 @@ export const handler: Handler = async (event) => {
     const payload = JSON.parse(event.body || '{}');
     const orderCode = extractSePayOrderCode(payload);
 
-    if (!orderCode) {
-      return {
-        statusCode: 400,
-        headers,
-        body: JSON.stringify({ error: 'Missing order_invoice_number' }),
-      };
-    }
-
     const admin = getServiceRoleClient();
     const providerOrderCode = Number(orderCode);
-    const { data: existingTransaction, error: existingTransactionError } = await admin
-      .from('payment_transactions')
-      .select('id, status, amount_vnd')
-      .or(Number.isFinite(providerOrderCode)
-        ? `provider_order_code.eq.${providerOrderCode},order_code.eq.${orderCode}`
-        : `order_code.eq.${orderCode}`)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    let existingTransaction: any = null;
+    let existingTransactionError: any = null;
+
+    if (orderCode) {
+      const result = await admin
+        .from('payment_transactions')
+        .select('id, status, amount_vnd')
+        .or(Number.isFinite(providerOrderCode)
+          ? `provider_order_code.eq.${providerOrderCode},order_code.eq.${orderCode}`
+          : `order_code.eq.${orderCode}`)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      existingTransaction = result.data;
+      existingTransactionError = result.error;
+    } else {
+      const amountIn = extractSePayBankAmountIn(payload);
+      const { data, error } = await admin
+        .from('payment_transactions')
+        .select('id, status, amount_vnd, order_code, provider_order_code, created_at')
+        .in('status', ['pending', 'cancelled'])
+        .or('payment_method.eq.sepay,provider_payment_link_id.like.sepay:%')
+        .eq('amount_vnd', amountIn || -1)
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      existingTransactionError = error;
+      existingTransaction = (data || []).find((tx: any) =>
+        transactionContainsSePayOrderCode(payload, tx.provider_order_code || tx.order_code),
+      ) || null;
+    }
 
     if (existingTransactionError) {
       throw existingTransactionError;
@@ -85,7 +106,7 @@ export const handler: Handler = async (event) => {
             ? 'PAID'
             : orderStatus;
 
-    const paidAmount = extractSePayPaidAmount(payload);
+    const paidAmount = extractSePayPaidAmount(payload) ?? extractSePayBankAmountIn(payload);
     if (providerStatus === 'PAID' && paidAmount != null && paidAmount !== Number(existingTransaction.amount_vnd)) {
       return {
         statusCode: 409,
@@ -101,13 +122,14 @@ export const handler: Handler = async (event) => {
 
     const providerPayload = {
       gateway: 'sepay',
+      source: orderCode ? 'checkout_ipn' : 'bank_webhook',
       ...payload,
     };
     const rpcArgs = {
       p_provider_status: providerStatus,
       p_provider_payload: providerPayload,
     };
-    const { data, error } = Number.isFinite(providerOrderCode)
+    const { data, error } = orderCode && Number.isFinite(providerOrderCode)
       ? await admin.rpc('settle_payment_transaction_by_order_code', {
           p_provider_order_code: providerOrderCode,
           ...rpcArgs,

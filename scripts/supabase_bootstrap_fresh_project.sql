@@ -333,7 +333,7 @@ create table if not exists public.payment_transactions (
   amount_vnd numeric not null default 0,
   vcoin_received numeric not null default 0,
   status text not null default 'pending',
-  payment_method text not null default 'payos',
+  payment_method text not null default 'sepay',
   order_code text,
   provider_order_code bigint,
   provider_payment_link_id text,

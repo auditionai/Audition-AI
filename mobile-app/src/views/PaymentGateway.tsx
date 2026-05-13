@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { PayOSGateway as DesktopPayOSGateway } from '../../../views/PayOSGateway';
+import { ManualPaymentGateway } from '../../../views/ManualPaymentGateway';
 import type { Transaction } from '../types';
 
 const PENDING_TRANSACTION_STORAGE_KEY = 'audition-mobile-pending-transaction';
@@ -38,7 +38,7 @@ export function PaymentGatewayView() {
   }
 
   return (
-    <DesktopPayOSGateway
+    <ManualPaymentGateway
       transaction={transaction}
       onSuccess={() => {
         clearPendingTransaction();

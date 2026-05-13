@@ -1500,7 +1500,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const handleSavePaymentGateway = async () => {
       const result = await savePaymentGatewayConfig(paymentGateway);
       if (result.success) {
-          showToast(`Đã chuyển cổng thanh toán sang ${paymentGateway === 'sepay' ? 'SePay' : 'PayOS'}!`);
+          showToast('Đã lưu cổng thanh toán SePay!');
       } else {
           showToast('Lỗi lưu cổng thanh toán: ' + result.error, 'error');
       }
@@ -3079,10 +3079,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           </button>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 gap-3">
                           {([
-                              { id: 'sepay' as PaymentGateway, title: 'SePay', desc: 'Cổng đang dùng tạm thời. Redirect qua form checkout SePay, giữ PayOS dự phòng.' },
-                              { id: 'payos' as PaymentGateway, title: 'PayOS', desc: 'Cổng cũ. Có thể bật lại nhanh khi PayOS hoạt động ổn định.' },
+                              { id: 'sepay' as PaymentGateway, title: 'SePay', desc: 'Cổng thanh toán duy nhất. Webhook và cron đối soát giao dịch ngân hàng tự động.' },
                           ]).map((gatewayOption) => {
                               const active = paymentGateway === gatewayOption.id;
                               return (
@@ -3100,7 +3099,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           <span className={`text-[10px] font-black uppercase px-2 py-1 rounded-full ${
                                               active ? 'bg-emerald-400 text-black' : 'bg-white/10 text-slate-400'
                                           }`}>
-                                              {active ? 'Đang bật' : 'Dự phòng'}
+                                              {active ? 'Đang bật' : 'Tắt'}
                                           </span>
                                       </div>
                                       <p className="mt-2 text-xs leading-relaxed text-slate-400">{gatewayOption.desc}</p>
@@ -3110,7 +3109,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       </div>
 
                       <div className="mt-4 rounded-xl border border-yellow-500/20 bg-yellow-500/10 p-3 text-xs leading-relaxed text-yellow-100">
-                          SePay cần cấu hình biến môi trường <code>SEPAY_MERCHANT_ID</code> và <code>SEPAY_SECRET_KEY</code> trên Netlify/Render. PayOS vẫn giữ các biến <code>PAYOS_CLIENT_ID</code>, <code>PAYOS_API_KEY</code>, <code>PAYOS_CHECKSUM_KEY</code>.
+                          SePay cần cấu hình <code>SEPAY_MERCHANT_ID</code>, <code>SEPAY_SECRET_KEY</code> và <code>SEPAY_API_TOKEN</code> trên Netlify/Render để checkout, webhook và đối soát tự động hoạt động.
                       </div>
                   </div>
 

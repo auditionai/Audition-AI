@@ -1,9 +1,6 @@
-import crypto from 'crypto';
 import type { Handler } from '@netlify/functions';
 import { getServiceRoleClient } from './_supabase';
 import { createSePayCheckoutFields, encodeSePayCheckoutPayload } from './_sepay';
-
-type PaymentGateway = 'sepay' | 'payos';
 
 const headers = {
   'Content-Type': 'application/json',
@@ -18,32 +15,12 @@ const getOrigin = (event: Parameters<Handler>[0]) => {
   return host ? `${proto}://${host}` : 'https://auditionai.io.vn';
 };
 
-const normalizeGateway = (value: unknown): PaymentGateway | null => {
-  const raw = String(value || '').trim().toLowerCase();
-  if (raw === 'sepay' || raw === 'payos') return raw;
-  return null;
-};
-
-const getConfiguredPaymentGateway = async (): Promise<PaymentGateway> => {
-  try {
-    const admin = getServiceRoleClient();
-    const { data, error } = await admin
-      .from('system_settings')
-      .select('value')
-      .eq('key', 'payment_gateway')
-      .maybeSingle();
-
-    if (error) throw error;
-    const configured = normalizeGateway(data?.value?.gateway || data?.value?.activeGateway || data?.value);
-    if (configured) return configured;
-  } catch (error) {
-    console.warn('[create-payment] Failed to read payment_gateway setting, falling back to env/default:', error);
-  }
-
-  return normalizeGateway(process.env.PAYMENT_GATEWAY) || 'sepay';
-};
-
-const buildRedirectUrl = (preferredBaseUrl: string | undefined, clientUrl: string | undefined, status: string, orderCode: string | number, gateway: PaymentGateway) => {
+const buildRedirectUrl = (
+  preferredBaseUrl: string | undefined,
+  clientUrl: string | undefined,
+  status: string,
+  orderCode: string | number,
+) => {
   const fallbackBase = clientUrl && clientUrl.startsWith('http') ? clientUrl : 'https://auditionai.io.vn/topup';
   const resolvedBaseUrl = preferredBaseUrl && preferredBaseUrl.startsWith('http')
     ? new URL(preferredBaseUrl)
@@ -61,77 +38,14 @@ const buildRedirectUrl = (preferredBaseUrl: string | undefined, clientUrl: strin
 
   resolvedBaseUrl.searchParams.set('status', status);
   resolvedBaseUrl.searchParams.set('orderCode', String(orderCode));
-  resolvedBaseUrl.searchParams.set('gateway', gateway);
+  resolvedBaseUrl.searchParams.set('gateway', 'sepay');
   return resolvedBaseUrl.toString();
 };
 
-const createPayOSPayment = async (input: any) => {
-  const PAYOS_CLIENT_ID = process.env.PAYOS_CLIENT_ID;
-  const PAYOS_API_KEY = process.env.PAYOS_API_KEY;
-  const PAYOS_CHECKSUM_KEY = process.env.PAYOS_CHECKSUM_KEY;
-
-  if (!PAYOS_CLIENT_ID || !PAYOS_API_KEY || !PAYOS_CHECKSUM_KEY) {
-    throw new Error('Server misconfiguration: Missing PayOS keys');
-  }
-
-  const finalReturnUrl = buildRedirectUrl(process.env.PAYOS_RETURN_URL, input.clientReturnUrl, 'PAID', input.orderCode, 'payos');
-  const finalCancelUrl = buildRedirectUrl(process.env.PAYOS_CANCEL_URL, input.clientCancelUrl, 'CANCELLED', input.orderCode, 'payos');
-
-  const signatureData = {
-    amount: input.amount,
-    cancelUrl: finalCancelUrl,
-    description: input.description,
-    orderCode: input.orderCode,
-    returnUrl: finalReturnUrl,
-  };
-
-  const signString = Object.keys(signatureData)
-    .sort()
-    .map((key) => {
-      const val = signatureData[key as keyof typeof signatureData];
-      return `${key}=${val === null || val === undefined ? '' : val}`;
-    })
-    .join('&');
-
-  const signature = crypto.createHmac('sha256', PAYOS_CHECKSUM_KEY).update(signString).digest('hex');
-
-  const response = await fetch('https://api-merchant.payos.vn/v2/payment-requests', {
-    method: 'POST',
-    headers: {
-      'x-client-id': PAYOS_CLIENT_ID,
-      'x-api-key': PAYOS_API_KEY,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      ...signatureData,
-      signature,
-      buyerName: input.buyerName,
-      buyerEmail: input.buyerEmail,
-      buyerPhone: input.buyerPhone,
-      items: input.items,
-      expiredAt: input.expiredAt,
-    }),
-  });
-
-  const resData = await response.json();
-  if (resData.code !== '00') {
-    const error = new Error(resData?.desc || resData?.error || 'PayOS rejected payment request') as Error & { payload?: any; status?: number };
-    error.payload = resData;
-    error.status = 400;
-    throw error;
-  }
-
-  return {
-    ...resData.data,
-    paymentGateway: 'payos',
-    paymentMethod: 'payos',
-  };
-};
-
 const createSePayPayment = async (event: Parameters<Handler>[0], input: any) => {
-  const successUrl = buildRedirectUrl(process.env.SEPAY_SUCCESS_URL, input.clientReturnUrl, 'PAID', input.orderCode, 'sepay');
-  const errorUrl = buildRedirectUrl(process.env.SEPAY_ERROR_URL || process.env.SEPAY_CANCEL_URL, input.clientCancelUrl, 'FAILED', input.orderCode, 'sepay');
-  const cancelUrl = buildRedirectUrl(process.env.SEPAY_CANCEL_URL, input.clientCancelUrl, 'CANCELLED', input.orderCode, 'sepay');
+  const successUrl = buildRedirectUrl(process.env.SEPAY_SUCCESS_URL, input.clientReturnUrl, 'PAID', input.orderCode);
+  const errorUrl = buildRedirectUrl(process.env.SEPAY_ERROR_URL || process.env.SEPAY_CANCEL_URL, input.clientCancelUrl, 'FAILED', input.orderCode);
+  const cancelUrl = buildRedirectUrl(process.env.SEPAY_CANCEL_URL, input.clientCancelUrl, 'CANCELLED', input.orderCode);
 
   const checkout = createSePayCheckoutFields({
     amount: input.amount,
@@ -158,43 +72,7 @@ const createSePayPayment = async (event: Parameters<Handler>[0], input: any) => 
   };
 };
 
-const cancelSupersededPendingTransactions = async (transactionId: string) => {
-  if (!transactionId) return;
-
-  try {
-    const admin = getServiceRoleClient();
-    const { data: current, error: currentError } = await admin
-      .from('payment_transactions')
-      .select('id, user_id, created_at')
-      .eq('id', transactionId)
-      .maybeSingle();
-
-    if (currentError) throw currentError;
-    if (!current?.user_id) return;
-
-    const { error } = await admin
-      .from('payment_transactions')
-      .update({
-        status: 'cancelled',
-        provider_status: 'SUPERSEDED_BY_NEW_CHECKOUT',
-        provider_payload: {
-          superseded_by_transaction_id: current.id,
-          cancelled_at: new Date().toISOString(),
-        },
-        updated_at: new Date().toISOString(),
-      })
-      .eq('user_id', current.user_id)
-      .eq('status', 'pending')
-      .neq('id', current.id)
-      .lt('created_at', current.created_at);
-
-    if (error) throw error;
-  } catch (error) {
-    console.warn('[create-payment] Failed to cancel superseded pending transactions:', error);
-  }
-};
-
-const persistPaymentGatewayMetadata = async (input: any, data: any, gateway: PaymentGateway) => {
+const persistPaymentGatewayMetadata = async (input: any, data: any) => {
   try {
     const admin = getServiceRoleClient();
     const transactionId = String(input.transactionId || '').trim();
@@ -203,7 +81,7 @@ const persistPaymentGatewayMetadata = async (input: any, data: any, gateway: Pay
     const updatePayload = {
       checkout_url: data.checkoutUrl || data.checkout_url || null,
       provider_payment_link_id: data.paymentLinkId || data.payment_link_id || null,
-      payment_method: gateway,
+      payment_method: 'sepay',
       updated_at: new Date().toISOString(),
     };
 
@@ -266,7 +144,6 @@ export const handler: Handler = async (event) => {
       };
     }
 
-    const gateway = await getConfiguredPaymentGateway();
     const input = {
       amount: Number(amount),
       description: String(description),
@@ -281,15 +158,8 @@ export const handler: Handler = async (event) => {
       transactionId,
     };
 
-    if (transactionId) {
-      await cancelSupersededPendingTransactions(String(transactionId));
-    }
-
-    const data = gateway === 'payos'
-      ? await createPayOSPayment(input)
-      : await createSePayPayment(event, input);
-
-    await persistPaymentGatewayMetadata(input, data, gateway);
+    const data = await createSePayPayment(event, input);
+    await persistPaymentGatewayMetadata(input, data);
 
     return {
       statusCode: 200,
@@ -297,7 +167,7 @@ export const handler: Handler = async (event) => {
       body: JSON.stringify(data),
     };
   } catch (error: any) {
-    console.error('[create-payment] Payment gateway error:', error?.payload || error);
+    console.error('[create-payment] SePay checkout error:', error?.payload || error);
     return {
       statusCode: error?.status || 500,
       headers,

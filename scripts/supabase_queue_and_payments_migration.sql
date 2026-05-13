@@ -1,5 +1,5 @@
 -- Audition AI
--- Migration: server-side queue manager + automatic PayOS settlement
+-- Migration: server-side queue manager + automatic payment settlement
 
 begin;
 

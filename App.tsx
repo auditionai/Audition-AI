@@ -11,7 +11,7 @@ import { Support } from './views/Support';
 import { Gallery } from './views/Gallery';
 import { Landing } from './views/Landing';
 import { TopUp } from './views/TopUp';
-import { PayOSGateway } from './views/PayOSGateway'; 
+import { ManualPaymentGateway } from './views/ManualPaymentGateway'; 
 import { Language, Theme, ViewId, Feature } from './types';
 import { APP_CONFIG } from './constants';
 import { getSupabaseSession, getSupabaseUser, supabase } from './services/supabaseClient';
@@ -19,7 +19,7 @@ import { getUserProfile, logVisit, updateLastActive, subscribeMaintenanceMode, g
 import { NotificationProvider, useNotification } from './components/NotificationSystem';
 import { AppEventPopup, AppEventPopupData, SystemAnnouncementModal } from './components/AppNotificationPopups';
 import { Icons } from './components/Icons';
-import { syncPayOSTransaction } from './services/serverQueueService';
+import { syncPaymentTransaction } from './services/serverQueueService';
 import MobileApp from './mobile-app/src/App';
 
 const PHONE_USER_AGENT_PATTERN = /iphone|ipod|android.+mobile|windows phone|blackberry|opera mini|mobile safari/i;
@@ -318,7 +318,7 @@ function AppContent() {
     }
   }, []);
 
-  // --- HANDLE PAYOS RETURN ---
+  // --- HANDLE PAYMENT RETURN ---
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const status = params.get('status');
@@ -331,7 +331,7 @@ function AppContent() {
         if (status === 'PAID') {
              desktopHistoryModeRef.current = 'replace';
              if (orderCode) {
-                 syncPayOSTransaction(orderCode, gateway)
+                 syncPaymentTransaction(orderCode, gateway)
                     .then(() => {
                         window.dispatchEvent(new Event('balance_updated'));
                         showPaymentSuccessPopup(orderCode);
@@ -341,7 +341,7 @@ function AppContent() {
                         );
                     })
                     .catch((error) => {
-                        console.error('Failed to sync PayOS transaction on return:', error);
+                        console.error('Failed to sync payment transaction on return:', error);
                         notify(
                             lang === 'vi' ? 'Thanh to\u00e1n \u0111\u00e3 ghi nh\u1eadn. H\u1ec7 th\u1ed1ng \u0111ang \u0111\u1ed3ng b\u1ed9 giao d\u1ecbch...' : 'Payment recorded. Syncing transaction...',
                             'info'
@@ -561,7 +561,7 @@ function AppContent() {
         return <TopUp lang={lang} onNavigate={handleNavigate} />;
       case 'payment_gateway':
         return pendingTransaction ? (
-            <PayOSGateway 
+            <ManualPaymentGateway 
                 transaction={pendingTransaction} 
                 onSuccess={() => {
                     notify('Giao dịch đã được ghi nhận! Vui lòng chờ Admin duyệt.', 'info');

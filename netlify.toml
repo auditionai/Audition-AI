@@ -119,18 +119,8 @@
   status = 200
 
 [[redirects]]
-  from = "/api/payos-sync-transaction"
-  to = "/.netlify/functions/payos-sync-transaction"
-  status = 200
-
-[[redirects]]
-  from = "/api/payos-webhook"
-  to = "/.netlify/functions/payos-webhook"
-  status = 200
-
-[[redirects]]
-  from = "/api/payment-webhook"
-  to = "/.netlify/functions/payos-webhook"
+  from = "/api/sepay-sync-transaction"
+  to = "/.netlify/functions/sepay-sync-transaction"
   status = 200
 
 [[redirects]]

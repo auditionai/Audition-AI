@@ -108,19 +108,19 @@ export const triggerServerQueueTick = async (_force = false) => {
   return QUEUE_TICK_NOOP_RESULT;
 };
 
-export const syncPayOSTransaction = async (orderCode: string | number, gateway?: string | null) => {
+export const syncPaymentTransaction = async (orderCode: string | number, gateway?: string | null) => {
   const params = new URLSearchParams({ orderCode: String(orderCode) });
   if (gateway) {
     params.set('gateway', gateway);
   }
 
-  const response = await fetch(`/api/payos-sync-transaction?${params.toString()}`, {
+  const response = await fetch(`/api/sepay-sync-transaction?${params.toString()}`, {
     method: 'GET',
   });
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(payload?.error || 'Failed to sync PayOS transaction');
+    throw new Error(payload?.error || 'Failed to sync payment transaction');
   }
 
   return payload;

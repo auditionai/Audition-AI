@@ -1366,7 +1366,7 @@ CREATE TABLE IF NOT EXISTS "public"."payment_transactions" (
     "amount_vnd" numeric DEFAULT 0 NOT NULL,
     "vcoin_received" numeric DEFAULT 0 NOT NULL,
     "status" "text" DEFAULT 'pending'::"text" NOT NULL,
-    "payment_method" "text" DEFAULT 'payos'::"text" NOT NULL,
+    "payment_method" "text" DEFAULT 'sepay'::"text" NOT NULL,
     "order_code" "text",
     "provider_order_code" bigint,
     "provider_payment_link_id" "text",
@@ -2381,7 +2381,6 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TAB
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "anon";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "authenticated";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "service_role";
-
 
 
 

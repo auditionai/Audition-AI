@@ -81,10 +81,10 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
           const tx = await createPaymentLink(pkg.id);
           
           if (tx.checkoutUrl) {
-              // Redirect to PayOS
+              // Redirect to SePay
               window.location.href = tx.checkoutUrl;
           } else {
-              // Fallback to internal Manual Gateway if PayOS link generation failed
+              // Fallback to internal Manual Gateway if SePay link generation failed
               onNavigate('payment_gateway', { transaction: tx });
           }
       } catch (e) {

@@ -1,6 +1,11 @@
 import { schedule, type Handler } from '@netlify/functions';
 import { getServiceRoleClient } from './_supabase';
-import { extractSePayPaidAmount, normalizeSePayOrderStatus, retrieveSePayOrder } from './_sepay';
+import {
+  extractSePayPaidAmount,
+  findSePayBankTransactionForOrder,
+  normalizeSePayOrderStatus,
+  retrieveSePayOrder,
+} from './_sepay';
 
 const headers = {
   'Content-Type': 'application/json',
@@ -29,7 +34,7 @@ const reconcilePendingSePay: Handler = async (event) => {
     const { data: transactions, error: listError } = await admin
       .from('payment_transactions')
       .select('id, user_id, amount_vnd, order_code, provider_order_code, status, payment_method, provider_payment_link_id, created_at')
-      .eq('status', 'pending')
+      .in('status', ['pending', 'cancelled'])
       .or('payment_method.eq.sepay,provider_payment_link_id.like.sepay:%')
       .lte('created_at', staleBefore)
       .order('created_at', { ascending: true })
@@ -46,77 +51,75 @@ const reconcilePendingSePay: Handler = async (event) => {
       }
 
       const lookup = await retrieveSePayOrder(orderCode);
-      if (!lookup.ok) {
-        results.push({ id: tx.id, orderCode, success: false, reason: 'lookup_failed', status: lookup.status });
-        continue;
+      const providerStatus = lookup.ok ? normalizeSePayOrderStatus(lookup.payload) : 'UNKNOWN';
+      const paidAmount = lookup.ok ? extractSePayPaidAmount(lookup.payload) : null;
+      let providerPayload: Record<string, unknown> | null = null;
+
+      if (providerStatus === 'PAID') {
+        if (paidAmount != null && paidAmount !== Number(tx.amount_vnd)) {
+          results.push({
+            id: tx.id,
+            orderCode,
+            success: false,
+            reason: 'amount_mismatch',
+            expected: Number(tx.amount_vnd),
+            received: paidAmount,
+          });
+          continue;
+        }
+
+        providerPayload = {
+          gateway: 'sepay',
+          source: 'order_detail_api',
+          reconciled: true,
+          reconciled_at: new Date().toISOString(),
+          ...lookup.payload,
+        };
       }
 
-      const providerStatus = normalizeSePayOrderStatus(lookup.payload);
-      const paidAmount = extractSePayPaidAmount(lookup.payload);
-      if (providerStatus === 'PAID' && paidAmount != null && paidAmount !== Number(tx.amount_vnd)) {
-        results.push({
-          id: tx.id,
+      if (!providerPayload) {
+        const bankLookup = await findSePayBankTransactionForOrder({
           orderCode,
-          success: false,
-          reason: 'amount_mismatch',
-          expected: Number(tx.amount_vnd),
-          received: paidAmount,
+          amount: Number(tx.amount_vnd),
+          createdAt: tx.created_at,
         });
-        continue;
-      }
 
-      if (providerStatus !== 'PAID') {
-        const { data: newerTransaction, error: newerError } = await admin
-          .from('payment_transactions')
-          .select('id, status, created_at')
-          .eq('user_id', tx.user_id)
-          .gt('created_at', tx.created_at)
-          .order('created_at', { ascending: true })
-          .limit(1)
-          .maybeSingle();
-
-        if (newerError) {
-          results.push({ id: tx.id, orderCode, success: false, reason: newerError.message });
+        if (!bankLookup.ok) {
+          results.push({
+            id: tx.id,
+            orderCode,
+            success: false,
+            reason: 'bank_transaction_lookup_failed',
+            status: bankLookup.status,
+          });
           continue;
         }
 
-        if (newerTransaction) {
-          const { error: cancelError } = await admin
-            .from('payment_transactions')
-            .update({
-              status: 'cancelled',
-              provider_status: 'SUPERSEDED_BY_NEW_CHECKOUT',
-              provider_payload: {
-                gateway: 'sepay',
-                reconciled: true,
-                superseded_by_transaction_id: newerTransaction.id,
-                cancelled_at: new Date().toISOString(),
-                ...lookup.payload,
-              },
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', tx.id)
-            .eq('status', 'pending');
-
-          if (cancelError) {
-            results.push({ id: tx.id, orderCode, success: false, reason: cancelError.message });
-            continue;
-          }
-
-          results.push({ id: tx.id, orderCode, success: true, providerStatus: 'SUPERSEDED_BY_NEW_CHECKOUT' });
+        if (!bankLookup.transaction) {
+          results.push({
+            id: tx.id,
+            orderCode,
+            success: true,
+            providerStatus,
+            settled: false,
+            reason: 'no_matching_bank_transaction_yet',
+          });
           continue;
         }
+
+        providerPayload = {
+          gateway: 'sepay',
+          source: 'transaction_api',
+          reconciled: true,
+          reconciled_at: new Date().toISOString(),
+          bank_transaction: bankLookup.transaction,
+        };
       }
 
       const { data, error } = await admin.rpc('settle_payment_transaction_by_id', {
         p_transaction_id: tx.id,
-        p_provider_status: providerStatus,
-        p_provider_payload: {
-          gateway: 'sepay',
-          reconciled: true,
-          reconciled_at: new Date().toISOString(),
-          ...lookup.payload,
-        },
+        p_provider_status: 'PAID',
+        p_provider_payload: providerPayload,
       });
 
       if (error) {
@@ -124,7 +127,7 @@ const reconcilePendingSePay: Handler = async (event) => {
         continue;
       }
 
-      results.push({ id: tx.id, orderCode, success: true, providerStatus, data });
+      results.push({ id: tx.id, orderCode, success: true, providerStatus: 'PAID', data });
     }
 
     return {

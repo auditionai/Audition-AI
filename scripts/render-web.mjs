@@ -16,8 +16,7 @@ import { localHandler as directImageEditBackgroundHandler } from '../netlify/fun
 import { handler as forceRescueFailedJobsHandler } from '../netlify/functions/force-rescue-failed-jobs.ts';
 import { handler as galleryImagesHandler } from '../netlify/functions/gallery-images.ts';
 import { handler as getVertexTokenHandler } from '../netlify/functions/get-vertex-token.ts';
-import { handler as payosSyncTransactionHandler } from '../netlify/functions/payos-sync-transaction.ts';
-import { handler as payosWebhookHandler } from '../netlify/functions/payos-webhook.ts';
+import { handler as sepaySyncTransactionHandler } from '../netlify/functions/sepay-sync-transaction.ts';
 import { handler as queueEnqueueHandler } from '../netlify/functions/queue-enqueue.ts';
 import { handler as queueReconcileHandler } from '../netlify/functions/queue-reconcile.ts';
 import { handler as queueSubmitHandler } from '../netlify/functions/queue-submit.ts';
@@ -70,8 +69,7 @@ const handlerConfigs = [
   { fnName: 'gallery-images', apiPath: '/api/gallery-images', handler: galleryImagesHandler },
   { fnName: 'checkin-reward', apiPath: '/api/checkin-reward', handler: checkinRewardHandler },
   { fnName: 'redeem-giftcode', apiPath: '/api/redeem-giftcode', handler: redeemGiftcodeHandler },
-  { fnName: 'payos-sync-transaction', apiPath: '/api/payos-sync-transaction', handler: payosSyncTransactionHandler },
-  { fnName: 'payos-webhook', apiPath: '/api/payos-webhook', handler: payosWebhookHandler, extraApiPaths: ['/api/payment-webhook'] },
+  { fnName: 'sepay-sync-transaction', apiPath: '/api/sepay-sync-transaction', handler: sepaySyncTransactionHandler },
   { fnName: 'create_payment', apiPath: '/api/create-payment', handler: createPaymentHandler },
   { fnName: 'sepay-checkout', apiPath: '/api/sepay-checkout', handler: sepayCheckoutHandler },
   { fnName: 'sepay-ipn', apiPath: '/api/sepay-ipn', handler: sepayIpnHandler, extraApiPaths: ['/api/sepay-webhook'] },

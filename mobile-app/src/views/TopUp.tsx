@@ -214,7 +214,7 @@ export const TopUp: React.FC = () => {
 
       <div className="mx-4 mt-6 p-4 rounded-2xl bg-gray-100 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700/50">
         <p className="text-[11px] text-gray-400 dark:text-zinc-500 leading-relaxed text-center">
-          Thanh toán an toàn qua <strong>PayOS</strong>. 1 Vcoin = 1.000đ. Vcoin nạp vào tài khoản ngay lập tức sau khi thanh toán thành công.
+          Thanh toán an toàn qua <strong>SePay</strong>. 1 Vcoin = 1.000đ. Vcoin nạp vào tài khoản ngay lập tức sau khi thanh toán thành công.
         </p>
       </div>
     </div>

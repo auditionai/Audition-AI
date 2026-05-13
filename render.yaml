@@ -37,18 +37,6 @@ services:
         sync: false
       - key: TST_API_KEY
         sync: false
-      - key: PAYOS_CLIENT_ID
-        sync: false
-      - key: PAYOS_API_KEY
-        sync: false
-      - key: PAYOS_CHECKSUM_KEY
-        sync: false
-      - key: PAYOS_RETURN_URL
-        sync: false
-      - key: PAYOS_CANCEL_URL
-        sync: false
-      - key: PAYOS_WEBHOOK_URL
-        sync: false
       - key: PAYMENT_GATEWAY
         value: sepay
       - key: SEPAY_ENV
@@ -56,6 +44,8 @@ services:
       - key: SEPAY_MERCHANT_ID
         sync: false
       - key: SEPAY_SECRET_KEY
+        sync: false
+      - key: SEPAY_API_TOKEN
         sync: false
       - key: SEPAY_PAYMENT_METHOD
         value: BANK_TRANSFER

@@ -1236,7 +1236,7 @@ CREATE TABLE IF NOT EXISTS "public"."payment_transactions" (
     "amount_vnd" numeric DEFAULT 0 NOT NULL,
     "vcoin_received" numeric DEFAULT 0 NOT NULL,
     "status" "text" DEFAULT 'pending'::"text" NOT NULL,
-    "payment_method" "text" DEFAULT 'payos'::"text" NOT NULL,
+    "payment_method" "text" DEFAULT 'sepay'::"text" NOT NULL,
     "order_code" "text",
     "provider_order_code" bigint,
     "provider_payment_link_id" "text",
@@ -2371,5 +2371,4 @@ using (true);
 
 
 CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
-
 

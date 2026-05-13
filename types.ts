@@ -238,10 +238,10 @@ export interface Transaction {
   vcoin_received: number;
   status: TransactionStatus;
   createdAt: string;
-  paymentMethod: 'payos' | 'sepay' | 'manual';
+  paymentMethod: 'sepay' | 'manual';
   code?: string; // Order Code
   order_code?: string; // New field
-  checkoutUrl?: string; // URL thanh toán PayOS
+  checkoutUrl?: string; // URL thanh toan SePay
 }
 
 export interface VcoinLog {

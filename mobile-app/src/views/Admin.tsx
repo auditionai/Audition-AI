@@ -5,13 +5,27 @@ import {
   AlertTriangle,
   ArrowLeft,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Coins,
+  CreditCard,
+  Gift,
   Image as ImageIcon,
+  KeyRound,
   Loader,
+  Megaphone,
+  Package,
+  Palette,
+  Pencil,
+  Plus,
   RefreshCw,
+  Save,
   Search,
+  Server,
   Settings2,
   Shield,
+  SlidersHorizontal,
+  Trash2,
   Users,
   Video,
   Wallet,
@@ -22,21 +36,51 @@ import { useNotification } from '../components/NotificationSystem';
 import {
   adminApproveTransaction,
   adminRejectTransaction,
+  deleteApiKey,
+  deleteGiftcode,
+  deletePackage,
+  deletePromotion,
+  deleteStylePreset,
   getAdminQueueJobDetail,
   getAdminQueueJobs,
   getAdminStats,
+  getApiKeysList,
   getFeatureMaintenanceConfig,
+  getGenerationGuideImages,
+  getGiftcodePromoConfig,
   getMaintenanceMode,
+  getModelPricing,
+  getPaymentGatewayConfig,
+  getStylePresets,
+  getSystemAnnouncementConfig,
+  getTutorialVideo,
   runAdminQueueReconcile,
+  saveGenerationGuideImages,
+  saveGiftcode,
+  saveGiftcodePromoConfig,
+  saveModelPricing,
+  savePackage,
+  savePaymentGatewayConfig,
+  savePromotion,
+  saveStylePreset,
+  saveSystemAnnouncementConfig,
+  saveTutorialVideo,
   saveFeatureMaintenanceConfig,
   saveMaintenanceMode,
+  updatePackageOrder,
   stopAdminQueueJob,
 } from '../services/economyService';
 import { APP_CONFIG } from '../constants';
-import type { FeatureMaintenanceConfig } from '../services/economyService';
-import type { AdminQueueInputMedia, AdminQueueJob, AdminQueueJobDetail, AdminQueueMediaSection, AdminQueueSummary, Transaction } from '../types';
+import {
+  filterAdminManagedPricingRows,
+  getPricingRows,
+  isAdminManagedPricingModel,
+  type TstPricingRow,
+} from '../services/tstCatalog';
+import type { FeatureMaintenanceConfig, ModelPricing, PaymentGateway, SystemAnnouncementConfig } from '../services/economyService';
+import type { AdminQueueInputMedia, AdminQueueJob, AdminQueueJobDetail, AdminQueueMediaSection, AdminQueueSummary, CreditPackage, Giftcode, PromotionCampaign, StylePreset, Transaction } from '../types';
 
-type AdminTab = 'overview' | 'queue' | 'transactions' | 'users';
+type AdminTab = 'overview' | 'queue' | 'transactions' | 'users' | 'packages' | 'marketing' | 'pricing' | 'styles' | 'system';
 type AdminStatsPayload = Awaited<ReturnType<typeof getAdminStats>>;
 type AdminUsageRow = {
   feature: string;
@@ -216,10 +260,67 @@ const getUserLastSeen = (user: AdminUserRow) => {
 };
 
 const Card = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
-  <div className={`rounded-[28px] border border-gray-100 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-[#18181B] ${className}`}>
+  <div className={`rounded-[20px] border border-gray-100 bg-white p-3 shadow-sm dark:border-zinc-800 dark:bg-[#18181B] ${className}`}>
     {children}
   </div>
 );
+
+const pillButtonClass = (active: boolean, tone = 'bg-gray-900 text-white dark:bg-white dark:text-black') =>
+  `whitespace-nowrap rounded-full px-3 py-1.5 text-[11px] font-bold ${active ? tone : 'bg-gray-100 text-gray-500 dark:bg-zinc-800 dark:text-zinc-400'}`;
+
+const fieldClass =
+  'w-full rounded-[16px] border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-800 outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-white';
+
+const compactPanelClass = 'rounded-[18px] bg-gray-50 p-3 dark:bg-zinc-800/80';
+
+const newCreditPackage = (): CreditPackage => ({
+  id: `temp_${Date.now()}`,
+  name: 'Gói mới',
+  vcoin: 100,
+  price: 100000,
+  currency: 'VND',
+  bonusText: '',
+  bonusPercent: 0,
+  isPopular: false,
+  isActive: true,
+  displayOrder: 999,
+  colorTheme: 'pink',
+  transferContent: 'AUDITIONAI',
+});
+
+const newPromotion = (): PromotionCampaign => {
+  const now = new Date();
+  const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  return {
+    id: `temp_${Date.now()}`,
+    name: 'Sự kiện mới',
+    marqueeText: 'Khuyến mãi đặc biệt từ AUDITION AI',
+    bonusPercent: 10,
+    startTime: now.toISOString(),
+    endTime: tomorrow.toISOString(),
+    isActive: true,
+  };
+};
+
+const newGiftcode = (): Giftcode => ({
+  id: `temp_${Date.now()}`,
+  code: 'NEWCODE',
+  campaignKey: 'NEWCODE',
+  reward: 20,
+  totalLimit: 100,
+  usedCount: 0,
+  maxPerUser: 1,
+  isActive: true,
+});
+
+const newStylePreset = (): StylePreset => ({
+  id: `temp_${Date.now()}`,
+  name: 'Style mới',
+  image_url: '',
+  trigger_prompt: '',
+  is_active: true,
+  is_default: false,
+});
 
 export function AdminView() {
   const navigate = useNavigate();
@@ -253,6 +354,32 @@ export function AdminView() {
   });
   const [savingMaintenance, setSavingMaintenance] = useState(false);
   const [savingFeatureMaintenance, setSavingFeatureMaintenance] = useState(false);
+  const [packages, setPackages] = useState<CreditPackage[]>([]);
+  const [promotions, setPromotions] = useState<PromotionCampaign[]>([]);
+  const [giftcodes, setGiftcodes] = useState<Giftcode[]>([]);
+  const [stylePresets, setStylePresets] = useState<StylePreset[]>([]);
+  const [modelPricing, setModelPricing] = useState<ModelPricing[]>([]);
+  const [pricingRows, setPricingRows] = useState<TstPricingRow[]>([]);
+  const [pricingDrafts, setPricingDrafts] = useState<Record<string, string>>({});
+  const [apiKeys, setApiKeys] = useState<any[]>([]);
+  const [giftcodePromo, setGiftcodePromo] = useState({ text: '', isActive: false });
+  const [tutorialVideo, setTutorialVideo] = useState({ url: '', isActive: true });
+  const [guideImages, setGuideImages] = useState({ characterUrl: '', sampleUrl: '' });
+  const [paymentGateway, setPaymentGateway] = useState<PaymentGateway>('sepay');
+  const [systemAnnouncement, setSystemAnnouncement] = useState<SystemAnnouncementConfig>({
+    isActive: false,
+    title: 'Thông báo từ AUDITION AI',
+    message: 'Chào mừng bạn quay lại AUDITION AI.',
+    variant: 'info',
+  });
+  const [editingPackage, setEditingPackage] = useState<CreditPackage | null>(null);
+  const [editingPromotion, setEditingPromotion] = useState<PromotionCampaign | null>(null);
+  const [editingGiftcode, setEditingGiftcode] = useState<Giftcode | null>(null);
+  const [editingStyle, setEditingStyle] = useState<StylePreset | null>(null);
+  const [marketingSearch, setMarketingSearch] = useState('');
+  const [pricingSearch, setPricingSearch] = useState('');
+  const [styleSearch, setStyleSearch] = useState('');
+  const [savingExtras, setSavingExtras] = useState(false);
 
   const loadStats = useCallback(async () => {
     setLoadingStats(true);
@@ -268,6 +395,9 @@ export function AdminView() {
         message: maintenancePayload.message || '',
       });
       setFeatureMaintenance(featureMaintenancePayload);
+      setPackages((statsPayload.packages || []) as CreditPackage[]);
+      setPromotions((statsPayload.promotions || []) as PromotionCampaign[]);
+      setGiftcodes((statsPayload.giftcodes || []) as Giftcode[]);
     } catch (error) {
       console.error('[MobileAdmin] Failed to load stats', error);
       notify('Không thể tải tổng quan admin.', 'error');
@@ -318,6 +448,48 @@ export function AdminView() {
     void loadQueue();
   }, [loadQueue]);
 
+  const loadAdminExtras = useCallback(async () => {
+    try {
+      const [
+        stylesPayload,
+        pricingPayload,
+        livePricingPayload,
+        apiKeysPayload,
+        giftcodePromoPayload,
+        tutorialPayload,
+        guidePayload,
+        paymentGatewayPayload,
+        announcementPayload,
+      ] = await Promise.all([
+        getStylePresets(),
+        getModelPricing({ force: true }),
+        getPricingRows(true).catch(() => []),
+        getApiKeysList(),
+        getGiftcodePromoConfig(),
+        getTutorialVideo(),
+        getGenerationGuideImages(),
+        getPaymentGatewayConfig(),
+        getSystemAnnouncementConfig(),
+      ]);
+      setStylePresets((stylesPayload || []) as StylePreset[]);
+      setModelPricing((pricingPayload || []).filter((row) => isAdminManagedPricingModel(row.model_id)));
+      setPricingRows(filterAdminManagedPricingRows(livePricingPayload || []));
+      setApiKeys(apiKeysPayload || []);
+      setGiftcodePromo(giftcodePromoPayload);
+      setTutorialVideo(tutorialPayload);
+      setGuideImages(guidePayload);
+      setPaymentGateway(paymentGatewayPayload.gateway);
+      setSystemAnnouncement(announcementPayload);
+    } catch (error) {
+      console.error('[MobileAdmin] Failed to load admin extras', error);
+      notify('Không thể tải đủ cấu hình admin.', 'error');
+    }
+  }, [notify]);
+
+  useEffect(() => {
+    void loadAdminExtras();
+  }, [loadAdminExtras]);
+
   const pendingTransactions = useMemo(
     () => ((stats?.transactions || []) as Transaction[]).filter((item: Transaction) => item.status === 'pending'),
     [stats],
@@ -341,6 +513,25 @@ export function AdminView() {
       .sort((a, b) => Number(b.vcoin_balance || 0) - Number(a.vcoin_balance || 0))
       .slice(0, 25);
   }, [stats, userSearch]);
+  const pricingByKey = useMemo(
+    () => new Map(modelPricing.map((row) => [`${row.model_id}|${row.option_id}`, row])),
+    [modelPricing],
+  );
+  const filteredPricingRows = useMemo(() => {
+    const query = pricingSearch.trim().toLowerCase();
+    return pricingRows.filter((row) => {
+      if (!query) return true;
+      return `${row.modelName} ${row.modelId} ${row.server} ${row.resolution || ''} ${row.duration || ''}`.toLowerCase().includes(query);
+    });
+  }, [pricingRows, pricingSearch]);
+  const filteredStyles = useMemo(() => {
+    const query = styleSearch.trim().toLowerCase();
+    return stylePresets.filter((style) => !query || `${style.name} ${style.trigger_prompt || ''}`.toLowerCase().includes(query));
+  }, [stylePresets, styleSearch]);
+  const filteredMarketingGiftcodes = useMemo(() => {
+    const query = marketingSearch.trim().toLowerCase();
+    return giftcodes.filter((code) => !query || `${code.code} ${code.campaignKey || ''}`.toLowerCase().includes(query));
+  }, [giftcodes, marketingSearch]);
   const selectedQueuePrompt = selectedQueueJobDetail?.prompt || selectedQueueJobDetail?.job.prompt || 'Không có prompt';
   const orderedQueueMediaSections = [...(selectedQueueJobDetail?.mediaSections || [])].sort((left, right) => {
     const order = { result: 0, reference: 1, sample: 2 };
@@ -353,7 +544,7 @@ export function AdminView() {
 
   const refreshAll = async () => {
     setRefreshing(true);
-    await Promise.all([loadStats(), loadQueue()]);
+    await Promise.all([loadStats(), loadQueue(), loadAdminExtras()]);
     setRefreshing(false);
   };
 
@@ -507,6 +698,204 @@ export function AdminView() {
     notify('Đã lưu bảo trì chức năng.', 'success');
   };
 
+  const savePackageForm = async () => {
+    if (!editingPackage) return;
+    setSavingExtras(true);
+    const result = await savePackage(editingPackage);
+    setSavingExtras(false);
+    if (!result.success) {
+      notify(result.error || 'Không thể lưu gói nạp.', 'error');
+      return;
+    }
+    setEditingPackage(null);
+    await loadStats();
+    notify('Đã lưu gói nạp.', 'success');
+  };
+
+  const removePackage = (pkg: CreditPackage) =>
+    confirm({
+      title: 'Xóa gói nạp?',
+      message: `Gói ${pkg.name} sẽ bị xóa hoặc ẩn nếu đã phát sinh giao dịch.`,
+      confirmText: 'Xóa',
+      cancelText: 'Hủy',
+      isDanger: true,
+      onConfirm: async () => {
+        const result = await deletePackage(pkg.id);
+        if (!result.success) {
+          notify(result.error || 'Không thể xóa gói nạp.', 'error');
+          return;
+        }
+        await loadStats();
+        notify(result.action === 'hidden' ? 'Gói đã được ẩn.' : 'Đã xóa gói nạp.', 'success');
+      },
+    });
+
+  const movePackage = async (index: number, direction: -1 | 1) => {
+    const next = [...packages];
+    const target = index + direction;
+    if (target < 0 || target >= next.length) return;
+    [next[index], next[target]] = [next[target], next[index]];
+    setPackages(next);
+    const result = await updatePackageOrder(next);
+    if (!result.success) notify(result.error || 'Không thể đổi thứ tự gói.', 'error');
+  };
+
+  const savePromotionForm = async () => {
+    if (!editingPromotion) return;
+    setSavingExtras(true);
+    const result = await savePromotion(editingPromotion);
+    setSavingExtras(false);
+    if (!result.success) {
+      notify(result.error || 'Không thể lưu sự kiện.', 'error');
+      return;
+    }
+    setEditingPromotion(null);
+    await loadStats();
+    notify('Đã lưu sự kiện.', 'success');
+  };
+
+  const removePromotion = (promotion: PromotionCampaign) =>
+    confirm({
+      title: 'Xóa sự kiện?',
+      message: `Xóa chiến dịch ${promotion.name}?`,
+      confirmText: 'Xóa',
+      cancelText: 'Hủy',
+      isDanger: true,
+      onConfirm: async () => {
+        const result = await deletePromotion(promotion.id);
+        if (!result.success) {
+          notify(result.error || 'Không thể xóa sự kiện.', 'error');
+          return;
+        }
+        await loadStats();
+        notify('Đã xóa sự kiện.', 'success');
+      },
+    });
+
+  const saveGiftcodeForm = async () => {
+    if (!editingGiftcode) return;
+    setSavingExtras(true);
+    const normalized = {
+      ...editingGiftcode,
+      code: editingGiftcode.code.trim().toUpperCase(),
+      campaignKey: (editingGiftcode.campaignKey || editingGiftcode.code).trim().toUpperCase(),
+    };
+    const result = await saveGiftcode(normalized);
+    setSavingExtras(false);
+    if (!result.success) {
+      notify(result.error || 'Không thể lưu giftcode.', 'error');
+      return;
+    }
+    setEditingGiftcode(null);
+    await loadStats();
+    notify('Đã lưu giftcode.', 'success');
+  };
+
+  const removeGiftcode = (code: Giftcode) =>
+    confirm({
+      title: 'Xóa giftcode?',
+      message: `Xóa mã ${code.code}?`,
+      confirmText: 'Xóa',
+      cancelText: 'Hủy',
+      isDanger: true,
+      onConfirm: async () => {
+        await deleteGiftcode(code.id);
+        await loadStats();
+        notify('Đã xóa giftcode.', 'success');
+      },
+    });
+
+  const saveStyleForm = async () => {
+    if (!editingStyle) return;
+    if (!editingStyle.name.trim() || !editingStyle.image_url.trim()) {
+      notify('Tên style và ảnh mẫu không được trống.', 'error');
+      return;
+    }
+    setSavingExtras(true);
+    const result = await saveStylePreset(editingStyle);
+    setSavingExtras(false);
+    if (!result.success) {
+      notify(result.error || 'Không thể lưu style.', 'error');
+      return;
+    }
+    setEditingStyle(null);
+    await loadAdminExtras();
+    notify('Đã lưu style mẫu.', 'success');
+  };
+
+  const removeStyle = (style: StylePreset) =>
+    confirm({
+      title: 'Xóa style mẫu?',
+      message: `Xóa style ${style.name}?`,
+      confirmText: 'Xóa',
+      cancelText: 'Hủy',
+      isDanger: true,
+      onConfirm: async () => {
+        await deleteStylePreset(style.id);
+        await loadAdminExtras();
+        notify('Đã xóa style.', 'success');
+      },
+    });
+
+  const setPricingDraft = (row: TstPricingRow, value: string) => {
+    setPricingDrafts((current) => ({ ...current, [`${row.modelId}|${row.configKey}`]: value }));
+  };
+
+  const getPricingValue = (row: TstPricingRow) => {
+    const key = `${row.modelId}|${row.configKey}`;
+    return pricingDrafts[key] ?? String(pricingByKey.get(key)?.audition_price_vcoin ?? row.defaultAuditionVcoin ?? row.vcoin);
+  };
+
+  const savePricingRow = async (row: TstPricingRow) => {
+    const key = `${row.modelId}|${row.configKey}`;
+    const price = Number(getPricingValue(row));
+    if (!Number.isFinite(price) || price <= 0) {
+      notify('Giá Vcoin phải lớn hơn 0.', 'error');
+      return;
+    }
+    setSavingExtras(true);
+    const existing = pricingByKey.get(key);
+    const result = await saveModelPricing({
+      id: existing?.id || `${row.modelId}_${row.configKey}`.replace(/[^a-zA-Z0-9_-]/g, '_'),
+      model_id: row.modelId,
+      option_id: row.configKey,
+      tst_price_credits: row.credits,
+      audition_price_vcoin: price,
+      updated_at: existing?.updated_at || new Date().toISOString(),
+    });
+    setSavingExtras(false);
+    if (!result.success) {
+      notify(result.error || 'Không thể lưu bảng giá.', 'error');
+      return;
+    }
+    setPricingDrafts((current) => {
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+    await loadAdminExtras();
+    notify('Đã lưu giá model.', 'success');
+  };
+
+  const saveSystemSettings = async () => {
+    setSavingExtras(true);
+    const [gatewayResult, announcementResult, promoResult, tutorialResult, guideResult] = await Promise.all([
+      savePaymentGatewayConfig(paymentGateway),
+      saveSystemAnnouncementConfig(systemAnnouncement),
+      saveGiftcodePromoConfig(giftcodePromo.text, giftcodePromo.isActive),
+      saveTutorialVideo(tutorialVideo.url, tutorialVideo.isActive),
+      saveGenerationGuideImages(guideImages.characterUrl, guideImages.sampleUrl),
+    ]);
+    setSavingExtras(false);
+    const failed = [gatewayResult, announcementResult, promoResult, tutorialResult, guideResult].find((result) => !result.success);
+    if (failed) {
+      notify(failed.error || 'Không thể lưu cấu hình hệ thống.', 'error');
+      return;
+    }
+    await loadAdminExtras();
+    notify('Đã lưu cấu hình hệ thống.', 'success');
+  };
+
   return (
     <div className="min-h-screen bg-[#F6F6F8] pb-10 dark:bg-[#09090B]">
       <div className="sticky top-0 z-40 border-b border-gray-100 bg-[#F6F6F8]/95 px-4 pb-4 pt-4 backdrop-blur-xl dark:border-zinc-800 dark:bg-[#09090B]/95">
@@ -539,24 +928,25 @@ export function AdminView() {
             </div>
           </div>
 
-          <div className="flex gap-2 overflow-x-auto no-scrollbar">
-            {(['overview', 'queue', 'transactions', 'users'] as const).map((tab) => (
+          <div className="grid grid-flow-col auto-cols-max gap-2 overflow-x-auto no-scrollbar">
+            {([
+              ['overview', 'Tổng quan', Activity],
+              ['queue', 'Queue', SlidersHorizontal],
+              ['transactions', 'Giao dịch', Wallet],
+              ['users', 'User', Users],
+              ['packages', 'Gói nạp', Package],
+              ['marketing', 'Sự kiện', Gift],
+              ['pricing', 'Bảng giá', Coins],
+              ['styles', 'Style', Palette],
+              ['system', 'Hệ thống', Server],
+            ] as Array<[AdminTab, string, typeof Activity]>).map(([tab, label, Icon]) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`whitespace-nowrap rounded-2xl px-4 py-2.5 text-xs font-bold ${
-                  activeTab === tab
-                    ? 'bg-gray-900 text-white dark:bg-white dark:text-black'
-                    : 'bg-gray-100 text-gray-500 dark:bg-zinc-800 dark:text-zinc-400'
-                }`}
+                className={`inline-flex items-center gap-1.5 ${pillButtonClass(activeTab === tab)}`}
               >
-                {tab === 'overview'
-                  ? 'Tổng quan'
-                  : tab === 'queue'
-                    ? 'Hàng đợi'
-                    : tab === 'transactions'
-                      ? 'Giao dịch'
-                      : 'Người dùng'}
+                <Icon className="h-3.5 w-3.5" />
+                {label}
               </button>
             ))}
           </div>
@@ -825,6 +1215,196 @@ export function AdminView() {
             {loadingStats ? <div className="flex justify-center py-12"><Loader className="h-7 w-7 animate-spin text-gray-300" /></div> : filteredUsers.length === 0 ? <div className="rounded-[24px] bg-gray-50 px-4 py-6 text-sm text-gray-500 dark:bg-zinc-800/80 dark:text-zinc-400">Không tìm thấy người dùng.</div> : <div className="space-y-3">{filteredUsers.map((entry: AdminUserRow) => <div key={entry.id} className="rounded-[24px] bg-gray-50 p-4 dark:bg-zinc-800/80"><div className="mb-3 flex items-start justify-between gap-3"><div className="min-w-0"><div className="truncate text-sm font-black text-gray-900 dark:text-white">{entry.username || entry.email}</div><div className="mt-1 truncate text-[11px] text-gray-500 dark:text-zinc-400">{entry.email}</div></div><div className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${entry.role === 'admin' ? 'bg-fuchsia-50 text-fuchsia-700 dark:bg-fuchsia-500/10 dark:text-fuchsia-300' : 'bg-gray-200 text-gray-700 dark:bg-zinc-700 dark:text-zinc-200'}`}>{getRoleLabel(entry.role)}</div></div><div className="grid grid-cols-2 gap-3 text-xs"><div className="rounded-2xl bg-white px-3 py-3 dark:bg-zinc-900"><div className="text-gray-400 dark:text-zinc-500">Số dư</div><div className="mt-1 text-sm font-bold text-amber-600 dark:text-amber-300">{Number(entry.vcoin_balance || 0).toLocaleString()} VC</div></div><div className="rounded-2xl bg-white px-3 py-3 dark:bg-zinc-900"><div className="text-gray-400 dark:text-zinc-500">Lượt dùng</div><div className="mt-1 text-sm font-bold text-gray-900 dark:text-white">{entry.usageCount || 0}</div></div></div><div className="mt-3 text-[11px] text-gray-500 dark:text-zinc-400">Hoạt động gần nhất: {getUserLastSeen(entry)}</div></div>)}</div>}
           </Card>
         )}
+
+        {activeTab === 'packages' && (
+          <Card>
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gray-100 dark:bg-zinc-800"><Package className="h-5 w-5 text-gray-700 dark:text-white" /></div>
+                <div><h2 className="text-base font-black text-gray-900 dark:text-white">Gói nạp</h2><p className="mt-1 text-xs text-gray-500 dark:text-zinc-400">Tạo, sửa, bật tắt và đổi thứ tự gói Vcoin.</p></div>
+              </div>
+              <button onClick={() => setEditingPackage(newCreditPackage())} className="rounded-full bg-gray-900 p-2.5 text-white dark:bg-white dark:text-black"><Plus className="h-4 w-4" /></button>
+            </div>
+            <div className="space-y-3">
+              {packages.map((pkg, index) => (
+                <div key={pkg.id} className={compactPanelClass}>
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div className="min-w-0"><div className="truncate text-sm font-black text-gray-900 dark:text-white">{pkg.name}</div><div className="mt-1 text-[11px] text-gray-500 dark:text-zinc-400">{pkg.transferContent || 'Chưa có cú pháp CK'}</div></div>
+                    <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${pkg.isActive === false ? 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-300' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'}`}>{pkg.isActive === false ? 'Ẩn' : 'Hiện'}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="rounded-2xl bg-white px-3 py-2.5 dark:bg-zinc-900"><div className="text-gray-400">Giá</div><div className="mt-1 font-black text-gray-900 dark:text-white">{Number(pkg.price || 0).toLocaleString('vi-VN')}đ</div></div>
+                    <div className="rounded-2xl bg-white px-3 py-2.5 dark:bg-zinc-900"><div className="text-gray-400">Vcoin</div><div className="mt-1 font-black text-pink-500">{Number(pkg.vcoin || 0).toLocaleString('vi-VN')} VC</div></div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-4 gap-2">
+                    <button onClick={() => void movePackage(index, -1)} disabled={index === 0} className="rounded-2xl bg-white py-2 text-gray-600 disabled:opacity-30 dark:bg-zinc-900 dark:text-zinc-200"><ChevronUp className="mx-auto h-4 w-4" /></button>
+                    <button onClick={() => void movePackage(index, 1)} disabled={index === packages.length - 1} className="rounded-2xl bg-white py-2 text-gray-600 disabled:opacity-30 dark:bg-zinc-900 dark:text-zinc-200"><ChevronDown className="mx-auto h-4 w-4" /></button>
+                    <button onClick={() => setEditingPackage(pkg)} className="rounded-2xl bg-blue-500 py-2 text-white"><Pencil className="mx-auto h-4 w-4" /></button>
+                    <button onClick={() => removePackage(pkg)} className="rounded-2xl bg-red-500 py-2 text-white"><Trash2 className="mx-auto h-4 w-4" /></button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+
+        {activeTab === 'marketing' && (
+          <Card>
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gray-100 dark:bg-zinc-800"><Megaphone className="h-5 w-5 text-gray-700 dark:text-white" /></div>
+                <div><h2 className="text-base font-black text-gray-900 dark:text-white">Sự kiện & Giftcode</h2><p className="mt-1 text-xs text-gray-500 dark:text-zinc-400">Quản lý khuyến mãi nạp và mã thưởng.</p></div>
+              </div>
+              <button onClick={() => setEditingGiftcode(newGiftcode())} className="rounded-full bg-gray-900 p-2.5 text-white dark:bg-white dark:text-black"><Plus className="h-4 w-4" /></button>
+            </div>
+            <div className="mb-4 flex items-center gap-3 rounded-[18px] border border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-zinc-700 dark:bg-zinc-800"><Search className="h-4 w-4 text-gray-400" /><input value={marketingSearch} onChange={(e) => setMarketingSearch(e.target.value)} placeholder="Tìm code hoặc chiến dịch" className="w-full bg-transparent text-sm outline-none dark:text-white" /></div>
+            <div className="mb-5">
+              <div className="mb-2 flex items-center justify-between"><h3 className="text-sm font-black text-gray-900 dark:text-white">Chiến dịch bonus</h3><button onClick={() => setEditingPromotion(newPromotion())} className="text-xs font-bold text-pink-500">Thêm</button></div>
+              <div className="space-y-2">
+                {promotions.length === 0 ? <div className={compactPanelClass}>Chưa có chiến dịch.</div> : promotions.map((promo) => (
+                  <div key={promo.id} className={compactPanelClass}>
+                    <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="truncate text-sm font-black text-gray-900 dark:text-white">{promo.name}</div><div className="mt-1 text-xs font-bold text-pink-500">+{promo.bonusPercent}% Vcoin</div></div><span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${promo.isActive ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300' : 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-300'}`}>{promo.isActive ? 'ON' : 'OFF'}</span></div>
+                    <div className="mt-2 text-[11px] text-gray-500 dark:text-zinc-400">{formatDateTime(promo.startTime)} - {formatDateTime(promo.endTime)}</div>
+                    <div className="mt-3 grid grid-cols-2 gap-2"><button onClick={() => setEditingPromotion(promo)} className="rounded-2xl bg-blue-500 py-2 text-xs font-bold text-white">Sửa</button><button onClick={() => removePromotion(promo)} className="rounded-2xl bg-red-500 py-2 text-xs font-bold text-white">Xóa</button></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <h3 className="mb-2 text-sm font-black text-gray-900 dark:text-white">Giftcode</h3>
+              <div className="space-y-2">
+                {filteredMarketingGiftcodes.map((code) => {
+                  const progress = code.totalLimit > 0 ? Math.min(100, (Number(code.usedCount || 0) / Number(code.totalLimit)) * 100) : 0;
+                  return (
+                    <div key={code.id} className={compactPanelClass}>
+                      <div className="flex items-start justify-between gap-3"><div><div className="font-mono text-sm font-black text-gray-900 dark:text-white">{code.code}</div><div className="mt-1 text-xs font-bold text-amber-600 dark:text-amber-300">+{code.reward} VC</div></div><span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${code.isActive ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300' : 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-300'}`}>{code.isActive ? 'ACTIVE' : 'OFF'}</span></div>
+                      <div className="mt-3 flex justify-between text-[11px] text-gray-500"><span>{code.campaignKey || code.code}</span><span>{code.usedCount}/{code.totalLimit}</span></div>
+                      <div className="mt-1 h-1.5 rounded-full bg-gray-200 dark:bg-zinc-900"><div className="h-full rounded-full bg-emerald-500" style={{ width: `${progress}%` }} /></div>
+                      <div className="mt-3 grid grid-cols-2 gap-2"><button onClick={() => setEditingGiftcode(code)} className="rounded-2xl bg-blue-500 py-2 text-xs font-bold text-white">Sửa</button><button onClick={() => removeGiftcode(code)} className="rounded-2xl bg-red-500 py-2 text-xs font-bold text-white">Xóa</button></div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {activeTab === 'pricing' && (
+          <Card>
+            <div className="mb-4 flex items-start gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gray-100 dark:bg-zinc-800"><Coins className="h-5 w-5 text-gray-700 dark:text-white" /></div><div><h2 className="text-base font-black text-gray-900 dark:text-white">Bảng giá AI</h2><p className="mt-1 text-xs text-gray-500 dark:text-zinc-400">Sửa giá Vcoin theo model, server, độ phân giải và duration.</p></div></div>
+            <div className="mb-3 grid grid-cols-3 gap-2 text-xs">
+              <div className={compactPanelClass}><div className="text-gray-400">Rows</div><div className="mt-1 text-lg font-black dark:text-white">{pricingRows.length}</div></div>
+              <div className={compactPanelClass}><div className="text-gray-400">Model</div><div className="mt-1 text-lg font-black text-cyan-500">{new Set(pricingRows.map((row) => row.modelId)).size}</div></div>
+              <div className={compactPanelClass}><div className="text-gray-400">Đã lưu</div><div className="mt-1 text-lg font-black text-pink-500">{modelPricing.length}</div></div>
+            </div>
+            <div className="mb-4 flex items-center gap-3 rounded-[18px] border border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-zinc-700 dark:bg-zinc-800"><Search className="h-4 w-4 text-gray-400" /><input value={pricingSearch} onChange={(e) => setPricingSearch(e.target.value)} placeholder="Tìm model, server, duration" className="w-full bg-transparent text-sm outline-none dark:text-white" /></div>
+            <div className="space-y-2">
+              {filteredPricingRows.slice(0, 80).map((row) => {
+                const saved = pricingByKey.get(`${row.modelId}|${row.configKey}`);
+                return (
+                  <div key={`${row.modelId}-${row.configKey}-${row.server}`} className={compactPanelClass}>
+                    <div className="mb-2 flex items-start justify-between gap-3"><div className="min-w-0"><div className="truncate text-sm font-black text-gray-900 dark:text-white">{row.modelName}</div><div className="mt-1 text-[11px] text-gray-500 dark:text-zinc-400">{row.type} · {row.server || 'default'} · {row.resolution || '-'} · {row.duration || row.quality || row.speed || '-'}</div></div><span className="rounded-full bg-gray-200 px-2 py-1 text-[10px] font-bold text-gray-700 dark:bg-zinc-900 dark:text-zinc-300">{row.billingUnit === 'second' ? '/giây' : 'flat'}</span></div>
+                    <div className="grid grid-cols-[1fr_auto] gap-2"><input type="number" value={getPricingValue(row)} onChange={(e) => setPricingDraft(row, e.target.value)} className={fieldClass} /><button onClick={() => void savePricingRow(row)} disabled={savingExtras} className="rounded-2xl bg-gray-900 px-3 text-white disabled:opacity-60 dark:bg-white dark:text-black"><Save className="h-4 w-4" /></button></div>
+                    <div className="mt-2 text-[11px] text-gray-500 dark:text-zinc-400">TST: {row.credits} credits · Gợi ý: {row.defaultAuditionVcoin ?? row.vcoin} VC{saved ? ` · Đang lưu: ${saved.audition_price_vcoin} VC` : ''}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        )}
+
+        {activeTab === 'styles' && (
+          <Card>
+            <div className="mb-4 flex items-start justify-between gap-3"><div className="flex items-start gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gray-100 dark:bg-zinc-800"><Palette className="h-5 w-5 text-gray-700 dark:text-white" /></div><div><h2 className="text-base font-black text-gray-900 dark:text-white">Style mẫu</h2><p className="mt-1 text-xs text-gray-500 dark:text-zinc-400">Quản lý ảnh reference và trigger prompt.</p></div></div><button onClick={() => setEditingStyle(newStylePreset())} className="rounded-full bg-gray-900 p-2.5 text-white dark:bg-white dark:text-black"><Plus className="h-4 w-4" /></button></div>
+            <div className="mb-4 flex items-center gap-3 rounded-[18px] border border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-zinc-700 dark:bg-zinc-800"><Search className="h-4 w-4 text-gray-400" /><input value={styleSearch} onChange={(e) => setStyleSearch(e.target.value)} placeholder="Tìm style" className="w-full bg-transparent text-sm outline-none dark:text-white" /></div>
+            <div className="grid grid-cols-2 gap-3">
+              {filteredStyles.map((style) => (
+                <div key={style.id} className="overflow-hidden rounded-[18px] bg-gray-50 dark:bg-zinc-800/80">
+                  <div className="aspect-[4/5] bg-gray-200 dark:bg-zinc-900">{style.image_url ? <img src={style.image_url} alt={style.name} className="h-full w-full object-cover" /> : null}</div>
+                  <div className="p-3"><div className="truncate text-sm font-black text-gray-900 dark:text-white">{style.name}</div><div className="mt-1 text-[10px] text-gray-500">{style.is_default ? 'Mặc định · ' : ''}{style.is_active ? 'Đang bật' : 'Đang tắt'}</div><div className="mt-3 grid grid-cols-2 gap-2"><button onClick={() => setEditingStyle(style)} className="rounded-xl bg-blue-500 py-2 text-xs font-bold text-white">Sửa</button><button onClick={() => removeStyle(style)} className="rounded-xl bg-red-500 py-2 text-xs font-bold text-white">Xóa</button></div></div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+
+        {activeTab === 'system' && (
+          <Card>
+            <div className="mb-4 flex items-start gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gray-100 dark:bg-zinc-800"><Server className="h-5 w-5 text-gray-700 dark:text-white" /></div><div><h2 className="text-base font-black text-gray-900 dark:text-white">Hệ thống</h2><p className="mt-1 text-xs text-gray-500 dark:text-zinc-400">Payment gateway, thông báo, banner code, hướng dẫn và API keys.</p></div></div>
+            <div className="space-y-3">
+              <div className={compactPanelClass}><div className="mb-2 flex items-center gap-2 text-sm font-black text-gray-900 dark:text-white"><CreditCard className="h-4 w-4" />Cổng thanh toán</div><select value={paymentGateway} onChange={(e) => setPaymentGateway(e.target.value as PaymentGateway)} className={fieldClass}><option value="sepay">SePay</option></select></div>
+              <div className={compactPanelClass}><div className="mb-2 text-sm font-black text-gray-900 dark:text-white">Thông báo hệ thống</div><div className="mb-2 flex gap-2">{(['info', 'promo', 'warning'] as const).map((variant) => <button key={variant} onClick={() => setSystemAnnouncement((current) => ({ ...current, variant }))} className={pillButtonClass(systemAnnouncement.variant === variant)}>{variant}</button>)}</div><input value={systemAnnouncement.title} onChange={(e) => setSystemAnnouncement((current) => ({ ...current, title: e.target.value }))} className={`${fieldClass} mb-2`} placeholder="Tiêu đề" /><textarea value={systemAnnouncement.message} onChange={(e) => setSystemAnnouncement((current) => ({ ...current, message: e.target.value }))} className={fieldClass} rows={3} placeholder="Nội dung" /><button onClick={() => setSystemAnnouncement((current) => ({ ...current, isActive: !current.isActive }))} className={`mt-2 ${pillButtonClass(systemAnnouncement.isActive, 'bg-pink-500 text-white')}`}>{systemAnnouncement.isActive ? 'Đang bật' : 'Đang tắt'}</button></div>
+              <div className={compactPanelClass}><div className="mb-2 text-sm font-black text-gray-900 dark:text-white">Banner giftcode</div><input value={giftcodePromo.text} onChange={(e) => setGiftcodePromo((current) => ({ ...current, text: e.target.value }))} className={fieldClass} /><button onClick={() => setGiftcodePromo((current) => ({ ...current, isActive: !current.isActive }))} className={`mt-2 ${pillButtonClass(giftcodePromo.isActive, 'bg-emerald-500 text-white')}`}>{giftcodePromo.isActive ? 'Đang bật' : 'Đang tắt'}</button></div>
+              <div className={compactPanelClass}><div className="mb-2 text-sm font-black text-gray-900 dark:text-white">Video hướng dẫn</div><input value={tutorialVideo.url} onChange={(e) => setTutorialVideo((current) => ({ ...current, url: e.target.value }))} className={fieldClass} placeholder="YouTube URL" /><button onClick={() => setTutorialVideo((current) => ({ ...current, isActive: !current.isActive }))} className={`mt-2 ${pillButtonClass(tutorialVideo.isActive, 'bg-cyan-500 text-white')}`}>{tutorialVideo.isActive ? 'Đang bật' : 'Đang tắt'}</button></div>
+              <div className={compactPanelClass}><div className="mb-2 text-sm font-black text-gray-900 dark:text-white">Ảnh guide tạo nhân vật</div><input value={guideImages.characterUrl} onChange={(e) => setGuideImages((current) => ({ ...current, characterUrl: e.target.value }))} className={`${fieldClass} mb-2`} placeholder="Character image URL" /><input value={guideImages.sampleUrl} onChange={(e) => setGuideImages((current) => ({ ...current, sampleUrl: e.target.value }))} className={fieldClass} placeholder="Sample image URL" /></div>
+              <button onClick={() => void saveSystemSettings()} disabled={savingExtras} className="flex w-full items-center justify-center gap-2 rounded-[18px] bg-gray-900 px-4 py-3 text-sm font-bold text-white disabled:opacity-60 dark:bg-white dark:text-black">{savingExtras ? <Loader className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}Lưu cấu hình hệ thống</button>
+              <div className={compactPanelClass}><div className="mb-2 flex items-center gap-2 text-sm font-black text-gray-900 dark:text-white"><KeyRound className="h-4 w-4" />API keys</div><div className="space-y-2">{apiKeys.length === 0 ? <div className="text-xs text-gray-500">Chưa có key.</div> : apiKeys.map((key) => <div key={key.id} className="flex items-center justify-between gap-3 rounded-2xl bg-white px-3 py-2 dark:bg-zinc-900"><div className="min-w-0"><div className="truncate text-xs font-bold text-gray-900 dark:text-white">{key.name || key.id}</div><div className="text-[10px] text-gray-500">{key.status || 'unknown'} · {key.last_used_at || key.created_at || ''}</div></div><button onClick={async () => { await deleteApiKey(key.id); await loadAdminExtras(); notify('Đã xóa API key.', 'success'); }} className="rounded-xl bg-red-500 p-2 text-white"><Trash2 className="h-3.5 w-3.5" /></button></div>)}</div></div>
+            </div>
+          </Card>
+        )}
+
+        {editingPackage ? (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm">
+            <div className="absolute inset-x-0 bottom-0 max-h-[86vh] overflow-y-auto rounded-t-[24px] bg-white p-4 dark:bg-[#18181B]">
+              <div className="mb-4 flex items-center justify-between"><h3 className="text-base font-black text-gray-900 dark:text-white">Gói nạp</h3><button onClick={() => setEditingPackage(null)} className="rounded-full bg-gray-100 p-2 dark:bg-zinc-800"><XCircle className="h-5 w-5" /></button></div>
+              <div className="space-y-3">
+                <input value={editingPackage.name} onChange={(e) => setEditingPackage({ ...editingPackage, name: e.target.value })} className={fieldClass} placeholder="Tên gói" />
+                <div className="grid grid-cols-2 gap-2"><input type="number" value={editingPackage.price} onChange={(e) => setEditingPackage({ ...editingPackage, price: Number(e.target.value) })} className={fieldClass} placeholder="Giá VND" /><input type="number" value={editingPackage.vcoin} onChange={(e) => setEditingPackage({ ...editingPackage, vcoin: Number(e.target.value) })} className={fieldClass} placeholder="Vcoin" /></div>
+                <div className="grid grid-cols-2 gap-2"><input value={editingPackage.bonusText || ''} onChange={(e) => setEditingPackage({ ...editingPackage, bonusText: e.target.value })} className={fieldClass} placeholder="Tag" /><input type="number" value={editingPackage.bonusPercent || 0} onChange={(e) => setEditingPackage({ ...editingPackage, bonusPercent: Number(e.target.value) })} className={fieldClass} placeholder="% Bonus" /></div>
+                <input value={editingPackage.transferContent || ''} onChange={(e) => setEditingPackage({ ...editingPackage, transferContent: e.target.value })} className={fieldClass} placeholder="Cú pháp chuyển khoản" />
+                <div className="grid grid-cols-2 gap-2"><button onClick={() => setEditingPackage({ ...editingPackage, isActive: !editingPackage.isActive })} className={pillButtonClass(editingPackage.isActive !== false, 'bg-emerald-500 text-white')}>{editingPackage.isActive === false ? 'Đang ẩn' : 'Đang hiện'}</button><button onClick={() => setEditingPackage({ ...editingPackage, isPopular: !editingPackage.isPopular })} className={pillButtonClass(!!editingPackage.isPopular, 'bg-pink-500 text-white')}>{editingPackage.isPopular ? 'Popular' : 'Không popular'}</button></div>
+                <button onClick={() => void savePackageForm()} disabled={savingExtras} className="flex w-full items-center justify-center gap-2 rounded-[18px] bg-gray-900 px-4 py-3 text-sm font-bold text-white disabled:opacity-60 dark:bg-white dark:text-black">{savingExtras ? <Loader className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}Lưu gói</button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {editingPromotion ? (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm">
+            <div className="absolute inset-x-0 bottom-0 max-h-[86vh] overflow-y-auto rounded-t-[24px] bg-white p-4 dark:bg-[#18181B]">
+              <div className="mb-4 flex items-center justify-between"><h3 className="text-base font-black text-gray-900 dark:text-white">Chiến dịch</h3><button onClick={() => setEditingPromotion(null)} className="rounded-full bg-gray-100 p-2 dark:bg-zinc-800"><XCircle className="h-5 w-5" /></button></div>
+              <div className="space-y-3">
+                <input value={editingPromotion.name} onChange={(e) => setEditingPromotion({ ...editingPromotion, name: e.target.value })} className={fieldClass} placeholder="Tên chiến dịch" />
+                <input value={editingPromotion.marqueeText} onChange={(e) => setEditingPromotion({ ...editingPromotion, marqueeText: e.target.value })} className={fieldClass} placeholder="Thông báo chạy" />
+                <input type="number" value={editingPromotion.bonusPercent} onChange={(e) => setEditingPromotion({ ...editingPromotion, bonusPercent: Number(e.target.value) })} className={fieldClass} placeholder="% Bonus" />
+                <div className="grid grid-cols-2 gap-2"><input type="datetime-local" value={editingPromotion.startTime ? new Date(editingPromotion.startTime).toISOString().slice(0, 16) : ''} onChange={(e) => setEditingPromotion({ ...editingPromotion, startTime: new Date(e.target.value).toISOString() })} className={fieldClass} /><input type="datetime-local" value={editingPromotion.endTime ? new Date(editingPromotion.endTime).toISOString().slice(0, 16) : ''} onChange={(e) => setEditingPromotion({ ...editingPromotion, endTime: new Date(e.target.value).toISOString() })} className={fieldClass} /></div>
+                <button onClick={() => setEditingPromotion({ ...editingPromotion, isActive: !editingPromotion.isActive })} className={pillButtonClass(editingPromotion.isActive, 'bg-emerald-500 text-white')}>{editingPromotion.isActive ? 'Đang bật' : 'Đang tắt'}</button>
+                <button onClick={() => void savePromotionForm()} disabled={savingExtras} className="flex w-full items-center justify-center gap-2 rounded-[18px] bg-gray-900 px-4 py-3 text-sm font-bold text-white disabled:opacity-60 dark:bg-white dark:text-black">{savingExtras ? <Loader className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}Lưu chiến dịch</button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {editingGiftcode ? (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm">
+            <div className="absolute inset-x-0 bottom-0 max-h-[86vh] overflow-y-auto rounded-t-[24px] bg-white p-4 dark:bg-[#18181B]">
+              <div className="mb-4 flex items-center justify-between"><h3 className="text-base font-black text-gray-900 dark:text-white">Giftcode</h3><button onClick={() => setEditingGiftcode(null)} className="rounded-full bg-gray-100 p-2 dark:bg-zinc-800"><XCircle className="h-5 w-5" /></button></div>
+              <div className="space-y-3">
+                <input value={editingGiftcode.code} onChange={(e) => setEditingGiftcode({ ...editingGiftcode, code: e.target.value.toUpperCase() })} className={`${fieldClass} font-mono font-bold`} placeholder="Mã code" />
+                <input value={editingGiftcode.campaignKey || ''} onChange={(e) => setEditingGiftcode({ ...editingGiftcode, campaignKey: e.target.value.toUpperCase() })} className={`${fieldClass} font-mono font-bold`} placeholder="Mã chiến dịch" />
+                <div className="grid grid-cols-3 gap-2"><input type="number" value={editingGiftcode.reward} onChange={(e) => setEditingGiftcode({ ...editingGiftcode, reward: Number(e.target.value) })} className={fieldClass} placeholder="Vcoin" /><input type="number" value={editingGiftcode.totalLimit} onChange={(e) => setEditingGiftcode({ ...editingGiftcode, totalLimit: Number(e.target.value) })} className={fieldClass} placeholder="Tổng" /><input type="number" value={editingGiftcode.maxPerUser} onChange={(e) => setEditingGiftcode({ ...editingGiftcode, maxPerUser: Number(e.target.value) })} className={fieldClass} placeholder="Max/user" /></div>
+                <button onClick={() => setEditingGiftcode({ ...editingGiftcode, isActive: !editingGiftcode.isActive })} className={pillButtonClass(editingGiftcode.isActive, 'bg-emerald-500 text-white')}>{editingGiftcode.isActive ? 'Đang bật' : 'Đang tắt'}</button>
+                <button onClick={() => void saveGiftcodeForm()} disabled={savingExtras} className="flex w-full items-center justify-center gap-2 rounded-[18px] bg-gray-900 px-4 py-3 text-sm font-bold text-white disabled:opacity-60 dark:bg-white dark:text-black">{savingExtras ? <Loader className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}Lưu giftcode</button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {editingStyle ? (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm">
+            <div className="absolute inset-x-0 bottom-0 max-h-[86vh] overflow-y-auto rounded-t-[24px] bg-white p-4 dark:bg-[#18181B]">
+              <div className="mb-4 flex items-center justify-between"><h3 className="text-base font-black text-gray-900 dark:text-white">Style mẫu</h3><button onClick={() => setEditingStyle(null)} className="rounded-full bg-gray-100 p-2 dark:bg-zinc-800"><XCircle className="h-5 w-5" /></button></div>
+              <div className="space-y-3">
+                <input value={editingStyle.name} onChange={(e) => setEditingStyle({ ...editingStyle, name: e.target.value })} className={fieldClass} placeholder="Tên style" />
+                <input value={editingStyle.image_url} onChange={(e) => setEditingStyle({ ...editingStyle, image_url: e.target.value })} className={fieldClass} placeholder="URL ảnh mẫu" />
+                {editingStyle.image_url ? <img src={editingStyle.image_url} alt={editingStyle.name} className="max-h-64 w-full rounded-[18px] bg-gray-100 object-contain dark:bg-zinc-900" /> : null}
+                <textarea value={editingStyle.trigger_prompt || ''} onChange={(e) => setEditingStyle({ ...editingStyle, trigger_prompt: e.target.value })} className={fieldClass} rows={4} placeholder="Trigger prompt" />
+                <div className="grid grid-cols-2 gap-2"><button onClick={() => setEditingStyle({ ...editingStyle, is_active: !editingStyle.is_active })} className={pillButtonClass(editingStyle.is_active, 'bg-emerald-500 text-white')}>{editingStyle.is_active ? 'Đang bật' : 'Đang tắt'}</button><button onClick={() => setEditingStyle({ ...editingStyle, is_default: !editingStyle.is_default })} className={pillButtonClass(editingStyle.is_default, 'bg-pink-500 text-white')}>{editingStyle.is_default ? 'Mặc định' : 'Không mặc định'}</button></div>
+                <button onClick={() => void saveStyleForm()} disabled={savingExtras} className="flex w-full items-center justify-center gap-2 rounded-[18px] bg-gray-900 px-4 py-3 text-sm font-bold text-white disabled:opacity-60 dark:bg-white dark:text-black">{savingExtras ? <Loader className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}Lưu style</button>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         {selectedQueueJobId ? (
           <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm">

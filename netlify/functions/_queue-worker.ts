@@ -1362,6 +1362,41 @@ const requeueJob = async (job: QueueJobRow, errorMessage: string) => {
   return 'requeued';
 };
 
+const requeueStalePreDispatchJob = async (job: QueueJobRow, errorMessage: string) => {
+  const state = await getJobRuntimeState(job.id);
+  const currentPayload =
+    state?.queue_payload && typeof state.queue_payload === 'object'
+      ? (state.queue_payload as Record<string, unknown>)
+      : job.queue_payload;
+  const restoredRecipePayload = getStoredImageGenerateRecipePayload(currentPayload);
+  const requeuePayload =
+    job.queue_kind === 'image_generate' && restoredRecipePayload
+      ? restoredRecipePayload
+      : toQueuePayloadObject(currentPayload);
+
+  await updateGeneratedImageRecord(job.id, {
+    status: 'queued',
+    job_id: null,
+    image_url: null,
+    finished_at: null,
+    processing_started_at: null,
+    error_message: errorMessage,
+    queue_payload: withQueueLog(
+      requeuePayload,
+      'queued',
+      `Worker bị mất nhịp trước khi provider nhận job. Đưa lại vào hàng đợi mà không tính là retry lỗi của user: ${errorMessage}`,
+      'warning',
+    ),
+    lease_token: null,
+    lease_expires_at: null,
+    next_poll_at: new Date().toISOString(),
+    last_error_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  });
+
+  return 'requeued';
+};
+
 const updatePreProviderStage = async (jobId: string, progress: number) => {
   await updateGeneratedImageRecord(jobId, {
     status: 'processing',
@@ -2560,7 +2595,7 @@ const recoverStalePreparingJobs = async () => {
     }
 
     if (currentStatus === 'processing' && isRecipePayload) {
-      const result = await requeueJob(job, 'Worker preparation lease expired before dispatching to provider.');
+      const result = await requeueStalePreDispatchJob(job, 'Worker preparation lease expired before dispatching to provider.');
       if (result === 'requeued') recovered += 1;
       continue;
     }

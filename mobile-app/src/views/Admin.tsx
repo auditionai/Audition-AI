@@ -343,7 +343,7 @@ export function AdminView() {
   const [actingTransactionId, setActingTransactionId] = useState<string | null>(null);
   const [queueStatusFilter, setQueueStatusFilter] = useState<'all' | 'processing' | 'failed' | 'completed'>('all');
   const [queueAssetFilter, setQueueAssetFilter] = useState<'all' | 'image' | 'video'>('all');
-  const [queueTimeScope, setQueueTimeScope] = useState<'today' | 'all'>('today');
+  const [queueTimeScope, setQueueTimeScope] = useState<'today' | 'all'>('all');
   const [queueSearch, setQueueSearch] = useState('');
   const [queueStuckOnly, setQueueStuckOnly] = useState(false);
   const [userSearch, setUserSearch] = useState('');

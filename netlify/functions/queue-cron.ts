@@ -8,19 +8,28 @@ export const config = {
 };
 
 export const handler: Handler = async () => {
-  if (isDedicatedQueueWorkerMode()) {
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ success: true, skipped: true, reason: 'dedicated_worker_mode' }),
-    };
-  }
-
   try {
     const serverAvailabilityAutoRefresh = await refreshAutoDisabledServerAvailability();
-    const summary = await runQueueDaemon({ maxRuntimeMs: 75_000, idleIterationsToStop: 30 });
+    const dedicatedWorkerMode = isDedicatedQueueWorkerMode();
+    const summary = await runQueueDaemon(
+      dedicatedWorkerMode
+        ? {
+            maxRuntimeMs: 20_000,
+            idleIterationsToStop: 3,
+            activeDelayMs: 50,
+            idleDelayMs: 500,
+          }
+        : { maxRuntimeMs: 75_000, idleIterationsToStop: 30 },
+    );
     return {
       statusCode: 200,
-      body: JSON.stringify({ success: true, serverAvailabilityAutoRefresh, summary }),
+      body: JSON.stringify({
+        success: true,
+        watchdog: dedicatedWorkerMode,
+        reason: dedicatedWorkerMode ? 'dedicated_worker_watchdog' : 'scheduled_worker',
+        serverAvailabilityAutoRefresh,
+        summary,
+      }),
     };
   } catch (error: any) {
     console.error('[queue-cron] Worker failed:', error);

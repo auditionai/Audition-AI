@@ -18,6 +18,7 @@ const headers = {
 
 const WORKER_LOCK_LEASE_SECONDS = 120;
 const STALE_PRE_DISPATCH_RECONCILE_MS = 45_000;
+const OVERDUE_POLL_RECONCILE_MS = 2 * 60 * 1000;
 
 const tryAcquireQueueWorkerLock = async (owner: string) => {
   const admin = getServiceRoleClient();
@@ -156,22 +157,58 @@ const resetStaleQueueStateForReconcile = async () => {
   const admin = getServiceRoleClient();
   const nowIso = new Date().toISOString();
   const staleBeforeIso = new Date(Date.now() - STALE_PRE_DISPATCH_RECONCILE_MS).toISOString();
+  const overduePollBeforeIso = new Date(Date.now() - OVERDUE_POLL_RECONCILE_MS).toISOString();
 
-  const { data: processingRows, error: processingError } = await admin
+  const { data: processingCandidates, error: processingCandidatesError } = await admin
     .from('generated_images')
-    .update({
-      lease_token: null,
-      lease_expires_at: null,
-      next_poll_at: nowIso,
-      updated_at: nowIso,
-      error_message: null,
-    })
+    .select('id, updated_at, lease_expires_at, next_poll_at')
     .eq('status', 'processing')
     .not('job_id', 'is', null)
-    .select('id');
+    .limit(500);
 
-  if (processingError) {
-    throw processingError;
+  if (processingCandidatesError) {
+    throw processingCandidatesError;
+  }
+
+  const processingIds = ((processingCandidates || []) as Array<{
+    id: string;
+    updated_at?: string | null;
+    lease_expires_at?: string | null;
+    next_poll_at?: string | null;
+  }>)
+    .filter((row) => {
+      const leaseExpired =
+        !row.lease_expires_at ||
+        new Date(row.lease_expires_at).getTime() <= Date.now();
+      const pollOverdue =
+        !!row.next_poll_at &&
+        new Date(row.next_poll_at).getTime() <= new Date(overduePollBeforeIso).getTime();
+      const noPollAndStale =
+        !row.next_poll_at &&
+        (!row.updated_at || new Date(row.updated_at).getTime() <= new Date(staleBeforeIso).getTime());
+      return leaseExpired && (pollOverdue || noPollAndStale);
+    })
+    .map((row) => row.id);
+
+  let resetProcessing = 0;
+  if (processingIds.length > 0) {
+    const { data: processingRows, error: processingError } = await admin
+      .from('generated_images')
+      .update({
+        lease_token: null,
+        lease_expires_at: null,
+        next_poll_at: nowIso,
+        updated_at: nowIso,
+        error_message: null,
+      })
+      .in('id', processingIds)
+      .select('id');
+
+    if (processingError) {
+      throw processingError;
+    }
+
+    resetProcessing = Array.isArray(processingRows) ? processingRows.length : 0;
   }
 
   const { data: stalledPreDispatchRows, error: stalledPreDispatchError } = await admin
@@ -240,7 +277,7 @@ const resetStaleQueueStateForReconcile = async () => {
   }
 
   return {
-    resetProcessing: Array.isArray(processingRows) ? processingRows.length : 0,
+    resetProcessing,
     resetStalledPreDispatch,
     resetQueued: Array.isArray(queuedRows) ? queuedRows.length : 0,
   };
@@ -297,18 +334,25 @@ export const handler: Handler = async (event) => {
     const serverAvailabilityAutoRefresh = await refreshAutoDisabledServerAvailability();
 
     if (isDedicatedQueueWorkerMode()) {
+      const summary = await runQueueDaemon({
+        maxRuntimeMs: 20_000,
+        idleIterationsToStop: 3,
+        activeDelayMs: 50,
+        idleDelayMs: 500,
+      });
+      followUpLaunchNeeded = hasQueueActivity(summary) || (await hasOutstandingQueueWork());
       return {
         statusCode: 200,
         headers,
         body: JSON.stringify({
           success: true,
-          skipped: true,
-          reason: 'dedicated_worker_mode',
+          watchdog: true,
+          reason: 'dedicated_worker_watchdog',
           resetSummary,
           finalizedFailedRescues,
           serverAvailabilityAutoRefresh,
-          summary: null,
-          followUpLaunchNeeded: false,
+          summary,
+          followUpLaunchNeeded,
         }),
       };
     }

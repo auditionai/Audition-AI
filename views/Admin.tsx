@@ -490,7 +490,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [queueEmailFilter, setQueueEmailFilter] = useState('');
   const [queueStatusFilter, setQueueStatusFilter] = useState<'all' | 'queued' | 'processing' | 'completed' | 'failed' | 'rescuing'>('all');
   const [queueAssetFilter, setQueueAssetFilter] = useState<'all' | 'image' | 'video'>('all');
-  const [queueTimeScope, setQueueTimeScope] = useState<'today' | 'all'>('today');
+  const [queueTimeScope, setQueueTimeScope] = useState<'today' | 'all'>('all');
   const [queueStageFilter, setQueueStageFilter] = useState('all');
   const [queueStuckOnly, setQueueStuckOnly] = useState(false);
   const [queueSummaryFilter, setQueueSummaryFilter] = useState<'all' | 'queued' | 'processing' | 'failed' | 'completed' | 'overdue_polls' | 'untouched_queued' | 'stalled_pre_dispatch'>('all');

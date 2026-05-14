@@ -410,6 +410,54 @@ const getInactiveDays = (dateString?: string) => {
     return Math.floor((now.getTime() - date.getTime()) / (24 * 60 * 60 * 1000));
 };
 
+const VIETNAM_TIME_ZONE = 'Asia/Ho_Chi_Minh';
+
+const formatVietnamDateTimeLocal = (value?: string) => {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: VIETNAM_TIME_ZONE,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    }).formatToParts(date);
+    const get = (type: string) => parts.find((part) => part.type === type)?.value || '';
+    return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
+};
+
+const parseVietnamDateTimeLocalToIso = (value: string, fallback?: string) => {
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+    if (!match) return fallback || new Date().toISOString();
+    const [, year, month, day, hour, minute] = match;
+    const utcMs = Date.UTC(
+        Number(year),
+        Number(month) - 1,
+        Number(day),
+        Number(hour) - 7,
+        Number(minute),
+        0,
+        0,
+    );
+    return new Date(utcMs).toISOString();
+};
+
+const formatVietnamDateTimeDisplay = (value?: string) =>
+    value
+        ? new Date(value).toLocaleString('vi-VN', {
+            timeZone: VIETNAM_TIME_ZONE,
+            hour12: false,
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+        })
+        : '-';
+
 const AdminModalPortal: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     if (typeof document === 'undefined') return null;
     return createPortal(children, document.body);
@@ -2432,7 +2480,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                               const now = new Date().getTime(); const start = new Date(p.startTime).getTime(); const end = new Date(p.endTime).getTime();
                               let statusBadge = <span className="text-slate-500 text-xs font-bold border border-slate-500/20 px-2 py-1 rounded">Stopped</span>;
                               if (p.isActive) { if (now < start) statusBadge = <span className="text-yellow-500 text-xs font-bold border border-yellow-500/20 px-2 py-1 rounded flex items-center gap-1"><Icons.Clock className="w-3 h-3" /> Scheduled</span>; else if (now > end) statusBadge = <span className="text-slate-500 text-xs font-bold border border-slate-500/20 px-2 py-1 rounded">Expired</span>; else statusBadge = <span className="text-green-500 text-xs font-bold border border-green-500/20 px-2 py-1 rounded flex items-center gap-1 animate-pulse"><Icons.Zap className="w-3 h-3" /> Running</span>; } else { statusBadge = <span className="text-red-500 text-xs font-bold border border-red-500/20 px-2 py-1 rounded">Disabled</span>; }
-                              return (<div key={p.id} className="bg-[#12121a] border border-white/10 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm"><div className="flex-1"><div className="flex justify-between items-start"><div><div className="font-bold text-white text-lg">{p.name}</div><div className="text-audi-pink font-bold text-sm">+{p.bonusPercent}% Vcoin Bonus</div></div><div className="md:hidden">{statusBadge}</div></div><div className="text-xs font-mono mt-2 space-y-1 bg-black/20 p-2 rounded-lg border border-white/5"><div className="text-green-400 flex items-center gap-2"><Icons.Calendar className="w-3 h-3"/> Start: {new Date(p.startTime).toLocaleString()}</div><div className="text-red-400 flex items-center gap-2"><Icons.Calendar className="w-3 h-3"/> End: {new Date(p.endTime).toLocaleString()}</div></div></div><div className="flex items-center justify-between md:justify-end gap-4 border-t md:border-t-0 border-white/5 pt-3 md:pt-0"><div className="hidden md:block">{statusBadge}</div><div className="flex gap-2"><button onClick={() => setEditingPromotion(p)} className="px-3 py-2 bg-blue-500/20 text-blue-500 rounded-lg hover:bg-blue-500 hover:text-white font-bold text-xs"><Icons.Settings className="w-4 h-4" /></button><button onClick={() => handleDeletePromotion(p.id)} className="px-3 py-2 bg-red-500/20 text-red-500 rounded-lg hover:bg-red-500 hover:text-white font-bold text-xs"><Icons.Trash className="w-4 h-4" /></button></div></div></div>);
+                              return (<div key={p.id} className="bg-[#12121a] border border-white/10 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm"><div className="flex-1"><div className="flex justify-between items-start"><div><div className="font-bold text-white text-lg">{p.name}</div><div className="text-audi-pink font-bold text-sm">+{p.bonusPercent}% Vcoin Bonus</div></div><div className="md:hidden">{statusBadge}</div></div><div className="text-xs font-mono mt-2 space-y-1 bg-black/20 p-2 rounded-lg border border-white/5"><div className="text-green-400 flex items-center gap-2"><Icons.Calendar className="w-3 h-3"/> Start: {formatVietnamDateTimeDisplay(p.startTime)}</div><div className="text-red-400 flex items-center gap-2"><Icons.Calendar className="w-3 h-3"/> End: {formatVietnamDateTimeDisplay(p.endTime)}</div></div></div><div className="flex items-center justify-between md:justify-end gap-4 border-t md:border-t-0 border-white/5 pt-3 md:pt-0"><div className="hidden md:block">{statusBadge}</div><div className="flex gap-2"><button onClick={() => setEditingPromotion(p)} className="px-3 py-2 bg-blue-500/20 text-blue-500 rounded-lg hover:bg-blue-500 hover:text-white font-bold text-xs"><Icons.Settings className="w-4 h-4" /></button><button onClick={() => handleDeletePromotion(p.id)} className="px-3 py-2 bg-red-500/20 text-red-500 rounded-lg hover:bg-red-500 hover:text-white font-bold text-xs"><Icons.Trash className="w-4 h-4" /></button></div></div></div>);
                           })}
                       </div>
                   </div>
@@ -4054,14 +4102,15 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                           <div>
-                              <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Bắt đầu</label>
-                              <input type="datetime-local" value={editingPromotion.startTime ? new Date(editingPromotion.startTime).toISOString().slice(0, 16) : ''} onChange={e => setEditingPromotion({...editingPromotion, startTime: new Date(e.target.value).toISOString()})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono text-xs" />
+                              <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Bắt đầu (giờ Việt Nam)</label>
+                              <input type="datetime-local" value={formatVietnamDateTimeLocal(editingPromotion.startTime)} onChange={e => setEditingPromotion({...editingPromotion, startTime: parseVietnamDateTimeLocalToIso(e.target.value, editingPromotion.startTime)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono text-xs" />
                           </div>
                           <div>
-                              <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Kết thúc</label>
-                              <input type="datetime-local" value={editingPromotion.endTime ? new Date(editingPromotion.endTime).toISOString().slice(0, 16) : ''} onChange={e => setEditingPromotion({...editingPromotion, endTime: new Date(e.target.value).toISOString()})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono text-xs" />
+                              <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Kết thúc (giờ Việt Nam)</label>
+                              <input type="datetime-local" value={formatVietnamDateTimeLocal(editingPromotion.endTime)} onChange={e => setEditingPromotion({...editingPromotion, endTime: parseVietnamDateTimeLocalToIso(e.target.value, editingPromotion.endTime)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono text-xs" />
                           </div>
                       </div>
+                      <p className="text-[10px] text-audi-cyan font-bold -mt-2">Múi giờ áp dụng: Việt Nam (UTC+7). Lưu xuống hệ thống bằng ISO để chạy khuyến mãi chính xác.</p>
                       <div className="bg-white/5 rounded-xl p-3 flex items-center gap-3 border border-white/10 cursor-pointer hover:bg-white/10 transition-colors" onClick={() => setEditingPromotion({...editingPromotion, isActive: !editingPromotion.isActive})}>
                           <div className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${editingPromotion.isActive ? 'bg-audi-lime border-audi-lime' : 'border-slate-500'}`}>{editingPromotion.isActive && <Icons.Check className="w-3 h-3 text-black" />}</div>
                           <label className="text-sm font-bold text-white cursor-pointer select-none">Kích hoạt (Manual Switch)</label>

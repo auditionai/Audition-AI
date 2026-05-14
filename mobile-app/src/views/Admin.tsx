@@ -115,6 +115,7 @@ const EMPTY_QUEUE_SUMMARY: AdminQueueSummary = {
 const formatDateTime = (value?: string) =>
   value
     ? new Date(value).toLocaleString('vi-VN', {
+        timeZone: 'Asia/Ho_Chi_Minh',
         month: '2-digit',
         day: '2-digit',
         year: 'numeric',
@@ -122,6 +123,32 @@ const formatDateTime = (value?: string) =>
         minute: '2-digit',
       })
     : 'Chưa cập nhật';
+
+const VIETNAM_TIME_ZONE = 'Asia/Ho_Chi_Minh';
+
+const formatVietnamDateTimeLocal = (value?: string) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: VIETNAM_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+  const get = (type: string) => parts.find((part) => part.type === type)?.value || '';
+  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
+};
+
+const parseVietnamDateTimeLocalToIso = (value: string, fallback?: string) => {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+  if (!match) return fallback || new Date().toISOString();
+  const [, year, month, day, hour, minute] = match;
+  return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour) - 7, Number(minute), 0, 0)).toISOString();
+};
 
 const getQueueStatus = (job: AdminQueueJob) => job.displayStatus || job.status;
 
@@ -1367,7 +1394,8 @@ export function AdminView() {
                 <input value={editingPromotion.name} onChange={(e) => setEditingPromotion({ ...editingPromotion, name: e.target.value })} className={fieldClass} placeholder="Tên chiến dịch" />
                 <input value={editingPromotion.marqueeText} onChange={(e) => setEditingPromotion({ ...editingPromotion, marqueeText: e.target.value })} className={fieldClass} placeholder="Thông báo chạy" />
                 <input type="number" value={editingPromotion.bonusPercent} onChange={(e) => setEditingPromotion({ ...editingPromotion, bonusPercent: Number(e.target.value) })} className={fieldClass} placeholder="% Bonus" />
-                <div className="grid grid-cols-2 gap-2"><input type="datetime-local" value={editingPromotion.startTime ? new Date(editingPromotion.startTime).toISOString().slice(0, 16) : ''} onChange={(e) => setEditingPromotion({ ...editingPromotion, startTime: new Date(e.target.value).toISOString() })} className={fieldClass} /><input type="datetime-local" value={editingPromotion.endTime ? new Date(editingPromotion.endTime).toISOString().slice(0, 16) : ''} onChange={(e) => setEditingPromotion({ ...editingPromotion, endTime: new Date(e.target.value).toISOString() })} className={fieldClass} /></div>
+                <div className="grid grid-cols-2 gap-2"><input type="datetime-local" value={formatVietnamDateTimeLocal(editingPromotion.startTime)} onChange={(e) => setEditingPromotion({ ...editingPromotion, startTime: parseVietnamDateTimeLocalToIso(e.target.value, editingPromotion.startTime) })} className={fieldClass} /><input type="datetime-local" value={formatVietnamDateTimeLocal(editingPromotion.endTime)} onChange={(e) => setEditingPromotion({ ...editingPromotion, endTime: parseVietnamDateTimeLocalToIso(e.target.value, editingPromotion.endTime) })} className={fieldClass} /></div>
+                <div className="text-[11px] font-bold text-cyan-500 dark:text-cyan-300">Múi giờ: Việt Nam (UTC+7)</div>
                 <button onClick={() => setEditingPromotion({ ...editingPromotion, isActive: !editingPromotion.isActive })} className={pillButtonClass(editingPromotion.isActive, 'bg-emerald-500 text-white')}>{editingPromotion.isActive ? 'Đang bật' : 'Đang tắt'}</button>
                 <button onClick={() => void savePromotionForm()} disabled={savingExtras} className="flex w-full items-center justify-center gap-2 rounded-[18px] bg-gray-900 px-4 py-3 text-sm font-bold text-white disabled:opacity-60 dark:bg-white dark:text-black">{savingExtras ? <Loader className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}Lưu chiến dịch</button>
               </div>

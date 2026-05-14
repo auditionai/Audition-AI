@@ -11,6 +11,7 @@
     "dev:netlify": "netlify dev",
     "build": "tsc && vite build",
     "render:queue-worker": "tsx ./scripts/render-queue-worker.mjs",
+    "render:queue-watchdog": "tsx ./scripts/render-queue-watchdog.mjs",
     "render:web": "tsx ./scripts/render-web.mjs",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"

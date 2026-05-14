@@ -84,3 +84,23 @@ services:
         sync: false
       - key: TELEGRAM_NOTIFY_WEBHOOK_SECRET
         sync: false
+
+  - type: cron
+    name: audition-queue-watchdog
+    runtime: node
+    plan: starter
+    region: singapore
+    schedule: "*/1 * * * *"
+    buildCommand: npm ci
+    startCommand: npm run render:queue-watchdog
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: TST_API_KEY
+        sync: false
+      - key: TELEGRAM_NOTIFY_WEBHOOK_URL
+        sync: false
+      - key: TELEGRAM_NOTIFY_WEBHOOK_SECRET
+        sync: false

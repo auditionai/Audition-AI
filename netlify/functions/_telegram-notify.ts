@@ -388,3 +388,32 @@ export const fireTelegramJobNotification = (
 
   void sendTelegramJobNotification(eventType, record);
 };
+
+export const sendTelegramOperationalAlert = async (
+  title: string,
+  details: Record<string, unknown> = {},
+) => {
+  if (!notifyWebhookUrl || !notifyWebhookSecret) {
+    return;
+  }
+
+  try {
+    await postNotification({
+      eventType: 'queue_alert',
+      app: 'Audition AI',
+      alert: {
+        title,
+        details,
+        createdAt: new Date().toISOString(),
+      },
+      job: {
+        id: 'queue-watchdog',
+        status: 'warning',
+        toolName: 'Queue Watchdog',
+        queueKind: 'system',
+      },
+    });
+  } catch (error) {
+    console.warn('[telegram-notify] Failed to send operational alert:', error);
+  }
+};

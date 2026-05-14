@@ -84,6 +84,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/queue-watchdog"
+  to = "/.netlify/functions/queue-watchdog"
+  status = 200
+
+[[redirects]]
   from = "/api/admin-queue-jobs"
   to = "/.netlify/functions/admin-queue-jobs"
   status = 200

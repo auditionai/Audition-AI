@@ -19,6 +19,7 @@ import { handler as getVertexTokenHandler } from '../netlify/functions/get-verte
 import { handler as sepaySyncTransactionHandler } from '../netlify/functions/sepay-sync-transaction.ts';
 import { handler as queueEnqueueHandler } from '../netlify/functions/queue-enqueue.ts';
 import { handler as queueReconcileHandler } from '../netlify/functions/queue-reconcile.ts';
+import { handler as queueWatchdogHandler } from '../netlify/functions/queue-watchdog.ts';
 import { handler as queueSubmitHandler } from '../netlify/functions/queue-submit.ts';
 import { handler as queueTickHandler } from '../netlify/functions/queue-tick.ts';
 import { handler as redeemGiftcodeHandler } from '../netlify/functions/redeem-giftcode.ts';
@@ -61,6 +62,7 @@ const handlerConfigs = [
   { fnName: 'queue-submit', apiPath: '/api/queue-submit', handler: queueSubmitHandler },
   { fnName: 'queue-tick', apiPath: '/api/queue-tick', handler: queueTickHandler },
   { fnName: 'queue-reconcile', apiPath: '/api/queue-reconcile', handler: queueReconcileHandler },
+  { fnName: 'queue-watchdog', apiPath: '/api/queue-watchdog', handler: queueWatchdogHandler },
   { fnName: 'admin-queue-jobs', apiPath: '/api/admin-queue-jobs', handler: adminQueueJobsHandler },
   { fnName: 'admin-queue-job-detail', apiPath: '/api/admin-queue-job-detail', handler: adminQueueJobDetailHandler },
   { fnName: 'admin-user-history', apiPath: '/api/admin-user-history', handler: adminUserHistoryHandler },

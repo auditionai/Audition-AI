@@ -1726,6 +1726,27 @@ const queueRecipeStageTransition = async (
   return nextPayload;
 };
 
+const persistActiveRecipeStageTransition = async (
+  jobId: string,
+  recipePayload: ImageGenerateRecipePayload,
+  stage: 'uploading_refs' | 'synthesizing_prompt' | 'building_payload',
+  message: string,
+  progress: number,
+  level: QueueProgressLogEntry['level'] = 'info',
+) => {
+  const nextPayload = withQueueLog(recipePayload, stage, message, level) as ImageGenerateRecipePayload;
+  await updateGeneratedImageRecord(jobId, {
+    status: 'processing',
+    progress,
+    error_message: null,
+    queue_payload: nextPayload,
+    next_poll_at: null,
+    updated_at: new Date().toISOString(),
+  });
+
+  return nextPayload;
+};
+
 const markRecipePreparedForDispatch = async (
   jobId: string,
   providerPayload: Record<string, unknown>,
@@ -1747,6 +1768,30 @@ const markRecipePreparedForDispatch = async (
     next_poll_at: new Date().toISOString(),
     lease_token: null,
     lease_expires_at: null,
+    updated_at: new Date().toISOString(),
+  });
+
+  return storedPayload;
+};
+
+const persistRecipePreparedForImmediateDispatch = async (
+  jobId: string,
+  providerPayload: Record<string, unknown>,
+  previousPayload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
+) => {
+  const storedPayload = withQueueLog(
+    withQueueMeta(providerPayload, previousPayload, 'dispatching'),
+    'dispatching',
+    'Payload da san sang. Dang giu lease de gui provider ngay.',
+    'success',
+  );
+
+  await updateGeneratedImageRecord(jobId, {
+    status: 'processing',
+    progress: 55,
+    error_message: null,
+    queue_payload: storedPayload,
+    next_poll_at: null,
     updated_at: new Date().toISOString(),
   });
 
@@ -1822,7 +1867,7 @@ const prepareImageRecipeInStages = async (
       __uploadedUrls: uploadedUrls,
     };
 
-    recipePayload = await queueRecipeStageTransition(
+    recipePayload = await persistActiveRecipeStageTransition(
       job.id,
       nextPayload,
       hasMoreUploads ? 'uploading_refs' : 'synthesizing_prompt',
@@ -1864,7 +1909,7 @@ const prepareImageRecipeInStages = async (
       __uploadedUrls: uploadedUrls,
     };
 
-    recipePayload = await queueRecipeStageTransition(
+    recipePayload = await persistActiveRecipeStageTransition(
       job.id,
       nextPayload,
       'building_payload',
@@ -1921,7 +1966,7 @@ const prepareImageRecipeInStages = async (
 
   const validationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, stripInternalQueueMeta(providerPayload));
   const validatedProviderPayload = applyLivePricingConfigToPayload(job.queue_kind, providerPayload, validationResult);
-  const storedPayload = await markRecipePreparedForDispatch(job.id, validatedProviderPayload, promptPreparation.optimizedPayload);
+  const storedPayload = await persistRecipePreparedForImmediateDispatch(job.id, validatedProviderPayload, promptPreparation.optimizedPayload);
 
   return { type: 'prepared', providerPayload: validatedProviderPayload, storedPayload };
 };
@@ -2733,6 +2778,11 @@ const recoverStaleProviderPollingJobs = async () => {
 
 const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Promise<Partial<QueueWorkerSummary>> => {
   if (!hasWorkerTickBudgetRemaining(workerStartedAt)) {
+    await releaseLease(job.id);
+    logQueueWorkerEvent(
+      'Released claimed dispatch job because worker tick budget was exhausted before processing.',
+      getQueueWorkerLogJob(job),
+    );
     return {};
   }
 
@@ -3018,6 +3068,11 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
 
 const processPollJob = async (job: QueueJobRow, workerStartedAt: number): Promise<Partial<QueueWorkerSummary>> => {
   if (!hasWorkerTickBudgetRemaining(workerStartedAt)) {
+    await releaseLease(job.id);
+    logQueueWorkerEvent(
+      'Released claimed poll job because worker tick budget was exhausted before processing.',
+      getQueueWorkerLogJob(job),
+    );
     return {};
   }
 

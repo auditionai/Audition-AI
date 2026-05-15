@@ -3,6 +3,7 @@ import 'dotenv/config';
 import { randomUUID } from 'node:crypto';
 
 import { runQueueDaemon } from '../netlify/functions/_queue-daemon.ts';
+import { runQueueWatchdog } from '../netlify/functions/_queue-watchdog.ts';
 import { refreshAutoDisabledServerAvailability } from '../netlify/functions/_server-availability.ts';
 import { getServiceRoleClient } from '../netlify/functions/_supabase.ts';
 
@@ -36,8 +37,10 @@ const DAEMON_MAX_RUNTIME_MS = parsePositiveIntEnv('RENDER_QUEUE_DAEMON_MAX_RUNTI
 const DAEMON_IDLE_ITERATIONS = parsePositiveIntEnv('RENDER_QUEUE_DAEMON_IDLE_ITERATIONS', 30, 1);
 const DAEMON_ACTIVE_DELAY_MS = parsePositiveIntEnv('RENDER_QUEUE_DAEMON_ACTIVE_DELAY_MS', 50, 10);
 const DAEMON_IDLE_DELAY_MS = parsePositiveIntEnv('RENDER_QUEUE_DAEMON_IDLE_DELAY_MS', 1_000, 50);
+const WATCHDOG_INTERVAL_MS = parsePositiveIntEnv('RENDER_QUEUE_WATCHDOG_INTERVAL_MS', 60_000, 10_000);
 
 let shouldStop = false;
+let lastWatchdogRunAt = 0;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -164,6 +167,27 @@ const registerSignalHandlers = () => {
   process.on('SIGTERM', stop);
 };
 
+const shouldRunIntegratedWatchdog = () => lane === 'poll' || lane === 'all';
+
+const runIntegratedWatchdogIfDue = async () => {
+  if (!shouldRunIntegratedWatchdog()) {
+    return;
+  }
+
+  const now = Date.now();
+  if (lastWatchdogRunAt > 0 && now - lastWatchdogRunAt < WATCHDOG_INTERVAL_MS) {
+    return;
+  }
+
+  lastWatchdogRunAt = now;
+  try {
+    const summary = await runQueueWatchdog({ runWorkerAfterRescue: false });
+    log('Integrated watchdog cycle finished.', summary);
+  } catch (error) {
+    console.warn(`[${label}] Integrated watchdog failed:`, error);
+  }
+};
+
 const main = async () => {
   registerSignalHandlers();
 
@@ -191,6 +215,8 @@ const main = async () => {
           log('Server availability snapshot updated.', serverAvailabilitySummary);
         }
       }
+
+      await runIntegratedWatchdogIfDue();
 
       const summary = await runQueueDaemon({
         lane,

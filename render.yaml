@@ -104,3 +104,29 @@ services:
         sync: false
       - key: TELEGRAM_NOTIFY_WEBHOOK_SECRET
         sync: false
+
+  - type: cron
+    name: audition-sepay-watchdog
+    runtime: node
+    plan: starter
+    region: singapore
+    schedule: "*/1 * * * *"
+    buildCommand: npm ci
+    startCommand: npm run render:sepay-watchdog
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SEPAY_ENV
+        value: production
+      - key: SEPAY_MERCHANT_ID
+        sync: false
+      - key: SEPAY_SECRET_KEY
+        sync: false
+      - key: SEPAY_API_TOKEN
+        sync: false
+      - key: TELEGRAM_NOTIFY_WEBHOOK_URL
+        sync: false
+      - key: TELEGRAM_NOTIFY_WEBHOOK_SECRET
+        sync: false

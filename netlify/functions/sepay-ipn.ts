@@ -3,10 +3,12 @@ import { getServiceRoleClient } from './_supabase';
 import {
   extractSePayBankAmountIn,
   extractSePayOrderCode,
+  extractSePayProviderOrderId,
+  extractSePayOrderDescription,
   extractSePayPaidAmount,
   getSePayEnv,
   normalizeSePayOrderStatus,
-  transactionContainsSePayOrderCode,
+  transactionContainsAnySePayReference,
 } from './_sepay';
 
 const headers = {
@@ -69,7 +71,7 @@ export const handler: Handler = async (event) => {
       const amountIn = extractSePayBankAmountIn(payload);
       const { data, error } = await admin
         .from('payment_transactions')
-        .select('id, status, amount_vnd, order_code, provider_order_code, created_at')
+        .select('id, status, amount_vnd, order_code, provider_order_code, provider_payment_link_id, created_at')
         .in('status', ['pending', 'cancelled'])
         .or('payment_method.eq.sepay,provider_payment_link_id.like.sepay:%')
         .eq('amount_vnd', amountIn || -1)
@@ -78,7 +80,10 @@ export const handler: Handler = async (event) => {
 
       existingTransactionError = error;
       existingTransaction = (data || []).find((tx: any) =>
-        transactionContainsSePayOrderCode(payload, tx.provider_order_code || tx.order_code),
+        transactionContainsAnySePayReference(payload, [
+          tx.provider_order_code || tx.order_code,
+          String(tx.provider_payment_link_id || '').replace(/^sepay:/i, ''),
+        ]),
       ) || null;
     }
 
@@ -123,6 +128,8 @@ export const handler: Handler = async (event) => {
     const providerPayload = {
       gateway: 'sepay',
       source: orderCode ? 'checkout_ipn' : 'bank_webhook',
+      sepay_order_id: extractSePayProviderOrderId(payload) || null,
+      sepay_order_description: extractSePayOrderDescription(payload) || null,
       ...payload,
     };
     const rpcArgs = {

@@ -2,6 +2,8 @@ import type { Handler } from '@netlify/functions';
 import { getServiceRoleClient } from './_supabase';
 import {
   extractSePayPaidAmount,
+  extractSePayProviderOrderId,
+  extractSePayOrderDescription,
   findSePayBankTransactionForOrder,
   normalizeSePayOrderStatus,
   retrieveSePayOrder,
@@ -53,7 +55,7 @@ export const handler: Handler = async (event) => {
     const admin = getServiceRoleClient();
     const { data: existingTransaction, error: existingTransactionError } = await admin
       .from('payment_transactions')
-      .select('id, payment_method, provider_payment_link_id, amount_vnd, created_at')
+      .select('id, payment_method, provider_payment_link_id, provider_payload, amount_vnd, created_at')
       .or(Number.isFinite(orderCode)
         ? `provider_order_code.eq.${orderCode},order_code.eq.${orderCodeText}`
         : `order_code.eq.${orderCodeText}`)
@@ -74,6 +76,12 @@ export const handler: Handler = async (event) => {
     }
 
     const orderLookup = await retrieveSePayOrder(orderCodeText);
+    const providerOrderId = orderLookup.ok ? extractSePayProviderOrderId(orderLookup.payload) : '';
+    const orderDescription = orderLookup.ok ? extractSePayOrderDescription(orderLookup.payload) : '';
+    const storedPayload =
+      existingTransaction.provider_payload && typeof existingTransaction.provider_payload === 'object'
+        ? existingTransaction.provider_payload as Record<string, unknown>
+        : {};
     if (orderLookup.ok) {
       const providerStatus = normalizeSePayOrderStatus(orderLookup.payload);
       const paidAmount = extractSePayPaidAmount(orderLookup.payload);
@@ -98,6 +106,7 @@ export const handler: Handler = async (event) => {
               p_provider_payload: {
                 gateway: 'sepay',
                 source: 'order_detail_api',
+                sepay_order_id: providerOrderId || null,
                 ...orderLookup.payload,
               },
             })
@@ -107,6 +116,7 @@ export const handler: Handler = async (event) => {
               p_provider_payload: {
                 gateway: 'sepay',
                 source: 'order_detail_api',
+                sepay_order_id: providerOrderId || null,
                 ...orderLookup.payload,
               },
             });
@@ -124,6 +134,13 @@ export const handler: Handler = async (event) => {
       orderCode: orderCodeText,
       amount: Number(existingTransaction.amount_vnd),
       createdAt: existingTransaction.created_at,
+      references: [
+        orderCodeText,
+        providerOrderId,
+        orderDescription,
+        String(storedPayload.sepay_order_description || ''),
+        String(existingTransaction.provider_payment_link_id || '').replace(/^sepay:/i, ''),
+      ],
     });
 
     if (!bankLookup.ok) {

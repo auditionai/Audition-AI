@@ -199,6 +199,8 @@ const main = async () => {
     let lockMode = 'legacy';
 
     try {
+      await runIntegratedWatchdogIfDue();
+
       const lockResult = await tryAcquireQueueWorkerLock(owner);
       acquired = lockResult.acquired;
       lockMode = lockResult.mode;
@@ -215,8 +217,6 @@ const main = async () => {
           log('Server availability snapshot updated.', serverAvailabilitySummary);
         }
       }
-
-      await runIntegratedWatchdogIfDue();
 
       const summary = await runQueueDaemon({
         lane,

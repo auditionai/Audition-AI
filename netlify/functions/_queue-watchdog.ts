@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { getServiceRoleClient } from './_supabase';
 import { runQueueDaemon } from './_queue-daemon';
 import { sendTelegramOperationalAlert } from './_telegram-notify';
+import { runSePayPendingReconcile } from './sepay-reconcile-pending';
 import type { QueueProcessingStage, QueueProgressLogEntry } from '../../shared/queueRecipes';
 
 type WatchdogSummary = {
@@ -13,6 +14,8 @@ type WatchdogSummary = {
   nudgedPolls: number;
   staleDispatchHeartbeat: boolean;
   alertsSent: number;
+  sepayReconcile?: unknown;
+  sepayReconcileError?: string;
   worker?: Awaited<ReturnType<typeof runQueueDaemon>>;
 };
 
@@ -306,6 +309,15 @@ export const runQueueWatchdog = async (options: { runWorkerAfterRescue?: boolean
   try {
     const admin = getServiceRoleClient();
     const alertState = await getAlertState();
+    try {
+      summary.sepayReconcile = await runSePayPendingReconcile();
+    } catch (error: any) {
+      summary.sepayReconcileError = error?.message || 'SePay reconcile failed';
+      if (await sendThrottledAlert(alertState, 'sepay_reconcile_failed', 'SePay reconcile tu dong bi loi', {
+        error: summary.sepayReconcileError,
+      })) summary.alertsSent += 1;
+    }
+
     summary.dbInvariant = await runDbInvariantRepair();
     const { data, error } = await admin
       .from('generated_images')

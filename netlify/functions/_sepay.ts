@@ -210,6 +210,24 @@ export const extractSePayOrderCode = (payload: any) => {
   ).trim();
 };
 
+export const extractSePayProviderOrderId = (payload: any) =>
+  String(
+    payload?.order?.order_id ||
+      payload?.order_id ||
+      payload?.data?.order_id ||
+      payload?.transaction?.order_id ||
+      '',
+  ).trim();
+
+export const extractSePayOrderDescription = (payload: any) =>
+  String(
+    payload?.order?.order_description ||
+      payload?.order_description ||
+      payload?.data?.order_description ||
+      payload?.transaction?.order_description ||
+      '',
+  ).trim();
+
 export const extractSePayPaidAmount = (payload: any) => {
   const raw =
     payload?.order?.order_amount ||
@@ -241,6 +259,24 @@ export const transactionContainsSePayOrderCode = (transaction: any, orderCode: s
   ].some((value) => String(value || '').toLowerCase().includes(needle));
 };
 
+export const transactionContainsAnySePayReference = (transaction: any, references: Array<string | number | null | undefined>) => {
+  const needles = references
+    .map((value) => String(value || '').trim().toLowerCase())
+    .filter(Boolean);
+
+  if (needles.length === 0) {
+    return false;
+  }
+
+  const haystack = [
+    transaction?.code,
+    transaction?.transaction_content,
+    transaction?.reference_number,
+  ].map((value) => String(value || '').toLowerCase());
+
+  return needles.some((needle) => haystack.some((value) => value.includes(needle)));
+};
+
 const formatSePayQueryDate = (date: Date) =>
   new Date(date.getTime() + 7 * 60 * 60_000).toISOString().slice(0, 19).replace('T', ' ');
 
@@ -248,6 +284,7 @@ export const findSePayBankTransactionForOrder = async (input: {
   orderCode: string | number;
   amount: number;
   createdAt?: string | null;
+  references?: Array<string | number | null | undefined>;
 }) => {
   const orderCode = String(input.orderCode || '').trim();
   if (!orderCode) {
@@ -260,9 +297,16 @@ export const findSePayBankTransactionForOrder = async (input: {
     : new Date(Date.now() - 24 * 60 * 60_000);
   const to = new Date(Date.now() + 10 * 60_000);
 
+  const references = Array.from(new Set([
+    orderCode,
+    ...(input.references || []),
+  ].map((value) => String(value || '').trim()).filter(Boolean)));
+
   const queries = [
-    { q: orderCode },
-    { transaction_content: orderCode },
+    ...references.flatMap((reference) => [
+      { q: reference },
+      { transaction_content: reference },
+    ]),
     { amount_in_min: input.amount, amount_in_max: input.amount },
   ];
 
@@ -284,7 +328,7 @@ export const findSePayBankTransactionForOrder = async (input: {
     const transactions = Array.isArray(result.payload?.data) ? result.payload.data : [];
     const matched = transactions.find((transaction: any) => {
       const amountIn = extractSePayBankAmountIn(transaction);
-      return amountIn === Number(input.amount) && transactionContainsSePayOrderCode(transaction, orderCode);
+      return amountIn === Number(input.amount) && transactionContainsAnySePayReference(transaction, references);
     });
 
     if (matched) {

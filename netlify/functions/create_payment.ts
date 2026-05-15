@@ -81,6 +81,12 @@ const persistPaymentGatewayMetadata = async (input: any, data: any) => {
     const updatePayload = {
       checkout_url: data.checkoutUrl || data.checkout_url || null,
       provider_payment_link_id: data.paymentLinkId || data.payment_link_id || null,
+      provider_payload: {
+        gateway: 'sepay',
+        sepay_order_code: orderCode || null,
+        sepay_order_description: String(input.description || '').trim() || null,
+        checkout_created_at: new Date().toISOString(),
+      },
       payment_method: 'sepay',
       updated_at: new Date().toISOString(),
     };

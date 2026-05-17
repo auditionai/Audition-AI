@@ -104,6 +104,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/admin-user-history"
+  to = "/.netlify/functions/admin-user-history"
+  status = 200
+
+[[redirects]]
   from = "/api/force-rescue-failed-jobs"
   to = "/.netlify/functions/force-rescue-failed-jobs"
   status = 200

@@ -17,7 +17,24 @@ const headers = {
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
 
-export const runSePayPendingReconcile = async () => {
+type SePayPendingReconcileOptions = {
+  limit?: number;
+  maxRuntimeMs?: number;
+};
+
+const DEFAULT_RECONCILE_LIMIT = 25;
+const DEFAULT_RECONCILE_MAX_RUNTIME_MS = 45_000;
+const MIN_RECONCILE_RUNTIME_LEFT_MS = 3_000;
+
+export const runSePayPendingReconcile = async (options: SePayPendingReconcileOptions = {}) => {
+  const startedAt = Date.now();
+  const maxRuntimeMs = Number.isFinite(options.maxRuntimeMs)
+    ? Math.max(Number(options.maxRuntimeMs), 5_000)
+    : DEFAULT_RECONCILE_MAX_RUNTIME_MS;
+  const limit = Number.isFinite(options.limit)
+    ? Math.max(1, Math.min(Number(options.limit), 100))
+    : DEFAULT_RECONCILE_LIMIT;
+  const hasRuntimeBudget = () => Date.now() - startedAt < maxRuntimeMs - MIN_RECONCILE_RUNTIME_LEFT_MS;
   const admin = getServiceRoleClient();
   const staleBefore = new Date(Date.now() - 60_000).toISOString();
 
@@ -28,12 +45,17 @@ export const runSePayPendingReconcile = async () => {
     .or('payment_method.eq.sepay,provider_payment_link_id.like.sepay:%')
     .lte('created_at', staleBefore)
     .order('created_at', { ascending: true })
-    .limit(100);
+    .limit(limit);
 
   if (listError) throw listError;
 
   const results = [];
   for (const tx of transactions || []) {
+    if (!hasRuntimeBudget()) {
+      results.push({ success: false, reason: 'runtime_budget_exhausted' });
+      break;
+    }
+
     const orderCode = String(tx.provider_order_code || tx.order_code || '').trim();
     if (!orderCode) {
       results.push({ id: tx.id, success: false, reason: 'missing_order_code' });
@@ -101,11 +123,17 @@ export const runSePayPendingReconcile = async () => {
     }
 
     if (!providerPayload) {
+      if (!hasRuntimeBudget()) {
+        results.push({ id: tx.id, orderCode, providerOrderId, success: false, reason: 'runtime_budget_exhausted' });
+        break;
+      }
+
       const bankLookup = await findSePayBankTransactionForOrder({
         orderCode,
         amount: Number(tx.amount_vnd),
         createdAt: tx.created_at,
         references,
+        maxQueries: 3,
       });
 
       if (!bankLookup.ok) {
@@ -186,6 +214,8 @@ export const runSePayPendingReconcile = async () => {
     checked: transactions?.length || 0,
     settled,
     failed,
+    runtimeMs: Date.now() - startedAt,
+    budgetExhausted: results.some((item) => item.reason === 'runtime_budget_exhausted'),
     results,
   };
 };

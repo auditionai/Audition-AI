@@ -46,6 +46,42 @@ export const getSePayApiBaseUrl = (env: SePayEnv['env']) =>
 export const getSePayUserApiBaseUrl = (env: SePayEnv['env']) =>
   env === 'sandbox' ? 'https://userapi-sandbox.sepay.vn/v2' : 'https://userapi.sepay.vn/v2';
 
+const getSePayRequestTimeoutMs = () => {
+  const value = Number(process.env.SEPAY_API_TIMEOUT_MS || 8000);
+  return Number.isFinite(value) && value >= 1000 ? value : 8000;
+};
+
+const fetchSePayJson = async (
+  url: string,
+  init: RequestInit,
+  timeoutMs = getSePayRequestTimeoutMs(),
+) => {
+  try {
+    const response = await fetch(url, {
+      ...init,
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    const payload = await response.json().catch(() => ({}));
+    return {
+      ok: response.ok,
+      status: response.status,
+      payload,
+    };
+  } catch (error: any) {
+    const message = error?.name === 'TimeoutError' || error?.name === 'AbortError'
+      ? 'sepay_api_timeout'
+      : error?.message || 'sepay_api_request_failed';
+    return {
+      ok: false,
+      status: error?.name === 'TimeoutError' || error?.name === 'AbortError' ? 504 : 500,
+      payload: {
+        error: message,
+        message,
+      },
+    };
+  }
+};
+
 export const signSePayFields = (fields: Record<string, unknown>, secretKey: string) => {
   const signed = SIGNED_FIELDS
     .filter((field) => fields[field] !== undefined)
@@ -104,21 +140,13 @@ export const decodeSePayCheckoutPayload = (payload: string) =>
   JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
 
 export const retrieveSePayOrder = async (orderCode: string | number, config = getSePayEnv()) => {
-  const response = await fetch(`${getSePayApiBaseUrl(config.env)}/order/detail/${encodeURIComponent(String(orderCode))}`, {
+  return fetchSePayJson(`${getSePayApiBaseUrl(config.env)}/order/detail/${encodeURIComponent(String(orderCode))}`, {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Basic ${Buffer.from(`${config.merchantId}:${config.secretKey}`).toString('base64')}`,
     },
-    signal: AbortSignal.timeout(30000),
   });
-
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    return { ok: false, status: response.status, payload };
-  }
-
-  return { ok: true, status: response.status, payload };
 };
 
 export const retrieveSePayTransactions = async (
@@ -136,21 +164,13 @@ export const retrieveSePayTransactions = async (
     }
   }
 
-  const response = await fetch(`${getSePayUserApiBaseUrl(config.env)}/transactions?${searchParams.toString()}`, {
+  return fetchSePayJson(`${getSePayUserApiBaseUrl(config.env)}/transactions?${searchParams.toString()}`, {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${config.apiToken}`,
     },
-    signal: AbortSignal.timeout(30000),
   });
-
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    return { ok: false, status: response.status, payload };
-  }
-
-  return { ok: true, status: response.status, payload };
 };
 
 export const normalizeSePayOrderStatus = (payload: any) => {
@@ -285,6 +305,7 @@ export const findSePayBankTransactionForOrder = async (input: {
   amount: number;
   createdAt?: string | null;
   references?: Array<string | number | null | undefined>;
+  maxQueries?: number;
 }) => {
   const orderCode = String(input.orderCode || '').trim();
   if (!orderCode) {
@@ -302,13 +323,16 @@ export const findSePayBankTransactionForOrder = async (input: {
     ...(input.references || []),
   ].map((value) => String(value || '').trim()).filter(Boolean)));
 
+  const maxQueries = Number.isFinite(input.maxQueries)
+    ? Math.max(1, Number(input.maxQueries))
+    : 5;
   const queries = [
+    { amount_in_min: input.amount, amount_in_max: input.amount },
     ...references.flatMap((reference) => [
       { q: reference },
       { transaction_content: reference },
     ]),
-    { amount_in_min: input.amount, amount_in_max: input.amount },
-  ];
+  ].slice(0, maxQueries);
 
   for (const query of queries) {
     const result = await retrieveSePayTransactions({

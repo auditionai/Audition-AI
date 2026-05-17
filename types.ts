@@ -258,10 +258,20 @@ export interface HistoryItem {
     createdAt: string;
     description: string;
     vcoinChange: number;
+    balanceAfter?: number | null;
     amountVnd?: number;
     type: 'topup' | 'usage' | 'reward' | 'giftcode' | 'refund' | 'pending_topup' | 'admin_adjustment';
-    status: 'success' | 'pending' | 'failed';
+    category?: 'image' | 'video' | 'checkin' | 'topup' | 'giftcode' | 'other';
+    referenceType?: string | null;
+    referenceId?: string | null;
     code?: string;
+    statusLabel?: string;
+    toolName?: string | null;
+    assetType?: 'image' | 'video' | null;
+    queueKind?: string | null;
+    jobStatus?: string | null;
+    metadata?: Record<string, unknown> | null;
+    status: 'success' | 'pending' | 'failed';
 }
 export interface CheckinConfig {
   day: number;

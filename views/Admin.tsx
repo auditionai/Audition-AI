@@ -569,6 +569,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [loadingUserDetails, setLoadingUserDetails] = useState(false);
   const [historyLimit, setHistoryLimit] = useState(20);
   const [imagesLimit, setImagesLimit] = useState(20);
+  const [userLedgerDateScope, setUserLedgerDateScope] = useState<'all' | 'today' | '7d' | '30d'>('all');
   const [editingPackage, setEditingPackage] = useState<CreditPackage | null>(null);
   const [editingGiftcode, setEditingGiftcode] = useState<Giftcode | null>(null);
   const [editingPromotion, setEditingPromotion] = useState<PromotionCampaign | null>(null);
@@ -1181,6 +1182,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       setLoadingUserDetails(true);
       setHistoryLimit(20);
       setImagesLimit(20);
+      setUserLedgerDateScope('all');
       setUserHistory([]);
       setUserImages([]);
       try {
@@ -1206,6 +1208,91 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           setLoadingUserDetails(false);
       }
   };
+
+  const formatVcoinValue = (value?: number | null) => {
+      if (value === null || value === undefined || Number.isNaN(Number(value))) return '-';
+      return `${Number(value).toLocaleString('vi-VN')} VC`;
+  };
+
+  const formatMoneyValue = (value?: number | null) => {
+      if (value === null || value === undefined || Number.isNaN(Number(value)) || Number(value) <= 0) return '-';
+      return `${Number(value).toLocaleString('vi-VN')} đ`;
+  };
+
+  const getHistoryStatusClass = (status: HistoryItem['status']) => {
+      if (status === 'success') return 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20';
+      if (status === 'pending') return 'bg-yellow-500/10 text-yellow-300 border-yellow-500/20';
+      return 'bg-red-500/10 text-red-300 border-red-500/20';
+  };
+
+  const getHistoryStatusLabel = (item: HistoryItem) => {
+      if (item.statusLabel) return item.statusLabel;
+      if (item.status === 'success') return 'SUCCESS';
+      if (item.status === 'pending') return 'PENDING';
+      return 'FAILED';
+  };
+
+  const isHistoryItemInScope = (item: HistoryItem) => {
+      if (userLedgerDateScope === 'all') return true;
+      const createdAt = new Date(item.createdAt).getTime();
+      if (!Number.isFinite(createdAt)) return false;
+      const now = new Date();
+      if (userLedgerDateScope === 'today') {
+          return new Date(createdAt).toLocaleDateString('en-CA', { timeZone: VIETNAM_TIME_ZONE }) === now.toLocaleDateString('en-CA', { timeZone: VIETNAM_TIME_ZONE });
+      }
+      const days = userLedgerDateScope === '7d' ? 7 : 30;
+      return now.getTime() - createdAt <= days * 24 * 60 * 60 * 1000;
+  };
+
+  const filteredUserHistory = userHistory.filter(isHistoryItemInScope);
+
+  const userLedgerSections = [
+      {
+          id: 'image',
+          title: 'Giao dịch tạo ảnh',
+          description: 'Tạo ảnh, chỉnh sửa ảnh, tách nền, làm nét, hoàn tiền ảnh',
+          icon: Icons.Image,
+          items: filteredUserHistory.filter((item) => (item.category || (item.assetType === 'image' ? 'image' : 'other')) === 'image'),
+      },
+      {
+          id: 'video',
+          title: 'Giao dịch tạo video',
+          description: 'Tạo video AI và Motion Control',
+          icon: Icons.Video,
+          items: filteredUserHistory.filter((item) => (item.category || (item.assetType === 'video' ? 'video' : 'other')) === 'video'),
+      },
+      {
+          id: 'checkin',
+          title: 'Giao dịch điểm danh',
+          description: 'Điểm danh hằng ngày và thưởng tích lũy',
+          icon: Icons.Calendar,
+          items: filteredUserHistory.filter((item) => item.category === 'checkin'),
+      },
+      {
+          id: 'topup',
+          title: 'Giao dịch nạp tiền',
+          description: 'Nạp tiền thành công, pending, thất bại hoặc hủy',
+          icon: Icons.Gem,
+          items: filteredUserHistory.filter((item) => item.category === 'topup' || item.type === 'topup' || item.type === 'pending_topup'),
+      },
+      {
+          id: 'giftcode',
+          title: 'Giao dịch giftcode',
+          description: 'Nhập mã quà tặng và phần thưởng VCoin',
+          icon: Icons.Gift,
+          items: filteredUserHistory.filter((item) => item.category === 'giftcode' || item.type === 'giftcode'),
+      },
+      {
+          id: 'other',
+          title: 'Điều chỉnh và giao dịch khác',
+          description: 'Admin adjustment, reward khác và các log hệ thống còn lại',
+          icon: Icons.Activity,
+          items: filteredUserHistory.filter((item) => {
+              const category = item.category || 'other';
+              return !['image', 'video', 'checkin', 'topup', 'giftcode'].includes(category);
+          }),
+      },
+  ];
 
   const filteredUsers = (stats?.usersList || [])
       .filter((u: any) => (u.email || '').toLowerCase().includes(userSearchEmail.toLowerCase()))
@@ -3908,20 +3995,21 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       {viewingUser && (
           <AdminModalPortal>
           <div className="fixed inset-0 z-[2000] bg-black/70 backdrop-blur-sm flex justify-center items-center p-4 md:p-6 animate-fade-in overflow-y-auto">
-              <div className="bg-[#12121a] w-full max-w-4xl p-6 rounded-2xl border border-white/20 shadow-2xl relative max-h-[90vh] overflow-y-auto custom-scrollbar flex flex-col">
-                  <div className="flex justify-between items-center mb-6">
-                      <div className="flex items-center gap-4">
-                          <img src={viewingUser.avatar || 'https://picsum.photos/100/100'} className="w-16 h-16 rounded-full border-2 border-audi-pink object-cover" />
+              <div className="bg-[#12121a] w-full max-w-7xl p-4 md:p-6 rounded-2xl border border-white/20 shadow-2xl relative max-h-[92vh] overflow-y-auto custom-scrollbar flex flex-col">
+                  <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 mb-6">
+                      <div className="flex items-center gap-4 min-w-0">
+                          <img src={viewingUser.avatar || 'https://picsum.photos/100/100'} className="w-14 h-14 md:w-16 md:h-16 rounded-full border-2 border-audi-pink object-cover shrink-0" />
                           <div>
-                              <h3 className="text-2xl font-bold text-white">{viewingUser.username}</h3>
-                              <p className="text-slate-400 text-sm">{viewingUser.email}</p>
-                              <div className="flex gap-2 mt-1">
+                              <h3 className="text-xl md:text-2xl font-bold text-white break-words">{viewingUser.username}</h3>
+                              <p className="text-slate-400 text-sm break-all">{viewingUser.email}</p>
+                              <div className="flex flex-wrap gap-2 mt-1">
                                   <span className="text-audi-yellow font-bold text-xs bg-audi-yellow/10 px-2 py-0.5 rounded">{viewingUser.vcoin_balance} Vcoin</span>
                                   <span className="text-blue-400 font-bold text-xs bg-blue-400/10 px-2 py-0.5 rounded uppercase">{viewingUser.role}</span>
+                                  <span className="text-slate-300 font-bold text-xs bg-white/5 px-2 py-0.5 rounded">{filteredUserHistory.length} giao dịch</span>
                               </div>
                           </div>
                       </div>
-                      <button onClick={() => setViewingUser(null)} className="p-2 bg-white/5 hover:bg-white/10 rounded-xl text-slate-400 hover:text-white transition-colors">
+                      <button onClick={() => setViewingUser(null)} className="self-end md:self-auto p-2 bg-white/5 hover:bg-white/10 rounded-xl text-slate-400 hover:text-white transition-colors">
                           <Icons.X className="w-6 h-6" />
                       </button>
                   </div>
@@ -3932,48 +4020,125 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       </div>
                   ) : (
                       <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-8">
-                          {/* Lịch sử giao dịch */}
                           <div>
-                              <h4 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                                  <Icons.History className="w-5 h-5 text-audi-cyan" />
-                                  Lịch sử hoạt động
-                              </h4>
-                              <div className="bg-black/30 rounded-xl border border-white/5 overflow-hidden">
-                                  <div className="max-h-80 overflow-y-auto custom-scrollbar">
-                                      <table className="w-full text-left text-sm text-slate-400">
-                                          <thead className="bg-black/80 text-xs font-bold text-slate-500 uppercase sticky top-0 z-10 backdrop-blur-sm">
-                                              <tr>
-                                                  <th className="px-4 py-3">Thời gian</th>
-                                                  <th className="px-4 py-3">Nội dung</th>
-                                                  <th className="px-4 py-3 text-right">Biến động</th>
-                                              </tr>
-                                          </thead>
-                                          <tbody className="divide-y divide-white/5">
-                                              {userHistory.length === 0 ? (
-                                                  <tr><td colSpan={3} className="text-center py-8 text-slate-500 italic">Chưa có lịch sử giao dịch.</td></tr>
-                                              ) : userHistory.slice(0, historyLimit).map(item => (
-                                                  <tr key={item.id} className="hover:bg-white/5 transition-colors">
-                                                      <td className="px-4 py-3 text-xs font-mono">{new Date(item.createdAt).toLocaleString()}</td>
-                                                      <td className="px-4 py-3 text-white">{item.description}</td>
-                                                      <td className={`px-4 py-3 text-right font-bold ${item.vcoinChange > 0 ? 'text-green-400' : 'text-audi-pink'}`}>
-                                                          {item.vcoinChange > 0 ? '+' : ''}{item.vcoinChange} VC
-                                                      </td>
-                                                  </tr>
-                                              ))}
-                                          </tbody>
-                                      </table>
+                              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
+                                  <div>
+                                      <h4 className="text-lg font-bold text-white flex items-center gap-2">
+                                          <Icons.History className="w-5 h-5 text-audi-cyan" />
+                                          Lịch sử VCoin chi tiết
+                                      </h4>
+                                      <div className="text-xs text-slate-400 mt-1">Hiển thị theo từng nhóm, có mã đối soát và số dư sau giao dịch.</div>
                                   </div>
-                                  {userHistory.length > historyLimit && (
-                                      <div className="p-2 border-t border-white/5 text-center">
-                                          <button 
-                                              onClick={() => setHistoryLimit(prev => prev + 20)}
-                                              className="text-xs font-bold text-audi-cyan hover:text-white transition-colors py-2 px-4 rounded-lg hover:bg-white/5"
+                                  <div className="grid grid-cols-2 sm:flex gap-2">
+                                      {[
+                                          { id: 'all', label: 'Tất cả' },
+                                          { id: 'today', label: 'Hôm nay' },
+                                          { id: '7d', label: '7 ngày' },
+                                          { id: '30d', label: '30 ngày' },
+                                      ].map((option) => (
+                                          <button
+                                              key={option.id}
+                                              onClick={() => setUserLedgerDateScope(option.id as typeof userLedgerDateScope)}
+                                              className={`px-3 py-2 rounded-lg border text-xs font-bold transition-colors ${
+                                                  userLedgerDateScope === option.id
+                                                      ? 'bg-audi-pink text-white border-audi-pink'
+                                                      : 'bg-white/5 text-slate-300 border-white/10 hover:bg-white/10'
+                                              }`}
                                           >
-                                              Xem thêm ({userHistory.length - historyLimit} giao dịch)
+                                              {option.label}
                                           </button>
-                                      </div>
-                                  )}
+                                      ))}
+                                  </div>
                               </div>
+
+                              {filteredUserHistory.length === 0 ? (
+                                  <div className="text-center py-10 text-slate-500 italic bg-black/30 rounded-xl border border-white/5">
+                                      Không có giao dịch trong bộ lọc này.
+                                  </div>
+                              ) : (
+                                  <div className="space-y-5">
+                                      {userLedgerSections.map((section) => {
+                                          const SectionIcon = section.icon;
+                                          const sectionTotal = section.items.reduce((sum, item) => sum + Number(item.vcoinChange || 0), 0);
+                                          return (
+                                              <div key={section.id} className="rounded-xl border border-white/10 bg-black/25 overflow-hidden">
+                                                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 px-4 py-4 border-b border-white/10 bg-white/[0.03]">
+                                                      <div className="flex items-start gap-3">
+                                                          <div className="w-9 h-9 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
+                                                              <SectionIcon className="w-5 h-5 text-audi-cyan" />
+                                                          </div>
+                                                          <div>
+                                                              <div className="font-bold text-white">{section.title}</div>
+                                                              <div className="text-xs text-slate-400 mt-0.5">{section.description}</div>
+                                                          </div>
+                                                      </div>
+                                                      <div className="flex flex-wrap gap-2 text-xs">
+                                                          <span className="px-2 py-1 rounded bg-white/5 text-slate-300 border border-white/10">{section.items.length} giao dịch</span>
+                                                          <span className={`px-2 py-1 rounded border font-bold ${sectionTotal >= 0 ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20' : 'bg-pink-500/10 text-audi-pink border-pink-500/20'}`}>
+                                                              {sectionTotal > 0 ? '+' : ''}{formatVcoinValue(sectionTotal)}
+                                                          </span>
+                                                      </div>
+                                                  </div>
+
+                                                  {section.items.length === 0 ? (
+                                                      <div className="px-4 py-6 text-sm text-slate-500 italic">Không có dữ liệu.</div>
+                                                  ) : (
+                                                      <div className="divide-y divide-white/5">
+                                                          {section.items.slice(0, historyLimit).map((item) => (
+                                                              <div key={item.id} className="p-4 hover:bg-white/[0.03] transition-colors">
+                                                                  <div className="grid grid-cols-1 xl:grid-cols-[160px_1fr_110px_120px_120px] gap-3 xl:items-center">
+                                                                      <div>
+                                                                          <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Thời gian</div>
+                                                                          <div className="mt-1 text-xs font-mono text-slate-300">{new Date(item.createdAt).toLocaleString('vi-VN')}</div>
+                                                                      </div>
+                                                                      <div className="min-w-0">
+                                                                          <div className="flex flex-wrap items-center gap-2">
+                                                                              <div className="font-bold text-white break-words">{item.description}</div>
+                                                                              <span className={`inline-flex px-2 py-0.5 rounded border text-[10px] font-bold ${getHistoryStatusClass(item.status)}`}>
+                                                                                  {getHistoryStatusLabel(item)}
+                                                                              </span>
+                                                                          </div>
+                                                                          <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-1 text-[11px] text-slate-500">
+                                                                              <div className="break-all">ID: <span className="font-mono text-slate-300">{item.referenceId || item.id}</span></div>
+                                                                              <div className="break-all">Mã: <span className="font-mono text-slate-300">{item.code || item.referenceType || '-'}</span></div>
+                                                                              {item.toolName && <div className="break-all">Công cụ: <span className="text-slate-300">{item.toolName}</span></div>}
+                                                                              {item.jobStatus && <div>Job: <span className="text-slate-300 uppercase">{item.jobStatus}</span></div>}
+                                                                          </div>
+                                                                      </div>
+                                                                      <div>
+                                                                          <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold xl:text-right">VND</div>
+                                                                          <div className="mt-1 text-sm font-bold text-slate-200 xl:text-right">{formatMoneyValue(item.amountVnd)}</div>
+                                                                      </div>
+                                                                      <div>
+                                                                          <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold xl:text-right">Biến động</div>
+                                                                          <div className={`mt-1 text-sm font-black xl:text-right ${item.vcoinChange > 0 ? 'text-emerald-300' : item.vcoinChange < 0 ? 'text-audi-pink' : 'text-slate-300'}`}>
+                                                                              {item.vcoinChange > 0 ? '+' : ''}{formatVcoinValue(item.vcoinChange)}
+                                                                          </div>
+                                                                      </div>
+                                                                      <div>
+                                                                          <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold xl:text-right">Số dư sau</div>
+                                                                          <div className="mt-1 text-sm font-black text-audi-yellow xl:text-right">{formatVcoinValue(item.balanceAfter)}</div>
+                                                                      </div>
+                                                                  </div>
+                                                              </div>
+                                                          ))}
+                                                      </div>
+                                                  )}
+                                              </div>
+                                          );
+                                      })}
+                                      {filteredUserHistory.length > historyLimit && (
+                                          <div className="text-center">
+                                              <button
+                                                  onClick={() => setHistoryLimit(prev => prev + 20)}
+                                                  className="text-xs font-bold text-audi-cyan hover:text-white transition-colors py-2 px-4 rounded-lg hover:bg-white/5 border border-white/10"
+                                              >
+                                                  Xem thêm ({filteredUserHistory.length - historyLimit} giao dịch)
+                                              </button>
+                                          </div>
+                                      )}
+                                  </div>
+                              )}
                           </div>
 
                           {/* Lịch sử tài sản đã tạo */}

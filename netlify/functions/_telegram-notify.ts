@@ -30,6 +30,14 @@ type NotificationUserProfile = {
 
 type NotificationMediaEntry = QueueNotificationMediaEntry;
 type TelegramNotificationEventState = Partial<Record<JobNotificationEvent, string>>;
+type OperationalAlertOptions = {
+  alertKey?: string;
+  cooldownMs?: number;
+  severity?: 'info' | 'warning' | 'error';
+};
+
+const OPERATIONAL_ALERT_STATE_KEY = 'telegram_operational_alert_state';
+const OPERATIONAL_ALERT_DEFAULT_COOLDOWN_MS = 30 * 60 * 1000;
 
 const toPayloadObject = (payload: QueuePayloadObject): Record<string, unknown> =>
   payload && typeof payload === 'object' ? { ...(payload as Record<string, unknown>) } : {};
@@ -321,6 +329,75 @@ const postNotification = async (body: Record<string, unknown>) => {
   }
 };
 
+const normalizeAlertKey = (value: string) =>
+  String(value || 'operational-alert')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9:_-]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 120) || 'operational-alert';
+
+const buildOperationalAlertSignature = (title: string, details: Record<string, unknown>) => {
+  try {
+    return JSON.stringify({ title, details });
+  } catch {
+    return title;
+  }
+};
+
+const shouldSkipDuplicateOperationalAlert = async (
+  alertKey: string,
+  signature: string,
+  cooldownMs: number,
+) => {
+  const admin = getAdminClient();
+  if (!admin) {
+    return false;
+  }
+
+  const { data, error } = await admin
+    .from('system_settings')
+    .select('value')
+    .eq('key', OPERATIONAL_ALERT_STATE_KEY)
+    .maybeSingle();
+
+  if (error) {
+    console.warn('[telegram-notify] Failed to load operational alert state:', error);
+    return false;
+  }
+
+  const state = toPayloadObject(data?.value);
+  const current = toPayloadObject(state[alertKey]);
+  const lastSentAt = typeof current.sentAt === 'string' ? new Date(current.sentAt).getTime() : 0;
+  const now = Date.now();
+
+  if (
+    current.signature === signature &&
+    lastSentAt > 0 &&
+    now - lastSentAt < Math.max(cooldownMs, 60_000)
+  ) {
+    return true;
+  }
+
+  const nextState = {
+    ...state,
+    [alertKey]: {
+      signature,
+      sentAt: new Date(now).toISOString(),
+    },
+  };
+
+  const { error: upsertError } = await admin
+    .from('system_settings')
+    .upsert({ key: OPERATIONAL_ALERT_STATE_KEY, value: nextState }, { onConflict: 'key' });
+
+  if (upsertError) {
+    console.warn('[telegram-notify] Failed to persist operational alert state:', upsertError);
+  }
+
+  return false;
+};
+
 export const sendTelegramJobNotification = async (
   eventType: JobNotificationEvent,
   record: JobNotificationRecord,
@@ -392,25 +469,32 @@ export const fireTelegramJobNotification = (
 export const sendTelegramOperationalAlert = async (
   title: string,
   details: Record<string, unknown> = {},
+  options: OperationalAlertOptions = {},
 ) => {
   if (!notifyWebhookUrl || !notifyWebhookSecret) {
     return;
   }
 
   try {
+    const alertKey = normalizeAlertKey(options.alertKey || title);
+    const signature = buildOperationalAlertSignature(title, details);
+    const cooldownMs = Number.isFinite(options.cooldownMs)
+      ? Number(options.cooldownMs)
+      : OPERATIONAL_ALERT_DEFAULT_COOLDOWN_MS;
+
+    if (await shouldSkipDuplicateOperationalAlert(alertKey, signature, cooldownMs)) {
+      return;
+    }
+
     await postNotification({
       eventType: 'queue_alert',
       app: 'Audition AI',
       alert: {
         title,
         details,
+        severity: options.severity || 'warning',
+        key: alertKey,
         createdAt: new Date().toISOString(),
-      },
-      job: {
-        id: 'queue-watchdog',
-        status: 'warning',
-        toolName: 'Queue Watchdog',
-        queueKind: 'system',
       },
     });
   } catch (error) {

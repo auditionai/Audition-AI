@@ -935,7 +935,7 @@ export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
   return excludeDirectEditHistory(localImages);
 };
 
-export const getUserImagesFromStorage = async (userId: string): Promise<GeneratedImage[]> => {
+export const getUserImagesFromStorage = async (userId: string, limit = 80): Promise<GeneratedImage[]> => {
     if (!supabase) return [];
     
     try {
@@ -943,7 +943,8 @@ export const getUserImagesFromStorage = async (userId: string): Promise<Generate
             .from(TABLE_NAME)
             .select(GENERATED_IMAGE_ROW_SELECT)
             .eq('user_id', userId)
-            .order('created_at', { ascending: false });
+            .order('created_at', { ascending: false })
+            .limit(limit);
 
         if (error || !data) return [];
 

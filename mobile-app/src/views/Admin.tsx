@@ -44,6 +44,7 @@ import {
   getAdminQueueJobDetail,
   getAdminQueueJobs,
   getAdminStats,
+  getAdminUserHistory,
   getApiKeysList,
   getFeatureMaintenanceConfig,
   getGenerationGuideImages,
@@ -70,6 +71,7 @@ import {
   updatePackageOrder,
   stopAdminQueueJob,
 } from '../services/economyService';
+import { getUserImagesFromStorage } from '../services/storageService';
 import { APP_CONFIG } from '../constants';
 import {
   filterAdminManagedPricingRows,
@@ -78,7 +80,7 @@ import {
   type TstPricingRow,
 } from '../services/tstCatalog';
 import type { FeatureMaintenanceConfig, ModelPricing, PaymentGateway, SystemAnnouncementConfig } from '../services/economyService';
-import type { AdminQueueInputMedia, AdminQueueJob, AdminQueueJobDetail, AdminQueueMediaSection, AdminQueueSummary, CreditPackage, Giftcode, PromotionCampaign, StylePreset, Transaction } from '../types';
+import type { AdminQueueInputMedia, AdminQueueJob, AdminQueueJobDetail, AdminQueueMediaSection, AdminQueueSummary, CreditPackage, GeneratedImage, Giftcode, HistoryItem, PromotionCampaign, StylePreset, Transaction } from '../types';
 
 type AdminTab = 'overview' | 'queue' | 'transactions' | 'users' | 'packages' | 'marketing' | 'pricing' | 'styles' | 'system';
 type AdminStatsPayload = Awaited<ReturnType<typeof getAdminStats>>;
@@ -407,6 +409,11 @@ export function AdminView() {
   const [pricingSearch, setPricingSearch] = useState('');
   const [styleSearch, setStyleSearch] = useState('');
   const [savingExtras, setSavingExtras] = useState(false);
+  const [viewingUser, setViewingUser] = useState<AdminUserRow | null>(null);
+  const [userHistory, setUserHistory] = useState<HistoryItem[]>([]);
+  const [userImages, setUserImages] = useState<GeneratedImage[]>([]);
+  const [loadingUserDetails, setLoadingUserDetails] = useState(false);
+  const [userLedgerSectionLimits, setUserLedgerSectionLimits] = useState<Record<string, number>>({});
 
   const loadStats = useCallback(async () => {
     setLoadingStats(true);
@@ -540,6 +547,109 @@ export function AdminView() {
       .sort((a, b) => Number(b.vcoin_balance || 0) - Number(a.vcoin_balance || 0))
       .slice(0, 25);
   }, [stats, userSearch]);
+
+  const buildAssetFallbackHistory = (images: GeneratedImage[]): HistoryItem[] =>
+    images
+      .filter((image) => Number(image.cost || 0) > 0)
+      .map((image) => ({
+        id: `asset-charge-${image.id}`,
+        createdAt: new Date(image.updatedAt || image.timestamp).toISOString(),
+        description: image.toolName || image.toolId || (image.assetType === 'video' ? 'Tạo video AI' : 'Tạo ảnh AI'),
+        vcoinChange: -Math.abs(Number(image.cost || 0)),
+        balanceAfter: null,
+        category: image.assetType === 'video' || String(image.queueKind || '').includes('video') || String(image.queueKind || '').includes('motion') ? 'video' : 'image',
+        referenceType: 'generated_image_charge',
+        referenceId: image.id,
+        toolName: image.toolName || image.toolId || null,
+        assetType: image.assetType || 'image',
+        queueKind: image.queueKind || null,
+        jobStatus: image.status || null,
+        type: 'usage',
+        status: 'success',
+      }));
+
+  const openUserLedger = async (entry: AdminUserRow) => {
+    setViewingUser(entry);
+    setLoadingUserDetails(true);
+    setUserLedgerSectionLimits({});
+    setUserHistory([]);
+    setUserImages([]);
+    try {
+      const [historyResult, imagesResult] = await Promise.allSettled([
+        getAdminUserHistory(entry.id),
+        getUserImagesFromStorage(entry.id, 60),
+      ]);
+      const history = historyResult.status === 'fulfilled' ? historyResult.value : [];
+      const images = imagesResult.status === 'fulfilled' ? imagesResult.value : [];
+      setUserImages(images);
+      setUserHistory(history.length > 0 ? history : buildAssetFallbackHistory(images));
+    } catch (error) {
+      console.error('[MobileAdmin] Failed to load user ledger', error);
+      notify('Không thể tải lịch sử người dùng.', 'error');
+    } finally {
+      setLoadingUserDetails(false);
+    }
+  };
+
+  const userImageById = useMemo(() => {
+    const lookup = new Map<string, GeneratedImage>();
+    userImages.forEach((image) => {
+      if (image.id) lookup.set(image.id, image);
+    });
+    return lookup;
+  }, [userImages]);
+
+  const getHistoryAsset = (item: HistoryItem) => {
+    const directId = String(item.referenceId || '').trim();
+    if (directId && userImageById.has(directId)) return userImageById.get(directId) || null;
+    const fallbackId = String(item.id || '').replace(/^asset-charge-/, '');
+    return fallbackId && userImageById.has(fallbackId) ? userImageById.get(fallbackId) || null : null;
+  };
+
+  const isRefundHistoryItem = (item: HistoryItem) =>
+    item.type === 'refund' ||
+    String(item.referenceType || '').toLowerCase().includes('refund') ||
+    String(item.description || '').toLowerCase().includes('refund') ||
+    String(item.description || '').toLowerCase().includes('hoàn');
+
+  const historyStatusTone = (item: HistoryItem) => {
+    if (isRefundHistoryItem(item)) return 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300';
+    if (item.status === 'success') return 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300';
+    if (item.status === 'pending') return 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300';
+    return 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-300';
+  };
+
+  const historyStatusLabel = (item: HistoryItem) => {
+    if (isRefundHistoryItem(item)) return 'Hoàn tiền';
+    if (item.status === 'success') return 'Thành công';
+    if (item.status === 'pending') return 'Đang chờ';
+    return 'Thất bại';
+  };
+
+  const formatVcoin = (value?: number | null) =>
+    value === null || value === undefined || Number.isNaN(Number(value)) ? '-' : `${Number(value).toLocaleString('vi-VN')} VC`;
+
+  const userLedgerSections = useMemo(() => [
+    { id: 'image', title: 'Tạo ảnh', icon: ImageIcon, items: userHistory.filter((item) => (item.category || (item.assetType === 'image' ? 'image' : 'other')) === 'image') },
+    { id: 'video', title: 'Tạo video', icon: Video, items: userHistory.filter((item) => (item.category || (item.assetType === 'video' ? 'video' : 'other')) === 'video') },
+    { id: 'checkin', title: 'Điểm danh', icon: Activity, items: userHistory.filter((item) => item.category === 'checkin') },
+    { id: 'topup', title: 'Nạp tiền', icon: Wallet, items: userHistory.filter((item) => item.category === 'topup' || item.type === 'topup' || item.type === 'pending_topup') },
+    { id: 'giftcode', title: 'Giftcode', icon: Gift, items: userHistory.filter((item) => item.category === 'giftcode' || item.type === 'giftcode') },
+    {
+      id: 'other',
+      title: 'Khác',
+      icon: SlidersHorizontal,
+      items: userHistory.filter((item) => !['image', 'video', 'checkin', 'topup', 'giftcode'].includes(item.category || 'other')),
+    },
+  ], [userHistory]);
+
+  const showMoreUserLedgerSection = (sectionId: string) => {
+    setUserLedgerSectionLimits((current) => ({
+      ...current,
+      [sectionId]: (current[sectionId] || 10) + 10,
+    }));
+  };
+
   const pricingByKey = useMemo(
     () => new Map(modelPricing.map((row) => [`${row.model_id}|${row.option_id}`, row])),
     [modelPricing],
@@ -1239,7 +1349,7 @@ export function AdminView() {
           <Card>
             <div className="mb-4 flex items-start gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gray-100 dark:bg-zinc-800"><Users className="h-5 w-5 text-gray-700 dark:text-white" /></div><div><h2 className="text-base font-black text-gray-900 dark:text-white">Người dùng</h2><p className="mt-1 text-xs text-gray-500 dark:text-zinc-400">Tìm người dùng, xem số dư, vai trò và hoạt động</p></div></div>
             <div className="mb-4 flex items-center gap-3 rounded-[24px] border border-gray-200 bg-gray-50 px-4 py-3 dark:border-zinc-700 dark:bg-zinc-800"><Search className="h-4 w-4 text-gray-400 dark:text-zinc-500" /><input value={userSearch} onChange={(e) => setUserSearch(e.target.value)} placeholder="Tìm theo tên hoặc email" className="w-full bg-transparent text-sm text-gray-800 outline-none placeholder:text-gray-400 dark:text-white dark:placeholder:text-zinc-500" /></div>
-            {loadingStats ? <div className="flex justify-center py-12"><Loader className="h-7 w-7 animate-spin text-gray-300" /></div> : filteredUsers.length === 0 ? <div className="rounded-[24px] bg-gray-50 px-4 py-6 text-sm text-gray-500 dark:bg-zinc-800/80 dark:text-zinc-400">Không tìm thấy người dùng.</div> : <div className="space-y-3">{filteredUsers.map((entry: AdminUserRow) => <div key={entry.id} className="rounded-[24px] bg-gray-50 p-4 dark:bg-zinc-800/80"><div className="mb-3 flex items-start justify-between gap-3"><div className="min-w-0"><div className="truncate text-sm font-black text-gray-900 dark:text-white">{entry.username || entry.email}</div><div className="mt-1 truncate text-[11px] text-gray-500 dark:text-zinc-400">{entry.email}</div></div><div className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${entry.role === 'admin' ? 'bg-fuchsia-50 text-fuchsia-700 dark:bg-fuchsia-500/10 dark:text-fuchsia-300' : 'bg-gray-200 text-gray-700 dark:bg-zinc-700 dark:text-zinc-200'}`}>{getRoleLabel(entry.role)}</div></div><div className="grid grid-cols-2 gap-3 text-xs"><div className="rounded-2xl bg-white px-3 py-3 dark:bg-zinc-900"><div className="text-gray-400 dark:text-zinc-500">Số dư</div><div className="mt-1 text-sm font-bold text-amber-600 dark:text-amber-300">{Number(entry.vcoin_balance || 0).toLocaleString()} VC</div></div><div className="rounded-2xl bg-white px-3 py-3 dark:bg-zinc-900"><div className="text-gray-400 dark:text-zinc-500">Lượt dùng</div><div className="mt-1 text-sm font-bold text-gray-900 dark:text-white">{entry.usageCount || 0}</div></div></div><div className="mt-3 text-[11px] text-gray-500 dark:text-zinc-400">Hoạt động gần nhất: {getUserLastSeen(entry)}</div></div>)}</div>}
+            {loadingStats ? <div className="flex justify-center py-12"><Loader className="h-7 w-7 animate-spin text-gray-300" /></div> : filteredUsers.length === 0 ? <div className="rounded-[24px] bg-gray-50 px-4 py-6 text-sm text-gray-500 dark:bg-zinc-800/80 dark:text-zinc-400">Không tìm thấy người dùng.</div> : <div className="space-y-3">{filteredUsers.map((entry: AdminUserRow) => <button key={entry.id} onClick={() => void openUserLedger(entry)} className="w-full rounded-[24px] bg-gray-50 p-4 text-left active:scale-[0.99] dark:bg-zinc-800/80"><div className="mb-3 flex items-start justify-between gap-3"><div className="min-w-0"><div className="truncate text-sm font-black text-gray-900 dark:text-white">{entry.username || entry.email}</div><div className="mt-1 truncate text-[11px] text-gray-500 dark:text-zinc-400">{entry.email}</div></div><div className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${entry.role === 'admin' ? 'bg-fuchsia-50 text-fuchsia-700 dark:bg-fuchsia-500/10 dark:text-fuchsia-300' : 'bg-gray-200 text-gray-700 dark:bg-zinc-700 dark:text-zinc-200'}`}>{getRoleLabel(entry.role)}</div></div><div className="grid grid-cols-2 gap-3 text-xs"><div className="rounded-2xl bg-white px-3 py-3 dark:bg-zinc-900"><div className="text-gray-400 dark:text-zinc-500">Số dư</div><div className="mt-1 text-sm font-bold text-amber-600 dark:text-amber-300">{Number(entry.vcoin_balance || 0).toLocaleString()} VC</div></div><div className="rounded-2xl bg-white px-3 py-3 dark:bg-zinc-900"><div className="text-gray-400 dark:text-zinc-500">Lượt dùng</div><div className="mt-1 text-sm font-bold text-gray-900 dark:text-white">{entry.usageCount || 0}</div></div></div><div className="mt-3 flex items-center justify-between gap-3 text-[11px] text-gray-500 dark:text-zinc-400"><span>Hoạt động gần nhất: {getUserLastSeen(entry)}</span><span className="font-bold text-pink-500">Lịch sử</span></div></button>)}</div>}
           </Card>
         )}
 
@@ -1369,6 +1479,92 @@ export function AdminView() {
             </div>
           </Card>
         )}
+
+        {viewingUser ? (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm">
+            <div className="absolute inset-x-0 bottom-0 flex max-h-[92vh] flex-col rounded-t-[28px] bg-white p-4 dark:bg-[#18181B]">
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="truncate text-lg font-black text-gray-900 dark:text-white">{viewingUser.username || viewingUser.email}</h3>
+                  <div className="mt-1 truncate text-xs text-gray-500 dark:text-zinc-400">{viewingUser.email}</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">{Number(viewingUser.vcoin_balance || 0).toLocaleString('vi-VN')} VC</span>
+                    <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-bold text-gray-600 dark:bg-zinc-800 dark:text-zinc-300">{userHistory.length} giao dịch</span>
+                  </div>
+                </div>
+                <button onClick={() => setViewingUser(null)} className="rounded-full bg-gray-100 p-2 dark:bg-zinc-800"><XCircle className="h-5 w-5" /></button>
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-y-auto pb-3">
+                {loadingUserDetails ? (
+                  <div className="flex justify-center py-14"><Loader className="h-7 w-7 animate-spin text-gray-300" /></div>
+                ) : (
+                  <div className="space-y-4">
+                    {userLedgerSections.map((section) => {
+                      const SectionIcon = section.icon;
+                      const sectionLimit = userLedgerSectionLimits[section.id] || 10;
+                      const visibleItems = section.items.slice(0, sectionLimit);
+                      const sectionTotal = section.items.reduce((sum, item) => sum + Number(item.vcoinChange || 0), 0);
+                      return (
+                        <div key={section.id} className="rounded-[24px] bg-gray-50 p-3 dark:bg-zinc-800/80">
+                          <div className="mb-3 flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2">
+                              <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-white dark:bg-zinc-900"><SectionIcon className="h-4 w-4 text-cyan-500" /></div>
+                              <div>
+                                <div className="text-sm font-black text-gray-900 dark:text-white">{section.title}</div>
+                                <div className="text-[10px] text-gray-500 dark:text-zinc-400">{section.items.length} giao dịch</div>
+                              </div>
+                            </div>
+                            <div className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${sectionTotal >= 0 ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300' : 'bg-pink-50 text-pink-600 dark:bg-pink-500/10 dark:text-pink-300'}`}>
+                              {sectionTotal > 0 ? '+' : ''}{formatVcoin(sectionTotal)}
+                            </div>
+                          </div>
+                          {visibleItems.length === 0 ? (
+                            <div className="rounded-2xl bg-white px-3 py-5 text-sm text-gray-400 dark:bg-zinc-900 dark:text-zinc-500">Không có dữ liệu.</div>
+                          ) : (
+                            <div className="space-y-2">
+                              {visibleItems.map((item) => {
+                                const asset = getHistoryAsset(item);
+                                const isVideo = asset ? asset.assetType === 'video' || String(asset.queueKind || '').includes('video') || String(asset.queueKind || '').includes('motion') : false;
+                                return (
+                                  <div key={item.id} className="rounded-2xl bg-white p-3 dark:bg-zinc-900">
+                                    <div className="flex gap-3">
+                                      {asset?.url ? (
+                                        <button onClick={() => window.open(asset.url, '_blank')} className="h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-gray-100 dark:bg-black">
+                                          {isVideo ? <video src={asset.url} className="h-full w-full object-cover" muted playsInline /> : <img src={asset.url} className="h-full w-full object-cover" alt={asset.toolName || item.description} />}
+                                        </button>
+                                      ) : null}
+                                      <div className="min-w-0 flex-1">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                          <div className="truncate text-sm font-black text-gray-900 dark:text-white">{item.description}</div>
+                                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${historyStatusTone(item)}`}>{historyStatusLabel(item)}</span>
+                                        </div>
+                                        <div className="mt-1 truncate text-[10px] text-gray-500 dark:text-zinc-400">ID: {item.referenceId || item.id}</div>
+                                        <div className="mt-2 flex items-center justify-between gap-3">
+                                          <div className={`text-sm font-black ${item.vcoinChange > 0 ? 'text-emerald-600 dark:text-emerald-300' : item.vcoinChange < 0 ? 'text-pink-500' : 'text-gray-500'}`}>{item.vcoinChange > 0 ? '+' : ''}{formatVcoin(item.vcoinChange)}</div>
+                                          <div className="text-xs font-bold text-amber-600 dark:text-amber-300">Sau: {formatVcoin(item.balanceAfter)}</div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                              {section.items.length > sectionLimit ? (
+                                <button onClick={() => showMoreUserLedgerSection(section.id)} className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-xs font-bold text-cyan-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-cyan-300">
+                                  Xem thêm 10 giao dịch ({section.items.length - sectionLimit} còn lại)
+                                </button>
+                              ) : null}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         {editingPackage ? (
           <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm">

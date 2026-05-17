@@ -27,7 +27,7 @@ const MAX_PRE_DISPATCH_RECOVERIES = 8;
 const MAX_PRE_DISPATCH_AGE_MS = 30 * 60 * 1000;
 const OVERDUE_POLL_GRACE_MS = 2 * 60 * 1000;
 const DISPATCH_HEARTBEAT_STALE_MS = 4 * 60 * 1000;
-const ALERT_THROTTLE_MS = 5 * 60 * 1000;
+const ALERT_THROTTLE_MS = 30 * 60 * 1000;
 const SYSTEM_QUEUE_KINDS = ['image_generate', 'video_generate', 'motion_generate'];
 const MAX_QUEUE_LOG_ENTRIES = 80;
 
@@ -154,7 +154,11 @@ const sendThrottledAlert = async (
     return false;
   }
 
-  await sendTelegramOperationalAlert(title, details);
+  await sendTelegramOperationalAlert(title, details, {
+    alertKey: `queue_watchdog:${key}`,
+    cooldownMs: ALERT_THROTTLE_MS,
+    severity: 'warning',
+  });
   state[key] = nowIso();
   return true;
 };

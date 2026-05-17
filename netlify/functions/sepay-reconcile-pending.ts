@@ -165,12 +165,20 @@ export const runSePayPendingReconcile = async () => {
   const failed = results.filter((item) => !item.success).length;
 
   if (pendingOlderThanFiveMinutes > 0 || failed > 0) {
-    await sendTelegramOperationalAlert('SePay reconcile can chu y', {
-      checked: transactions?.length || 0,
-      settled,
-      failed,
-      pendingOlderThanFiveMinutes,
-    });
+    await sendTelegramOperationalAlert(
+      'SePay reconcile can chu y',
+      {
+        checked: transactions?.length || 0,
+        settled,
+        failed,
+        pendingOlderThanFiveMinutes,
+      },
+      {
+        alertKey: 'sepay_reconcile:attention',
+        cooldownMs: 30 * 60 * 1000,
+        severity: failed > 0 ? 'error' : 'warning',
+      },
+    );
   }
 
   return {

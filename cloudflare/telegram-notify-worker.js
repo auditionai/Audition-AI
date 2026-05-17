@@ -78,6 +78,8 @@ const getEventLabel = (eventType) => {
       return 'THÀNH CÔNG';
     case 'failed':
       return 'THẤT BẠI';
+    case 'queue_alert':
+      return 'CANH BAO HE THONG';
     default:
       return 'ĐANG XỬ LÝ';
   }
@@ -177,6 +179,37 @@ const buildSummaryLines = (payload) => {
 
 const buildTextMessage = (payload, extraLines = []) => {
   return [...buildSummaryLines(payload), ...(extraLines.length > 0 ? ['', ...extraLines] : [])].join('\n');
+};
+
+const formatAlertDetailValue = (value) => {
+  if (value === null || value === undefined) return 'N/A';
+  if (typeof value === 'object') {
+    try {
+      return truncate(JSON.stringify(value), 260);
+    } catch {
+      return '[object]';
+    }
+  }
+  return truncate(String(value), 260);
+};
+
+const buildAlertMessage = (payload) => {
+  const alert = payload?.alert || {};
+  const details = alert?.details && typeof alert.details === 'object' ? alert.details : {};
+  const lines = [
+    buildHeader(payload?.app || 'App', payload?.eventType || 'queue_alert'),
+    '',
+    `- Tieu de: <b>${escapeHtml(displayValue(alert?.title, 'Operational alert'))}</b>`,
+    `- Muc do: ${escapeHtml(displayValue(alert?.severity, 'warning'))}`,
+    `- Key: <code>${escapeHtml(displayValue(alert?.key, 'N/A'))}</code>`,
+    `- Tao luc: ${escapeHtml(formatIso(alert?.createdAt))}`,
+  ];
+
+  for (const [key, value] of Object.entries(details).slice(0, 12)) {
+    lines.push(`- ${escapeHtml(key)}: ${escapeHtml(formatAlertDetailValue(value))}`);
+  }
+
+  return lines.join('\n');
 };
 
 const buildMediaCaption = (payload) =>
@@ -403,6 +436,11 @@ async function sendSingleJobMessage(env, payload) {
 
 async function handleNotification(env, payload) {
   if (String(payload?.eventType || '').toLowerCase() === 'queued') {
+    return;
+  }
+
+  if (String(payload?.eventType || '').toLowerCase() === 'queue_alert') {
+    await sendText(env, buildAlertMessage(payload));
     return;
   }
 

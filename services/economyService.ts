@@ -771,16 +771,46 @@ export const updateMyProfile = async (profile: UserProfile): Promise<{success: b
 export const updateAdminUserProfile = async (profile: UserProfile): Promise<{success: boolean, error?: string}> => {
     if (!supabase) return { success: false, error: "No Database" };
     try {
+        const { data: currentProfile, error: currentProfileError } = await supabase
+            .from('users')
+            .select('vcoin_balance')
+            .eq('id', profile.id)
+            .maybeSingle();
+
+        if (currentProfileError) throw currentProfileError;
+
+        const currentBalance = Number(currentProfile?.vcoin_balance || 0);
+        const nextBalance = Number(profile.vcoin_balance || 0);
+        const balanceDelta = nextBalance - currentBalance;
+
         const { error } = await supabase
             .from('users')
             .update({
                 display_name: profile.username,
-                vcoin_balance: profile.vcoin_balance,
                 photo_url: profile.avatar
             })
             .eq('id', profile.id);
         
         if (error) throw error;
+
+        if (Math.abs(balanceDelta) > 0.0001) {
+            const { error: balanceError } = await supabase.rpc('apply_balance_transaction', {
+                p_target_user_id: profile.id,
+                p_amount: balanceDelta,
+                p_reason: `Admin adjustment: ${currentBalance} -> ${nextBalance} VCoin`,
+                p_log_type: 'admin_adjustment',
+                p_reference_type: 'admin_adjustment',
+                p_reference_id: `${profile.id}:${Date.now()}`,
+                p_metadata: {
+                    previous_balance: currentBalance,
+                    next_balance: nextBalance,
+                    source: 'admin_user_profile',
+                },
+            });
+
+            if (balanceError) throw balanceError;
+        }
+
         invalidateUserProfileCache();
         return { success: true };
     } catch (e: any) {

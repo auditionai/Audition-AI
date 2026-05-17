@@ -567,9 +567,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [userImages, setUserImages] = useState<GeneratedImage[]>([]);
   const [totalImagesCreated, setTotalImagesCreated] = useState(0);
   const [loadingUserDetails, setLoadingUserDetails] = useState(false);
-  const [historyLimit, setHistoryLimit] = useState(20);
   const [imagesLimit, setImagesLimit] = useState(20);
   const [userLedgerDateScope, setUserLedgerDateScope] = useState<'all' | 'today' | '7d' | '30d'>('all');
+  const [userLedgerSectionLimits, setUserLedgerSectionLimits] = useState<Record<string, number>>({});
   const [editingPackage, setEditingPackage] = useState<CreditPackage | null>(null);
   const [editingGiftcode, setEditingGiftcode] = useState<Giftcode | null>(null);
   const [editingPromotion, setEditingPromotion] = useState<PromotionCampaign | null>(null);
@@ -1188,15 +1188,15 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const handleViewUser = async (user: UserProfile) => {
       setViewingUser(user);
       setLoadingUserDetails(true);
-      setHistoryLimit(20);
       setImagesLimit(20);
       setUserLedgerDateScope('all');
+      setUserLedgerSectionLimits({});
       setUserHistory([]);
       setUserImages([]);
       try {
           const [historyResult, imagesResult] = await Promise.allSettled([
               getAdminUserHistory(user.id),
-              getUserImagesFromStorage(user.id),
+              getUserImagesFromStorage(user.id, 80),
           ]);
 
           const history = historyResult.status === 'fulfilled' ? historyResult.value : [];
@@ -1222,22 +1222,24 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       return `${Number(value).toLocaleString('vi-VN')} VC`;
   };
 
-  const formatMoneyValue = (value?: number | null) => {
-      if (value === null || value === undefined || Number.isNaN(Number(value)) || Number(value) <= 0) return '-';
-      return `${Number(value).toLocaleString('vi-VN')} đ`;
-  };
+  const isRefundHistoryItem = (item: HistoryItem) =>
+      item.type === 'refund' ||
+      String(item.referenceType || '').toLowerCase().includes('refund') ||
+      String(item.description || '').toLowerCase().includes('refund') ||
+      String(item.description || '').toLowerCase().includes('hoàn');
 
-  const getHistoryStatusClass = (status: HistoryItem['status']) => {
-      if (status === 'success') return 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20';
-      if (status === 'pending') return 'bg-yellow-500/10 text-yellow-300 border-yellow-500/20';
+  const getHistoryStatusClass = (item: HistoryItem) => {
+      if (isRefundHistoryItem(item)) return 'bg-yellow-500/10 text-yellow-300 border-yellow-500/25';
+      if (item.status === 'success') return 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20';
+      if (item.status === 'pending') return 'bg-yellow-500/10 text-yellow-300 border-yellow-500/20';
       return 'bg-red-500/10 text-red-300 border-red-500/20';
   };
 
   const getHistoryStatusLabel = (item: HistoryItem) => {
-      if (item.statusLabel) return item.statusLabel;
-      if (item.status === 'success') return 'SUCCESS';
-      if (item.status === 'pending') return 'PENDING';
-      return 'FAILED';
+      if (isRefundHistoryItem(item)) return 'Hoàn tiền';
+      if (item.status === 'success') return 'Thành công';
+      if (item.status === 'pending') return 'Đang chờ';
+      return 'Thất bại';
   };
 
   const isHistoryItemInScope = (item: HistoryItem) => {
@@ -1301,6 +1303,15 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           }),
       },
   ];
+
+  const getUserLedgerSectionLimit = (sectionId: string) => userLedgerSectionLimits[sectionId] || 10;
+
+  const showMoreUserLedgerSection = (sectionId: string) => {
+      setUserLedgerSectionLimits((current) => ({
+          ...current,
+          [sectionId]: (current[sectionId] || 10) + 10,
+      }));
+  };
 
   const filteredUsers = (stats?.usersList || [])
       .filter((u: any) => (u.email || '').toLowerCase().includes(userSearchEmail.toLowerCase()))
@@ -4068,6 +4079,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       {userLedgerSections.map((section) => {
                                           const SectionIcon = section.icon;
                                           const sectionTotal = section.items.reduce((sum, item) => sum + Number(item.vcoinChange || 0), 0);
+                                          const sectionLimit = getUserLedgerSectionLimit(section.id);
+                                          const visibleItems = section.items.slice(0, sectionLimit);
                                           return (
                                               <div key={section.id} className="rounded-xl border border-white/10 bg-black/25 overflow-hidden">
                                                   <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 px-4 py-4 border-b border-white/10 bg-white/[0.03]">
@@ -4092,9 +4105,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                       <div className="px-4 py-6 text-sm text-slate-500 italic">Không có dữ liệu.</div>
                                                   ) : (
                                                       <div className="divide-y divide-white/5">
-                                                          {section.items.slice(0, historyLimit).map((item) => (
+                                                          {visibleItems.map((item) => (
                                                               <div key={item.id} className="p-4 hover:bg-white/[0.03] transition-colors">
-                                                                  <div className="grid grid-cols-1 xl:grid-cols-[160px_1fr_110px_120px_120px] gap-3 xl:items-center">
+                                                                  <div className="grid grid-cols-1 xl:grid-cols-[160px_1fr_120px_120px] gap-3 xl:items-center">
                                                                       <div>
                                                                           <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Thời gian</div>
                                                                           <div className="mt-1 text-xs font-mono text-slate-300">{new Date(item.createdAt).toLocaleString('vi-VN')}</div>
@@ -4102,7 +4115,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                                       <div className="min-w-0">
                                                                           <div className="flex flex-wrap items-center gap-2">
                                                                               <div className="font-bold text-white break-words">{item.description}</div>
-                                                                              <span className={`inline-flex px-2 py-0.5 rounded border text-[10px] font-bold ${getHistoryStatusClass(item.status)}`}>
+                                                                              <span className={`inline-flex px-2 py-0.5 rounded border text-[10px] font-bold ${getHistoryStatusClass(item)}`}>
                                                                                   {getHistoryStatusLabel(item)}
                                                                               </span>
                                                                           </div>
@@ -4112,10 +4125,6 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                                               {item.toolName && <div className="break-all">Công cụ: <span className="text-slate-300">{item.toolName}</span></div>}
                                                                               {item.jobStatus && <div>Job: <span className="text-slate-300 uppercase">{item.jobStatus}</span></div>}
                                                                           </div>
-                                                                      </div>
-                                                                      <div>
-                                                                          <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold xl:text-right">VND</div>
-                                                                          <div className="mt-1 text-sm font-bold text-slate-200 xl:text-right">{formatMoneyValue(item.amountVnd)}</div>
                                                                       </div>
                                                                       <div>
                                                                           <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold xl:text-right">Biến động</div>
@@ -4130,21 +4139,21 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                                   </div>
                                                               </div>
                                                           ))}
+                                                          {section.items.length > sectionLimit && (
+                                                              <div className="px-4 py-3 text-center bg-black/20">
+                                                                  <button
+                                                                      onClick={() => showMoreUserLedgerSection(section.id)}
+                                                                      className="text-xs font-bold text-audi-cyan hover:text-white transition-colors py-2 px-4 rounded-lg hover:bg-white/5 border border-white/10"
+                                                                  >
+                                                                      Xem thêm 10 giao dịch ({section.items.length - sectionLimit} còn lại)
+                                                                  </button>
+                                                              </div>
+                                                          )}
                                                       </div>
                                                   )}
                                               </div>
                                           );
                                       })}
-                                      {filteredUserHistory.length > historyLimit && (
-                                          <div className="text-center">
-                                              <button
-                                                  onClick={() => setHistoryLimit(prev => prev + 20)}
-                                                  className="text-xs font-bold text-audi-cyan hover:text-white transition-colors py-2 px-4 rounded-lg hover:bg-white/5 border border-white/10"
-                                              >
-                                                  Xem thêm ({filteredUserHistory.length - historyLimit} giao dịch)
-                                              </button>
-                                          </div>
-                                      )}
                                   </div>
                               )}
                           </div>

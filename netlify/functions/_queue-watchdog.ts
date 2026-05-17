@@ -314,7 +314,10 @@ export const runQueueWatchdog = async (options: { runWorkerAfterRescue?: boolean
     const admin = getServiceRoleClient();
     const alertState = await getAlertState();
     try {
-      summary.sepayReconcile = await runSePayPendingReconcile();
+      summary.sepayReconcile = await runSePayPendingReconcile({
+        limit: 10,
+        maxRuntimeMs: 20_000,
+      });
     } catch (error: any) {
       summary.sepayReconcileError = error?.message || 'SePay reconcile failed';
       if (await sendThrottledAlert(alertState, 'sepay_reconcile_failed', 'SePay reconcile tu dong bi loi', {

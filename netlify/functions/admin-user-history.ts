@@ -63,6 +63,7 @@ const classifyLedgerEntry = (entry: any, relatedJob?: any): HistoryItem['categor
   const toolId = String(relatedJob?.tool_id || metadata.tool_id || '').toLowerCase();
   const description = String(entry?.description || '').toLowerCase();
 
+  if (type === 'admin_adjustment' || referenceType === 'admin_adjustment') return 'admin_transaction';
   if (type === 'topup' || referenceType === 'payment_transaction') return 'topup';
   if (type === 'giftcode' || referenceType.includes('giftcode') || referenceType.includes('gift_code')) return 'giftcode';
   if (referenceType.includes('daily_checkin') || metadata.reward_type === 'daily_checkin' || description.includes('checkin')) return 'checkin';

@@ -69,6 +69,7 @@ import {
   saveFeatureMaintenanceConfig,
   saveMaintenanceMode,
   updatePackageOrder,
+  updateAdminUserProfile,
   stopAdminQueueJob,
 } from '../services/economyService';
 import { getUserImagesFromStorage } from '../services/storageService';
@@ -80,7 +81,7 @@ import {
   type TstPricingRow,
 } from '../services/tstCatalog';
 import type { FeatureMaintenanceConfig, ModelPricing, PaymentGateway, SystemAnnouncementConfig } from '../services/economyService';
-import type { AdminQueueInputMedia, AdminQueueJob, AdminQueueJobDetail, AdminQueueMediaSection, AdminQueueSummary, CreditPackage, GeneratedImage, Giftcode, HistoryItem, PromotionCampaign, StylePreset, Transaction } from '../types';
+import type { AdminQueueInputMedia, AdminQueueJob, AdminQueueJobDetail, AdminQueueMediaSection, AdminQueueSummary, CreditPackage, GeneratedImage, Giftcode, HistoryItem, PromotionCampaign, StylePreset, Transaction, UserProfile } from '../types';
 
 type AdminTab = 'overview' | 'queue' | 'transactions' | 'users' | 'packages' | 'marketing' | 'pricing' | 'styles' | 'system';
 type AdminStatsPayload = Awaited<ReturnType<typeof getAdminStats>>;
@@ -405,6 +406,9 @@ export function AdminView() {
   const [editingPromotion, setEditingPromotion] = useState<PromotionCampaign | null>(null);
   const [editingGiftcode, setEditingGiftcode] = useState<Giftcode | null>(null);
   const [editingStyle, setEditingStyle] = useState<StylePreset | null>(null);
+  const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+  const [editingUserOriginalBalance, setEditingUserOriginalBalance] = useState<number | null>(null);
+  const [adminUserAdjustmentReason, setAdminUserAdjustmentReason] = useState('');
   const [marketingSearch, setMarketingSearch] = useState('');
   const [pricingSearch, setPricingSearch] = useState('');
   const [styleSearch, setStyleSearch] = useState('');
@@ -414,6 +418,7 @@ export function AdminView() {
   const [userImages, setUserImages] = useState<GeneratedImage[]>([]);
   const [loadingUserDetails, setLoadingUserDetails] = useState(false);
   const [userLedgerSectionLimits, setUserLedgerSectionLimits] = useState<Record<string, number>>({});
+  const [savingUserEdit, setSavingUserEdit] = useState(false);
 
   const loadStats = useCallback(async () => {
     setLoadingStats(true);
@@ -591,6 +596,28 @@ export function AdminView() {
     }
   };
 
+  const toEditableUserProfile = (entry: AdminUserRow): UserProfile => ({
+    id: entry.id,
+    username: entry.username || entry.email || '',
+    email: entry.email || '',
+    avatar: entry.avatar || '',
+    vcoin_balance: Number(entry.vcoin_balance || 0),
+    role: entry.role === 'admin' ? 'admin' : 'user',
+    isVip: !!entry.isVip,
+    streak: 0,
+    lastCheckin: null,
+    checkinHistory: [],
+    lastActive: entry.lastActive,
+    usageCount: entry.usageCount,
+  });
+
+  const openEditUser = (entry: AdminUserRow) => {
+    const profile = toEditableUserProfile(entry);
+    setEditingUser(profile);
+    setEditingUserOriginalBalance(Number(profile.vcoin_balance || 0));
+    setAdminUserAdjustmentReason('');
+  };
+
   const userImageById = useMemo(() => {
     const lookup = new Map<string, GeneratedImage>();
     userImages.forEach((image) => {
@@ -635,11 +662,12 @@ export function AdminView() {
     { id: 'checkin', title: 'Điểm danh', icon: Activity, items: userHistory.filter((item) => item.category === 'checkin') },
     { id: 'topup', title: 'Nạp tiền', icon: Wallet, items: userHistory.filter((item) => item.category === 'topup' || item.type === 'topup' || item.type === 'pending_topup') },
     { id: 'giftcode', title: 'Giftcode', icon: Gift, items: userHistory.filter((item) => item.category === 'giftcode' || item.type === 'giftcode') },
+    { id: 'admin_transaction', title: 'Sửa VCoin', icon: Shield, items: userHistory.filter((item) => item.category === 'admin_transaction' || item.type === 'admin_adjustment') },
     {
       id: 'other',
       title: 'Khác',
       icon: SlidersHorizontal,
-      items: userHistory.filter((item) => !['image', 'video', 'checkin', 'topup', 'giftcode'].includes(item.category || 'other')),
+      items: userHistory.filter((item) => item.type !== 'admin_adjustment' && !['image', 'video', 'checkin', 'topup', 'giftcode', 'admin_transaction'].includes(item.category || 'other')),
     },
   ], [userHistory]);
 
@@ -833,6 +861,34 @@ export function AdminView() {
       return;
     }
     notify('Đã lưu bảo trì chức năng.', 'success');
+  };
+
+  const saveUserEdit = async () => {
+    if (!editingUser) return;
+
+    const nextBalance = Number(editingUser.vcoin_balance || 0);
+    const balanceChanged = editingUserOriginalBalance !== null && Math.abs(nextBalance - editingUserOriginalBalance) > 0.0001;
+    const adjustmentReason = adminUserAdjustmentReason.trim();
+
+    if (balanceChanged && !adjustmentReason) {
+      notify('Nhập nội dung giao dịch sửa VCoin trước khi lưu.', 'error');
+      return;
+    }
+
+    setSavingUserEdit(true);
+    const result = await updateAdminUserProfile(editingUser, { adjustmentReason });
+    setSavingUserEdit(false);
+
+    if (!result.success) {
+      notify(result.error || 'Không thể cập nhật người dùng.', 'error');
+      return;
+    }
+
+    setEditingUser(null);
+    setEditingUserOriginalBalance(null);
+    setAdminUserAdjustmentReason('');
+    await loadStats();
+    notify('Đã cập nhật người dùng.', 'success');
   };
 
   const savePackageForm = async () => {
@@ -1349,7 +1405,7 @@ export function AdminView() {
           <Card>
             <div className="mb-4 flex items-start gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gray-100 dark:bg-zinc-800"><Users className="h-5 w-5 text-gray-700 dark:text-white" /></div><div><h2 className="text-base font-black text-gray-900 dark:text-white">Người dùng</h2><p className="mt-1 text-xs text-gray-500 dark:text-zinc-400">Tìm người dùng, xem số dư, vai trò và hoạt động</p></div></div>
             <div className="mb-4 flex items-center gap-3 rounded-[24px] border border-gray-200 bg-gray-50 px-4 py-3 dark:border-zinc-700 dark:bg-zinc-800"><Search className="h-4 w-4 text-gray-400 dark:text-zinc-500" /><input value={userSearch} onChange={(e) => setUserSearch(e.target.value)} placeholder="Tìm theo tên hoặc email" className="w-full bg-transparent text-sm text-gray-800 outline-none placeholder:text-gray-400 dark:text-white dark:placeholder:text-zinc-500" /></div>
-            {loadingStats ? <div className="flex justify-center py-12"><Loader className="h-7 w-7 animate-spin text-gray-300" /></div> : filteredUsers.length === 0 ? <div className="rounded-[24px] bg-gray-50 px-4 py-6 text-sm text-gray-500 dark:bg-zinc-800/80 dark:text-zinc-400">Không tìm thấy người dùng.</div> : <div className="space-y-3">{filteredUsers.map((entry: AdminUserRow) => <button key={entry.id} onClick={() => void openUserLedger(entry)} className="w-full rounded-[24px] bg-gray-50 p-4 text-left active:scale-[0.99] dark:bg-zinc-800/80"><div className="mb-3 flex items-start justify-between gap-3"><div className="min-w-0"><div className="truncate text-sm font-black text-gray-900 dark:text-white">{entry.username || entry.email}</div><div className="mt-1 truncate text-[11px] text-gray-500 dark:text-zinc-400">{entry.email}</div></div><div className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${entry.role === 'admin' ? 'bg-fuchsia-50 text-fuchsia-700 dark:bg-fuchsia-500/10 dark:text-fuchsia-300' : 'bg-gray-200 text-gray-700 dark:bg-zinc-700 dark:text-zinc-200'}`}>{getRoleLabel(entry.role)}</div></div><div className="grid grid-cols-2 gap-3 text-xs"><div className="rounded-2xl bg-white px-3 py-3 dark:bg-zinc-900"><div className="text-gray-400 dark:text-zinc-500">Số dư</div><div className="mt-1 text-sm font-bold text-amber-600 dark:text-amber-300">{Number(entry.vcoin_balance || 0).toLocaleString()} VC</div></div><div className="rounded-2xl bg-white px-3 py-3 dark:bg-zinc-900"><div className="text-gray-400 dark:text-zinc-500">Lượt dùng</div><div className="mt-1 text-sm font-bold text-gray-900 dark:text-white">{entry.usageCount || 0}</div></div></div><div className="mt-3 flex items-center justify-between gap-3 text-[11px] text-gray-500 dark:text-zinc-400"><span>Hoạt động gần nhất: {getUserLastSeen(entry)}</span><span className="font-bold text-pink-500">Lịch sử</span></div></button>)}</div>}
+            {loadingStats ? <div className="flex justify-center py-12"><Loader className="h-7 w-7 animate-spin text-gray-300" /></div> : filteredUsers.length === 0 ? <div className="rounded-[24px] bg-gray-50 px-4 py-6 text-sm text-gray-500 dark:bg-zinc-800/80 dark:text-zinc-400">Không tìm thấy người dùng.</div> : <div className="space-y-3">{filteredUsers.map((entry: AdminUserRow) => <div key={entry.id} className="w-full rounded-[24px] bg-gray-50 p-4 text-left dark:bg-zinc-800/80"><div className="mb-3 flex items-start justify-between gap-3"><div className="min-w-0"><div className="truncate text-sm font-black text-gray-900 dark:text-white">{entry.username || entry.email}</div><div className="mt-1 truncate text-[11px] text-gray-500 dark:text-zinc-400">{entry.email}</div></div><div className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${entry.role === 'admin' ? 'bg-fuchsia-50 text-fuchsia-700 dark:bg-fuchsia-500/10 dark:text-fuchsia-300' : 'bg-gray-200 text-gray-700 dark:bg-zinc-700 dark:text-zinc-200'}`}>{getRoleLabel(entry.role)}</div></div><div className="grid grid-cols-2 gap-3 text-xs"><div className="rounded-2xl bg-white px-3 py-3 dark:bg-zinc-900"><div className="text-gray-400 dark:text-zinc-500">Số dư</div><div className="mt-1 text-sm font-bold text-amber-600 dark:text-amber-300">{Number(entry.vcoin_balance || 0).toLocaleString()} VC</div></div><div className="rounded-2xl bg-white px-3 py-3 dark:bg-zinc-900"><div className="text-gray-400 dark:text-zinc-500">Lượt dùng</div><div className="mt-1 text-sm font-bold text-gray-900 dark:text-white">{entry.usageCount || 0}</div></div></div><div className="mt-3 text-[11px] text-gray-500 dark:text-zinc-400">Hoạt động gần nhất: {getUserLastSeen(entry)}</div><div className="mt-3 grid grid-cols-2 gap-2"><button onClick={() => void openUserLedger(entry)} className="rounded-2xl bg-pink-500 px-3 py-2.5 text-xs font-bold text-white">Lịch sử</button><button onClick={() => openEditUser(entry)} className="rounded-2xl bg-cyan-500 px-3 py-2.5 text-xs font-bold text-white">Sửa user</button></div></div>)}</div>}
           </Card>
         )}
 
@@ -1538,6 +1594,9 @@ export function AdminView() {
                                         <div className="flex flex-wrap items-center gap-2">
                                           <div className="truncate text-sm font-black text-gray-900 dark:text-white">{item.description}</div>
                                           <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${historyStatusTone(item)}`}>{historyStatusLabel(item)}</span>
+                                          {(item.category === 'admin_transaction' || item.type === 'admin_adjustment') ? (
+                                            <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-bold text-violet-700 dark:bg-violet-500/10 dark:text-violet-300">Admin Transaction</span>
+                                          ) : null}
                                         </div>
                                         <div className="mt-1 truncate text-[10px] text-gray-500 dark:text-zinc-400">ID: {item.referenceId || item.id}</div>
                                         <div className="mt-2 flex items-center justify-between gap-3">
@@ -1561,6 +1620,48 @@ export function AdminView() {
                     })}
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {editingUser ? (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm">
+            <div className="absolute inset-x-0 bottom-0 max-h-[86vh] overflow-y-auto rounded-t-[24px] bg-white p-4 dark:bg-[#18181B]">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="truncate text-base font-black text-gray-900 dark:text-white">Sửa người dùng</h3>
+                  <div className="mt-1 truncate text-xs text-gray-500 dark:text-zinc-400">{editingUser.email}</div>
+                </div>
+                <button
+                  onClick={() => {
+                    setEditingUser(null);
+                    setEditingUserOriginalBalance(null);
+                    setAdminUserAdjustmentReason('');
+                  }}
+                  className="rounded-full bg-gray-100 p-2 dark:bg-zinc-800"
+                >
+                  <XCircle className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="space-y-3">
+                <input value={editingUser.username || ''} onChange={(e) => setEditingUser({ ...editingUser, username: e.target.value })} className={fieldClass} placeholder="Tên hiển thị" />
+                <input type="number" value={editingUser.vcoin_balance || 0} onChange={(e) => setEditingUser({ ...editingUser, vcoin_balance: Number(e.target.value) })} className={fieldClass} placeholder="Số dư VCoin" />
+                <textarea
+                  value={adminUserAdjustmentReason}
+                  onChange={(e) => setAdminUserAdjustmentReason(e.target.value)}
+                  rows={3}
+                  className={`${fieldClass} min-h-[96px] resize-none`}
+                  placeholder="Nội dung giao dịch sửa VCoin"
+                />
+                <input value={editingUser.avatar || ''} onChange={(e) => setEditingUser({ ...editingUser, avatar: e.target.value })} className={fieldClass} placeholder="Avatar URL" />
+                <div className="rounded-2xl bg-amber-50 px-3 py-2 text-[11px] text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+                  Khi số dư VCoin thay đổi, nội dung giao dịch là bắt buộc và sẽ hiện trong lịch sử với tag Admin Transaction.
+                </div>
+                <button onClick={() => void saveUserEdit()} disabled={savingUserEdit} className="flex w-full items-center justify-center gap-2 rounded-[18px] bg-gray-900 px-4 py-3 text-sm font-bold text-white disabled:opacity-60 dark:bg-white dark:text-black">
+                  {savingUserEdit ? <Loader className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  Lưu người dùng
+                </button>
               </div>
             </div>
           </div>

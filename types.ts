@@ -261,7 +261,7 @@ export interface HistoryItem {
     balanceAfter?: number | null;
     amountVnd?: number;
     type: 'topup' | 'usage' | 'reward' | 'giftcode' | 'refund' | 'pending_topup' | 'admin_adjustment';
-    category?: 'image' | 'video' | 'checkin' | 'topup' | 'giftcode' | 'other';
+    category?: 'image' | 'video' | 'checkin' | 'topup' | 'giftcode' | 'admin_transaction' | 'other';
     referenceType?: string | null;
     referenceId?: string | null;
     code?: string;

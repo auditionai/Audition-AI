@@ -768,7 +768,10 @@ export const updateMyProfile = async (profile: UserProfile): Promise<{success: b
     }
 };
 
-export const updateAdminUserProfile = async (profile: UserProfile): Promise<{success: boolean, error?: string}> => {
+export const updateAdminUserProfile = async (
+    profile: UserProfile,
+    options: { adjustmentReason?: string } = {},
+): Promise<{success: boolean, error?: string}> => {
     if (!supabase) return { success: false, error: "No Database" };
     try {
         const { data: currentProfile, error: currentProfileError } = await supabase
@@ -794,16 +797,18 @@ export const updateAdminUserProfile = async (profile: UserProfile): Promise<{suc
         if (error) throw error;
 
         if (Math.abs(balanceDelta) > 0.0001) {
+            const adjustmentReason = options.adjustmentReason?.trim() || `Admin adjustment: ${currentBalance} -> ${nextBalance} VCoin`;
             const { error: balanceError } = await supabase.rpc('apply_balance_transaction', {
                 p_target_user_id: profile.id,
                 p_amount: balanceDelta,
-                p_reason: `Admin adjustment: ${currentBalance} -> ${nextBalance} VCoin`,
+                p_reason: adjustmentReason,
                 p_log_type: 'admin_adjustment',
                 p_reference_type: 'admin_adjustment',
                 p_reference_id: `${profile.id}:${Date.now()}`,
                 p_metadata: {
                     previous_balance: currentBalance,
                     next_balance: nextBalance,
+                    admin_note: adjustmentReason,
                     source: 'admin_user_profile',
                 },
             });

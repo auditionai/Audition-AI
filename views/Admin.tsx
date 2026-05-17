@@ -562,6 +562,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
   // Modal States
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+  const [editingUserOriginalBalance, setEditingUserOriginalBalance] = useState<number | null>(null);
+  const [adminUserAdjustmentReason, setAdminUserAdjustmentReason] = useState('');
   const [viewingUser, setViewingUser] = useState<UserProfile | null>(null);
   const [userHistory, setUserHistory] = useState<HistoryItem[]>([]);
   const [userImages, setUserImages] = useState<GeneratedImage[]>([]);
@@ -1254,6 +1256,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
   const filteredUserHistory = userHistory.filter(isHistoryItemInScope);
 
+  const openEditUser = (user: UserProfile) => {
+      setEditingUser(user);
+      setEditingUserOriginalBalance(Number(user.vcoin_balance || 0));
+      setAdminUserAdjustmentReason('');
+  };
+
   const userLedgerSections = [
       {
           id: 'image',
@@ -1291,13 +1299,20 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           items: filteredUserHistory.filter((item) => item.category === 'giftcode' || item.type === 'giftcode'),
       },
       {
+          id: 'admin_transaction',
+          title: 'Giao dịch sửa VCoin',
+          description: 'Admin chỉnh số dư trực tiếp cho tài khoản',
+          icon: Icons.Settings,
+          items: filteredUserHistory.filter((item) => item.category === 'admin_transaction' || item.type === 'admin_adjustment'),
+      },
+      {
           id: 'other',
           title: 'Điều chỉnh và giao dịch khác',
-          description: 'Admin adjustment, reward khác và các log hệ thống còn lại',
+          description: 'Reward khác và các log hệ thống còn lại',
           icon: Icons.Activity,
           items: filteredUserHistory.filter((item) => {
               const category = item.category || 'other';
-              return !['image', 'video', 'checkin', 'topup', 'giftcode'].includes(category);
+              return item.type !== 'admin_adjustment' && !['image', 'video', 'checkin', 'topup', 'giftcode', 'admin_transaction'].includes(category);
           }),
       },
   ];
@@ -1541,10 +1556,21 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
   const handleSaveUser = async () => {
       if (editingUser) {
-          const result = await updateAdminUserProfile(editingUser);
+          const nextBalance = Number(editingUser.vcoin_balance || 0);
+          const balanceChanged = editingUserOriginalBalance !== null && Math.abs(nextBalance - editingUserOriginalBalance) > 0.0001;
+          const adjustmentReason = adminUserAdjustmentReason.trim();
+
+          if (balanceChanged && !adjustmentReason) {
+              showToast('Vui lòng nhập nội dung giao dịch sửa VCoin.', 'error');
+              return;
+          }
+
+          const result = await updateAdminUserProfile(editingUser, { adjustmentReason });
           
           if (result.success) {
               setEditingUser(null);
+              setEditingUserOriginalBalance(null);
+              setAdminUserAdjustmentReason('');
               await refreshData();
               showToast('Cập nhật người dùng thành công!');
           } else {
@@ -2283,7 +2309,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               </td>
                                               <td className="px-6 py-4 text-right flex justify-end gap-2">
                                                   <button onClick={() => handleViewUser(u)} className="text-xs font-bold text-audi-pink hover:text-white bg-audi-pink/10 hover:bg-audi-pink/30 px-3 py-1.5 rounded transition-colors">Chi tiết</button>
-                                                  <button onClick={() => setEditingUser(u)} className="text-xs font-bold text-audi-cyan hover:text-white bg-audi-cyan/10 hover:bg-audi-cyan/30 px-3 py-1.5 rounded transition-colors">Sửa</button>
+                                                  <button onClick={() => openEditUser(u)} className="text-xs font-bold text-audi-cyan hover:text-white bg-audi-cyan/10 hover:bg-audi-cyan/30 px-3 py-1.5 rounded transition-colors">Sửa</button>
                                               </td>
                                           </tr>
                                       );
@@ -2334,7 +2360,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
                                       <div className="flex gap-2 border-t border-white/5 pt-3">
                                           <button onClick={() => handleViewUser(u)} className="flex-1 py-2 bg-audi-pink/10 text-audi-pink rounded-lg font-bold text-xs border border-audi-pink/30">Chi tiết</button>
-                                          <button onClick={() => setEditingUser(u)} className="flex-1 py-2 bg-audi-cyan/10 text-audi-cyan rounded-lg font-bold text-xs border border-audi-cyan/30">Sửa</button>
+                                          <button onClick={() => openEditUser(u)} className="flex-1 py-2 bg-audi-cyan/10 text-audi-cyan rounded-lg font-bold text-xs border border-audi-cyan/30">Sửa</button>
                                       </div>
                                   </div>
                               );
@@ -4151,6 +4177,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                                                       <span className={`inline-flex px-2 py-0.5 rounded border text-[10px] font-bold ${getHistoryStatusClass(item)}`}>
                                                                                           {getHistoryStatusLabel(item)}
                                                                                       </span>
+                                                                                      {(item.category === 'admin_transaction' || item.type === 'admin_adjustment') && (
+                                                                                          <span className="inline-flex px-2 py-0.5 rounded border text-[10px] font-bold bg-violet-500/10 text-violet-300 border-violet-500/20">
+                                                                                              Admin Transaction
+                                                                                          </span>
+                                                                                      )}
                                                                                       {generatedAsset && (
                                                                                           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-bold ${
                                                                                               assetKind === 'video'
@@ -4226,11 +4257,22 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           <input type="number" value={editingUser.vcoin_balance || 0} onChange={e => setEditingUser({...editingUser, vcoin_balance: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-yellow font-bold focus:border-audi-pink outline-none" />
                       </div>
                       <div>
+                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Nội dung giao dịch sửa VCoin</label>
+                          <textarea
+                              value={adminUserAdjustmentReason}
+                              onChange={(e) => setAdminUserAdjustmentReason(e.target.value)}
+                              rows={3}
+                              placeholder="VD: Bù lỗi nạp tiền, cộng thưởng hỗ trợ khách hàng..."
+                              className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white text-sm focus:border-audi-pink outline-none resize-none"
+                          />
+                          <div className="mt-1 text-[11px] text-slate-500">Bắt buộc khi thay đổi số dư VCoin. Nội dung này sẽ hiển thị trong lịch sử giao dịch.</div>
+                      </div>
+                      <div>
                           <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Ảnh đại diện URL</label>
                           <input value={editingUser.avatar || ''} onChange={e => setEditingUser({...editingUser, avatar: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-slate-300 text-xs font-mono focus:border-audi-pink outline-none" />
                       </div>
                   </div>
-                  <div className="flex gap-3"><button onClick={() => setEditingUser(null)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold">Hủy</button><button onClick={handleSaveUser} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold">Lưu</button></div>
+                  <div className="flex gap-3"><button onClick={() => { setEditingUser(null); setEditingUserOriginalBalance(null); setAdminUserAdjustmentReason(''); }} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold">Hủy</button><button onClick={handleSaveUser} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold">Lưu</button></div>
               </div>
           </div>
           </AdminModalPortal>

@@ -567,7 +567,6 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [userImages, setUserImages] = useState<GeneratedImage[]>([]);
   const [totalImagesCreated, setTotalImagesCreated] = useState(0);
   const [loadingUserDetails, setLoadingUserDetails] = useState(false);
-  const [imagesLimit, setImagesLimit] = useState(20);
   const [userLedgerDateScope, setUserLedgerDateScope] = useState<'all' | 'today' | '7d' | '30d'>('all');
   const [userLedgerSectionLimits, setUserLedgerSectionLimits] = useState<Record<string, number>>({});
   const [editingPackage, setEditingPackage] = useState<CreditPackage | null>(null);
@@ -1188,7 +1187,6 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const handleViewUser = async (user: UserProfile) => {
       setViewingUser(user);
       setLoadingUserDetails(true);
-      setImagesLimit(20);
       setUserLedgerDateScope('all');
       setUserLedgerSectionLimits({});
       setUserHistory([]);
@@ -1303,6 +1301,21 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           }),
       },
   ];
+
+  const userImageById = useMemo(() => {
+      const lookup = new Map<string, GeneratedImage>();
+      userImages.forEach((image) => {
+          if (image.id) lookup.set(image.id, image);
+      });
+      return lookup;
+  }, [userImages]);
+
+  const getHistoryGeneratedAsset = (item: HistoryItem) => {
+      const directId = String(item.referenceId || '').trim();
+      if (directId && userImageById.has(directId)) return userImageById.get(directId) || null;
+      const fallbackId = String(item.id || '').replace(/^asset-charge-/, '');
+      return fallbackId && userImageById.has(fallbackId) ? userImageById.get(fallbackId) || null : null;
+  };
 
   const getUserLedgerSectionLimit = (sectionId: string) => userLedgerSectionLimits[sectionId] || 10;
 
@@ -4105,7 +4118,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                       <div className="px-4 py-6 text-sm text-slate-500 italic">Không có dữ liệu.</div>
                                                   ) : (
                                                       <div className="divide-y divide-white/5">
-                                                          {visibleItems.map((item) => (
+                                                          {visibleItems.map((item) => {
+                                                              const generatedAsset = getHistoryGeneratedAsset(item);
+                                                              const assetKind = generatedAsset ? getAssetKind(generatedAsset) : null;
+                                                              return (
                                                               <div key={item.id} className="p-4 hover:bg-white/[0.03] transition-colors">
                                                                   <div className="grid grid-cols-1 xl:grid-cols-[160px_1fr_120px_120px] gap-3 xl:items-center">
                                                                       <div>
@@ -4113,17 +4129,46 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                                           <div className="mt-1 text-xs font-mono text-slate-300">{new Date(item.createdAt).toLocaleString('vi-VN')}</div>
                                                                       </div>
                                                                       <div className="min-w-0">
-                                                                          <div className="flex flex-wrap items-center gap-2">
-                                                                              <div className="font-bold text-white break-words">{item.description}</div>
-                                                                              <span className={`inline-flex px-2 py-0.5 rounded border text-[10px] font-bold ${getHistoryStatusClass(item)}`}>
-                                                                                  {getHistoryStatusLabel(item)}
-                                                                              </span>
-                                                                          </div>
-                                                                          <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-1 text-[11px] text-slate-500">
-                                                                              <div className="break-all">ID: <span className="font-mono text-slate-300">{item.referenceId || item.id}</span></div>
-                                                                              <div className="break-all">Mã: <span className="font-mono text-slate-300">{item.code || item.referenceType || '-'}</span></div>
-                                                                              {item.toolName && <div className="break-all">Công cụ: <span className="text-slate-300">{item.toolName}</span></div>}
-                                                                              {item.jobStatus && <div>Job: <span className="text-slate-300 uppercase">{item.jobStatus}</span></div>}
+                                                                          <div className="flex flex-col sm:flex-row gap-3">
+                                                                              {generatedAsset?.url && (
+                                                                                  <a
+                                                                                      href={generatedAsset.url}
+                                                                                      target="_blank"
+                                                                                      rel="noreferrer"
+                                                                                      className="block w-full sm:w-24 h-32 sm:h-24 rounded-lg overflow-hidden border border-white/10 bg-black/40 shrink-0"
+                                                                                      title="Mở tài sản đã tạo từ job này"
+                                                                                  >
+                                                                                      {assetKind === 'video' ? (
+                                                                                          <video src={generatedAsset.url} className="w-full h-full object-cover" muted playsInline />
+                                                                                      ) : (
+                                                                                          <img src={generatedAsset.url} className="w-full h-full object-cover" alt={generatedAsset.toolName || item.description} />
+                                                                                      )}
+                                                                                  </a>
+                                                                              )}
+                                                                              <div className="min-w-0 flex-1">
+                                                                                  <div className="flex flex-wrap items-center gap-2">
+                                                                                      <div className="font-bold text-white break-words">{item.description}</div>
+                                                                                      <span className={`inline-flex px-2 py-0.5 rounded border text-[10px] font-bold ${getHistoryStatusClass(item)}`}>
+                                                                                          {getHistoryStatusLabel(item)}
+                                                                                      </span>
+                                                                                      {generatedAsset && (
+                                                                                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-bold ${
+                                                                                              assetKind === 'video'
+                                                                                                  ? 'bg-yellow-500/10 text-yellow-300 border-yellow-500/20'
+                                                                                                  : 'bg-blue-500/10 text-blue-300 border-blue-500/20'
+                                                                                          }`}>
+                                                                                              {assetKind === 'video' ? <Icons.Video className="w-3 h-3" /> : <Icons.Image className="w-3 h-3" />}
+                                                                                              {assetKind === 'video' ? 'VIDEO' : 'ẢNH'}
+                                                                                          </span>
+                                                                                      )}
+                                                                                  </div>
+                                                                                  <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-1 text-[11px] text-slate-500">
+                                                                                      <div className="break-all">ID: <span className="font-mono text-slate-300">{item.referenceId || item.id}</span></div>
+                                                                                      <div className="break-all">Mã: <span className="font-mono text-slate-300">{item.code || item.referenceType || '-'}</span></div>
+                                                                                      {item.toolName && <div className="break-all">Công cụ: <span className="text-slate-300">{item.toolName}</span></div>}
+                                                                                      {item.jobStatus && <div>Job: <span className="text-slate-300 uppercase">{item.jobStatus}</span></div>}
+                                                                                  </div>
+                                                                              </div>
                                                                           </div>
                                                                       </div>
                                                                       <div>
@@ -4138,7 +4183,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                                       </div>
                                                                   </div>
                                                               </div>
-                                                          ))}
+                                                              );
+                                                          })}
                                                           {section.items.length > sectionLimit && (
                                                               <div className="px-4 py-3 text-center bg-black/20">
                                                                   <button
@@ -4158,61 +4204,6 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                               )}
                           </div>
 
-                          {/* Lịch sử tài sản đã tạo */}
-                          <div>
-                              <h4 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                                  <Icons.Image className="w-5 h-5 text-audi-pink" />
-                                  Tài sản đã tạo ({userImages.length} tổng cộng)
-                              </h4>
-                              {userImages.length === 0 ? (
-                                  <div className="text-center py-8 text-slate-500 italic bg-black/30 rounded-xl border border-white/5">
-                                      Chưa có ảnh hoặc video nào được tạo.
-                                  </div>
-                              ) : (
-                                  <>
-                                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                          {userImages.slice(0, imagesLimit).map(img => (
-                                              <div key={img.id} className="bg-black/30 rounded-xl border border-white/5 overflow-hidden group">
-                                                  <div className="aspect-square relative">
-                                                      {getAssetKind(img) === 'video' ? (
-                                                          <video src={img.url} className="w-full h-full object-cover" muted playsInline />
-                                                      ) : (
-                                                          <img src={img.url} className="w-full h-full object-cover" />
-                                                      )}
-                                                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center p-2">
-                                                          <p className="text-[10px] text-white text-center line-clamp-4">{img.prompt}</p>
-                                                      </div>
-                                                  </div>
-                                                  <div className="p-2">
-                                                      <div className="text-[10px] text-slate-400 font-mono truncate">{new Date(img.timestamp).toLocaleDateString()}</div>
-                                                      <div className="text-xs font-bold text-audi-cyan truncate">{img.toolName}</div>
-                                                      <div className="mt-1">
-                                                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${
-                                                              getAssetKind(img) === 'video'
-                                                                  ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'
-                                                                  : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                                                          }`}>
-                                                              {getAssetKind(img) === 'video' ? <Icons.Video className="w-3 h-3" /> : <Icons.Image className="w-3 h-3" />}
-                                                              {getAssetKind(img) === 'video' ? 'VIDEO' : 'IMAGE'}
-                                                          </span>
-                                                      </div>
-                                                  </div>
-                                              </div>
-                                          ))}
-                                      </div>
-                                      {userImages.length > imagesLimit && (
-                                          <div className="mt-4 text-center">
-                                              <button 
-                                                  onClick={() => setImagesLimit(prev => prev + 20)}
-                                                  className="text-sm font-bold text-audi-pink hover:text-white transition-colors py-2 px-6 rounded-xl border border-audi-pink/30 hover:bg-audi-pink/20"
-                                              >
-                                                  Xem thêm ({userImages.length - imagesLimit} tài sản)
-                                              </button>
-                                          </div>
-                                      )}
-                                  </>
-                              )}
-                          </div>
                       </div>
                   )}
               </div>

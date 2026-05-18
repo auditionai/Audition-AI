@@ -3,6 +3,8 @@ export type VideoScriptDirectorOptions = {
   theme?: string;
   soundMood?: string;
   voiceDialogue?: boolean;
+  trendEdit?: boolean;
+  textOverlay?: boolean;
   targetModel?: string;
 };
 

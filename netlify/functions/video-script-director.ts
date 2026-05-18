@@ -88,10 +88,15 @@ const buildDirectorInstruction = (
   const soundMood = normalizeOption(scriptOptions.soundMood, 'match the visual context');
   const targetModel = normalizeOption(scriptOptions.targetModel, 'selected video model');
   const voiceDialogue = Boolean(scriptOptions.voiceDialogue);
+  const trendEdit = Boolean(scriptOptions.trendEdit);
+  const textOverlay = Boolean(scriptOptions.textOverlay);
+  const shotCountRule = trendEdit
+    ? '- For 5s video: create exactly 5 compact shots. For 8-10s: create 6-8 shots. For 15s or longer: create 8-12 shots.'
+    : '- Use a natural number of shots for the image and idea: 2-4 shots for 5s, 3-5 shots for 8-10s, 4-7 shots for 15s or longer. Do not over-cut simple scenes.';
 
   return [
-    'You are a cinematic AI video director for an image-to-video generation pipeline.',
-    'Analyze the uploaded reference image and write a precise video prompt/script for the selected duration.',
+    'You are a professional AI video director for an image-to-video generation pipeline.',
+    'Analyze the uploaded reference image first, then write a precise video prompt/script for the selected duration.',
     'Output language rule: the final script MUST be written entirely in Vietnamese.',
     'Do not answer in English. Do not mix English sentences into the script, except unavoidable proper names, model names, or brand labels visible in the image.',
     `The target video duration is ${durationSeconds} seconds. Structure the motion timing to fit this duration.`,
@@ -99,29 +104,32 @@ const buildDirectorInstruction = (
     `Requested style: ${style}.`,
     `Requested theme: ${theme}.`,
     `Requested sound/music mood: ${soundMood}.`,
+    `Trend edit mode: ${trendEdit ? 'ON - use modern Douyin/TikTok/CapCut pacing when it fits the image.' : 'OFF - avoid Douyin/TikTok/CapCut formula unless the user explicitly asked for it.'}`,
+    `Text overlay mode: ${textOverlay ? 'ON - include short text overlay instructions only where useful.' : 'OFF - do not include any text overlay, title card, caption, subtitles, or visible typography in the video script.'}`,
     voiceDialogue
       ? 'Dialogue/voice rule: include short natural Vietnamese voice-over or spoken lines only when it fits the scene. The voice must be standard Vietnamese.'
       : 'Dialogue/voice rule: do NOT include spoken dialogue, voice-over, or narrated speech. Use only visual action, ambience, music, and sound effects.',
     userPrompt.trim() ? `User idea to incorporate: ${userPrompt.trim()}` : '',
     '',
     'Reference image analysis requirements:',
-    '- Identify visible character count, apparent gender presentation if visible, scene context, outfit, face details, accessories, color palette, and mood.',
-    '- Build the script around those observed details. Do not replace the subject with a different person or a real human actor.',
+    '- Identify visible character count, subject type, framing, camera angle, pose, expression, outfit, accessories, background, color palette, lighting, and mood.',
+    '- Build the script around those observed details and the actual composition of the image. If it is a close portrait, prefer facial micro-motion and subtle camera movement. If it is full-body, use body movement that fits the pose. If the background is important, use depth and environment motion.',
+    '- Do not replace the subject with a different person or a real human actor.',
     '',
-    'Mandatory cinematic trend-editing language for every style/theme:',
-    '- The video must feel cinematic, trendy, high-retention, youth-oriented, and suitable for Douyin / TikTok / CapCut style edits.',
-    '- The video MUST have at least 5 distinct shots/scenes and at least 5 different camera angles, even when the duration is short.',
-    '- Use fast continuous transitions: whip pan, match cut, flash cut, zoom transition, speed ramp, motion blur, light leak, beat-synced cut, camera shake, or glow burst where appropriate.',
-    '- Include slow-motion highlight moments, close-up detail shots, medium shots, wide/environment shots, low-angle or high-angle shots, and dynamic push-in/pull-out movement.',
-    '- Add Vietnamese text overlay instructions: short trendy captions, lyric-style text, title card, or punchy Gen Z phrases. Text must not cover the face.',
-    '- Describe remix/music direction: beat drop, bass hit, riser, whoosh, sparkle SFX, camera shutter, ambient SFX, or scene-matched sound design.',
+    trendEdit
+      ? 'Trend-edit direction: use high-retention cinematic pacing, multiple camera angles, beat-synced cuts, whip pan, match cut, flash cut, speed ramp, motion blur, light leak, glow burst, slow-motion highlights, and modern Douyin/TikTok/CapCut language where appropriate.'
+      : 'Natural direction: use restrained cinematic pacing, believable camera movement, smooth transitions, and scene-matched motion. Avoid repetitive trend-template wording, avoid forcing many angles, and keep the script calm if the uploaded image is calm.',
     '- Keep the character identity locked across every shot. Camera and scene can change, but face, outfit, colors, accessories, and body proportions must remain consistent.',
-    '- For 5s video: create exactly 5 compact shots of about 1 second each. For 10s: create 6-8 shots. For 15s or longer: create 8-12 shots.',
+    shotCountRule,
+    textOverlay
+      ? '- Include text overlay only as optional visual graphics. Keep it short, place it away from the face, and prefer no-diacritic text if the user text may cause font issues.'
+      : '- Do not mention text overlay anywhere in the final script.',
     '',
     'Required final script format:',
     '- Start with one concise overall direction sentence.',
     '- Then write a numbered shot list by time range, for example: Canh 1 (0.0s-1.0s): ...',
-    '- Each shot must include camera angle, motion, subject action, transition, text overlay, and sound/music cue.',
+    '- Each shot must include camera angle, camera/subject motion, subject action, transition, and sound/music cue.',
+    textOverlay ? '- If text overlay mode is ON, a shot may include a Text overlay field when useful.' : '',
     '- End with a short negative instruction line preventing face/body/outfit deformation and unwanted extra limbs.',
     '',
     'Hard constraints that must be included in the final script:',
@@ -149,37 +157,57 @@ const buildFallbackVideoScript = (
   const soundMood = normalizeOption(scriptOptions.soundMood, 'phù hợp bối cảnh');
   const targetModel = normalizeOption(scriptOptions.targetModel, 'model video đang chọn');
   const voiceDialogue = Boolean(scriptOptions.voiceDialogue);
-  const shotCount = durationSeconds <= 5 ? 5 : durationSeconds <= 10 ? 7 : 9;
+  const trendEdit = Boolean(scriptOptions.trendEdit);
+  const textOverlay = Boolean(scriptOptions.textOverlay);
+  const shotCount = trendEdit
+    ? (durationSeconds <= 5 ? 5 : durationSeconds <= 10 ? 7 : 9)
+    : (durationSeconds <= 5 ? 3 : durationSeconds <= 10 ? 4 : 6);
   const shotLength = Math.max(0.7, durationSeconds / shotCount);
+  const cameras = trendEdit
+    ? [
+        'cận cảnh khuôn mặt, dolly-in nhẹ',
+        'góc trung cảnh ngang hông, whip pan theo nhịp',
+        'góc thấp điện ảnh, slow-motion highlight',
+        'góc rộng bối cảnh, speed ramp chuyển cảnh',
+        'cận chi tiết outfit/phụ kiện, flash cut theo beat',
+      ]
+    : [
+        'cận cảnh tự nhiên, giữ đúng bố cục ảnh gốc',
+        'trung cảnh ổn định để nhân vật chuyển động nhẹ',
+        'góc nghiêng nhẹ tạo chiều sâu cho nền ảnh',
+        'góc rộng vừa đủ để mở rộng không gian trong ảnh',
+        'cận chi tiết trang phục/phụ kiện nếu ảnh thể hiện rõ',
+      ];
+  const transitions = trendEdit
+    ? ['flash cut + light leak', 'match cut + motion blur', 'speed ramp ngắn', 'whip pan theo beat']
+    : ['cắt mềm', 'dissolve nhẹ', 'match cut tự nhiên', 'camera drift liền mạch'];
+  const actions = trendEdit
+    ? [
+        'nhân vật giữ thần thái tự tin, mắt và biểu cảm bám sát ảnh tham chiếu',
+        'tay/chân chuyển động nhỏ theo pose gốc, không thêm chi thừa',
+        'ánh sáng và nền chuyển động nhẹ tạo cảm giác premium',
+        'camera bắt chất liệu trang phục và màu sắc đúng ảnh gốc',
+      ]
+    : [
+        'nhân vật giữ biểu cảm và thần thái của ảnh tham chiếu, chỉ thêm chuyển động nhỏ tự nhiên',
+        'camera tạo chiều sâu bằng ánh sáng và nền chuyển động rất nhẹ',
+        'outfit, màu sắc, phụ kiện và tỉ lệ cơ thể được giữ nguyên',
+        'hành động bám theo ý tưởng người dùng và không biến nhân vật thành người khác',
+      ];
 
   const shots = Array.from({ length: shotCount }, (_, index) => {
     const start = (index * shotLength).toFixed(1);
     const end = Math.min(durationSeconds, (index + 1) * shotLength).toFixed(1);
-    const camera =
-      index % 5 === 0 ? 'cận cảnh khuôn mặt, dolly-in nhẹ' :
-      index % 5 === 1 ? 'góc trung cảnh ngang hông, whip pan theo nhịp' :
-      index % 5 === 2 ? 'góc thấp điện ảnh, slow-motion highlight' :
-      index % 5 === 3 ? 'góc rộng bối cảnh, speed ramp chuyển cảnh' :
-      'cận chi tiết outfit/phụ kiện, flash cut theo beat';
-    const action =
-      index % 5 === 0 ? 'nhân vật giữ thần thái tự tin, mắt và biểu cảm giữ đúng ảnh tham chiếu' :
-      index % 5 === 1 ? 'nhân vật đổi dáng tự nhiên, tay/chân chuyển động nhỏ, không thêm chi thừa' :
-      index % 5 === 2 ? 'tóc, ánh sáng và nền chuyển động nhẹ tạo cảm giác premium trend video' :
-      index % 5 === 3 ? 'bối cảnh có chiều sâu, hạt sáng và motion blur tạo nhịp Douyin/TikTok' :
-      'camera bắt chi tiết trang phục, màu sắc và chất liệu giữ nguyên thiết kế gốc';
-    const textOverlay =
-      index === 0 ? 'Text overlay: "AUDITION MOMENT"' :
-      index === shotCount - 1 ? 'Text overlay: "STAY ICONIC"' :
-      `Text overlay ngắn tiếng Việt theo chủ đề ${theme}, không che mặt`;
-    return `Cảnh ${index + 1} (${start}s-${end}s): ${camera}. ${action}. Chuyển cảnh bằng ${
-      index % 2 === 0 ? 'flash cut + light leak' : 'match cut + motion blur'
-    }. ${textOverlay}. Âm thanh: ${soundMood}, có whoosh/SFX theo nhịp.`;
+    const textLine = textOverlay
+      ? ` Text overlay: chữ ngắn theo chủ đề ${theme}, ưu tiên không dấu nếu lo lỗi font, đặt ở vùng trống và không che mặt.`
+      : '';
+    return `Cảnh ${index + 1} (${start}s-${end}s): ${cameras[index % cameras.length]}. ${actions[index % actions.length]}. Chuyển cảnh bằng ${transitions[index % transitions.length]}.${textLine} Âm thanh: ${soundMood}${trendEdit ? ', có whoosh/SFX theo nhịp' : ', âm nền và SFX vừa đủ theo bối cảnh'}.`;
   });
 
   return [
-    `Video ${durationSeconds}s phong cách ${style}, tối ưu cho ${targetModel}, dựng theo ngôn ngữ Douyin/TikTok/CapCut hiện đại, nhiều góc máy và chuyển cảnh nhanh.`,
+    `Video ${durationSeconds}s phong cách ${style}, tối ưu cho ${targetModel}, bám sát ảnh tham chiếu và ý tưởng người dùng.`,
     userPrompt.trim() ? `Ý tưởng người dùng cần giữ: ${userPrompt.trim()}` : '',
-    `Chủ đề: ${theme}. Âm thanh: ${soundMood}.`,
+    `Chủ đề: ${theme}. Âm thanh: ${soundMood}. Chế độ trend edit: ${trendEdit ? 'bật' : 'tắt'}.`,
     voiceDialogue
       ? 'Có lời thoại/voice tiếng Việt ngắn, tự nhiên, phù hợp bối cảnh; không lấn át nhạc.'
       : 'Không có lời thoại hoặc voice-over; chỉ dùng hành động hình ảnh, nhạc nền và hiệu ứng âm thanh.',
@@ -238,8 +266,8 @@ export const handler: Handler = async (event) => {
                 body: JSON.stringify({
                   contents: [{ role: 'user', parts: [imagePart, promptPart] }],
                   generationConfig: {
-                    temperature: 0.35,
-                    topP: 0.75,
+                    temperature: 0.7,
+                    topP: 0.9,
                     maxOutputTokens: 2600,
                   },
                 }),

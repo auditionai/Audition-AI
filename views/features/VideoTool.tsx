@@ -210,6 +210,8 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
   const [scriptTheme, setScriptTheme] = useState('Tự động theo ảnh');
   const [scriptSoundMood, setScriptSoundMood] = useState('Phù hợp bối cảnh');
   const [scriptVoiceDialogue, setScriptVoiceDialogue] = useState(false);
+  const [scriptTrendEdit, setScriptTrendEdit] = useState(false);
+  const [scriptTextOverlay, setScriptTextOverlay] = useState(false);
   const [scriptTargetModel, setScriptTargetModel] = useState('');
 
   const pricingOverrides: AuditionPricingOverride[] = auditionPricing.map((row) => ({
@@ -625,6 +627,8 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
           theme: scriptTheme,
           soundMood: scriptSoundMood,
           voiceDialogue: scriptVoiceDialogue,
+          trendEdit: scriptTrendEdit,
+          textOverlay: scriptTextOverlay,
           targetModel: scriptTargetModel || videoModel,
         },
       });
@@ -1063,10 +1067,126 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                   <textarea 
                       value={activeMode === 'video_ai' ? prompt : motionPrompt}
                       onChange={(e) => activeMode === 'video_ai' ? setPrompt(e.target.value) : setMotionPrompt(e.target.value)}
-                      placeholder={activeMode === 'video_ai' ? (lang === 'vi' ? "Mô tả chi tiết video bạn muốn tạo..." : "Describe the video you want to generate...") : (lang === 'vi' ? "Mô tả bối cảnh phía sau nhân vật (Tùy chọn)..." : "Describe the background behind the character (Optional)...")}
+                      placeholder={activeMode === 'video_ai' ? (lang === 'vi' ? "Nhập kịch bản ngắn hoặc ý tưởng chính. Ví dụ: nhân vật bước ra từ khung ảnh, nhìn camera và tạo dáng tự tin..." : "Enter a short script or core idea. Example: the character steps forward, looks at camera, and poses confidently...") : (lang === 'vi' ? "Mô tả bối cảnh phía sau nhân vật (Tùy chọn)..." : "Describe the background behind the character (Optional)...")}
                       className="flex-1 bg-black/20 border border-white/5 rounded-xl p-3 text-sm text-white focus:border-audi-purple outline-none resize-none min-h-[100px]"
                   />
               </div>
+
+              {activeMode === 'video_ai' && (
+                <div className="mt-4 rounded-2xl border border-audi-cyan/20 bg-audi-cyan/5 p-3 space-y-3">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div>
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-audi-cyan flex items-center gap-1">
+                        <Icons.Sparkles className="w-3 h-3" />
+                        Đạo diễn kịch bản AI
+                      </div>
+                      <p className="mt-1 text-[10px] leading-relaxed text-slate-400">
+                        Viết ý tưởng ngắn trong prompt, tải ảnh mẫu rồi bấm tạo. AI sẽ nhìn ảnh để chọn bố cục, chuyển động và nhịp dựng phù hợp.
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleGenerateVideoScript}
+                      disabled={isGeneratingScript || !keyframeImage}
+                      className="shrink-0 rounded-lg border border-audi-cyan/40 bg-audi-cyan px-3 py-2 text-[10px] font-bold text-black disabled:border-white/10 disabled:bg-white/10 disabled:text-slate-500"
+                    >
+                      {isGeneratingScript ? 'Đang viết...' : 'Tạo kịch bản chi tiết'}
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <OptionDropdown
+                      label="Phong cách"
+                      value={scriptStyle}
+                      options={[
+                        { label: 'Cinematic điện ảnh', value: 'Cinematic điện ảnh' },
+                        { label: 'Đời thường tự nhiên', value: 'Đời thường tự nhiên' },
+                        { label: 'Thời trang', value: 'Thời trang' },
+                        { label: 'Hành động', value: 'Hành động' },
+                        { label: 'Lãng mạn', value: 'Lãng mạn' },
+                      ]}
+                      onChange={setScriptStyle}
+                      icon={Icons.Image}
+                    />
+                    <OptionDropdown
+                      label="Chủ đề"
+                      value={scriptTheme}
+                      options={[
+                        { label: 'Tự động theo ảnh', value: 'Tự động theo ảnh' },
+                        { label: 'Đời thường', value: 'Đời thường' },
+                        { label: 'Sân khấu', value: 'Sân khấu' },
+                        { label: 'Đường phố', value: 'Đường phố' },
+                      ]}
+                      onChange={setScriptTheme}
+                      icon={Icons.MessageCircle}
+                    />
+                    <OptionDropdown
+                      label="Âm thanh"
+                      value={scriptSoundMood}
+                      options={[
+                        { label: 'Phù hợp bối cảnh', value: 'Phù hợp bối cảnh' },
+                        { label: 'Lãng mạn vui vẻ', value: 'Lãng mạn vui vẻ' },
+                        { label: 'Sôi động hành động', value: 'Sôi động hành động' },
+                        { label: 'Sầu bi buồn bã', value: 'Sầu bi buồn bã' },
+                        { label: 'Vui tươi hài hước', value: 'Vui tươi hài hước' },
+                      ]}
+                      onChange={setScriptSoundMood}
+                      icon={Icons.Volume2}
+                    />
+                    <OptionDropdown
+                      label="Model kịch bản"
+                      value={scriptTargetModel || videoModel}
+                      options={(videoModelOptions.length > 0 ? videoModelOptions : [{ id: videoModel, name: videoModel || 'Model hiện tại', price: 0 }]).map((model) => ({
+                        label: model.name,
+                        value: model.id,
+                      }))}
+                      onChange={setScriptTargetModel}
+                      icon={Icons.Video}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                    {[
+                      {
+                        label: 'Trend Douyin/TikTok',
+                        description: scriptTrendEdit ? 'Dựng nhanh, nhiều góc máy, chuyển cảnh theo beat.' : 'Tắt trend, kịch bản tự nhiên và ít dập khuôn hơn.',
+                        active: scriptTrendEdit,
+                        onClick: () => setScriptTrendEdit((value) => !value),
+                      },
+                      {
+                        label: 'Text trong video',
+                        description: scriptTextOverlay ? 'Có chỉ dẫn text overlay, tránh che mặt.' : 'Không thêm text overlay để tránh lỗi font.',
+                        active: scriptTextOverlay,
+                        onClick: () => setScriptTextOverlay((value) => !value),
+                      },
+                      {
+                        label: 'Lời thoại giọng nói',
+                        description: scriptVoiceDialogue ? 'Có thoại tiếng Việt ngắn khi hợp cảnh.' : 'Không thoại, chỉ hình ảnh và âm thanh.',
+                        active: scriptVoiceDialogue,
+                        onClick: () => setScriptVoiceDialogue((value) => !value),
+                      },
+                    ].map((item) => (
+                      <button
+                        key={item.label}
+                        type="button"
+                        onClick={item.onClick}
+                        className={`rounded-xl border px-3 py-2 text-left transition-all ${
+                          item.active
+                            ? 'border-audi-purple bg-audi-purple/20 text-white'
+                            : 'border-white/10 bg-black/20 text-slate-300 hover:border-white/20'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] font-bold uppercase">{item.label}</span>
+                          <span className={`h-4 w-7 rounded-full p-0.5 transition-colors ${item.active ? 'bg-audi-cyan' : 'bg-white/10'}`}>
+                            <span className={`block h-3 w-3 rounded-full bg-white transition-transform ${item.active ? 'translate-x-3' : ''}`} />
+                          </span>
+                        </div>
+                        <div className="mt-1 text-[10px] leading-snug text-slate-500">{item.description}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
           </div>
         </div>
 
@@ -1186,94 +1306,6 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                 )}
               </div>
 
-              {activeMode === 'video_ai' && (
-                <div className="rounded-2xl border border-audi-cyan/20 bg-audi-cyan/5 p-3 space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-[10px] font-bold uppercase tracking-wider text-audi-cyan flex items-center gap-1">
-                        <Icons.Sparkles className="w-3 h-3" />
-                        Đạo diễn kịch bản AI
-                      </div>
-                      <p className="mt-1 text-[10px] leading-relaxed text-slate-400">
-                        Tải ảnh mẫu, chọn nhu cầu bên dưới rồi bấm tạo. Kịch bản sẽ được ghi vào ô prompt; hãy đọc và chỉnh lại trước khi tạo video.
-                      </p>
-                    </div>
-                    <button
-                      onClick={handleGenerateVideoScript}
-                      disabled={isGeneratingScript || !keyframeImage}
-                      className="shrink-0 rounded-lg border border-audi-cyan/40 bg-audi-cyan px-2.5 py-2 text-[10px] font-bold text-black disabled:border-white/10 disabled:bg-white/10 disabled:text-slate-500"
-                    >
-                      {isGeneratingScript ? 'Đang viết...' : 'Tạo kịch bản'}
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <OptionDropdown
-                      label="Phong cách"
-                      value={scriptStyle}
-                      options={[
-                        { label: 'Cinematic điện ảnh', value: 'Cinematic điện ảnh' },
-                        { label: 'Thời trang', value: 'Thời trang' },
-                        { label: 'Hành động', value: 'Hành động' },
-                        { label: 'Lãng mạn', value: 'Lãng mạn' },
-                      ]}
-                      onChange={setScriptStyle}
-                      icon={Icons.Image}
-                    />
-                    <OptionDropdown
-                      label="Chủ đề"
-                      value={scriptTheme}
-                      options={[
-                        { label: 'Tự động theo ảnh', value: 'Tự động theo ảnh' },
-                        { label: 'Đời thường', value: 'Đời thường' },
-                        { label: 'Sân khấu', value: 'Sân khấu' },
-                        { label: 'Đường phố', value: 'Đường phố' },
-                      ]}
-                      onChange={setScriptTheme}
-                      icon={Icons.MessageCircle}
-                    />
-                    <OptionDropdown
-                      label="Âm thanh"
-                      value={scriptSoundMood}
-                      options={[
-                        { label: 'Phù hợp bối cảnh', value: 'Phù hợp bối cảnh' },
-                        { label: 'Lãng mạn vui vẻ', value: 'Lãng mạn vui vẻ' },
-                        { label: 'Sôi động hành động', value: 'Sôi động hành động' },
-                        { label: 'Sầu bi buồn bã', value: 'Sầu bi buồn bã' },
-                        { label: 'Vui tươi hài hước', value: 'Vui tươi hài hước' },
-                      ]}
-                      onChange={setScriptSoundMood}
-                      icon={Icons.Volume2}
-                    />
-                    <OptionDropdown
-                      label="Model kịch bản"
-                      value={scriptTargetModel || videoModel}
-                      options={(videoModelOptions.length > 0 ? videoModelOptions : [{ id: videoModel, name: videoModel || 'Model hiện tại', price: 0 }]).map((model) => ({
-                        label: model.name,
-                        value: model.id,
-                      }))}
-                      onChange={setScriptTargetModel}
-                      icon={Icons.Video}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between rounded-xl border border-white/10 bg-black/20 px-3 py-2">
-                    <div>
-                      <div className="text-[10px] font-bold uppercase text-slate-300">Lời thoại giọng nói</div>
-                      <div className="text-[10px] text-slate-500">
-                        {scriptVoiceDialogue ? 'Có thoại tiếng Việt chuẩn trong kịch bản.' : 'Không thêm lời thoại, chỉ mô tả hình ảnh và âm thanh.'}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => setScriptVoiceDialogue((value) => !value)}
-                      className={`rounded-lg px-3 py-1.5 text-[10px] font-bold ${scriptVoiceDialogue ? 'bg-audi-purple text-white' : 'bg-white/10 text-slate-300'}`}
-                    >
-                      {scriptVoiceDialogue ? 'Có' : 'Không'}
-                    </button>
-                  </div>
-                </div>
-              )}
-              
               {modelOptions.showAspectRatio && modelOptions.aspectRatios.length > 0 && (
                 <OptionDropdown
                   label={lang === 'vi' ? 'Tỉ lệ khung hình' : 'Aspect Ratio'}

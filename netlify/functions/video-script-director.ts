@@ -2,8 +2,8 @@ import type { Handler } from '@netlify/functions';
 import { runWithVertexCredentialFailover } from './_vertex-credentials';
 
 const VERTEX_MODELS = Array.from(new Set([
-  process.env.VERTEX_VIDEO_SCRIPT_MODEL,
   'gemini-3.1-pro-preview',
+  process.env.VERTEX_VIDEO_SCRIPT_MODEL,
   'gemini-3.1-flash-preview',
 ].filter(Boolean))) as string[];
 const VERTEX_VIDEO_SCRIPT_TIMEOUT_MS = 55_000;
@@ -98,15 +98,27 @@ const sanitizeDirectorScript = (value: string) =>
   value
     .split(/\r?\n/)
     .map((line) => line.trimEnd())
-    .filter((line) => !/^(Chủ đề|Âm thanh|Chế độ trend edit|Trend edit mode|Text overlay mode|Selected target model|Model kịch bản)\s*:/i.test(line.trim()))
+    .filter((line) => !/^(chu de|am thanh|che do trend edit|trend edit mode|text overlay mode|selected target model|model kich ban)\s*:/i.test(normalizeForValidation(line.trim())))
     .join('\n')
     .trim();
 
+const normalizeForValidation = (value: string) =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\u0111/g, 'd')
+    .replace(/\u0110/g, 'D')
+    .toLowerCase();
+
 const validateDirectorScript = (value: string) => {
-  if (!/Quan sát ảnh tham chiếu\s*:/i.test(value)) {
+  const normalized = normalizeForValidation(value);
+  if (!/quan sat anh tham chieu\s*:/i.test(normalized)) {
     throw new Error('AI chưa trả về phần quan sát ảnh tham chiếu đủ rõ. Vui lòng bấm tạo lại để AI phân tích ảnh trực tiếp.');
   }
-  if (/Chế độ trend edit\s*:/i.test(value)) {
+  if (!/loai chu the\s*:/i.test(normalized)) {
+    throw new Error('AI chưa phân loại loại chủ thể trong ảnh. Vui lòng bấm tạo lại để AI phân tích ảnh rõ hơn.');
+  }
+  if (/che do trend edit\s*:/i.test(normalized)) {
     throw new Error('AI trả về cấu hình nội bộ thay vì kịch bản video. Vui lòng bấm tạo lại.');
   }
 };
@@ -146,6 +158,9 @@ const buildDirectorInstruction = (
     '',
     'Reference image analysis requirements:',
     '- Identify visible character count, subject type, framing, camera angle, pose, expression, outfit, accessories, background, color palette, lighting, and mood.',
+    '- The final script MUST include a line "Loai chu the:" near the top. Choose the most accurate label from: nhan vat 3D/game avatar, nguoi that, bup be/do choi vat ly, thu cung/dong vat, do vat/san pham, phong canh/khong co nhan vat. Include one short evidence phrase from the image, not a guess.',
+    '- Character type rule: if the image shows stylized 3D/game/avatar characters, call them "nhan vat 3D" or "3D avatar". Do NOT call them dolls, toys, figurines, mannequins, or children cartoon unless the image is unmistakably a real physical toy photo.',
+    '- When unsure about material/type, describe visual rendering style instead of inventing an object category. Prefer "nhan vat 3D phong cach game/anime" over "bup be".',
     '- The final script MUST include a short "Quan sát ảnh tham chiếu" section with at least 6 concrete visible details from the image. Mention actual visible colors, clothing pieces, pose, expression, props/accessories, background elements, lighting, and framing. Do not write generic words like "outfit", "background", or "pose" without naming what is visible.',
     '- Build the script around those observed details and the actual composition of the image. If it is a close portrait, prefer facial micro-motion and subtle camera movement. If it is full-body, use body movement that fits the pose. If the background is important, use depth and environment motion.',
     '- Every shot must reuse at least one concrete observed detail from the image, for example the actual clothing color, accessory, posture, hand position, visible prop, background object, lighting direction, or camera crop.',
@@ -162,6 +177,7 @@ const buildDirectorInstruction = (
     '',
     'Required final script format:',
     '- Start with "Quan sát ảnh tham chiếu:" followed by 2-3 concise Vietnamese sentences describing concrete visible details from the uploaded image.',
+    '- Immediately after that, include "Loại chủ thể:" with the chosen subject type and visual evidence, for example "Loại chủ thể: nhân vật 3D/game avatar, vì khuôn mặt và chất liệu da/tóc là render phong cách game, không phải đồ chơi vật lý."',
     '- Then write one concise overall direction sentence for the video. Do not print internal settings such as model name, theme value, trend edit mode, or text overlay mode.',
     '- Then write a numbered shot list by time range, for example: Canh 1 (0.0s-1.0s): ...',
     '- Each shot must include camera angle, camera/subject motion, subject action, transition, and sound/music cue.',
@@ -172,6 +188,7 @@ const buildDirectorInstruction = (
     'Hard constraints that must be included in the final script:',
     '- Do not create a real human video.',
     '- Do not invent a new character.',
+    '- Preserve the subject as stylized 3D/avatar/game characters when the reference image has that look. Do not relabel them as dolls, toys, figurines, mannequins, or physical collectibles.',
     '- Preserve the exact face, facial proportions, makeup, accessories, outfit design, outfit colors, body identity, and character quality from the uploaded reference image.',
     '- Do not deform the face, eyes, nose, mouth, hands, outfit, or character silhouette.',
     '- Do not change clothing colors, logos, patterns, or material identity.',

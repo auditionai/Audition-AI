@@ -1,4 +1,5 @@
 import { getSupabaseAuthHeader, getSupabaseUser, supabase } from './supabaseClient';
+import { trackEvent } from './analyticsService';
 import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, HistoryItem, VcoinLog, AdminQueueJob, AdminQueueSummary, AdminQueueJobDetail } from '../types';
 import {
   creditsToVcoin,
@@ -1436,6 +1437,7 @@ export const subscribeCheckinStatus = (
 
 export const performCheckin = async (): Promise<{success: boolean, reward: number, newStreak: number, message?: string}> => {
     if (!supabase) return { success: false, reward: 0, newStreak: 0, message: "No Database" };
+    trackEvent('daily_checkin_start');
 
     try {
         const response = await fetch('/api/checkin-reward', {
@@ -1457,19 +1459,28 @@ export const performCheckin = async (): Promise<{success: boolean, reward: numbe
         const refreshedStatus = await getCheckinStatus({ force: true }).catch(() => DEFAULT_CHECKIN_STATUS);
         window.dispatchEvent(new Event('balance_updated'));
 
-        return {
+        const result = {
             success: Boolean(payload?.success),
             reward: Number(payload?.reward || 0),
             newStreak: Number(payload?.newStreak || refreshedStatus.streak || 0),
             message: payload?.message,
         };
+        trackEvent(result.success ? 'daily_checkin_success' : 'daily_checkin_no_reward', {
+            reward_vcoin: result.reward,
+            streak: result.newStreak,
+        });
+        return result;
     } catch (e: any) {
+        trackEvent('daily_checkin_error', {
+            error_message: e?.message?.slice?.(0, 120) || 'unknown',
+        });
         return { success: false, reward: 0, newStreak: 0, message: e.message };
     }
 };
 
 export const claimMilestoneReward = async (day: number): Promise<{success: boolean, message: string}> => {
     if (!supabase) return { success: false, message: "No Database" };
+    trackEvent('milestone_reward_claim_start', { day });
     try {
         const response = await fetch('/api/checkin-reward', {
             method: 'POST',
@@ -1490,11 +1501,17 @@ export const claimMilestoneReward = async (day: number): Promise<{success: boole
         await getCheckinStatus({ force: true }).catch(() => DEFAULT_CHECKIN_STATUS);
         window.dispatchEvent(new Event('balance_updated'));
 
-        return {
+        const result = {
             success: Boolean(payload?.success),
             message: payload?.message || ''
         };
+        trackEvent(result.success ? 'milestone_reward_claim_success' : 'milestone_reward_claim_no_reward', { day });
+        return result;
     } catch (e: any) {
+        trackEvent('milestone_reward_claim_error', {
+            day,
+            error_message: e?.message?.slice?.(0, 120) || 'unknown',
+        });
         return { success: false, message: e.message };
     }
 };
@@ -1780,6 +1797,14 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
 
     const providerOrderCode = Date.now();
     const orderCode = `${providerOrderCode}`;
+    const analyticsBase = {
+        package_id: packageId,
+        package_price_vnd: pkg.price,
+        package_vcoin: pkg.vcoin,
+        bonus_percent: activeBonusPercent,
+        total_vcoin: totalCoins,
+    };
+    trackEvent('topup_checkout_start', analyticsBase);
     
     // Create Pending Transaction
     const { data, error } = await supabase.from('payment_transactions').insert({
@@ -1853,6 +1878,10 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
             .eq('id', data.id);
         
         // Update transaction with checkoutUrl if needed, or just return it
+        trackEvent('topup_checkout_created', {
+            ...analyticsBase,
+            payment_method: paymentMethod,
+        });
         return {
             id: data.id,
             userId: user.id,
@@ -1868,6 +1897,10 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
         };
     } catch (e) {
         console.warn("Payment gateway generation failed, using manual mode", e);
+        trackEvent('topup_checkout_manual_fallback', {
+            ...analyticsBase,
+            error_message: e instanceof Error ? e.message.slice(0, 120) : 'unknown',
+        });
         return {
             id: data.id,
             userId: user.id,
@@ -2581,6 +2614,7 @@ export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean
     if (!supabase) return { success: false, reward: 0, message: "No Database" };
     const cleanCode = codeStr.trim().toUpperCase();
     if (!cleanCode) return { success: false, reward: 0, message: "Vui lòng nhập giftcode." };
+    trackEvent('giftcode_redeem_start');
 
     try {
         const authHeader = await getSessionAuthHeader();
@@ -2595,6 +2629,9 @@ export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean
 
         const payload = await response.json().catch(() => ({}));
         if (!response.ok || !payload?.success) {
+            trackEvent('giftcode_redeem_failed', {
+                reason: payload?.message || 'request_failed',
+            });
             return {
                 success: false,
                 reward: 0,
@@ -2604,8 +2641,13 @@ export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean
 
         invalidateUserProfileCache();
         window.dispatchEvent(new Event('balance_updated'));
-        return { success: true, reward: Number(payload?.reward || 0), message: 'Success' };
+        const reward = Number(payload?.reward || 0);
+        trackEvent('giftcode_redeem_success', { reward_vcoin: reward });
+        return { success: true, reward, message: 'Success' };
     } catch (e: any) {
+        trackEvent('giftcode_redeem_error', {
+            error_message: e?.message?.slice?.(0, 120) || 'unknown',
+        });
         return { success: false, reward: 0, message: e.message };
     }
 };

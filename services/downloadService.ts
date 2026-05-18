@@ -1,3 +1,5 @@
+import { trackEvent } from './analyticsService';
+
 const dataUrlToBlob = (dataUrl: string) => {
   const [header, body] = dataUrl.split(',', 2);
   const mimeType = header.match(/:(.*?);/)?.[1] || 'application/octet-stream';
@@ -47,8 +49,16 @@ export const downloadAssetToBrowser = async (url: string, filename: string) => {
   } else {
     const proxyUrl = `/api/download-proxy?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`;
     triggerBrowserDownload(proxyUrl, filename);
+    trackEvent('asset_download', {
+      source_type: 'remote',
+      file_extension: filename.split('.').pop()?.toLowerCase() || 'unknown',
+    });
     return;
   }
 
   downloadBlob(blob, filename);
+  trackEvent('asset_download', {
+    source_type: url.startsWith('data:') ? 'data_url' : 'blob_url',
+    file_extension: filename.split('.').pop()?.toLowerCase() || 'unknown',
+  });
 };

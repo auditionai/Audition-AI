@@ -3,10 +3,10 @@ import { runWithVertexCredentialFailover } from './_vertex-credentials';
 
 const VERTEX_MODELS = Array.from(new Set([
   process.env.VERTEX_VIDEO_SCRIPT_MODEL,
-  'gemini-3.1-flash-preview',
   'gemini-3.1-pro-preview',
+  'gemini-3.1-flash-preview',
 ].filter(Boolean))) as string[];
-const VERTEX_VIDEO_SCRIPT_TIMEOUT_MS = 16_000;
+const VERTEX_VIDEO_SCRIPT_TIMEOUT_MS = 55_000;
 const VIDEO_SCRIPT_DEADLINE_ERROR = 'VIDEO_SCRIPT_VERTEX_DEADLINE';
 
 const jsonHeaders = {
@@ -78,6 +78,39 @@ const isModelUnavailableError = (message: string) => {
   );
 };
 
+const extractCandidateText = (data: any) => {
+  const candidates = Array.isArray(data?.candidates) ? data.candidates : [];
+
+  for (const candidate of candidates) {
+    const parts = Array.isArray(candidate?.content?.parts) ? candidate.content.parts : [];
+    const text = parts
+      .map((part: any) => (typeof part?.text === 'string' ? part.text : ''))
+      .join('\n')
+      .trim();
+
+    if (text) return text;
+  }
+
+  return '';
+};
+
+const sanitizeDirectorScript = (value: string) =>
+  value
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter((line) => !/^(Chủ đề|Âm thanh|Chế độ trend edit|Trend edit mode|Text overlay mode|Selected target model|Model kịch bản)\s*:/i.test(line.trim()))
+    .join('\n')
+    .trim();
+
+const validateDirectorScript = (value: string) => {
+  if (!/Quan sát ảnh tham chiếu\s*:/i.test(value)) {
+    throw new Error('AI chưa trả về phần quan sát ảnh tham chiếu đủ rõ. Vui lòng bấm tạo lại để AI phân tích ảnh trực tiếp.');
+  }
+  if (/Chế độ trend edit\s*:/i.test(value)) {
+    throw new Error('AI trả về cấu hình nội bộ thay vì kịch bản video. Vui lòng bấm tạo lại.');
+  }
+};
+
 const buildDirectorInstruction = (
   durationSeconds: number,
   userPrompt: string,
@@ -96,14 +129,14 @@ const buildDirectorInstruction = (
 
   return [
     'You are a professional AI video director for an image-to-video generation pipeline.',
-    'Analyze the uploaded reference image first, then write a precise video prompt/script for the selected duration.',
+    'Analyze the uploaded reference image first, then write a precise video prompt/script for the selected duration. The final script must prove that you actually saw the image.',
     'Output language rule: the final script MUST be written entirely in Vietnamese.',
     'Do not answer in English. Do not mix English sentences into the script, except unavoidable proper names, model names, or brand labels visible in the image.',
     `The target video duration is ${durationSeconds} seconds. Structure the motion timing to fit this duration.`,
-    `Selected target model: ${targetModel}. Optimize the script for this model and avoid impossible motion.`,
-    `Requested style: ${style}.`,
-    `Requested theme: ${theme}.`,
-    `Requested sound/music mood: ${soundMood}.`,
+    `Internal target model context: ${targetModel}. Use this only to choose feasible camera/action detail. Do not print this model/config line in the final script.`,
+    `Internal requested style: ${style}.`,
+    `Internal requested theme: ${theme}.`,
+    `Internal requested sound/music mood: ${soundMood}.`,
     `Trend edit mode: ${trendEdit ? 'ON - use modern Douyin/TikTok/CapCut pacing when it fits the image.' : 'OFF - avoid Douyin/TikTok/CapCut formula unless the user explicitly asked for it.'}`,
     `Text overlay mode: ${textOverlay ? 'ON - include short text overlay instructions only where useful.' : 'OFF - do not include any text overlay, title card, caption, subtitles, or visible typography in the video script.'}`,
     voiceDialogue
@@ -113,7 +146,9 @@ const buildDirectorInstruction = (
     '',
     'Reference image analysis requirements:',
     '- Identify visible character count, subject type, framing, camera angle, pose, expression, outfit, accessories, background, color palette, lighting, and mood.',
+    '- The final script MUST include a short "Quan sát ảnh tham chiếu" section with at least 6 concrete visible details from the image. Mention actual visible colors, clothing pieces, pose, expression, props/accessories, background elements, lighting, and framing. Do not write generic words like "outfit", "background", or "pose" without naming what is visible.',
     '- Build the script around those observed details and the actual composition of the image. If it is a close portrait, prefer facial micro-motion and subtle camera movement. If it is full-body, use body movement that fits the pose. If the background is important, use depth and environment motion.',
+    '- Every shot must reuse at least one concrete observed detail from the image, for example the actual clothing color, accessory, posture, hand position, visible prop, background object, lighting direction, or camera crop.',
     '- Do not replace the subject with a different person or a real human actor.',
     '',
     trendEdit
@@ -126,11 +161,13 @@ const buildDirectorInstruction = (
       : '- Do not mention text overlay anywhere in the final script.',
     '',
     'Required final script format:',
-    '- Start with one concise overall direction sentence.',
+    '- Start with "Quan sát ảnh tham chiếu:" followed by 2-3 concise Vietnamese sentences describing concrete visible details from the uploaded image.',
+    '- Then write one concise overall direction sentence for the video. Do not print internal settings such as model name, theme value, trend edit mode, or text overlay mode.',
     '- Then write a numbered shot list by time range, for example: Canh 1 (0.0s-1.0s): ...',
     '- Each shot must include camera angle, camera/subject motion, subject action, transition, and sound/music cue.',
     textOverlay ? '- If text overlay mode is ON, a shot may include a Text overlay field when useful.' : '',
     '- End with a short negative instruction line preventing face/body/outfit deformation and unwanted extra limbs.',
+    '- Do not include lines like "Chủ đề: ...", "Âm thanh: ...", "Chế độ trend edit: ...", or "tối ưu cho model ...". Those are UI/internal settings, not useful video instructions.',
     '',
     'Hard constraints that must be included in the final script:',
     '- Do not create a real human video.',
@@ -145,76 +182,6 @@ const buildDirectorInstruction = (
     'Write only the final Vietnamese prompt/script. No JSON, no explanation.',
     'The output should be detailed enough for Seedance/Kling/Grok video generation, but stay under 10000 characters.',
   ].filter(Boolean).join('\n');
-};
-
-const buildFallbackVideoScript = (
-  durationSeconds: number,
-  userPrompt: string,
-  scriptOptions: Record<string, unknown>,
-) => {
-  const style = normalizeOption(scriptOptions.style, 'cinematic');
-  const theme = normalizeOption(scriptOptions.theme, 'tự động theo ảnh tham chiếu');
-  const soundMood = normalizeOption(scriptOptions.soundMood, 'phù hợp bối cảnh');
-  const targetModel = normalizeOption(scriptOptions.targetModel, 'model video đang chọn');
-  const voiceDialogue = Boolean(scriptOptions.voiceDialogue);
-  const trendEdit = Boolean(scriptOptions.trendEdit);
-  const textOverlay = Boolean(scriptOptions.textOverlay);
-  const shotCount = trendEdit
-    ? (durationSeconds <= 5 ? 5 : durationSeconds <= 10 ? 7 : 9)
-    : (durationSeconds <= 5 ? 3 : durationSeconds <= 10 ? 4 : 6);
-  const shotLength = Math.max(0.7, durationSeconds / shotCount);
-  const cameras = trendEdit
-    ? [
-        'cận cảnh khuôn mặt, dolly-in nhẹ',
-        'góc trung cảnh ngang hông, whip pan theo nhịp',
-        'góc thấp điện ảnh, slow-motion highlight',
-        'góc rộng bối cảnh, speed ramp chuyển cảnh',
-        'cận chi tiết outfit/phụ kiện, flash cut theo beat',
-      ]
-    : [
-        'cận cảnh tự nhiên, giữ đúng bố cục ảnh gốc',
-        'trung cảnh ổn định để nhân vật chuyển động nhẹ',
-        'góc nghiêng nhẹ tạo chiều sâu cho nền ảnh',
-        'góc rộng vừa đủ để mở rộng không gian trong ảnh',
-        'cận chi tiết trang phục/phụ kiện nếu ảnh thể hiện rõ',
-      ];
-  const transitions = trendEdit
-    ? ['flash cut + light leak', 'match cut + motion blur', 'speed ramp ngắn', 'whip pan theo beat']
-    : ['cắt mềm', 'dissolve nhẹ', 'match cut tự nhiên', 'camera drift liền mạch'];
-  const actions = trendEdit
-    ? [
-        'nhân vật giữ thần thái tự tin, mắt và biểu cảm bám sát ảnh tham chiếu',
-        'tay/chân chuyển động nhỏ theo pose gốc, không thêm chi thừa',
-        'ánh sáng và nền chuyển động nhẹ tạo cảm giác premium',
-        'camera bắt chất liệu trang phục và màu sắc đúng ảnh gốc',
-      ]
-    : [
-        'nhân vật giữ biểu cảm và thần thái của ảnh tham chiếu, chỉ thêm chuyển động nhỏ tự nhiên',
-        'camera tạo chiều sâu bằng ánh sáng và nền chuyển động rất nhẹ',
-        'outfit, màu sắc, phụ kiện và tỉ lệ cơ thể được giữ nguyên',
-        'hành động bám theo ý tưởng người dùng và không biến nhân vật thành người khác',
-      ];
-
-  const shots = Array.from({ length: shotCount }, (_, index) => {
-    const start = (index * shotLength).toFixed(1);
-    const end = Math.min(durationSeconds, (index + 1) * shotLength).toFixed(1);
-    const textLine = textOverlay
-      ? ` Text overlay: chữ ngắn theo chủ đề ${theme}, ưu tiên không dấu nếu lo lỗi font, đặt ở vùng trống và không che mặt.`
-      : '';
-    return `Cảnh ${index + 1} (${start}s-${end}s): ${cameras[index % cameras.length]}. ${actions[index % actions.length]}. Chuyển cảnh bằng ${transitions[index % transitions.length]}.${textLine} Âm thanh: ${soundMood}${trendEdit ? ', có whoosh/SFX theo nhịp' : ', âm nền và SFX vừa đủ theo bối cảnh'}.`;
-  });
-
-  return [
-    `Video ${durationSeconds}s phong cách ${style}, tối ưu cho ${targetModel}, bám sát ảnh tham chiếu và ý tưởng người dùng.`,
-    userPrompt.trim() ? `Ý tưởng người dùng cần giữ: ${userPrompt.trim()}` : '',
-    `Chủ đề: ${theme}. Âm thanh: ${soundMood}. Chế độ trend edit: ${trendEdit ? 'bật' : 'tắt'}.`,
-    voiceDialogue
-      ? 'Có lời thoại/voice tiếng Việt ngắn, tự nhiên, phù hợp bối cảnh; không lấn át nhạc.'
-      : 'Không có lời thoại hoặc voice-over; chỉ dùng hành động hình ảnh, nhạc nền và hiệu ứng âm thanh.',
-    'Bắt buộc dùng ảnh tham chiếu làm nguồn nhân vật duy nhất: không tạo người thật, không đổi nhân vật, không đổi mặt, không đổi outfit, không đổi màu trang phục, không làm trẻ con hóa nhân vật.',
-    ...shots,
-    'Negative/lock: giữ nguyên mặt, makeup, tỉ lệ cơ thể, outfit, phụ kiện và chất lượng nhân vật từ ảnh tham chiếu; không méo mặt, không thừa tay chân, không mất tay chân, không kéo dài cổ, không đổi màu da/trang phục, không thêm nhân vật lạ.',
-  ].filter(Boolean).join('\n').slice(0, 10000);
 };
 
 export const handler: Handler = async (event) => {
@@ -291,10 +258,11 @@ export const handler: Handler = async (event) => {
           }
 
           const data = await response.json();
-          const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+          const text = sanitizeDirectorScript(extractCandidateText(data));
           if (!text) {
             throw new Error('Vertex AI did not return a video script.');
           }
+          validateDirectorScript(text);
           return text.slice(0, 10000);
         }
 
@@ -310,26 +278,11 @@ export const handler: Handler = async (event) => {
   } catch (error: any) {
     const message = String(error?.message || '');
     if (message.includes(VIDEO_SCRIPT_DEADLINE_ERROR)) {
-      const body = (() => {
-        try {
-          return JSON.parse(event.body || '{}');
-        } catch {
-          return {};
-        }
-      })();
-      const durationSeconds = clampDurationSeconds(body.durationSeconds);
-      const userPrompt = String(body.userPrompt || '').trim();
-      const scriptOptions =
-        body.scriptOptions && typeof body.scriptOptions === 'object'
-          ? body.scriptOptions as Record<string, unknown>
-          : {};
       return {
-        statusCode: 200,
+        statusCode: 504,
         headers: jsonHeaders,
         body: JSON.stringify({
-          script: buildFallbackVideoScript(durationSeconds, userPrompt, scriptOptions),
-          fallback: true,
-          warning: 'Vertex AI took too long, returned a safe fallback video script.',
+          error: 'AI chưa kịp phân tích ảnh tham chiếu để viết kịch bản. Vui lòng bấm tạo lại; hệ thống sẽ không trả kịch bản mẫu chung chung thay cho phân tích ảnh.',
         }),
       };
     }

@@ -7,7 +7,7 @@ import { CONCURRENCY_LIMITS, useConcurrency } from '../../services/concurrencySe
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import { downloadAssetToBrowser } from '../../services/downloadService';
-import { generateVideoScriptWithVertex } from '../../services/videoScriptDirectorService';
+import { compressDataImageForDirector, generateVideoScriptWithVertex } from '../../services/videoScriptDirectorService';
 import type { MotionGenerateRecipePayload, VideoGenerateRecipePayload } from '../../shared/queueRecipes';
 import {
   type AuditionPricingOverride,
@@ -618,8 +618,11 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
 
     setIsGeneratingScript(true);
     try {
+      notify('Đang tối ưu và tải ảnh tham chiếu lên R2...', 'info');
+      const directorImageSource = await compressDataImageForDirector(keyframeImage);
+      const directorImageUrl = await tryStageInputToR2(directorImageSource, 'inputs/video-script-reference');
       const script = await generateVideoScriptWithVertex({
-        imageSource: keyframeImage,
+        imageSource: directorImageUrl,
         durationSeconds: parseInt(duration, 10) || 5,
         userPrompt: prompt,
         scriptOptions: {

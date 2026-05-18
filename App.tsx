@@ -20,6 +20,7 @@ import { NotificationProvider, useNotification } from './components/Notification
 import { AppEventPopup, AppEventPopupData, SystemAnnouncementModal } from './components/AppNotificationPopups';
 import { Icons } from './components/Icons';
 import { syncPaymentTransaction } from './services/serverQueueService';
+import { setAnalyticsUser, trackEvent, trackPageView } from './services/analyticsService';
 import MobileApp from './mobile-app/src/App';
 
 const PHONE_USER_AGENT_PATTERN = /iphone|ipod|android.+mobile|windows phone|blackberry|opera mini|mobile safari/i;
@@ -238,6 +239,17 @@ function AppContent() {
 
   const showPaymentSuccessPopup = useCallback((orderCode?: string | null) => {
     const meta = readPendingPaymentMeta(orderCode);
+    trackEvent('payment_return_success', {
+      amount_vnd: meta?.amount,
+      vcoin: meta?.vcoin,
+      payment_method: 'sepay',
+    });
+    trackEvent('purchase', {
+      transaction_id: orderCode,
+      value: meta?.amount,
+      currency: 'VND',
+      item_name: meta?.packageName,
+    });
     const amountText = typeof meta?.amount === 'number' ? `${meta.amount.toLocaleString('vi-VN')}đ` : 'giao dịch';
     const vcoinText = typeof meta?.vcoin === 'number' ? `${meta.vcoin.toLocaleString('vi-VN')} Vcoin` : 'Vcoin';
     setEventPopup({
@@ -292,6 +304,7 @@ function AppContent() {
         getSupabaseSession().then((session: any) => {
             if (session) {
                 setIsAuthenticated(true);
+                setAnalyticsUser(session.user.id);
                 checkAdminRole(session.user.id);
             }
         });
@@ -300,11 +313,19 @@ function AppContent() {
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event: any, session: any) => {
             if (session) {
                 setIsAuthenticated(true);
+                setAnalyticsUser(session.user.id);
                 if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
+                    if (event === 'SIGNED_IN') {
+                        trackEvent('login', { method: 'supabase' });
+                    }
                     checkAdminRole(session.user.id);
                     updateLastActive();
                 }
             } else {
+                setAnalyticsUser(null);
+                if (event === 'SIGNED_OUT') {
+                    trackEvent('logout');
+                }
                 setIsAuthenticated(false);
             }
         });
@@ -357,6 +378,7 @@ function AppContent() {
              setCurrentView('topup');
         } else if (status === 'CANCELLED') {
              desktopHistoryModeRef.current = 'replace';
+             trackEvent('payment_return_cancelled', { payment_method: gateway || 'sepay' });
              notify(
                  lang === 'vi' ? '\u0110\u00e3 h\u1ee7y thanh to\u00e1n.' : 'Payment cancelled.',
                  'error'
@@ -411,6 +433,10 @@ function AppContent() {
 
             const assetLabel = row.asset_type === 'video' ? 'Video' : 'Ảnh';
             if (status === 'completed') {
+              trackEvent('generation_job_completed', {
+                asset_type: row.asset_type || 'unknown',
+                tool_id: row.tool_id,
+              });
               setEventPopup({
                 type: 'generation_success',
                 title: `${assetLabel} đã tạo thành công`,
@@ -420,6 +446,11 @@ function AppContent() {
               return;
             }
 
+            trackEvent('generation_job_failed', {
+              asset_type: row.asset_type || 'unknown',
+              tool_id: row.tool_id,
+              error_message: row.error_message ? String(row.error_message).slice(0, 120) : 'unknown',
+            });
             setEventPopup({
               type: 'generation_failed',
               title: `${assetLabel} tạo thất bại`,
@@ -459,6 +490,11 @@ function AppContent() {
   }, [currentView, isAuthenticated, selectedFeature]);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
+    trackPageView(buildDesktopPath(currentView, selectedFeature));
+  }, [currentView, isAuthenticated, selectedFeature]);
+
+  useEffect(() => {
     if (!isAuthenticated || userRole === 'admin' || currentView !== 'tool_workspace' || !selectedFeature) return;
     if (!isFeatureInMaintenance(featureMaintenance, selectedFeature.id)) return;
 
@@ -494,6 +530,7 @@ function AppContent() {
       if (supabase) {
           await supabase.auth.signOut();
       }
+      setAnalyticsUser(null);
       desktopHistoryModeRef.current = 'replace';
       setIsAuthenticated(false);
       setCurrentView('home');

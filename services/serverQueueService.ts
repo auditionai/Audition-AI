@@ -1,4 +1,5 @@
 import { getSupabaseAuthHeader } from './supabaseClient';
+import { trackEvent } from './analyticsService';
 import type { QueueRecipePayload } from '../shared/queueRecipes';
 import type { QueueClientPlatform } from '../types';
 
@@ -72,31 +73,50 @@ const notifyQueueSubmitted = (payload: any) => {
 export const enqueueServerJob = async (request: QueueEnqueueRequest) => {
   const authHeader = await getAuthHeader();
   const clientPlatform = request.clientPlatform || detectQueueClientPlatform();
+  const analyticsBase = {
+    client_platform: clientPlatform,
+    asset_type: request.assetType,
+    queue_kind: request.queueKind,
+    tool_id: request.toolId,
+    engine: request.engine,
+    cost_vcoin: request.costVcoin,
+  };
 
-  const response = await fetch('/api/queue-submit', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-client-platform': clientPlatform,
-      ...authHeader,
-    },
-    body: JSON.stringify({
-      ...request,
-      clientPlatform,
-    }),
-  });
+  trackEvent('generation_job_enqueue_start', analyticsBase);
 
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(payload?.error || 'Failed to enqueue job');
+  try {
+    const response = await fetch('/api/queue-submit', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-client-platform': clientPlatform,
+        ...authHeader,
+      },
+      body: JSON.stringify({
+        ...request,
+        clientPlatform,
+      }),
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload?.error || 'Failed to enqueue job');
+    }
+
+    notifyQueueSubmitted({
+      request,
+      response: payload,
+    });
+    trackEvent('generation_job_enqueue_success', analyticsBase);
+
+    return payload;
+  } catch (error) {
+    trackEvent('generation_job_enqueue_error', {
+      ...analyticsBase,
+      error_message: error instanceof Error ? error.message.slice(0, 120) : 'unknown',
+    });
+    throw error;
   }
-
-  notifyQueueSubmitted({
-    request,
-    response: payload,
-  });
-
-  return payload;
 };
 
 export const triggerServerQueueTick = async (_force = false) => {

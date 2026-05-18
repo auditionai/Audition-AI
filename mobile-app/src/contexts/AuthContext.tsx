@@ -7,6 +7,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { supabase, getSupabaseSession, getSupabaseUser } from '../services/supabaseClient';
 import { getUserProfile, logVisit, updateLastActive, subscribeMaintenanceMode, invalidateUserProfileCache } from '../services/economyService';
+import { setAnalyticsUser, trackEvent } from '../services/analyticsService';
 import type { UserProfile } from '../types';
 
 interface AuthContextType {
@@ -68,6 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (supabase) {
       await supabase.auth.signOut();
     }
+    setAnalyticsUser(null);
     setIsAuthenticated(false);
     setUser(null);
     setUserRole('user');
@@ -99,6 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       getSupabaseSession().then(async (session: any) => {
         if (session) {
           setIsAuthenticated(true);
+          setAnalyticsUser(session.user.id);
           await checkAdminRole(session.user.id);
         }
         setIsLoading(false);
@@ -110,7 +113,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } = supabase.auth.onAuthStateChange((event: any, session: any) => {
         if (session) {
           setIsAuthenticated(true);
+          setAnalyticsUser(session.user.id);
           if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
+            if (event === 'SIGNED_IN') {
+              trackEvent('login', { method: 'supabase' });
+            }
             setIsLoading(true);
             void checkAdminRole(session.user.id)
               .finally(() => {
@@ -119,6 +126,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             void updateLastActive();
           }
         } else {
+          setAnalyticsUser(null);
+          if (event === 'SIGNED_OUT') {
+            trackEvent('logout');
+          }
           setIsAuthenticated(false);
           setUser(null);
           setUserRole('user');

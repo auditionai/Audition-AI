@@ -8,6 +8,7 @@ import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import { downloadAssetToBrowser } from '../../services/downloadService';
 import { compressDataImageForDirector, generateVideoScriptWithVertex } from '../../services/videoScriptDirectorService';
+import { trackEvent } from '../../services/analyticsService';
 import type { MotionGenerateRecipePayload, VideoGenerateRecipePayload } from '../../shared/queueRecipes';
 import {
   type AuditionPricingOverride,
@@ -617,6 +618,13 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
     }
 
     setIsGeneratingScript(true);
+    trackEvent('video_script_generate_start', {
+      client_platform: 'desktop',
+      duration_seconds: parseInt(duration, 10) || 5,
+      trend_edit: scriptTrendEdit,
+      text_overlay: scriptTextOverlay,
+      target_model: scriptTargetModel || videoModel,
+    });
     try {
       notify('Đang tối ưu và tải ảnh tham chiếu lên R2...', 'info');
       const directorImageSource = await compressDataImageForDirector(keyframeImage);
@@ -636,9 +644,21 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
         },
       });
       setPrompt(script);
+      trackEvent('video_script_generate_success', {
+        client_platform: 'desktop',
+        duration_seconds: parseInt(duration, 10) || 5,
+        trend_edit: scriptTrendEdit,
+        text_overlay: scriptTextOverlay,
+        target_model: scriptTargetModel || videoModel,
+      });
       notify('Đã tạo kịch bản video bằng AI.', 'success');
     } catch (error) {
       console.error('[VideoTool] Video script director failed', error);
+      trackEvent('video_script_generate_error', {
+        client_platform: 'desktop',
+        target_model: scriptTargetModel || videoModel,
+        error_message: error instanceof Error ? error.message.slice(0, 120) : 'unknown',
+      });
       notify(error instanceof Error ? error.message : 'Không thể tạo kịch bản video bằng Vertex AI.', 'error');
     } finally {
       setIsGeneratingScript(false);

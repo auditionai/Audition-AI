@@ -21,6 +21,7 @@ import { Guide } from './views/Guide';
 import { AdminView } from './views/Admin';
 import { PaymentGatewayView } from './views/PaymentGateway';
 import { syncPaymentTransaction } from './services/serverQueueService';
+import { trackEvent, trackPageView } from './services/analyticsService';
 import { getFeatureMaintenanceConfig, getSystemAnnouncementConfig, isFeatureInMaintenance, type FeatureMaintenanceConfig, type SystemAnnouncementConfig } from './services/economyService';
 import { getSupabaseUser, supabase } from './services/supabaseClient';
 import { AppEventPopup, type AppEventPopupData, SystemAnnouncementModal } from '../../components/AppNotificationPopups';
@@ -167,6 +168,17 @@ function MobileRuntimeEffects() {
 
   const showPaymentSuccessPopup = useCallback((orderCode?: string | null) => {
     const meta = readPendingPaymentMeta(orderCode);
+    trackEvent('payment_return_success', {
+      amount_vnd: meta?.amount,
+      vcoin: meta?.vcoin,
+      payment_method: 'sepay',
+    });
+    trackEvent('purchase', {
+      transaction_id: orderCode,
+      value: meta?.amount,
+      currency: 'VND',
+      item_name: meta?.packageName,
+    });
     const amountText = typeof meta?.amount === 'number' ? `${meta.amount.toLocaleString('vi-VN')}đ` : 'giao dịch';
     const vcoinText = typeof meta?.vcoin === 'number' ? `${meta.vcoin.toLocaleString('vi-VN')} Vcoin` : 'Vcoin';
     setEventPopup({
@@ -183,6 +195,11 @@ function MobileRuntimeEffects() {
       setShowSystemAnnouncement(shouldShowSystemAnnouncement(config));
     });
   }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    trackPageView(`${location.pathname}${location.search}`);
+  }, [isAuthenticated, location.pathname, location.search]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -217,6 +234,7 @@ function MobileRuntimeEffects() {
       }
 
       if (status === 'CANCELLED') {
+        trackEvent('payment_return_cancelled', { payment_method: gateway || 'sepay' });
         notify('Đã hủy thanh toán.', 'error');
         navigate('/topup', { replace: true });
         return;
@@ -258,6 +276,10 @@ function MobileRuntimeEffects() {
 
             const assetLabel = row.asset_type === 'video' ? 'Video' : 'Ảnh';
             if (status === 'completed') {
+              trackEvent('generation_job_completed', {
+                asset_type: row.asset_type || 'unknown',
+                tool_id: row.tool_id,
+              });
               setEventPopup({
                 type: 'generation_success',
                 title: `${assetLabel} đã tạo thành công`,
@@ -267,6 +289,11 @@ function MobileRuntimeEffects() {
               return;
             }
 
+            trackEvent('generation_job_failed', {
+              asset_type: row.asset_type || 'unknown',
+              tool_id: row.tool_id,
+              error_message: row.error_message ? String(row.error_message).slice(0, 120) : 'unknown',
+            });
             setEventPopup({
               type: 'generation_failed',
               title: `${assetLabel} tạo thất bại`,

@@ -3,6 +3,8 @@ export type VideoScriptDirectorOptions = {
   theme?: string;
   soundMood?: string;
   voiceDialogue?: boolean;
+  trendEdit?: boolean;
+  textOverlay?: boolean;
   targetModel?: string;
 };
 
@@ -18,7 +20,7 @@ const loadImage = (source: string) =>
     image.src = source;
   });
 
-const compressDataImageForDirector = async (source: string) => {
+export const compressDataImageForDirector = async (source: string) => {
   if (!source.startsWith('data:image/')) return source;
 
   try {
@@ -100,7 +102,7 @@ export const generateVideoScriptWithVertex = async ({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: requestBody,
-      signal: AbortSignal.timeout(45_000),
+      signal: AbortSignal.timeout(75_000),
     });
 
     payload = await parseResponsePayload(response);

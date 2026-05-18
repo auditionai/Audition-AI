@@ -19,7 +19,7 @@ import { getUserProfile, getModelPricing, getTstServerAvailabilityConfig } from 
 import { useConcurrency, CONCURRENCY_LIMITS } from '../services/concurrencyService';
 import { enqueueServerJob } from '../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../services/storageService';
-import { generateVideoScriptWithVertex } from '../services/videoScriptDirectorService';
+import { compressDataImageForDirector, generateVideoScriptWithVertex } from '../services/videoScriptDirectorService';
 import {
   fetchTstPricing, fetchTstModels,
   getMotionCompatibleServers, getMotionCompatibleSpeeds, getMotionCostBreakdown, getMotionModelSpecs,
@@ -140,6 +140,8 @@ export function WorkspaceVideo() {
   const [scriptTheme, setScriptTheme] = useState('Tự động theo ảnh');
   const [scriptSoundMood, setScriptSoundMood] = useState('Phù hợp bối cảnh');
   const [scriptVoiceDialogue, setScriptVoiceDialogue] = useState(false);
+  const [scriptTrendEdit, setScriptTrendEdit] = useState(false);
+  const [scriptTextOverlay, setScriptTextOverlay] = useState(false);
   const [scriptTargetModel, setScriptTargetModel] = useState('');
 
   // --- Cooldown ---
@@ -452,8 +454,11 @@ export function WorkspaceVideo() {
 
     setIsGeneratingScript(true);
     try {
+      notify('Đang tối ưu và tải ảnh tham chiếu lên R2...', 'info');
+      const directorImageSource = await compressDataImageForDirector(keyframeImage);
+      const directorImageUrl = await uploadFileToR2(directorImageSource, 'inputs/video-script-reference/mobile');
       const script = await generateVideoScriptWithVertex({
-        imageSource: keyframeImage,
+        imageSource: directorImageUrl,
         durationSeconds: parseInt(duration, 10) || 5,
         userPrompt: prompt,
         scriptOptions: {
@@ -461,6 +466,8 @@ export function WorkspaceVideo() {
           theme: scriptTheme,
           soundMood: scriptSoundMood,
           voiceDialogue: scriptVoiceDialogue,
+          trendEdit: scriptTrendEdit,
+          textOverlay: scriptTextOverlay,
           targetModel: scriptTargetModel || videoModel,
         },
       });
@@ -591,6 +598,100 @@ export function WorkspaceVideo() {
     || (activeMode === 'video_ai' && !keyframeImage)
     || (activeMode === 'motion_control' && (!characterImage || !motionVideoFile));
 
+  const scriptDirectorPanel = activeMode === 'video_ai' ? (
+    <div className="rounded-[22px] border border-cyan-200 bg-cyan-50/70 p-4 dark:border-cyan-500/30 dark:bg-cyan-500/10">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-1 text-[11px] font-black uppercase tracking-wide text-cyan-700 dark:text-cyan-200">
+            <Sparkles className="h-3.5 w-3.5" />
+            Đạo diễn kịch bản AI
+          </div>
+          <p className="mt-1 text-[11px] leading-relaxed text-cyan-700/80 dark:text-cyan-100/80">
+            Nhập ý tưởng ngắn trong prompt, AI sẽ dùng ảnh tham chiếu trên R2 để viết kịch bản chi tiết.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handleGenerateVideoScript}
+          disabled={isGeneratingScript || !keyframeImage}
+          className="shrink-0 rounded-full bg-cyan-500 px-3 py-2 text-[11px] font-black text-white disabled:bg-gray-200 disabled:text-gray-400"
+        >
+          {isGeneratingScript ? 'Đang viết...' : 'Tạo'}
+        </button>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <select value={scriptStyle} onChange={(e) => setScriptStyle(e.target.value)} className="rounded-2xl border border-white/70 bg-white px-3 py-2 text-xs font-bold text-gray-700 dark:border-zinc-700 dark:bg-[#18181B] dark:text-zinc-100">
+          <option>Cinematic điện ảnh</option>
+          <option>Đời thường tự nhiên</option>
+          <option>Thời trang</option>
+          <option>Hành động</option>
+          <option>Lãng mạn</option>
+        </select>
+        <select value={scriptTheme} onChange={(e) => setScriptTheme(e.target.value)} className="rounded-2xl border border-white/70 bg-white px-3 py-2 text-xs font-bold text-gray-700 dark:border-zinc-700 dark:bg-[#18181B] dark:text-zinc-100">
+          <option>Tự động theo ảnh</option>
+          <option>Đời thường</option>
+          <option>Sân khấu</option>
+          <option>Đường phố</option>
+        </select>
+        <select value={scriptSoundMood} onChange={(e) => setScriptSoundMood(e.target.value)} className="rounded-2xl border border-white/70 bg-white px-3 py-2 text-xs font-bold text-gray-700 dark:border-zinc-700 dark:bg-[#18181B] dark:text-zinc-100">
+          <option>Phù hợp bối cảnh</option>
+          <option>Lãng mạn vui vẻ</option>
+          <option>Sôi động hành động</option>
+          <option>Sầu bi buồn bã</option>
+          <option>Vui tươi hài hước</option>
+        </select>
+        <select value={scriptTargetModel || videoModel} onChange={(e) => setScriptTargetModel(e.target.value)} className="rounded-2xl border border-white/70 bg-white px-3 py-2 text-xs font-bold text-gray-700 dark:border-zinc-700 dark:bg-[#18181B] dark:text-zinc-100">
+          {(videoModelOptions.length > 0 ? videoModelOptions : [{ id: videoModel, name: videoModel || 'Model hiện tại', price: 0 }]).map((model: AIModelOption) => (
+            <option key={model.id} value={model.id}>{model.name}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="mt-3 grid grid-cols-1 gap-2">
+        {[
+          {
+            label: 'Trend Douyin/TikTok',
+            description: scriptTrendEdit ? 'Dựng nhanh, nhiều góc máy, chuyển cảnh theo beat.' : 'Tắt trend, kịch bản tự nhiên hơn.',
+            active: scriptTrendEdit,
+            onClick: () => setScriptTrendEdit((value) => !value),
+          },
+          {
+            label: 'Text trong video',
+            description: scriptTextOverlay ? 'Có text overlay, tránh che mặt.' : 'Không thêm text để tránh lỗi font.',
+            active: scriptTextOverlay,
+            onClick: () => setScriptTextOverlay((value) => !value),
+          },
+          {
+            label: 'Lời thoại giọng nói',
+            description: scriptVoiceDialogue ? 'Có thoại tiếng Việt ngắn khi hợp cảnh.' : 'Không thoại, chỉ hình ảnh và âm thanh.',
+            active: scriptVoiceDialogue,
+            onClick: () => setScriptVoiceDialogue((value) => !value),
+          },
+        ].map((item) => (
+          <button
+            key={item.label}
+            type="button"
+            onClick={item.onClick}
+            className={`rounded-2xl border px-3 py-2 text-left transition-all ${
+              item.active
+                ? 'border-purple-200 bg-purple-600 text-white dark:border-purple-500/40'
+                : 'border-white/70 bg-white text-gray-600 dark:border-zinc-700 dark:bg-[#18181B] dark:text-zinc-300'
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] font-black uppercase">{item.label}</span>
+              <span className={`h-4 w-7 rounded-full p-0.5 ${item.active ? 'bg-white/30' : 'bg-gray-200 dark:bg-zinc-700'}`}>
+                <span className={`block h-3 w-3 rounded-full bg-white shadow-sm transition-transform ${item.active ? 'translate-x-3' : ''}`} />
+              </span>
+            </div>
+            <div className={`mt-1 text-[10px] leading-snug ${item.active ? 'text-white/80' : 'text-gray-400 dark:text-zinc-500'}`}>{item.description}</div>
+          </button>
+        ))}
+      </div>
+    </div>
+  ) : null;
+
   return (
     <div className="flex flex-col h-full bg-[#FAFAFA] dark:bg-[#09090B]">
       <div className="flex-1 overflow-y-auto p-5 space-y-6 pb-40 hide-scrollbar">
@@ -654,12 +755,14 @@ export function WorkspaceVideo() {
                 <textarea
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="VD: Cô gái đang đi dạo trên bãi biển, tóc bay trong gió..."
+                  placeholder="Nhập kịch bản ngắn hoặc ý tưởng chính. Ví dụ: nhân vật nhìn vào gương, giữ dáng tự tin, ánh sáng chuyển nhẹ..."
                   className="w-full h-24 bg-transparent text-[15px] leading-relaxed resize-none focus:outline-none placeholder:text-gray-300 text-gray-800 dark:text-zinc-100"
                   disabled={stage === 'submitting'}
                 />
               </div>
             </div>
+
+            {scriptDirectorPanel}
 
             {/* Config Grids */}
             {modelOptions.showAspectRatio && modelOptions.aspectRatios.length > 0 && (
@@ -802,63 +905,6 @@ export function WorkspaceVideo() {
                   ))}
                 </div>
               </div>
-            </div>
-
-            <div className="rounded-[22px] border border-cyan-200 bg-cyan-50/70 p-4 dark:border-cyan-500/30 dark:bg-cyan-500/10">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-1 text-[11px] font-black uppercase tracking-wide text-cyan-700 dark:text-cyan-200">
-                    <Sparkles className="h-3.5 w-3.5" />
-                    Tạo kịch bản AI
-                  </div>
-                  <p className="mt-1 text-[11px] leading-relaxed text-cyan-700/80 dark:text-cyan-100/80">
-                    AI sẽ quét ảnh, viết kịch bản theo model/thời lượng đang chọn. Hãy đọc và chỉnh lại prompt trước khi tạo video.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleGenerateVideoScript}
-                  disabled={isGeneratingScript || !keyframeImage}
-                  className="shrink-0 rounded-full bg-cyan-500 px-3 py-2 text-[11px] font-black text-white disabled:bg-gray-200 disabled:text-gray-400"
-                >
-                  {isGeneratingScript ? 'Đang viết...' : 'Tạo'}
-                </button>
-              </div>
-
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <select value={scriptStyle} onChange={(e) => setScriptStyle(e.target.value)} className="rounded-2xl border border-white/70 bg-white px-3 py-2 text-xs font-bold text-gray-700 dark:border-zinc-700 dark:bg-[#18181B] dark:text-zinc-100">
-                  <option>Cinematic điện ảnh</option>
-                  <option>Thời trang</option>
-                  <option>Hành động</option>
-                  <option>Lãng mạn</option>
-                </select>
-                <select value={scriptTheme} onChange={(e) => setScriptTheme(e.target.value)} className="rounded-2xl border border-white/70 bg-white px-3 py-2 text-xs font-bold text-gray-700 dark:border-zinc-700 dark:bg-[#18181B] dark:text-zinc-100">
-                  <option>Tự động theo ảnh</option>
-                  <option>Đời thường</option>
-                  <option>Sân khấu</option>
-                  <option>Đường phố</option>
-                </select>
-                <select value={scriptSoundMood} onChange={(e) => setScriptSoundMood(e.target.value)} className="rounded-2xl border border-white/70 bg-white px-3 py-2 text-xs font-bold text-gray-700 dark:border-zinc-700 dark:bg-[#18181B] dark:text-zinc-100">
-                  <option>Phù hợp bối cảnh</option>
-                  <option>Lãng mạn vui vẻ</option>
-                  <option>Sôi động hành động</option>
-                  <option>Sầu bi buồn bã</option>
-                  <option>Vui tươi hài hước</option>
-                </select>
-                <select value={scriptTargetModel || videoModel} onChange={(e) => setScriptTargetModel(e.target.value)} className="rounded-2xl border border-white/70 bg-white px-3 py-2 text-xs font-bold text-gray-700 dark:border-zinc-700 dark:bg-[#18181B] dark:text-zinc-100">
-                  {(videoModelOptions.length > 0 ? videoModelOptions : [{ id: videoModel, name: videoModel || 'Model hiện tại', price: 0 }]).map((model: AIModelOption) => (
-                    <option key={model.id} value={model.id}>{model.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setScriptVoiceDialogue((value) => !value)}
-                className={`mt-3 w-full rounded-2xl px-3 py-2 text-xs font-black ${scriptVoiceDialogue ? 'bg-purple-600 text-white' : 'bg-white text-gray-600 dark:bg-[#18181B] dark:text-zinc-300'}`}
-              >
-                {scriptVoiceDialogue ? 'Có lời thoại tiếng Việt chuẩn' : 'Không thêm lời thoại'}
-              </button>
             </div>
 
             {/* Audio Toggle */}

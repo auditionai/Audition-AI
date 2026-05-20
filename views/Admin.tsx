@@ -1961,7 +1961,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       
       {/* Top Command Bar */}
       <div className="bg-[#12121a] border-b border-white/10 sticky top-[72px] z-40 shadow-lg">
-          <div className="max-w-7xl mx-auto px-4 py-3 flex flex-row justify-between items-center gap-4">
+          <div className="w-full max-w-[1920px] mx-auto px-4 xl:px-6 2xl:px-8 py-3 flex flex-row justify-between items-center gap-4">
               <div className="flex items-center gap-3">
                   <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-audi-pink flex items-center justify-center text-white font-bold shadow-lg shadow-audi-pink/30">
                       <Icons.Shield className="w-5 h-5 md:w-6 md:h-6" />
@@ -1981,7 +1981,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           </div>
 
           {/* Navigation Tabs (Scrollable) */}
-          <div className="max-w-7xl mx-auto px-4 flex gap-2 overflow-x-auto no-scrollbar py-2 border-t border-white/5">
+          <div className="w-full max-w-[1920px] mx-auto px-4 xl:px-6 2xl:px-8 flex gap-2 overflow-x-auto no-scrollbar py-2 border-t border-white/5">
               {[
                   { id: 'overview', icon: Icons.Home, label: 'Tổng Quan' },
                   { id: 'transactions', icon: Icons.Gem, label: 'Giao Dịch' },
@@ -2009,7 +2009,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+      <div className="w-full max-w-[1920px] mx-auto px-4 xl:px-6 2xl:px-8 py-6 space-y-6">
           
           {/* ... (Existing Views) ... */}
           {activeView === 'overview' && (

@@ -8,10 +8,13 @@ import { useNavigate } from 'react-router-dom';
 import { ChevronRight, Flame, Gem, Loader, ShoppingBag, Sparkles, Zap } from 'lucide-react';
 import { useNotification } from '../components/NotificationSystem';
 import { createPaymentLink, getActivePromotion, getPackages, updateLastActive } from '../services/economyService';
+import { syncPaymentTransaction } from '../services/serverQueueService';
 import type { PromotionCampaign } from '../services/economyService';
 import type { CreditPackage, Transaction } from '../types';
 
 const PENDING_TRANSACTION_STORAGE_KEY = 'audition-mobile-pending-transaction';
+const PENDING_SEPAY_ORDERS_STORAGE_KEY = 'auditionai:pending-sepay-orders';
+const PENDING_SEPAY_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 export const TopUp: React.FC = () => {
   const navigate = useNavigate();
@@ -36,6 +39,78 @@ export const TopUp: React.FC = () => {
       }
     })();
   }, []);
+
+  useEffect(() => {
+    let disposed = false;
+    let syncing = false;
+
+    const getPendingOrders = () => {
+      if (typeof window === 'undefined') return [];
+      try {
+        const raw = window.localStorage.getItem(PENDING_SEPAY_ORDERS_STORAGE_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        if (!Array.isArray(parsed)) return [];
+        const now = Date.now();
+        return parsed.filter((item) =>
+          item?.orderCode &&
+          Number.isFinite(Number(item?.createdAt || 0)) &&
+          now - Number(item.createdAt) < PENDING_SEPAY_MAX_AGE_MS
+        );
+      } catch {
+        return [];
+      }
+    };
+
+    const savePendingOrders = (orders: any[]) => {
+      if (typeof window === 'undefined') return;
+      try {
+        window.localStorage.setItem(PENDING_SEPAY_ORDERS_STORAGE_KEY, JSON.stringify(orders.slice(-12)));
+      } catch {
+        // Ignore storage failures.
+      }
+    };
+
+    const reconcilePendingOrders = async () => {
+      if (syncing || disposed) return;
+      const pendingOrders = getPendingOrders();
+      if (pendingOrders.length === 0) return;
+
+      syncing = true;
+      const remaining = [...pendingOrders];
+      try {
+        for (const order of pendingOrders.slice(-4)) {
+          if (disposed) return;
+          try {
+            const result = await syncPaymentTransaction(order.orderCode, 'sepay');
+            if (result?.settled === false) {
+              continue;
+            }
+
+            const index = remaining.findIndex((item) => String(item.orderCode) === String(order.orderCode));
+            if (index >= 0) remaining.splice(index, 1);
+            window.dispatchEvent(new Event('balance_updated'));
+            notify('Giao dịch nạp tiền đã được đối soát thành công. Vcoin đã được cộng tự động.', 'success');
+          } catch (error) {
+            console.warn('[Mobile TopUp] Pending SePay reconcile failed:', order.orderCode, error);
+          }
+        }
+      } finally {
+        savePendingOrders(remaining);
+        syncing = false;
+      }
+    };
+
+    void reconcilePendingOrders();
+    const handleAttention = () => void reconcilePendingOrders();
+    window.addEventListener('focus', handleAttention);
+    document.addEventListener('visibilitychange', handleAttention);
+
+    return () => {
+      disposed = true;
+      window.removeEventListener('focus', handleAttention);
+      document.removeEventListener('visibilitychange', handleAttention);
+    };
+  }, [notify]);
 
   useEffect(() => {
     if (!activeCampaign) return;

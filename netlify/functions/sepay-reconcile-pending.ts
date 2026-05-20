@@ -134,6 +134,7 @@ export const runSePayPendingReconcile = async (options: SePayPendingReconcileOpt
         createdAt: tx.created_at,
         references,
         maxQueries: 3,
+        allowUniqueAmountFallback: true,
       });
 
       if (!bankLookup.ok) {
@@ -251,4 +252,4 @@ const reconcilePendingSePay: Handler = async (event) => {
   }
 };
 
-export const handler = schedule('*/5 * * * *', reconcilePendingSePay);
+export const handler = schedule('* * * * *', reconcilePendingSePay);

@@ -306,6 +306,7 @@ export const findSePayBankTransactionForOrder = async (input: {
   createdAt?: string | null;
   references?: Array<string | number | null | undefined>;
   maxQueries?: number;
+  allowUniqueAmountFallback?: boolean;
 }) => {
   const orderCode = String(input.orderCode || '').trim();
   if (!orderCode) {
@@ -334,7 +335,7 @@ export const findSePayBankTransactionForOrder = async (input: {
     ]),
   ].slice(0, maxQueries);
 
-  for (const query of queries) {
+  for (const [queryIndex, query] of queries.entries()) {
     const result = await retrieveSePayTransactions({
       ...query,
       transfer_type: 'in',
@@ -350,13 +351,29 @@ export const findSePayBankTransactionForOrder = async (input: {
     }
 
     const transactions = Array.isArray(result.payload?.data) ? result.payload.data : [];
-    const matched = transactions.find((transaction: any) => {
+    const exactAmountTransactions = transactions.filter((transaction: any) => {
       const amountIn = extractSePayBankAmountIn(transaction);
-      return amountIn === Number(input.amount) && transactionContainsAnySePayReference(transaction, references);
+      return amountIn === Number(input.amount);
+    });
+    const matched = exactAmountTransactions.find((transaction: any) => {
+      return transactionContainsAnySePayReference(transaction, references);
     });
 
     if (matched) {
       return { ok: true, status: result.status, payload: result.payload, transaction: matched };
+    }
+
+    if (input.allowUniqueAmountFallback === true && queryIndex === 0 && exactAmountTransactions.length === 1) {
+      return {
+        ok: true,
+        status: result.status,
+        payload: {
+          ...result.payload,
+          audition_unique_amount_fallback: true,
+          audition_match_reason: 'unique_exact_amount_in_payment_window',
+        },
+        transaction: exactAmountTransactions[0],
+      };
     }
   }
 

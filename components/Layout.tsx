@@ -127,7 +127,7 @@ export const Layout: React.FC<LayoutProps> = ({
       </header>
 
       <main className={`relative z-10 ${showMarquee ? 'pt-32' : 'pt-24'} pb-32 min-h-screen`}>
-         <div className="max-w-7xl mx-auto px-4 md:px-6 animate-fade-in">
+         <div className={`${currentView === 'admin' ? 'w-full max-w-[1920px] px-4 xl:px-6 2xl:px-8' : 'max-w-7xl px-4 md:px-6'} mx-auto animate-fade-in`}>
              {children}
          </div>
       </main>

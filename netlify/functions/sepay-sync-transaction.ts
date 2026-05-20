@@ -32,6 +32,11 @@ const settleFromBankTransaction = async (admin: any, tx: any, bankTransaction: a
   return data;
 };
 
+const isSettledPaid = (payload: any) => {
+  const status = String(payload?.status || payload?.transaction?.status || payload?.payment_status || '').toLowerCase();
+  return payload?.settled === true || ['paid', 'success', 'succeeded'].includes(status);
+};
+
 export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers, body: '' };
@@ -125,7 +130,13 @@ export const handler: Handler = async (event) => {
         return {
           statusCode: 200,
           headers,
-          body: JSON.stringify({ success: true, gateway: 'sepay', source: 'order_detail_api', transaction: data }),
+          body: JSON.stringify({
+            success: true,
+            gateway: 'sepay',
+            settled: isSettledPaid(data),
+            source: 'order_detail_api',
+            transaction: data,
+          }),
         };
       }
     }
@@ -141,6 +152,7 @@ export const handler: Handler = async (event) => {
         String(storedPayload.sepay_order_description || ''),
         String(existingTransaction.provider_payment_link_id || '').replace(/^sepay:/i, ''),
       ],
+      allowUniqueAmountFallback: true,
     });
 
     if (!bankLookup.ok) {
@@ -169,7 +181,13 @@ export const handler: Handler = async (event) => {
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify({ success: true, gateway: 'sepay', source: 'transaction_api', transaction: data }),
+      body: JSON.stringify({
+        success: true,
+        gateway: 'sepay',
+        settled: isSettledPaid(data),
+        source: 'transaction_api',
+        transaction: data,
+      }),
     };
   } catch (error: any) {
     console.error('[sepay-sync-transaction] Failed to sync transaction:', error);

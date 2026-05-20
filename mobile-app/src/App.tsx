@@ -217,10 +217,14 @@ function MobileRuntimeEffects() {
       if (status === 'PAID') {
         if (orderCode) {
           try {
-            await syncPaymentTransaction(orderCode, gateway);
-            window.dispatchEvent(new Event('balance_updated'));
-            showPaymentSuccessPopup(orderCode);
-            notify('Thanh toán thành công! Vcoin đã được cộng tự động.', 'success');
+            const result = await syncPaymentTransaction(orderCode, gateway);
+            if (result?.settled === false) {
+              notify('Thanh toán đã ghi nhận. Hệ thống đang đối soát ngân hàng và sẽ tự cộng Vcoin sau khi khớp giao dịch.', 'info');
+            } else {
+              window.dispatchEvent(new Event('balance_updated'));
+              showPaymentSuccessPopup(orderCode);
+              notify('Thanh toán thành công! Vcoin đã được cộng tự động.', 'success');
+            }
           } catch (error) {
             console.error('Failed to sync payment transaction on mobile return:', error);
             notify('Thanh toán đã ghi nhận. Hệ thống đang đồng bộ giao dịch...', 'info');
@@ -235,7 +239,23 @@ function MobileRuntimeEffects() {
 
       if (status === 'CANCELLED') {
         trackEvent('payment_return_cancelled', { payment_method: gateway || 'sepay' });
-        notify('Đã hủy thanh toán.', 'error');
+        if (orderCode) {
+          try {
+            const result = await syncPaymentTransaction(orderCode, gateway);
+            if (result?.settled === false) {
+              notify('SePay đã đóng phiên thanh toán. Nếu bạn đã chuyển khoản, hệ thống đang tự đối soát và sẽ cộng Vcoin khi khớp giao dịch.', 'info');
+            } else {
+              window.dispatchEvent(new Event('balance_updated'));
+              showPaymentSuccessPopup(orderCode);
+              notify('Thanh toán đã được đối soát thành công! Vcoin đã được cộng tự động.', 'success');
+            }
+          } catch (error) {
+            console.error('Failed to reconcile cancelled mobile payment return:', error);
+            notify('SePay đã đóng phiên thanh toán. Nếu bạn đã chuyển khoản, hệ thống sẽ tiếp tục tự đối soát.', 'info');
+          }
+        } else {
+          notify('SePay đã đóng phiên thanh toán. Nếu bạn đã chuyển khoản, hệ thống sẽ tiếp tục tự đối soát.', 'info');
+        }
         navigate('/topup', { replace: true });
         return;
       }

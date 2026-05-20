@@ -353,13 +353,20 @@ function AppContent() {
              desktopHistoryModeRef.current = 'replace';
              if (orderCode) {
                  syncPaymentTransaction(orderCode, gateway)
-                    .then(() => {
-                        window.dispatchEvent(new Event('balance_updated'));
-                        showPaymentSuccessPopup(orderCode);
-                        notify(
-                            lang === 'vi' ? 'Thanh to\u00e1n th\u00e0nh c\u00f4ng! Vcoin \u0111\u00e3 \u0111\u01b0\u1ee3c c\u1ed9ng t\u1ef1 \u0111\u1ed9ng.' : 'Payment successful! Vcoin has been added automatically.',
-                            'success'
-                        );
+                    .then((result) => {
+                        if (result?.settled === false) {
+                            notify(
+                                lang === 'vi' ? 'Thanh toán đã ghi nhận. Hệ thống đang đối soát ngân hàng và sẽ tự cộng Vcoin sau khi khớp giao dịch.' : 'Payment recorded. The system is reconciling the bank transaction.',
+                                'info'
+                            );
+                        } else {
+                            window.dispatchEvent(new Event('balance_updated'));
+                            showPaymentSuccessPopup(orderCode);
+                            notify(
+                                lang === 'vi' ? 'Thanh to\u00e1n th\u00e0nh c\u00f4ng! Vcoin \u0111\u00e3 \u0111\u01b0\u1ee3c c\u1ed9ng t\u1ef1 \u0111\u1ed9ng.' : 'Payment successful! Vcoin has been added automatically.',
+                                'success'
+                            );
+                        }
                     })
                     .catch((error) => {
                         console.error('Failed to sync payment transaction on return:', error);
@@ -379,10 +386,36 @@ function AppContent() {
         } else if (status === 'CANCELLED') {
              desktopHistoryModeRef.current = 'replace';
              trackEvent('payment_return_cancelled', { payment_method: gateway || 'sepay' });
-             notify(
-                 lang === 'vi' ? '\u0110\u00e3 h\u1ee7y thanh to\u00e1n.' : 'Payment cancelled.',
-                 'error'
-             );
+             if (orderCode) {
+                 syncPaymentTransaction(orderCode, gateway)
+                    .then((result) => {
+                        if (result?.settled === false) {
+                            notify(
+                                lang === 'vi' ? 'SePay đã đóng phiên thanh toán. Nếu bạn đã chuyển khoản, hệ thống đang tự đối soát và sẽ cộng Vcoin khi khớp giao dịch.' : 'SePay closed the payment session. If you transferred money, reconciliation will continue automatically.',
+                                'info'
+                            );
+                        } else {
+                            window.dispatchEvent(new Event('balance_updated'));
+                            showPaymentSuccessPopup(orderCode);
+                            notify(
+                                lang === 'vi' ? 'Thanh toán đã được đối soát thành công! Vcoin đã được cộng tự động.' : 'Payment reconciled successfully. Vcoin has been added automatically.',
+                                'success'
+                            );
+                        }
+                    })
+                    .catch((error) => {
+                        console.error('Failed to reconcile cancelled payment return:', error);
+                        notify(
+                            lang === 'vi' ? 'SePay đã đóng phiên thanh toán. Nếu bạn đã chuyển khoản, hệ thống sẽ tiếp tục tự đối soát.' : 'SePay closed the payment session. If you transferred money, reconciliation will continue automatically.',
+                            'info'
+                        );
+                    });
+             } else {
+                 notify(
+                     lang === 'vi' ? 'SePay đã đóng phiên thanh toán. Nếu bạn đã chuyển khoản, hệ thống sẽ tiếp tục tự đối soát.' : 'SePay closed the payment session. If you transferred money, reconciliation will continue automatically.',
+                     'info'
+                 );
+             }
              setCurrentView('topup');
         }
     }

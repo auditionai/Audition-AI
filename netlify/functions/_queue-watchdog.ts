@@ -23,6 +23,7 @@ const WATCHDOG_LOCK_NAME = 'queue_watchdog_lock';
 const WATCHDOG_LOCK_SECONDS = 55;
 const QUEUED_STALE_MS = 5 * 60 * 1000;
 const PRE_DISPATCH_LEASE_GRACE_MS = 15 * 1000;
+const PRE_DISPATCH_PREPARING_STALE_MS = 90 * 1000;
 const MAX_PRE_DISPATCH_RECOVERIES = 8;
 const MAX_PRE_DISPATCH_AGE_MS = 30 * 60 * 1000;
 const OVERDUE_POLL_GRACE_MS = 2 * 60 * 1000;
@@ -87,6 +88,16 @@ const isProviderCommitRisk = (row: any) => {
   const payload = toPayloadObject(row.queue_payload);
   const stage = getStage(payload);
   return Boolean(row.job_id) || payload.__tstTouched === true || payload.__dispatchConfirmationPending === true || stage === 'dispatching';
+};
+
+const isStalePreDispatchWithoutProviderRisk = (row: any, updatedAgeMs: number) => {
+  if (isProviderCommitRisk(row)) {
+    return false;
+  }
+
+  const stage = getStage(toPayloadObject(row.queue_payload));
+  return ['preparing', 'uploading_refs', 'synthesizing_prompt', 'building_payload'].includes(stage) &&
+    updatedAgeMs >= PRE_DISPATCH_PREPARING_STALE_MS;
 };
 
 const tryAcquireNamedLock = async (owner: string) => {
@@ -362,7 +373,11 @@ export const runQueueWatchdog = async (options: { runWorkerAfterRescue?: boolean
 
       if (!hasProviderJob) {
         const leaseExpired = !leaseExpiresAtMs || now - leaseExpiresAtMs > PRE_DISPATCH_LEASE_GRACE_MS;
-        if (!leaseExpired) {
+        const stalePreDispatchWithoutProviderRisk = isStalePreDispatchWithoutProviderRisk(
+          row,
+          updatedAtMs > 0 ? now - updatedAtMs : 0,
+        );
+        if (!leaseExpired && !stalePreDispatchWithoutProviderRisk) {
           continue;
         }
 

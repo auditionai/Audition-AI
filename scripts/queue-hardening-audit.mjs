@@ -256,6 +256,12 @@ const getJob = async (admin, id) => {
   return data;
 };
 
+const getDbQueueHealthReport = async (admin) => {
+  const { data, error } = await admin.rpc('get_generated_queue_health_report');
+  if (error) throw error;
+  return data;
+};
+
 const runCase = async (name, fn) => {
   const startedAt = Date.now();
   try {
@@ -298,6 +304,51 @@ const main = async () => {
   };
 
   const results = [];
+
+  results.push(await runCase('db queue health report classifies stale states', async () => {
+    const queuedUserId = await createMarkedUser('health-queued-stale');
+    const safeUserId = await createMarkedUser('health-safe-requeue');
+    const riskUserId = await createMarkedUser('health-provider-risk');
+    const pollUserId = await createMarkedUser('health-poll-overdue');
+
+    await createJob(admin, queuedUserId, {
+      status: 'queued',
+      queue_payload: basePayload('queued'),
+      updated_at: iso(-420_000),
+      lease_expires_at: null,
+    });
+    await createJob(admin, safeUserId, {
+      queue_payload: basePayload('preparing'),
+      updated_at: iso(-120_000),
+      lease_expires_at: iso(600_000),
+    });
+    await createJob(admin, riskUserId, {
+      queue_payload: basePayload('dispatching', {
+        __tstTouched: true,
+        __dispatchConfirmationPending: true,
+      }),
+      updated_at: iso(-180_000),
+      lease_expires_at: iso(-60_000),
+    });
+    await createJob(admin, pollUserId, {
+      status: 'processing',
+      job_id: 'mock-hardening-overdue',
+      progress: 60,
+      queue_payload: basePayload('submitted'),
+      next_poll_at: iso(-300_000),
+      lease_expires_at: iso(-120_000),
+      updated_at: iso(-300_000),
+    });
+
+    const report = await getDbQueueHealthReport(admin);
+    assert(Number(report?.counts?.queued_stale || 0) >= 1, 'Expected DB health report to count queued_stale.', { report });
+    assert(Number(report?.counts?.pre_dispatch_safe_requeue_due || 0) >= 1, 'Expected DB health report to count safe pre-dispatch requeue.', { report });
+    assert(Number(report?.counts?.pre_dispatch_provider_risk || 0) >= 1, 'Expected DB health report to count provider risk.', { report });
+    assert(Number(report?.counts?.poll_overdue || 0) >= 1, 'Expected DB health report to count overdue poll.', { report });
+    assert(Number(report?.watchdogDue || 0) >= 4, 'Expected DB health report watchdogDue aggregate.', { report });
+    await admin.from('generated_images').delete().in('user_id', [queuedUserId, safeUserId, riskUserId, pollUserId]);
+    return { report };
+  }));
 
   results.push(await runCase('watchdog requeues stale preparing job before provider touch', async () => {
     const userId = await createMarkedUser('watchdog-requeue');

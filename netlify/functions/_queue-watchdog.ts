@@ -8,6 +8,8 @@ import type { QueueProcessingStage, QueueProgressLogEntry } from '../../shared/q
 type WatchdogSummary = {
   scanned: number;
   dbInvariant?: unknown;
+  healthBefore?: QueueHealthSnapshot;
+  healthAfter?: QueueHealthSnapshot;
   queuedStale: number;
   requeuedPreDispatch: number;
   failedPreDispatch: number;
@@ -17,6 +19,32 @@ type WatchdogSummary = {
   sepayReconcile?: unknown;
   sepayReconcileError?: string;
   worker?: Awaited<ReturnType<typeof runQueueDaemon>>;
+};
+
+type QueueHealthCode =
+  | 'healthy'
+  | 'queued_stale'
+  | 'pre_dispatch_waiting_lease'
+  | 'pre_dispatch_safe_requeue_due'
+  | 'pre_dispatch_provider_risk'
+  | 'poll_overdue'
+  | 'unknown';
+
+type QueueHealthSnapshot = {
+  generatedAt: string;
+  scanned: number;
+  counts: Record<QueueHealthCode, number>;
+  watchdogDue: number;
+  examples: Array<{
+    id: string;
+    userId: string;
+    status: string;
+    stage: string;
+    code: QueueHealthCode;
+    ageSeconds: number;
+    leaseState: 'none' | 'active' | 'expired';
+    providerRisk: boolean;
+  }>;
 };
 
 const WATCHDOG_LOCK_NAME = 'queue_watchdog_lock';
@@ -84,6 +112,12 @@ const getStage = (payload: unknown) => {
   return typeof stage === 'string' ? stage : '';
 };
 
+const getLeaseState = (leaseExpiresAt: unknown, now = Date.now()): 'none' | 'active' | 'expired' => {
+  const leaseMs = leaseExpiresAt ? new Date(String(leaseExpiresAt)).getTime() : 0;
+  if (!leaseMs) return 'none';
+  return leaseMs > now ? 'active' : 'expired';
+};
+
 const isProviderCommitRisk = (row: any) => {
   const payload = toPayloadObject(row.queue_payload);
   const stage = getStage(payload);
@@ -98,6 +132,130 @@ const isStalePreDispatchWithoutProviderRisk = (row: any, updatedAgeMs: number) =
   const stage = getStage(toPayloadObject(row.queue_payload));
   return ['preparing', 'uploading_refs', 'synthesizing_prompt', 'building_payload'].includes(stage) &&
     updatedAgeMs >= PRE_DISPATCH_PREPARING_STALE_MS;
+};
+
+const getQueueHealthCode = (row: any, now = Date.now()): QueueHealthCode => {
+  const status = String(row.status || '').toLowerCase();
+  const updatedAtMs = new Date(String(row.updated_at || row.created_at || '')).getTime();
+  const updatedAgeMs = updatedAtMs > 0 ? now - updatedAtMs : 0;
+  const nextPollAtMs = row.next_poll_at ? new Date(String(row.next_poll_at)).getTime() : 0;
+  const hasProviderJob = Boolean(String(row.job_id || '').trim());
+  const stage = getStage(row.queue_payload);
+
+  if (status === 'queued') {
+    return updatedAgeMs > QUEUED_STALE_MS ? 'queued_stale' : 'healthy';
+  }
+
+  if (status !== 'processing') {
+    return 'healthy';
+  }
+
+  if (!hasProviderJob) {
+    const leaseState = getLeaseState(row.lease_expires_at, now);
+    const preDispatchStage = ['preparing', 'uploading_refs', 'synthesizing_prompt', 'building_payload'].includes(stage);
+    const preDispatchStale = preDispatchStage && updatedAgeMs >= PRE_DISPATCH_PREPARING_STALE_MS;
+    const leaseExpired = leaseState === 'none' || (leaseState === 'expired' && row.lease_expires_at && now - new Date(String(row.lease_expires_at)).getTime() > PRE_DISPATCH_LEASE_GRACE_MS);
+
+    if (isProviderCommitRisk(row)) {
+      return leaseExpired || preDispatchStale ? 'pre_dispatch_provider_risk' : 'pre_dispatch_waiting_lease';
+    }
+
+    if (leaseExpired || preDispatchStale) {
+      return 'pre_dispatch_safe_requeue_due';
+    }
+
+    return 'pre_dispatch_waiting_lease';
+  }
+
+  if (nextPollAtMs > 0 && now - nextPollAtMs > OVERDUE_POLL_GRACE_MS) {
+    return 'poll_overdue';
+  }
+
+  return 'healthy';
+};
+
+const buildQueueHealthSnapshot = (rows: any[]): QueueHealthSnapshot => {
+  const now = Date.now();
+  const counts: Record<QueueHealthCode, number> = {
+    healthy: 0,
+    queued_stale: 0,
+    pre_dispatch_waiting_lease: 0,
+    pre_dispatch_safe_requeue_due: 0,
+    pre_dispatch_provider_risk: 0,
+    poll_overdue: 0,
+    unknown: 0,
+  };
+  const riskyExamples: QueueHealthSnapshot['examples'] = [];
+
+  for (const row of rows) {
+    const code = getQueueHealthCode(row, now);
+    counts[code] = (counts[code] || 0) + 1;
+    if (code === 'healthy' || code === 'pre_dispatch_waiting_lease') {
+      continue;
+    }
+
+    const updatedAtMs = new Date(String(row.updated_at || row.created_at || '')).getTime();
+    riskyExamples.push({
+      id: String(row.id),
+      userId: String(row.user_id || ''),
+      status: String(row.status || ''),
+      stage: getStage(row.queue_payload) || 'unknown',
+      code,
+      ageSeconds: updatedAtMs > 0 ? Math.max(0, Math.floor((now - updatedAtMs) / 1000)) : 0,
+      leaseState: getLeaseState(row.lease_expires_at, now),
+      providerRisk: isProviderCommitRisk(row),
+    });
+  }
+
+  const watchdogDue =
+    counts.queued_stale +
+    counts.pre_dispatch_safe_requeue_due +
+    counts.pre_dispatch_provider_risk +
+    counts.poll_overdue;
+
+  return {
+    generatedAt: nowIso(),
+    scanned: rows.length,
+    counts,
+    watchdogDue,
+    examples: riskyExamples
+      .sort((a, b) => b.ageSeconds - a.ageSeconds)
+      .slice(0, 12),
+  };
+};
+
+const fetchQueueHealthRows = async () => {
+  const admin = getServiceRoleClient();
+  const { data, error } = await admin
+    .from('generated_images')
+    .select('id, user_id, asset_type, queue_kind, queue_payload, prompt, tool_id, tool_name, model_used, cost_vcoin, status, job_id, progress, created_at, updated_at, processing_started_at, lease_expires_at, next_poll_at')
+    .in('status', ['queued', 'processing'])
+    .in('queue_kind', SYSTEM_QUEUE_KINDS)
+    .order('updated_at', { ascending: true })
+    .limit(500);
+
+  if (error) {
+    throw error;
+  }
+
+  return Array.isArray(data) ? data : [];
+};
+
+const saveQueueHealthSnapshot = async (summary: WatchdogSummary) => {
+  const admin = getServiceRoleClient();
+  const { error } = await admin
+    .from('system_settings')
+    .upsert({
+      key: 'queue_watchdog_last_health_report',
+      value: {
+        generatedAt: nowIso(),
+        summary,
+      },
+    }, { onConflict: 'key' });
+
+  if (error) {
+    console.warn('[queue-watchdog] Failed to save queue health snapshot:', error);
+  }
 };
 
 const tryAcquireNamedLock = async (owner: string) => {
@@ -177,7 +335,12 @@ const sendThrottledAlert = async (
 const failAndRefund = async (row: any, message: string) => {
   const admin = getServiceRoleClient();
   const failedAt = nowIso();
-  const failedPayload = withQueueLog(row.queue_payload, 'failed', message, 'error');
+  const failedPayload = {
+    ...withQueueLog(row.queue_payload, 'failed', message, 'error'),
+    __watchdogLastActionAt: failedAt,
+    __watchdogLastAction: 'failed_refunded',
+    __watchdogLastReason: message,
+  };
 
   const { error } = await admin
     .from('generated_images')
@@ -215,6 +378,9 @@ const requeuePreDispatch = async (row: any, message: string) => {
   const payload = {
     ...withQueueLog(row.queue_payload, 'queued', message, 'warning'),
     __watchdogRecoveries: recoveries,
+    __watchdogLastActionAt: nowIso(),
+    __watchdogLastAction: 'requeued',
+    __watchdogLastReason: message,
   };
 
   const { error } = await admin
@@ -242,14 +408,20 @@ const requeuePreDispatch = async (row: any, message: string) => {
 
 const nudgeProviderPoll = async (row: any) => {
   const admin = getServiceRoleClient();
+  const nudgedAt = nowIso();
   const { error } = await admin
     .from('generated_images')
     .update({
-      queue_payload: withQueueLog(row.queue_payload, 'polling', 'Watchdog phat hien poll qua han. Dua job ve hang poll ngay.', 'warning'),
+      queue_payload: {
+        ...withQueueLog(row.queue_payload, 'polling', 'Watchdog phat hien poll qua han. Dua job ve hang poll ngay.', 'warning'),
+        __watchdogLastActionAt: nudgedAt,
+        __watchdogLastAction: 'nudged_poll',
+        __watchdogLastReason: 'poll_overdue',
+      },
       lease_token: null,
       lease_expires_at: null,
-      next_poll_at: nowIso(),
-      updated_at: nowIso(),
+      next_poll_at: nudgedAt,
+      updated_at: nudgedAt,
     })
     .eq('id', row.id);
 
@@ -337,20 +509,9 @@ export const runQueueWatchdog = async (options: { runWorkerAfterRescue?: boolean
     }
 
     summary.dbInvariant = await runDbInvariantRepair();
-    const { data, error } = await admin
-      .from('generated_images')
-      .select('id, user_id, asset_type, queue_kind, queue_payload, prompt, tool_id, tool_name, model_used, cost_vcoin, status, job_id, progress, created_at, updated_at, processing_started_at, lease_expires_at, next_poll_at')
-      .in('status', ['queued', 'processing'])
-      .in('queue_kind', SYSTEM_QUEUE_KINDS)
-      .order('updated_at', { ascending: true })
-      .limit(500);
-
-    if (error) {
-      throw error;
-    }
-
-    const rows = Array.isArray(data) ? data : [];
+    const rows = await fetchQueueHealthRows();
     summary.scanned = rows.length;
+    summary.healthBefore = buildQueueHealthSnapshot(rows);
     const now = Date.now();
 
     for (const row of rows) {
@@ -406,6 +567,7 @@ export const runQueueWatchdog = async (options: { runWorkerAfterRescue?: boolean
     }
 
     summary.staleDispatchHeartbeat = await inspectDispatchHeartbeat();
+    summary.healthAfter = buildQueueHealthSnapshot(await fetchQueueHealthRows());
 
     if (summary.queuedStale > 0) {
       if (await sendThrottledAlert(alertState, 'queued_stale', 'Queue co job queued qua 5 phut', {
@@ -428,17 +590,32 @@ export const runQueueWatchdog = async (options: { runWorkerAfterRescue?: boolean
         thresholdMs: DISPATCH_HEARTBEAT_STALE_MS,
       })) summary.alertsSent += 1;
     }
+    if (summary.healthAfter.watchdogDue > 0) {
+      if (await sendThrottledAlert(alertState, 'residual_watchdog_due', 'Queue van con job den han watchdog sau chu ky tu cuu', {
+        watchdogDue: summary.healthAfter.watchdogDue,
+        counts: summary.healthAfter.counts,
+        examples: summary.healthAfter.examples.slice(0, 5),
+      })) summary.alertsSent += 1;
+    }
 
     await saveAlertState(alertState);
 
-    if (options.runWorkerAfterRescue !== false && (summary.requeuedPreDispatch > 0 || summary.nudgedPolls > 0 || summary.queuedStale > 0)) {
+    if (options.runWorkerAfterRescue !== false && (
+      summary.requeuedPreDispatch > 0 ||
+      summary.nudgedPolls > 0 ||
+      summary.queuedStale > 0 ||
+      summary.staleDispatchHeartbeat
+    )) {
       summary.worker = await runQueueDaemon({
         maxRuntimeMs: 20_000,
         idleIterationsToStop: 3,
         activeDelayMs: 50,
         idleDelayMs: 500,
       });
+      summary.healthAfter = buildQueueHealthSnapshot(await fetchQueueHealthRows());
     }
+
+    await saveQueueHealthSnapshot(summary);
 
     return summary;
   } finally {

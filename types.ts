@@ -124,6 +124,31 @@ export interface AdminQueueJob {
   processingStartedAt?: string;
   leaseExpiresAt?: string;
   isStuck?: boolean;
+  health?: {
+    code:
+      | 'healthy'
+      | 'queued_stale'
+      | 'pre_dispatch_waiting_lease'
+      | 'pre_dispatch_safe_requeue_due'
+      | 'pre_dispatch_provider_risk'
+      | 'poll_overdue'
+      | 'rescuing_failed_provider'
+      | 'completed'
+      | 'failed'
+      | 'unknown';
+    label: string;
+    detail: string;
+    action: string;
+    severity: 'ok' | 'info' | 'warning' | 'critical';
+    providerRisk?: boolean;
+    safeToRequeue?: boolean;
+    watchdogDue?: boolean;
+    leaseState?: 'none' | 'active' | 'expired';
+    secondsUntilWatchdogDue?: number;
+    secondsSinceUpdated?: number;
+    secondsSinceLeaseExpired?: number;
+    recoveries?: number;
+  };
 }
 
 export interface AdminQueueSummaryCounts {
@@ -138,6 +163,43 @@ export interface AdminQueueSummaryCounts {
 }
 
 export interface AdminQueueSummary extends AdminQueueSummaryCounts {}
+
+export interface AdminQueueHealthSnapshot {
+  generatedAt?: string;
+  scanned?: number;
+  counts?: Partial<Record<NonNullable<AdminQueueJob['health']>['code'], number>>;
+  watchdogDue?: number;
+  examples?: Array<{
+    id: string;
+    userId?: string;
+    status?: string;
+    stage?: string;
+    code?: NonNullable<AdminQueueJob['health']>['code'];
+    ageSeconds?: number;
+    leaseState?: NonNullable<AdminQueueJob['health']>['leaseState'];
+    providerRisk?: boolean;
+  }>;
+}
+
+export interface AdminQueueHealthReport {
+  lastWatchdogReport?: {
+    generatedAt?: string;
+    summary?: {
+      scanned?: number;
+      queuedStale?: number;
+      requeuedPreDispatch?: number;
+      failedPreDispatch?: number;
+      nudgedPolls?: number;
+      staleDispatchHeartbeat?: boolean;
+      alertsSent?: number;
+      healthBefore?: AdminQueueHealthSnapshot;
+      healthAfter?: AdminQueueHealthSnapshot;
+      sepayReconcileError?: string;
+    };
+  } | null;
+  lastWatchdogReportUpdatedAt?: string | null;
+  liveDbReport?: AdminQueueHealthSnapshot | { error?: string; code?: string } | null;
+}
 
 export interface AdminQueueInputMedia {
   label: string;

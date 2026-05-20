@@ -1,6 +1,6 @@
 import { getSupabaseAuthHeader, getSupabaseUser, supabase } from './supabaseClient';
 import { trackEvent } from './analyticsService';
-import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, HistoryItem, VcoinLog, AdminQueueJob, AdminQueueSummary, AdminQueueJobDetail } from '../types';
+import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, HistoryItem, VcoinLog, AdminQueueJob, AdminQueueSummary, AdminQueueJobDetail, AdminQueueHealthReport } from '../types';
 import {
   creditsToVcoin,
   fetchTstModels,
@@ -2121,6 +2121,21 @@ export const getAdminQueueJobs = async (params?: {
         jobs: Array.isArray(payload?.jobs) ? payload.jobs : [],
         summary: normalizeAdminQueueSummary(payload?.summary || EMPTY_ADMIN_QUEUE_SUMMARY),
     };
+};
+
+export const getAdminQueueHealthReport = async (): Promise<AdminQueueHealthReport> => {
+    const authHeader = await getSessionAuthHeader();
+    const response = await fetch('/api/admin-queue-health-report', {
+        method: 'GET',
+        headers: authHeader,
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        throw new Error(payload?.error || 'Khong the tai queue health report');
+    }
+
+    return payload as AdminQueueHealthReport;
 };
 
 export const runAdminQueueReconcile = async () => {

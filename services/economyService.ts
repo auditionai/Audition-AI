@@ -1750,6 +1750,7 @@ export const getApiKeysList = async () => {
 // --- TRANSACTIONS ---
 
 const SHELL_OVERRIDE_STORAGE_KEY = 'auditionai:shell-override';
+const PENDING_SEPAY_ORDERS_STORAGE_KEY = 'auditionai:pending-sepay-orders';
 const PHONE_USER_AGENT_PATTERN = /iphone|ipod|android.+mobile|windows phone|blackberry|opera mini|mobile safari/i;
 
 const shouldPreferMobileShell = () => {
@@ -1863,6 +1864,23 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
                         paymentMethod,
                     }),
                 );
+                const rawPendingOrders = window.localStorage.getItem(PENDING_SEPAY_ORDERS_STORAGE_KEY);
+                const pendingOrders = rawPendingOrders ? JSON.parse(rawPendingOrders) : [];
+                const nextPendingOrders = [
+                    ...(Array.isArray(pendingOrders) ? pendingOrders : []),
+                    {
+                        orderCode,
+                        transactionId: data.id,
+                        createdAt: Date.now(),
+                        amount: pkg.price,
+                        vcoin: totalCoins,
+                        packageName: pkg.name,
+                    },
+                ].filter((item, index, all) =>
+                    item?.orderCode &&
+                    all.findIndex((candidate) => String(candidate?.orderCode) === String(item.orderCode)) === index
+                ).slice(-12);
+                window.localStorage.setItem(PENDING_SEPAY_ORDERS_STORAGE_KEY, JSON.stringify(nextPendingOrders));
             } catch (storageError) {
                 console.warn('Failed to persist pending payment metadata', storageError);
             }

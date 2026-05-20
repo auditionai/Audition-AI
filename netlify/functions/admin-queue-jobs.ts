@@ -20,7 +20,9 @@ const FILTER_OVERFETCH_MULTIPLIER = 5;
 const MAX_FILTER_OVERFETCH = 1000;
 const STALE_QUEUE_MS = 5 * 60 * 1000;
 const OVERDUE_POLL_GRACE_MS = 2 * 60 * 1000;
+const PRE_DISPATCH_STALE_MS = 90 * 1000;
 const SUMMARY_TIME_ZONE = 'Asia/Ho_Chi_Minh';
+const PRE_DISPATCH_STAGES = new Set(['preparing', 'uploading_refs', 'synthesizing_prompt', 'building_payload']);
 
 const normalizeQueueLogs = (payload: Record<string, unknown> | null | undefined): QueueProgressLogEntry[] => {
   const rawLogs = payload && typeof payload === 'object' ? (payload as Record<string, unknown>).__logs : null;
@@ -59,6 +61,221 @@ const normalizeVertexDiagnostics = (payload: Record<string, unknown> | null | un
 const getQueueStage = (payload: Record<string, unknown> | null | undefined) => {
   const rawStage = payload && typeof payload === 'object' ? (payload as Record<string, unknown>).__stage : null;
   return typeof rawStage === 'string' && rawStage.trim() ? rawStage.trim() : undefined;
+};
+
+const toPayloadObject = (payload: Record<string, unknown> | null | undefined): Record<string, unknown> =>
+  payload && typeof payload === 'object' ? payload : {};
+
+const getBooleanPayloadFlag = (payload: Record<string, unknown> | null | undefined, key: string) =>
+  toPayloadObject(payload)[key] === true;
+
+const getNumericPayloadValue = (payload: Record<string, unknown> | null | undefined, key: string) => {
+  const value = Number(toPayloadObject(payload)[key] || 0);
+  return Number.isFinite(value) ? value : 0;
+};
+
+const formatSeconds = (seconds: number) => {
+  const normalized = Math.max(0, Math.ceil(seconds));
+  if (normalized < 60) return `${normalized}s`;
+  return `${Math.ceil(normalized / 60)} phút`;
+};
+
+const getQueueHealthReport = (
+  row: any,
+  payload: Record<string, unknown> | null | undefined,
+  displayStatus: AdminQueueJob['displayStatus'],
+): AdminQueueJob['health'] => {
+  const now = Date.now();
+  const status = String(row.status || '').toLowerCase();
+  const stage = getQueueStage(payload) || '';
+  const updatedAtMs = new Date(row.updated_at || row.created_at || now).getTime();
+  const leaseExpiresAtMs = row.lease_expires_at ? new Date(row.lease_expires_at).getTime() : 0;
+  const nextPollAtMs = row.next_poll_at ? new Date(row.next_poll_at).getTime() : 0;
+  const secondsSinceUpdated = Number.isFinite(updatedAtMs) ? Math.max(0, Math.floor((now - updatedAtMs) / 1000)) : 0;
+  const secondsSinceLeaseExpired = leaseExpiresAtMs > 0 ? Math.floor((now - leaseExpiresAtMs) / 1000) : 0;
+  const missingProviderJob = !String(row.job_id || '').trim();
+  const tstTouched = getBooleanPayloadFlag(payload, '__tstTouched');
+  const dispatchConfirmationPending = getBooleanPayloadFlag(payload, '__dispatchConfirmationPending');
+  const recoveries = getNumericPayloadValue(payload, '__watchdogRecoveries');
+  const providerRisk = Boolean(row.job_id) || tstTouched || dispatchConfirmationPending || stage === 'dispatching';
+  const leaseState: NonNullable<AdminQueueJob['health']>['leaseState'] =
+    leaseExpiresAtMs <= 0 ? 'none' : leaseExpiresAtMs > now ? 'active' : 'expired';
+
+  if (displayStatus === 'rescuing') {
+    return {
+      code: 'rescuing_failed_provider',
+      label: 'Đang cứu kết quả provider',
+      detail: 'Job đã fail nhưng còn khả năng provider vẫn có kết quả. Worker đang theo chính sách rescue.',
+      action: 'Theo dõi rescue, không dispatch lại job này.',
+      severity: 'warning',
+      providerRisk: true,
+      safeToRequeue: false,
+      watchdogDue: false,
+      leaseState,
+      secondsSinceUpdated,
+      secondsSinceLeaseExpired,
+      recoveries,
+    };
+  }
+
+  if (status === 'completed') {
+    return {
+      code: 'completed',
+      label: 'Đã hoàn thành',
+      detail: 'Job đã có trạng thái completed.',
+      action: 'Không cần xử lý.',
+      severity: 'ok',
+      providerRisk: false,
+      safeToRequeue: false,
+      watchdogDue: false,
+      leaseState,
+      secondsSinceUpdated,
+      secondsSinceLeaseExpired,
+      recoveries,
+    };
+  }
+
+  if (status === 'failed') {
+    return {
+      code: 'failed',
+      label: 'Đã thất bại',
+      detail: 'Job đã kết thúc ở trạng thái failed.',
+      action: 'Xem log lỗi/refund nếu cần đối soát.',
+      severity: 'critical',
+      providerRisk,
+      safeToRequeue: false,
+      watchdogDue: false,
+      leaseState,
+      secondsSinceUpdated,
+      secondsSinceLeaseExpired,
+      recoveries,
+    };
+  }
+
+  if (status === 'queued') {
+    const queuedStale = secondsSinceUpdated * 1000 >= STALE_QUEUE_MS;
+    return {
+      code: queuedStale ? 'queued_stale' : 'healthy',
+      label: queuedStale ? 'Queued quá lâu' : 'Đang chờ slot',
+      detail: queuedStale
+        ? `Job queued không được claim trong ${formatSeconds(secondsSinceUpdated)}. Có thể worker/slot dispatch đang bận hoặc mất heartbeat.`
+        : 'Job đang chờ worker claim theo slot hệ thống và giới hạn mỗi user.',
+      action: queuedStale ? 'Watchdog sẽ alert. Kiểm tra dispatch worker heartbeat và capacity.' : 'Chờ worker dispatch.',
+      severity: queuedStale ? 'warning' : 'info',
+      providerRisk: false,
+      safeToRequeue: false,
+      watchdogDue: queuedStale,
+      leaseState,
+      secondsSinceUpdated,
+      secondsSinceLeaseExpired,
+      recoveries,
+    };
+  }
+
+  if (status === 'processing' && missingProviderJob) {
+    const preDispatchStage = PRE_DISPATCH_STAGES.has(stage);
+    const preDispatchStale = preDispatchStage && secondsSinceUpdated * 1000 >= PRE_DISPATCH_STALE_MS;
+    const leaseExpired = leaseState === 'none' || leaseState === 'expired';
+    const watchdogDue = !providerRisk && (preDispatchStale || leaseExpired);
+    const secondsUntilWatchdogDue =
+      !providerRisk && preDispatchStage && !preDispatchStale
+        ? Math.ceil((PRE_DISPATCH_STALE_MS - secondsSinceUpdated * 1000) / 1000)
+        : 0;
+
+    if (providerRisk) {
+      return {
+        code: 'pre_dispatch_provider_risk',
+        label: 'Rủi ro provider duplicate',
+        detail: `Job chưa có provider id nhưng đã có dấu hiệu chạm TST (${[
+          tstTouched ? '__tstTouched' : '',
+          dispatchConfirmationPending ? '__dispatchConfirmationPending' : '',
+          stage === 'dispatching' ? 'stage=dispatching' : '',
+        ].filter(Boolean).join(', ')}).`,
+        action: 'Không tự dispatch lại. Watchdog sẽ fail/refund hoặc chờ xác minh để tránh tạo trùng provider job.',
+        severity: 'critical',
+        providerRisk: true,
+        safeToRequeue: false,
+        watchdogDue: leaseExpired || preDispatchStale,
+        leaseState,
+        secondsUntilWatchdogDue,
+        secondsSinceUpdated,
+        secondsSinceLeaseExpired,
+        recoveries,
+      };
+    }
+
+    if (watchdogDue) {
+      return {
+        code: 'pre_dispatch_safe_requeue_due',
+        label: 'Pre-dispatch stale, an toàn để requeue',
+        detail: `Job chưa chạm TST, chưa có provider id, stage=${stage || 'unknown'}, im lặng ${formatSeconds(secondsSinceUpdated)}.`,
+        action: 'Watchdog/DB invariant phải đưa job về queue ở chu kỳ kế tiếp.',
+        severity: 'critical',
+        providerRisk: false,
+        safeToRequeue: true,
+        watchdogDue: true,
+        leaseState,
+        secondsUntilWatchdogDue: 0,
+        secondsSinceUpdated,
+        secondsSinceLeaseExpired,
+        recoveries,
+      };
+    }
+
+    return {
+      code: 'pre_dispatch_waiting_lease',
+      label: 'Đang chuẩn bị, chưa tới hạn watchdog',
+      detail: preDispatchStage
+        ? `Job ở ${stage}, chưa chạm TST. Watchdog còn khoảng ${formatSeconds(secondsUntilWatchdogDue)} trước khi được phép rescue.`
+        : 'Job đang processing trước provider nhưng stage chưa đủ điều kiện stale nhanh.',
+      action: 'Chờ worker tiếp tục hoặc watchdog rescue khi hết ngưỡng.',
+      severity: 'warning',
+      providerRisk: false,
+      safeToRequeue: false,
+      watchdogDue: false,
+      leaseState,
+      secondsUntilWatchdogDue,
+      secondsSinceUpdated,
+      secondsSinceLeaseExpired,
+      recoveries,
+    };
+  }
+
+  if (status === 'processing' && !missingProviderJob && nextPollAtMs > 0) {
+    const overdueSeconds = Math.floor((now - nextPollAtMs) / 1000);
+    const overdue = overdueSeconds * 1000 >= OVERDUE_POLL_GRACE_MS;
+    return {
+      code: overdue ? 'poll_overdue' : 'healthy',
+      label: overdue ? 'Poll provider quá hạn' : 'Đang chờ poll provider',
+      detail: overdue
+        ? `Provider job đã quá lịch poll ${formatSeconds(overdueSeconds)}.`
+        : 'Provider đã nhận job, worker sẽ poll khi tới lịch.',
+      action: overdue ? 'Watchdog phải clear lease và đẩy next_poll_at về hiện tại.' : 'Chờ poll worker.',
+      severity: overdue ? 'critical' : 'info',
+      providerRisk: true,
+      safeToRequeue: false,
+      watchdogDue: overdue,
+      leaseState,
+      secondsSinceUpdated,
+      secondsSinceLeaseExpired,
+      recoveries,
+    };
+  }
+
+  return {
+    code: 'unknown',
+    label: 'Chưa phân loại',
+    detail: 'Không khớp rule health hiện tại.',
+    action: 'Mở chi tiết job để xem payload/log.',
+    severity: 'warning',
+    providerRisk,
+    safeToRequeue: false,
+    watchdogDue: false,
+    leaseState,
+    secondsSinceUpdated,
+    secondsSinceLeaseExpired,
+    recoveries,
+  };
 };
 
 const getLastQueueLog = (payload: Record<string, unknown> | null | undefined) => {
@@ -103,9 +320,9 @@ const buildSummary = (jobs: AdminQueueJob[]): AdminQueueSummary => ({
   processing: jobs.filter((job) => job.status === 'processing').length,
   completed: jobs.filter((job) => (job.displayStatus || job.status) === 'completed').length,
   failed: jobs.filter((job) => (job.displayStatus || job.status) === 'failed').length,
-  overduePolls: jobs.filter((job) => job.status === 'processing' && !!job.jobId && !!job.isStuck).length,
-  untouchedQueued: jobs.filter((job) => job.status === 'queued' && !!job.isStuck).length,
-  stalledPreDispatch: jobs.filter((job) => job.status === 'processing' && !job.jobId && !!job.isStuck).length,
+  overduePolls: jobs.filter((job) => job.health?.code === 'poll_overdue').length,
+  untouchedQueued: jobs.filter((job) => job.health?.code === 'queued_stale').length,
+  stalledPreDispatch: jobs.filter((job) => ['pre_dispatch_safe_requeue_due', 'pre_dispatch_provider_risk'].includes(job.health?.code || '')).length,
 });
 
 const getSaigonTodayStartIso = () => {
@@ -253,6 +470,8 @@ export const handler: Handler = async (event) => {
             ? normalizedStatus
             : 'queued') as AdminQueueJob['status'];
 
+      const health = getQueueHealthReport(row, payload, displayStatus);
+
       return {
         id: String(row.id),
         userId: String(row.user_id),
@@ -281,7 +500,8 @@ export const handler: Handler = async (event) => {
         nextPollAt: row.next_poll_at || undefined,
         processingStartedAt: row.processing_started_at || undefined,
         leaseExpiresAt: row.lease_expires_at || undefined,
-        isStuck: isStuckJob(row),
+        isStuck: isStuckJob(row) || health.watchdogDue || health.code === 'pre_dispatch_provider_risk',
+        health,
       };
     });
 

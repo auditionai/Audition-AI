@@ -99,6 +99,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/admin-queue-health-report"
+  to = "/.netlify/functions/admin-queue-health-report"
+  status = 200
+
+[[redirects]]
   from = "/api/admin-stop-queue-job"
   to = "/.netlify/functions/admin-stop-queue-job"
   status = 200

@@ -227,6 +227,19 @@ const getQueueStatusTone = (status?: string) => {
   }
 };
 
+const getQueueHealthTone = (severity?: string) => {
+  switch (severity) {
+    case 'ok':
+      return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300';
+    case 'info':
+      return 'border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-cyan-500/20 dark:bg-cyan-500/10 dark:text-cyan-300';
+    case 'critical':
+      return 'border-red-200 bg-red-50 text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300';
+    default:
+      return 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300';
+  }
+};
+
 const getQueueMediaSectionTone = (key: AdminQueueMediaSection['key']) => {
   switch (key) {
     case 'result':
@@ -1354,7 +1367,7 @@ export function AdminView() {
                         )}
                         <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-bold text-gray-600 dark:bg-zinc-900 dark:text-zinc-300">{getQueuePlatformLabel(job.clientPlatform)}</span>
                         <span className="text-[11px] font-semibold text-gray-500 dark:text-zinc-400">{Math.round(job.progress || 0)}%</span>
-                        {job.isStuck ? <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">STUCK</span> : null}
+                        {job.isStuck ? <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">{job.health?.label || 'STUCK'}</span> : null}
                       </div>
 
                       <div className="grid grid-cols-2 gap-3 text-xs">
@@ -1369,6 +1382,19 @@ export function AdminView() {
                       </div>
 
                       <div className="mt-3 text-sm text-gray-700 dark:text-zinc-200">{job.toolName || (job.assetType === 'video' ? 'Video' : 'Ảnh')}</div>
+                      {job.health ? (
+                        <div className={`mt-3 rounded-2xl border px-3 py-3 text-xs ${getQueueHealthTone(job.health.severity)}`}>
+                          <div className="font-black">{job.health.label}</div>
+                          <div className="mt-1 leading-relaxed opacity-90">{job.health.detail}</div>
+                          <div className="mt-2 font-bold">Hành động: {job.health.action}</div>
+                          <div className="mt-2 flex flex-wrap gap-1 text-[10px]">
+                            <span className="rounded-full bg-white/40 px-2 py-0.5 dark:bg-black/20">lease: {job.health.leaseState || '-'}</span>
+                            {typeof job.health.recoveries === 'number' ? <span className="rounded-full bg-white/40 px-2 py-0.5 dark:bg-black/20">recoveries: {job.health.recoveries}</span> : null}
+                            {job.health.providerRisk ? <span className="rounded-full bg-white/40 px-2 py-0.5 dark:bg-black/20">provider-risk</span> : null}
+                            {job.health.safeToRequeue ? <span className="rounded-full bg-white/40 px-2 py-0.5 dark:bg-black/20">safe-requeue</span> : null}
+                          </div>
+                        </div>
+                      ) : null}
                       <div className="mt-3 text-[11px] text-gray-500 dark:text-zinc-400">{lastLogMessage}</div>
 
                       <div className="mt-4 flex gap-2">
@@ -1765,6 +1791,20 @@ export function AdminView() {
                         </div>
                       </div>
                     </div>
+
+                    {selectedQueueJobDetail.job.health ? (
+                      <div className={`rounded-[24px] border px-4 py-4 text-sm ${getQueueHealthTone(selectedQueueJobDetail.job.health.severity)}`}>
+                        <div className="font-black">{selectedQueueJobDetail.job.health.label}</div>
+                        <div className="mt-2 leading-relaxed opacity-90">{selectedQueueJobDetail.job.health.detail}</div>
+                        <div className="mt-2 font-bold">Hành động: {selectedQueueJobDetail.job.health.action}</div>
+                        <div className="mt-3 flex flex-wrap gap-1 text-[10px]">
+                          <span className="rounded-full bg-white/40 px-2 py-0.5 dark:bg-black/20">lease: {selectedQueueJobDetail.job.health.leaseState || '-'}</span>
+                          {typeof selectedQueueJobDetail.job.health.recoveries === 'number' ? <span className="rounded-full bg-white/40 px-2 py-0.5 dark:bg-black/20">recoveries: {selectedQueueJobDetail.job.health.recoveries}</span> : null}
+                          {selectedQueueJobDetail.job.health.providerRisk ? <span className="rounded-full bg-white/40 px-2 py-0.5 dark:bg-black/20">provider-risk</span> : null}
+                          {selectedQueueJobDetail.job.health.safeToRequeue ? <span className="rounded-full bg-white/40 px-2 py-0.5 dark:bg-black/20">safe-requeue</span> : null}
+                        </div>
+                      </div>
+                    ) : null}
 
                     <div className="rounded-[24px] bg-gray-50 px-4 py-4 dark:bg-zinc-800/80">
                       <div className="mb-3 flex items-center justify-between gap-3">

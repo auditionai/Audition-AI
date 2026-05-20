@@ -162,6 +162,8 @@ const ORPHAN_CLAIM_GRACE_MS = 30_000;
 const AMBIGUOUS_DISPATCH_RECOVERY_GRACE_MS = 3 * 60 * 1000;
 const LEASE_HEARTBEAT_INTERVAL_MS = 30_000;
 const DISPATCH_LEASE_SECONDS = parsePositiveIntEnv('QUEUE_DISPATCH_LEASE_SECONDS', 300, 30);
+const DISPATCH_CLAIM_LEASE_SECONDS = parsePositiveIntEnv('QUEUE_DISPATCH_CLAIM_LEASE_SECONDS', 60, 30);
+const LIVE_CATALOG_VALIDATION_TIMEOUT_MS = parsePositiveIntEnv('QUEUE_LIVE_CATALOG_VALIDATION_TIMEOUT_MS', 45_000, 5_000);
 const STALE_RECOVERY_SCAN_LIMIT = 50;
 const STALE_RECOVERY_MIN_AGE_MS = 45_000;
 const STALE_VERIFYING_OUTPUT_RECOVERY_MIN_AGE_MS = 90_000;
@@ -968,6 +970,20 @@ const getPreparationTimeoutUserMessage = (job: Pick<QueueJobRow, 'tool_id'>, pay
   const timeoutMinutes = Math.ceil(getPreparationTimeoutMs(job, payload) / 60000);
   return `Quá thời gian chuẩn bị trong ${timeoutMinutes} phút. Vui lòng tạo lại.`;
 };
+
+const validateQueuePayloadForDispatch = async (
+  job: QueueJobRow,
+  validationPayload: Record<string, unknown>,
+) =>
+  withTimeout(
+    withLeaseHeartbeat(
+      job.id,
+      validateQueuePayloadAgainstLiveCatalog(job.queue_kind, validationPayload),
+      DISPATCH_CLAIM_LEASE_SECONDS,
+    ),
+    LIVE_CATALOG_VALIDATION_TIMEOUT_MS,
+    'TST live catalog validation timeout before dispatching to provider.',
+  );
 
 const getMaxProcessingAgeMs = (job: Pick<QueueJobRow, 'queue_kind'>) => {
   if (job.queue_kind === 'video_generate' || job.queue_kind === 'motion_generate') {
@@ -1964,7 +1980,7 @@ const prepareImageRecipeInStages = async (
     promptPreparation.providerPrompt,
   );
 
-  const validationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, stripInternalQueueMeta(providerPayload));
+  const validationResult = await validateQueuePayloadForDispatch(job, stripInternalQueueMeta(providerPayload));
   const validatedProviderPayload = applyLivePricingConfigToPayload(job.queue_kind, providerPayload, validationResult);
   const storedPayload = await persistRecipePreparedForImmediateDispatch(job.id, validatedProviderPayload, promptPreparation.optimizedPayload);
 
@@ -2541,7 +2557,7 @@ const recoverStalePreparingJobs = async () => {
       isRecipePayload &&
       missingProviderJobId &&
       isStagedRecipe &&
-      leaseExpired &&
+      (leaseExpired || updatedAgeMs >= 90_000) &&
       ageMs >= ORPHAN_CLAIM_GRACE_MS;
     const isWaitingForAmbiguousDispatchConfirmation =
       currentStatus === 'processing' &&
@@ -2853,7 +2869,7 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
     const validationPayload = isQueueRecipePayload(currentPayload)
       ? getRecipeValidationPayload(currentPayload)
       : stripInternalQueueMeta(currentPayload);
-    const validationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, validationPayload);
+    const validationResult = await validateQueuePayloadForDispatch(job, validationPayload);
     submitValidationResult = validationResult;
 
     if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'image_generate_recipe_v1') {
@@ -2899,7 +2915,7 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
         preparationTimeoutMs,
         'Queue preparation timed out before dispatching to provider.',
       );
-      const preparedValidationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, providerPayload);
+      const preparedValidationResult = await validateQueuePayloadForDispatch(job, providerPayload);
       const validatedProviderPayload = applyLivePricingConfigToPayload(
         job.queue_kind,
         providerPayload,
@@ -2980,7 +2996,7 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
         preparationTimeoutMs,
         'Queue preparation timed out before dispatching to provider.',
       );
-      const preparedValidationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, providerPayload);
+      const preparedValidationResult = await validateQueuePayloadForDispatch(job, providerPayload);
       const validatedProviderPayload = applyLivePricingConfigToPayload(
         job.queue_kind,
         providerPayload,
@@ -3019,7 +3035,11 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
       return {};
     }
     providerDispatchStarted = true;
-    const providerJobId = await submitProviderJob(job.queue_kind, providerPayloadForSubmit);
+    const providerJobId = await withLeaseHeartbeat(
+      job.id,
+      submitProviderJob(job.queue_kind, providerPayloadForSubmit),
+      DISPATCH_CLAIM_LEASE_SECONDS,
+    );
     job.queue_payload = await markSubmittedWithOwnership(job, providerJobId);
     logQueueWorkerEvent('Submitted job to provider.', {
       ...getQueueWorkerLogJob(job),
@@ -3169,7 +3189,7 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
   if (shouldRunDispatchLane) {
     const { data: claimedDispatchRows, error: prioritizedDispatchError } = await admin.rpc('claim_dispatchable_generated_jobs', {
       p_limit: dynamicDispatchClaimLimit,
-      p_lease_seconds: DISPATCH_LEASE_SECONDS,
+      p_lease_seconds: DISPATCH_CLAIM_LEASE_SECONDS,
     });
 
     if (prioritizedDispatchError) {
@@ -3201,7 +3221,7 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
 
   const { data: dispatchJobs, error: dispatchError } = await admin.rpc('claim_dispatchable_generated_jobs', {
     p_limit: DISPATCH_CLAIM_LIMIT,
-    p_lease_seconds: DISPATCH_LEASE_SECONDS,
+    p_lease_seconds: DISPATCH_CLAIM_LEASE_SECONDS,
   });
 
   if (dispatchError) {
@@ -3283,7 +3303,7 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
       const validationPayload = isQueueRecipePayload(currentPayload)
         ? getRecipeValidationPayload(currentPayload)
         : stripInternalQueueMeta(currentPayload);
-      const validationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, validationPayload);
+      const validationResult = await validateQueuePayloadForDispatch(job, validationPayload);
       submitValidationResult = validationResult;
 
       if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'image_generate_recipe_v1') {
@@ -3330,7 +3350,7 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
           preparationTimeoutMs,
           'Queue preparation timed out before dispatching to provider.',
         );
-        const preparedValidationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, providerPayload);
+        const preparedValidationResult = await validateQueuePayloadForDispatch(job, providerPayload);
         const validatedProviderPayload = applyLivePricingConfigToPayload(
           job.queue_kind,
           providerPayload,
@@ -3412,7 +3432,7 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
           preparationTimeoutMs,
           'Queue preparation timed out before dispatching to provider.',
         );
-        const preparedValidationResult = await validateQueuePayloadAgainstLiveCatalog(job.queue_kind, providerPayload);
+        const preparedValidationResult = await validateQueuePayloadForDispatch(job, providerPayload);
         const validatedProviderPayload = applyLivePricingConfigToPayload(
           job.queue_kind,
           providerPayload,
@@ -3442,7 +3462,11 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
 
       job.queue_payload = await markSubmittingPreparedPayload(job.id, job.queue_payload);
       providerDispatchStarted = true;
-      const providerJobId = await submitProviderJob(job.queue_kind, providerPayloadForSubmit);
+      const providerJobId = await withLeaseHeartbeat(
+        job.id,
+        submitProviderJob(job.queue_kind, providerPayloadForSubmit),
+        DISPATCH_CLAIM_LEASE_SECONDS,
+      );
       job.queue_payload = await markSubmitted(job, providerJobId);
       summary.submitted += 1;
     } catch (error: any) {

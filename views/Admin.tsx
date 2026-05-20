@@ -53,6 +53,7 @@ import {
     ModelPricing,
     getTstServerAvailabilityConfig,
     saveTstServerAvailabilityConfig,
+    getAdminQueueHealthReport,
     runAdminQueueReconcile
 } from '../services/economyService';
 import { getAllImagesFromStorage, deleteImageFromStorage, checkR2Connection, getUserImagesFromStorage, cleanupExpiredImages, cleanupR2Directly } from '../services/storageService';
@@ -71,7 +72,7 @@ import {
 } from '../services/tstCatalog';
 import { Icons } from '../components/Icons';
 import { APP_CONFIG } from '../constants';
-import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, GeneratedImage, Language, StylePreset, HistoryItem, AdminQueueJob, AdminQueueSummary, AdminQueueJobDetail, AdminQueueInputMedia, AdminQueueMediaSection } from '../types';
+import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, GeneratedImage, Language, StylePreset, HistoryItem, AdminQueueJob, AdminQueueSummary, AdminQueueJobDetail, AdminQueueInputMedia, AdminQueueMediaSection, AdminQueueHealthReport, AdminQueueHealthSnapshot } from '../types';
 
 interface AdminProps {
   lang: Language;
@@ -89,6 +90,9 @@ interface ToastMsg {
     msg: string;
     type: 'success' | 'error' | 'info';
 }
+
+const isQueueHealthSnapshot = (value: AdminQueueHealthReport['liveDbReport']): value is AdminQueueHealthSnapshot =>
+    value !== null && value !== undefined && typeof value === 'object' && !('error' in value);
 
 interface ConfirmState {
     show: boolean;
@@ -544,6 +548,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [queueSummaryFilter, setQueueSummaryFilter] = useState<'all' | 'queued' | 'processing' | 'failed' | 'completed' | 'overdue_polls' | 'untouched_queued' | 'stalled_pre_dispatch'>('all');
   const [queueJobs, setQueueJobs] = useState<AdminQueueJob[]>([]);
   const [queueSummary, setQueueSummary] = useState<AdminQueueSummary>(EMPTY_QUEUE_SUMMARY);
+  const [queueHealthReport, setQueueHealthReport] = useState<AdminQueueHealthReport | null>(null);
   const [loadingQueueJobs, setLoadingQueueJobs] = useState(false);
   const [reconcilingQueue, setReconcilingQueue] = useState(false);
   const [selectedQueueJobId, setSelectedQueueJobId] = useState<string | null>(null);
@@ -735,6 +740,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           });
           setQueueJobs(result.jobs || []);
           setQueueSummary(result.summary || EMPTY_QUEUE_SUMMARY);
+          try {
+              setQueueHealthReport(await getAdminQueueHealthReport());
+          } catch (healthError) {
+              console.warn('Failed to load queue health report', healthError);
+          }
       } catch (error: any) {
           showToast(`Lỗi tải queue: ${error?.message || error}`, 'error');
       } finally {
@@ -1385,11 +1395,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           case 'completed':
               return (job.displayStatus || job.status) === 'completed';
           case 'overdue_polls':
-              return job.status === 'processing' && !!job.jobId && !!job.isStuck;
+              return job.health?.code === 'poll_overdue';
           case 'untouched_queued':
-              return job.status === 'queued' && !!job.isStuck;
+              return job.health?.code === 'queued_stale';
           case 'stalled_pre_dispatch':
-              return job.status === 'processing' && !job.jobId && !!job.isStuck;
+              return ['pre_dispatch_safe_requeue_due', 'pre_dispatch_provider_risk'].includes(job.health?.code || '');
           default:
               return true;
       }
@@ -1729,6 +1739,14 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           showToast('Đã lưu cấu hình bảo trì chức năng!', 'success');
       } else {
           showToast('Lỗi lưu bảo trì chức năng: ' + result.error, 'error');
+      }
+  };
+  const getQueueHealthClass = (severity?: string) => {
+      switch (severity) {
+          case 'ok': return 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20';
+          case 'info': return 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20';
+          case 'critical': return 'bg-red-500/10 text-red-300 border-red-500/25';
+          default: return 'bg-amber-500/10 text-amber-300 border-amber-500/20';
       }
   };
 
@@ -2424,6 +2442,56 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       ))}
                   </div>
 
+                  {queueHealthReport && (
+                      <div className="rounded-2xl border border-white/10 bg-[#12121a] p-4">
+                          <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
+                              <div>
+                                  <div className="text-sm font-black text-white">Queue Health Report</div>
+                                  <div className="mt-1 text-xs text-slate-400">
+                                      Live DB: {
+                                          isQueueHealthSnapshot(queueHealthReport.liveDbReport)
+                                              ? `${queueHealthReport.liveDbReport.scanned || 0} job, ${queueHealthReport.liveDbReport.watchdogDue || 0} cần watchdog`
+                                              : `chưa có RPC hoặc lỗi: ${'error' in (queueHealthReport.liveDbReport || {}) ? (queueHealthReport.liveDbReport as any).error : 'N/A'}`
+                                      }
+                                  </div>
+                                  <div className="mt-1 text-xs text-slate-500">
+                                      Watchdog gần nhất: {queueHealthReport.lastWatchdogReportUpdatedAt ? getTimeAgo(queueHealthReport.lastWatchdogReportUpdatedAt) : 'chưa ghi snapshot'}
+                                  </div>
+                              </div>
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                                  {(() => {
+                                      const live = isQueueHealthSnapshot(queueHealthReport.liveDbReport) ? queueHealthReport.liveDbReport : null;
+                                      const counts = live?.counts || {};
+                                      return [
+                                          ['Queued stale', counts.queued_stale || 0, 'text-orange-300'],
+                                          ['Safe requeue', counts.pre_dispatch_safe_requeue_due || 0, 'text-pink-300'],
+                                          ['Provider risk', counts.pre_dispatch_provider_risk || 0, 'text-red-300'],
+                                          ['Poll quá hạn', counts.poll_overdue || 0, 'text-red-200'],
+                                      ].map(([label, value, color]) => (
+                                          <div key={String(label)} className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+                                              <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">{label}</div>
+                                              <div className={`mt-1 text-lg font-black ${color}`}>{value}</div>
+                                          </div>
+                                      ));
+                                  })()}
+                              </div>
+                          </div>
+                          {queueHealthReport.lastWatchdogReport?.summary?.healthAfter?.examples?.length ? (
+                              <div className="mt-4 border-t border-white/10 pt-3">
+                                  <div className="text-[11px] uppercase tracking-wider text-slate-500 font-bold mb-2">Ví dụ job còn rủi ro sau watchdog</div>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
+                                      {queueHealthReport.lastWatchdogReport.summary.healthAfter.examples.slice(0, 6).map((item) => (
+                                          <div key={item.id} className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs">
+                                              <div className="font-mono text-white">{item.id.slice(0, 12)}</div>
+                                              <div className="mt-1 text-slate-400">{item.code || 'unknown'} · {item.stage || 'unknown'} · {item.ageSeconds || 0}s</div>
+                                          </div>
+                                      ))}
+                                  </div>
+                              </div>
+                          ) : null}
+                      </div>
+                  )}
+
                   <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 space-y-4">
                       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[minmax(220px,1.2fr)_170px_repeat(3,minmax(0,1fr))_170px] gap-3">
                           <div className="flex h-12 items-center gap-2 bg-white/5 rounded-xl border border-white/10 px-3">
@@ -2507,7 +2575,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                   <div className={`inline-flex px-2 py-1 rounded text-[11px] font-bold uppercase ${getQueueStatusClass(job.displayStatus || job.status)}`}>
                                                       {getQueueStatusLabel(job.displayStatus || job.status)}
                                                   </div>
-                                                  {job.isStuck && <div className="text-[11px] text-orange-400 font-bold mt-2">STUCK</div>}
+                                                  {job.isStuck && <div className="text-[11px] text-orange-400 font-bold mt-2">{job.health?.label || 'STUCK'}</div>}
                                               </td>
                                               <td className="px-3 py-3 text-xs text-slate-300">{getQueueStageLabel(job.queueStage)}</td>
                                               <td className="px-3 py-3">
@@ -2521,6 +2589,19 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                   {job.nextPollAt && <div className="mt-1">poll: {getTimeAgo(job.nextPollAt)}</div>}
                                               </td>
                                               <td className="px-3 py-3 text-xs text-slate-400 max-w-[360px]">
+                                                  {job.health && (
+                                                      <div className={`mb-2 rounded-lg border p-2 ${getQueueHealthClass(job.health.severity)}`}>
+                                                          <div className="font-bold">{job.health.label}</div>
+                                                          <div className="mt-1 text-[11px] leading-relaxed opacity-90">{job.health.detail}</div>
+                                                          <div className="mt-1 text-[11px] font-bold opacity-95">Hành động: {job.health.action}</div>
+                                                          <div className="mt-1 flex flex-wrap gap-1 text-[10px]">
+                                                              <span className="rounded bg-black/20 px-1.5 py-0.5">lease: {job.health.leaseState || '-'}</span>
+                                                              {typeof job.health.recoveries === 'number' && <span className="rounded bg-black/20 px-1.5 py-0.5">recoveries: {job.health.recoveries}</span>}
+                                                              {job.health.providerRisk && <span className="rounded bg-black/20 px-1.5 py-0.5">provider-risk</span>}
+                                                              {job.health.safeToRequeue && <span className="rounded bg-black/20 px-1.5 py-0.5">safe-requeue</span>}
+                                                          </div>
+                                                      </div>
+                                                  )}
                                                   {job.errorCategory && job.error && (
                                                       <div className={`inline-flex px-2 py-1 rounded border text-[10px] font-bold uppercase mb-2 ${getQueueErrorCategoryClass(job.errorCategory)}`}>
                                                           {getQueueErrorCategoryLabel(job.errorCategory)}
@@ -2556,7 +2637,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           </div>
                                           <div className="text-right">
                                               <div className={`inline-flex px-2 py-1 rounded text-[11px] font-bold uppercase ${getQueueStatusClass(job.displayStatus || job.status)}`}>{getQueueStatusLabel(job.displayStatus || job.status)}</div>
-                                              {job.isStuck && <div className="text-[11px] text-orange-400 font-bold mt-1">STUCK</div>}
+                                              {job.isStuck && <div className="text-[11px] text-orange-400 font-bold mt-1">{job.health?.label || 'STUCK'}</div>}
                                           </div>
                                       </div>
                                           <div className="grid grid-cols-2 gap-3 mt-3 text-xs">
@@ -2569,6 +2650,19 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       {job.errorCategory && job.error && (
                                           <div className={`inline-flex mt-3 px-2 py-1 rounded border text-[10px] font-bold uppercase ${getQueueErrorCategoryClass(job.errorCategory)}`}>
                                               {getQueueErrorCategoryLabel(job.errorCategory)}
+                                          </div>
+                                      )}
+                                      {job.health && (
+                                          <div className={`mt-3 rounded-xl border p-3 text-xs ${getQueueHealthClass(job.health.severity)}`}>
+                                              <div className="font-black">{job.health.label}</div>
+                                              <div className="mt-1 leading-relaxed opacity-90">{job.health.detail}</div>
+                                              <div className="mt-2 font-bold">Hành động: {job.health.action}</div>
+                                              <div className="mt-2 flex flex-wrap gap-1 text-[10px]">
+                                                  <span className="rounded bg-black/20 px-1.5 py-0.5">lease: {job.health.leaseState || '-'}</span>
+                                                  {typeof job.health.recoveries === 'number' && <span className="rounded bg-black/20 px-1.5 py-0.5">recoveries: {job.health.recoveries}</span>}
+                                                  {job.health.providerRisk && <span className="rounded bg-black/20 px-1.5 py-0.5">provider-risk</span>}
+                                                  {job.health.safeToRequeue && <span className="rounded bg-black/20 px-1.5 py-0.5">safe-requeue</span>}
+                                              </div>
                                           </div>
                                       )}
                                       <div className="mt-3 text-xs text-slate-300">{lastLogMessage}</div>
@@ -3941,6 +4035,31 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   </div>
 
                                   <div className="space-y-6">
+                                      {selectedQueueJobDetail.job.health && (
+                                          <div className={`rounded-2xl border p-4 ${getQueueHealthClass(selectedQueueJobDetail.job.health.severity)}`}>
+                                              <div className="flex items-start justify-between gap-3">
+                                                  <div>
+                                                      <div className="text-sm font-black text-white">Queue Health</div>
+                                                      <div className="mt-2 text-lg font-black">{selectedQueueJobDetail.job.health.label}</div>
+                                                  </div>
+                                                  <div className="rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[10px] font-bold uppercase">
+                                                      {selectedQueueJobDetail.job.health.code}
+                                                  </div>
+                                              </div>
+                                              <div className="mt-3 text-sm leading-relaxed opacity-90">{selectedQueueJobDetail.job.health.detail}</div>
+                                              <div className="mt-3 text-sm font-bold opacity-95">Hành động: {selectedQueueJobDetail.job.health.action}</div>
+                                              <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-bold">
+                                                  <span className="rounded-full bg-black/20 px-2 py-1">lease: {selectedQueueJobDetail.job.health.leaseState || '-'}</span>
+                                                  {typeof selectedQueueJobDetail.job.health.recoveries === 'number' && <span className="rounded-full bg-black/20 px-2 py-1">recoveries: {selectedQueueJobDetail.job.health.recoveries}</span>}
+                                                  {typeof selectedQueueJobDetail.job.health.secondsSinceUpdated === 'number' && <span className="rounded-full bg-black/20 px-2 py-1">updated: {selectedQueueJobDetail.job.health.secondsSinceUpdated}s</span>}
+                                                  {typeof selectedQueueJobDetail.job.health.secondsUntilWatchdogDue === 'number' && selectedQueueJobDetail.job.health.secondsUntilWatchdogDue > 0 && <span className="rounded-full bg-black/20 px-2 py-1">watchdog còn: {selectedQueueJobDetail.job.health.secondsUntilWatchdogDue}s</span>}
+                                                  {selectedQueueJobDetail.job.health.providerRisk && <span className="rounded-full bg-black/20 px-2 py-1">provider-risk</span>}
+                                                  {selectedQueueJobDetail.job.health.safeToRequeue && <span className="rounded-full bg-black/20 px-2 py-1">safe-requeue</span>}
+                                                  {selectedQueueJobDetail.job.health.watchdogDue && <span className="rounded-full bg-black/20 px-2 py-1">watchdog-due</span>}
+                                              </div>
+                                          </div>
+                                      )}
+
                                       <div className="bg-black/20 border border-white/10 rounded-2xl p-4">
                                           <div className="text-sm font-bold text-white mb-4">Tóm tắt nhanh</div>
                                           <div className="grid grid-cols-2 gap-3">

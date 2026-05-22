@@ -54,7 +54,8 @@ import {
     getTstServerAvailabilityConfig,
     saveTstServerAvailabilityConfig,
     getAdminQueueHealthReport,
-    runAdminQueueReconcile
+    runAdminQueueReconcile,
+    forceRescueFailedQueueJobs
 } from '../services/economyService';
 import { getAllImagesFromStorage, deleteImageFromStorage, checkR2Connection, getUserImagesFromStorage, cleanupExpiredImages, cleanupR2Directly } from '../services/storageService';
 import { checkConnection, analyzeStyleImage } from '../services/geminiService';
@@ -551,6 +552,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [queueHealthReport, setQueueHealthReport] = useState<AdminQueueHealthReport | null>(null);
   const [loadingQueueJobs, setLoadingQueueJobs] = useState(false);
   const [reconcilingQueue, setReconcilingQueue] = useState(false);
+  const [rescuingFailedQueueJobs, setRescuingFailedQueueJobs] = useState(false);
   const [selectedQueueJobId, setSelectedQueueJobId] = useState<string | null>(null);
   const [selectedQueueJobDetail, setSelectedQueueJobDetail] = useState<AdminQueueJobDetail | null>(null);
   const [loadingQueueJobDetail, setLoadingQueueJobDetail] = useState(false);
@@ -1530,6 +1532,28 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       }
   };
 
+  const handleRescueFailedJobs = async () => {
+      showConfirm('Kéo lại kết quả đã tạo xong từ TST cho mọi job đã fail timeout trong 7 ngày gần đây? Hành động này chỉ cập nhật job có result trên TST, không dispatch lại job mới.', async () => {
+          setRescuingFailedQueueJobs(true);
+          try {
+              const payload = await forceRescueFailedQueueJobs({
+                  assetType: 'all',
+                  lookbackHours: 168,
+                  limit: 50,
+              });
+              showToast(
+                  `Rescue TST xong. Kiểm tra=${payload.checked}, kéo lại=${payload.rescued}, đưa về processing=${payload.revived}, ứng viên=${payload.totalCandidates}.`,
+                  payload.rescued > 0 || payload.revived > 0 ? 'success' : 'info',
+              );
+              await loadQueueJobs({ silent: false });
+          } catch (error: any) {
+              showToast(`Lỗi rescue job TST: ${error?.message || error}`, 'error');
+          } finally {
+              setRescuingFailedQueueJobs(false);
+          }
+      });
+  };
+
   const handleOpenQueueJobDetail = async (jobId: string) => {
       setSelectedQueueJobId(jobId);
       setSelectedQueueJobDetail(null);
@@ -2408,6 +2432,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       <div className="flex flex-wrap gap-2">
                           <button onClick={() => loadQueueJobs({ silent: false })} disabled={loadingQueueJobs} className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-bold text-white disabled:opacity-60">
                               {loadingQueueJobs ? 'Đang tải...' : 'Làm mới'}
+                          </button>
+                          <button onClick={handleRescueFailedJobs} disabled={rescuingFailedQueueJobs} className="px-4 py-2 rounded-xl bg-violet-500 hover:bg-violet-600 text-white text-sm font-bold disabled:opacity-60">
+                              {rescuingFailedQueueJobs ? 'Đang cứu TST...' : 'Cứu job TST timeout'}
                           </button>
                           <button onClick={handleQueueReconcile} disabled={reconcilingQueue} className="px-4 py-2 rounded-xl bg-audi-pink hover:bg-pink-600 text-white text-sm font-bold disabled:opacity-60">
                               {reconcilingQueue ? 'Đang reconcile...' : 'Reconcile Queue'}

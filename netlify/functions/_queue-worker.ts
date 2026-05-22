@@ -30,7 +30,7 @@ import {
   type PromptImageGenerateRecipePayload,
   type VideoGenerateRecipePayload,
 } from '../../shared/queueRecipes';
-import { classifyQueueError, isTerminalRescueFailureMessage, normalizeQueueErrorMessage, pickQueueFailureMessage } from '../../shared/queueErrorClassifier';
+import { isTerminalRescueFailureMessage, normalizeQueueErrorMessage } from '../../shared/queueErrorClassifier';
 import { repairVietnameseMojibake } from '../../shared/queueLogText';
 import { clearFailedRescueMeta, hasFailedRescueFinalized, hasManualStopFlag } from '../../shared/queueRescueState';
 
@@ -136,14 +136,14 @@ const VIDEO_POLL_INTERVAL_SECONDS = parsePositiveIntEnv('QUEUE_VIDEO_POLL_INTERV
 const PROVIDER_FAILURE_GRACE_SECONDS = parsePositiveIntEnv('QUEUE_PROVIDER_FAILURE_GRACE_SECONDS', 90, 5);
 const MAX_DISPATCH_RETRIES = 6;
 const MAX_POLL_FAILURES = 8;
-const MAX_PROCESSING_AGE_MS = 30 * 60 * 1000;
+const MAX_PROCESSING_AGE_MS = 60 * 60 * 1000;
 const MAX_VIDEO_PROCESSING_AGE_MS = Number.POSITIVE_INFINITY;
-const MAX_SINGLE_IMAGE_PROCESSING_AGE_MS = 30 * 60 * 1000;
-const MAX_COUPLE_IMAGE_PROCESSING_AGE_MS = 30 * 60 * 1000;
-const MAX_GROUP3_IMAGE_PROCESSING_AGE_MS = 30 * 60 * 1000;
-const MAX_GROUP4_IMAGE_PROCESSING_AGE_MS = 30 * 60 * 1000;
+const MAX_SINGLE_IMAGE_PROCESSING_AGE_MS = 60 * 60 * 1000;
+const MAX_COUPLE_IMAGE_PROCESSING_AGE_MS = 60 * 60 * 1000;
+const MAX_GROUP3_IMAGE_PROCESSING_AGE_MS = 60 * 60 * 1000;
+const MAX_GROUP4_IMAGE_PROCESSING_AGE_MS = 60 * 60 * 1000;
 const FAILED_RESULT_RESCUE_SCAN_LIMIT = 10;
-const FAILED_RESULT_RESCUE_LOOKBACK_MS = 24 * 60 * 60 * 1000;
+const FAILED_RESULT_RESCUE_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000;
 const FAILED_RESULT_RESCUE_MAX_ATTEMPTS = 8;
 const PROVIDER_LOST_JOB_CONFIRMATION_POLLS = 3;
 const PROVIDER_LOST_JOB_CONFIRMATION_INTERVAL_SECONDS = 60;
@@ -2159,7 +2159,6 @@ const reviveFailedJobToProcessing = async (
 };
 
 const rescueFailedJobsWithProviderResults = async () => {
-  return 0;
   const admin = getServiceRoleClient();
   const lookbackIso = new Date(Date.now() - FAILED_RESULT_RESCUE_LOOKBACK_MS).toISOString();
   const now = Date.now();
@@ -2182,14 +2181,6 @@ const rescueFailedJobsWithProviderResults = async () => {
     .filter((job) => !hasFailedRescueFinalized(job?.queue_payload))
     .filter((job) => !hasManualStopFlag(job?.queue_payload))
     .filter((job) => getFailedRescueAttemptCount(job?.queue_payload) < FAILED_RESULT_RESCUE_MAX_ATTEMPTS)
-    .filter((job) => {
-      const pickedMessage = pickQueueFailureMessage(job?.error_message, getQueueLogs(job?.queue_payload));
-      const category = classifyQueueError(pickedMessage).category;
-      if (isTerminalRescueFailureMessage(pickedMessage)) {
-        return false;
-      }
-      return category === 'provider' || category === 'unknown';
-    })
     .filter((job) => {
       const nextAt = getFailedRescueNextAt(job?.queue_payload);
       return !nextAt || nextAt <= now;

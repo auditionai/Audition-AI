@@ -1,6 +1,6 @@
 import { getSupabaseAuthHeader, getSupabaseUser, supabase } from './supabaseClient';
 import { trackEvent } from './analyticsService';
-import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, HistoryItem, VcoinLog, AdminQueueJob, AdminQueueSummary, AdminQueueJobDetail, AdminQueueHealthReport } from '../types';
+import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, HistoryItem, VcoinLog, AdminQueueJob, AdminQueueSummary, AdminQueueJobDetail, AdminQueueHealthReport, AdminQueueRescueResult } from '../types';
 import {
   creditsToVcoin,
   fetchTstModels,
@@ -2172,6 +2172,39 @@ export const runAdminQueueReconcile = async () => {
     }
 
     return payload;
+};
+
+export const forceRescueFailedQueueJobs = async (params?: {
+    server?: string;
+    assetType?: 'image' | 'video' | 'all';
+    lookbackHours?: number;
+    limit?: number;
+    jobId?: string;
+    idPrefix?: string;
+}): Promise<AdminQueueRescueResult> => {
+    const authHeader = await getSessionAuthHeader();
+    const response = await fetch('/api/force-rescue-failed-jobs', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...authHeader,
+        },
+        body: JSON.stringify({
+            lookbackHours: params?.lookbackHours ?? 168,
+            limit: params?.limit ?? 50,
+            server: params?.server,
+            assetType: params?.assetType ?? 'all',
+            jobId: params?.jobId,
+            idPrefix: params?.idPrefix,
+        }),
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        throw new Error(payload?.error || 'Khong the rescue failed queue jobs');
+    }
+
+    return payload as AdminQueueRescueResult;
 };
 
 export const getAdminQueueJobDetail = async (jobId: string): Promise<AdminQueueJobDetail> => {

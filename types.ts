@@ -164,6 +164,20 @@ export interface AdminQueueSummaryCounts {
 
 export interface AdminQueueSummary extends AdminQueueSummaryCounts {}
 
+export interface AdminQueueRescueResult {
+  success: boolean;
+  checked: number;
+  rescued: number;
+  revived: number;
+  totalCandidates: number;
+  results: Array<{
+    id: string;
+    providerJobId: string;
+    action: 'rescued' | 'revived' | 'no_result' | 'poll_error' | string;
+    detail?: string;
+  }>;
+}
+
 export interface AdminQueueHealthSnapshot {
   generatedAt?: string;
   scanned?: number;

@@ -47,6 +47,8 @@ type RescueRequestBody = {
   idPrefix?: string;
   limit?: number;
   lookbackHours?: number;
+  server?: string;
+  assetType?: 'image' | 'video' | 'all';
 };
 
 const parseErrorMessage = async (response: Response) => {
@@ -75,6 +77,24 @@ const getQueueLogs = (payload?: Record<string, unknown> | null): QueueProgressLo
       typeof (entry as QueueProgressLogEntry).stage === 'string' &&
       typeof (entry as QueueProgressLogEntry).level === 'string' &&
       typeof (entry as QueueProgressLogEntry).message === 'string',
+  );
+};
+
+const normalizeFilterValue = (value?: unknown) => String(value || '').trim().toLowerCase();
+
+const getPayloadServerId = (payload?: Record<string, unknown> | null) => {
+  const raw = toPayloadObject(payload);
+  const recipePayload = raw.__recipePayload && typeof raw.__recipePayload === 'object'
+    ? raw.__recipePayload as Record<string, unknown>
+    : {};
+  return normalizeFilterValue(
+    raw.server_id ||
+      raw.serverId ||
+      raw.server ||
+      raw.__serverId ||
+      recipePayload.server_id ||
+      recipePayload.serverId ||
+      recipePayload.server,
   );
 };
 
@@ -253,6 +273,8 @@ export const handler: Handler = async (event) => {
     const limit = Math.max(1, Math.min(50, Number(body.limit || DEFAULT_LIMIT)));
     const exactJobId = String(body.jobId || '').trim().toLowerCase();
     const idPrefix = String(body.idPrefix || '').trim().toLowerCase();
+    const serverFilter = normalizeFilterValue(body.server);
+    const assetTypeFilter = body.assetType === 'image' || body.assetType === 'video' ? body.assetType : 'all';
     const lookbackIso = new Date(Date.now() - lookbackHours * 60 * 60 * 1000).toISOString();
 
     const { data, error } = await admin
@@ -274,6 +296,8 @@ export const handler: Handler = async (event) => {
       .filter((job) => !hasManualStopFlag(job.queue_payload))
       .filter((job) => !exactJobId || job.id.toLowerCase() === exactJobId)
       .filter((job) => !idPrefix || job.id.toLowerCase().startsWith(idPrefix))
+      .filter((job) => assetTypeFilter === 'all' || job.asset_type === assetTypeFilter)
+      .filter((job) => !serverFilter || getPayloadServerId(job.queue_payload) === serverFilter)
       .slice(0, limit);
 
     let rescued = 0;

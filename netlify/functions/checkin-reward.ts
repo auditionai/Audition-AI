@@ -10,8 +10,8 @@ const headers = {
 
 const REWARD_BY_MILESTONE: Record<number, number> = {
   7: 20,
-  14: 50,
-  30: 100,
+  14: 30,
+  30: 50,
 };
 
 type RewardRepairWindow = {
@@ -43,26 +43,32 @@ const getVietnamTodayStr = () => {
   return `${year}-${month}-${day}`;
 };
 
-const getVietnamMonthStr = () => {
-  const { year, month } = getVietnamDateParts();
-  return `${year}-${month}`;
-};
-
 const getDayBoundaryIso = (dateStr: string, boundary: 'start' | 'end') => {
   const suffix = boundary === 'start' ? 'T00:00:00+07:00' : 'T23:59:59.999+07:00';
   return new Date(`${dateStr}${suffix}`).toISOString();
 };
 
-const getMonthStartDateStr = (monthStr: string) => `${monthStr}-01`;
-
-const getNextMonthDateStr = (monthStr: string) => {
-  const [year, month] = monthStr.split('-').map((value) => Number(value));
-  const next = new Date(Date.UTC(year, month, 1));
-  return next.toISOString().slice(0, 10);
+const shiftDateStr = (dateStr: string, days: number) => {
+  const date = new Date(`${dateStr}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
 };
 
-const getNextMonthStartIso = (monthStr: string) =>
-  new Date(`${getNextMonthDateStr(monthStr)}T00:00:00+07:00`).toISOString();
+const calculateConsecutiveStreak = (dates: string[], today: string) => {
+  const dateSet = new Set(dates);
+  let cursor = dateSet.has(today) ? today : shiftDateStr(today, -1);
+  let streak = 0;
+
+  while (dateSet.has(cursor)) {
+    streak += 1;
+    cursor = shiftDateStr(cursor, -1);
+  }
+
+  return {
+    streak,
+    streakStartedOn: streak > 0 ? shiftDateStr(cursor, 1) : null,
+  };
+};
 
 const isDuplicateError = (error: any) =>
   error?.code === '23505' || /duplicate|already exists/i.test(String(error?.message || ''));
@@ -220,22 +226,23 @@ const applyRewardIfMissing = async ({
   return data !== false;
 };
 
-const getMonthlyCheckinCount = async (userId: string, monthStr: string) => {
+const getCurrentStreak = async (userId: string, today: string) => {
   const admin = getServiceRoleClient();
-  const startDate = getMonthStartDateStr(monthStr);
-  const nextMonthDate = getNextMonthDateStr(monthStr);
-  const { count, error } = await admin
+  const { data, error } = await admin
     .from('daily_check_ins')
-    .select('id', { head: true, count: 'exact' })
+    .select('check_in_date')
     .eq('user_id', userId)
-    .gte('check_in_date', startDate)
-    .lt('check_in_date', nextMonthDate);
+    .lte('check_in_date', today)
+    .order('check_in_date', { ascending: false });
 
   if (error) {
     throw error;
   }
 
-  return count ?? 0;
+  return calculateConsecutiveStreak(
+    (data || []).map((row: any) => String(row.check_in_date)),
+    today,
+  );
 };
 
 const handleDailyCheckin = async (userId: string) => {
@@ -273,7 +280,7 @@ const handleDailyCheckin = async (userId: string) => {
     repairWindow: { startAt, endAt },
   });
 
-  const streak = await getMonthlyCheckinCount(userId, today.slice(0, 7));
+  const { streak } = await getCurrentStreak(userId, today);
   const reconcileResult = await reconcileBalanceToLedger(userId);
 
   if (checkinAlreadyExists && !rewardApplied && !reconcileResult.repaired) {
@@ -300,8 +307,7 @@ const handleDailyCheckin = async (userId: string) => {
 const handleMilestoneClaim = async (userId: string, day: number) => {
   const admin = getServiceRoleClient();
   const amount = REWARD_BY_MILESTONE[day] || 0;
-  const monthStr = getVietnamMonthStr();
-  const referenceId = `${userId}:${monthStr}:${day}`;
+  const today = getVietnamTodayStr();
 
   if (amount <= 0) {
     return {
@@ -310,21 +316,23 @@ const handleMilestoneClaim = async (userId: string, day: number) => {
     };
   }
 
-  const streak = await getMonthlyCheckinCount(userId, monthStr);
-  if (streak < day) {
+  const { streak, streakStartedOn } = await getCurrentStreak(userId, today);
+  if (streak < day || !streakStartedOn) {
     return {
       success: false,
-      message: `Bạn chưa đủ ${day} ngày điểm danh trong tháng này.`,
+      message: `Bạn chưa đủ ${day} ngày điểm danh liên tiếp.`,
     };
   }
 
+  const referenceId = `${userId}:${streakStartedOn}:${day}`;
   let alreadyClaimed = false;
 
   const { error: insertError } = await admin.from('milestone_claims').insert({
     user_id: userId,
     day_milestone: day,
     reward_amount: amount,
-    claim_month: monthStr,
+    claim_month: streakStartedOn,
+    streak_started_on: streakStartedOn,
   });
 
   if (insertError) {
@@ -343,12 +351,11 @@ const handleMilestoneClaim = async (userId: string, day: number) => {
     referenceId,
     metadata: {
       reward_type: 'milestone',
-      claim_month: monthStr,
+      streak_started_on: streakStartedOn,
       milestone_day: day,
     },
     repairWindow: {
-      startAt: getDayBoundaryIso(getMonthStartDateStr(monthStr), 'start'),
-      endAt: getNextMonthStartIso(monthStr),
+      startAt: getDayBoundaryIso(streakStartedOn, 'start'),
     },
   });
 
@@ -356,7 +363,7 @@ const handleMilestoneClaim = async (userId: string, day: number) => {
   if (alreadyClaimed && !rewardApplied && !reconcileResult.repaired) {
     return {
       success: false,
-      message: `Bạn đã nhận mốc ${day} ngày trong tháng này rồi!`,
+      message: `Bạn đã nhận mốc ${day} ngày của chuỗi hiện tại rồi!`,
       balance: reconcileResult.balance,
     };
   }

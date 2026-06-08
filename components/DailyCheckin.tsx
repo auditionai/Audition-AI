@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Icons } from './Icons';
-import { performCheckin, claimMilestoneReward, subscribeCheckinStatus } from '../services/economyService';
+import { performCheckin, claimMilestoneReward, subscribeCheckinStatus, getLocalTodayStr } from '../services/economyService';
 
 interface DailyCheckinProps {
   onClose: () => void;
@@ -94,7 +94,8 @@ ALTER TABLE public.daily_check_ins ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "User read own checkins" ON public.daily_check_ins;
 CREATE POLICY "User read own checkins" ON public.daily_check_ins FOR SELECT TO authenticated USING (auth.uid() = user_id);
 DROP POLICY IF EXISTS "User insert own checkins" ON public.daily_check_ins;
-CREATE POLICY "User insert own checkins" ON public.daily_check_ins FOR INSERT WITH CHECK (auth.uid() = user_id);
+REVOKE INSERT, UPDATE, DELETE ON public.daily_check_ins FROM authenticated;
+GRANT SELECT ON public.daily_check_ins TO authenticated;
 
 CREATE TABLE IF NOT EXISTS public.milestone_claims (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -102,13 +103,19 @@ CREATE TABLE IF NOT EXISTS public.milestone_claims (
     day_milestone numeric NOT NULL,
     reward_amount numeric NOT NULL,
     claim_month text,
+    streak_started_on date,
     created_at timestamptz DEFAULT now()
 );
+ALTER TABLE public.milestone_claims ADD COLUMN IF NOT EXISTS streak_started_on date;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_milestone_claims_user_streak_day
+ON public.milestone_claims(user_id, streak_started_on, day_milestone)
+WHERE streak_started_on IS NOT NULL;
 ALTER TABLE public.milestone_claims ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "User read own milestones" ON public.milestone_claims;
 CREATE POLICY "User read own milestones" ON public.milestone_claims FOR SELECT TO authenticated USING (auth.uid() = user_id);
 DROP POLICY IF EXISTS "User insert own milestones" ON public.milestone_claims;
-CREATE POLICY "User insert own milestones" ON public.milestone_claims FOR INSERT WITH CHECK (auth.uid() = user_id);
+REVOKE INSERT, UPDATE, DELETE ON public.milestone_claims FROM authenticated;
+GRANT SELECT ON public.milestone_claims TO authenticated;
 `;
 
 export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, lang }) => {
@@ -121,13 +128,14 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
   const [showSqlFix, setShowSqlFix] = useState(false);
   
   // Calendar State
-  const today = new Date();
+  const todayStr = getLocalTodayStr();
+  const today = new Date(`${todayStr}T00:00:00`);
   const [currentMonth, setCurrentMonth] = useState(today.getMonth());
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
 
   useEffect(() => {
     return subscribeCheckinStatus((status) => {
-        setStreak(status.streak); // Now represents total monthly check-ins
+        setStreak(status.streak);
         setCheckedIn(status.isCheckedInToday);
         setHistory(status.history);
         setClaimedMilestones(status.claimedMilestones);
@@ -143,7 +151,7 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
           if (res.success) {
               setStreak(res.newStreak || 0);
               setCheckedIn(true);
-              setHistory(prev => [...prev, new Date().toLocaleDateString('sv-SE')]);
+              setHistory(prev => prev.includes(todayStr) ? prev : [...prev, todayStr]);
               
               setMessage(lang === 'vi' ? `Điểm danh thành công! +${res.reward} Vcoin` : `Check-in success! +${res.reward} Vcoin`);
 
@@ -258,7 +266,7 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
                     <Icons.Flame className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                    <p className="text-xs text-slate-400 font-bold uppercase">{lang === 'vi' ? 'Tích lũy tháng này' : 'Monthly Check-ins'}</p>
+                    <p className="text-xs text-slate-400 font-bold uppercase">{lang === 'vi' ? 'Chuỗi điểm danh liên tiếp' : 'Consecutive Check-ins'}</p>
                     <p className="text-2xl font-black text-white">{streak} {lang === 'vi' ? 'ngày' : 'days'}</p>
                 </div>
                 <div className="ml-auto text-right">
@@ -303,8 +311,8 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
                 <div className="grid grid-cols-3 gap-3">
                     {[
                         { days: 7, reward: 20 },
-                        { days: 14, reward: 50 },
-                        { days: 30, reward: 100 },
+                        { days: 14, reward: 30 },
+                        { days: 30, reward: 50 },
                     ].map((m) => {
                         const isUnlocked = streak >= m.days;
                         const isClaimed = claimedMilestones.includes(m.days);

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, Flame, Gift, Loader, Lock, Trophy, X, CalendarDays, ChevronLeft, ChevronRight, Hand } from 'lucide-react';
-import { performCheckin, claimMilestoneReward, subscribeCheckinStatus } from '../services/economyService';
+import { performCheckin, claimMilestoneReward, subscribeCheckinStatus, getLocalTodayStr } from '../services/economyService';
 
 interface DailyCheckinProps {
   onClose: () => void;
@@ -18,7 +18,8 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
   const [message, setMessage] = useState<string | null>(null);
   
   // Calendar State
-  const today = new Date();
+  const todayStr = getLocalTodayStr();
+  const today = new Date(`${todayStr}T00:00:00`);
   const [currentMonth, setCurrentMonth] = useState(today.getMonth());
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
 
@@ -39,7 +40,7 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
           if (res.success) {
               setStreak(res.newStreak || 0);
               setCheckedIn(true);
-              setHistory(prev => [...prev, new Date().toLocaleDateString('sv-SE')]);
+              setHistory(prev => prev.includes(todayStr) ? prev : [...prev, todayStr]);
               setMessage(lang === 'vi' ? `Điểm danh thành công! +${res.reward} Vcoin` : `Check-in success! +${res.reward} Vcoin`);
               setTimeout(() => onSuccess(), 1500); 
           } else {
@@ -133,7 +134,7 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
                     <Flame className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                    <p className="text-[10px] text-purple-600 font-bold uppercase tracking-wider">{lang === 'vi' ? 'Tích lũy tháng này' : 'Monthly Check-ins'}</p>
+                    <p className="text-[10px] text-purple-600 font-bold uppercase tracking-wider">{lang === 'vi' ? 'Chuỗi điểm danh liên tiếp' : 'Consecutive Check-ins'}</p>
                     <p className="text-xl font-black text-gray-900 dark:text-white">{streak} {lang === 'vi' ? 'ngày' : 'days'}</p>
                 </div>
                 <div className="ml-auto flex items-end flex-col">
@@ -178,8 +179,8 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
                 <div className="grid grid-cols-3 gap-2 md:gap-3">
                     {[
                         { days: 7, reward: 20 },
-                        { days: 14, reward: 50 },
-                        { days: 30, reward: 100 },
+                        { days: 14, reward: 30 },
+                        { days: 30, reward: 50 },
                     ].map((m) => {
                         const isUnlocked = streak >= m.days;
                         const isClaimed = claimedMilestones.includes(m.days);

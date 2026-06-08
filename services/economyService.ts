@@ -25,6 +25,7 @@ const DEFAULT_GENERATION_PRICES = {
     couple: 2,
     group3: 4,
     group4: 6,
+    group5: 8,
 };
 
 const USER_PROFILE_CACHE_TTL_MS = 30_000;
@@ -1250,8 +1251,34 @@ export const deletePromotion = async (id: string): Promise<{success: boolean, er
 
 // --- HELPER ---
 export const getLocalTodayStr = () => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Ho_Chi_Minh',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    }).format(new Date());
+};
+
+const shiftDateStr = (dateStr: string, days: number) => {
+    const date = new Date(`${dateStr}T00:00:00Z`);
+    date.setUTCDate(date.getUTCDate() + days);
+    return date.toISOString().slice(0, 10);
+};
+
+const calculateConsecutiveStreak = (dates: string[], today: string) => {
+    const dateSet = new Set(dates);
+    let cursor = dateSet.has(today) ? today : shiftDateStr(today, -1);
+    let streak = 0;
+
+    while (dateSet.has(cursor)) {
+        streak += 1;
+        cursor = shiftDateStr(cursor, -1);
+    }
+
+    return {
+        streak,
+        streakStartedOn: streak > 0 ? shiftDateStr(cursor, 1) : null,
+    };
 };
 
 const getLocalDayBoundaryIso = (dateStr: string, boundary: 'start' | 'end') => {
@@ -1374,31 +1401,32 @@ export const getCheckinStatus = async (options?: { force?: boolean }): Promise<C
 
     checkinStatusPromise = (async () => {
         const today = getLocalTodayStr();
-        const startOfMonth = new Date(today.substring(0, 7) + '-01').toISOString();
-
-        const [{ data: checkins, error: checkinError }, { data: milestones, error: milestoneError }] = await Promise.all([
-            supabase
-                .from('daily_check_ins')
-                .select('check_in_date')
-                .eq('user_id', user.id),
-            supabase
-                .from('milestone_claims')
-                .select('day_milestone')
-                .eq('user_id', user.id)
-                .gte('created_at', startOfMonth),
-        ]);
+        const { data: checkins, error: checkinError } = await supabase
+            .from('daily_check_ins')
+            .select('check_in_date')
+            .eq('user_id', user.id);
 
         if (checkinError) {
             throw new Error(checkinError.message);
         }
+
+        const history = checkins?.map((r: any) => String(r.check_in_date)) || [];
+        const { streak, streakStartedOn } = calculateConsecutiveStreak(history, today);
+        const milestoneResponse = streakStartedOn
+            ? await supabase
+                .from('milestone_claims')
+                .select('day_milestone')
+                .eq('user_id', user.id)
+                .eq('streak_started_on', streakStartedOn)
+            : { data: [], error: null };
+        const { data: milestones, error: milestoneError } = milestoneResponse;
+
         if (milestoneError) {
             throw new Error(milestoneError.message);
         }
 
-        const history = checkins?.map((r: any) => r.check_in_date) || [];
-        const currentMonthPrefix = today.substring(0, 7);
         const value: CheckinStatusState = {
-            streak: history.filter((d: string) => d.startsWith(currentMonthPrefix)).length,
+            streak,
             isCheckedInToday: history.includes(today),
             history,
             claimedMilestones: milestones?.map((m: any) => m.day_milestone) || [],
@@ -2955,6 +2983,8 @@ export const getAdminStats = async () => {
             feature = 'Làm Nét Ảnh (Upscale)';
         } else if (lower.includes('tách nền') || lower.includes('remove background') || lower.includes('background')) {
             feature = 'Tách Nền (Remove BG)';
+        } else if (lower.includes('5 người') || lower.includes('group of 5') || lower.includes('squad of 5')) {
+            feature = 'Tạo Ảnh 5 Người';
         } else if (lower.includes('4 người') || lower.includes('group of 4') || lower.includes('squad of 4')) {
             feature = 'Tạo Ảnh 4 Người';
         } else if (lower.includes('3 người') || lower.includes('group of 3') || lower.includes('squad of 3')) {

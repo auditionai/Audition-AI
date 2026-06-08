@@ -18,10 +18,9 @@ import { CONCURRENCY_LIMITS, useConcurrency } from '../../services/concurrencySe
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import { downloadAssetToBrowser } from '../../services/downloadService';
-import { analyzeCharacterAppearanceProfile, createFaceDetailReference, createFaceLockReference, createPoseOnlyReference, optimizePayload } from '../../utils/imageProcessor';
+import { analyzeCharacterAppearanceProfile, createPoseOnlyReference, optimizePayload } from '../../utils/imageProcessor';
 import { APP_CONFIG } from '../../constants';
 import { buildAuditionKoreaMmoStylePrompt, DEFAULT_IMAGE_NEGATIVE_PROMPT } from '../../shared/imagePromptDefaults';
-import { resolveCharacterFacePriorityMode } from '../../shared/queueRecipes';
 import {
   type AuditionPricingOverride,
   fetchTstModels,
@@ -57,7 +56,7 @@ interface GenerationToolProps {
   onNavigateView?: (view: ViewId, data?: any) => void;
 }
 
-type GenMode = 'single' | 'couple' | 'group3' | 'group4';
+type GenMode = 'single' | 'couple' | 'group3' | 'group4' | 'group5';
 type Stage = 'input' | 'processing' | 'result';
 type Resolution = '1K' | '2K' | '4K';
 
@@ -104,6 +103,7 @@ const MODE_TO_FEATURE_ID: Record<GenMode, string> = {
     couple: 'couple_photo_gen',
     group3: 'group_3_gen',
     group4: 'group_4_gen',
+    group5: 'group_5_gen',
 };
 
 interface CharacterInput {
@@ -113,11 +113,11 @@ interface CharacterInput {
 }
 
 const SMART_TIPS = [
-    { icon: Icons.Sparkles, text: "MỚI: Chế độ 'Deep Scan' sẽ quét toàn bộ makeup, khuyên mũi/môi và phụ kiện trên mặt để tái tạo chính xác 99%." },
-    { icon: Icons.Zap, text: "Tip: Để khuôn mặt sắc nét, hãy dùng ảnh chụp cận mặt từ Patch hoặc đã qua làm nét (Remini)." },
+    { icon: Icons.Sparkles, text: "Ảnh nhân vật được gửi nguyên bản để giữ đầy đủ khuôn mặt, trang phục, phụ kiện và bố cục ảnh tải lên." },
+    { icon: Icons.Zap, text: "Tip: Chọn ảnh nhân vật rõ nét, đủ sáng và không bị che khuất để kết quả nhận diện ổn định hơn." },
     { icon: Icons.Crown, text: "Lưu ý: Model Pro 4K mang lại độ chi tiết trang phục chân thực nhất." },
     { icon: Icons.Palette, text: "Mẹo: Nhập mô tả màu sắc trang phục cụ thể, ví dụ váy đỏ hoặc giày trắng, để AI vẽ đúng ý." },
-    { icon: Icons.Lock, text: "MỚI: Hệ thống tự động khóa nhận diện khuôn mặt và trang phục từ ảnh nhân vật, bạn không cần bật tay nữa." },
+    { icon: Icons.Lock, text: "Mỗi nhân vật sử dụng đúng một ảnh tham chiếu, không tạo thêm ảnh cắt khuôn mặt chiếm slot." },
     { icon: Icons.Image, text: "Mẹo: Ảnh mẫu (Ref) nên có góc chụp tương đồng với ý tưởng bạn muốn tạo." },
     { icon: Icons.MessageCircle, text: "Tip: Bí ý tưởng? Dùng nút 'Sử dụng Prompt Mẫu' để lấy ý tưởng từ cộng đồng." },
     { icon: Icons.Monitor, text: "Lưu ý: Độ phân giải 4K rất nét, thích hợp in ấn nhưng sẽ tốn thời gian xử lý hơn." },
@@ -140,8 +140,7 @@ const tryStageGenerationInput = async (source: string, folder: string) => {
     if (source.startsWith('http')) return source;
 
     try {
-        const optimizedSource = await optimizePayload(source, 2048);
-        return await uploadFileToR2(optimizedSource, folder);
+        return await uploadFileToR2(source, folder);
     } catch (error) {
         console.warn('[GenerationTool] Failed to stage generation input to storage.', error);
         throw new Error('Không thể tải ảnh tham chiếu lên vùng đệm. Vui lòng thử lại.');
@@ -158,38 +157,6 @@ const tryStageSampleReferenceInput = async (source: string, folder: string, aspe
     } catch (error) {
         console.warn('[GenerationTool] Failed to stage sample reference.', error);
         throw new Error('Không thể chuẩn hóa ảnh mẫu trước khi tạo ảnh. Vui lòng thử lại.');
-    }
-};
-
-const tryStageFaceLockReferenceInput = async (source: string, folder: string) => {
-    if (!source) return null;
-
-    try {
-        const faceLockReference = await createFaceLockReference(source);
-        if (faceLockReference === source) {
-            return null;
-        }
-        const optimizedSource = await optimizePayload(faceLockReference, 1536);
-        return await uploadFileToR2(optimizedSource, folder);
-    } catch (error) {
-        console.warn('[GenerationTool] Failed to stage face-lock reference.', error);
-        throw new Error('Không thể khóa gương mặt nhân vật trước khi tạo ảnh. Vui lòng thử lại.');
-    }
-};
-
-const tryStageFaceDetailReferenceInput = async (source: string, folder: string) => {
-    if (!source) return null;
-
-    try {
-        const faceDetailReference = await createFaceDetailReference(source);
-        if (faceDetailReference === source) {
-            return null;
-        }
-        const optimizedSource = await optimizePayload(faceDetailReference, 1536);
-        return await uploadFileToR2(optimizedSource, folder);
-    } catch (error) {
-        console.warn('[GenerationTool] Failed to stage face-detail reference.', error);
-        throw new Error('Không thể khóa chi tiết gương mặt nhân vật trước khi tạo ảnh. Vui lòng thử lại.');
     }
 };
 
@@ -543,6 +510,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
     if (feature.id.includes('couple')) handleModeChange('couple');
     else if (feature.id.includes('group_3')) handleModeChange('group3');
     else if (feature.id.includes('group_4')) handleModeChange('group4');
+    else if (feature.id.includes('group_5')) handleModeChange('group5');
     else handleModeChange('single');
   }, [feature]);
 
@@ -610,6 +578,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       if (mode === 'couple') count = 2;
       if (mode === 'group3') count = 3;
       if (mode === 'group4') count = 4;
+      if (mode === 'group5') count = 5;
 
       setCharacters(prev => {
           const newChars = [];
@@ -758,7 +727,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
               ? 2
               : activeMode === 'group3'
                   ? 3
-                  : 4;
+                  : activeMode === 'group4'
+                      ? 4
+                      : 5;
 
       return baseCost * modeMultiplier;
   };
@@ -956,7 +927,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
     void (async () => {
         try {
-            const facePriorityMode = resolveCharacterFacePriorityMode(prompt);
             const stagedCharacterGroups = (
                 await Promise.all(
                     characters.map(async (char, charIndex) => {
@@ -965,24 +935,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
                         if (char.bodyImage) {
                             appearanceProfile = await analyzeCharacterAppearanceProfile(char.bodyImage);
-                            if (facePriorityMode === 'portrait_headshot') {
-                                const stagedFaceDetail = await tryStageFaceDetailReferenceInput(
-                                    char.bodyImage,
-                                    `inputs/generation/${activeMode}/character-${charIndex + 1}/face-detail`,
-                                );
-                                if (stagedFaceDetail) {
-                                    references.push({ source: stagedFaceDetail, kind: 'face_detail' });
-                                }
-                            }
-
-                            const stagedFaceLock = await tryStageFaceLockReferenceInput(
-                                char.bodyImage,
-                                `inputs/generation/${activeMode}/character-${charIndex + 1}/face`,
-                            );
-                            if (stagedFaceLock) {
-                                references.push({ source: stagedFaceLock, kind: 'face' });
-                            }
-
                             const stagedBody = await tryStageGenerationInput(
                                 char.bodyImage,
                                 `inputs/generation/${activeMode}/character-${charIndex + 1}/body`,
@@ -995,7 +947,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                         return {
                             characterIndex: charIndex + 1,
                             gender: char.gender,
-                            facePriorityMode,
                             appearanceProfile,
                             references,
                         } satisfies CharacterReferenceGroup;
@@ -1025,9 +976,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                     }]
                     : []),
                 ...stagedCharacterGroups.flatMap((group) => {
-                    const bodyReferences = group.references.filter((reference) => reference.kind === 'body');
-                    const faceReferences = group.references.filter((reference) => reference.kind !== 'body');
-                    return [...bodyReferences, ...faceReferences].map((reference) => ({
+                    return group.references.map((reference) => ({
                         url: reference.source,
                         role: 'character' as const,
                         kind: 'image' as const,
@@ -1450,13 +1399,14 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                     { id: 'couple', label: { vi: 'Đôi', en: 'Couple' }, icon: Icons.Heart },
                     { id: 'group3', label: { vi: 'Nhóm 3', en: 'Group 3' }, icon: Icons.User },
                     { id: 'group4', label: { vi: 'Nhóm 4', en: 'Group 4' }, icon: Icons.User },
+                    { id: 'group5', label: { vi: 'Nhóm 5', en: 'Group 5' }, icon: Icons.User },
                 ].map(mode => (
                     <button
                         key={mode.id}
                         onClick={() => handleModeChange(mode.id as GenMode)}
                         className={`px-4 py-2.5 rounded-xl flex items-center gap-2 text-xs md:text-sm font-bold transition-all whitespace-nowrap ${activeMode === mode.id ? 'bg-white text-black shadow-md' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}
                     >
-                        {mode.id === 'group4' ? <div className="flex -space-x-1"><Icons.User className="w-3 h-3"/><Icons.User className="w-3 h-3"/></div> : <mode.icon className="w-3 h-3 md:w-4 md:h-4" />}
+                        {mode.id === 'group4' || mode.id === 'group5' ? <div className="flex -space-x-1"><Icons.User className="w-3 h-3"/><Icons.User className="w-3 h-3"/></div> : <mode.icon className="w-3 h-3 md:w-4 md:h-4" />}
                         {mode.label[lang === 'vi' ? 'vi' : 'en']}
                     </button>
                 ))}

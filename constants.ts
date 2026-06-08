@@ -86,14 +86,28 @@ export const APP_CONFIG: AppConfig = {
       category: 'generation',
       supportsStyleReference: true
     },
+    {
+      id: "group_5_gen",
+      name: {vi: "Team 5 Người", en: "Group of 5"},
+      description: {
+        vi: "Tạo ảnh nhóm 5 nhân vật với đầy đủ ảnh tham chiếu.",
+        en: "Generate a group photo with 5 referenced characters."
+      },
+      engine: "Gemini 3.1 Flash / 3 Pro",
+      preview_image: "https://picsum.photos/400/305?grayscale",
+      toolType: 'generation',
+      defaultPrompt: "A high quality 3D render of a group of 5 game characters, standing together in a balanced composition, vivid colors, unreal engine 5: ",
+      category: 'generation',
+      supportsStyleReference: true
+    },
 
     // --- EDITING TOOLS (Chỉnh sửa) ---
     {
       id: "ai_image_tool",
       name: {vi: "Tạo Ảnh AI", en: "AI Image Creator"},
       description: {
-        vi: "Tạo ảnh thuần từ prompt và tối đa 4 ảnh tham chiếu, không dùng prompt hệ thống Audition.",
-        en: "Create prompt-only images with up to 4 references, without Audition system prompts."
+        vi: "Tạo ảnh thuần từ prompt và tối đa 5 ảnh tham chiếu, không dùng prompt hệ thống Audition.",
+        en: "Create prompt-only images with up to 5 references, without Audition system prompts."
       },
       engine: "TST Image API",
       preview_image: "https://picsum.photos/400/308?grayscale",

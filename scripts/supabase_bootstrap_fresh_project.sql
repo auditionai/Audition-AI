@@ -392,11 +392,16 @@ create table if not exists public.milestone_claims (
   day_milestone numeric not null,
   reward_amount numeric not null,
   claim_month text,
+  streak_started_on date,
   created_at timestamptz not null default now()
 );
 
 create unique index if not exists uq_milestone_claims_user_month_day
   on public.milestone_claims(user_id, coalesce(claim_month, ''), day_milestone);
+
+create unique index if not exists uq_milestone_claims_user_streak_day
+  on public.milestone_claims(user_id, streak_started_on, day_milestone)
+  where streak_started_on is not null;
 
 create table if not exists public.model_pricing (
   id uuid primary key default gen_random_uuid(),
@@ -851,17 +856,14 @@ for select
 to authenticated
 using (auth.uid() = user_id or public.check_is_admin());
 
-create policy "User insert own checkins"
-on public.daily_check_ins
-for insert
-to authenticated
-with check (auth.uid() = user_id or public.check_is_admin());
-
 create policy "Admin read checkins"
 on public.daily_check_ins
 for select
 to authenticated
 using (public.check_is_admin());
+
+revoke insert, update, delete on table public.daily_check_ins from authenticated;
+grant select on table public.daily_check_ins to authenticated;
 
 drop policy if exists "User read own milestones" on public.milestone_claims;
 drop policy if exists "User insert own milestones" on public.milestone_claims;
@@ -873,17 +875,14 @@ for select
 to authenticated
 using (auth.uid() = user_id or public.check_is_admin());
 
-create policy "User insert own milestones"
-on public.milestone_claims
-for insert
-to authenticated
-with check (auth.uid() = user_id or public.check_is_admin());
-
 create policy "Admin read milestones"
 on public.milestone_claims
 for select
 to authenticated
 using (public.check_is_admin());
+
+revoke insert, update, delete on table public.milestone_claims from authenticated;
+grant select on table public.milestone_claims to authenticated;
 
 drop policy if exists "Authenticated read model pricing" on public.model_pricing;
 drop policy if exists "Admin manage model pricing" on public.model_pricing;

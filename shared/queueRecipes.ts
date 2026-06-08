@@ -193,6 +193,9 @@ export interface PromptImageGenerateRecipePayload {
   recipeType: 'prompt_image_generate_recipe_v1';
   modelId: string;
   prompt: string;
+  promptMode?: 'user_only' | 'system_assisted';
+  systemPromptPrefix?: string | null;
+  negativePrompt?: string | null;
   referenceImages?: string[];
   resolution?: string;
   aspectRatio?: string;

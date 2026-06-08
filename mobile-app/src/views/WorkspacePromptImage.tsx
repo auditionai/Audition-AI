@@ -25,11 +25,14 @@ import {
   type TstResolution,
   type AuditionPricingOverride,
 } from '../services/tstCatalog';
+import { optimizePayload } from '../../../utils/imageProcessor';
+import { buildAuditionKoreaMmoStylePrompt, DEFAULT_IMAGE_NEGATIVE_PROMPT } from '../../../shared/imagePromptDefaults';
 import type { GeneratedImage } from '../types';
 import type { ModelPricing } from '../services/economyService';
 import type { PromptImageGenerateRecipePayload } from '../../../shared/queueRecipes';
 
-const MAX_REFERENCE_IMAGES = 5;
+const DEFAULT_REFERENCE_IMAGE_LIMIT = 4;
+const GPT_REFERENCE_IMAGE_LIMIT = 5;
 const MAX_PROMPT_CHARACTERS = 10_000;
 const ASPECT_RATIOS = ['1:1', '9:16', '16:9', '3:4', '4:3', '2:3', '3:2'];
 const MODEL_TABS: Array<{
@@ -78,8 +81,9 @@ const readFileAsDataUrl = (file: File) =>
     reader.readAsDataURL(file);
   });
 
-const stageReferenceImage = async (source: string, index: number) => {
-  return uploadFileToR2(source, `inputs/prompt-image/mobile-ref-${index + 1}`);
+const stageReferenceImage = async (source: string, index: number, preserveOriginal: boolean) => {
+  const uploadSource = preserveOriginal ? source : await optimizePayload(source, 2048);
+  return uploadFileToR2(uploadSource, `inputs/prompt-image/mobile-ref-${index + 1}`);
 };
 
 const getModelLabel = (tier: TstGenerationTier) => {
@@ -143,7 +147,8 @@ export function WorkspacePromptImage() {
 
   const uploadedImages = referenceImages.filter((value): value is string => Boolean(value));
   const uploadedCount = uploadedImages.length;
-  const modeCountForPrice = Math.max(1, Math.min(MAX_REFERENCE_IMAGES, uploadedCount));
+  const maxReferenceImages = aiModel === 'gpt' ? GPT_REFERENCE_IMAGE_LIMIT : DEFAULT_REFERENCE_IMAGE_LIMIT;
+  const modeCountForPrice = Math.max(1, Math.min(maxReferenceImages, uploadedCount));
   const generationSpeedId = speedLabelToTst(speed);
   const generationServerId = uiServerToTst(server) || 'fast';
 
@@ -207,6 +212,15 @@ export function WorkspacePromptImage() {
     }
   }, [aiModel, generationServerId, generationSpeedId, gptQuality, pricingEntries, resolution, server, speed]);
 
+  useEffect(() => {
+    if (aiModel !== 'gpt') {
+      setReferenceImages((prev) => {
+        const next = prev.slice(0, DEFAULT_REFERENCE_IMAGE_LIMIT);
+        return next.length > 0 ? next : [null];
+      });
+    }
+  }, [aiModel]);
+
   const selectedCost = getGenerationCostBreakdown({
     tier: aiModel,
     resolution,
@@ -249,7 +263,7 @@ export function WorkspacePromptImage() {
   const addImageSlot = () => {
     setReferenceImages((prev) => {
       const safeSlots = Array.isArray(prev) && prev.length > 0 ? prev : [null];
-      return safeSlots.length >= MAX_REFERENCE_IMAGES ? safeSlots : [...safeSlots, null];
+      return safeSlots.length >= maxReferenceImages ? safeSlots : [...safeSlots, null];
     });
   };
 
@@ -287,20 +301,26 @@ export function WorkspacePromptImage() {
         return;
       }
 
-      const stagedImages = await Promise.all(uploadedImages.map((value, index) => stageReferenceImage(value, index)));
+      const stagedImages = await Promise.all(
+        uploadedImages.slice(0, maxReferenceImages).map((value, index) => stageReferenceImage(value, index, aiModel === 'gpt')),
+      );
       const queuedJobId = crypto.randomUUID();
       const modelLabel = getModelLabel(aiModel);
       const engine = `${modelLabel} Prompt Image ${resolution}`;
+      const isGptPromptMode = aiModel === 'gpt';
       const queuePayload: PromptImageGenerateRecipePayload = {
         recipeType: 'prompt_image_generate_recipe_v1',
         modelId: getGenerationModelId(aiModel),
         prompt,
+        promptMode: isGptPromptMode ? 'user_only' : 'system_assisted',
+        systemPromptPrefix: isGptPromptMode ? null : buildAuditionKoreaMmoStylePrompt(null),
+        negativePrompt: isGptPromptMode ? null : DEFAULT_IMAGE_NEGATIVE_PROMPT,
         referenceImages: stagedImages,
         resolution,
         aspectRatio,
         speed: generationSpeedId,
         serverId: generationServerId,
-        quality: aiModel === 'gpt' ? gptQuality : undefined,
+        quality: isGptPromptMode ? gptQuality : undefined,
       };
       const queuedImage: GeneratedImage = {
         id: queuedJobId,
@@ -357,7 +377,7 @@ export function WorkspacePromptImage() {
       <section className="rounded-[24px] border border-gray-200 dark:border-zinc-800 bg-white dark:bg-[#18181B] p-3 shadow-sm">
         <div className="flex items-center justify-between mb-2.5">
           <h2 className="text-sm font-black text-gray-950 dark:text-white">1. Upload ảnh</h2>
-          <span className="text-[11px] font-bold text-gray-400 dark:text-zinc-500">{uploadedCount}/{MAX_REFERENCE_IMAGES}</span>
+          <span className="text-[11px] font-bold text-gray-400 dark:text-zinc-500">{uploadedCount}/{maxReferenceImages}</span>
         </div>
         <div className="grid grid-cols-2 gap-2.5">
           {referenceImages.map((image, index) => (
@@ -379,7 +399,7 @@ export function WorkspacePromptImage() {
               </button>
             </div>
           ))}
-          {referenceImages.length < MAX_REFERENCE_IMAGES && (
+          {referenceImages.length < maxReferenceImages && (
             <button
               type="button"
               onClick={addImageSlot}

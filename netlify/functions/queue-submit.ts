@@ -177,7 +177,10 @@ const getImageGenerateToolMetadata = (
     : 0;
   const characterCount = Math.max(1, Math.floor(Number(recipePayload.characterCount || 0)) || groupCount || flatCount || 1);
 
-  if (characterCount >= 4) {
+  if (characterCount >= 5) {
+    return { toolId: 'group_5_gen', toolName: 'Group of 5' };
+  }
+  if (characterCount === 4) {
     return { toolId: 'group_4_gen', toolName: 'Clan of 4' };
   }
   if (characterCount === 3) {

@@ -25,6 +25,7 @@ const DEFAULT_GENERATION_PRICES = {
     couple: 2,
     group3: 4,
     group4: 6,
+    group5: 8,
 };
 
 const USER_PROFILE_CACHE_TTL_MS = 30_000;
@@ -2982,6 +2983,8 @@ export const getAdminStats = async () => {
             feature = 'Làm Nét Ảnh (Upscale)';
         } else if (lower.includes('tách nền') || lower.includes('remove background') || lower.includes('background')) {
             feature = 'Tách Nền (Remove BG)';
+        } else if (lower.includes('5 người') || lower.includes('group of 5') || lower.includes('squad of 5')) {
+            feature = 'Tạo Ảnh 5 Người';
         } else if (lower.includes('4 người') || lower.includes('group of 4') || lower.includes('squad of 4')) {
             feature = 'Tạo Ảnh 4 Người';
         } else if (lower.includes('3 người') || lower.includes('group of 3') || lower.includes('squad of 3')) {

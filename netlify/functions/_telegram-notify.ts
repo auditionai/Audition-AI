@@ -39,7 +39,7 @@ type OperationalAlertOptions = {
 const OPERATIONAL_ALERT_STATE_KEY = 'telegram_operational_alert_state';
 const OPERATIONAL_ALERT_DEFAULT_COOLDOWN_MS = 30 * 60 * 1000;
 
-const toPayloadObject = (payload: QueuePayloadObject): Record<string, unknown> =>
+const toPayloadObject = (payload: unknown): Record<string, unknown> =>
   payload && typeof payload === 'object' ? { ...(payload as Record<string, unknown>) } : {};
 
 const getEmbeddedRecipePayload = (payload: QueuePayloadObject): Record<string, unknown> => {
@@ -147,7 +147,8 @@ const inferMode = (toolId: string | null | undefined, payload: QueuePayloadObjec
   if (recipeType === 'image_edit_recipe_v1') return String(toolId || 'image_edit');
 
   if (recipeType === 'image_generate_recipe_v1') {
-    if (characterCount >= 4) return 'group4';
+    if (characterCount >= 5) return 'group5';
+    if (characterCount === 4) return 'group4';
     if (characterCount === 3) return 'group3';
     if (characterCount === 2) return 'couple';
     return 'single';
@@ -183,6 +184,7 @@ const getDisplayToolName = (
     if (config.mode === 'couple') return 'Couple 3D Mode';
     if (config.mode === 'group3') return 'Squad of 3';
     if (config.mode === 'group4') return 'Clan of 4';
+    if (config.mode === 'group5') return 'Group of 5';
     if (config.mode === 'single') return 'Single 3D Character';
   }
 
@@ -437,7 +439,7 @@ export const sendTelegramJobNotification = async (
         engine: record.engine || null,
         queueKind: record.queueKind || null,
         costVcoin: Number(record.costVcoin || 0),
-        status: eventType === 'queued' ? 'queued' : eventType,
+        status: eventType,
         createdAt: record.createdAt || new Date().toISOString(),
         finishedAt: record.finishedAt || null,
         errorMessage: record.errorMessage || null,

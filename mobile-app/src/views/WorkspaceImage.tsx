@@ -38,15 +38,15 @@ import type { ModelPricing } from '../services/economyService';
 import type { GeneratedImage } from '../types';
 import { caulenhauClient } from '../services/supabaseClient';
 import { buildAuditionKoreaMmoStylePrompt, DEFAULT_IMAGE_NEGATIVE_PROMPT } from '../../../shared/imagePromptDefaults';
-import { resolveCharacterFacePriorityMode, type CharacterReferenceGroup, type ImageGenerateRecipePayload } from '../../../shared/queueRecipes';
-import { analyzeCharacterAppearanceProfile, createFaceDetailReference, createFaceLockReference, createPoseOnlyReference, optimizePayload } from '../../../utils/imageProcessor';
+import type { CharacterReferenceGroup, ImageGenerateRecipePayload } from '../../../shared/queueRecipes';
+import { analyzeCharacterAppearanceProfile, createPoseOnlyReference, optimizePayload } from '../../../utils/imageProcessor';
 import {
   CHARACTER_ASSISTANT_RESOLUTION,
   runCharacterAssistantAction,
   type CharacterAssistantToolId,
 } from '../../../services/characterImageAssistService';
 
-type GenMode = 'single' | 'couple' | 'trio' | 'squad';
+type GenMode = 'single' | 'couple' | 'trio' | 'squad' | 'group5';
 type Stage = 'input' | 'submitting';
 
 const IMAGE_MODEL_OPTIONS: Array<{
@@ -114,6 +114,7 @@ const MODE_TO_FEATURE_ID: Record<GenMode, string> = {
   couple: 'couple_photo_gen',
   trio: 'group_3_gen',
   squad: 'group_4_gen',
+  group5: 'group_5_gen',
 };
 
 const MODE_META: Record<GenMode, { label: string; sampleCategoryId: number; sampleCategoryName: string }> = {
@@ -121,6 +122,7 @@ const MODE_META: Record<GenMode, { label: string; sampleCategoryId: number; samp
   couple: { label: 'Đôi', sampleCategoryId: 3, sampleCategoryName: 'Ảnh couple' },
   trio: { label: 'Nhóm 3', sampleCategoryId: 4, sampleCategoryName: 'Ảnh nhóm' },
   squad: { label: 'Nhóm 4', sampleCategoryId: 4, sampleCategoryName: 'Ảnh nhóm' },
+  group5: { label: 'Nhóm 5', sampleCategoryId: 4, sampleCategoryName: 'Ảnh nhóm' },
 };
 
 const MODE_TO_CHARACTER_COUNT: Record<GenMode, number> = {
@@ -128,6 +130,7 @@ const MODE_TO_CHARACTER_COUNT: Record<GenMode, number> = {
   couple: 2,
   trio: 3,
   squad: 4,
+  group5: 5,
 };
 
 const FEATURE_ID_TO_MODE: Record<string, GenMode> = {
@@ -135,6 +138,7 @@ const FEATURE_ID_TO_MODE: Record<string, GenMode> = {
   couple_photo_gen: 'couple',
   group_3_gen: 'trio',
   group_4_gen: 'squad',
+  group_5_gen: 'group5',
 };
 
 const SAMPLES_PER_PAGE = 20;
@@ -150,8 +154,7 @@ const tryStageGenerationInput = async (source: string, folder: string) => {
   if (source.startsWith('http')) return source;
 
   try {
-    const optimizedSource = await optimizePayload(source, 2048);
-    return await uploadFileToR2(optimizedSource, folder);
+    return await uploadFileToR2(source, folder);
   } catch (error) {
     console.warn('[WorkspaceImage] Failed to stage generation input.', error);
     throw new Error('Không thể tải ảnh nhân vật lên vùng đệm. Vui lòng thử lại.');
@@ -168,38 +171,6 @@ const tryStageSampleReferenceInput = async (source: string, folder: string, aspe
   } catch (error) {
     console.warn('[WorkspaceImage] Failed to stage sample reference.', error);
     throw new Error('Không thể chuẩn hóa ảnh mẫu trước khi tạo ảnh. Vui lòng thử lại.');
-  }
-};
-
-const tryStageFaceLockReferenceInput = async (source: string, folder: string) => {
-  if (!source) return null;
-
-  try {
-    const faceLockReference = await createFaceLockReference(source);
-    if (faceLockReference === source) {
-      return null;
-    }
-    const optimizedSource = await optimizePayload(faceLockReference, 1536);
-    return await uploadFileToR2(optimizedSource, folder);
-  } catch (error) {
-    console.warn('[WorkspaceImage] Failed to stage face-lock reference.', error);
-    throw new Error('Không thể khóa gương mặt nhân vật trước khi tạo ảnh. Vui lòng thử lại.');
-  }
-};
-
-const tryStageFaceDetailReferenceInput = async (source: string, folder: string) => {
-  if (!source) return null;
-
-  try {
-    const faceDetailReference = await createFaceDetailReference(source);
-    if (faceDetailReference === source) {
-      return null;
-    }
-    const optimizedSource = await optimizePayload(faceDetailReference, 1536);
-    return await uploadFileToR2(optimizedSource, folder);
-  } catch (error) {
-    console.warn('[WorkspaceImage] Failed to stage face-detail reference.', error);
-    throw new Error('Không thể khóa chi tiết gương mặt nhân vật trước khi tạo ảnh. Vui lòng thử lại.');
   }
 };
 
@@ -363,6 +334,7 @@ export function WorkspaceImage() {
     if (activeMode === 'couple') modeMultiplier = 2;
     if (activeMode === 'trio') modeMultiplier = 3;
     if (activeMode === 'squad') modeMultiplier = 4;
+    if (activeMode === 'group5') modeMultiplier = 5;
     return baseCost * modeMultiplier;
   };
 
@@ -574,6 +546,7 @@ export function WorkspaceImage() {
     if (mode === 'couple') count = 2;
     if (mode === 'trio') count = 3;
     if (mode === 'squad') count = 4;
+    if (mode === 'group5') count = 5;
 
     setCharacters((prev) => {
       const nextChars: CharacterInput[] = [];
@@ -777,8 +750,6 @@ export function WorkspaceImage() {
     void (async () => {
       try {
         addSubmissionLog('Đang chuẩn hóa ảnh nhân vật và ảnh mẫu.');
-        const facePriorityMode = resolveCharacterFacePriorityMode(prompt);
-
         const stagedCharacterGroups = await Promise.all(
           characters.map(async (char, idx) => {
             const references: CharacterReferenceGroup['references'] = [];
@@ -786,26 +757,12 @@ export function WorkspaceImage() {
 
             if (char.bodyImage) {
               appearanceProfile = await analyzeCharacterAppearanceProfile(char.bodyImage);
-              if (facePriorityMode === 'portrait_headshot') {
-                const faceDetailStaged = await tryStageFaceDetailReferenceInput(
-                  char.bodyImage,
-                  `inputs/generation/${activeMode}/character-${idx + 1}/face-detail`,
-                );
-                if (faceDetailStaged) references.push({ source: faceDetailStaged, kind: 'face_detail' });
-              }
-
-              const faceLockStaged = await tryStageFaceLockReferenceInput(
-                char.bodyImage,
-                `inputs/generation/${activeMode}/character-${idx + 1}/face`,
-              );
-              if (faceLockStaged) references.push({ source: faceLockStaged, kind: 'face' });
-
               addSubmissionLog(`Đang tải ảnh nhân vật ${idx + 1} lên vùng đệm.`);
               const bodyStaged = await tryStageGenerationInput(char.bodyImage, `inputs/generation/${activeMode}/character-${idx + 1}/body`);
               if (bodyStaged) references.push({ source: bodyStaged, kind: 'body' });
             }
 
-            return { characterIndex: idx + 1, gender: char.gender, facePriorityMode, appearanceProfile, references };
+            return { characterIndex: idx + 1, gender: char.gender, appearanceProfile, references };
           }),
         );
 
@@ -833,9 +790,7 @@ export function WorkspaceImage() {
               }]
             : []),
           ...stagedCharacterGroups.flatMap((group) => {
-            const bodyReferences = group.references.filter((reference) => reference.kind === 'body');
-            const faceReferences = group.references.filter((reference) => reference.kind !== 'body');
-            return [...bodyReferences, ...faceReferences].map((reference) => ({
+            return group.references.map((reference) => ({
               url: reference.source,
               role: 'character' as const,
               kind: 'image' as const,
@@ -929,7 +884,7 @@ export function WorkspaceImage() {
 
         {/* Mode Toggle */}
         <div className="flex gap-2">
-          {(['single', 'couple', 'trio', 'squad'] as GenMode[]).map((mode) => (
+          {(['single', 'couple', 'trio', 'squad', 'group5'] as GenMode[]).map((mode) => (
             <button
               key={mode}
               onClick={() => handleModeChange(mode)}

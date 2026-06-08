@@ -536,13 +536,15 @@ export const prepareProviderPayloadFromQueueRecipe = async (payload: QueueRecipe
     }
 
     case 'prompt_image_generate_recipe_v1': {
-      const providerPrompt = await prepareDirectPromptWithinLimit(
-        payload.prompt || 'Create an image',
-        'prompt image generation',
-        payload.serverId,
-      );
+      const providerPrompt = String(payload.prompt || '');
+      if (!providerPrompt.trim()) {
+        throw new Error('Prompt tạo ảnh không được để trống.');
+      }
+      if (providerPrompt.length > TST_PROMPT_MAX_CHARACTERS) {
+        throw new Error(`Prompt tạo ảnh vượt quá giới hạn ${TST_PROMPT_MAX_CHARACTERS} ký tự.`);
+      }
       const referenceImages = Array.isArray(payload.referenceImages)
-        ? payload.referenceImages.filter((value): value is string => Boolean(value)).slice(0, 4)
+        ? payload.referenceImages.filter((value): value is string => Boolean(value)).slice(0, 5)
         : [];
       const uploadedUrls = await Promise.all(referenceImages.map((source) => uploadImageToTst(source)));
       const providerPayload: Record<string, unknown> = {

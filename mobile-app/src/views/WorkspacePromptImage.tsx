@@ -25,11 +25,12 @@ import {
   type TstResolution,
   type AuditionPricingOverride,
 } from '../services/tstCatalog';
-import { optimizePayload } from '../../../utils/imageProcessor';
 import type { GeneratedImage } from '../types';
 import type { ModelPricing } from '../services/economyService';
+import type { PromptImageGenerateRecipePayload } from '../../../shared/queueRecipes';
 
-const MAX_REFERENCE_IMAGES = 4;
+const MAX_REFERENCE_IMAGES = 5;
+const MAX_PROMPT_CHARACTERS = 10_000;
 const ASPECT_RATIOS = ['1:1', '9:16', '16:9', '3:4', '4:3', '2:3', '3:2'];
 const MODEL_TABS: Array<{
   tier: TstGenerationTier;
@@ -78,8 +79,7 @@ const readFileAsDataUrl = (file: File) =>
   });
 
 const stageReferenceImage = async (source: string, index: number) => {
-  const optimized = await optimizePayload(source, 2048);
-  return uploadFileToR2(optimized, `inputs/prompt-image/mobile-ref-${index + 1}`);
+  return uploadFileToR2(source, `inputs/prompt-image/mobile-ref-${index + 1}`);
 };
 
 const getModelLabel = (tier: TstGenerationTier) => {
@@ -262,9 +262,12 @@ export function WorkspacePromptImage() {
   };
 
   const submit = async () => {
-    const userPrompt = prompt.trim();
-    if (!userPrompt) {
+    if (!prompt.trim()) {
       notify('Vui lòng nhập prompt tạo ảnh.', 'error');
+      return;
+    }
+    if (prompt.length > MAX_PROMPT_CHARACTERS) {
+      notify(`Prompt không được vượt quá ${MAX_PROMPT_CHARACTERS.toLocaleString('vi-VN')} ký tự.`, 'error');
       return;
     }
     if (queueStats.myImageProcessing >= CONCURRENCY_LIMITS.user.imageProcessing) {
@@ -288,20 +291,21 @@ export function WorkspacePromptImage() {
       const queuedJobId = crypto.randomUUID();
       const modelLabel = getModelLabel(aiModel);
       const engine = `${modelLabel} Prompt Image ${resolution}`;
-      const queuePayload: Record<string, unknown> = {
-        model: getGenerationModelId(aiModel),
-        prompt: userPrompt,
-        resolution: resolution.toLowerCase(),
-        aspect_ratio: aspectRatio,
+      const queuePayload: PromptImageGenerateRecipePayload = {
+        recipeType: 'prompt_image_generate_recipe_v1',
+        modelId: getGenerationModelId(aiModel),
+        prompt,
+        referenceImages: stagedImages,
+        resolution,
+        aspectRatio,
         speed: generationSpeedId,
-        server_id: generationServerId,
+        serverId: generationServerId,
+        quality: aiModel === 'gpt' ? gptQuality : undefined,
       };
-      if (stagedImages.length > 0) queuePayload.img_url = stagedImages;
-      if (aiModel === 'gpt') queuePayload.quality = gptQuality;
       const queuedImage: GeneratedImage = {
         id: queuedJobId,
         url: uploadedImages[0] || '',
-        prompt: userPrompt,
+        prompt,
         timestamp: Date.now(),
         updatedAt: Date.now(),
         toolId: 'ai_image_tool',
@@ -319,7 +323,7 @@ export function WorkspacePromptImage() {
       await saveImageToLocalCache(queuedImage);
       await enqueueServerJob({
         id: queuedJobId,
-        prompt: userPrompt,
+        prompt,
         toolId: 'ai_image_tool',
         toolName: 'AI Image Creator',
         engine,
@@ -393,12 +397,12 @@ export function WorkspacePromptImage() {
         <textarea
           value={prompt}
           onChange={(event) => setPrompt(event.target.value)}
-          maxLength={9999}
+          maxLength={MAX_PROMPT_CHARACTERS}
           placeholder="Nhập prompt tạo ảnh..."
           rows={12}
           className="block w-full min-h-[320px] max-h-[720px] rounded-2xl bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-zinc-800 p-4 text-sm leading-relaxed text-gray-950 dark:text-white outline-none resize-y overflow-auto placeholder:text-gray-400 dark:placeholder:text-zinc-500"
         />
-        <div className="text-right text-[11px] text-gray-400 dark:text-zinc-500 mt-1">{prompt.length}/9999</div>
+        <div className="text-right text-[11px] text-gray-400 dark:text-zinc-500 mt-1">{prompt.length}/{MAX_PROMPT_CHARACTERS}</div>
       </section>
 
       <div className="space-y-4">

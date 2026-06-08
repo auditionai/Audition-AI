@@ -24,9 +24,9 @@ import {
   type TstResolution,
   type AuditionPricingOverride,
 } from '../../services/tstCatalog';
-import { optimizePayload } from '../../utils/imageProcessor';
 import type { Feature, GeneratedImage, Language, ViewId } from '../../types';
 import type { ModelPricing } from '../../services/economyService';
+import type { PromptImageGenerateRecipePayload } from '../../shared/queueRecipes';
 
 interface PromptImageToolProps {
   feature: Feature;
@@ -36,7 +36,8 @@ interface PromptImageToolProps {
 
 type PromptImageSlot = string | null;
 
-const MAX_REFERENCE_IMAGES = 4;
+const MAX_REFERENCE_IMAGES = 5;
+const MAX_PROMPT_CHARACTERS = 10_000;
 const ASPECT_RATIOS = ['1:1', '9:16', '16:9', '3:4', '4:3', '2:3', '3:2'];
 const MODEL_TABS: Array<{
   tier: TstGenerationTier;
@@ -85,8 +86,7 @@ const readFileAsDataUrl = (file: File) =>
   });
 
 const stageReferenceImage = async (source: string, index: number) => {
-  const optimized = await optimizePayload(source, 2048);
-  return uploadFileToR2(optimized, `inputs/prompt-image/ref-${index + 1}`);
+  return uploadFileToR2(source, `inputs/prompt-image/ref-${index + 1}`);
 };
 
 const getModelLabel = (tier: TstGenerationTier) => {
@@ -282,9 +282,12 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
   };
 
   const handleSubmit = async () => {
-    const userPrompt = prompt.trim();
-    if (!userPrompt) {
+    if (!prompt.trim()) {
       notify('Vui lòng nhập prompt tạo ảnh.', 'error');
+      return;
+    }
+    if (prompt.length > MAX_PROMPT_CHARACTERS) {
+      notify(`Prompt không được vượt quá ${MAX_PROMPT_CHARACTERS.toLocaleString('vi-VN')} ký tự.`, 'error');
       return;
     }
     if (queueStats.myImageProcessing >= CONCURRENCY_LIMITS.user.imageProcessing) {
@@ -307,21 +310,22 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
       const stagedImages = await Promise.all(uploadedImages.map((value, index) => stageReferenceImage(value, index)));
       const queuedJobId = crypto.randomUUID();
       const modelLabel = getModelLabel(aiModel);
-      const queuePayload: Record<string, unknown> = {
-        model: getGenerationModelId(aiModel),
-        prompt: userPrompt,
-        resolution: resolution.toLowerCase(),
-        aspect_ratio: aspectRatio,
+      const queuePayload: PromptImageGenerateRecipePayload = {
+        recipeType: 'prompt_image_generate_recipe_v1',
+        modelId: getGenerationModelId(aiModel),
+        prompt,
+        referenceImages: stagedImages,
+        resolution,
+        aspectRatio,
         speed: generationSpeedId,
-        server_id: generationServerId,
+        serverId: generationServerId,
+        quality: aiModel === 'gpt' ? gptQuality : undefined,
       };
-      if (stagedImages.length > 0) queuePayload.img_url = stagedImages;
-      if (aiModel === 'gpt') queuePayload.quality = gptQuality;
 
       const queuedImage: GeneratedImage = {
         id: queuedJobId,
         url: uploadedImages[0] || '',
-        prompt: userPrompt,
+        prompt,
         timestamp: Date.now(),
         updatedAt: Date.now(),
         toolId: feature.id,
@@ -339,7 +343,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
       await saveImageToLocalCache(queuedImage);
       await enqueueServerJob({
         id: queuedJobId,
-        prompt: userPrompt,
+        prompt,
         toolId: feature.id,
         toolName: feature.name.en,
         engine: queuedImage.engine,
@@ -427,12 +431,12 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
             <textarea
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
-              maxLength={9999}
+              maxLength={MAX_PROMPT_CHARACTERS}
               placeholder="Nhập prompt tạo ảnh. Hệ thống chỉ gửi prompt này và ảnh tham chiếu lên TST, không chèn prompt hệ thống Audition."
               rows={12}
               className="block w-full min-h-[340px] max-h-[760px] rounded-xl border border-white/10 bg-black/40 p-4 text-sm leading-relaxed text-white outline-none focus:border-audi-pink resize-y overflow-auto placeholder:text-slate-500"
             />
-            <div className="mt-2 text-right text-xs text-slate-500">{prompt.length}/9999</div>
+            <div className="mt-2 text-right text-xs text-slate-500">{prompt.length}/{MAX_PROMPT_CHARACTERS}</div>
           </section>
         </div>
 

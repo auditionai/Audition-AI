@@ -520,7 +520,7 @@ const getShotAwareRenderProfile = (shotType: ImageRoleContract['shotType']) => {
 
   return `${AUDITION_SOFT_BEAUTY_RENDER_PROFILE} Half-body: balance face fidelity, torso flow, hands, materials, and avoid default far full-body standing framing.`;
 };
-export const DEFAULT_PROVIDER_PROMPT_MAX_LENGTH = 9999;
+export const DEFAULT_PROVIDER_PROMPT_MAX_LENGTH = 10_000;
 export const SERVER_3_PROVIDER_PROMPT_MAX_LENGTH = 3500;
 
 const normalizeProviderServerId = (value?: string | null) =>
@@ -883,22 +883,26 @@ export const getImageRenderReferenceEntries = (
       })
       .filter((entry): entry is ImageRenderReferenceEntry => Boolean(entry));
 
+    if (characterGroups.length >= 5) {
+      return bodyEntries.slice(0, 5);
+    }
+
     if (characterGroups.length <= 1) {
       return [
-        ...bodyEntries.slice(0, 1),
-        ...faceEntries.slice(0, 1),
+        ...bodyEntries,
+        ...faceEntries,
         ...(sampleEntry ? [sampleEntry] : []),
         ...(styleEntry ? [styleEntry] : []),
-      ].slice(0, 5);
+      ];
     }
 
     if (characterGroups.length === 2) {
       if (sampleEntry) {
         return [
           sampleEntry,
-          ...bodyEntries.slice(0, 2),
+          ...bodyEntries,
           ...(styleEntry ? [styleEntry] : []),
-        ].slice(0, 5);
+        ];
       }
 
       const characterPairs = characterGroups.flatMap((group) => {
@@ -914,25 +918,35 @@ export const getImageRenderReferenceEntries = (
       return [
         ...characterPairs,
         ...(styleEntry ? [styleEntry] : []),
-      ].slice(0, 5);
+      ];
     }
 
     if (characterGroups.length === 3) {
       return [
         ...(sampleEntry ? [sampleEntry] : []),
-        ...bodyEntries.slice(0, 3),
+        ...bodyEntries,
         ...(styleEntry ? [styleEntry] : []),
-      ].slice(0, 5);
+      ];
     }
 
     return [
       ...(sampleEntry ? [sampleEntry] : []),
-      ...bodyEntries.slice(0, 4),
+      ...bodyEntries,
       ...(!sampleEntry && styleEntry ? [styleEntry] : []),
-    ].slice(0, 5);
+    ];
   }
 
   const entries: ImageRenderReferenceEntry[] = [];
+
+  if (characterGroups.length >= 5) {
+    return characterGroups
+      .map((group) => {
+        const primaryReference = group.references.find((reference) => reference.kind === 'body') || group.references[0];
+        return primaryReference ? buildCharacterEntry(group, primaryReference, 0) : null;
+      })
+      .filter((entry): entry is ImageRenderReferenceEntry => Boolean(entry))
+      .slice(0, 5);
+  }
 
   const sampleEntry = buildSampleEntry();
   if (sampleEntry) {

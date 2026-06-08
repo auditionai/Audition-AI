@@ -536,15 +536,27 @@ export const prepareProviderPayloadFromQueueRecipe = async (payload: QueueRecipe
     }
 
     case 'prompt_image_generate_recipe_v1': {
-      const providerPrompt = String(payload.prompt || '');
-      if (!providerPrompt.trim()) {
+      const userPrompt = String(payload.prompt || '');
+      if (!userPrompt.trim()) {
         throw new Error('Prompt tạo ảnh không được để trống.');
       }
-      if (providerPrompt.length > TST_PROMPT_MAX_CHARACTERS) {
+      if (userPrompt.length > TST_PROMPT_MAX_CHARACTERS) {
         throw new Error(`Prompt tạo ảnh vượt quá giới hạn ${TST_PROMPT_MAX_CHARACTERS} ký tự.`);
       }
+      const isUserOnlyPrompt = payload.promptMode === 'user_only';
+      const providerPrompt = isUserOnlyPrompt
+        ? userPrompt
+        : await prepareDirectPromptWithinLimit(
+            [
+              String(payload.systemPromptPrefix || '').trim(),
+              userPrompt,
+              payload.negativePrompt ? `Negative prompt: ${payload.negativePrompt}` : '',
+            ].filter(Boolean).join('\n\n'),
+            'prompt image generation',
+            payload.serverId,
+          );
       const referenceImages = Array.isArray(payload.referenceImages)
-        ? payload.referenceImages.filter((value): value is string => Boolean(value)).slice(0, 5)
+        ? payload.referenceImages.filter((value): value is string => Boolean(value)).slice(0, isUserOnlyPrompt ? 5 : 4)
         : [];
       const uploadedUrls = await Promise.all(referenceImages.map((source) => uploadImageToTst(source)));
       const providerPayload: Record<string, unknown> = {

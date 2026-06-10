@@ -820,6 +820,16 @@ export const getImageDirectorSources = (
     ...(payload.styleImage ? [payload.styleImage] : []),
   ].filter((value): value is string => Boolean(value));
 
+const TEXT_ONLY_SAMPLE_COMPOSITION_MODELS = new Set([
+  'nano-banana-2',
+  'nano-banana-pro',
+  'image-gpt-2',
+]);
+
+const usesTextOnlySampleComposition = (
+  payload: Pick<ImageGenerateRecipePayload, 'sampleImage'> & { modelId?: string | null },
+) => Boolean(payload.sampleImage) && TEXT_ONLY_SAMPLE_COMPOSITION_MODELS.has(normalizeValue(payload.modelId));
+
 export const getImageRenderReferenceEntries = (
   payload: Pick<ImageGenerateRecipePayload, 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'> & {
     modelId?: string | null;
@@ -848,7 +858,7 @@ export const getImageRenderReferenceEntries = (
   };
 
   const buildSampleEntry = (): ImageRenderReferenceEntry | null =>
-    payload.sampleImage
+    payload.sampleImage && !usesTextOnlySampleComposition(payload)
       ? {
           role: 'sample',
           source: payload.sampleImage,
@@ -971,11 +981,13 @@ export const getImageRenderReferenceEntries = (
 };
 
 export const getImageRenderReferenceSources = (
-  payload: Pick<ImageGenerateRecipePayload, 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
+  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'>,
 ) => getImageRenderReferenceEntries(payload).map((entry) => entry.source);
 
 export const buildImageRoleContract = (
-  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio' | 'visionAnalysis'>,
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'aspectRatio' | 'visionAnalysis'> & {
+    modelId?: string | null;
+  },
 ): ImageRoleContract => {
   const renderEntries = getImageRenderReferenceEntries(payload);
   const characterGroups = getImageCharacterReferenceGroups(payload);
@@ -1437,6 +1449,16 @@ const buildProSampleVisionLine = (
   if (!sample) return null;
 
   const segments = [
+    sample.summary ? `summary=${collapsePromptWhitespace(sample.summary)}` : null,
+    sample.pose ? `pose=${collapsePromptWhitespace(sample.pose)}` : null,
+    sample.camera ? `camera=${collapsePromptWhitespace(sample.camera)}` : null,
+    sample.framing ? `framing=${collapsePromptWhitespace(sample.framing)}` : null,
+    sample.subjectPlacement ? `placement=${collapsePromptWhitespace(sample.subjectPlacement)}` : null,
+    sample.background ? `background=${collapsePromptWhitespace(sample.background)}` : null,
+    sample.lighting ? `lighting=${collapsePromptWhitespace(sample.lighting)}` : null,
+    sample.limbLayout ? `limbs=${collapsePromptWhitespace(sample.limbLayout)}` : null,
+    sample.supportContact ? `contact=${collapsePromptWhitespace(sample.supportContact)}` : null,
+    sample.occlusionNotes ? `occlusion=${collapsePromptWhitespace(sample.occlusionNotes)}` : null,
     normalizeProVisionTags(sample.proPoseTags).length > 0 ? `pose_tags=${normalizeProVisionTags(sample.proPoseTags).join(' | ')}` : null,
     normalizeProVisionTags(sample.proContactTags).length > 0 ? `contact_tags=${normalizeProVisionTags(sample.proContactTags).join(' | ')}` : null,
   ].filter(Boolean);
@@ -1490,6 +1512,10 @@ const buildProStructuredProviderPrompt = (
   const characterCount = Math.max(1, Math.floor(Number(payload.characterCount || getImageCharacterReferenceGroups(payload).length || 1)));
   const compactNegativePrompt = trimPromptText(mergedNegativePrompt, 420);
   const stylePrompt = getProviderStyleQualityText(payload.stylePrompt);
+  const textOnlySampleComposition = usesTextOnlySampleComposition(payload);
+  const referenceOrder = getImageRenderReferenceEntries(payload)
+    .map((entry, index) => `Image ${index + 1}=${entry.indexLabel}; ${entry.role === 'style' ? 'style only' : 'required final identity'}.`)
+    .join(' ');
   const structuredVisionLines = [
     ...getImageCharacterReferenceGroups(payload)
       .map((group) => buildProCharacterVisionLine(payload, group.characterIndex))
@@ -1505,9 +1531,12 @@ const buildProStructuredProviderPrompt = (
     {
       locked: true,
       text: payload.sampleImage
-        ? 'SAMPLE IMAGE COMPOSITION: use the sample only for pose, framing, camera angle, subject placement, background, props, and contact points. Never copy the sample identity, face, outfit, or hairstyle.'
+        ? textOnlySampleComposition
+          ? 'SAMPLE COMPOSITION IS TEXT-ONLY: sample pixels are intentionally not sent to the render model. Reconstruct pose, framing, camera angle, placement, background, lighting, props, limb layout, contact points, and occlusion only from REFERENCE ANALYSIS. The uploaded CHARACTER images are the only person and identity sources.'
+          : 'SAMPLE IMAGE COMPOSITION: use the sample only for pose, framing, camera angle, subject placement, background, props, and contact points. Never copy the sample identity, face, outfit, or hairstyle.'
         : 'COMPOSITION: no sample image is present, so use the user prompt for pose, camera, framing, scene, and background. Do not fall back to a default standing studio pose.',
     },
+    { locked: true, text: `REFERENCE ORDER: ${referenceOrder}` },
     { locked: true, text: `STYLE QUALITY: ${stylePrompt}` },
     {
       weight: 1,
@@ -1523,7 +1552,7 @@ const buildProStructuredProviderPrompt = (
 
 const buildDetailedImageProviderPrompt = (
   synthesizedPrompt: string,
-  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'stylePrompt' | 'aspectRatio' | 'visionAnalysis' | 'serverId'>,
+  payload: Pick<ImageGenerateRecipePayload, 'modelId' | 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'stylePrompt' | 'aspectRatio' | 'visionAnalysis' | 'serverId'>,
   mergedNegativePrompt: string,
 ) => {
   const roleContract = buildImageRoleContract(payload);
@@ -1534,6 +1563,7 @@ const buildDetailedImageProviderPrompt = (
   const compactNegativePrompt = trimPromptText(mergedNegativePrompt, 420);
   const shotAwareRenderProfile = getShotAwareRenderProfile(roleContract.shotType);
   const stylePrompt = getProviderStyleQualityText(payload.stylePrompt);
+  const textOnlySampleComposition = usesTextOnlySampleComposition(payload);
   const referenceOrder = getImageRenderReferenceEntries(payload)
     .map((entry, index) => {
       if (entry.role === 'sample') {
@@ -1567,7 +1597,10 @@ const buildDetailedImageProviderPrompt = (
         sampleVision.framing,
         sampleVision.subjectPlacement,
         sampleVision.background,
+        sampleVision.lighting,
+        sampleVision.limbLayout,
         sampleVision.supportContact,
+        sampleVision.occlusionNotes,
       ].filter(Boolean).join('; ')}`
     : '';
 
@@ -1575,7 +1608,12 @@ const buildDetailedImageProviderPrompt = (
     { locked: true, text: 'RENDER ONE NEW FINAL IMAGE. Never return any uploaded reference unchanged.' },
     { locked: true, text: `USER PROMPT - highest priority:\n${originalUserPrompt || 'No additional user prompt provided.'}` },
     { locked: true, text: `CHARACTER REFERENCES: render exactly ${characterCount} character(s). Preserve uploaded face identity, hairstyle, skin tone, outfit, shoes, accessories, makeup, body structure, and gender presentation. Do not invent a new face, new outfit, or extra character.` },
-    { locked: true, text: 'SAMPLE IMAGE COMPOSITION: use the sample only for pose, framing, camera angle, subject placement, background, props, and contact points. Never copy the sample identity, face, outfit, hairstyle, or realism.' },
+    {
+      locked: true,
+      text: textOnlySampleComposition
+        ? 'SAMPLE COMPOSITION IS TEXT-ONLY: sample pixels are intentionally not sent to the render model. Reconstruct pose, framing, camera angle, subject placement, background, lighting, props, limb layout, occlusion, and contact points only from SAMPLE ANALYSIS below. The uploaded CHARACTER image is the only person and identity source.'
+        : 'SAMPLE IMAGE COMPOSITION: use the sample only for pose, framing, camera angle, subject placement, background, props, and contact points. Never copy the sample identity, face, outfit, hairstyle, or realism.',
+    },
     { locked: true, text: `REFERENCE ORDER: ${referenceOrder}` },
     { weight: 1, text: characterVision },
     { weight: 1, text: sampleCompositionVision },

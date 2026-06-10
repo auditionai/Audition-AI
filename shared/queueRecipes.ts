@@ -110,13 +110,21 @@ export interface CharacterVisionAnalysis {
 export interface SampleVisionAnalysis {
   summary?: string;
   pose?: string;
+  facialOrientation?: string;
+  gazeDirection?: string;
   camera?: string;
+  lensAndDepth?: string;
   framing?: string;
+  compositionGeometry?: string;
   subjectPlacement?: string;
   background?: string;
   lighting?: string;
+  lightingDirection?: string;
+  colorPalette?: string;
+  contrastAndExposure?: string;
   limbLayout?: string;
   supportContact?: string;
+  propLayout?: string;
   occlusionNotes?: string;
   proSceneTags?: string[];
   proPoseTags?: string[];
@@ -350,7 +358,7 @@ const HALF_BODY_PROMPT_PATTERNS = [
 ];
 
 const resolveImageShotType = (
-  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'sampleImage' | 'aspectRatio'>,
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'sampleImage' | 'aspectRatio' | 'visionAnalysis'>,
 ): ImageRoleContract['shotType'] => {
   const normalizedPrompt = collapsePromptWhitespace(
     [payload.userPromptInput, payload.prompt].filter(Boolean).join('\n'),
@@ -371,6 +379,26 @@ const resolveImageShotType = (
     return 'half_body';
   }
 
+  const sampleShotDescription = collapsePromptWhitespace([
+    payload.visionAnalysis?.sample?.summary,
+    payload.visionAnalysis?.sample?.camera,
+    payload.visionAnalysis?.sample?.lensAndDepth,
+    payload.visionAnalysis?.sample?.framing,
+    payload.visionAnalysis?.sample?.compositionGeometry,
+  ].filter(Boolean).join('\n')).toLowerCase();
+
+  if (sampleShotDescription) {
+    if (CLOSE_UP_PROMPT_PATTERNS.some((pattern) => pattern.test(sampleShotDescription))) {
+      return 'close_up';
+    }
+    if (FULL_BODY_PROMPT_PATTERNS.some((pattern) => pattern.test(sampleShotDescription))) {
+      return 'full_body';
+    }
+    if (HALF_BODY_PROMPT_PATTERNS.some((pattern) => pattern.test(sampleShotDescription))) {
+      return 'half_body';
+    }
+  }
+
   if (payload.sampleImage) {
     return payload.aspectRatio === '9:16' || payload.aspectRatio === '3:4'
       ? 'full_body'
@@ -381,7 +409,7 @@ const resolveImageShotType = (
 };
 
 export const buildImageRoleWeights = (
-  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'sampleImage' | 'aspectRatio'>,
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'sampleImage' | 'aspectRatio' | 'visionAnalysis'>,
 ): ImageRoleWeights => {
   const shotType = resolveImageShotType(payload);
   const hasSample = Boolean(payload.sampleImage);
@@ -820,16 +848,6 @@ export const getImageDirectorSources = (
     ...(payload.styleImage ? [payload.styleImage] : []),
   ].filter((value): value is string => Boolean(value));
 
-const TEXT_ONLY_SAMPLE_COMPOSITION_MODELS = new Set([
-  'nano-banana-2',
-  'nano-banana-pro',
-  'image-gpt-2',
-]);
-
-const usesTextOnlySampleComposition = (
-  payload: Pick<ImageGenerateRecipePayload, 'sampleImage'> & { modelId?: string | null },
-) => Boolean(payload.sampleImage) && TEXT_ONLY_SAMPLE_COMPOSITION_MODELS.has(normalizeValue(payload.modelId));
-
 export const getImageRenderReferenceEntries = (
   payload: Pick<ImageGenerateRecipePayload, 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage'> & {
     modelId?: string | null;
@@ -858,11 +876,11 @@ export const getImageRenderReferenceEntries = (
   };
 
   const buildSampleEntry = (): ImageRenderReferenceEntry | null =>
-    payload.sampleImage && !usesTextOnlySampleComposition(payload)
+    payload.sampleImage
       ? {
           role: 'sample',
           source: payload.sampleImage,
-          indexLabel: 'SAMPLE IMAGE',
+          indexLabel: 'SAMPLE BASE IMAGE',
         }
       : null;
 
@@ -897,14 +915,16 @@ export const getImageRenderReferenceEntries = (
       .filter((entry): entry is ImageRenderReferenceEntry => Boolean(entry));
 
     if (characterGroups.length >= 5) {
-      return bodyEntries.slice(0, 5);
+      return sampleEntry
+        ? [sampleEntry, ...bodyEntries.slice(0, 4)]
+        : bodyEntries.slice(0, 5);
     }
 
     if (characterGroups.length <= 1) {
       return [
+        ...(sampleEntry ? [sampleEntry] : []),
         ...bodyEntries,
         ...faceEntries,
-        ...(sampleEntry ? [sampleEntry] : []),
         ...(styleEntry ? [styleEntry] : []),
       ];
     }
@@ -952,13 +972,21 @@ export const getImageRenderReferenceEntries = (
   const entries: ImageRenderReferenceEntry[] = [];
 
   if (characterGroups.length >= 5) {
-    return characterGroups
+    const bodyEntries = characterGroups
       .map((group) => {
         const primaryReference = group.references.find((reference) => reference.kind === 'body') || group.references[0];
         return primaryReference ? buildCharacterEntry(group, primaryReference, 0) : null;
       })
-      .filter((entry): entry is ImageRenderReferenceEntry => Boolean(entry))
-      .slice(0, 5);
+      .filter((entry): entry is ImageRenderReferenceEntry => Boolean(entry));
+    const sampleEntry = buildSampleEntry();
+    return sampleEntry
+      ? [sampleEntry, ...bodyEntries.slice(0, 4)]
+      : bodyEntries.slice(0, 5);
+  }
+
+  const sampleEntry = buildSampleEntry();
+  if (sampleEntry) {
+    entries.push(sampleEntry);
   }
 
   characterGroups.forEach((group) => {
@@ -966,11 +994,6 @@ export const getImageRenderReferenceEntries = (
       entries.push(buildCharacterEntry(group, reference, referenceIndex));
     });
   });
-
-  const sampleEntry = buildSampleEntry();
-  if (sampleEntry) {
-    entries.push(sampleEntry);
-  }
 
   const styleEntry = buildStyleEntry();
   if (styleEntry) {
@@ -1067,12 +1090,21 @@ export const buildImageRoleContract = (
   if (sampleVision) {
     const sampleSignals = [
       sampleVision.pose ? `pose: ${sampleVision.pose}` : '',
+      sampleVision.facialOrientation ? `face orientation: ${sampleVision.facialOrientation}` : '',
+      sampleVision.gazeDirection ? `gaze: ${sampleVision.gazeDirection}` : '',
       sampleVision.camera ? `camera: ${sampleVision.camera}` : '',
+      sampleVision.lensAndDepth ? `lens/depth: ${sampleVision.lensAndDepth}` : '',
       sampleVision.framing ? `framing: ${sampleVision.framing}` : '',
+      sampleVision.compositionGeometry ? `geometry: ${sampleVision.compositionGeometry}` : '',
       sampleVision.subjectPlacement ? `placement: ${sampleVision.subjectPlacement}` : '',
       sampleVision.background ? `background: ${sampleVision.background}` : '',
+      sampleVision.lighting ? `lighting: ${sampleVision.lighting}` : '',
+      sampleVision.lightingDirection ? `light direction: ${sampleVision.lightingDirection}` : '',
+      sampleVision.colorPalette ? `palette: ${sampleVision.colorPalette}` : '',
+      sampleVision.contrastAndExposure ? `contrast/exposure: ${sampleVision.contrastAndExposure}` : '',
       sampleVision.limbLayout ? `limbs: ${sampleVision.limbLayout}` : '',
       sampleVision.supportContact ? `support/contact: ${sampleVision.supportContact}` : '',
+      sampleVision.propLayout ? `props: ${sampleVision.propLayout}` : '',
       sampleVision.occlusionNotes ? `occlusion: ${sampleVision.occlusionNotes}` : '',
     ].filter(Boolean);
     if (sampleSignals.length > 0) {
@@ -1147,7 +1179,9 @@ export const buildImageRoleContract = (
     ],
     globalRules: [
       'Never output a split-screen, image grid, collage, storyboard, or panel layout.',
-      'Never return an uploaded reference nearly unchanged as the final output.',
+      hasSample
+        ? 'Never leave the original sample person unchanged. Preserve the sample canvas while replacing its person with the uploaded character identity.'
+        : 'Never return an uploaded reference nearly unchanged as the final output.',
       'Keep the final result as a stylized 3D game avatar, not a photorealistic human.',
     ],
   };
@@ -1451,13 +1485,21 @@ const buildProSampleVisionLine = (
   const segments = [
     sample.summary ? `summary=${collapsePromptWhitespace(sample.summary)}` : null,
     sample.pose ? `pose=${collapsePromptWhitespace(sample.pose)}` : null,
+    sample.facialOrientation ? `face_orientation=${collapsePromptWhitespace(sample.facialOrientation)}` : null,
+    sample.gazeDirection ? `gaze=${collapsePromptWhitespace(sample.gazeDirection)}` : null,
     sample.camera ? `camera=${collapsePromptWhitespace(sample.camera)}` : null,
+    sample.lensAndDepth ? `lens_depth=${collapsePromptWhitespace(sample.lensAndDepth)}` : null,
     sample.framing ? `framing=${collapsePromptWhitespace(sample.framing)}` : null,
+    sample.compositionGeometry ? `geometry=${collapsePromptWhitespace(sample.compositionGeometry)}` : null,
     sample.subjectPlacement ? `placement=${collapsePromptWhitespace(sample.subjectPlacement)}` : null,
     sample.background ? `background=${collapsePromptWhitespace(sample.background)}` : null,
     sample.lighting ? `lighting=${collapsePromptWhitespace(sample.lighting)}` : null,
+    sample.lightingDirection ? `light_direction=${collapsePromptWhitespace(sample.lightingDirection)}` : null,
+    sample.colorPalette ? `palette=${collapsePromptWhitespace(sample.colorPalette)}` : null,
+    sample.contrastAndExposure ? `contrast_exposure=${collapsePromptWhitespace(sample.contrastAndExposure)}` : null,
     sample.limbLayout ? `limbs=${collapsePromptWhitespace(sample.limbLayout)}` : null,
     sample.supportContact ? `contact=${collapsePromptWhitespace(sample.supportContact)}` : null,
+    sample.propLayout ? `props=${collapsePromptWhitespace(sample.propLayout)}` : null,
     sample.occlusionNotes ? `occlusion=${collapsePromptWhitespace(sample.occlusionNotes)}` : null,
     normalizeProVisionTags(sample.proPoseTags).length > 0 ? `pose_tags=${normalizeProVisionTags(sample.proPoseTags).join(' | ')}` : null,
     normalizeProVisionTags(sample.proContactTags).length > 0 ? `contact_tags=${normalizeProVisionTags(sample.proContactTags).join(' | ')}` : null,
@@ -1482,7 +1524,7 @@ const buildProStyleVisionLine = (
 };
 
 const buildProWeightedReferencePlan = (
-  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'aspectRatio'>,
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'aspectRatio' | 'visionAnalysis'>,
 ) => {
   const weights = buildImageRoleWeights(payload);
   const groups = getImageCharacterReferenceGroups(payload);
@@ -1512,9 +1554,12 @@ const buildProStructuredProviderPrompt = (
   const characterCount = Math.max(1, Math.floor(Number(payload.characterCount || getImageCharacterReferenceGroups(payload).length || 1)));
   const compactNegativePrompt = trimPromptText(mergedNegativePrompt, 420);
   const stylePrompt = getProviderStyleQualityText(payload.stylePrompt);
-  const textOnlySampleComposition = usesTextOnlySampleComposition(payload);
   const referenceOrder = getImageRenderReferenceEntries(payload)
-    .map((entry, index) => `Image ${index + 1}=${entry.indexLabel}; ${entry.role === 'style' ? 'style only' : 'required final identity'}.`)
+    .map((entry, index) => {
+      if (entry.role === 'sample') return `Image ${index + 1}=SAMPLE BASE IMAGE; edit this canvas in place.`;
+      if (entry.role === 'style') return `Image ${index + 1}=STYLE ONLY.`;
+      return `Image ${index + 1}=${entry.indexLabel}; replacement identity source.`;
+    })
     .join(' ');
   const structuredVisionLines = [
     ...getImageCharacterReferenceGroups(payload)
@@ -1525,15 +1570,15 @@ const buildProStructuredProviderPrompt = (
   ].filter((value): value is string => Boolean(value));
 
   return buildProviderPromptWithinServerBudget([
-    { locked: true, text: 'RENDER ONE NEW FINAL IMAGE. Never return any uploaded reference unchanged.' },
+    { locked: true, text: payload.sampleImage
+      ? 'EDIT IMAGE 1 IN PLACE. Use the SAMPLE BASE IMAGE as the original canvas. Remove only its existing person and replace that person with the uploaded CHARACTER identity.'
+      : 'RENDER ONE NEW FINAL IMAGE. Never return any uploaded reference unchanged.' },
     { locked: true, text: `USER PROMPT - highest priority:\n${getPrimaryUserRequestText(payload) || 'Create one new image from the uploaded references.'}` },
     { locked: true, text: `CHARACTER REFERENCES: render exactly ${characterCount} character(s). Preserve the uploaded face identity, hair, skin tone, outfit, shoes, accessories, makeup, body structure, and gender presentation. Do not invent a new face, new outfit, or extra character.` },
     {
       locked: true,
       text: payload.sampleImage
-        ? textOnlySampleComposition
-          ? 'SAMPLE COMPOSITION IS TEXT-ONLY: sample pixels are intentionally not sent to the render model. Reconstruct pose, framing, camera angle, placement, background, lighting, props, limb layout, contact points, and occlusion only from REFERENCE ANALYSIS. The uploaded CHARACTER images are the only person and identity sources.'
-          : 'SAMPLE IMAGE COMPOSITION: use the sample only for pose, framing, camera angle, subject placement, background, props, and contact points. Never copy the sample identity, face, outfit, or hairstyle.'
+        ? 'SAMPLE BASE IMAGE LOCK: preserve its canvas, crop, camera, background pixels, environment, props, object positions, lighting, shadows, color grade, depth of field, and occlusion layout as closely as the model permits. Replace only the original sample person. Do not redesign or regenerate the scene.'
         : 'COMPOSITION: no sample image is present, so use the user prompt for pose, camera, framing, scene, and background. Do not fall back to a default standing studio pose.',
     },
     { locked: true, text: `REFERENCE ORDER: ${referenceOrder}` },
@@ -1542,6 +1587,12 @@ const buildProStructuredProviderPrompt = (
       weight: 1,
       text: structuredVisionLines.length > 0
         ? ['REFERENCE ANALYSIS:', ...structuredVisionLines].join('\n')
+        : '',
+    },
+    {
+      locked: true,
+      text: payload.visionAnalysis?.sample
+        ? 'COMPOSITION FIDELITY: SAMPLE ANALYSIS overrides generic style defaults for crop, camera, subject scale, prop position, background color, light direction, shadow hardness, contrast, and depth of field. Do not widen a close-up into a half-body or full-body shot.'
         : '',
     },
     { locked: true, text: `SHOT: ${roleContract.shotType}. ${getShotAwareRenderProfile(roleContract.shotType)}` },
@@ -1563,11 +1614,10 @@ const buildDetailedImageProviderPrompt = (
   const compactNegativePrompt = trimPromptText(mergedNegativePrompt, 420);
   const shotAwareRenderProfile = getShotAwareRenderProfile(roleContract.shotType);
   const stylePrompt = getProviderStyleQualityText(payload.stylePrompt);
-  const textOnlySampleComposition = usesTextOnlySampleComposition(payload);
   const referenceOrder = getImageRenderReferenceEntries(payload)
     .map((entry, index) => {
       if (entry.role === 'sample') {
-        return `Image ${index + 1}=SAMPLE COMPOSITION ONLY; replace its person.`;
+        return `Image ${index + 1}=SAMPLE BASE IMAGE; edit this canvas in place and replace its person.`;
       }
       if (entry.role === 'style') {
         return `Image ${index + 1}=STYLE ONLY.`;
@@ -1593,30 +1643,46 @@ const buildDetailedImageProviderPrompt = (
   const sampleCompositionVision = sampleVision
     ? `Sample analysis: ${[
         sampleVision.pose,
+        sampleVision.facialOrientation,
+        sampleVision.gazeDirection,
         sampleVision.camera,
+        sampleVision.lensAndDepth,
         sampleVision.framing,
+        sampleVision.compositionGeometry,
         sampleVision.subjectPlacement,
         sampleVision.background,
         sampleVision.lighting,
+        sampleVision.lightingDirection,
+        sampleVision.colorPalette,
+        sampleVision.contrastAndExposure,
         sampleVision.limbLayout,
         sampleVision.supportContact,
+        sampleVision.propLayout,
         sampleVision.occlusionNotes,
       ].filter(Boolean).join('; ')}`
     : '';
 
   return buildProviderPromptWithinServerBudget([
-    { locked: true, text: 'RENDER ONE NEW FINAL IMAGE. Never return any uploaded reference unchanged.' },
+    { locked: true, text: payload.sampleImage
+      ? 'EDIT IMAGE 1 IN PLACE. Keep the SAMPLE BASE IMAGE as the original canvas. Remove only its existing person and replace that person with the uploaded CHARACTER identity.'
+      : 'RENDER ONE NEW FINAL IMAGE. Never return any uploaded reference unchanged.' },
     { locked: true, text: `USER PROMPT - highest priority:\n${originalUserPrompt || 'No additional user prompt provided.'}` },
     { locked: true, text: `CHARACTER REFERENCES: render exactly ${characterCount} character(s). Preserve uploaded face identity, hairstyle, skin tone, outfit, shoes, accessories, makeup, body structure, and gender presentation. Do not invent a new face, new outfit, or extra character.` },
     {
       locked: true,
-      text: textOnlySampleComposition
-        ? 'SAMPLE COMPOSITION IS TEXT-ONLY: sample pixels are intentionally not sent to the render model. Reconstruct pose, framing, camera angle, subject placement, background, lighting, props, limb layout, occlusion, and contact points only from SAMPLE ANALYSIS below. The uploaded CHARACTER image is the only person and identity source.'
-        : 'SAMPLE IMAGE COMPOSITION: use the sample only for pose, framing, camera angle, subject placement, background, props, and contact points. Never copy the sample identity, face, outfit, hairstyle, or realism.',
+      text: payload.sampleImage
+        ? 'SAMPLE BASE IMAGE LOCK: preserve its canvas, crop, camera, background pixels, environment, props, object positions, lighting, shadows, color grade, depth of field, and occlusion layout. Replace only the original sample person; do not redesign or regenerate the scene.'
+        : 'COMPOSITION: no sample image is present, so compose from the user request.',
     },
     { locked: true, text: `REFERENCE ORDER: ${referenceOrder}` },
     { weight: 1, text: characterVision },
     { weight: 1, text: sampleCompositionVision },
+    {
+      locked: true,
+      text: sampleVision
+        ? 'COMPOSITION FIDELITY: SAMPLE ANALYSIS overrides generic style defaults for crop, camera, subject scale, prop position, background color, light direction, shadow hardness, contrast, and depth of field. Do not widen a close-up into a half-body or full-body shot.'
+        : '',
+    },
     { locked: true, text: `STYLE QUALITY: ${stylePrompt}` },
     {
       locked: true,

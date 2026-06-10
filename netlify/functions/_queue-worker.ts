@@ -2137,7 +2137,11 @@ const completePolledJobWithResultUrl = async (
       }
 
       const verification = await verifyGeneratedImageOutput(storedImageRecipe, resultUrl);
-      const summary = verification.summary || verification.issues.join('; ') || 'Không xác minh được identity.';
+      const summary = [
+        verification.summary,
+        ...verification.issues,
+        ...verification.compositionIssues,
+      ].filter(Boolean).join('; ') || 'Không xác minh được identity và bố cục ảnh mẫu.';
       if (!verification.pass) {
         await markOutputVerificationFailed(
           { ...job, queue_payload: verifyingPayload },

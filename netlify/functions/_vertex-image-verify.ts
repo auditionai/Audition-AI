@@ -18,6 +18,9 @@ export interface ImageOutputSlotFinding {
 export interface ImageOutputVerificationResult {
   pass: boolean;
   summary: string;
+  sampleCompositionMatched: boolean;
+  compositionScore: number | null;
+  compositionIssues: string[];
   detectedCharacterCount: number | null;
   missingCharacterSlots: number[];
   duplicatedCharacterSlots: number[];
@@ -167,8 +170,19 @@ const summarySignalsSuccessfulMultiCharacterCoverage = (summary: string, expecte
   return lower.includes(`all ${expectedCount} character slots`);
 };
 
-const normalizeVerificationResult = (raw: any): ImageOutputVerificationResult => {
+const normalizeVerificationResult = (
+  raw: any,
+  requiresSampleComposition: boolean,
+): ImageOutputVerificationResult => {
   const summary = typeof raw?.summary === 'string' ? raw.summary.trim() : '';
+  const sampleCompositionMatched = raw?.sampleCompositionMatched === true;
+  const compositionScore =
+    typeof raw?.compositionScore === 'number' && Number.isFinite(raw.compositionScore)
+      ? Math.max(0, Math.min(100, raw.compositionScore))
+      : null;
+  const compositionIssues = Array.isArray(raw?.compositionIssues)
+    ? raw.compositionIssues.map((entry: unknown) => String(entry || '').trim()).filter(Boolean)
+    : [];
   const missingCharacterSlots = normalizeNumberArray(raw?.missingCharacterSlots);
   const duplicatedCharacterSlots = normalizeNumberArray(raw?.duplicatedCharacterSlots);
   const substitutedFromSampleOrStyle = raw?.substitutedFromSampleOrStyle === true;
@@ -196,11 +210,19 @@ const normalizeVerificationResult = (raw: any): ImageOutputVerificationResult =>
     !hasBlockingSlotFinding &&
     !borrowedStyleSignal &&
     !issueSignalsStyleBorrow &&
-    !notesSignalStyleBorrow;
+    !notesSignalStyleBorrow &&
+    (!requiresSampleComposition || (
+      sampleCompositionMatched &&
+      compositionScore !== null &&
+      compositionScore >= 90
+    ));
 
   return {
     pass,
     summary,
+    sampleCompositionMatched,
+    compositionScore,
+    compositionIssues,
     detectedCharacterCount:
       typeof raw?.detectedCharacterCount === 'number' && Number.isFinite(raw.detectedCharacterCount)
         ? raw.detectedCharacterCount
@@ -249,9 +271,11 @@ const buildVerificationInstruction = (payload: ImageGenerateRecipePayload) => {
     imageIndex += group.references.length;
   });
 
-  if (payload.sampleImage) {
+  if (payload.sampleImage && !payload.visionAnalysis?.sample) {
     sections.push(`- Image ${imageIndex}: SAMPLE IMAGE. This may define pose/composition only and must not replace any character slot.`);
     imageIndex += 1;
+  } else if (payload.visionAnalysis?.sample) {
+    sections.push('- SAMPLE COMPOSITION TARGET is provided as structured text below; no sample pixels are included in this audit.');
   }
 
   if (payload.styleImage) {
@@ -276,11 +300,23 @@ const buildVerificationInstruction = (payload: ImageGenerateRecipePayload) => {
     layeredSingleSubjectAllowed
       ? '9. If the prompt clearly requests double exposure, ghosting, or superimposed self-overlays, do not mark the result as duplicated merely because the same character appears in multiple layered silhouettes.'
       : '9. Do not allow the same uploaded character to appear multiple times as separate final people.',
+    payload.sampleImage
+      ? '10. Compare FINAL RESULT with SAMPLE IMAGE for composition: shot size/crop, face and torso orientation, gaze, camera angle, subject scale and placement, prop size and location, occlusion landmarks, background color/depth, light direction, shadow pattern, contrast, and overall color relationship.'
+      : '10. No sample composition audit is required.',
+    payload.sampleImage
+      ? '11. Set sampleCompositionMatched=true only when the dominant composition is clearly the same. A generic portrait with a similar prop is not sufficient. Score below 90, any major crop/prop/lighting mismatch, or missing signature shadow pattern must make pass=false.'
+      : '11. Set sampleCompositionMatched=true and compositionScore=100 when no sample image is present.',
+    payload.visionAnalysis?.sample
+      ? `SAMPLE COMPOSITION TARGET:\n${JSON.stringify(payload.visionAnalysis.sample)}`
+      : '',
     '',
     'Return JSON only with this exact schema:',
     '{',
     '  "pass": boolean,',
     '  "summary": "short summary",',
+    '  "sampleCompositionMatched": boolean,',
+    '  "compositionScore": number,',
+    '  "compositionIssues": ["short issue"],',
     '  "detectedCharacterCount": number | null,',
     '  "missingCharacterSlots": number[],',
     '  "duplicatedCharacterSlots": number[],',
@@ -304,6 +340,9 @@ const shouldAcceptLayeredSingleSubjectVerificationResult = (
   }
 
   if (result.substitutedFromSampleOrStyle || result.missingCharacterSlots.length > 0) {
+    return false;
+  }
+  if (payload.sampleImage && (!result.sampleCompositionMatched || (result.compositionScore || 0) < 90)) {
     return false;
   }
 
@@ -343,6 +382,9 @@ const shouldAcceptPositiveMultiCharacterVerificationResult = (
   }
 
   if (result.substitutedFromSampleOrStyle) {
+    return false;
+  }
+  if (payload.sampleImage && (!result.sampleCompositionMatched || (result.compositionScore || 0) < 90)) {
     return false;
   }
 
@@ -390,7 +432,7 @@ export const verifyGeneratedImageOutput = async (
   const orderedSources = [
     resultImageUrl,
     ...characterGroups.flatMap((group) => group.references.map((reference) => reference.source)),
-    ...(payload.sampleImage ? [payload.sampleImage] : []),
+    ...(payload.sampleImage && !payload.visionAnalysis?.sample ? [payload.sampleImage] : []),
     ...(payload.styleImage ? [payload.styleImage] : []),
   ];
 
@@ -426,13 +468,24 @@ export const verifyGeneratedImageOutput = async (
       }
 
       const data = await response.json();
-      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+      const candidate = data?.candidates?.[0];
+      const text = Array.isArray(candidate?.content?.parts)
+        ? candidate.content.parts
+            .map((part: any) => (typeof part?.text === 'string' ? part.text.trim() : ''))
+            .filter(Boolean)
+            .join('\n')
+            .trim()
+        : '';
 
       if (!text) {
-        throw new Error('Vertex AI did not return an image verification result.');
+        const finishReason = String(candidate?.finishReason || data?.promptFeedback?.blockReason || 'unknown');
+        throw new Error(`Vertex AI did not return an image verification result. finishReason=${finishReason}`);
       }
 
-      const normalized = normalizeVerificationResult(JSON.parse(extractJsonPayload(text)));
+      const normalized = normalizeVerificationResult(
+        JSON.parse(extractJsonPayload(text)),
+        Boolean(payload.sampleImage),
+      );
       if (!normalized.pass && shouldAcceptLayeredSingleSubjectVerificationResult(payload, normalized)) {
         return {
           ...normalized,

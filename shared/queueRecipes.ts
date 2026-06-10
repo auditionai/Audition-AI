@@ -110,13 +110,21 @@ export interface CharacterVisionAnalysis {
 export interface SampleVisionAnalysis {
   summary?: string;
   pose?: string;
+  facialOrientation?: string;
+  gazeDirection?: string;
   camera?: string;
+  lensAndDepth?: string;
   framing?: string;
+  compositionGeometry?: string;
   subjectPlacement?: string;
   background?: string;
   lighting?: string;
+  lightingDirection?: string;
+  colorPalette?: string;
+  contrastAndExposure?: string;
   limbLayout?: string;
   supportContact?: string;
+  propLayout?: string;
   occlusionNotes?: string;
   proSceneTags?: string[];
   proPoseTags?: string[];
@@ -350,7 +358,7 @@ const HALF_BODY_PROMPT_PATTERNS = [
 ];
 
 const resolveImageShotType = (
-  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'sampleImage' | 'aspectRatio'>,
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'sampleImage' | 'aspectRatio' | 'visionAnalysis'>,
 ): ImageRoleContract['shotType'] => {
   const normalizedPrompt = collapsePromptWhitespace(
     [payload.userPromptInput, payload.prompt].filter(Boolean).join('\n'),
@@ -371,6 +379,26 @@ const resolveImageShotType = (
     return 'half_body';
   }
 
+  const sampleShotDescription = collapsePromptWhitespace([
+    payload.visionAnalysis?.sample?.summary,
+    payload.visionAnalysis?.sample?.camera,
+    payload.visionAnalysis?.sample?.lensAndDepth,
+    payload.visionAnalysis?.sample?.framing,
+    payload.visionAnalysis?.sample?.compositionGeometry,
+  ].filter(Boolean).join('\n')).toLowerCase();
+
+  if (sampleShotDescription) {
+    if (CLOSE_UP_PROMPT_PATTERNS.some((pattern) => pattern.test(sampleShotDescription))) {
+      return 'close_up';
+    }
+    if (FULL_BODY_PROMPT_PATTERNS.some((pattern) => pattern.test(sampleShotDescription))) {
+      return 'full_body';
+    }
+    if (HALF_BODY_PROMPT_PATTERNS.some((pattern) => pattern.test(sampleShotDescription))) {
+      return 'half_body';
+    }
+  }
+
   if (payload.sampleImage) {
     return payload.aspectRatio === '9:16' || payload.aspectRatio === '3:4'
       ? 'full_body'
@@ -381,7 +409,7 @@ const resolveImageShotType = (
 };
 
 export const buildImageRoleWeights = (
-  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'sampleImage' | 'aspectRatio'>,
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'sampleImage' | 'aspectRatio' | 'visionAnalysis'>,
 ): ImageRoleWeights => {
   const shotType = resolveImageShotType(payload);
   const hasSample = Boolean(payload.sampleImage);
@@ -1067,12 +1095,21 @@ export const buildImageRoleContract = (
   if (sampleVision) {
     const sampleSignals = [
       sampleVision.pose ? `pose: ${sampleVision.pose}` : '',
+      sampleVision.facialOrientation ? `face orientation: ${sampleVision.facialOrientation}` : '',
+      sampleVision.gazeDirection ? `gaze: ${sampleVision.gazeDirection}` : '',
       sampleVision.camera ? `camera: ${sampleVision.camera}` : '',
+      sampleVision.lensAndDepth ? `lens/depth: ${sampleVision.lensAndDepth}` : '',
       sampleVision.framing ? `framing: ${sampleVision.framing}` : '',
+      sampleVision.compositionGeometry ? `geometry: ${sampleVision.compositionGeometry}` : '',
       sampleVision.subjectPlacement ? `placement: ${sampleVision.subjectPlacement}` : '',
       sampleVision.background ? `background: ${sampleVision.background}` : '',
+      sampleVision.lighting ? `lighting: ${sampleVision.lighting}` : '',
+      sampleVision.lightingDirection ? `light direction: ${sampleVision.lightingDirection}` : '',
+      sampleVision.colorPalette ? `palette: ${sampleVision.colorPalette}` : '',
+      sampleVision.contrastAndExposure ? `contrast/exposure: ${sampleVision.contrastAndExposure}` : '',
       sampleVision.limbLayout ? `limbs: ${sampleVision.limbLayout}` : '',
       sampleVision.supportContact ? `support/contact: ${sampleVision.supportContact}` : '',
+      sampleVision.propLayout ? `props: ${sampleVision.propLayout}` : '',
       sampleVision.occlusionNotes ? `occlusion: ${sampleVision.occlusionNotes}` : '',
     ].filter(Boolean);
     if (sampleSignals.length > 0) {
@@ -1451,13 +1488,21 @@ const buildProSampleVisionLine = (
   const segments = [
     sample.summary ? `summary=${collapsePromptWhitespace(sample.summary)}` : null,
     sample.pose ? `pose=${collapsePromptWhitespace(sample.pose)}` : null,
+    sample.facialOrientation ? `face_orientation=${collapsePromptWhitespace(sample.facialOrientation)}` : null,
+    sample.gazeDirection ? `gaze=${collapsePromptWhitespace(sample.gazeDirection)}` : null,
     sample.camera ? `camera=${collapsePromptWhitespace(sample.camera)}` : null,
+    sample.lensAndDepth ? `lens_depth=${collapsePromptWhitespace(sample.lensAndDepth)}` : null,
     sample.framing ? `framing=${collapsePromptWhitespace(sample.framing)}` : null,
+    sample.compositionGeometry ? `geometry=${collapsePromptWhitespace(sample.compositionGeometry)}` : null,
     sample.subjectPlacement ? `placement=${collapsePromptWhitespace(sample.subjectPlacement)}` : null,
     sample.background ? `background=${collapsePromptWhitespace(sample.background)}` : null,
     sample.lighting ? `lighting=${collapsePromptWhitespace(sample.lighting)}` : null,
+    sample.lightingDirection ? `light_direction=${collapsePromptWhitespace(sample.lightingDirection)}` : null,
+    sample.colorPalette ? `palette=${collapsePromptWhitespace(sample.colorPalette)}` : null,
+    sample.contrastAndExposure ? `contrast_exposure=${collapsePromptWhitespace(sample.contrastAndExposure)}` : null,
     sample.limbLayout ? `limbs=${collapsePromptWhitespace(sample.limbLayout)}` : null,
     sample.supportContact ? `contact=${collapsePromptWhitespace(sample.supportContact)}` : null,
+    sample.propLayout ? `props=${collapsePromptWhitespace(sample.propLayout)}` : null,
     sample.occlusionNotes ? `occlusion=${collapsePromptWhitespace(sample.occlusionNotes)}` : null,
     normalizeProVisionTags(sample.proPoseTags).length > 0 ? `pose_tags=${normalizeProVisionTags(sample.proPoseTags).join(' | ')}` : null,
     normalizeProVisionTags(sample.proContactTags).length > 0 ? `contact_tags=${normalizeProVisionTags(sample.proContactTags).join(' | ')}` : null,
@@ -1482,7 +1527,7 @@ const buildProStyleVisionLine = (
 };
 
 const buildProWeightedReferencePlan = (
-  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'aspectRatio'>,
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'aspectRatio' | 'visionAnalysis'>,
 ) => {
   const weights = buildImageRoleWeights(payload);
   const groups = getImageCharacterReferenceGroups(payload);
@@ -1544,6 +1589,12 @@ const buildProStructuredProviderPrompt = (
         ? ['REFERENCE ANALYSIS:', ...structuredVisionLines].join('\n')
         : '',
     },
+    {
+      locked: true,
+      text: payload.visionAnalysis?.sample
+        ? 'COMPOSITION FIDELITY: SAMPLE ANALYSIS overrides generic style defaults for crop, camera, subject scale, prop position, background color, light direction, shadow hardness, contrast, and depth of field. Do not widen a close-up into a half-body or full-body shot.'
+        : '',
+    },
     { locked: true, text: `SHOT: ${roleContract.shotType}. ${getShotAwareRenderProfile(roleContract.shotType)}` },
     { weight: 1, text: `QUALITY: ${COMPACT_IMAGE_QUALITY_BOOSTERS}` },
     { weight: 1, text: `AVOID: ${compactNegativePrompt}` },
@@ -1593,13 +1644,21 @@ const buildDetailedImageProviderPrompt = (
   const sampleCompositionVision = sampleVision
     ? `Sample analysis: ${[
         sampleVision.pose,
+        sampleVision.facialOrientation,
+        sampleVision.gazeDirection,
         sampleVision.camera,
+        sampleVision.lensAndDepth,
         sampleVision.framing,
+        sampleVision.compositionGeometry,
         sampleVision.subjectPlacement,
         sampleVision.background,
         sampleVision.lighting,
+        sampleVision.lightingDirection,
+        sampleVision.colorPalette,
+        sampleVision.contrastAndExposure,
         sampleVision.limbLayout,
         sampleVision.supportContact,
+        sampleVision.propLayout,
         sampleVision.occlusionNotes,
       ].filter(Boolean).join('; ')}`
     : '';
@@ -1617,6 +1676,12 @@ const buildDetailedImageProviderPrompt = (
     { locked: true, text: `REFERENCE ORDER: ${referenceOrder}` },
     { weight: 1, text: characterVision },
     { weight: 1, text: sampleCompositionVision },
+    {
+      locked: true,
+      text: sampleVision
+        ? 'COMPOSITION FIDELITY: SAMPLE ANALYSIS overrides generic style defaults for crop, camera, subject scale, prop position, background color, light direction, shadow hardness, contrast, and depth of field. Do not widen a close-up into a half-body or full-body shot.'
+        : '',
+    },
     { locked: true, text: `STYLE QUALITY: ${stylePrompt}` },
     {
       locked: true,

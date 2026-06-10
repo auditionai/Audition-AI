@@ -12,7 +12,6 @@ import {
   uploadImageToTst,
 } from './_queue-recipes';
 import { runVertexImageEdit } from './_vertex-image-edit';
-import { verifyGeneratedImageOutput } from './_vertex-image-verify';
 import {
   buildImageProviderPrompt,
   getImageCharacterReferenceGroups,
@@ -35,7 +34,6 @@ import {
 import { isTerminalRescueFailureMessage, normalizeQueueErrorMessage } from '../../shared/queueErrorClassifier';
 import { repairVietnameseMojibake } from '../../shared/queueLogText';
 import { clearFailedRescueMeta, hasFailedRescueFinalized, hasManualStopFlag } from '../../shared/queueRescueState';
-import sharp from 'sharp';
 
 type QueueJobRow = {
   id: string;
@@ -169,11 +167,7 @@ const DISPATCH_CLAIM_LEASE_SECONDS = parsePositiveIntEnv('QUEUE_DISPATCH_CLAIM_L
 const LIVE_CATALOG_VALIDATION_TIMEOUT_MS = parsePositiveIntEnv('QUEUE_LIVE_CATALOG_VALIDATION_TIMEOUT_MS', 45_000, 5_000);
 const STALE_RECOVERY_SCAN_LIMIT = 50;
 const STALE_RECOVERY_MIN_AGE_MS = 45_000;
-const STALE_VERIFYING_OUTPUT_RECOVERY_MIN_AGE_MS = 90_000;
 const STALE_PROVIDER_POLL_RECOVERY_MIN_AGE_MS = 45_000;
-const REFERENCE_ECHO_HASH_SIZE = 32;
-const REFERENCE_ECHO_HAMMING_THRESHOLD = 220;
-const MAX_OUTPUT_VERIFICATION_ATTEMPTS = 3;
 const AMBIGUOUS_DISPATCH_DUPLICATE_PROTECTION_MESSAGE =
   'Khong nhan duoc xac nhan provider job goc sau loi mang/timeout. Job da dung de tranh tao them provider moi.';
 
@@ -366,10 +360,6 @@ const getStoredImageGenerateRecipePayload = (
 
   return null;
 };
-
-const getOutputVerificationAttemptCount = (
-  payload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
-) => Math.max(0, Number(getStoredImageGenerateRecipePayload(payload)?.__outputVerificationRetryCount || 0));
 
 const getFailedRescueAttemptCount = (payload?: Record<string, unknown> | ImageGenerateRecipePayload | null) =>
   Math.max(0, Number(toQueuePayloadObject(payload).__failedRescueAttemptCount || 0));
@@ -691,59 +681,6 @@ const extractResultUrlFromValue = (value: unknown): string | null => {
 
 const extractResultUrl = (data: any): string | null => {
   return extractResultUrlFromValue(data);
-};
-
-const fetchImageFingerprintBits = async (source: string) => {
-  const response = await fetch(source, { signal: AbortSignal.timeout(60000) });
-  if (!response.ok) {
-    throw new Error(`Failed to fetch image for similarity check: ${await parseErrorMessage(response)}`);
-  }
-
-  const grayscale = await sharp(Buffer.from(await response.arrayBuffer()))
-    .resize(REFERENCE_ECHO_HASH_SIZE, REFERENCE_ECHO_HASH_SIZE, { fit: 'fill' })
-    .grayscale()
-    .raw()
-    .toBuffer();
-  const average = grayscale.reduce((total, value) => total + value, 0) / grayscale.length;
-  return Array.from(grayscale, (value) => (value >= average ? 1 : 0));
-};
-
-const getHammingDistance = (left: number[], right: number[]) => {
-  const limit = Math.min(left.length, right.length);
-  let distance = Math.abs(left.length - right.length);
-  for (let index = 0; index < limit; index += 1) {
-    if (left[index] !== right[index]) distance += 1;
-  }
-  return distance;
-};
-
-const detectSuspiciousReferenceEcho = async (
-  payload: ImageGenerateRecipePayload,
-  resultImageUrl: string,
-) => {
-  const candidates: Array<{ label: string; source: string }> = [];
-  getImageCharacterReferenceGroups(payload).forEach((group) => {
-    group.references.forEach((reference) => {
-      candidates.push({
-        label: `CHARACTER ${group.characterIndex} ${reference.kind.toUpperCase()}`,
-        source: reference.source,
-      });
-    });
-  });
-  if (candidates.length === 0) return null;
-
-  const resultBits = await fetchImageFingerprintBits(resultImageUrl);
-  let closestMatch: { label: string; distance: number } | null = null;
-  for (const candidate of candidates) {
-    const distance = getHammingDistance(resultBits, await fetchImageFingerprintBits(candidate.source));
-    if (!closestMatch || distance < closestMatch.distance) {
-      closestMatch = { label: candidate.label, distance };
-    }
-  }
-
-  return closestMatch && closestMatch.distance <= REFERENCE_ECHO_HAMMING_THRESHOLD
-    ? `Output is too similar to ${closestMatch.label} (${closestMatch.distance}/${resultBits.length} perceptual bits differ).`
-    : null;
 };
 
 const getRetryDelaySeconds = (attemptCount: number) => {
@@ -1374,15 +1311,6 @@ const markFailedRespectingRefundPolicy = async (
     payloadOverride: latestPayload,
   });
 };
-
-const markOutputVerificationFailed = async (job: QueueJobRow, errorMessage: string) =>
-  markFailed(job, errorMessage, {
-    refund: true,
-    payloadOverride: {
-      ...clearFailedRescueMeta(toQueuePayloadObject(job.queue_payload)),
-      __outputVerificationRejected: true,
-    },
-  });
 
 const requeueJob = async (job: QueueJobRow, errorMessage: string) => {
   const admin = getServiceRoleClient();
@@ -2109,91 +2037,7 @@ const completePolledJobWithResultUrl = async (
   }
 
   const admin = getServiceRoleClient();
-  let completionPayload = clearProviderLostJobConfirmationMeta(job.queue_payload);
-  const storedImageRecipe =
-    job.queue_kind === 'image_generate'
-      ? getStoredImageGenerateRecipePayload(job.queue_payload)
-      : null;
-
-  if (storedImageRecipe) {
-    const verifyingPayload = await persistQueueLog(
-      job.id,
-      completionPayload,
-      'verifying_output',
-      'Đang hậu kiểm ảnh kết quả để bảo đảm đã thay đúng nhân vật.',
-    );
-
-    try {
-      const echoFailure = await detectSuspiciousReferenceEcho(storedImageRecipe, resultUrl);
-      if (echoFailure) {
-        await markOutputVerificationFailed(
-          { ...job, queue_payload: verifyingPayload },
-          `Kết quả không hợp lệ: ${echoFailure}`,
-        );
-        return 'failed' as const;
-      }
-
-      const verification = await verifyGeneratedImageOutput(storedImageRecipe, resultUrl);
-      const summary = [
-        verification.summary,
-        ...verification.issues,
-        ...verification.compositionIssues,
-      ].filter(Boolean).join('; ') || 'Không xác minh được identity và bố cục ảnh mẫu.';
-      if (!verification.pass) {
-        await markOutputVerificationFailed(
-          { ...job, queue_payload: verifyingPayload },
-          `Kết quả không thay đúng nhân vật tham chiếu: ${summary}`,
-        );
-        return 'failed' as const;
-      }
-
-      completionPayload = withQueueLog(
-        verifyingPayload,
-        'verifying_output',
-        `Hậu kiểm đạt: ${summary}`,
-        'success',
-      );
-    } catch (verificationError) {
-      const message =
-        verificationError instanceof Error
-          ? verificationError.message
-          : String(verificationError || 'Unknown verification error');
-      const nextAttempt = getOutputVerificationAttemptCount(verifyingPayload) + 1;
-      if (nextAttempt < MAX_OUTPUT_VERIFICATION_ATTEMPTS) {
-        const retryAt = new Date(Date.now() + 30_000).toISOString();
-        const retryPayload = withQueueLog(
-          {
-            ...toQueuePayloadObject(verifyingPayload),
-            __recipePayload: {
-              ...storedImageRecipe,
-              __outputVerificationRetryCount: nextAttempt,
-            },
-          },
-          'verifying_output',
-          `Hậu kiểm tạm lỗi, sẽ thử lại (${nextAttempt}/${MAX_OUTPUT_VERIFICATION_ATTEMPTS}): ${message}`,
-          'warning',
-        );
-        await updateGeneratedImageRecord(job.id, {
-          status: 'processing',
-          image_url: resultUrl,
-          queue_payload: retryPayload,
-          progress: 95,
-          error_message: null,
-          next_poll_at: retryAt,
-          lease_token: null,
-          lease_expires_at: null,
-          updated_at: new Date().toISOString(),
-        });
-        return 'processing' as const;
-      }
-
-      await markOutputVerificationFailed(
-        { ...job, queue_payload: verifyingPayload },
-        `Không thể hậu kiểm kết quả ảnh sau ${MAX_OUTPUT_VERIFICATION_ATTEMPTS} lần: ${message}`,
-      );
-      return 'failed' as const;
-    }
-  }
+  const completionPayload = clearProviderLostJobConfirmationMeta(job.queue_payload);
 
   await admin
     .from('generated_images')
@@ -2829,68 +2673,6 @@ const recoverStalePreparingJobs = async () => {
   return recovered;
 };
 
-const recoverStaleVerifyingOutputJobs = async () => {
-  const admin = getServiceRoleClient();
-  const nowIso = new Date().toISOString();
-  const staleBeforeIso = new Date(Date.now() - STALE_VERIFYING_OUTPUT_RECOVERY_MIN_AGE_MS).toISOString();
-  const { data, error } = await admin
-    .from('generated_images')
-    .select('id, user_id, asset_type, queue_kind, queue_payload, prompt, tool_id, tool_name, model_used, cost_vcoin, job_id, status, image_url, updated_at, lease_expires_at')
-    .eq('status', 'processing')
-    .not('job_id', 'is', null)
-    .lt('updated_at', staleBeforeIso)
-    .order('updated_at', { ascending: true })
-    .limit(STALE_RECOVERY_SCAN_LIMIT);
-
-  if (error) {
-    throw error;
-  }
-
-  let recovered = 0;
-  for (const job of ((data || []) as QueueJobRow[])) {
-    const payload = job.queue_payload || {};
-    const stage = getQueueStage(payload);
-    const leaseExpired =
-      !(job as any).lease_expires_at || String((job as any).lease_expires_at) < nowIso;
-
-    if (stage !== 'verifying_output' || !leaseExpired) {
-      continue;
-    }
-
-    const existingResultUrl = typeof (job as any).image_url === 'string' ? String((job as any).image_url).trim() : '';
-    if (existingResultUrl) {
-      const state = await completePolledJobWithResultUrl(job, existingResultUrl, {
-        completionMessage: 'Da dong bo ket qua dau tien sau khi buoc hau kiem cu bi treo.',
-        completionLevel: 'warning',
-      });
-      if (state === 'completed') {
-        recovered += 1;
-      }
-      continue;
-    }
-
-    try {
-      const providerData = await pollProviderJob(String(job.job_id || ''));
-      const resultUrl = extractResultUrl(providerData);
-      if (!resultUrl) {
-        continue;
-      }
-
-      const state = await completePolledJobWithResultUrl(job, resultUrl, {
-        completionMessage: 'Da dong bo lai ket qua provider sau khi buoc hau kiem cu bi treo.',
-        completionLevel: 'warning',
-      });
-      if (state === 'completed') {
-        recovered += 1;
-      }
-    } catch (recoveryError) {
-      console.warn('[queue-worker] Failed to recover stale verifying_output job:', job.id, recoveryError);
-    }
-  }
-
-  return recovered;
-};
-
 const recoverStaleProviderPollingJobs = async () => {
   const admin = getServiceRoleClient();
   const nowIso = new Date().toISOString();
@@ -2924,8 +2706,7 @@ const recoverStaleProviderPollingJobs = async () => {
     if (
       stage !== 'submitted' &&
       stage !== 'polling' &&
-      stage !== 'dispatching' &&
-      stage !== 'verifying_output'
+      stage !== 'dispatching'
     ) {
       continue;
     }
@@ -3312,7 +3093,6 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
   };
 
   if (shouldRunPollLane) {
-    summary.completed += await recoverStaleVerifyingOutputJobs();
     summary.requeued += await recoverStaleProviderPollingJobs();
   }
 

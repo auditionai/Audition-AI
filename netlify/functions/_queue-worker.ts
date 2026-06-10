@@ -12,8 +12,10 @@ import {
   uploadImageToTst,
 } from './_queue-recipes';
 import { runVertexImageEdit } from './_vertex-image-edit';
+import { verifyGeneratedImageOutput } from './_vertex-image-verify';
 import {
   buildImageProviderPrompt,
+  getImageCharacterReferenceGroups,
   getImageDirectorSources,
   validateImageGenerateReferenceIntegrity,
   getImageRenderReferenceSources,
@@ -33,6 +35,7 @@ import {
 import { isTerminalRescueFailureMessage, normalizeQueueErrorMessage } from '../../shared/queueErrorClassifier';
 import { repairVietnameseMojibake } from '../../shared/queueLogText';
 import { clearFailedRescueMeta, hasFailedRescueFinalized, hasManualStopFlag } from '../../shared/queueRescueState';
+import sharp from 'sharp';
 
 type QueueJobRow = {
   id: string;
@@ -168,6 +171,9 @@ const STALE_RECOVERY_SCAN_LIMIT = 50;
 const STALE_RECOVERY_MIN_AGE_MS = 45_000;
 const STALE_VERIFYING_OUTPUT_RECOVERY_MIN_AGE_MS = 90_000;
 const STALE_PROVIDER_POLL_RECOVERY_MIN_AGE_MS = 45_000;
+const REFERENCE_ECHO_HASH_SIZE = 32;
+const REFERENCE_ECHO_HAMMING_THRESHOLD = 220;
+const MAX_OUTPUT_VERIFICATION_ATTEMPTS = 3;
 const AMBIGUOUS_DISPATCH_DUPLICATE_PROTECTION_MESSAGE =
   'Khong nhan duoc xac nhan provider job goc sau loi mang/timeout. Job da dung de tranh tao them provider moi.';
 
@@ -361,6 +367,10 @@ const getStoredImageGenerateRecipePayload = (
   return null;
 };
 
+const getOutputVerificationAttemptCount = (
+  payload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
+) => Math.max(0, Number(getStoredImageGenerateRecipePayload(payload)?.__outputVerificationRetryCount || 0));
+
 const getFailedRescueAttemptCount = (payload?: Record<string, unknown> | ImageGenerateRecipePayload | null) =>
   Math.max(0, Number(toQueuePayloadObject(payload).__failedRescueAttemptCount || 0));
 
@@ -461,9 +471,12 @@ const withQueueLog = (
 };
 
 const formatVertexDiagnosticLogMessage = (entry: QueueVertexDiagnosticEntry) => {
-  const taskLabel = entry.task === 'image_prompt_compression'
-    ? 'Vertex prompt compression'
-    : 'Vertex prompt synthesis';
+  const taskLabel =
+    entry.task === 'image_reference_analysis'
+      ? 'Vertex reference analysis'
+      : entry.task === 'image_prompt_compression'
+        ? 'Vertex prompt compression'
+        : 'Vertex prompt synthesis';
   const location = [entry.credentialName, entry.projectId].filter(Boolean).join(' / ');
   const details = [
     location ? `key=${location}` : '',
@@ -678,6 +691,62 @@ const extractResultUrlFromValue = (value: unknown): string | null => {
 
 const extractResultUrl = (data: any): string | null => {
   return extractResultUrlFromValue(data);
+};
+
+const fetchImageFingerprintBits = async (source: string) => {
+  const response = await fetch(source, { signal: AbortSignal.timeout(60000) });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch image for similarity check: ${await parseErrorMessage(response)}`);
+  }
+
+  const grayscale = await sharp(Buffer.from(await response.arrayBuffer()))
+    .resize(REFERENCE_ECHO_HASH_SIZE, REFERENCE_ECHO_HASH_SIZE, { fit: 'fill' })
+    .grayscale()
+    .raw()
+    .toBuffer();
+  const average = grayscale.reduce((total, value) => total + value, 0) / grayscale.length;
+  return Array.from(grayscale, (value) => (value >= average ? 1 : 0));
+};
+
+const getHammingDistance = (left: number[], right: number[]) => {
+  const limit = Math.min(left.length, right.length);
+  let distance = Math.abs(left.length - right.length);
+  for (let index = 0; index < limit; index += 1) {
+    if (left[index] !== right[index]) distance += 1;
+  }
+  return distance;
+};
+
+const detectSuspiciousReferenceEcho = async (
+  payload: ImageGenerateRecipePayload,
+  resultImageUrl: string,
+) => {
+  const candidates: Array<{ label: string; source: string }> = [];
+  if (payload.sampleImage) {
+    candidates.push({ label: 'SAMPLE IMAGE', source: payload.sampleImage });
+  }
+  getImageCharacterReferenceGroups(payload).forEach((group) => {
+    group.references.forEach((reference) => {
+      candidates.push({
+        label: `CHARACTER ${group.characterIndex} ${reference.kind.toUpperCase()}`,
+        source: reference.source,
+      });
+    });
+  });
+  if (candidates.length === 0) return null;
+
+  const resultBits = await fetchImageFingerprintBits(resultImageUrl);
+  let closestMatch: { label: string; distance: number } | null = null;
+  for (const candidate of candidates) {
+    const distance = getHammingDistance(resultBits, await fetchImageFingerprintBits(candidate.source));
+    if (!closestMatch || distance < closestMatch.distance) {
+      closestMatch = { label: candidate.label, distance };
+    }
+  }
+
+  return closestMatch && closestMatch.distance <= REFERENCE_ECHO_HAMMING_THRESHOLD
+    ? `Output is too similar to ${closestMatch.label} (${closestMatch.distance}/${resultBits.length} perceptual bits differ).`
+    : null;
 };
 
 const getRetryDelaySeconds = (attemptCount: number) => {
@@ -2024,7 +2093,87 @@ const completePolledJobWithResultUrl = async (
   }
 
   const admin = getServiceRoleClient();
-  const completionPayload = clearProviderLostJobConfirmationMeta(job.queue_payload);
+  let completionPayload = clearProviderLostJobConfirmationMeta(job.queue_payload);
+  const storedImageRecipe =
+    job.queue_kind === 'image_generate'
+      ? getStoredImageGenerateRecipePayload(job.queue_payload)
+      : null;
+
+  if (storedImageRecipe) {
+    const verifyingPayload = await persistQueueLog(
+      job.id,
+      completionPayload,
+      'verifying_output',
+      'Đang hậu kiểm ảnh kết quả để bảo đảm đã thay đúng nhân vật.',
+    );
+
+    try {
+      const echoFailure = await detectSuspiciousReferenceEcho(storedImageRecipe, resultUrl);
+      if (echoFailure) {
+        await markFailedAndRefund(
+          { ...job, queue_payload: verifyingPayload },
+          `Kết quả không hợp lệ: ${echoFailure}`,
+        );
+        return 'failed' as const;
+      }
+
+      const verification = await verifyGeneratedImageOutput(storedImageRecipe, resultUrl);
+      const summary = verification.summary || verification.issues.join('; ') || 'Không xác minh được identity.';
+      if (!verification.pass) {
+        await markFailedAndRefund(
+          { ...job, queue_payload: verifyingPayload },
+          `Kết quả không thay đúng nhân vật tham chiếu: ${summary}`,
+        );
+        return 'failed' as const;
+      }
+
+      completionPayload = withQueueLog(
+        verifyingPayload,
+        'verifying_output',
+        `Hậu kiểm đạt: ${summary}`,
+        'success',
+      );
+    } catch (verificationError) {
+      const message =
+        verificationError instanceof Error
+          ? verificationError.message
+          : String(verificationError || 'Unknown verification error');
+      const nextAttempt = getOutputVerificationAttemptCount(verifyingPayload) + 1;
+      if (nextAttempt < MAX_OUTPUT_VERIFICATION_ATTEMPTS) {
+        const retryAt = new Date(Date.now() + 30_000).toISOString();
+        const retryPayload = withQueueLog(
+          {
+            ...toQueuePayloadObject(verifyingPayload),
+            __recipePayload: {
+              ...storedImageRecipe,
+              __outputVerificationRetryCount: nextAttempt,
+            },
+          },
+          'verifying_output',
+          `Hậu kiểm tạm lỗi, sẽ thử lại (${nextAttempt}/${MAX_OUTPUT_VERIFICATION_ATTEMPTS}): ${message}`,
+          'warning',
+        );
+        await updateGeneratedImageRecord(job.id, {
+          status: 'processing',
+          image_url: resultUrl,
+          queue_payload: retryPayload,
+          progress: 95,
+          error_message: null,
+          next_poll_at: retryAt,
+          lease_token: null,
+          lease_expires_at: null,
+          updated_at: new Date().toISOString(),
+        });
+        return 'processing' as const;
+      }
+
+      await markFailedAndRefund(
+        { ...job, queue_payload: verifyingPayload },
+        `Không thể hậu kiểm kết quả ảnh sau ${MAX_OUTPUT_VERIFICATION_ATTEMPTS} lần: ${message}`,
+      );
+      return 'failed' as const;
+    }
+  }
 
   await admin
     .from('generated_images')

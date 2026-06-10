@@ -432,7 +432,7 @@ export const prepareImageGeneratePromptWithinLimit = async (
       }
     }
   }
-  let synthesizedPrompt = await synthesizeImageGeneratePromptWithLastResortFallback(workingPayload, options);
+  let synthesizedPrompt = workingPayload.prompt?.trim() || '';
   let providerPrompt = buildImageProviderPrompt(synthesizedPrompt, workingPayload, workingPayload.negativePrompt);
 
   providerPrompt = trimProviderPromptForServer(providerPrompt, workingPayload.serverId);
@@ -481,7 +481,7 @@ export const prepareImageGeneratePromptWithinLimit = async (
       userPromptInput: rewrittenPrompt,
       systemPromptPrefix,
     };
-    synthesizedPrompt = await synthesizeImageGeneratePromptWithLastResortFallback(workingPayload, options);
+    synthesizedPrompt = workingPayload.prompt?.trim() || '';
     providerPrompt = buildImageProviderPrompt(synthesizedPrompt, workingPayload, workingPayload.negativePrompt);
     providerPrompt = trimProviderPromptForServer(providerPrompt, workingPayload.serverId);
 

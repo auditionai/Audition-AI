@@ -19,6 +19,8 @@ import {
 import { analyzeImageGenerationVision } from './_vertex-image-vision';
 
 const TST_API_BASE = 'https://api.tramsangtao.com/v1';
+const TST_UPLOAD_STATUS_POLL_INTERVAL_MS = 2_000;
+const TST_UPLOAD_STATUS_TIMEOUT_MS = 240_000;
 export const TST_PROMPT_MAX_CHARACTERS = 10_000;
 const PROMPT_REWRITE_SAFETY_MARGIN = 400;
 const MIN_USER_PROMPT_REWRITE_CHARACTERS = 180;
@@ -31,6 +33,17 @@ const VERTEX_SYNTH_BYPASS_REFERENCE_COUNT = 4;
 const cleanBase64 = (value: string) => value.replace(/^data:[^;]+;base64,/, '');
 const isHttpUrl = (value: unknown) => /^https?:\/\//i.test(String(value || '').trim());
 
+const mimeTypeToFileExtension = (mimeType: string, kind: 'image' | 'video') => {
+  const normalized = String(mimeType || '').split(';', 1)[0].trim().toLowerCase();
+  const overrides: Record<string, string> = {
+    'image/jpeg': 'jpg',
+    'image/jpg': 'jpg',
+    'video/quicktime': 'mov',
+    'video/x-m4v': 'm4v',
+  };
+  return overrides[normalized] || normalized.split('/')[1] || (kind === 'video' ? 'mp4' : 'jpg');
+};
+
 const getTstApiKey = () => {
   const apiKey = process.env.TST_API_KEY;
   if (!apiKey) {
@@ -42,7 +55,12 @@ const getTstApiKey = () => {
 const parseErrorMessage = async (response: Response) => {
   try {
     const data = await response.json();
-    return data?.error || data?.detail?.error?.message || data?.detail || data?.message || `${response.status} ${response.statusText}`;
+    const detail = data?.error || data?.detail?.error?.message || data?.detail || data?.message;
+    return typeof detail === 'string'
+      ? detail
+      : detail
+        ? JSON.stringify(detail)
+        : `${response.status} ${response.statusText}`;
   } catch {
     return `${response.status} ${response.statusText}`;
   }
@@ -63,7 +81,7 @@ const normalizeSourceToBlob = async (
     return {
       blob,
       mimeType: blob.type || fallbackMimeType,
-      filename: kind === 'video' ? 'motion.mp4' : 'image.jpg',
+      filename: `${kind === 'video' ? 'motion' : 'image'}.${mimeTypeToFileExtension(blob.type || fallbackMimeType, kind)}`,
     };
   }
 
@@ -79,7 +97,7 @@ const normalizeSourceToBlob = async (
   }
 
   const blob = new Blob([Buffer.from(normalized, 'base64')], { type: mimeType });
-  const extension = mimeType.split('/')[1] || (kind === 'video' ? 'mp4' : 'jpg');
+  const extension = mimeTypeToFileExtension(mimeType, kind);
 
   return {
     blob,
@@ -88,11 +106,79 @@ const normalizeSourceToBlob = async (
   };
 };
 
+const sleep = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+const extractUploadedMediaUrl = (data: any) => {
+  const value = data?.url || data?.data?.url || data?.result?.url;
+  return typeof value === 'string' && /^https?:\/\//i.test(value.trim()) ? value.trim() : '';
+};
+
+const uploadMediaFromUrlToTst = async (sourceUrl: string, kind: 'image' | 'video') => {
+  const apiKey = getTstApiKey();
+  const response = await fetch(`${TST_API_BASE}/files/upload-url`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ url: sourceUrl, type: kind }),
+    signal: AbortSignal.timeout(30_000),
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response));
+  }
+
+  let data = await response.json();
+  const immediateUrl = extractUploadedMediaUrl(data);
+  if (immediateUrl) return immediateUrl;
+
+  const uploadId = String(data?.upload_id || data?.id || '').trim();
+  if (!uploadId) {
+    throw new Error(`Upload-from-URL response missing upload_id: ${JSON.stringify(data)}`);
+  }
+
+  const deadline = Date.now() + TST_UPLOAD_STATUS_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    await sleep(TST_UPLOAD_STATUS_POLL_INTERVAL_MS);
+    const statusResponse = await fetch(
+      `${TST_API_BASE}/files/upload/${encodeURIComponent(uploadId)}/status`,
+      {
+        headers: { Authorization: `Bearer ${apiKey}` },
+        signal: AbortSignal.timeout(30_000),
+      },
+    );
+    if (!statusResponse.ok) {
+      throw new Error(await parseErrorMessage(statusResponse));
+    }
+
+    data = await statusResponse.json();
+    const status = String(data?.status || '').trim().toLowerCase();
+    const uploadedUrl = extractUploadedMediaUrl(data);
+    if ((status === 'ready' || status === 'completed') && uploadedUrl) {
+      return uploadedUrl;
+    }
+    if (status === 'failed' || status === 'error') {
+      throw new Error(String(data?.error || data?.message || `TST ${kind} upload failed`));
+    }
+  }
+
+  throw new Error(`TST ${kind} upload timed out after ${TST_UPLOAD_STATUS_TIMEOUT_MS / 1000}s`);
+};
+
 const uploadMediaToTst = async (
   input: string,
   kind: 'image' | 'video',
   fallbackMimeType?: string,
 ) => {
+  if (isHttpUrl(input)) {
+    try {
+      return await uploadMediaFromUrlToTst(input.trim(), kind);
+    } catch (error) {
+      console.warn(`[queue-recipes] TST upload-from-URL failed for ${kind}; falling back to multipart upload.`, error);
+    }
+  }
+
   const apiKey = getTstApiKey();
   const { blob, filename } = await normalizeSourceToBlob(input, kind, fallbackMimeType);
   const formData = new FormData();
@@ -115,7 +201,7 @@ const uploadMediaToTst = async (
   }
 
   const data = await response.json();
-  const url = data?.url || data?.data?.url;
+  const url = extractUploadedMediaUrl(data);
   if (!url) {
     throw new Error(`Upload response missing URL: ${JSON.stringify(data)}`);
   }
@@ -126,6 +212,21 @@ const uploadMediaToTst = async (
 export const uploadImageToTst = async (input: string) => uploadMediaToTst(input, 'image');
 export const uploadVideoToTst = async (input: string, fallbackMimeType?: string) =>
   uploadMediaToTst(input, 'video', fallbackMimeType);
+
+const assertTstUploadedMediaReady = async (url: string, kind: 'image' | 'video') => {
+  const response = await fetch(url, {
+    headers: { Range: 'bytes=0-0' },
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!response.ok && response.status !== 206) {
+    throw new Error(`TST ${kind} upload URL is not readable (${response.status}): ${url}`);
+  }
+
+  const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+  if (contentType && !contentType.startsWith(`${kind}/`)) {
+    throw new Error(`TST ${kind} upload returned unexpected MIME type "${contentType}": ${url}`);
+  }
+};
 
 const isRecoverablePromptSynthesisError = (error: unknown) => {
   const message = error instanceof Error ? error.message.toLowerCase() : String(error || '').toLowerCase();
@@ -635,20 +736,24 @@ export const prepareProviderPayloadFromQueueRecipe = async (payload: QueueRecipe
         uploadImageToTst(payload.characterImage),
         uploadVideoToTst(payload.motionVideoDataUrl),
       ]);
+      await Promise.all([
+        assertTstUploadedMediaReady(characterImageUrl, 'image'),
+        assertTstUploadedMediaReady(motionVideoUrl, 'video'),
+      ]);
 
       const providerPayload: Record<string, unknown> = {
         model: payload.modelId,
-        mode: payload.modelId,
+        mode: String(payload.resolution || '').trim().toLowerCase() === '1080p' ? 'pro' : 'std',
+        background_source: 'input_image',
+        count: 1,
         character_image_url: characterImageUrl,
         motion_video_url: motionVideoUrl,
       };
 
       if (providerPrompt) providerPayload.prompt = providerPrompt;
-      if (payload.resolution) providerPayload.resolution = payload.resolution.toLowerCase();
-      if (payload.speed) providerPayload.speed = payload.speed;
       if (payload.serverId) providerPayload.server_id = payload.serverId;
       if (typeof payload.motionVideoDurationSeconds === 'number' && Number.isFinite(payload.motionVideoDurationSeconds)) {
-        providerPayload.duration_seconds = payload.motionVideoDurationSeconds;
+        providerPayload.duration = payload.motionVideoDurationSeconds;
       }
 
       return providerPayload;

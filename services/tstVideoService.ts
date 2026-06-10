@@ -7,10 +7,26 @@ const TST_DEFAULT_TIMEOUT_MS = 120 * 60 * 1000;
 const cleanBase64 = (b64: string) => b64.replace(/^data:image\/\w+;base64,/, '');
 const isHttpUrl = (value: unknown) => /^https?:\/\//i.test(String(value || '').trim());
 
+const mimeTypeToFileExtension = (mimeType: string, kind: 'image' | 'video') => {
+  const normalized = String(mimeType || '').split(';', 1)[0].trim().toLowerCase();
+  const overrides: Record<string, string> = {
+    'image/jpeg': 'jpg',
+    'image/jpg': 'jpg',
+    'video/quicktime': 'mov',
+    'video/x-m4v': 'm4v',
+  };
+  return overrides[normalized] || normalized.split('/')[1] || (kind === 'video' ? 'mp4' : 'jpg');
+};
+
 const parseErrorMessage = async (response: Response): Promise<string> => {
   try {
     const data = await response.json();
-    return data?.error || data?.detail?.error?.message || data?.detail || data?.message || `${response.status} ${response.statusText}`;
+    const detail = data?.error || data?.detail?.error?.message || data?.detail || data?.message;
+    return typeof detail === 'string'
+      ? detail
+      : detail
+        ? JSON.stringify(detail)
+        : `${response.status} ${response.statusText}`;
   } catch {
     return `${response.status} ${response.statusText}`;
   }
@@ -79,7 +95,7 @@ const resolveBlob = async (input: File | Blob | string, kind: 'image' | 'video')
       ? await optimizePayload(input.startsWith('data:') ? input : `data:image/jpeg;base64,${cleanBase64(input)}`, TST_IMAGE_UPLOAD_MAX_WIDTH)
       : input;
   const blob = dataUrlToBlob(optimizedDataUrl);
-  const extension = blob.type.split('/')[1] || (kind === 'video' ? 'mp4' : 'jpg');
+  const extension = mimeTypeToFileExtension(blob.type, kind);
 
   return {
     blob,
@@ -215,14 +231,15 @@ export const prepareTramsangtaoMotionJob = async ({
 
   const payload: Record<string, unknown> = {
     model: modelId,
-    mode: modelId,
+    mode: String(resolution || '').trim().toLowerCase() === '1080p' ? 'pro' : 'std',
+    background_source: 'input_image',
+    count: 1,
     character_image_url: characterImageUrl,
     motion_video_url: motionVideoUrl,
   };
 
   if (prompt?.trim()) payload.prompt = prompt.trim();
-  if (resolution) payload.resolution = resolution.toLowerCase();
-  if (speed) payload.speed = speed;
+  void speed;
   if (serverId) payload.server_id = serverId;
 
   return payload;

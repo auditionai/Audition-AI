@@ -951,16 +951,16 @@ export const getImageRenderReferenceEntries = (
       .slice(0, 5);
   }
 
-  const sampleEntry = buildSampleEntry();
-  if (sampleEntry) {
-    entries.push(sampleEntry);
-  }
-
   characterGroups.forEach((group) => {
     group.references.forEach((reference, referenceIndex) => {
       entries.push(buildCharacterEntry(group, reference, referenceIndex));
     });
   });
+
+  const sampleEntry = buildSampleEntry();
+  if (sampleEntry) {
+    entries.push(sampleEntry);
+  }
 
   const styleEntry = buildStyleEntry();
   if (styleEntry) {
@@ -1523,7 +1523,7 @@ const buildProStructuredProviderPrompt = (
 
 const buildDetailedImageProviderPrompt = (
   synthesizedPrompt: string,
-  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'stylePrompt' | 'aspectRatio' | 'serverId'>,
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'characterImages' | 'characterCount' | 'characterReferenceGroups' | 'sampleImage' | 'styleImage' | 'stylePrompt' | 'aspectRatio' | 'visionAnalysis' | 'serverId'>,
   mergedNegativePrompt: string,
 ) => {
   const roleContract = buildImageRoleContract(payload);
@@ -1534,12 +1534,51 @@ const buildDetailedImageProviderPrompt = (
   const compactNegativePrompt = trimPromptText(mergedNegativePrompt, 420);
   const shotAwareRenderProfile = getShotAwareRenderProfile(roleContract.shotType);
   const stylePrompt = getProviderStyleQualityText(payload.stylePrompt);
+  const referenceOrder = getImageRenderReferenceEntries(payload)
+    .map((entry, index) => {
+      if (entry.role === 'sample') {
+        return `Image ${index + 1}=SAMPLE COMPOSITION ONLY; replace its person.`;
+      }
+      if (entry.role === 'style') {
+        return `Image ${index + 1}=STYLE ONLY.`;
+      }
+      return `Image ${index + 1}=${entry.indexLabel}; required final identity.`;
+    })
+    .join(' ');
+  const characterVision = getImageCharacterReferenceGroups(payload)
+    .map((group) => {
+      const vision = getCharacterVisionAnalysisMap(payload).get(group.characterIndex);
+      if (!vision) return '';
+      return `Character ${group.characterIndex} analysis: ${[
+        vision.summary,
+        ...(vision.faceIdentityNotes || []).slice(0, 2),
+        ...(vision.makeupNotes || []).slice(0, 1),
+        ...(vision.hairNotes || []).slice(0, 1),
+        ...(vision.outfitNotes || []).slice(0, 1),
+      ].filter(Boolean).join('; ')}`;
+    })
+    .filter(Boolean)
+    .join('\n');
+  const sampleVision = payload.visionAnalysis?.sample;
+  const sampleCompositionVision = sampleVision
+    ? `Sample analysis: ${[
+        sampleVision.pose,
+        sampleVision.camera,
+        sampleVision.framing,
+        sampleVision.subjectPlacement,
+        sampleVision.background,
+        sampleVision.supportContact,
+      ].filter(Boolean).join('; ')}`
+    : '';
 
   return buildProviderPromptWithinServerBudget([
     { locked: true, text: 'RENDER ONE NEW FINAL IMAGE. Never return any uploaded reference unchanged.' },
     { locked: true, text: `USER PROMPT - highest priority:\n${originalUserPrompt || 'No additional user prompt provided.'}` },
     { locked: true, text: `CHARACTER REFERENCES: render exactly ${characterCount} character(s). Preserve uploaded face identity, hairstyle, skin tone, outfit, shoes, accessories, makeup, body structure, and gender presentation. Do not invent a new face, new outfit, or extra character.` },
     { locked: true, text: 'SAMPLE IMAGE COMPOSITION: use the sample only for pose, framing, camera angle, subject placement, background, props, and contact points. Never copy the sample identity, face, outfit, hairstyle, or realism.' },
+    { locked: true, text: `REFERENCE ORDER: ${referenceOrder}` },
+    { weight: 1, text: characterVision },
+    { weight: 1, text: sampleCompositionVision },
     { locked: true, text: `STYLE QUALITY: ${stylePrompt}` },
     {
       locked: true,

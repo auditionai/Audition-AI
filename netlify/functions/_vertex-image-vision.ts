@@ -108,7 +108,7 @@ const generateVisionJson = async <T>(
             generationConfig: {
               temperature: 0.0,
               topP: 0.1,
-              maxOutputTokens: mode === 'pro_structured' ? 420 : 900,
+              maxOutputTokens: mode === 'pro_structured' ? 1024 : 2048,
               responseMimeType: 'application/json',
             },
           }),
@@ -127,8 +127,9 @@ const generateVisionJson = async <T>(
         throw new Error('Vertex AI did not return a vision analysis result.');
       }
 
+      const parsed = JSON.parse(extractJsonPayload(text)) as T;
       await emitDiagnostic(onDiagnostic, 'success', `${taskName} succeeded via ${credentialName || projectId}.`);
-      return JSON.parse(extractJsonPayload(text)) as T;
+      return parsed;
     },
   });
 };

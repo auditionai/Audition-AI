@@ -1378,8 +1378,14 @@ const markFailedRespectingRefundPolicy = async (
   });
 };
 
-const markFailedAndRefund = async (job: QueueJobRow, errorMessage: string) =>
-  markFailed(job, errorMessage, { refund: true });
+const markOutputVerificationFailed = async (job: QueueJobRow, errorMessage: string) =>
+  markFailed(job, errorMessage, {
+    refund: true,
+    payloadOverride: {
+      ...clearFailedRescueMeta(toQueuePayloadObject(job.queue_payload)),
+      __outputVerificationRejected: true,
+    },
+  });
 
 const requeueJob = async (job: QueueJobRow, errorMessage: string) => {
   const admin = getServiceRoleClient();
@@ -2092,6 +2098,19 @@ const completePolledJobWithResultUrl = async (
     return 'failed' as const;
   }
 
+  const latestRuntimeState = await getJobRuntimeState(job.id).catch(() => null);
+  if (
+    String(latestRuntimeState?.status || '').toLowerCase() === 'failed' &&
+    hasFailedRescueFinalized(
+      latestRuntimeState?.queue_payload && typeof latestRuntimeState.queue_payload === 'object'
+        ? latestRuntimeState.queue_payload as Record<string, unknown>
+        : null,
+    )
+  ) {
+    await releaseLease(job.id);
+    return 'failed' as const;
+  }
+
   const admin = getServiceRoleClient();
   let completionPayload = clearProviderLostJobConfirmationMeta(job.queue_payload);
   const storedImageRecipe =
@@ -2110,7 +2129,7 @@ const completePolledJobWithResultUrl = async (
     try {
       const echoFailure = await detectSuspiciousReferenceEcho(storedImageRecipe, resultUrl);
       if (echoFailure) {
-        await markFailedAndRefund(
+        await markOutputVerificationFailed(
           { ...job, queue_payload: verifyingPayload },
           `Kết quả không hợp lệ: ${echoFailure}`,
         );
@@ -2120,7 +2139,7 @@ const completePolledJobWithResultUrl = async (
       const verification = await verifyGeneratedImageOutput(storedImageRecipe, resultUrl);
       const summary = verification.summary || verification.issues.join('; ') || 'Không xác minh được identity.';
       if (!verification.pass) {
-        await markFailedAndRefund(
+        await markOutputVerificationFailed(
           { ...job, queue_payload: verifyingPayload },
           `Kết quả không thay đúng nhân vật tham chiếu: ${summary}`,
         );
@@ -2167,7 +2186,7 @@ const completePolledJobWithResultUrl = async (
         return 'processing' as const;
       }
 
-      await markFailedAndRefund(
+      await markOutputVerificationFailed(
         { ...job, queue_payload: verifyingPayload },
         `Không thể hậu kiểm kết quả ảnh sau ${MAX_OUTPUT_VERIFICATION_ATTEMPTS} lần: ${message}`,
       );

@@ -722,9 +722,6 @@ const detectSuspiciousReferenceEcho = async (
   resultImageUrl: string,
 ) => {
   const candidates: Array<{ label: string; source: string }> = [];
-  if (payload.sampleImage) {
-    candidates.push({ label: 'SAMPLE IMAGE', source: payload.sampleImage });
-  }
   getImageCharacterReferenceGroups(payload).forEach((group) => {
     group.references.forEach((reference) => {
       candidates.push({

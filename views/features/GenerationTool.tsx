@@ -18,7 +18,7 @@ import { CONCURRENCY_LIMITS, useConcurrency } from '../../services/concurrencySe
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import { downloadAssetToBrowser } from '../../services/downloadService';
-import { analyzeCharacterAppearanceProfile, createPoseOnlyReference, optimizePayload } from '../../utils/imageProcessor';
+import { analyzeCharacterAppearanceProfile } from '../../utils/imageProcessor';
 import { APP_CONFIG } from '../../constants';
 import { buildAuditionKoreaMmoStylePrompt, DEFAULT_IMAGE_NEGATIVE_PROMPT } from '../../shared/imagePromptDefaults';
 import {
@@ -144,19 +144,6 @@ const tryStageGenerationInput = async (source: string, folder: string) => {
     } catch (error) {
         console.warn('[GenerationTool] Failed to stage generation input to storage.', error);
         throw new Error('Không thể tải ảnh tham chiếu lên vùng đệm. Vui lòng thử lại.');
-    }
-};
-
-const tryStageSampleReferenceInput = async (source: string, folder: string, aspectRatio: string) => {
-    if (!source) return null;
-
-    try {
-        const poseOnlyReference = await createPoseOnlyReference(source, aspectRatio);
-        const optimizedSource = await optimizePayload(poseOnlyReference, 2048);
-        return await uploadFileToR2(optimizedSource, folder);
-    } catch (error) {
-        console.warn('[GenerationTool] Failed to stage sample reference.', error);
-        throw new Error('Không thể chuẩn hóa ảnh mẫu trước khi tạo ảnh. Vui lòng thử lại.');
     }
 };
 
@@ -961,10 +948,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
             const stagedCharacterImages = stagedCharacterGroups.flatMap((group) => group.references.map((reference) => reference.source));
 
             const stagedSampleImage = refImage
-                ? await tryStageSampleReferenceInput(refImage, `inputs/generation/${activeMode}/sample`, aspectRatio)
-                : null;
-            const stagedSampleAnalysisImage = refImage
-                ? await tryStageGenerationInput(refImage, `inputs/generation/${activeMode}/sample-analysis`)
+                ? await tryStageGenerationInput(refImage, `inputs/generation/${activeMode}/sample`)
                 : null;
             const notifyInputMedia = [
                 ...(stagedSampleImage
@@ -1001,7 +985,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                 characterReferenceGroups: stagedCharacterGroups,
                 characterImages: stagedCharacterImages,
                 sampleImage: stagedSampleImage || null,
-                sampleAnalysisImage: stagedSampleAnalysisImage || stagedSampleImage || null,
+                sampleAnalysisImage: stagedSampleImage || null,
                 styleImage: null,
                 styleAnalysisImage: null,
                 stylePrompt: styleDirectivePrompt,

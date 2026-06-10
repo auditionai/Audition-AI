@@ -168,11 +168,15 @@ const buildProCharacterVisionPrompt = (characterIndex: number) => [
   '}',
 ].join('\n');
 
-const buildSampleVisionPrompt = () => [
+const buildSampleVisionPrompt = (expectedCharacterCount: number) => [
   'Analyze the uploaded sample image for composition only.',
+  `The final replacement requires exactly ${expectedCharacterCount} character slot(s).`,
   'Return one precise JSON object in English only. Describe visible facts instead of generic photography language.',
   'Use approximate percentages of image width and height for important placements, crop boundaries, subject scale, and prop overlap.',
   'Describe pose, exact face orientation, gaze, camera viewpoint, apparent lens/depth, framing, spatial geometry, background, lighting direction and quality, palette, exposure, limbs, props, contact, and occlusion.',
+  expectedCharacterCount > 1
+    ? 'In subjectLayout, enumerate SAMPLE SUBJECT 1..N from left to right and describe each subject position, scale, pose, head direction, gaze, visible limbs, interaction, spacing, overlap, and occlusion. Keep this ordering stable for one-to-one character slot replacement.'
+    : 'In subjectLayout, describe the single subject position, scale, pose, visible limbs, and occlusion.',
   'For every important prop, state its approximate size, side of frame, overlap with the subject, and which facial or body landmarks it covers.',
   'For lighting, state screen direction, hardness, warmth or coolness, shadow pattern, and where highlights and shadows fall.',
   'Do not describe face identity or outfit identity as something to copy.',
@@ -186,6 +190,7 @@ const buildSampleVisionPrompt = () => [
   '  "lensAndDepth": "string",',
   '  "framing": "string",',
   '  "compositionGeometry": "string",',
+  '  "subjectLayout": "string",',
   '  "subjectPlacement": "string",',
   '  "background": "string",',
   '  "lighting": "string",',
@@ -269,6 +274,7 @@ const normalizeSampleVision = (raw: any): SampleVisionAnalysis => ({
   lensAndDepth: typeof raw?.lensAndDepth === 'string' ? raw.lensAndDepth.trim() : undefined,
   framing: typeof raw?.framing === 'string' ? raw.framing.trim() : undefined,
   compositionGeometry: typeof raw?.compositionGeometry === 'string' ? raw.compositionGeometry.trim() : undefined,
+  subjectLayout: typeof raw?.subjectLayout === 'string' ? raw.subjectLayout.trim() : undefined,
   subjectPlacement: typeof raw?.subjectPlacement === 'string' ? raw.subjectPlacement.trim() : undefined,
   background: typeof raw?.background === 'string' ? raw.background.trim() : undefined,
   lighting: typeof raw?.lighting === 'string' ? raw.lighting.trim() : undefined,
@@ -302,6 +308,7 @@ export const analyzeImageGenerationVision = async (
 ): Promise<ImageVisionAnalysis> => {
   const mode: VisionAnalysisMode = isProImageGenerationModel(payload.modelId) ? 'pro_structured' : 'default';
   const characterGroups = getImageCharacterReferenceGroups(payload);
+  const expectedCharacterCount = Math.max(1, Math.floor(Number(payload.characterCount || characterGroups.length || 1)));
   const characters: CharacterVisionAnalysis[] = [];
 
   for (const group of characterGroups) {
@@ -357,7 +364,7 @@ export const analyzeImageGenerationVision = async (
         await generateVisionJson<any>(
           'sample image analysis',
           [await toInlineImagePart(sampleAnalysisSource)],
-          buildSampleVisionPrompt(),
+          buildSampleVisionPrompt(expectedCharacterCount),
           'default',
           options?.onDiagnostic,
         ),

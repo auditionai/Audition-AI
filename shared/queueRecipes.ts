@@ -116,6 +116,7 @@ export interface SampleVisionAnalysis {
   lensAndDepth?: string;
   framing?: string;
   compositionGeometry?: string;
+  subjectLayout?: string;
   subjectPlacement?: string;
   background?: string;
   lighting?: string;
@@ -916,8 +917,8 @@ export const getImageRenderReferenceEntries = (
 
     if (characterGroups.length >= 5) {
       return sampleEntry
-        ? [sampleEntry, ...bodyEntries.slice(0, 4)]
-        : bodyEntries.slice(0, 5);
+        ? [sampleEntry, ...bodyEntries]
+        : bodyEntries;
     }
 
     if (characterGroups.length <= 1) {
@@ -980,8 +981,8 @@ export const getImageRenderReferenceEntries = (
       .filter((entry): entry is ImageRenderReferenceEntry => Boolean(entry));
     const sampleEntry = buildSampleEntry();
     return sampleEntry
-      ? [sampleEntry, ...bodyEntries.slice(0, 4)]
-      : bodyEntries.slice(0, 5);
+      ? [sampleEntry, ...bodyEntries]
+      : bodyEntries;
   }
 
   const sampleEntry = buildSampleEntry();
@@ -1016,6 +1017,7 @@ export const buildImageRoleContract = (
   const characterGroups = getImageCharacterReferenceGroups(payload);
   const characterVisionMap = getCharacterVisionAnalysisMap(payload);
   const characterCount = Math.max(1, Math.floor(Number(payload.characterCount || characterGroups.length || 1)));
+  const sampleSubjectLabel = characterCount === 1 ? 'person' : `${characterCount} people`;
   const layeredSingleSubjectAllowed = allowsLayeredSingleSubjectComposition(payload);
   const shotType = resolveImageShotType(payload);
   const hasSample = Boolean(payload.sampleImage);
@@ -1076,8 +1078,8 @@ export const buildImageRoleContract = (
   const compositionRules = hasSample
     ? [
         'Sample image is the primary scene plate. Preserve the sample scene, background, furniture, props, object layout, contact points, camera angle, framing, and spatial composition exactly.',
-        'Replace only the sample person with the uploaded character identity. Keep the sample pose, body orientation, chair/ground contact, hand placement, occlusion pattern, and scene interaction as closely as possible.',
-        'Never borrow face identity, hair identity, outfit identity, makeup identity, or realism from the sample person.',
+        `Replace all ${sampleSubjectLabel} in the sample one-to-one with CHARACTER slots 1-${characterCount}. Keep each subject's pose, body orientation, chair/ground contact, hand placement, occlusion pattern, spacing, overlap, and scene interaction as closely as possible.`,
+        'Never borrow face identity, hair identity, outfit identity, makeup identity, or realism from any sample subject.',
         'If identity conflicts with sample composition, keep identity from character references but still preserve the sample scene plate and pose. Repair only broken or ambiguous anatomy; do not redesign the composition.',
       ]
     : [
@@ -1096,6 +1098,7 @@ export const buildImageRoleContract = (
       sampleVision.lensAndDepth ? `lens/depth: ${sampleVision.lensAndDepth}` : '',
       sampleVision.framing ? `framing: ${sampleVision.framing}` : '',
       sampleVision.compositionGeometry ? `geometry: ${sampleVision.compositionGeometry}` : '',
+      sampleVision.subjectLayout ? `subject layout: ${sampleVision.subjectLayout}` : '',
       sampleVision.subjectPlacement ? `placement: ${sampleVision.subjectPlacement}` : '',
       sampleVision.background ? `background: ${sampleVision.background}` : '',
       sampleVision.lighting ? `lighting: ${sampleVision.lighting}` : '',
@@ -1180,7 +1183,7 @@ export const buildImageRoleContract = (
     globalRules: [
       'Never output a split-screen, image grid, collage, storyboard, or panel layout.',
       hasSample
-        ? 'Never leave the original sample person unchanged. Preserve the sample canvas while replacing its person with the uploaded character identity.'
+        ? `Never leave any original sample subject unchanged. Preserve the sample canvas while replacing all ${sampleSubjectLabel} one-to-one with CHARACTER slots 1-${characterCount}.`
         : 'Never return an uploaded reference nearly unchanged as the final output.',
       'Keep the final result as a stylized 3D game avatar, not a photorealistic human.',
     ],
@@ -1202,7 +1205,7 @@ export const buildImageRoleContractText = (
               ? `- Image ${number}: ${entry.indexLabel}. Identity only, high-priority overall face lock.${entry.facePriorityMode === 'portrait_headshot' ? ' Portrait/headshot priority mode is active for this slot.' : ''} Never pose.`
               : `- Image ${number}: ${entry.indexLabel}. Identity only,${entry.facePriorityMode === 'portrait_headshot' ? ' portrait/headshot priority slot: use this mainly for hair, outfit, accessories, and upper-body silhouette, never to redefine the face,' : ''} never pose.`;
           case 'sample':
-            return `- Image ${number}: ${entry.indexLabel}. Primary scene plate. Preserve the full sample background and composition exactly; replace only the sample person with the uploaded character identity.`;
+            return `- Image ${number}: ${entry.indexLabel}. Primary scene plate. Preserve the full sample background and composition exactly; replace all sample subjects one-to-one with CHARACTER slots 1-${contract.characterCount}.`;
           case 'style':
             return `- Image ${number}: ${entry.indexLabel}. Style only, never identity or composition.`;
           default:
@@ -1231,6 +1234,7 @@ const buildImageReferenceOrderDirective = (
   const entries = getImageRenderReferenceEntries(payload);
   const hasSample = Boolean(payload.sampleImage);
   const hasStyle = Boolean(payload.styleImage);
+  const characterCount = Math.max(1, Math.floor(Number(payload.characterCount || getImageCharacterReferenceGroups(payload).length || 1)));
   const layeredSingleSubjectAllowed = allowsLayeredSingleSubjectComposition(payload);
   if (entries.length === 0) {
     return hasSample
@@ -1251,7 +1255,7 @@ const buildImageReferenceOrderDirective = (
 
     switch (entry.role) {
       case 'sample':
-        return `- Image ${number}: ${entry.indexLabel}. This is the PRIMARY scene plate and highest-priority composition anchor. Preserve the sample background, environment, furniture, props, lighting placement, object positions, chair/ground contact, body orientation, framing, camera angle, and overall scene layout as closely as possible to the sample. Replace only the sample person with the uploaded character identity. Do not copy the sample person's face, hair identity, outfit identity, makeup identity, or realism. If the sample pose is partially occluded or anatomically ambiguous, repair the limbs into one natural coherent body while keeping the same visible pose intent and same scene layout. Never collapse this into an empty backdrop or a default studio render.`;
+        return `- Image ${number}: ${entry.indexLabel}. This is the PRIMARY scene plate and highest-priority composition anchor. Preserve the sample background, environment, furniture, props, lighting placement, object positions, chair/ground contact, body orientation, framing, camera angle, and overall scene layout as closely as possible to the sample. Replace all sample subjects one-to-one with CHARACTER slots 1-${characterCount}. Do not copy any sample subject's face, hair identity, outfit identity, makeup identity, or realism. Preserve each subject's pose intent, spacing, overlap, interaction, and scene position. Never collapse this into an empty backdrop or a default studio render.`;
       case 'character':
         return entry.indexLabel.includes('FACE DETAIL LOCK')
           ? `- Image ${number}: ${entry.indexLabel}. This is the highest-priority micro face anchor. Copy exact eye shape, eyelash styling, eyebrow shape, nose shape, lip shape, makeup placement, blush placement, freckles, beauty marks, face jewelry, face decals, and all fine facial likeness cues from this image. Override any conflicting face detail from SAMPLE IMAGE, STYLE IMAGE, BODY references, or prompt phrasing.${entry.facePriorityMode === 'portrait_headshot' ? ' Portrait/headshot priority mode is active: this image must dominate the full facial outcome for this slot.' : ''}`
@@ -1281,7 +1285,7 @@ const buildImageReferenceOrderDirective = (
     '- If multiple CHARACTER REFERENCE images share the same CHARACTER number, they all belong to the same final subject and must be merged into one identity.',
     '- Never duplicate one uploaded character to fill another slot. Never omit a slot and replace it with a sample person, style person, or invented/blended subject.',
     hasSample
-      ? '- If CHARACTER REFERENCES conflict with the SAMPLE IMAGE, keep identity/outfit from CHARACTER REFERENCES but preserve the SAMPLE IMAGE scene plate, background, prop layout, and pose. Replace the sample person only.'
+      ? `- If CHARACTER REFERENCES conflict with the SAMPLE IMAGE, keep identity/outfit from CHARACTER REFERENCES but preserve the SAMPLE IMAGE scene plate, background, prop layout, and poses. Replace all sample subjects one-to-one with CHARACTER slots 1-${characterCount}.`
       : '- Without a SAMPLE IMAGE, never ignore the PRIMARY COMMAND PROMPT and fall back to a default standing pose or empty black background unless the prompt explicitly asks for that.',
     hasSample
       ? '- The final image must never be a near-unchanged copy of a standing CHARACTER REFERENCE unless the SAMPLE IMAGE itself is also a standing front-view pose.'
@@ -1491,6 +1495,7 @@ const buildProSampleVisionLine = (
     sample.lensAndDepth ? `lens_depth=${collapsePromptWhitespace(sample.lensAndDepth)}` : null,
     sample.framing ? `framing=${collapsePromptWhitespace(sample.framing)}` : null,
     sample.compositionGeometry ? `geometry=${collapsePromptWhitespace(sample.compositionGeometry)}` : null,
+    sample.subjectLayout ? `subject_layout=${collapsePromptWhitespace(sample.subjectLayout)}` : null,
     sample.subjectPlacement ? `placement=${collapsePromptWhitespace(sample.subjectPlacement)}` : null,
     sample.background ? `background=${collapsePromptWhitespace(sample.background)}` : null,
     sample.lighting ? `lighting=${collapsePromptWhitespace(sample.lighting)}` : null,
@@ -1552,11 +1557,12 @@ const buildProStructuredProviderPrompt = (
   const roleContract = buildImageRoleContract(payload);
   void synthesizedPrompt;
   const characterCount = Math.max(1, Math.floor(Number(payload.characterCount || getImageCharacterReferenceGroups(payload).length || 1)));
+  const sampleSubjectLabel = characterCount === 1 ? 'person' : `${characterCount} people`;
   const compactNegativePrompt = trimPromptText(mergedNegativePrompt, 420);
   const stylePrompt = getProviderStyleQualityText(payload.stylePrompt);
   const referenceOrder = getImageRenderReferenceEntries(payload)
     .map((entry, index) => {
-      if (entry.role === 'sample') return `Image ${index + 1}=SAMPLE BASE IMAGE; edit this canvas in place.`;
+      if (entry.role === 'sample') return `Image ${index + 1}=SAMPLE BASE IMAGE; replace its ${sampleSubjectLabel} one-to-one.`;
       if (entry.role === 'style') return `Image ${index + 1}=STYLE ONLY.`;
       return `Image ${index + 1}=${entry.indexLabel}; replacement identity source.`;
     })
@@ -1571,14 +1577,14 @@ const buildProStructuredProviderPrompt = (
 
   return buildProviderPromptWithinServerBudget([
     { locked: true, text: payload.sampleImage
-      ? 'EDIT IMAGE 1 IN PLACE. Use the SAMPLE BASE IMAGE as the original canvas. Remove only its existing person and replace that person with the uploaded CHARACTER identity.'
+      ? `EDIT IMAGE 1 IN PLACE. Use the SAMPLE BASE IMAGE as the original canvas. Remove only its existing ${sampleSubjectLabel} and replace them one-to-one with CHARACTER slots 1-${characterCount}.`
       : 'RENDER ONE NEW FINAL IMAGE. Never return any uploaded reference unchanged.' },
     { locked: true, text: `USER PROMPT - highest priority:\n${getPrimaryUserRequestText(payload) || 'Create one new image from the uploaded references.'}` },
     { locked: true, text: `CHARACTER REFERENCES: render exactly ${characterCount} character(s). Preserve the uploaded face identity, hair, skin tone, outfit, shoes, accessories, makeup, body structure, and gender presentation. Do not invent a new face, new outfit, or extra character.` },
     {
       locked: true,
       text: payload.sampleImage
-        ? 'SAMPLE BASE IMAGE LOCK: preserve its canvas, crop, camera, background pixels, environment, and every prop exactly. Keep each prop type, species, color, saturation, size, screen position, depth plane, overlap, and orientation unchanged. Preserve lighting direction, shadow pattern, color grade, depth of field, and occlusion layout. Match the original relaxed body curve, shoulder angle, head tilt, hand visibility, and natural joint flow. If a hand or limb is hidden in Image 1, keep it hidden instead of inventing a visible hand. Replace only the original sample person. Do not redesign or regenerate the scene.'
+        ? `SAMPLE BASE IMAGE LOCK: preserve its canvas, crop, camera, background pixels, environment, and every prop exactly. Keep each prop type, species, color, saturation, size, screen position, depth plane, overlap, and orientation unchanged. Preserve lighting direction, shadow pattern, color grade, depth of field, and occlusion layout. Match every original subject's pose, body curve, shoulder angle, head tilt, hand visibility, interaction, spacing, overlap, and natural joint flow. If a hand or limb is hidden in Image 1, keep it hidden instead of inventing a visible hand. Replace all ${characterCount} sample subjects one-to-one with CHARACTER slots 1-${characterCount}. Never merge, omit, duplicate, reorder, or swap character slots. Do not redesign or regenerate the scene.`
         : 'COMPOSITION: no sample image is present, so use the user prompt for pose, camera, framing, scene, and background. Do not fall back to a default standing studio pose.',
     },
     { locked: true, text: `REFERENCE ORDER: ${referenceOrder}` },
@@ -1611,13 +1617,14 @@ const buildDetailedImageProviderPrompt = (
   const originalUserPrompt = getPrimaryUserRequestText(payload);
   const layeredSingleSubjectAllowed = allowsLayeredSingleSubjectComposition(payload);
   const characterCount = Math.max(1, Math.floor(Number(payload.characterCount || getImageCharacterReferenceGroups(payload).length || 1)));
+  const sampleSubjectLabel = characterCount === 1 ? 'person' : `${characterCount} people`;
   const compactNegativePrompt = trimPromptText(mergedNegativePrompt, 420);
   const shotAwareRenderProfile = getShotAwareRenderProfile(roleContract.shotType);
   const stylePrompt = getProviderStyleQualityText(payload.stylePrompt);
   const referenceOrder = getImageRenderReferenceEntries(payload)
     .map((entry, index) => {
       if (entry.role === 'sample') {
-        return `Image ${index + 1}=SAMPLE BASE IMAGE; edit this canvas in place and replace its person.`;
+        return `Image ${index + 1}=SAMPLE BASE IMAGE; edit this canvas in place and replace its ${sampleSubjectLabel} one-to-one.`;
       }
       if (entry.role === 'style') {
         return `Image ${index + 1}=STYLE ONLY.`;
@@ -1649,6 +1656,7 @@ const buildDetailedImageProviderPrompt = (
         sampleVision.lensAndDepth,
         sampleVision.framing,
         sampleVision.compositionGeometry,
+        sampleVision.subjectLayout,
         sampleVision.subjectPlacement,
         sampleVision.background,
         sampleVision.lighting,
@@ -1664,14 +1672,14 @@ const buildDetailedImageProviderPrompt = (
 
   return buildProviderPromptWithinServerBudget([
     { locked: true, text: payload.sampleImage
-      ? 'EDIT IMAGE 1 IN PLACE. Keep the SAMPLE BASE IMAGE as the original canvas. Remove only its existing person and replace that person with the uploaded CHARACTER identity.'
+      ? `EDIT IMAGE 1 IN PLACE. Keep the SAMPLE BASE IMAGE as the original canvas. Remove only its existing ${sampleSubjectLabel} and replace them one-to-one with CHARACTER slots 1-${characterCount}.`
       : 'RENDER ONE NEW FINAL IMAGE. Never return any uploaded reference unchanged.' },
     { locked: true, text: `USER PROMPT - highest priority:\n${originalUserPrompt || 'No additional user prompt provided.'}` },
     { locked: true, text: `CHARACTER REFERENCES: render exactly ${characterCount} character(s). Preserve uploaded face identity, hairstyle, skin tone, outfit, shoes, accessories, makeup, body structure, and gender presentation. Do not invent a new face, new outfit, or extra character.` },
     {
       locked: true,
       text: payload.sampleImage
-        ? 'SAMPLE BASE IMAGE LOCK: preserve its canvas, crop, camera, background pixels, environment, and every prop exactly. Keep each prop type, species, color, saturation, size, screen position, depth plane, overlap, and orientation unchanged. Preserve lighting direction, shadow pattern, color grade, depth of field, and occlusion layout. Match the original relaxed body curve, shoulder angle, head tilt, hand visibility, and natural joint flow. If a hand or limb is hidden in Image 1, keep it hidden instead of inventing a visible hand. Replace only the original sample person; do not redesign or regenerate the scene.'
+        ? `SAMPLE BASE IMAGE LOCK: preserve its canvas, crop, camera, background pixels, environment, and every prop exactly. Keep each prop type, species, color, saturation, size, screen position, depth plane, overlap, and orientation unchanged. Preserve lighting direction, shadow pattern, color grade, depth of field, and occlusion layout. Match every original subject's pose, body curve, shoulder angle, head tilt, hand visibility, interaction, spacing, overlap, and natural joint flow. If a hand or limb is hidden in Image 1, keep it hidden instead of inventing a visible hand. Replace all ${characterCount} sample subjects one-to-one with CHARACTER slots 1-${characterCount}. Never merge, omit, duplicate, reorder, or swap character slots. Do not redesign or regenerate the scene.`
         : 'COMPOSITION: no sample image is present, so compose from the user request.',
     },
     { locked: true, text: `REFERENCE ORDER: ${referenceOrder}` },

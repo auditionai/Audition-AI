@@ -1578,7 +1578,7 @@ const buildProStructuredProviderPrompt = (
     {
       locked: true,
       text: payload.sampleImage
-        ? 'SAMPLE BASE IMAGE LOCK: preserve its canvas, crop, camera, background pixels, environment, props, object positions, lighting, shadows, color grade, depth of field, and occlusion layout as closely as the model permits. Replace only the original sample person. Do not redesign or regenerate the scene.'
+        ? 'SAMPLE BASE IMAGE LOCK: preserve its canvas, crop, camera, background pixels, environment, and every prop exactly. Keep each prop type, species, color, saturation, size, screen position, depth plane, overlap, and orientation unchanged. Preserve lighting direction, shadow pattern, color grade, depth of field, and occlusion layout. Match the original relaxed body curve, shoulder angle, head tilt, hand visibility, and natural joint flow. If a hand or limb is hidden in Image 1, keep it hidden instead of inventing a visible hand. Replace only the original sample person. Do not redesign or regenerate the scene.'
         : 'COMPOSITION: no sample image is present, so use the user prompt for pose, camera, framing, scene, and background. Do not fall back to a default standing studio pose.',
     },
     { locked: true, text: `REFERENCE ORDER: ${referenceOrder}` },
@@ -1592,7 +1592,7 @@ const buildProStructuredProviderPrompt = (
     {
       locked: true,
       text: payload.visionAnalysis?.sample
-        ? 'COMPOSITION FIDELITY: SAMPLE ANALYSIS overrides generic style defaults for crop, camera, subject scale, prop position, background color, light direction, shadow hardness, contrast, and depth of field. Do not widen a close-up into a half-body or full-body shot.'
+        ? 'COMPOSITION FIDELITY: SAMPLE ANALYSIS overrides generic style defaults for crop, camera, subject scale, pose flow, limb visibility, prop type/color/size/position, background color, light direction, shadow hardness, contrast, foreground separation, and depth of field. Preserve distinct foreground, subject, and blurred background depth planes. Do not widen a close-up into a half-body or full-body shot.'
         : '',
     },
     { locked: true, text: `SHOT: ${roleContract.shotType}. ${getShotAwareRenderProfile(roleContract.shotType)}` },
@@ -1671,7 +1671,7 @@ const buildDetailedImageProviderPrompt = (
     {
       locked: true,
       text: payload.sampleImage
-        ? 'SAMPLE BASE IMAGE LOCK: preserve its canvas, crop, camera, background pixels, environment, props, object positions, lighting, shadows, color grade, depth of field, and occlusion layout. Replace only the original sample person; do not redesign or regenerate the scene.'
+        ? 'SAMPLE BASE IMAGE LOCK: preserve its canvas, crop, camera, background pixels, environment, and every prop exactly. Keep each prop type, species, color, saturation, size, screen position, depth plane, overlap, and orientation unchanged. Preserve lighting direction, shadow pattern, color grade, depth of field, and occlusion layout. Match the original relaxed body curve, shoulder angle, head tilt, hand visibility, and natural joint flow. If a hand or limb is hidden in Image 1, keep it hidden instead of inventing a visible hand. Replace only the original sample person; do not redesign or regenerate the scene.'
         : 'COMPOSITION: no sample image is present, so compose from the user request.',
     },
     { locked: true, text: `REFERENCE ORDER: ${referenceOrder}` },
@@ -1680,7 +1680,7 @@ const buildDetailedImageProviderPrompt = (
     {
       locked: true,
       text: sampleVision
-        ? 'COMPOSITION FIDELITY: SAMPLE ANALYSIS overrides generic style defaults for crop, camera, subject scale, prop position, background color, light direction, shadow hardness, contrast, and depth of field. Do not widen a close-up into a half-body or full-body shot.'
+        ? 'COMPOSITION FIDELITY: SAMPLE ANALYSIS overrides generic style defaults for crop, camera, subject scale, pose flow, limb visibility, prop type/color/size/position, background color, light direction, shadow hardness, contrast, foreground separation, and depth of field. Preserve distinct foreground, subject, and blurred background depth planes. Do not widen a close-up into a half-body or full-body shot.'
         : '',
     },
     { locked: true, text: `STYLE QUALITY: ${stylePrompt}` },

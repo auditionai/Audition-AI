@@ -304,7 +304,7 @@ const buildVerificationInstruction = (payload: ImageGenerateRecipePayload) => {
       ? '10. Compare FINAL RESULT with SAMPLE IMAGE for composition: shot size/crop, face and torso orientation, gaze, camera angle, subject scale and placement, prop size and location, occlusion landmarks, background color/depth, light direction, shadow pattern, contrast, and overall color relationship.'
       : '10. No sample composition audit is required.',
     payload.sampleImage
-      ? '11. Set sampleCompositionMatched=true only when the dominant composition is clearly the same. A generic portrait with a similar prop is not sufficient. Score below 90, any major crop/prop/lighting mismatch, or missing signature shadow pattern must make pass=false.'
+      ? '11. Set sampleCompositionMatched=true only when the dominant composition is clearly the same. A generic portrait with a similar prop is not sufficient. Any mismatch in dominant prop type or color, invented visible hand/limb, stiff pose replacing a relaxed pose, missing foreground-subject-background depth separation, score below 90, major crop/lighting mismatch, or missing signature shadow pattern must make pass=false.'
       : '11. Set sampleCompositionMatched=true and compositionScore=100 when no sample image is present.',
     payload.visionAnalysis?.sample
       ? `SAMPLE COMPOSITION TARGET:\n${JSON.stringify(payload.visionAnalysis.sample)}`
@@ -455,7 +455,7 @@ export const verifyGeneratedImageOutput = async (
             generationConfig: {
               temperature: 0.0,
               topP: 0.1,
-              maxOutputTokens: 2048,
+              maxOutputTokens: 4096,
               responseMimeType: 'application/json',
             },
           }),

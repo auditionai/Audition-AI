@@ -505,6 +505,17 @@ const processBase64Data = (base64: string): { blob: Blob, type: string, buffer: 
   };
 };
 
+const mimeTypeToFileExtension = (contentType: string) => {
+    const normalized = String(contentType || '').split(';', 1)[0].trim().toLowerCase();
+    const overrides: Record<string, string> = {
+        'image/jpeg': 'jpg',
+        'image/jpg': 'jpg',
+        'video/quicktime': 'mov',
+        'video/x-m4v': 'm4v',
+    };
+    return overrides[normalized] || normalized.split('/')[1] || 'bin';
+};
+
 // --- NEW: UPLOAD INPUT FILE TO R2 ---
 export const uploadFileToR2 = async (file: File | Blob | string, folder: string = 'inputs'): Promise<string> => {
     try {
@@ -519,14 +530,14 @@ export const uploadFileToR2 = async (file: File | Blob | string, folder: string 
             buffer = processed.buffer;
             blob = processed.blob;
             contentType = processed.type;
-            extension = contentType.split('/')[1] || 'png';
+            extension = mimeTypeToFileExtension(contentType);
         } else {
             // File or Blob
             const arrayBuffer = await file.arrayBuffer();
             buffer = new Uint8Array(arrayBuffer);
             contentType = file.type || 'image/png';
             blob = new Blob([arrayBuffer], { type: contentType });
-            extension = contentType.split('/')[1] || 'png';
+            extension = mimeTypeToFileExtension(contentType);
         }
 
         const fileName = `${folder}/${Date.now()}_${Math.random().toString(36).substring(7)}.${extension}`;

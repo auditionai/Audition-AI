@@ -1799,15 +1799,15 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       const id = `tour_${Date.now()}`;
       const nextTour: AppTourDefinition = {
           id,
-          title: 'Huong dan moi',
+          title: 'Hướng dẫn mới',
           surface: 'desktop',
           screen: 'home',
           isActive: true,
           steps: [{
               id: `step_${Date.now()}`,
               targetId: 'desktop.home.features',
-              title: 'Buoc huong dan',
-              description: 'Nhap noi dung huong dan tai day.',
+              title: 'Bước hướng dẫn',
+              description: 'Nhập nội dung hướng dẫn tại đây.',
               placement: 'auto',
               order: 1,
               isActive: true,
@@ -1850,8 +1850,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   {
                       id: `step_${Date.now()}`,
                       targetId: fallbackTarget?.id || '',
-                      title: 'Buoc huong dan',
-                      description: 'Nhap noi dung huong dan tai day.',
+                      title: 'Bước hướng dẫn',
+                      description: 'Nhập nội dung hướng dẫn tại đây.',
                       placement: 'auto',
                       order: nextOrder,
                       isActive: true,

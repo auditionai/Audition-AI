@@ -942,7 +942,7 @@ export function WorkspaceImage() {
           const isAssistRunning = !!activeAssist;
 
           return (
-            <div key={char.id} className="space-y-3">
+            <div key={char.id} data-tour-id="mobile.generation.characters" className="space-y-3">
               <div className="flex gap-2 justify-center">
                 {(['female', 'male'] as const).map((g) => (
                   <button
@@ -1034,7 +1034,7 @@ export function WorkspaceImage() {
         })}
 
         {/* Prompt & Ref Image */}
-        <div className="relative group space-y-3">
+        <div data-tour-id="mobile.generation.prompt" className="relative group space-y-3">
           <div className="bg-white dark:bg-[#18181B] rounded-[24px] p-4 shadow-sm border border-gray-100 dark:border-zinc-800 flex items-center justify-between">
             <div>
               <h3 className="text-sm font-bold text-gray-800 dark:text-zinc-100">Ảnh mẫu bố cục</h3>
@@ -1079,7 +1079,7 @@ export function WorkspaceImage() {
         </div>
 
         {/* Aspect Ratio */}
-        <div className="space-y-2">
+        <div data-tour-id="mobile.generation.settings" className="space-y-2">
           <h3 className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider ml-1">Khung hình</h3>
           <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
             {ratios.map((r) => (
@@ -1283,6 +1283,7 @@ export function WorkspaceImage() {
 
       <div className="fixed bottom-[70px] left-0 right-0 p-5 pt-8 bg-gradient-to-t from-[#fcfcfc] via-[#fcfcfc] dark:from-[#09090b] dark:via-[#09090b] to-transparent max-w-md mx-auto xl:absolute xl:bottom-0">
         <Button
+          data-tour-id="mobile.generation.generate"
           size="lg"
           className="w-full shadow-2xl shadow-black/10 flex items-center justify-center gap-3 bg-[var(--color-primary)] relative overflow-hidden group"
           disabled={isGenerateDisabled || stage === 'submitting'}

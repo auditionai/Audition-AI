@@ -2883,12 +2883,51 @@ export const saveAppToursConfig = async (config: AppToursConfig) => {
             contentVersion: DEFAULT_APP_TOURS_CONFIG.contentVersion,
             updatedAt: new Date().toISOString(),
         };
-        const { error } = await supabase.from('system_settings').upsert(
-            { key: 'app_tours', value: payload },
-            { onConflict: 'key' },
-        );
 
-        if (error) throw error;
+        const { data: existing, error: readError } = await supabase
+            .from('system_settings')
+            .select('key')
+            .eq('key', 'app_tours')
+            .maybeSingle();
+        if (readError) throw readError;
+
+        if (existing?.key) {
+            const { error: updateError } = await supabase
+                .from('system_settings')
+                .update({ value: payload })
+                .eq('key', 'app_tours');
+            if (updateError) throw updateError;
+        } else {
+            const { error: insertError } = await supabase
+                .from('system_settings')
+                .insert({ key: 'app_tours', value: payload });
+
+            if (insertError) {
+                if (insertError.code === '23505') {
+                    const { error: retryUpdateError } = await supabase
+                        .from('system_settings')
+                        .update({ value: payload })
+                        .eq('key', 'app_tours');
+                    if (retryUpdateError) throw retryUpdateError;
+                } else {
+                    throw insertError;
+                }
+            }
+        }
+
+        const { data: savedRow, error: verifyError } = await supabase
+            .from('system_settings')
+            .select('value')
+            .eq('key', 'app_tours')
+            .maybeSingle();
+        if (verifyError) throw verifyError;
+
+        const savedVersion = Number(savedRow?.value?.contentVersion || 0);
+        const savedUpdatedAt = String(savedRow?.value?.updatedAt || '');
+        if (!savedRow?.value || savedVersion !== DEFAULT_APP_TOURS_CONFIG.contentVersion || savedUpdatedAt !== payload.updatedAt) {
+            throw new Error('Không xác nhận được dữ liệu hướng dẫn sau khi ghi vào database.');
+        }
+
         return { success: true };
     } catch (e: any) {
         console.error("Save App Tours Config Error", e);

@@ -1903,8 +1903,13 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const handleSaveAppTours = async () => {
       const result = await saveAppToursConfig(appTours);
       if (result.success) {
+          const savedConfig = await getAppToursConfig();
+          setAppTours(savedConfig);
+          setSelectedTourId((current) => current && savedConfig.tours.some((tour) => tour.id === current)
+              ? current
+              : savedConfig.tours[0]?.id || '');
           window.dispatchEvent(new Event('auditionai:app-tours-updated'));
-          showToast('Đã lưu cấu hình hướng dẫn!', 'success');
+          showToast('Đã lưu cấu hình hướng dẫn vào database!', 'success');
       } else {
           showToast('Lỗi lưu hướng dẫn: ' + result.error, 'error');
       }

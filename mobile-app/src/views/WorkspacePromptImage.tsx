@@ -102,12 +102,12 @@ export function WorkspacePromptImage() {
   const [referenceImages, setReferenceImages] = useState<(string | null)[]>([null]);
   const [activeUploadIndex, setActiveUploadIndex] = useState(0);
   const [prompt, setPrompt] = useState('');
-  const [aiModel, setAiModel] = useState<TstGenerationTier>('flash');
+  const [aiModel, setAiModel] = useState<TstGenerationTier>('gpt');
   const [aspectRatio, setAspectRatio] = useState('3:4');
   const [resolution, setResolution] = useState<TstResolution>('1K');
   const [speed, setSpeed] = useState('Nhanh');
   const [server, setServer] = useState('VIP 1');
-  const [gptQuality, setGptQuality] = useState<'low' | 'medium' | 'high'>('high');
+  const [gptQuality, setGptQuality] = useState<'low' | 'medium' | 'high'>('low');
   const [pricingEntries, setPricingEntries] = useState<TstPricingEntry[]>([]);
   const [pricingOverrides, setPricingOverrides] = useState<ModelPricing[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);

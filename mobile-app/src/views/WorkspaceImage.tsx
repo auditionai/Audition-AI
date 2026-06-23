@@ -194,8 +194,8 @@ export function WorkspaceImage() {
   const [resolution, setResolution] = useState<TstResolution>('1K');
   const [speed, setSpeed] = useState<'Nhanh' | 'Tiết Kiệm'>('Nhanh');
   const [server, setServer] = useState('VIP 1');
-  const [gptQuality, setGptQuality] = useState<'low' | 'medium' | 'high'>('high');
-  const [aiModel, setAiModel] = useState<TstGenerationTier>('flash');
+  const [gptQuality, setGptQuality] = useState<'low' | 'medium' | 'high'>('low');
+  const [aiModel, setAiModel] = useState<TstGenerationTier>('gpt');
 
   const [pricingEntries, setPricingEntries] = useState<TstPricingEntry[]>([]);
   const [auditionPricing, setAuditionPricing] = useState<ModelPricing[]>([]);

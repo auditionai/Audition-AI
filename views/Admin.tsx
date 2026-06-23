@@ -47,6 +47,13 @@ import {
     getSystemAnnouncementConfig,
     saveSystemAnnouncementConfig,
     SystemAnnouncementConfig,
+    getAppToursConfig,
+    saveAppToursConfig,
+    APP_TOUR_TARGETS,
+    DEFAULT_APP_TOURS_CONFIG,
+    AppToursConfig,
+    AppTourDefinition,
+    AppTourStep,
     getModelPricing,
     saveModelPricing,
     syncTSTPrices,
@@ -492,7 +499,7 @@ const getQueueMediaSectionTone = (key: AdminQueueMediaSection['key']) => {
 const getQueueMediaMeta = (media: AdminQueueInputMedia) => `${media.kind} · ${media.sourceType}${media.userProvided === false ? ' · hệ thống' : ''}`;
 
 export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
-  const [activeView, setActiveView] = useState<'overview' | 'transactions' | 'users' | 'queue' | 'packages' | 'marketing' | 'pricing' | 'system' | 'styles'>('overview');
+  const [activeView, setActiveView] = useState<'overview' | 'transactions' | 'users' | 'queue' | 'packages' | 'marketing' | 'pricing' | 'system' | 'styles' | 'tours'>('overview');
   const [stats, setStats] = useState<any>(null);
   const [allImages, setAllImages] = useState<GeneratedImage[]>([]);
   const [packages, setPackages] = useState<CreditPackage[]>([]);
@@ -519,6 +526,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       message: 'Chào mừng bạn quay lại AUDITION AI.',
       variant: 'info',
   });
+  const [appTours, setAppTours] = useState<AppToursConfig>(DEFAULT_APP_TOURS_CONFIG);
+  const [selectedTourId, setSelectedTourId] = useState(DEFAULT_APP_TOURS_CONFIG.tours[0]?.id || '');
 
   // API Key States
   const [apiKey, setApiKey] = useState('');
@@ -710,6 +719,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
       const announcementConfig = await getSystemAnnouncementConfig();
       setSystemAnnouncement(announcementConfig);
+
+      const toursConfig = await getAppToursConfig();
+      setAppTours(toursConfig);
+      setSelectedTourId((current) => current && toursConfig.tours.some((tour) => tour.id === current)
+          ? current
+          : toursConfig.tours[0]?.id || '');
 
       const pricing = await getModelPricing();
       setModelPricing((pricing || []).filter((row) => isAdminManagedPricingModel(row.model_id)));
@@ -1765,6 +1780,103 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           showToast('Lỗi lưu bảo trì chức năng: ' + result.error, 'error');
       }
   };
+
+  const updateAppTour = (tourId: string, updater: (tour: AppTourDefinition) => AppTourDefinition) => {
+      setAppTours((current) => ({
+          ...current,
+          tours: current.tours.map((tour) => tour.id === tourId ? updater(tour) : tour),
+      }));
+  };
+
+  const updateAppTourStep = (tourId: string, stepId: string, updater: (step: AppTourStep) => AppTourStep) => {
+      updateAppTour(tourId, (tour) => ({
+          ...tour,
+          steps: tour.steps.map((step) => step.id === stepId ? updater(step) : step),
+      }));
+  };
+
+  const handleAddTour = () => {
+      const id = `tour_${Date.now()}`;
+      const nextTour: AppTourDefinition = {
+          id,
+          title: 'Huong dan moi',
+          surface: 'desktop',
+          screen: 'home',
+          isActive: true,
+          steps: [{
+              id: `step_${Date.now()}`,
+              targetId: 'desktop.home.features',
+              title: 'Buoc huong dan',
+              description: 'Nhap noi dung huong dan tai day.',
+              placement: 'auto',
+              order: 1,
+              isActive: true,
+          }],
+      };
+      setAppTours((current) => ({ ...current, tours: [...current.tours, nextTour] }));
+      setSelectedTourId(id);
+  };
+
+  const handleDuplicateTour = (tour: AppTourDefinition) => {
+      const id = `${tour.id}_copy_${Date.now()}`;
+      const nextTour: AppTourDefinition = {
+          ...tour,
+          id,
+          title: `${tour.title} Copy`,
+          steps: tour.steps.map((step, index) => ({ ...step, id: `${id}_step_${index + 1}` })),
+      };
+      setAppTours((current) => ({ ...current, tours: [...current.tours, nextTour] }));
+      setSelectedTourId(id);
+  };
+
+  const handleDeleteTour = (tourId: string) => {
+      showConfirm('Xóa tour hướng dẫn này?', () => {
+          setAppTours((current) => {
+              const nextTours = current.tours.filter((tour) => tour.id !== tourId);
+              setSelectedTourId(nextTours[0]?.id || '');
+              return { ...current, tours: nextTours };
+          });
+      });
+  };
+
+  const handleAddTourStep = (tourId: string) => {
+      updateAppTour(tourId, (tour) => {
+          const nextOrder = (tour.steps || []).length + 1;
+          const fallbackTarget = APP_TOUR_TARGETS.find((target) => target.surface === tour.surface && (target.screen === tour.screen || target.screen === 'global'));
+          return {
+              ...tour,
+              steps: [
+                  ...tour.steps,
+                  {
+                      id: `step_${Date.now()}`,
+                      targetId: fallbackTarget?.id || '',
+                      title: 'Buoc huong dan',
+                      description: 'Nhap noi dung huong dan tai day.',
+                      placement: 'auto',
+                      order: nextOrder,
+                      isActive: true,
+                  },
+              ],
+          };
+      });
+  };
+
+  const handleDeleteTourStep = (tourId: string, stepId: string) => {
+      updateAppTour(tourId, (tour) => ({
+          ...tour,
+          steps: tour.steps.filter((step) => step.id !== stepId).map((step, index) => ({ ...step, order: index + 1 })),
+      }));
+  };
+
+  const handleSaveAppTours = async () => {
+      const result = await saveAppToursConfig(appTours);
+      if (result.success) {
+          window.dispatchEvent(new Event('auditionai:app-tours-updated'));
+          showToast('Đã lưu cấu hình hướng dẫn!', 'success');
+      } else {
+          showToast('Lỗi lưu hướng dẫn: ' + result.error, 'error');
+      }
+  };
   const getQueueHealthClass = (severity?: string) => {
       switch (severity) {
           case 'ok': return 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20';
@@ -1942,6 +2054,13 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       </div>
   );
 
+  const selectedTour = appTours.tours.find((tour) => tour.id === selectedTourId) || appTours.tours[0] || null;
+  const getTourTargetOptions = (tour: AppTourDefinition | null) => APP_TOUR_TARGETS.filter((target) => {
+      if (!tour) return true;
+      if (target.surface !== tour.surface) return false;
+      return target.screen === 'global' || target.screen === tour.screen || target.featureId === tour.featureId;
+  });
+
   return (
     <div className="min-h-screen pb-24 animate-fade-in bg-[#05050A]">
       {/* --- TOASTS CONTAINER --- */}
@@ -2015,6 +2134,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   { id: 'marketing', icon: Icons.Zap, label: 'Sự Kiện & Code' },
                   { id: 'pricing', icon: Icons.Gem, label: 'Bảng Giá' },
                   { id: 'styles', icon: Icons.Palette, label: 'Style Mẫu' },
+                  { id: 'tours', icon: Icons.Info, label: 'Hướng Dẫn' },
                   { id: 'system', icon: Icons.Cpu, label: 'Hệ Thống' },
               ].map(tab => (
                   <button
@@ -3184,6 +3304,103 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       {stylePresets.length === 0 && (
                           <div className="col-span-full py-12 text-center text-slate-500 italic border border-dashed border-white/10 rounded-2xl">
                               Chưa có style mẫu nào. Hãy thêm mới!
+                          </div>
+                      )}
+                  </div>
+              </div>
+           )}
+
+           {/* ================= VIEW: TOURS ================= */}
+           {activeView === 'tours' && (
+              <div className="space-y-6 animate-slide-in-right">
+                  <div className="bg-[#12121a] border border-white/10 rounded-2xl p-5 shadow-xl">
+                      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                          <div>
+                              <h2 className="text-lg md:text-2xl font-bold text-white flex items-center gap-2">
+                                  <Icons.Info className="w-5 h-5 text-audi-cyan" />
+                                  Hướng Dẫn Ứng Dụng
+                              </h2>
+                              <p className="mt-1 text-xs text-slate-400">Tạo tour riêng cho máy tính và điện thoại, theo từng màn hình hoặc từng công cụ.</p>
+                          </div>
+                          <div className="flex gap-2">
+                              <button onClick={handleAddTour} className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-bold">Thêm tour</button>
+                              <button onClick={handleSaveAppTours} className="px-5 py-2 rounded-xl bg-audi-cyan hover:bg-cyan-300 text-black text-xs font-black">Lưu cấu hình</button>
+                          </div>
+                      </div>
+                      <div className="mt-5 grid gap-4 md:grid-cols-3">
+                          <label className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Trạng thái</span>
+                              <select value={appTours.isActive ? 'on' : 'off'} onChange={(e) => setAppTours((c) => ({ ...c, isActive: e.target.value === 'on' }))} className="mt-2 w-full rounded-xl border border-white/10 bg-[#090914] px-3 py-2 text-sm font-bold text-white outline-none">
+                                  <option value="on">Bật toàn bộ</option>
+                                  <option value="off">Tắt toàn bộ</option>
+                              </select>
+                          </label>
+                          <label className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Tần suất</span>
+                              <select value={appTours.showFrequency} onChange={(e) => setAppTours((c) => ({ ...c, showFrequency: e.target.value as AppToursConfig['showFrequency'] }))} className="mt-2 w-full rounded-xl border border-white/10 bg-[#090914] px-3 py-2 text-sm font-bold text-white outline-none">
+                                  <option value="daily">Mỗi ngày một lần</option>
+                                  <option value="once">Chỉ một lần</option>
+                                  <option value="always">Luôn hiển thị</option>
+                              </select>
+                          </label>
+                          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Tổng tour</span>
+                              <div className="mt-2 text-3xl font-game font-bold text-white">{appTours.tours.length}</div>
+                          </div>
+                      </div>
+                  </div>
+
+                  <div className="grid gap-6 xl:grid-cols-[340px_1fr]">
+                      <div className="space-y-3">
+                          {appTours.tours.map((tour) => (
+                              <button key={tour.id} onClick={() => setSelectedTourId(tour.id)} className={`w-full rounded-2xl border p-4 text-left transition-all ${selectedTour?.id === tour.id ? 'border-audi-cyan bg-audi-cyan/10' : 'border-white/10 bg-[#12121a] hover:border-white/20'}`}>
+                                  <div className="flex items-center justify-between gap-3">
+                                      <span className="text-sm font-black text-white">{tour.title}</span>
+                                      <span className={`rounded-full px-2 py-1 text-[9px] font-black uppercase ${tour.surface === 'mobile' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-cyan-500/15 text-cyan-300'}`}>{tour.surface}</span>
+                                  </div>
+                                  <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-bold text-slate-500">
+                                      <span>{tour.screen}</span>
+                                      {tour.featureId && <span>{tour.featureId}</span>}
+                                      <span>{tour.steps.length} bước</span>
+                                      <span>{tour.isActive ? 'Bật' : 'Tắt'}</span>
+                                  </div>
+                              </button>
+                          ))}
+                      </div>
+
+                      {selectedTour && (
+                          <div className="space-y-4">
+                              <div className="rounded-2xl border border-white/10 bg-[#12121a] p-5">
+                                  <div className="grid gap-4 md:grid-cols-2">
+                                      <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Tên tour</span><input value={selectedTour.title} onChange={(e) => updateAppTour(selectedTour.id, (t) => ({ ...t, title: e.target.value }))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan" /></label>
+                                      <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Màn hình</span><input value={selectedTour.screen} onChange={(e) => updateAppTour(selectedTour.id, (t) => ({ ...t, screen: e.target.value.trim() || 'global' }))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan" /></label>
+                                      <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Giao diện</span><select value={selectedTour.surface} onChange={(e) => updateAppTour(selectedTour.id, (t) => ({ ...t, surface: e.target.value as AppTourDefinition['surface'] }))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan"><option value="desktop">Máy tính</option><option value="mobile">Điện thoại</option></select></label>
+                                      <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Feature ID</span><input value={selectedTour.featureId || ''} placeholder="Ví dụ: ai_image_tool, video_ai_gen" onChange={(e) => updateAppTour(selectedTour.id, (t) => ({ ...t, featureId: e.target.value.trim() || undefined }))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan" /></label>
+                                  </div>
+                                  <div className="mt-4 flex flex-wrap gap-2">
+                                      <button onClick={() => updateAppTour(selectedTour.id, (t) => ({ ...t, isActive: !t.isActive }))} className={`px-4 py-2 rounded-xl text-xs font-bold ${selectedTour.isActive ? 'bg-green-500/15 text-green-300' : 'bg-white/10 text-slate-300'}`}>{selectedTour.isActive ? 'Tour đang bật' : 'Tour đang tắt'}</button>
+                                      <button onClick={() => handleDuplicateTour(selectedTour)} className="px-4 py-2 rounded-xl bg-white/10 text-xs font-bold text-white hover:bg-white/15">Nhân bản</button>
+                                      <button onClick={() => handleAddTourStep(selectedTour.id)} className="px-4 py-2 rounded-xl bg-audi-purple text-xs font-bold text-white hover:bg-purple-600">Thêm bước</button>
+                                      <button onClick={() => handleDeleteTour(selectedTour.id)} className="ml-auto px-4 py-2 rounded-xl bg-red-500/15 text-xs font-bold text-red-300 hover:bg-red-500/25">Xóa tour</button>
+                                  </div>
+                              </div>
+
+                              {selectedTour.steps.slice().sort((a, b) => (a.order || 0) - (b.order || 0)).map((step, index) => (
+                                  <div key={step.id} className="rounded-2xl border border-white/10 bg-[#12121a] p-5">
+                                      <div className="mb-4 flex items-center justify-between">
+                                          <div className="flex items-center gap-2"><span className="grid h-8 w-8 place-items-center rounded-full bg-audi-cyan text-sm font-black text-black">{index + 1}</span><span className="text-sm font-black text-white">{step.title}</span></div>
+                                          <button onClick={() => handleDeleteTourStep(selectedTour.id, step.id)} className="text-xs font-bold text-red-300 hover:text-red-200">Xóa bước</button>
+                                      </div>
+                                      <div className="grid gap-4 md:grid-cols-2">
+                                          <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Vùng khoanh</span><select value={step.targetId} onChange={(e) => updateAppTourStep(selectedTour.id, step.id, (s) => ({ ...s, targetId: e.target.value }))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan">{getTourTargetOptions(selectedTour).map((target) => <option key={target.id} value={target.id}>{target.label}</option>)}</select></label>
+                                          <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Vị trí hộp</span><select value={step.placement || 'auto'} onChange={(e) => updateAppTourStep(selectedTour.id, step.id, (s) => ({ ...s, placement: e.target.value as AppTourStep['placement'] }))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan"><option value="auto">Tự động</option><option value="top">Trên</option><option value="right">Phải</option><option value="bottom">Dưới</option><option value="left">Trái</option></select></label>
+                                          <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Tiêu đề</span><input value={step.title} onChange={(e) => updateAppTourStep(selectedTour.id, step.id, (s) => ({ ...s, title: e.target.value }))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan" /></label>
+                                          <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Thứ tự</span><input type="number" value={step.order || index + 1} onChange={(e) => updateAppTourStep(selectedTour.id, step.id, (s) => ({ ...s, order: Number(e.target.value) || index + 1 }))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan" /></label>
+                                          <label className="md:col-span-2"><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Nội dung hướng dẫn</span><textarea value={step.description} onChange={(e) => updateAppTourStep(selectedTour.id, step.id, (s) => ({ ...s, description: e.target.value }))} rows={3} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm leading-relaxed text-white outline-none focus:border-audi-cyan" /></label>
+                                      </div>
+                                      <button onClick={() => updateAppTourStep(selectedTour.id, step.id, (s) => ({ ...s, isActive: s.isActive === false }))} className={`mt-4 rounded-xl px-4 py-2 text-xs font-bold ${step.isActive === false ? 'bg-white/10 text-slate-300' : 'bg-green-500/15 text-green-300'}`}>{step.isActive === false ? 'Bước đang tắt' : 'Bước đang bật'}</button>
+                                  </div>
+                              ))}
                           </div>
                       )}
                   </div>

@@ -20,7 +20,7 @@ export function BottomNav() {
   if (hiddenRoutes.includes(location.pathname)) return null;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 glass pb-safe">
+    <div data-tour-id="mobile.layout.bottomnav" className="fixed bottom-0 left-0 right-0 z-50 glass pb-safe">
       <div className="flex items-center justify-around px-2 py-2.5 mx-auto max-w-md">
         {tabs.map((tab) => {
           const isActive = location.pathname.startsWith(tab.path);

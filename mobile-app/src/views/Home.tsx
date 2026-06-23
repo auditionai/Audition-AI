@@ -121,7 +121,7 @@ export function Home() {
       </a>
 
       {/* Features Grid */}
-      <div className="space-y-4">
+      <div data-tour-id="mobile.home.features" className="space-y-4">
 
         {/* 1. Tạo Ảnh Audition AI */}
         <div

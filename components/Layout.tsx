@@ -101,6 +101,7 @@ export const Layout: React.FC<LayoutProps> = ({
          <div className="max-w-7xl mx-auto px-4 md:px-6 flex justify-between items-center">
             
             <div 
+              data-tour-id="desktop.layout.logo"
               className="flex items-center gap-3 cursor-pointer group"
               onClick={() => onNavigate('home')}
             >
@@ -117,6 +118,7 @@ export const Layout: React.FC<LayoutProps> = ({
 
             <div className="flex items-center gap-3">
                  <button 
+                    data-tour-id="desktop.layout.language"
                     onClick={() => setLang(lang === 'vi' ? 'en' : 'vi')}
                     className="px-3 py-1 rounded-full bg-white/5 border border-white/10 text-[10px] font-bold text-slate-400 hover:text-white hover:border-audi-cyan transition-colors uppercase tracking-wider"
                 >
@@ -135,7 +137,7 @@ export const Layout: React.FC<LayoutProps> = ({
       {/* --- DOCK --- */}
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex justify-center w-auto">
           
-          <div className="relative backdrop-blur-2xl bg-[#0c0c14]/90 border border-white/10 rounded-[2.5rem] p-2 pl-3 pr-3 shadow-[0_10px_40px_rgba(0,0,0,0.8)] flex items-center gap-3 md:gap-6 animate-slide-in-right">
+          <div data-tour-id="desktop.layout.dock" className="relative backdrop-blur-2xl bg-[#0c0c14]/90 border border-white/10 rounded-[2.5rem] p-2 pl-3 pr-3 shadow-[0_10px_40px_rgba(0,0,0,0.8)] flex items-center gap-3 md:gap-6 animate-slide-in-right">
               
               <div className="absolute -inset-1 bg-gradient-to-r from-audi-pink/20 via-audi-purple/20 to-audi-cyan/20 blur-xl -z-10 rounded-[3rem] opacity-50"></div>
               
@@ -162,6 +164,7 @@ export const Layout: React.FC<LayoutProps> = ({
                   
                   {/* Balance / Top Up */}
                   <button 
+                    data-tour-id="desktop.layout.vcoin"
                     onClick={() => onNavigate('topup')}
                     className="flex items-center gap-2 bg-black/40 hover:bg-white/10 px-3 py-1.5 rounded-full border border-audi-yellow/20 hover:border-audi-yellow transition-all group"
                   >
@@ -184,6 +187,7 @@ export const Layout: React.FC<LayoutProps> = ({
                    </button>
 
                   <button 
+                      data-tour-id="desktop.layout.profile"
                       onClick={() => onNavigate('settings')}
                       className={`relative w-11 h-11 md:w-12 md:h-12 rounded-full overflow-hidden border-2 transition-all group ${currentView === 'settings' ? 'border-audi-pink shadow-[0_0_15px_rgba(255,0,153,0.5)]' : 'border-white/10 hover:border-audi-pink'}`}
                   >

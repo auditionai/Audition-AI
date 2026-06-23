@@ -150,6 +150,7 @@ export const Home: React.FC<HomeProps> = ({ lang, onSelectFeature, onNavigate, o
           <div className="flex items-center gap-2">
              {/* CHECKIN BUTTON WITH PROMINENT EFFECT */}
              <button
+                data-tour-id="desktop.home.checkin"
                 onClick={onOpenCheckin}
                 className={`px-4 py-1.5 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all active:scale-95 ${
                     !isCheckedIn
@@ -220,7 +221,7 @@ export const Home: React.FC<HomeProps> = ({ lang, onSelectFeature, onNavigate, o
       {/* SECTION 1: STUDIO AI (Generation) */}
       <div className="animate-fade-in">
         <div className="flex items-end justify-between mb-8 border-b border-white/10 pb-4">
-            <div>
+      <div data-tour-id="desktop.home.features">
                 <h2 className="font-game text-3xl font-bold text-white flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-audi-cyan/10 flex items-center justify-center">
                         <Icons.Wand className="w-5 h-5 text-audi-cyan" />

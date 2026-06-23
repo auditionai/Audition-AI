@@ -745,7 +745,7 @@ export function WorkspaceVideo() {
         {activeMode === 'video_ai' ? (
           <div className="space-y-6">
             {/* Keyframe Upload */}
-            <div className="space-y-2">
+            <div data-tour-id="mobile.video.upload" className="space-y-2">
               <h3 className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider ml-1">Ảnh Gốc (Bắt Buộc)</h3>
               <button
                 onClick={() => triggerUpload('keyframe')}
@@ -769,7 +769,7 @@ export function WorkspaceVideo() {
             </div>
 
             {/* Prompt */}
-            <div className="relative group">
+            <div data-tour-id="mobile.video.prompt" className="relative group">
               <h3 className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider ml-1 mb-2">Chuyển động mong muốn</h3>
               <div className="relative bg-white dark:bg-[#18181B] rounded-[20px] p-4 shadow-[0_4px_20px_rgb(0,0,0,0.04)] ring-1 ring-gray-100 dark:ring-zinc-800 focus-within:ring-2 focus-within:ring-purple-400">
                 <textarea
@@ -951,7 +951,7 @@ export function WorkspaceVideo() {
         ) : (
           <div className="space-y-6">
             {/* Motion Uploads */}
-            <div className="grid grid-cols-2 gap-3">
+            <div data-tour-id="mobile.video.upload" className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <h3 className="text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase text-center">Ảnh Nhân vật</h3>
                 <button
@@ -1079,7 +1079,7 @@ export function WorkspaceVideo() {
               </div>
             </div>
             
-            <div className="relative group">
+            <div data-tour-id="mobile.video.prompt" className="relative group">
               <h3 className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider ml-1 mb-2">Prompt (Không bắt buộc)</h3>
               <div className="relative bg-white dark:bg-[#18181B] rounded-[20px] p-3 shadow-[0_4px_20px_rgb(0,0,0,0.04)] ring-1 ring-gray-100 dark:ring-zinc-800 focus-within:ring-2 focus-within:ring-purple-400">
                 <textarea
@@ -1119,6 +1119,7 @@ export function WorkspaceVideo() {
           </div>
         )}
         <Button
+          data-tour-id="mobile.video.generate"
           size="lg"
           className="w-full shadow-[0_8px_30px_rgb(168,85,247,0.3)] flex items-center justify-center gap-3 bg-gradient-to-r from-purple-500 to-indigo-500 relative overflow-hidden group border-0 text-white rounded-[16px]"
           disabled={isGenerateDisabled || stage === 'submitting'}

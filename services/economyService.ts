@@ -117,6 +117,36 @@ export type FeatureMaintenanceConfig = {
     updatedAt?: string;
 };
 
+export type AppTourSurface = 'desktop' | 'mobile';
+export type AppTourPlacement = 'auto' | 'top' | 'right' | 'bottom' | 'left';
+
+export type AppTourStep = {
+    id: string;
+    targetId: string;
+    title: string;
+    description: string;
+    placement?: AppTourPlacement;
+    order?: number;
+    isActive?: boolean;
+};
+
+export type AppTourDefinition = {
+    id: string;
+    title: string;
+    surface: AppTourSurface;
+    screen: string;
+    featureId?: string;
+    isActive: boolean;
+    steps: AppTourStep[];
+};
+
+export type AppToursConfig = {
+    isActive: boolean;
+    showFrequency: 'daily' | 'once' | 'always';
+    tours: AppTourDefinition[];
+    updatedAt?: string;
+};
+
 const DEFAULT_PAYMENT_GATEWAY_CONFIG: PaymentGatewayConfig = {
     gateway: 'sepay',
 };
@@ -131,6 +161,126 @@ export const DEFAULT_SYSTEM_ANNOUNCEMENT_CONFIG: SystemAnnouncementConfig = {
 export const DEFAULT_FEATURE_MAINTENANCE_CONFIG: FeatureMaintenanceConfig = {
     disabledFeatureIds: [],
     message: 'Tính năng đang bảo trì. Vui lòng quay lại sau.',
+};
+
+export const APP_TOUR_TARGETS: Array<{ id: string; label: string; surface: AppTourSurface; screen: string; featureId?: string }> = [
+    { id: 'desktop.layout.logo', label: 'Desktop - Logo / home', surface: 'desktop', screen: 'global' },
+    { id: 'desktop.layout.language', label: 'Desktop - Language switch', surface: 'desktop', screen: 'global' },
+    { id: 'desktop.layout.dock', label: 'Desktop - Bottom dock', surface: 'desktop', screen: 'global' },
+    { id: 'desktop.layout.vcoin', label: 'Desktop - VCOIN balance/top up', surface: 'desktop', screen: 'global' },
+    { id: 'desktop.layout.profile', label: 'Desktop - Profile/settings', surface: 'desktop', screen: 'global' },
+    { id: 'desktop.home.checkin', label: 'Desktop - Daily check-in', surface: 'desktop', screen: 'home' },
+    { id: 'desktop.home.features', label: 'Desktop - Tool cards', surface: 'desktop', screen: 'home' },
+    { id: 'desktop.tool.back', label: 'Desktop - Tool back button', surface: 'desktop', screen: 'tool_workspace' },
+    { id: 'desktop.image.references', label: 'Desktop - Prompt image references', surface: 'desktop', screen: 'tool_workspace', featureId: 'ai_image_tool' },
+    { id: 'desktop.image.prompt', label: 'Desktop - Prompt image prompt', surface: 'desktop', screen: 'tool_workspace', featureId: 'ai_image_tool' },
+    { id: 'desktop.image.model', label: 'Desktop - Prompt image model/settings', surface: 'desktop', screen: 'tool_workspace', featureId: 'ai_image_tool' },
+    { id: 'desktop.image.generate', label: 'Desktop - Prompt image generate button', surface: 'desktop', screen: 'tool_workspace', featureId: 'ai_image_tool' },
+    { id: 'desktop.generation.prompt', label: 'Desktop - Studio image prompt', surface: 'desktop', screen: 'tool_workspace' },
+    { id: 'desktop.generation.characters', label: 'Desktop - Studio image characters', surface: 'desktop', screen: 'tool_workspace' },
+    { id: 'desktop.generation.settings', label: 'Desktop - Studio image settings', surface: 'desktop', screen: 'tool_workspace' },
+    { id: 'desktop.generation.generate', label: 'Desktop - Studio image generate button', surface: 'desktop', screen: 'tool_workspace' },
+    { id: 'desktop.video.mode', label: 'Desktop - Video mode switch', surface: 'desktop', screen: 'tool_workspace', featureId: 'video_ai_gen' },
+    { id: 'desktop.video.upload', label: 'Desktop - Video upload area', surface: 'desktop', screen: 'tool_workspace', featureId: 'video_ai_gen' },
+    { id: 'desktop.video.prompt', label: 'Desktop - Video/motion prompt', surface: 'desktop', screen: 'tool_workspace', featureId: 'video_ai_gen' },
+    { id: 'desktop.video.model', label: 'Desktop - Video/motion model settings', surface: 'desktop', screen: 'tool_workspace', featureId: 'video_ai_gen' },
+    { id: 'desktop.video.generate', label: 'Desktop - Video/motion generate button', surface: 'desktop', screen: 'tool_workspace', featureId: 'video_ai_gen' },
+    { id: 'mobile.layout.topbar', label: 'Mobile - Top bar', surface: 'mobile', screen: 'global' },
+    { id: 'mobile.layout.vcoin', label: 'Mobile - VCOIN balance', surface: 'mobile', screen: 'global' },
+    { id: 'mobile.layout.profile', label: 'Mobile - Profile/settings', surface: 'mobile', screen: 'global' },
+    { id: 'mobile.layout.bottomnav', label: 'Mobile - Bottom navigation', surface: 'mobile', screen: 'global' },
+    { id: 'mobile.home.features', label: 'Mobile - Tool cards', surface: 'mobile', screen: 'home' },
+    { id: 'mobile.image.prompt', label: 'Mobile - Prompt image prompt', surface: 'mobile', screen: 'tool_workspace', featureId: 'ai_image_tool' },
+    { id: 'mobile.image.references', label: 'Mobile - Prompt image references', surface: 'mobile', screen: 'tool_workspace', featureId: 'ai_image_tool' },
+    { id: 'mobile.image.generate', label: 'Mobile - Prompt image generate button', surface: 'mobile', screen: 'tool_workspace', featureId: 'ai_image_tool' },
+    { id: 'mobile.video.upload', label: 'Mobile - Video upload area', surface: 'mobile', screen: 'tool_workspace', featureId: 'video_ai_gen' },
+    { id: 'mobile.video.prompt', label: 'Mobile - Video/motion prompt', surface: 'mobile', screen: 'tool_workspace', featureId: 'video_ai_gen' },
+    { id: 'mobile.video.generate', label: 'Mobile - Video/motion generate button', surface: 'mobile', screen: 'tool_workspace', featureId: 'video_ai_gen' },
+];
+
+export const DEFAULT_APP_TOURS_CONFIG: AppToursConfig = {
+    isActive: true,
+    showFrequency: 'daily',
+    tours: [
+        {
+            id: 'desktop_home_intro',
+            title: 'Huong dan trang chu may tinh',
+            surface: 'desktop',
+            screen: 'home',
+            isActive: true,
+            steps: [
+                { id: 'desktop_home_intro_1', targetId: 'desktop.home.features', title: 'Chon cong cu AI', description: 'Chon cong cu tao anh, chinh sua anh hoac tao video de bat dau.', placement: 'top', order: 1, isActive: true },
+                { id: 'desktop_home_intro_2', targetId: 'desktop.home.checkin', title: 'Diem danh moi ngay', description: 'Bam vao day de nhan phan thuong diem danh khi co luot kha dung.', placement: 'left', order: 2, isActive: true },
+                { id: 'desktop_home_intro_3', targetId: 'desktop.layout.vcoin', title: 'So du VCOIN', description: 'Theo doi so du va nap them VCOIN de su dung cac tinh nang AI.', placement: 'top', order: 3, isActive: true },
+            ],
+        },
+        {
+            id: 'desktop_image_tool_intro',
+            title: 'Huong dan tao anh may tinh',
+            surface: 'desktop',
+            screen: 'tool_workspace',
+            featureId: 'ai_image_tool',
+            isActive: true,
+            steps: [
+                { id: 'desktop_image_tool_1', targetId: 'desktop.image.references', title: 'Anh tham chieu', description: 'Tai anh mau neu ban muon AI bam theo nhan vat, bo cuc hoac phong cach cu the.', placement: 'right', order: 1, isActive: true },
+                { id: 'desktop_image_tool_2', targetId: 'desktop.image.prompt', title: 'Prompt tao anh', description: 'Nhap mo ta anh cang ro thi ket qua cang sat y tuong.', placement: 'top', order: 2, isActive: true },
+                { id: 'desktop_image_tool_3', targetId: 'desktop.image.model', title: 'Model va cau hinh', description: 'Chon model, chat luong va toc do phu hop voi nhu cau.', placement: 'left', order: 3, isActive: true },
+                { id: 'desktop_image_tool_4', targetId: 'desktop.image.generate', title: 'Tao anh', description: 'Kiem tra chi phi VCOIN roi bam tao de dua job vao hang doi.', placement: 'top', order: 4, isActive: true },
+            ],
+        },
+        {
+            id: 'desktop_video_tool_intro',
+            title: 'Huong dan tao video may tinh',
+            surface: 'desktop',
+            screen: 'tool_workspace',
+            featureId: 'video_ai_gen',
+            isActive: true,
+            steps: [
+                { id: 'desktop_video_tool_1', targetId: 'desktop.video.mode', title: 'Chon che do video', description: 'Chuyen giua tao Video AI va Motion Control tuy muc dich.', placement: 'bottom', order: 1, isActive: true },
+                { id: 'desktop_video_tool_2', targetId: 'desktop.video.upload', title: 'Tai tu lieu', description: 'Tai anh keyframe cho Video AI hoac anh nhan vat/video chuyen dong cho Motion Control.', placement: 'right', order: 2, isActive: true },
+                { id: 'desktop_video_tool_3', targetId: 'desktop.video.prompt', title: 'Mo ta chuyen dong', description: 'Viet y tuong, hanh dong, boi canh hoac yeu cau chuyen dong cho video.', placement: 'top', order: 3, isActive: true },
+                { id: 'desktop_video_tool_4', targetId: 'desktop.video.generate', title: 'Tao video', description: 'Kiem tra VCOIN va bam tao de gui job render video.', placement: 'top', order: 4, isActive: true },
+            ],
+        },
+        {
+            id: 'mobile_home_intro',
+            title: 'Huong dan trang chu dien thoai',
+            surface: 'mobile',
+            screen: 'home',
+            isActive: true,
+            steps: [
+                { id: 'mobile_home_intro_1', targetId: 'mobile.layout.topbar', title: 'Thanh tai khoan', description: 'Xem nhanh so du, uu dai va mo trang tai khoan.', placement: 'bottom', order: 1, isActive: true },
+                { id: 'mobile_home_intro_2', targetId: 'mobile.home.features', title: 'Chon cong cu', description: 'Chon cong cu AI ban muon dung tren dien thoai.', placement: 'top', order: 2, isActive: true },
+                { id: 'mobile_home_intro_3', targetId: 'mobile.layout.bottomnav', title: 'Dieu huong nhanh', description: 'Dung thanh duoi de chuyen giua trang chu, thu vien, nap tien va tai khoan.', placement: 'top', order: 3, isActive: true },
+            ],
+        },
+        {
+            id: 'mobile_image_tool_intro',
+            title: 'Huong dan tao anh dien thoai',
+            surface: 'mobile',
+            screen: 'tool_workspace',
+            featureId: 'ai_image_tool',
+            isActive: true,
+            steps: [
+                { id: 'mobile_image_tool_1', targetId: 'mobile.image.references', title: 'Anh tham chieu', description: 'Them anh mau de AI hieu nhan vat hoac phong cach ban muon.', placement: 'bottom', order: 1, isActive: true },
+                { id: 'mobile_image_tool_2', targetId: 'mobile.image.prompt', title: 'Prompt tao anh', description: 'Nhap mo ta ro rang truoc khi tao anh.', placement: 'top', order: 2, isActive: true },
+                { id: 'mobile_image_tool_3', targetId: 'mobile.image.generate', title: 'Bam tao', description: 'Kiem tra chi phi roi gui yeu cau tao anh.', placement: 'top', order: 3, isActive: true },
+            ],
+        },
+        {
+            id: 'mobile_video_tool_intro',
+            title: 'Huong dan tao video dien thoai',
+            surface: 'mobile',
+            screen: 'tool_workspace',
+            featureId: 'video_ai_gen',
+            isActive: true,
+            steps: [
+                { id: 'mobile_video_tool_1', targetId: 'mobile.video.upload', title: 'Tai anh hoac video mau', description: 'Chuan bi tu lieu dau vao cho Video AI hoac Motion Control.', placement: 'bottom', order: 1, isActive: true },
+                { id: 'mobile_video_tool_2', targetId: 'mobile.video.prompt', title: 'Mo ta video', description: 'Viet chuyen dong, boi canh va y tuong chinh.', placement: 'top', order: 2, isActive: true },
+                { id: 'mobile_video_tool_3', targetId: 'mobile.video.generate', title: 'Tao video', description: 'Bam tao de dua video vao hang doi xu ly.', placement: 'top', order: 3, isActive: true },
+            ],
+        },
+    ],
 };
 
 let userProfileCache: (TimedCache<UserProfile> & { userId: string }) | null = null;
@@ -2515,6 +2665,97 @@ export const saveSystemAnnouncementConfig = async (config: SystemAnnouncementCon
         return { success: true };
     } catch (e: any) {
         console.error("Save System Announcement Config Error", e);
+        return { success: false, error: e?.message || e };
+    }
+};
+
+// --- APP TOURS ---
+
+const normalizeTourPlacement = (value: any): AppTourPlacement => {
+    const placement = String(value || '').toLowerCase();
+    return placement === 'top' || placement === 'right' || placement === 'bottom' || placement === 'left' ? placement : 'auto';
+};
+
+const normalizeAppTourStep = (value: any, index: number): AppTourStep => ({
+    id: String(value?.id || `step_${Date.now()}_${index}`).trim(),
+    targetId: String(value?.targetId || '').trim(),
+    title: String(value?.title || 'Huong dan').trim() || 'Huong dan',
+    description: String(value?.description || '').trim(),
+    placement: normalizeTourPlacement(value?.placement),
+    order: Number.isFinite(Number(value?.order)) ? Number(value.order) : index + 1,
+    isActive: value?.isActive !== false,
+});
+
+const normalizeAppTour = (value: any, index: number): AppTourDefinition => {
+    const surface = String(value?.surface || '').toLowerCase() === 'mobile' ? 'mobile' : 'desktop';
+    const steps = Array.isArray(value?.steps)
+        ? value.steps
+            .map(normalizeAppTourStep)
+            .filter((step: AppTourStep) => step.targetId && step.title)
+            .sort((left: AppTourStep, right: AppTourStep) => (left.order || 0) - (right.order || 0))
+        : [];
+
+    return {
+        id: String(value?.id || `tour_${surface}_${index + 1}`).trim(),
+        title: String(value?.title || 'Huong dan ung dung').trim() || 'Huong dan ung dung',
+        surface,
+        screen: String(value?.screen || 'global').trim() || 'global',
+        featureId: String(value?.featureId || '').trim() || undefined,
+        isActive: value?.isActive !== false,
+        steps,
+    };
+};
+
+const normalizeAppToursConfig = (value: any): AppToursConfig => {
+    const frequency = String(value?.showFrequency || '').toLowerCase();
+    const showFrequency = frequency === 'once' || frequency === 'always' ? frequency : 'daily';
+    const sourceTours = Array.isArray(value?.tours) ? value.tours : DEFAULT_APP_TOURS_CONFIG.tours;
+    const tours = sourceTours
+        .map(normalizeAppTour)
+        .filter((tour: AppTourDefinition) => tour.id && tour.steps.length > 0);
+
+    return {
+        isActive: value?.isActive !== false,
+        showFrequency,
+        tours,
+        updatedAt: typeof value?.updatedAt === 'string' ? value.updatedAt : undefined,
+    };
+};
+
+export const getAppToursConfig = async (): Promise<AppToursConfig> => {
+    if (!supabase) return DEFAULT_APP_TOURS_CONFIG;
+    try {
+        const { data, error } = await supabase
+            .from('system_settings')
+            .select('value')
+            .eq('key', 'app_tours')
+            .maybeSingle();
+        if (error) throw error;
+
+        return normalizeAppToursConfig(data?.value || DEFAULT_APP_TOURS_CONFIG);
+    } catch (e) {
+        console.error("Get App Tours Config Error", e);
+        return DEFAULT_APP_TOURS_CONFIG;
+    }
+};
+
+export const saveAppToursConfig = async (config: AppToursConfig) => {
+    if (!supabase) return { success: false, error: "No Database" };
+    try {
+        const normalizedConfig = normalizeAppToursConfig(config);
+        const payload = {
+            ...normalizedConfig,
+            updatedAt: new Date().toISOString(),
+        };
+        const { error } = await supabase.from('system_settings').upsert(
+            { key: 'app_tours', value: payload },
+            { onConflict: 'key' },
+        );
+
+        if (error) throw error;
+        return { success: true };
+    } catch (e: any) {
+        console.error("Save App Tours Config Error", e);
         return { success: false, error: e?.message || e };
     }
 };

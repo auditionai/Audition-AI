@@ -391,7 +391,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6">
         <div className="space-y-4">
-          <section>
+          <section data-tour-id="desktop.image.references">
             <div className="flex items-center justify-between mb-3 px-1">
               <h3 className="text-sm font-bold uppercase text-white flex items-center gap-2">
                 <Upload className="w-4 h-4 text-audi-pink" />
@@ -443,7 +443,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
             </div>
           </section>
 
-          <section className="rounded-2xl border border-white/10 bg-[#11121a] p-4 shadow-lg">
+          <section data-tour-id="desktop.image.prompt" className="rounded-2xl border border-white/10 bg-[#11121a] p-4 shadow-lg">
             <h3 className="text-sm font-bold uppercase text-white mb-3 flex items-center gap-2">
               <MessageSquare className="w-4 h-4 text-cyan-300" />
               2. Mô tả
@@ -460,7 +460,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
           </section>
         </div>
 
-        <aside className="h-fit rounded-2xl border border-white/10 bg-[#12121a] p-5 sticky top-4 shadow-lg">
+        <aside data-tour-id="desktop.image.model" className="h-fit rounded-2xl border border-white/10 bg-[#12121a] p-5 sticky top-4 shadow-lg">
           <div className="flex items-center justify-between border-b border-white/10 pb-3">
             <h3 className="font-bold text-white flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-slate-400" />
@@ -664,6 +664,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
             </div>
 
             <button
+              data-tour-id="desktop.image.generate"
               type="button"
               onClick={handleSubmit}
               disabled={isSubmitting}

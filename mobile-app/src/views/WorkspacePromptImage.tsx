@@ -374,7 +374,7 @@ export function WorkspacePromptImage() {
         <h1 className="text-xl font-black text-gray-950 dark:text-white">Tạo Ảnh AI</h1>
       </header>
 
-      <section className="rounded-[24px] border border-gray-200 dark:border-zinc-800 bg-white dark:bg-[#18181B] p-3 shadow-sm">
+      <section data-tour-id="mobile.image.references" className="rounded-[24px] border border-gray-200 dark:border-zinc-800 bg-white dark:bg-[#18181B] p-3 shadow-sm">
         <div className="flex items-center justify-between mb-2.5">
           <h2 className="text-sm font-black text-gray-950 dark:text-white">1. Upload ảnh</h2>
           <span className="text-[11px] font-bold text-gray-400 dark:text-zinc-500">{uploadedCount}/{maxReferenceImages}</span>
@@ -412,7 +412,7 @@ export function WorkspacePromptImage() {
         </div>
       </section>
 
-      <section className="rounded-[24px] border border-gray-200 dark:border-zinc-800 bg-white dark:bg-[#18181B] p-3 shadow-sm">
+      <section data-tour-id="mobile.image.prompt" className="rounded-[24px] border border-gray-200 dark:border-zinc-800 bg-white dark:bg-[#18181B] p-3 shadow-sm">
         <h2 className="text-sm font-black text-gray-950 dark:text-white mb-3">2. Mô tả</h2>
         <textarea
           value={prompt}
@@ -608,6 +608,7 @@ export function WorkspacePromptImage() {
       </div>
 
       <button
+        data-tour-id="mobile.image.generate"
         type="button"
         onClick={submit}
         disabled={isGenerateDisabled}

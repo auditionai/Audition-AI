@@ -2055,11 +2055,39 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   );
 
   const selectedTour = appTours.tours.find((tour) => tour.id === selectedTourId) || appTours.tours[0] || null;
+  const tourFeatureIds = (tour: AppTourDefinition | null) =>
+      (tour?.featureId || '').split(',').map((value) => value.trim()).filter(Boolean);
   const getTourTargetOptions = (tour: AppTourDefinition | null) => APP_TOUR_TARGETS.filter((target) => {
       if (!tour) return true;
       if (target.surface !== tour.surface) return false;
-      return target.screen === 'global' || target.screen === tour.screen || target.featureId === tour.featureId;
+      const featureIds = tourFeatureIds(tour);
+      const featureMatches = !target.featureId || featureIds.length === 0 || featureIds.includes(target.featureId);
+      return (target.screen === 'global' || target.screen === tour.screen) && featureMatches;
   });
+  const getTourTargetMeta = (targetId: string) => APP_TOUR_TARGETS.find((target) => target.id === targetId);
+  const getTourTargetDescription = (targetId: string) => {
+      if (targetId.includes('.layout.logo')) return 'Khoanh vùng logo AUDITION AI ở header. Người dùng có thể bấm để quay về trang chủ.';
+      if (targetId.includes('.layout.language')) return 'Khoanh vùng nút đổi ngôn ngữ trên header máy tính.';
+      if (targetId.includes('.layout.dock') || targetId.includes('.layout.bottomnav')) return 'Khoanh vùng thanh điều hướng chính ở cạnh dưới màn hình.';
+      if (targetId.includes('.layout.vcoin')) return 'Khoanh vùng khu vực số dư VCOIN và lối vào nạp tiền.';
+      if (targetId.includes('.layout.profile')) return 'Khoanh vùng nút tài khoản/cài đặt của người dùng.';
+      if (targetId.includes('.home.checkin')) return 'Khoanh vùng nút điểm danh trên trang chủ.';
+      if (targetId.includes('.home.features')) return 'Khoanh vùng danh sách công cụ AI trên trang chủ.';
+      if (targetId.includes('.generation.characters')) return 'Khoanh vùng khu vực tải ảnh nhân vật trong trình tạo ảnh Audition.';
+      if (targetId.includes('.generation.prompt')) return 'Khoanh vùng ô nhập mô tả/prompt trong trình tạo ảnh Audition.';
+      if (targetId.includes('.generation.settings')) return 'Khoanh vùng khu vực chọn model, khung hình, độ phân giải, tốc độ và server trong trình tạo ảnh Audition.';
+      if (targetId.includes('.generation.generate')) return 'Khoanh vùng nút bắt đầu tạo ảnh Audition.';
+      if (targetId.includes('.image.references')) return 'Khoanh vùng khu vực ảnh tham chiếu của công cụ tạo ảnh AI.';
+      if (targetId.includes('.image.prompt')) return 'Khoanh vùng ô nhập prompt của công cụ tạo ảnh AI.';
+      if (targetId.includes('.image.settings') || targetId.includes('.image.model')) return 'Khoanh vùng khu vực chọn model, tỷ lệ, độ phân giải, tốc độ và máy chủ của công cụ tạo ảnh AI.';
+      if (targetId.includes('.image.generate')) return 'Khoanh vùng nút tạo ảnh của công cụ tạo ảnh AI.';
+      if (targetId.includes('.video.mode')) return 'Khoanh vùng nút chuyển giữa Video AI và Motion Control.';
+      if (targetId.includes('.video.upload')) return 'Khoanh vùng khu vực tải ảnh/video đầu vào cho Video AI hoặc Motion Control.';
+      if (targetId.includes('.video.prompt')) return 'Khoanh vùng ô mô tả chuyển động/kịch bản video.';
+      if (targetId.includes('.video.settings') || targetId.includes('.video.model')) return 'Khoanh vùng khu vực chọn model, thời lượng, độ phân giải, tốc độ và máy chủ video.';
+      if (targetId.includes('.video.generate')) return 'Khoanh vùng nút tạo video.';
+      return 'Vị trí đã được gắn data-tour-id trong giao diện. Chọn target này để khoanh đúng khu vực tương ứng khi tour chạy.';
+  };
 
   return (
     <div className="min-h-screen pb-24 animate-fade-in bg-[#05050A]">
@@ -3394,6 +3422,22 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       <div className="grid gap-4 md:grid-cols-2">
                                           <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Vùng khoanh</span><select value={step.targetId} onChange={(e) => updateAppTourStep(selectedTour.id, step.id, (s) => ({ ...s, targetId: e.target.value }))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan">{getTourTargetOptions(selectedTour).map((target) => <option key={target.id} value={target.id}>{target.label}</option>)}</select></label>
                                           <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Vị trí hộp</span><select value={step.placement || 'auto'} onChange={(e) => updateAppTourStep(selectedTour.id, step.id, (s) => ({ ...s, placement: e.target.value as AppTourStep['placement'] }))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan"><option value="auto">Tự động</option><option value="top">Trên</option><option value="right">Phải</option><option value="bottom">Dưới</option><option value="left">Trái</option></select></label>
+                                          <div className="md:col-span-2 rounded-2xl border border-audi-cyan/20 bg-audi-cyan/5 p-4">
+                                              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                                                  <div>
+                                                      <div className="text-sm font-black text-white">{getTourTargetMeta(step.targetId)?.label || 'Chưa chọn vùng khoanh'}</div>
+                                                      <div className="mt-1 font-mono text-[10px] text-audi-cyan">{step.targetId || 'data-tour-id'}</div>
+                                                  </div>
+                                                  {getTourTargetMeta(step.targetId) && (
+                                                      <div className="flex flex-wrap gap-1.5 text-[9px] font-bold uppercase">
+                                                          <span className="rounded-full bg-white/10 px-2 py-1 text-slate-300">{getTourTargetMeta(step.targetId)?.surface}</span>
+                                                          <span className="rounded-full bg-white/10 px-2 py-1 text-slate-300">{getTourTargetMeta(step.targetId)?.screen}</span>
+                                                          {getTourTargetMeta(step.targetId)?.featureId && <span className="rounded-full bg-audi-purple/20 px-2 py-1 text-audi-purple">{getTourTargetMeta(step.targetId)?.featureId}</span>}
+                                                      </div>
+                                                  )}
+                                              </div>
+                                              <p className="mt-3 text-xs leading-relaxed text-slate-300">{getTourTargetDescription(step.targetId)}</p>
+                                          </div>
                                           <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Tiêu đề</span><input value={step.title} onChange={(e) => updateAppTourStep(selectedTour.id, step.id, (s) => ({ ...s, title: e.target.value }))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan" /></label>
                                           <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Thứ tự</span><input type="number" value={step.order || index + 1} onChange={(e) => updateAppTourStep(selectedTour.id, step.id, (s) => ({ ...s, order: Number(e.target.value) || index + 1 }))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan" /></label>
                                           <label className="md:col-span-2"><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Nội dung hướng dẫn</span><textarea value={step.description} onChange={(e) => updateAppTourStep(selectedTour.id, step.id, (s) => ({ ...s, description: e.target.value }))} rows={3} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm leading-relaxed text-white outline-none focus:border-audi-cyan" /></label>

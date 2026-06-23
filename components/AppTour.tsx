@@ -20,7 +20,6 @@ const STORAGE_PREFIX = 'auditionai:tour:last-shown';
 const TOUR_REFRESH_EVENT = 'auditionai:app-tours-updated';
 
 const getTodayKey = () => new Date().toISOString().slice(0, 10);
-
 const getStorageKey = (tour: AppTourDefinition) => `${STORAGE_PREFIX}:${tour.surface}:${tour.id}`;
 
 const hasSeenTour = (tour: AppTourDefinition, frequency: string) => {
@@ -43,21 +42,20 @@ const getActiveSteps = (tour: AppTourDefinition) =>
     .filter((step) => step.isActive !== false && step.targetId)
     .sort((left, right) => (left.order || 0) - (right.order || 0));
 
-const selectTour = (tours: AppTourDefinition[], surface: AppTourSurface, screen: string, featureId?: string | null) => {
-  const featureMatches = (tourFeatureId?: string) => {
-    if (!tourFeatureId) return true;
-    return tourFeatureId
-      .split(',')
-      .map((value) => value.trim())
-      .filter(Boolean)
-      .includes(String(featureId || ''));
-  };
+const featureIdMatches = (tourFeatureId: string | undefined, featureId: string | null | undefined) => {
+  if (!tourFeatureId) return true;
+  return tourFeatureId
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .includes(String(featureId || ''));
+};
 
+const selectTour = (tours: AppTourDefinition[], surface: AppTourSurface, screen: string, featureId?: string | null) => {
   const active = tours.filter((tour) => {
     if (!tour.isActive || tour.surface !== surface) return false;
-    const screenMatches = tour.screen === screen || tour.screen === 'global';
-    if (!screenMatches) return false;
-    if (!featureMatches(tour.featureId)) return false;
+    if (tour.screen !== screen && tour.screen !== 'global') return false;
+    if (!featureIdMatches(tour.featureId, featureId)) return false;
     return getActiveSteps(tour).length > 0;
   });
 
@@ -70,10 +68,12 @@ const selectTour = (tours: AppTourDefinition[], surface: AppTourSurface, screen:
   })[0] || null;
 };
 
-const getTooltipStyle = (rect: TargetRect, placement: AppTourStep['placement']) => {
-  const margin = 22;
-  const tooltipWidth = Math.min(410, window.innerWidth - 32);
-  const tooltipHeight = 250;
+const getTooltipStyle = (rect: TargetRect, placement: AppTourStep['placement'], surface: AppTourSurface) => {
+  const margin = surface === 'mobile' ? 12 : 16;
+  const tooltipWidth = surface === 'mobile'
+    ? Math.min(310, window.innerWidth - 24)
+    : Math.min(340, window.innerWidth - 32);
+  const tooltipHeight = surface === 'mobile' ? 190 : 205;
   const preferred = placement && placement !== 'auto' ? placement : rect.top > window.innerHeight / 2 ? 'top' : 'bottom';
 
   let top = rect.top + rect.height + margin;
@@ -89,8 +89,8 @@ const getTooltipStyle = (rect: TargetRect, placement: AppTourStep['placement']) 
     left = rect.left + rect.width + margin;
   }
 
-  top = Math.max(16, Math.min(top, window.innerHeight - tooltipHeight - 16));
-  left = Math.max(16, Math.min(left, window.innerWidth - tooltipWidth - 16));
+  top = Math.max(10, Math.min(top, window.innerHeight - tooltipHeight - 10));
+  left = Math.max(10, Math.min(left, window.innerWidth - tooltipWidth - 10));
 
   return { top, left, width: tooltipWidth };
 };
@@ -105,7 +105,6 @@ export const AppTour: React.FC<AppTourProps> = ({ surface, screen, featureId, di
   useEffect(() => {
     if (disabled) return;
     let disposed = false;
-
     const load = async () => {
       const next = await getAppToursConfig();
       if (!disposed) setConfig(next);
@@ -148,7 +147,7 @@ export const AppTour: React.FC<AppTourProps> = ({ surface, screen, featureId, di
       if (!target) {
         attempts += 1;
         if (attempts < 8) {
-          window.setTimeout(syncRect, 150);
+          window.setTimeout(syncRect, 140);
           return;
         }
         goNext();
@@ -159,14 +158,9 @@ export const AppTour: React.FC<AppTourProps> = ({ surface, screen, featureId, di
       window.setTimeout(() => {
         if (disposed) return;
         const nextRect = target.getBoundingClientRect();
-        setRect({
-          top: nextRect.top,
-          left: nextRect.left,
-          width: nextRect.width,
-          height: nextRect.height,
-        });
+        setRect({ top: nextRect.top, left: nextRect.left, width: nextRect.width, height: nextRect.height });
         setReady(true);
-      }, 260);
+      }, 220);
     };
 
     setReady(false);
@@ -205,83 +199,116 @@ export const AppTour: React.FC<AppTourProps> = ({ surface, screen, featureId, di
 
   if (!activeTour || !currentStep || !rect || !ready || typeof document === 'undefined') return null;
 
-  const tooltipStyle = getTooltipStyle(rect, currentStep.placement);
+  const tooltipStyle = getTooltipStyle(rect, currentStep.placement, surface);
+  const isMobile = surface === 'mobile';
+
+  const highlightStyle: React.CSSProperties = {
+    top: rect.top - (isMobile ? 5 : 7),
+    left: rect.left - (isMobile ? 5 : 7),
+    width: rect.width + (isMobile ? 10 : 14),
+    height: rect.height + (isMobile ? 10 : 14),
+    boxShadow: isMobile
+      ? '0 8px 24px rgba(0,0,0,0.18), 0 0 0 3px rgba(255,255,255,0.75)'
+      : '0 0 26px rgba(33,212,253,0.58), inset 0 0 18px rgba(33,212,253,0.12)',
+  };
 
   return createPortal(
     <div className="fixed inset-0 z-[9998] pointer-events-none">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_30%,rgba(33,212,253,0.18),rgba(0,0,0,0.72)_42%,rgba(0,0,0,0.86))] backdrop-blur-[3px]" />
+      <div className="absolute inset-0 bg-transparent" />
       <div
-        className="absolute rounded-[28px] border border-white/20 opacity-70 blur-[1px] transition-all duration-700 ease-[cubic-bezier(.2,.8,.2,1)]"
-        style={{
-          top: rect.top - 18,
-          left: rect.left - 18,
-          width: rect.width + 36,
-          height: rect.height + 36,
-          boxShadow: '0 0 70px rgba(33,212,253,0.38), inset 0 0 34px rgba(255,255,255,0.14)',
-        }}
-      />
-      <div
-        className="absolute rounded-[24px] border-2 border-audi-cyan bg-white/10 transition-all duration-700 ease-[cubic-bezier(.2,.8,.2,1)]"
-        style={{
-          top: rect.top - 8,
-          left: rect.left - 8,
-          width: rect.width + 16,
-          height: rect.height + 16,
-          boxShadow: '0 0 0 9999px rgba(0,0,0,0.56), 0 20px 80px rgba(33,212,253,0.55), inset 0 0 26px rgba(33,212,253,0.18)',
-        }}
+        className={`absolute transition-all duration-500 ease-[cubic-bezier(.2,.8,.2,1)] ${
+          isMobile
+            ? 'rounded-[22px] border-2 border-gray-950 bg-white/5'
+            : 'rounded-[22px] border-2 border-audi-cyan bg-audi-cyan/5'
+        }`}
+        style={highlightStyle}
       >
-        <div className="absolute -left-1.5 -top-1.5 h-5 w-5 rounded-tl-[20px] border-l-4 border-t-4 border-white shadow-[0_0_18px_rgba(255,255,255,0.9)]" />
-        <div className="absolute -right-1.5 -top-1.5 h-5 w-5 rounded-tr-[20px] border-r-4 border-t-4 border-white shadow-[0_0_18px_rgba(255,255,255,0.9)]" />
-        <div className="absolute -bottom-1.5 -left-1.5 h-5 w-5 rounded-bl-[20px] border-b-4 border-l-4 border-white shadow-[0_0_18px_rgba(255,255,255,0.9)]" />
-        <div className="absolute -bottom-1.5 -right-1.5 h-5 w-5 rounded-br-[20px] border-b-4 border-r-4 border-white shadow-[0_0_18px_rgba(255,255,255,0.9)]" />
+        {!isMobile && (
+          <>
+            <div className="absolute -left-1 -top-1 h-4 w-4 rounded-tl-2xl border-l-[3px] border-t-[3px] border-white" />
+            <div className="absolute -right-1 -top-1 h-4 w-4 rounded-tr-2xl border-r-[3px] border-t-[3px] border-white" />
+            <div className="absolute -bottom-1 -left-1 h-4 w-4 rounded-bl-2xl border-b-[3px] border-l-[3px] border-white" />
+            <div className="absolute -bottom-1 -right-1 h-4 w-4 rounded-br-2xl border-b-[3px] border-r-[3px] border-white" />
+          </>
+        )}
+        <div
+          className={`absolute -top-8 left-2 rounded-full px-2.5 py-1 text-[10px] font-black shadow-lg ${
+            isMobile ? 'bg-gray-950 text-white' : 'bg-audi-cyan text-black'
+          }`}
+        >
+          {stepIndex + 1}/{steps.length}
+        </div>
       </div>
+
       <div
         key={currentStep.id}
-        className="absolute pointer-events-auto overflow-hidden rounded-[28px] border border-white/20 bg-[#0d0d18]/95 p-5 text-white shadow-[0_26px_80px_rgba(0,0,0,0.65)] backdrop-blur-2xl animate-fade-in"
-        style={{
-          ...tooltipStyle,
-          transform: 'perspective(900px) rotateX(2deg) translateZ(0)',
-          boxShadow: '0 24px 80px rgba(0,0,0,0.68), 0 0 42px rgba(183,33,255,0.28), inset 0 1px 0 rgba(255,255,255,0.16)',
-        }}
+        className={`absolute pointer-events-auto animate-fade-in ${
+          isMobile
+            ? 'rounded-[22px] border border-gray-200 bg-white p-4 text-gray-950 shadow-[0_14px_42px_rgba(0,0,0,0.18)] dark:border-zinc-800 dark:bg-[#18181B] dark:text-white'
+            : 'overflow-hidden rounded-2xl border border-white/15 bg-[#101018]/96 p-4 text-white shadow-[0_18px_54px_rgba(0,0,0,0.56)] backdrop-blur-xl'
+        }`}
+        style={tooltipStyle}
       >
-        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-audi-pink via-audi-cyan to-audi-yellow" />
-        <div className="absolute -right-16 -top-16 h-36 w-36 rounded-full bg-audi-cyan/20 blur-3xl" />
-        <div className="absolute -bottom-20 -left-20 h-44 w-44 rounded-full bg-audi-pink/20 blur-3xl" />
-
-        <div className="relative mb-4 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="rounded-full border border-audi-cyan/40 bg-audi-cyan/15 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-audi-cyan shadow-[0_0_20px_rgba(33,212,253,0.18)]">
-              Bước {stepIndex + 1}/{steps.length}
-            </span>
-            <span className="hidden rounded-full bg-white/5 px-2.5 py-1 text-[10px] font-bold text-slate-400 sm:inline">
-              {activeTour.title}
-            </span>
-          </div>
-          <button onClick={closeTour} className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-300 transition-all hover:border-audi-pink/50 hover:bg-audi-pink/15 hover:text-white">
+        {!isMobile && <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-audi-pink via-audi-cyan to-audi-yellow" />}
+        <div className="relative mb-3 flex items-center justify-between gap-2">
+          <span
+            className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-wider ${
+              isMobile
+                ? 'bg-gray-100 text-gray-600 dark:bg-zinc-800 dark:text-zinc-300'
+                : 'border border-audi-cyan/40 bg-audi-cyan/10 text-audi-cyan'
+            }`}
+          >
+            Bước {stepIndex + 1}/{steps.length}
+          </span>
+          <button
+            onClick={closeTour}
+            className={`rounded-full px-3 py-1.5 text-xs font-bold transition-colors ${
+              isMobile
+                ? 'bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-zinc-800 dark:text-zinc-300'
+                : 'border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white'
+            }`}
+          >
             Bỏ qua
           </button>
         </div>
-        <h3 className="relative mb-2 text-xl font-black leading-tight text-white drop-shadow-[0_0_18px_rgba(255,255,255,0.18)]">{currentStep.title}</h3>
-        <p className="relative mb-5 text-sm leading-relaxed text-slate-200">{currentStep.description}</p>
-        <div className="relative mb-5 flex gap-1.5">
+
+        <h3 className={`relative mb-1.5 font-black leading-tight ${isMobile ? 'text-[17px]' : 'text-lg'}`}>{currentStep.title}</h3>
+        <p className={`relative mb-4 text-sm leading-relaxed ${isMobile ? 'text-gray-500 dark:text-zinc-300' : 'text-slate-300'}`}>
+          {currentStep.description}
+        </p>
+
+        <div className="relative mb-4 flex gap-1.5">
           {steps.map((step, index) => (
             <div
               key={step.id}
-              className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${index <= stepIndex ? 'bg-gradient-to-r from-audi-pink to-audi-cyan shadow-[0_0_12px_rgba(33,212,253,0.45)]' : 'bg-white/10'}`}
+              className={`h-1 flex-1 rounded-full transition-all duration-500 ${
+                index <= stepIndex
+                  ? isMobile ? 'bg-gray-950 dark:bg-white' : 'bg-gradient-to-r from-audi-pink to-audi-cyan'
+                  : isMobile ? 'bg-gray-200 dark:bg-zinc-700' : 'bg-white/10'
+              }`}
             />
           ))}
         </div>
+
         <div className="relative flex items-center gap-2">
           <button
             onClick={() => setStepIndex((current) => Math.max(0, current - 1))}
             disabled={stepIndex === 0}
-            className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-bold text-slate-200 transition-all hover:-translate-y-0.5 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0"
+            className={`rounded-xl px-3.5 py-2 text-sm font-bold transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
+              isMobile
+                ? 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-zinc-800 dark:text-zinc-200'
+                : 'border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10'
+            }`}
           >
             Quay lại
           </button>
           <button
             onClick={goNext}
-            className="ml-auto rounded-2xl bg-gradient-to-r from-audi-cyan to-audi-yellow px-5 py-2.5 text-sm font-black text-black shadow-[0_0_28px_rgba(33,212,253,0.35)] transition-all hover:-translate-y-0.5 hover:shadow-[0_0_38px_rgba(251,218,97,0.45)] active:scale-95"
+            className={`ml-auto rounded-xl px-4 py-2 text-sm font-black transition-transform active:scale-95 ${
+              isMobile
+                ? 'bg-gray-950 text-white dark:bg-white dark:text-black'
+                : 'bg-audi-cyan text-black shadow-[0_0_22px_rgba(33,212,253,0.28)]'
+            }`}
           >
             {stepIndex >= steps.length - 1 ? 'Hoàn tất' : 'Tiếp theo'}
           </button>
@@ -291,3 +318,4 @@ export const AppTour: React.FC<AppTourProps> = ({ surface, screen, featureId, di
     document.body,
   );
 };
+

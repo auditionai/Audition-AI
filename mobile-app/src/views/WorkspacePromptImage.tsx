@@ -425,7 +425,7 @@ export function WorkspacePromptImage() {
         <div className="text-right text-[11px] text-gray-400 dark:text-zinc-500 mt-1">{prompt.length}/{MAX_PROMPT_CHARACTERS}</div>
       </section>
 
-      <div className="space-y-4">
+      <div data-tour-id="mobile.image.settings" className="space-y-4">
         <div className="space-y-2">
           <h3 className="ml-1 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-zinc-500">KHUNG HÌNH</h3>
           <div className="flex gap-2 overflow-x-auto pb-1">

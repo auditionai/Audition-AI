@@ -164,7 +164,7 @@ export const DEFAULT_FEATURE_MAINTENANCE_CONFIG: FeatureMaintenanceConfig = {
     message: 'Tính năng đang bảo trì. Vui lòng quay lại sau.',
 };
 
-export const APP_TOUR_TARGETS: Array<{ id: string; label: string; surface: AppTourSurface; screen: string; featureId?: string }> = [
+export const APP_TOUR_TARGETS: Array<{ id: string; label: string; surface: AppTourSurface; screen: string; featureId?: string; description?: string }> = [
     { id: 'desktop.layout.logo', label: 'Máy tính - Logo / trang chủ', surface: 'desktop', screen: 'global' },
     { id: 'desktop.layout.language', label: 'Máy tính - Đổi ngôn ngữ', surface: 'desktop', screen: 'global' },
     { id: 'desktop.layout.dock', label: 'Máy tính - Thanh điều hướng dưới', surface: 'desktop', screen: 'global' },
@@ -193,6 +193,7 @@ export const APP_TOUR_TARGETS: Array<{ id: string; label: string; surface: AppTo
     { id: 'mobile.home.features', label: 'Điện thoại - Danh sách công cụ', surface: 'mobile', screen: 'home' },
     { id: 'mobile.image.prompt', label: 'Điện thoại - Tạo ảnh AI: prompt', surface: 'mobile', screen: 'tool_workspace', featureId: 'ai_image_tool' },
     { id: 'mobile.image.references', label: 'Điện thoại - Tạo ảnh AI: ảnh tham chiếu', surface: 'mobile', screen: 'tool_workspace', featureId: 'ai_image_tool' },
+    { id: 'mobile.image.settings', label: 'Điện thoại - Tạo ảnh AI: cấu hình', surface: 'mobile', screen: 'tool_workspace', featureId: 'ai_image_tool' },
     { id: 'mobile.image.generate', label: 'Điện thoại - Tạo ảnh AI: nút tạo', surface: 'mobile', screen: 'tool_workspace', featureId: 'ai_image_tool' },
     { id: 'mobile.generation.prompt', label: 'Điện thoại - Tạo ảnh Audition: mô tả', surface: 'mobile', screen: 'tool_workspace', featureId: 'single_photo_gen' },
     { id: 'mobile.generation.characters', label: 'Điện thoại - Tạo ảnh Audition: ảnh nhân vật', surface: 'mobile', screen: 'tool_workspace', featureId: 'single_photo_gen' },
@@ -200,13 +201,14 @@ export const APP_TOUR_TARGETS: Array<{ id: string; label: string; surface: AppTo
     { id: 'mobile.generation.generate', label: 'Điện thoại - Tạo ảnh Audition: nút tạo', surface: 'mobile', screen: 'tool_workspace', featureId: 'single_photo_gen' },
     { id: 'mobile.video.upload', label: 'Điện thoại - Video: vùng tải tư liệu', surface: 'mobile', screen: 'tool_workspace', featureId: 'video_ai_gen' },
     { id: 'mobile.video.prompt', label: 'Điện thoại - Video / Motion: prompt', surface: 'mobile', screen: 'tool_workspace', featureId: 'video_ai_gen' },
+    { id: 'mobile.video.settings', label: 'Điện thoại - Video / Motion: cấu hình', surface: 'mobile', screen: 'tool_workspace', featureId: 'video_ai_gen' },
     { id: 'mobile.video.generate', label: 'Điện thoại - Video / Motion: nút tạo', surface: 'mobile', screen: 'tool_workspace', featureId: 'video_ai_gen' },
 ];
 
 export const DEFAULT_APP_TOURS_CONFIG: AppToursConfig = {
     isActive: true,
     showFrequency: 'daily',
-    contentVersion: 2,
+    contentVersion: 3,
     tours: [
         {
             id: 'desktop_home_intro',
@@ -310,7 +312,8 @@ export const DEFAULT_APP_TOURS_CONFIG: AppToursConfig = {
             steps: [
                 { id: 'mobile_image_tool_1', targetId: 'mobile.image.references', title: 'Ảnh tham chiếu', description: 'Thêm ảnh mẫu để AI hiểu nhân vật hoặc phong cách bạn muốn.', placement: 'bottom', order: 1, isActive: true },
                 { id: 'mobile_image_tool_2', targetId: 'mobile.image.prompt', title: 'Prompt tạo ảnh', description: 'Nhập mô tả rõ ràng trước khi tạo ảnh.', placement: 'top', order: 2, isActive: true },
-                { id: 'mobile_image_tool_3', targetId: 'mobile.image.generate', title: 'Bấm tạo', description: 'Kiểm tra chi phí rồi gửi yêu cầu tạo ảnh.', placement: 'top', order: 3, isActive: true },
+                { id: 'mobile_image_tool_3', targetId: 'mobile.image.settings', title: 'Chọn cấu hình', description: 'Chọn khung hình, model, độ phân giải, tốc độ và máy chủ trước khi tạo.', placement: 'top', order: 3, isActive: true },
+                { id: 'mobile_image_tool_4', targetId: 'mobile.image.generate', title: 'Bấm tạo', description: 'Kiểm tra chi phí rồi gửi yêu cầu tạo ảnh.', placement: 'top', order: 4, isActive: true },
             ],
         },
         {
@@ -323,7 +326,8 @@ export const DEFAULT_APP_TOURS_CONFIG: AppToursConfig = {
             steps: [
                 { id: 'mobile_video_tool_1', targetId: 'mobile.video.upload', title: 'Tải ảnh hoặc video mẫu', description: 'Chuẩn bị tư liệu đầu vào cho Video AI hoặc Motion Control.', placement: 'bottom', order: 1, isActive: true },
                 { id: 'mobile_video_tool_2', targetId: 'mobile.video.prompt', title: 'Mô tả video', description: 'Viết chuyển động, bối cảnh và ý tưởng chính.', placement: 'top', order: 2, isActive: true },
-                { id: 'mobile_video_tool_3', targetId: 'mobile.video.generate', title: 'Tạo video', description: 'Bấm tạo để đưa video vào hàng đợi xử lý.', placement: 'top', order: 3, isActive: true },
+                { id: 'mobile_video_tool_3', targetId: 'mobile.video.settings', title: 'Chọn cấu hình video', description: 'Chọn model, thời lượng, độ phân giải, tốc độ xử lý và máy chủ.', placement: 'top', order: 3, isActive: true },
+                { id: 'mobile_video_tool_4', targetId: 'mobile.video.generate', title: 'Tạo video', description: 'Bấm tạo để đưa video vào hàng đợi xử lý.', placement: 'top', order: 4, isActive: true },
             ],
         },
     ],

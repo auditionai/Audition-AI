@@ -803,7 +803,7 @@ export function WorkspaceVideo() {
                 </div>
               </div>
             )}
-            <div className="grid grid-cols-2 gap-4">
+            <div data-tour-id="mobile.video.settings" className="grid grid-cols-2 gap-4">
               <div className="col-span-2 space-y-3">
                 <h3 className="text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider ml-1">Model AI</h3>
                 <div className="grid grid-cols-3 gap-2">
@@ -1009,7 +1009,7 @@ export function WorkspaceVideo() {
             </div>
 
             {/* Setup Options for Motion */}
-            <div className="grid grid-cols-2 gap-4 border-t border-gray-100 dark:border-zinc-800 pt-5">
+            <div data-tour-id="mobile.video.settings" className="grid grid-cols-2 gap-4 border-t border-gray-100 dark:border-zinc-800 pt-5">
               <div className="space-y-2">
                 <h3 className="text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider ml-1">Model</h3>
                 <div className="flex flex-col gap-2">

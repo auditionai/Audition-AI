@@ -25,6 +25,7 @@ import { trackEvent, trackPageView } from './services/analyticsService';
 import { getFeatureMaintenanceConfig, getSystemAnnouncementConfig, isFeatureInMaintenance, type FeatureMaintenanceConfig, type SystemAnnouncementConfig } from './services/economyService';
 import { getSupabaseUser, supabase } from './services/supabaseClient';
 import { AppEventPopup, type AppEventPopupData, SystemAnnouncementModal } from '../../components/AppNotificationPopups';
+import { AppTour } from '../../components/AppTour';
 import './mobile-shell.css';
 
 const SYSTEM_ANNOUNCEMENT_DISMISS_STORAGE_KEY = 'auditionai:system-announcement-dismissed';
@@ -71,6 +72,15 @@ const getMobileRouteFeatureId = (pathname: string) => {
   if (pathname === '/tools/remove-bg') return 'remove_bg_pro';
   if (pathname === '/tools/enhance') return 'sharpen_upscale';
   return null;
+};
+
+const getMobileTourScreen = (pathname: string) => {
+  if (pathname === '/home') return 'home';
+  if (pathname.startsWith('/generate/') || pathname.startsWith('/tools/')) return 'tool_workspace';
+  if (pathname === '/gallery') return 'gallery';
+  if (pathname === '/topup') return 'topup';
+  if (pathname === '/profile') return 'settings';
+  return pathname.replace(/^\/+/, '') || 'home';
 };
 
 function FeatureMaintenanceGuard({ children }: { children: React.ReactElement }) {
@@ -360,6 +370,12 @@ function MobileRuntimeEffects() {
           setEventPopup(null);
           navigate(target);
         }}
+      />
+      <AppTour
+        surface="mobile"
+        screen={getMobileTourScreen(location.pathname)}
+        featureId={getMobileRouteFeatureId(location.pathname)}
+        disabled={!isAuthenticated || location.pathname === '/admin' || location.pathname === '/'}
       />
       {maintenanceMode.isActive && userRole !== 'admin' && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/75 backdrop-blur-md p-5">

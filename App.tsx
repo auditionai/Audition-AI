@@ -18,6 +18,7 @@ import { getSupabaseSession, getSupabaseUser, supabase } from './services/supaba
 import { getUserProfile, logVisit, updateLastActive, subscribeMaintenanceMode, getSystemAnnouncementConfig, getFeatureMaintenanceConfig, isFeatureInMaintenance, type FeatureMaintenanceConfig, type SystemAnnouncementConfig } from './services/economyService';
 import { NotificationProvider, useNotification } from './components/NotificationSystem';
 import { AppEventPopup, AppEventPopupData, SystemAnnouncementModal } from './components/AppNotificationPopups';
+import { AppTour } from './components/AppTour';
 import { Icons } from './components/Icons';
 import { syncPaymentTransaction } from './services/serverQueueService';
 import { setAnalyticsUser, trackEvent, trackPageView } from './services/analyticsService';
@@ -716,6 +717,12 @@ function AppContent() {
       </div>
 
       {currentView !== 'tool_workspace' && renderContent()}
+      <AppTour
+        surface="desktop"
+        screen={currentView}
+        featureId={currentView === 'tool_workspace' ? selectedFeature?.id : undefined}
+        disabled={!isAuthenticated || currentView === 'admin'}
+      />
     </Layout>
   );
 }

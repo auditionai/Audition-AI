@@ -206,7 +206,7 @@ export function Settings() {
 
       <div className="p-4 pb-32 space-y-8">
         {/* Profile Card */}
-        <div className="bg-white dark:bg-[#18181B] rounded-[32px] p-6 text-center border border-gray-100 dark:border-zinc-800 shadow-sm relative overflow-hidden">
+        <div data-tour-id="mobile.settings.profile" className="bg-white dark:bg-[#18181B] rounded-[32px] p-6 text-center border border-gray-100 dark:border-zinc-800 shadow-sm relative overflow-hidden">
           {loading && (
              <div className="absolute inset-0 bg-white/50 dark:bg-black/50 z-10 flex items-center justify-center">
                 <Loader className="w-8 h-8 text-black dark:text-white animate-spin" />
@@ -227,7 +227,7 @@ export function Settings() {
         </div>
 
         {/* Settings List */}
-        <div>
+        <div data-tour-id="mobile.settings.menu">
           <h3 className="text-sm font-bold tracking-tight text-gray-500 dark:text-zinc-400 uppercase mb-3 ml-2">Tài khoản & Bảo mật</h3>
           <div className="bg-white dark:bg-[#18181B] rounded-[24px] border border-gray-100 dark:border-zinc-800 shadow-sm overflow-hidden mb-6">
             {accountItems.map((item, idx) => (
@@ -281,6 +281,7 @@ export function Settings() {
 
           {userRole === 'admin' && (
             <button
+              data-tour-id="mobile.settings.admin"
               onClick={() => navigate('/admin')}
               className="w-full flex items-center justify-between p-4 mb-4 bg-white dark:bg-[#18181B] rounded-[24px] border border-amber-200 dark:border-amber-500/30 shadow-sm text-left"
             >
@@ -298,6 +299,7 @@ export function Settings() {
           )}
 
           <button
+            data-tour-id="mobile.settings.logout"
             onClick={handleLogout}
             className="w-full flex items-center justify-center gap-2 p-4 text-red-500 font-semibold bg-white dark:bg-[#18181B] rounded-[24px] border border-red-500/20 hover:bg-red-500/10 transition-colors"
           >
@@ -316,7 +318,7 @@ export function Settings() {
 
       {/* Giftcode Modal */}
       {showGiftcodeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <div data-tour-id="mobile.settings.giftcode" className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-[#18181B] w-full max-w-sm rounded-[32px] overflow-hidden shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">

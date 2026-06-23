@@ -462,7 +462,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
         </div>
       )}
 
-      <div className="w-full flex justify-center mb-4">
+      <div data-tour-id="desktop.edit.tabs" className="w-full flex justify-center mb-4">
         <div className="bg-[#12121a] p-1.5 rounded-2xl border border-white/10 flex gap-1 shadow-lg overflow-x-auto no-scrollbar max-w-full">
           {EDITING_TABS.map((tab) => (
             <button
@@ -503,6 +503,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
       </div>
 
       <a
+        data-tour-id="desktop.edit.promo"
         href="https://aumix3d.com/"
         target="_blank"
         rel="noopener noreferrer"
@@ -549,7 +550,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
 
           <div className="flex flex-col gap-4 w-full">
             <div className="flex justify-center w-full">
-              <div className="w-full md:w-[220px] bg-[#12121a] border border-white/10 rounded-2xl p-4 hover:border-white/20 transition-colors relative group shrink-0 shadow-lg">
+              <div data-tour-id="desktop.edit.upload" className="w-full md:w-[220px] bg-[#12121a] border border-white/10 rounded-2xl p-4 hover:border-white/20 transition-colors relative group shrink-0 shadow-lg">
                 <div className="flex justify-between items-center mb-3">
                   <span className="text-xs font-bold text-white bg-white/10 px-2 py-1 rounded">ẢNH GỐC</span>
                 </div>
@@ -573,7 +574,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
             </div>
 
             {isMagicEditor && (
-              <div className="w-full bg-[#12121a] border border-white/10 rounded-2xl p-4 shadow-lg">
+              <div data-tour-id="desktop.edit.prompt" className="w-full bg-[#12121a] border border-white/10 rounded-2xl p-4 shadow-lg">
                 <div className="flex justify-between items-center mb-3">
                   <label className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
                     <Icons.MessageCircle className="w-4 h-4" /> 2. Yêu cầu chỉnh sửa
@@ -588,7 +589,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
                     className="w-full bg-black/20 border border-white/5 rounded-xl p-3 text-sm text-white focus:border-audi-purple outline-none resize-none min-h-[150px]"
                   />
 
-                  <div className="space-y-2">
+                  <div data-tour-id="desktop.edit.suggestions" className="space-y-2">
                     <span className="text-[10px] font-bold text-slate-500 uppercase">Gợi ý nhanh</span>
                     <div className="flex flex-wrap gap-2 max-h-[100px] overflow-y-auto custom-scrollbar">
                       {SUGGESTIONS.map((suggestion, index) => (
@@ -610,7 +611,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
         </div>
 
         <div className="lg:col-span-1 space-y-6">
-          <div className="bg-[#12121a] border border-white/10 rounded-2xl p-5 flex flex-col gap-5 shadow-lg h-full">
+          <div data-tour-id="desktop.edit.settings" className="bg-[#12121a] border border-white/10 rounded-2xl p-5 flex flex-col gap-5 shadow-lg h-full">
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <h3 className="font-bold text-white flex items-center gap-2">
                 <Icons.Settings className="w-5 h-5 text-slate-400" />
@@ -647,7 +648,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
             )}
 
             {isMagicEditor && (
-              <div className="space-y-3">
+              <div data-tour-id="desktop.edit.model" className="space-y-3">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Mô hình AI</label>
                 <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
                   <button
@@ -678,7 +679,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
               </div>
             )}
 
-            <div className="space-y-3">
+            <div data-tour-id="desktop.edit.resolution" className="space-y-3">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Độ phân giải</label>
               <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
                 {(['1K', '2K', '4K'] as Resolution[]).map((value) => {
@@ -701,7 +702,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
               </div>
             </div>
 
-            <div className="space-y-3">
+            <div data-tour-id="desktop.edit.speed" className="space-y-3">
               <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
                 <Icons.Zap className="w-3 h-3" />
                 Tốc độ xử lý
@@ -723,7 +724,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
               </div>
             </div>
 
-            <div className="space-y-3">
+            <div data-tour-id="desktop.edit.server" className="space-y-3">
               <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
                 <Icons.Database className="w-3 h-3" />
                 Server
@@ -745,7 +746,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
               </div>
             </div>
 
-            <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-audi-purple/20 to-audi-pink/20 border border-white/10 p-3 mt-2">
+            <div data-tour-id="desktop.edit.price" className="relative overflow-hidden rounded-xl bg-gradient-to-r from-audi-purple/20 to-audi-pink/20 border border-white/10 p-3 mt-2">
               <div className="flex justify-between items-center relative z-10">
                 <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Giá hiện tại</span>
                 <div className="flex items-end gap-1">
@@ -763,6 +764,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
             </div>
 
             <button
+              data-tour-id="desktop.edit.generate"
               onClick={handleExecute}
               disabled={isSubmitting || !uploadedImage || !isCatalogReady || !selectedGenerationCost.available}
               className={`w-full py-3.5 mt-auto rounded-xl font-bold text-white shadow-[0_0_20px_rgba(255,0,153,0.4)] transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed hover:scale-[1.02] bg-gradient-to-r ${getGradient(feature.id)}`}

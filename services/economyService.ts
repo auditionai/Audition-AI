@@ -117,6 +117,37 @@ export type FeatureMaintenanceConfig = {
     updatedAt?: string;
 };
 
+export type AppTourSurface = 'desktop' | 'mobile';
+export type AppTourPlacement = 'auto' | 'top' | 'right' | 'bottom' | 'left';
+
+export type AppTourStep = {
+    id: string;
+    targetId: string;
+    title: string;
+    description: string;
+    placement?: AppTourPlacement;
+    order?: number;
+    isActive?: boolean;
+};
+
+export type AppTourDefinition = {
+    id: string;
+    title: string;
+    surface: AppTourSurface;
+    screen: string;
+    featureId?: string;
+    isActive: boolean;
+    steps: AppTourStep[];
+};
+
+export type AppToursConfig = {
+    isActive: boolean;
+    showFrequency: 'daily' | 'once' | 'always';
+    tours: AppTourDefinition[];
+    updatedAt?: string;
+    contentVersion?: number;
+};
+
 const DEFAULT_PAYMENT_GATEWAY_CONFIG: PaymentGatewayConfig = {
     gateway: 'sepay',
 };
@@ -131,6 +162,254 @@ export const DEFAULT_SYSTEM_ANNOUNCEMENT_CONFIG: SystemAnnouncementConfig = {
 export const DEFAULT_FEATURE_MAINTENANCE_CONFIG: FeatureMaintenanceConfig = {
     disabledFeatureIds: [],
     message: 'Tính năng đang bảo trì. Vui lòng quay lại sau.',
+};
+
+export const APP_TOUR_TARGETS: Array<{ id: string; label: string; surface: AppTourSurface; screen: string; featureId?: string; description?: string }> = [
+    { id: 'desktop.layout.logo', label: 'Máy tính - Logo / trang chủ', surface: 'desktop', screen: 'global' },
+    { id: 'desktop.layout.language', label: 'Máy tính - Đổi ngôn ngữ', surface: 'desktop', screen: 'global' },
+    { id: 'desktop.layout.dock', label: 'Máy tính - Thanh điều hướng dưới', surface: 'desktop', screen: 'global' },
+    { id: 'desktop.layout.vcoin', label: 'Máy tính - Số dư / nạp VCOIN', surface: 'desktop', screen: 'global' },
+    { id: 'desktop.layout.profile', label: 'Máy tính - Tài khoản / cài đặt', surface: 'desktop', screen: 'global' },
+    { id: 'desktop.home.checkin', label: 'Máy tính - Điểm danh hằng ngày', surface: 'desktop', screen: 'home' },
+    { id: 'desktop.home.features', label: 'Máy tính - Danh sách công cụ', surface: 'desktop', screen: 'home' },
+    { id: 'desktop.tool.back', label: 'Máy tính - Nút quay lại thư viện', surface: 'desktop', screen: 'tool_workspace' },
+    { id: 'desktop.image.references', label: 'Máy tính - Tạo ảnh AI: ảnh tham chiếu', surface: 'desktop', screen: 'tool_workspace', featureId: 'ai_image_tool' },
+    { id: 'desktop.image.prompt', label: 'Máy tính - Tạo ảnh AI: prompt', surface: 'desktop', screen: 'tool_workspace', featureId: 'ai_image_tool' },
+    { id: 'desktop.image.model', label: 'Máy tính - Tạo ảnh AI: model / cấu hình', surface: 'desktop', screen: 'tool_workspace', featureId: 'ai_image_tool' },
+    { id: 'desktop.image.generate', label: 'Máy tính - Tạo ảnh AI: nút tạo', surface: 'desktop', screen: 'tool_workspace', featureId: 'ai_image_tool' },
+    { id: 'desktop.generation.prompt', label: 'Máy tính - Tạo ảnh Audition: mô tả', surface: 'desktop', screen: 'tool_workspace' },
+    { id: 'desktop.generation.characters', label: 'Máy tính - Tạo ảnh Audition: ảnh nhân vật', surface: 'desktop', screen: 'tool_workspace' },
+    { id: 'desktop.generation.settings', label: 'Máy tính - Tạo ảnh Audition: cấu hình', surface: 'desktop', screen: 'tool_workspace' },
+    { id: 'desktop.generation.generate', label: 'Máy tính - Tạo ảnh Audition: nút tạo', surface: 'desktop', screen: 'tool_workspace' },
+    { id: 'desktop.video.mode', label: 'Máy tính - Video: chọn chế độ', surface: 'desktop', screen: 'tool_workspace', featureId: 'video_ai_gen' },
+    { id: 'desktop.video.upload', label: 'Máy tính - Video: vùng tải tư liệu', surface: 'desktop', screen: 'tool_workspace', featureId: 'video_ai_gen' },
+    { id: 'desktop.video.prompt', label: 'Máy tính - Video / Motion: prompt', surface: 'desktop', screen: 'tool_workspace', featureId: 'video_ai_gen' },
+    { id: 'desktop.video.model', label: 'Máy tính - Video / Motion: model và cấu hình', surface: 'desktop', screen: 'tool_workspace', featureId: 'video_ai_gen' },
+    { id: 'desktop.video.generate', label: 'Máy tính - Video / Motion: nút tạo', surface: 'desktop', screen: 'tool_workspace', featureId: 'video_ai_gen' },
+    { id: 'mobile.layout.topbar', label: 'Điện thoại - Thanh trên', surface: 'mobile', screen: 'global' },
+    { id: 'mobile.layout.vcoin', label: 'Điện thoại - Số dư VCOIN', surface: 'mobile', screen: 'global' },
+    { id: 'mobile.layout.profile', label: 'Điện thoại - Tài khoản / cài đặt', surface: 'mobile', screen: 'global' },
+    { id: 'mobile.layout.bottomnav', label: 'Điện thoại - Thanh điều hướng dưới', surface: 'mobile', screen: 'global' },
+    { id: 'mobile.home.features', label: 'Điện thoại - Danh sách công cụ', surface: 'mobile', screen: 'home' },
+    { id: 'mobile.image.prompt', label: 'Điện thoại - Tạo ảnh AI: prompt', surface: 'mobile', screen: 'tool_workspace', featureId: 'ai_image_tool' },
+    { id: 'mobile.image.references', label: 'Điện thoại - Tạo ảnh AI: ảnh tham chiếu', surface: 'mobile', screen: 'tool_workspace', featureId: 'ai_image_tool' },
+    { id: 'mobile.image.settings', label: 'Điện thoại - Tạo ảnh AI: cấu hình', surface: 'mobile', screen: 'tool_workspace', featureId: 'ai_image_tool' },
+    { id: 'mobile.image.generate', label: 'Điện thoại - Tạo ảnh AI: nút tạo', surface: 'mobile', screen: 'tool_workspace', featureId: 'ai_image_tool' },
+    { id: 'mobile.generation.prompt', label: 'Điện thoại - Tạo ảnh Audition: mô tả', surface: 'mobile', screen: 'tool_workspace', featureId: 'single_photo_gen' },
+    { id: 'mobile.generation.characters', label: 'Điện thoại - Tạo ảnh Audition: ảnh nhân vật', surface: 'mobile', screen: 'tool_workspace', featureId: 'single_photo_gen' },
+    { id: 'mobile.generation.settings', label: 'Điện thoại - Tạo ảnh Audition: cấu hình', surface: 'mobile', screen: 'tool_workspace', featureId: 'single_photo_gen' },
+    { id: 'mobile.generation.generate', label: 'Điện thoại - Tạo ảnh Audition: nút tạo', surface: 'mobile', screen: 'tool_workspace', featureId: 'single_photo_gen' },
+    { id: 'mobile.video.upload', label: 'Điện thoại - Video: vùng tải tư liệu', surface: 'mobile', screen: 'tool_workspace', featureId: 'video_ai_gen' },
+    { id: 'mobile.video.prompt', label: 'Điện thoại - Video / Motion: prompt', surface: 'mobile', screen: 'tool_workspace', featureId: 'video_ai_gen' },
+    { id: 'mobile.video.settings', label: 'Điện thoại - Video / Motion: cấu hình', surface: 'mobile', screen: 'tool_workspace', featureId: 'video_ai_gen' },
+    { id: 'mobile.video.generate', label: 'Điện thoại - Video / Motion: nút tạo', surface: 'mobile', screen: 'tool_workspace', featureId: 'video_ai_gen' },
+    { id: 'desktop.layout.nav.home', label: 'Máy tính - Dock: Trang chủ', surface: 'desktop', screen: 'global', description: 'Khoanh nút Trang chủ trong thanh điều hướng dưới cùng.' },
+    { id: 'desktop.layout.nav.tools', label: 'Máy tính - Dock: Công cụ', surface: 'desktop', screen: 'global', description: 'Khoanh nút Công cụ trong thanh điều hướng dưới cùng.' },
+    { id: 'desktop.layout.nav.gallery', label: 'Máy tính - Dock: Thư viện', surface: 'desktop', screen: 'global', description: 'Khoanh nút Thư viện trong thanh điều hướng dưới cùng.' },
+    { id: 'desktop.layout.checkin', label: 'Máy tính - Dock: Điểm danh mobile-width', surface: 'desktop', screen: 'global', description: 'Khoanh nút điểm danh nhỏ xuất hiện trong dock khi màn hình desktop bị thu hẹp.' },
+    { id: 'desktop.home.hero', label: 'Máy tính - Trang chủ: Lời chào', surface: 'desktop', screen: 'home', description: 'Khoanh thanh lời chào đầu trang chủ, nơi có trạng thái hệ thống và nút điểm danh.' },
+    { id: 'desktop.home.promo', label: 'Máy tính - Trang chủ: Banner AuMix3D', surface: 'desktop', screen: 'home', description: 'Khoanh banner đối tác AuMix3D trên trang chủ.' },
+    { id: 'desktop.home.studio', label: 'Máy tính - Trang chủ: Nhóm Studio AI', surface: 'desktop', screen: 'home', description: 'Khoanh toàn bộ nhóm công cụ tạo ảnh Audition AI.' },
+    { id: 'desktop.home.video', label: 'Máy tính - Trang chủ: Nhóm Video Lab', surface: 'desktop', screen: 'home', description: 'Khoanh toàn bộ nhóm công cụ tạo video và Motion Control.' },
+    { id: 'desktop.home.editing', label: 'Máy tính - Trang chủ: Nhóm chỉnh sửa ảnh', surface: 'desktop', screen: 'home', description: 'Khoanh nhóm công cụ chỉnh sửa/nâng cấp ảnh.' },
+    { id: 'desktop.home.feature.single_photo_gen', label: 'Máy tính - Thẻ: Tạo ảnh 1 người', surface: 'desktop', screen: 'home', description: 'Khoanh đúng thẻ tính năng tạo ảnh Audition 1 người.' },
+    { id: 'desktop.home.feature.couple_photo_gen', label: 'Máy tính - Thẻ: Tạo ảnh couple', surface: 'desktop', screen: 'home', description: 'Khoanh đúng thẻ tính năng tạo ảnh couple.' },
+    { id: 'desktop.home.feature.group_3_gen', label: 'Máy tính - Thẻ: Tạo ảnh nhóm 3', surface: 'desktop', screen: 'home', description: 'Khoanh đúng thẻ tính năng tạo ảnh nhóm 3.' },
+    { id: 'desktop.home.feature.group_4_gen', label: 'Máy tính - Thẻ: Tạo ảnh nhóm 4', surface: 'desktop', screen: 'home', description: 'Khoanh đúng thẻ tính năng tạo ảnh nhóm 4.' },
+    { id: 'desktop.home.feature.group_5_gen', label: 'Máy tính - Thẻ: Tạo ảnh nhóm 5', surface: 'desktop', screen: 'home', description: 'Khoanh đúng thẻ tính năng tạo ảnh nhóm 5.' },
+    { id: 'desktop.home.feature.video_ai_gen', label: 'Máy tính - Thẻ: Tạo video Audition', surface: 'desktop', screen: 'home', description: 'Khoanh đúng thẻ tính năng tạo video/Motion Control.' },
+    { id: 'desktop.home.feature.ai_image_tool', label: 'Máy tính - Thẻ: Tạo ảnh AI', surface: 'desktop', screen: 'home', description: 'Khoanh đúng thẻ công cụ tạo ảnh AI bằng prompt.' },
+    { id: 'desktop.home.feature.magic_editor_pro', label: 'Máy tính - Thẻ: Chỉnh sửa ảnh AI', surface: 'desktop', screen: 'home', description: 'Khoanh đúng thẻ công cụ chỉnh sửa ảnh AI.' },
+    { id: 'desktop.home.feature.remove_bg_pro', label: 'Máy tính - Thẻ: Tách nền', surface: 'desktop', screen: 'home', description: 'Khoanh đúng thẻ công cụ tách nền.' },
+    { id: 'desktop.home.feature.sharpen_upscale', label: 'Máy tính - Thẻ: Làm nét ảnh', surface: 'desktop', screen: 'home', description: 'Khoanh đúng thẻ công cụ làm nét/nâng cấp ảnh.' },
+    { id: 'desktop.edit.tabs', label: 'Máy tính - Chỉnh sửa: Chọn công cụ', surface: 'desktop', screen: 'tool_workspace', description: 'Khoanh cụm tab đổi giữa chỉnh sửa ảnh, tách nền và làm nét.' },
+    { id: 'desktop.edit.promo', label: 'Máy tính - Chỉnh sửa: Banner AuMix3D', surface: 'desktop', screen: 'tool_workspace', description: 'Khoanh banner gợi ý tạo ảnh nhân vật bằng AuMix3D trong màn chỉnh sửa.' },
+    { id: 'desktop.edit.upload', label: 'Máy tính - Chỉnh sửa: Upload ảnh', surface: 'desktop', screen: 'tool_workspace', description: 'Khoanh ô tải ảnh gốc cần chỉnh sửa.' },
+    { id: 'desktop.edit.prompt', label: 'Máy tính - Chỉnh sửa: Prompt chỉnh sửa', surface: 'desktop', screen: 'tool_workspace', featureId: 'magic_editor_pro', description: 'Khoanh ô nhập yêu cầu chỉnh sửa ảnh.' },
+    { id: 'desktop.edit.suggestions', label: 'Máy tính - Chỉnh sửa: Gợi ý nhanh', surface: 'desktop', screen: 'tool_workspace', featureId: 'magic_editor_pro', description: 'Khoanh nhóm nút gợi ý prompt nhanh cho chỉnh sửa ảnh.' },
+    { id: 'desktop.edit.settings', label: 'Máy tính - Chỉnh sửa: Toàn bộ setting', surface: 'desktop', screen: 'tool_workspace', description: 'Khoanh panel cấu hình của công cụ chỉnh sửa ảnh.' },
+    { id: 'desktop.edit.model', label: 'Máy tính - Chỉnh sửa: Model AI', surface: 'desktop', screen: 'tool_workspace', featureId: 'magic_editor_pro', description: 'Khoanh vùng chọn Flash/Pro trong chỉnh sửa ảnh.' },
+    { id: 'desktop.edit.resolution', label: 'Máy tính - Chỉnh sửa: Độ phân giải', surface: 'desktop', screen: 'tool_workspace', description: 'Khoanh vùng chọn chất lượng xuất 1K/2K/4K.' },
+    { id: 'desktop.edit.speed', label: 'Máy tính - Chỉnh sửa: Tốc độ', surface: 'desktop', screen: 'tool_workspace', description: 'Khoanh vùng chọn tốc độ xử lý.' },
+    { id: 'desktop.edit.server', label: 'Máy tính - Chỉnh sửa: Server', surface: 'desktop', screen: 'tool_workspace', description: 'Khoanh vùng chọn máy chủ xử lý.' },
+    { id: 'desktop.edit.price', label: 'Máy tính - Chỉnh sửa: Giá hiện tại', surface: 'desktop', screen: 'tool_workspace', description: 'Khoanh khung hiển thị chi phí VCOIN trước khi tạo.' },
+    { id: 'desktop.edit.generate', label: 'Máy tính - Chỉnh sửa: Nút thực hiện', surface: 'desktop', screen: 'tool_workspace', description: 'Khoanh nút gửi job chỉnh sửa ảnh.' },
+    { id: 'desktop.gallery.panel', label: 'Máy tính - Thư viện: Khung chính', surface: 'desktop', screen: 'gallery', description: 'Khoanh toàn bộ khung lịch sử tạo và giao dịch.' },
+    { id: 'desktop.gallery.tabs', label: 'Máy tính - Thư viện: Tab lịch sử/giao dịch', surface: 'desktop', screen: 'gallery', description: 'Khoanh cụm tab chuyển giữa lịch sử tạo và giao dịch VCOIN.' },
+    { id: 'desktop.gallery.filters', label: 'Máy tính - Thư viện: Bộ lọc', surface: 'desktop', screen: 'gallery', description: 'Khoanh bộ lọc trạng thái ảnh/video trong lịch sử.' },
+    { id: 'desktop.gallery.bulk_actions', label: 'Máy tính - Thư viện: Xóa trang này', surface: 'desktop', screen: 'gallery', description: 'Khoanh nút thao tác hàng loạt trong thư viện.' },
+    { id: 'desktop.gallery.grid', label: 'Máy tính - Thư viện: Bảng kết quả', surface: 'desktop', screen: 'gallery', description: 'Khoanh bảng danh sách lịch sử tạo.' },
+    { id: 'desktop.gallery.item', label: 'Máy tính - Thư viện: Một dòng kết quả', surface: 'desktop', screen: 'gallery', description: 'Khoanh một item trong lịch sử để hướng dẫn bấm xem chi tiết.' },
+    { id: 'desktop.topup.hero', label: 'Máy tính - Nạp VCOIN: Banner đầu trang', surface: 'desktop', screen: 'topup', description: 'Khoanh banner sự kiện hoặc tiêu đề Store VCOIN.' },
+    { id: 'desktop.topup.heading', label: 'Máy tính - Nạp VCOIN: Tiêu đề chọn gói', surface: 'desktop', screen: 'topup', description: 'Khoanh tiêu đề khu vực chọn gói nạp.' },
+    { id: 'desktop.topup.packages', label: 'Máy tính - Nạp VCOIN: Danh sách gói', surface: 'desktop', screen: 'topup', description: 'Khoanh toàn bộ grid các gói nạp.' },
+    { id: 'desktop.topup.payment_button', label: 'Máy tính - Nạp VCOIN: Nút nạp ngay', surface: 'desktop', screen: 'topup', description: 'Khoanh nút nạp ngay trên gói đang hiển thị.' },
+    { id: 'desktop.settings.profile_header', label: 'Máy tính - Cài đặt: Hồ sơ đầu trang', surface: 'desktop', screen: 'settings', description: 'Khoanh cụm avatar, tên tài khoản và trạng thái.' },
+    { id: 'desktop.settings.tabs', label: 'Máy tính - Cài đặt: Menu trái', surface: 'desktop', screen: 'settings', description: 'Khoanh menu chuyển giữa hồ sơ, bảo mật và giftcode.' },
+    { id: 'desktop.settings.content', label: 'Máy tính - Cài đặt: Nội dung tab', surface: 'desktop', screen: 'settings', description: 'Khoanh vùng nội dung chính của cài đặt.' },
+    { id: 'desktop.settings.profile_form', label: 'Máy tính - Cài đặt: Form hồ sơ', surface: 'desktop', screen: 'settings', description: 'Khoanh form chỉnh sửa thông tin cá nhân.' },
+    { id: 'desktop.settings.security', label: 'Máy tính - Cài đặt: Bảo mật', surface: 'desktop', screen: 'settings', description: 'Khoanh form đổi mật khẩu.' },
+    { id: 'desktop.settings.giftcode', label: 'Máy tính - Cài đặt: Giftcode', surface: 'desktop', screen: 'settings', description: 'Khoanh khu vực nhập giftcode.' },
+    { id: 'desktop.settings.logout', label: 'Máy tính - Cài đặt: Đăng xuất', surface: 'desktop', screen: 'settings', description: 'Khoanh nút đăng xuất ở đầu trang cài đặt.' },
+    { id: 'mobile.home.hero', label: 'Điện thoại - Trang chủ: Lời chào', surface: 'mobile', screen: 'home', description: 'Khoanh khu vực lời chào và câu hỏi chọn công cụ trên mobile.' },
+    { id: 'mobile.home.checkin', label: 'Điện thoại - Trang chủ: Điểm danh', surface: 'mobile', screen: 'home', description: 'Khoanh nút điểm danh trên đầu trang chủ mobile.' },
+    { id: 'mobile.home.promo', label: 'Điện thoại - Trang chủ: Banner AuMix3D', surface: 'mobile', screen: 'home', description: 'Khoanh banner đối tác AuMix3D trên mobile.' },
+    { id: 'mobile.home.feature.single_photo_gen', label: 'Điện thoại - Thẻ: Tạo ảnh Audition', surface: 'mobile', screen: 'home', description: 'Khoanh thẻ tạo ảnh Audition AI trên mobile.' },
+    { id: 'mobile.home.feature.video_ai_gen', label: 'Điện thoại - Thẻ: Tạo video', surface: 'mobile', screen: 'home', description: 'Khoanh thẻ tạo video/Motion Control trên mobile.' },
+    { id: 'mobile.home.feature.ai_image_tool', label: 'Điện thoại - Thẻ: Tạo ảnh AI', surface: 'mobile', screen: 'home', description: 'Khoanh thẻ tạo ảnh AI bằng prompt trên mobile.' },
+    { id: 'mobile.home.feature.magic_editor_pro', label: 'Điện thoại - Thẻ: Chỉnh sửa ảnh', surface: 'mobile', screen: 'home', description: 'Khoanh thẻ chỉnh sửa ảnh AI trên mobile.' },
+    { id: 'mobile.home.feature.remove_bg_pro', label: 'Điện thoại - Thẻ: Tách nền', surface: 'mobile', screen: 'home', description: 'Khoanh thẻ tách nền trên mobile.' },
+    { id: 'mobile.home.feature.sharpen_upscale', label: 'Điện thoại - Thẻ: Làm nét', surface: 'mobile', screen: 'home', description: 'Khoanh thẻ làm nét/nâng cấp ảnh trên mobile.' },
+    { id: 'mobile.edit.info', label: 'Điện thoại - Chỉnh sửa: Mô tả công cụ', surface: 'mobile', screen: 'tool_workspace', description: 'Khoanh khung mô tả ngắn của công cụ chỉnh sửa.' },
+    { id: 'mobile.edit.upload', label: 'Điện thoại - Chỉnh sửa: Upload ảnh', surface: 'mobile', screen: 'tool_workspace', description: 'Khoanh vùng tải ảnh gốc cần xử lý.' },
+    { id: 'mobile.edit.prompt', label: 'Điện thoại - Chỉnh sửa: Prompt', surface: 'mobile', screen: 'tool_workspace', featureId: 'magic_editor_pro', description: 'Khoanh ô nhập mô tả chỉnh sửa trên mobile.' },
+    { id: 'mobile.edit.settings', label: 'Điện thoại - Chỉnh sửa: Toàn bộ setting', surface: 'mobile', screen: 'tool_workspace', description: 'Khoanh cụm cấu hình chỉnh sửa ảnh trên mobile.' },
+    { id: 'mobile.edit.model', label: 'Điện thoại - Chỉnh sửa: Model', surface: 'mobile', screen: 'tool_workspace', featureId: 'magic_editor_pro', description: 'Khoanh vùng chọn Flash/Pro trên mobile.' },
+    { id: 'mobile.edit.resolution', label: 'Điện thoại - Chỉnh sửa: Chất lượng xuất', surface: 'mobile', screen: 'tool_workspace', description: 'Khoanh vùng chọn độ phân giải xuất trên mobile.' },
+    { id: 'mobile.edit.price', label: 'Điện thoại - Chỉnh sửa: Chi phí', surface: 'mobile', screen: 'tool_workspace', description: 'Khoanh giá VCOIN trong thanh action dưới cùng.' },
+    { id: 'mobile.edit.generate', label: 'Điện thoại - Chỉnh sửa: Nút thực hiện', surface: 'mobile', screen: 'tool_workspace', description: 'Khoanh nút thực hiện trong thanh action dưới cùng.' },
+    { id: 'mobile.gallery.tabs', label: 'Điện thoại - Thư viện: Tab', surface: 'mobile', screen: 'gallery', description: 'Khoanh tab lịch sử tạo/giao dịch VCOIN trên mobile.' },
+    { id: 'mobile.gallery.filters', label: 'Điện thoại - Thư viện: Bộ lọc', surface: 'mobile', screen: 'gallery', description: 'Khoanh bộ lọc trạng thái và loại media trên mobile.' },
+    { id: 'mobile.gallery.grid', label: 'Điện thoại - Thư viện: Grid kết quả', surface: 'mobile', screen: 'gallery', description: 'Khoanh lưới ảnh/video đã tạo trên mobile.' },
+    { id: 'mobile.gallery.item', label: 'Điện thoại - Thư viện: Một item', surface: 'mobile', screen: 'gallery', description: 'Khoanh một item thư viện để hướng dẫn mở chi tiết.' },
+    { id: 'mobile.topup.hero', label: 'Điện thoại - Nạp VCOIN: Banner', surface: 'mobile', screen: 'topup', description: 'Khoanh banner sự kiện hoặc tiêu đề Store VCOIN trên mobile.' },
+    { id: 'mobile.topup.heading', label: 'Điện thoại - Nạp VCOIN: Tiêu đề chọn gói', surface: 'mobile', screen: 'topup', description: 'Khoanh tiêu đề khu vực chọn gói nạp.' },
+    { id: 'mobile.topup.packages', label: 'Điện thoại - Nạp VCOIN: Danh sách gói', surface: 'mobile', screen: 'topup', description: 'Khoanh danh sách các gói nạp trên mobile.' },
+    { id: 'mobile.topup.payment_button', label: 'Điện thoại - Nạp VCOIN: Nút nạp', surface: 'mobile', screen: 'topup', description: 'Khoanh nút nạp của gói đang hiển thị.' },
+    { id: 'mobile.topup.note', label: 'Điện thoại - Nạp VCOIN: Ghi chú thanh toán', surface: 'mobile', screen: 'topup', description: 'Khoanh ghi chú thanh toán SePay cuối trang.' },
+    { id: 'mobile.settings.profile', label: 'Điện thoại - Cài đặt: Hồ sơ', surface: 'mobile', screen: 'settings', description: 'Khoanh thẻ hồ sơ tài khoản trên mobile.' },
+    { id: 'mobile.settings.menu', label: 'Điện thoại - Cài đặt: Danh sách cài đặt', surface: 'mobile', screen: 'settings', description: 'Khoanh danh sách mục tài khoản, bảo mật, hỗ trợ và cài đặt chung.' },
+    { id: 'mobile.settings.admin', label: 'Điện thoại - Cài đặt: Nút admin', surface: 'mobile', screen: 'settings', description: 'Khoanh nút mở trang quản trị khi tài khoản là admin.' },
+    { id: 'mobile.settings.logout', label: 'Điện thoại - Cài đặt: Đăng xuất', surface: 'mobile', screen: 'settings', description: 'Khoanh nút đăng xuất trên mobile.' },
+    { id: 'mobile.settings.giftcode', label: 'Điện thoại - Cài đặt: Modal giftcode', surface: 'mobile', screen: 'settings', description: 'Khoanh modal nhập giftcode khi người dùng mở chức năng đổi quà.' },
+];
+
+export const DEFAULT_APP_TOURS_CONFIG: AppToursConfig = {
+    isActive: true,
+    showFrequency: 'daily',
+    contentVersion: 4,
+    tours: [
+        {
+            id: 'desktop_home_intro',
+            title: 'Hướng dẫn trang chủ máy tính',
+            surface: 'desktop',
+            screen: 'home',
+            isActive: true,
+            steps: [
+                { id: 'desktop_home_intro_1', targetId: 'desktop.home.features', title: 'Chọn công cụ AI', description: 'Chọn công cụ tạo ảnh, chỉnh sửa ảnh hoặc tạo video để bắt đầu.', placement: 'top', order: 1, isActive: true },
+                { id: 'desktop_home_intro_2', targetId: 'desktop.home.checkin', title: 'Điểm danh mỗi ngày', description: 'Bấm vào đây để nhận phần thưởng điểm danh khi có lượt khả dụng.', placement: 'left', order: 2, isActive: true },
+                { id: 'desktop_home_intro_3', targetId: 'desktop.layout.vcoin', title: 'Số dư VCOIN', description: 'Theo dõi số dư và nạp thêm VCOIN để sử dụng các tính năng AI.', placement: 'top', order: 3, isActive: true },
+            ],
+        },
+        {
+            id: 'desktop_generation_tool_intro',
+            title: 'Hướng dẫn tạo ảnh Audition máy tính',
+            surface: 'desktop',
+            screen: 'tool_workspace',
+            featureId: 'single_photo_gen,couple_photo_gen,group_3_gen,group_4_gen,group_5_gen',
+            isActive: true,
+            steps: [
+                { id: 'desktop_generation_tool_1', targetId: 'desktop.generation.characters', title: 'Tải ảnh nhân vật', description: 'Tải ảnh nhân vật rõ mặt, rõ trang phục để AI giữ đúng dáng và chi tiết.', placement: 'right', order: 1, isActive: true },
+                { id: 'desktop_generation_tool_2', targetId: 'desktop.generation.prompt', title: 'Nhập mô tả ảnh', description: 'Viết bối cảnh, trang phục, ánh sáng, cảm xúc hoặc phong cách bạn muốn tạo.', placement: 'top', order: 2, isActive: true },
+                { id: 'desktop_generation_tool_3', targetId: 'desktop.generation.settings', title: 'Chọn cấu hình', description: 'Chọn model, tỷ lệ ảnh, độ phân giải, tốc độ và server phù hợp với nhu cầu.', placement: 'left', order: 3, isActive: true },
+                { id: 'desktop_generation_tool_4', targetId: 'desktop.generation.generate', title: 'Tạo ảnh', description: 'Kiểm tra chi phí VCOIN rồi bấm tạo để đưa ảnh vào hàng đợi xử lý.', placement: 'top', order: 4, isActive: true },
+            ],
+        },
+        {
+            id: 'desktop_generation_group_intro',
+            title: 'Hướng dẫn tạo ảnh nhóm Audition máy tính',
+            surface: 'desktop',
+            screen: 'tool_workspace',
+            featureId: 'couple_photo_gen',
+            isActive: true,
+            steps: [
+                { id: 'desktop_generation_group_1', targetId: 'desktop.generation.characters', title: 'Tải ảnh từng nhân vật', description: 'Mỗi ô nhân vật nên dùng ảnh rõ mặt, rõ trang phục để AI phối đúng đội hình.', placement: 'right', order: 1, isActive: true },
+                { id: 'desktop_generation_group_2', targetId: 'desktop.generation.prompt', title: 'Mô tả bố cục nhóm', description: 'Nhập bối cảnh, tư thế, ánh sáng và phong cách để ảnh nhóm đúng ý hơn.', placement: 'top', order: 2, isActive: true },
+                { id: 'desktop_generation_group_3', targetId: 'desktop.generation.generate', title: 'Tạo ảnh nhóm', description: 'Sau khi kiểm tra cấu hình và VCOIN, bấm tạo để gửi job vào hàng đợi.', placement: 'top', order: 3, isActive: true },
+            ],
+        },
+        {
+            id: 'desktop_image_tool_intro',
+            title: 'Hướng dẫn tạo ảnh AI máy tính',
+            surface: 'desktop',
+            screen: 'tool_workspace',
+            featureId: 'ai_image_tool',
+            isActive: true,
+            steps: [
+                { id: 'desktop_image_tool_1', targetId: 'desktop.image.references', title: 'Ảnh tham chiếu', description: 'Tải ảnh mẫu nếu bạn muốn AI bám theo nhân vật, bố cục hoặc phong cách cụ thể.', placement: 'right', order: 1, isActive: true },
+                { id: 'desktop_image_tool_2', targetId: 'desktop.image.prompt', title: 'Prompt tạo ảnh', description: 'Nhập mô tả ảnh càng rõ thì kết quả càng sát ý tưởng.', placement: 'top', order: 2, isActive: true },
+                { id: 'desktop_image_tool_3', targetId: 'desktop.image.model', title: 'Model và cấu hình', description: 'Chọn model, chất lượng và tốc độ phù hợp với nhu cầu.', placement: 'left', order: 3, isActive: true },
+                { id: 'desktop_image_tool_4', targetId: 'desktop.image.generate', title: 'Tạo ảnh', description: 'Kiểm tra chi phí VCOIN rồi bấm tạo để đưa job vào hàng đợi.', placement: 'top', order: 4, isActive: true },
+            ],
+        },
+        {
+            id: 'desktop_video_tool_intro',
+            title: 'Hướng dẫn tạo video máy tính',
+            surface: 'desktop',
+            screen: 'tool_workspace',
+            featureId: 'video_ai_gen',
+            isActive: true,
+            steps: [
+                { id: 'desktop_video_tool_1', targetId: 'desktop.video.mode', title: 'Chọn chế độ video', description: 'Chuyển giữa tạo Video AI và Motion Control tùy mục đích.', placement: 'bottom', order: 1, isActive: true },
+                { id: 'desktop_video_tool_2', targetId: 'desktop.video.upload', title: 'Tải tư liệu', description: 'Tải ảnh keyframe cho Video AI hoặc ảnh nhân vật/video chuyển động cho Motion Control.', placement: 'right', order: 2, isActive: true },
+                { id: 'desktop_video_tool_3', targetId: 'desktop.video.prompt', title: 'Mô tả chuyển động', description: 'Viết ý tưởng, hành động, bối cảnh hoặc yêu cầu chuyển động cho video.', placement: 'top', order: 3, isActive: true },
+                { id: 'desktop_video_tool_4', targetId: 'desktop.video.generate', title: 'Tạo video', description: 'Kiểm tra VCOIN và bấm tạo để gửi job render video.', placement: 'top', order: 4, isActive: true },
+            ],
+        },
+        {
+            id: 'mobile_home_intro',
+            title: 'Hướng dẫn trang chủ điện thoại',
+            surface: 'mobile',
+            screen: 'home',
+            isActive: true,
+            steps: [
+                { id: 'mobile_home_intro_1', targetId: 'mobile.layout.topbar', title: 'Thanh tài khoản', description: 'Xem nhanh số dư, ưu đãi và mở trang tài khoản.', placement: 'bottom', order: 1, isActive: true },
+                { id: 'mobile_home_intro_2', targetId: 'mobile.home.features', title: 'Chọn công cụ', description: 'Chọn công cụ AI bạn muốn dùng trên điện thoại.', placement: 'top', order: 2, isActive: true },
+                { id: 'mobile_home_intro_3', targetId: 'mobile.layout.bottomnav', title: 'Điều hướng nhanh', description: 'Dùng thanh dưới để chuyển giữa trang chủ, thư viện, nạp tiền và tài khoản.', placement: 'top', order: 3, isActive: true },
+            ],
+        },
+        {
+            id: 'mobile_generation_tool_intro',
+            title: 'Hướng dẫn tạo ảnh Audition điện thoại',
+            surface: 'mobile',
+            screen: 'tool_workspace',
+            featureId: 'single_photo_gen',
+            isActive: true,
+            steps: [
+                { id: 'mobile_generation_tool_1', targetId: 'mobile.generation.characters', title: 'Tải ảnh nhân vật', description: 'Chọn ảnh rõ mặt, rõ trang phục để AI tạo ảnh sát nhân vật hơn.', placement: 'bottom', order: 1, isActive: true },
+                { id: 'mobile_generation_tool_2', targetId: 'mobile.generation.prompt', title: 'Nhập mô tả', description: 'Mô tả bối cảnh, trang phục, ánh sáng hoặc phong cách bạn muốn.', placement: 'top', order: 2, isActive: true },
+                { id: 'mobile_generation_tool_3', targetId: 'mobile.generation.generate', title: 'Tạo ảnh', description: 'Kiểm tra VCOIN và bấm tạo để gửi yêu cầu xử lý.', placement: 'top', order: 3, isActive: true },
+            ],
+        },
+        {
+            id: 'mobile_image_tool_intro',
+            title: 'Hướng dẫn tạo ảnh AI điện thoại',
+            surface: 'mobile',
+            screen: 'tool_workspace',
+            featureId: 'ai_image_tool',
+            isActive: true,
+            steps: [
+                { id: 'mobile_image_tool_1', targetId: 'mobile.image.references', title: 'Ảnh tham chiếu', description: 'Thêm ảnh mẫu để AI hiểu nhân vật hoặc phong cách bạn muốn.', placement: 'bottom', order: 1, isActive: true },
+                { id: 'mobile_image_tool_2', targetId: 'mobile.image.prompt', title: 'Prompt tạo ảnh', description: 'Nhập mô tả rõ ràng trước khi tạo ảnh.', placement: 'top', order: 2, isActive: true },
+                { id: 'mobile_image_tool_3', targetId: 'mobile.image.settings', title: 'Chọn cấu hình', description: 'Chọn khung hình, model, độ phân giải, tốc độ và máy chủ trước khi tạo.', placement: 'top', order: 3, isActive: true },
+                { id: 'mobile_image_tool_4', targetId: 'mobile.image.generate', title: 'Bấm tạo', description: 'Kiểm tra chi phí rồi gửi yêu cầu tạo ảnh.', placement: 'top', order: 4, isActive: true },
+            ],
+        },
+        {
+            id: 'mobile_video_tool_intro',
+            title: 'Hướng dẫn tạo video điện thoại',
+            surface: 'mobile',
+            screen: 'tool_workspace',
+            featureId: 'video_ai_gen',
+            isActive: true,
+            steps: [
+                { id: 'mobile_video_tool_1', targetId: 'mobile.video.upload', title: 'Tải ảnh hoặc video mẫu', description: 'Chuẩn bị tư liệu đầu vào cho Video AI hoặc Motion Control.', placement: 'bottom', order: 1, isActive: true },
+                { id: 'mobile_video_tool_2', targetId: 'mobile.video.prompt', title: 'Mô tả video', description: 'Viết chuyển động, bối cảnh và ý tưởng chính.', placement: 'top', order: 2, isActive: true },
+                { id: 'mobile_video_tool_3', targetId: 'mobile.video.settings', title: 'Chọn cấu hình video', description: 'Chọn model, thời lượng, độ phân giải, tốc độ xử lý và máy chủ.', placement: 'top', order: 3, isActive: true },
+                { id: 'mobile_video_tool_4', targetId: 'mobile.video.generate', title: 'Tạo video', description: 'Bấm tạo để đưa video vào hàng đợi xử lý.', placement: 'top', order: 4, isActive: true },
+            ],
+        },
+    ],
 };
 
 let userProfileCache: (TimedCache<UserProfile> & { userId: string }) | null = null;
@@ -2515,6 +2794,143 @@ export const saveSystemAnnouncementConfig = async (config: SystemAnnouncementCon
         return { success: true };
     } catch (e: any) {
         console.error("Save System Announcement Config Error", e);
+        return { success: false, error: e?.message || e };
+    }
+};
+
+// --- APP TOURS ---
+
+const normalizeTourPlacement = (value: any): AppTourPlacement => {
+    const placement = String(value || '').toLowerCase();
+    return placement === 'top' || placement === 'right' || placement === 'bottom' || placement === 'left' ? placement : 'auto';
+};
+
+const normalizeAppTourStep = (value: any, index: number): AppTourStep => ({
+    id: String(value?.id || `step_${Date.now()}_${index}`).trim(),
+    targetId: String(value?.targetId || '').trim(),
+    title: String(value?.title || 'Hướng dẫn').trim() || 'Hướng dẫn',
+    description: String(value?.description || '').trim(),
+    placement: normalizeTourPlacement(value?.placement),
+    order: Number.isFinite(Number(value?.order)) ? Number(value.order) : index + 1,
+    isActive: value?.isActive !== false,
+});
+
+const normalizeAppTour = (value: any, index: number): AppTourDefinition => {
+    const surface = String(value?.surface || '').toLowerCase() === 'mobile' ? 'mobile' : 'desktop';
+    const steps = Array.isArray(value?.steps)
+        ? value.steps
+            .map(normalizeAppTourStep)
+            .filter((step: AppTourStep) => step.targetId && step.title)
+            .sort((left: AppTourStep, right: AppTourStep) => (left.order || 0) - (right.order || 0))
+        : [];
+
+    return {
+        id: String(value?.id || `tour_${surface}_${index + 1}`).trim(),
+        title: String(value?.title || 'Hướng dẫn ứng dụng').trim() || 'Hướng dẫn ứng dụng',
+        surface,
+        screen: String(value?.screen || 'global').trim() || 'global',
+        featureId: String(value?.featureId || '').trim() || undefined,
+        isActive: value?.isActive !== false,
+        steps,
+    };
+};
+
+const normalizeAppToursConfig = (value: any): AppToursConfig => {
+    const frequency = String(value?.showFrequency || '').toLowerCase();
+    const showFrequency = frequency === 'once' || frequency === 'always' ? frequency : 'daily';
+    const sourceTours = Array.isArray(value?.tours) ? value.tours : DEFAULT_APP_TOURS_CONFIG.tours;
+    const tours = sourceTours
+        .map(normalizeAppTour)
+        .filter((tour: AppTourDefinition) => tour.id && tour.steps.length > 0);
+
+    return {
+        isActive: value?.isActive !== false,
+        showFrequency,
+        tours,
+        updatedAt: typeof value?.updatedAt === 'string' ? value.updatedAt : undefined,
+        contentVersion: Number(value?.contentVersion) || undefined,
+    };
+};
+
+export const getAppToursConfig = async (): Promise<AppToursConfig> => {
+    if (!supabase) return DEFAULT_APP_TOURS_CONFIG;
+    try {
+        const { data, error } = await supabase
+            .from('system_settings')
+            .select('value')
+            .eq('key', 'app_tours')
+            .maybeSingle();
+        if (error) throw error;
+
+        const storedValue = data?.value;
+        if (!storedValue || Number(storedValue?.contentVersion) < DEFAULT_APP_TOURS_CONFIG.contentVersion!) {
+            return DEFAULT_APP_TOURS_CONFIG;
+        }
+
+        return normalizeAppToursConfig(storedValue);
+    } catch (e) {
+        console.error("Get App Tours Config Error", e);
+        return DEFAULT_APP_TOURS_CONFIG;
+    }
+};
+
+export const saveAppToursConfig = async (config: AppToursConfig) => {
+    if (!supabase) return { success: false, error: "No Database" };
+    try {
+        const normalizedConfig = normalizeAppToursConfig(config);
+        const payload = {
+            ...normalizedConfig,
+            contentVersion: DEFAULT_APP_TOURS_CONFIG.contentVersion,
+            updatedAt: new Date().toISOString(),
+        };
+
+        const { data: existing, error: readError } = await supabase
+            .from('system_settings')
+            .select('key')
+            .eq('key', 'app_tours')
+            .maybeSingle();
+        if (readError) throw readError;
+
+        if (existing?.key) {
+            const { error: updateError } = await supabase
+                .from('system_settings')
+                .update({ value: payload })
+                .eq('key', 'app_tours');
+            if (updateError) throw updateError;
+        } else {
+            const { error: insertError } = await supabase
+                .from('system_settings')
+                .insert({ key: 'app_tours', value: payload });
+
+            if (insertError) {
+                if (insertError.code === '23505') {
+                    const { error: retryUpdateError } = await supabase
+                        .from('system_settings')
+                        .update({ value: payload })
+                        .eq('key', 'app_tours');
+                    if (retryUpdateError) throw retryUpdateError;
+                } else {
+                    throw insertError;
+                }
+            }
+        }
+
+        const { data: savedRow, error: verifyError } = await supabase
+            .from('system_settings')
+            .select('value')
+            .eq('key', 'app_tours')
+            .maybeSingle();
+        if (verifyError) throw verifyError;
+
+        const savedVersion = Number(savedRow?.value?.contentVersion || 0);
+        const savedUpdatedAt = String(savedRow?.value?.updatedAt || '');
+        if (!savedRow?.value || savedVersion !== DEFAULT_APP_TOURS_CONFIG.contentVersion || savedUpdatedAt !== payload.updatedAt) {
+            throw new Error('Không xác nhận được dữ liệu hướng dẫn sau khi ghi vào database.');
+        }
+
+        return { success: true };
+    } catch (e: any) {
+        console.error("Save App Tours Config Error", e);
         return { success: false, error: e?.message || e };
     }
 };

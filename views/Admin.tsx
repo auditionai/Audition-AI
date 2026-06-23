@@ -47,6 +47,13 @@ import {
     getSystemAnnouncementConfig,
     saveSystemAnnouncementConfig,
     SystemAnnouncementConfig,
+    getAppToursConfig,
+    saveAppToursConfig,
+    APP_TOUR_TARGETS,
+    DEFAULT_APP_TOURS_CONFIG,
+    AppToursConfig,
+    AppTourDefinition,
+    AppTourStep,
     getModelPricing,
     saveModelPricing,
     syncTSTPrices,
@@ -492,7 +499,7 @@ const getQueueMediaSectionTone = (key: AdminQueueMediaSection['key']) => {
 const getQueueMediaMeta = (media: AdminQueueInputMedia) => `${media.kind} · ${media.sourceType}${media.userProvided === false ? ' · hệ thống' : ''}`;
 
 export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
-  const [activeView, setActiveView] = useState<'overview' | 'transactions' | 'users' | 'queue' | 'packages' | 'marketing' | 'pricing' | 'system' | 'styles'>('overview');
+  const [activeView, setActiveView] = useState<'overview' | 'transactions' | 'users' | 'queue' | 'packages' | 'marketing' | 'pricing' | 'system' | 'styles' | 'tours'>('overview');
   const [stats, setStats] = useState<any>(null);
   const [allImages, setAllImages] = useState<GeneratedImage[]>([]);
   const [packages, setPackages] = useState<CreditPackage[]>([]);
@@ -519,6 +526,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       message: 'Chào mừng bạn quay lại AUDITION AI.',
       variant: 'info',
   });
+  const [appTours, setAppTours] = useState<AppToursConfig>(DEFAULT_APP_TOURS_CONFIG);
+  const [selectedTourId, setSelectedTourId] = useState(DEFAULT_APP_TOURS_CONFIG.tours[0]?.id || '');
+  const [draggingTourStepId, setDraggingTourStepId] = useState<string | null>(null);
+  const [collapsedTourStepIds, setCollapsedTourStepIds] = useState<string[]>([]);
 
   // API Key States
   const [apiKey, setApiKey] = useState('');
@@ -710,6 +721,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
       const announcementConfig = await getSystemAnnouncementConfig();
       setSystemAnnouncement(announcementConfig);
+
+      const toursConfig = await getAppToursConfig();
+      setAppTours(toursConfig);
+      setSelectedTourId((current) => current && toursConfig.tours.some((tour) => tour.id === current)
+          ? current
+          : toursConfig.tours[0]?.id || '');
 
       const pricing = await getModelPricing();
       setModelPricing((pricing || []).filter((row) => isAdminManagedPricingModel(row.model_id)));
@@ -1765,6 +1782,138 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           showToast('Lỗi lưu bảo trì chức năng: ' + result.error, 'error');
       }
   };
+
+  const updateAppTour = (tourId: string, updater: (tour: AppTourDefinition) => AppTourDefinition) => {
+      setAppTours((current) => ({
+          ...current,
+          tours: current.tours.map((tour) => tour.id === tourId ? updater(tour) : tour),
+      }));
+  };
+
+  const updateAppTourStep = (tourId: string, stepId: string, updater: (step: AppTourStep) => AppTourStep) => {
+      updateAppTour(tourId, (tour) => ({
+          ...tour,
+          steps: tour.steps.map((step) => step.id === stepId ? updater(step) : step),
+      }));
+  };
+
+  const reorderAppTourSteps = (tourId: string, draggedStepId: string, targetStepId: string) => {
+      if (draggedStepId === targetStepId) return;
+      updateAppTour(tourId, (tour) => {
+          const orderedSteps = [...tour.steps].sort((a, b) => (a.order || 0) - (b.order || 0));
+          const fromIndex = orderedSteps.findIndex((step) => step.id === draggedStepId);
+          const toIndex = orderedSteps.findIndex((step) => step.id === targetStepId);
+          if (fromIndex < 0 || toIndex < 0) return tour;
+
+          const [draggedStep] = orderedSteps.splice(fromIndex, 1);
+          orderedSteps.splice(toIndex, 0, draggedStep);
+
+          return {
+              ...tour,
+              steps: orderedSteps.map((step, index) => ({ ...step, order: index + 1 })),
+          };
+      });
+  };
+
+  const toggleCollapsedTourStep = (stepId: string) => {
+      setCollapsedTourStepIds((current) => (
+          current.includes(stepId)
+              ? current.filter((id) => id !== stepId)
+              : [...current, stepId]
+      ));
+  };
+
+  const setAllTourStepsCollapsed = (steps: AppTourStep[], collapsed: boolean) => {
+      setCollapsedTourStepIds(collapsed ? steps.map((step) => step.id) : []);
+  };
+
+  const handleAddTour = () => {
+      const id = `tour_${Date.now()}`;
+      const nextTour: AppTourDefinition = {
+          id,
+          title: 'Hướng dẫn mới',
+          surface: 'desktop',
+          screen: 'home',
+          isActive: true,
+          steps: [{
+              id: `step_${Date.now()}`,
+              targetId: 'desktop.home.features',
+              title: 'Bước hướng dẫn',
+              description: 'Nhập nội dung hướng dẫn tại đây.',
+              placement: 'auto',
+              order: 1,
+              isActive: true,
+          }],
+      };
+      setAppTours((current) => ({ ...current, tours: [...current.tours, nextTour] }));
+      setSelectedTourId(id);
+  };
+
+  const handleDuplicateTour = (tour: AppTourDefinition) => {
+      const id = `${tour.id}_copy_${Date.now()}`;
+      const nextTour: AppTourDefinition = {
+          ...tour,
+          id,
+          title: `${tour.title} Copy`,
+          steps: tour.steps.map((step, index) => ({ ...step, id: `${id}_step_${index + 1}` })),
+      };
+      setAppTours((current) => ({ ...current, tours: [...current.tours, nextTour] }));
+      setSelectedTourId(id);
+  };
+
+  const handleDeleteTour = (tourId: string) => {
+      showConfirm('Xóa tour hướng dẫn này?', () => {
+          setAppTours((current) => {
+              const nextTours = current.tours.filter((tour) => tour.id !== tourId);
+              setSelectedTourId(nextTours[0]?.id || '');
+              return { ...current, tours: nextTours };
+          });
+      });
+  };
+
+  const handleAddTourStep = (tourId: string) => {
+      updateAppTour(tourId, (tour) => {
+          const nextOrder = (tour.steps || []).length + 1;
+          const fallbackTarget = APP_TOUR_TARGETS.find((target) => target.surface === tour.surface && (target.screen === tour.screen || target.screen === 'global'));
+          return {
+              ...tour,
+              steps: [
+                  ...tour.steps,
+                  {
+                      id: `step_${Date.now()}`,
+                      targetId: fallbackTarget?.id || '',
+                      title: 'Bước hướng dẫn',
+                      description: 'Nhập nội dung hướng dẫn tại đây.',
+                      placement: 'auto',
+                      order: nextOrder,
+                      isActive: true,
+                  },
+              ],
+          };
+      });
+  };
+
+  const handleDeleteTourStep = (tourId: string, stepId: string) => {
+      updateAppTour(tourId, (tour) => ({
+          ...tour,
+          steps: tour.steps.filter((step) => step.id !== stepId).map((step, index) => ({ ...step, order: index + 1 })),
+      }));
+  };
+
+  const handleSaveAppTours = async () => {
+      const result = await saveAppToursConfig(appTours);
+      if (result.success) {
+          const savedConfig = await getAppToursConfig();
+          setAppTours(savedConfig);
+          setSelectedTourId((current) => current && savedConfig.tours.some((tour) => tour.id === current)
+              ? current
+              : savedConfig.tours[0]?.id || '');
+          window.dispatchEvent(new Event('auditionai:app-tours-updated'));
+          showToast('Đã lưu cấu hình hướng dẫn vào database!', 'success');
+      } else {
+          showToast('Lỗi lưu hướng dẫn: ' + result.error, 'error');
+      }
+  };
   const getQueueHealthClass = (severity?: string) => {
       switch (severity) {
           case 'ok': return 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20';
@@ -1942,6 +2091,44 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       </div>
   );
 
+  const selectedTour = appTours.tours.find((tour) => tour.id === selectedTourId) || appTours.tours[0] || null;
+  const orderedTourSteps = selectedTour?.steps.slice().sort((a, b) => (a.order || 0) - (b.order || 0)) || [];
+  const tourFeatureIds = (tour: AppTourDefinition | null) =>
+      (tour?.featureId || '').split(',').map((value) => value.trim()).filter(Boolean);
+  const getTourTargetOptions = (tour: AppTourDefinition | null) => APP_TOUR_TARGETS.filter((target) => {
+      if (!tour) return true;
+      if (target.surface !== tour.surface) return false;
+      const featureIds = tourFeatureIds(tour);
+      const featureMatches = !target.featureId || featureIds.length === 0 || featureIds.includes(target.featureId);
+      return (target.screen === 'global' || target.screen === tour.screen) && featureMatches;
+  });
+  const getTourTargetMeta = (targetId: string) => APP_TOUR_TARGETS.find((target) => target.id === targetId);
+  const getTourTargetDescription = (targetId: string) => {
+      const meta = getTourTargetMeta(targetId);
+      if (meta?.description) return meta.description;
+      if (targetId.includes('.layout.logo')) return 'Khoanh vùng logo AUDITION AI ở header. Người dùng có thể bấm để quay về trang chủ.';
+      if (targetId.includes('.layout.language')) return 'Khoanh vùng nút đổi ngôn ngữ trên header máy tính.';
+      if (targetId.includes('.layout.dock') || targetId.includes('.layout.bottomnav')) return 'Khoanh vùng thanh điều hướng chính ở cạnh dưới màn hình.';
+      if (targetId.includes('.layout.vcoin')) return 'Khoanh vùng khu vực số dư VCOIN và lối vào nạp tiền.';
+      if (targetId.includes('.layout.profile')) return 'Khoanh vùng nút tài khoản/cài đặt của người dùng.';
+      if (targetId.includes('.home.checkin')) return 'Khoanh vùng nút điểm danh trên trang chủ.';
+      if (targetId.includes('.home.features')) return 'Khoanh vùng danh sách công cụ AI trên trang chủ.';
+      if (targetId.includes('.generation.characters')) return 'Khoanh vùng khu vực tải ảnh nhân vật trong trình tạo ảnh Audition.';
+      if (targetId.includes('.generation.prompt')) return 'Khoanh vùng ô nhập mô tả/prompt trong trình tạo ảnh Audition.';
+      if (targetId.includes('.generation.settings')) return 'Khoanh vùng khu vực chọn model, khung hình, độ phân giải, tốc độ và server trong trình tạo ảnh Audition.';
+      if (targetId.includes('.generation.generate')) return 'Khoanh vùng nút bắt đầu tạo ảnh Audition.';
+      if (targetId.includes('.image.references')) return 'Khoanh vùng khu vực ảnh tham chiếu của công cụ tạo ảnh AI.';
+      if (targetId.includes('.image.prompt')) return 'Khoanh vùng ô nhập prompt của công cụ tạo ảnh AI.';
+      if (targetId.includes('.image.settings') || targetId.includes('.image.model')) return 'Khoanh vùng khu vực chọn model, tỷ lệ, độ phân giải, tốc độ và máy chủ của công cụ tạo ảnh AI.';
+      if (targetId.includes('.image.generate')) return 'Khoanh vùng nút tạo ảnh của công cụ tạo ảnh AI.';
+      if (targetId.includes('.video.mode')) return 'Khoanh vùng nút chuyển giữa Video AI và Motion Control.';
+      if (targetId.includes('.video.upload')) return 'Khoanh vùng khu vực tải ảnh/video đầu vào cho Video AI hoặc Motion Control.';
+      if (targetId.includes('.video.prompt')) return 'Khoanh vùng ô mô tả chuyển động/kịch bản video.';
+      if (targetId.includes('.video.settings') || targetId.includes('.video.model')) return 'Khoanh vùng khu vực chọn model, thời lượng, độ phân giải, tốc độ và máy chủ video.';
+      if (targetId.includes('.video.generate')) return 'Khoanh vùng nút tạo video.';
+      return 'Vị trí đã được gắn data-tour-id trong giao diện. Chọn target này để khoanh đúng khu vực tương ứng khi tour chạy.';
+  };
+
   return (
     <div className="min-h-screen pb-24 animate-fade-in bg-[#05050A]">
       {/* --- TOASTS CONTAINER --- */}
@@ -2015,6 +2202,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   { id: 'marketing', icon: Icons.Zap, label: 'Sự Kiện & Code' },
                   { id: 'pricing', icon: Icons.Gem, label: 'Bảng Giá' },
                   { id: 'styles', icon: Icons.Palette, label: 'Style Mẫu' },
+                  { id: 'tours', icon: Icons.Info, label: 'Hướng Dẫn' },
                   { id: 'system', icon: Icons.Cpu, label: 'Hệ Thống' },
               ].map(tab => (
                   <button
@@ -3184,6 +3372,164 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       {stylePresets.length === 0 && (
                           <div className="col-span-full py-12 text-center text-slate-500 italic border border-dashed border-white/10 rounded-2xl">
                               Chưa có style mẫu nào. Hãy thêm mới!
+                          </div>
+                      )}
+                  </div>
+              </div>
+           )}
+
+           {/* ================= VIEW: TOURS ================= */}
+           {activeView === 'tours' && (
+              <div className="space-y-6 animate-slide-in-right">
+                  <div className="bg-[#12121a] border border-white/10 rounded-2xl p-5 shadow-xl">
+                      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                          <div>
+                              <h2 className="text-lg md:text-2xl font-bold text-white flex items-center gap-2">
+                                  <Icons.Info className="w-5 h-5 text-audi-cyan" />
+                                  Hướng Dẫn Ứng Dụng
+                              </h2>
+                              <p className="mt-1 text-xs text-slate-400">Tạo tour riêng cho máy tính và điện thoại, theo từng màn hình hoặc từng công cụ.</p>
+                          </div>
+                          <div className="flex gap-2">
+                              <button onClick={handleAddTour} className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-bold">Thêm tour</button>
+                              <button onClick={handleSaveAppTours} className="px-5 py-2 rounded-xl bg-audi-cyan hover:bg-cyan-300 text-black text-xs font-black">Lưu cấu hình</button>
+                          </div>
+                      </div>
+                      <div className="mt-5 grid gap-4 md:grid-cols-3">
+                          <label className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Trạng thái</span>
+                              <select value={appTours.isActive ? 'on' : 'off'} onChange={(e) => setAppTours((c) => ({ ...c, isActive: e.target.value === 'on' }))} className="mt-2 w-full rounded-xl border border-white/10 bg-[#090914] px-3 py-2 text-sm font-bold text-white outline-none">
+                                  <option value="on">Bật toàn bộ</option>
+                                  <option value="off">Tắt toàn bộ</option>
+                              </select>
+                          </label>
+                          <label className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Tần suất</span>
+                              <select value={appTours.showFrequency} onChange={(e) => setAppTours((c) => ({ ...c, showFrequency: e.target.value as AppToursConfig['showFrequency'] }))} className="mt-2 w-full rounded-xl border border-white/10 bg-[#090914] px-3 py-2 text-sm font-bold text-white outline-none">
+                                  <option value="daily">Mỗi ngày một lần</option>
+                                  <option value="once">Chỉ một lần</option>
+                                  <option value="always">Luôn hiển thị</option>
+                              </select>
+                          </label>
+                          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Tổng tour</span>
+                              <div className="mt-2 text-3xl font-game font-bold text-white">{appTours.tours.length}</div>
+                          </div>
+                      </div>
+                  </div>
+
+                  <div className="grid gap-6 xl:grid-cols-[340px_1fr]">
+                      <div className="space-y-3">
+                          {appTours.tours.map((tour) => (
+                              <button key={tour.id} onClick={() => setSelectedTourId(tour.id)} className={`w-full rounded-2xl border p-4 text-left transition-all ${selectedTour?.id === tour.id ? 'border-audi-cyan bg-audi-cyan/10' : 'border-white/10 bg-[#12121a] hover:border-white/20'}`}>
+                                  <div className="flex items-center justify-between gap-3">
+                                      <span className="text-sm font-black text-white">{tour.title}</span>
+                                      <span className={`rounded-full px-2 py-1 text-[9px] font-black uppercase ${tour.surface === 'mobile' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-cyan-500/15 text-cyan-300'}`}>{tour.surface}</span>
+                                  </div>
+                                  <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-bold text-slate-500">
+                                      <span>{tour.screen}</span>
+                                      {tour.featureId && <span>{tour.featureId}</span>}
+                                      <span>{tour.steps.length} bước</span>
+                                      <span>{tour.isActive ? 'Bật' : 'Tắt'}</span>
+                                  </div>
+                              </button>
+                          ))}
+                      </div>
+
+                      {selectedTour && (
+                          <div className="space-y-4">
+                              <div className="rounded-2xl border border-white/10 bg-[#12121a] p-5">
+                                  <div className="grid gap-4 md:grid-cols-2">
+                                      <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Tên tour</span><input value={selectedTour.title} onChange={(e) => updateAppTour(selectedTour.id, (t) => ({ ...t, title: e.target.value }))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan" /></label>
+                                      <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Màn hình</span><input value={selectedTour.screen} onChange={(e) => updateAppTour(selectedTour.id, (t) => ({ ...t, screen: e.target.value.trim() || 'global' }))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan" /></label>
+                                      <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Giao diện</span><select value={selectedTour.surface} onChange={(e) => updateAppTour(selectedTour.id, (t) => ({ ...t, surface: e.target.value as AppTourDefinition['surface'] }))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan"><option value="desktop">Máy tính</option><option value="mobile">Điện thoại</option></select></label>
+                                      <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Feature ID</span><input value={selectedTour.featureId || ''} placeholder="Ví dụ: ai_image_tool, video_ai_gen" onChange={(e) => updateAppTour(selectedTour.id, (t) => ({ ...t, featureId: e.target.value.trim() || undefined }))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan" /></label>
+                                  </div>
+                                  <div className="mt-4 flex flex-wrap gap-2">
+                                      <button onClick={() => updateAppTour(selectedTour.id, (t) => ({ ...t, isActive: !t.isActive }))} className={`px-4 py-2 rounded-xl text-xs font-bold ${selectedTour.isActive ? 'bg-green-500/15 text-green-300' : 'bg-white/10 text-slate-300'}`}>{selectedTour.isActive ? 'Tour đang bật' : 'Tour đang tắt'}</button>
+                                      <button onClick={() => handleDuplicateTour(selectedTour)} className="px-4 py-2 rounded-xl bg-white/10 text-xs font-bold text-white hover:bg-white/15">Nhân bản</button>
+                                      <button onClick={() => handleAddTourStep(selectedTour.id)} className="px-4 py-2 rounded-xl bg-audi-purple text-xs font-bold text-white hover:bg-purple-600">Thêm bước</button>
+                                      <button onClick={() => setAllTourStepsCollapsed(orderedTourSteps, true)} className="px-4 py-2 rounded-xl bg-white/10 text-xs font-bold text-white hover:bg-white/15">Thu gọn tất cả</button>
+                                      <button onClick={() => setAllTourStepsCollapsed(orderedTourSteps, false)} className="px-4 py-2 rounded-xl bg-white/10 text-xs font-bold text-white hover:bg-white/15">Mở tất cả</button>
+                                      <button onClick={() => handleDeleteTour(selectedTour.id)} className="ml-auto px-4 py-2 rounded-xl bg-red-500/15 text-xs font-bold text-red-300 hover:bg-red-500/25">Xóa tour</button>
+                                  </div>
+                              </div>
+
+                              <div className="space-y-3">
+                              {orderedTourSteps.map((step, index) => {
+                                  const isStepCollapsed = collapsedTourStepIds.includes(step.id);
+                                  return (
+                                  <div
+                                      key={step.id}
+                                      onDragOver={(event) => {
+                                          event.preventDefault();
+                                          event.dataTransfer.dropEffect = 'move';
+                                      }}
+                                      onDrop={(event) => {
+                                          event.preventDefault();
+                                          const draggedStepId = event.dataTransfer.getData('text/plain') || draggingTourStepId;
+                                          if (draggedStepId) reorderAppTourSteps(selectedTour.id, draggedStepId, step.id);
+                                          setDraggingTourStepId(null);
+                                      }}
+                                      onDragEnd={() => setDraggingTourStepId(null)}
+                                      className={`rounded-2xl border bg-[#12121a] p-5 transition-all ${draggingTourStepId === step.id ? 'border-audi-cyan opacity-60 scale-[0.99]' : 'border-white/10 hover:border-white/20'}`}
+                                  >
+                                      <div className="mb-4 flex items-center justify-between">
+                                          <div className="flex min-w-0 items-center gap-2">
+                                              <button
+                                                  type="button"
+                                                  draggable
+                                                  onDragStart={(event) => {
+                                                      setDraggingTourStepId(step.id);
+                                                      event.dataTransfer.effectAllowed = 'move';
+                                                      event.dataTransfer.setData('text/plain', step.id);
+                                                  }}
+                                                  onDragEnd={() => setDraggingTourStepId(null)}
+                                                  className="grid h-8 w-8 cursor-grab place-items-center rounded-xl border border-white/10 bg-black/30 text-slate-400 active:cursor-grabbing"
+                                                  title="Kéo để sắp xếp bước"
+                                              >
+                                                  <Icons.Menu className="h-4 w-4" />
+                                              </button>
+                                              <span className="grid h-8 w-8 place-items-center rounded-full bg-audi-cyan text-sm font-black text-black">{index + 1}</span>
+                                              <span className="truncate text-sm font-black text-white">{step.title}</span>
+                                          </div>
+                                          <div className="flex shrink-0 items-center gap-2">
+                                              <button onClick={() => toggleCollapsedTourStep(step.id)} className="rounded-lg bg-white/10 px-3 py-1.5 text-xs font-bold text-slate-200 hover:bg-white/15">{isStepCollapsed ? 'Mở' : 'Thu gọn'}</button>
+                                              <button onClick={() => handleDeleteTourStep(selectedTour.id, step.id)} className="text-xs font-bold text-red-300 hover:text-red-200">Xóa bước</button>
+                                          </div>
+                                      </div>
+                                      {!isStepCollapsed && (
+                                      <>
+                                      <div className="grid gap-4 md:grid-cols-2">
+                                          <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Vùng khoanh</span><select value={step.targetId} onChange={(e) => updateAppTourStep(selectedTour.id, step.id, (s) => ({ ...s, targetId: e.target.value }))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan">{getTourTargetOptions(selectedTour).map((target) => <option key={target.id} value={target.id}>{target.label}</option>)}</select></label>
+                                          <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Vị trí hộp</span><select value={step.placement || 'auto'} onChange={(e) => updateAppTourStep(selectedTour.id, step.id, (s) => ({ ...s, placement: e.target.value as AppTourStep['placement'] }))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan"><option value="auto">Tự động</option><option value="top">Trên</option><option value="right">Phải</option><option value="bottom">Dưới</option><option value="left">Trái</option></select></label>
+                                          <div className="md:col-span-2 rounded-2xl border border-audi-cyan/20 bg-audi-cyan/5 p-4">
+                                              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                                                  <div>
+                                                      <div className="text-sm font-black text-white">{getTourTargetMeta(step.targetId)?.label || 'Chưa chọn vùng khoanh'}</div>
+                                                      <div className="mt-1 font-mono text-[10px] text-audi-cyan">{step.targetId || 'data-tour-id'}</div>
+                                                  </div>
+                                                  {getTourTargetMeta(step.targetId) && (
+                                                      <div className="flex flex-wrap gap-1.5 text-[9px] font-bold uppercase">
+                                                          <span className="rounded-full bg-white/10 px-2 py-1 text-slate-300">{getTourTargetMeta(step.targetId)?.surface}</span>
+                                                          <span className="rounded-full bg-white/10 px-2 py-1 text-slate-300">{getTourTargetMeta(step.targetId)?.screen}</span>
+                                                          {getTourTargetMeta(step.targetId)?.featureId && <span className="rounded-full bg-audi-purple/20 px-2 py-1 text-audi-purple">{getTourTargetMeta(step.targetId)?.featureId}</span>}
+                                                      </div>
+                                                  )}
+                                              </div>
+                                              <p className="mt-3 text-xs leading-relaxed text-slate-300">{getTourTargetDescription(step.targetId)}</p>
+                                          </div>
+                                          <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Tiêu đề</span><input value={step.title} onChange={(e) => updateAppTourStep(selectedTour.id, step.id, (s) => ({ ...s, title: e.target.value }))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan" /></label>
+                                          <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Thứ tự</span><input type="number" value={step.order || index + 1} onChange={(e) => updateAppTourStep(selectedTour.id, step.id, (s) => ({ ...s, order: Number(e.target.value) || index + 1 }))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan" /></label>
+                                          <label className="md:col-span-2"><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Nội dung hướng dẫn</span><textarea value={step.description} onChange={(e) => updateAppTourStep(selectedTour.id, step.id, (s) => ({ ...s, description: e.target.value }))} rows={3} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm leading-relaxed text-white outline-none focus:border-audi-cyan" /></label>
+                                      </div>
+                                      <button onClick={() => updateAppTourStep(selectedTour.id, step.id, (s) => ({ ...s, isActive: s.isActive === false }))} className={`mt-4 rounded-xl px-4 py-2 text-xs font-bold ${step.isActive === false ? 'bg-white/10 text-slate-300' : 'bg-green-500/15 text-green-300'}`}>{step.isActive === false ? 'Bước đang tắt' : 'Bước đang bật'}</button>
+                                      </>
+                                      )}
+                                  </div>
+                              );
+                              })}
+                              </div>
                           </div>
                       )}
                   </div>

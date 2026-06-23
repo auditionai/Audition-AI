@@ -102,12 +102,12 @@ export function WorkspacePromptImage() {
   const [referenceImages, setReferenceImages] = useState<(string | null)[]>([null]);
   const [activeUploadIndex, setActiveUploadIndex] = useState(0);
   const [prompt, setPrompt] = useState('');
-  const [aiModel, setAiModel] = useState<TstGenerationTier>('flash');
+  const [aiModel, setAiModel] = useState<TstGenerationTier>('gpt');
   const [aspectRatio, setAspectRatio] = useState('3:4');
   const [resolution, setResolution] = useState<TstResolution>('1K');
   const [speed, setSpeed] = useState('Nhanh');
   const [server, setServer] = useState('VIP 1');
-  const [gptQuality, setGptQuality] = useState<'low' | 'medium' | 'high'>('high');
+  const [gptQuality, setGptQuality] = useState<'low' | 'medium' | 'high'>('low');
   const [pricingEntries, setPricingEntries] = useState<TstPricingEntry[]>([]);
   const [pricingOverrides, setPricingOverrides] = useState<ModelPricing[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -374,7 +374,7 @@ export function WorkspacePromptImage() {
         <h1 className="text-xl font-black text-gray-950 dark:text-white">Tạo Ảnh AI</h1>
       </header>
 
-      <section className="rounded-[24px] border border-gray-200 dark:border-zinc-800 bg-white dark:bg-[#18181B] p-3 shadow-sm">
+      <section data-tour-id="mobile.image.references" className="rounded-[24px] border border-gray-200 dark:border-zinc-800 bg-white dark:bg-[#18181B] p-3 shadow-sm">
         <div className="flex items-center justify-between mb-2.5">
           <h2 className="text-sm font-black text-gray-950 dark:text-white">1. Upload ảnh</h2>
           <span className="text-[11px] font-bold text-gray-400 dark:text-zinc-500">{uploadedCount}/{maxReferenceImages}</span>
@@ -412,7 +412,7 @@ export function WorkspacePromptImage() {
         </div>
       </section>
 
-      <section className="rounded-[24px] border border-gray-200 dark:border-zinc-800 bg-white dark:bg-[#18181B] p-3 shadow-sm">
+      <section data-tour-id="mobile.image.prompt" className="rounded-[24px] border border-gray-200 dark:border-zinc-800 bg-white dark:bg-[#18181B] p-3 shadow-sm">
         <h2 className="text-sm font-black text-gray-950 dark:text-white mb-3">2. Mô tả</h2>
         <textarea
           value={prompt}
@@ -425,7 +425,7 @@ export function WorkspacePromptImage() {
         <div className="text-right text-[11px] text-gray-400 dark:text-zinc-500 mt-1">{prompt.length}/{MAX_PROMPT_CHARACTERS}</div>
       </section>
 
-      <div className="space-y-4">
+      <div data-tour-id="mobile.image.settings" className="space-y-4">
         <div className="space-y-2">
           <h3 className="ml-1 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-zinc-500">KHUNG HÌNH</h3>
           <div className="flex gap-2 overflow-x-auto pb-1">
@@ -608,6 +608,7 @@ export function WorkspacePromptImage() {
       </div>
 
       <button
+        data-tour-id="mobile.image.generate"
         type="button"
         onClick={submit}
         disabled={isGenerateDisabled}

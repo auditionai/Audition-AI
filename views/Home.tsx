@@ -52,6 +52,7 @@ const FeatureCard: React.FC<FeatureCardProps & { isMaintenance?: boolean; mainte
 
     return (
         <div
+            data-tour-id={`desktop.home.feature.${feature.id}`}
             onClick={isMaintenance ? undefined : onClick}
             className={`group relative h-[240px] rounded-[2rem] overflow-hidden bg-gradient-to-br border transition-all duration-500 flex flex-col p-6 ${getCardStyle()} ${!isMaintenance && 'hover:-translate-y-2 cursor-pointer'}`}
         >
@@ -132,7 +133,7 @@ export const Home: React.FC<HomeProps> = ({ lang, onSelectFeature, onNavigate, o
     <div className="space-y-16 pb-24 relative">
 
       {/* Optimized Slim Hero Section */}
-      <div className="relative rounded-2xl overflow-hidden border border-white/10 bg-gradient-to-r from-[#120024] to-black py-4 px-6 flex items-center justify-between">
+      <div data-tour-id="desktop.home.hero" className="relative rounded-2xl overflow-hidden border border-white/10 bg-gradient-to-r from-[#120024] to-black py-4 px-6 flex items-center justify-between">
           <div className="absolute top-0 right-0 w-32 h-32 bg-audi-pink/10 blur-[50px] rounded-full animate-pulse"></div>
 
           <div className="relative z-10 flex items-center gap-4">
@@ -150,6 +151,7 @@ export const Home: React.FC<HomeProps> = ({ lang, onSelectFeature, onNavigate, o
           <div className="flex items-center gap-2">
              {/* CHECKIN BUTTON WITH PROMINENT EFFECT */}
              <button
+                data-tour-id="desktop.home.checkin"
                 onClick={onOpenCheckin}
                 className={`px-4 py-1.5 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all active:scale-95 ${
                     !isCheckedIn
@@ -176,6 +178,7 @@ export const Home: React.FC<HomeProps> = ({ lang, onSelectFeature, onNavigate, o
 
       {/* NEW: PROMO BANNER FOR AUMIX3D */}
       <a
+        data-tour-id="desktop.home.promo"
         href="https://aumix3d.com/"
         target="_blank"
         rel="noopener noreferrer"
@@ -218,9 +221,9 @@ export const Home: React.FC<HomeProps> = ({ lang, onSelectFeature, onNavigate, o
       </a>
 
       {/* SECTION 1: STUDIO AI (Generation) */}
-      <div className="animate-fade-in">
+      <div data-tour-id="desktop.home.studio" className="animate-fade-in">
         <div className="flex items-end justify-between mb-8 border-b border-white/10 pb-4">
-            <div>
+      <div data-tour-id="desktop.home.features">
                 <h2 className="font-game text-3xl font-bold text-white flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-audi-cyan/10 flex items-center justify-center">
                         <Icons.Wand className="w-5 h-5 text-audi-cyan" />
@@ -251,7 +254,7 @@ export const Home: React.FC<HomeProps> = ({ lang, onSelectFeature, onNavigate, o
 
       {/* SECTION 2: VIDEO LAB */}
       {videoFeatures.length > 0 && (
-        <div className="animate-fade-in" style={{animationDelay: '0.2s'}}>
+        <div data-tour-id="desktop.home.video" className="animate-fade-in" style={{animationDelay: '0.2s'}}>
           <div className="flex items-end justify-between mb-8 border-b border-white/10 pb-4">
               <div>
                   <h2 className="font-game text-3xl font-bold text-white flex items-center gap-3">
@@ -284,7 +287,7 @@ export const Home: React.FC<HomeProps> = ({ lang, onSelectFeature, onNavigate, o
       )}
 
       {/* SECTION 3: TOOLS (Editing) */}
-      <div className="animate-fade-in" style={{animationDelay: '0.3s'}}>
+      <div data-tour-id="desktop.home.editing" className="animate-fade-in" style={{animationDelay: '0.3s'}}>
         <div className="flex items-end justify-between mb-8 border-b border-white/10 pb-4">
             <div>
                 <h2 className="font-game text-3xl font-bold text-white flex items-center gap-3">

@@ -181,7 +181,7 @@ export const TopUp: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#FAFAFA] dark:bg-[#09090B] pb-28">
       {activeCampaign ? (
-        <div className="relative mx-4 mt-4 rounded-3xl overflow-hidden border border-purple-200 dark:border-purple-500/30 shadow-lg">
+        <div data-tour-id="mobile.topup.hero" className="relative mx-4 mt-4 rounded-3xl overflow-hidden border border-purple-200 dark:border-purple-500/30 shadow-lg">
           <div className="absolute inset-0 bg-gradient-to-br from-purple-600 via-fuchsia-600 to-orange-500" />
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.15),transparent_60%)]" />
 
@@ -213,21 +213,21 @@ export const TopUp: React.FC = () => {
           </div>
         </div>
       ) : (
-        <div className="mx-4 mt-4 p-6 rounded-3xl bg-gradient-to-br from-gray-900 to-gray-800 text-center">
+        <div data-tour-id="mobile.topup.hero" className="mx-4 mt-4 p-6 rounded-3xl bg-gradient-to-br from-gray-900 to-gray-800 text-center">
           <Sparkles className="w-8 h-8 text-yellow-400 mx-auto mb-2" />
           <h2 className="text-xl font-black text-white mb-1">STORE VCOIN</h2>
           <p className="text-xs text-gray-400 dark:text-zinc-500">Nạp Vcoin để trải nghiệm các tính năng AI cao cấp</p>
         </div>
       )}
 
-      <div className="flex items-center gap-2.5 px-5 mt-6 mb-4">
+      <div data-tour-id="mobile.topup.heading" className="flex items-center gap-2.5 px-5 mt-6 mb-4">
         <div className="w-8 h-8 rounded-xl bg-purple-100 flex items-center justify-center">
           <ShoppingBag className="w-4 h-4 text-purple-600" />
         </div>
         <h2 className="text-base font-bold text-gray-800 dark:text-zinc-100">Chọn gói nạp</h2>
       </div>
 
-      <div className="px-4 space-y-3">
+      <div data-tour-id="mobile.topup.packages" className="px-4 space-y-3">
         {packages.map((pkg) => {
           const bonusPercent = activeCampaign ? activeCampaign.bonusPercent : pkg.bonusPercent;
           const hasBonus = bonusPercent > 0;
@@ -239,6 +239,7 @@ export const TopUp: React.FC = () => {
           return (
             <div
               key={pkg.id}
+              data-tour-id={`mobile.topup.package.${pkg.id}`}
               className={`relative bg-white dark:bg-[#18181B] rounded-2xl overflow-hidden border transition-all active:scale-[0.98] ${isPopular ? 'border-purple-200 dark:border-purple-500/30 shadow-lg shadow-purple-500/10' : 'border-gray-100 dark:border-zinc-800 shadow-sm'}`}
             >
               {isPopular && (
@@ -275,6 +276,7 @@ export const TopUp: React.FC = () => {
                 </div>
 
                 <button
+                  data-tour-id="mobile.topup.payment_button"
                   onClick={() => void handleBuyPackage(pkg)}
                   disabled={loading}
                   className={`shrink-0 px-5 py-3 rounded-2xl text-xs font-bold flex items-center gap-1 transition-all ${isPopular ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white shadow-lg shadow-purple-500/30 active:shadow-sm' : 'bg-gray-900 text-white active:bg-gray-700'}`}
@@ -287,7 +289,7 @@ export const TopUp: React.FC = () => {
         })}
       </div>
 
-      <div className="mx-4 mt-6 p-4 rounded-2xl bg-gray-100 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700/50">
+      <div data-tour-id="mobile.topup.note" className="mx-4 mt-6 p-4 rounded-2xl bg-gray-100 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700/50">
         <p className="text-[11px] text-gray-400 dark:text-zinc-500 leading-relaxed text-center">
           Thanh toán an toàn qua <strong>SePay</strong>. 1 Vcoin = 1.000đ. Vcoin nạp vào tài khoản ngay lập tức sau khi thanh toán thành công.
         </p>

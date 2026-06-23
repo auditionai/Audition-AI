@@ -895,7 +895,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
         accept={uploadTarget === 'motion' ? "video/*" : "image/*"} 
       />
 
-      <div className="w-full flex justify-center mb-4">
+      <div data-tour-id="desktop.video.mode" className="w-full flex justify-center mb-4">
           <div className="bg-[#12121a] p-1.5 rounded-2xl border border-white/10 flex gap-1 shadow-lg overflow-x-auto no-scrollbar max-w-full">
               <button
                   onClick={() => setActiveMode('video_ai')}
@@ -983,7 +983,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
               </div>
           </div>
 
-          <div className="flex flex-wrap justify-center gap-4 w-full">
+          <div data-tour-id="desktop.video.upload" className="flex flex-wrap justify-center gap-4 w-full">
             {activeMode === 'video_ai' ? (
               <div className="w-full md:w-[220px] bg-[#12121a] border border-white/10 rounded-2xl p-4 hover:border-white/20 transition-colors relative group shrink-0 shadow-lg block">
                 <div className="flex justify-between items-center mb-3">
@@ -1076,7 +1076,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
             )}
           </div>
 
-          <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 shadow-lg">
+          <div data-tour-id="desktop.video.prompt" className="bg-[#12121a] border border-white/10 rounded-2xl p-4 shadow-lg">
               <div className="flex justify-between items-center mb-3">
                   <label className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
                       <Icons.MessageCircle className="w-4 h-4" /> 2. Mô tả
@@ -1215,7 +1215,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
 
         {/* RIGHT PANEL: SETTINGS & GENERATE */}
         <div className="lg:col-span-1 space-y-4">
-          <div className="bg-[#12121a] border border-white/10 rounded-2xl p-5 flex flex-col gap-5 shadow-lg h-full relative z-10">
+          <div data-tour-id="desktop.video.model" className="bg-[#12121a] border border-white/10 rounded-2xl p-5 flex flex-col gap-5 shadow-lg h-full relative z-10">
             
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
                 <h3 className="font-bold text-white flex items-center gap-2">
@@ -1565,6 +1565,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
               </div>
 
               <button 
+                  data-tour-id="desktop.video.generate"
                   onClick={handleGenerate}
                   disabled={isProcessing || !isCatalogReady || !currentCostBreakdown.available}
                   className={`w-full py-3.5 mt-auto rounded-xl font-bold text-white shadow-[0_0_20px_rgba(251,218,97,0.4)] transition-all flex items-center justify-center gap-2 ${

@@ -93,7 +93,7 @@ export const Settings: React.FC<SettingsProps> = ({ lang, onLogout, onNavigate, 
     <div className="max-w-4xl mx-auto pb-24 animate-fade-in">
         
         {/* Header */}
-        <div className="flex items-center gap-4 mb-8">
+        <div data-tour-id="desktop.settings.profile_header" className="flex items-center gap-4 mb-8">
             <div className="w-16 h-16 rounded-full bg-gradient-to-br from-audi-pink to-audi-purple p-1 shadow-[0_0_20px_rgba(255,0,153,0.3)]">
                 <img src={userProfile.avatar} alt="Avatar" className="w-full h-full rounded-full object-cover border-2 border-black" onError={(e) => (e.currentTarget.src = 'https://picsum.photos/100/100')} />
             </div>
@@ -107,6 +107,7 @@ export const Settings: React.FC<SettingsProps> = ({ lang, onLogout, onNavigate, 
                 </div>
             </div>
             <button 
+                data-tour-id="desktop.settings.logout"
                 onClick={onLogout}
                 className="ml-auto px-4 py-2 bg-red-500/10 hover:bg-red-500 border border-red-500/50 text-red-500 hover:text-white rounded-xl transition-all font-bold text-sm flex items-center gap-2"
             >
@@ -117,7 +118,7 @@ export const Settings: React.FC<SettingsProps> = ({ lang, onLogout, onNavigate, 
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             {/* Sidebar Tabs */}
-            <div className="md:col-span-1 space-y-2">
+            <div data-tour-id="desktop.settings.tabs" className="md:col-span-1 space-y-2">
                 {[
                     { id: 'profile', icon: Icons.User, label: { vi: 'Hồ sơ', en: 'Profile' } },
                     { id: 'security', icon: Icons.Shield, label: { vi: 'Bảo mật', en: 'Security' } },
@@ -146,11 +147,11 @@ export const Settings: React.FC<SettingsProps> = ({ lang, onLogout, onNavigate, 
             </div>
 
             {/* Content Area */}
-            <div className="md:col-span-3 glass-panel p-6 md:p-8 rounded-3xl min-h-[400px]">
+            <div data-tour-id="desktop.settings.content" className="md:col-span-3 glass-panel p-6 md:p-8 rounded-3xl min-h-[400px]">
                 
                 {/* PROFILE SETTINGS */}
                 {activeTab === 'profile' && (
-                    <div className="space-y-6 animate-fade-in">
+                    <div data-tour-id="desktop.settings.profile_form" className="space-y-6 animate-fade-in">
                         <h2 className="text-xl font-bold text-white mb-4 border-b border-white/10 pb-2">
                             {lang === 'vi' ? 'Thông tin cá nhân' : 'Personal Information'}
                         </h2>
@@ -203,7 +204,7 @@ export const Settings: React.FC<SettingsProps> = ({ lang, onLogout, onNavigate, 
 
                 {/* SECURITY SETTINGS */}
                 {activeTab === 'security' && (
-                    <div className="space-y-6 animate-fade-in">
+                    <div data-tour-id="desktop.settings.security" className="space-y-6 animate-fade-in">
                         <h2 className="text-xl font-bold text-white mb-4 border-b border-white/10 pb-2">
                             {lang === 'vi' ? 'Đổi mật khẩu' : 'Change Password'}
                         </h2>
@@ -231,7 +232,7 @@ export const Settings: React.FC<SettingsProps> = ({ lang, onLogout, onNavigate, 
 
                 {/* GIFTCODE SETTINGS */}
                 {activeTab === 'giftcode' && (
-                    <div className="space-y-6 animate-fade-in">
+                    <div data-tour-id="desktop.settings.giftcode" className="space-y-6 animate-fade-in">
                         <h2 className="text-xl font-bold text-white mb-4 border-b border-white/10 pb-2">
                             {lang === 'vi' ? 'Nhập Giftcode' : 'Redeem Giftcode'}
                         </h2>

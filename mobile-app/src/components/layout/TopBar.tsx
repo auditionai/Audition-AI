@@ -113,7 +113,7 @@ export function TopBar() {
 
   return (
     <div className="sticky top-0 z-40">
-      <div className="bg-white dark:bg-[#18181B]/80 backdrop-blur-xl border-b border-gray-100 dark:border-zinc-800/50 px-4 py-3 flex items-center justify-between">
+      <div data-tour-id="mobile.layout.topbar" className="bg-white dark:bg-[#18181B]/80 backdrop-blur-xl border-b border-gray-100 dark:border-zinc-800/50 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#111] to-[#333] flex items-center justify-center text-white font-bold text-sm shadow-sm">
             A
@@ -122,13 +122,14 @@ export function TopBar() {
         </div>
 
         <div className="flex items-center gap-3">
-          <Link to="/topup">
+          <Link to="/topup" data-tour-id="mobile.layout.vcoin">
             <div className="flex items-center gap-1.5 bg-gray-100 dark:bg-zinc-800 px-3 py-1.5 rounded-full active:scale-95 transition-transform">
               <Coins className="w-3.5 h-3.5 text-yellow-600" />
               <span className="text-xs font-bold text-gray-700 dark:text-zinc-200">{vcoinDisplay}</span>
             </div>
           </Link>
           <button
+            data-tour-id="mobile.layout.profile"
             onClick={() => navigate('/profile')}
             className="w-8 h-8 rounded-full bg-gray-100 dark:bg-zinc-800 flex items-center justify-center active:scale-95 transition-transform"
           >

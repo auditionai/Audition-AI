@@ -178,8 +178,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const [resolution, setResolution] = useState<Resolution>('1K');
   const [speed, setSpeed] = useState('Nhanh');
   const [server, setServer] = useState('VIP 1');
-  const [gptQuality, setGptQuality] = useState<'low' | 'medium' | 'high'>('high');
-  const [aiModel, setAiModel] = useState<TstGenerationTier>('flash');
+  const [gptQuality, setGptQuality] = useState<'low' | 'medium' | 'high'>('low');
+  const [aiModel, setAiModel] = useState<TstGenerationTier>('gpt');
 
   const [guideTopic, setGuideTopic] = useState<'chars' | 'settings' | null>(null);
   const [currentTipIdx, setCurrentTipIdx] = useState(0);
@@ -1549,7 +1549,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                     </div>
                 )}
 
-                <div className="flex flex-wrap justify-center gap-4 w-full">
+                <div data-tour-id="desktop.generation.characters" className="flex flex-wrap justify-center gap-4 w-full">
                     {characters.map((char) => {
                         const assistantError = assistantErrorByCharId[char.id];
                         const activeAssist = assistLoadingByCharId[char.id];
@@ -1680,7 +1680,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                     </div>
                 </div>
 
-                <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 shadow-lg">
+                <div data-tour-id="desktop.generation.prompt" className="bg-[#12121a] border border-white/10 rounded-2xl p-4 shadow-lg">
                     <div className="flex justify-between items-center mb-3">
                         <label className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
                             <Icons.MessageCircle className="w-4 h-4" /> 3. Mô tả
@@ -1708,7 +1708,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
             <div className="lg:col-span-1 space-y-6">
 
-                <div className="bg-[#12121a] border border-white/10 rounded-2xl p-5 flex flex-col gap-5 shadow-lg h-full">
+                <div data-tour-id="desktop.generation.settings" className="bg-[#12121a] border border-white/10 rounded-2xl p-5 flex flex-col gap-5 shadow-lg h-full">
                     <div className="flex items-center justify-between border-b border-white/10 pb-3">
                         <h3 className="font-bold text-white flex items-center gap-2">
                             <Icons.Settings className="w-5 h-5 text-slate-400" />
@@ -2029,6 +2029,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                     </div>
 
                     <button
+                        data-tour-id="desktop.generation.generate"
                         onClick={handleGenerate}
                         disabled={isGenerateDisabled || isSubmitting}
                         className={`w-full py-3.5 mt-auto rounded-xl font-bold text-white shadow-[0_0_20px_rgba(255,0,153,0.4)] transition-all flex items-center justify-center gap-2 ${

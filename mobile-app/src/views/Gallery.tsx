@@ -491,13 +491,13 @@ export const Gallery: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#FAFAFA] pb-28 dark:bg-[#09090B]">
       <div className="sticky top-0 z-30 border-b border-gray-100 bg-white/90 px-4 pb-0 pt-3 backdrop-blur-xl dark:border-zinc-800 dark:bg-[#18181B]/85">
-        <div className="mb-3 flex rounded-2xl bg-gray-100 p-1 dark:bg-zinc-800">
+        <div data-tour-id="mobile.gallery.tabs" className="mb-3 flex rounded-2xl bg-gray-100 p-1 dark:bg-zinc-800">
           <button onClick={() => setActiveTab('generation')} className={`flex-1 rounded-xl py-2.5 text-xs font-bold transition-all ${activeTab === 'generation' ? 'bg-white text-gray-900 shadow-sm dark:bg-[#18181B] dark:text-white' : 'text-gray-400 dark:text-zinc-500'}`}>Lịch sử tạo</button>
           <button onClick={() => setActiveTab('transactions')} className={`flex-1 rounded-xl py-2.5 text-xs font-bold transition-all ${activeTab === 'transactions' ? 'bg-white text-gray-900 shadow-sm dark:bg-[#18181B] dark:text-white' : 'text-gray-400 dark:text-zinc-500'}`}>Giao dịch Vcoin</button>
         </div>
 
         {activeTab === 'generation' ? (
-          <div className="space-y-2 pb-3">
+          <div data-tour-id="mobile.gallery.filters" className="space-y-2 pb-3">
             <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
               <Filter className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-zinc-500" />
               {([
@@ -534,7 +534,7 @@ export const Gallery: React.FC = () => {
               <p className="text-sm text-gray-400 dark:text-zinc-500">Không có dữ liệu phù hợp.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-3">
+            <div data-tour-id="mobile.gallery.grid" className="grid grid-cols-2 gap-3">
               {filteredImages.map((image) => {
                 const assetKind = getAssetKind(image);
                 const isVideo = assetKind === 'video';
@@ -543,7 +543,7 @@ export const Gallery: React.FC = () => {
                 const isFailed = status === 'failed';
 
                 return (
-                  <button key={image.id} onClick={() => setViewingImage(image)} className="overflow-hidden rounded-[26px] border border-gray-100 bg-white text-left shadow-sm transition-transform active:scale-[0.985] dark:border-zinc-800 dark:bg-[#18181B]">
+                  <button key={image.id} data-tour-id="mobile.gallery.item" onClick={() => setViewingImage(image)} className="overflow-hidden rounded-[26px] border border-gray-100 bg-white text-left shadow-sm transition-transform active:scale-[0.985] dark:border-zinc-800 dark:bg-[#18181B]">
                     <div className="relative aspect-square bg-gray-100 dark:bg-zinc-800">
                       {isProcessing ? (
                         <div className="flex h-full w-full flex-col items-center justify-center">

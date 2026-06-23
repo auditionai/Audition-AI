@@ -528,6 +528,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   });
   const [appTours, setAppTours] = useState<AppToursConfig>(DEFAULT_APP_TOURS_CONFIG);
   const [selectedTourId, setSelectedTourId] = useState(DEFAULT_APP_TOURS_CONFIG.tours[0]?.id || '');
+  const [draggingTourStepId, setDraggingTourStepId] = useState<string | null>(null);
 
   // API Key States
   const [apiKey, setApiKey] = useState('');
@@ -1795,6 +1796,24 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       }));
   };
 
+  const reorderAppTourSteps = (tourId: string, draggedStepId: string, targetStepId: string) => {
+      if (draggedStepId === targetStepId) return;
+      updateAppTour(tourId, (tour) => {
+          const orderedSteps = [...tour.steps].sort((a, b) => (a.order || 0) - (b.order || 0));
+          const fromIndex = orderedSteps.findIndex((step) => step.id === draggedStepId);
+          const toIndex = orderedSteps.findIndex((step) => step.id === targetStepId);
+          if (fromIndex < 0 || toIndex < 0) return tour;
+
+          const [draggedStep] = orderedSteps.splice(fromIndex, 1);
+          orderedSteps.splice(toIndex, 0, draggedStep);
+
+          return {
+              ...tour,
+              steps: orderedSteps.map((step, index) => ({ ...step, order: index + 1 })),
+          };
+      });
+  };
+
   const handleAddTour = () => {
       const id = `tour_${Date.now()}`;
       const nextTour: AppTourDefinition = {
@@ -2055,6 +2074,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   );
 
   const selectedTour = appTours.tours.find((tour) => tour.id === selectedTourId) || appTours.tours[0] || null;
+  const orderedTourSteps = selectedTour?.steps.slice().sort((a, b) => (a.order || 0) - (b.order || 0)) || [];
   const tourFeatureIds = (tour: AppTourDefinition | null) =>
       (tour?.featureId || '').split(',').map((value) => value.trim()).filter(Boolean);
   const getTourTargetOptions = (tour: AppTourDefinition | null) => APP_TOUR_TARGETS.filter((target) => {
@@ -3415,10 +3435,41 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   </div>
                               </div>
 
-                              {selectedTour.steps.slice().sort((a, b) => (a.order || 0) - (b.order || 0)).map((step, index) => (
-                                  <div key={step.id} className="rounded-2xl border border-white/10 bg-[#12121a] p-5">
+                              <div className="space-y-3">
+                              {orderedTourSteps.map((step, index) => (
+                                  <div
+                                      key={step.id}
+                                      draggable
+                                      onDragStart={(event) => {
+                                          setDraggingTourStepId(step.id);
+                                          event.dataTransfer.effectAllowed = 'move';
+                                          event.dataTransfer.setData('text/plain', step.id);
+                                      }}
+                                      onDragOver={(event) => {
+                                          event.preventDefault();
+                                          event.dataTransfer.dropEffect = 'move';
+                                      }}
+                                      onDrop={(event) => {
+                                          event.preventDefault();
+                                          const draggedStepId = event.dataTransfer.getData('text/plain') || draggingTourStepId;
+                                          if (draggedStepId) reorderAppTourSteps(selectedTour.id, draggedStepId, step.id);
+                                          setDraggingTourStepId(null);
+                                      }}
+                                      onDragEnd={() => setDraggingTourStepId(null)}
+                                      className={`rounded-2xl border bg-[#12121a] p-5 transition-all ${draggingTourStepId === step.id ? 'border-audi-cyan opacity-60 scale-[0.99]' : 'border-white/10 hover:border-white/20'}`}
+                                  >
                                       <div className="mb-4 flex items-center justify-between">
-                                          <div className="flex items-center gap-2"><span className="grid h-8 w-8 place-items-center rounded-full bg-audi-cyan text-sm font-black text-black">{index + 1}</span><span className="text-sm font-black text-white">{step.title}</span></div>
+                                          <div className="flex min-w-0 items-center gap-2">
+                                              <button
+                                                  type="button"
+                                                  className="grid h-8 w-8 cursor-grab place-items-center rounded-xl border border-white/10 bg-black/30 text-slate-400 active:cursor-grabbing"
+                                                  title="Kéo để sắp xếp bước"
+                                              >
+                                                  <Icons.Menu className="h-4 w-4" />
+                                              </button>
+                                              <span className="grid h-8 w-8 place-items-center rounded-full bg-audi-cyan text-sm font-black text-black">{index + 1}</span>
+                                              <span className="truncate text-sm font-black text-white">{step.title}</span>
+                                          </div>
                                           <button onClick={() => handleDeleteTourStep(selectedTour.id, step.id)} className="text-xs font-bold text-red-300 hover:text-red-200">Xóa bước</button>
                                       </div>
                                       <div className="grid gap-4 md:grid-cols-2">
@@ -3447,6 +3498,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       <button onClick={() => updateAppTourStep(selectedTour.id, step.id, (s) => ({ ...s, isActive: s.isActive === false }))} className={`mt-4 rounded-xl px-4 py-2 text-xs font-bold ${step.isActive === false ? 'bg-white/10 text-slate-300' : 'bg-green-500/15 text-green-300'}`}>{step.isActive === false ? 'Bước đang tắt' : 'Bước đang bật'}</button>
                                   </div>
                               ))}
+                              </div>
                           </div>
                       )}
                   </div>

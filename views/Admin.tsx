@@ -2066,6 +2066,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   });
   const getTourTargetMeta = (targetId: string) => APP_TOUR_TARGETS.find((target) => target.id === targetId);
   const getTourTargetDescription = (targetId: string) => {
+      const meta = getTourTargetMeta(targetId);
+      if (meta?.description) return meta.description;
       if (targetId.includes('.layout.logo')) return 'Khoanh vùng logo AUDITION AI ở header. Người dùng có thể bấm để quay về trang chủ.';
       if (targetId.includes('.layout.language')) return 'Khoanh vùng nút đổi ngôn ngữ trên header máy tính.';
       if (targetId.includes('.layout.dock') || targetId.includes('.layout.bottomnav')) return 'Khoanh vùng thanh điều hướng chính ở cạnh dưới màn hình.';

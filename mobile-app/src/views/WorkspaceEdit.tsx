@@ -321,7 +321,7 @@ export function WorkspaceEdit() {
       <div className="flex-1 overflow-y-auto pb-32 custom-scrollbar">
         <div className="p-4 space-y-6">
           
-          <div className="bg-purple-50 dark:bg-purple-500/10 p-3 rounded-2xl border border-purple-100 dark:border-purple-500/30 flex gap-3 items-center">
+          <div data-tour-id="mobile.edit.info" className="bg-purple-50 dark:bg-purple-500/10 p-3 rounded-2xl border border-purple-100 dark:border-purple-500/30 flex gap-3 items-center">
              <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center shrink-0">
                 <Sparkles className="w-4 h-4 text-purple-600" />
              </div>
@@ -331,7 +331,7 @@ export function WorkspaceEdit() {
           </div>
 
           {/* Source Image */}
-          <div className="space-y-3">
+          <div data-tour-id="mobile.edit.upload" className="space-y-3">
             <label className="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-widest flex justify-between">
               <span>Ảnh Cần Xử Lý</span>
             </label>
@@ -361,9 +361,9 @@ export function WorkspaceEdit() {
           </div>
 
           {/* Configs */}
-          <div className="space-y-5">
+          <div data-tour-id="mobile.edit.settings" className="space-y-5">
             {isMagicEditor && (
-              <div className="space-y-3">
+              <div data-tour-id="mobile.edit.prompt" className="space-y-3">
                 <label className="text-[11px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Mô Tả Chỉnh Sửa</label>
                 <textarea
                   value={prompt}
@@ -375,7 +375,7 @@ export function WorkspaceEdit() {
             )}
 
             {isMagicEditor && (
-              <div className="space-y-3">
+              <div data-tour-id="mobile.edit.model" className="space-y-3">
                 <label className="text-[11px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Engine Thông Minh</label>
                 <div className="flex gap-2">
                   <button
@@ -396,7 +396,7 @@ export function WorkspaceEdit() {
               </div>
             )}
 
-            <div className="space-y-3">
+            <div data-tour-id="mobile.edit.resolution" className="space-y-3">
               <label className="text-[11px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Chất Lượng Xuất</label>
               <div className="flex gap-2 p-1 bg-gray-100 dark:bg-zinc-800/80 rounded-[18px]">
                 {availableResolutions.map((res) => (
@@ -417,7 +417,7 @@ export function WorkspaceEdit() {
       {/* Bottom Sticky Action Bar */}
       <div className="fixed bottom-[70px] left-0 right-0 bg-white dark:bg-[#18181B] border-t border-gray-100 dark:border-zinc-800 p-4 z-20 shadow-[0_-10px_30px_rgba(0,0,0,0.03)] flex gap-4 items-center max-w-md mx-auto xl:absolute xl:bottom-0">
         {/* Cost info */}
-        <div className="flex-1">
+        <div data-tour-id="mobile.edit.price" className="flex-1">
           <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-bold uppercase tracking-wider mb-0.5">Chi Phí</p>
           <div className="flex items-end gap-1">
             <span className="text-xl font-black text-gray-900 dark:text-white">{selectedCost.available ? selectedCost.vcoin : '--'}</span>
@@ -427,6 +427,7 @@ export function WorkspaceEdit() {
 
         {/* Action Button */}
         <Button
+          data-tour-id="mobile.edit.generate"
           onClick={handleCreate}
           disabled={stage === 'submitting' || !sourceImage || !selectedCost.available || catalogLoading}
           className="flex-none w-[180px] h-12 rounded-2xl text-[13px] font-bold shadow-lg"

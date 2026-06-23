@@ -66,12 +66,13 @@ export function Home() {
   return (
     <div className="relative animate-fade-in space-y-8 p-5 pb-20">
       {/* Greeting and Checkin Action */}
-      <div className="pt-1 flex items-start justify-between">
+      <div data-tour-id="mobile.home.hero" className="pt-1 flex items-start justify-between">
         <div>
           <p className="text-sm text-gray-500 dark:text-zinc-400 font-medium">{greeting}, {userName} 👋</p>
           <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white mt-0.5">Bạn muốn tạo gì hôm nay?</h1>
         </div>
         <button
+          data-tour-id="mobile.home.checkin"
           onClick={() => setShowCheckin(true)}
           className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl transition-transform active:scale-95 ${!isCheckedIn
               ? 'bg-red-50 dark:bg-red-500/10 text-red-600 border border-red-100 dark:border-red-500/30 shadow-[0_0_15px_rgba(239,68,68,0.2)] animate-pulse dark:bg-red-500/10 dark:border-red-500/20'
@@ -95,6 +96,7 @@ export function Home() {
 
       {/* AuMix3D Partner Banner */}
       <a
+        data-tour-id="mobile.home.promo"
         href="https://aumix3d.com/"
         target="_blank"
         rel="noopener noreferrer"
@@ -125,6 +127,7 @@ export function Home() {
 
         {/* 1. Tạo Ảnh Audition AI */}
         <div
+          data-tour-id="mobile.home.feature.single_photo_gen"
           onClick={() => openFeature('single_photo_gen', '/generate/image')}
           className={`relative overflow-hidden rounded-[32px] p-6 flex flex-col justify-end min-h-[180px] group transition-all duration-300 bg-gradient-to-br from-[#ff3385] via-[#ff0055] to-[#cc0044] border border-white/20 shadow-[0_15px_35px_-5px_rgba(255,0,85,0.3),0_6px_0_#990033,inset_0_2px_4px_rgba(255,255,255,0.2)] ${isLocked('single_photo_gen') ? 'cursor-not-allowed opacity-55' : 'cursor-pointer active:scale-[0.98] active:shadow-[0_5px_15px_rgba(255,0,85,0.2),0_1px_0_#990033,inset_0_2px_4px_rgba(255,255,255,0.1)] active:translate-y-1'}`}
         >
@@ -153,6 +156,7 @@ export function Home() {
 
         {/* 2. Tạo Video Audition AI */}
         <div
+          data-tour-id="mobile.home.feature.video_ai_gen"
           onClick={() => openFeature('video_ai_gen', '/generate/video')}
           className={`relative overflow-hidden rounded-[32px] p-6 flex flex-col justify-end min-h-[160px] group transition-all duration-300 bg-gradient-to-br from-[#4A72FF] via-[#2F5BFF] to-[#0038FF] border border-white/20 shadow-[0_15px_35px_-5px_rgba(59,130,246,0.3),0_6px_0_#0024a8,inset_0_2px_4px_rgba(255,255,255,0.2)] ${isLocked('video_ai_gen') ? 'cursor-not-allowed opacity-55' : 'cursor-pointer active:scale-[0.98] active:shadow-[0_5px_15px_rgba(59,130,246,0.2),0_1px_0_#0024a8,inset_0_2px_4px_rgba(255,255,255,0.1)] active:translate-y-1'}`}
         >
@@ -182,6 +186,7 @@ export function Home() {
         {/* 3 Tools Grid */}
         <div className="grid grid-cols-2 gap-3">
           <div
+            data-tour-id="mobile.home.feature.ai_image_tool"
             onClick={() => openFeature('ai_image_tool', '/tools/ai-image')}
             className={`bg-white dark:bg-[#18181B] rounded-[24px] p-4 flex flex-col items-center justify-center text-center gap-3 border border-gray-100 dark:border-zinc-800 shadow-sm transition-all duration-150 group relative overflow-hidden ${isLocked('ai_image_tool') ? 'cursor-not-allowed opacity-55' : 'active:translate-y-1 cursor-pointer'}`}
           >
@@ -196,6 +201,7 @@ export function Home() {
           </div>
           {/* Chỉnh sửa Ảnh */}
           <div
+            data-tour-id="mobile.home.feature.magic_editor_pro"
             onClick={() => openFeature('magic_editor_pro', '/tools/edit')}
             className={`flex-1 bg-white dark:bg-[#18181B] rounded-[24px] p-4 flex flex-col items-center justify-center text-center gap-3 border border-gray-100 dark:border-zinc-800 shadow-sm transition-all duration-150 group relative overflow-hidden ${isLocked('magic_editor_pro') ? 'cursor-not-allowed opacity-55' : 'active:translate-y-1 cursor-pointer'}`}
           >
@@ -213,6 +219,7 @@ export function Home() {
 
           {/* Tách Nền */}
           <div
+            data-tour-id="mobile.home.feature.remove_bg_pro"
             onClick={() => openFeature('remove_bg_pro', '/tools/remove-bg')}
             className={`flex-1 bg-white dark:bg-[#18181B] rounded-[24px] p-4 flex flex-col items-center justify-center text-center gap-3 border border-gray-100 dark:border-zinc-800 shadow-sm transition-all duration-150 group relative overflow-hidden ${isLocked('remove_bg_pro') ? 'cursor-not-allowed opacity-55' : 'active:translate-y-1 cursor-pointer'}`}
           >
@@ -230,6 +237,7 @@ export function Home() {
 
           {/* Làm Nét */}
           <div
+            data-tour-id="mobile.home.feature.sharpen_upscale"
             onClick={() => openFeature('sharpen_upscale', '/tools/enhance')}
             className={`flex-1 bg-white dark:bg-[#18181B] rounded-[24px] p-4 flex flex-col items-center justify-center text-center gap-3 border border-gray-100 dark:border-zinc-800 shadow-sm transition-all duration-150 group relative overflow-hidden ${isLocked('sharpen_upscale') ? 'cursor-not-allowed opacity-55' : 'active:translate-y-1 cursor-pointer'}`}
           >

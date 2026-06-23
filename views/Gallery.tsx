@@ -420,10 +420,10 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
             </div>
         </div>
 
-        <div className="bg-[#12121a] rounded-3xl border border-white/10 overflow-hidden shadow-2xl">
+        <div data-tour-id="desktop.gallery.panel" className="bg-[#12121a] rounded-3xl border border-white/10 overflow-hidden shadow-2xl">
             {/* Header / Tabs */}
             <div className="flex flex-col md:flex-row items-center justify-between p-6 border-b border-white/10 gap-4">
-                <div className="flex bg-black/50 p-1 rounded-xl border border-white/5">
+                <div data-tour-id="desktop.gallery.tabs" className="flex bg-black/50 p-1 rounded-xl border border-white/5">
                     <button
                         onClick={() => setActiveTab('generation')}
                         className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'generation' ? 'bg-white/10 text-white shadow-sm' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
@@ -439,7 +439,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                 </div>
 
                 {activeTab === 'generation' && (
-                    <div className="flex items-center gap-4 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 custom-scrollbar">
+                    <div data-tour-id="desktop.gallery.filters" className="flex items-center gap-4 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 custom-scrollbar">
                         <span className="text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">LỌC THEO:</span>
                         <div className="flex gap-2">
                             <button onClick={() => setFilter('all')} className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-colors whitespace-nowrap ${filter === 'all' ? 'bg-audi-cyan/20 border-audi-cyan/50 text-audi-cyan' : 'border-white/10 text-slate-400 hover:bg-white/5'}`}>Tất cả</button>
@@ -450,6 +450,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                         </div>
                         <div className="w-px h-6 bg-white/10 mx-2 hidden md:block"></div>
                         <button
+                            data-tour-id="desktop.gallery.bulk_actions"
                             onClick={handleDeleteSelected}
                             disabled={selectedIds.size === 0}
                             className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold transition-colors whitespace-nowrap ${selectedIds.size > 0 ? 'text-red-400 hover:bg-red-500/10' : 'text-slate-600 cursor-not-allowed'}`}
@@ -464,7 +465,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
             {/* Content Area */}
             <div className="overflow-x-auto">
                 {activeTab === 'generation' ? (
-                    <table className="w-full text-left text-sm text-slate-400">
+                    <table data-tour-id="desktop.gallery.grid" className="w-full text-left text-sm text-slate-400">
                         <thead className="text-xs uppercase bg-black/20 text-slate-500 font-bold tracking-wider border-b border-white/5">
                             <tr>
                                 <th className="px-6 py-4 w-12">
@@ -497,6 +498,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                 return (
                                     <tr
                                         key={img.id}
+                                        data-tour-id="desktop.gallery.item"
                                         className="hover:bg-white/[0.05] transition-colors group cursor-pointer"
                                         onClick={() => {
                                             setViewingImage(img);

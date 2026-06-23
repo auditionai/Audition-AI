@@ -148,6 +148,7 @@ export const Layout: React.FC<LayoutProps> = ({
                     return (
                         <button
                           key={item.id}
+                          data-tour-id={`desktop.layout.nav.${item.id}`}
                           onClick={() => onNavigate(item.id)}
                           className={`relative group flex items-center justify-center w-12 h-12 md:w-14 md:h-14 rounded-[1.5rem] transition-all duration-300 ${isActive ? 'bg-white/10' : 'hover:bg-white/5'}`}
                         >
@@ -180,6 +181,7 @@ export const Layout: React.FC<LayoutProps> = ({
 
                    {/* Mobile Checkin */}
                    <button 
+                      data-tour-id="desktop.layout.checkin"
                       onClick={() => setShowCheckin(true)}
                       className="md:hidden w-10 h-10 rounded-full bg-audi-lime/10 border border-audi-lime/30 flex items-center justify-center"
                    >

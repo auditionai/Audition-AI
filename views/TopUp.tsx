@@ -100,7 +100,7 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
         
         {/* --- HERO BANNER (EVENT) --- */}
         {activeCampaign ? (
-            <div className="relative rounded-[2.5rem] overflow-hidden mb-12 border-2 border-audi-pink/50 shadow-[0_0_50px_rgba(255,0,153,0.3)] group mt-8">
+            <div data-tour-id="desktop.topup.hero" className="relative rounded-[2.5rem] overflow-hidden mb-12 border-2 border-audi-pink/50 shadow-[0_0_50px_rgba(255,0,153,0.3)] group mt-8">
                 {/* Dynamic Background */}
                 <div className="absolute inset-0 bg-gradient-to-r from-[#2a0b36] via-[#4a0e44] to-[#0c0c14] z-0"></div>
                 <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-30 z-0"></div>
@@ -147,21 +147,21 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
                 </div>
             </div>
         ) : (
-            <div className="text-center mb-12 py-8 bg-gradient-to-r from-audi-purple/10 to-audi-cyan/10 rounded-3xl border border-white/10 mt-8">
+            <div data-tour-id="desktop.topup.hero" className="text-center mb-12 py-8 bg-gradient-to-r from-audi-purple/10 to-audi-cyan/10 rounded-3xl border border-white/10 mt-8">
                 <h2 className="text-3xl font-game font-bold text-white mb-2">STORE VCOIN</h2>
                 <p className="text-slate-400">Nạp Vcoin để trải nghiệm các tính năng AI cao cấp</p>
             </div>
         )}
 
         {/* --- PACKAGES GRID --- */}
-        <div className="flex items-center gap-3 mb-8">
+        <div data-tour-id="desktop.topup.heading" className="flex items-center gap-3 mb-8">
              <div className="w-10 h-10 rounded-xl bg-audi-cyan/20 flex items-center justify-center text-audi-cyan">
                  <Icons.ShoppingBag className="w-5 h-5" />
              </div>
              <h2 className="text-2xl font-bold text-white">{lang === 'vi' ? 'Chọn gói nạp' : 'Select Package'}</h2>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div data-tour-id="desktop.topup.packages" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {packages.map((pkg) => {
                 const activeBonusPercent = activeCampaign ? activeCampaign.bonusPercent : pkg.bonusPercent;
                 const hasBonus = activeBonusPercent > 0;
@@ -170,6 +170,7 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
                 return (
                     <div 
                         key={pkg.id}
+                        data-tour-id={`desktop.topup.package.${pkg.id}`}
                         className={`group relative bg-[#12121a] rounded-[2rem] p-6 border transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_10px_40px_rgba(0,0,0,0.5)] flex flex-col ${pkg.isPopular ? 'border-audi-pink shadow-[0_0_20px_rgba(255,0,153,0.1)]' : 'border-white/10 hover:border-white/30'}`}
                     >
                         {/* Badges */}
@@ -215,6 +216,7 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
 
                         {/* Button */}
                         <button 
+                            data-tour-id="desktop.topup.payment_button"
                             onClick={() => handleBuyPackage(pkg)}
                             disabled={loading}
                             className={`w-full py-4 rounded-xl font-bold text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all relative overflow-hidden ${pkg.isPopular ? 'bg-gradient-to-r from-audi-pink to-audi-purple text-white shadow-[0_5px_20px_rgba(255,0,153,0.3)] hover:shadow-[0_5px_30px_rgba(255,0,153,0.5)]' : 'bg-white text-black hover:bg-slate-200'}`}

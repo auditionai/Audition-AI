@@ -529,6 +529,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [appTours, setAppTours] = useState<AppToursConfig>(DEFAULT_APP_TOURS_CONFIG);
   const [selectedTourId, setSelectedTourId] = useState(DEFAULT_APP_TOURS_CONFIG.tours[0]?.id || '');
   const [draggingTourStepId, setDraggingTourStepId] = useState<string | null>(null);
+  const [collapsedTourStepIds, setCollapsedTourStepIds] = useState<string[]>([]);
 
   // API Key States
   const [apiKey, setApiKey] = useState('');
@@ -1812,6 +1813,18 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               steps: orderedSteps.map((step, index) => ({ ...step, order: index + 1 })),
           };
       });
+  };
+
+  const toggleCollapsedTourStep = (stepId: string) => {
+      setCollapsedTourStepIds((current) => (
+          current.includes(stepId)
+              ? current.filter((id) => id !== stepId)
+              : [...current, stepId]
+      ));
+  };
+
+  const setAllTourStepsCollapsed = (steps: AppTourStep[], collapsed: boolean) => {
+      setCollapsedTourStepIds(collapsed ? steps.map((step) => step.id) : []);
   };
 
   const handleAddTour = () => {
@@ -3431,20 +3444,18 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       <button onClick={() => updateAppTour(selectedTour.id, (t) => ({ ...t, isActive: !t.isActive }))} className={`px-4 py-2 rounded-xl text-xs font-bold ${selectedTour.isActive ? 'bg-green-500/15 text-green-300' : 'bg-white/10 text-slate-300'}`}>{selectedTour.isActive ? 'Tour đang bật' : 'Tour đang tắt'}</button>
                                       <button onClick={() => handleDuplicateTour(selectedTour)} className="px-4 py-2 rounded-xl bg-white/10 text-xs font-bold text-white hover:bg-white/15">Nhân bản</button>
                                       <button onClick={() => handleAddTourStep(selectedTour.id)} className="px-4 py-2 rounded-xl bg-audi-purple text-xs font-bold text-white hover:bg-purple-600">Thêm bước</button>
+                                      <button onClick={() => setAllTourStepsCollapsed(orderedTourSteps, true)} className="px-4 py-2 rounded-xl bg-white/10 text-xs font-bold text-white hover:bg-white/15">Thu gọn tất cả</button>
+                                      <button onClick={() => setAllTourStepsCollapsed(orderedTourSteps, false)} className="px-4 py-2 rounded-xl bg-white/10 text-xs font-bold text-white hover:bg-white/15">Mở tất cả</button>
                                       <button onClick={() => handleDeleteTour(selectedTour.id)} className="ml-auto px-4 py-2 rounded-xl bg-red-500/15 text-xs font-bold text-red-300 hover:bg-red-500/25">Xóa tour</button>
                                   </div>
                               </div>
 
                               <div className="space-y-3">
-                              {orderedTourSteps.map((step, index) => (
+                              {orderedTourSteps.map((step, index) => {
+                                  const isStepCollapsed = collapsedTourStepIds.includes(step.id);
+                                  return (
                                   <div
                                       key={step.id}
-                                      draggable
-                                      onDragStart={(event) => {
-                                          setDraggingTourStepId(step.id);
-                                          event.dataTransfer.effectAllowed = 'move';
-                                          event.dataTransfer.setData('text/plain', step.id);
-                                      }}
                                       onDragOver={(event) => {
                                           event.preventDefault();
                                           event.dataTransfer.dropEffect = 'move';
@@ -3462,6 +3473,13 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           <div className="flex min-w-0 items-center gap-2">
                                               <button
                                                   type="button"
+                                                  draggable
+                                                  onDragStart={(event) => {
+                                                      setDraggingTourStepId(step.id);
+                                                      event.dataTransfer.effectAllowed = 'move';
+                                                      event.dataTransfer.setData('text/plain', step.id);
+                                                  }}
+                                                  onDragEnd={() => setDraggingTourStepId(null)}
                                                   className="grid h-8 w-8 cursor-grab place-items-center rounded-xl border border-white/10 bg-black/30 text-slate-400 active:cursor-grabbing"
                                                   title="Kéo để sắp xếp bước"
                                               >
@@ -3470,8 +3488,13 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               <span className="grid h-8 w-8 place-items-center rounded-full bg-audi-cyan text-sm font-black text-black">{index + 1}</span>
                                               <span className="truncate text-sm font-black text-white">{step.title}</span>
                                           </div>
-                                          <button onClick={() => handleDeleteTourStep(selectedTour.id, step.id)} className="text-xs font-bold text-red-300 hover:text-red-200">Xóa bước</button>
+                                          <div className="flex shrink-0 items-center gap-2">
+                                              <button onClick={() => toggleCollapsedTourStep(step.id)} className="rounded-lg bg-white/10 px-3 py-1.5 text-xs font-bold text-slate-200 hover:bg-white/15">{isStepCollapsed ? 'Mở' : 'Thu gọn'}</button>
+                                              <button onClick={() => handleDeleteTourStep(selectedTour.id, step.id)} className="text-xs font-bold text-red-300 hover:text-red-200">Xóa bước</button>
+                                          </div>
                                       </div>
+                                      {!isStepCollapsed && (
+                                      <>
                                       <div className="grid gap-4 md:grid-cols-2">
                                           <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Vùng khoanh</span><select value={step.targetId} onChange={(e) => updateAppTourStep(selectedTour.id, step.id, (s) => ({ ...s, targetId: e.target.value }))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan">{getTourTargetOptions(selectedTour).map((target) => <option key={target.id} value={target.id}>{target.label}</option>)}</select></label>
                                           <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Vị trí hộp</span><select value={step.placement || 'auto'} onChange={(e) => updateAppTourStep(selectedTour.id, step.id, (s) => ({ ...s, placement: e.target.value as AppTourStep['placement'] }))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan"><option value="auto">Tự động</option><option value="top">Trên</option><option value="right">Phải</option><option value="bottom">Dưới</option><option value="left">Trái</option></select></label>
@@ -3496,8 +3519,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           <label className="md:col-span-2"><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Nội dung hướng dẫn</span><textarea value={step.description} onChange={(e) => updateAppTourStep(selectedTour.id, step.id, (s) => ({ ...s, description: e.target.value }))} rows={3} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm leading-relaxed text-white outline-none focus:border-audi-cyan" /></label>
                                       </div>
                                       <button onClick={() => updateAppTourStep(selectedTour.id, step.id, (s) => ({ ...s, isActive: s.isActive === false }))} className={`mt-4 rounded-xl px-4 py-2 text-xs font-bold ${step.isActive === false ? 'bg-white/10 text-slate-300' : 'bg-green-500/15 text-green-300'}`}>{step.isActive === false ? 'Bước đang tắt' : 'Bước đang bật'}</button>
+                                      </>
+                                      )}
                                   </div>
-                              ))}
+                              );
+                              })}
                               </div>
                           </div>
                       )}

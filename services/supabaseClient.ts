@@ -12,6 +12,7 @@ let cachedSession: any = null;
 let cachedUser: any = null;
 let sessionFetchedAt = 0;
 let inFlightSessionPromise: Promise<any> | null = null;
+const BROWSER_DEVICE_KEY_STORAGE = 'audition_browser_device_key_v1';
 
 if (supabaseUrl && supabaseAnonKey) {
   try {
@@ -91,7 +92,25 @@ export const getSupabaseAuthHeader = async (force = false) => {
 
     return {
         Authorization: `Bearer ${accessToken}`,
+        'X-Audition-Device-Key': getBrowserDeviceKey(),
     };
+};
+
+export const getBrowserDeviceKey = () => {
+    if (typeof window === 'undefined') return '';
+
+    try {
+        const existing = window.localStorage.getItem(BROWSER_DEVICE_KEY_STORAGE);
+        if (existing && existing.length >= 24) return existing;
+
+        const next = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+            ? crypto.randomUUID()
+            : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+        window.localStorage.setItem(BROWSER_DEVICE_KEY_STORAGE, next);
+        return next;
+    } catch {
+        return '';
+    }
 };
 
 export const clearSupabaseSessionCache = () => {

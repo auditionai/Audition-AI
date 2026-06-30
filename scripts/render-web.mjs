@@ -7,6 +7,7 @@ import { Readable } from 'node:stream';
 
 import { handler as adminQueueJobDetailHandler } from '../netlify/functions/admin-queue-job-detail.ts';
 import { handler as adminQueueJobsHandler } from '../netlify/functions/admin-queue-jobs.ts';
+import { handler as adminGiftcodeActionHandler } from '../netlify/functions/admin-giftcode-action.ts';
 import { handler as adminStopQueueJobHandler } from '../netlify/functions/admin-stop-queue-job.ts';
 import { handler as adminUserHistoryHandler } from '../netlify/functions/admin-user-history.ts';
 import { handler as checkinRewardHandler } from '../netlify/functions/checkin-reward.ts';
@@ -72,6 +73,7 @@ const handlerConfigs = [
   { fnName: 'gallery-images', apiPath: '/api/gallery-images', handler: galleryImagesHandler },
   { fnName: 'checkin-reward', apiPath: '/api/checkin-reward', handler: checkinRewardHandler },
   { fnName: 'redeem-giftcode', apiPath: '/api/redeem-giftcode', handler: redeemGiftcodeHandler },
+  { fnName: 'admin-giftcode-action', apiPath: '/api/admin-giftcode-action', handler: adminGiftcodeActionHandler },
   { fnName: 'sepay-sync-transaction', apiPath: '/api/sepay-sync-transaction', handler: sepaySyncTransactionHandler },
   { fnName: 'create_payment', apiPath: '/api/create-payment', handler: createPaymentHandler },
   { fnName: 'sepay-checkout', apiPath: '/api/sepay-checkout', handler: sepayCheckoutHandler },

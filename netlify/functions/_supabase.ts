@@ -1,4 +1,5 @@
 import type { HandlerEvent } from '@netlify/functions';
+import { createHash } from 'node:crypto';
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
 
 const getEnv = (...keys: string[]) => {
@@ -57,7 +58,7 @@ export const getUserClient = (authorizationHeader?: string | null): SupabaseClie
 
 export const requireAuthenticatedUser = async (
   event: HandlerEvent,
-): Promise<{ user: User; userClient: SupabaseClient }> => {
+): Promise<{ user: User; userClient: SupabaseClient; browserKeyHash: string }> => {
   const authorization = event.headers.authorization || event.headers.Authorization || '';
   if (!authorization.startsWith('Bearer ')) {
     throw new Error('Unauthorized');
@@ -73,5 +74,39 @@ export const requireAuthenticatedUser = async (
     throw new Error('Unauthorized');
   }
 
-  return { user, userClient };
+  const rawBrowserKey = String(
+    event.headers['x-audition-device-key'] ||
+      event.headers['X-Audition-Device-Key'] ||
+      '',
+  ).trim();
+  const browserKeyHash = rawBrowserKey
+    ? createHash('sha256').update(rawBrowserKey).digest('hex')
+    : '';
+
+  const admin = getServiceRoleClient();
+  if (browserKeyHash) {
+    const { error: bindError } = await admin.rpc('bind_user_browser_key', {
+      p_user_id: user.id,
+      p_browser_key_hash: browserKeyHash,
+    });
+    if (bindError && !/bind_user_browser_key|function|schema|browser/i.test(bindError.message || '')) {
+      throw bindError;
+    }
+  }
+
+  const { data: profile, error: profileError } = await admin
+    .from('users')
+    .select('account_status')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  if (profileError && !/account_status|column/i.test(profileError.message || '')) {
+    throw profileError;
+  }
+
+  if (profile?.account_status === 'locked') {
+    throw new Error('AccountLocked');
+  }
+
+  return { user, userClient, browserKeyHash };
 };

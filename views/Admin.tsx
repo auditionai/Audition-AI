@@ -62,7 +62,8 @@ import {
     saveTstServerAvailabilityConfig,
     getAdminQueueHealthReport,
     runAdminQueueReconcile,
-    forceRescueFailedQueueJobs
+    forceRescueFailedQueueJobs,
+    adminGiftcodeAction
 } from '../services/economyService';
 import { getAllImagesFromStorage, deleteImageFromStorage, checkR2Connection, getUserImagesFromStorage, cleanupExpiredImages, cleanupR2Directly } from '../services/storageService';
 import { checkConnection, analyzeStyleImage } from '../services/geminiService';
@@ -1524,6 +1525,30 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           showToast('Lỗi tải danh sách người dùng', 'error');
       } finally {
           setLoadingGiftcodeUsers(false);
+      }
+  };
+
+  const handleGiftcodeUserAction = async (
+      action: 'revoke' | 'warn' | 'lock',
+      usage: any
+  ) => {
+      const reason = action === 'revoke'
+          ? 'Thu hồi Vcoin do lạm dụng giftcode'
+          : action === 'warn'
+              ? 'Cảnh báo: không tạo nhiều tài khoản để nhập giftcode'
+              : 'Khóa tài khoản do lạm dụng giftcode';
+      try {
+          await adminGiftcodeAction(action, {
+              userId: usage.userId,
+              usageId: usage.usageId,
+              reason,
+          });
+          showToast(action === 'revoke' ? 'Đã thu hồi Vcoin' : action === 'warn' ? 'Đã gửi cảnh báo' : 'Đã khóa tài khoản', 'success');
+          if (viewingGiftcodeUsage) {
+              await handleViewGiftcodeUsage(viewingGiftcodeUsage);
+          }
+      } catch (error: any) {
+          showToast(error?.message || 'Không thể xử lý thao tác', 'error');
       }
   };
 
@@ -4835,7 +4860,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           <div className="fixed inset-0 z-[2000] flex justify-center items-start p-4 pt-24 overflow-y-auto">
               <div className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-white/20 shadow-2xl">
                   <h3 className="text-xl font-bold text-white mb-6">{editingGiftcode.id.startsWith('temp_') ? 'Tạo Giftcode' : 'Sửa Giftcode'}</h3>
-                  <div className="space-y-4 mb-6"><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Mã Code (Tự động in hoa)</label><input value={editingGiftcode.code} onChange={e => setEditingGiftcode({...editingGiftcode, code: e.target.value.toUpperCase()})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono font-bold" placeholder="Vd: CHAOMUNG"/></div><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Mã chiến dịch</label><input value={editingGiftcode.campaignKey || ''} onChange={e => setEditingGiftcode({...editingGiftcode, campaignKey: e.target.value.toUpperCase()})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono font-bold" placeholder="Vd: TET2026" /></div><p className="text-[11px] text-slate-500 -mt-2">Các giftcode cùng chiến dịch dùng chung mã này. 1 IP chỉ nhập được 1 lần trong cùng chiến dịch.</p><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Phần thưởng (Vcoin)</label><input type="number" value={editingGiftcode.reward} onChange={e => setEditingGiftcode({...editingGiftcode, reward: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-yellow font-bold" /></div><div className="grid grid-cols-2 gap-4"><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Giới hạn tổng</label><input type="number" value={editingGiftcode.totalLimit} onChange={e => setEditingGiftcode({...editingGiftcode, totalLimit: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" /></div><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Max/Người</label><input type="number" value={editingGiftcode.maxPerUser} onChange={e => setEditingGiftcode({...editingGiftcode, maxPerUser: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" /></div></div><label className="flex items-center gap-2 cursor-pointer bg-white/5 p-3 rounded-xl border border-white/10 hover:bg-white/10 transition-colors mt-2"><input type="checkbox" checked={editingGiftcode.isActive} onChange={e => setEditingGiftcode({...editingGiftcode, isActive: e.target.checked})} className="accent-green-500 w-4 h-4" /><span className="text-sm font-bold text-white">Kích hoạt ngay</span></label></div><div className="flex gap-3"><button onClick={() => setEditingGiftcode(null)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold">Hủy</button><button onClick={handleSaveGiftcode} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold">Lưu Code</button></div>
+                  <div className="space-y-4 mb-6"><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Mã Code (Tự động in hoa)</label><input value={editingGiftcode.code} onChange={e => setEditingGiftcode({...editingGiftcode, code: e.target.value.toUpperCase()})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono font-bold" placeholder="Vd: CHAOMUNG"/></div><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Mã chiến dịch</label><input value={editingGiftcode.campaignKey || ''} onChange={e => setEditingGiftcode({...editingGiftcode, campaignKey: e.target.value.toUpperCase()})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono font-bold" placeholder="Vd: TET2026" /></div><p className="text-[11px] text-slate-500 -mt-2">Các giftcode cùng chiến dịch dùng chung mã này. Hệ thống chặn theo tài khoản, IP/network và cụm email.</p><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Phần thưởng (Vcoin)</label><input type="number" value={editingGiftcode.reward} onChange={e => setEditingGiftcode({...editingGiftcode, reward: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-yellow font-bold" /></div><div className="grid grid-cols-2 gap-4"><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Giới hạn tổng</label><input type="number" value={editingGiftcode.totalLimit} onChange={e => setEditingGiftcode({...editingGiftcode, totalLimit: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" /></div><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Max/Người</label><input type="number" value={editingGiftcode.maxPerUser} onChange={e => setEditingGiftcode({...editingGiftcode, maxPerUser: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" /></div></div><label className="flex items-center gap-2 cursor-pointer bg-white/5 p-3 rounded-xl border border-white/10 hover:bg-white/10 transition-colors mt-2"><input type="checkbox" checked={editingGiftcode.isActive} onChange={e => setEditingGiftcode({...editingGiftcode, isActive: e.target.checked})} className="accent-green-500 w-4 h-4" /><span className="text-sm font-bold text-white">Kích hoạt ngay</span></label></div><div className="flex gap-3"><button onClick={() => setEditingGiftcode(null)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold">Hủy</button><button onClick={handleSaveGiftcode} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold">Lưu Code</button></div>
               </div>
           </div>
       )}
@@ -4994,6 +5019,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       <th className="px-6 py-3">Người dùng</th>
                                       <th className="px-6 py-3">Email</th>
                                       <th className="px-6 py-3">IP</th>
+                                      <th className="px-6 py-3">Risk</th>
+                                      <th className="px-6 py-3">Thưởng</th>
+                                      <th className="px-6 py-3">Xử lý</th>
                                       <th className="px-6 py-3 text-right">Thời gian</th>
                                   </tr>
                               </thead>
@@ -5006,6 +5034,22 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           </td>
                                           <td className="px-6 py-3">{u.userEmail}</td>
                                           <td className="px-6 py-3 font-mono text-xs">{u.ipAddress || 'Ẩn / cũ'}</td>
+                                          <td className="px-6 py-3">
+                                              <div className="font-mono text-xs text-audi-yellow">{u.riskScore || 0}</div>
+                                              {u.browserKeyHash && <div className="mt-1 max-w-[160px] truncate font-mono text-[10px] text-audi-cyan" title={u.browserKeyHash}>key:{u.browserKeyHash.slice(0, 10)}</div>}
+                                              {u.riskFlags?.length > 0 && <div className="mt-1 max-w-[160px] truncate text-[10px] text-slate-500" title={u.riskFlags.join(', ')}>{u.riskFlags.join(', ')}</div>}
+                                          </td>
+                                          <td className="px-6 py-3">
+                                              <span className={`rounded-full px-2 py-1 text-[10px] font-bold uppercase ${u.rewardStatus === 'granted' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-red-500/15 text-red-300'}`}>{u.rewardStatus || 'granted'}</span>
+                                              {u.abuseStatus && u.abuseStatus !== 'ok' && <div className="mt-1 text-[10px] text-red-300">{u.abuseStatus}</div>}
+                                          </td>
+                                          <td className="px-6 py-3">
+                                              <div className="flex flex-wrap gap-1">
+                                                  <button onClick={() => handleGiftcodeUserAction('revoke', u)} disabled={u.rewardStatus === 'revoked'} className="rounded bg-red-500/15 px-2 py-1 text-[10px] font-bold text-red-300 hover:bg-red-500 hover:text-white disabled:opacity-40">Thu hồi</button>
+                                                  <button onClick={() => handleGiftcodeUserAction('warn', u)} className="rounded bg-yellow-500/15 px-2 py-1 text-[10px] font-bold text-yellow-300 hover:bg-yellow-500 hover:text-black">Cảnh báo</button>
+                                                  <button onClick={() => handleGiftcodeUserAction('lock', u)} className="rounded bg-white/10 px-2 py-1 text-[10px] font-bold text-slate-200 hover:bg-white hover:text-black">Khóa</button>
+                                              </div>
+                                          </td>
                                           <td className="px-6 py-3 text-right font-mono text-xs">{new Date(u.usedAt).toLocaleString()}</td>
                                       </tr>
                                   ))}

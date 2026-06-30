@@ -41,8 +41,11 @@ grant insert on table public.milestone_claims to authenticated;
 grant select on table public.model_pricing to authenticated;
 
 grant execute on function public.check_is_admin() to anon, authenticated, service_role;
+grant execute on function public.bind_user_browser_key(uuid, text) to service_role;
+revoke execute on function public.bind_user_browser_key(uuid, text) from public, anon, authenticated;
 grant execute on function public.increment_giftcode_usage(uuid) to authenticated, service_role;
-grant execute on function public.redeem_giftcode(uuid, text, text, text) to service_role;
+grant execute on function public.redeem_giftcode(uuid, text, text, text, text, text) to service_role;
+revoke execute on function public.redeem_giftcode(uuid, text, text, text, text, text) from public, anon, authenticated;
 grant execute on function public.apply_balance_transaction(uuid, numeric, text, text, text, text, jsonb) to authenticated, service_role;
 grant execute on function public.secure_update_balance(numeric, text, text) to authenticated, service_role;
 grant execute on function public.refund_generated_job(uuid, text) to service_role;

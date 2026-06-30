@@ -6,7 +6,7 @@ import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 const headers = {
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Audition-Device-Key',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
@@ -86,7 +86,8 @@ const toNetworkKey = (ip: string) => {
     return `ipv6:${normalizeIpv6Network(ip)}`;
   }
   if (family === 4) {
-    return `ipv4:${ip}`;
+    const parts = ip.split('.');
+    return `ipv4:${parts.slice(0, 3).join('.')}.0/24`;
   }
   return ip;
 };
@@ -115,6 +116,10 @@ const getClientIp = (event: Parameters<Handler>[0]) => {
 };
 
 const hashIp = (ip: string) => createHash('sha256').update(ip).digest('hex');
+const hashUserAgent = (value?: string | null) => {
+  const normalized = String(value || '').trim().slice(0, 500);
+  return normalized ? createHash('sha256').update(normalized).digest('hex') : '';
+};
 const normalizeCampaignKey = (value?: string | null, fallback = '') =>
   String(value || fallback || '')
     .trim()
@@ -125,7 +130,19 @@ const mapGiftcodeError = (message: string) => {
     return 'Địa chỉ IP này đã dùng giftcode trong chiến dịch này rồi.';
   }
   if (/GIFT_CODE_ALREADY_USED_BY_USER/i.test(message)) {
-    return 'Bạn đã nhập mã này rồi.';
+    return 'Bạn đã nhập giftcode trong chiến dịch này rồi.';
+  }
+  if (/GIFT_CODE_ALREADY_USED_BY_EMAIL_CLUSTER/i.test(message)) {
+    return 'Cụm email này đã dùng giftcode trong chiến dịch này rồi.';
+  }
+  if (/GIFT_CODE_ALREADY_USED_BY_BROWSER/i.test(message)) {
+    return 'Tr\u00ecnh duy\u1ec7t/thi\u1ebft b\u1ecb n\u00e0y \u0111\u00e3 d\u00f9ng giftcode trong chi\u1ebfn d\u1ecbch n\u00e0y r\u1ed3i.';
+  }
+  if (/GIFT_CODE_ALREADY_REDEEMED/i.test(message)) {
+    return 'Lượt nhập giftcode này đã được xử lý trước đó.';
+  }
+  if (/ACCOUNT_LOCKED|AccountLocked/i.test(message)) {
+    return 'Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên.';
   }
   if (/GIFT_CODE_LIMIT_REACHED/i.test(message)) {
     return 'Mã đã hết lượt sử dụng.';
@@ -166,12 +183,13 @@ export const handler: Handler = async (event) => {
   }
 
   try {
-    const { user } = await requireAuthenticatedUser(event);
+    const { user, browserKeyHash } = await requireAuthenticatedUser(event);
     const body = JSON.parse(event.body || '{}');
     const code = String(body?.code || '').trim().toUpperCase();
     const ipAddress = getClientIp(event);
     const ipNetworkKey = ipAddress ? toNetworkKey(ipAddress) : '';
     const ipHash = ipNetworkKey ? hashIp(ipNetworkKey) : '';
+    const userAgentHash = hashUserAgent(event.headers['user-agent']);
 
     const admin = getServiceRoleClient();
     if (ipHash) {
@@ -263,6 +281,8 @@ export const handler: Handler = async (event) => {
       p_code: code,
       p_ip_hash: ipHash,
       p_ip_address: ipAddress || null,
+      p_user_agent_hash: userAgentHash || null,
+      p_browser_key_hash: browserKeyHash || null,
     });
 
     if (error) {
@@ -279,18 +299,21 @@ export const handler: Handler = async (event) => {
 
     const row = Array.isArray(data) ? data[0] : data;
     const success = Boolean(row?.success);
+    const resultMessage = String(row?.message || '');
     return {
       statusCode: success ? 200 : 400,
       headers,
       body: JSON.stringify({
         success,
         reward: Number(row?.reward || 0),
-        message: success ? 'Success' : mapGiftcodeError(String(row?.message || 'Không thể sử dụng giftcode.')),
+        message: success
+          ? (resultMessage === 'SUCCESS' ? 'Success' : mapGiftcodeError(resultMessage))
+          : mapGiftcodeError(resultMessage || 'Không thể sử dụng giftcode.'),
       }),
     };
   } catch (error: any) {
     return {
-      statusCode: error?.message === 'Unauthorized' ? 401 : 500,
+      statusCode: error?.message === 'Unauthorized' ? 401 : error?.message === 'AccountLocked' ? 403 : 500,
       headers,
       body: JSON.stringify({
         success: false,

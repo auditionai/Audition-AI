@@ -134,6 +134,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/admin-giftcode-action"
+  to = "/.netlify/functions/admin-giftcode-action"
+  status = 200
+
+[[redirects]]
   from = "/api/sepay-sync-transaction"
   to = "/.netlify/functions/sepay-sync-transaction"
   status = 200

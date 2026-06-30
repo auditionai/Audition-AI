@@ -3153,7 +3153,7 @@ export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean
         window.dispatchEvent(new Event('balance_updated'));
         const reward = Number(payload?.reward || 0);
         trackEvent('giftcode_redeem_success', { reward_vcoin: reward });
-        return { success: true, reward, message: 'Success' };
+        return { success: true, reward, message: payload?.message || 'Success' };
     } catch (e: any) {
         trackEvent('giftcode_redeem_error', {
             error_message: e?.message?.slice?.(0, 120) || 'unknown',
@@ -3166,7 +3166,7 @@ export const getGiftcodeUsages = async (codeId: string) => {
     if (!supabase) return [];
     const { data, error } = await supabase
         .from('gift_code_usages')
-        .select('user_id, created_at, ip_address, users(display_name, email, photo_url)')
+        .select('id, user_id, created_at, ip_address, browser_key_hash, reward_status, risk_score, risk_flags, abuse_status, users(display_name, email, photo_url)')
         .eq('gift_code_id', codeId)
         .order('created_at', { ascending: false });
         
@@ -3175,14 +3175,40 @@ export const getGiftcodeUsages = async (codeId: string) => {
     return data.map((u: any) => {
         const userObj = Array.isArray(u.users) ? u.users[0] : u.users;
         return {
+            usageId: u.id,
             userId: u.user_id,
             usedAt: u.created_at,
             ipAddress: u.ip_address || null,
+            browserKeyHash: u.browser_key_hash || null,
             userName: userObj?.display_name || userObj?.email?.split('@')[0] || 'Unknown',
             userEmail: userObj?.email || 'No Email',
-            userAvatar: userObj?.photo_url || 'https://picsum.photos/50/50'
+            userAvatar: userObj?.photo_url || 'https://picsum.photos/50/50',
+            rewardStatus: u.reward_status || 'granted',
+            riskScore: Number(u.risk_score || 0),
+            riskFlags: Array.isArray(u.risk_flags) ? u.risk_flags : [],
+            abuseStatus: u.abuse_status || 'ok'
         };
     });
+};
+
+export const adminGiftcodeAction = async (
+    action: 'revoke' | 'warn' | 'lock' | 'unlock',
+    payload: { userId?: string; usageId?: string; reason?: string }
+) => {
+    const authHeader = await getSessionAuthHeader();
+    const response = await fetch('/api/admin-giftcode-action', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...authHeader,
+        },
+        body: JSON.stringify({ action, ...payload }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result?.success) {
+        throw new Error(result?.error || 'Không thể xử lý thao tác giftcode.');
+    }
+    return result;
 };
 
 // --- STYLE PRESETS ---

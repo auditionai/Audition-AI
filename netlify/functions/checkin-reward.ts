@@ -4,7 +4,7 @@ import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 const headers = {
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Audition-Device-Key',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
@@ -72,6 +72,29 @@ const calculateConsecutiveStreak = (dates: string[], today: string) => {
 
 const isDuplicateError = (error: any) =>
   error?.code === '23505' || /duplicate|already exists/i.test(String(error?.message || ''));
+
+const ensureBrowserKeyCheckinAllowed = async (userId: string, browserKeyHash: string) => {
+  if (!browserKeyHash) return;
+
+  const admin = getServiceRoleClient();
+  const { data, error } = await admin
+    .from('user_browser_keys')
+    .select('account_index, is_checkin_allowed')
+    .eq('browser_key_hash', browserKeyHash)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error) {
+    if (/user_browser_keys|schema|relation|table/i.test(error.message || '')) {
+      return;
+    }
+    throw error;
+  }
+
+  if (data && (!data.is_checkin_allowed || Number(data.account_index || 0) > 3)) {
+    throw new Error('CHECKIN_BROWSER_KEY_LIMIT');
+  }
+};
 
 const hasRewardLog = async (
   userId: string,
@@ -395,7 +418,8 @@ export const handler: Handler = async (event) => {
   }
 
   try {
-    const { user } = await requireAuthenticatedUser(event);
+    const { user, browserKeyHash } = await requireAuthenticatedUser(event);
+    await ensureBrowserKeyCheckinAllowed(user.id, browserKeyHash);
     const body = JSON.parse(event.body || '{}') as CheckinBody;
 
     if (body.action === 'milestone') {
@@ -416,8 +440,30 @@ export const handler: Handler = async (event) => {
     };
   } catch (error: any) {
     console.error('[checkin-reward] failed:', error);
+    if (error?.message === 'CHECKIN_BROWSER_KEY_LIMIT') {
+      return {
+        statusCode: 403,
+        headers,
+        body: JSON.stringify({
+          success: false,
+          message: 'T\u00e0i kho\u1ea3n n\u00e0y \u0111\u00e3 v\u01b0\u1ee3t gi\u1edbi h\u1ea1n \u0111i\u1ec3m danh tr\u00ean tr\u00ecnh duy\u1ec7t/thi\u1ebft b\u1ecb n\u00e0y.',
+        }),
+      };
+    }
+
+    if (error?.message === 'AccountLocked') {
+      return {
+        statusCode: 403,
+        headers,
+        body: JSON.stringify({
+          success: false,
+          message: 'TÃ i khoáº£n Ä‘Ã£ bá»‹ khÃ³a. Vui lÃ²ng liÃªn há»‡ quáº£n trá»‹ viÃªn.',
+        }),
+      };
+    }
+
     return {
-      statusCode: 500,
+      statusCode: error?.message === 'Unauthorized' ? 401 : 500,
       headers,
       body: JSON.stringify({
         success: false,

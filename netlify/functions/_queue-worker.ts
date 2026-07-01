@@ -165,6 +165,7 @@ const AMBIGUOUS_DISPATCH_RECOVERY_GRACE_MS = 3 * 60 * 1000;
 const LEASE_HEARTBEAT_INTERVAL_MS = 30_000;
 const DISPATCH_LEASE_SECONDS = parsePositiveIntEnv('QUEUE_DISPATCH_LEASE_SECONDS', 300, 30);
 const DISPATCH_CLAIM_LEASE_SECONDS = parsePositiveIntEnv('QUEUE_DISPATCH_CLAIM_LEASE_SECONDS', 60, 30);
+const PROVIDER_DISPATCH_TIMEOUT_MS = parsePositiveIntEnv('QUEUE_PROVIDER_DISPATCH_TIMEOUT_MS', 45_000, 5_000);
 const LIVE_CATALOG_VALIDATION_TIMEOUT_MS = parsePositiveIntEnv('QUEUE_LIVE_CATALOG_VALIDATION_TIMEOUT_MS', 45_000, 5_000);
 const STALE_RECOVERY_SCAN_LIMIT = 50;
 const STALE_RECOVERY_MIN_AGE_MS = 45_000;
@@ -1154,7 +1155,7 @@ const submitProviderJob = async (queueKind: string, providerPayload: Record<stri
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(outboundPayload),
-    signal: AbortSignal.timeout(295000),
+    signal: AbortSignal.timeout(PROVIDER_DISPATCH_TIMEOUT_MS),
   });
 
   if (!response.ok) {

@@ -195,6 +195,50 @@ export interface AdminQueueHealthSnapshot {
   }>;
 }
 
+export interface AdminQueueDispatchDiagnostics {
+  generatedAt?: string;
+  capacity?: {
+    systemImageProcessing?: number;
+    systemVideoProcessing?: number;
+    imageSlots?: number;
+    videoSlots?: number;
+  };
+  counts?: {
+    queued?: number;
+    queuedImages?: number;
+    queuedVideos?: number;
+    eligibleForDispatch?: number;
+    processing?: number;
+  };
+  locks?: Array<{
+    key: string;
+    owner?: string | null;
+    expiresAt?: string | null;
+    heartbeatAt?: string | null;
+    updatedAt?: string | null;
+    expired?: boolean;
+  }>;
+  oldestEligibleQueued?: Array<{
+    id: string;
+    userId?: string;
+    assetType?: string;
+    queueKind?: string;
+    stage?: string;
+    createdAt?: string;
+    updatedAt?: string;
+  }>;
+  blockedQueued?: Array<{
+    id: string;
+    userId?: string;
+    assetType?: string;
+    queueKind?: string;
+    stage?: string;
+    updatedAt?: string;
+    leaseExpiresAt?: string | null;
+    reasons?: string[];
+  }>;
+}
+
 export interface AdminQueueHealthReport {
   lastWatchdogReport?: {
     generatedAt?: string;
@@ -213,6 +257,7 @@ export interface AdminQueueHealthReport {
   } | null;
   lastWatchdogReportUpdatedAt?: string | null;
   liveDbReport?: AdminQueueHealthSnapshot | { error?: string; code?: string } | null;
+  dispatchDiagnostics?: AdminQueueDispatchDiagnostics | null;
 }
 
 export interface AdminQueueInputMedia {

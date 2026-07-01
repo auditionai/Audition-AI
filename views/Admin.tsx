@@ -550,7 +550,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
   // Search States
   const [userSearchEmail, setUserSearchEmail] = useState('');
-  const [userActivityFilter, setUserActivityFilter] = useState<'all' | 'online' | 'inactive_60' | 'inactive_90'>('all');
+  const [userActivityFilter, setUserActivityFilter] = useState<'all' | 'online' | 'locked' | 'warned' | 'inactive_60' | 'inactive_90'>('all');
   const [userSortMode, setUserSortMode] = useState<'last_active_desc' | 'vcoin_desc' | 'usage_desc' | 'name_asc'>('last_active_desc');
   const [userListLimit, setUserListLimit] = useState(30);
   const [currentUserEmail, setCurrentUserEmail] = useState('');
@@ -1385,6 +1385,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       .filter((u: UserProfile) => {
           if (userActivityFilter === 'all') return true;
           if (userActivityFilter === 'online') return isUserOnline(u.lastActive);
+          if (userActivityFilter === 'locked') return u.accountStatus === 'locked';
+          if (userActivityFilter === 'warned') return Boolean(u.accountWarning);
 
           const inactiveDays = getInactiveDays(u.lastActive);
           if (userActivityFilter === 'inactive_60') return inactiveDays >= 60;
@@ -1679,6 +1681,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               }
           }
           showToast(`Đã xử lý ${successCount} mục${failCount ? `, lỗi ${failCount}` : ''}`, failCount ? 'info' : 'success');
+          await refreshData();
           await loadGiftcodeAbuseCases();
       } finally {
           setBulkGiftcodeActionLoading(false);
@@ -1726,10 +1729,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   ) => {
       const meta = getGiftcodeActionMeta(action);
       try {
-          await executeGiftcodeAction(action, usage, meta.reason);
-          showToast(`${meta.success}: ${usage.userEmail || usage.userName || usage.userId}`, 'success');
-          if (viewingGiftcodeUsage) {
-              await handleViewGiftcodeUsage(viewingGiftcodeUsage);
+           await executeGiftcodeAction(action, usage, meta.reason);
+           showToast(`${meta.success}: ${usage.userEmail || usage.userName || usage.userId}`, 'success');
+           await refreshData();
+           if (viewingGiftcodeUsage) {
+               await handleViewGiftcodeUsage(viewingGiftcodeUsage);
           }
           if (activeView === 'giftcode_abuse') {
               await loadGiftcodeAbuseCases();
@@ -2686,6 +2690,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           >
                               <option value="all" className="bg-[#12121a]">Tất cả người dùng</option>
                               <option value="online" className="bg-[#12121a]">Đang online</option>
+                              <option value="locked" className="bg-[#12121a]">Tài khoản bị khóa</option>
+                              <option value="warned" className="bg-[#12121a]">Đã cảnh báo</option>
                               <option value="inactive_60" className="bg-[#12121a]">Không online từ 60 ngày</option>
                               <option value="inactive_90" className="bg-[#12121a]">Không online từ 90 ngày</option>
                           </select>
@@ -2716,10 +2722,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           </thead>
                           <tbody className="divide-y divide-white/5">
                               {visibleUsers
-                                  .map((u: UserProfile) => {
-                                      const online = isUserOnline(u.lastActive);
-                                      return (
-                                          <tr key={u.id} className="hover:bg-white/5 transition-colors">
+                                   .map((u: UserProfile) => {
+                                       const online = isUserOnline(u.lastActive);
+                                      const locked = u.accountStatus === 'locked';
+                                       return (
+                                          <tr key={u.id} className={`transition-colors ${locked ? 'bg-red-500/5 hover:bg-red-500/10' : 'hover:bg-white/5'}`}>
                                               <td className="px-6 py-4">
                                                   <div className="flex items-center gap-3">
                                                       <div className="relative">
@@ -2729,6 +2736,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                       <div>
                                                           <div className="font-bold text-white">{u.username}</div>
                                                           <div className="text-xs text-slate-500">{u.email}</div>
+                                                          <div className="mt-1 flex flex-wrap gap-1">
+                                                              {locked && <span className="rounded bg-red-500/15 px-2 py-0.5 text-[10px] font-bold text-red-300">LOCKED</span>}
+                                                              {u.accountWarning && <span className="rounded bg-yellow-500/15 px-2 py-0.5 text-[10px] font-bold text-yellow-300">WARNED</span>}
+                                                          </div>
+                                                          {locked && u.lockReason && <div className="mt-1 max-w-[260px] truncate text-[10px] text-red-300" title={u.lockReason}>Lý do khóa: {u.lockReason}</div>}
                                                       </div>
                                                   </div>
                                               </td>
@@ -2764,27 +2776,37 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   {/* Mobile View */}
                   <div className="md:hidden space-y-4">
                       {visibleUsers
-                          .map((u: UserProfile) => {
-                              const online = isUserOnline(u.lastActive);
-                              return (
-                                  <div key={u.id} className="bg-[#12121a] border border-white/10 rounded-xl p-4 relative overflow-hidden">
+                           .map((u: UserProfile) => {
+                               const online = isUserOnline(u.lastActive);
+                              const locked = u.accountStatus === 'locked';
+                               return (
+                                  <div key={u.id} className={`rounded-xl p-4 relative overflow-hidden border ${locked ? 'bg-red-500/5 border-red-500/20' : 'bg-[#12121a] border-white/10'}`}>
                                       <div className="flex justify-between items-start mb-3">
                                           <div className="flex items-center gap-3">
                                               <div className="relative">
                                                   <img src={u.avatar} className="w-10 h-10 rounded-full border border-white/10 object-cover" onError={(e) => (e.currentTarget.src = 'https://picsum.photos/100/100')} />
                                                   {online && <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-[#12121a] rounded-full animate-pulse"></div>}
                                               </div>
-                                              <div>
-                                                  <div className="font-bold text-white text-sm">{u.username}</div>
-                                                  <div className="text-xs text-slate-500">{u.email}</div>
-                                              </div>
-                                          </div>
+                                               <div>
+                                                   <div className="font-bold text-white text-sm">{u.username}</div>
+                                                   <div className="text-xs text-slate-500">{u.email}</div>
+                                                  <div className="mt-1 flex flex-wrap gap-1">
+                                                      {locked && <span className="rounded bg-red-500/15 px-2 py-0.5 text-[10px] font-bold text-red-300">LOCKED</span>}
+                                                      {u.accountWarning && <span className="rounded bg-yellow-500/15 px-2 py-0.5 text-[10px] font-bold text-yellow-300">WARNED</span>}
+                                                  </div>
+                                               </div>
+                                           </div>
                                           <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${u.role === 'admin' ? 'bg-red-500/20 text-red-500' : 'bg-blue-500/20 text-blue-500'}`}>
                                               {u.role}
                                           </span>
-                                      </div>
-                                      
-                                      <div className="grid grid-cols-3 gap-2 mb-3 bg-white/5 p-2 rounded-lg">
+                                       </div>
+                                      {locked && u.lockReason && (
+                                          <div className="mb-3 rounded-lg border border-red-500/20 bg-red-500/10 p-2 text-xs text-red-200">
+                                              Lý do khóa: {u.lockReason}
+                                          </div>
+                                      )}
+
+                                       <div className="grid grid-cols-3 gap-2 mb-3 bg-white/5 p-2 rounded-lg">
                                           <div className="text-center">
                                               <div className="text-[10px] text-slate-500 uppercase font-bold">Trạng thái</div>
                                               <div className={`text-xs font-bold ${online ? 'text-green-500' : 'text-slate-400'}`}>
@@ -5418,11 +5440,20 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   </tr>
                               </thead>
                               <tbody className="divide-y divide-white/5">
-                                  {giftcodeUsers.map((u, idx) => (
-                                      <tr key={idx} className="hover:bg-white/5 transition-colors">
+                                  {giftcodeUsers.map((u, idx) => {
+                                      const locked = u.accountStatus === 'locked';
+                                      return (
+                                      <tr key={idx} className={`transition-colors ${locked ? 'bg-red-500/5 hover:bg-red-500/10' : 'hover:bg-white/5'}`}>
                                           <td className="px-6 py-3 flex items-center gap-3">
                                               <img src={u.userAvatar} className="w-8 h-8 rounded-full bg-white/10" />
-                                              <span className="font-bold text-white">{u.userName}</span>
+                                              <div>
+                                                  <div className="font-bold text-white">{u.userName}</div>
+                                                  <div className="mt-1 flex flex-wrap gap-1">
+                                                      {locked && <span className="rounded bg-red-500/15 px-2 py-0.5 text-[10px] font-bold text-red-300">LOCKED</span>}
+                                                      {u.accountWarning && <span className="rounded bg-yellow-500/15 px-2 py-0.5 text-[10px] font-bold text-yellow-300">WARNED</span>}
+                                                  </div>
+                                                  {locked && u.lockReason && <div className="mt-1 max-w-[180px] truncate text-[10px] text-red-300" title={u.lockReason}>{u.lockReason}</div>}
+                                              </div>
                                           </td>
                                           <td className="px-6 py-3">{u.userEmail}</td>
                                           <td className="px-6 py-3 font-mono text-xs">{u.ipAddress || 'Ẩn / cũ'}</td>
@@ -5439,12 +5470,13 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               <div className="flex flex-wrap gap-1">
                                                   <button onClick={() => handleGiftcodeUserAction('revoke', u)} disabled={u.rewardStatus === 'revoked'} className="rounded bg-red-500/15 px-2 py-1 text-[10px] font-bold text-red-300 hover:bg-red-500 hover:text-white disabled:opacity-40">Thu hồi</button>
                                                   <button onClick={() => handleGiftcodeUserAction('warn', u)} className="rounded bg-yellow-500/15 px-2 py-1 text-[10px] font-bold text-yellow-300 hover:bg-yellow-500 hover:text-black">Cảnh báo</button>
-                                                  <button onClick={() => handleGiftcodeUserAction('lock', u)} className="rounded bg-white/10 px-2 py-1 text-[10px] font-bold text-slate-200 hover:bg-white hover:text-black">Khóa</button>
+                                                  <button onClick={() => handleGiftcodeUserAction('lock', u)} disabled={locked} className="rounded bg-white/10 px-2 py-1 text-[10px] font-bold text-slate-200 hover:bg-white hover:text-black disabled:opacity-40">Khóa</button>
                                               </div>
                                           </td>
                                           <td className="px-6 py-3 text-right font-mono text-xs">{new Date(u.usedAt).toLocaleString()}</td>
                                       </tr>
-                                  ))}
+                                      );
+                                  })}
                               </tbody>
                           </table>
                       )}

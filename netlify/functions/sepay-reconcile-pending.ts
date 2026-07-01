@@ -191,9 +191,10 @@ export const runSePayPendingReconcile = async (options: SePayPendingReconcileOpt
     return String(tx.status || '').toLowerCase() === 'pending' && createdAt > 0 && Date.now() - createdAt > 5 * 60_000;
   }).length;
   const settled = results.filter((item) => item.success && item.providerStatus === 'PAID').length;
-  const failed = results.filter((item) => !item.success).length;
+  const budgetExhausted = results.some((item) => item.reason === 'runtime_budget_exhausted');
+  const failed = results.filter((item) => !item.success && item.reason !== 'runtime_budget_exhausted').length;
   const failedReasonCounts = results
-    .filter((item) => !item.success)
+    .filter((item) => !item.success && item.reason !== 'runtime_budget_exhausted')
     .reduce((acc, item: any) => {
       const reason = String(item.reason || 'unknown');
       acc[reason] = (acc[reason] || 0) + 1;
@@ -208,7 +209,7 @@ export const runSePayPendingReconcile = async (options: SePayPendingReconcileOpt
     ].includes(reason);
   }).length;
 
-  if (pendingOlderThanFiveMinutes > 0 || failed > 0) {
+  if (pendingOlderThanFiveMinutes > 0 || failed > 0 || criticalFailureCount > 0) {
     await sendTelegramOperationalAlert(
       'SePay reconcile can chu y',
       {
@@ -216,6 +217,7 @@ export const runSePayPendingReconcile = async (options: SePayPendingReconcileOpt
         settled,
         failed,
         failedReasonCounts,
+        budgetExhausted,
         criticalFailureCount,
         pendingOlderThanFiveMinutes,
       },
@@ -235,7 +237,7 @@ export const runSePayPendingReconcile = async (options: SePayPendingReconcileOpt
     failedReasonCounts,
     criticalFailureCount,
     runtimeMs: Date.now() - startedAt,
-    budgetExhausted: results.some((item) => item.reason === 'runtime_budget_exhausted'),
+    budgetExhausted,
     results,
   };
 };

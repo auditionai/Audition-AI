@@ -34,6 +34,7 @@ import {
 import { isTerminalRescueFailureMessage, normalizeQueueErrorMessage } from '../../shared/queueErrorClassifier';
 import { repairVietnameseMojibake } from '../../shared/queueLogText';
 import { clearFailedRescueMeta, hasFailedRescueFinalized, hasManualStopFlag } from '../../shared/queueRescueState';
+import { SYSTEM_QUEUE_KINDS } from '../../shared/queueKinds';
 
 type QueueJobRow = {
   id: string;
@@ -2518,6 +2519,7 @@ const recoverStalePreparingJobs = async () => {
     .from('generated_images')
     .select('id, user_id, asset_type, queue_kind, queue_payload, prompt, tool_id, tool_name, model_used, cost_vcoin, processing_started_at, created_at, updated_at, lease_expires_at, status')
     .in('status', ['processing', 'queued'])
+    .in('queue_kind', SYSTEM_QUEUE_KINDS)
     .is('job_id', null)
     .lt('updated_at', staleBeforeIso)
     .order('updated_at', { ascending: true })
@@ -3093,11 +3095,19 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
   };
 
   if (shouldRunPollLane) {
-    summary.requeued += await recoverStaleProviderPollingJobs();
+    try {
+      summary.requeued += await recoverStaleProviderPollingJobs();
+    } catch (error) {
+      console.error('[queue-worker] Stale provider polling recovery failed; continuing with poll claims:', error);
+    }
   }
 
   if (shouldRunDispatchLane) {
-    summary.requeued += await recoverStalePreparingJobs();
+    try {
+      summary.requeued += await recoverStalePreparingJobs();
+    } catch (error) {
+      console.error('[queue-worker] Stale pre-dispatch recovery failed; continuing with dispatch claims:', error);
+    }
   }
 
   if (shouldRunPollLane) {

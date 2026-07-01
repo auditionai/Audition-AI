@@ -45,14 +45,6 @@ export interface QueueEnqueueRequest {
 }
 
 export const QUEUE_SUBMITTED_EVENT = 'audition:queue-submitted';
-const QUEUE_TICK_NOOP_RESULT = {
-  success: true,
-  accepted: false,
-  background: false,
-  reason: 'dedicated_worker_mode',
-} as const;
-
-let queueTickDisabledLogged = false;
 
 const getAuthHeader = async () => {
   return getSupabaseAuthHeader();
@@ -120,12 +112,16 @@ export const enqueueServerJob = async (request: QueueEnqueueRequest) => {
 };
 
 export const triggerServerQueueTick = async (_force = false) => {
-  if (!queueTickDisabledLogged) {
-    queueTickDisabledLogged = true;
-    console.info('[Queue] queue-tick is disabled. Render dedicated worker owns queue processing.');
+  const response = await fetch('/api/queue-tick', {
+    method: 'POST',
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.error || 'Failed to trigger queue worker');
   }
 
-  return QUEUE_TICK_NOOP_RESULT;
+  return payload;
 };
 
 export const syncPaymentTransaction = async (orderCode: string | number, gateway?: string | null) => {

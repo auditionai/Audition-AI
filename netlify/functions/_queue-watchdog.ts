@@ -11,6 +11,7 @@ type WatchdogSummary = {
   healthBefore?: QueueHealthSnapshot;
   healthAfter?: QueueHealthSnapshot;
   queuedStale: number;
+  nudgedQueued: number;
   requeuedPreDispatch: number;
   failedPreDispatch: number;
   nudgedPolls: number;
@@ -406,6 +407,32 @@ const requeuePreDispatch = async (row: any, message: string) => {
   }
 };
 
+const nudgeQueuedJob = async (row: any) => {
+  const admin = getServiceRoleClient();
+  const nudgedAt = nowIso();
+  const { error } = await admin
+    .from('generated_images')
+    .update({
+      queue_payload: {
+        ...withQueueLog(row.queue_payload, 'queued', 'Watchdog phat hien job queued qua lau. Lam moi lease/next_poll de worker claim lai.', 'warning'),
+        __watchdogLastActionAt: nudgedAt,
+        __watchdogLastAction: 'nudged_queued',
+        __watchdogLastReason: 'queued_stale',
+      },
+      lease_token: null,
+      lease_expires_at: null,
+      next_poll_at: nudgedAt,
+      error_message: null,
+      updated_at: nudgedAt,
+    })
+    .eq('id', row.id)
+    .eq('status', 'queued');
+
+  if (error) {
+    throw error;
+  }
+};
+
 const nudgeProviderPoll = async (row: any) => {
   const admin = getServiceRoleClient();
   const nudgedAt = nowIso();
@@ -475,6 +502,7 @@ export const runQueueWatchdog = async (options: { runWorkerAfterRescue?: boolean
     return {
       scanned: 0,
       queuedStale: 0,
+      nudgedQueued: 0,
       requeuedPreDispatch: 0,
       failedPreDispatch: 0,
       nudgedPolls: 0,
@@ -486,6 +514,7 @@ export const runQueueWatchdog = async (options: { runWorkerAfterRescue?: boolean
   const summary: WatchdogSummary = {
     scanned: 0,
     queuedStale: 0,
+    nudgedQueued: 0,
     requeuedPreDispatch: 0,
     failedPreDispatch: 0,
     nudgedPolls: 0,
@@ -525,6 +554,8 @@ export const runQueueWatchdog = async (options: { runWorkerAfterRescue?: boolean
 
       if (status === 'queued' && updatedAtMs > 0 && now - updatedAtMs > QUEUED_STALE_MS) {
         summary.queuedStale += 1;
+        await nudgeQueuedJob(row);
+        summary.nudgedQueued += 1;
         continue;
       }
 
@@ -567,11 +598,30 @@ export const runQueueWatchdog = async (options: { runWorkerAfterRescue?: boolean
     }
 
     summary.staleDispatchHeartbeat = await inspectDispatchHeartbeat();
+
+    if (options.runWorkerAfterRescue !== false && (
+      summary.requeuedPreDispatch > 0 ||
+      summary.nudgedPolls > 0 ||
+      summary.queuedStale > 0 ||
+      summary.staleDispatchHeartbeat
+    )) {
+      summary.worker = await runQueueDaemon({
+        maxRuntimeMs: 20_000,
+        idleIterationsToStop: 3,
+        activeDelayMs: 50,
+        idleDelayMs: 500,
+      });
+      summary.healthAfter = buildQueueHealthSnapshot(await fetchQueueHealthRows());
+    }
+
+    summary.staleDispatchHeartbeat = await inspectDispatchHeartbeat();
     summary.healthAfter = buildQueueHealthSnapshot(await fetchQueueHealthRows());
 
     if (summary.queuedStale > 0) {
-      if (await sendThrottledAlert(alertState, 'queued_stale', 'Queue co job queued qua 5 phut', {
+      if (await sendThrottledAlert(alertState, 'queued_stale', 'Watchdog da day lai job queued qua 5 phut', {
         queuedStale: summary.queuedStale,
+        nudgedQueued: summary.nudgedQueued,
+        worker: summary.worker || null,
       })) summary.alertsSent += 1;
     }
     if (summary.requeuedPreDispatch > 0 || summary.failedPreDispatch > 0) {
@@ -595,25 +645,11 @@ export const runQueueWatchdog = async (options: { runWorkerAfterRescue?: boolean
         watchdogDue: summary.healthAfter.watchdogDue,
         counts: summary.healthAfter.counts,
         examples: summary.healthAfter.examples.slice(0, 5),
+        worker: summary.worker || null,
       })) summary.alertsSent += 1;
     }
 
     await saveAlertState(alertState);
-
-    if (options.runWorkerAfterRescue !== false && (
-      summary.requeuedPreDispatch > 0 ||
-      summary.nudgedPolls > 0 ||
-      summary.queuedStale > 0 ||
-      summary.staleDispatchHeartbeat
-    )) {
-      summary.worker = await runQueueDaemon({
-        maxRuntimeMs: 20_000,
-        idleIterationsToStop: 3,
-        activeDelayMs: 50,
-        idleDelayMs: 500,
-      });
-      summary.healthAfter = buildQueueHealthSnapshot(await fetchQueueHealthRows());
-    }
 
     await saveQueueHealthSnapshot(summary);
 

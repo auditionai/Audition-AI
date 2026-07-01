@@ -156,6 +156,9 @@ const mapGiftcodeError = (message: string) => {
   if (/IP_REQUIRED/i.test(message)) {
     return 'Không xác định được địa chỉ IP để kiểm tra giftcode.';
   }
+  if (/BROWSER_KEY_REQUIRED/i.test(message)) {
+    return 'Khong xac dinh duoc trinh duyet/thiet bi de kiem tra giftcode. Vui long tai lai trang roi thu lai.';
+  }
   if (/GIFTCODE_REQUIRED/i.test(message)) {
     return 'Vui lòng nhập giftcode.';
   }
@@ -190,6 +193,18 @@ export const handler: Handler = async (event) => {
     const ipNetworkKey = ipAddress ? toNetworkKey(ipAddress) : '';
     const ipHash = ipNetworkKey ? hashIp(ipNetworkKey) : '';
     const userAgentHash = hashUserAgent(event.headers['user-agent']);
+
+    if (!browserKeyHash) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({
+          success: false,
+          reward: 0,
+          message: mapGiftcodeError('BROWSER_KEY_REQUIRED'),
+        }),
+      };
+    }
 
     const admin = getServiceRoleClient();
     if (ipHash) {

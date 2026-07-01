@@ -63,7 +63,9 @@ import {
     getAdminQueueHealthReport,
     runAdminQueueReconcile,
     forceRescueFailedQueueJobs,
-    adminGiftcodeAction
+    adminGiftcodeAction,
+    getGiftcodeAbuseCases,
+    GiftcodeAbuseCase
 } from '../services/economyService';
 import { getAllImagesFromStorage, deleteImageFromStorage, checkR2Connection, getUserImagesFromStorage, cleanupExpiredImages, cleanupR2Directly } from '../services/storageService';
 import { checkConnection, analyzeStyleImage } from '../services/geminiService';
@@ -500,7 +502,7 @@ const getQueueMediaSectionTone = (key: AdminQueueMediaSection['key']) => {
 const getQueueMediaMeta = (media: AdminQueueInputMedia) => `${media.kind} · ${media.sourceType}${media.userProvided === false ? ' · hệ thống' : ''}`;
 
 export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
-  const [activeView, setActiveView] = useState<'overview' | 'transactions' | 'users' | 'queue' | 'packages' | 'marketing' | 'pricing' | 'system' | 'styles' | 'tours'>('overview');
+  const [activeView, setActiveView] = useState<'overview' | 'transactions' | 'users' | 'giftcode_abuse' | 'queue' | 'packages' | 'marketing' | 'pricing' | 'system' | 'styles' | 'tours'>('overview');
   const [stats, setStats] = useState<any>(null);
   const [allImages, setAllImages] = useState<GeneratedImage[]>([]);
   const [packages, setPackages] = useState<CreditPackage[]>([]);
@@ -596,6 +598,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [viewingGiftcodeUsage, setViewingGiftcodeUsage] = useState<Giftcode | null>(null);
   const [giftcodeUsers, setGiftcodeUsers] = useState<any[]>([]);
   const [loadingGiftcodeUsers, setLoadingGiftcodeUsers] = useState(false);
+  const [giftcodeAbuseCases, setGiftcodeAbuseCases] = useState<GiftcodeAbuseCase[]>([]);
+  const [loadingGiftcodeAbuse, setLoadingGiftcodeAbuse] = useState(false);
+  const [giftcodeAbuseSearch, setGiftcodeAbuseSearch] = useState('');
+  const [giftcodeAbuseFilter, setGiftcodeAbuseFilter] = useState<'all' | 'duplicates' | 'high_risk' | 'unhandled' | 'revoked' | 'locked'>('unhandled');
+  const [selectedGiftcodeAbuseIds, setSelectedGiftcodeAbuseIds] = useState<string[]>([]);
+  const [bulkGiftcodeActionLoading, setBulkGiftcodeActionLoading] = useState(false);
 
   // Error Recovery States
   const [showGiftcodeFix, setShowGiftcodeFix] = useState(false);
@@ -1515,6 +1523,95 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       setQueueSummaryFilter('all');
   }, [queueEmailFilter, queueStatusFilter, queueAssetFilter, queueTimeScope, queueStageFilter, queueStuckOnly]);
 
+  const loadGiftcodeAbuseCases = async () => {
+      setLoadingGiftcodeAbuse(true);
+      try {
+          const rows = await getGiftcodeAbuseCases(1500);
+          setGiftcodeAbuseCases(rows);
+          setSelectedGiftcodeAbuseIds([]);
+      } catch (error: any) {
+          showToast(error?.message || 'Không thể tải danh sách vi phạm giftcode', 'error');
+      } finally {
+          setLoadingGiftcodeAbuse(false);
+      }
+  };
+
+  useEffect(() => {
+      if (!isAdmin || activeView !== 'giftcode_abuse') return;
+      loadGiftcodeAbuseCases();
+  }, [activeView, isAdmin]);
+
+  const filteredGiftcodeAbuseCases = giftcodeAbuseCases.filter((item) => {
+      const query = giftcodeAbuseSearch.trim().toLowerCase();
+      const matchesQuery = !query || [
+          item.userEmail,
+          item.userName,
+          item.giftCode,
+          item.campaignKey,
+          item.ipAddress || '',
+          item.ipHash || '',
+          item.browserKeyHash || '',
+          item.emailFingerprint || '',
+          item.abuseStatus,
+          ...item.riskFlags,
+      ].some((value) => String(value || '').toLowerCase().includes(query));
+
+      if (!matchesQuery) return false;
+      if (giftcodeAbuseFilter === 'duplicates') {
+          return item.clusterCounts.email > 1 || item.clusterCounts.ip > 1 || item.clusterCounts.browser > 1 || item.clusterCounts.userCampaign > 1 || item.abuseStatus.includes('duplicate');
+      }
+      if (giftcodeAbuseFilter === 'high_risk') return item.riskScore >= 45 || item.severity >= 90;
+      if (giftcodeAbuseFilter === 'unhandled') return item.rewardStatus !== 'revoked' && item.accountStatus !== 'locked';
+      if (giftcodeAbuseFilter === 'revoked') return item.rewardStatus === 'revoked';
+      if (giftcodeAbuseFilter === 'locked') return item.accountStatus === 'locked';
+      return true;
+  });
+
+  const selectedGiftcodeAbuseCases = filteredGiftcodeAbuseCases.filter((item) => selectedGiftcodeAbuseIds.includes(item.usageId));
+  const allVisibleGiftcodeAbuseSelected = filteredGiftcodeAbuseCases.length > 0 && selectedGiftcodeAbuseIds.length === filteredGiftcodeAbuseCases.length;
+  const toggleGiftcodeAbuseSelection = (usageId: string) => {
+      setSelectedGiftcodeAbuseIds((current) => current.includes(usageId) ? current.filter((id) => id !== usageId) : [...current, usageId]);
+  };
+  const toggleAllGiftcodeAbuseSelection = () => {
+      setSelectedGiftcodeAbuseIds(allVisibleGiftcodeAbuseSelected ? [] : filteredGiftcodeAbuseCases.map((item) => item.usageId));
+  };
+
+  const runBulkGiftcodeAction = async (action: 'revoke' | 'warn' | 'lock') => {
+      const targets = selectedGiftcodeAbuseCases;
+      if (targets.length === 0) {
+          showToast('Chưa chọn tài khoản/lượt vi phạm nào', 'error');
+          return;
+      }
+
+      const reason = action === 'revoke'
+          ? 'Thu hồi Vcoin hàng loạt do lạm dụng giftcode'
+          : action === 'warn'
+              ? 'Cảnh báo hàng loạt: không tạo nhiều tài khoản để nhập giftcode'
+              : 'Khóa hàng loạt do lạm dụng giftcode';
+
+      setBulkGiftcodeActionLoading(true);
+      let successCount = 0;
+      let failCount = 0;
+      try {
+          for (const item of targets) {
+              try {
+                  await adminGiftcodeAction(action, {
+                      userId: item.userId,
+                      usageId: item.usageId,
+                      reason,
+                  });
+                  successCount += 1;
+              } catch {
+                  failCount += 1;
+              }
+          }
+          showToast(`Đã xử lý ${successCount} mục${failCount ? `, lỗi ${failCount}` : ''}`, failCount ? 'info' : 'success');
+          await loadGiftcodeAbuseCases();
+      } finally {
+          setBulkGiftcodeActionLoading(false);
+      }
+  };
+
   const handleViewGiftcodeUsage = async (code: Giftcode) => {
       setViewingGiftcodeUsage(code);
       setLoadingGiftcodeUsers(true);
@@ -1546,6 +1643,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           showToast(action === 'revoke' ? 'Đã thu hồi Vcoin' : action === 'warn' ? 'Đã gửi cảnh báo' : 'Đã khóa tài khoản', 'success');
           if (viewingGiftcodeUsage) {
               await handleViewGiftcodeUsage(viewingGiftcodeUsage);
+          }
+          if (activeView === 'giftcode_abuse') {
+              await loadGiftcodeAbuseCases();
           }
       } catch (error: any) {
           showToast(error?.message || 'Không thể xử lý thao tác', 'error');
@@ -2222,6 +2322,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   { id: 'overview', icon: Icons.Home, label: 'Tổng Quan' },
                   { id: 'transactions', icon: Icons.Gem, label: 'Giao Dịch' },
                   { id: 'users', icon: Icons.User, label: 'Người Dùng' },
+                  { id: 'giftcode_abuse', icon: Icons.AlertTriangle, label: 'Vi Phạm Code' },
                   { id: 'queue', icon: Icons.Clock, label: 'Queue Jobs' },
                   { id: 'packages', icon: Icons.ShoppingBag, label: 'Gói Nạp' },
                   { id: 'marketing', icon: Icons.Zap, label: 'Sự Kiện & Code' },
@@ -2632,6 +2733,177 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           </button>
                       </div>
                   )}
+              </div>
+          )}
+
+          {activeView === 'giftcode_abuse' && (
+              <div className="space-y-6 animate-slide-in-right">
+                  <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+                      <div>
+                          <h2 className="text-lg md:text-2xl font-bold text-white flex items-center gap-2"><Icons.AlertTriangle className="w-6 h-6 text-audi-yellow" /> Vi phạm giftcode</h2>
+                          <p className="text-sm text-slate-400 mt-1">Tách riêng các tài khoản/cụm nghi spam tạo tài khoản để nhập giftcode, có bằng chứng IP, email, browser key và risk flags.</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                          <button onClick={loadGiftcodeAbuseCases} disabled={loadingGiftcodeAbuse} className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-bold text-white disabled:opacity-60 flex items-center gap-2">
+                              <Icons.RefreshCw className={`w-4 h-4 ${loadingGiftcodeAbuse ? 'animate-spin' : ''}`} /> Làm mới
+                          </button>
+                      </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {[
+                          { label: 'Tổng case', value: giftcodeAbuseCases.length, tone: 'text-white' },
+                          { label: 'Chưa xử lý', value: giftcodeAbuseCases.filter((i) => i.rewardStatus !== 'revoked' && i.accountStatus !== 'locked').length, tone: 'text-audi-yellow' },
+                          { label: 'Đã thu hồi', value: giftcodeAbuseCases.filter((i) => i.rewardStatus === 'revoked').length, tone: 'text-red-300' },
+                          { label: 'Đã khóa', value: giftcodeAbuseCases.filter((i) => i.accountStatus === 'locked').length, tone: 'text-audi-pink' },
+                      ].map((item) => (
+                          <div key={item.label} className="bg-[#12121a] border border-white/10 rounded-xl p-4">
+                              <div className="text-[10px] uppercase font-bold text-slate-500">{item.label}</div>
+                              <div className={`text-2xl font-black mt-1 ${item.tone}`}>{item.value}</div>
+                          </div>
+                      ))}
+                  </div>
+
+                  <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 space-y-4">
+                      <div className="flex flex-col xl:flex-row gap-3 xl:items-center xl:justify-between">
+                          <div className="flex flex-col md:flex-row gap-3 flex-1">
+                              <div className="flex items-center gap-2 bg-black/30 rounded-xl border border-white/10 px-3 py-2 w-full md:max-w-md">
+                                  <Icons.Search className="w-4 h-4 text-slate-500" />
+                                  <input value={giftcodeAbuseSearch} onChange={(e) => setGiftcodeAbuseSearch(e.target.value)} placeholder="Tìm email, IP, code, campaign, browser key..." className="bg-transparent border-none outline-none text-sm text-white w-full placeholder-slate-500" />
+                              </div>
+                              <select value={giftcodeAbuseFilter} onChange={(e) => setGiftcodeAbuseFilter(e.target.value as typeof giftcodeAbuseFilter)} className="bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none min-w-[190px]">
+                                  <option value="unhandled" className="bg-[#12121a]">Chưa xử lý</option>
+                                  <option value="all" className="bg-[#12121a]">Tất cả case</option>
+                                  <option value="duplicates" className="bg-[#12121a]">Trùng cụm</option>
+                                  <option value="high_risk" className="bg-[#12121a]">Risk cao</option>
+                                  <option value="revoked" className="bg-[#12121a]">Đã thu hồi</option>
+                                  <option value="locked" className="bg-[#12121a]">Đã khóa</option>
+                              </select>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                              <button onClick={toggleAllGiftcodeAbuseSelection} className="px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-white">
+                                  {allVisibleGiftcodeAbuseSelected ? 'Bỏ chọn' : 'Chọn tất cả'} ({filteredGiftcodeAbuseCases.length})
+                              </button>
+                              <button onClick={() => runBulkGiftcodeAction('revoke')} disabled={bulkGiftcodeActionLoading || selectedGiftcodeAbuseCases.length === 0} className="px-3 py-2 rounded-xl bg-red-500/15 hover:bg-red-500 text-red-300 hover:text-white border border-red-500/20 text-xs font-bold disabled:opacity-50">Thu hồi chọn</button>
+                              <button onClick={() => runBulkGiftcodeAction('warn')} disabled={bulkGiftcodeActionLoading || selectedGiftcodeAbuseCases.length === 0} className="px-3 py-2 rounded-xl bg-yellow-500/15 hover:bg-yellow-500 text-yellow-300 hover:text-black border border-yellow-500/20 text-xs font-bold disabled:opacity-50">Cảnh báo chọn</button>
+                              <button onClick={() => runBulkGiftcodeAction('lock')} disabled={bulkGiftcodeActionLoading || selectedGiftcodeAbuseCases.length === 0} className="px-3 py-2 rounded-xl bg-audi-pink/15 hover:bg-audi-pink text-audi-pink hover:text-white border border-audi-pink/20 text-xs font-bold disabled:opacity-50">Khóa chọn</button>
+                          </div>
+                      </div>
+
+                      <div className="text-xs text-slate-500">
+                          Đã chọn <span className="text-white font-bold">{selectedGiftcodeAbuseCases.length}</span> mục. Severity = risk score + điểm trùng cụm email/IP/browser/user.
+                      </div>
+                  </div>
+
+                  <div className="hidden xl:block bg-[#12121a] border border-white/10 rounded-2xl overflow-hidden">
+                      <table className="w-full text-left text-xs text-slate-400">
+                          <thead className="bg-black/40 text-[10px] font-bold text-slate-500 uppercase">
+                              <tr>
+                                  <th className="px-4 py-3 w-10"></th>
+                                  <th className="px-4 py-3">User</th>
+                                  <th className="px-4 py-3">Giftcode</th>
+                                  <th className="px-4 py-3">Bằng chứng</th>
+                                  <th className="px-4 py-3">IP / Browser / Email</th>
+                                  <th className="px-4 py-3">Trạng thái</th>
+                                  <th className="px-4 py-3 text-right">Xử lý</th>
+                              </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/5">
+                              {loadingGiftcodeAbuse ? (
+                                  <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-500"><Icons.Loader className="w-6 h-6 animate-spin mx-auto mb-2 text-audi-cyan" />Đang tải dữ liệu vi phạm...</td></tr>
+                              ) : filteredGiftcodeAbuseCases.length === 0 ? (
+                                  <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-500">Không có case phù hợp bộ lọc.</td></tr>
+                              ) : filteredGiftcodeAbuseCases.map((item) => (
+                                  <tr key={item.usageId} className="hover:bg-white/5 transition-colors align-top">
+                                      <td className="px-4 py-4">
+                                          <input type="checkbox" checked={selectedGiftcodeAbuseIds.includes(item.usageId)} onChange={() => toggleGiftcodeAbuseSelection(item.usageId)} className="accent-audi-pink w-4 h-4" />
+                                      </td>
+                                      <td className="px-4 py-4 min-w-[220px]">
+                                          <div className="flex items-center gap-3">
+                                              <img src={item.userAvatar} className="w-9 h-9 rounded-full bg-white/10 object-cover" />
+                                              <div>
+                                                  <div className="font-bold text-white">{item.userName}</div>
+                                                  <div className="text-slate-400">{item.userEmail}</div>
+                                                  <div className="mt-1 flex gap-2 text-[10px]">
+                                                      <span className="text-audi-yellow">{item.userBalance} VC</span>
+                                                      <span className={item.accountStatus === 'locked' ? 'text-red-300' : 'text-emerald-300'}>{item.accountStatus}</span>
+                                                  </div>
+                                              </div>
+                                          </div>
+                                      </td>
+                                      <td className="px-4 py-4 min-w-[150px]">
+                                          <div className="font-mono font-bold text-white">{item.giftCode}</div>
+                                          <div className="text-[10px] text-slate-500">Campaign: {item.campaignKey}</div>
+                                          <div className="text-[10px] text-audi-yellow">+{item.reward} VC</div>
+                                          <div className="text-[10px] text-slate-500 mt-1">{formatVietnamDateTimeDisplay(item.usedAt)}</div>
+                                      </td>
+                                      <td className="px-4 py-4 min-w-[260px]">
+                                          <div className="flex flex-wrap gap-1 mb-2">
+                                              <span className={`px-2 py-1 rounded font-bold ${item.severity >= 120 ? 'bg-red-500/20 text-red-300' : item.severity >= 70 ? 'bg-yellow-500/20 text-yellow-300' : 'bg-white/10 text-slate-300'}`}>Severity {item.severity}</span>
+                                              <span className="px-2 py-1 rounded bg-audi-yellow/10 text-audi-yellow font-bold">Risk {item.riskScore}</span>
+                                          </div>
+                                          <div className="space-y-1">
+                                              {item.evidence.slice(0, 5).map((evidence) => <div key={evidence} className="text-[11px] text-slate-300">• {evidence}</div>)}
+                                              {item.evidence.length > 5 && <div className="text-[10px] text-slate-500">+{item.evidence.length - 5} bằng chứng khác</div>}
+                                          </div>
+                                      </td>
+                                      <td className="px-4 py-4 min-w-[260px] font-mono text-[10px]">
+                                          <div className="space-y-1">
+                                              <div><span className="text-slate-500">IP:</span> <span className="text-white">{item.ipAddress || 'Ẩn/cũ'}</span> {item.clusterCounts.ip > 1 && <span className="text-red-300">({item.clusterCounts.ip})</span>}</div>
+                                              <div className="truncate max-w-[280px]" title={item.ipHash || ''}><span className="text-slate-500">IP hash:</span> {item.ipHash || '-'}</div>
+                                              <div className="truncate max-w-[280px]" title={item.browserKeyHash || ''}><span className="text-slate-500">Browser:</span> {item.browserKeyHash || '-'} {item.clusterCounts.browser > 1 && <span className="text-red-300">({item.clusterCounts.browser})</span>}</div>
+                                              <div className="truncate max-w-[280px]" title={item.emailFingerprint || ''}><span className="text-slate-500">Email cluster:</span> {item.emailFingerprint || '-'} {item.clusterCounts.email > 1 && <span className="text-red-300">({item.clusterCounts.email})</span>}</div>
+                                          </div>
+                                      </td>
+                                      <td className="px-4 py-4 min-w-[130px]">
+                                          <span className={`block w-fit rounded px-2 py-1 text-[10px] font-bold uppercase ${item.rewardStatus === 'revoked' ? 'bg-red-500/15 text-red-300' : 'bg-emerald-500/15 text-emerald-300'}`}>{item.rewardStatus}</span>
+                                          <span className={`mt-1 block w-fit rounded px-2 py-1 text-[10px] font-bold uppercase ${item.abuseStatus === 'ok' ? 'bg-white/10 text-slate-300' : 'bg-yellow-500/15 text-yellow-300'}`}>{item.abuseStatus}</span>
+                                      </td>
+                                      <td className="px-4 py-4 text-right">
+                                          <div className="flex justify-end gap-1">
+                                              <button onClick={() => handleGiftcodeUserAction('revoke', item)} disabled={item.rewardStatus === 'revoked'} className="rounded bg-red-500/15 px-2 py-1 text-[10px] font-bold text-red-300 hover:bg-red-500 hover:text-white disabled:opacity-40">Thu hồi</button>
+                                              <button onClick={() => handleGiftcodeUserAction('warn', item)} className="rounded bg-yellow-500/15 px-2 py-1 text-[10px] font-bold text-yellow-300 hover:bg-yellow-500 hover:text-black">Cảnh báo</button>
+                                              <button onClick={() => handleGiftcodeUserAction('lock', item)} className="rounded bg-white/10 px-2 py-1 text-[10px] font-bold text-slate-200 hover:bg-white hover:text-black">Khóa</button>
+                                          </div>
+                                      </td>
+                                  </tr>
+                              ))}
+                          </tbody>
+                      </table>
+                  </div>
+
+                  <div className="xl:hidden space-y-3">
+                      {loadingGiftcodeAbuse ? (
+                          <div className="rounded-2xl border border-white/10 bg-[#12121a] p-8 text-center text-slate-500"><Icons.Loader className="w-6 h-6 animate-spin mx-auto mb-2 text-audi-cyan" />Đang tải dữ liệu vi phạm...</div>
+                      ) : filteredGiftcodeAbuseCases.map((item) => (
+                          <div key={item.usageId} className="rounded-2xl border border-white/10 bg-[#12121a] p-4 space-y-3">
+                              <div className="flex items-start justify-between gap-3">
+                                  <label className="flex items-start gap-3">
+                                      <input type="checkbox" checked={selectedGiftcodeAbuseIds.includes(item.usageId)} onChange={() => toggleGiftcodeAbuseSelection(item.usageId)} className="mt-1 accent-audi-pink w-4 h-4" />
+                                      <div>
+                                          <div className="font-bold text-white">{item.userName}</div>
+                                          <div className="text-xs text-slate-400">{item.userEmail}</div>
+                                      </div>
+                                  </label>
+                                  <span className="rounded bg-audi-yellow/10 px-2 py-1 text-[10px] font-bold text-audi-yellow">Risk {item.riskScore}</span>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2 text-xs">
+                                  <div className="rounded-lg bg-black/30 p-2"><div className="text-slate-500">Code</div><div className="font-mono text-white">{item.giftCode}</div></div>
+                                  <div className="rounded-lg bg-black/30 p-2"><div className="text-slate-500">IP</div><div className="font-mono text-white truncate">{item.ipAddress || 'Ẩn/cũ'}</div></div>
+                                  <div className="rounded-lg bg-black/30 p-2 col-span-2"><div className="text-slate-500">Email cluster</div><div className="font-mono text-white truncate">{item.emailFingerprint || '-'}</div></div>
+                                  <div className="rounded-lg bg-black/30 p-2 col-span-2"><div className="text-slate-500">Browser key</div><div className="font-mono text-white truncate">{item.browserKeyHash || '-'}</div></div>
+                              </div>
+                              <div className="space-y-1">
+                                  {item.evidence.slice(0, 4).map((evidence) => <div key={evidence} className="text-xs text-slate-300">• {evidence}</div>)}
+                              </div>
+                              <div className="flex gap-2 border-t border-white/5 pt-3">
+                                  <button onClick={() => handleGiftcodeUserAction('revoke', item)} disabled={item.rewardStatus === 'revoked'} className="flex-1 rounded bg-red-500/15 px-2 py-2 text-xs font-bold text-red-300 disabled:opacity-40">Thu hồi</button>
+                                  <button onClick={() => handleGiftcodeUserAction('warn', item)} className="flex-1 rounded bg-yellow-500/15 px-2 py-2 text-xs font-bold text-yellow-300">Cảnh báo</button>
+                                  <button onClick={() => handleGiftcodeUserAction('lock', item)} className="flex-1 rounded bg-white/10 px-2 py-2 text-xs font-bold text-slate-200">Khóa</button>
+                              </div>
+                          </div>
+                      ))}
+                  </div>
               </div>
           )}
 

@@ -3191,6 +3191,128 @@ export const getGiftcodeUsages = async (codeId: string) => {
     });
 };
 
+export type GiftcodeAbuseCase = {
+    usageId: string;
+    userId: string;
+    userName: string;
+    userEmail: string;
+    userAvatar: string;
+    accountStatus: string;
+    userBalance: number;
+    userCreatedAt?: string | null;
+    userLastActive?: string | null;
+    giftCode: string;
+    giftCodeId: string;
+    campaignKey: string;
+    reward: number;
+    usedAt: string;
+    ipAddress: string | null;
+    ipHash: string | null;
+    browserKeyHash: string | null;
+    emailFingerprint: string | null;
+    userAgentHash: string | null;
+    rewardStatus: string;
+    abuseStatus: string;
+    riskScore: number;
+    riskFlags: string[];
+    evidence: string[];
+    clusterCounts: {
+        userCampaign: number;
+        email: number;
+        ip: number;
+        browser: number;
+    };
+    severity: number;
+};
+
+const groupCount = (rows: any[], keyFactory: (row: any) => string) => {
+    const counts: Record<string, number> = {};
+    rows.forEach((row) => {
+        const key = keyFactory(row);
+        if (key) counts[key] = (counts[key] || 0) + 1;
+    });
+    return counts;
+};
+
+export const getGiftcodeAbuseCases = async (limit = 1000): Promise<GiftcodeAbuseCase[]> => {
+    if (!supabase) return [];
+    const { data, error } = await supabase
+        .from('gift_code_usages')
+        .select('id, user_id, gift_code_id, created_at, campaign_key, email_fingerprint, ip_address, ip_hash, browser_key_hash, user_agent_hash, reward_status, risk_score, risk_flags, abuse_status, gift_codes(code, reward, campaign_key), users(display_name, email, photo_url, account_status, vcoin_balance, created_at, last_active)')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+    if (error) throw error;
+
+    const rows = data || [];
+    const userCampaignCounts = groupCount(rows, (row: any) => `${row.campaign_key || row.gift_codes?.campaign_key || ''}|${row.user_id || ''}`);
+    const emailCounts = groupCount(rows, (row: any) => row.email_fingerprint ? `${row.campaign_key || row.gift_codes?.campaign_key || ''}|${row.email_fingerprint}` : '');
+    const ipCounts = groupCount(rows, (row: any) => row.ip_hash ? `${row.campaign_key || row.gift_codes?.campaign_key || ''}|${row.ip_hash}` : '');
+    const browserCounts = groupCount(rows, (row: any) => row.browser_key_hash ? `${row.campaign_key || row.gift_codes?.campaign_key || ''}|${row.browser_key_hash}` : '');
+
+    return rows.map((row: any) => {
+        const userObj = Array.isArray(row.users) ? row.users[0] : row.users;
+        const codeObj = Array.isArray(row.gift_codes) ? row.gift_codes[0] : row.gift_codes;
+        const campaignKey = String(row.campaign_key || codeObj?.campaign_key || codeObj?.code || '').trim().toUpperCase();
+        const userCampaignCount = userCampaignCounts[`${campaignKey}|${row.user_id || ''}`] || 0;
+        const emailCount = row.email_fingerprint ? (emailCounts[`${campaignKey}|${row.email_fingerprint}`] || 0) : 0;
+        const ipCount = row.ip_hash ? (ipCounts[`${campaignKey}|${row.ip_hash}`] || 0) : 0;
+        const browserCount = row.browser_key_hash ? (browserCounts[`${campaignKey}|${row.browser_key_hash}`] || 0) : 0;
+        const riskFlags = Array.isArray(row.risk_flags) ? row.risk_flags : [];
+        const abuseStatus = row.abuse_status || 'ok';
+        const evidence = [
+            abuseStatus !== 'ok' ? `Trạng thái abuse: ${abuseStatus}` : '',
+            userCampaignCount > 1 ? `${userCampaignCount} lượt cùng user/campaign` : '',
+            emailCount > 1 ? `${emailCount} tài khoản/lượt cùng cụm email` : '',
+            ipCount > 1 ? `${ipCount} tài khoản/lượt cùng IP/network` : '',
+            browserCount > 1 ? `${browserCount} tài khoản/lượt cùng browser key` : '',
+            ...riskFlags.map((flag: string) => `Risk flag: ${flag}`),
+        ].filter(Boolean);
+        const severity = Number(row.risk_score || 0)
+            + (abuseStatus !== 'ok' ? 80 : 0)
+            + (emailCount > 1 ? 35 : 0)
+            + (ipCount > 1 ? 35 : 0)
+            + (browserCount > 1 ? 45 : 0)
+            + (userCampaignCount > 1 ? 30 : 0);
+
+        return {
+            usageId: row.id,
+            userId: row.user_id,
+            userName: userObj?.display_name || userObj?.email?.split('@')[0] || 'Unknown',
+            userEmail: userObj?.email || 'No Email',
+            userAvatar: userObj?.photo_url || 'https://picsum.photos/50/50',
+            accountStatus: userObj?.account_status || 'active',
+            userBalance: Number(userObj?.vcoin_balance || 0),
+            userCreatedAt: userObj?.created_at || null,
+            userLastActive: userObj?.last_active || null,
+            giftCode: codeObj?.code || 'Unknown',
+            giftCodeId: row.gift_code_id,
+            campaignKey,
+            reward: Number(codeObj?.reward || 0),
+            usedAt: row.created_at,
+            ipAddress: row.ip_address || null,
+            ipHash: row.ip_hash || null,
+            browserKeyHash: row.browser_key_hash || null,
+            emailFingerprint: row.email_fingerprint || null,
+            userAgentHash: row.user_agent_hash || null,
+            rewardStatus: row.reward_status || 'granted',
+            abuseStatus,
+            riskScore: Number(row.risk_score || 0),
+            riskFlags,
+            evidence,
+            clusterCounts: {
+                userCampaign: userCampaignCount,
+                email: emailCount,
+                ip: ipCount,
+                browser: browserCount,
+            },
+            severity,
+        };
+    })
+    .filter((row: GiftcodeAbuseCase) => row.abuseStatus !== 'ok' || row.riskScore >= 30 || row.evidence.length > 0)
+    .sort((a: GiftcodeAbuseCase, b: GiftcodeAbuseCase) => b.severity - a.severity || new Date(b.usedAt).getTime() - new Date(a.usedAt).getTime());
+};
+
 export const adminGiftcodeAction = async (
     action: 'revoke' | 'warn' | 'lock' | 'unlock',
     payload: { userId?: string; usageId?: string; reason?: string }

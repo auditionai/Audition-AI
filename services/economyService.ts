@@ -3182,7 +3182,7 @@ export const getGiftcodeUsages = async (codeId: string) => {
     if (!supabase) return [];
     const { data, error } = await supabase
         .from('gift_code_usages')
-        .select('id, user_id, created_at, ip_address, browser_key_hash, reward_status, risk_score, risk_flags, abuse_status, users(display_name, email, photo_url)')
+        .select('id, user_id, created_at, ip_address, browser_key_hash, reward_status, risk_score, risk_flags, abuse_status, users(display_name, email, photo_url, account_status, account_warning, account_warning_at, locked_at, lock_reason)')
         .eq('gift_code_id', codeId)
         .order('created_at', { ascending: false });
         
@@ -3199,6 +3199,11 @@ export const getGiftcodeUsages = async (codeId: string) => {
             userName: userObj?.display_name || userObj?.email?.split('@')[0] || 'Unknown',
             userEmail: userObj?.email || 'No Email',
             userAvatar: userObj?.photo_url || 'https://picsum.photos/50/50',
+            accountStatus: userObj?.account_status || 'active',
+            accountWarning: userObj?.account_warning || null,
+            accountWarningAt: userObj?.account_warning_at || null,
+            lockedAt: userObj?.locked_at || null,
+            lockReason: userObj?.lock_reason || null,
             rewardStatus: u.reward_status || 'granted',
             riskScore: Number(u.risk_score || 0),
             riskFlags: Array.isArray(u.risk_flags) ? u.risk_flags : [],
@@ -3442,7 +3447,7 @@ export const getAdminStats = async () => {
     while (true) {
         const { data, error } = await supabase
             .from('users')
-            .select('id, email, display_name, photo_url, vcoin_balance, is_admin, created_at, last_active')
+            .select('id, email, display_name, photo_url, vcoin_balance, is_admin, created_at, last_active, account_status, account_warning, account_warning_at, locked_at, lock_reason')
             .range(page * pageSize, (page + 1) * pageSize - 1);
             
         if (error) {
@@ -3649,7 +3654,12 @@ export const getAdminStats = async () => {
         created_at: u.created_at,
         isVip: false,
         lastActive: u.last_active,
-        usageCount: userUsageCounts[u.id] || 0 // New: Include usage count
+        usageCount: userUsageCounts[u.id] || 0, // New: Include usage count
+        accountStatus: u.account_status || 'active',
+        accountWarning: u.account_warning || null,
+        accountWarningAt: u.account_warning_at || null,
+        lockedAt: u.locked_at || null,
+        lockReason: u.lock_reason || null
     })) || [];
 
     return {

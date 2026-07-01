@@ -20,6 +20,7 @@ type WatchdogSummary = {
   sepayReconcile?: unknown;
   sepayReconcileError?: string;
   worker?: Awaited<ReturnType<typeof runQueueDaemon>>;
+  workerError?: string;
 };
 
 type QueueHealthCode =
@@ -605,12 +606,17 @@ export const runQueueWatchdog = async (options: { runWorkerAfterRescue?: boolean
       summary.queuedStale > 0 ||
       summary.staleDispatchHeartbeat
     )) {
-      summary.worker = await runQueueDaemon({
-        maxRuntimeMs: 20_000,
-        idleIterationsToStop: 3,
-        activeDelayMs: 50,
-        idleDelayMs: 500,
-      });
+      try {
+        summary.worker = await runQueueDaemon({
+          maxRuntimeMs: 20_000,
+          idleIterationsToStop: 3,
+          activeDelayMs: 50,
+          idleDelayMs: 500,
+        });
+      } catch (error: any) {
+        summary.workerError = error?.message || 'Queue worker failed after watchdog rescue';
+        console.error('[queue-watchdog] Worker run after rescue failed:', error);
+      }
       summary.healthAfter = buildQueueHealthSnapshot(await fetchQueueHealthRows());
     }
 

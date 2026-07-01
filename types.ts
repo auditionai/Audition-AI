@@ -253,6 +253,7 @@ export interface AdminQueueHealthReport {
       healthBefore?: AdminQueueHealthSnapshot;
       healthAfter?: AdminQueueHealthSnapshot;
       sepayReconcileError?: string;
+      workerError?: string;
     };
   } | null;
   lastWatchdogReportUpdatedAt?: string | null;

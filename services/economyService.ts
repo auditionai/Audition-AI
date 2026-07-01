@@ -698,7 +698,12 @@ export const getUserProfile = async (options?: { force?: boolean }): Promise<Use
                 photo_url: user.user_metadata?.avatar_url || data?.photo_url || 'https://picsum.photos/100/100',
                 vcoin_balance: data?.vcoin_balance ?? 0,
                 is_admin: data?.is_admin ?? false,
-                last_active: new Date().toISOString()
+                last_active: new Date().toISOString(),
+                account_status: data?.account_status || 'active',
+                account_warning: data?.account_warning || null,
+                account_warning_at: data?.account_warning_at || null,
+                locked_at: data?.locked_at || null,
+                lock_reason: data?.lock_reason || null
             };
 
             try {
@@ -718,7 +723,13 @@ export const getUserProfile = async (options?: { force?: boolean }): Promise<Use
                 streak: 0,
                 lastCheckin: null,
                 checkinHistory: [],
-                usedGiftcodes: []
+                usedGiftcodes: [],
+                lastActive: newProfile.last_active,
+                accountStatus: newProfile.account_status,
+                accountWarning: newProfile.account_warning,
+                accountWarningAt: newProfile.account_warning_at,
+                lockedAt: newProfile.locked_at,
+                lockReason: newProfile.lock_reason
             };
         } else {
             profile = {
@@ -733,7 +744,12 @@ export const getUserProfile = async (options?: { force?: boolean }): Promise<Use
                 lastCheckin: null,
                 checkinHistory: [],
                 usedGiftcodes: [],
-                lastActive: data.last_active || null
+                lastActive: data.last_active || null,
+                accountStatus: data.account_status || 'active',
+                accountWarning: data.account_warning || null,
+                accountWarningAt: data.account_warning_at || null,
+                lockedAt: data.locked_at || null,
+                lockReason: data.lock_reason || null
             };
         }
 
@@ -3198,6 +3214,10 @@ export type GiftcodeAbuseCase = {
     userEmail: string;
     userAvatar: string;
     accountStatus: string;
+    accountWarning?: string | null;
+    accountWarningAt?: string | null;
+    lockedAt?: string | null;
+    lockReason?: string | null;
     userBalance: number;
     userCreatedAt?: string | null;
     userLastActive?: string | null;
@@ -3238,7 +3258,7 @@ export const getGiftcodeAbuseCases = async (limit = 1000): Promise<GiftcodeAbuse
     if (!supabase) return [];
     const { data, error } = await supabase
         .from('gift_code_usages')
-        .select('id, user_id, gift_code_id, created_at, campaign_key, email_fingerprint, ip_address, ip_hash, browser_key_hash, user_agent_hash, reward_status, risk_score, risk_flags, abuse_status, gift_codes(code, reward, campaign_key), users(display_name, email, photo_url, account_status, vcoin_balance, created_at, last_active)')
+        .select('id, user_id, gift_code_id, created_at, campaign_key, email_fingerprint, ip_address, ip_hash, browser_key_hash, user_agent_hash, reward_status, risk_score, risk_flags, abuse_status, gift_codes(code, reward, campaign_key), users(display_name, email, photo_url, account_status, account_warning, account_warning_at, locked_at, lock_reason, vcoin_balance, created_at, last_active)')
         .order('created_at', { ascending: false })
         .limit(limit);
 
@@ -3282,6 +3302,10 @@ export const getGiftcodeAbuseCases = async (limit = 1000): Promise<GiftcodeAbuse
             userEmail: userObj?.email || 'No Email',
             userAvatar: userObj?.photo_url || 'https://picsum.photos/50/50',
             accountStatus: userObj?.account_status || 'active',
+            accountWarning: userObj?.account_warning || null,
+            accountWarningAt: userObj?.account_warning_at || null,
+            lockedAt: userObj?.locked_at || null,
+            lockReason: userObj?.lock_reason || null,
             userBalance: Number(userObj?.vcoin_balance || 0),
             userCreatedAt: userObj?.created_at || null,
             userLastActive: userObj?.last_active || null,

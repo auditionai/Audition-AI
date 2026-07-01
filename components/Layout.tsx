@@ -16,10 +16,11 @@ interface LayoutProps {
   setTheme: (t: Theme) => void;
   showCheckin: boolean;
   setShowCheckin: (show: boolean) => void;
+  onLogout?: () => void | Promise<void>;
 }
 
 export const Layout: React.FC<LayoutProps> = ({ 
-  children, currentView, onNavigate, lang, setLang, theme, setTheme, showCheckin, setShowCheckin
+  children, currentView, onNavigate, lang, setLang, theme, setTheme, showCheckin, setShowCheckin, onLogout
 }) => {
   const [scrolled, setScrolled] = useState(false);
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -71,12 +72,74 @@ export const Layout: React.FC<LayoutProps> = ({
   );
 
   const showMarquee = promoConfig?.isActive && promoConfig?.marqueeText;
+  const isAccountLocked = user?.accountStatus === 'locked';
+  const accountWarning = user?.accountWarning?.trim();
+  const lockedAtText = user?.lockedAt
+    ? new Date(user.lockedAt).toLocaleString('vi-VN', {
+        hour12: false,
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : '';
 
   return (
     <div className="min-h-screen bg-[#05050A] text-white font-sans selection:bg-audi-pink selection:text-white relative overflow-x-hidden">
       
       {/* Checkin Modal */}
       {showCheckin && <DailyCheckin onClose={() => setShowCheckin(false)} onSuccess={() => getUserProfile({ force: true }).then(setUser)} lang={lang === 'vi' ? 'vi' : 'en'} />}
+
+      {accountWarning && !isAccountLocked && (
+          <div className={`${showMarquee ? 'top-9' : 'top-2'} fixed left-1/2 z-[80] w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 rounded-2xl border border-yellow-400/30 bg-yellow-400/10 px-4 py-3 text-sm text-yellow-100 shadow-2xl backdrop-blur-xl`}>
+              <div className="flex items-start gap-3">
+                  <Icons.AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-yellow-300" />
+                  <div>
+                      <div className="font-bold text-white">Cảnh báo tài khoản</div>
+                      <div className="text-yellow-100/90">{accountWarning}</div>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {isAccountLocked && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/85 p-4 backdrop-blur-md">
+              <div className="w-full max-w-lg rounded-2xl border border-red-500/30 bg-[#12121a] p-6 text-center shadow-2xl animate-fade-in">
+                  <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-red-500/10">
+                      <Icons.Lock className="h-10 w-10 text-red-400" />
+                  </div>
+                  <h2 className="text-2xl font-black text-white">Tài khoản đã bị khóa</h2>
+                  <p className="mt-3 text-sm leading-relaxed text-slate-300">
+                      Tài khoản này đang bị tạm khóa do hệ thống phát hiện dấu hiệu vi phạm hoặc lạm dụng tính năng.
+                  </p>
+                  <div className="mt-5 space-y-3 rounded-xl border border-white/10 bg-black/30 p-4 text-left text-sm">
+                      <div>
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Lý do</div>
+                          <div className="mt-1 text-white">{user?.lockReason || 'Vi phạm quy định sử dụng hệ thống.'}</div>
+                      </div>
+                      {lockedAtText && (
+                          <div>
+                              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Thời gian khóa</div>
+                              <div className="mt-1 text-white">{lockedAtText}</div>
+                          </div>
+                      )}
+                      <div>
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Tài khoản</div>
+                          <div className="mt-1 break-all text-white">{user?.email}</div>
+                      </div>
+                  </div>
+                  <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <a href="mailto:support@auditionai.vn?subject=Yeu cau mo khoa tai khoan AUDITION AI" className="rounded-xl bg-white px-4 py-3 text-sm font-bold text-black transition-colors hover:bg-slate-200">
+                          Liên hệ hỗ trợ
+                      </a>
+                      <button onClick={() => void onLogout?.()} className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-white/10">
+                          Đăng xuất
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
 
       {/* --- PROMOTION MARQUEE --- */}
       {showMarquee && (

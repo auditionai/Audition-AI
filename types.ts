@@ -269,6 +269,11 @@ export interface UserProfile {
   usedGiftcodes?: string[]; // Track used codes
   lastActive?: string; // New: Last active timestamp
   usageCount?: number; // New: Total AI generations/usages
+  accountStatus?: 'active' | 'locked' | string;
+  accountWarning?: string | null;
+  accountWarningAt?: string | null;
+  lockedAt?: string | null;
+  lockReason?: string | null;
 }
 
 export interface CreditPackage {

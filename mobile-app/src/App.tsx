@@ -1,7 +1,7 @@
 ﻿import { useEffect, useRef } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useCallback, useState } from 'react';
-import { AlertTriangle, Loader } from 'lucide-react';
+import { AlertTriangle, Loader, Lock } from 'lucide-react';
 import { NotificationProvider, useNotification } from './components/NotificationSystem';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
@@ -154,7 +154,7 @@ function MobileRuntimeEffects() {
   const location = useLocation();
   const navigate = useNavigate();
   const { notify } = useNotification();
-  const { isAuthenticated, maintenanceMode, userRole } = useAuth();
+  const { isAuthenticated, maintenanceMode, userRole, user, logout } = useAuth();
 
   const handledPaymentReturnRef = useRef<string | null>(null);
   const notifiedTerminalJobsRef = useRef<Set<string>>(new Set());
@@ -351,6 +351,19 @@ function MobileRuntimeEffects() {
     return null;
   }
 
+  const isAccountLocked = user?.accountStatus === 'locked';
+  const accountWarning = user?.accountWarning?.trim();
+  const lockedAtText = user?.lockedAt
+    ? new Date(user.lockedAt).toLocaleString('vi-VN', {
+        hour12: false,
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : '';
+
   return (
     <>
       <SystemAnnouncementModal
@@ -377,6 +390,54 @@ function MobileRuntimeEffects() {
         featureId={getMobileRouteFeatureId(location.pathname)}
         disabled={!isAuthenticated || location.pathname === '/admin' || location.pathname === '/'}
       />
+      {accountWarning && !isAccountLocked && (
+        <div className="fixed left-4 right-4 top-4 z-[110] rounded-[24px] border border-amber-300/40 bg-amber-50/95 p-4 shadow-2xl backdrop-blur dark:border-amber-400/20 dark:bg-amber-500/10">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
+            <div>
+              <div className="text-sm font-black text-gray-900 dark:text-white">Cảnh báo tài khoản</div>
+              <div className="mt-1 text-xs leading-relaxed text-amber-800 dark:text-amber-100">{accountWarning}</div>
+            </div>
+          </div>
+        </div>
+      )}
+      {isAccountLocked && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 p-5 backdrop-blur-md">
+          <div className="w-full max-w-sm rounded-[32px] border border-red-500/20 bg-white p-6 text-center shadow-2xl animate-slide-up dark:bg-[#18181B]">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-50 dark:bg-red-500/10">
+              <Lock className="h-8 w-8 text-red-500" />
+            </div>
+            <h2 className="text-xl font-black text-gray-900 dark:text-white">Tài khoản đã bị khóa</h2>
+            <p className="mt-3 text-sm leading-relaxed text-gray-500 dark:text-zinc-400">
+              Tài khoản này đang bị tạm khóa do hệ thống phát hiện dấu hiệu vi phạm hoặc lạm dụng tính năng.
+            </p>
+            <div className="mt-5 space-y-3 rounded-[24px] bg-gray-50 p-4 text-left text-sm dark:bg-zinc-900">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400 dark:text-zinc-500">Lý do</div>
+                <div className="mt-1 text-gray-900 dark:text-white">{user?.lockReason || 'Vi phạm quy định sử dụng hệ thống.'}</div>
+              </div>
+              {lockedAtText && (
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400 dark:text-zinc-500">Thời gian khóa</div>
+                  <div className="mt-1 text-gray-900 dark:text-white">{lockedAtText}</div>
+                </div>
+              )}
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400 dark:text-zinc-500">Tài khoản</div>
+                <div className="mt-1 break-all text-gray-900 dark:text-white">{user?.email}</div>
+              </div>
+            </div>
+            <div className="mt-5 grid grid-cols-1 gap-3">
+              <a href="mailto:support@auditionai.vn?subject=Yeu cau mo khoa tai khoan AUDITION AI" className="rounded-2xl bg-gray-900 px-4 py-3 text-sm font-bold text-white dark:bg-white dark:text-black">
+                Liên hệ hỗ trợ
+              </a>
+              <button onClick={() => void logout()} className="rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-bold text-gray-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white">
+                Đăng xuất
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {maintenanceMode.isActive && userRole !== 'admin' && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/75 backdrop-blur-md p-5">
           <div className="w-full max-w-sm rounded-[32px] border border-red-500/20 bg-white p-6 text-center shadow-2xl animate-slide-up dark:bg-[#18181B]">

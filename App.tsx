@@ -660,6 +660,7 @@ function AppContent() {
       setTheme={setTheme}
       showCheckin={showCheckin}
       setShowCheckin={setShowCheckin}
+      onLogout={handleLogout}
     >
       <SystemAnnouncementModal
         config={showSystemAnnouncement ? systemAnnouncement : null}

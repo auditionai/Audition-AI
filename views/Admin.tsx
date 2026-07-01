@@ -604,6 +604,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [giftcodeAbuseFilter, setGiftcodeAbuseFilter] = useState<'all' | 'duplicates' | 'high_risk' | 'unhandled' | 'revoked' | 'locked'>('unhandled');
   const [selectedGiftcodeAbuseIds, setSelectedGiftcodeAbuseIds] = useState<string[]>([]);
   const [bulkGiftcodeActionLoading, setBulkGiftcodeActionLoading] = useState(false);
+  const [giftcodeActionState, setGiftcodeActionState] = useState<Record<string, { action: 'revoke' | 'warn' | 'lock'; at: string; status: 'success' | 'error'; note?: string }>>({});
 
   // Error Recovery States
   const [showGiftcodeFix, setShowGiftcodeFix] = useState(false);
@@ -1561,7 +1562,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           return item.clusterCounts.email > 1 || item.clusterCounts.ip > 1 || item.clusterCounts.browser > 1 || item.clusterCounts.userCampaign > 1 || item.abuseStatus.includes('duplicate');
       }
       if (giftcodeAbuseFilter === 'high_risk') return item.riskScore >= 45 || item.severity >= 90;
-      if (giftcodeAbuseFilter === 'unhandled') return item.rewardStatus !== 'revoked' && item.accountStatus !== 'locked';
+      if (giftcodeAbuseFilter === 'unhandled') return item.rewardStatus !== 'revoked' && item.accountStatus !== 'locked' && !item.accountWarning;
       if (giftcodeAbuseFilter === 'revoked') return item.rewardStatus === 'revoked';
       if (giftcodeAbuseFilter === 'locked') return item.accountStatus === 'locked';
       return true;
@@ -1569,6 +1570,59 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
   const selectedGiftcodeAbuseCases = filteredGiftcodeAbuseCases.filter((item) => selectedGiftcodeAbuseIds.includes(item.usageId));
   const allVisibleGiftcodeAbuseSelected = filteredGiftcodeAbuseCases.length > 0 && selectedGiftcodeAbuseIds.length === filteredGiftcodeAbuseCases.length;
+  const getGiftcodeActionMeta = (action: 'revoke' | 'warn' | 'lock') => {
+      if (action === 'revoke') {
+          return {
+              label: 'Thu hồi Vcoin',
+              shortLabel: 'Thu hồi',
+              tone: 'red',
+              reason: 'Thu hồi Vcoin do lạm dụng giftcode',
+              effect: 'Trừ lại đúng lượng Vcoin đã nhận từ lượt giftcode này, đánh dấu lượt thưởng là revoked và abuse_status là revoked_abuse. Không khóa tài khoản.',
+              success: 'Đã thu hồi Vcoin',
+          };
+      }
+      if (action === 'warn') {
+          return {
+              label: 'Gửi cảnh báo',
+              shortLabel: 'Cảnh báo',
+              tone: 'yellow',
+              reason: 'Cảnh báo: không tạo nhiều tài khoản để nhập giftcode',
+              effect: 'Ghi cảnh báo vào tài khoản. Người dùng vẫn dùng app bình thường nhưng sẽ thấy banner cảnh báo khi đăng nhập.',
+              success: 'Đã gửi cảnh báo',
+          };
+      }
+      return {
+          label: 'Khóa tài khoản',
+          shortLabel: 'Khóa',
+          tone: 'pink',
+          reason: 'Khóa tài khoản do lạm dụng giftcode',
+          effect: 'Đổi account_status sang locked. Người dùng bị chặn bởi API và thấy màn hình tài khoản bị khóa trên desktop/mobile.',
+          success: 'Đã khóa tài khoản',
+      };
+  };
+  const getGiftcodeCaseStatus = (item: GiftcodeAbuseCase) => {
+      const local = giftcodeActionState[item.usageId];
+      if (local?.status === 'success') {
+          return {
+              label: `Vừa ${getGiftcodeActionMeta(local.action).shortLabel.toLowerCase()}`,
+              className: 'bg-cyan-500/15 text-cyan-300',
+              detail: new Date(local.at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+          };
+      }
+      if (local?.status === 'error') {
+          return { label: 'Lỗi xử lý', className: 'bg-red-500/15 text-red-300', detail: local.note || '' };
+      }
+      if (item.accountStatus === 'locked') {
+          return { label: 'Tài khoản đã khóa', className: 'bg-audi-pink/15 text-audi-pink', detail: item.lockReason || '' };
+      }
+      if (item.rewardStatus === 'revoked') {
+          return { label: 'Đã thu hồi thưởng', className: 'bg-red-500/15 text-red-300', detail: item.abuseStatus };
+      }
+      if (item.accountWarning) {
+          return { label: 'Đã cảnh báo', className: 'bg-yellow-500/15 text-yellow-300', detail: item.accountWarning };
+      }
+      return { label: 'Chưa xử lý', className: 'bg-white/10 text-slate-300', detail: 'Có thể thu hồi/cảnh báo/khóa' };
+  };
   const toggleGiftcodeAbuseSelection = (usageId: string) => {
       setSelectedGiftcodeAbuseIds((current) => current.includes(usageId) ? current.filter((id) => id !== usageId) : [...current, usageId]);
   };
@@ -1576,13 +1630,36 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       setSelectedGiftcodeAbuseIds(allVisibleGiftcodeAbuseSelected ? [] : filteredGiftcodeAbuseCases.map((item) => item.usageId));
   };
 
-  const runBulkGiftcodeAction = async (action: 'revoke' | 'warn' | 'lock') => {
+  const executeGiftcodeAction = async (action: 'revoke' | 'warn' | 'lock', item: GiftcodeAbuseCase | any, reasonOverride?: string) => {
+      const meta = getGiftcodeActionMeta(action);
+      try {
+          await adminGiftcodeAction(action, {
+              userId: item.userId,
+              usageId: item.usageId,
+              reason: reasonOverride || meta.reason,
+          });
+          setGiftcodeActionState((current) => ({
+              ...current,
+              [item.usageId]: { action, at: new Date().toISOString(), status: 'success' },
+          }));
+          return true;
+      } catch (error: any) {
+          setGiftcodeActionState((current) => ({
+              ...current,
+              [item.usageId]: { action, at: new Date().toISOString(), status: 'error', note: error?.message || 'Không thể xử lý' },
+          }));
+          throw error;
+      }
+  };
+
+  const runBulkGiftcodeActionNow = async (action: 'revoke' | 'warn' | 'lock') => {
       const targets = selectedGiftcodeAbuseCases;
       if (targets.length === 0) {
           showToast('Chưa chọn tài khoản/lượt vi phạm nào', 'error');
           return;
       }
 
+      const meta = getGiftcodeActionMeta(action);
       const reason = action === 'revoke'
           ? 'Thu hồi Vcoin hàng loạt do lạm dụng giftcode'
           : action === 'warn'
@@ -1595,11 +1672,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       try {
           for (const item of targets) {
               try {
-                  await adminGiftcodeAction(action, {
-                      userId: item.userId,
-                      usageId: item.usageId,
-                      reason,
-                  });
+                  await executeGiftcodeAction(action, item, reason);
                   successCount += 1;
               } catch {
                   failCount += 1;
@@ -1610,6 +1683,28 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       } finally {
           setBulkGiftcodeActionLoading(false);
       }
+  };
+
+  const runBulkGiftcodeAction = (action: 'revoke' | 'warn' | 'lock') => {
+      const meta = getGiftcodeActionMeta(action);
+      const count = selectedGiftcodeAbuseCases.length;
+      if (count === 0) {
+          showToast('Chưa chọn tài khoản/lượt vi phạm nào', 'error');
+          return;
+      }
+      showConfirm(
+          `${meta.label} ${count} mục đã chọn?\n\nTác dụng: ${meta.effect}`,
+          async () => runBulkGiftcodeActionNow(action)
+      );
+  };
+
+  const confirmGiftcodeUserAction = (action: 'revoke' | 'warn' | 'lock', usage: any) => {
+      const meta = getGiftcodeActionMeta(action);
+      const target = usage.userEmail || usage.userName || usage.userId || 'người dùng này';
+      showConfirm(
+          `${meta.label} cho ${target}?\n\nTác dụng: ${meta.effect}`,
+          async () => handleGiftcodeUserAction(action, usage)
+      );
   };
 
   const handleViewGiftcodeUsage = async (code: Giftcode) => {
@@ -1629,18 +1724,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       action: 'revoke' | 'warn' | 'lock',
       usage: any
   ) => {
-      const reason = action === 'revoke'
-          ? 'Thu hồi Vcoin do lạm dụng giftcode'
-          : action === 'warn'
-              ? 'Cảnh báo: không tạo nhiều tài khoản để nhập giftcode'
-              : 'Khóa tài khoản do lạm dụng giftcode';
+      const meta = getGiftcodeActionMeta(action);
       try {
-          await adminGiftcodeAction(action, {
-              userId: usage.userId,
-              usageId: usage.usageId,
-              reason,
-          });
-          showToast(action === 'revoke' ? 'Đã thu hồi Vcoin' : action === 'warn' ? 'Đã gửi cảnh báo' : 'Đã khóa tài khoản', 'success');
+          await executeGiftcodeAction(action, usage, meta.reason);
+          showToast(`${meta.success}: ${usage.userEmail || usage.userName || usage.userId}`, 'success');
           if (viewingGiftcodeUsage) {
               await handleViewGiftcodeUsage(viewingGiftcodeUsage);
           }
@@ -2279,7 +2366,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       <Icons.Bell className="w-6 h-6 animate-swing" />
                   </div>
                   <h3 className="text-lg font-bold text-white text-center mb-2">{confirmDialog.title || 'Thông báo'}</h3>
-                  <p className="text-slate-400 text-center text-sm mb-6 leading-relaxed">{confirmDialog.msg}</p>
+                  <p className="text-slate-400 text-center text-sm mb-6 leading-relaxed whitespace-pre-line">{confirmDialog.msg}</p>
                   
                   <div className="flex gap-3">
                       {!confirmDialog.isAlertOnly && (
@@ -2753,7 +2840,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                       {[
                           { label: 'Tổng case', value: giftcodeAbuseCases.length, tone: 'text-white' },
-                          { label: 'Chưa xử lý', value: giftcodeAbuseCases.filter((i) => i.rewardStatus !== 'revoked' && i.accountStatus !== 'locked').length, tone: 'text-audi-yellow' },
+                          { label: 'Chưa xử lý', value: giftcodeAbuseCases.filter((i) => i.rewardStatus !== 'revoked' && i.accountStatus !== 'locked' && !i.accountWarning).length, tone: 'text-audi-yellow' },
                           { label: 'Đã thu hồi', value: giftcodeAbuseCases.filter((i) => i.rewardStatus === 'revoked').length, tone: 'text-red-300' },
                           { label: 'Đã khóa', value: giftcodeAbuseCases.filter((i) => i.accountStatus === 'locked').length, tone: 'text-audi-pink' },
                       ].map((item) => (
@@ -2762,6 +2849,26 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                               <div className={`text-2xl font-black mt-1 ${item.tone}`}>{item.value}</div>
                           </div>
                       ))}
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                      {(['revoke', 'warn', 'lock'] as const).map((action) => {
+                          const meta = getGiftcodeActionMeta(action);
+                          const toneClass = action === 'revoke'
+                              ? 'border-red-500/20 bg-red-500/5 text-red-200'
+                              : action === 'warn'
+                                  ? 'border-yellow-500/20 bg-yellow-500/5 text-yellow-100'
+                                  : 'border-audi-pink/20 bg-audi-pink/5 text-pink-100';
+                          return (
+                              <div key={action} className={`rounded-2xl border p-4 ${toneClass}`}>
+                                  <div className="flex items-center justify-between gap-3">
+                                      <div className="font-black text-white">{meta.label}</div>
+                                      <span className="rounded-full bg-black/30 px-2 py-1 text-[10px] font-bold uppercase">{action}</span>
+                                  </div>
+                                  <p className="mt-2 text-xs leading-relaxed opacity-90">{meta.effect}</p>
+                              </div>
+                          );
+                      })}
                   </div>
 
                   <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 space-y-4">
@@ -2813,8 +2920,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-500"><Icons.Loader className="w-6 h-6 animate-spin mx-auto mb-2 text-audi-cyan" />Đang tải dữ liệu vi phạm...</td></tr>
                               ) : filteredGiftcodeAbuseCases.length === 0 ? (
                                   <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-500">Không có case phù hợp bộ lọc.</td></tr>
-                              ) : filteredGiftcodeAbuseCases.map((item) => (
-                                  <tr key={item.usageId} className="hover:bg-white/5 transition-colors align-top">
+                              ) : filteredGiftcodeAbuseCases.map((item) => {
+                                  const caseStatus = getGiftcodeCaseStatus(item);
+                                  const justActed = Boolean(giftcodeActionState[item.usageId]?.status === 'success');
+                                  return (
+                                  <tr key={item.usageId} className={`transition-colors align-top ${justActed ? 'bg-cyan-500/5 ring-1 ring-inset ring-cyan-500/20' : 'hover:bg-white/5'}`}>
                                       <td className="px-4 py-4">
                                           <input type="checkbox" checked={selectedGiftcodeAbuseIds.includes(item.usageId)} onChange={() => toggleGiftcodeAbuseSelection(item.usageId)} className="accent-audi-pink w-4 h-4" />
                                       </td>
@@ -2856,18 +2966,21 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           </div>
                                       </td>
                                       <td className="px-4 py-4 min-w-[130px]">
-                                          <span className={`block w-fit rounded px-2 py-1 text-[10px] font-bold uppercase ${item.rewardStatus === 'revoked' ? 'bg-red-500/15 text-red-300' : 'bg-emerald-500/15 text-emerald-300'}`}>{item.rewardStatus}</span>
+                                          <span className={`block w-fit rounded px-2 py-1 text-[10px] font-bold uppercase ${caseStatus.className}`}>{caseStatus.label}</span>
+                                          {caseStatus.detail && <div className="mt-1 max-w-[170px] truncate text-[10px] text-slate-500" title={caseStatus.detail}>{caseStatus.detail}</div>}
+                                          <span className={`mt-2 block w-fit rounded px-2 py-1 text-[10px] font-bold uppercase ${item.rewardStatus === 'revoked' ? 'bg-red-500/15 text-red-300' : 'bg-emerald-500/15 text-emerald-300'}`}>{item.rewardStatus}</span>
                                           <span className={`mt-1 block w-fit rounded px-2 py-1 text-[10px] font-bold uppercase ${item.abuseStatus === 'ok' ? 'bg-white/10 text-slate-300' : 'bg-yellow-500/15 text-yellow-300'}`}>{item.abuseStatus}</span>
                                       </td>
                                       <td className="px-4 py-4 text-right">
                                           <div className="flex justify-end gap-1">
-                                              <button onClick={() => handleGiftcodeUserAction('revoke', item)} disabled={item.rewardStatus === 'revoked'} className="rounded bg-red-500/15 px-2 py-1 text-[10px] font-bold text-red-300 hover:bg-red-500 hover:text-white disabled:opacity-40">Thu hồi</button>
-                                              <button onClick={() => handleGiftcodeUserAction('warn', item)} className="rounded bg-yellow-500/15 px-2 py-1 text-[10px] font-bold text-yellow-300 hover:bg-yellow-500 hover:text-black">Cảnh báo</button>
-                                              <button onClick={() => handleGiftcodeUserAction('lock', item)} className="rounded bg-white/10 px-2 py-1 text-[10px] font-bold text-slate-200 hover:bg-white hover:text-black">Khóa</button>
+                                              <button title={getGiftcodeActionMeta('revoke').effect} onClick={() => confirmGiftcodeUserAction('revoke', item)} disabled={item.rewardStatus === 'revoked'} className="rounded bg-red-500/15 px-2 py-1 text-[10px] font-bold text-red-300 hover:bg-red-500 hover:text-white disabled:opacity-40">Thu hồi</button>
+                                              <button title={getGiftcodeActionMeta('warn').effect} onClick={() => confirmGiftcodeUserAction('warn', item)} disabled={Boolean(item.accountWarning)} className="rounded bg-yellow-500/15 px-2 py-1 text-[10px] font-bold text-yellow-300 hover:bg-yellow-500 hover:text-black disabled:opacity-40">Cảnh báo</button>
+                                              <button title={getGiftcodeActionMeta('lock').effect} onClick={() => confirmGiftcodeUserAction('lock', item)} disabled={item.accountStatus === 'locked'} className="rounded bg-white/10 px-2 py-1 text-[10px] font-bold text-slate-200 hover:bg-white hover:text-black disabled:opacity-40">Khóa</button>
                                           </div>
                                       </td>
                                   </tr>
-                              ))}
+                                  );
+                              })}
                           </tbody>
                       </table>
                   </div>
@@ -2875,8 +2988,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   <div className="xl:hidden space-y-3">
                       {loadingGiftcodeAbuse ? (
                           <div className="rounded-2xl border border-white/10 bg-[#12121a] p-8 text-center text-slate-500"><Icons.Loader className="w-6 h-6 animate-spin mx-auto mb-2 text-audi-cyan" />Đang tải dữ liệu vi phạm...</div>
-                      ) : filteredGiftcodeAbuseCases.map((item) => (
-                          <div key={item.usageId} className="rounded-2xl border border-white/10 bg-[#12121a] p-4 space-y-3">
+                      ) : filteredGiftcodeAbuseCases.map((item) => {
+                          const caseStatus = getGiftcodeCaseStatus(item);
+                          const justActed = Boolean(giftcodeActionState[item.usageId]?.status === 'success');
+                          return (
+                          <div key={item.usageId} className={`rounded-2xl border p-4 space-y-3 ${justActed ? 'border-cyan-500/30 bg-cyan-500/5' : 'border-white/10 bg-[#12121a]'}`}>
                               <div className="flex items-start justify-between gap-3">
                                   <label className="flex items-start gap-3">
                                       <input type="checkbox" checked={selectedGiftcodeAbuseIds.includes(item.usageId)} onChange={() => toggleGiftcodeAbuseSelection(item.usageId)} className="mt-1 accent-audi-pink w-4 h-4" />
@@ -2885,7 +3001,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           <div className="text-xs text-slate-400">{item.userEmail}</div>
                                       </div>
                                   </label>
-                                  <span className="rounded bg-audi-yellow/10 px-2 py-1 text-[10px] font-bold text-audi-yellow">Risk {item.riskScore}</span>
+                                  <div className="flex flex-col items-end gap-1">
+                                      <span className="rounded bg-audi-yellow/10 px-2 py-1 text-[10px] font-bold text-audi-yellow">Risk {item.riskScore}</span>
+                                      <span className={`rounded px-2 py-1 text-[10px] font-bold ${caseStatus.className}`}>{caseStatus.label}</span>
+                                  </div>
                               </div>
                               <div className="grid grid-cols-2 gap-2 text-xs">
                                   <div className="rounded-lg bg-black/30 p-2"><div className="text-slate-500">Code</div><div className="font-mono text-white">{item.giftCode}</div></div>
@@ -2897,12 +3016,13 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   {item.evidence.slice(0, 4).map((evidence) => <div key={evidence} className="text-xs text-slate-300">• {evidence}</div>)}
                               </div>
                               <div className="flex gap-2 border-t border-white/5 pt-3">
-                                  <button onClick={() => handleGiftcodeUserAction('revoke', item)} disabled={item.rewardStatus === 'revoked'} className="flex-1 rounded bg-red-500/15 px-2 py-2 text-xs font-bold text-red-300 disabled:opacity-40">Thu hồi</button>
-                                  <button onClick={() => handleGiftcodeUserAction('warn', item)} className="flex-1 rounded bg-yellow-500/15 px-2 py-2 text-xs font-bold text-yellow-300">Cảnh báo</button>
-                                  <button onClick={() => handleGiftcodeUserAction('lock', item)} className="flex-1 rounded bg-white/10 px-2 py-2 text-xs font-bold text-slate-200">Khóa</button>
+                                  <button onClick={() => confirmGiftcodeUserAction('revoke', item)} disabled={item.rewardStatus === 'revoked'} className="flex-1 rounded bg-red-500/15 px-2 py-2 text-xs font-bold text-red-300 disabled:opacity-40">Thu hồi</button>
+                                  <button onClick={() => confirmGiftcodeUserAction('warn', item)} disabled={Boolean(item.accountWarning)} className="flex-1 rounded bg-yellow-500/15 px-2 py-2 text-xs font-bold text-yellow-300 disabled:opacity-40">Cảnh báo</button>
+                                  <button onClick={() => confirmGiftcodeUserAction('lock', item)} disabled={item.accountStatus === 'locked'} className="flex-1 rounded bg-white/10 px-2 py-2 text-xs font-bold text-slate-200 disabled:opacity-40">Khóa</button>
                               </div>
                           </div>
-                      ))}
+                          );
+                      })}
                   </div>
               </div>
           )}

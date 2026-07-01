@@ -192,6 +192,21 @@ export const runSePayPendingReconcile = async (options: SePayPendingReconcileOpt
   }).length;
   const settled = results.filter((item) => item.success && item.providerStatus === 'PAID').length;
   const failed = results.filter((item) => !item.success).length;
+  const failedReasonCounts = results
+    .filter((item) => !item.success)
+    .reduce((acc, item: any) => {
+      const reason = String(item.reason || 'unknown');
+      acc[reason] = (acc[reason] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+  const criticalFailureCount = results.filter((item: any) => {
+    if (item.success) return false;
+    const reason = String(item.reason || '');
+    return ![
+      'bank_transaction_lookup_failed',
+      'runtime_budget_exhausted',
+    ].includes(reason);
+  }).length;
 
   if (pendingOlderThanFiveMinutes > 0 || failed > 0) {
     await sendTelegramOperationalAlert(
@@ -200,12 +215,14 @@ export const runSePayPendingReconcile = async (options: SePayPendingReconcileOpt
         checked: transactions?.length || 0,
         settled,
         failed,
+        failedReasonCounts,
+        criticalFailureCount,
         pendingOlderThanFiveMinutes,
       },
       {
         alertKey: 'sepay_reconcile:attention',
-        cooldownMs: 30 * 60 * 1000,
-        severity: failed > 0 ? 'error' : 'warning',
+        cooldownMs: criticalFailureCount > 0 || pendingOlderThanFiveMinutes > 0 ? 30 * 60 * 1000 : 60 * 60 * 1000,
+        severity: criticalFailureCount > 0 || pendingOlderThanFiveMinutes > 0 ? 'error' : 'warning',
       },
     );
   }
@@ -215,6 +232,8 @@ export const runSePayPendingReconcile = async (options: SePayPendingReconcileOpt
     checked: transactions?.length || 0,
     settled,
     failed,
+    failedReasonCounts,
+    criticalFailureCount,
     runtimeMs: Date.now() - startedAt,
     budgetExhausted: results.some((item) => item.reason === 'runtime_budget_exhausted'),
     results,

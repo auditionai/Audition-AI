@@ -13,6 +13,7 @@ let cachedUser: any = null;
 let sessionFetchedAt = 0;
 let inFlightSessionPromise: Promise<any> | null = null;
 const BROWSER_DEVICE_KEY_STORAGE = 'audition_browser_device_key_v1';
+const BROWSER_DEVICE_KEY_COOKIE = 'audition_device_key_v1';
 
 if (supabaseUrl && supabaseAnonKey) {
   try {
@@ -103,10 +104,21 @@ export const getBrowserDeviceKey = () => {
         const existing = window.localStorage.getItem(BROWSER_DEVICE_KEY_STORAGE);
         if (existing && existing.length >= 24) return existing;
 
+        const cookieMatch = document.cookie
+            .split(';')
+            .map((entry) => entry.trim())
+            .find((entry) => entry.startsWith(`${BROWSER_DEVICE_KEY_COOKIE}=`));
+        const cookieValue = cookieMatch ? decodeURIComponent(cookieMatch.split('=').slice(1).join('=')) : '';
+        if (cookieValue && cookieValue.length >= 24) {
+            window.localStorage.setItem(BROWSER_DEVICE_KEY_STORAGE, cookieValue);
+            return cookieValue;
+        }
+
         const next = typeof crypto !== 'undefined' && 'randomUUID' in crypto
             ? crypto.randomUUID()
             : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
         window.localStorage.setItem(BROWSER_DEVICE_KEY_STORAGE, next);
+        document.cookie = `${BROWSER_DEVICE_KEY_COOKIE}=${encodeURIComponent(next)}; Max-Age=31536000; Path=/; SameSite=Lax`;
         return next;
     } catch {
         return '';

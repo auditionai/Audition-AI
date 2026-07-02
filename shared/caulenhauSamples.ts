@@ -1,6 +1,8 @@
 export const PROMPT_LIBRARY_PAGE_SIZE = 30;
 export const PROMPT_LIBRARY_PENDING_PROMPT_KEY = 'auditionai:pending-caulenhau-prompt';
 export const PROMPT_LIBRARY_APPLY_EVENT = 'auditionai:apply-caulenhau-prompt';
+const PROMPT_LIBRARY_CACHE_PREFIX = 'auditionai:caulenhau-samples';
+const PROMPT_LIBRARY_CACHE_TTL_MS = 5 * 60 * 1000;
 
 export type CaulenhauSampleCategoryId = 'single' | 'couple' | 'group3' | 'group4' | 'group5';
 
@@ -67,6 +69,21 @@ export const fetchCaulenhauSamples = async (
     throw new Error('Chưa kết nối được dữ liệu CauLenhAu.');
   }
 
+  const cacheKey = `${PROMPT_LIBRARY_CACHE_PREFIX}:${category.id}:${page}:${pageSize}`;
+  if (typeof window !== 'undefined') {
+    try {
+      const cached = window.sessionStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached) as { savedAt?: number; samples?: CaulenhauSamplePrompt[] };
+        if (parsed.savedAt && Date.now() - parsed.savedAt < PROMPT_LIBRARY_CACHE_TTL_MS && Array.isArray(parsed.samples)) {
+          return parsed.samples;
+        }
+      }
+    } catch {
+      // Ignore cache errors; fetching fresh data is safe.
+    }
+  }
+
   const from = page * pageSize;
   const to = from + pageSize - 1;
   const { data, error } = await client
@@ -80,12 +97,22 @@ export const fetchCaulenhauSamples = async (
     throw error;
   }
 
-  return (data || []).map((item: any) => ({
+  const samples = (data || []).map((item: any) => ({
     id: String(item.id),
     image_url: item.image_url,
     prompt: item.prompt || '',
     category: category.label,
   }));
+
+  if (typeof window !== 'undefined') {
+    try {
+      window.sessionStorage.setItem(cacheKey, JSON.stringify({ savedAt: Date.now(), samples }));
+    } catch {
+      // Ignore storage quota or privacy-mode failures.
+    }
+  }
+
+  return samples;
 };
 
 export const stashPromptForGenerator = (prompt: string) => {

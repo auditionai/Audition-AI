@@ -38,6 +38,7 @@ import type { ModelPricing } from '../services/economyService';
 import type { GeneratedImage } from '../types';
 import { caulenhauClient } from '../services/supabaseClient';
 import { buildAuditionKoreaMmoStylePrompt, DEFAULT_IMAGE_NEGATIVE_PROMPT } from '../../../shared/imagePromptDefaults';
+import { PROMPT_LIBRARY_APPLY_EVENT, consumeStashedPromptForGenerator } from '../../../shared/caulenhauSamples';
 import type { CharacterReferenceGroup, ImageGenerateRecipePayload } from '../../../shared/queueRecipes';
 import { analyzeCharacterAppearanceProfile, createPoseOnlyReference, optimizePayload } from '../../../utils/imageProcessor';
 import {
@@ -312,6 +313,25 @@ export function WorkspaceImage() {
     resolution: CHARACTER_ASSISTANT_RESOLUTION,
     pricingOverrides,
   });
+
+  useEffect(() => {
+    const applyPrompt = (nextPrompt: string) => {
+      const trimmed = nextPrompt.trim();
+      if (!trimmed) return;
+      setPrompt(trimmed);
+      setStage('input');
+    };
+
+    applyPrompt(consumeStashedPromptForGenerator());
+
+    const handleApplyPrompt = (event: Event) => {
+      const promptFromEvent = (event as CustomEvent<{ prompt?: string }>).detail?.prompt || '';
+      applyPrompt(promptFromEvent);
+    };
+
+    window.addEventListener(PROMPT_LIBRARY_APPLY_EVENT, handleApplyPrompt);
+    return () => window.removeEventListener(PROMPT_LIBRARY_APPLY_EVENT, handleApplyPrompt);
+  }, []);
 
   useEffect(() => {
     if (!refImage) return;

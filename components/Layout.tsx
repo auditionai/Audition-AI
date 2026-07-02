@@ -67,9 +67,11 @@ export const Layout: React.FC<LayoutProps> = ({
     };
   }, []);
 
-  const dockItems = APP_CONFIG.ui.menu.filter(item => 
-    ['home', 'tools', 'gallery'].includes(item.id)
-  );
+  const dockItems = [
+    ...APP_CONFIG.ui.menu.filter(item => item.id === 'home'),
+    { id: 'prompt_library' as ViewId, label: { vi: 'Prompt mẫu', en: 'Prompts' }, icon: 'Flame' },
+    ...APP_CONFIG.ui.menu.filter(item => ['tools', 'gallery'].includes(item.id)),
+  ];
 
   const showMarquee = promoConfig?.isActive && promoConfig?.marqueeText;
   const isAccountLocked = user?.accountStatus === 'locked';
@@ -211,9 +213,10 @@ export const Layout: React.FC<LayoutProps> = ({
                           key={item.id}
                           data-tour-id={`desktop.layout.nav.${item.id}`}
                           onClick={() => onNavigate(item.id)}
-                          className={`relative group flex items-center justify-center w-12 h-12 md:w-14 md:h-14 rounded-[1.5rem] transition-all duration-300 ${isActive ? 'bg-white/10' : 'hover:bg-white/5'}`}
+                          className={`relative group flex items-center justify-center w-12 h-12 md:w-14 md:h-14 rounded-[1.5rem] transition-all duration-300 ${item.id === 'prompt_library' && !isActive ? 'bg-gradient-to-br from-audi-pink/25 to-audi-purple/25 shadow-[0_0_22px_rgba(255,0,153,0.22)] border border-audi-pink/30' : isActive ? 'bg-white/10' : 'hover:bg-white/5'}`}
                         >
-                            <Icon className={`w-5 h-5 md:w-6 md:h-6 transition-all duration-300 ${isActive ? 'text-white scale-110 drop-shadow-[0_0_8px_rgba(255,255,255,0.6)]' : 'text-slate-500 group-hover:text-slate-300'}`} />
+                            {item.id === 'prompt_library' && !isActive && <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-audi-yellow shadow-[0_0_10px_rgba(251,218,97,0.8)]" />}
+                            <Icon className={`w-5 h-5 md:w-6 md:h-6 transition-all duration-300 ${isActive ? 'text-white scale-110 drop-shadow-[0_0_8px_rgba(255,255,255,0.6)]' : item.id === 'prompt_library' ? 'text-audi-yellow group-hover:text-white' : 'text-slate-500 group-hover:text-slate-300'}`} />
                             {isActive && <div className="absolute bottom-2 w-1 h-1 rounded-full bg-audi-cyan shadow-[0_0_5px_#21D4FD]"></div>}
                         </button>
                     );

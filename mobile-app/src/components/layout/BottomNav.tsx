@@ -3,7 +3,7 @@
  * Clean Apple-style bottom nav with 5 essential tabs
  */
 
-import { Home, Clock, Coins, User } from 'lucide-react';
+import { Home, Clock, Coins, User, Flame } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
 export function BottomNav() {
@@ -11,6 +11,7 @@ export function BottomNav() {
 
   const tabs = [
     { name: 'Home', path: '/home', icon: Home },
+    { name: 'Mẫu hot', path: '/prompt-library', icon: Flame, featured: true },
     { name: 'Thư viện', path: '/gallery', icon: Clock },
     { name: 'Nạp tiền', path: '/topup', icon: Coins },
     { name: 'Tài khoản', path: '/profile', icon: User },
@@ -35,9 +36,12 @@ export function BottomNav() {
               {isActive && (
                 <div className="absolute -top-0.5 w-5 h-0.5 bg-gray-900 rounded-full" />
               )}
+              {tab.featured && !isActive && (
+                <div className="absolute -top-1 right-3 h-2.5 w-2.5 rounded-full bg-fuchsia-500 shadow-[0_0_10px_rgba(217,70,239,0.8)]" />
+              )}
               <Icon
                 className={`w-[22px] h-[22px] mb-0.5 transition-colors duration-200 ${
-                  isActive ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-zinc-500'
+                  isActive ? 'text-gray-900 dark:text-white' : tab.featured ? 'text-fuchsia-500 dark:text-fuchsia-300' : 'text-gray-400 dark:text-zinc-500'
                 }`}
                 strokeWidth={isActive ? 2.5 : 1.8}
               />

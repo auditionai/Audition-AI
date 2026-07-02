@@ -9,6 +9,7 @@ import { About } from './views/About';
 import { Guide } from './views/Guide';
 import { Support } from './views/Support';
 import { Gallery } from './views/Gallery';
+import { PromptLibrary } from './views/PromptLibrary';
 import { Landing } from './views/Landing';
 import { TopUp } from './views/TopUp';
 import { ManualPaymentGateway } from './views/ManualPaymentGateway'; 
@@ -139,6 +140,7 @@ const resolveDesktopRoute = () => {
   if (pathname === '/about') return { view: 'about' as ViewId, feature: null };
   if (pathname === '/support') return { view: 'support' as ViewId, feature: null };
   if (pathname === '/gallery') return { view: 'gallery' as ViewId, feature: null };
+  if (pathname === '/prompt-library') return { view: 'prompt_library' as ViewId, feature: null };
   if (pathname === '/topup') return { view: 'topup' as ViewId, feature: null };
   if (pathname === '/payment-gateway') return { view: 'payment_gateway' as ViewId, feature: null };
   if (pathname === '/generate/image') {
@@ -188,6 +190,8 @@ const buildDesktopPath = (view: ViewId, selectedFeature: Feature | null) => {
       return '/support';
     case 'gallery':
       return '/gallery';
+    case 'prompt_library':
+      return '/prompt-library';
     case 'topup':
       return '/topup';
     case 'payment_gateway':
@@ -611,6 +615,12 @@ function AppContent() {
     }
   };
 
+  const handleUsePromptLibraryPrompt = () => {
+    desktopHistoryModeRef.current = 'push';
+    setSelectedFeature(DEFAULT_IMAGE_FEATURE || APP_CONFIG.main_features[0] || null);
+    setCurrentView('tool_workspace');
+  };
+
   // View Routing Logic
   const renderContent = () => {
     switch (currentView) {
@@ -628,6 +638,8 @@ function AppContent() {
         return <Support lang={lang} onNavigate={handleNavigate} />;
       case 'gallery':
         return <Gallery lang={lang} />;
+      case 'prompt_library':
+        return <PromptLibrary onUsePrompt={handleUsePromptLibraryPrompt} />;
       case 'topup':
         return <TopUp lang={lang} onNavigate={handleNavigate} />;
       case 'payment_gateway':

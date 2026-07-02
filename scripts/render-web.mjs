@@ -29,6 +29,7 @@ import { handler as reviewCharacterImageHandler } from '../netlify/functions/rev
 import { handler as sepayCheckoutHandler } from '../netlify/functions/sepay-checkout.ts';
 import { handler as sepayIpnHandler } from '../netlify/functions/sepay-ipn.ts';
 import { handler as sepayReconcilePendingHandler } from '../netlify/functions/sepay-reconcile-pending.ts';
+import { handler as supabaseHealthHandler } from '../netlify/functions/supabase-health.ts';
 import { handler as tstGenerateHandler } from '../netlify/functions/tst-generate.ts';
 import { handler as tstModelsPricingHandler } from '../netlify/functions/tst-models-pricing.ts';
 import { handler as tstModelsHandler } from '../netlify/functions/tst-models.ts';
@@ -84,6 +85,7 @@ const handlerConfigs = [
   { fnName: 'direct-image-edit', apiPath: '/api/direct-image-edit', handler: directImageEditHandler },
   { fnName: 'direct-image-edit-background', apiPath: '/api/direct-image-edit-background', handler: directImageEditBackgroundHandler },
   { fnName: 'review-character-image', apiPath: '/api/review-character-image', handler: reviewCharacterImageHandler },
+  { fnName: 'supabase-health', apiPath: '/api/supabase-health', handler: supabaseHealthHandler },
 ];
 
 const toHeaderRecord = (headers) => {

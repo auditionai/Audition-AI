@@ -188,6 +188,11 @@
   to = "/.netlify/functions/download_proxy"
   status = 200
 
+[[redirects]]
+  from = "/api/supabase-health"
+  to = "/.netlify/functions/supabase-health"
+  status = 200
+
 # Fallback cho React Router (SPA)
 [[redirects]]
   from = "/*"

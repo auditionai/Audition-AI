@@ -2,7 +2,7 @@ import type { Handler } from '@netlify/functions';
 import type { AdminQueueJob, AdminQueueSummary } from '../../types';
 import type { QueueProgressLogEntry, QueueVertexDiagnosticEntry } from '../../shared/queueRecipes';
 import { normalizeQueueProgressLogs } from '../../shared/queueLogText';
-import { isSystemQueueKind } from '../../shared/queueKinds';
+import { SYSTEM_QUEUE_KINDS } from '../../shared/queueKinds';
 import { classifyQueueError, isTerminalRescueFailureMessage, normalizeQueueErrorMessage, pickQueueFailureMessage } from '../../shared/queueErrorClassifier';
 import { isFailedRescueStillActive } from '../../shared/queueRescueState';
 import { repairVietnameseMojibake } from '../../shared/queueLogText';
@@ -404,6 +404,7 @@ export const handler: Handler = async (event) => {
     let query = admin
       .from('generated_images')
       .select('id, user_id, tool_name, queue_kind, asset_type, status, job_id, progress, queue_payload, error_message, created_at, updated_at, next_poll_at, processing_started_at, lease_expires_at')
+      .in('queue_kind', [...SYSTEM_QUEUE_KINDS])
       .order('updated_at', { ascending: false })
       .limit(queryLimit);
 
@@ -425,7 +426,7 @@ export const handler: Handler = async (event) => {
       throw error;
     }
 
-    const rows = (Array.isArray(data) ? data : []).filter((row: any) => isSystemQueueKind(row.queue_kind));
+    const rows = Array.isArray(data) ? data : [];
     const userIds = [...new Set(rows.map((row: any) => String(row.user_id || '')).filter(Boolean))];
     const { data: userRows, error: userRowsError } = userIds.length > 0
       ? await admin

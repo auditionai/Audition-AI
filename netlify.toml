@@ -119,6 +119,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/ensure-user-profile"
+  to = "/.netlify/functions/ensure-user-profile"
+  status = 200
+
+[[redirects]]
   from = "/api/gallery-images"
   to = "/.netlify/functions/gallery-images"
   status = 200

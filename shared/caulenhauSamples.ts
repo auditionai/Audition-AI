@@ -2,7 +2,7 @@ export const PROMPT_LIBRARY_PAGE_SIZE = 30;
 export const PROMPT_LIBRARY_PENDING_PROMPT_KEY = 'auditionai:pending-caulenhau-prompt';
 export const PROMPT_LIBRARY_APPLY_EVENT = 'auditionai:apply-caulenhau-prompt';
 
-export type CaulenhauSampleCategoryId = 'single' | 'duo' | 'couple' | 'group';
+export type CaulenhauSampleCategoryId = 'single' | 'couple' | 'group3' | 'group4' | 'group5';
 
 export interface CaulenhauSampleCategory {
   id: CaulenhauSampleCategoryId;
@@ -24,28 +24,35 @@ export const CAULENHAU_SAMPLE_CATEGORIES: CaulenhauSampleCategory[] = [
     id: 'single',
     label: 'Ảnh đơn',
     shortLabel: 'Đơn',
-    description: 'Một nhân vật, chân dung hoặc dáng đứng cá nhân.',
-    categoryId: 1,
-  },
-  {
-    id: 'duo',
-    label: 'Ảnh đôi',
-    shortLabel: 'Đôi',
-    description: 'Hai nhân vật trong cùng khung hình, tạo dáng đồng bộ.',
+    description: 'Lấy từ chuyên mục Ảnh Nam Nữ trên CauLenhAu.',
     categoryId: 2,
   },
   {
     id: 'couple',
-    label: 'Ảnh couple',
-    shortLabel: 'Couple',
-    description: 'Bố cục lãng mạn, tương tác gần và nhiều cảm xúc.',
+    label: 'Ảnh đôi / Couple',
+    shortLabel: 'Đôi',
+    description: 'Lấy từ chuyên mục Ảnh Couple trên CauLenhAu.',
     categoryId: 3,
   },
   {
-    id: 'group',
-    label: 'Ảnh nhóm',
-    shortLabel: 'Nhóm',
-    description: 'Team 3-5 người, đội hình cân bằng và nổi bật.',
+    id: 'group3',
+    label: 'Nhóm 3',
+    shortLabel: 'Nhóm 3',
+    description: 'Lấy từ chuyên mục Ảnh Nhóm trên CauLenhAu.',
+    categoryId: 4,
+  },
+  {
+    id: 'group4',
+    label: 'Nhóm 4',
+    shortLabel: 'Nhóm 4',
+    description: 'Lấy từ chuyên mục Ảnh Nhóm trên CauLenhAu.',
+    categoryId: 4,
+  },
+  {
+    id: 'group5',
+    label: 'Nhóm 5',
+    shortLabel: 'Nhóm 5',
+    description: 'Lấy từ chuyên mục Ảnh Nhóm trên CauLenhAu.',
     categoryId: 4,
   },
 ];

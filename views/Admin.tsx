@@ -1319,7 +1319,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       {
           id: 'checkin',
           title: 'Giao dịch điểm danh',
-          description: 'Điểm danh hằng ngày và thưởng tích lũy',
+          description: 'Điểm danh hằng ngày',
           icon: Icons.Calendar,
           items: filteredUserHistory.filter((item) => item.category === 'checkin'),
       },
@@ -2327,7 +2327,6 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       if (targetId.includes('.layout.dock') || targetId.includes('.layout.bottomnav')) return 'Khoanh vùng thanh điều hướng chính ở cạnh dưới màn hình.';
       if (targetId.includes('.layout.vcoin')) return 'Khoanh vùng khu vực số dư VCOIN và lối vào nạp tiền.';
       if (targetId.includes('.layout.profile')) return 'Khoanh vùng nút tài khoản/cài đặt của người dùng.';
-      if (targetId.includes('.home.checkin')) return 'Khoanh vùng nút điểm danh trên trang chủ.';
       if (targetId.includes('.home.features')) return 'Khoanh vùng danh sách công cụ AI trên trang chủ.';
       if (targetId.includes('.generation.characters')) return 'Khoanh vùng khu vực tải ảnh nhân vật trong trình tạo ảnh Audition.';
       if (targetId.includes('.generation.prompt')) return 'Khoanh vùng ô nhập mô tả/prompt trong trình tạo ảnh Audition.';

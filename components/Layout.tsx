@@ -87,10 +87,8 @@ export const Layout: React.FC<LayoutProps> = ({
 
   return (
     <div className="min-h-screen bg-[#05050A] text-white font-sans selection:bg-audi-pink selection:text-white relative overflow-x-hidden">
-      
-      {/* Checkin Modal */}
       {showCheckin && <DailyCheckin onClose={() => setShowCheckin(false)} onSuccess={() => getUserProfile({ force: true }).then(setUser)} lang={lang === 'vi' ? 'vi' : 'en'} />}
-
+      
       {accountWarning && !isAccountLocked && (
           <div className={`${showMarquee ? 'top-9' : 'top-2'} fixed left-1/2 z-[80] w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 rounded-2xl border border-yellow-400/30 bg-yellow-400/10 px-4 py-3 text-sm text-yellow-100 shadow-2xl backdrop-blur-xl`}>
               <div className="flex items-start gap-3">
@@ -242,8 +240,7 @@ export const Layout: React.FC<LayoutProps> = ({
                        </div>
                   </button>
 
-                   {/* Mobile Checkin */}
-                   <button 
+                  <button 
                       data-tour-id="desktop.layout.checkin"
                       onClick={() => setShowCheckin(true)}
                       className="md:hidden w-10 h-10 rounded-full bg-audi-lime/10 border border-audi-lime/30 flex items-center justify-center"

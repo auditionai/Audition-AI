@@ -211,7 +211,7 @@ function AppContent() {
   // State for Payment Flow
   const [pendingTransaction, setPendingTransaction] = useState<any>(null);
 
-  // Lifted state for Daily Checkin Modal
+  // Daily check-in modal state
   const [showCheckin, setShowCheckin] = useState(false);
 
   // Maintenance Mode State

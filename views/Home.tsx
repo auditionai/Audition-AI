@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { APP_CONFIG } from '../constants';
 import { Language, Feature, ViewId } from '../types';
 import { Icons } from '../components/Icons';
@@ -118,14 +118,12 @@ export const Home: React.FC<HomeProps> = ({ lang, onSelectFeature, onNavigate, o
   const studioFeatures = APP_CONFIG.main_features.filter(f => f.toolType === 'generation');
   const toolFeatures = APP_CONFIG.main_features.filter(f => f.toolType === 'editing');
   const videoFeatures = APP_CONFIG.main_features.filter(f => f.toolType === 'video');
-
-  // Checkin Status for Notification
   const [isCheckedIn, setIsCheckedIn] = useState(true);
 
   useEffect(() => {
     return subscribeCheckinStatus(
       (status) => setIsCheckedIn(status.isCheckedInToday),
-      { force: true }
+      { force: true },
     );
   }, []);
 
@@ -149,7 +147,6 @@ export const Home: React.FC<HomeProps> = ({ lang, onSelectFeature, onNavigate, o
           </div>
 
           <div className="flex items-center gap-2">
-             {/* CHECKIN BUTTON WITH PROMINENT EFFECT */}
              <button
                 data-tour-id="desktop.home.checkin"
                 onClick={onOpenCheckin}

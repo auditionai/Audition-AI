@@ -90,14 +90,12 @@ const readWithRetry = async <T>(factory: () => Promise<T>, label: string): Promi
     throw lastError instanceof Error ? lastError : new Error(`${label} failed`);
 };
 
+export type PaymentGateway = 'sepay';
+
 export type CheckinStatusState = {
-    streak: number;
     isCheckedInToday: boolean;
     history: string[];
-    claimedMilestones: number[];
 };
-
-export type PaymentGateway = 'sepay';
 
 export type PaymentGatewayConfig = {
     gateway: PaymentGateway;
@@ -170,7 +168,6 @@ export const APP_TOUR_TARGETS: Array<{ id: string; label: string; surface: AppTo
     { id: 'desktop.layout.dock', label: 'Máy tính - Thanh điều hướng dưới', surface: 'desktop', screen: 'global' },
     { id: 'desktop.layout.vcoin', label: 'Máy tính - Số dư / nạp VCOIN', surface: 'desktop', screen: 'global' },
     { id: 'desktop.layout.profile', label: 'Máy tính - Tài khoản / cài đặt', surface: 'desktop', screen: 'global' },
-    { id: 'desktop.home.checkin', label: 'Máy tính - Điểm danh hằng ngày', surface: 'desktop', screen: 'home' },
     { id: 'desktop.home.features', label: 'Máy tính - Danh sách công cụ', surface: 'desktop', screen: 'home' },
     { id: 'desktop.tool.back', label: 'Máy tính - Nút quay lại thư viện', surface: 'desktop', screen: 'tool_workspace' },
     { id: 'desktop.image.references', label: 'Máy tính - Tạo ảnh AI: ảnh tham chiếu', surface: 'desktop', screen: 'tool_workspace', featureId: 'ai_image_tool' },
@@ -206,8 +203,7 @@ export const APP_TOUR_TARGETS: Array<{ id: string; label: string; surface: AppTo
     { id: 'desktop.layout.nav.home', label: 'Máy tính - Dock: Trang chủ', surface: 'desktop', screen: 'global', description: 'Khoanh nút Trang chủ trong thanh điều hướng dưới cùng.' },
     { id: 'desktop.layout.nav.tools', label: 'Máy tính - Dock: Công cụ', surface: 'desktop', screen: 'global', description: 'Khoanh nút Công cụ trong thanh điều hướng dưới cùng.' },
     { id: 'desktop.layout.nav.gallery', label: 'Máy tính - Dock: Thư viện', surface: 'desktop', screen: 'global', description: 'Khoanh nút Thư viện trong thanh điều hướng dưới cùng.' },
-    { id: 'desktop.layout.checkin', label: 'Máy tính - Dock: Điểm danh mobile-width', surface: 'desktop', screen: 'global', description: 'Khoanh nút điểm danh nhỏ xuất hiện trong dock khi màn hình desktop bị thu hẹp.' },
-    { id: 'desktop.home.hero', label: 'Máy tính - Trang chủ: Lời chào', surface: 'desktop', screen: 'home', description: 'Khoanh thanh lời chào đầu trang chủ, nơi có trạng thái hệ thống và nút điểm danh.' },
+    { id: 'desktop.home.hero', label: 'Máy tính - Trang chủ: Lời chào', surface: 'desktop', screen: 'home', description: 'Khoanh thanh lời chào đầu trang chủ và trạng thái hệ thống.' },
     { id: 'desktop.home.promo', label: 'Máy tính - Trang chủ: Banner AuMix3D', surface: 'desktop', screen: 'home', description: 'Khoanh banner đối tác AuMix3D trên trang chủ.' },
     { id: 'desktop.home.studio', label: 'Máy tính - Trang chủ: Nhóm Studio AI', surface: 'desktop', screen: 'home', description: 'Khoanh toàn bộ nhóm công cụ tạo ảnh Audition AI.' },
     { id: 'desktop.home.video', label: 'Máy tính - Trang chủ: Nhóm Video Lab', surface: 'desktop', screen: 'home', description: 'Khoanh toàn bộ nhóm công cụ tạo video và Motion Control.' },
@@ -252,7 +248,6 @@ export const APP_TOUR_TARGETS: Array<{ id: string; label: string; surface: AppTo
     { id: 'desktop.settings.giftcode', label: 'Máy tính - Cài đặt: Giftcode', surface: 'desktop', screen: 'settings', description: 'Khoanh khu vực nhập giftcode.' },
     { id: 'desktop.settings.logout', label: 'Máy tính - Cài đặt: Đăng xuất', surface: 'desktop', screen: 'settings', description: 'Khoanh nút đăng xuất ở đầu trang cài đặt.' },
     { id: 'mobile.home.hero', label: 'Điện thoại - Trang chủ: Lời chào', surface: 'mobile', screen: 'home', description: 'Khoanh khu vực lời chào và câu hỏi chọn công cụ trên mobile.' },
-    { id: 'mobile.home.checkin', label: 'Điện thoại - Trang chủ: Điểm danh', surface: 'mobile', screen: 'home', description: 'Khoanh nút điểm danh trên đầu trang chủ mobile.' },
     { id: 'mobile.home.promo', label: 'Điện thoại - Trang chủ: Banner AuMix3D', surface: 'mobile', screen: 'home', description: 'Khoanh banner đối tác AuMix3D trên mobile.' },
     { id: 'mobile.home.feature.single_photo_gen', label: 'Điện thoại - Thẻ: Tạo ảnh Audition', surface: 'mobile', screen: 'home', description: 'Khoanh thẻ tạo ảnh Audition AI trên mobile.' },
     { id: 'mobile.home.feature.video_ai_gen', label: 'Điện thoại - Thẻ: Tạo video', surface: 'mobile', screen: 'home', description: 'Khoanh thẻ tạo video/Motion Control trên mobile.' },
@@ -297,7 +292,6 @@ export const DEFAULT_APP_TOURS_CONFIG: AppToursConfig = {
             isActive: true,
             steps: [
                 { id: 'desktop_home_intro_1', targetId: 'desktop.home.features', title: 'Chọn công cụ AI', description: 'Chọn công cụ tạo ảnh, chỉnh sửa ảnh hoặc tạo video để bắt đầu.', placement: 'top', order: 1, isActive: true },
-                { id: 'desktop_home_intro_2', targetId: 'desktop.home.checkin', title: 'Điểm danh mỗi ngày', description: 'Bấm vào đây để nhận phần thưởng điểm danh khi có lượt khả dụng.', placement: 'left', order: 2, isActive: true },
                 { id: 'desktop_home_intro_3', targetId: 'desktop.layout.vcoin', title: 'Số dư VCOIN', description: 'Theo dõi số dư và nạp thêm VCOIN để sử dụng các tính năng AI.', placement: 'top', order: 3, isActive: true },
             ],
         },
@@ -417,10 +411,8 @@ let userProfilePromise: Promise<UserProfile> | null = null;
 let packageCache: TimedCache<CreditPackage[]> | null = null;
 let promotionCache: TimedCache<PromotionCampaign | null> | null = null;
 const DEFAULT_CHECKIN_STATUS: CheckinStatusState = {
-    streak: 0,
     isCheckedInToday: false,
     history: [],
-    claimedMilestones: [],
 };
 let checkinStatusCache: (TimedCache<CheckinStatusState> & { userId: string }) | null = null;
 let checkinStatusPromise: Promise<CheckinStatusState> | null = null;
@@ -647,9 +639,6 @@ const mapUserRowToProfile = (data: any): UserProfile => ({
     vcoin_balance: data.vcoin_balance || 0,
     role: data.is_admin ? 'admin' : 'user',
     isVip: false,
-    streak: 0,
-    lastCheckin: null,
-    checkinHistory: [],
     usedGiftcodes: [],
     lastActive: data.last_active || null,
     accountStatus: data.account_status || 'active',
@@ -1558,7 +1547,8 @@ export const deletePromotion = async (id: string): Promise<{success: boolean, er
     }
 };
 
-// --- HELPER ---
+// --- DAILY CHECK-IN ---
+
 export const getLocalTodayStr = () => {
     return new Intl.DateTimeFormat('en-CA', {
         timeZone: 'Asia/Ho_Chi_Minh',
@@ -1567,133 +1557,6 @@ export const getLocalTodayStr = () => {
         day: '2-digit',
     }).format(new Date());
 };
-
-const shiftDateStr = (dateStr: string, days: number) => {
-    const date = new Date(`${dateStr}T00:00:00Z`);
-    date.setUTCDate(date.getUTCDate() + days);
-    return date.toISOString().slice(0, 10);
-};
-
-const calculateConsecutiveStreak = (dates: string[], today: string) => {
-    const dateSet = new Set(dates);
-    let cursor = dateSet.has(today) ? today : shiftDateStr(today, -1);
-    let streak = 0;
-
-    while (dateSet.has(cursor)) {
-        streak += 1;
-        cursor = shiftDateStr(cursor, -1);
-    }
-
-    return {
-        streak,
-        streakStartedOn: streak > 0 ? shiftDateStr(cursor, 1) : null,
-    };
-};
-
-const getLocalDayBoundaryIso = (dateStr: string, boundary: 'start' | 'end') => {
-    const suffix = boundary === 'start' ? 'T00:00:00.000' : 'T23:59:59.999';
-    return new Date(`${dateStr}${suffix}`).toISOString();
-};
-
-const getNextMonthStartIso = (monthStr: string) => {
-    const [year, month] = monthStr.split('-').map((value) => Number(value));
-    return new Date(year, month, 1, 0, 0, 0, 0).toISOString();
-};
-
-type RewardRepairWindow = {
-    startAt: string;
-    endAt?: string;
-};
-
-const hasRewardLog = async (
-    userId: string,
-    referenceType: string,
-    referenceId: string,
-    legacyDescription: string,
-    window: RewardRepairWindow,
-) => {
-    if (!supabase) return false;
-
-    try {
-        const { data, error } = await supabase
-            .from('vcoin_transactions')
-            .select('id')
-            .eq('user_id', userId)
-            .eq('reference_type', referenceType)
-            .eq('reference_id', referenceId)
-            .limit(1);
-
-        if (!error && (data?.length || 0) > 0) {
-            return true;
-        }
-    } catch (error) {
-        console.warn('[Checkin] Failed to verify reward log by reference', error);
-    }
-
-    try {
-        let query = supabase
-            .from('vcoin_transactions')
-            .select('id')
-            .eq('user_id', userId)
-            .eq('type', 'reward')
-            .eq('description', legacyDescription)
-            .gte('created_at', window.startAt);
-
-        if (window.endAt) {
-            query = query.lt('created_at', window.endAt);
-        }
-
-        const { data, error } = await query.limit(1);
-        if (error) {
-            throw error;
-        }
-
-        return (data?.length || 0) > 0;
-    } catch (error) {
-        console.warn('[Checkin] Failed to verify legacy reward log', error);
-        return false;
-    }
-};
-
-const ensureRewardApplied = async ({
-    userId,
-    amount,
-    reason,
-    referenceType,
-    referenceId,
-    metadata,
-    repairWindow,
-}: {
-    userId: string;
-    amount: number;
-    reason: string;
-    referenceType: string;
-    referenceId: string;
-    metadata?: Record<string, any>;
-    repairWindow: RewardRepairWindow;
-}) => {
-    const alreadyApplied = await hasRewardLog(userId, referenceType, referenceId, reason, repairWindow);
-    if (alreadyApplied) {
-        const sessionUser = await getCurrentSessionUser().catch(() => null);
-        if (sessionUser?.id === userId) {
-            await reconcileCurrentUserBalanceFromLedger().catch((reconcileError) => {
-                console.warn('[Checkin] Failed to reconcile existing reward balance drift', reconcileError);
-            });
-        }
-        return false;
-    }
-
-    await updateUserBalance(amount, reason, 'reward', {
-        targetUserId: userId,
-        referenceType,
-        referenceId,
-        metadata,
-    });
-
-    return true;
-};
-
-// --- CHECKIN & REWARDS ---
 
 export const getCheckinStatus = async (options?: { force?: boolean }): Promise<CheckinStatusState> => {
     if (!supabase) return DEFAULT_CHECKIN_STATUS;
@@ -1719,26 +1582,10 @@ export const getCheckinStatus = async (options?: { force?: boolean }): Promise<C
             throw new Error(checkinError.message);
         }
 
-        const history = checkins?.map((r: any) => String(r.check_in_date)) || [];
-        const { streak, streakStartedOn } = calculateConsecutiveStreak(history, today);
-        const milestoneResponse = streakStartedOn
-            ? await supabase
-                .from('milestone_claims')
-                .select('day_milestone')
-                .eq('user_id', user.id)
-                .eq('streak_started_on', streakStartedOn)
-            : { data: [], error: null };
-        const { data: milestones, error: milestoneError } = milestoneResponse;
-
-        if (milestoneError) {
-            throw new Error(milestoneError.message);
-        }
-
+        const history = checkins?.map((row: any) => String(row.check_in_date)) || [];
         const value: CheckinStatusState = {
-            streak,
             isCheckedInToday: history.includes(today),
             history,
-            claimedMilestones: milestones?.map((m: any) => m.day_milestone) || [],
         };
 
         return setSharedCheckinStatus(user.id, value);
@@ -1772,8 +1619,8 @@ export const subscribeCheckinStatus = (
     };
 };
 
-export const performCheckin = async (): Promise<{success: boolean, reward: number, newStreak: number, message?: string}> => {
-    if (!supabase) return { success: false, reward: 0, newStreak: 0, message: "No Database" };
+export const performCheckin = async (): Promise<{success: boolean, reward: number, message?: string}> => {
+    if (!supabase) return { success: false, reward: 0, message: "No Database" };
     trackEvent('daily_checkin_start');
 
     try {
@@ -1793,63 +1640,23 @@ export const performCheckin = async (): Promise<{success: boolean, reward: numbe
 
         invalidateCheckinStatusCache();
         invalidateUserProfileCache();
-        const refreshedStatus = await getCheckinStatus({ force: true }).catch(() => DEFAULT_CHECKIN_STATUS);
+        await getCheckinStatus({ force: true }).catch(() => DEFAULT_CHECKIN_STATUS);
         window.dispatchEvent(new Event('balance_updated'));
 
         const result = {
             success: Boolean(payload?.success),
             reward: Number(payload?.reward || 0),
-            newStreak: Number(payload?.newStreak || refreshedStatus.streak || 0),
             message: payload?.message,
         };
         trackEvent(result.success ? 'daily_checkin_success' : 'daily_checkin_no_reward', {
             reward_vcoin: result.reward,
-            streak: result.newStreak,
         });
         return result;
     } catch (e: any) {
         trackEvent('daily_checkin_error', {
             error_message: e?.message?.slice?.(0, 120) || 'unknown',
         });
-        return { success: false, reward: 0, newStreak: 0, message: e.message };
-    }
-};
-
-export const claimMilestoneReward = async (day: number): Promise<{success: boolean, message: string}> => {
-    if (!supabase) return { success: false, message: "No Database" };
-    trackEvent('milestone_reward_claim_start', { day });
-    try {
-        const response = await fetch('/api/checkin-reward', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                ...(await getSessionAuthHeader()),
-            },
-            body: JSON.stringify({ action: 'milestone', day }),
-        });
-
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) {
-            throw new Error(payload?.message || payload?.error || 'Milestone request failed');
-        }
-
-        invalidateCheckinStatusCache();
-        invalidateUserProfileCache();
-        await getCheckinStatus({ force: true }).catch(() => DEFAULT_CHECKIN_STATUS);
-        window.dispatchEvent(new Event('balance_updated'));
-
-        const result = {
-            success: Boolean(payload?.success),
-            message: payload?.message || ''
-        };
-        trackEvent(result.success ? 'milestone_reward_claim_success' : 'milestone_reward_claim_no_reward', { day });
-        return result;
-    } catch (e: any) {
-        trackEvent('milestone_reward_claim_error', {
-            day,
-            error_message: e?.message?.slice?.(0, 120) || 'unknown',
-        });
-        return { success: false, message: e.message };
+        return { success: false, reward: 0, message: e.message };
     }
 };
 

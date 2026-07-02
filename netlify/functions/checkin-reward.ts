@@ -8,23 +8,13 @@ const headers = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-const REWARD_BY_MILESTONE: Record<number, number> = {
-  7: 20,
-  14: 30,
-  30: 50,
-};
-
 type RewardRepairWindow = {
   startAt: string;
   endAt?: string;
 };
 
-type CheckinBody = {
-  action?: 'daily' | 'milestone';
-  day?: number;
-};
-
 const VIETNAM_TIMEZONE = 'Asia/Ho_Chi_Minh';
+const DAILY_REWARD = 5;
 
 const getVietnamDateParts = (date = new Date()) => {
   const formatter = new Intl.DateTimeFormat('en-CA', {
@@ -46,28 +36,6 @@ const getVietnamTodayStr = () => {
 const getDayBoundaryIso = (dateStr: string, boundary: 'start' | 'end') => {
   const suffix = boundary === 'start' ? 'T00:00:00+07:00' : 'T23:59:59.999+07:00';
   return new Date(`${dateStr}${suffix}`).toISOString();
-};
-
-const shiftDateStr = (dateStr: string, days: number) => {
-  const date = new Date(`${dateStr}T00:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-};
-
-const calculateConsecutiveStreak = (dates: string[], today: string) => {
-  const dateSet = new Set(dates);
-  let cursor = dateSet.has(today) ? today : shiftDateStr(today, -1);
-  let streak = 0;
-
-  while (dateSet.has(cursor)) {
-    streak += 1;
-    cursor = shiftDateStr(cursor, -1);
-  }
-
-  return {
-    streak,
-    streakStartedOn: streak > 0 ? shiftDateStr(cursor, 1) : null,
-  };
 };
 
 const isDuplicateError = (error: any) =>
@@ -183,9 +151,6 @@ const reconcileBalanceToLedger = async (userId: string) => {
   const repaired = delta > 0.0001;
   const effectiveBalance = repaired ? ledgerBalance : currentBalance;
 
-  // Only repair upward when the transaction ledger is ahead of the stored balance.
-  // Never overwrite a higher current balance, because admins may have adjusted it
-  // directly before a matching ledger entry exists.
   if (repaired) {
     const { error: updateError } = await admin
       .from('users')
@@ -203,43 +168,46 @@ const reconcileBalanceToLedger = async (userId: string) => {
   return {
     balance: effectiveBalance,
     repaired,
-    delta,
-    ledgerBalance,
-    currentBalance,
   };
 };
 
-const applyRewardIfMissing = async ({
+const applyDailyRewardIfMissing = async ({
   userId,
-  amount,
-  reason,
-  referenceType,
-  referenceId,
-  metadata,
-  repairWindow,
+  today,
+  startAt,
+  endAt,
 }: {
   userId: string;
-  amount: number;
-  reason: string;
-  referenceType: string;
-  referenceId: string;
-  metadata?: Record<string, unknown>;
-  repairWindow: RewardRepairWindow;
+  today: string;
+  startAt: string;
+  endAt: string;
 }) => {
   const admin = getServiceRoleClient();
-  const alreadyApplied = await hasRewardLog(userId, referenceType, referenceId, reason, repairWindow);
+  const referenceId = `${userId}:${today}`;
+  const reason = 'Daily Checkin';
+  const alreadyApplied = await hasRewardLog(
+    userId,
+    'daily_checkin_reward',
+    referenceId,
+    reason,
+    { startAt, endAt },
+  );
+
   if (alreadyApplied) {
     return false;
   }
 
   const { data, error } = await admin.rpc('apply_balance_transaction', {
     p_target_user_id: userId,
-    p_amount: amount,
+    p_amount: DAILY_REWARD,
     p_reason: reason,
     p_log_type: 'reward',
-    p_reference_type: referenceType,
+    p_reference_type: 'daily_checkin_reward',
     p_reference_id: referenceId,
-    p_metadata: metadata ?? {},
+    p_metadata: {
+      reward_type: 'daily_checkin',
+      check_in_date: today,
+    },
   });
 
   if (error) {
@@ -249,30 +217,9 @@ const applyRewardIfMissing = async ({
   return data !== false;
 };
 
-const getCurrentStreak = async (userId: string, today: string) => {
-  const admin = getServiceRoleClient();
-  const { data, error } = await admin
-    .from('daily_check_ins')
-    .select('check_in_date')
-    .eq('user_id', userId)
-    .lte('check_in_date', today)
-    .order('check_in_date', { ascending: false });
-
-  if (error) {
-    throw error;
-  }
-
-  return calculateConsecutiveStreak(
-    (data || []).map((row: any) => String(row.check_in_date)),
-    today,
-  );
-};
-
 const handleDailyCheckin = async (userId: string) => {
   const admin = getServiceRoleClient();
   const today = getVietnamTodayStr();
-  const reward = 5;
-  const referenceId = `${userId}:${today}`;
   const startAt = getDayBoundaryIso(today, 'start');
   const endAt = getDayBoundaryIso(today, 'end');
   let checkinAlreadyExists = false;
@@ -290,27 +237,18 @@ const handleDailyCheckin = async (userId: string) => {
     }
   }
 
-  const rewardApplied = await applyRewardIfMissing({
+  const rewardApplied = await applyDailyRewardIfMissing({
     userId,
-    amount: reward,
-    reason: 'Daily Checkin',
-    referenceType: 'daily_checkin_reward',
-    referenceId,
-    metadata: {
-      reward_type: 'daily_checkin',
-      check_in_date: today,
-    },
-    repairWindow: { startAt, endAt },
+    today,
+    startAt,
+    endAt,
   });
-
-  const { streak } = await getCurrentStreak(userId, today);
   const reconcileResult = await reconcileBalanceToLedger(userId);
 
   if (checkinAlreadyExists && !rewardApplied && !reconcileResult.repaired) {
     return {
       success: false,
       reward: 0,
-      newStreak: streak,
       balance: reconcileResult.balance,
       message: 'Bạn đã điểm danh hôm nay rồi!',
     };
@@ -318,85 +256,11 @@ const handleDailyCheckin = async (userId: string) => {
 
   return {
     success: true,
-    reward: rewardApplied || reconcileResult.repaired ? reward : 0,
-    newStreak: streak,
+    reward: rewardApplied || reconcileResult.repaired ? DAILY_REWARD : 0,
     balance: reconcileResult.balance,
     message: checkinAlreadyExists
       ? 'Đã đồng bộ lại phần thưởng điểm danh hôm nay.'
       : undefined,
-  };
-};
-
-const handleMilestoneClaim = async (userId: string, day: number) => {
-  const admin = getServiceRoleClient();
-  const amount = REWARD_BY_MILESTONE[day] || 0;
-  const today = getVietnamTodayStr();
-
-  if (amount <= 0) {
-    return {
-      success: false,
-      message: 'Mốc thưởng không hợp lệ.',
-    };
-  }
-
-  const { streak, streakStartedOn } = await getCurrentStreak(userId, today);
-  if (streak < day || !streakStartedOn) {
-    return {
-      success: false,
-      message: `Bạn chưa đủ ${day} ngày điểm danh liên tiếp.`,
-    };
-  }
-
-  const referenceId = `${userId}:${streakStartedOn}:${day}`;
-  let alreadyClaimed = false;
-
-  const { error: insertError } = await admin.from('milestone_claims').insert({
-    user_id: userId,
-    day_milestone: day,
-    reward_amount: amount,
-    claim_month: streakStartedOn,
-    streak_started_on: streakStartedOn,
-  });
-
-  if (insertError) {
-    if (isDuplicateError(insertError)) {
-      alreadyClaimed = true;
-    } else {
-      throw insertError;
-    }
-  }
-
-  const rewardApplied = await applyRewardIfMissing({
-    userId,
-    amount,
-    reason: `Milestone ${day} Days`,
-    referenceType: 'milestone_reward',
-    referenceId,
-    metadata: {
-      reward_type: 'milestone',
-      streak_started_on: streakStartedOn,
-      milestone_day: day,
-    },
-    repairWindow: {
-      startAt: getDayBoundaryIso(streakStartedOn, 'start'),
-    },
-  });
-
-  const reconcileResult = await reconcileBalanceToLedger(userId);
-  if (alreadyClaimed && !rewardApplied && !reconcileResult.repaired) {
-    return {
-      success: false,
-      message: `Bạn đã nhận mốc ${day} ngày của chuỗi hiện tại rồi!`,
-      balance: reconcileResult.balance,
-    };
-  }
-
-  return {
-    success: true,
-    message: alreadyClaimed
-      ? `Đã đồng bộ lại thưởng mốc ${day} ngày cho bạn.`
-      : `Nhận thưởng mốc ${day} ngày thành công!`,
-    balance: reconcileResult.balance,
   };
 };
 
@@ -420,17 +284,6 @@ export const handler: Handler = async (event) => {
   try {
     const { user, browserKeyHash } = await requireAuthenticatedUser(event);
     await ensureBrowserKeyCheckinAllowed(user.id, browserKeyHash);
-    const body = JSON.parse(event.body || '{}') as CheckinBody;
-
-    if (body.action === 'milestone') {
-      const day = Number(body.day || 0);
-      const result = await handleMilestoneClaim(user.id, day);
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify(result),
-      };
-    }
 
     const result = await handleDailyCheckin(user.id);
     return {
@@ -446,7 +299,7 @@ export const handler: Handler = async (event) => {
         headers,
         body: JSON.stringify({
           success: false,
-          message: 'T\u00e0i kho\u1ea3n n\u00e0y \u0111\u00e3 v\u01b0\u1ee3t gi\u1edbi h\u1ea1n \u0111i\u1ec3m danh tr\u00ean tr\u00ecnh duy\u1ec7t/thi\u1ebft b\u1ecb n\u00e0y.',
+          message: 'Tài khoản này đã vượt giới hạn điểm danh trên trình duyệt/thiết bị này.',
         }),
       };
     }
@@ -457,7 +310,7 @@ export const handler: Handler = async (event) => {
         headers,
         body: JSON.stringify({
           success: false,
-          message: 'TÃ i khoáº£n Ä‘Ã£ bá»‹ khÃ³a. Vui lÃ²ng liÃªn há»‡ quáº£n trá»‹ viÃªn.',
+          message: 'Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên.',
         }),
       };
     }

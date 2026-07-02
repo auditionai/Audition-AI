@@ -617,9 +617,6 @@ export function AdminView() {
     vcoin_balance: Number(entry.vcoin_balance || 0),
     role: entry.role === 'admin' ? 'admin' : 'user',
     isVip: !!entry.isVip,
-    streak: 0,
-    lastCheckin: null,
-    checkinHistory: [],
     lastActive: entry.lastActive,
     usageCount: entry.usageCount,
   });

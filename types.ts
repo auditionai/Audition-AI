@@ -308,9 +308,6 @@ export interface UserProfile {
   vcoin_balance: number;
   role: 'user' | 'admin';
   isVip: boolean;
-  streak: number;
-  lastCheckin: string | null; // ISO Date string
-  checkinHistory: string[]; // Array of 'YYYY-MM-DD' strings
   password?: string; // Mock password field for admin editing
   usedGiftcodes?: string[]; // Track used codes
   lastActive?: string; // New: Last active timestamp
@@ -400,12 +397,6 @@ export interface HistoryItem {
     metadata?: Record<string, unknown> | null;
     status: 'success' | 'pending' | 'failed';
 }
-export interface CheckinConfig {
-  day: number;
-  reward: number;
-  isMilestone?: boolean;
-}
-
 export interface PromotionCampaign {
     id: string;
     name: string; // Internal Campaign Name
@@ -426,6 +417,5 @@ export interface Promotion {
     isActive?: boolean;
     marqueeText?: string;
 }
-export interface DailyCheckin { user_id: string; last_checkin: string; streak: number; }
 export interface SystemSettings { id: string; maintenance_mode: boolean; announcement: string; min_topup: number; support_email: string; version: string; pricing_config?: any; giftcode_promo_config?: any; }
 export interface ApiKey { id: string; key: string; name: string; tier: 'flash' | 'pro'; status: 'active' | 'inactive' | 'error'; last_used?: string; created_at: string; }

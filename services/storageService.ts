@@ -16,6 +16,7 @@ const HISTORY_RETENTION_DAYS = 7;
 const HISTORY_RETENTION_MS = HISTORY_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 const ACTIVE_GALLERY_CLIENT_CACHE_TTL_MS = 10_000;
 const IDLE_GALLERY_CLIENT_CACHE_TTL_MS = 30_000;
+const GALLERY_API_TIMEOUT_MS = 12_000;
 const GENERATED_IMAGE_ROW_SELECT = 'id, image_url, prompt, created_at, updated_at, asset_type, queue_kind, tool_id, tool_name, model_used, is_public, user_id, user_name, status, job_id, progress, queue_payload, error_message, cost_vcoin';
 
 // --- CLOUDFLARE R2 CONFIGURATION ---
@@ -178,6 +179,20 @@ const saveLocalImage = async (image: GeneratedImage): Promise<void> => {
 
 const getSessionAuthHeader = async () => {
   return getSupabaseAuthHeader();
+};
+
+const fetchWithTimeout = async (input: RequestInfo | URL, init: RequestInit, timeoutMs: number) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 };
 
 const replaceLocalImagesForUser = async (userId: string, images: GeneratedImage[]): Promise<void> => {
@@ -486,6 +501,23 @@ const getGeneratedImageChargeMap = async (userId: string, imageIds: string[]): P
     console.warn('[Storage] Failed to load generated image charge map', error);
     return new Map();
   }
+};
+
+const fetchCurrentUserGeneratedImagesDirectly = async (userId: string): Promise<any[]> => {
+  if (!supabase || !userId) return [];
+
+  const { data, error } = await supabase
+    .from(TABLE_NAME)
+    .select(GENERATED_IMAGE_ROW_SELECT)
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(100);
+
+  if (error) {
+    throw error;
+  }
+
+  return data || [];
 };
 
 // Modified to return Uint8Array for AWS SDK compatibility
@@ -894,32 +926,53 @@ export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
 
             const authHeader = await getSessionAuthHeader();
             galleryFetchPromise = (async () => {
-              const response = await fetch('/api/gallery-images', {
-                method: 'GET',
-                headers: authHeader,
-              });
-              const payload = await response.json().catch(() => ({}));
+              try {
+                const response = await fetchWithTimeout('/api/gallery-images', {
+                  method: 'GET',
+                  headers: authHeader,
+                }, GALLERY_API_TIMEOUT_MS);
+                const payload = await response.json().catch(() => ({}));
 
-              if (response.ok && Array.isArray(payload?.images)) {
-                  const cloudImages = payload.images.map((row: any) => mapGeneratedImageRow(row, 'Me'));
-                  const mergedImages = excludeDirectEditHistory(mergeCloudAndLocalImages(cloudImages, localImagesForUser));
+                if (response.ok && Array.isArray(payload?.images)) {
+                    const cloudImages = payload.images.map((row: any) => mapGeneratedImageRow(row, 'Me'));
+                    const mergedImages = excludeDirectEditHistory(mergeCloudAndLocalImages(cloudImages, localImagesForUser));
+                    galleryFetchCache = {
+                      userId: user.id,
+                      expiresAt:
+                        Date.now() +
+                        (mergedImages.some((image) => image.displayStatus === 'queued' || image.displayStatus === 'processing' || image.displayStatus === 'rescuing')
+                          ? ACTIVE_GALLERY_CLIENT_CACHE_TTL_MS
+                          : IDLE_GALLERY_CLIENT_CACHE_TTL_MS),
+                      images: mergedImages,
+                    };
+                    void replaceLocalImagesForUser(user.id, mergedImages).catch((syncError) => {
+                      console.warn('[Storage] Failed to sync local cache from cloud', syncError);
+                    });
+                    return mergedImages;
+                }
+
+                console.warn('[Storage] Gallery API failed, trying direct Supabase fallback', payload?.error || response.statusText);
+              } catch (apiError) {
+                console.warn('[Storage] Gallery API request failed, trying direct Supabase fallback', apiError);
+              }
+
+              try {
+                const directRows = await fetchCurrentUserGeneratedImagesDirectly(user.id);
+                if (directRows.length > 0) {
+                  const directImages = directRows.map((row: any) => mapGeneratedImageRow(row, 'Me'));
+                  const mergedImages = excludeDirectEditHistory(mergeCloudAndLocalImages(directImages, localImagesForUser));
                   galleryFetchCache = {
                     userId: user.id,
-                    expiresAt:
-                      Date.now() +
-                      (mergedImages.some((image) => image.displayStatus === 'queued' || image.displayStatus === 'processing' || image.displayStatus === 'rescuing')
-                        ? ACTIVE_GALLERY_CLIENT_CACHE_TTL_MS
-                        : IDLE_GALLERY_CLIENT_CACHE_TTL_MS),
+                    expiresAt: Date.now() + IDLE_GALLERY_CLIENT_CACHE_TTL_MS,
                     images: mergedImages,
                   };
                   void replaceLocalImagesForUser(user.id, mergedImages).catch((syncError) => {
-                    console.warn('[Storage] Failed to sync local cache from cloud', syncError);
+                    console.warn('[Storage] Failed to sync local cache from direct gallery load', syncError);
                   });
                   return mergedImages;
-              }
-
-              if (!response.ok) {
-                console.warn('[Storage] Gallery API failed, using local cache only', payload?.error || response.statusText);
+                }
+              } catch (directError) {
+                console.warn('[Storage] Direct gallery fallback failed', directError);
               }
 
               const filteredLocalImages = excludeDirectEditHistory(localImagesForUser);

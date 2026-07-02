@@ -14,6 +14,7 @@ import { handler as checkinRewardHandler } from '../netlify/functions/checkin-re
 import { handler as createPaymentHandler } from '../netlify/functions/create_payment.ts';
 import { handler as directImageEditHandler } from '../netlify/functions/direct-image-edit.ts';
 import { localHandler as directImageEditBackgroundHandler } from '../netlify/functions/direct-image-edit-background.ts';
+import { handler as ensureUserProfileHandler } from '../netlify/functions/ensure-user-profile.ts';
 import { handler as forceRescueFailedJobsHandler } from '../netlify/functions/force-rescue-failed-jobs.ts';
 import { handler as galleryImagesHandler } from '../netlify/functions/gallery-images.ts';
 import { handler as getVertexTokenHandler } from '../netlify/functions/get-vertex-token.ts';
@@ -70,6 +71,7 @@ const handlerConfigs = [
   { fnName: 'admin-user-history', apiPath: '/api/admin-user-history', handler: adminUserHistoryHandler },
   { fnName: 'admin-stop-queue-job', apiPath: '/api/admin-stop-queue-job', handler: adminStopQueueJobHandler },
   { fnName: 'force-rescue-failed-jobs', apiPath: '/api/force-rescue-failed-jobs', handler: forceRescueFailedJobsHandler },
+  { fnName: 'ensure-user-profile', apiPath: '/api/ensure-user-profile', handler: ensureUserProfileHandler },
   { fnName: 'gallery-images', apiPath: '/api/gallery-images', handler: galleryImagesHandler },
   { fnName: 'checkin-reward', apiPath: '/api/checkin-reward', handler: checkinRewardHandler },
   { fnName: 'redeem-giftcode', apiPath: '/api/redeem-giftcode', handler: redeemGiftcodeHandler },

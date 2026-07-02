@@ -639,6 +639,47 @@ const mapVcoinTransactionToHistoryItem = (log: any): HistoryItem => ({
 
 // --- USER & PROFILE ---
 
+const mapUserRowToProfile = (data: any): UserProfile => ({
+    id: data.id,
+    username: data.display_name || 'User',
+    email: data.email || '',
+    avatar: data.photo_url || 'https://picsum.photos/100/100',
+    vcoin_balance: data.vcoin_balance || 0,
+    role: data.is_admin ? 'admin' : 'user',
+    isVip: false,
+    streak: 0,
+    lastCheckin: null,
+    checkinHistory: [],
+    usedGiftcodes: [],
+    lastActive: data.last_active || null,
+    accountStatus: data.account_status || 'active',
+    accountWarning: data.account_warning || null,
+    accountWarningAt: data.account_warning_at || null,
+    lockedAt: data.locked_at || null,
+    lockReason: data.lock_reason || null
+});
+
+const ensureUserProfileViaApi = async (): Promise<any | null> => {
+    try {
+        const authHeader = await getSessionAuthHeader();
+        const response = await fetch('/api/ensure-user-profile', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...authHeader,
+            },
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(payload?.error || response.statusText || 'Failed to ensure user profile');
+        }
+        return payload?.profile || null;
+    } catch (error) {
+        console.warn('[Economy] Failed to ensure user profile via API', error);
+        return null;
+    }
+};
+
 export const getUserProfile = async (options?: { force?: boolean }): Promise<UserProfile> => {
     if (!supabase) throw new Error("No Database");
 
@@ -675,6 +716,10 @@ export const getUserProfile = async (options?: { force?: boolean }): Promise<Use
             if (cachedProfile && cachedProfile.userId === user.id) {
                 return cachedProfile.value;
             }
+            const repairedProfile = await ensureUserProfileViaApi();
+            if (repairedProfile) {
+                return mapUserRowToProfile(repairedProfile);
+            }
             throw new Error("Failed to fetch user profile: " + (readError?.message || 'Network error'));
         }
 
@@ -683,6 +728,10 @@ export const getUserProfile = async (options?: { force?: boolean }): Promise<Use
             const cachedProfile = userProfileCache;
             if (cachedProfile && cachedProfile.userId === user.id) {
                 return cachedProfile.value;
+            }
+            const repairedProfile = await ensureUserProfileViaApi();
+            if (repairedProfile) {
+                return mapUserRowToProfile(repairedProfile);
             }
             throw new Error("Failed to fetch user profile: " + error.message);
         }
@@ -712,45 +761,10 @@ export const getUserProfile = async (options?: { force?: boolean }): Promise<Use
                 console.warn("Failed to auto-create/update user profile", e);
             }
 
-            profile = {
-                id: newProfile.id,
-                username: newProfile.display_name,
-                email: newProfile.email,
-                avatar: newProfile.photo_url,
-                vcoin_balance: newProfile.vcoin_balance,
-                role: newProfile.is_admin ? 'admin' : 'user',
-                isVip: false,
-                streak: 0,
-                lastCheckin: null,
-                checkinHistory: [],
-                usedGiftcodes: [],
-                lastActive: newProfile.last_active,
-                accountStatus: newProfile.account_status,
-                accountWarning: newProfile.account_warning,
-                accountWarningAt: newProfile.account_warning_at,
-                lockedAt: newProfile.locked_at,
-                lockReason: newProfile.lock_reason
-            };
+            const repairedProfile = await ensureUserProfileViaApi();
+            profile = repairedProfile ? mapUserRowToProfile(repairedProfile) : mapUserRowToProfile(newProfile);
         } else {
-            profile = {
-                id: data.id,
-                username: data.display_name || 'User',
-                email: data.email,
-                avatar: data.photo_url || 'https://picsum.photos/100/100',
-                vcoin_balance: data.vcoin_balance || 0,
-                role: data.is_admin ? 'admin' : 'user',
-                isVip: false, // Logic for VIP could be added later
-                streak: 0, // Need separate checkin table query if needed
-                lastCheckin: null,
-                checkinHistory: [],
-                usedGiftcodes: [],
-                lastActive: data.last_active || null,
-                accountStatus: data.account_status || 'active',
-                accountWarning: data.account_warning || null,
-                accountWarningAt: data.account_warning_at || null,
-                lockedAt: data.locked_at || null,
-                lockReason: data.lock_reason || null
-            };
+            profile = mapUserRowToProfile(data);
         }
 
         userProfileCache = {

@@ -19,6 +19,7 @@ export const Settings: React.FC<SettingsProps> = ({ lang, onLogout, onNavigate, 
   // Initialize with empty/loading state rather than hardcoded demo data
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   // Editable Form State
   const [formName, setFormName] = useState('');
@@ -32,22 +33,28 @@ export const Settings: React.FC<SettingsProps> = ({ lang, onLogout, onNavigate, 
   useEffect(() => {
       const loadUser = async () => {
           setIsLoading(true);
-          const profile = await getUserProfile();
-          if (!profile) {
+          setLoadError('');
+          try {
+              const profile = await getUserProfile({ force: true });
+              if (!profile) {
+                  setLoadError(lang === 'vi' ? 'Không tìm thấy hồ sơ tài khoản.' : 'Account profile was not found.');
+                  return;
+              }
+              setUserProfile(profile);
+              setFormName(profile.username);
+              setFormAvatar(profile.avatar);
+              
+              const promo = await getGiftcodePromoConfig();
+              setPromoConfig(promo);
+          } catch (error: any) {
+              console.error('Failed to load settings profile', error);
+              setLoadError(error?.message || (lang === 'vi' ? 'Không thể tải hồ sơ tài khoản.' : 'Could not load account profile.'));
+          } finally {
               setIsLoading(false);
-              return;
           }
-          setUserProfile(profile);
-          setFormName(profile.username);
-          setFormAvatar(profile.avatar);
-          
-          const promo = await getGiftcodePromoConfig();
-          setPromoConfig(promo);
-          
-          setIsLoading(false);
       };
       loadUser();
-  }, []);
+  }, [lang]);
 
   const handleSaveProfile = async () => {
       if (!userProfile) return;
@@ -85,8 +92,26 @@ export const Settings: React.FC<SettingsProps> = ({ lang, onLogout, onNavigate, 
       }
   };
 
-  if (isLoading || !userProfile) {
+  if (isLoading) {
       return <div className="flex items-center justify-center h-64"><Icons.Loader className="animate-spin text-white w-8 h-8"/></div>;
+  }
+
+  if (!userProfile) {
+      return (
+        <div className="max-w-2xl mx-auto glass-panel p-6 rounded-3xl text-center space-y-4">
+            <Icons.AlertTriangle className="w-10 h-10 text-red-400 mx-auto" />
+            <div>
+                <h2 className="text-xl font-bold text-white">{lang === 'vi' ? 'Không thể tải tài khoản' : 'Could not load account'}</h2>
+                <p className="text-sm text-slate-400 mt-2">{loadError || (lang === 'vi' ? 'Vui lòng đăng xuất rồi đăng nhập lại.' : 'Please sign out and sign in again.')}</p>
+            </div>
+            <button
+                onClick={onLogout}
+                className="px-5 py-2.5 bg-red-500/10 hover:bg-red-500 border border-red-500/50 text-red-400 hover:text-white rounded-xl transition-all font-bold text-sm"
+            >
+                {lang === 'vi' ? 'Đăng xuất' : 'Logout'}
+            </button>
+        </div>
+      );
   }
 
   return (

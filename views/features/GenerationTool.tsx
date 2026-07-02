@@ -21,6 +21,7 @@ import { downloadAssetToBrowser } from '../../services/downloadService';
 import { analyzeCharacterAppearanceProfile } from '../../utils/imageProcessor';
 import { APP_CONFIG } from '../../constants';
 import { buildAuditionKoreaMmoStylePrompt, DEFAULT_IMAGE_NEGATIVE_PROMPT } from '../../shared/imagePromptDefaults';
+import { PROMPT_LIBRARY_APPLY_EVENT, consumeStashedPromptForGenerator } from '../../shared/caulenhauSamples';
 import {
   type AuditionPricingOverride,
   fetchTstModels,
@@ -234,6 +235,25 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
   const [isConcurrencyExpanded, setIsConcurrencyExpanded] = useState(false);
   const activeFeature = APP_CONFIG.main_features.find((entry) => entry.id === MODE_TO_FEATURE_ID[activeMode]) || feature;
+
+  useEffect(() => {
+      const applyPrompt = (nextPrompt: string) => {
+          const trimmed = nextPrompt.trim();
+          if (!trimmed) return;
+          setPrompt(trimmed);
+          setStage('input');
+      };
+
+      applyPrompt(consumeStashedPromptForGenerator());
+
+      const handleApplyPrompt = (event: Event) => {
+          const promptFromEvent = (event as CustomEvent<{ prompt?: string }>).detail?.prompt || '';
+          applyPrompt(promptFromEvent);
+      };
+
+      window.addEventListener(PROMPT_LIBRARY_APPLY_EVENT, handleApplyPrompt);
+      return () => window.removeEventListener(PROMPT_LIBRARY_APPLY_EVENT, handleApplyPrompt);
+  }, []);
 
   useEffect(() => {
       if (!refImage) return;

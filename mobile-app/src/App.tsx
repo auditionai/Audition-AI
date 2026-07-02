@@ -13,6 +13,7 @@ import { WorkspaceVideo } from './views/WorkspaceVideo';
 import { WorkspaceEdit } from './views/WorkspaceEdit';
 import { WorkspacePromptImage } from './views/WorkspacePromptImage';
 import { Gallery } from './views/Gallery';
+import { PromptLibrary } from './views/PromptLibrary';
 import { TopUp } from './views/TopUp';
 import { Settings } from './views/Settings';
 import { About } from './views/About';
@@ -78,6 +79,7 @@ const getMobileTourScreen = (pathname: string) => {
   if (pathname === '/home') return 'home';
   if (pathname.startsWith('/generate/') || pathname.startsWith('/tools/')) return 'tool_workspace';
   if (pathname === '/gallery') return 'gallery';
+  if (pathname === '/prompt-library') return 'prompt_library';
   if (pathname === '/topup') return 'topup';
   if (pathname === '/profile') return 'settings';
   return pathname.replace(/^\/+/, '') || 'home';
@@ -134,6 +136,7 @@ function AppRoutes() {
             <Route path="/tools/ai-image" element={<FeatureMaintenanceGuard><WorkspacePromptImage /></FeatureMaintenanceGuard>} />
             <Route path="/tools/:toolId" element={<FeatureMaintenanceGuard><WorkspaceEdit /></FeatureMaintenanceGuard>} />
             <Route path="/gallery" element={<Gallery />} />
+            <Route path="/prompt-library" element={<PromptLibrary />} />
             <Route path="/topup" element={<TopUp />} />
             <Route path="/payment-gateway" element={<PaymentGatewayView />} />
             <Route path="/profile" element={<Settings />} />

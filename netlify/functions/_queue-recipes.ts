@@ -422,6 +422,10 @@ export const buildImageGenerateProviderPayload = (
 
 const normalizePromptWhitespace = (value?: string | null) => String(value || '').replace(/\s+/g, ' ').trim();
 
+const normalizeModelId = (value?: string | null) => String(value || '').trim().toLowerCase();
+
+const isGptImageModel = (modelId?: string | null) => normalizeModelId(modelId) === 'image-gpt-2';
+
 const combineImageGeneratePrompt = (systemPromptPrefix: string, userPromptInput: string) =>
   `${systemPromptPrefix}${userPromptInput}`.trim();
 
@@ -644,7 +648,7 @@ export const prepareProviderPayloadFromQueueRecipe = async (payload: QueueRecipe
       if (userPrompt.length > TST_PROMPT_MAX_CHARACTERS) {
         throw new Error(`Prompt tạo ảnh vượt quá giới hạn ${TST_PROMPT_MAX_CHARACTERS} ký tự.`);
       }
-      const isUserOnlyPrompt = payload.promptMode === 'user_only';
+      const isUserOnlyPrompt = payload.promptMode === 'user_only' || isGptImageModel(payload.modelId);
       const providerPrompt = isUserOnlyPrompt
         ? userPrompt
         : await prepareDirectPromptWithinLimit(

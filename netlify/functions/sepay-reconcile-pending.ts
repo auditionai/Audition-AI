@@ -134,7 +134,7 @@ export const runSePayPendingReconcile = async (options: SePayPendingReconcileOpt
         createdAt: tx.created_at,
         references,
         maxQueries: 3,
-        allowUniqueAmountFallback: true,
+        allowUniqueAmountFallback: false,
       });
 
       if (!bankLookup.ok) {

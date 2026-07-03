@@ -152,7 +152,7 @@ export const handler: Handler = async (event) => {
         String(storedPayload.sepay_order_description || ''),
         String(existingTransaction.provider_payment_link_id || '').replace(/^sepay:/i, ''),
       ],
-      allowUniqueAmountFallback: true,
+      allowUniqueAmountFallback: false,
     });
 
     if (!bankLookup.ok) {

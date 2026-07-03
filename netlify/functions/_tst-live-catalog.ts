@@ -151,7 +151,7 @@ const matchesDurationForModel = (modelId: string, entryDuration?: string, reques
   if (!normalizedRequested) return true;
   const normalizedEntry = normalizeDuration(entryDuration);
   if (normalizedEntry === normalizedRequested) return true;
-  const perSecondModel = normalize(modelId).startsWith('kling-') || normalize(modelId).startsWith('motion-control-');
+  const perSecondModel = normalize(modelId).startsWith('motion-control-');
   return (isGrokModel(modelId) || perSecondModel) && !normalizedEntry;
 };
 

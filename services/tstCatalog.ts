@@ -755,11 +755,10 @@ export const parseDurationSeconds = (value?: string | number | null) => {
 };
 
 export const isPerSecondVideoBillingModel = (modelId: string) =>
-  normalizeModelId(modelId).startsWith('kling-');
+  false;
 
 export const isPerSecondMotionBillingModel = (modelId: string) =>
-  normalizeModelId(modelId).startsWith('motion-control-') ||
-  normalizeModelId(modelId).startsWith('kling-');
+  normalizeModelId(modelId).startsWith('motion-control-');
 
 export const isPerSecondBillingModel = (modelId: string, type?: TstMediaType) =>
   type === 'motion-control'

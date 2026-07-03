@@ -611,6 +611,13 @@ const getPrimaryUserRequestText = (
   payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput'>,
 ) => collapsePromptWhitespace(payload.userPromptInput || payload.prompt || '');
 
+const buildGptUserOnlyProviderPrompt = (
+  payload: Pick<ImageGenerateRecipePayload, 'prompt' | 'userPromptInput' | 'serverId'>,
+) =>
+  buildProviderPromptWithinServerBudget([
+    { locked: true, text: getPrimaryUserRequestText(payload) || 'Create one new image from the uploaded references.' },
+  ], payload.serverId, sanitizeGptImage2ProviderText);
+
 const trimPromptText = (value: string, maxLength: number) => {
   if (value.length <= maxLength) {
     return value;
@@ -1768,16 +1775,16 @@ export const buildImageProviderPrompt = (
   void customNegativePrompt;
   const mergedNegativePrompt = IMAGE_NEGATIVE_PROMPT;
 
+  if (normalizeValue(payload.modelId) === 'image-gpt-2') {
+    return buildGptUserOnlyProviderPrompt(payload);
+  }
+
   if (isProImageGenerationModel(payload.modelId)) {
     return buildProStructuredProviderPrompt(synthesizedPrompt, payload, mergedNegativePrompt);
   }
 
   if (payload.sampleImage) {
     return buildDetailedImageProviderPrompt(synthesizedPrompt, payload, mergedNegativePrompt);
-  }
-
-  if (normalizeValue(payload.modelId) === 'image-gpt-2') {
-    return buildGptPromptFirstProviderPromptWithoutSample(synthesizedPrompt, payload, mergedNegativePrompt);
   }
 
   return buildReducedImageProviderPromptWithoutSample(synthesizedPrompt, payload, mergedNegativePrompt);

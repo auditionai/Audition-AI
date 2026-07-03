@@ -250,6 +250,25 @@ const toQueuePayloadObject = (
 const stripInternalQueueMeta = (payload: Record<string, unknown> | ImageGenerateRecipePayload) =>
   Object.fromEntries(Object.entries(payload).filter(([key]) => !key.startsWith('__')));
 
+const isGptImageRecipePayload = (payload?: Partial<ImageGenerateRecipePayload> | null) =>
+  String(payload?.modelId || '').trim().toLowerCase() === 'image-gpt-2';
+
+const sanitizeGptImageRecipePayload = (payload: ImageGenerateRecipePayload): ImageGenerateRecipePayload => {
+  if (!isGptImageRecipePayload(payload)) {
+    return payload;
+  }
+
+  const userPrompt = String(payload.userPromptInput || payload.prompt || '').trim();
+  return {
+    ...payload,
+    prompt: userPrompt,
+    userPromptInput: userPrompt,
+    systemPromptPrefix: null,
+    negativePrompt: undefined,
+    stylePrompt: null,
+  };
+};
+
 const normalizeNotificationMediaEntry = (
   entry: unknown,
 ): QueueNotificationMediaEntry | null => {
@@ -536,7 +555,7 @@ const withQueueMeta = (
 
   const previousRecipePayload = getStoredImageGenerateRecipePayload(previousPayload);
   if (previousRecipePayload) {
-    nextPayload.__recipePayload = previousRecipePayload;
+    nextPayload.__recipePayload = sanitizeGptImageRecipePayload(previousRecipePayload);
   }
 
   if (stage) {

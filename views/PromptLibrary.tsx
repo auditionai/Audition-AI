@@ -1,19 +1,47 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icons } from '../components/Icons';
 import { useNotification } from '../components/NotificationSystem';
-import { caulenhauClient } from '../services/supabaseClient';
+import { caulenhauClient, supabase } from '../services/supabaseClient';
 import {
   CAULENHAU_SAMPLE_CATEGORIES,
   CaulenhauSampleCategoryId,
   CaulenhauSamplePrompt,
   PROMPT_LIBRARY_PAGE_SIZE,
+  PromptLibrarySortMode,
   fetchCaulenhauSamples,
+  fetchPromptLibraryUsageStats,
+  getPromptLibraryTags,
   stashPromptForGenerator,
+  trackPromptLibrarySampleUse,
 } from '../shared/caulenhauSamples';
 
 interface PromptLibraryProps {
   onUsePrompt: () => void;
 }
+
+const enrichUsageStats = async (nextSamples: CaulenhauSamplePrompt[]) => {
+  const localStats = await fetchPromptLibraryUsageStats(supabase, nextSamples.map((sample) => sample.id));
+  return nextSamples.map((sample) => {
+    const localUseCount = localStats.get(sample.id) || 0;
+    const externalUseCount = sample.external_use_count || 0;
+    return {
+      ...sample,
+      local_use_count: localUseCount,
+      total_use_count: localUseCount + externalUseCount,
+    };
+  });
+};
+
+const sortSamplesForMode = (items: CaulenhauSamplePrompt[], sortMode: PromptLibrarySortMode) => {
+  if (sortMode !== 'popular') return items;
+  return [...items].sort((a, b) => (b.total_use_count || 0) - (a.total_use_count || 0));
+};
+
+const formatUseCount = (value = 0) => {
+  if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
+  if (value >= 1000) return `${(value / 1000).toFixed(1)}K`;
+  return String(value);
+};
 
 export const PromptLibrary: React.FC<PromptLibraryProps> = ({ onUsePrompt }) => {
   const { notify } = useNotification();
@@ -23,36 +51,66 @@ export const PromptLibrary: React.FC<PromptLibraryProps> = ({ onUsePrompt }) => 
   const [hasMore, setHasMore] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortMode, setSortMode] = useState<PromptLibrarySortMode>('newest');
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const loadingRef = useRef(false);
+  const loadRequestRef = useRef(0);
 
   const activeCategory = useMemo(
     () => CAULENHAU_SAMPLE_CATEGORIES.find((category) => category.id === activeCategoryId) || CAULENHAU_SAMPLE_CATEGORIES[0],
     [activeCategoryId],
   );
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setSearchQuery(searchInput.trim());
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [searchInput]);
+
   const loadSamples = useCallback(async (nextPage = 0) => {
-    if (isLoading) return;
+    if (loadingRef.current && nextPage > 0) return;
+    const requestId = ++loadRequestRef.current;
+    loadingRef.current = true;
     setIsLoading(true);
     setError('');
 
     try {
-      const nextSamples = await fetchCaulenhauSamples(caulenhauClient, activeCategory, nextPage);
-      setSamples((current) => nextPage === 0 ? nextSamples : [...current, ...nextSamples]);
+      const nextSamples = await fetchCaulenhauSamples(
+        caulenhauClient,
+        activeCategory,
+        nextPage,
+        PROMPT_LIBRARY_PAGE_SIZE,
+        { query: searchQuery, sortMode },
+      );
+      const samplesWithStats = await enrichUsageStats(nextSamples);
+      if (requestId !== loadRequestRef.current) return;
+      setSamples((current) => {
+        const merged = nextPage === 0 ? samplesWithStats : [...current, ...samplesWithStats];
+        return sortSamplesForMode(merged, sortMode);
+      });
       setPage(nextPage);
       setHasMore(nextSamples.length === PROMPT_LIBRARY_PAGE_SIZE);
     } catch (loadError: any) {
-      const message = loadError?.message || 'Không thể tải Prompt mẫu.';
+      const message = loadError?.message || 'Không thể tải prompt mẫu.';
       setError(message);
       if (nextPage === 0) setSamples([]);
       notify(message, 'error');
     } finally {
-      setIsLoading(false);
+      if (requestId === loadRequestRef.current) {
+        loadingRef.current = false;
+        setIsLoading(false);
+      }
     }
-  }, [activeCategory, isLoading, notify]);
+  }, [activeCategory, notify, searchQuery, sortMode]);
 
   useEffect(() => {
+    setSamples([]);
+    setHasMore(true);
     void loadSamples(0);
-  }, [activeCategoryId]);
+  }, [activeCategoryId, searchQuery, sortMode]);
 
   useEffect(() => {
     const target = loadMoreRef.current;
@@ -68,11 +126,24 @@ export const PromptLibrary: React.FC<PromptLibraryProps> = ({ onUsePrompt }) => 
     return () => observer.disconnect();
   }, [hasMore, isLoading, loadSamples, page, samples.length]);
 
-  const handleUsePrompt = (sample: CaulenhauSamplePrompt) => {
+  const handleUsePrompt = async (sample: CaulenhauSamplePrompt) => {
     const prompt = sample.prompt.trim();
     if (!prompt) {
       notify('Prompt mẫu này hiện chưa có nội dung.', 'warning');
       return;
+    }
+
+    const nextUseCount = await trackPromptLibrarySampleUse(supabase, sample);
+    if (typeof nextUseCount === 'number') {
+      setSamples((current) => sortSamplesForMode(current.map((item) => {
+        if (item.id !== sample.id) return item;
+        const externalUseCount = item.external_use_count || 0;
+        return {
+          ...item,
+          local_use_count: nextUseCount,
+          total_use_count: externalUseCount + nextUseCount,
+        };
+      }), sortMode));
     }
 
     stashPromptForGenerator(prompt);
@@ -92,7 +163,7 @@ export const PromptLibrary: React.FC<PromptLibraryProps> = ({ onUsePrompt }) => 
             </div>
             <h1 className="font-game text-3xl font-black leading-tight text-white md:text-5xl">Khám phá prompt mẫu</h1>
             <p className="mt-3 max-w-xl text-sm leading-relaxed text-slate-300">
-              Chọn ảnh bạn thích, bấm sử dụng và AUDITION AI sẽ mở trang tạo ảnh với prompt đã nhập sẵn.
+              Tìm theo chủ đề bằng tiếng Việt hoặc tiếng Anh, chọn ảnh bạn thích và AUDITION AI sẽ mở trang tạo ảnh với prompt đã nhập sẵn.
             </p>
           </div>
           <button
@@ -102,6 +173,50 @@ export const PromptLibrary: React.FC<PromptLibraryProps> = ({ onUsePrompt }) => 
             <Icons.RefreshCw className="h-4 w-4" />
             Làm mới
           </button>
+        </div>
+      </section>
+
+      <section className="grid gap-3 rounded-2xl border border-white/10 bg-black/30 p-3 lg:grid-cols-[1fr_auto]">
+        <label className="relative block">
+          <Icons.Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
+          <input
+            value={searchInput}
+            onChange={(event) => setSearchInput(event.target.value)}
+            placeholder="Tìm mẫu theo chủ đề: Sinh nhật, Tình yêu, birthday, romantic..."
+            className="h-12 w-full rounded-2xl border border-white/10 bg-white/8 pl-12 pr-11 text-sm font-bold text-white outline-none transition focus:border-audi-pink/70 focus:bg-white/12"
+          />
+          {searchInput && (
+            <button
+              type="button"
+              onClick={() => setSearchInput('')}
+              className="absolute right-3 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-slate-300 hover:bg-white/20 hover:text-white"
+              aria-label="Xóa tìm kiếm"
+            >
+              <Icons.X className="h-4 w-4" />
+            </button>
+          )}
+        </label>
+        <div className="flex rounded-2xl border border-white/10 bg-white/5 p-1">
+          {([
+            ['newest', 'Mới nhất', Icons.Clock],
+            ['popular', 'Dùng nhiều', Icons.Flame],
+          ] as const).map(([mode, label, Icon]) => {
+            const isActive = sortMode === mode;
+            return (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setSortMode(mode)}
+                className={`inline-flex h-10 items-center justify-center gap-2 rounded-xl px-4 text-xs font-black transition ${isActive ? 'bg-white text-black' : 'text-slate-300 hover:bg-white/10 hover:text-white'}`}
+              >
+                <Icon className="h-4 w-4" />
+                {label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="text-xs font-bold text-slate-500 lg:col-span-2">
+          AI semantic search tự mở rộng từ khóa song ngữ, ví dụ “sinh nhật” sẽ khớp cả birthday, cake, party và celebration.
         </div>
       </section>
 
@@ -130,28 +245,55 @@ export const PromptLibrary: React.FC<PromptLibraryProps> = ({ onUsePrompt }) => 
       ) : samples.length === 0 && isLoading ? (
         <div className="flex min-h-[360px] items-center justify-center gap-3 text-slate-400">
           <Icons.Loader className="h-8 w-8 animate-spin text-audi-purple" />
-          Đang tải 30 mẫu đầu tiên...
+          Đang tải mẫu phù hợp...
+        </div>
+      ) : samples.length === 0 ? (
+        <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-center">
+          <Icons.Search className="mb-3 h-10 w-10 text-audi-purple" />
+          <p className="text-sm font-bold text-slate-300">Chưa tìm thấy mẫu hợp với “{searchQuery}”.</p>
+          <button onClick={() => setSearchInput('')} className="mt-4 rounded-full bg-white px-4 py-2 text-xs font-black text-black">Xóa tìm kiếm</button>
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
-          {samples.map((sample) => (
-            <article key={sample.id} className="group overflow-hidden rounded-2xl border border-white/10 bg-[#12121a] shadow-xl transition-all hover:-translate-y-1 hover:border-audi-pink/60">
-              <div className="relative aspect-[3/4] bg-white/5">
-                <img src={sample.image_url} alt={sample.category} className="h-full w-full object-cover" loading="lazy" />
-                <div className="absolute left-2 top-2 rounded-full bg-black/65 px-2 py-1 text-[10px] font-black text-white backdrop-blur">{sample.category}</div>
-              </div>
-              <div className="space-y-3 p-3">
-                <p className="line-clamp-3 min-h-[48px] text-xs leading-relaxed text-slate-300">{sample.prompt || 'Prompt mẫu chưa có nội dung.'}</p>
-                <button
-                  onClick={() => handleUsePrompt(sample)}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-audi-pink to-audi-purple px-3 py-2 text-xs font-black text-white shadow-[0_0_18px_rgba(255,0,153,0.25)] transition-transform hover:scale-[1.02]"
-                >
-                  <Icons.Wand className="h-3.5 w-3.5" />
-                  Sử dụng
-                </button>
-              </div>
-            </article>
-          ))}
+          {samples.map((sample) => {
+            const tags = getPromptLibraryTags(sample);
+            return (
+              <article key={sample.id} className="group overflow-hidden rounded-2xl border border-white/10 bg-[#12121a] shadow-xl transition-all hover:-translate-y-1 hover:border-audi-pink/60">
+                <div className="relative aspect-[3/4] bg-white/5">
+                  <img src={sample.image_url} alt={sample.category} className="h-full w-full object-cover" loading="lazy" />
+                  <div className="absolute left-2 top-2 rounded-full bg-black/65 px-2 py-1 text-[10px] font-black text-white backdrop-blur">{sample.category}</div>
+                  <div className="absolute right-2 top-2 flex flex-col items-end gap-1">
+                    {tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className={`rounded-full px-2 py-1 text-[10px] font-black shadow-lg ${tag === 'HOT' ? 'bg-gradient-to-r from-audi-pink to-audi-purple text-white' : 'bg-audi-yellow text-black'}`}
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full bg-black/70 px-2 py-1 text-[10px] font-black text-white backdrop-blur">
+                    <Icons.Eye className="h-3 w-3 text-audi-yellow" />
+                    {formatUseCount(sample.total_use_count)}
+                  </div>
+                </div>
+                <div className="space-y-3 p-3">
+                  <p className="line-clamp-3 min-h-[48px] text-xs leading-relaxed text-slate-300">{sample.prompt || 'Prompt mẫu chưa có nội dung.'}</p>
+                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-500">
+                    <span>{formatUseCount(sample.total_use_count)} lượt dùng</span>
+                    {sample.searchScore ? <span>Khớp AI: {sample.searchScore}</span> : <span>{sortMode === 'popular' ? 'Xếp theo lượt dùng' : 'Mới nhất'}</span>}
+                  </div>
+                  <button
+                    onClick={() => void handleUsePrompt(sample)}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-audi-pink to-audi-purple px-3 py-2 text-xs font-black text-white shadow-[0_0_18px_rgba(255,0,153,0.25)] transition-transform hover:scale-[1.02]"
+                  >
+                    <Icons.Wand className="h-3.5 w-3.5" />
+                    Sử dụng
+                  </button>
+                </div>
+              </article>
+            );
+          })}
         </div>
       )}
 

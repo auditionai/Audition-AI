@@ -3,8 +3,10 @@ export const PROMPT_LIBRARY_PENDING_PROMPT_KEY = 'auditionai:pending-caulenhau-p
 export const PROMPT_LIBRARY_APPLY_EVENT = 'auditionai:apply-caulenhau-prompt';
 const PROMPT_LIBRARY_CACHE_PREFIX = 'auditionai:caulenhau-samples';
 const PROMPT_LIBRARY_CACHE_TTL_MS = 5 * 60 * 1000;
+const PROMPT_LIBRARY_NEW_WINDOW_MS = 48 * 60 * 60 * 1000;
 
 export type CaulenhauSampleCategoryId = 'single' | 'couple' | 'group3' | 'group4' | 'group5';
+export type PromptLibrarySortMode = 'newest' | 'popular';
 
 export interface CaulenhauSampleCategory {
   id: CaulenhauSampleCategoryId;
@@ -19,6 +21,16 @@ export interface CaulenhauSamplePrompt {
   image_url: string;
   prompt: string;
   category: string;
+  created_at?: string;
+  external_use_count?: number;
+  local_use_count?: number;
+  total_use_count?: number;
+  searchScore?: number;
+}
+
+export interface FetchCaulenhauSamplesOptions {
+  query?: string;
+  sortMode?: PromptLibrarySortMode;
 }
 
 export const CAULENHAU_SAMPLE_CATEGORIES: CaulenhauSampleCategory[] = [
@@ -59,17 +71,103 @@ export const CAULENHAU_SAMPLE_CATEGORIES: CaulenhauSampleCategory[] = [
   },
 ];
 
+const SEMANTIC_SEARCH_TERMS: Record<string, string[]> = {
+  'sinh nhat': ['sinh nhat', 'birthday', 'birth day', 'party', 'cake', 'celebration', 'balloon', 'gift', 'happy birthday'],
+  'tinh yeu': ['tinh yeu', 'love', 'romantic', 'romance', 'couple', 'valentine', 'heart', 'lover'],
+  'dam cuoi': ['dam cuoi', 'wedding', 'bride', 'groom', 'bridal', 'marriage', 'engagement'],
+  'giang sinh': ['giang sinh', 'christmas', 'xmas', 'santa', 'snow', 'winter', 'holiday'],
+  'tet': ['tet', 'new year', 'lunar new year', 'vietnamese new year', 'spring', 'mai vang', 'dao hoa'],
+  'trung thu': ['trung thu', 'mid autumn', 'moon festival', 'lantern', 'mooncake'],
+  'mua he': ['mua he', 'summer', 'beach', 'sea', 'sunset', 'vacation'],
+  'mua dong': ['mua dong', 'winter', 'snow', 'cold', 'ice', 'coat'],
+  'bien': ['bien', 'beach', 'sea', 'ocean', 'waves', 'coast'],
+  'hoc duong': ['hoc duong', 'school', 'student', 'classroom', 'uniform', 'campus'],
+  'cong chua': ['cong chua', 'princess', 'royal', 'castle', 'fairy tale'],
+  'co dau': ['co dau', 'bride', 'bridal', 'wedding dress'],
+  'cyberpunk': ['cyberpunk', 'neon', 'futuristic', 'sci fi', 'sci-fi', 'city night'],
+  'gothic': ['gothic', 'dark', 'vampire', 'black dress', 'castle'],
+  'co trang': ['co trang', 'ancient', 'hanfu', 'wuxia', 'traditional', 'historical'],
+  'han quoc': ['han quoc', 'korean', 'kpop', 'idol', 'seoul'],
+  'nhat ban': ['nhat ban', 'japanese', 'kimono', 'anime', 'tokyo'],
+  'ca phe': ['ca phe', 'coffee', 'cafe', 'latte'],
+  'xe': ['xe', 'car', 'supercar', 'motorbike', 'vehicle'],
+};
+
+const removeVietnameseTone = (value: string) => value
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .replace(/[đĐ]/g, 'd');
+
+export const normalizePromptSearchText = (value: string) => removeVietnameseTone(value || '')
+  .toLowerCase()
+  .replace(/[^a-z0-9\s-]/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+export const expandPromptSearchTerms = (query: string) => {
+  const normalized = normalizePromptSearchText(query);
+  if (!normalized) return [];
+
+  const terms = new Set<string>();
+  normalized.split(' ').filter((term) => term.length >= 2).forEach((term) => terms.add(term));
+  terms.add(normalized);
+
+  Object.entries(SEMANTIC_SEARCH_TERMS).forEach(([topic, synonyms]) => {
+    const normalizedSynonyms = synonyms.map(normalizePromptSearchText);
+    const matchesTopic = normalized.includes(topic) || topic.includes(normalized);
+    const matchesSynonym = normalizedSynonyms.some((term) => normalized.includes(term) || term.includes(normalized));
+    if (matchesTopic || matchesSynonym) {
+      terms.add(topic);
+      normalizedSynonyms.forEach((term) => terms.add(term));
+    }
+  });
+
+  return Array.from(terms).filter(Boolean);
+};
+
+const scorePromptSample = (sample: CaulenhauSamplePrompt, query: string) => {
+  const terms = expandPromptSearchTerms(query);
+  if (terms.length === 0) return 1;
+
+  const prompt = normalizePromptSearchText(`${sample.prompt} ${sample.category}`);
+  const directQuery = normalizePromptSearchText(query);
+  let score = prompt.includes(directQuery) ? 20 : 0;
+
+  terms.forEach((term) => {
+    if (prompt.includes(term)) score += term.includes(' ') ? 8 : 4;
+  });
+
+  return score;
+};
+
+const buildSampleQuery = (client: any, category: CaulenhauSampleCategory, selectColumns: string) => client
+  .from('images')
+  .select(selectColumns)
+  .eq('image_categories.category_id', category.categoryId);
+
+const mapCaulenhauSample = (item: any, category: CaulenhauSampleCategory): CaulenhauSamplePrompt => ({
+  id: String(item.id),
+  image_url: item.image_url,
+  prompt: item.prompt || '',
+  category: category.label,
+  created_at: item.created_at || undefined,
+  external_use_count: Number(item.use_count || item.usage_count || item.click_count || 0) || 0,
+});
+
 export const fetchCaulenhauSamples = async (
   client: any,
   category: CaulenhauSampleCategory,
   page: number,
   pageSize = PROMPT_LIBRARY_PAGE_SIZE,
+  options: FetchCaulenhauSamplesOptions = {},
 ): Promise<CaulenhauSamplePrompt[]> => {
   if (!client) {
     throw new Error('Chưa kết nối được dữ liệu CauLenhAu.');
   }
 
-  const cacheKey = `${PROMPT_LIBRARY_CACHE_PREFIX}:${category.id}:${page}:${pageSize}`;
+  const normalizedQuery = normalizePromptSearchText(options.query || '');
+  const sortMode = options.sortMode || 'newest';
+  const cacheKey = `${PROMPT_LIBRARY_CACHE_PREFIX}:${category.id}:${page}:${pageSize}:${sortMode}:${normalizedQuery}`;
   if (typeof window !== 'undefined') {
     try {
       const cached = window.sessionStorage.getItem(cacheKey);
@@ -84,25 +182,40 @@ export const fetchCaulenhauSamples = async (
     }
   }
 
-  const from = page * pageSize;
-  const to = from + pageSize - 1;
-  const { data, error } = await client
-    .from('images')
-    .select('id, image_url, prompt, image_categories!inner(category_id)')
-    .eq('image_categories.category_id', category.categoryId)
-    .order('created_at', { ascending: false })
-    .range(from, to);
+  const sourcePageSize = normalizedQuery || sortMode === 'popular' ? pageSize * 6 : pageSize;
+  const from = page * sourcePageSize;
+  const to = from + sourcePageSize - 1;
 
-  if (error) {
-    throw error;
+  const selectVariants = [
+    'id, image_url, prompt, created_at, use_count, image_categories!inner(category_id)',
+    'id, image_url, prompt, created_at, usage_count, image_categories!inner(category_id)',
+    'id, image_url, prompt, created_at, click_count, image_categories!inner(category_id)',
+    'id, image_url, prompt, created_at, image_categories!inner(category_id)',
+    'id, image_url, prompt, image_categories!inner(category_id)',
+  ];
+
+  let response: any = null;
+  for (const selectColumns of selectVariants) {
+    response = await buildSampleQuery(client, category, selectColumns)
+      .order('created_at', { ascending: false })
+      .range(from, to);
+    if (!response.error) break;
   }
 
-  const samples = (data || []).map((item: any) => ({
-    id: String(item.id),
-    image_url: item.image_url,
-    prompt: item.prompt || '',
-    category: category.label,
-  }));
+  if (response.error) {
+    throw response.error;
+  }
+
+  let samples: CaulenhauSamplePrompt[] = (response.data || []).map((item: any) => mapCaulenhauSample(item, category));
+
+  if (normalizedQuery) {
+    samples = samples
+      .map((sample: CaulenhauSamplePrompt) => ({ ...sample, searchScore: scorePromptSample(sample, normalizedQuery) }))
+      .filter((sample: CaulenhauSamplePrompt) => (sample.searchScore || 0) > 0)
+      .sort((a: CaulenhauSamplePrompt, b: CaulenhauSamplePrompt) => (b.searchScore || 0) - (a.searchScore || 0));
+  }
+
+  samples = samples.slice(0, pageSize);
 
   if (typeof window !== 'undefined') {
     try {
@@ -113,6 +226,51 @@ export const fetchCaulenhauSamples = async (
   }
 
   return samples;
+};
+
+export const fetchPromptLibraryUsageStats = async (client: any, sampleIds: string[]): Promise<Map<string, number>> => {
+  const uniqueIds = Array.from(new Set(sampleIds.filter(Boolean)));
+  if (!client || uniqueIds.length === 0) return new Map<string, number>();
+
+  const { data, error } = await client
+    .from('prompt_library_sample_stats')
+    .select('sample_id, use_count')
+    .eq('sample_source', 'caulenhau')
+    .in('sample_id', uniqueIds);
+
+  if (error) {
+    console.warn('[PromptLibrary] Could not load local usage stats:', error.message || error);
+    return new Map<string, number>();
+  }
+
+  return new Map<string, number>((data || []).map((row: any) => [String(row.sample_id), Number(row.use_count || 0)]));
+};
+
+export const trackPromptLibrarySampleUse = async (client: any, sample: CaulenhauSamplePrompt) => {
+  if (!client) return null;
+
+  const { data, error } = await client.rpc('track_prompt_library_sample_use', {
+    p_sample_source: 'caulenhau',
+    p_sample_id: sample.id,
+    p_sample_category: sample.category,
+    p_sample_prompt: sample.prompt || '',
+    p_sample_image_url: sample.image_url || '',
+  });
+
+  if (error) {
+    console.warn('[PromptLibrary] Could not track sample use:', error.message || error);
+    return null;
+  }
+
+  return Number(data || 0);
+};
+
+export const getPromptLibraryTags = (sample: CaulenhauSamplePrompt) => {
+  const tags: Array<'HOT' | 'NEW'> = [];
+  const createdAt = sample.created_at ? new Date(sample.created_at).getTime() : 0;
+  if (createdAt && Date.now() - createdAt <= PROMPT_LIBRARY_NEW_WINDOW_MS) tags.push('NEW');
+  if ((sample.total_use_count || 0) >= 10) tags.push('HOT');
+  return tags;
 };
 
 export const stashPromptForGenerator = (prompt: string) => {

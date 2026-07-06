@@ -5,7 +5,7 @@ const PROMPT_LIBRARY_CACHE_PREFIX = 'auditionai:caulenhau-samples';
 const PROMPT_LIBRARY_CACHE_TTL_MS = 5 * 60 * 1000;
 const PROMPT_LIBRARY_NEW_WINDOW_MS = 48 * 60 * 60 * 1000;
 
-export type CaulenhauSampleCategoryId = 'single' | 'couple' | 'group3' | 'group4' | 'group5';
+export type CaulenhauSampleCategoryId = 'all' | 'single' | 'couple' | 'group3' | 'group4' | 'group5';
 export type PromptLibrarySortMode = 'newest' | 'popular';
 
 export interface CaulenhauSampleCategory {
@@ -13,7 +13,7 @@ export interface CaulenhauSampleCategory {
   label: string;
   shortLabel: string;
   description: string;
-  categoryId: number;
+  categoryId: number | null;
 }
 
 export interface CaulenhauSamplePrompt {
@@ -34,6 +34,13 @@ export interface FetchCaulenhauSamplesOptions {
 }
 
 export const CAULENHAU_SAMPLE_CATEGORIES: CaulenhauSampleCategory[] = [
+  {
+    id: 'all',
+    label: 'Tất cả mẫu',
+    shortLabel: 'Tất cả',
+    description: 'Tìm trong toàn bộ prompt mẫu từ CauLenhAu.',
+    categoryId: null,
+  },
   {
     id: 'single',
     label: 'Ảnh đơn',
@@ -109,7 +116,6 @@ export const expandPromptSearchTerms = (query: string) => {
   if (!normalized) return [];
 
   const terms = new Set<string>();
-  normalized.split(' ').filter((term) => term.length >= 2).forEach((term) => terms.add(term));
   terms.add(normalized);
 
   Object.entries(SEMANTIC_SEARCH_TERMS).forEach(([topic, synonyms]) => {
@@ -125,25 +131,51 @@ export const expandPromptSearchTerms = (query: string) => {
   return Array.from(terms).filter(Boolean);
 };
 
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const promptHasTerm = (prompt: string, term: string) => {
+  if (!term) return false;
+  if (term.includes(' ')) return prompt.includes(term);
+  return new RegExp(`(^|\\s)${escapeRegExp(term)}($|\\s)`).test(prompt);
+};
+
+const findMatchedSearchTopic = (query: string) => {
+  const normalized = normalizePromptSearchText(query);
+  if (!normalized) return null;
+
+  return Object.entries(SEMANTIC_SEARCH_TERMS).find(([topic, synonyms]) => {
+    const normalizedSynonyms = synonyms.map(normalizePromptSearchText);
+    return normalized === topic
+      || normalized.includes(topic)
+      || normalizedSynonyms.some((term) => normalized === term || normalized.includes(term));
+  }) || null;
+};
+
 const scorePromptSample = (sample: CaulenhauSamplePrompt, query: string) => {
-  const terms = expandPromptSearchTerms(query);
+  const matchedTopic = findMatchedSearchTopic(query);
+  const terms = matchedTopic
+    ? [matchedTopic[0], ...matchedTopic[1].map(normalizePromptSearchText)]
+    : expandPromptSearchTerms(query);
   if (terms.length === 0) return 1;
 
   const prompt = normalizePromptSearchText(`${sample.prompt} ${sample.category}`);
   const directQuery = normalizePromptSearchText(query);
-  let score = prompt.includes(directQuery) ? 20 : 0;
+  let score = promptHasTerm(prompt, directQuery) ? 30 : 0;
 
   terms.forEach((term) => {
-    if (prompt.includes(term)) score += term.includes(' ') ? 8 : 4;
+    if (promptHasTerm(prompt, term)) score += term.includes(' ') ? 18 : 10;
   });
 
+  if (matchedTopic && score === 0) return 0;
   return score;
 };
 
-const buildSampleQuery = (client: any, category: CaulenhauSampleCategory, selectColumns: string) => client
-  .from('images')
-  .select(selectColumns)
-  .eq('image_categories.category_id', category.categoryId);
+const buildSampleQuery = (client: any, category: CaulenhauSampleCategory, selectColumns: string) => {
+  const query = client.from('images').select(selectColumns);
+  return category.categoryId === null
+    ? query
+    : query.eq('image_categories.category_id', category.categoryId);
+};
 
 const mapCaulenhauSample = (item: any, category: CaulenhauSampleCategory): CaulenhauSamplePrompt => ({
   id: String(item.id),
@@ -182,16 +214,17 @@ export const fetchCaulenhauSamples = async (
     }
   }
 
-  const sourcePageSize = normalizedQuery || sortMode === 'popular' ? pageSize * 6 : pageSize;
+  const sourcePageSize = normalizedQuery ? pageSize * 20 : sortMode === 'popular' ? pageSize * 8 : pageSize;
   const from = page * sourcePageSize;
   const to = from + sourcePageSize - 1;
 
+  const categoryJoin = category.categoryId === null ? '' : ', image_categories!inner(category_id)';
   const selectVariants = [
-    'id, image_url, prompt, created_at, use_count, image_categories!inner(category_id)',
-    'id, image_url, prompt, created_at, usage_count, image_categories!inner(category_id)',
-    'id, image_url, prompt, created_at, click_count, image_categories!inner(category_id)',
-    'id, image_url, prompt, created_at, image_categories!inner(category_id)',
-    'id, image_url, prompt, image_categories!inner(category_id)',
+    `id, image_url, prompt, created_at, use_count${categoryJoin}`,
+    `id, image_url, prompt, created_at, usage_count${categoryJoin}`,
+    `id, image_url, prompt, created_at, click_count${categoryJoin}`,
+    `id, image_url, prompt, created_at${categoryJoin}`,
+    `id, image_url, prompt${categoryJoin}`,
   ];
 
   let response: any = null;

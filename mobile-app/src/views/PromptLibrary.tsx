@@ -9,24 +9,29 @@ import {
   CaulenhauSamplePrompt,
   PROMPT_LIBRARY_PAGE_SIZE,
   PromptLibrarySortMode,
+  applyPromptLibraryLearningScores,
   fetchCaulenhauSamples,
+  fetchPromptLibrarySearchLearningStats,
   fetchPromptLibraryUsageStats,
   getPromptLibraryTags,
   stashPromptForGenerator,
   trackPromptLibrarySampleUse,
 } from '../../../shared/caulenhauSamples';
 
-const enrichUsageStats = async (nextSamples: CaulenhauSamplePrompt[]) => {
+const enrichUsageStats = async (nextSamples: CaulenhauSamplePrompt[], searchQuery: string) => {
   const localStats = await fetchPromptLibraryUsageStats(supabase, nextSamples.map((sample) => sample.id));
-  return nextSamples.map((sample) => {
-    const localUseCount = localStats.get(sample.id) || 0;
+  const samplesWithStats = nextSamples.map((sample) => {
+    const trackedUseCount = localStats.get(sample.id) || 0;
     const externalUseCount = sample.external_use_count || 0;
+    const totalUseCount = Math.max(trackedUseCount, externalUseCount);
     return {
       ...sample,
-      local_use_count: localUseCount,
-      total_use_count: localUseCount + externalUseCount,
+      local_use_count: Math.max(totalUseCount - externalUseCount, 0),
+      total_use_count: totalUseCount,
     };
   });
+  const learningStats = await fetchPromptLibrarySearchLearningStats(supabase, searchQuery, samplesWithStats.map((sample) => sample.id));
+  return applyPromptLibraryLearningScores(samplesWithStats, learningStats, searchQuery);
 };
 
 const sortSamplesForMode = (items: CaulenhauSamplePrompt[], sortMode: PromptLibrarySortMode) => {
@@ -83,7 +88,7 @@ export function PromptLibrary() {
         PROMPT_LIBRARY_PAGE_SIZE,
         { query: searchQuery, sortMode },
       );
-      const samplesWithStats = await enrichUsageStats(nextSamples);
+      const samplesWithStats = await enrichUsageStats(nextSamples, searchQuery);
       if (requestId !== loadRequestRef.current) return;
       setSamples((current) => {
         const merged = nextPage === 0 ? samplesWithStats : [...current, ...samplesWithStats];
@@ -131,15 +136,16 @@ export function PromptLibrary() {
       return;
     }
 
-    const nextUseCount = await trackPromptLibrarySampleUse(supabase, sample);
+    const nextUseCount = await trackPromptLibrarySampleUse(supabase, sample, searchQuery);
     if (typeof nextUseCount === 'number') {
       setSamples((current) => sortSamplesForMode(current.map((item) => {
         if (item.id !== sample.id) return item;
         const externalUseCount = item.external_use_count || 0;
+        const totalUseCount = Math.max(nextUseCount, externalUseCount);
         return {
           ...item,
-          local_use_count: nextUseCount,
-          total_use_count: externalUseCount + nextUseCount,
+          local_use_count: Math.max(totalUseCount - externalUseCount, 0),
+          total_use_count: totalUseCount,
         };
       }), sortMode));
     }
@@ -285,7 +291,7 @@ export function PromptLibrary() {
                     <p className="line-clamp-3 min-h-[45px] text-[11px] leading-relaxed text-gray-600 dark:text-zinc-300">{sample.prompt || 'Prompt mẫu chưa có nội dung.'}</p>
                     <div className="mt-2 flex items-center justify-between text-[10px] font-black text-gray-400 dark:text-zinc-500">
                       <span>{formatUseCount(sample.total_use_count)} lượt dùng</span>
-                      {sample.searchScore ? <span>Khớp {sample.searchScore}</span> : null}
+                      {sample.searchScore ? <span>{sample.searchLearningScore ? `AI học ${sample.searchLearningScore}` : `Khớp ${sample.searchScore}`}</span> : null}
                     </div>
                     <div className="mt-3 flex items-center justify-center gap-1.5 rounded-2xl bg-gradient-to-r from-fuchsia-600 to-violet-600 px-3 py-2 text-[11px] font-black text-white">
                       <Wand2 className="h-3.5 w-3.5" />

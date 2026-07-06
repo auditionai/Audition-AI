@@ -45,7 +45,7 @@ const formatUseCount = (value = 0) => {
 
 export const PromptLibrary: React.FC<PromptLibraryProps> = ({ onUsePrompt }) => {
   const { notify } = useNotification();
-  const [activeCategoryId, setActiveCategoryId] = useState<CaulenhauSampleCategoryId>('single');
+  const [activeCategoryId, setActiveCategoryId] = useState<CaulenhauSampleCategoryId>('all');
   const [samples, setSamples] = useState<CaulenhauSamplePrompt[]>([]);
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
@@ -176,47 +176,63 @@ export const PromptLibrary: React.FC<PromptLibraryProps> = ({ onUsePrompt }) => 
         </div>
       </section>
 
-      <section className="grid gap-3 rounded-2xl border border-white/10 bg-black/30 p-3 lg:grid-cols-[1fr_auto]">
-        <label className="relative block">
-          <Icons.Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
-          <input
-            value={searchInput}
-            onChange={(event) => setSearchInput(event.target.value)}
-            placeholder="Tìm mẫu theo chủ đề: Sinh nhật, Tình yêu, birthday, romantic..."
-            className="h-12 w-full rounded-2xl border border-white/10 bg-white/8 pl-12 pr-11 text-sm font-bold text-white outline-none transition focus:border-audi-pink/70 focus:bg-white/12"
-          />
-          {searchInput && (
-            <button
-              type="button"
-              onClick={() => setSearchInput('')}
-              className="absolute right-3 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-slate-300 hover:bg-white/20 hover:text-white"
-              aria-label="Xóa tìm kiếm"
-            >
-              <Icons.X className="h-4 w-4" />
-            </button>
-          )}
-        </label>
-        <div className="flex rounded-2xl border border-white/10 bg-white/5 p-1">
-          {([
-            ['newest', 'Mới nhất', Icons.Clock],
-            ['popular', 'Dùng nhiều', Icons.Flame],
-          ] as const).map(([mode, label, Icon]) => {
-            const isActive = sortMode === mode;
-            return (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => setSortMode(mode)}
-                className={`inline-flex h-10 items-center justify-center gap-2 rounded-xl px-4 text-xs font-black transition ${isActive ? 'bg-white text-black' : 'text-slate-300 hover:bg-white/10 hover:text-white'}`}
-              >
-                <Icon className="h-4 w-4" />
-                {label}
-              </button>
-            );
-          })}
+      <section className="rounded-2xl border border-white/10 bg-[#080912]/90 p-4 shadow-[0_0_0_1px_rgba(255,255,255,0.03)]">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+          <label className="group relative block flex-1">
+            <span className="mb-2 block text-xs font-black uppercase tracking-[0.14em] text-slate-400">Tìm prompt mẫu</span>
+            <div className="relative">
+              <Icons.Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-audi-pink" />
+              <input
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)}
+                placeholder="Nhập chủ đề: sinh nhật, tình yêu, birthday, romantic..."
+                className="h-14 w-full rounded-2xl border border-white/15 bg-[#151525] pl-12 pr-12 text-base font-extrabold text-white outline-none selection:bg-audi-pink selection:text-white placeholder:text-slate-500 transition focus:border-audi-pink focus:bg-[#19192b] focus:shadow-[0_0_0_3px_rgba(255,0,153,0.18)]"
+              />
+              {searchInput && (
+                <button
+                  type="button"
+                  onClick={() => setSearchInput('')}
+                  className="absolute right-3 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-slate-300 hover:bg-white/20 hover:text-white"
+                  aria-label="Xóa tìm kiếm"
+                >
+                  <Icons.X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          </label>
+          <div className="flex shrink-0 rounded-2xl border border-white/10 bg-white/5 p-1 xl:mt-7">
+            {([
+              ['newest', 'Mới nhất', Icons.Clock],
+              ['popular', 'Dùng nhiều', Icons.Flame],
+            ] as const).map(([mode, label, Icon]) => {
+              const isActive = sortMode === mode;
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setSortMode(mode)}
+                  className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl px-4 text-xs font-black transition ${isActive ? 'bg-white text-black shadow-lg' : 'text-slate-300 hover:bg-white/10 hover:text-white'}`}
+                >
+                  <Icon className="h-4 w-4" />
+                  {label}
+                </button>
+              );
+            })}
+          </div>
         </div>
-        <div className="text-xs font-bold text-slate-500 lg:col-span-2">
-          AI semantic search tự mở rộng từ khóa song ngữ, ví dụ “sinh nhật” sẽ khớp cả birthday, cake, party và celebration.
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-bold text-slate-500">Gợi ý:</span>
+          {['Sinh nhật', 'Tình yêu', 'Đám cưới', 'Giáng sinh', 'Cyberpunk'].map((keyword) => (
+            <button
+              key={keyword}
+              type="button"
+              onClick={() => setSearchInput(keyword)}
+              className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-black text-slate-300 transition hover:border-audi-pink/50 hover:bg-audi-pink/15 hover:text-white"
+            >
+              {keyword}
+            </button>
+          ))}
+          <span className="text-xs font-bold text-slate-600">Tự hiểu song ngữ: “sinh nhật” khớp birthday, cake, party.</span>
         </div>
       </section>
 

@@ -1,56 +1,114 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, Flame, Loader, RefreshCw, Wand2 } from 'lucide-react';
+import { AlertTriangle, Clock, Eye, Flame, Loader, RefreshCw, Search, Wand2, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../components/NotificationSystem';
-import { caulenhauClient } from '../services/supabaseClient';
+import { caulenhauClient, supabase } from '../services/supabaseClient';
 import {
   CAULENHAU_SAMPLE_CATEGORIES,
   CaulenhauSampleCategoryId,
   CaulenhauSamplePrompt,
   PROMPT_LIBRARY_PAGE_SIZE,
+  PromptLibrarySortMode,
   fetchCaulenhauSamples,
+  fetchPromptLibraryUsageStats,
+  getPromptLibraryTags,
   stashPromptForGenerator,
+  trackPromptLibrarySampleUse,
 } from '../../../shared/caulenhauSamples';
+
+const enrichUsageStats = async (nextSamples: CaulenhauSamplePrompt[]) => {
+  const localStats = await fetchPromptLibraryUsageStats(supabase, nextSamples.map((sample) => sample.id));
+  return nextSamples.map((sample) => {
+    const localUseCount = localStats.get(sample.id) || 0;
+    const externalUseCount = sample.external_use_count || 0;
+    return {
+      ...sample,
+      local_use_count: localUseCount,
+      total_use_count: localUseCount + externalUseCount,
+    };
+  });
+};
+
+const sortSamplesForMode = (items: CaulenhauSamplePrompt[], sortMode: PromptLibrarySortMode) => {
+  if (sortMode !== 'popular') return items;
+  return [...items].sort((a, b) => (b.total_use_count || 0) - (a.total_use_count || 0));
+};
+
+const formatUseCount = (value = 0) => {
+  if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
+  if (value >= 1000) return `${(value / 1000).toFixed(1)}K`;
+  return String(value);
+};
 
 export function PromptLibrary() {
   const navigate = useNavigate();
   const { notify } = useNotification();
-  const [activeCategoryId, setActiveCategoryId] = useState<CaulenhauSampleCategoryId>('single');
+  const [activeCategoryId, setActiveCategoryId] = useState<CaulenhauSampleCategoryId>('all');
   const [samples, setSamples] = useState<CaulenhauSamplePrompt[]>([]);
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortMode, setSortMode] = useState<PromptLibrarySortMode>('newest');
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const loadingRef = useRef(false);
+  const loadRequestRef = useRef(0);
 
   const activeCategory = useMemo(
     () => CAULENHAU_SAMPLE_CATEGORIES.find((category) => category.id === activeCategoryId) || CAULENHAU_SAMPLE_CATEGORIES[0],
     [activeCategoryId],
   );
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setSearchQuery(searchInput.trim());
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [searchInput]);
+
   const loadSamples = useCallback(async (nextPage = 0) => {
-    if (isLoading) return;
+    if (loadingRef.current && nextPage > 0) return;
+    const requestId = ++loadRequestRef.current;
+    loadingRef.current = true;
     setIsLoading(true);
     setError('');
 
     try {
-      const nextSamples = await fetchCaulenhauSamples(caulenhauClient, activeCategory, nextPage);
-      setSamples((current) => nextPage === 0 ? nextSamples : [...current, ...nextSamples]);
+      const nextSamples = await fetchCaulenhauSamples(
+        caulenhauClient,
+        activeCategory,
+        nextPage,
+        PROMPT_LIBRARY_PAGE_SIZE,
+        { query: searchQuery, sortMode },
+      );
+      const samplesWithStats = await enrichUsageStats(nextSamples);
+      if (requestId !== loadRequestRef.current) return;
+      setSamples((current) => {
+        const merged = nextPage === 0 ? samplesWithStats : [...current, ...samplesWithStats];
+        return sortSamplesForMode(merged, sortMode);
+      });
       setPage(nextPage);
       setHasMore(nextSamples.length === PROMPT_LIBRARY_PAGE_SIZE);
     } catch (loadError: any) {
-      const message = loadError?.message || 'Không thể tải Prompt mẫu.';
+      const message = loadError?.message || 'Không thể tải prompt mẫu.';
       setError(message);
       if (nextPage === 0) setSamples([]);
       notify(message, 'error');
     } finally {
-      setIsLoading(false);
+      if (requestId === loadRequestRef.current) {
+        loadingRef.current = false;
+        setIsLoading(false);
+      }
     }
-  }, [activeCategory, isLoading, notify]);
+  }, [activeCategory, notify, searchQuery, sortMode]);
 
   useEffect(() => {
+    setSamples([]);
+    setHasMore(true);
     void loadSamples(0);
-  }, [activeCategoryId]);
+  }, [activeCategoryId, searchQuery, sortMode]);
 
   useEffect(() => {
     const target = loadMoreRef.current;
@@ -66,11 +124,24 @@ export function PromptLibrary() {
     return () => observer.disconnect();
   }, [hasMore, isLoading, loadSamples, page, samples.length]);
 
-  const handleUsePrompt = (sample: CaulenhauSamplePrompt) => {
+  const handleUsePrompt = async (sample: CaulenhauSamplePrompt) => {
     const prompt = sample.prompt.trim();
     if (!prompt) {
       notify('Prompt mẫu này hiện chưa có nội dung.', 'warning');
       return;
+    }
+
+    const nextUseCount = await trackPromptLibrarySampleUse(supabase, sample);
+    if (typeof nextUseCount === 'number') {
+      setSamples((current) => sortSamplesForMode(current.map((item) => {
+        if (item.id !== sample.id) return item;
+        const externalUseCount = item.external_use_count || 0;
+        return {
+          ...item,
+          local_use_count: nextUseCount,
+          total_use_count: externalUseCount + nextUseCount,
+        };
+      }), sortMode));
     }
 
     stashPromptForGenerator(prompt);
@@ -80,21 +151,57 @@ export function PromptLibrary() {
 
   return (
     <div className="min-h-screen bg-[#FAFAFA] pb-28 dark:bg-[#09090B]">
-      <section className="mx-4 mt-4 overflow-hidden rounded-[32px] bg-gray-950 p-5 text-white shadow-2xl">
+      <section className="mx-4 mt-4 overflow-hidden rounded-[28px] bg-gray-950 p-5 text-white shadow-xl dark:bg-[#18181B]">
         <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-yellow-200">
           <Flame className="h-3.5 w-3.5" />
           Mẫu hot
         </div>
-        <h1 className="text-2xl font-black tracking-tight">Prompt mẫu CauLenhAu</h1>
-        <p className="mt-2 text-sm leading-relaxed text-white/70">Lướt ảnh, chọn mẫu hợp ý rồi bấm sử dụng để mở trang tạo ảnh với prompt đã điền sẵn.</p>
-        <button onClick={() => void loadSamples(0)} className="mt-4 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-black text-gray-950">
-          <RefreshCw className="h-3.5 w-3.5" />
-          Làm mới
-        </button>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-black tracking-tight">Prompt mẫu</h1>
+            <p className="mt-2 text-sm leading-relaxed text-white/70">Tìm chủ đề, chọn mẫu hợp ý rồi mở trang tạo ảnh với prompt đã điền sẵn.</p>
+          </div>
+          <button onClick={() => void loadSamples(0)} className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-gray-950">
+            <RefreshCw className="h-4 w-4" />
+          </button>
+        </div>
       </section>
 
-      <div className="sticky top-[57px] z-20 mt-4 overflow-x-auto border-y border-gray-100 bg-[#FAFAFA]/95 px-4 py-3 backdrop-blur dark:border-zinc-800 dark:bg-[#09090B]/90">
-        <div className="flex gap-2">
+      <section className="sticky top-[57px] z-20 mt-3 border-y border-gray-100 bg-[#FAFAFA]/95 px-4 py-3 backdrop-blur dark:border-zinc-800 dark:bg-[#09090B]/90">
+        <label className="relative block">
+          <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-fuchsia-500" />
+          <input
+            value={searchInput}
+            onChange={(event) => setSearchInput(event.target.value)}
+            placeholder="Tìm: sinh nhật, tình yêu, birthday..."
+            className="h-12 w-full rounded-2xl border border-gray-200 bg-white pl-11 pr-11 text-sm font-extrabold text-gray-950 outline-none placeholder:text-gray-400 focus:border-fuchsia-500 focus:ring-4 focus:ring-fuchsia-500/10 dark:border-zinc-800 dark:bg-[#18181B] dark:text-white dark:placeholder:text-zinc-500"
+          />
+          {searchInput && (
+            <button
+              type="button"
+              onClick={() => setSearchInput('')}
+              className="absolute right-3 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-gray-100 text-gray-500 dark:bg-zinc-800 dark:text-zinc-300"
+              aria-label="Xóa tìm kiếm"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </label>
+
+        <div className="mt-3 flex gap-2 overflow-x-auto no-scrollbar">
+          {['Sinh nhật', 'Tình yêu', 'Đám cưới', 'Giáng sinh'].map((keyword) => (
+            <button
+              key={keyword}
+              type="button"
+              onClick={() => setSearchInput(keyword)}
+              className="shrink-0 rounded-full bg-white px-3 py-1.5 text-xs font-black text-gray-600 shadow-sm dark:bg-zinc-900 dark:text-zinc-300"
+            >
+              {keyword}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-3 flex gap-2 overflow-x-auto no-scrollbar">
           {CAULENHAU_SAMPLE_CATEGORIES.map((category) => {
             const isActive = activeCategoryId === category.id;
             return (
@@ -108,7 +215,27 @@ export function PromptLibrary() {
             );
           })}
         </div>
-      </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-2 rounded-2xl bg-gray-100 p-1 dark:bg-zinc-900">
+          {([
+            ['newest', 'Mới nhất', Clock],
+            ['popular', 'Dùng nhiều', Flame],
+          ] as const).map(([mode, label, Icon]) => {
+            const isActive = sortMode === mode;
+            return (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setSortMode(mode)}
+                className={`flex h-10 items-center justify-center gap-2 rounded-xl text-xs font-black transition ${isActive ? 'bg-white text-gray-950 shadow-sm dark:bg-zinc-700 dark:text-white' : 'text-gray-500 dark:text-zinc-400'}`}
+              >
+                <Icon className="h-4 w-4" />
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </section>
 
       <div className="px-4 py-4">
         {error && samples.length === 0 ? (
@@ -119,31 +246,55 @@ export function PromptLibrary() {
           </div>
         ) : samples.length === 0 && isLoading ? (
           <div className="flex min-h-[360px] items-center justify-center gap-3 text-sm text-gray-500 dark:text-zinc-400">
-            <Loader className="h-6 w-6 animate-spin text-indigo-500" />
-            Đang tải 30 mẫu...
+            <Loader className="h-6 w-6 animate-spin text-fuchsia-500" />
+            Đang tải mẫu phù hợp...
+          </div>
+        ) : samples.length === 0 ? (
+          <div className="flex min-h-[320px] flex-col items-center justify-center rounded-[28px] bg-white p-6 text-center shadow-sm dark:bg-[#18181B]">
+            <Search className="mb-3 h-10 w-10 text-fuchsia-500" />
+            <p className="text-sm font-bold text-gray-500 dark:text-zinc-400">Chưa tìm thấy mẫu hợp với “{searchQuery}”.</p>
+            <button onClick={() => setSearchInput('')} className="mt-4 rounded-full bg-gray-900 px-4 py-2 text-xs font-black text-white dark:bg-white dark:text-black">Xóa tìm kiếm</button>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3">
-            {samples.map((sample) => (
-              <button
-                key={sample.id}
-                type="button"
-                onClick={() => handleUsePrompt(sample)}
-                className="overflow-hidden rounded-[24px] bg-white text-left shadow-sm transition-transform active:scale-[0.98] dark:bg-[#18181B]"
-              >
-                <div className="relative aspect-[3/4] bg-gray-100 dark:bg-zinc-900">
-                  <img src={sample.image_url} alt={sample.category} className="h-full w-full object-cover" loading="lazy" />
-                  <span className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-1 text-[9px] font-black text-white backdrop-blur">{sample.category}</span>
-                </div>
-                <div className="p-3">
-                  <p className="line-clamp-3 min-h-[45px] text-[11px] leading-relaxed text-gray-600 dark:text-zinc-300">{sample.prompt || 'Prompt mẫu chưa có nội dung.'}</p>
-                  <div className="mt-3 flex items-center justify-center gap-1.5 rounded-2xl bg-gradient-to-r from-fuchsia-600 to-violet-600 px-3 py-2 text-[11px] font-black text-white">
-                    <Wand2 className="h-3.5 w-3.5" />
-                    Sử dụng
+            {samples.map((sample) => {
+              const tags = getPromptLibraryTags(sample);
+              return (
+                <button
+                  key={sample.id}
+                  type="button"
+                  onClick={() => void handleUsePrompt(sample)}
+                  className="overflow-hidden rounded-[24px] bg-white text-left shadow-sm transition-transform active:scale-[0.98] dark:bg-[#18181B]"
+                >
+                  <div className="relative aspect-[3/4] bg-gray-100 dark:bg-zinc-900">
+                    <img src={sample.image_url} alt={sample.category} className="h-full w-full object-cover" loading="lazy" />
+                    <span className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-1 text-[9px] font-black text-white backdrop-blur">{sample.category}</span>
+                    <span className="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full bg-black/65 px-2 py-1 text-[9px] font-black text-white backdrop-blur">
+                      <Eye className="h-3 w-3 text-yellow-200" />
+                      {formatUseCount(sample.total_use_count)}
+                    </span>
+                    <span className="absolute right-2 top-2 flex flex-col items-end gap-1">
+                      {tags.map((tag) => (
+                        <span key={tag} className={`rounded-full px-2 py-1 text-[9px] font-black ${tag === 'HOT' ? 'bg-fuchsia-600 text-white' : 'bg-yellow-300 text-gray-950'}`}>
+                          {tag}
+                        </span>
+                      ))}
+                    </span>
                   </div>
-                </div>
-              </button>
-            ))}
+                  <div className="p-3">
+                    <p className="line-clamp-3 min-h-[45px] text-[11px] leading-relaxed text-gray-600 dark:text-zinc-300">{sample.prompt || 'Prompt mẫu chưa có nội dung.'}</p>
+                    <div className="mt-2 flex items-center justify-between text-[10px] font-black text-gray-400 dark:text-zinc-500">
+                      <span>{formatUseCount(sample.total_use_count)} lượt dùng</span>
+                      {sample.searchScore ? <span>Khớp {sample.searchScore}</span> : null}
+                    </div>
+                    <div className="mt-3 flex items-center justify-center gap-1.5 rounded-2xl bg-gradient-to-r from-fuchsia-600 to-violet-600 px-3 py-2 text-[11px] font-black text-white">
+                      <Wand2 className="h-3.5 w-3.5" />
+                      Sử dụng
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         )}
 

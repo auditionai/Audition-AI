@@ -1,6 +1,6 @@
 import type { Handler } from '@netlify/functions';
 import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
-import { isSystemQueueKind } from '../../shared/queueKinds';
+import { isSystemQueueKind, SYSTEM_QUEUE_KINDS } from '../../shared/queueKinds';
 
 const headers = {
   'Content-Type': 'application/json',
@@ -34,6 +34,7 @@ const buildDispatchDiagnostics = async (admin: ReturnType<typeof getServiceRoleC
       .from('generated_images')
       .select('id, user_id, status, asset_type, queue_kind, queue_payload, created_at, updated_at, lease_expires_at')
       .in('status', ['queued', 'processing'])
+      .in('queue_kind', SYSTEM_QUEUE_KINDS)
       .order('created_at', { ascending: true })
       .limit(500),
     admin

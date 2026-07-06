@@ -12,3 +12,5 @@ export const isDedicatedQueueWorkerMode = () => {
     truthyValues.has(disableTrigger)
   );
 };
+
+export const areQueueWorkersDisabled = () => truthyValues.has(normalize(process.env.DISABLE_QUEUE_WORKERS));

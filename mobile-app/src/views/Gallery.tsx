@@ -131,12 +131,12 @@ export const Gallery: React.FC = () => {
     const handleQueueSubmitted = () => {
       if (refreshTimer) clearTimeout(refreshTimer);
       refreshTimer = setTimeout(() => {
-        if (Date.now() - lastRealtimeRefreshAtRef.current < 3500) {
+        if (Date.now() - lastRealtimeRefreshAtRef.current < 7000) {
           return;
         }
         invalidateGalleryCache();
         void loadImages();
-      }, 2500);
+      }, 5000);
     };
 
     window.addEventListener(QUEUE_SUBMITTED_EVENT, handleQueueSubmitted);
@@ -158,7 +158,7 @@ export const Gallery: React.FC = () => {
         if (!isMounted) return;
         invalidateGalleryCache();
         void loadImages();
-      }, 250);
+      }, 1000);
     };
 
     void (async () => {

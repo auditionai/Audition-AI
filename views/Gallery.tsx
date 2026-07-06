@@ -68,14 +68,14 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
           }
 
           refreshTimer = setTimeout(() => {
-              if (Date.now() - lastRealtimeRefreshAtRef.current < 3500) {
+              if (Date.now() - lastRealtimeRefreshAtRef.current < 7000) {
                   return;
               }
 
               loadImages(true).catch((error) => {
                   console.warn('[Gallery] Fallback refresh after queue submit failed', error);
               });
-          }, 2500);
+          }, 5000);
       };
 
       window.addEventListener(QUEUE_SUBMITTED_EVENT, handleQueueSubmitted);
@@ -103,7 +103,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
               loadImages(true).catch((error) => {
                   console.warn('[Gallery] Realtime refresh failed', error);
               });
-          }, 250);
+          }, 1000);
       };
 
       void (async () => {

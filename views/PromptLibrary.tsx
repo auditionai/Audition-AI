@@ -8,7 +8,9 @@ import {
   CaulenhauSamplePrompt,
   PROMPT_LIBRARY_PAGE_SIZE,
   PromptLibrarySortMode,
+  applyPromptLibraryLearningScores,
   fetchCaulenhauSamples,
+  fetchPromptLibrarySearchLearningStats,
   fetchPromptLibraryUsageStats,
   getPromptLibraryTags,
   stashPromptForGenerator,
@@ -19,17 +21,20 @@ interface PromptLibraryProps {
   onUsePrompt: () => void;
 }
 
-const enrichUsageStats = async (nextSamples: CaulenhauSamplePrompt[]) => {
+const enrichUsageStats = async (nextSamples: CaulenhauSamplePrompt[], searchQuery: string) => {
   const localStats = await fetchPromptLibraryUsageStats(supabase, nextSamples.map((sample) => sample.id));
-  return nextSamples.map((sample) => {
-    const localUseCount = localStats.get(sample.id) || 0;
+  const samplesWithStats = nextSamples.map((sample) => {
+    const trackedUseCount = localStats.get(sample.id) || 0;
     const externalUseCount = sample.external_use_count || 0;
+    const totalUseCount = Math.max(trackedUseCount, externalUseCount);
     return {
       ...sample,
-      local_use_count: localUseCount,
-      total_use_count: localUseCount + externalUseCount,
+      local_use_count: Math.max(totalUseCount - externalUseCount, 0),
+      total_use_count: totalUseCount,
     };
   });
+  const learningStats = await fetchPromptLibrarySearchLearningStats(supabase, searchQuery, samplesWithStats.map((sample) => sample.id));
+  return applyPromptLibraryLearningScores(samplesWithStats, learningStats, searchQuery);
 };
 
 const sortSamplesForMode = (items: CaulenhauSamplePrompt[], sortMode: PromptLibrarySortMode) => {
@@ -85,7 +90,7 @@ export const PromptLibrary: React.FC<PromptLibraryProps> = ({ onUsePrompt }) => 
         PROMPT_LIBRARY_PAGE_SIZE,
         { query: searchQuery, sortMode },
       );
-      const samplesWithStats = await enrichUsageStats(nextSamples);
+      const samplesWithStats = await enrichUsageStats(nextSamples, searchQuery);
       if (requestId !== loadRequestRef.current) return;
       setSamples((current) => {
         const merged = nextPage === 0 ? samplesWithStats : [...current, ...samplesWithStats];
@@ -133,15 +138,16 @@ export const PromptLibrary: React.FC<PromptLibraryProps> = ({ onUsePrompt }) => 
       return;
     }
 
-    const nextUseCount = await trackPromptLibrarySampleUse(supabase, sample);
+    const nextUseCount = await trackPromptLibrarySampleUse(supabase, sample, searchQuery);
     if (typeof nextUseCount === 'number') {
       setSamples((current) => sortSamplesForMode(current.map((item) => {
         if (item.id !== sample.id) return item;
         const externalUseCount = item.external_use_count || 0;
+        const totalUseCount = Math.max(nextUseCount, externalUseCount);
         return {
           ...item,
-          local_use_count: nextUseCount,
-          total_use_count: externalUseCount + nextUseCount,
+          local_use_count: Math.max(totalUseCount - externalUseCount, 0),
+          total_use_count: totalUseCount,
         };
       }), sortMode));
     }
@@ -297,7 +303,7 @@ export const PromptLibrary: React.FC<PromptLibraryProps> = ({ onUsePrompt }) => 
                   <p className="line-clamp-3 min-h-[48px] text-xs leading-relaxed text-slate-300">{sample.prompt || 'Prompt mẫu chưa có nội dung.'}</p>
                   <div className="flex items-center justify-between text-[11px] font-bold text-slate-500">
                     <span>{formatUseCount(sample.total_use_count)} lượt dùng</span>
-                    {sample.searchScore ? <span>Khớp AI: {sample.searchScore}</span> : <span>{sortMode === 'popular' ? 'Xếp theo lượt dùng' : 'Mới nhất'}</span>}
+                    {sample.searchScore ? <span>{sample.searchLearningScore ? `AI học: ${sample.searchLearningScore}` : `Khớp AI: ${sample.searchScore}`}</span> : <span>{sortMode === 'popular' ? 'Xếp theo lượt dùng' : 'Mới nhất'}</span>}
                   </div>
                   <button
                     onClick={() => void handleUsePrompt(sample)}

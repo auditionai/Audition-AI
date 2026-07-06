@@ -2,8 +2,9 @@ import { randomUUID } from 'node:crypto';
 import type { Handler } from '@netlify/functions';
 import { runQueueDaemon } from './_queue-daemon';
 import { triggerBackgroundQueueWorker } from './_queue-launcher';
-import { isDedicatedQueueWorkerMode } from './_queue-runtime-mode';
+import { areQueueWorkersDisabled, isDedicatedQueueWorkerMode } from './_queue-runtime-mode';
 import { getServiceRoleClient } from './_supabase';
+import { SYSTEM_QUEUE_KINDS } from '../../shared/queueKinds';
 
 const WORKER_LOCK_LEASE_SECONDS = 180;
 
@@ -21,6 +22,7 @@ const hasOutstandingQueueWork = async () => {
     .from('generated_images')
     .select('id')
     .in('status', ['queued', 'processing'])
+    .in('queue_kind', [...SYSTEM_QUEUE_KINDS])
     .limit(1);
 
   if (error) {
@@ -76,6 +78,13 @@ export const handler: Handler = async (event) => {
     return {
       statusCode: 405,
       body: JSON.stringify({ error: 'Method Not Allowed' }),
+    };
+  }
+
+  if (areQueueWorkersDisabled()) {
+    return {
+      statusCode: 202,
+      body: JSON.stringify({ success: true, skipped: true, reason: 'queue_workers_disabled' }),
     };
   }
 

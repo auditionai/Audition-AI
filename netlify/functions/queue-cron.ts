@@ -1,6 +1,6 @@
 import type { Handler } from '@netlify/functions';
 import { runQueueDaemon } from './_queue-daemon';
-import { isDedicatedQueueWorkerMode } from './_queue-runtime-mode';
+import { areQueueWorkersDisabled, isDedicatedQueueWorkerMode } from './_queue-runtime-mode';
 import { refreshAutoDisabledServerAvailability } from './_server-availability';
 
 export const config = {
@@ -9,6 +9,13 @@ export const config = {
 
 export const handler: Handler = async () => {
   try {
+    if (areQueueWorkersDisabled()) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({ success: true, skipped: true, reason: 'queue_workers_disabled' }),
+      };
+    }
+
     const serverAvailabilityAutoRefresh = await refreshAutoDisabledServerAvailability();
     const dedicatedWorkerMode = isDedicatedQueueWorkerMode();
     const summary = await runQueueDaemon(
@@ -19,7 +26,12 @@ export const handler: Handler = async () => {
             activeDelayMs: 50,
             idleDelayMs: 500,
           }
-        : { maxRuntimeMs: 75_000, idleIterationsToStop: 30 },
+        : {
+            maxRuntimeMs: 45_000,
+            idleIterationsToStop: 8,
+            activeDelayMs: 250,
+            idleDelayMs: 1_000,
+          },
     );
     return {
       statusCode: 200,

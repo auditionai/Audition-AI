@@ -26,6 +26,7 @@ export interface CaulenhauSamplePrompt {
   local_use_count?: number;
   total_use_count?: number;
   searchScore?: number;
+  searchLearningScore?: number;
 }
 
 export interface FetchCaulenhauSamplesOptions {
@@ -79,7 +80,7 @@ export const CAULENHAU_SAMPLE_CATEGORIES: CaulenhauSampleCategory[] = [
 ];
 
 const SEMANTIC_SEARCH_TERMS: Record<string, string[]> = {
-  'sinh nhat': ['sinh nhat', 'birthday', 'birth day', 'party', 'cake', 'celebration', 'balloon', 'gift', 'happy birthday'],
+  'sinh nhat': ['sinh nhat', 'tiec sinh nhat', 'birthday', 'birth day', 'bday', 'birthday party', 'birthday cake', 'cake', 'candle', 'candles', 'celebration', 'balloon', 'balloons', 'gift', 'present', 'happy birthday'],
   'tinh yeu': ['tinh yeu', 'love', 'romantic', 'romance', 'couple', 'valentine', 'heart', 'lover'],
   'dam cuoi': ['dam cuoi', 'wedding', 'bride', 'groom', 'bridal', 'marriage', 'engagement'],
   'giang sinh': ['giang sinh', 'christmas', 'xmas', 'santa', 'snow', 'winter', 'holiday'],
@@ -99,6 +100,11 @@ const SEMANTIC_SEARCH_TERMS: Record<string, string[]> = {
   'ca phe': ['ca phe', 'coffee', 'cafe', 'latte'],
   'xe': ['xe', 'car', 'supercar', 'motorbike', 'vehicle'],
 };
+
+const STOP_SEARCH_TOKENS = new Set([
+  'a', 'an', 'and', 'are', 'as', 'at', 'by', 'for', 'from', 'in', 'is', 'of', 'on', 'or', 'the', 'to', 'with',
+  'anh', 'ao', 'bo', 'cac', 'cho', 'co', 'cua', 'da', 'de', 'duoc', 'la', 'lam', 'mot', 'nguoi', 'nhu', 'tao', 'theo', 'trong', 'va', 'voi',
+]);
 
 const removeVietnameseTone = (value: string) => value
   .normalize('NFD')
@@ -131,6 +137,8 @@ export const expandPromptSearchTerms = (query: string) => {
   return Array.from(terms).filter(Boolean);
 };
 
+export const getPromptSearchLearningKey = (query: string) => normalizePromptSearchText(query);
+
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const promptHasTerm = (prompt: string, term: string) => {
@@ -138,6 +146,11 @@ const promptHasTerm = (prompt: string, term: string) => {
   if (term.includes(' ')) return prompt.includes(term);
   return new RegExp(`(^|\\s)${escapeRegExp(term)}($|\\s)`).test(prompt);
 };
+
+const tokenizeSearchText = (value: string) => normalizePromptSearchText(value)
+  .split(' ')
+  .map((token) => token.trim())
+  .filter((token) => token.length >= 2 && !STOP_SEARCH_TOKENS.has(token));
 
 const findMatchedSearchTopic = (query: string) => {
   const normalized = normalizePromptSearchText(query);
@@ -165,6 +178,15 @@ const scorePromptSample = (sample: CaulenhauSamplePrompt, query: string) => {
   terms.forEach((term) => {
     if (promptHasTerm(prompt, term)) score += term.includes(' ') ? 18 : 10;
   });
+
+  if (!matchedTopic) {
+    const queryTokens = tokenizeSearchText(query);
+    const promptTokens = new Set(tokenizeSearchText(prompt));
+    queryTokens.forEach((token) => {
+      if (promptTokens.has(token)) score += 8;
+    });
+    if (queryTokens.length > 1 && queryTokens.every((token) => promptTokens.has(token))) score += 16;
+  }
 
   if (matchedTopic && score === 0) return 0;
   return score;
@@ -279,16 +301,70 @@ export const fetchPromptLibraryUsageStats = async (client: any, sampleIds: strin
   return new Map<string, number>((data || []).map((row: any) => [String(row.sample_id), Number(row.use_count || 0)]));
 };
 
-export const trackPromptLibrarySampleUse = async (client: any, sample: CaulenhauSamplePrompt) => {
+export const fetchPromptLibrarySearchLearningStats = async (client: any, query: string, sampleIds: string[]): Promise<Map<string, number>> => {
+  const searchQuery = getPromptSearchLearningKey(query);
+  const uniqueIds = Array.from(new Set(sampleIds.filter(Boolean)));
+  if (!client || !searchQuery || uniqueIds.length === 0) return new Map<string, number>();
+
+  const { data, error } = await client
+    .from('prompt_library_search_sample_stats')
+    .select('sample_id, selected_count')
+    .eq('sample_source', 'caulenhau')
+    .eq('search_query', searchQuery)
+    .in('sample_id', uniqueIds);
+
+  if (error) {
+    console.warn('[PromptLibrary] Could not load search learning stats:', error.message || error);
+    return new Map<string, number>();
+  }
+
+  return new Map<string, number>((data || []).map((row: any) => [String(row.sample_id), Number(row.selected_count || 0)]));
+};
+
+export const applyPromptLibraryLearningScores = (
+  samples: CaulenhauSamplePrompt[],
+  learningStats: Map<string, number>,
+  query: string,
+) => {
+  if (!query.trim() || learningStats.size === 0) return samples;
+
+  return samples
+    .map((sample) => {
+      const learningScore = learningStats.get(sample.id) || 0;
+      return {
+        ...sample,
+        searchLearningScore: learningScore,
+        searchScore: (sample.searchScore || 0) + Math.min(learningScore * 25, 250),
+      };
+    })
+    .sort((a, b) => (b.searchScore || 0) - (a.searchScore || 0));
+};
+
+export const trackPromptLibrarySampleUse = async (client: any, sample: CaulenhauSamplePrompt, searchQuery = '') => {
   if (!client) return null;
 
-  const { data, error } = await client.rpc('track_prompt_library_sample_use', {
+  const payload = {
     p_sample_source: 'caulenhau',
     p_sample_id: sample.id,
     p_sample_category: sample.category,
     p_sample_prompt: sample.prompt || '',
     p_sample_image_url: sample.image_url || '',
-  });
+    p_search_query: getPromptSearchLearningKey(searchQuery),
+  };
+
+  let { data, error } = await client.rpc('track_prompt_library_sample_use_v2', payload);
+
+  if (error) {
+    const fallback = await client.rpc('track_prompt_library_sample_use', {
+      p_sample_source: payload.p_sample_source,
+      p_sample_id: payload.p_sample_id,
+      p_sample_category: payload.p_sample_category,
+      p_sample_prompt: payload.p_sample_prompt,
+      p_sample_image_url: payload.p_sample_image_url,
+    });
+    data = fallback.data;
+    error = fallback.error;
+  }
 
   if (error) {
     console.warn('[PromptLibrary] Could not track sample use:', error.message || error);

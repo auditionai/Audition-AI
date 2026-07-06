@@ -153,10 +153,10 @@ const SINGLE_AND_COUPLE_PREPARE_TIMEOUT_MS = 10 * 60 * 1000;
 const GROUP_OF_THREE_PREPARE_TIMEOUT_MS = 15 * 60 * 1000;
 const GROUP_OF_FOUR_PREPARE_TIMEOUT_MS = 20 * 60 * 1000;
 const IMAGE_REFERENCE_UPLOAD_CHUNK_SIZE = 2;
-const DISPATCH_CLAIM_LIMIT = parsePositiveIntEnv('QUEUE_DISPATCH_CLAIM_LIMIT', 8);
-const POLL_CLAIM_LIMIT = parsePositiveIntEnv('QUEUE_POLL_CLAIM_LIMIT', 12);
-const DISPATCH_CONCURRENCY_LIMIT = parsePositiveIntEnv('QUEUE_DISPATCH_CONCURRENCY_LIMIT', 8);
-const POLL_CONCURRENCY_LIMIT = parsePositiveIntEnv('QUEUE_POLL_CONCURRENCY_LIMIT', 12);
+const DISPATCH_CLAIM_LIMIT = parsePositiveIntEnv('QUEUE_DISPATCH_CLAIM_LIMIT', 4);
+const POLL_CLAIM_LIMIT = parsePositiveIntEnv('QUEUE_POLL_CLAIM_LIMIT', 6);
+const DISPATCH_CONCURRENCY_LIMIT = parsePositiveIntEnv('QUEUE_DISPATCH_CONCURRENCY_LIMIT', 2);
+const POLL_CONCURRENCY_LIMIT = parsePositiveIntEnv('QUEUE_POLL_CONCURRENCY_LIMIT', 4);
 const WORKER_TICK_BUDGET_MS = 8_000;
 const MAX_QUEUE_LOG_ENTRIES = 80;
 const MAX_VERTEX_DIAGNOSTIC_ENTRIES = 24;
@@ -789,16 +789,19 @@ const getQueueBacklogSnapshot = async (): Promise<QueueBacklogSnapshot> => {
         .from('generated_images')
         .select('asset_type')
         .eq('status', 'queued')
+        .in('queue_kind', SYSTEM_QUEUE_KINDS)
         .limit(200),
       admin
         .from('generated_images')
         .select('asset_type')
         .eq('status', 'processing')
+        .in('queue_kind', SYSTEM_QUEUE_KINDS)
         .limit(200),
       admin
         .from('generated_images')
         .select('id')
         .eq('status', 'processing')
+        .in('queue_kind', SYSTEM_QUEUE_KINDS)
         .not('job_id', 'is', null)
         .or(`next_poll_at.is.null,next_poll_at.lte.${nowIso}`)
         .limit(200),
@@ -2200,6 +2203,7 @@ const rescueFailedJobsWithProviderResults = async () => {
     .from('generated_images')
     .select('id, user_id, asset_type, queue_kind, queue_payload, prompt, tool_id, tool_name, model_used, cost_vcoin, job_id, status, error_message, created_at, updated_at, finished_at, processing_started_at, next_poll_at, attempt_count, image_url')
     .eq('status', 'failed')
+    .in('queue_kind', SYSTEM_QUEUE_KINDS)
     .not('job_id', 'is', null)
     .gte('created_at', lookbackIso)
     .order('updated_at', { ascending: true })
@@ -2703,6 +2707,7 @@ const recoverStaleProviderPollingJobs = async () => {
     .from('generated_images')
     .select('id, user_id, asset_type, queue_kind, queue_payload, prompt, tool_id, tool_name, model_used, cost_vcoin, job_id, status, updated_at, lease_expires_at, next_poll_at')
     .eq('status', 'processing')
+    .in('queue_kind', SYSTEM_QUEUE_KINDS)
     .not('job_id', 'is', null)
     .lt('updated_at', staleBeforeIso)
     .order('updated_at', { ascending: true })
@@ -3095,15 +3100,15 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
   const admin = getServiceRoleClient();
   const workerStartedAt = Date.now();
   const backlog = await getQueueBacklogSnapshot();
-  const dynamicPollClaimLimit = Math.max(POLL_CLAIM_LIMIT, Math.min(40, backlog.duePollCount + 4));
+  const dynamicPollClaimLimit = Math.max(POLL_CLAIM_LIMIT, Math.min(16, backlog.duePollCount + 2));
   const dynamicDispatchClaimLimit = Math.max(
     DISPATCH_CLAIM_LIMIT,
-    Math.min(20, backlog.queuedImages + backlog.queuedVideos + 4),
+    Math.min(8, backlog.queuedImages + backlog.queuedVideos + 2),
   );
-  const dynamicPollConcurrencyLimit = Math.max(POLL_CONCURRENCY_LIMIT, Math.min(24, dynamicPollClaimLimit));
+  const dynamicPollConcurrencyLimit = Math.max(POLL_CONCURRENCY_LIMIT, Math.min(8, dynamicPollClaimLimit));
   const dynamicDispatchConcurrencyLimit = Math.max(
     DISPATCH_CONCURRENCY_LIMIT,
-    Math.min(16, dynamicDispatchClaimLimit),
+    Math.min(4, dynamicDispatchClaimLimit),
   );
   const summary: QueueWorkerSummary = {
     claimedForDispatch: 0,

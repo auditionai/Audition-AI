@@ -38,6 +38,8 @@ const TST_SERVER_AVAILABILITY_CACHE_TTL_MS = 60_000;
 const TST_SUPABASE_READ_TIMEOUT_MS = 12_000;
 const TST_SUPABASE_READ_RETRIES = 1;
 const TST_SUPABASE_READ_RETRY_DELAY_MS = 500;
+const USER_PROFILE_API_TIMEOUT_MS = 8_000;
+const USER_PROFILE_FAILURE_BACKOFF_MS = 45_000;
 const MAINTENANCE_MODE_CACHE_TTL_MS = 60_000;
 const MAINTENANCE_MODE_POLL_MS = 300_000;
 const VISIT_LOG_THROTTLE_MS = 30 * 60_000;
@@ -408,6 +410,7 @@ export const DEFAULT_APP_TOURS_CONFIG: AppToursConfig = {
 
 let userProfileCache: (TimedCache<UserProfile> & { userId: string }) | null = null;
 let userProfilePromise: Promise<UserProfile> | null = null;
+let userProfileFailureCache: { userId: string; message: string; expiresAt: number } | null = null;
 let packageCache: TimedCache<CreditPackage[]> | null = null;
 let promotionCache: TimedCache<PromotionCampaign | null> | null = null;
 const DEFAULT_CHECKIN_STATUS: CheckinStatusState = {
@@ -436,6 +439,7 @@ let lastActiveUpdateAt = 0;
 export const invalidateUserProfileCache = () => {
     userProfileCache = null;
     userProfilePromise = null;
+    userProfileFailureCache = null;
 };
 
 export const invalidatePackageCache = () => {
@@ -649,6 +653,8 @@ const mapUserRowToProfile = (data: any): UserProfile => ({
 });
 
 const ensureUserProfileViaApi = async (): Promise<any | null> => {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), USER_PROFILE_API_TIMEOUT_MS);
     try {
         const authHeader = await getSessionAuthHeader();
         const response = await fetch('/api/ensure-user-profile', {
@@ -657,6 +663,7 @@ const ensureUserProfileViaApi = async (): Promise<any | null> => {
                 'Content-Type': 'application/json',
                 ...authHeader,
             },
+            signal: controller.signal,
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) {
@@ -666,6 +673,8 @@ const ensureUserProfileViaApi = async (): Promise<any | null> => {
     } catch (error) {
         console.warn('[Economy] Failed to ensure user profile via API', error);
         return null;
+    } finally {
+        window.clearTimeout(timeoutId);
     }
 };
 
@@ -680,9 +689,21 @@ export const getUserProfile = async (options?: { force?: boolean }): Promise<Use
         return userProfileCache.value;
     }
 
+    if (!forceRefresh && userProfileFailureCache && userProfileFailureCache.userId === user.id && userProfileFailureCache.expiresAt > Date.now()) {
+        throw new Error(userProfileFailureCache.message);
+    }
+
     if (!forceRefresh && userProfilePromise) {
         return userProfilePromise;
     }
+
+    const rememberProfileFailure = (message: string) => {
+        userProfileFailureCache = {
+            userId: user.id,
+            message,
+            expiresAt: Date.now() + USER_PROFILE_FAILURE_BACKOFF_MS,
+        };
+    };
 
     userProfilePromise = (async () => {
         let data: any = null;
@@ -707,9 +728,18 @@ export const getUserProfile = async (options?: { force?: boolean }): Promise<Use
             }
             const repairedProfile = await ensureUserProfileViaApi();
             if (repairedProfile) {
-                return mapUserRowToProfile(repairedProfile);
+                const profile = mapUserRowToProfile(repairedProfile);
+                userProfileFailureCache = null;
+                userProfileCache = {
+                    userId: user.id,
+                    value: profile,
+                    expiresAt: Date.now() + USER_PROFILE_CACHE_TTL_MS,
+                };
+                return profile;
             }
-            throw new Error("Failed to fetch user profile: " + (readError?.message || 'Network error'));
+            const message = "Failed to fetch user profile: " + (readError?.message || 'Network error');
+            rememberProfileFailure(message);
+            throw new Error(message);
         }
 
         if (error) {
@@ -720,9 +750,18 @@ export const getUserProfile = async (options?: { force?: boolean }): Promise<Use
             }
             const repairedProfile = await ensureUserProfileViaApi();
             if (repairedProfile) {
-                return mapUserRowToProfile(repairedProfile);
+                const profile = mapUserRowToProfile(repairedProfile);
+                userProfileFailureCache = null;
+                userProfileCache = {
+                    userId: user.id,
+                    value: profile,
+                    expiresAt: Date.now() + USER_PROFILE_CACHE_TTL_MS,
+                };
+                return profile;
             }
-            throw new Error("Failed to fetch user profile: " + error.message);
+            const message = "Failed to fetch user profile: " + error.message;
+            rememberProfileFailure(message);
+            throw new Error(message);
         }
 
         let profile: UserProfile;
@@ -761,6 +800,7 @@ export const getUserProfile = async (options?: { force?: boolean }): Promise<Use
             value: profile,
             expiresAt: Date.now() + USER_PROFILE_CACHE_TTL_MS,
         };
+        userProfileFailureCache = null;
 
         return profile;
     })();

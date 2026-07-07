@@ -2511,9 +2511,18 @@ export const runAdminR2Cleanup = async (params: {
         window.clearTimeout(timeoutId);
     }
 
-    const payload = await response.json().catch(() => ({}));
+    const responseText = await response.text();
+    const payload = responseText
+        ? (() => {
+            try {
+                return JSON.parse(responseText);
+            } catch {
+                return { error: responseText.slice(0, 180) };
+            }
+        })()
+        : {};
     if (!response.ok) {
-        throw new Error(payload?.error || 'Khong the don R2 theo khoang ngay');
+        throw new Error(payload?.error || `Khong the don R2 theo khoang ngay (${response.status})`);
     }
 
     return payload as AdminR2CleanupResult;

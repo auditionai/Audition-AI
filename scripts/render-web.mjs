@@ -10,6 +10,7 @@ import { handler as adminQueueJobsHandler } from '../netlify/functions/admin-que
 import { handler as adminGiftcodeActionHandler } from '../netlify/functions/admin-giftcode-action.ts';
 import { handler as adminStopQueueJobHandler } from '../netlify/functions/admin-stop-queue-job.ts';
 import { handler as adminUserHistoryHandler } from '../netlify/functions/admin-user-history.ts';
+import { handler as adminR2CleanupHandler } from '../netlify/functions/admin-r2-cleanup.ts';
 import { handler as checkinRewardHandler } from '../netlify/functions/checkin-reward.ts';
 import { handler as createPaymentHandler } from '../netlify/functions/create_payment.ts';
 import { handler as directImageEditHandler } from '../netlify/functions/direct-image-edit.ts';
@@ -71,6 +72,7 @@ const handlerConfigs = [
   { fnName: 'admin-queue-job-detail', apiPath: '/api/admin-queue-job-detail', handler: adminQueueJobDetailHandler },
   { fnName: 'admin-user-history', apiPath: '/api/admin-user-history', handler: adminUserHistoryHandler },
   { fnName: 'admin-stop-queue-job', apiPath: '/api/admin-stop-queue-job', handler: adminStopQueueJobHandler },
+  { fnName: 'admin-r2-cleanup', apiPath: '/api/admin-r2-cleanup', handler: adminR2CleanupHandler },
   { fnName: 'force-rescue-failed-jobs', apiPath: '/api/force-rescue-failed-jobs', handler: forceRescueFailedJobsHandler },
   { fnName: 'ensure-user-profile', apiPath: '/api/ensure-user-profile', handler: ensureUserProfileHandler },
   { fnName: 'gallery-images', apiPath: '/api/gallery-images', handler: galleryImagesHandler },

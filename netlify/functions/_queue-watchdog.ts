@@ -4,6 +4,8 @@ import { runQueueDaemon } from './_queue-daemon';
 import { sendTelegramOperationalAlert } from './_telegram-notify';
 import { runSePayPendingReconcile } from './sepay-reconcile-pending';
 import type { QueueProcessingStage, QueueProgressLogEntry } from '../../shared/queueRecipes';
+import { DIRECT_IMAGE_EDIT_QUEUE_KIND } from '../../shared/queueKinds';
+import { processDirectImageEditJob } from './_direct-image-edit-processor';
 
 type WatchdogSummary = {
   scanned: number;
@@ -15,6 +17,12 @@ type WatchdogSummary = {
   requeuedPreDispatch: number;
   failedPreDispatch: number;
   nudgedPolls: number;
+  directEditScanned: number;
+  directEditRetried: number;
+  directEditCompleted: number;
+  directEditFailed: number;
+  directEditRefunded: number;
+  directEditSkipped: number;
   staleDispatchHeartbeat: boolean;
   alertsSent: number;
   sepayReconcile?: unknown;
@@ -59,6 +67,10 @@ const MAX_PRE_DISPATCH_AGE_MS = 30 * 60 * 1000;
 const OVERDUE_POLL_GRACE_MS = 2 * 60 * 1000;
 const DISPATCH_HEARTBEAT_STALE_MS = 4 * 60 * 1000;
 const ALERT_THROTTLE_MS = 30 * 60 * 1000;
+const DIRECT_EDIT_STALE_MS = 12 * 60 * 1000;
+const DIRECT_EDIT_MAX_ATTEMPTS = 2;
+const DIRECT_EDIT_MAX_AGE_MS = 30 * 60 * 1000;
+const DIRECT_EDIT_WATCHDOG_LIMIT = 3;
 const SYSTEM_QUEUE_KINDS = ['image_generate', 'video_generate', 'motion_generate'];
 const MAX_QUEUE_LOG_ENTRIES = 80;
 
@@ -374,6 +386,122 @@ const failAndRefund = async (row: any, message: string) => {
   }
 };
 
+const failDirectEditAndRefund = async (row: any, message: string) => {
+  const admin = getServiceRoleClient();
+  const failedAt = nowIso();
+  const failedPayload = {
+    ...withQueueLog(row.queue_payload, 'failed', message, 'error'),
+    __watchdogLastActionAt: failedAt,
+    __watchdogLastAction: 'direct_edit_failed_refunded',
+    __watchdogLastReason: message,
+  };
+
+  const { error } = await admin
+    .from('generated_images')
+    .update({
+      status: 'failed',
+      error_message: message,
+      queue_payload: failedPayload,
+      progress: 100,
+      finished_at: failedAt,
+      lease_token: null,
+      lease_expires_at: null,
+      next_poll_at: null,
+      last_error_at: failedAt,
+      updated_at: failedAt,
+    })
+    .eq('id', row.id)
+    .in('status', ['queued', 'processing'])
+    .eq('queue_kind', DIRECT_IMAGE_EDIT_QUEUE_KIND);
+
+  if (error) {
+    throw error;
+  }
+
+  const { error: refundError } = await admin.rpc('refund_generated_job', {
+    p_generated_image_id: row.id,
+    p_reason: `Refund: watchdog failed stale ${row.tool_name || 'direct image edit'}`,
+  });
+
+  if (refundError) {
+    console.warn('[queue-watchdog] Direct edit refund failed:', row.id, refundError);
+    return false;
+  }
+
+  return true;
+};
+
+const fetchStaleDirectEditRows = async () => {
+  const admin = getServiceRoleClient();
+  const staleBeforeIso = new Date(Date.now() - DIRECT_EDIT_STALE_MS).toISOString();
+  const { data, error } = await admin
+    .from('generated_images')
+    .select('id, user_id, status, queue_kind, queue_payload, tool_name, cost_vcoin, progress, created_at, updated_at, processing_started_at, lease_expires_at, attempt_count')
+    .in('status', ['queued', 'processing'])
+    .eq('queue_kind', DIRECT_IMAGE_EDIT_QUEUE_KIND)
+    .or(`lease_expires_at.is.null,lease_expires_at.lt.${nowIso()},updated_at.lt.${staleBeforeIso}`)
+    .order('updated_at', { ascending: true })
+    .limit(DIRECT_EDIT_WATCHDOG_LIMIT);
+
+  if (error) {
+    throw error;
+  }
+
+  return Array.isArray(data) ? data : [];
+};
+
+const rescueStaleDirectImageEditJobs = async (summary: WatchdogSummary) => {
+  const rows = await fetchStaleDirectEditRows();
+  summary.directEditScanned = rows.length;
+  const now = Date.now();
+
+  for (const row of rows) {
+    const status = String(row.status || '').toLowerCase();
+    const updatedAtMs = new Date(String(row.updated_at || row.created_at || '')).getTime();
+    const createdAtMs = new Date(String(row.created_at || '')).getTime();
+    const leaseExpiresAtMs = row.lease_expires_at ? new Date(String(row.lease_expires_at)).getTime() : 0;
+    const attemptCount = Number(row.attempt_count || 0);
+    const staleEnough =
+      status === 'queued' ||
+      !leaseExpiresAtMs ||
+      leaseExpiresAtMs <= now ||
+      (updatedAtMs > 0 && now - updatedAtMs >= DIRECT_EDIT_STALE_MS);
+
+    if (!staleEnough) {
+      summary.directEditSkipped += 1;
+      continue;
+    }
+
+    const ageMs = createdAtMs > 0 ? now - createdAtMs : 0;
+    if (attemptCount >= DIRECT_EDIT_MAX_ATTEMPTS || ageMs >= DIRECT_EDIT_MAX_AGE_MS) {
+      const refunded = await failDirectEditAndRefund(
+        row,
+        'Watchdog stopped a stale direct image edit job after repeated/expired processing.',
+      );
+      summary.directEditFailed += 1;
+      if (refunded) summary.directEditRefunded += 1;
+      continue;
+    }
+
+    try {
+      const result = await processDirectImageEditJob(String(row.id));
+      if (result.status === 'completed') {
+        summary.directEditCompleted += 1;
+      } else if (result.status === 'failed') {
+        summary.directEditFailed += 1;
+        if (Number(row.cost_vcoin || 0) > 0) summary.directEditRefunded += 1;
+      } else {
+        summary.directEditSkipped += 1;
+      }
+      summary.directEditRetried += 1;
+    } catch (error: any) {
+      summary.directEditRetried += 1;
+      summary.directEditFailed += 1;
+      console.warn('[queue-watchdog] Direct edit retry failed:', row.id, error?.message || error);
+    }
+  }
+};
+
 const requeuePreDispatch = async (row: any, message: string) => {
   const admin = getServiceRoleClient();
   const recoveries = getWatchdogRecoveryCount(row.queue_payload) + 1;
@@ -507,6 +635,12 @@ export const runQueueWatchdog = async (options: { runWorkerAfterRescue?: boolean
       requeuedPreDispatch: 0,
       failedPreDispatch: 0,
       nudgedPolls: 0,
+      directEditScanned: 0,
+      directEditRetried: 0,
+      directEditCompleted: 0,
+      directEditFailed: 0,
+      directEditRefunded: 0,
+      directEditSkipped: 0,
       staleDispatchHeartbeat: false,
       alertsSent: 0,
     };
@@ -519,6 +653,12 @@ export const runQueueWatchdog = async (options: { runWorkerAfterRescue?: boolean
     requeuedPreDispatch: 0,
     failedPreDispatch: 0,
     nudgedPolls: 0,
+    directEditScanned: 0,
+    directEditRetried: 0,
+    directEditCompleted: 0,
+    directEditFailed: 0,
+    directEditRefunded: 0,
+    directEditSkipped: 0,
     staleDispatchHeartbeat: false,
     alertsSent: 0,
   };
@@ -539,6 +679,7 @@ export const runQueueWatchdog = async (options: { runWorkerAfterRescue?: boolean
     }
 
     summary.dbInvariant = await runDbInvariantRepair();
+    await rescueStaleDirectImageEditJobs(summary);
     const rows = await fetchQueueHealthRows();
     summary.scanned = rows.length;
     summary.healthBefore = buildQueueHealthSnapshot(rows);
@@ -639,6 +780,16 @@ export const runQueueWatchdog = async (options: { runWorkerAfterRescue?: boolean
     if (summary.nudgedPolls > 0) {
       if (await sendThrottledAlert(alertState, 'poll_overdue', 'Watchdog da day lai job poll qua han', {
         nudgedPolls: summary.nudgedPolls,
+      })) summary.alertsSent += 1;
+    }
+    if (summary.directEditRetried > 0 || summary.directEditFailed > 0) {
+      if (await sendThrottledAlert(alertState, 'direct_edit_rescued', 'Watchdog da xu ly job sua anh truc tiep bi ket', {
+        scanned: summary.directEditScanned,
+        retried: summary.directEditRetried,
+        completed: summary.directEditCompleted,
+        failed: summary.directEditFailed,
+        refunded: summary.directEditRefunded,
+        skipped: summary.directEditSkipped,
       })) summary.alertsSent += 1;
     }
     if (summary.staleDispatchHeartbeat) {

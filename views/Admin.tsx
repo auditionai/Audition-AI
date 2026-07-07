@@ -63,6 +63,8 @@ import {
     getAdminQueueHealthReport,
     runAdminQueueReconcile,
     forceRescueFailedQueueJobs,
+    runAdminR2Cleanup,
+    AdminR2CleanupResult,
     adminGiftcodeAction,
     getGiftcodeAbuseCases,
     GiftcodeAbuseCase
@@ -500,6 +502,7 @@ const getQueueMediaSectionTone = (key: AdminQueueMediaSection['key']) => {
     }
 };
 const getQueueMediaMeta = (media: AdminQueueInputMedia) => `${media.kind} · ${media.sourceType}${media.userProvided === false ? ' · hệ thống' : ''}`;
+const toDateInputValue = (date: Date) => date.toISOString().slice(0, 10);
 
 export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [activeView, setActiveView] = useState<'overview' | 'transactions' | 'users' | 'giftcode_abuse' | 'queue' | 'packages' | 'marketing' | 'pricing' | 'system' | 'styles' | 'tours'>('overview');
@@ -610,6 +613,17 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [showGiftcodeFix, setShowGiftcodeFix] = useState(false);
   const [showUserFix, setShowUserFix] = useState(false);
   const [showBalanceFix, setShowBalanceFix] = useState(false);
+  const [r2CleanupStartDate, setR2CleanupStartDate] = useState(() => {
+      const date = new Date();
+      date.setDate(date.getDate() - 7);
+      return toDateInputValue(date);
+  });
+  const [r2CleanupEndDate, setR2CleanupEndDate] = useState(() => toDateInputValue(new Date()));
+  const [r2CleanupPrefix, setR2CleanupPrefix] = useState('');
+  const [r2CleanupIncludeOrphans, setR2CleanupIncludeOrphans] = useState(true);
+  const [r2CleanupIncludePublic, setR2CleanupIncludePublic] = useState(false);
+  const [r2CleanupLoading, setR2CleanupLoading] = useState(false);
+  const [r2CleanupPreview, setR2CleanupPreview] = useState<AdminR2CleanupResult | null>(null);
 
   // UX States
   const [processingTxId, setProcessingTxId] = useState<string | null>(null);
@@ -2236,6 +2250,55 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               showToast(`Lỗi khi xóa ảnh: ${e.message}`, 'error');
           }
       });
+  };
+
+  const buildR2CleanupParams = (dryRun: boolean) => ({
+      startDate: r2CleanupStartDate,
+      endDate: r2CleanupEndDate,
+      dryRun,
+      includePublic: r2CleanupIncludePublic,
+      includeOrphanR2: r2CleanupIncludeOrphans,
+      prefix: r2CleanupPrefix.trim(),
+  });
+
+  const handlePreviewR2Cleanup = async () => {
+      if (!r2CleanupStartDate || !r2CleanupEndDate) {
+          showToast('Vui lòng chọn ngày bắt đầu và ngày kết thúc.', 'error');
+          return;
+      }
+
+      setR2CleanupLoading(true);
+      try {
+          const result = await runAdminR2Cleanup(buildR2CleanupParams(true));
+          setR2CleanupPreview(result);
+          showToast(`Tìm thấy ${result.matched.dbRows} dòng DB và ${result.matched.totalR2Objects} file R2 có thể xoá.`, 'info');
+      } catch (e: any) {
+          showToast(`Lỗi preview R2: ${e.message || e}`, 'error');
+      } finally {
+          setR2CleanupLoading(false);
+      }
+  };
+
+  const handleExecuteR2Cleanup = async () => {
+      const preview = r2CleanupPreview;
+      const totalR2 = preview?.matched?.totalR2Objects ?? 0;
+      const totalDb = preview?.matched?.dbRows ?? 0;
+      showConfirm(
+          `Xóa thật ${totalDb} dòng lịch sử và ${totalR2} file R2 trong khoảng ${r2CleanupStartDate} -> ${r2CleanupEndDate}? Hành động này không thể hoàn tác.`,
+          async () => {
+              setR2CleanupLoading(true);
+              try {
+                  const result = await runAdminR2Cleanup(buildR2CleanupParams(false));
+                  setR2CleanupPreview(result);
+                  showToast(`Đã xoá ${result.deleted.dbRows} dòng DB và ${result.deleted.r2Objects} file R2.`, 'success');
+                  await refreshData();
+              } catch (e: any) {
+                  showToast(`Lỗi xoá R2: ${e.message || e}`, 'error');
+              } finally {
+                  setR2CleanupLoading(false);
+              }
+          },
+      );
   };
 
   // --- BULK ACTIONS ---
@@ -4540,6 +4603,151 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                               </div>
                               <p className="text-xs text-slate-400">Xóa toàn bộ asset chưa publish đã quá 7 ngày trong lịch sử tạo (giữ lại ảnh public).</p>
                           </button>
+                      </div>
+
+                      <div className="mt-6 rounded-2xl border border-orange-500/20 bg-orange-500/5 p-4">
+                          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                              <div>
+                                  <h4 className="flex items-center gap-2 text-sm font-black text-white">
+                                      <Icons.Cloud className="h-4 w-4 text-orange-300" />
+                                      Xóa R2 thủ công theo thời gian
+                                  </h4>
+                                  <p className="mt-1 text-xs leading-relaxed text-slate-400">
+                                      Chọn khoảng ngày để preview rồi xoá file R2 và metadata lịch sử. Mặc định giữ ảnh public và bỏ qua job đang chạy.
+                                  </p>
+                              </div>
+                              <div className="flex shrink-0 gap-2">
+                                  <button
+                                      onClick={handlePreviewR2Cleanup}
+                                      disabled={r2CleanupLoading}
+                                      className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/10 px-3 py-2 text-xs font-bold text-white hover:bg-white/15 disabled:opacity-50"
+                                  >
+                                      {r2CleanupLoading ? <Icons.Loader className="h-4 w-4 animate-spin" /> : <Icons.Search className="h-4 w-4" />}
+                                      Xem trước
+                                  </button>
+                                  <button
+                                      onClick={handleExecuteR2Cleanup}
+                                      disabled={r2CleanupLoading || !r2CleanupPreview}
+                                      className="inline-flex items-center gap-2 rounded-lg bg-red-500 px-3 py-2 text-xs font-bold text-white hover:bg-red-600 disabled:opacity-50"
+                                  >
+                                      <Icons.Trash className="h-4 w-4" />
+                                      Xóa thật
+                                  </button>
+                              </div>
+                          </div>
+
+                          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                              <div>
+                                  <label className="mb-1 block text-xs font-bold uppercase text-slate-500">Từ ngày</label>
+                                  <input
+                                      type="date"
+                                      value={r2CleanupStartDate}
+                                      onChange={(e) => {
+                                          setR2CleanupStartDate(e.target.value);
+                                          setR2CleanupPreview(null);
+                                      }}
+                                      className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-orange-300"
+                                  />
+                              </div>
+                              <div>
+                                  <label className="mb-1 block text-xs font-bold uppercase text-slate-500">Đến ngày</label>
+                                  <input
+                                      type="date"
+                                      value={r2CleanupEndDate}
+                                      onChange={(e) => {
+                                          setR2CleanupEndDate(e.target.value);
+                                          setR2CleanupPreview(null);
+                                      }}
+                                      className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-orange-300"
+                                  />
+                              </div>
+                              <div className="xl:col-span-2">
+                                  <label className="mb-1 block text-xs font-bold uppercase text-slate-500">Prefix R2</label>
+                                  <input
+                                      type="text"
+                                      value={r2CleanupPrefix}
+                                      onChange={(e) => {
+                                          setR2CleanupPrefix(e.target.value);
+                                          setR2CleanupPreview(null);
+                                      }}
+                                      placeholder="Ví dụ: inputs/ hoặc để trống"
+                                      className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none placeholder:text-slate-600 focus:border-orange-300"
+                                  />
+                              </div>
+                          </div>
+
+                          <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
+                              <label className="flex items-start gap-3 rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-slate-300">
+                                  <input
+                                      type="checkbox"
+                                      checked={r2CleanupIncludeOrphans}
+                                      onChange={(e) => {
+                                          setR2CleanupIncludeOrphans(e.target.checked);
+                                          setR2CleanupPreview(null);
+                                      }}
+                                      className="mt-0.5 accent-orange-400"
+                                  />
+                                  <span>
+                                      <b className="text-white">Quét file mồ côi trên R2</b>
+                                      <span className="mt-1 block text-slate-500">Dựa trên LastModified của R2, dùng prefix để giới hạn phạm vi nếu cần.</span>
+                                  </span>
+                              </label>
+                              <label className="flex items-start gap-3 rounded-xl border border-red-500/20 bg-red-500/5 p-3 text-xs text-red-100">
+                                  <input
+                                      type="checkbox"
+                                      checked={r2CleanupIncludePublic}
+                                      onChange={(e) => {
+                                          setR2CleanupIncludePublic(e.target.checked);
+                                          setR2CleanupPreview(null);
+                                      }}
+                                      className="mt-0.5 accent-red-500"
+                                  />
+                                  <span>
+                                      <b className="text-red-100">Cho phép xoá cả ảnh public</b>
+                                      <span className="mt-1 block text-red-200/70">Tắt mặc định để bảo vệ showcase/published assets.</span>
+                                  </span>
+                              </label>
+                          </div>
+
+                          {r2CleanupPreview && (
+                              <div className="mt-4 rounded-xl border border-white/10 bg-black/30 p-4">
+                                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                                      {[
+                                          ['DB rows', r2CleanupPreview.matched.dbRows],
+                                          ['R2 từ DB', r2CleanupPreview.matched.dbR2Objects],
+                                          ['R2 mồ côi', r2CleanupPreview.matched.orphanR2Objects],
+                                          [r2CleanupPreview.dryRun ? 'Sẽ xoá R2' : 'Đã xoá R2', r2CleanupPreview.dryRun ? r2CleanupPreview.matched.totalR2Objects : r2CleanupPreview.deleted.r2Objects],
+                                      ].map(([label, value]) => (
+                                          <div key={String(label)} className="rounded-lg bg-white/5 p-3">
+                                              <div className="text-[10px] font-bold uppercase text-slate-500">{label}</div>
+                                              <div className="mt-1 text-xl font-black text-white">{Number(value || 0).toLocaleString('vi-VN')}</div>
+                                          </div>
+                                      ))}
+                                  </div>
+                                  <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                                      <div>
+                                          <div className="mb-2 text-xs font-bold uppercase text-slate-500">Mẫu DB</div>
+                                          <div className="max-h-40 space-y-1 overflow-auto rounded-lg bg-black/30 p-2 text-[11px] text-slate-400">
+                                              {(r2CleanupPreview.samples?.dbRows || []).length === 0 ? (
+                                                  <div>Không có dòng DB trong khoảng này.</div>
+                                              ) : r2CleanupPreview.samples?.dbRows?.map((row) => (
+                                                  <div key={row.id} className="truncate font-mono">{row.createdAt} · {row.id} · {row.r2Key || 'no-r2-key'}</div>
+                                              ))}
+                                          </div>
+                                      </div>
+                                      <div>
+                                          <div className="mb-2 text-xs font-bold uppercase text-slate-500">Mẫu R2</div>
+                                          <div className="max-h-40 space-y-1 overflow-auto rounded-lg bg-black/30 p-2 text-[11px] text-slate-400">
+                                              {(r2CleanupPreview.samples?.r2Objects || []).length === 0 ? (
+                                                  <div>Không có file R2 mồ côi theo bộ lọc.</div>
+                                              ) : r2CleanupPreview.samples?.r2Objects?.map((obj) => (
+                                                  <div key={obj.key} className="truncate font-mono">{obj.lastModified} · {obj.key}</div>
+                                              ))}
+                                          </div>
+                                      </div>
+                                  </div>
+                              </div>
+                          )}
                       </div>
                   </div>
               </div>

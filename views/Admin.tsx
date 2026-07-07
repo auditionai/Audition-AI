@@ -620,7 +620,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   });
   const [r2CleanupEndDate, setR2CleanupEndDate] = useState(() => toDateInputValue(new Date()));
   const [r2CleanupPrefix, setR2CleanupPrefix] = useState('');
-  const [r2CleanupIncludeOrphans, setR2CleanupIncludeOrphans] = useState(true);
+  const [r2CleanupIncludeOrphans, setR2CleanupIncludeOrphans] = useState(false);
   const [r2CleanupIncludePublic, setR2CleanupIncludePublic] = useState(false);
   const [r2CleanupLoading, setR2CleanupLoading] = useState(false);
   const [r2CleanupPreview, setR2CleanupPreview] = useState<AdminR2CleanupResult | null>(null);
@@ -4689,7 +4689,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   />
                                   <span>
                                       <b className="text-white">Quét file mồ côi trên R2</b>
-                                      <span className="mt-1 block text-slate-500">Dựa trên LastModified của R2, dùng prefix để giới hạn phạm vi nếu cần.</span>
+                                      <span className="mt-1 block text-slate-500">Cần nhập prefix, ví dụ inputs/. Nếu tắt, preview chỉ quét metadata DB nên chạy nhanh hơn.</span>
                                   </span>
                               </label>
                               <label className="flex items-start gap-3 rounded-xl border border-red-500/20 bg-red-500/5 p-3 text-xs text-red-100">

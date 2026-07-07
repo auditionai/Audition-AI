@@ -9,8 +9,9 @@ const headers = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-const MAX_DB_ROWS = 1000;
-const MAX_R2_OBJECTS = 2000;
+const MAX_DB_ROWS = 200;
+const MAX_R2_OBJECTS = 500;
+const MAX_R2_SCAN_PAGES = 3;
 const DELETE_CHUNK_SIZE = 500;
 
 const getEnv = (...keys: string[]) => {
@@ -169,8 +170,10 @@ const listR2ObjectsByDate = async (
   const samples: Array<{ key: string; lastModified?: string; size?: number }> = [];
   let continuationToken: string | undefined;
   let scanned = 0;
+  let pages = 0;
 
   do {
+    pages += 1;
     const response = await r2.send(new ListObjectsV2Command({
       Bucket: R2_BUCKET_NAME,
       Prefix: prefix || undefined,
@@ -193,6 +196,7 @@ const listR2ObjectsByDate = async (
     }
 
     if (keys.length >= MAX_R2_OBJECTS) break;
+    if (pages >= MAX_R2_SCAN_PAGES) break;
     continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
   } while (continuationToken);
 
@@ -226,10 +230,12 @@ export const handler: Handler = async (event) => {
     const { start, endExclusive, startIso, endExclusiveIso } = parseDateRange(body);
     const dryRun = body.dryRun !== false;
     const includePublic = body.includePublic === true;
-    const includeOrphanR2 = body.includeOrphanR2 !== false;
+    const includeOrphanR2 = body.includeOrphanR2 === true;
     const prefix = String(body.prefix || '').trim().replace(/^\/+/, '');
-    const r2 = getR2Client();
-    const protectedKeys = await loadProtectedKeys(includePublic);
+    if (includeOrphanR2 && !prefix) {
+      throw new Error('Vui long nhap prefix R2 khi quet file mo coi de tranh quet toan bucket.');
+    }
+    const protectedKeys = includeOrphanR2 ? await loadProtectedKeys(includePublic) : new Set<string>();
 
     let dbQuery = admin
       .from('generated_images')
@@ -262,7 +268,7 @@ export const handler: Handler = async (event) => {
     }));
 
     const orphanResult = includeOrphanR2
-      ? await listR2ObjectsByDate(r2, start, endExclusive, prefix, protectedKeys)
+      ? await listR2ObjectsByDate(getR2Client(), start, endExclusive, prefix, protectedKeys)
       : { keys: [] as string[], samples: [] as Array<{ key: string; lastModified?: string; size?: number }>, scanned: 0 };
 
     const allR2Keys = [...new Set([...dbR2Keys, ...orphanResult.keys])];
@@ -270,7 +276,9 @@ export const handler: Handler = async (event) => {
     let deletedDbRows = 0;
 
     if (!dryRun) {
-      deletedR2Objects = await deleteR2Objects(r2, allR2Keys);
+      if (allR2Keys.length > 0) {
+        deletedR2Objects = await deleteR2Objects(getR2Client(), allR2Keys);
+      }
 
       for (let i = 0; i < dbRows.length; i += DELETE_CHUNK_SIZE) {
         const ids = dbRows.slice(i, i + DELETE_CHUNK_SIZE).map((row) => row.id);

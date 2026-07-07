@@ -2262,6 +2262,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   });
 
   const handlePreviewR2Cleanup = async () => {
+      showToast('Tính năng cleanup R2 theo DB đang tạm khóa để bảo vệ Supabase. Hãy dùng R2 lifecycle/prefix cleanup.', 'error');
+      return;
+
       if (!r2CleanupStartDate || !r2CleanupEndDate) {
           showToast('Vui lòng chọn ngày bắt đầu và ngày kết thúc.', 'error');
           return;
@@ -2280,6 +2283,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   };
 
   const handleExecuteR2Cleanup = async () => {
+      showToast('Tính năng cleanup R2 theo DB đang tạm khóa để bảo vệ Supabase. Hãy dùng R2 lifecycle/prefix cleanup.', 'error');
+      return;
+
       const preview = r2CleanupPreview;
       const totalR2 = preview?.matched?.totalR2Objects ?? 0;
       const totalDb = preview?.matched?.dbRows ?? 0;
@@ -4615,11 +4621,14 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   <p className="mt-1 text-xs leading-relaxed text-slate-400">
                                       Chọn khoảng ngày để preview rồi xoá file R2 và metadata lịch sử. Mặc định giữ ảnh public và bỏ qua job đang chạy.
                                   </p>
+                                  <p className="mt-2 text-xs font-bold text-red-200">
+                                      Đang tạm khóa vì truy vấn cleanup theo DB có thể làm Supabase nano bị unhealthy.
+                                  </p>
                               </div>
                               <div className="flex shrink-0 gap-2">
                                   <button
                                       onClick={handlePreviewR2Cleanup}
-                                      disabled={r2CleanupLoading}
+                                      disabled
                                       className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/10 px-3 py-2 text-xs font-bold text-white hover:bg-white/15 disabled:opacity-50"
                                   >
                                       {r2CleanupLoading ? <Icons.Loader className="h-4 w-4 animate-spin" /> : <Icons.Search className="h-4 w-4" />}
@@ -4627,7 +4636,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   </button>
                                   <button
                                       onClick={handleExecuteR2Cleanup}
-                                      disabled={r2CleanupLoading || !r2CleanupPreview}
+                                      disabled
                                       className="inline-flex items-center gap-2 rounded-lg bg-red-500 px-3 py-2 text-xs font-bold text-white hover:bg-red-600 disabled:opacity-50"
                                   >
                                       <Icons.Trash className="h-4 w-4" />

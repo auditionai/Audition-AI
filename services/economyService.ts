@@ -2441,21 +2441,35 @@ export const runAdminR2Cleanup = async (params: {
     prefix?: string;
 }): Promise<AdminR2CleanupResult> => {
     const authHeader = await getSessionAuthHeader();
-    const response = await fetch('/api/admin-r2-cleanup', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            ...authHeader,
-        },
-        body: JSON.stringify({
-            startDate: params.startDate,
-            endDate: params.endDate,
-            dryRun: params.dryRun !== false,
-            includePublic: params.includePublic === true,
-            includeOrphanR2: params.includeOrphanR2 !== false,
-            prefix: params.prefix || '',
-        }),
-    });
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 20_000);
+    let response: Response;
+
+    try {
+        response = await fetch('/api/admin-r2-cleanup', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...authHeader,
+            },
+            signal: controller.signal,
+            body: JSON.stringify({
+                startDate: params.startDate,
+                endDate: params.endDate,
+                dryRun: params.dryRun !== false,
+                includePublic: params.includePublic === true,
+                includeOrphanR2: params.includeOrphanR2 === true,
+                prefix: params.prefix || '',
+            }),
+        });
+    } catch (error: any) {
+        if (error?.name === 'AbortError') {
+            throw new Error('Preview/xoa R2 qua lau. Hay tat quet file mo coi hoac nhap prefix nho hon.');
+        }
+        throw error;
+    } finally {
+        window.clearTimeout(timeoutId);
+    }
 
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {

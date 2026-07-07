@@ -8,6 +8,7 @@ import { refreshAutoDisabledServerAvailability } from './_server-availability';
 import type { QueueProgressLogEntry } from '../../shared/queueRecipes';
 import { classifyQueueError, isTerminalRescueFailureMessage, normalizeQueueErrorMessage, pickQueueFailureMessage } from '../../shared/queueErrorClassifier';
 import { clearFailedRescueMeta, hasFailedRescuePending, isFailedRescueStale } from '../../shared/queueRescueState';
+import { SYSTEM_QUEUE_KINDS } from '../../shared/queueKinds';
 
 const headers = {
   'Content-Type': 'application/json',
@@ -68,6 +69,7 @@ const hasOutstandingQueueWork = async () => {
     .from('generated_images')
     .select('id')
     .in('status', ['queued', 'processing'])
+    .in('queue_kind', [...SYSTEM_QUEUE_KINDS])
     .limit(1);
 
   if (error) {
@@ -163,6 +165,7 @@ const resetStaleQueueStateForReconcile = async () => {
     .from('generated_images')
     .select('id, updated_at, lease_expires_at, next_poll_at')
     .eq('status', 'processing')
+    .in('queue_kind', [...SYSTEM_QUEUE_KINDS])
     .not('job_id', 'is', null)
     .limit(500);
 
@@ -215,6 +218,7 @@ const resetStaleQueueStateForReconcile = async () => {
     .from('generated_images')
     .select('id, updated_at, lease_expires_at')
     .eq('status', 'processing')
+    .in('queue_kind', [...SYSTEM_QUEUE_KINDS])
     .is('job_id', null)
     .not('queue_payload', 'is', null)
     .limit(200);
@@ -269,6 +273,7 @@ const resetStaleQueueStateForReconcile = async () => {
       error_message: null,
     })
     .eq('status', 'queued')
+    .in('queue_kind', [...SYSTEM_QUEUE_KINDS])
     .not('queue_payload', 'is', null)
     .select('id');
 

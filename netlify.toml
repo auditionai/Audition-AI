@@ -114,6 +114,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/admin-r2-cleanup"
+  to = "/.netlify/functions/admin-r2-cleanup"
+  status = 200
+
+[[redirects]]
   from = "/api/force-rescue-failed-jobs"
   to = "/.netlify/functions/force-rescue-failed-jobs"
   status = 200

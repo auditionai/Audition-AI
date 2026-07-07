@@ -166,6 +166,7 @@ const updateJob = async (jobId: string, patch: Record<string, unknown>) => {
 };
 
 const tryClaimJob = async (job: DirectEditJobRow, leaseToken: string) => {
+  const admin = getServiceRoleClient();
   const now = Date.now();
   const leaseExpiryMs = job.lease_expires_at ? Date.parse(job.lease_expires_at) : 0;
   const hasActiveLease =
@@ -195,18 +196,34 @@ const tryClaimJob = async (job: DirectEditJobRow, leaseToken: string) => {
   const nowIso = new Date().toISOString();
   const leaseExpiresAt = new Date(Date.now() + DIRECT_EDIT_LEASE_MS).toISOString();
 
-  await updateJob(job.id, {
-    status: 'processing',
-    progress: 10,
-    processing_started_at: job.processing_started_at || nowIso,
-    lease_token: leaseToken,
-    lease_expires_at: leaseExpiresAt,
-    attempt_count: Number(job.attempt_count || 0) + 1,
-    queue_payload: payload,
-    error_message: null,
-    last_error_at: null,
-    finished_at: null,
-  });
+  const { data: claimedRows, error: claimError } = await admin
+    .from('generated_images')
+    .update({
+      status: 'processing',
+      progress: 10,
+      processing_started_at: job.processing_started_at || nowIso,
+      lease_token: leaseToken,
+      lease_expires_at: leaseExpiresAt,
+      attempt_count: Number(job.attempt_count || 0) + 1,
+      queue_payload: payload,
+      error_message: null,
+      last_error_at: null,
+      finished_at: null,
+      updated_at: nowIso,
+    })
+    .eq('id', job.id)
+    .eq('queue_kind', DIRECT_IMAGE_EDIT_QUEUE_KIND)
+    .in('status', ['queued', 'processing'])
+    .or(`lease_token.is.null,lease_expires_at.is.null,lease_expires_at.lt.${nowIso}`)
+    .select('id');
+
+  if (claimError) {
+    throw claimError;
+  }
+
+  if (!Array.isArray(claimedRows) || claimedRows.length === 0) {
+    return { claimed: false, payload: job.queue_payload, reason: 'lease_active' as const };
+  }
 
   return { claimed: true, payload, reason: null as const };
 };

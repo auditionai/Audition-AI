@@ -2385,6 +2385,86 @@ export const stopAdminQueueJob = async (jobId: string) => {
     return payload as { success: boolean; refunded?: boolean; jobId?: string; providerJobId?: string | null; providerCancelRequested?: boolean };
 };
 
+export type AdminR2CleanupResult = {
+    success: boolean;
+    dryRun: boolean;
+    range: {
+        startDate?: string;
+        endDate?: string;
+        startIso?: string;
+        endExclusiveIso?: string;
+    };
+    options: {
+        includePublic: boolean;
+        includeOrphanR2: boolean;
+        prefix: string;
+    };
+    limits: {
+        maxDbRows: number;
+        maxR2Objects: number;
+    };
+    matched: {
+        dbRows: number;
+        dbR2Objects: number;
+        orphanR2Objects: number;
+        totalR2Objects: number;
+        r2Scanned: number;
+    };
+    deleted: {
+        dbRows: number;
+        r2Objects: number;
+    };
+    samples?: {
+        dbRows?: Array<{
+            id: string;
+            createdAt?: string;
+            isPublic?: boolean;
+            status?: string;
+            assetType?: string;
+            toolName?: string;
+            r2Key?: string | null;
+        }>;
+        r2Objects?: Array<{
+            key: string;
+            lastModified?: string;
+            size?: number;
+        }>;
+    };
+};
+
+export const runAdminR2Cleanup = async (params: {
+    startDate: string;
+    endDate: string;
+    dryRun?: boolean;
+    includePublic?: boolean;
+    includeOrphanR2?: boolean;
+    prefix?: string;
+}): Promise<AdminR2CleanupResult> => {
+    const authHeader = await getSessionAuthHeader();
+    const response = await fetch('/api/admin-r2-cleanup', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...authHeader,
+        },
+        body: JSON.stringify({
+            startDate: params.startDate,
+            endDate: params.endDate,
+            dryRun: params.dryRun !== false,
+            includePublic: params.includePublic === true,
+            includeOrphanR2: params.includeOrphanR2 !== false,
+            prefix: params.prefix || '',
+        }),
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        throw new Error(payload?.error || 'Khong the don R2 theo khoang ngay');
+    }
+
+    return payload as AdminR2CleanupResult;
+};
+
 // --- MAINTENANCE MODE ---
 
 export const getMaintenanceMode = async (options?: { force?: boolean }) => {

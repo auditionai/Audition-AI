@@ -9,7 +9,7 @@ const headers = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-const MAX_DB_ROWS = 200;
+const MAX_DB_ROWS = 50;
 const MAX_R2_OBJECTS = 500;
 const MAX_R2_SCAN_PAGES = 3;
 const DELETE_CHUNK_SIZE = 500;
@@ -243,7 +243,6 @@ export const handler: Handler = async (event) => {
       .gte('created_at', startIso)
       .lt('created_at', endExclusiveIso)
       .not('status', 'in', '("queued","processing")')
-      .order('created_at', { ascending: true })
       .limit(MAX_DB_ROWS);
 
     if (!includePublic) {

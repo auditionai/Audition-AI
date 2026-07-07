@@ -212,6 +212,14 @@ export const handler: Handler = async (event) => {
     return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method Not Allowed' }) };
   }
 
+  return {
+    statusCode: 503,
+    headers,
+    body: JSON.stringify({
+      error: 'R2 cleanup theo DB dang tam khoa de bao ve Supabase. Dung R2 lifecycle/prefix cleanup thay the.',
+    }),
+  };
+
   try {
     const { user } = await requireAuthenticatedUser(event);
     const admin = getServiceRoleClient();

@@ -3653,7 +3653,9 @@ export const getAdminStats = async () => {
         })) || [],
         giftcodes: codes?.map((c: any) => {
              // Use count from relation if available, otherwise fallback to column
-             const realCount = c.gift_code_usages && c.gift_code_usages[0] ? c.gift_code_usages[0].count : (c.used_count || 0);
+             const realCount = c.code_type === 'topup_discount'
+                 ? (c.used_count || 0)
+                 : (c.gift_code_usages && c.gift_code_usages[0] ? c.gift_code_usages[0].count : (c.used_count || 0));
              
              return {
                  id: c.id,

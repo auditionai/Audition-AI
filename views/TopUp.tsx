@@ -242,7 +242,7 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
                                 className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-audi-pink font-black text-white hover:bg-pink-600 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 {loading ? <Icons.Loader className="h-5 w-5 animate-spin" /> : <Icons.QrCode className="h-5 w-5" />}
-                                Thanh toÃ¡n qua SePay
+                                Quét QR để thanh toán
                             </button>
                         </div>
                     </div>

@@ -55,10 +55,87 @@ const mapTopupGiftcodeError = (message: string) => {
   if (/GIFT_CODE_INVALID/i.test(message)) {
     return 'Mã ưu đãi không hợp lệ hoặc không áp dụng cho tài khoản này.';
   }
+  if (/GIFT_CODE_GENERATED_COLLISION/i.test(message)) {
+    return 'Mã ưu đãi vừa tạo đã bị trùng. Vui lòng đóng cửa sổ nạp tiền rồi mở lại để nhận mã mới.';
+  }
   if (/GIFTCODE_REQUIRED/i.test(message)) {
     return 'Vui lòng nhập giftcode ưu đãi.';
   }
   return message || 'Không thể áp dụng giftcode ưu đãi.';
+};
+
+const ensureGeneratedTopupGiftcode = async (admin: any, userId: string, generatedCode: string) => {
+  const code = generatedCode.trim().toUpperCase();
+  const { data: exact, error: exactError } = await admin
+    .from('gift_codes')
+    .select('id')
+    .eq('code', code)
+    .maybeSingle();
+
+  if (exactError) throw exactError;
+  if (exact?.id) return { giftCodeId: exact.id, templateId: null };
+
+  const match = code.match(/^(.+)-([A-Z0-9]{5})$/);
+  if (!match) return { giftCodeId: null, templateId: null };
+
+  const prefix = match[1];
+  const { data: template, error: templateError } = await admin
+    .from('gift_codes')
+    .select('id, code, campaign_key, discount_percent, audience, total_limit, max_per_user, expires_at, is_active, auto_generate_per_user')
+    .eq('code', prefix)
+    .eq('code_type', 'topup_discount')
+    .is('assigned_user_id', null)
+    .maybeSingle();
+
+  if (templateError) throw templateError;
+  if (!template?.id) return { giftCodeId: null, templateId: null };
+  if (template.auto_generate_per_user !== true && /^.+-[A-Z0-9]{5}$/.test(String(template.code || '').trim().toUpperCase())) {
+    return { giftCodeId: null, templateId: null };
+  }
+  if (template.is_active !== true || (template.expires_at && new Date(template.expires_at).getTime() < Date.now())) {
+    throw new Error('GIFT_CODE_TOPUP_EXPIRED_OR_LIMIT');
+  }
+
+  const campaignKey = String(template.campaign_key || template.code || prefix).trim().toUpperCase();
+  const { count: usedCount, error: usedCountError } = await admin
+    .from('topup_gift_code_usages')
+    .select('id, gift_codes!inner(campaign_key)', { count: 'exact', head: true })
+    .eq('gift_codes.campaign_key', campaignKey)
+    .in('status', ['reserved', 'applied']);
+  if (usedCountError && !/topup_gift_code_usages|schema|relation/i.test(usedCountError.message || '')) {
+    throw usedCountError;
+  }
+  if (Number(usedCount || 0) >= Number(template.total_limit || 0)) {
+    throw new Error('GIFT_CODE_TOPUP_EXPIRED_OR_LIMIT');
+  }
+
+  const { data: inserted, error: insertError } = await admin
+    .from('gift_codes')
+    .insert({
+      code,
+      code_type: 'topup_discount',
+      campaign_key: campaignKey,
+      reward: 0,
+      discount_percent: template.discount_percent,
+      audience: template.audience || 'all',
+      assigned_user_id: userId,
+      auto_generate_per_user: false,
+      total_limit: 1,
+      max_per_user: 1,
+      expires_at: template.expires_at || null,
+      is_active: true,
+    })
+    .select('id')
+    .single();
+
+  if (insertError) {
+    if (/duplicate|unique/i.test(insertError.message || '')) {
+      throw new Error('GIFT_CODE_GENERATED_COLLISION');
+    }
+    throw insertError;
+  }
+
+  return { giftCodeId: inserted?.id || null, templateId: template.id };
 };
 
 export const handler: Handler = async (event) => {
@@ -139,8 +216,21 @@ export const handler: Handler = async (event) => {
     let discountAmount = 0;
     let discountPercent = 0;
     let appliedGiftcode: string | null = null;
+    let generatedTemplateId: string | null = null;
 
     if (giftcode) {
+      try {
+        const generated = await ensureGeneratedTopupGiftcode(admin, user.id, giftcode);
+        generatedTemplateId = generated.templateId;
+      } catch (generatedError: any) {
+        await admin.from('payment_transactions').update({ status: 'failed' }).eq('id', tx.id);
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({ success: false, error: mapTopupGiftcodeError(generatedError?.message || '') }),
+        };
+      }
+
       const { data: reservedRows, error: reserveError } = await admin.rpc('reserve_topup_giftcode', {
         p_user_id: user.id,
         p_code: giftcode,
@@ -171,6 +261,10 @@ export const handler: Handler = async (event) => {
       discountAmount = Number(reserved.discount_amount_vnd || 0);
       discountPercent = Number(reserved.discount_percent || 0);
       appliedGiftcode = String(reserved.code || giftcode);
+
+      if (generatedTemplateId) {
+        await admin.rpc('increment_giftcode_usage', { code_id: generatedTemplateId });
+      }
 
       const { error: discountUpdateError } = await admin
         .from('payment_transactions')

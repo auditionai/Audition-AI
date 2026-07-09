@@ -16,6 +16,18 @@ const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const DIRECT_IMAGE_EDIT_BACKGROUND_PATH = '/.netlify/functions/direct-image-edit-background';
+const DIRECT_EDIT_DEFAULT_PRICES: Record<string, Record<string, Record<string, number>>> = {
+  magic_editor_pro: {
+    flash: { '1k': 2, '2k': 3, '4k': 4 },
+    pro: { '1k': 4, '2k': 5, '4k': 6 },
+  },
+  remove_bg_pro: {
+    flash: { '1k': 1, '2k': 1, '4k': 1 },
+  },
+  sharpen_upscale: {
+    flash: { '1k': 1, '2k': 2, '4k': 3 },
+  },
+};
 
 type DirectImageEditBody = {
   id?: string;
@@ -51,6 +63,50 @@ const mapError = (message: string) => {
   }
 
   return { statusCode: 400, error: message };
+};
+
+const normalizeKey = (value?: unknown) => String(value || '').trim().toLowerCase();
+
+const getDirectEditServerCost = async (
+  admin: ReturnType<typeof getServiceRoleClient>,
+  toolId: string,
+  queuePayload: ImageEditRecipePayload,
+) => {
+  const normalizedToolId = normalizeKey(toolId);
+  const tier = normalizeKey(queuePayload.modelId).includes('pro') ? 'pro' : 'flash';
+  const resolution = normalizeKey(queuePayload.resolution || '1K');
+  const optionId = `${tier}|${resolution}`;
+  const defaultPrice = DIRECT_EDIT_DEFAULT_PRICES[normalizedToolId]?.[tier]?.[resolution];
+
+  if (!Number.isFinite(defaultPrice) || Number(defaultPrice) <= 0) {
+    throw new Error('INVALID_SERVER_PRICE');
+  }
+
+  const { data, error } = await admin
+    .from('model_pricing')
+    .select('audition_price_vcoin')
+    .eq('model_id', normalizedToolId)
+    .eq('option_id', optionId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  const overridePrice = Number(data?.audition_price_vcoin);
+  const costVcoin = Number.isFinite(overridePrice) && overridePrice > 0
+    ? Math.ceil(overridePrice)
+    : Math.ceil(defaultPrice);
+
+  return {
+    costVcoin,
+    pricing: {
+      model_id: normalizedToolId,
+      config_key: optionId,
+      base_vcoin: costVcoin,
+      source: Number.isFinite(overridePrice) && overridePrice > 0 ? 'model_pricing_override' : 'direct_edit_default',
+    },
+  };
 };
 
 const triggerDirectImageEditBackground = async (rawUrl?: string | null, jobId?: string) => {
@@ -153,7 +209,6 @@ export const handler: Handler = async (event) => {
     const toolName = String(body.toolName || toolId || 'Image Edit').trim();
     const prompt = String(body.prompt || '').trim();
     const engine = String(body.engine || 'Vertex AI').trim();
-    const costVcoin = Math.max(0, Number(body.costVcoin || 0));
     const showInGenerationHistory = body.showInGenerationHistory === true;
     const queuePayload = body.queuePayload;
 
@@ -164,6 +219,9 @@ export const handler: Handler = async (event) => {
     if (!queuePayload || queuePayload.recipeType !== 'image_edit_recipe_v1') {
       throw new Error('Missing direct image edit payload');
     }
+
+    const serverPrice = await getDirectEditServerCost(admin, toolId, queuePayload);
+    const costVcoin = serverPrice.costVcoin;
 
     const { data: existing, error: existingError } = await admin
       .from('generated_images')
@@ -243,6 +301,7 @@ export const handler: Handler = async (event) => {
           queue_kind: DIRECT_IMAGE_EDIT_QUEUE_KIND,
           asset_type: 'image',
           cost_vcoin: costVcoin,
+          pricing: serverPrice.pricing,
         },
       });
 
@@ -301,6 +360,7 @@ export const handler: Handler = async (event) => {
             queue_kind: DIRECT_IMAGE_EDIT_QUEUE_KIND,
             asset_type: 'image',
             cost_vcoin: costVcoin,
+            pricing: serverPrice.pricing,
           },
         });
       }

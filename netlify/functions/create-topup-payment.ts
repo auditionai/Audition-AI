@@ -221,7 +221,7 @@ export const handler: Handler = async (event) => {
     const originalAmount = Number(pkg.price_vnd || 0);
     const bonusPercent = Number(promo?.bonus_percent ?? pkg.bonus_credits ?? 0);
     const totalCoins = baseVcoin + Math.floor(baseVcoin * bonusPercent / 100);
-    const providerOrderCode = Date.now();
+    const providerOrderCode = Date.now() * 1000 + Math.floor(Math.random() * 1000);
     const orderCode = `${providerOrderCode}`;
 
     const { data: tx, error: txError } = await admin

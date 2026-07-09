@@ -1141,13 +1141,10 @@ export const updateAdminUserProfile = async (
 
         if (Math.abs(balanceDelta) > 0.0001) {
             const adjustmentReason = options.adjustmentReason?.trim() || `Admin adjustment: ${currentBalance} -> ${nextBalance} VCoin`;
-            const { error: balanceError } = await supabase.rpc('apply_balance_transaction', {
+            const { error: balanceError } = await supabase.rpc('admin_adjust_user_balance', {
                 p_target_user_id: profile.id,
                 p_amount: balanceDelta,
                 p_reason: adjustmentReason,
-                p_log_type: 'admin_adjustment',
-                p_reference_type: 'admin_adjustment',
-                p_reference_id: `${profile.id}:${Date.now()}`,
                 p_metadata: {
                     previous_balance: currentBalance,
                     next_balance: nextBalance,
@@ -1273,9 +1270,23 @@ export const updateUserBalance = async (
         userId = user.id;
     }
 
-    // 1. Preferred path: atomic RPC with reference support
+    const rpcName = options.targetUserId ? 'admin_adjust_user_balance' : 'apply_balance_transaction';
+
     try {
-        const { data, error } = await supabase.rpc('apply_balance_transaction', {
+        const { data, error } = options.targetUserId
+            ? await supabase.rpc('admin_adjust_user_balance', {
+                p_target_user_id: userId,
+                p_amount: amount,
+                p_reason: reason,
+                p_metadata: {
+                    ...(options.metadata ?? {}),
+                    reference_type: options.referenceType ?? null,
+                    reference_id: options.referenceId ?? null,
+                    log_type: type,
+                    source: 'updateUserBalance',
+                },
+            })
+            : await supabase.rpc('apply_balance_transaction', {
             p_target_user_id: userId,
             p_amount: amount,
             p_reason: reason,
@@ -1297,83 +1308,11 @@ export const updateUserBalance = async (
             return;
         }
 
-        console.warn("[Economy] apply_balance_transaction RPC failed, falling back to legacy flow", error, data);
+        console.error(`[Economy] ${rpcName} RPC failed; direct client balance mutation is disabled`, error, data);
+        throw error;
     } catch (rpcError) {
-        console.warn("[Economy] apply_balance_transaction RPC unavailable, falling back to legacy flow", rpcError);
-    }
-    
-    // 2. Legacy fallback: log transaction first
-    try {
-        const transactionData: any = {
-            amount,
-            reason,
-            description: reason,
-            type,
-            ...(options.referenceType ? { reference_type: options.referenceType } : {}),
-            ...(options.referenceId ? { reference_id: options.referenceId } : {}),
-            ...(options.metadata ? { metadata: options.metadata } : {}),
-        };
-        
-        const { error } = await supabase.from('vcoin_transactions').insert({
-            ...transactionData,
-            user_id: userId
-        });
-        
-        if (error) {
-            const fallbackData = {
-                amount,
-                description: reason,
-                type,
-                user_id: userId
-            };
-            const { error: err2 } = await supabase.from('vcoin_transactions').insert(fallbackData);
-            
-            if (err2 && err2.message.includes('column "user_id" does not exist')) {
-                 await supabase.from('vcoin_transactions').insert({
-                    amount,
-                    description: reason,
-                    type,
-                    uid: userId
-                });
-            }
-        }
-    } catch (e) {
-        // Completely silent
-    }
-    
-    // 3. Legacy balance update
-    try {
-        const sessionUser = await getCurrentSessionUser().catch(() => null);
-        const canDirectlyRepairCurrentUser = sessionUser?.id === userId;
-
-        if (canDirectlyRepairCurrentUser) {
-            const { data: latestUser, error: fetchError } = await supabase.from('users').select('vcoin_balance').eq('id', userId).maybeSingle();
-            if (fetchError) throw fetchError;
-            const currentBalance = Number(latestUser?.vcoin_balance || 0);
-            const newBalance = currentBalance + amount;
-            const { error: directError } = await supabase.from('users').update({ vcoin_balance: newBalance }).eq('id', userId);
-            if (directError) throw directError;
-        } else {
-            const { error } = await supabase.rpc('secure_update_balance', {
-                amount: amount,
-                reason: reason,
-                log_type: type
-            });
-
-            if (error) throw error;
-        }
-    } catch (e: any) {
-        console.error("[Economy] Critical: Failed to update balance", e);
-        throw new Error("Failed to update balance: " + e.message);
-    }
-    
-    const sessionUser = await getCurrentSessionUser().catch(() => null);
-    if (!options.targetUserId || sessionUser?.id === userId) {
-        await reconcileCurrentUserBalanceFromLedger().catch((reconcileError) => {
-            console.warn('[Economy] Failed to reconcile balance after legacy update', reconcileError);
-        });
-        invalidateUserProfileCache();
-        window.dispatchEvent(new Event('balance_updated'));
+        console.error(`[Economy] ${rpcName} unavailable; direct client balance mutation is disabled`, rpcError);
+        throw rpcError;
     }
 };
 
@@ -2205,6 +2144,13 @@ export const adminApproveTransaction = async (txId: string): Promise<{success: b
             p_provider_payload: { source: 'admin_manual_approval' }
         });
         if (error) throw error;
+
+        const { error: giftcodeError } = await supabase.rpc('mark_topup_giftcode_applied', {
+            p_transaction_id: txId,
+        });
+        if (giftcodeError && !/mark_topup_giftcode_applied|function|schema|topup_gift_code/i.test(giftcodeError.message || '')) {
+            throw giftcodeError;
+        }
         
         return { success: true };
     } catch (e: any) {
@@ -2276,6 +2222,13 @@ export const adminBulkRejectTransactions = async (txIds: string[]): Promise<{suc
 export const deleteTransaction = async (txId: string): Promise<{success: boolean, error?: string}> => {
     if (!supabase) return { success: false, error: "No Database" };
     try {
+        const { error: giftcodeError } = await supabase.rpc('cancel_topup_giftcode_reservation', {
+            p_transaction_id: txId,
+        });
+        if (giftcodeError && !/cancel_topup_giftcode_reservation|function|schema/i.test(giftcodeError.message || '')) {
+            throw giftcodeError;
+        }
+
         const { error } = await supabase.from('payment_transactions').delete().eq('id', txId);
         if (error) throw error;
         return { success: true };

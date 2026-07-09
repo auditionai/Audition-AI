@@ -1,5 +1,5 @@
 import type { Handler } from '@netlify/functions';
-import { getServiceRoleClient } from './_supabase';
+import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 import {
   extractSePayPaidAmount,
   extractSePayProviderOrderId,
@@ -53,6 +53,7 @@ export const handler: Handler = async (event) => {
   }
 
   try {
+    const { user } = await requireAuthenticatedUser(event);
     const orderCodeText = String(event.queryStringParameters?.orderCode || '').trim();
     const orderCode = Number(orderCodeText);
     if (!orderCodeText) {
@@ -66,7 +67,7 @@ export const handler: Handler = async (event) => {
     const admin = getServiceRoleClient();
     const { data: existingTransaction, error: existingTransactionError } = await admin
       .from('payment_transactions')
-      .select('id, payment_method, provider_payment_link_id, provider_payload, amount_vnd, created_at')
+      .select('id, user_id, payment_method, provider_payment_link_id, provider_payload, amount_vnd, created_at')
       .or(Number.isFinite(orderCode)
         ? `provider_order_code.eq.${orderCode},order_code.eq.${orderCodeText}`
         : `order_code.eq.${orderCodeText}`)
@@ -83,6 +84,24 @@ export const handler: Handler = async (event) => {
         statusCode: 404,
         headers,
         body: JSON.stringify({ error: 'Transaction not found', orderCode: orderCodeText }),
+      };
+    }
+
+    const { data: requesterProfile, error: requesterProfileError } = await admin
+      .from('users')
+      .select('is_admin')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (requesterProfileError) {
+      throw requesterProfileError;
+    }
+
+    if (existingTransaction.user_id !== user.id && requesterProfile?.is_admin !== true) {
+      return {
+        statusCode: 403,
+        headers,
+        body: JSON.stringify({ error: 'Forbidden' }),
       };
     }
 

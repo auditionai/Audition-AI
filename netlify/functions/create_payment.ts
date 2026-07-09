@@ -127,6 +127,14 @@ export const handler: Handler = async (event) => {
   }
 
   try {
+    return {
+      statusCode: 410,
+      headers,
+      body: JSON.stringify({
+        error: 'Deprecated payment endpoint. Use /api/create-topup-payment.',
+      }),
+    };
+
     const body = JSON.parse(event.body || '{}');
     const {
       amount,

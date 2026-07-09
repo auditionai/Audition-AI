@@ -153,6 +153,7 @@ const TST_DOCS_VIDEO_ASPECT_RATIO_FALLBACKS: Record<string, string[]> = {
   'kling-o1-video': ['9:16', '16:9', '1:1'],
   'kling-3.0-video': ['16:9', '9:16', '1:1'],
 };
+const GROK_VIDEO_DURATIONS = ['5s', '10s'];
 
 const tierToModelId: Record<TstGenerationTier, string> = {
   flash: 'nano-banana-2',
@@ -549,6 +550,10 @@ export const sanitizePricingEntriesWithRuntimeModels = (
     }
 
     const normalizedDuration = normalizeCatalogDuration(entry.duration);
+    if (!isDurationAllowedForModel(entry.model, normalizedDuration)) {
+      return false;
+    }
+
     if (normalizedDuration && Array.isArray(model.capabilities?.durations) && model.capabilities?.durations?.length) {
       const allowedDurations = model.capabilities.durations.map((value) => normalizeCatalogDuration(value)).filter(Boolean);
       if (allowedDurations.length > 0 && !allowedDurations.includes(normalizedDuration)) {
@@ -809,6 +814,17 @@ const getDefaultServerForModel = (modelId: string) =>
 
 const isGrokVideoModel = (modelId: string) => normalizeModelId(modelId).startsWith('grok');
 
+const isDurationAllowedForModel = (modelId: string, duration?: string | null) => {
+  const normalizedDuration = normalizeDuration(duration || '');
+  if (!normalizedDuration) return true;
+  return !isGrokVideoModel(modelId) || GROK_VIDEO_DURATIONS.includes(normalizedDuration);
+};
+
+const filterDurationsForModel = (modelId: string, durations: string[]) =>
+  isGrokVideoModel(modelId)
+    ? durations.filter((duration) => GROK_VIDEO_DURATIONS.includes(normalizeDuration(duration)))
+    : durations;
+
 const serversMatchForModel = (modelId: string, entryServer?: string, requestedServer?: string | null) => {
   const normalizedRequested = requestedServer ? normalizeServer(requestedServer) : '';
   if (!normalizedRequested) return true;
@@ -830,6 +846,7 @@ const matchesVideoResolutionForModel = (modelId: string, entryResolution?: strin
 
 const matchesVideoDurationForModel = (modelId: string, entryDuration?: string, requestedDuration?: string | null) => {
   if (!requestedDuration) return true;
+  if (!isDurationAllowedForModel(modelId, requestedDuration)) return false;
   const normalizedEntry = normalizeCatalogDuration(entryDuration);
   if (normalizedEntry === requestedDuration) return true;
   return (isGrokVideoModel(modelId) || isPerSecondBillingModel(modelId, 'video')) && !normalizedEntry;
@@ -1406,9 +1423,12 @@ export const getVideoModelSpecs = (
       unique(((model.capabilities?.resolutions || []) as string[]).map((value) => normalizeCatalogResolution(value)).filter(Boolean)),
       RESOLUTION_ORDER,
     );
-    const durations = getUniqueDurations(entries);
+    const durations = filterDurationsForModel(model.model, getUniqueDurations(entries));
     const capabilityDurations = sortByOrder(
-      unique(((model.capabilities?.durations || []) as string[]).map((value) => normalizeCatalogDuration(value)).filter(Boolean)),
+      filterDurationsForModel(
+        model.model,
+        unique(((model.capabilities?.durations || []) as string[]).map((value) => normalizeCatalogDuration(value)).filter(Boolean)),
+      ),
       DURATION_ORDER,
     );
     const speeds = getUniqueSpeeds(entries);
@@ -1538,7 +1558,7 @@ export const getVideoCompatibleDurations = ({
   if (entries.length === 0) {
     return [];
   }
-  return getUniqueDurations(entries);
+  return filterDurationsForModel(modelId, getUniqueDurations(entries));
 };
 
 export const getVideoCompatibleSpeeds = ({

@@ -33,7 +33,7 @@ All models available via the API. Credits are deducted per generation.
 | `kling-o1-video` | Kling O1 Video | vip2 | 1080p, 720p | 5s, 10s | 16:9, 9:16, 1:1 | No | 60-600 |
 | `seedance-2.0-fast` | Seedance 2.0 Fast | fast | 720p, 480p | 5s, 8s, 10s, 15s | 16:9, 9:16, 4:3, 3:4, 1:1, 21:9 | Yes | 80-530 |
 | `seedance-2.0` | Seedance 2.0 | standard | 720p, 480p | 5s, 8s, 10s, 15s | 16:9, 9:16, 4:3, 3:4, 1:1, 21:9 | Yes | 200-900 |
-| `grok-i2v` | Grok Video | default | 720p, 480p | 6s, 10s | 9:16, 16:9, 1:1 | No | 5-15 |
+| `grok-i2v` | Grok Video | default | 720p, 480p | 5s, 10s | 9:16, 16:9, 1:1 | No | 5-15 |
 | `sora-2.0` | Sora 2.0 | vip1 | - | 10s, 15s, 25s | 16:9, 9:16 | No | 20-50 |
 | `veo3.1-low` | Veo 3.1 LOW | fast | - | 8s | 16:9, 9:16 | No | 10 |
 

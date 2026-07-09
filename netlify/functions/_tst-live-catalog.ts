@@ -52,6 +52,7 @@ const TST_DOCS_VIDEO_ASPECT_RATIO_FALLBACKS: Record<string, string[]> = {
   'kling-o1-video': ['9:16', '16:9', '1:1'],
   'kling-3.0-video': ['16:9', '9:16', '1:1'],
 };
+const GROK_VIDEO_DURATIONS = ['5s', '10s'];
 
 const sortByOrder = (values: string[], order: string[]) =>
   [...values].sort((a, b) => {
@@ -126,6 +127,12 @@ const getDefaultServerForModel = (modelId: string) =>
 
 const isGrokModel = (modelId: string) => normalize(modelId).startsWith('grok');
 
+const isDurationAllowedForModel = (modelId: string, duration?: string) => {
+  const normalizedDuration = normalizeDuration(duration);
+  if (!normalizedDuration) return true;
+  return !isGrokModel(modelId) || GROK_VIDEO_DURATIONS.includes(normalizedDuration);
+};
+
 const serversMatchForModel = (modelId: string, entryServer?: string, requestedServer?: string) => {
   const normalizedRequested = normalizeServer(requestedServer);
   if (!normalizedRequested) return true;
@@ -149,6 +156,7 @@ const matchesResolutionForModel = (modelId: string, entryResolution?: string, re
 const matchesDurationForModel = (modelId: string, entryDuration?: string, requestedDuration?: string) => {
   const normalizedRequested = normalizeDuration(requestedDuration);
   if (!normalizedRequested) return true;
+  if (!isDurationAllowedForModel(modelId, normalizedRequested)) return false;
   const normalizedEntry = normalizeDuration(entryDuration);
   if (normalizedEntry === normalizedRequested) return true;
   const perSecondModel = normalize(modelId).startsWith('motion-control-');
@@ -390,9 +398,11 @@ export const validateQueuePayloadAgainstLiveCatalog = async (
 
   if (duration && Array.isArray(model.capabilities?.durations) && model.capabilities!.durations!.length > 0) {
     const availableDurations = model.capabilities!.durations!.map((value) => normalizeDuration(value));
-    if (!availableDurations.includes(duration)) {
+    if (!availableDurations.includes(duration) || !isDurationAllowedForModel(modelId, duration)) {
       throw new Error(`INVALID_TST_CONFIG: Duration ${duration} is disabled for ${modelId}`);
     }
+  } else if (duration && !isDurationAllowedForModel(modelId, duration)) {
+    throw new Error(`INVALID_TST_CONFIG: Duration ${duration} is disabled for ${modelId}`);
   }
 
   if (speed === 'slow' && model.capabilities?.slow_mode !== true) {

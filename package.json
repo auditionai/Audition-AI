@@ -14,6 +14,7 @@
     "render:queue-watchdog": "tsx ./scripts/render-queue-watchdog.mjs",
     "queue:hardening-audit": "tsx ./scripts/queue-hardening-audit.mjs",
     "render:web": "tsx ./scripts/render-web.mjs",
+    "r2:cleanup": "node ./scripts/r2-cleanup-only.mjs",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
   },

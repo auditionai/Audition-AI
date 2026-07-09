@@ -150,6 +150,15 @@ export const handler: Handler = async (event) => {
       throw error;
     }
 
+    if (providerStatus === 'PAID') {
+      const { error: giftcodeApplyError } = await admin.rpc('mark_topup_giftcode_applied', {
+        p_transaction_id: existingTransaction.id,
+      });
+      if (giftcodeApplyError && !/function|schema|topup_gift_code/i.test(giftcodeApplyError.message || '')) {
+        throw giftcodeApplyError;
+      }
+    }
+
     return {
       statusCode: 200,
       headers,

@@ -1904,9 +1904,23 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       }
   };
 
+  const buildRandomTopupGiftcode = (discountPercent: number) => {
+      const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      const suffix = Array.from({ length: 5 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
+      return `AUAI-${Math.max(1, Math.min(100, Math.floor(discountPercent || 0)))}-${suffix}`;
+  };
+
   const handleSaveGiftcode = async () => {
       if (editingGiftcode) {
-          const result = await saveGiftcode(editingGiftcode);
+          const giftcodeToSave = {
+              ...editingGiftcode,
+              code: editingGiftcode.code?.trim()
+                  ? editingGiftcode.code
+                  : editingGiftcode.codeType === 'topup_discount'
+                      ? buildRandomTopupGiftcode(editingGiftcode.discountPercent || 0)
+                      : editingGiftcode.code,
+          };
+          const result = await saveGiftcode(giftcodeToSave);
           if (result.success) {
               setEditingGiftcode(null);
               refreshData();
@@ -3451,7 +3465,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       <div className="flex justify-between items-center">
                           <h2 className="text-lg md:text-2xl font-bold text-white">Quản Lý Giftcode</h2>
                           <div className="flex gap-2">
-                              <button onClick={() => setEditingGiftcode({id: `temp_${Date.now()}`, code: '', campaignKey: '', reward: 10, totalLimit: 100, usedCount: 0, maxPerUser: 1, isActive: true})} className="px-3 py-2 bg-audi-pink text-white rounded-lg font-bold flex items-center gap-2 hover:bg-pink-600 text-xs md:text-sm"><Icons.Plus className="w-4 h-4" /> <span className="hidden md:inline">Tạo Code</span><span className="md:hidden">Tạo</span></button>
+                              <button onClick={() => setEditingGiftcode({id: `temp_${Date.now()}`, code: '', codeType: 'reward', campaignKey: '', reward: 10, discountPercent: 0, audience: 'all', assignedUserId: null, autoGeneratePerUser: false, totalLimit: 100, usedCount: 0, maxPerUser: 1, isActive: true})} className="px-3 py-2 bg-audi-pink text-white rounded-lg font-bold flex items-center gap-2 hover:bg-pink-600 text-xs md:text-sm"><Icons.Plus className="w-4 h-4" /> <span className="hidden md:inline">Tạo Code</span><span className="md:hidden">Tạo</span></button>
                           </div>
                       </div>
                       <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 md:p-6 mb-6">
@@ -3467,7 +3481,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                           {giftcodes.map(code => (
                               <div key={code.id} className="bg-[#12121a] border border-white/10 rounded-xl p-4 shadow-sm relative overflow-hidden">
-                                  <div className="flex justify-between items-start mb-3"><div><div className="font-mono font-bold text-white text-lg tracking-wider">{code.code}</div><div className="text-[10px] text-slate-400 font-bold uppercase mt-1">Chiến dịch: {code.campaignKey || code.code}</div><div className="text-audi-yellow font-bold text-sm mt-1">+{code.reward} Vcoin</div></div>{code.isActive ? <span className="text-green-500 text-[10px] font-bold border border-green-500/20 px-2 py-1 rounded bg-green-500/10">ACTIVE</span> : <span className="text-red-500 text-[10px] font-bold border border-red-500/20 px-2 py-1 rounded bg-red-500/10">INACTIVE</span>}</div>
+                                  <div className="flex justify-between items-start mb-3"><div><div className="font-mono font-bold text-white text-lg tracking-wider">{code.code}</div><div className="text-[10px] text-slate-400 font-bold uppercase mt-1">Chiến dịch: {code.campaignKey || code.code}</div><div className="mt-1 flex flex-wrap gap-2"><span className={`rounded px-2 py-1 text-[10px] font-bold uppercase ${code.codeType === 'topup_discount' ? 'bg-audi-cyan/15 text-audi-cyan' : 'bg-audi-yellow/15 text-audi-yellow'}`}>{code.codeType === 'topup_discount' ? 'Giảm giá nạp' : 'Thưởng Vcoin'}</span><span className="text-audi-yellow font-bold text-sm">{code.codeType === 'topup_discount' ? `-${code.discountPercent || 0}%` : `+${code.reward} Vcoin`}</span></div></div>{code.isActive ? <span className="text-green-500 text-[10px] font-bold border border-green-500/20 px-2 py-1 rounded bg-green-500/10">ACTIVE</span> : <span className="text-red-500 text-[10px] font-bold border border-red-500/20 px-2 py-1 rounded bg-red-500/10">INACTIVE</span>}</div>
                                   <div className="mb-3"><div className="flex justify-between text-[10px] text-slate-500 mb-1 font-bold uppercase"><span>Sử dụng</span><span>{code.usedCount}/{code.totalLimit}</span></div><div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden"><div className="h-full bg-green-500" style={{ width: `${Math.min(100, (code.usedCount / code.totalLimit) * 100)}%` }}></div></div></div>
                                   <div className="flex justify-between items-center border-t border-white/5 pt-3">
                                       <span className="text-[10px] text-slate-500">Max: {code.maxPerUser}/người</span>
@@ -5490,7 +5504,67 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           <div className="fixed inset-0 z-[2000] flex justify-center items-start p-4 pt-24 overflow-y-auto">
               <div className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-white/20 shadow-2xl">
                   <h3 className="text-xl font-bold text-white mb-6">{editingGiftcode.id.startsWith('temp_') ? 'Tạo Giftcode' : 'Sửa Giftcode'}</h3>
-                  <div className="space-y-4 mb-6"><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Mã Code (Tự động in hoa)</label><input value={editingGiftcode.code} onChange={e => setEditingGiftcode({...editingGiftcode, code: e.target.value.toUpperCase()})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono font-bold" placeholder="Vd: CHAOMUNG"/></div><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Mã chiến dịch</label><input value={editingGiftcode.campaignKey || ''} onChange={e => setEditingGiftcode({...editingGiftcode, campaignKey: e.target.value.toUpperCase()})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono font-bold" placeholder="Vd: TET2026" /></div><p className="text-[11px] text-slate-500 -mt-2">Các giftcode cùng chiến dịch dùng chung mã này. Hệ thống chặn theo tài khoản, IP/network và cụm email.</p><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Phần thưởng (Vcoin)</label><input type="number" value={editingGiftcode.reward} onChange={e => setEditingGiftcode({...editingGiftcode, reward: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-yellow font-bold" /></div><div className="grid grid-cols-2 gap-4"><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Giới hạn tổng</label><input type="number" value={editingGiftcode.totalLimit} onChange={e => setEditingGiftcode({...editingGiftcode, totalLimit: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" /></div><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Max/Người</label><input type="number" value={editingGiftcode.maxPerUser} onChange={e => setEditingGiftcode({...editingGiftcode, maxPerUser: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" /></div></div><label className="flex items-center gap-2 cursor-pointer bg-white/5 p-3 rounded-xl border border-white/10 hover:bg-white/10 transition-colors mt-2"><input type="checkbox" checked={editingGiftcode.isActive} onChange={e => setEditingGiftcode({...editingGiftcode, isActive: e.target.checked})} className="accent-green-500 w-4 h-4" /><span className="text-sm font-bold text-white">Kích hoạt ngay</span></label></div><div className="flex gap-3"><button onClick={() => setEditingGiftcode(null)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold">Hủy</button><button onClick={handleSaveGiftcode} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold">Lưu Code</button></div>
+                  <div className="space-y-4 mb-6">
+                      <div>
+                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Loại code</label>
+                          <select value={editingGiftcode.codeType || 'reward'} onChange={e => setEditingGiftcode({...editingGiftcode, codeType: e.target.value as any})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-bold">
+                              <option value="reward">Thưởng Vcoin</option>
+                              <option value="topup_discount">Giảm giá nạp tiền</option>
+                          </select>
+                      </div>
+                      <div>
+                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Mã Code (Tự động in hoa)</label>
+                          <input value={editingGiftcode.code} onChange={e => setEditingGiftcode({...editingGiftcode, code: e.target.value.toUpperCase()})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono font-bold" placeholder={editingGiftcode.codeType === 'topup_discount' ? 'Vd: AUAI-50-8K2QD' : 'Vd: CHAOMUNG'} />
+                      </div>
+                      <div>
+                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Mã chiến dịch</label>
+                          <input value={editingGiftcode.campaignKey || ''} onChange={e => setEditingGiftcode({...editingGiftcode, campaignKey: e.target.value.toUpperCase()})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono font-bold" placeholder="Vd: TET2026" />
+                      </div>
+                      <p className="text-[11px] text-slate-500 -mt-2">Code thưởng dùng cho mục Giftcode. Code giảm giá nạp tiền dùng ở màn nạp và được reserve theo giao dịch SePay.</p>
+                      {editingGiftcode.codeType === 'topup_discount' ? (
+                          <>
+                              <div>
+                                  <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Giảm giá (%)</label>
+                                  <input type="number" min={1} max={100} value={editingGiftcode.discountPercent || 0} onChange={e => setEditingGiftcode({...editingGiftcode, discountPercent: Number(e.target.value), reward: 0})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-cyan font-bold" />
+                              </div>
+                              <div>
+                                  <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Áp dụng cho</label>
+                                  <select value={editingGiftcode.audience || 'all'} onChange={e => setEditingGiftcode({...editingGiftcode, audience: e.target.value as any})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-bold">
+                                      <option value="all">Tất cả tài khoản</option>
+                                      <option value="new_user_first_topup">Chỉ lần nạp đầu tiên</option>
+                                      <option value="specific_user">Một tài khoản cụ thể</option>
+                                  </select>
+                              </div>
+                              {editingGiftcode.audience === 'specific_user' && (
+                                  <div>
+                                      <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">User ID</label>
+                                      <input value={editingGiftcode.assignedUserId || ''} onChange={e => setEditingGiftcode({...editingGiftcode, assignedUserId: e.target.value.trim() || null})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono text-xs" placeholder="UUID tài khoản" />
+                                  </div>
+                              )}
+                              <label className="flex items-center gap-2 cursor-pointer bg-white/5 p-3 rounded-xl border border-white/10 hover:bg-white/10 transition-colors">
+                                  <input type="checkbox" checked={Boolean(editingGiftcode.autoGeneratePerUser)} onChange={e => setEditingGiftcode({...editingGiftcode, autoGeneratePerUser: e.target.checked})} className="accent-audi-cyan w-4 h-4" />
+                                  <span className="text-sm font-bold text-white">Đánh dấu mẫu tạo code riêng từng user</span>
+                              </label>
+                          </>
+                      ) : (
+                          <div>
+                              <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Phần thưởng (Vcoin)</label>
+                              <input type="number" value={editingGiftcode.reward} onChange={e => setEditingGiftcode({...editingGiftcode, reward: Number(e.target.value), discountPercent: 0})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-yellow font-bold" />
+                          </div>
+                      )}
+                      <div className="grid grid-cols-2 gap-4">
+                          <div>
+                              <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Giới hạn tổng</label>
+                              <input type="number" value={editingGiftcode.totalLimit} onChange={e => setEditingGiftcode({...editingGiftcode, totalLimit: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" />
+                          </div>
+                          <div>
+                              <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Max/Người</label>
+                              <input type="number" value={editingGiftcode.maxPerUser} onChange={e => setEditingGiftcode({...editingGiftcode, maxPerUser: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" />
+                          </div>
+                      </div>
+                      <label className="flex items-center gap-2 cursor-pointer bg-white/5 p-3 rounded-xl border border-white/10 hover:bg-white/10 transition-colors mt-2"><input type="checkbox" checked={editingGiftcode.isActive} onChange={e => setEditingGiftcode({...editingGiftcode, isActive: e.target.checked})} className="accent-green-500 w-4 h-4" /><span className="text-sm font-bold text-white">Kích hoạt ngay</span></label>
+                  </div>
+                  <div className="flex gap-3"><button onClick={() => setEditingGiftcode(null)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold">Hủy</button><button onClick={handleSaveGiftcode} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold">Lưu Code</button></div>
               </div>
           </div>
       )}

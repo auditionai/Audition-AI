@@ -337,8 +337,13 @@ export interface CreditPackage {
 export interface Giftcode {
     id: string;
     code: string;
+    codeType?: 'reward' | 'topup_discount';
     campaignKey?: string;
     reward: number; // Amount of Vcoin
+    discountPercent?: number;
+    audience?: 'all' | 'new_user_first_topup' | 'specific_user';
+    assignedUserId?: string | null;
+    autoGeneratePerUser?: boolean;
     totalLimit: number; // Total usages allowed (e.g., 100 people)
     usedCount: number;
     maxPerUser: number; // Usually 1
@@ -359,6 +364,9 @@ export interface Transaction {
   packageId: string;
   amount?: number;
   price?: number;
+  originalAmount?: number;
+  discountAmount?: number;
+  topupGiftcode?: string | null;
   vcoin_received: number;
   status: TransactionStatus;
   createdAt: string;

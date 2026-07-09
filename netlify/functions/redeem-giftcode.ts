@@ -126,6 +126,9 @@ const normalizeCampaignKey = (value?: string | null, fallback = '') =>
     .toUpperCase();
 
 const mapGiftcodeError = (message: string) => {
+  if (/GIFT_CODE_LIMIT_REACHED|GIFT_CODE_EXPIRED|GIFT_CODE_INVALID/i.test(message)) {
+    return 'Code đã đạt giới hạn 1000 lần sử dụng trên hệ thống hoặc đã hết hạn sử dụng, vui lòng inbox admin nếu bạn có thắc mắc gì thêm.';
+  }
   if (/GIFT_CODE_ALREADY_USED_BY_IP/i.test(message)) {
     return 'Địa chỉ IP này đã dùng giftcode trong chiến dịch này rồi.';
   }
@@ -214,12 +217,24 @@ export const handler: Handler = async (event) => {
       try {
         const { data: giftCodeRow, error: giftCodeRowError } = await admin
           .from('gift_codes')
-          .select('id, campaign_key')
+          .select('id, campaign_key, code_type')
           .eq('code', code)
           .maybeSingle();
 
         if (giftCodeRowError) {
           throw giftCodeRowError;
+        }
+
+        if (giftCodeRow?.code_type === 'topup_discount') {
+          return {
+            statusCode: 400,
+            headers,
+            body: JSON.stringify({
+              success: false,
+              reward: 0,
+              message: 'Mã này chỉ áp dụng trong giao diện nạp tiền.',
+            }),
+          };
         }
 
         campaignKey = normalizeCampaignKey(giftCodeRow?.campaign_key, code);

@@ -1969,7 +1969,37 @@ const buildPaymentReturnUrls = () => {
     };
 };
 
-export const createPaymentLink = async (packageId: string): Promise<Transaction> => {
+export type TopupGiftcodeOffer = {
+    id: string;
+    code: string;
+    discountPercent: number;
+    totalLimit: number;
+    usedCount: number;
+    remainingCount: number;
+    maxPerUser: number;
+    audience: 'all' | 'new_user_first_topup' | 'specific_user' | string;
+    expiresAt?: string | null;
+    status: 'available' | 'used' | 'reserved' | 'expired' | 'limit_reached' | 'unavailable' | string;
+    lastUsedAt?: string | null;
+};
+
+export const getTopupGiftcodes = async (): Promise<TopupGiftcodeOffer[]> => {
+    if (!supabase) return [];
+    const authHeader = await getSessionAuthHeader();
+    const response = await fetch('/api/topup-giftcodes', {
+        method: 'GET',
+        headers: {
+            ...authHeader,
+        },
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error || 'Không thể tải giftcode nạp tiền.');
+    }
+    return Array.isArray(payload.giftcodes) ? payload.giftcodes : [];
+};
+
+export const createPaymentLink = async (packageId: string, topupGiftcode?: string): Promise<Transaction> => {
     if (!supabase) throw new Error("No Database");
     const user = await getUserProfile();
     const pkg = (await getPackages()).find(p => p.id === packageId);
@@ -1990,62 +2020,44 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
         total_vcoin: totalCoins,
     };
     trackEvent('topup_checkout_start', analyticsBase);
-    
-    // Create Pending Transaction
-    const { data, error } = await supabase.from('payment_transactions').insert({
-        user_id: user.id,
-        package_id: packageId,
-        amount_vnd: pkg.price,
-        vcoin_received: totalCoins,
-        status: 'pending',
-        order_code: orderCode,
-        provider_order_code: providerOrderCode,
-    }).select().single();
-
-    if (error) throw error;
 
     // Call Cloud Function to get SePay checkout URL.
     try {
         const { returnUrl, cancelUrl } = buildPaymentReturnUrls();
-        const res = await fetch('/api/create-payment', {
+        const authHeader = await getSessionAuthHeader();
+        const res = await fetch('/api/create-topup-payment', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                ...authHeader,
+            },
             body: JSON.stringify({
-                amount: pkg.price,
-                description: `AI${String(providerOrderCode).slice(-7)}`,
-                orderCode: providerOrderCode,
-                transactionId: data.id,
+                packageId,
+                giftcode: String(topupGiftcode || '').trim().toUpperCase() || undefined,
                 returnUrl,
                 cancelUrl,
-                buyerName: user.username,
-                buyerEmail: user.email,
-                items: [
-                    {
-                        name: pkg.name,
-                        quantity: 1,
-                        price: pkg.price,
-                    }
-                ],
-                expiredAt: Math.floor(Date.now() / 1000) + (15 * 60)
             })
         });
         const paymentData = await res.json();
+        const tx = paymentData?.transaction;
 
-        if (!res.ok || !paymentData?.checkoutUrl) {
+        if (!res.ok || !paymentData?.success || !tx?.checkoutUrl) {
             throw new Error(paymentData?.desc || paymentData?.error || 'Failed to create payment checkout URL');
         }
 
-        const paymentMethod = 'sepay';
         if (typeof window !== 'undefined') {
             try {
                 window.sessionStorage.setItem(
-                    `auditionai:pending-payment:${orderCode}`,
+                    `auditionai:pending-payment:${tx.order_code || tx.code}`,
                     JSON.stringify({
-                        orderCode,
-                        amount: pkg.price,
-                        vcoin: totalCoins,
+                        orderCode: tx.order_code || tx.code,
+                        amount: tx.amount,
+                        originalAmount: tx.originalAmount,
+                        discountAmount: tx.discountAmount,
+                        topupGiftcode: tx.topupGiftcode,
+                        vcoin: tx.vcoin_received,
                         packageName: pkg.name,
-                        paymentMethod,
+                        paymentMethod: tx.paymentMethod,
                     }),
                 );
                 const rawPendingOrders = window.localStorage.getItem(PENDING_SEPAY_ORDERS_STORAGE_KEY);
@@ -2053,11 +2065,14 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
                 const nextPendingOrders = [
                     ...(Array.isArray(pendingOrders) ? pendingOrders : []),
                     {
-                        orderCode,
-                        transactionId: data.id,
+                        orderCode: tx.order_code || tx.code,
+                        transactionId: tx.id,
                         createdAt: Date.now(),
-                        amount: pkg.price,
-                        vcoin: totalCoins,
+                        amount: tx.amount,
+                        originalAmount: tx.originalAmount,
+                        discountAmount: tx.discountAmount,
+                        topupGiftcode: tx.topupGiftcode,
+                        vcoin: tx.vcoin_received,
                         packageName: pkg.name,
                     },
                 ].filter((item, index, all) =>
@@ -2069,51 +2084,22 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
                 console.warn('Failed to persist pending payment metadata', storageError);
             }
         }
-
-        await supabase
-            .from('payment_transactions')
-            .update({
-                checkout_url: paymentData.checkoutUrl,
-                provider_payment_link_id: paymentData.paymentLinkId || null,
-                payment_method: paymentMethod,
-            })
-            .eq('id', data.id);
         
         // Update transaction with checkoutUrl if needed, or just return it
         trackEvent('topup_checkout_created', {
             ...analyticsBase,
-            payment_method: paymentMethod,
+            payment_method: tx.paymentMethod,
+            discount_amount_vnd: tx.discountAmount || 0,
+            topup_giftcode: tx.topupGiftcode || null,
         });
-        return {
-            id: data.id,
-            userId: user.id,
-            packageId,
-            amount: pkg.price,
-            vcoin_received: totalCoins,
-            status: 'pending',
-            createdAt: data.created_at,
-            paymentMethod,
-            code: orderCode,
-            order_code: orderCode,
-            checkoutUrl: paymentData.checkoutUrl
-        };
+        return tx;
     } catch (e) {
-        console.warn("Payment gateway generation failed, using manual mode", e);
+        console.warn("Payment gateway generation failed", e);
         trackEvent('topup_checkout_manual_fallback', {
             ...analyticsBase,
             error_message: e instanceof Error ? e.message.slice(0, 120) : 'unknown',
         });
-        return {
-            id: data.id,
-            userId: user.id,
-            packageId,
-            amount: pkg.price,
-            vcoin_received: totalCoins,
-            status: 'pending',
-            createdAt: data.created_at,
-            paymentMethod: 'manual',
-            code: orderCode
-        };
+        throw e;
     }
 };
 
@@ -3075,7 +3061,12 @@ export const saveGiftcode = async (code: Giftcode): Promise<{success: boolean, e
         const payload = {
             code: normalizedCode,
             campaign_key: normalizedCampaignKey,
+            code_type: code.codeType || 'reward',
             reward: code.reward,
+            discount_percent: code.discountPercent || 0,
+            audience: code.audience || 'all',
+            assigned_user_id: code.assignedUserId || null,
+            auto_generate_per_user: code.autoGeneratePerUser || false,
             total_limit: code.totalLimit,
             max_per_user: code.maxPerUser,
             is_active: code.isActive
@@ -3448,7 +3439,7 @@ export const getAdminStats = async () => {
     // Fetch giftcodes with accurate usage count from relation
     const { data: codes } = await supabase
         .from('gift_codes')
-        .select('id, code, campaign_key, reward, total_limit, used_count, max_per_user, is_active, gift_code_usages(count)');
+        .select('id, code, code_type, campaign_key, reward, discount_percent, audience, assigned_user_id, auto_generate_per_user, total_limit, used_count, max_per_user, is_active, gift_code_usages(count)');
 
     const { data: txs, error: txError } = await supabase
         .from('payment_transactions')
@@ -3667,8 +3658,13 @@ export const getAdminStats = async () => {
              return {
                  id: c.id,
                  code: c.code,
+                 codeType: c.code_type || 'reward',
                  campaignKey: c.campaign_key || c.code,
                  reward: c.reward,
+                 discountPercent: c.discount_percent || 0,
+                 audience: c.audience || 'all',
+                 assignedUserId: c.assigned_user_id || null,
+                 autoGeneratePerUser: Boolean(c.auto_generate_per_user),
                  totalLimit: c.total_limit,
                  usedCount: realCount,
                  maxPerUser: c.max_per_user,

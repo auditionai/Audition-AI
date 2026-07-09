@@ -29,6 +29,12 @@ const settleFromBankTransaction = async (admin: any, tx: any, bankTransaction: a
   });
 
   if (error) throw error;
+  const giftcodeApplyResult = await admin.rpc('mark_topup_giftcode_applied', {
+    p_transaction_id: tx.id,
+  });
+  if (giftcodeApplyResult.error && !/function|schema|topup_gift_code/i.test(giftcodeApplyResult.error.message || '')) {
+    throw giftcodeApplyResult.error;
+  }
   return data;
 };
 
@@ -127,6 +133,12 @@ export const handler: Handler = async (event) => {
             });
 
         if (error) throw error;
+        const giftcodeApplyResult = await admin.rpc('mark_topup_giftcode_applied', {
+          p_transaction_id: existingTransaction.id,
+        });
+        if (giftcodeApplyResult.error && !/function|schema|topup_gift_code/i.test(giftcodeApplyResult.error.message || '')) {
+          throw giftcodeApplyResult.error;
+        }
         return {
           statusCode: 200,
           headers,

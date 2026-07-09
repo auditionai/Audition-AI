@@ -159,6 +159,16 @@
   status = 200
 
 [[redirects]]
+  from = "/api/create-topup-payment"
+  to = "/.netlify/functions/create-topup-payment"
+  status = 200
+
+[[redirects]]
+  from = "/api/topup-giftcodes"
+  to = "/.netlify/functions/topup-giftcodes"
+  status = 200
+
+[[redirects]]
   from = "/api/sepay-checkout"
   to = "/.netlify/functions/sepay-checkout"
   status = 200

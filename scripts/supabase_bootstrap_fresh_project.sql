@@ -1228,9 +1228,9 @@ begin
   return query
   with paid_topups as (
     select count(*)::integer as count
-    from public.payment_transactions
-    where user_id = p_user_id
-      and status = 'paid'
+    from public.payment_transactions pt
+    where pt.user_id = p_user_id
+      and pt.status = 'paid'
   ),
   usage_counts as (
     select tgu.gift_code_id, count(*)::bigint as count
@@ -1378,9 +1378,9 @@ begin
   end if;
 
   select count(*) into v_total_used
-  from public.topup_gift_code_usages
-  where gift_code_id = v_code.id
-    and status = 'applied';
+  from public.topup_gift_code_usages tgu
+  where tgu.gift_code_id = v_code.id
+    and tgu.status = 'applied';
 
   if v_total_used >= coalesce(v_code.total_limit, 0) then
     return query select false, v_code.id, v_code.code, v_code.discount_percent, 0::numeric, p_original_amount_vnd, 'GIFT_CODE_TOPUP_EXPIRED_OR_LIMIT'::text;
@@ -1388,10 +1388,10 @@ begin
   end if;
 
   select count(*) into v_user_used
-  from public.topup_gift_code_usages
-  where gift_code_id = v_code.id
-    and user_id = p_user_id
-    and status = 'applied';
+  from public.topup_gift_code_usages tgu
+  where tgu.gift_code_id = v_code.id
+    and tgu.user_id = p_user_id
+    and tgu.status = 'applied';
 
   if v_user_used >= coalesce(v_code.max_per_user, 1) then
     return query select false, v_code.id, v_code.code, v_code.discount_percent, 0::numeric, p_original_amount_vnd, 'GIFT_CODE_ALREADY_USED_BY_USER'::text;
@@ -1410,9 +1410,9 @@ begin
 
   if v_code.audience = 'new_user_first_topup' then
     select count(*) into v_paid_topups
-    from public.payment_transactions
-    where user_id = p_user_id
-      and status = 'paid';
+    from public.payment_transactions pt
+    where pt.user_id = p_user_id
+      and pt.status = 'paid';
 
     if v_paid_topups > 0 then
       return query select false, v_code.id, v_code.code, v_code.discount_percent, 0::numeric, p_original_amount_vnd, 'GIFT_CODE_FIRST_TOPUP_ONLY'::text;

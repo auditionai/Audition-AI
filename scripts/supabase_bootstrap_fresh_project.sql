@@ -373,7 +373,12 @@ create table if not exists public.gift_codes (
   id uuid primary key default gen_random_uuid(),
   code text not null,
   campaign_key text,
+  code_type text not null default 'reward',
   reward numeric not null default 0,
+  discount_percent numeric not null default 0,
+  audience text not null default 'all',
+  assigned_user_id uuid references public.users(id) on delete cascade,
+  auto_generate_per_user boolean not null default false,
   total_limit numeric not null default 100,
   used_count numeric not null default 0,
   max_per_user numeric not null default 1,
@@ -387,7 +392,12 @@ create unique index if not exists uq_gift_codes_code
   on public.gift_codes(upper(code));
 
 alter table public.gift_codes
-  add column if not exists campaign_key text;
+  add column if not exists campaign_key text,
+  add column if not exists code_type text not null default 'reward',
+  add column if not exists discount_percent numeric not null default 0,
+  add column if not exists audience text not null default 'all',
+  add column if not exists assigned_user_id uuid references public.users(id) on delete cascade,
+  add column if not exists auto_generate_per_user boolean not null default false;
 
 create index if not exists idx_gift_codes_campaign_key
   on public.gift_codes(campaign_key);

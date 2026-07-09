@@ -1,4 +1,4 @@
-import { getSupabaseAuthHeader, getSupabaseUser, supabase } from './supabaseClient';
+﻿import { getSupabaseAuthHeader, getSupabaseUser, supabase } from './supabaseClient';
 import { trackEvent } from './analyticsService';
 import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, HistoryItem, VcoinLog, AdminQueueJob, AdminQueueSummary, AdminQueueJobDetail, AdminQueueHealthReport, AdminQueueRescueResult } from '../types';
 import {
@@ -154,131 +154,131 @@ const DEFAULT_PAYMENT_GATEWAY_CONFIG: PaymentGatewayConfig = {
 
 export const DEFAULT_SYSTEM_ANNOUNCEMENT_CONFIG: SystemAnnouncementConfig = {
     isActive: false,
-    title: 'Thông báo từ AUDITION AI',
-    message: 'Chào mừng bạn quay lại AUDITION AI.',
+    title: 'ThÃ´ng bÃ¡o tá»« AUDITION AI',
+    message: 'ChÃ o má»«ng báº¡n quay láº¡i AUDITION AI.',
     variant: 'info',
 };
 
 export const DEFAULT_FEATURE_MAINTENANCE_CONFIG: FeatureMaintenanceConfig = {
     disabledFeatureIds: [],
-    message: 'Tính năng đang bảo trì. Vui lòng quay lại sau.',
+    message: 'TÃ­nh nÄƒng Ä‘ang báº£o trÃ¬. Vui lÃ²ng quay láº¡i sau.',
 };
 
 export const APP_TOUR_TARGETS: Array<{ id: string; label: string; surface: AppTourSurface; screen: string; featureId?: string; description?: string }> = [
-    { id: 'desktop.layout.logo', label: 'Máy tính - Logo / trang chủ', surface: 'desktop', screen: 'global' },
-    { id: 'desktop.layout.language', label: 'Máy tính - Đổi ngôn ngữ', surface: 'desktop', screen: 'global' },
-    { id: 'desktop.layout.dock', label: 'Máy tính - Thanh điều hướng dưới', surface: 'desktop', screen: 'global' },
-    { id: 'desktop.layout.vcoin', label: 'Máy tính - Số dư / nạp VCOIN', surface: 'desktop', screen: 'global' },
-    { id: 'desktop.layout.profile', label: 'Máy tính - Tài khoản / cài đặt', surface: 'desktop', screen: 'global' },
-    { id: 'desktop.home.features', label: 'Máy tính - Danh sách công cụ', surface: 'desktop', screen: 'home' },
-    { id: 'desktop.tool.back', label: 'Máy tính - Nút quay lại thư viện', surface: 'desktop', screen: 'tool_workspace' },
-    { id: 'desktop.image.references', label: 'Máy tính - Tạo ảnh AI: ảnh tham chiếu', surface: 'desktop', screen: 'tool_workspace', featureId: 'ai_image_tool' },
-    { id: 'desktop.image.prompt', label: 'Máy tính - Tạo ảnh AI: prompt', surface: 'desktop', screen: 'tool_workspace', featureId: 'ai_image_tool' },
-    { id: 'desktop.image.model', label: 'Máy tính - Tạo ảnh AI: model / cấu hình', surface: 'desktop', screen: 'tool_workspace', featureId: 'ai_image_tool' },
-    { id: 'desktop.image.generate', label: 'Máy tính - Tạo ảnh AI: nút tạo', surface: 'desktop', screen: 'tool_workspace', featureId: 'ai_image_tool' },
-    { id: 'desktop.generation.prompt', label: 'Máy tính - Tạo ảnh Audition: mô tả', surface: 'desktop', screen: 'tool_workspace' },
-    { id: 'desktop.generation.characters', label: 'Máy tính - Tạo ảnh Audition: ảnh nhân vật', surface: 'desktop', screen: 'tool_workspace' },
-    { id: 'desktop.generation.settings', label: 'Máy tính - Tạo ảnh Audition: cấu hình', surface: 'desktop', screen: 'tool_workspace' },
-    { id: 'desktop.generation.generate', label: 'Máy tính - Tạo ảnh Audition: nút tạo', surface: 'desktop', screen: 'tool_workspace' },
-    { id: 'desktop.video.mode', label: 'Máy tính - Video: chọn chế độ', surface: 'desktop', screen: 'tool_workspace', featureId: 'video_ai_gen' },
-    { id: 'desktop.video.upload', label: 'Máy tính - Video: vùng tải tư liệu', surface: 'desktop', screen: 'tool_workspace', featureId: 'video_ai_gen' },
-    { id: 'desktop.video.prompt', label: 'Máy tính - Video / Motion: prompt', surface: 'desktop', screen: 'tool_workspace', featureId: 'video_ai_gen' },
-    { id: 'desktop.video.model', label: 'Máy tính - Video / Motion: model và cấu hình', surface: 'desktop', screen: 'tool_workspace', featureId: 'video_ai_gen' },
-    { id: 'desktop.video.generate', label: 'Máy tính - Video / Motion: nút tạo', surface: 'desktop', screen: 'tool_workspace', featureId: 'video_ai_gen' },
-    { id: 'mobile.layout.topbar', label: 'Điện thoại - Thanh trên', surface: 'mobile', screen: 'global' },
-    { id: 'mobile.layout.vcoin', label: 'Điện thoại - Số dư VCOIN', surface: 'mobile', screen: 'global' },
-    { id: 'mobile.layout.profile', label: 'Điện thoại - Tài khoản / cài đặt', surface: 'mobile', screen: 'global' },
-    { id: 'mobile.layout.bottomnav', label: 'Điện thoại - Thanh điều hướng dưới', surface: 'mobile', screen: 'global' },
-    { id: 'mobile.home.features', label: 'Điện thoại - Danh sách công cụ', surface: 'mobile', screen: 'home' },
-    { id: 'mobile.image.prompt', label: 'Điện thoại - Tạo ảnh AI: prompt', surface: 'mobile', screen: 'tool_workspace', featureId: 'ai_image_tool' },
-    { id: 'mobile.image.references', label: 'Điện thoại - Tạo ảnh AI: ảnh tham chiếu', surface: 'mobile', screen: 'tool_workspace', featureId: 'ai_image_tool' },
-    { id: 'mobile.image.settings', label: 'Điện thoại - Tạo ảnh AI: cấu hình', surface: 'mobile', screen: 'tool_workspace', featureId: 'ai_image_tool' },
-    { id: 'mobile.image.generate', label: 'Điện thoại - Tạo ảnh AI: nút tạo', surface: 'mobile', screen: 'tool_workspace', featureId: 'ai_image_tool' },
-    { id: 'mobile.generation.prompt', label: 'Điện thoại - Tạo ảnh Audition: mô tả', surface: 'mobile', screen: 'tool_workspace', featureId: 'single_photo_gen' },
-    { id: 'mobile.generation.characters', label: 'Điện thoại - Tạo ảnh Audition: ảnh nhân vật', surface: 'mobile', screen: 'tool_workspace', featureId: 'single_photo_gen' },
-    { id: 'mobile.generation.settings', label: 'Điện thoại - Tạo ảnh Audition: cấu hình', surface: 'mobile', screen: 'tool_workspace', featureId: 'single_photo_gen' },
-    { id: 'mobile.generation.generate', label: 'Điện thoại - Tạo ảnh Audition: nút tạo', surface: 'mobile', screen: 'tool_workspace', featureId: 'single_photo_gen' },
-    { id: 'mobile.video.upload', label: 'Điện thoại - Video: vùng tải tư liệu', surface: 'mobile', screen: 'tool_workspace', featureId: 'video_ai_gen' },
-    { id: 'mobile.video.prompt', label: 'Điện thoại - Video / Motion: prompt', surface: 'mobile', screen: 'tool_workspace', featureId: 'video_ai_gen' },
-    { id: 'mobile.video.settings', label: 'Điện thoại - Video / Motion: cấu hình', surface: 'mobile', screen: 'tool_workspace', featureId: 'video_ai_gen' },
-    { id: 'mobile.video.generate', label: 'Điện thoại - Video / Motion: nút tạo', surface: 'mobile', screen: 'tool_workspace', featureId: 'video_ai_gen' },
-    { id: 'desktop.layout.nav.home', label: 'Máy tính - Dock: Trang chủ', surface: 'desktop', screen: 'global', description: 'Khoanh nút Trang chủ trong thanh điều hướng dưới cùng.' },
-    { id: 'desktop.layout.nav.tools', label: 'Máy tính - Dock: Công cụ', surface: 'desktop', screen: 'global', description: 'Khoanh nút Công cụ trong thanh điều hướng dưới cùng.' },
-    { id: 'desktop.layout.nav.gallery', label: 'Máy tính - Dock: Thư viện', surface: 'desktop', screen: 'global', description: 'Khoanh nút Thư viện trong thanh điều hướng dưới cùng.' },
-    { id: 'desktop.home.hero', label: 'Máy tính - Trang chủ: Lời chào', surface: 'desktop', screen: 'home', description: 'Khoanh thanh lời chào đầu trang chủ và trạng thái hệ thống.' },
-    { id: 'desktop.home.promo', label: 'Máy tính - Trang chủ: Banner AuMix3D', surface: 'desktop', screen: 'home', description: 'Khoanh banner đối tác AuMix3D trên trang chủ.' },
-    { id: 'desktop.home.studio', label: 'Máy tính - Trang chủ: Nhóm Studio AI', surface: 'desktop', screen: 'home', description: 'Khoanh toàn bộ nhóm công cụ tạo ảnh Audition AI.' },
-    { id: 'desktop.home.video', label: 'Máy tính - Trang chủ: Nhóm Video Lab', surface: 'desktop', screen: 'home', description: 'Khoanh toàn bộ nhóm công cụ tạo video và Motion Control.' },
-    { id: 'desktop.home.editing', label: 'Máy tính - Trang chủ: Nhóm chỉnh sửa ảnh', surface: 'desktop', screen: 'home', description: 'Khoanh nhóm công cụ chỉnh sửa/nâng cấp ảnh.' },
-    { id: 'desktop.home.feature.single_photo_gen', label: 'Máy tính - Thẻ: Tạo ảnh 1 người', surface: 'desktop', screen: 'home', description: 'Khoanh đúng thẻ tính năng tạo ảnh Audition 1 người.' },
-    { id: 'desktop.home.feature.couple_photo_gen', label: 'Máy tính - Thẻ: Tạo ảnh couple', surface: 'desktop', screen: 'home', description: 'Khoanh đúng thẻ tính năng tạo ảnh couple.' },
-    { id: 'desktop.home.feature.group_3_gen', label: 'Máy tính - Thẻ: Tạo ảnh nhóm 3', surface: 'desktop', screen: 'home', description: 'Khoanh đúng thẻ tính năng tạo ảnh nhóm 3.' },
-    { id: 'desktop.home.feature.group_4_gen', label: 'Máy tính - Thẻ: Tạo ảnh nhóm 4', surface: 'desktop', screen: 'home', description: 'Khoanh đúng thẻ tính năng tạo ảnh nhóm 4.' },
-    { id: 'desktop.home.feature.group_5_gen', label: 'Máy tính - Thẻ: Tạo ảnh nhóm 5', surface: 'desktop', screen: 'home', description: 'Khoanh đúng thẻ tính năng tạo ảnh nhóm 5.' },
-    { id: 'desktop.home.feature.video_ai_gen', label: 'Máy tính - Thẻ: Tạo video Audition', surface: 'desktop', screen: 'home', description: 'Khoanh đúng thẻ tính năng tạo video/Motion Control.' },
-    { id: 'desktop.home.feature.ai_image_tool', label: 'Máy tính - Thẻ: Tạo ảnh AI', surface: 'desktop', screen: 'home', description: 'Khoanh đúng thẻ công cụ tạo ảnh AI bằng prompt.' },
-    { id: 'desktop.home.feature.magic_editor_pro', label: 'Máy tính - Thẻ: Chỉnh sửa ảnh AI', surface: 'desktop', screen: 'home', description: 'Khoanh đúng thẻ công cụ chỉnh sửa ảnh AI.' },
-    { id: 'desktop.home.feature.remove_bg_pro', label: 'Máy tính - Thẻ: Tách nền', surface: 'desktop', screen: 'home', description: 'Khoanh đúng thẻ công cụ tách nền.' },
-    { id: 'desktop.home.feature.sharpen_upscale', label: 'Máy tính - Thẻ: Làm nét ảnh', surface: 'desktop', screen: 'home', description: 'Khoanh đúng thẻ công cụ làm nét/nâng cấp ảnh.' },
-    { id: 'desktop.edit.tabs', label: 'Máy tính - Chỉnh sửa: Chọn công cụ', surface: 'desktop', screen: 'tool_workspace', description: 'Khoanh cụm tab đổi giữa chỉnh sửa ảnh, tách nền và làm nét.' },
-    { id: 'desktop.edit.promo', label: 'Máy tính - Chỉnh sửa: Banner AuMix3D', surface: 'desktop', screen: 'tool_workspace', description: 'Khoanh banner gợi ý tạo ảnh nhân vật bằng AuMix3D trong màn chỉnh sửa.' },
-    { id: 'desktop.edit.upload', label: 'Máy tính - Chỉnh sửa: Upload ảnh', surface: 'desktop', screen: 'tool_workspace', description: 'Khoanh ô tải ảnh gốc cần chỉnh sửa.' },
-    { id: 'desktop.edit.prompt', label: 'Máy tính - Chỉnh sửa: Prompt chỉnh sửa', surface: 'desktop', screen: 'tool_workspace', featureId: 'magic_editor_pro', description: 'Khoanh ô nhập yêu cầu chỉnh sửa ảnh.' },
-    { id: 'desktop.edit.suggestions', label: 'Máy tính - Chỉnh sửa: Gợi ý nhanh', surface: 'desktop', screen: 'tool_workspace', featureId: 'magic_editor_pro', description: 'Khoanh nhóm nút gợi ý prompt nhanh cho chỉnh sửa ảnh.' },
-    { id: 'desktop.edit.settings', label: 'Máy tính - Chỉnh sửa: Toàn bộ setting', surface: 'desktop', screen: 'tool_workspace', description: 'Khoanh panel cấu hình của công cụ chỉnh sửa ảnh.' },
-    { id: 'desktop.edit.model', label: 'Máy tính - Chỉnh sửa: Model AI', surface: 'desktop', screen: 'tool_workspace', featureId: 'magic_editor_pro', description: 'Khoanh vùng chọn Flash/Pro trong chỉnh sửa ảnh.' },
-    { id: 'desktop.edit.resolution', label: 'Máy tính - Chỉnh sửa: Độ phân giải', surface: 'desktop', screen: 'tool_workspace', description: 'Khoanh vùng chọn chất lượng xuất 1K/2K/4K.' },
-    { id: 'desktop.edit.speed', label: 'Máy tính - Chỉnh sửa: Tốc độ', surface: 'desktop', screen: 'tool_workspace', description: 'Khoanh vùng chọn tốc độ xử lý.' },
-    { id: 'desktop.edit.server', label: 'Máy tính - Chỉnh sửa: Server', surface: 'desktop', screen: 'tool_workspace', description: 'Khoanh vùng chọn máy chủ xử lý.' },
-    { id: 'desktop.edit.price', label: 'Máy tính - Chỉnh sửa: Giá hiện tại', surface: 'desktop', screen: 'tool_workspace', description: 'Khoanh khung hiển thị chi phí VCOIN trước khi tạo.' },
-    { id: 'desktop.edit.generate', label: 'Máy tính - Chỉnh sửa: Nút thực hiện', surface: 'desktop', screen: 'tool_workspace', description: 'Khoanh nút gửi job chỉnh sửa ảnh.' },
-    { id: 'desktop.gallery.panel', label: 'Máy tính - Thư viện: Khung chính', surface: 'desktop', screen: 'gallery', description: 'Khoanh toàn bộ khung lịch sử tạo và giao dịch.' },
-    { id: 'desktop.gallery.tabs', label: 'Máy tính - Thư viện: Tab lịch sử/giao dịch', surface: 'desktop', screen: 'gallery', description: 'Khoanh cụm tab chuyển giữa lịch sử tạo và giao dịch VCOIN.' },
-    { id: 'desktop.gallery.filters', label: 'Máy tính - Thư viện: Bộ lọc', surface: 'desktop', screen: 'gallery', description: 'Khoanh bộ lọc trạng thái ảnh/video trong lịch sử.' },
-    { id: 'desktop.gallery.bulk_actions', label: 'Máy tính - Thư viện: Xóa trang này', surface: 'desktop', screen: 'gallery', description: 'Khoanh nút thao tác hàng loạt trong thư viện.' },
-    { id: 'desktop.gallery.grid', label: 'Máy tính - Thư viện: Bảng kết quả', surface: 'desktop', screen: 'gallery', description: 'Khoanh bảng danh sách lịch sử tạo.' },
-    { id: 'desktop.gallery.item', label: 'Máy tính - Thư viện: Một dòng kết quả', surface: 'desktop', screen: 'gallery', description: 'Khoanh một item trong lịch sử để hướng dẫn bấm xem chi tiết.' },
-    { id: 'desktop.topup.hero', label: 'Máy tính - Nạp VCOIN: Banner đầu trang', surface: 'desktop', screen: 'topup', description: 'Khoanh banner sự kiện hoặc tiêu đề Store VCOIN.' },
-    { id: 'desktop.topup.heading', label: 'Máy tính - Nạp VCOIN: Tiêu đề chọn gói', surface: 'desktop', screen: 'topup', description: 'Khoanh tiêu đề khu vực chọn gói nạp.' },
-    { id: 'desktop.topup.packages', label: 'Máy tính - Nạp VCOIN: Danh sách gói', surface: 'desktop', screen: 'topup', description: 'Khoanh toàn bộ grid các gói nạp.' },
-    { id: 'desktop.topup.payment_button', label: 'Máy tính - Nạp VCOIN: Nút nạp ngay', surface: 'desktop', screen: 'topup', description: 'Khoanh nút nạp ngay trên gói đang hiển thị.' },
-    { id: 'desktop.settings.profile_header', label: 'Máy tính - Cài đặt: Hồ sơ đầu trang', surface: 'desktop', screen: 'settings', description: 'Khoanh cụm avatar, tên tài khoản và trạng thái.' },
-    { id: 'desktop.settings.tabs', label: 'Máy tính - Cài đặt: Menu trái', surface: 'desktop', screen: 'settings', description: 'Khoanh menu chuyển giữa hồ sơ, bảo mật và giftcode.' },
-    { id: 'desktop.settings.content', label: 'Máy tính - Cài đặt: Nội dung tab', surface: 'desktop', screen: 'settings', description: 'Khoanh vùng nội dung chính của cài đặt.' },
-    { id: 'desktop.settings.profile_form', label: 'Máy tính - Cài đặt: Form hồ sơ', surface: 'desktop', screen: 'settings', description: 'Khoanh form chỉnh sửa thông tin cá nhân.' },
-    { id: 'desktop.settings.security', label: 'Máy tính - Cài đặt: Bảo mật', surface: 'desktop', screen: 'settings', description: 'Khoanh form đổi mật khẩu.' },
-    { id: 'desktop.settings.giftcode', label: 'Máy tính - Cài đặt: Giftcode', surface: 'desktop', screen: 'settings', description: 'Khoanh khu vực nhập giftcode.' },
-    { id: 'desktop.settings.logout', label: 'Máy tính - Cài đặt: Đăng xuất', surface: 'desktop', screen: 'settings', description: 'Khoanh nút đăng xuất ở đầu trang cài đặt.' },
-    { id: 'mobile.home.hero', label: 'Điện thoại - Trang chủ: Lời chào', surface: 'mobile', screen: 'home', description: 'Khoanh khu vực lời chào và câu hỏi chọn công cụ trên mobile.' },
-    { id: 'mobile.home.promo', label: 'Điện thoại - Trang chủ: Banner AuMix3D', surface: 'mobile', screen: 'home', description: 'Khoanh banner đối tác AuMix3D trên mobile.' },
-    { id: 'mobile.home.feature.single_photo_gen', label: 'Điện thoại - Thẻ: Tạo ảnh Audition', surface: 'mobile', screen: 'home', description: 'Khoanh thẻ tạo ảnh Audition AI trên mobile.' },
-    { id: 'mobile.home.feature.video_ai_gen', label: 'Điện thoại - Thẻ: Tạo video', surface: 'mobile', screen: 'home', description: 'Khoanh thẻ tạo video/Motion Control trên mobile.' },
-    { id: 'mobile.home.feature.ai_image_tool', label: 'Điện thoại - Thẻ: Tạo ảnh AI', surface: 'mobile', screen: 'home', description: 'Khoanh thẻ tạo ảnh AI bằng prompt trên mobile.' },
-    { id: 'mobile.home.feature.magic_editor_pro', label: 'Điện thoại - Thẻ: Chỉnh sửa ảnh', surface: 'mobile', screen: 'home', description: 'Khoanh thẻ chỉnh sửa ảnh AI trên mobile.' },
-    { id: 'mobile.home.feature.remove_bg_pro', label: 'Điện thoại - Thẻ: Tách nền', surface: 'mobile', screen: 'home', description: 'Khoanh thẻ tách nền trên mobile.' },
-    { id: 'mobile.home.feature.sharpen_upscale', label: 'Điện thoại - Thẻ: Làm nét', surface: 'mobile', screen: 'home', description: 'Khoanh thẻ làm nét/nâng cấp ảnh trên mobile.' },
-    { id: 'mobile.edit.info', label: 'Điện thoại - Chỉnh sửa: Mô tả công cụ', surface: 'mobile', screen: 'tool_workspace', description: 'Khoanh khung mô tả ngắn của công cụ chỉnh sửa.' },
-    { id: 'mobile.edit.upload', label: 'Điện thoại - Chỉnh sửa: Upload ảnh', surface: 'mobile', screen: 'tool_workspace', description: 'Khoanh vùng tải ảnh gốc cần xử lý.' },
-    { id: 'mobile.edit.prompt', label: 'Điện thoại - Chỉnh sửa: Prompt', surface: 'mobile', screen: 'tool_workspace', featureId: 'magic_editor_pro', description: 'Khoanh ô nhập mô tả chỉnh sửa trên mobile.' },
-    { id: 'mobile.edit.settings', label: 'Điện thoại - Chỉnh sửa: Toàn bộ setting', surface: 'mobile', screen: 'tool_workspace', description: 'Khoanh cụm cấu hình chỉnh sửa ảnh trên mobile.' },
-    { id: 'mobile.edit.model', label: 'Điện thoại - Chỉnh sửa: Model', surface: 'mobile', screen: 'tool_workspace', featureId: 'magic_editor_pro', description: 'Khoanh vùng chọn Flash/Pro trên mobile.' },
-    { id: 'mobile.edit.resolution', label: 'Điện thoại - Chỉnh sửa: Chất lượng xuất', surface: 'mobile', screen: 'tool_workspace', description: 'Khoanh vùng chọn độ phân giải xuất trên mobile.' },
-    { id: 'mobile.edit.price', label: 'Điện thoại - Chỉnh sửa: Chi phí', surface: 'mobile', screen: 'tool_workspace', description: 'Khoanh giá VCOIN trong thanh action dưới cùng.' },
-    { id: 'mobile.edit.generate', label: 'Điện thoại - Chỉnh sửa: Nút thực hiện', surface: 'mobile', screen: 'tool_workspace', description: 'Khoanh nút thực hiện trong thanh action dưới cùng.' },
-    { id: 'mobile.gallery.tabs', label: 'Điện thoại - Thư viện: Tab', surface: 'mobile', screen: 'gallery', description: 'Khoanh tab lịch sử tạo/giao dịch VCOIN trên mobile.' },
-    { id: 'mobile.gallery.filters', label: 'Điện thoại - Thư viện: Bộ lọc', surface: 'mobile', screen: 'gallery', description: 'Khoanh bộ lọc trạng thái và loại media trên mobile.' },
-    { id: 'mobile.gallery.grid', label: 'Điện thoại - Thư viện: Grid kết quả', surface: 'mobile', screen: 'gallery', description: 'Khoanh lưới ảnh/video đã tạo trên mobile.' },
-    { id: 'mobile.gallery.item', label: 'Điện thoại - Thư viện: Một item', surface: 'mobile', screen: 'gallery', description: 'Khoanh một item thư viện để hướng dẫn mở chi tiết.' },
-    { id: 'mobile.topup.hero', label: 'Điện thoại - Nạp VCOIN: Banner', surface: 'mobile', screen: 'topup', description: 'Khoanh banner sự kiện hoặc tiêu đề Store VCOIN trên mobile.' },
-    { id: 'mobile.topup.heading', label: 'Điện thoại - Nạp VCOIN: Tiêu đề chọn gói', surface: 'mobile', screen: 'topup', description: 'Khoanh tiêu đề khu vực chọn gói nạp.' },
-    { id: 'mobile.topup.packages', label: 'Điện thoại - Nạp VCOIN: Danh sách gói', surface: 'mobile', screen: 'topup', description: 'Khoanh danh sách các gói nạp trên mobile.' },
-    { id: 'mobile.topup.payment_button', label: 'Điện thoại - Nạp VCOIN: Nút nạp', surface: 'mobile', screen: 'topup', description: 'Khoanh nút nạp của gói đang hiển thị.' },
-    { id: 'mobile.topup.note', label: 'Điện thoại - Nạp VCOIN: Ghi chú thanh toán', surface: 'mobile', screen: 'topup', description: 'Khoanh ghi chú thanh toán SePay cuối trang.' },
-    { id: 'mobile.settings.profile', label: 'Điện thoại - Cài đặt: Hồ sơ', surface: 'mobile', screen: 'settings', description: 'Khoanh thẻ hồ sơ tài khoản trên mobile.' },
-    { id: 'mobile.settings.menu', label: 'Điện thoại - Cài đặt: Danh sách cài đặt', surface: 'mobile', screen: 'settings', description: 'Khoanh danh sách mục tài khoản, bảo mật, hỗ trợ và cài đặt chung.' },
-    { id: 'mobile.settings.admin', label: 'Điện thoại - Cài đặt: Nút admin', surface: 'mobile', screen: 'settings', description: 'Khoanh nút mở trang quản trị khi tài khoản là admin.' },
-    { id: 'mobile.settings.logout', label: 'Điện thoại - Cài đặt: Đăng xuất', surface: 'mobile', screen: 'settings', description: 'Khoanh nút đăng xuất trên mobile.' },
-    { id: 'mobile.settings.giftcode', label: 'Điện thoại - Cài đặt: Modal giftcode', surface: 'mobile', screen: 'settings', description: 'Khoanh modal nhập giftcode khi người dùng mở chức năng đổi quà.' },
+    { id: 'desktop.layout.logo', label: 'MÃ¡y tÃ­nh - Logo / trang chá»§', surface: 'desktop', screen: 'global' },
+    { id: 'desktop.layout.language', label: 'MÃ¡y tÃ­nh - Äá»•i ngÃ´n ngá»¯', surface: 'desktop', screen: 'global' },
+    { id: 'desktop.layout.dock', label: 'MÃ¡y tÃ­nh - Thanh Ä‘iá»u hÆ°á»›ng dÆ°á»›i', surface: 'desktop', screen: 'global' },
+    { id: 'desktop.layout.vcoin', label: 'MÃ¡y tÃ­nh - Sá»‘ dÆ° / náº¡p VCOIN', surface: 'desktop', screen: 'global' },
+    { id: 'desktop.layout.profile', label: 'MÃ¡y tÃ­nh - TÃ i khoáº£n / cÃ i Ä‘áº·t', surface: 'desktop', screen: 'global' },
+    { id: 'desktop.home.features', label: 'MÃ¡y tÃ­nh - Danh sÃ¡ch cÃ´ng cá»¥', surface: 'desktop', screen: 'home' },
+    { id: 'desktop.tool.back', label: 'MÃ¡y tÃ­nh - NÃºt quay láº¡i thÆ° viá»‡n', surface: 'desktop', screen: 'tool_workspace' },
+    { id: 'desktop.image.references', label: 'MÃ¡y tÃ­nh - Táº¡o áº£nh AI: áº£nh tham chiáº¿u', surface: 'desktop', screen: 'tool_workspace', featureId: 'ai_image_tool' },
+    { id: 'desktop.image.prompt', label: 'MÃ¡y tÃ­nh - Táº¡o áº£nh AI: prompt', surface: 'desktop', screen: 'tool_workspace', featureId: 'ai_image_tool' },
+    { id: 'desktop.image.model', label: 'MÃ¡y tÃ­nh - Táº¡o áº£nh AI: model / cáº¥u hÃ¬nh', surface: 'desktop', screen: 'tool_workspace', featureId: 'ai_image_tool' },
+    { id: 'desktop.image.generate', label: 'MÃ¡y tÃ­nh - Táº¡o áº£nh AI: nÃºt táº¡o', surface: 'desktop', screen: 'tool_workspace', featureId: 'ai_image_tool' },
+    { id: 'desktop.generation.prompt', label: 'MÃ¡y tÃ­nh - Táº¡o áº£nh Audition: mÃ´ táº£', surface: 'desktop', screen: 'tool_workspace' },
+    { id: 'desktop.generation.characters', label: 'MÃ¡y tÃ­nh - Táº¡o áº£nh Audition: áº£nh nhÃ¢n váº­t', surface: 'desktop', screen: 'tool_workspace' },
+    { id: 'desktop.generation.settings', label: 'MÃ¡y tÃ­nh - Táº¡o áº£nh Audition: cáº¥u hÃ¬nh', surface: 'desktop', screen: 'tool_workspace' },
+    { id: 'desktop.generation.generate', label: 'MÃ¡y tÃ­nh - Táº¡o áº£nh Audition: nÃºt táº¡o', surface: 'desktop', screen: 'tool_workspace' },
+    { id: 'desktop.video.mode', label: 'MÃ¡y tÃ­nh - Video: chá»n cháº¿ Ä‘á»™', surface: 'desktop', screen: 'tool_workspace', featureId: 'video_ai_gen' },
+    { id: 'desktop.video.upload', label: 'MÃ¡y tÃ­nh - Video: vÃ¹ng táº£i tÆ° liá»‡u', surface: 'desktop', screen: 'tool_workspace', featureId: 'video_ai_gen' },
+    { id: 'desktop.video.prompt', label: 'MÃ¡y tÃ­nh - Video / Motion: prompt', surface: 'desktop', screen: 'tool_workspace', featureId: 'video_ai_gen' },
+    { id: 'desktop.video.model', label: 'MÃ¡y tÃ­nh - Video / Motion: model vÃ  cáº¥u hÃ¬nh', surface: 'desktop', screen: 'tool_workspace', featureId: 'video_ai_gen' },
+    { id: 'desktop.video.generate', label: 'MÃ¡y tÃ­nh - Video / Motion: nÃºt táº¡o', surface: 'desktop', screen: 'tool_workspace', featureId: 'video_ai_gen' },
+    { id: 'mobile.layout.topbar', label: 'Äiá»‡n thoáº¡i - Thanh trÃªn', surface: 'mobile', screen: 'global' },
+    { id: 'mobile.layout.vcoin', label: 'Äiá»‡n thoáº¡i - Sá»‘ dÆ° VCOIN', surface: 'mobile', screen: 'global' },
+    { id: 'mobile.layout.profile', label: 'Äiá»‡n thoáº¡i - TÃ i khoáº£n / cÃ i Ä‘áº·t', surface: 'mobile', screen: 'global' },
+    { id: 'mobile.layout.bottomnav', label: 'Äiá»‡n thoáº¡i - Thanh Ä‘iá»u hÆ°á»›ng dÆ°á»›i', surface: 'mobile', screen: 'global' },
+    { id: 'mobile.home.features', label: 'Äiá»‡n thoáº¡i - Danh sÃ¡ch cÃ´ng cá»¥', surface: 'mobile', screen: 'home' },
+    { id: 'mobile.image.prompt', label: 'Äiá»‡n thoáº¡i - Táº¡o áº£nh AI: prompt', surface: 'mobile', screen: 'tool_workspace', featureId: 'ai_image_tool' },
+    { id: 'mobile.image.references', label: 'Äiá»‡n thoáº¡i - Táº¡o áº£nh AI: áº£nh tham chiáº¿u', surface: 'mobile', screen: 'tool_workspace', featureId: 'ai_image_tool' },
+    { id: 'mobile.image.settings', label: 'Äiá»‡n thoáº¡i - Táº¡o áº£nh AI: cáº¥u hÃ¬nh', surface: 'mobile', screen: 'tool_workspace', featureId: 'ai_image_tool' },
+    { id: 'mobile.image.generate', label: 'Äiá»‡n thoáº¡i - Táº¡o áº£nh AI: nÃºt táº¡o', surface: 'mobile', screen: 'tool_workspace', featureId: 'ai_image_tool' },
+    { id: 'mobile.generation.prompt', label: 'Äiá»‡n thoáº¡i - Táº¡o áº£nh Audition: mÃ´ táº£', surface: 'mobile', screen: 'tool_workspace', featureId: 'single_photo_gen' },
+    { id: 'mobile.generation.characters', label: 'Äiá»‡n thoáº¡i - Táº¡o áº£nh Audition: áº£nh nhÃ¢n váº­t', surface: 'mobile', screen: 'tool_workspace', featureId: 'single_photo_gen' },
+    { id: 'mobile.generation.settings', label: 'Äiá»‡n thoáº¡i - Táº¡o áº£nh Audition: cáº¥u hÃ¬nh', surface: 'mobile', screen: 'tool_workspace', featureId: 'single_photo_gen' },
+    { id: 'mobile.generation.generate', label: 'Äiá»‡n thoáº¡i - Táº¡o áº£nh Audition: nÃºt táº¡o', surface: 'mobile', screen: 'tool_workspace', featureId: 'single_photo_gen' },
+    { id: 'mobile.video.upload', label: 'Äiá»‡n thoáº¡i - Video: vÃ¹ng táº£i tÆ° liá»‡u', surface: 'mobile', screen: 'tool_workspace', featureId: 'video_ai_gen' },
+    { id: 'mobile.video.prompt', label: 'Äiá»‡n thoáº¡i - Video / Motion: prompt', surface: 'mobile', screen: 'tool_workspace', featureId: 'video_ai_gen' },
+    { id: 'mobile.video.settings', label: 'Äiá»‡n thoáº¡i - Video / Motion: cáº¥u hÃ¬nh', surface: 'mobile', screen: 'tool_workspace', featureId: 'video_ai_gen' },
+    { id: 'mobile.video.generate', label: 'Äiá»‡n thoáº¡i - Video / Motion: nÃºt táº¡o', surface: 'mobile', screen: 'tool_workspace', featureId: 'video_ai_gen' },
+    { id: 'desktop.layout.nav.home', label: 'MÃ¡y tÃ­nh - Dock: Trang chá»§', surface: 'desktop', screen: 'global', description: 'Khoanh nÃºt Trang chá»§ trong thanh Ä‘iá»u hÆ°á»›ng dÆ°á»›i cÃ¹ng.' },
+    { id: 'desktop.layout.nav.tools', label: 'MÃ¡y tÃ­nh - Dock: CÃ´ng cá»¥', surface: 'desktop', screen: 'global', description: 'Khoanh nÃºt CÃ´ng cá»¥ trong thanh Ä‘iá»u hÆ°á»›ng dÆ°á»›i cÃ¹ng.' },
+    { id: 'desktop.layout.nav.gallery', label: 'MÃ¡y tÃ­nh - Dock: ThÆ° viá»‡n', surface: 'desktop', screen: 'global', description: 'Khoanh nÃºt ThÆ° viá»‡n trong thanh Ä‘iá»u hÆ°á»›ng dÆ°á»›i cÃ¹ng.' },
+    { id: 'desktop.home.hero', label: 'MÃ¡y tÃ­nh - Trang chá»§: Lá»i chÃ o', surface: 'desktop', screen: 'home', description: 'Khoanh thanh lá»i chÃ o Ä‘áº§u trang chá»§ vÃ  tráº¡ng thÃ¡i há»‡ thá»‘ng.' },
+    { id: 'desktop.home.promo', label: 'MÃ¡y tÃ­nh - Trang chá»§: Banner AuMix3D', surface: 'desktop', screen: 'home', description: 'Khoanh banner Ä‘á»‘i tÃ¡c AuMix3D trÃªn trang chá»§.' },
+    { id: 'desktop.home.studio', label: 'MÃ¡y tÃ­nh - Trang chá»§: NhÃ³m Studio AI', surface: 'desktop', screen: 'home', description: 'Khoanh toÃ n bá»™ nhÃ³m cÃ´ng cá»¥ táº¡o áº£nh Audition AI.' },
+    { id: 'desktop.home.video', label: 'MÃ¡y tÃ­nh - Trang chá»§: NhÃ³m Video Lab', surface: 'desktop', screen: 'home', description: 'Khoanh toÃ n bá»™ nhÃ³m cÃ´ng cá»¥ táº¡o video vÃ  Motion Control.' },
+    { id: 'desktop.home.editing', label: 'MÃ¡y tÃ­nh - Trang chá»§: NhÃ³m chá»‰nh sá»­a áº£nh', surface: 'desktop', screen: 'home', description: 'Khoanh nhÃ³m cÃ´ng cá»¥ chá»‰nh sá»­a/nÃ¢ng cáº¥p áº£nh.' },
+    { id: 'desktop.home.feature.single_photo_gen', label: 'MÃ¡y tÃ­nh - Tháº»: Táº¡o áº£nh 1 ngÆ°á»i', surface: 'desktop', screen: 'home', description: 'Khoanh Ä‘Ãºng tháº» tÃ­nh nÄƒng táº¡o áº£nh Audition 1 ngÆ°á»i.' },
+    { id: 'desktop.home.feature.couple_photo_gen', label: 'MÃ¡y tÃ­nh - Tháº»: Táº¡o áº£nh couple', surface: 'desktop', screen: 'home', description: 'Khoanh Ä‘Ãºng tháº» tÃ­nh nÄƒng táº¡o áº£nh couple.' },
+    { id: 'desktop.home.feature.group_3_gen', label: 'MÃ¡y tÃ­nh - Tháº»: Táº¡o áº£nh nhÃ³m 3', surface: 'desktop', screen: 'home', description: 'Khoanh Ä‘Ãºng tháº» tÃ­nh nÄƒng táº¡o áº£nh nhÃ³m 3.' },
+    { id: 'desktop.home.feature.group_4_gen', label: 'MÃ¡y tÃ­nh - Tháº»: Táº¡o áº£nh nhÃ³m 4', surface: 'desktop', screen: 'home', description: 'Khoanh Ä‘Ãºng tháº» tÃ­nh nÄƒng táº¡o áº£nh nhÃ³m 4.' },
+    { id: 'desktop.home.feature.group_5_gen', label: 'MÃ¡y tÃ­nh - Tháº»: Táº¡o áº£nh nhÃ³m 5', surface: 'desktop', screen: 'home', description: 'Khoanh Ä‘Ãºng tháº» tÃ­nh nÄƒng táº¡o áº£nh nhÃ³m 5.' },
+    { id: 'desktop.home.feature.video_ai_gen', label: 'MÃ¡y tÃ­nh - Tháº»: Táº¡o video Audition', surface: 'desktop', screen: 'home', description: 'Khoanh Ä‘Ãºng tháº» tÃ­nh nÄƒng táº¡o video/Motion Control.' },
+    { id: 'desktop.home.feature.ai_image_tool', label: 'MÃ¡y tÃ­nh - Tháº»: Táº¡o áº£nh AI', surface: 'desktop', screen: 'home', description: 'Khoanh Ä‘Ãºng tháº» cÃ´ng cá»¥ táº¡o áº£nh AI báº±ng prompt.' },
+    { id: 'desktop.home.feature.magic_editor_pro', label: 'MÃ¡y tÃ­nh - Tháº»: Chá»‰nh sá»­a áº£nh AI', surface: 'desktop', screen: 'home', description: 'Khoanh Ä‘Ãºng tháº» cÃ´ng cá»¥ chá»‰nh sá»­a áº£nh AI.' },
+    { id: 'desktop.home.feature.remove_bg_pro', label: 'MÃ¡y tÃ­nh - Tháº»: TÃ¡ch ná»n', surface: 'desktop', screen: 'home', description: 'Khoanh Ä‘Ãºng tháº» cÃ´ng cá»¥ tÃ¡ch ná»n.' },
+    { id: 'desktop.home.feature.sharpen_upscale', label: 'MÃ¡y tÃ­nh - Tháº»: LÃ m nÃ©t áº£nh', surface: 'desktop', screen: 'home', description: 'Khoanh Ä‘Ãºng tháº» cÃ´ng cá»¥ lÃ m nÃ©t/nÃ¢ng cáº¥p áº£nh.' },
+    { id: 'desktop.edit.tabs', label: 'MÃ¡y tÃ­nh - Chá»‰nh sá»­a: Chá»n cÃ´ng cá»¥', surface: 'desktop', screen: 'tool_workspace', description: 'Khoanh cá»¥m tab Ä‘á»•i giá»¯a chá»‰nh sá»­a áº£nh, tÃ¡ch ná»n vÃ  lÃ m nÃ©t.' },
+    { id: 'desktop.edit.promo', label: 'MÃ¡y tÃ­nh - Chá»‰nh sá»­a: Banner AuMix3D', surface: 'desktop', screen: 'tool_workspace', description: 'Khoanh banner gá»£i Ã½ táº¡o áº£nh nhÃ¢n váº­t báº±ng AuMix3D trong mÃ n chá»‰nh sá»­a.' },
+    { id: 'desktop.edit.upload', label: 'MÃ¡y tÃ­nh - Chá»‰nh sá»­a: Upload áº£nh', surface: 'desktop', screen: 'tool_workspace', description: 'Khoanh Ã´ táº£i áº£nh gá»‘c cáº§n chá»‰nh sá»­a.' },
+    { id: 'desktop.edit.prompt', label: 'MÃ¡y tÃ­nh - Chá»‰nh sá»­a: Prompt chá»‰nh sá»­a', surface: 'desktop', screen: 'tool_workspace', featureId: 'magic_editor_pro', description: 'Khoanh Ã´ nháº­p yÃªu cáº§u chá»‰nh sá»­a áº£nh.' },
+    { id: 'desktop.edit.suggestions', label: 'MÃ¡y tÃ­nh - Chá»‰nh sá»­a: Gá»£i Ã½ nhanh', surface: 'desktop', screen: 'tool_workspace', featureId: 'magic_editor_pro', description: 'Khoanh nhÃ³m nÃºt gá»£i Ã½ prompt nhanh cho chá»‰nh sá»­a áº£nh.' },
+    { id: 'desktop.edit.settings', label: 'MÃ¡y tÃ­nh - Chá»‰nh sá»­a: ToÃ n bá»™ setting', surface: 'desktop', screen: 'tool_workspace', description: 'Khoanh panel cáº¥u hÃ¬nh cá»§a cÃ´ng cá»¥ chá»‰nh sá»­a áº£nh.' },
+    { id: 'desktop.edit.model', label: 'MÃ¡y tÃ­nh - Chá»‰nh sá»­a: Model AI', surface: 'desktop', screen: 'tool_workspace', featureId: 'magic_editor_pro', description: 'Khoanh vÃ¹ng chá»n Flash/Pro trong chá»‰nh sá»­a áº£nh.' },
+    { id: 'desktop.edit.resolution', label: 'MÃ¡y tÃ­nh - Chá»‰nh sá»­a: Äá»™ phÃ¢n giáº£i', surface: 'desktop', screen: 'tool_workspace', description: 'Khoanh vÃ¹ng chá»n cháº¥t lÆ°á»£ng xuáº¥t 1K/2K/4K.' },
+    { id: 'desktop.edit.speed', label: 'MÃ¡y tÃ­nh - Chá»‰nh sá»­a: Tá»‘c Ä‘á»™', surface: 'desktop', screen: 'tool_workspace', description: 'Khoanh vÃ¹ng chá»n tá»‘c Ä‘á»™ xá»­ lÃ½.' },
+    { id: 'desktop.edit.server', label: 'MÃ¡y tÃ­nh - Chá»‰nh sá»­a: Server', surface: 'desktop', screen: 'tool_workspace', description: 'Khoanh vÃ¹ng chá»n mÃ¡y chá»§ xá»­ lÃ½.' },
+    { id: 'desktop.edit.price', label: 'MÃ¡y tÃ­nh - Chá»‰nh sá»­a: GiÃ¡ hiá»‡n táº¡i', surface: 'desktop', screen: 'tool_workspace', description: 'Khoanh khung hiá»ƒn thá»‹ chi phÃ­ VCOIN trÆ°á»›c khi táº¡o.' },
+    { id: 'desktop.edit.generate', label: 'MÃ¡y tÃ­nh - Chá»‰nh sá»­a: NÃºt thá»±c hiá»‡n', surface: 'desktop', screen: 'tool_workspace', description: 'Khoanh nÃºt gá»­i job chá»‰nh sá»­a áº£nh.' },
+    { id: 'desktop.gallery.panel', label: 'MÃ¡y tÃ­nh - ThÆ° viá»‡n: Khung chÃ­nh', surface: 'desktop', screen: 'gallery', description: 'Khoanh toÃ n bá»™ khung lá»‹ch sá»­ táº¡o vÃ  giao dá»‹ch.' },
+    { id: 'desktop.gallery.tabs', label: 'MÃ¡y tÃ­nh - ThÆ° viá»‡n: Tab lá»‹ch sá»­/giao dá»‹ch', surface: 'desktop', screen: 'gallery', description: 'Khoanh cá»¥m tab chuyá»ƒn giá»¯a lá»‹ch sá»­ táº¡o vÃ  giao dá»‹ch VCOIN.' },
+    { id: 'desktop.gallery.filters', label: 'MÃ¡y tÃ­nh - ThÆ° viá»‡n: Bá»™ lá»c', surface: 'desktop', screen: 'gallery', description: 'Khoanh bá»™ lá»c tráº¡ng thÃ¡i áº£nh/video trong lá»‹ch sá»­.' },
+    { id: 'desktop.gallery.bulk_actions', label: 'MÃ¡y tÃ­nh - ThÆ° viá»‡n: XÃ³a trang nÃ y', surface: 'desktop', screen: 'gallery', description: 'Khoanh nÃºt thao tÃ¡c hÃ ng loáº¡t trong thÆ° viá»‡n.' },
+    { id: 'desktop.gallery.grid', label: 'MÃ¡y tÃ­nh - ThÆ° viá»‡n: Báº£ng káº¿t quáº£', surface: 'desktop', screen: 'gallery', description: 'Khoanh báº£ng danh sÃ¡ch lá»‹ch sá»­ táº¡o.' },
+    { id: 'desktop.gallery.item', label: 'MÃ¡y tÃ­nh - ThÆ° viá»‡n: Má»™t dÃ²ng káº¿t quáº£', surface: 'desktop', screen: 'gallery', description: 'Khoanh má»™t item trong lá»‹ch sá»­ Ä‘á»ƒ hÆ°á»›ng dáº«n báº¥m xem chi tiáº¿t.' },
+    { id: 'desktop.topup.hero', label: 'MÃ¡y tÃ­nh - Náº¡p VCOIN: Banner Ä‘áº§u trang', surface: 'desktop', screen: 'topup', description: 'Khoanh banner sá»± kiá»‡n hoáº·c tiÃªu Ä‘á» Store VCOIN.' },
+    { id: 'desktop.topup.heading', label: 'MÃ¡y tÃ­nh - Náº¡p VCOIN: TiÃªu Ä‘á» chá»n gÃ³i', surface: 'desktop', screen: 'topup', description: 'Khoanh tiÃªu Ä‘á» khu vá»±c chá»n gÃ³i náº¡p.' },
+    { id: 'desktop.topup.packages', label: 'MÃ¡y tÃ­nh - Náº¡p VCOIN: Danh sÃ¡ch gÃ³i', surface: 'desktop', screen: 'topup', description: 'Khoanh toÃ n bá»™ grid cÃ¡c gÃ³i náº¡p.' },
+    { id: 'desktop.topup.payment_button', label: 'MÃ¡y tÃ­nh - Náº¡p VCOIN: NÃºt náº¡p ngay', surface: 'desktop', screen: 'topup', description: 'Khoanh nÃºt náº¡p ngay trÃªn gÃ³i Ä‘ang hiá»ƒn thá»‹.' },
+    { id: 'desktop.settings.profile_header', label: 'MÃ¡y tÃ­nh - CÃ i Ä‘áº·t: Há»“ sÆ¡ Ä‘áº§u trang', surface: 'desktop', screen: 'settings', description: 'Khoanh cá»¥m avatar, tÃªn tÃ i khoáº£n vÃ  tráº¡ng thÃ¡i.' },
+    { id: 'desktop.settings.tabs', label: 'MÃ¡y tÃ­nh - CÃ i Ä‘áº·t: Menu trÃ¡i', surface: 'desktop', screen: 'settings', description: 'Khoanh menu chuyá»ƒn giá»¯a há»“ sÆ¡, báº£o máº­t vÃ  giftcode.' },
+    { id: 'desktop.settings.content', label: 'MÃ¡y tÃ­nh - CÃ i Ä‘áº·t: Ná»™i dung tab', surface: 'desktop', screen: 'settings', description: 'Khoanh vÃ¹ng ná»™i dung chÃ­nh cá»§a cÃ i Ä‘áº·t.' },
+    { id: 'desktop.settings.profile_form', label: 'MÃ¡y tÃ­nh - CÃ i Ä‘áº·t: Form há»“ sÆ¡', surface: 'desktop', screen: 'settings', description: 'Khoanh form chá»‰nh sá»­a thÃ´ng tin cÃ¡ nhÃ¢n.' },
+    { id: 'desktop.settings.security', label: 'MÃ¡y tÃ­nh - CÃ i Ä‘áº·t: Báº£o máº­t', surface: 'desktop', screen: 'settings', description: 'Khoanh form Ä‘á»•i máº­t kháº©u.' },
+    { id: 'desktop.settings.giftcode', label: 'MÃ¡y tÃ­nh - CÃ i Ä‘áº·t: Giftcode', surface: 'desktop', screen: 'settings', description: 'Khoanh khu vá»±c nháº­p giftcode.' },
+    { id: 'desktop.settings.logout', label: 'MÃ¡y tÃ­nh - CÃ i Ä‘áº·t: ÄÄƒng xuáº¥t', surface: 'desktop', screen: 'settings', description: 'Khoanh nÃºt Ä‘Äƒng xuáº¥t á»Ÿ Ä‘áº§u trang cÃ i Ä‘áº·t.' },
+    { id: 'mobile.home.hero', label: 'Äiá»‡n thoáº¡i - Trang chá»§: Lá»i chÃ o', surface: 'mobile', screen: 'home', description: 'Khoanh khu vá»±c lá»i chÃ o vÃ  cÃ¢u há»i chá»n cÃ´ng cá»¥ trÃªn mobile.' },
+    { id: 'mobile.home.promo', label: 'Äiá»‡n thoáº¡i - Trang chá»§: Banner AuMix3D', surface: 'mobile', screen: 'home', description: 'Khoanh banner Ä‘á»‘i tÃ¡c AuMix3D trÃªn mobile.' },
+    { id: 'mobile.home.feature.single_photo_gen', label: 'Äiá»‡n thoáº¡i - Tháº»: Táº¡o áº£nh Audition', surface: 'mobile', screen: 'home', description: 'Khoanh tháº» táº¡o áº£nh Audition AI trÃªn mobile.' },
+    { id: 'mobile.home.feature.video_ai_gen', label: 'Äiá»‡n thoáº¡i - Tháº»: Táº¡o video', surface: 'mobile', screen: 'home', description: 'Khoanh tháº» táº¡o video/Motion Control trÃªn mobile.' },
+    { id: 'mobile.home.feature.ai_image_tool', label: 'Äiá»‡n thoáº¡i - Tháº»: Táº¡o áº£nh AI', surface: 'mobile', screen: 'home', description: 'Khoanh tháº» táº¡o áº£nh AI báº±ng prompt trÃªn mobile.' },
+    { id: 'mobile.home.feature.magic_editor_pro', label: 'Äiá»‡n thoáº¡i - Tháº»: Chá»‰nh sá»­a áº£nh', surface: 'mobile', screen: 'home', description: 'Khoanh tháº» chá»‰nh sá»­a áº£nh AI trÃªn mobile.' },
+    { id: 'mobile.home.feature.remove_bg_pro', label: 'Äiá»‡n thoáº¡i - Tháº»: TÃ¡ch ná»n', surface: 'mobile', screen: 'home', description: 'Khoanh tháº» tÃ¡ch ná»n trÃªn mobile.' },
+    { id: 'mobile.home.feature.sharpen_upscale', label: 'Äiá»‡n thoáº¡i - Tháº»: LÃ m nÃ©t', surface: 'mobile', screen: 'home', description: 'Khoanh tháº» lÃ m nÃ©t/nÃ¢ng cáº¥p áº£nh trÃªn mobile.' },
+    { id: 'mobile.edit.info', label: 'Äiá»‡n thoáº¡i - Chá»‰nh sá»­a: MÃ´ táº£ cÃ´ng cá»¥', surface: 'mobile', screen: 'tool_workspace', description: 'Khoanh khung mÃ´ táº£ ngáº¯n cá»§a cÃ´ng cá»¥ chá»‰nh sá»­a.' },
+    { id: 'mobile.edit.upload', label: 'Äiá»‡n thoáº¡i - Chá»‰nh sá»­a: Upload áº£nh', surface: 'mobile', screen: 'tool_workspace', description: 'Khoanh vÃ¹ng táº£i áº£nh gá»‘c cáº§n xá»­ lÃ½.' },
+    { id: 'mobile.edit.prompt', label: 'Äiá»‡n thoáº¡i - Chá»‰nh sá»­a: Prompt', surface: 'mobile', screen: 'tool_workspace', featureId: 'magic_editor_pro', description: 'Khoanh Ã´ nháº­p mÃ´ táº£ chá»‰nh sá»­a trÃªn mobile.' },
+    { id: 'mobile.edit.settings', label: 'Äiá»‡n thoáº¡i - Chá»‰nh sá»­a: ToÃ n bá»™ setting', surface: 'mobile', screen: 'tool_workspace', description: 'Khoanh cá»¥m cáº¥u hÃ¬nh chá»‰nh sá»­a áº£nh trÃªn mobile.' },
+    { id: 'mobile.edit.model', label: 'Äiá»‡n thoáº¡i - Chá»‰nh sá»­a: Model', surface: 'mobile', screen: 'tool_workspace', featureId: 'magic_editor_pro', description: 'Khoanh vÃ¹ng chá»n Flash/Pro trÃªn mobile.' },
+    { id: 'mobile.edit.resolution', label: 'Äiá»‡n thoáº¡i - Chá»‰nh sá»­a: Cháº¥t lÆ°á»£ng xuáº¥t', surface: 'mobile', screen: 'tool_workspace', description: 'Khoanh vÃ¹ng chá»n Ä‘á»™ phÃ¢n giáº£i xuáº¥t trÃªn mobile.' },
+    { id: 'mobile.edit.price', label: 'Äiá»‡n thoáº¡i - Chá»‰nh sá»­a: Chi phÃ­', surface: 'mobile', screen: 'tool_workspace', description: 'Khoanh giÃ¡ VCOIN trong thanh action dÆ°á»›i cÃ¹ng.' },
+    { id: 'mobile.edit.generate', label: 'Äiá»‡n thoáº¡i - Chá»‰nh sá»­a: NÃºt thá»±c hiá»‡n', surface: 'mobile', screen: 'tool_workspace', description: 'Khoanh nÃºt thá»±c hiá»‡n trong thanh action dÆ°á»›i cÃ¹ng.' },
+    { id: 'mobile.gallery.tabs', label: 'Äiá»‡n thoáº¡i - ThÆ° viá»‡n: Tab', surface: 'mobile', screen: 'gallery', description: 'Khoanh tab lá»‹ch sá»­ táº¡o/giao dá»‹ch VCOIN trÃªn mobile.' },
+    { id: 'mobile.gallery.filters', label: 'Äiá»‡n thoáº¡i - ThÆ° viá»‡n: Bá»™ lá»c', surface: 'mobile', screen: 'gallery', description: 'Khoanh bá»™ lá»c tráº¡ng thÃ¡i vÃ  loáº¡i media trÃªn mobile.' },
+    { id: 'mobile.gallery.grid', label: 'Äiá»‡n thoáº¡i - ThÆ° viá»‡n: Grid káº¿t quáº£', surface: 'mobile', screen: 'gallery', description: 'Khoanh lÆ°á»›i áº£nh/video Ä‘Ã£ táº¡o trÃªn mobile.' },
+    { id: 'mobile.gallery.item', label: 'Äiá»‡n thoáº¡i - ThÆ° viá»‡n: Má»™t item', surface: 'mobile', screen: 'gallery', description: 'Khoanh má»™t item thÆ° viá»‡n Ä‘á»ƒ hÆ°á»›ng dáº«n má»Ÿ chi tiáº¿t.' },
+    { id: 'mobile.topup.hero', label: 'Äiá»‡n thoáº¡i - Náº¡p VCOIN: Banner', surface: 'mobile', screen: 'topup', description: 'Khoanh banner sá»± kiá»‡n hoáº·c tiÃªu Ä‘á» Store VCOIN trÃªn mobile.' },
+    { id: 'mobile.topup.heading', label: 'Äiá»‡n thoáº¡i - Náº¡p VCOIN: TiÃªu Ä‘á» chá»n gÃ³i', surface: 'mobile', screen: 'topup', description: 'Khoanh tiÃªu Ä‘á» khu vá»±c chá»n gÃ³i náº¡p.' },
+    { id: 'mobile.topup.packages', label: 'Äiá»‡n thoáº¡i - Náº¡p VCOIN: Danh sÃ¡ch gÃ³i', surface: 'mobile', screen: 'topup', description: 'Khoanh danh sÃ¡ch cÃ¡c gÃ³i náº¡p trÃªn mobile.' },
+    { id: 'mobile.topup.payment_button', label: 'Äiá»‡n thoáº¡i - Náº¡p VCOIN: NÃºt náº¡p', surface: 'mobile', screen: 'topup', description: 'Khoanh nÃºt náº¡p cá»§a gÃ³i Ä‘ang hiá»ƒn thá»‹.' },
+    { id: 'mobile.topup.note', label: 'Äiá»‡n thoáº¡i - Náº¡p VCOIN: Ghi chÃº thanh toÃ¡n', surface: 'mobile', screen: 'topup', description: 'Khoanh ghi chÃº thanh toÃ¡n SePay cuá»‘i trang.' },
+    { id: 'mobile.settings.profile', label: 'Äiá»‡n thoáº¡i - CÃ i Ä‘áº·t: Há»“ sÆ¡', surface: 'mobile', screen: 'settings', description: 'Khoanh tháº» há»“ sÆ¡ tÃ i khoáº£n trÃªn mobile.' },
+    { id: 'mobile.settings.menu', label: 'Äiá»‡n thoáº¡i - CÃ i Ä‘áº·t: Danh sÃ¡ch cÃ i Ä‘áº·t', surface: 'mobile', screen: 'settings', description: 'Khoanh danh sÃ¡ch má»¥c tÃ i khoáº£n, báº£o máº­t, há»— trá»£ vÃ  cÃ i Ä‘áº·t chung.' },
+    { id: 'mobile.settings.admin', label: 'Äiá»‡n thoáº¡i - CÃ i Ä‘áº·t: NÃºt admin', surface: 'mobile', screen: 'settings', description: 'Khoanh nÃºt má»Ÿ trang quáº£n trá»‹ khi tÃ i khoáº£n lÃ  admin.' },
+    { id: 'mobile.settings.logout', label: 'Äiá»‡n thoáº¡i - CÃ i Ä‘áº·t: ÄÄƒng xuáº¥t', surface: 'mobile', screen: 'settings', description: 'Khoanh nÃºt Ä‘Äƒng xuáº¥t trÃªn mobile.' },
+    { id: 'mobile.settings.giftcode', label: 'Äiá»‡n thoáº¡i - CÃ i Ä‘áº·t: Modal giftcode', surface: 'mobile', screen: 'settings', description: 'Khoanh modal nháº­p giftcode khi ngÆ°á»i dÃ¹ng má»Ÿ chá»©c nÄƒng Ä‘á»•i quÃ .' },
 ];
 
 export const DEFAULT_APP_TOURS_CONFIG: AppToursConfig = {
@@ -288,121 +288,121 @@ export const DEFAULT_APP_TOURS_CONFIG: AppToursConfig = {
     tours: [
         {
             id: 'desktop_home_intro',
-            title: 'Hướng dẫn trang chủ máy tính',
+            title: 'HÆ°á»›ng dáº«n trang chá»§ mÃ¡y tÃ­nh',
             surface: 'desktop',
             screen: 'home',
             isActive: true,
             steps: [
-                { id: 'desktop_home_intro_1', targetId: 'desktop.home.features', title: 'Chọn công cụ AI', description: 'Chọn công cụ tạo ảnh, chỉnh sửa ảnh hoặc tạo video để bắt đầu.', placement: 'top', order: 1, isActive: true },
-                { id: 'desktop_home_intro_3', targetId: 'desktop.layout.vcoin', title: 'Số dư VCOIN', description: 'Theo dõi số dư và nạp thêm VCOIN để sử dụng các tính năng AI.', placement: 'top', order: 3, isActive: true },
+                { id: 'desktop_home_intro_1', targetId: 'desktop.home.features', title: 'Chá»n cÃ´ng cá»¥ AI', description: 'Chá»n cÃ´ng cá»¥ táº¡o áº£nh, chá»‰nh sá»­a áº£nh hoáº·c táº¡o video Ä‘á»ƒ báº¯t Ä‘áº§u.', placement: 'top', order: 1, isActive: true },
+                { id: 'desktop_home_intro_3', targetId: 'desktop.layout.vcoin', title: 'Sá»‘ dÆ° VCOIN', description: 'Theo dÃµi sá»‘ dÆ° vÃ  náº¡p thÃªm VCOIN Ä‘á»ƒ sá»­ dá»¥ng cÃ¡c tÃ­nh nÄƒng AI.', placement: 'top', order: 3, isActive: true },
             ],
         },
         {
             id: 'desktop_generation_tool_intro',
-            title: 'Hướng dẫn tạo ảnh Audition máy tính',
+            title: 'HÆ°á»›ng dáº«n táº¡o áº£nh Audition mÃ¡y tÃ­nh',
             surface: 'desktop',
             screen: 'tool_workspace',
             featureId: 'single_photo_gen,couple_photo_gen,group_3_gen,group_4_gen,group_5_gen',
             isActive: true,
             steps: [
-                { id: 'desktop_generation_tool_1', targetId: 'desktop.generation.characters', title: 'Tải ảnh nhân vật', description: 'Tải ảnh nhân vật rõ mặt, rõ trang phục để AI giữ đúng dáng và chi tiết.', placement: 'right', order: 1, isActive: true },
-                { id: 'desktop_generation_tool_2', targetId: 'desktop.generation.prompt', title: 'Nhập mô tả ảnh', description: 'Viết bối cảnh, trang phục, ánh sáng, cảm xúc hoặc phong cách bạn muốn tạo.', placement: 'top', order: 2, isActive: true },
-                { id: 'desktop_generation_tool_3', targetId: 'desktop.generation.settings', title: 'Chọn cấu hình', description: 'Chọn model, tỷ lệ ảnh, độ phân giải, tốc độ và server phù hợp với nhu cầu.', placement: 'left', order: 3, isActive: true },
-                { id: 'desktop_generation_tool_4', targetId: 'desktop.generation.generate', title: 'Tạo ảnh', description: 'Kiểm tra chi phí VCOIN rồi bấm tạo để đưa ảnh vào hàng đợi xử lý.', placement: 'top', order: 4, isActive: true },
+                { id: 'desktop_generation_tool_1', targetId: 'desktop.generation.characters', title: 'Táº£i áº£nh nhÃ¢n váº­t', description: 'Táº£i áº£nh nhÃ¢n váº­t rÃµ máº·t, rÃµ trang phá»¥c Ä‘á»ƒ AI giá»¯ Ä‘Ãºng dÃ¡ng vÃ  chi tiáº¿t.', placement: 'right', order: 1, isActive: true },
+                { id: 'desktop_generation_tool_2', targetId: 'desktop.generation.prompt', title: 'Nháº­p mÃ´ táº£ áº£nh', description: 'Viáº¿t bá»‘i cáº£nh, trang phá»¥c, Ã¡nh sÃ¡ng, cáº£m xÃºc hoáº·c phong cÃ¡ch báº¡n muá»‘n táº¡o.', placement: 'top', order: 2, isActive: true },
+                { id: 'desktop_generation_tool_3', targetId: 'desktop.generation.settings', title: 'Chá»n cáº¥u hÃ¬nh', description: 'Chá»n model, tá»· lá»‡ áº£nh, Ä‘á»™ phÃ¢n giáº£i, tá»‘c Ä‘á»™ vÃ  server phÃ¹ há»£p vá»›i nhu cáº§u.', placement: 'left', order: 3, isActive: true },
+                { id: 'desktop_generation_tool_4', targetId: 'desktop.generation.generate', title: 'Táº¡o áº£nh', description: 'Kiá»ƒm tra chi phÃ­ VCOIN rá»“i báº¥m táº¡o Ä‘á»ƒ Ä‘Æ°a áº£nh vÃ o hÃ ng Ä‘á»£i xá»­ lÃ½.', placement: 'top', order: 4, isActive: true },
             ],
         },
         {
             id: 'desktop_generation_group_intro',
-            title: 'Hướng dẫn tạo ảnh nhóm Audition máy tính',
+            title: 'HÆ°á»›ng dáº«n táº¡o áº£nh nhÃ³m Audition mÃ¡y tÃ­nh',
             surface: 'desktop',
             screen: 'tool_workspace',
             featureId: 'couple_photo_gen',
             isActive: true,
             steps: [
-                { id: 'desktop_generation_group_1', targetId: 'desktop.generation.characters', title: 'Tải ảnh từng nhân vật', description: 'Mỗi ô nhân vật nên dùng ảnh rõ mặt, rõ trang phục để AI phối đúng đội hình.', placement: 'right', order: 1, isActive: true },
-                { id: 'desktop_generation_group_2', targetId: 'desktop.generation.prompt', title: 'Mô tả bố cục nhóm', description: 'Nhập bối cảnh, tư thế, ánh sáng và phong cách để ảnh nhóm đúng ý hơn.', placement: 'top', order: 2, isActive: true },
-                { id: 'desktop_generation_group_3', targetId: 'desktop.generation.generate', title: 'Tạo ảnh nhóm', description: 'Sau khi kiểm tra cấu hình và VCOIN, bấm tạo để gửi job vào hàng đợi.', placement: 'top', order: 3, isActive: true },
+                { id: 'desktop_generation_group_1', targetId: 'desktop.generation.characters', title: 'Táº£i áº£nh tá»«ng nhÃ¢n váº­t', description: 'Má»—i Ã´ nhÃ¢n váº­t nÃªn dÃ¹ng áº£nh rÃµ máº·t, rÃµ trang phá»¥c Ä‘á»ƒ AI phá»‘i Ä‘Ãºng Ä‘á»™i hÃ¬nh.', placement: 'right', order: 1, isActive: true },
+                { id: 'desktop_generation_group_2', targetId: 'desktop.generation.prompt', title: 'MÃ´ táº£ bá»‘ cá»¥c nhÃ³m', description: 'Nháº­p bá»‘i cáº£nh, tÆ° tháº¿, Ã¡nh sÃ¡ng vÃ  phong cÃ¡ch Ä‘á»ƒ áº£nh nhÃ³m Ä‘Ãºng Ã½ hÆ¡n.', placement: 'top', order: 2, isActive: true },
+                { id: 'desktop_generation_group_3', targetId: 'desktop.generation.generate', title: 'Táº¡o áº£nh nhÃ³m', description: 'Sau khi kiá»ƒm tra cáº¥u hÃ¬nh vÃ  VCOIN, báº¥m táº¡o Ä‘á»ƒ gá»­i job vÃ o hÃ ng Ä‘á»£i.', placement: 'top', order: 3, isActive: true },
             ],
         },
         {
             id: 'desktop_image_tool_intro',
-            title: 'Hướng dẫn tạo ảnh AI máy tính',
+            title: 'HÆ°á»›ng dáº«n táº¡o áº£nh AI mÃ¡y tÃ­nh',
             surface: 'desktop',
             screen: 'tool_workspace',
             featureId: 'ai_image_tool',
             isActive: true,
             steps: [
-                { id: 'desktop_image_tool_1', targetId: 'desktop.image.references', title: 'Ảnh tham chiếu', description: 'Tải ảnh mẫu nếu bạn muốn AI bám theo nhân vật, bố cục hoặc phong cách cụ thể.', placement: 'right', order: 1, isActive: true },
-                { id: 'desktop_image_tool_2', targetId: 'desktop.image.prompt', title: 'Prompt tạo ảnh', description: 'Nhập mô tả ảnh càng rõ thì kết quả càng sát ý tưởng.', placement: 'top', order: 2, isActive: true },
-                { id: 'desktop_image_tool_3', targetId: 'desktop.image.model', title: 'Model và cấu hình', description: 'Chọn model, chất lượng và tốc độ phù hợp với nhu cầu.', placement: 'left', order: 3, isActive: true },
-                { id: 'desktop_image_tool_4', targetId: 'desktop.image.generate', title: 'Tạo ảnh', description: 'Kiểm tra chi phí VCOIN rồi bấm tạo để đưa job vào hàng đợi.', placement: 'top', order: 4, isActive: true },
+                { id: 'desktop_image_tool_1', targetId: 'desktop.image.references', title: 'áº¢nh tham chiáº¿u', description: 'Táº£i áº£nh máº«u náº¿u báº¡n muá»‘n AI bÃ¡m theo nhÃ¢n váº­t, bá»‘ cá»¥c hoáº·c phong cÃ¡ch cá»¥ thá»ƒ.', placement: 'right', order: 1, isActive: true },
+                { id: 'desktop_image_tool_2', targetId: 'desktop.image.prompt', title: 'Prompt táº¡o áº£nh', description: 'Nháº­p mÃ´ táº£ áº£nh cÃ ng rÃµ thÃ¬ káº¿t quáº£ cÃ ng sÃ¡t Ã½ tÆ°á»Ÿng.', placement: 'top', order: 2, isActive: true },
+                { id: 'desktop_image_tool_3', targetId: 'desktop.image.model', title: 'Model vÃ  cáº¥u hÃ¬nh', description: 'Chá»n model, cháº¥t lÆ°á»£ng vÃ  tá»‘c Ä‘á»™ phÃ¹ há»£p vá»›i nhu cáº§u.', placement: 'left', order: 3, isActive: true },
+                { id: 'desktop_image_tool_4', targetId: 'desktop.image.generate', title: 'Táº¡o áº£nh', description: 'Kiá»ƒm tra chi phÃ­ VCOIN rá»“i báº¥m táº¡o Ä‘á»ƒ Ä‘Æ°a job vÃ o hÃ ng Ä‘á»£i.', placement: 'top', order: 4, isActive: true },
             ],
         },
         {
             id: 'desktop_video_tool_intro',
-            title: 'Hướng dẫn tạo video máy tính',
+            title: 'HÆ°á»›ng dáº«n táº¡o video mÃ¡y tÃ­nh',
             surface: 'desktop',
             screen: 'tool_workspace',
             featureId: 'video_ai_gen',
             isActive: true,
             steps: [
-                { id: 'desktop_video_tool_1', targetId: 'desktop.video.mode', title: 'Chọn chế độ video', description: 'Chuyển giữa tạo Video AI và Motion Control tùy mục đích.', placement: 'bottom', order: 1, isActive: true },
-                { id: 'desktop_video_tool_2', targetId: 'desktop.video.upload', title: 'Tải tư liệu', description: 'Tải ảnh keyframe cho Video AI hoặc ảnh nhân vật/video chuyển động cho Motion Control.', placement: 'right', order: 2, isActive: true },
-                { id: 'desktop_video_tool_3', targetId: 'desktop.video.prompt', title: 'Mô tả chuyển động', description: 'Viết ý tưởng, hành động, bối cảnh hoặc yêu cầu chuyển động cho video.', placement: 'top', order: 3, isActive: true },
-                { id: 'desktop_video_tool_4', targetId: 'desktop.video.generate', title: 'Tạo video', description: 'Kiểm tra VCOIN và bấm tạo để gửi job render video.', placement: 'top', order: 4, isActive: true },
+                { id: 'desktop_video_tool_1', targetId: 'desktop.video.mode', title: 'Chá»n cháº¿ Ä‘á»™ video', description: 'Chuyá»ƒn giá»¯a táº¡o Video AI vÃ  Motion Control tÃ¹y má»¥c Ä‘Ã­ch.', placement: 'bottom', order: 1, isActive: true },
+                { id: 'desktop_video_tool_2', targetId: 'desktop.video.upload', title: 'Táº£i tÆ° liá»‡u', description: 'Táº£i áº£nh keyframe cho Video AI hoáº·c áº£nh nhÃ¢n váº­t/video chuyá»ƒn Ä‘á»™ng cho Motion Control.', placement: 'right', order: 2, isActive: true },
+                { id: 'desktop_video_tool_3', targetId: 'desktop.video.prompt', title: 'MÃ´ táº£ chuyá»ƒn Ä‘á»™ng', description: 'Viáº¿t Ã½ tÆ°á»Ÿng, hÃ nh Ä‘á»™ng, bá»‘i cáº£nh hoáº·c yÃªu cáº§u chuyá»ƒn Ä‘á»™ng cho video.', placement: 'top', order: 3, isActive: true },
+                { id: 'desktop_video_tool_4', targetId: 'desktop.video.generate', title: 'Táº¡o video', description: 'Kiá»ƒm tra VCOIN vÃ  báº¥m táº¡o Ä‘á»ƒ gá»­i job render video.', placement: 'top', order: 4, isActive: true },
             ],
         },
         {
             id: 'mobile_home_intro',
-            title: 'Hướng dẫn trang chủ điện thoại',
+            title: 'HÆ°á»›ng dáº«n trang chá»§ Ä‘iá»‡n thoáº¡i',
             surface: 'mobile',
             screen: 'home',
             isActive: true,
             steps: [
-                { id: 'mobile_home_intro_1', targetId: 'mobile.layout.topbar', title: 'Thanh tài khoản', description: 'Xem nhanh số dư, ưu đãi và mở trang tài khoản.', placement: 'bottom', order: 1, isActive: true },
-                { id: 'mobile_home_intro_2', targetId: 'mobile.home.features', title: 'Chọn công cụ', description: 'Chọn công cụ AI bạn muốn dùng trên điện thoại.', placement: 'top', order: 2, isActive: true },
-                { id: 'mobile_home_intro_3', targetId: 'mobile.layout.bottomnav', title: 'Điều hướng nhanh', description: 'Dùng thanh dưới để chuyển giữa trang chủ, thư viện, nạp tiền và tài khoản.', placement: 'top', order: 3, isActive: true },
+                { id: 'mobile_home_intro_1', targetId: 'mobile.layout.topbar', title: 'Thanh tÃ i khoáº£n', description: 'Xem nhanh sá»‘ dÆ°, Æ°u Ä‘Ã£i vÃ  má»Ÿ trang tÃ i khoáº£n.', placement: 'bottom', order: 1, isActive: true },
+                { id: 'mobile_home_intro_2', targetId: 'mobile.home.features', title: 'Chá»n cÃ´ng cá»¥', description: 'Chá»n cÃ´ng cá»¥ AI báº¡n muá»‘n dÃ¹ng trÃªn Ä‘iá»‡n thoáº¡i.', placement: 'top', order: 2, isActive: true },
+                { id: 'mobile_home_intro_3', targetId: 'mobile.layout.bottomnav', title: 'Äiá»u hÆ°á»›ng nhanh', description: 'DÃ¹ng thanh dÆ°á»›i Ä‘á»ƒ chuyá»ƒn giá»¯a trang chá»§, thÆ° viá»‡n, náº¡p tiá»n vÃ  tÃ i khoáº£n.', placement: 'top', order: 3, isActive: true },
             ],
         },
         {
             id: 'mobile_generation_tool_intro',
-            title: 'Hướng dẫn tạo ảnh Audition điện thoại',
+            title: 'HÆ°á»›ng dáº«n táº¡o áº£nh Audition Ä‘iá»‡n thoáº¡i',
             surface: 'mobile',
             screen: 'tool_workspace',
             featureId: 'single_photo_gen',
             isActive: true,
             steps: [
-                { id: 'mobile_generation_tool_1', targetId: 'mobile.generation.characters', title: 'Tải ảnh nhân vật', description: 'Chọn ảnh rõ mặt, rõ trang phục để AI tạo ảnh sát nhân vật hơn.', placement: 'bottom', order: 1, isActive: true },
-                { id: 'mobile_generation_tool_2', targetId: 'mobile.generation.prompt', title: 'Nhập mô tả', description: 'Mô tả bối cảnh, trang phục, ánh sáng hoặc phong cách bạn muốn.', placement: 'top', order: 2, isActive: true },
-                { id: 'mobile_generation_tool_3', targetId: 'mobile.generation.generate', title: 'Tạo ảnh', description: 'Kiểm tra VCOIN và bấm tạo để gửi yêu cầu xử lý.', placement: 'top', order: 3, isActive: true },
+                { id: 'mobile_generation_tool_1', targetId: 'mobile.generation.characters', title: 'Táº£i áº£nh nhÃ¢n váº­t', description: 'Chá»n áº£nh rÃµ máº·t, rÃµ trang phá»¥c Ä‘á»ƒ AI táº¡o áº£nh sÃ¡t nhÃ¢n váº­t hÆ¡n.', placement: 'bottom', order: 1, isActive: true },
+                { id: 'mobile_generation_tool_2', targetId: 'mobile.generation.prompt', title: 'Nháº­p mÃ´ táº£', description: 'MÃ´ táº£ bá»‘i cáº£nh, trang phá»¥c, Ã¡nh sÃ¡ng hoáº·c phong cÃ¡ch báº¡n muá»‘n.', placement: 'top', order: 2, isActive: true },
+                { id: 'mobile_generation_tool_3', targetId: 'mobile.generation.generate', title: 'Táº¡o áº£nh', description: 'Kiá»ƒm tra VCOIN vÃ  báº¥m táº¡o Ä‘á»ƒ gá»­i yÃªu cáº§u xá»­ lÃ½.', placement: 'top', order: 3, isActive: true },
             ],
         },
         {
             id: 'mobile_image_tool_intro',
-            title: 'Hướng dẫn tạo ảnh AI điện thoại',
+            title: 'HÆ°á»›ng dáº«n táº¡o áº£nh AI Ä‘iá»‡n thoáº¡i',
             surface: 'mobile',
             screen: 'tool_workspace',
             featureId: 'ai_image_tool',
             isActive: true,
             steps: [
-                { id: 'mobile_image_tool_1', targetId: 'mobile.image.references', title: 'Ảnh tham chiếu', description: 'Thêm ảnh mẫu để AI hiểu nhân vật hoặc phong cách bạn muốn.', placement: 'bottom', order: 1, isActive: true },
-                { id: 'mobile_image_tool_2', targetId: 'mobile.image.prompt', title: 'Prompt tạo ảnh', description: 'Nhập mô tả rõ ràng trước khi tạo ảnh.', placement: 'top', order: 2, isActive: true },
-                { id: 'mobile_image_tool_3', targetId: 'mobile.image.settings', title: 'Chọn cấu hình', description: 'Chọn khung hình, model, độ phân giải, tốc độ và máy chủ trước khi tạo.', placement: 'top', order: 3, isActive: true },
-                { id: 'mobile_image_tool_4', targetId: 'mobile.image.generate', title: 'Bấm tạo', description: 'Kiểm tra chi phí rồi gửi yêu cầu tạo ảnh.', placement: 'top', order: 4, isActive: true },
+                { id: 'mobile_image_tool_1', targetId: 'mobile.image.references', title: 'áº¢nh tham chiáº¿u', description: 'ThÃªm áº£nh máº«u Ä‘á»ƒ AI hiá»ƒu nhÃ¢n váº­t hoáº·c phong cÃ¡ch báº¡n muá»‘n.', placement: 'bottom', order: 1, isActive: true },
+                { id: 'mobile_image_tool_2', targetId: 'mobile.image.prompt', title: 'Prompt táº¡o áº£nh', description: 'Nháº­p mÃ´ táº£ rÃµ rÃ ng trÆ°á»›c khi táº¡o áº£nh.', placement: 'top', order: 2, isActive: true },
+                { id: 'mobile_image_tool_3', targetId: 'mobile.image.settings', title: 'Chá»n cáº¥u hÃ¬nh', description: 'Chá»n khung hÃ¬nh, model, Ä‘á»™ phÃ¢n giáº£i, tá»‘c Ä‘á»™ vÃ  mÃ¡y chá»§ trÆ°á»›c khi táº¡o.', placement: 'top', order: 3, isActive: true },
+                { id: 'mobile_image_tool_4', targetId: 'mobile.image.generate', title: 'Báº¥m táº¡o', description: 'Kiá»ƒm tra chi phÃ­ rá»“i gá»­i yÃªu cáº§u táº¡o áº£nh.', placement: 'top', order: 4, isActive: true },
             ],
         },
         {
             id: 'mobile_video_tool_intro',
-            title: 'Hướng dẫn tạo video điện thoại',
+            title: 'HÆ°á»›ng dáº«n táº¡o video Ä‘iá»‡n thoáº¡i',
             surface: 'mobile',
             screen: 'tool_workspace',
             featureId: 'video_ai_gen',
             isActive: true,
             steps: [
-                { id: 'mobile_video_tool_1', targetId: 'mobile.video.upload', title: 'Tải ảnh hoặc video mẫu', description: 'Chuẩn bị tư liệu đầu vào cho Video AI hoặc Motion Control.', placement: 'bottom', order: 1, isActive: true },
-                { id: 'mobile_video_tool_2', targetId: 'mobile.video.prompt', title: 'Mô tả video', description: 'Viết chuyển động, bối cảnh và ý tưởng chính.', placement: 'top', order: 2, isActive: true },
-                { id: 'mobile_video_tool_3', targetId: 'mobile.video.settings', title: 'Chọn cấu hình video', description: 'Chọn model, thời lượng, độ phân giải, tốc độ xử lý và máy chủ.', placement: 'top', order: 3, isActive: true },
-                { id: 'mobile_video_tool_4', targetId: 'mobile.video.generate', title: 'Tạo video', description: 'Bấm tạo để đưa video vào hàng đợi xử lý.', placement: 'top', order: 4, isActive: true },
+                { id: 'mobile_video_tool_1', targetId: 'mobile.video.upload', title: 'Táº£i áº£nh hoáº·c video máº«u', description: 'Chuáº©n bá»‹ tÆ° liá»‡u Ä‘áº§u vÃ o cho Video AI hoáº·c Motion Control.', placement: 'bottom', order: 1, isActive: true },
+                { id: 'mobile_video_tool_2', targetId: 'mobile.video.prompt', title: 'MÃ´ táº£ video', description: 'Viáº¿t chuyá»ƒn Ä‘á»™ng, bá»‘i cáº£nh vÃ  Ã½ tÆ°á»Ÿng chÃ­nh.', placement: 'top', order: 2, isActive: true },
+                { id: 'mobile_video_tool_3', targetId: 'mobile.video.settings', title: 'Chá»n cáº¥u hÃ¬nh video', description: 'Chá»n model, thá»i lÆ°á»£ng, Ä‘á»™ phÃ¢n giáº£i, tá»‘c Ä‘á»™ xá»­ lÃ½ vÃ  mÃ¡y chá»§.', placement: 'top', order: 3, isActive: true },
+                { id: 'mobile_video_tool_4', targetId: 'mobile.video.generate', title: 'Táº¡o video', description: 'Báº¥m táº¡o Ä‘á»ƒ Ä‘Æ°a video vÃ o hÃ ng Ä‘á»£i xá»­ lÃ½.', placement: 'top', order: 4, isActive: true },
             ],
         },
     ],
@@ -427,7 +427,7 @@ let tstServerAvailabilityCache: TimedCache<TstServerAvailabilityConfig> | null =
 let featureMaintenanceCache: TimedCache<FeatureMaintenanceConfig> | null = null;
 const DEFAULT_MAINTENANCE_MODE = {
     isActive: false,
-    message: "Hệ thống đang bảo trì, vui lòng quay lại sau."
+    message: "Há»‡ thá»‘ng Ä‘ang báº£o trÃ¬, vui lÃ²ng quay láº¡i sau."
 };
 type MaintenanceModeState = typeof DEFAULT_MAINTENANCE_MODE;
 let maintenanceModeCache: TimedCache<MaintenanceModeState> | null = null;
@@ -1724,7 +1724,7 @@ export const isKeyDisabled = (key: string): boolean => {
 export const reportKeyFailure = (key: string) => {
     if (!key) return;
     const shortKey = key.substring(0, 4) + '...' + key.slice(-4);
-    console.warn(`[System] ðŸ”´ API Key ${shortKey} failed (429/503). Temporarily disabling for 1 minute.`);
+    console.warn(`[System] Ã°Å¸â€Â´ API Key ${shortKey} failed (429/503). Temporarily disabling for 1 minute.`);
     temporarilyDisabledKeys.add(key);
     
     // Also max out its usage stats so it's deprioritized
@@ -1735,7 +1735,7 @@ export const reportKeyFailure = (key: string) => {
 
     setTimeout(() => {
         temporarilyDisabledKeys.delete(key);
-        console.log(`[System] ðŸŸ¢ API Key ${shortKey} is back in rotation.`);
+        console.log(`[System] Ã°Å¸Å¸Â¢ API Key ${shortKey} is back in rotation.`);
     }, KEY_COOLDOWN_MS);
 };
 
@@ -1983,20 +1983,82 @@ export type TopupGiftcodeOffer = {
     lastUsedAt?: string | null;
 };
 
+const buildRandomTopupGiftcodeSuffix = () => {
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    return Array.from({ length: 5 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
+};
+
+const isConcreteGeneratedTopupCode = (code: string) => /^.+-[A-Z0-9]{5}$/.test(code.trim().toUpperCase());
+
+const getTopupGiftcodesFromPublicTemplates = async (): Promise<TopupGiftcodeOffer[]> => {
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+        .from('gift_codes')
+        .select('id, code, campaign_key, discount_percent, total_limit, used_count, max_per_user, audience, expires_at, is_active, assigned_user_id, auto_generate_per_user, code_type')
+        .eq('code_type', 'topup_discount')
+        .eq('is_active', true)
+        .is('assigned_user_id', null);
+
+    if (error) {
+        console.warn('[TopUp] Public giftcode template fallback failed', error);
+        return [];
+    }
+
+    const now = Date.now();
+    return (data || [])
+        .map((row: any): TopupGiftcodeOffer | null => {
+            const prefix = String(row.code || '').trim().toUpperCase();
+            if (!prefix) return null;
+            if (isConcreteGeneratedTopupCode(prefix) && row.auto_generate_per_user !== true) return null;
+
+            const expiresAt = row.expires_at || null;
+            if (expiresAt && new Date(expiresAt).getTime() < now) return null;
+
+            const totalLimit = Number(row.total_limit || 0);
+            const usedCount = Number(row.used_count || 0);
+            if (totalLimit > 0 && usedCount >= totalLimit) return null;
+
+            return {
+                id: `local-template:${row.id}:${Date.now()}:${Math.random().toString(36).slice(2)}`,
+                code: `${prefix}-${buildRandomTopupGiftcodeSuffix()}`,
+                discountPercent: Number(row.discount_percent || 0),
+                totalLimit,
+                usedCount,
+                remainingCount: Math.max(0, totalLimit - usedCount),
+                maxPerUser: 1,
+                audience: row.audience || 'all',
+                expiresAt,
+                status: 'available',
+                lastUsedAt: null,
+            };
+        })
+        .filter(Boolean) as TopupGiftcodeOffer[];
+};
+
 export const getTopupGiftcodes = async (): Promise<TopupGiftcodeOffer[]> => {
     if (!supabase) return [];
-    const authHeader = await getSessionAuthHeader();
-    const response = await fetch('/api/topup-giftcodes', {
-        method: 'GET',
-        headers: {
-            ...authHeader,
-        },
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok || !payload?.success) {
-        throw new Error(payload?.error || 'Không thể tải giftcode nạp tiền.');
+
+    try {
+        const authHeader = await getSessionAuthHeader();
+        const response = await fetch('/api/topup-giftcodes', {
+            method: 'GET',
+            headers: {
+                ...authHeader,
+            },
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || !payload?.success) {
+            throw new Error(payload?.error || 'Không thể tải giftcode nạp tiền.');
+        }
+
+        const rows = Array.isArray(payload.giftcodes) ? payload.giftcodes : [];
+        if (rows.length > 0) return rows;
+    } catch (error) {
+        console.warn('[TopUp] API giftcode list failed, using public template fallback', error);
     }
-    return Array.isArray(payload.giftcodes) ? payload.giftcodes : [];
+
+    return getTopupGiftcodesFromPublicTemplates();
 };
 
 export const createPaymentLink = async (packageId: string, topupGiftcode?: string): Promise<Transaction> => {
@@ -2203,7 +2265,7 @@ export const getUnifiedHistory = async (targetUserId?: string): Promise<HistoryI
         history.push({
             id: t.id,
             createdAt: t.created_at,
-            description: `Nạp Vcoin (${t.order_code})`,
+            description: `Náº¡p Vcoin (${t.order_code})`,
             vcoinChange: t.vcoin_received,
             amountVnd: t.amount_vnd,
             type: t.status === 'paid' ? 'topup' : 'pending_topup',
@@ -2222,7 +2284,7 @@ export const getUnifiedHistory = async (targetUserId?: string): Promise<HistoryI
         history.push({
             id: l.id,
             createdAt: l.created_at,
-            description: l.description || l.reason || l.note || l.action || l.details || 'Giao dịch hệ thống',
+            description: l.description || l.reason || l.note || l.action || l.details || 'Giao dá»‹ch há»‡ thá»‘ng',
             vcoinChange: l.amount, // Amount is already signed (negative for usage)
             type: l.type || 'usage', // Fallback to usage if type is missing (for legacy logs)
             status: 'success'
@@ -2774,7 +2836,7 @@ const normalizeTourPlacement = (value: any): AppTourPlacement => {
 const normalizeAppTourStep = (value: any, index: number): AppTourStep => ({
     id: String(value?.id || `step_${Date.now()}_${index}`).trim(),
     targetId: String(value?.targetId || '').trim(),
-    title: String(value?.title || 'Hướng dẫn').trim() || 'Hướng dẫn',
+    title: String(value?.title || 'HÆ°á»›ng dáº«n').trim() || 'HÆ°á»›ng dáº«n',
     description: String(value?.description || '').trim(),
     placement: normalizeTourPlacement(value?.placement),
     order: Number.isFinite(Number(value?.order)) ? Number(value.order) : index + 1,
@@ -2792,7 +2854,7 @@ const normalizeAppTour = (value: any, index: number): AppTourDefinition => {
 
     return {
         id: String(value?.id || `tour_${surface}_${index + 1}`).trim(),
-        title: String(value?.title || 'Hướng dẫn ứng dụng').trim() || 'Hướng dẫn ứng dụng',
+        title: String(value?.title || 'HÆ°á»›ng dáº«n á»©ng dá»¥ng').trim() || 'HÆ°á»›ng dáº«n á»©ng dá»¥ng',
         surface,
         screen: String(value?.screen || 'global').trim() || 'global',
         featureId: String(value?.featureId || '').trim() || undefined,
@@ -2891,7 +2953,7 @@ export const saveAppToursConfig = async (config: AppToursConfig) => {
         const savedVersion = Number(savedRow?.value?.contentVersion || 0);
         const savedUpdatedAt = String(savedRow?.value?.updatedAt || '');
         if (!savedRow?.value || savedVersion !== DEFAULT_APP_TOURS_CONFIG.contentVersion || savedUpdatedAt !== payload.updatedAt) {
-            throw new Error('Không xác nhận được dữ liệu hướng dẫn sau khi ghi vào database.');
+            throw new Error('KhÃ´ng xÃ¡c nháº­n Ä‘Æ°á»£c dá»¯ liá»‡u hÆ°á»›ng dáº«n sau khi ghi vÃ o database.');
         }
 
         return { success: true };
@@ -3004,29 +3066,29 @@ export const saveGenerationGuideImages = async (characterUrl: string, sampleUrl:
 };
 
 export const getGiftcodePromoConfig = async () => {
-    if (!supabase) return { text: "Nhập CODE \"HELLO2026\" để nhận 20 Vcoin miễn phí !!!", isActive: true };
+    if (!supabase) return { text: "Nháº­p CODE \"HELLO2026\" Ä‘á»ƒ nháº­n 20 Vcoin miá»…n phÃ­ !!!", isActive: true };
     try {
         const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'giftcode_promo').maybeSingle();
         if (error) throw error;
 
         if (data?.value) {
             const parsedValue = parseSettingValue(data.value, {
-                text: "Nhập CODE \"HELLO2026\" để nhận 20 Vcoin miễn phí !!!",
+                text: "Nháº­p CODE \"HELLO2026\" Ä‘á»ƒ nháº­n 20 Vcoin miá»…n phÃ­ !!!",
                 isActive: true
             });
             return {
-                text: parsedValue.text || "Nhập CODE \"HELLO2026\" để nhận 20 Vcoin miễn phí !!!",
+                text: parsedValue.text || "Nháº­p CODE \"HELLO2026\" Ä‘á»ƒ nháº­n 20 Vcoin miá»…n phÃ­ !!!",
                 isActive: parsedValue.isActive !== undefined ? parsedValue.isActive : true
             };
         }
 
         return {
-            text: "Nhập CODE \"HELLO2026\" để nhận 20 Vcoin miễn phí !!!",
+            text: "Nháº­p CODE \"HELLO2026\" Ä‘á»ƒ nháº­n 20 Vcoin miá»…n phÃ­ !!!",
             isActive: true
         };
     } catch (e) {
         return {
-            text: "Nhập CODE \"HELLO2026\" để nhận 20 Vcoin miễn phí !!!",
+            text: "Nháº­p CODE \"HELLO2026\" Ä‘á»ƒ nháº­n 20 Vcoin miá»…n phÃ­ !!!",
             isActive: true
         };
     }
@@ -3094,7 +3156,7 @@ export const deleteGiftcode = async (id: string) => {
 export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean, reward: number, message: string}> => {
     if (!supabase) return { success: false, reward: 0, message: "No Database" };
     const cleanCode = codeStr.trim().toUpperCase();
-    if (!cleanCode) return { success: false, reward: 0, message: "Vui lòng nhập giftcode." };
+    if (!cleanCode) return { success: false, reward: 0, message: "Vui lÃ²ng nháº­p giftcode." };
     trackEvent('giftcode_redeem_start');
 
     try {
@@ -3116,7 +3178,7 @@ export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean
             return {
                 success: false,
                 reward: 0,
-                message: payload?.message || 'Không thể sử dụng giftcode.',
+                message: payload?.message || 'KhÃ´ng thá»ƒ sá»­ dá»¥ng giftcode.',
             };
         }
 
@@ -3241,11 +3303,11 @@ export const getGiftcodeAbuseCases = async (limit = 1000): Promise<GiftcodeAbuse
         const riskFlags = Array.isArray(row.risk_flags) ? row.risk_flags : [];
         const abuseStatus = row.abuse_status || 'ok';
         const evidence = [
-            abuseStatus !== 'ok' ? `Trạng thái abuse: ${abuseStatus}` : '',
-            userCampaignCount > 1 ? `${userCampaignCount} lượt cùng user/campaign` : '',
-            emailCount > 1 ? `${emailCount} tài khoản/lượt cùng cụm email` : '',
-            ipCount > 1 ? `${ipCount} tài khoản/lượt cùng IP/network` : '',
-            browserCount > 1 ? `${browserCount} tài khoản/lượt cùng browser key` : '',
+            abuseStatus !== 'ok' ? `Tráº¡ng thÃ¡i abuse: ${abuseStatus}` : '',
+            userCampaignCount > 1 ? `${userCampaignCount} lÆ°á»£t cÃ¹ng user/campaign` : '',
+            emailCount > 1 ? `${emailCount} tÃ i khoáº£n/lÆ°á»£t cÃ¹ng cá»¥m email` : '',
+            ipCount > 1 ? `${ipCount} tÃ i khoáº£n/lÆ°á»£t cÃ¹ng IP/network` : '',
+            browserCount > 1 ? `${browserCount} tÃ i khoáº£n/lÆ°á»£t cÃ¹ng browser key` : '',
             ...riskFlags.map((flag: string) => `Risk flag: ${flag}`),
         ].filter(Boolean);
         const severity = Number(row.risk_score || 0)
@@ -3312,7 +3374,7 @@ export const adminGiftcodeAction = async (
     });
     const result = await response.json().catch(() => ({}));
     if (!response.ok || !result?.success) {
-        throw new Error(result?.error || 'Không thể xử lý thao tác giftcode.');
+        throw new Error(result?.error || 'KhÃ´ng thá»ƒ xá»­ lÃ½ thao tÃ¡c giftcode.');
     }
     return result;
 };
@@ -3363,26 +3425,26 @@ export const deleteStylePreset = async (id: string) => {
 
 const normalizeAdminVietnameseText = (value: string) => {
     const replacements: Array<[string, string]> = [
-        ['KhÃ¡c', 'Khác'],
-        ['nÃ¢ng cáº¥p', 'nâng cấp'],
-        ['lÃ m nÃ©t', 'làm nét'],
-        ['tÃ¡ch ná»n', 'tách nền'],
-        ['ngÆ°á»i', 'người'],
-        ['Ä‘Ã´i', 'đôi'],
-        ['táº¡o áº£nh', 'tạo ảnh'],
-        ['chÃ¢n dung', 'chân dung'],
-        ['áº£nh', 'ảnh'],
-        ['xá»­ lÃ½', 'xử lý'],
-        ['LÃ m NÃ©t áº¢nh', 'Làm Nét Ảnh'],
-        ['TÃ¡ch Ná»n', 'Tách Nền'],
-        ['Táº¡o áº¢nh', 'Tạo Ảnh'],
-        ['Táº¡o áº£nh', 'Tạo ảnh'],
-        ['NgÆ°á»i', 'Người'],
-        ['ÄÃ´i', 'Đôi'],
-        ['ÄÆ¡n', 'Đơn'],
-        ['Chá»‰nh Sá»­a', 'Chỉnh Sửa'],
-        ['Chá»‰nh sá»­a áº£nh', 'Chỉnh sửa ảnh'],
-        ['Xá»­ LÃ½ áº¢nh', 'Xử Lý Ảnh'],
+        ['KhÃƒÂ¡c', 'KhÃ¡c'],
+        ['nÃƒÂ¢ng cÃ¡ÂºÂ¥p', 'nÃ¢ng cáº¥p'],
+        ['lÃƒÂ m nÃƒÂ©t', 'lÃ m nÃ©t'],
+        ['tÃƒÂ¡ch nÃ¡Â»Ân', 'tÃ¡ch ná»n'],
+        ['ngÃ†Â°Ã¡Â»Âi', 'ngÆ°á»i'],
+        ['Ã„â€˜ÃƒÂ´i', 'Ä‘Ã´i'],
+        ['tÃ¡ÂºÂ¡o Ã¡ÂºÂ£nh', 'táº¡o áº£nh'],
+        ['chÃƒÂ¢n dung', 'chÃ¢n dung'],
+        ['Ã¡ÂºÂ£nh', 'áº£nh'],
+        ['xÃ¡Â»Â­ lÃƒÂ½', 'xá»­ lÃ½'],
+        ['LÃƒÂ m NÃƒÂ©t Ã¡ÂºÂ¢nh', 'LÃ m NÃ©t áº¢nh'],
+        ['TÃƒÂ¡ch NÃ¡Â»Ân', 'TÃ¡ch Ná»n'],
+        ['TÃ¡ÂºÂ¡o Ã¡ÂºÂ¢nh', 'Táº¡o áº¢nh'],
+        ['TÃ¡ÂºÂ¡o Ã¡ÂºÂ£nh', 'Táº¡o áº£nh'],
+        ['NgÃ†Â°Ã¡Â»Âi', 'NgÆ°á»i'],
+        ['Ã„ÂÃƒÂ´i', 'ÄÃ´i'],
+        ['Ã„ÂÃ†Â¡n', 'ÄÆ¡n'],
+        ['ChÃ¡Â»â€°nh SÃ¡Â»Â­a', 'Chá»‰nh Sá»­a'],
+        ['ChÃ¡Â»â€°nh sÃ¡Â»Â­a Ã¡ÂºÂ£nh', 'Chá»‰nh sá»­a áº£nh'],
+        ['XÃ¡Â»Â­ LÃƒÂ½ Ã¡ÂºÂ¢nh', 'Xá»­ LÃ½ áº¢nh'],
     ];
 
     return replacements.reduce((text, [bad, good]) => text.split(bad).join(good), value);
@@ -3511,10 +3573,10 @@ export const getAdminStats = async () => {
         }
 
         // Try to find the reason field from various potential column names
-        let rawFeature = normalizeAdminVietnameseText(log.reason || log.description || log.note || log.action || log.activity || log.details || 'Khác');
+        let rawFeature = normalizeAdminVietnameseText(log.reason || log.description || log.note || log.action || log.activity || log.details || 'KhÃ¡c');
         
-        // If still 'Khác', try to find any property that looks like a feature name
-        if (rawFeature === 'Khác') {
+        // If still 'KhÃ¡c', try to find any property that looks like a feature name
+        if (rawFeature === 'KhÃ¡c') {
             for (const key in log) {
                 if (typeof log[key] === 'string' && (log[key].startsWith('Gen') || log[key].startsWith('Edit') || log[key].includes(':'))) {
                     rawFeature = normalizeAdminVietnameseText(log[key]);
@@ -3524,25 +3586,25 @@ export const getAdminStats = async () => {
         }
 
         // Grouping Logic
-        let feature = 'Khác';
+        let feature = 'KhÃ¡c';
         const lower = rawFeature.toLowerCase();
 
-        if (lower.includes('nâng cấp') || lower.includes('upscale') || lower.includes('làm nét') || lower.includes('hd')) {
-            feature = 'Làm Nét Ảnh (Upscale)';
-        } else if (lower.includes('tách nền') || lower.includes('remove background') || lower.includes('background')) {
-            feature = 'Tách Nền (Remove BG)';
-        } else if (lower.includes('5 người') || lower.includes('group of 5') || lower.includes('squad of 5')) {
-            feature = 'Tạo Ảnh 5 Người';
-        } else if (lower.includes('4 người') || lower.includes('group of 4') || lower.includes('squad of 4')) {
-            feature = 'Tạo Ảnh 4 Người';
-        } else if (lower.includes('3 người') || lower.includes('group of 3') || lower.includes('squad of 3')) {
-            feature = 'Tạo Ảnh 3 Người';
-        } else if (lower.includes('2 người') || lower.includes('couple') || lower.includes('đôi') || lower.includes('song ca')) {
-            feature = 'Tạo Ảnh Đôi (Couple)';
-        } else if (lower.includes('tạo ảnh') || lower.includes('gen:') || lower.includes('generate') || lower.includes('chân dung') || lower.includes('1 ảnh') || lower.includes('single')) {
-            feature = 'Tạo Ảnh Đơn (Single)';
-        } else if (lower.includes('xử lý') || lower.includes('edit') || lower.includes('face')) {
-             feature = 'Chỉnh Sửa / Xử Lý Ảnh';
+        if (lower.includes('nÃ¢ng cáº¥p') || lower.includes('upscale') || lower.includes('lÃ m nÃ©t') || lower.includes('hd')) {
+            feature = 'LÃ m NÃ©t áº¢nh (Upscale)';
+        } else if (lower.includes('tÃ¡ch ná»n') || lower.includes('remove background') || lower.includes('background')) {
+            feature = 'TÃ¡ch Ná»n (Remove BG)';
+        } else if (lower.includes('5 ngÆ°á»i') || lower.includes('group of 5') || lower.includes('squad of 5')) {
+            feature = 'Táº¡o áº¢nh 5 NgÆ°á»i';
+        } else if (lower.includes('4 ngÆ°á»i') || lower.includes('group of 4') || lower.includes('squad of 4')) {
+            feature = 'Táº¡o áº¢nh 4 NgÆ°á»i';
+        } else if (lower.includes('3 ngÆ°á»i') || lower.includes('group of 3') || lower.includes('squad of 3')) {
+            feature = 'Táº¡o áº¢nh 3 NgÆ°á»i';
+        } else if (lower.includes('2 ngÆ°á»i') || lower.includes('couple') || lower.includes('Ä‘Ã´i') || lower.includes('song ca')) {
+            feature = 'Táº¡o áº¢nh ÄÃ´i (Couple)';
+        } else if (lower.includes('táº¡o áº£nh') || lower.includes('gen:') || lower.includes('generate') || lower.includes('chÃ¢n dung') || lower.includes('1 áº£nh') || lower.includes('single')) {
+            feature = 'Táº¡o áº¢nh ÄÆ¡n (Single)';
+        } else if (lower.includes('xá»­ lÃ½') || lower.includes('edit') || lower.includes('face')) {
+             feature = 'Chá»‰nh Sá»­a / Xá»­ LÃ½ áº¢nh';
         } else {
             feature = rawFeature.length > 50 ? rawFeature.substring(0, 50) + '...' : rawFeature;
         }

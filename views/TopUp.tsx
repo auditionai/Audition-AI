@@ -41,6 +41,7 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
           setTopupGiftcodes(rows);
       } catch (error) {
           console.warn('Failed to load topup giftcodes', error);
+          notify(error instanceof Error ? error.message : 'Không thể tải giftcode nạp tiền', 'error');
       } finally {
           setLoadingGiftcodes(false);
       }

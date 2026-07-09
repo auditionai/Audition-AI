@@ -5,11 +5,11 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, Flame, Gem, Loader, ShoppingBag, Sparkles, Zap } from 'lucide-react';
+import { CheckCircle2, ChevronRight, Flame, Gem, Gift, Loader, QrCode, ShoppingBag, Sparkles, X, Zap } from 'lucide-react';
 import { useNotification } from '../components/NotificationSystem';
-import { createPaymentLink, getActivePromotion, getPackages, updateLastActive } from '../services/economyService';
+import { createPaymentLink, getActivePromotion, getPackages, getTopupGiftcodes, updateLastActive } from '../services/economyService';
 import { syncPaymentTransaction } from '../services/serverQueueService';
-import type { PromotionCampaign } from '../services/economyService';
+import type { PromotionCampaign, TopupGiftcodeOffer } from '../services/economyService';
 import type { CreditPackage, Transaction } from '../types';
 
 const PENDING_TRANSACTION_STORAGE_KEY = 'audition-mobile-pending-transaction';
@@ -23,6 +23,10 @@ export const TopUp: React.FC = () => {
   const [activeCampaign, setActiveCampaign] = useState<PromotionCampaign | null>(null);
   const [loading, setLoading] = useState(false);
   const [packagesLoading, setPackagesLoading] = useState(true);
+  const [selectedPackage, setSelectedPackage] = useState<CreditPackage | null>(null);
+  const [topupGiftcodes, setTopupGiftcodes] = useState<TopupGiftcodeOffer[]>([]);
+  const [giftcodeInput, setGiftcodeInput] = useState('');
+  const [loadingGiftcodes, setLoadingGiftcodes] = useState(false);
   const [timeLeft, setTimeLeft] = useState({ d: 0, h: 0, m: 0, s: 0 });
 
   useEffect(() => {
@@ -145,12 +149,70 @@ export const TopUp: React.FC = () => {
     return `Sự kiện "${name}". Ưu đãi nạp +${bonusPercent}% Vcoin ngay hôm nay!`;
   }, [activeCampaign]);
 
-  const handleBuyPackage = async (pkg: CreditPackage) => {
+  const loadTopupGiftcodes = async () => {
+    setLoadingGiftcodes(true);
+    try {
+      setTopupGiftcodes(await getTopupGiftcodes());
+    } catch (error) {
+      console.warn('[Mobile TopUp] Failed to load topup giftcodes', error);
+      notify(error instanceof Error ? error.message : 'Không thể tải giftcode nạp tiền', 'error');
+    } finally {
+      setLoadingGiftcodes(false);
+    }
+  };
+
+  const openCheckoutModal = async (pkg: CreditPackage) => {
+    setSelectedPackage(pkg);
+    setGiftcodeInput('');
+    await loadTopupGiftcodes();
+  };
+
+  const selectedOffer = useMemo(() => {
+    const clean = giftcodeInput.trim().toUpperCase();
+    if (!clean) return null;
+    return topupGiftcodes.find((code) => code.code.toUpperCase() === clean) || null;
+  }, [giftcodeInput, topupGiftcodes]);
+
+  const availableTopupGiftcodes = useMemo(() => {
+    return topupGiftcodes
+      .filter((code) => code.status === 'available' && Number(code.remainingPerUser ?? code.maxPerUser ?? 1) > 0)
+      .sort((a, b) => {
+        const aFeatured = a.audience === 'new_user_first_topup' ? 1 : 0;
+        const bFeatured = b.audience === 'new_user_first_topup' ? 1 : 0;
+        if (aFeatured !== bFeatured) return bFeatured - aFeatured;
+        return b.discountPercent - a.discountPercent;
+      });
+  }, [topupGiftcodes]);
+
+  const checkoutPreview = useMemo(() => {
+    if (!selectedPackage) return null;
+    const discountPercent = selectedOffer?.status === 'available' ? selectedOffer.discountPercent : 0;
+    const discountAmount = Math.floor(selectedPackage.price * discountPercent / 100);
+    return {
+      originalAmount: selectedPackage.price,
+      discountAmount,
+      finalAmount: Math.max(0, selectedPackage.price - discountAmount),
+    };
+  }, [selectedPackage, selectedOffer]);
+
+  const getGiftcodeUsageText = (code: TopupGiftcodeOffer) => {
+    if (code.audience === 'new_user_first_topup') return 'Chỉ sử dụng được 1 lần duy nhất';
+    return `Còn ${Number(code.remainingPerUser ?? code.maxPerUser ?? 1).toLocaleString('vi-VN')} lần sử dụng`;
+  };
+
+  const getGiftcodeDescription = (code: TopupGiftcodeOffer) => {
+    if (code.audience === 'new_user_first_topup') {
+      return `Ưu đãi ${code.discountPercent}% cho tài khoản mới nạp lần đầu. Hãy tận dụng để tránh lãng phí.`;
+    }
+    return `Giảm trực tiếp ${code.discountPercent}% trên giá gói nạp.`;
+  };
+
+  const handleBuyPackage = async (pkg: CreditPackage, code?: string) => {
     setLoading(true);
     updateLastActive();
 
     try {
-      const transaction = await createPaymentLink(pkg.id);
+      const transaction = await createPaymentLink(pkg.id, code);
       if (transaction.checkoutUrl) {
         window.location.assign(transaction.checkoutUrl);
         return;
@@ -277,7 +339,7 @@ export const TopUp: React.FC = () => {
 
                 <button
                   data-tour-id="mobile.topup.payment_button"
-                  onClick={() => void handleBuyPackage(pkg)}
+                  onClick={() => void openCheckoutModal(pkg)}
                   disabled={loading}
                   className={`shrink-0 px-5 py-3 rounded-2xl text-xs font-bold flex items-center gap-1 transition-all ${isPopular ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white shadow-lg shadow-purple-500/30 active:shadow-sm' : 'bg-gray-900 text-white active:bg-gray-700'}`}
                 >
@@ -294,6 +356,103 @@ export const TopUp: React.FC = () => {
           Thanh toán an toàn qua <strong>SePay</strong>. 1 Vcoin = 1.000đ. Vcoin nạp vào tài khoản ngay lập tức sau khi thanh toán thành công.
         </p>
       </div>
+
+      {selectedPackage && checkoutPreview && (
+        <div className="fixed inset-0 z-[80] flex items-end bg-black/60 backdrop-blur-sm">
+          <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-[30px] bg-white p-4 shadow-2xl dark:bg-[#18181B]">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-cyan-50 px-3 py-1 text-[10px] font-black uppercase text-cyan-700 dark:bg-cyan-500/10 dark:text-cyan-300">
+                  <Gift className="h-3.5 w-3.5" />
+                  Giftcode ưu đãi
+                </div>
+                <h3 className="text-xl font-black text-gray-900 dark:text-white">{selectedPackage.name}</h3>
+                <p className="mt-1 text-xs text-gray-500 dark:text-zinc-400">Chọn mã trước khi quét QR thanh toán.</p>
+              </div>
+              <button onClick={() => setSelectedPackage(null)} className="rounded-2xl bg-gray-100 p-2 text-gray-500 dark:bg-zinc-800 dark:text-zinc-300">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="rounded-2xl bg-gray-50 p-3 dark:bg-zinc-800/80">
+              <label className="text-[10px] font-black uppercase tracking-wide text-gray-400 dark:text-zinc-500">Nhập hoặc chọn nhanh code</label>
+              <div className="mt-2 flex gap-2">
+                <input
+                  value={giftcodeInput}
+                  onChange={(e) => setGiftcodeInput(e.target.value.toUpperCase())}
+                  placeholder="AUAI-50-XXXXX"
+                  className="min-w-0 flex-1 rounded-2xl border border-gray-200 bg-white px-4 py-3 font-mono text-sm font-black uppercase outline-none focus:border-cyan-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
+                />
+                <button onClick={() => setGiftcodeInput('')} className="rounded-2xl bg-gray-900 px-4 text-xs font-bold text-white dark:bg-white dark:text-black">Xóa</button>
+              </div>
+            </div>
+
+            <div className="mt-3 space-y-2.5">
+              {loadingGiftcodes ? (
+                <div className="flex items-center justify-center rounded-2xl bg-gray-50 py-8 text-sm text-gray-400 dark:bg-zinc-800/80">
+                  <Loader className="mr-2 h-4 w-4 animate-spin" /> Đang tải mã ưu đãi
+                </div>
+              ) : availableTopupGiftcodes.length === 0 ? (
+                <div className="rounded-2xl bg-gray-50 p-4 text-sm text-gray-500 dark:bg-zinc-800/80 dark:text-zinc-400">Hiện chưa có giftcode nạp tiền khả dụng cho tài khoản này.</div>
+              ) : availableTopupGiftcodes.map((code) => {
+                const selected = giftcodeInput.trim().toUpperCase() === code.code.toUpperCase();
+                const featured = code.audience === 'new_user_first_topup';
+                return (
+                  <button
+                    key={code.id}
+                    onClick={() => setGiftcodeInput(code.code)}
+                    className={`w-full rounded-2xl border p-3 text-left transition-all ${
+                      selected
+                        ? 'border-cyan-400 bg-cyan-50 dark:bg-cyan-500/10'
+                        : featured
+                          ? 'border-amber-200 bg-amber-50 dark:border-amber-500/20 dark:bg-amber-500/10'
+                          : 'border-gray-100 bg-gray-50 dark:border-zinc-800 dark:bg-zinc-800/80'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="break-all font-mono text-sm font-black text-gray-900 dark:text-white">{code.code}</span>
+                          {featured && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">Nạp lần đầu</span>}
+                        </div>
+                        <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-zinc-400">{getGiftcodeDescription(code)}</p>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-black text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300">-{code.discountPercent}%</span>
+                    </div>
+                    <div className="mt-3 inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[10px] font-bold text-gray-600 dark:bg-zinc-900 dark:text-zinc-300">
+                      <CheckCircle2 className="h-3 w-3 text-cyan-500" />
+                      {getGiftcodeUsageText(code)}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-4 rounded-3xl bg-gray-950 p-4 text-white">
+              <div className="mb-3 flex items-center justify-between border-b border-white/10 pb-3">
+                <span className="text-sm text-zinc-400">Gói nhận</span>
+                <span className="text-lg font-black text-yellow-300">{selectedPackage.vcoin} Vcoin</span>
+              </div>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between gap-3"><span className="text-zinc-400">Giá gốc</span><span className="font-bold">{checkoutPreview.originalAmount.toLocaleString('vi-VN')}đ</span></div>
+                <div className="flex justify-between gap-3"><span className="text-zinc-400">Giảm giá</span><span className="font-bold text-emerald-300">-{checkoutPreview.discountAmount.toLocaleString('vi-VN')}đ</span></div>
+                <div className="flex justify-between gap-3 border-t border-white/10 pt-3"><span className="font-bold">Cần thanh toán</span><span className="text-2xl font-black text-cyan-300">{checkoutPreview.finalAmount.toLocaleString('vi-VN')}đ</span></div>
+              </div>
+              {giftcodeInput && selectedOffer?.status !== 'available' && (
+                <p className="mt-3 rounded-2xl border border-amber-400/20 bg-amber-400/10 p-3 text-xs text-amber-200">Code này không còn khả dụng cho tài khoản hoặc đã được sử dụng.</p>
+              )}
+              <button
+                onClick={() => void handleBuyPackage(selectedPackage, selectedOffer?.status === 'available' ? giftcodeInput : undefined)}
+                disabled={loading || Boolean(giftcodeInput && selectedOffer?.status !== 'available')}
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-purple-600 to-fuchsia-600 px-4 py-3 text-sm font-black text-white disabled:opacity-50"
+              >
+                {loading ? <Loader className="h-4 w-4 animate-spin" /> : <QrCode className="h-4 w-4" />}
+                Quét QR để thanh toán
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -629,7 +629,8 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                         </tbody>
                     </table>
                 ) : (
-                    <table className="w-full text-left text-sm text-slate-400">
+                    <div>
+                    <table className="hidden w-full text-left text-sm text-slate-400 md:table">
                         <thead className="text-xs uppercase bg-black/20 text-slate-500 font-bold tracking-wider border-b border-white/5">
                             <tr>
                                 <th className="px-6 py-4">THỜI GIAN</th>
@@ -691,6 +692,83 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                             ))}
                         </tbody>
                     </table>
+                    <div className="space-y-3 p-3 md:hidden">
+                        {loadingTransactions ? (
+                            <div className="flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 py-10">
+                                <Icons.Loader className="h-6 w-6 animate-spin text-audi-cyan" />
+                            </div>
+                        ) : transactions.length === 0 ? (
+                            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-10 text-center text-sm italic text-slate-500">
+                                Chưa có giao dịch nào
+                            </div>
+                        ) : transactions.map(item => {
+                            const topupGiftcode = getTopupGiftcodeLabel(item.topupGiftcode);
+                            return (
+                                <div key={item.id} className="rounded-2xl border border-white/10 bg-black/25 p-4 shadow-lg">
+                                    <div className="mb-3 flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Thời gian</div>
+                                            <div className="mt-1 font-mono text-xs text-slate-300">{new Date(item.createdAt).toLocaleString('vi-VN')}</div>
+                                        </div>
+                                        <span className={`shrink-0 rounded border px-2 py-1 text-[10px] font-bold ${getBadgeStyle(item.type)}`}>
+                                            {getBadgeLabel(item.type)}
+                                        </span>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <div className="font-bold leading-snug text-white">{item.description}</div>
+                                        {item.code && (
+                                            <div className="break-all text-[11px] text-slate-500">
+                                                Mã đơn: <span className="font-mono text-slate-300">{item.code}</span>
+                                            </div>
+                                        )}
+                                        {topupGiftcode && (
+                                            <div className="rounded-xl border border-audi-cyan/20 bg-audi-cyan/10 p-3">
+                                                <div className="flex items-center gap-2 text-xs font-bold text-audi-cyan">
+                                                    <Icons.Gift className="h-4 w-4 shrink-0" />
+                                                    <span>Giftcode đang áp dụng</span>
+                                                </div>
+                                                <div className="mt-1 break-all font-mono text-sm font-black text-white">{topupGiftcode}</div>
+                                                {Number(item.discountAmount || 0) > 0 && (
+                                                    <div className="mt-1 text-xs font-bold text-emerald-300">
+                                                        Giảm {Number(item.discountAmount || 0).toLocaleString('vi-VN')}đ
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="mt-4 grid grid-cols-2 gap-3 border-t border-white/10 pt-3">
+                                        <div>
+                                            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Vcoin</div>
+                                            <div className={`mt-1 text-base font-black ${item.vcoinChange > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                                {item.vcoinChange > 0 ? '+' : ''}{item.vcoinChange}
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Trạng thái</div>
+                                            <div className="mt-1 flex justify-end">
+                                                {item.status === 'success' ? (
+                                                    <span className="inline-flex items-center gap-1.5 rounded-full border border-green-500/20 bg-green-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-green-400">
+                                                        <Icons.Check className="h-3 w-3" /> Thành công
+                                                    </span>
+                                                ) : item.status === 'pending' ? (
+                                                    <span className="inline-flex items-center gap-1.5 rounded-full border border-yellow-500/20 bg-yellow-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-yellow-400">
+                                                        <Icons.Loader className="h-3 w-3 animate-spin" /> Đang chờ
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center gap-1.5 rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-red-400">
+                                                        <Icons.X className="h-3 w-3" /> Thất bại
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                    </div>
                 )}
             </div>
 

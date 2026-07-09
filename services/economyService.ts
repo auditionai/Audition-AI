@@ -2206,6 +2206,14 @@ export const adminRejectTransaction = async (txId: string): Promise<{success: bo
             .update({ status: 'failed' })
             .eq('id', txId);
         if (error) throw error;
+
+        const { error: giftcodeError } = await supabase.rpc('cancel_topup_giftcode_reservation', {
+            p_transaction_id: txId,
+        });
+        if (giftcodeError && !/cancel_topup_giftcode_reservation|function|schema/i.test(giftcodeError.message || '')) {
+            throw giftcodeError;
+        }
+
         return { success: true };
     } catch (e: any) {
         return { success: false, error: e.message };
@@ -2235,6 +2243,16 @@ export const adminBulkRejectTransactions = async (txIds: string[]): Promise<{suc
             .in('id', txIds);
             
         if (error) throw error;
+
+        for (const id of txIds) {
+            const { error: giftcodeError } = await supabase.rpc('cancel_topup_giftcode_reservation', {
+                p_transaction_id: id,
+            });
+            if (giftcodeError && !/cancel_topup_giftcode_reservation|function|schema/i.test(giftcodeError.message || '')) {
+                throw giftcodeError;
+            }
+        }
+
         return { success: true, count: count || txIds.length };
     } catch (e: any) {
         return { success: false, error: e.message };

@@ -123,7 +123,7 @@ const ensureGeneratedTopupGiftcode = async (admin: any, userId: string, generate
     .from('topup_gift_code_usages')
     .select('id, gift_codes!inner(campaign_key)', { count: 'exact', head: true })
     .eq('gift_codes.campaign_key', campaignKey)
-    .in('status', ['reserved', 'applied']);
+    .eq('status', 'applied');
   if (usedCountError && !/topup_gift_code_usages|schema|relation/i.test(usedCountError.message || '')) {
     throw usedCountError;
   }
@@ -136,7 +136,7 @@ const ensureGeneratedTopupGiftcode = async (admin: any, userId: string, generate
     .select('id, gift_codes!inner(campaign_key)', { count: 'exact', head: true })
     .eq('user_id', userId)
     .eq('gift_codes.campaign_key', campaignKey)
-    .in('status', ['reserved', 'applied']);
+    .eq('status', 'applied');
   if (userUsedCountError && !/topup_gift_code_usages|schema|relation/i.test(userUsedCountError.message || '')) {
     throw userUsedCountError;
   }
@@ -254,12 +254,10 @@ export const handler: Handler = async (event) => {
     let discountAmount = 0;
     let discountPercent = 0;
     let appliedGiftcode: string | null = null;
-    let generatedTemplateId: string | null = null;
 
     if (giftcode) {
       try {
-        const generated = await ensureGeneratedTopupGiftcode(admin, user.id, giftcode);
-        generatedTemplateId = generated.templateId;
+        await ensureGeneratedTopupGiftcode(admin, user.id, giftcode);
       } catch (generatedError: any) {
         await admin.from('payment_transactions').update({ status: 'failed' }).eq('id', tx.id);
         return {
@@ -299,10 +297,6 @@ export const handler: Handler = async (event) => {
       discountAmount = Number(reserved.discount_amount_vnd || 0);
       discountPercent = Number(reserved.discount_percent || 0);
       appliedGiftcode = String(reserved.code || giftcode);
-
-      if (generatedTemplateId) {
-        await admin.rpc('increment_giftcode_usage', { code_id: generatedTemplateId });
-      }
 
       const { error: discountUpdateError } = await admin
         .from('payment_transactions')

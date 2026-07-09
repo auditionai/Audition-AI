@@ -1,79 +1,25 @@
 begin;
 
-alter table public.gift_codes
-  add column if not exists code_type text not null default 'reward',
-  add column if not exists discount_percent numeric not null default 0,
-  add column if not exists audience text not null default 'all',
-  add column if not exists assigned_user_id uuid references public.users(id) on delete cascade,
-  add column if not exists auto_generate_per_user boolean not null default false;
+-- Pending QR reservations must not consume giftcode limits. Only successful
+-- SePay payments should count as an applied top-up giftcode usage.
 
-alter table public.payment_transactions
-  add column if not exists topup_giftcode text,
-  add column if not exists topup_gift_code_id uuid references public.gift_codes(id) on delete set null,
-  add column if not exists original_amount_vnd numeric,
-  add column if not exists discount_amount_vnd numeric not null default 0;
+update public.topup_gift_code_usages tgu
+set
+  status = 'cancelled',
+  cancelled_at = coalesce(tgu.cancelled_at, now())
+from public.payment_transactions pt
+where tgu.payment_transaction_id = pt.id
+  and tgu.status = 'reserved'
+  and pt.status in ('cancelled', 'failed');
 
-do $$
-begin
-  if not exists (
-    select 1 from pg_constraint
-    where conname = 'gift_codes_code_type_check'
-      and conrelid = 'public.gift_codes'::regclass
-  ) then
-    alter table public.gift_codes
-      add constraint gift_codes_code_type_check
-      check (code_type in ('reward', 'topup_discount'));
-  end if;
+update public.topup_gift_code_usages tgu
+set
+  status = 'cancelled',
+  cancelled_at = coalesce(tgu.cancelled_at, now())
+where tgu.status = 'reserved'
+  and tgu.payment_transaction_id is null;
 
-  if not exists (
-    select 1 from pg_constraint
-    where conname = 'gift_codes_audience_check'
-      and conrelid = 'public.gift_codes'::regclass
-  ) then
-    alter table public.gift_codes
-      add constraint gift_codes_audience_check
-      check (audience in ('all', 'new_user_first_topup', 'specific_user'));
-  end if;
-end
-$$;
-
-create index if not exists idx_gift_codes_topup_lookup
-  on public.gift_codes(code_type, is_active, audience, assigned_user_id);
-
-create table if not exists public.topup_gift_code_usages (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references public.users(id) on delete cascade,
-  gift_code_id uuid not null references public.gift_codes(id) on delete cascade,
-  payment_transaction_id uuid references public.payment_transactions(id) on delete set null,
-  status text not null default 'reserved',
-  original_amount_vnd numeric not null default 0,
-  discount_amount_vnd numeric not null default 0,
-  final_amount_vnd numeric not null default 0,
-  created_at timestamptz not null default now(),
-  applied_at timestamptz,
-  cancelled_at timestamptz
-);
-
-do $$
-begin
-  if not exists (
-    select 1 from pg_constraint
-    where conname = 'topup_gift_code_usages_status_check'
-      and conrelid = 'public.topup_gift_code_usages'::regclass
-  ) then
-    alter table public.topup_gift_code_usages
-      add constraint topup_gift_code_usages_status_check
-      check (status in ('reserved', 'applied', 'cancelled'));
-  end if;
-end
-$$;
-
-create index if not exists idx_topup_gift_code_usages_user_created
-  on public.topup_gift_code_usages(user_id, created_at desc);
-
-create unique index if not exists uq_topup_gift_code_usage_user_code_active
-  on public.topup_gift_code_usages(user_id, gift_code_id)
-  where status in ('reserved', 'applied');
+drop function if exists public.get_available_topup_giftcodes(uuid);
 
 create or replace function public.get_available_topup_giftcodes(p_user_id uuid)
 returns table (
@@ -178,6 +124,10 @@ begin
 end;
 $$;
 
+grant execute on function public.get_available_topup_giftcodes(uuid) to authenticated, service_role;
+
+drop function if exists public.reserve_topup_giftcode(uuid, text, uuid, numeric);
+
 create or replace function public.reserve_topup_giftcode(
   p_user_id uuid,
   p_code text,
@@ -214,6 +164,16 @@ begin
     return query select false, null::uuid, null::text, 0::numeric, 0::numeric, p_original_amount_vnd, 'GIFTCODE_REQUIRED'::text;
     return;
   end if;
+
+  update public.topup_gift_code_usages tgu
+  set
+    status = 'cancelled',
+    cancelled_at = coalesce(tgu.cancelled_at, now())
+  from public.payment_transactions pt
+  where tgu.payment_transaction_id = pt.id
+    and tgu.user_id = p_user_id
+    and tgu.status = 'reserved'
+    and pt.status in ('cancelled', 'failed');
 
   select *
   into v_code
@@ -309,6 +269,8 @@ begin
 end;
 $$;
 
+grant execute on function public.reserve_topup_giftcode(uuid, text, uuid, numeric) to service_role;
+
 create or replace function public.mark_topup_giftcode_applied(p_transaction_id uuid)
 returns void
 language sql
@@ -361,47 +323,52 @@ $$;
 
 grant execute on function public.cancel_topup_giftcode_reservation(uuid) to authenticated, service_role;
 
-create or replace function public.handle_new_user()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  insert into public.users (
-    id,
-    email,
-    display_name,
-    photo_url,
-    vcoin_balance,
-    is_admin,
-    created_at,
-    updated_at
-  )
-  values (
-    new.id,
-    new.email,
-    coalesce(
-      new.raw_user_meta_data->>'display_name',
-      new.raw_user_meta_data->>'full_name',
-      new.raw_user_meta_data->>'name',
-      split_part(new.email, '@', 1)
-    ),
-    coalesce(new.raw_user_meta_data->>'avatar_url', ''),
-    0,
-    false,
-    now(),
-    now()
-  )
-  on conflict (id) do update
-  set
-    email = excluded.email,
-    display_name = coalesce(excluded.display_name, public.users.display_name),
-    photo_url = coalesce(excluded.photo_url, public.users.photo_url),
-    updated_at = now();
+with applied_per_code as (
+  select gift_code_id, count(*)::numeric as count
+  from public.topup_gift_code_usages
+  where status = 'applied'
+  group by gift_code_id
+)
+update public.gift_codes gc
+set
+  used_count = coalesce(apc.count, 0),
+  updated_at = now()
+from applied_per_code apc
+where gc.id = apc.gift_code_id
+  and gc.code_type = 'topup_discount';
 
-  return new;
-end;
-$$;
+update public.gift_codes gc
+set
+  used_count = 0,
+  updated_at = now()
+where gc.code_type = 'topup_discount'
+  and not exists (
+    select 1
+    from public.topup_gift_code_usages tgu
+    where tgu.gift_code_id = gc.id
+      and tgu.status = 'applied'
+  );
+
+with applied_per_campaign as (
+  select
+    upper(btrim(coalesce(gc.campaign_key, gc.code))) as campaign_key,
+    count(*)::numeric as count
+  from public.topup_gift_code_usages tgu
+  join public.gift_codes gc on gc.id = tgu.gift_code_id
+  where tgu.status = 'applied'
+  group by upper(btrim(coalesce(gc.campaign_key, gc.code)))
+)
+update public.gift_codes template
+set
+  used_count = coalesce(apc.count, 0),
+  updated_at = now()
+from applied_per_campaign apc
+where template.code_type = 'topup_discount'
+  and template.assigned_user_id is null
+  and template.auto_generate_per_user is true
+  and upper(btrim(coalesce(template.campaign_key, template.code))) = apc.campaign_key;
+
+notify pgrst, 'reload schema';
+notify pgrst, 'reload config';
 
 commit;

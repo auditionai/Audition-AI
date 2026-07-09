@@ -290,6 +290,11 @@ const getPaymentStatusLabel = (status?: string) => {
   }
 };
 
+const getTopupGiftcodeLabel = (giftcode?: string | null) => {
+  const clean = String(giftcode || '').trim().toUpperCase();
+  return clean || null;
+};
+
 const getRoleLabel = (role?: string) => (role === 'admin' ? 'Quản trị viên' : 'Người dùng');
 
 const getUserLastSeen = (user: AdminUserRow) => {
@@ -1420,7 +1425,55 @@ export function AdminView() {
         {activeTab === 'transactions' && (
           <Card>
             <div className="mb-4 flex items-start gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gray-100 dark:bg-zinc-800"><Wallet className="h-5 w-5 text-gray-700 dark:text-white" /></div><div><h2 className="text-base font-black text-gray-900 dark:text-white">Giao dịch nạp tiền</h2><p className="mt-1 text-xs text-gray-500 dark:text-zinc-400">Duyệt giao dịch chờ ngay trên mobile</p></div></div>
-            {loadingStats ? <div className="flex justify-center py-12"><Loader className="h-7 w-7 animate-spin text-gray-300" /></div> : (stats?.transactions || []).length === 0 ? <div className="rounded-[24px] bg-gray-50 px-4 py-6 text-sm text-gray-500 dark:bg-zinc-800/80 dark:text-zinc-400">Chưa có giao dịch nào.</div> : <div className="space-y-3">{((stats?.transactions || []) as Transaction[]).slice(0, 20).map((tx: Transaction) => <div key={tx.id} className="rounded-[24px] bg-gray-50 p-4 dark:bg-zinc-800/80"><div className="mb-3 flex items-start justify-between gap-3"><div className="min-w-0"><div className="truncate text-sm font-black text-gray-900 dark:text-white">{tx.userName || tx.userEmail || 'Người dùng không xác định'}</div><div className="mt-1 text-[11px] text-gray-500 dark:text-zinc-400">{tx.userEmail || tx.userId}</div></div><div className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${tx.status === 'pending' ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300' : tx.status === 'paid' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300' : 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-300'}`}>{getPaymentStatusLabel(tx.status)}</div></div><div className="grid grid-cols-2 gap-3 text-xs"><div><div className="text-gray-400 dark:text-zinc-500">Số tiền</div><div className="mt-1 text-sm font-bold text-gray-900 dark:text-white">{new Intl.NumberFormat('vi-VN').format(Number(tx.amount || 0))}đ</div></div><div><div className="text-gray-400 dark:text-zinc-500">Vcoin</div><div className="mt-1 text-sm font-bold text-pink-500">{tx.vcoin_received} VC</div></div></div><div className="mt-3 text-[11px] text-gray-500 dark:text-zinc-400">{formatDateTime(tx.createdAt)}{tx.order_code ? ` • ${tx.order_code}` : ''}</div>{tx.status === 'pending' ? <div className="mt-4 flex gap-2"><button onClick={() => approveTransaction(tx)} disabled={actingTransactionId === tx.id} className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-bold text-white disabled:opacity-60">{actingTransactionId === tx.id ? <Loader className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}Duyệt</button><button onClick={() => rejectTransaction(tx)} disabled={actingTransactionId === tx.id} className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-red-500 px-4 py-3 text-sm font-bold text-white disabled:opacity-60">{actingTransactionId === tx.id ? <Loader className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}Từ chối</button></div> : null}</div>)}</div>}
+            {loadingStats ? (
+              <div className="flex justify-center py-12"><Loader className="h-7 w-7 animate-spin text-gray-300" /></div>
+            ) : (stats?.transactions || []).length === 0 ? (
+              <div className="rounded-[24px] bg-gray-50 px-4 py-6 text-sm text-gray-500 dark:bg-zinc-800/80 dark:text-zinc-400">Chưa có giao dịch nào.</div>
+            ) : (
+              <div className="space-y-3">
+                {((stats?.transactions || []) as Transaction[]).slice(0, 20).map((tx: Transaction) => {
+                  const topupGiftcode = getTopupGiftcodeLabel(tx.topupGiftcode);
+                  return (
+                    <div key={tx.id} className="rounded-[24px] bg-gray-50 p-4 dark:bg-zinc-800/80">
+                      <div className="mb-3 flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-black text-gray-900 dark:text-white">{tx.userName || tx.userEmail || 'Người dùng không xác định'}</div>
+                          <div className="mt-1 text-[11px] text-gray-500 dark:text-zinc-400">{tx.userEmail || tx.userId}</div>
+                        </div>
+                        <div className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${tx.status === 'pending' ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300' : tx.status === 'paid' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300' : 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-300'}`}>{getPaymentStatusLabel(tx.status)}</div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <div>
+                          <div className="text-gray-400 dark:text-zinc-500">Số tiền</div>
+                          <div className="mt-1 text-sm font-bold text-gray-900 dark:text-white">{new Intl.NumberFormat('vi-VN').format(Number(tx.amount || 0))}đ</div>
+                          {Number(tx.discountAmount || 0) > 0 && <div className="mt-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-300">Giảm {Number(tx.discountAmount || 0).toLocaleString('vi-VN')}đ</div>}
+                        </div>
+                        <div>
+                          <div className="text-gray-400 dark:text-zinc-500">Vcoin</div>
+                          <div className="mt-1 text-sm font-bold text-pink-500">{tx.vcoin_received} VC</div>
+                        </div>
+                      </div>
+                      {topupGiftcode && (
+                        <div className="mt-3 rounded-2xl border border-cyan-100 bg-cyan-50 p-3 dark:border-cyan-500/20 dark:bg-cyan-500/10">
+                          <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wide text-cyan-700 dark:text-cyan-300">
+                            <Gift className="h-3.5 w-3.5" />
+                            Giftcode áp dụng
+                          </div>
+                          <div className="mt-1 break-all font-mono text-sm font-black text-gray-900 dark:text-white">{topupGiftcode}</div>
+                        </div>
+                      )}
+                      <div className="mt-3 text-[11px] text-gray-500 dark:text-zinc-400">{formatDateTime(tx.createdAt)}{tx.order_code ? ` • ${tx.order_code}` : ''}</div>
+                      {tx.status === 'pending' ? (
+                        <div className="mt-4 flex gap-2">
+                          <button onClick={() => approveTransaction(tx)} disabled={actingTransactionId === tx.id} className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-bold text-white disabled:opacity-60">{actingTransactionId === tx.id ? <Loader className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}Duyệt</button>
+                          <button onClick={() => rejectTransaction(tx)} disabled={actingTransactionId === tx.id} className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-red-500 px-4 py-3 text-sm font-bold text-white disabled:opacity-60">{actingTransactionId === tx.id ? <Loader className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}Từ chối</button>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </Card>
         )}
 
@@ -1605,6 +1658,7 @@ export function AdminView() {
                               {visibleItems.map((item) => {
                                 const asset = getHistoryAsset(item);
                                 const isVideo = asset ? asset.assetType === 'video' || String(asset.queueKind || '').includes('video') || String(asset.queueKind || '').includes('motion') : false;
+                                const topupGiftcode = getTopupGiftcodeLabel(item.topupGiftcode);
                                 return (
                                   <div key={item.id} className="rounded-2xl bg-white p-3 dark:bg-zinc-900">
                                     <div className="flex gap-3">
@@ -1622,6 +1676,18 @@ export function AdminView() {
                                           ) : null}
                                         </div>
                                         <div className="mt-1 truncate text-[10px] text-gray-500 dark:text-zinc-400">ID: {item.referenceId || item.id}</div>
+                                        {topupGiftcode ? (
+                                          <div className="mt-2 rounded-2xl border border-cyan-100 bg-cyan-50 p-2 dark:border-cyan-500/20 dark:bg-cyan-500/10">
+                                            <div className="flex items-center gap-1.5 text-[10px] font-black uppercase text-cyan-700 dark:text-cyan-300">
+                                              <Gift className="h-3 w-3" />
+                                              Giftcode nạp
+                                            </div>
+                                            <div className="mt-1 break-all font-mono text-xs font-black text-gray-900 dark:text-white">{topupGiftcode}</div>
+                                            {Number(item.discountAmount || 0) > 0 ? (
+                                              <div className="mt-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-300">Giảm {Number(item.discountAmount || 0).toLocaleString('vi-VN')}đ</div>
+                                            ) : null}
+                                          </div>
+                                        ) : null}
                                         <div className="mt-2 flex items-center justify-between gap-3">
                                           <div className={`text-sm font-black ${item.vcoinChange > 0 ? 'text-emerald-600 dark:text-emerald-300' : item.vcoinChange < 0 ? 'text-pink-500' : 'text-gray-500'}`}>{item.vcoinChange > 0 ? '+' : ''}{formatVcoin(item.vcoinChange)}</div>
                                           <div className="text-xs font-bold text-amber-600 dark:text-amber-300">Sau: {formatVcoin(item.balanceAfter)}</div>

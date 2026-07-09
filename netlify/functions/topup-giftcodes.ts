@@ -54,7 +54,7 @@ export const handler: Handler = async (event) => {
     const concreteCodes = !rpcUnavailable && Array.isArray(data) ? data : [];
     const concreteCampaigns = new Set(
       concreteCodes
-        .filter((row: any) => ['reserved', 'available'].includes(String(row.status || '')))
+        .filter((row: any) => String(row.status || '') === 'available')
         .map((row: any) => String(row.campaign_key || '').trim().toUpperCase())
         .filter(Boolean),
     );
@@ -73,7 +73,7 @@ export const handler: Handler = async (event) => {
         .from('topup_gift_code_usages')
         .select('id, gift_codes!inner(campaign_key)', { count: 'exact', head: true })
         .eq('gift_codes.campaign_key', campaignKey)
-        .in('status', ['reserved', 'applied']);
+        .eq('status', 'applied');
 
       if (usedCountError && !/topup_gift_code_usages|gift_codes|schema|relation|foreign key/i.test(usedCountError.message || '')) {
         throw usedCountError;
@@ -86,7 +86,7 @@ export const handler: Handler = async (event) => {
         .select('id, gift_codes!inner(campaign_key)', { count: 'exact', head: true })
         .eq('user_id', user.id)
         .eq('gift_codes.campaign_key', campaignKey)
-        .in('status', ['reserved', 'applied']);
+        .eq('status', 'applied');
 
       if (userUsedCountError && !/topup_gift_code_usages|gift_codes|schema|relation|foreign key/i.test(userUsedCountError.message || '')) {
         throw userUsedCountError;

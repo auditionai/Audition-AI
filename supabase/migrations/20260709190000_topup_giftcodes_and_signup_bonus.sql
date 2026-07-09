@@ -108,20 +108,20 @@ begin
       and status = 'paid'
   ),
   usage_counts as (
-    select gift_code_id, count(*)::bigint as count
-    from public.topup_gift_code_usages
-    where status = 'applied'
-    group by gift_code_id
+    select tgu.gift_code_id, count(*)::bigint as count
+    from public.topup_gift_code_usages tgu
+    where tgu.status = 'applied'
+    group by tgu.gift_code_id
   ),
   user_usage as (
     select
-      gift_code_id,
-      count(*) filter (where status = 'applied')::bigint as count,
-      max(applied_at) filter (where status = 'applied') as last_used_at,
-      max(status) filter (where status = 'applied') as applied_status
-    from public.topup_gift_code_usages
-    where user_id = p_user_id
-    group by gift_code_id
+      tgu.gift_code_id,
+      count(*) filter (where tgu.status = 'applied')::bigint as count,
+      max(tgu.applied_at) filter (where tgu.status = 'applied') as last_used_at,
+      max(tgu.status) filter (where tgu.status = 'applied') as applied_status
+    from public.topup_gift_code_usages tgu
+    where tgu.user_id = p_user_id
+    group by tgu.gift_code_id
   )
   select
     gc.id,
@@ -215,11 +215,11 @@ begin
     return;
   end if;
 
-  select *
+  select gc.*
   into v_code
-  from public.gift_codes
-  where upper(code) = v_code_normalized
-    and code_type = 'topup_discount'
+  from public.gift_codes gc
+  where upper(gc.code) = v_code_normalized
+    and gc.code_type = 'topup_discount'
   for update;
 
   if not found then

@@ -9,9 +9,9 @@ const headers = {
 };
 
 const buildRandomTopupGiftcode = (discountPercent: number) => {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   const suffix = Array.from({ length: 5 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
-  return `AUAI-${Math.max(1, Math.min(100, Math.floor(discountPercent || 0)))}-${suffix}`;
+  return suffix;
 };
 
 export const handler: Handler = async (event) => {
@@ -26,11 +26,11 @@ export const handler: Handler = async (event) => {
   try {
     const { user } = await requireAuthenticatedUser(event);
     const admin = getServiceRoleClient();
+    const nowIso = new Date().toISOString();
     const { data: templates, error: templatesError } = await admin
       .from('gift_codes')
-      .select('id, campaign_key, reward, discount_percent, audience, total_limit, max_per_user, expires_at, is_active')
+      .select('id, code, campaign_key, reward, discount_percent, audience, total_limit, max_per_user, expires_at, is_active, created_at, auto_generate_per_user')
       .eq('code_type', 'topup_discount')
-      .eq('auto_generate_per_user', true)
       .is('assigned_user_id', null)
       .eq('is_active', true);
 
@@ -38,61 +38,84 @@ export const handler: Handler = async (event) => {
       throw templatesError;
     }
 
-    for (const template of templates || []) {
-      if (template.expires_at && new Date(template.expires_at).getTime() < Date.now()) {
-        continue;
-      }
-
-      const { data: existingPersonalCode, error: existingError } = await admin
-        .from('gift_codes')
-        .select('id')
-        .eq('code_type', 'topup_discount')
-        .eq('assigned_user_id', user.id)
-        .eq('campaign_key', template.campaign_key || template.id)
-        .maybeSingle();
-
-      if (existingError) throw existingError;
-      if (existingPersonalCode?.id) continue;
-
-      let code = buildRandomTopupGiftcode(Number(template.discount_percent || 0));
-      for (let attempt = 0; attempt < 5; attempt += 1) {
-        const { error: insertError } = await admin
-          .from('gift_codes')
-          .insert({
-            code,
-            code_type: 'topup_discount',
-            campaign_key: template.campaign_key || template.id,
-            reward: 0,
-            discount_percent: template.discount_percent,
-            audience: 'specific_user',
-            assigned_user_id: user.id,
-            auto_generate_per_user: false,
-            total_limit: 1,
-            max_per_user: 1,
-            expires_at: template.expires_at || null,
-            is_active: true,
-          });
-
-        if (!insertError) break;
-        if (!/duplicate|unique/i.test(insertError.message || '') || attempt === 4) {
-          throw insertError;
-        }
-        code = buildRandomTopupGiftcode(Number(template.discount_percent || 0));
-      }
-    }
-
     const { data, error } = await admin.rpc('get_available_topup_giftcodes', {
       p_user_id: user.id,
     });
 
-    if (error) throw error;
+    const rpcUnavailable = Boolean(error && /get_available_topup_giftcodes|function|schema|campaign_key|structure|topup_gift/i.test(error.message || ''));
+    if (error && !rpcUnavailable) throw error;
+
+    const { count: paidTopupCount } = await admin
+      .from('payment_transactions')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('status', 'paid');
+
+    const concreteCodes = !rpcUnavailable && Array.isArray(data) ? data : [];
+    const concreteCampaigns = new Set(
+      concreteCodes
+        .filter((row: any) => ['used', 'reserved', 'available'].includes(String(row.status || '')))
+        .map((row: any) => String(row.campaign_key || '').trim().toUpperCase())
+        .filter(Boolean),
+    );
+
+    const syntheticGiftcodes = [];
+    for (const template of templates || []) {
+      const prefix = String(template.code || '').trim().toUpperCase();
+      const isGeneratedConcreteShape = /^.+-[A-Z0-9]{5}$/.test(prefix);
+      if (isGeneratedConcreteShape && template.auto_generate_per_user !== true) continue;
+      const campaignKey = String(template.campaign_key || prefix).trim().toUpperCase();
+      if (!prefix || concreteCampaigns.has(campaignKey)) continue;
+      if (template.expires_at && template.expires_at < nowIso) continue;
+      if (template.audience === 'new_user_first_topup' && Number(paidTopupCount || 0) > 0) continue;
+
+      const { count: usedCount, error: usedCountError } = await admin
+        .from('topup_gift_code_usages')
+        .select('id, gift_codes!inner(campaign_key)', { count: 'exact', head: true })
+        .eq('gift_codes.campaign_key', campaignKey)
+        .in('status', ['reserved', 'applied']);
+
+      if (usedCountError && !/topup_gift_code_usages|gift_codes|schema|relation|foreign key/i.test(usedCountError.message || '')) {
+        throw usedCountError;
+      }
+
+      if (Number(usedCount || 0) >= Number(template.total_limit || 0)) continue;
+
+      let candidate = `${prefix}-${buildRandomTopupGiftcode(Number(template.discount_percent || 0))}`;
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        const { data: existing } = await admin
+          .from('gift_codes')
+          .select('id')
+          .eq('code', candidate)
+          .maybeSingle();
+        if (!existing?.id) break;
+        candidate = `${prefix}-${buildRandomTopupGiftcode(Number(template.discount_percent || 0))}`;
+      }
+
+      syntheticGiftcodes.push({
+        id: `template:${template.id}:${candidate}`,
+        code: candidate,
+        discountPercent: Number(template.discount_percent || 0),
+        totalLimit: Number(template.total_limit || 0),
+        usedCount: Number(usedCount || 0),
+        remainingCount: Math.max(0, Number(template.total_limit || 0) - Number(usedCount || 0)),
+        maxPerUser: 1,
+        audience: template.audience || 'all',
+        expiresAt: template.expires_at || null,
+        status: 'available',
+        lastUsedAt: null,
+        isGeneratedPreview: true,
+      });
+    }
 
     return {
       statusCode: 200,
       headers,
       body: JSON.stringify({
         success: true,
-        giftcodes: (data || []).map((row: any) => ({
+        giftcodes: [
+          ...syntheticGiftcodes,
+          ...concreteCodes.map((row: any) => ({
           id: row.id,
           code: row.code,
           discountPercent: Number(row.discount_percent || 0),
@@ -105,6 +128,7 @@ export const handler: Handler = async (event) => {
           status: row.status || 'unavailable',
           lastUsedAt: row.last_used_at || null,
         })),
+        ],
       }),
     };
   } catch (error: any) {

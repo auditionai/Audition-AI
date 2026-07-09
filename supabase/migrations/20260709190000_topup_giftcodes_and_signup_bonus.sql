@@ -73,6 +73,7 @@ create or replace function public.get_available_topup_giftcodes(p_user_id uuid)
 returns table (
   id uuid,
   code text,
+  campaign_key text,
   discount_percent numeric,
   total_limit numeric,
   used_count bigint,
@@ -119,6 +120,7 @@ begin
   select
     gc.id,
     gc.code,
+    gc.campaign_key,
     gc.discount_percent,
     gc.total_limit,
     coalesce(uc.count, 0) as used_count,
@@ -142,7 +144,14 @@ begin
   left join usage_counts uc on uc.gift_code_id = gc.id
   left join user_usage uu on uu.gift_code_id = gc.id
   where gc.code_type = 'topup_discount'
-    and not (gc.auto_generate_per_user is true and gc.assigned_user_id is null)
+    and not (
+      gc.assigned_user_id is null
+      and (
+        gc.auto_generate_per_user is true
+        or gc.code !~ '-[A-Z0-9]{5}$'
+      )
+    )
+    and (gc.assigned_user_id is null or gc.assigned_user_id = p_user_id)
     and (
       gc.audience in ('all', 'new_user_first_topup')
       or (gc.audience = 'specific_user' and gc.assigned_user_id = p_user_id)
@@ -207,6 +216,15 @@ begin
     return;
   end if;
 
+  if v_code.assigned_user_id is null
+    and (
+      v_code.auto_generate_per_user is true
+      or v_code.code !~ '-[A-Z0-9]{5}$'
+    ) then
+    return query select false, v_code.id, v_code.code, v_code.discount_percent, 0::numeric, p_original_amount_vnd, 'GIFT_CODE_INVALID'::text;
+    return;
+  end if;
+
   if v_code.is_active is not true
     or (v_code.expires_at is not null and v_code.expires_at < now()) then
     return query select false, v_code.id, v_code.code, v_code.discount_percent, 0::numeric, p_original_amount_vnd, 'GIFT_CODE_TOPUP_EXPIRED_OR_LIMIT'::text;
@@ -235,6 +253,11 @@ begin
   end if;
 
   if v_code.audience = 'specific_user' and v_code.assigned_user_id is distinct from p_user_id then
+    return query select false, v_code.id, v_code.code, v_code.discount_percent, 0::numeric, p_original_amount_vnd, 'GIFT_CODE_INVALID'::text;
+    return;
+  end if;
+
+  if v_code.assigned_user_id is not null and v_code.assigned_user_id is distinct from p_user_id then
     return query select false, v_code.id, v_code.code, v_code.discount_percent, 0::numeric, p_original_amount_vnd, 'GIFT_CODE_INVALID'::text;
     return;
   end if;

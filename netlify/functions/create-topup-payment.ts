@@ -64,6 +64,28 @@ const mapTopupGiftcodeError = (message: string) => {
   return message || 'Không thể áp dụng giftcode ưu đãi.';
 };
 
+const mapReadableTopupGiftcodeError = (message: string) => {
+  if (/GIFT_CODE_TOPUP_EXPIRED_OR_LIMIT|GIFT_CODE_LIMIT_REACHED|GIFT_CODE_EXPIRED/i.test(message)) {
+    return 'Code đã đạt giới hạn 1000 lần sử dụng trên hệ thống hoặc đã hết hạn sử dụng, vui lòng inbox admin nếu bạn có thắc mắc gì thêm.';
+  }
+  if (/GIFT_CODE_FIRST_TOPUP_ONLY/i.test(message)) {
+    return 'Mã ưu đãi này chỉ áp dụng cho lần nạp đầu tiên.';
+  }
+  if (/GIFT_CODE_ALREADY_USED_BY_USER|GIFT_CODE_TOPUP_USER_LIMIT|duplicate key/i.test(message)) {
+    return 'Bạn đã sử dụng hết số lần áp dụng của mã ưu đãi này.';
+  }
+  if (/GIFT_CODE_INVALID/i.test(message)) {
+    return 'Mã ưu đãi không hợp lệ hoặc không áp dụng cho tài khoản này.';
+  }
+  if (/GIFT_CODE_GENERATED_COLLISION/i.test(message)) {
+    return 'Mã ưu đãi vừa tạo đã bị trùng. Vui lòng đóng cửa sổ nạp tiền rồi mở lại để nhận mã mới.';
+  }
+  if (/GIFTCODE_REQUIRED/i.test(message)) {
+    return 'Vui lòng nhập giftcode ưu đãi.';
+  }
+  return message || 'Không thể áp dụng giftcode ưu đãi.';
+};
+
 const ensureGeneratedTopupGiftcode = async (admin: any, userId: string, generatedCode: string) => {
   const code = generatedCode.trim().toUpperCase();
   const { data: exact, error: exactError } = await admin
@@ -107,6 +129,19 @@ const ensureGeneratedTopupGiftcode = async (admin: any, userId: string, generate
   }
   if (Number(usedCount || 0) >= Number(template.total_limit || 0)) {
     throw new Error('GIFT_CODE_TOPUP_EXPIRED_OR_LIMIT');
+  }
+
+  const { count: userUsedCount, error: userUsedCountError } = await admin
+    .from('topup_gift_code_usages')
+    .select('id, gift_codes!inner(campaign_key)', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .eq('gift_codes.campaign_key', campaignKey)
+    .in('status', ['reserved', 'applied']);
+  if (userUsedCountError && !/topup_gift_code_usages|schema|relation/i.test(userUsedCountError.message || '')) {
+    throw userUsedCountError;
+  }
+  if (Number(userUsedCount || 0) >= Math.max(1, Number(template.max_per_user || 1))) {
+    throw new Error('GIFT_CODE_TOPUP_USER_LIMIT');
   }
 
   const { data: inserted, error: insertError } = await admin
@@ -227,7 +262,7 @@ export const handler: Handler = async (event) => {
         return {
           statusCode: 400,
           headers,
-          body: JSON.stringify({ success: false, error: mapTopupGiftcodeError(generatedError?.message || '') }),
+          body: JSON.stringify({ success: false, error: mapReadableTopupGiftcodeError(generatedError?.message || '') }),
         };
       }
 
@@ -243,7 +278,7 @@ export const handler: Handler = async (event) => {
         return {
           statusCode: 400,
           headers,
-          body: JSON.stringify({ success: false, error: mapTopupGiftcodeError(reserveError.message || '') }),
+          body: JSON.stringify({ success: false, error: mapReadableTopupGiftcodeError(reserveError.message || '') }),
         };
       }
 
@@ -253,7 +288,7 @@ export const handler: Handler = async (event) => {
         return {
           statusCode: 400,
           headers,
-          body: JSON.stringify({ success: false, error: mapTopupGiftcodeError(reserved?.message || '') }),
+          body: JSON.stringify({ success: false, error: mapReadableTopupGiftcodeError(reserved?.message || '') }),
         };
       }
 

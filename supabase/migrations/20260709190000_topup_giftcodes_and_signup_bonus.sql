@@ -79,6 +79,7 @@ returns table (
   used_count bigint,
   remaining_count numeric,
   max_per_user numeric,
+  user_used_count bigint,
   audience text,
   expires_at timestamptz,
   status text,
@@ -126,6 +127,7 @@ begin
     coalesce(uc.count, 0) as used_count,
     greatest(gc.total_limit - coalesce(uc.count, 0), 0) as remaining_count,
     gc.max_per_user,
+    coalesce(uu.count, 0) as user_used_count,
     gc.audience,
     gc.expires_at,
     case

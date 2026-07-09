@@ -115,6 +115,35 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
       };
   }, [selectedPackage, selectedOffer]);
 
+  const availableTopupGiftcodes = useMemo(() => {
+      return topupGiftcodes
+          .filter((code) => {
+              const remainingPerUser = Number(code.remainingPerUser ?? code.maxPerUser ?? 1);
+              return code.status === 'available' && remainingPerUser > 0;
+          })
+          .sort((a, b) => {
+              const aFeatured = a.audience === 'new_user_first_topup' ? 1 : 0;
+              const bFeatured = b.audience === 'new_user_first_topup' ? 1 : 0;
+              if (aFeatured !== bFeatured) return bFeatured - aFeatured;
+              return b.discountPercent - a.discountPercent;
+          });
+  }, [topupGiftcodes]);
+
+  const getGiftcodeUsageText = (code: TopupGiftcodeOffer) => {
+      if (code.audience === 'new_user_first_topup') {
+          return 'Chỉ sử dụng được 1 lần duy nhất';
+      }
+      const remainingPerUser = Math.max(0, Number(code.remainingPerUser ?? code.maxPerUser ?? 1));
+      return `Còn ${remainingPerUser.toLocaleString('vi-VN')} lần sử dụng`;
+  };
+
+  const getGiftcodeDescription = (code: TopupGiftcodeOffer) => {
+      if (code.audience === 'new_user_first_topup') {
+          return `Ưu đãi ${code.discountPercent}% cho tài khoản mới nạp lần đầu tiên. Hãy tận dụng ưu đãi để tránh lãng phí.`;
+      }
+      return `Giảm trực tiếp ${code.discountPercent}% trên giá gói nạp khi quét QR thanh toán.`;
+  };
+
   const handleBuyPackage = async (pkg: CreditPackage, code?: string) => {
       setLoading(true);
       updateLastActive(); // Mark active on purchase attempt
@@ -137,30 +166,30 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
   };
 
   const checkoutModal = selectedPackage && checkoutPreview ? (
-            <div className="fixed inset-0 z-[3000] flex items-start justify-center overflow-y-auto bg-black/70 px-3 py-16 backdrop-blur-sm sm:px-4 md:py-20">
-                <div className="w-full max-w-2xl rounded-2xl border border-white/10 bg-[#0f1018] p-5 shadow-2xl md:p-6">
-                    <div className="mb-5 flex items-start justify-between gap-4">
+            <div className="fixed inset-0 z-[3000] flex items-start justify-center overflow-y-auto bg-black/75 px-3 py-8 backdrop-blur-md sm:px-5 md:py-12">
+                <div className="w-full max-w-4xl rounded-3xl border border-white/10 bg-[#10111b] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.65)] sm:p-5 md:p-7">
+                    <div className="mb-6 flex items-start justify-between gap-4">
                         <div>
                             <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-audi-cyan/30 bg-audi-cyan/10 px-3 py-1 text-xs font-bold uppercase text-audi-cyan">
                                 <Icons.Gift className="h-4 w-4" />
                                 Giftcode ưu đãi
                             </div>
                             <h3 className="text-xl font-black text-white md:text-2xl">{selectedPackage!.name}</h3>
-                            <p className="mt-1 text-sm text-slate-400">Chọn mã khuyến mại trước khi chuyển sang SePay.</p>
+                            <p className="mt-1 max-w-xl text-sm text-slate-400">Chọn mã khuyến mại trước khi quét QR. Mã đã hết lượt trên tài khoản sẽ tự động ẩn khỏi danh sách.</p>
                         </div>
                         <button
                             onClick={() => setSelectedPackage(null)}
-                            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white"
+                            className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white"
                             aria-label="Đóng"
                         >
                             <Icons.X className="h-5 w-5" />
                         </button>
                     </div>
 
-                    <div className="grid gap-5 md:grid-cols-[1.1fr_0.9fr]">
-                        <div className="space-y-4">
-                            <div>
-                                <label className="mb-2 block text-xs font-bold uppercase text-slate-500">Nhập code</label>
+                    <div className="grid gap-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(300px,0.85fr)]">
+                        <div className="space-y-5">
+                            <div className="rounded-2xl border border-white/10 bg-black/20 p-3 sm:p-4">
+                                <label className="mb-2 block text-xs font-bold uppercase text-slate-500">Nhập hoặc chọn nhanh code</label>
                                 <div className="flex gap-2">
                                     <input
                                         value={giftcodeInput}
@@ -177,35 +206,55 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
                                 </div>
                             </div>
 
-                            <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+                            <div className="max-h-[430px] space-y-3 overflow-y-auto pr-1">
                                 {loadingGiftcodes ? (
-                                    <div className="flex items-center justify-center rounded-xl border border-white/10 bg-white/5 py-8 text-slate-400">
+                                    <div className="flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 py-10 text-slate-400">
                                         <Icons.Loader className="mr-2 h-4 w-4 animate-spin" /> Đang tải mã ưu đãi
                                     </div>
-                                ) : topupGiftcodes.length === 0 ? (
-                                    <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-slate-400">
+                                ) : availableTopupGiftcodes.length === 0 ? (
+                                    <div className="rounded-2xl border border-white/10 bg-white/5 p-5 text-sm text-slate-400">
                                         Hiện chưa có giftcode nạp tiền khả dụng cho tài khoản này.
                                     </div>
-                                ) : topupGiftcodes.map((code) => {
-                                    const available = code.status === 'available';
+                                ) : availableTopupGiftcodes.map((code) => {
                                     const selected = giftcodeInput.trim().toUpperCase() === code.code.toUpperCase();
+                                    const featured = code.audience === 'new_user_first_topup';
                                     return (
                                         <button
                                             key={code.id}
-                                            onClick={() => available && setGiftcodeInput(code.code)}
-                                            disabled={!available}
-                                            className={`w-full rounded-xl border p-3 text-left transition-all ${selected ? 'border-audi-cyan bg-audi-cyan/10' : 'border-white/10 bg-white/5 hover:bg-white/10'} ${!available ? 'opacity-55' : ''}`}
+                                            onClick={() => setGiftcodeInput(code.code)}
+                                            className={`w-full overflow-hidden rounded-2xl border p-4 text-left transition-all ${
+                                                selected
+                                                    ? 'border-audi-cyan bg-audi-cyan/10 shadow-[0_0_28px_rgba(0,217,255,0.18)]'
+                                                    : featured
+                                                        ? 'border-audi-yellow/45 bg-gradient-to-br from-audi-yellow/16 via-white/[0.06] to-audi-pink/10 hover:border-audi-yellow/70'
+                                                        : 'border-white/10 bg-white/[0.06] hover:border-white/20 hover:bg-white/10'
+                                            }`}
                                         >
-                                            <div className="flex items-center justify-between gap-3">
-                                                <span className="break-all font-mono text-sm font-black text-white">{code.code}</span>
-                                                <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-black uppercase ${available ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-500/15 text-slate-400'}`}>
-                                                    {available ? `-${code.discountPercent}%` : code.status}
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <span className="break-all font-mono text-base font-black text-white">{code.code}</span>
+                                                        {featured && (
+                                                            <span className="rounded-full bg-audi-yellow/20 px-2 py-1 text-[10px] font-black uppercase text-audi-yellow">
+                                                                Nạp lần đầu
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <p className="mt-2 text-sm leading-relaxed text-slate-300">{getGiftcodeDescription(code)}</p>
+                                                </div>
+                                                <span className="shrink-0 rounded-full bg-emerald-400/15 px-3 py-1 text-xs font-black text-emerald-300">
+                                                    -{code.discountPercent}%
                                                 </span>
                                             </div>
-                                            <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-400">
-                                                <span>Còn {code.remainingCount}/{code.totalLimit} lượt</span>
-                                                <span>Max {code.maxPerUser}/tài khoản</span>
-                                                {code.audience === 'new_user_first_topup' && <span>Lần nạp đầu</span>}
+                                            <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
+                                                <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 font-bold ${featured ? 'bg-audi-yellow/15 text-audi-yellow' : 'bg-audi-cyan/10 text-audi-cyan'}`}>
+                                                    <Icons.Check className="h-3.5 w-3.5" />
+                                                    {getGiftcodeUsageText(code)}
+                                                </span>
+                                                <span className="inline-flex items-center gap-1 rounded-full bg-white/5 px-3 py-1 font-bold text-slate-300">
+                                                    <Icons.Sparkles className="h-3.5 w-3.5" />
+                                                    Áp dụng tức thì
+                                                </span>
                                             </div>
                                         </button>
                                     );
@@ -213,7 +262,21 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
                             </div>
                         </div>
 
-                        <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+                        <div className="self-start rounded-3xl border border-white/10 bg-black/35 p-5 lg:sticky lg:top-6">
+                            <div className="mb-4 rounded-2xl border border-audi-pink/20 bg-audi-pink/10 p-4">
+                                <p className="text-xs font-bold uppercase text-audi-pink">Ưu đãi đang áp dụng</p>
+                                {selectedOffer?.status === 'available' ? (
+                                    <>
+                                        <div className="mt-2 flex items-center justify-between gap-3">
+                                            <span className="break-all font-mono text-sm font-black text-white">{selectedOffer.code}</span>
+                                            <span className="text-2xl font-black text-emerald-300">-{selectedOffer.discountPercent}%</span>
+                                        </div>
+                                        <p className="mt-2 text-xs leading-relaxed text-slate-300">{getGiftcodeUsageText(selectedOffer)}</p>
+                                    </>
+                                ) : (
+                                    <p className="mt-2 text-sm text-slate-300">Chưa chọn giftcode. Bạn vẫn có thể thanh toán theo giá gốc.</p>
+                                )}
+                            </div>
                             <div className="mb-4 flex items-center justify-between border-b border-white/10 pb-4">
                                 <span className="text-sm text-slate-400">Gói nhận</span>
                                 <span className="text-lg font-black text-audi-yellow">{selectedPackage!.vcoin} Vcoin</span>

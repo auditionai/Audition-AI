@@ -1977,6 +1977,8 @@ export type TopupGiftcodeOffer = {
     usedCount: number;
     remainingCount: number;
     maxPerUser: number;
+    userUsedCount?: number;
+    remainingPerUser?: number;
     audience: 'all' | 'new_user_first_topup' | 'specific_user' | string;
     expiresAt?: string | null;
     status: 'available' | 'used' | 'reserved' | 'expired' | 'limit_reached' | 'unavailable' | string;
@@ -2019,6 +2021,7 @@ const getTopupGiftcodesFromPublicTemplates = async (): Promise<TopupGiftcodeOffe
             const usedCount = Number(row.used_count || 0);
             if (totalLimit > 0 && usedCount >= totalLimit) return null;
 
+            const maxPerUser = Math.max(1, Number(row.max_per_user || 1));
             return {
                 id: `local-template:${row.id}:${Date.now()}:${Math.random().toString(36).slice(2)}`,
                 code: `${prefix}-${buildRandomTopupGiftcodeSuffix()}`,
@@ -2026,7 +2029,9 @@ const getTopupGiftcodesFromPublicTemplates = async (): Promise<TopupGiftcodeOffe
                 totalLimit,
                 usedCount,
                 remainingCount: Math.max(0, totalLimit - usedCount),
-                maxPerUser: 1,
+                maxPerUser,
+                userUsedCount: 0,
+                remainingPerUser: maxPerUser,
                 audience: row.audience || 'all',
                 expiresAt,
                 status: 'available',
@@ -2053,12 +2058,21 @@ export const getTopupGiftcodes = async (): Promise<TopupGiftcodeOffer[]> => {
         }
 
         const rows = Array.isArray(payload.giftcodes) ? payload.giftcodes : [];
-        if (rows.length > 0) return rows;
+        if (rows.length > 0) {
+            return rows.filter((row: TopupGiftcodeOffer) => {
+                const remainingPerUser = Number(row.remainingPerUser ?? row.maxPerUser ?? 1);
+                return row.status === 'available' && remainingPerUser > 0;
+            });
+        }
     } catch (error) {
         console.warn('[TopUp] API giftcode list failed, using public template fallback', error);
     }
 
-    return getTopupGiftcodesFromPublicTemplates();
+    const fallbackRows = await getTopupGiftcodesFromPublicTemplates();
+    return fallbackRows.filter((row) => {
+        const remainingPerUser = Number(row.remainingPerUser ?? row.maxPerUser ?? 1);
+        return row.status === 'available' && remainingPerUser > 0;
+    });
 };
 
 export const createPaymentLink = async (packageId: string, topupGiftcode?: string): Promise<Transaction> => {

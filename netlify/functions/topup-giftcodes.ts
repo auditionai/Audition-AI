@@ -54,7 +54,7 @@ export const handler: Handler = async (event) => {
     const concreteCodes = !rpcUnavailable && Array.isArray(data) ? data : [];
     const concreteCampaigns = new Set(
       concreteCodes
-        .filter((row: any) => ['used', 'reserved', 'available'].includes(String(row.status || '')))
+        .filter((row: any) => ['reserved', 'available'].includes(String(row.status || '')))
         .map((row: any) => String(row.campaign_key || '').trim().toUpperCase())
         .filter(Boolean),
     );
@@ -81,6 +81,21 @@ export const handler: Handler = async (event) => {
 
       if (Number(usedCount || 0) >= Number(template.total_limit || 0)) continue;
 
+      const { count: userUsedCount, error: userUsedCountError } = await admin
+        .from('topup_gift_code_usages')
+        .select('id, gift_codes!inner(campaign_key)', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('gift_codes.campaign_key', campaignKey)
+        .in('status', ['reserved', 'applied']);
+
+      if (userUsedCountError && !/topup_gift_code_usages|gift_codes|schema|relation|foreign key/i.test(userUsedCountError.message || '')) {
+        throw userUsedCountError;
+      }
+
+      const maxPerUser = Math.max(1, Number(template.max_per_user || 1));
+      const remainingPerUser = Math.max(0, maxPerUser - Number(userUsedCount || 0));
+      if (remainingPerUser <= 0) continue;
+
       let candidate = `${prefix}-${buildRandomTopupGiftcode(Number(template.discount_percent || 0))}`;
       for (let attempt = 0; attempt < 6; attempt += 1) {
         const { data: existing } = await admin
@@ -99,7 +114,9 @@ export const handler: Handler = async (event) => {
         totalLimit: Number(template.total_limit || 0),
         usedCount: Number(usedCount || 0),
         remainingCount: Math.max(0, Number(template.total_limit || 0) - Number(usedCount || 0)),
-        maxPerUser: 1,
+        maxPerUser,
+        userUsedCount: Number(userUsedCount || 0),
+        remainingPerUser,
         audience: template.audience || 'all',
         expiresAt: template.expires_at || null,
         status: 'available',
@@ -123,6 +140,8 @@ export const handler: Handler = async (event) => {
           usedCount: Number(row.used_count || 0),
           remainingCount: Number(row.remaining_count || 0),
           maxPerUser: Number(row.max_per_user || 1),
+          userUsedCount: Number(row.user_used_count || 0),
+          remainingPerUser: Math.max(0, Number(row.max_per_user || 1) - Number(row.user_used_count || 0)),
           audience: row.audience || 'all',
           expiresAt: row.expires_at || null,
           status: row.status || 'unavailable',

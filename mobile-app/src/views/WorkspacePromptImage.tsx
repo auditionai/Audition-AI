@@ -321,6 +321,7 @@ export function WorkspacePromptImage() {
         speed: generationSpeedId,
         serverId: generationServerId,
         quality: isGptPromptMode ? gptQuality : undefined,
+        __billingUnits: modeCountForPrice,
       };
       const queuedImage: GeneratedImage = {
         id: queuedJobId,

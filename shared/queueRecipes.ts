@@ -211,6 +211,7 @@ export interface PromptImageGenerateRecipePayload {
   quality?: string;
   speed?: string;
   serverId?: string;
+  __billingUnits?: number;
   __stage?: QueueProcessingStage;
   __logs?: QueueProgressLogEntry[];
   __notifyInputMedia?: QueueNotificationMediaEntry[];

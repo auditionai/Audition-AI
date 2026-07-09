@@ -881,7 +881,7 @@ create policy "Public read users"
 on public.users
 for select
 to anon, authenticated
-using (true);
+using (auth.uid() = id or public.check_is_admin());
 
 create policy "Users can insert own profile"
 on public.users
@@ -967,7 +967,11 @@ create policy "Public read giftcodes"
 on public.gift_codes
 for select
 to anon, authenticated
-using (true);
+using (
+  code_type = 'topup_discount'
+  and is_active = true
+  and assigned_user_id is null
+);
 
 create policy "Admin manage giftcodes"
 on public.gift_codes
@@ -1325,14 +1329,20 @@ as $$
 declare
   v_code public.gift_codes%rowtype;
   v_code_normalized text := upper(btrim(coalesce(p_code, '')));
+  v_campaign_key text;
   v_total_used integer := 0;
   v_user_used integer := 0;
   v_paid_topups integer := 0;
+  v_pending_reservation_id uuid;
   v_discount numeric := 0;
   v_final numeric := 0;
 begin
   if p_user_id is null then
     raise exception 'USER_REQUIRED';
+  end if;
+
+  if p_payment_transaction_id is null then
+    raise exception 'PAYMENT_TRANSACTION_REQUIRED';
   end if;
 
   if v_code_normalized = '' then
@@ -1371,16 +1381,42 @@ begin
     return;
   end if;
 
+  v_campaign_key := upper(btrim(coalesce(
+    v_code.campaign_key,
+    regexp_replace(v_code.code, '-[A-Z0-9]{5}$', ''),
+    v_code.code
+  )));
+
+  perform pg_advisory_xact_lock(hashtext('topup-giftcode|' || p_user_id::text || '|' || v_campaign_key));
+
   if v_code.is_active is not true
     or (v_code.expires_at is not null and v_code.expires_at < now()) then
     return query select false, v_code.id, v_code.code, v_code.discount_percent, 0::numeric, p_original_amount_vnd, 'GIFT_CODE_TOPUP_EXPIRED_OR_LIMIT'::text;
     return;
   end if;
 
+  select tgu.id
+  into v_pending_reservation_id
+  from public.topup_gift_code_usages tgu
+  join public.gift_codes gc on gc.id = tgu.gift_code_id
+  join public.payment_transactions pt on pt.id = tgu.payment_transaction_id
+  where tgu.user_id = p_user_id
+    and tgu.status = 'reserved'
+    and pt.status = 'pending'
+    and tgu.payment_transaction_id is distinct from p_payment_transaction_id
+    and upper(btrim(coalesce(gc.campaign_key, regexp_replace(gc.code, '-[A-Z0-9]{5}$', ''), gc.code))) = v_campaign_key
+  limit 1;
+
+  if v_pending_reservation_id is not null then
+    return query select false, v_code.id, v_code.code, v_code.discount_percent, 0::numeric, p_original_amount_vnd, 'GIFT_CODE_PENDING_PAYMENT_EXISTS'::text;
+    return;
+  end if;
+
   select count(*) into v_total_used
   from public.topup_gift_code_usages tgu
-  where tgu.gift_code_id = v_code.id
-    and tgu.status = 'applied';
+  join public.gift_codes gc on gc.id = tgu.gift_code_id
+  where tgu.status = 'applied'
+    and upper(btrim(coalesce(gc.campaign_key, regexp_replace(gc.code, '-[A-Z0-9]{5}$', ''), gc.code))) = v_campaign_key;
 
   if v_total_used >= coalesce(v_code.total_limit, 0) then
     return query select false, v_code.id, v_code.code, v_code.discount_percent, 0::numeric, p_original_amount_vnd, 'GIFT_CODE_TOPUP_EXPIRED_OR_LIMIT'::text;
@@ -1389,9 +1425,10 @@ begin
 
   select count(*) into v_user_used
   from public.topup_gift_code_usages tgu
-  where tgu.gift_code_id = v_code.id
-    and tgu.user_id = p_user_id
-    and tgu.status = 'applied';
+  join public.gift_codes gc on gc.id = tgu.gift_code_id
+  where tgu.user_id = p_user_id
+    and tgu.status = 'applied'
+    and upper(btrim(coalesce(gc.campaign_key, regexp_replace(gc.code, '-[A-Z0-9]{5}$', ''), gc.code))) = v_campaign_key;
 
   if v_user_used >= coalesce(v_code.max_per_user, 1) then
     return query select false, v_code.id, v_code.code, v_code.discount_percent, 0::numeric, p_original_amount_vnd, 'GIFT_CODE_ALREADY_USED_BY_USER'::text;
@@ -1446,10 +1483,15 @@ $$;
 
 create or replace function public.mark_topup_giftcode_applied(p_transaction_id uuid)
 returns void
-language sql
+language plpgsql
 security definer
 set search_path = public
 as $$
+begin
+  if auth.role() <> 'service_role' and not public.check_is_admin() then
+    raise exception 'FORBIDDEN';
+  end if;
+
   with updated_usage as (
     update public.topup_gift_code_usages
     set status = 'applied',
@@ -1459,7 +1501,7 @@ as $$
     returning gift_code_id
   ),
   applied_codes as (
-    select gc.id, upper(btrim(coalesce(gc.campaign_key, gc.code))) as campaign_key
+    select gc.id, upper(btrim(coalesce(gc.campaign_key, regexp_replace(gc.code, '-[A-Z0-9]{5}$', ''), gc.code))) as campaign_key
     from public.gift_codes gc
     join updated_usage uu on uu.gift_code_id = gc.id
   ),
@@ -1479,19 +1521,26 @@ as $$
     and template.auto_generate_per_user is true
     and upper(btrim(coalesce(template.campaign_key, template.code))) = ac.campaign_key
     and template.id <> ac.id;
+end;
 $$;
 
 create or replace function public.cancel_topup_giftcode_reservation(p_transaction_id uuid)
 returns void
-language sql
+language plpgsql
 security definer
 set search_path = public
 as $$
+begin
+  if auth.role() <> 'service_role' and not public.check_is_admin() then
+    raise exception 'FORBIDDEN';
+  end if;
+
   update public.topup_gift_code_usages
   set status = 'cancelled',
       cancelled_at = coalesce(cancelled_at, now())
   where payment_transaction_id = p_transaction_id
     and status = 'reserved';
+end;
 $$;
 
 grant execute on function public.cancel_topup_giftcode_reservation(uuid) to authenticated, service_role;
@@ -2154,6 +2203,10 @@ declare
   v_applied boolean := false;
   v_status text := lower(coalesce(p_provider_status, ''));
 begin
+  if auth.role() <> 'service_role' and not public.check_is_admin() then
+    raise exception 'FORBIDDEN';
+  end if;
+
   select *
   into v_tx
   from public.payment_transactions
@@ -2165,6 +2218,7 @@ begin
   end if;
 
   if lower(coalesce(v_tx.status, '')) = 'paid' then
+    perform public.mark_topup_giftcode_applied(v_tx.id);
     return jsonb_build_object(
       'success', true,
       'applied', false,
@@ -2197,6 +2251,8 @@ begin
       )
     );
 
+    perform public.mark_topup_giftcode_applied(v_tx.id);
+
     return jsonb_build_object(
       'success', true,
       'applied', v_applied,
@@ -2216,6 +2272,10 @@ begin
     provider_payload = coalesce(provider_payload, '{}'::jsonb) || coalesce(p_provider_payload, '{}'::jsonb),
     updated_at = now()
   where id = v_tx.id;
+
+  if v_status in ('cancelled', 'canceled', 'failed', 'expired') then
+    perform public.cancel_topup_giftcode_reservation(v_tx.id);
+  end if;
 
   return jsonb_build_object(
     'success', true,
@@ -2243,6 +2303,10 @@ as $$
 declare
   v_tx_id uuid;
 begin
+  if auth.role() <> 'service_role' and not public.check_is_admin() then
+    raise exception 'FORBIDDEN';
+  end if;
+
   select id
   into v_tx_id
   from public.payment_transactions
@@ -2261,6 +2325,34 @@ begin
   where id = v_tx_id;
 
   return public.settle_payment_transaction_by_id(v_tx_id, p_provider_status, p_provider_payload);
+end;
+$$;
+
+create or replace function public.admin_adjust_user_balance(
+  p_target_user_id uuid,
+  p_amount numeric,
+  p_reason text,
+  p_metadata jsonb default '{}'::jsonb
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.role() <> 'service_role' and not public.check_is_admin() then
+    raise exception 'FORBIDDEN';
+  end if;
+
+  return public.apply_balance_transaction(
+    p_target_user_id,
+    p_amount,
+    nullif(btrim(coalesce(p_reason, '')), ''),
+    'admin_adjustment',
+    'admin_adjustment',
+    p_target_user_id::text || ':' || extract(epoch from now())::text,
+    coalesce(p_metadata, '{}'::jsonb)
+  );
 end;
 $$;
 
@@ -2740,6 +2832,33 @@ grant execute on function public.lock_user_account(uuid, text) to service_role;
 
 revoke execute on function public.unlock_user_account(uuid) from public, anon, authenticated;
 grant execute on function public.unlock_user_account(uuid) to service_role;
+
+revoke execute on function public.apply_balance_transaction(uuid, numeric, text, text, text, text, jsonb) from public, anon, authenticated;
+grant execute on function public.apply_balance_transaction(uuid, numeric, text, text, text, text, jsonb) to service_role;
+
+revoke execute on function public.secure_update_balance(numeric, text, text) from public, anon, authenticated;
+grant execute on function public.secure_update_balance(numeric, text, text) to service_role;
+
+revoke execute on function public.increment_giftcode_usage(uuid) from public, anon, authenticated;
+grant execute on function public.increment_giftcode_usage(uuid) to service_role;
+
+revoke execute on function public.reserve_topup_giftcode(uuid, text, uuid, numeric) from public, anon, authenticated;
+grant execute on function public.reserve_topup_giftcode(uuid, text, uuid, numeric) to service_role;
+
+revoke execute on function public.mark_topup_giftcode_applied(uuid) from public, anon, authenticated;
+grant execute on function public.mark_topup_giftcode_applied(uuid) to authenticated, service_role;
+
+revoke execute on function public.cancel_topup_giftcode_reservation(uuid) from public, anon, authenticated;
+grant execute on function public.cancel_topup_giftcode_reservation(uuid) to authenticated, service_role;
+
+revoke execute on function public.settle_payment_transaction_by_id(uuid, text, jsonb) from public, anon, authenticated;
+grant execute on function public.settle_payment_transaction_by_id(uuid, text, jsonb) to authenticated, service_role;
+
+revoke execute on function public.settle_payment_transaction_by_order_code(bigint, text, jsonb) from public, anon, authenticated;
+grant execute on function public.settle_payment_transaction_by_order_code(bigint, text, jsonb) to authenticated, service_role;
+
+revoke execute on function public.admin_adjust_user_balance(uuid, numeric, text, jsonb) from public, anon, authenticated;
+grant execute on function public.admin_adjust_user_balance(uuid, numeric, text, jsonb) to authenticated, service_role;
 
 -- ---------------------------------------------------------------------------
 -- Default settings

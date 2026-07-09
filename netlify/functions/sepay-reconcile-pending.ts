@@ -183,6 +183,14 @@ export const runSePayPendingReconcile = async (options: SePayPendingReconcileOpt
       continue;
     }
 
+    const giftcodeApplyResult = await admin.rpc('mark_topup_giftcode_applied', {
+      p_transaction_id: tx.id,
+    });
+    if (giftcodeApplyResult.error && !/function|schema|topup_gift_code/i.test(giftcodeApplyResult.error.message || '')) {
+      results.push({ id: tx.id, orderCode, success: false, reason: giftcodeApplyResult.error.message });
+      continue;
+    }
+
     results.push({ id: tx.id, orderCode, providerOrderId, success: true, providerStatus: 'PAID', data });
   }
 

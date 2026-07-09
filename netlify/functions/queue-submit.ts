@@ -4,6 +4,7 @@ import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 import { triggerBackgroundQueueWorker } from './_queue-launcher';
 import { runQueueDaemon } from './_queue-daemon';
 import { isDedicatedQueueWorkerMode } from './_queue-runtime-mode';
+import { validateQueuePayloadAgainstLiveCatalog } from './_tst-live-catalog';
 import type { QueueProcessingStage, QueueProgressLogEntry } from '../../shared/queueRecipes';
 
 const headers = {
@@ -26,6 +27,8 @@ const INLINE_QUEUE_WAKE_WINDOW_MS = 2 * 60_000;
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PHONE_USER_AGENT_PATTERN = /iphone|ipod|android.+mobile|windows phone|blackberry|opera mini|mobile safari/i;
+const VND_PER_CREDIT = 40;
+const VND_PER_VCOIN = 1000;
 
 type QueueClientPlatform = 'mobile' | 'desktop' | 'unknown';
 
@@ -221,14 +224,98 @@ const countRows = async (query: PromiseLike<{ count: number | null; error: any }
   return count ?? 0;
 };
 
+const normalizeKey = (value?: unknown) => String(value || '').trim().toLowerCase();
+
+const creditsToVcoin = (credits: number) =>
+  Math.max(1, Math.ceil((Math.max(0, Number(credits) || 0) * VND_PER_CREDIT) / VND_PER_VCOIN));
+
+const getAuditionPriceOverride = async (
+  admin: ReturnType<typeof getServiceRoleClient>,
+  modelId: string,
+  optionId?: string | null,
+) => {
+  const normalizedOptionId = String(optionId || '').trim();
+  if (!modelId || !normalizedOptionId) return null;
+
+  const { data, error } = await admin
+    .from('model_pricing')
+    .select('audition_price_vcoin')
+    .eq('model_id', modelId)
+    .eq('option_id', normalizedOptionId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  const price = Number(data?.audition_price_vcoin);
+  return Number.isFinite(price) && price > 0 ? Math.ceil(price) : null;
+};
+
+const getImageBillingMultiplier = (queuePayload: Record<string, unknown>) => {
+  const recipeType = normalizeKey(queuePayload.recipeType);
+  if (recipeType === 'prompt_image_generate_recipe_v1') {
+    const explicitUnits = Math.floor(Number((queuePayload as any).__billingUnits || 0));
+    const referenceCount = Array.isArray((queuePayload as any).referenceImages)
+      ? (queuePayload as any).referenceImages.filter(Boolean).length
+      : 0;
+    return Math.max(1, Math.min(5, explicitUnits || referenceCount || 1));
+  }
+
+  if (recipeType === 'image_generate_recipe_v1') {
+    const groupCount = Array.isArray((queuePayload as any).characterReferenceGroups)
+      ? (queuePayload as any).characterReferenceGroups.length
+      : 0;
+    const flatCount = Array.isArray((queuePayload as any).characterImages)
+      ? (queuePayload as any).characterImages.length
+      : 0;
+    const characterCount = Math.floor(Number((queuePayload as any).characterCount || 0));
+    return Math.max(1, Math.min(5, characterCount || groupCount || flatCount || 1));
+  }
+
+  return 1;
+};
+
+const resolveServerCostVcoin = async (
+  admin: ReturnType<typeof getServiceRoleClient>,
+  queueKind: string,
+  queuePayload: Record<string, unknown>,
+) => {
+  const validation = await validateQueuePayloadAgainstLiveCatalog(queueKind, queuePayload);
+  const modelId = String(validation.modelId || '').trim();
+  const configKey = String(validation.pricingMatch?.config_key || '').trim();
+  const fallbackVcoin = creditsToVcoin(Number(validation.pricingMatch?.credits || 0));
+  const overrideVcoin = await getAuditionPriceOverride(admin, modelId, configKey);
+  const baseVcoin = overrideVcoin ?? fallbackVcoin;
+  const multiplier = queueKind === 'image_generate' ? getImageBillingMultiplier(queuePayload) : 1;
+  const costVcoin = Math.ceil(baseVcoin * multiplier);
+
+  if (!Number.isFinite(costVcoin) || costVcoin <= 0) {
+    throw new Error('INVALID_SERVER_PRICE');
+  }
+
+  return {
+    costVcoin,
+    pricing: {
+      model_id: modelId,
+      config_key: configKey || null,
+      provider_credits: Number(validation.pricingMatch?.credits || 0),
+      base_vcoin: baseVcoin,
+      multiplier,
+      source: overrideVcoin ? 'model_pricing_override' : 'provider_pricing',
+    },
+  };
+};
+
 export const enqueueDirectly = async (userId: string, body: QueueBody) => {
   const admin = getServiceRoleClient();
   const jobId = normalizeJobId(body.id);
   const assetType = asQueueAssetType(body.assetType);
-  const costVcoin = Number(body.costVcoin || 0);
   const queueKind = body.queueKind || (assetType === 'video' ? 'video_generate' : 'image_generate');
   const clientPlatform = normalizeQueueClientPlatform(body.clientPlatform) || 'unknown';
   const queuePayload = body.queuePayload ?? {};
+  const serverPrice = await resolveServerCostVcoin(admin, queueKind, queuePayload);
+  const costVcoin = serverPrice.costVcoin;
   const normalizedToolMeta = getImageGenerateToolMetadata(queueKind, queuePayload, body.toolId, body.toolName);
   const effectiveToolId = normalizedToolMeta.toolId;
   const effectiveToolName = normalizedToolMeta.toolName;
@@ -354,6 +441,7 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
         queue_kind: queueKind,
         asset_type: assetType,
         cost_vcoin: costVcoin,
+        pricing: serverPrice.pricing,
       },
     });
 
@@ -414,6 +502,7 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
           queue_kind: queueKind,
           asset_type: assetType,
           cost_vcoin: costVcoin,
+          pricing: serverPrice.pricing,
         },
       });
     }
@@ -503,8 +592,10 @@ export const handler: Handler = async (event) => {
     let row: any;
     const queuePayloadWithLogs = buildInitialQueuePayload(body.queuePayload, body.queueKind, clientPlatform);
     const normalizedToolMeta = getImageGenerateToolMetadata(body.queueKind, queuePayloadWithLogs, body.toolId, body.toolName);
+    const serverPrice = await resolveServerCostVcoin(admin, body.queueKind, queuePayloadWithLogs);
     const normalizedBody: QueueBody = {
       ...body,
+      costVcoin: serverPrice.costVcoin,
       toolId: normalizedToolMeta.toolId,
       toolName: normalizedToolMeta.toolName,
       clientPlatform,
@@ -518,7 +609,7 @@ export const handler: Handler = async (event) => {
       p_tool_name: normalizedToolMeta.toolName,
       p_engine: body.engine || normalizedToolMeta.toolName || body.queueKind,
       p_asset_type: asQueueAssetType(body.assetType),
-      p_cost_vcoin: Number(body.costVcoin || 0),
+      p_cost_vcoin: serverPrice.costVcoin,
       p_queue_kind: body.queueKind,
       p_queue_payload: queuePayloadWithLogs,
     });

@@ -130,8 +130,10 @@ export const syncPaymentTransaction = async (orderCode: string | number, gateway
     params.set('gateway', gateway);
   }
 
+  const authHeader = await getSupabaseAuthHeader();
   const response = await fetch(`/api/sepay-sync-transaction?${params.toString()}`, {
     method: 'GET',
+    headers: authHeader,
   });
 
   const payload = await response.json().catch(() => ({}));

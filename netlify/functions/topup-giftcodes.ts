@@ -42,7 +42,8 @@ export const handler: Handler = async (event) => {
       p_user_id: user.id,
     });
 
-    if (error) throw error;
+    const rpcUnavailable = Boolean(error && /get_available_topup_giftcodes|function|schema|campaign_key|structure|topup_gift/i.test(error.message || ''));
+    if (error && !rpcUnavailable) throw error;
 
     const { count: paidTopupCount } = await admin
       .from('payment_transactions')
@@ -50,7 +51,7 @@ export const handler: Handler = async (event) => {
       .eq('user_id', user.id)
       .eq('status', 'paid');
 
-    const concreteCodes = Array.isArray(data) ? data : [];
+    const concreteCodes = !rpcUnavailable && Array.isArray(data) ? data : [];
     const concreteCampaigns = new Set(
       concreteCodes
         .filter((row: any) => ['used', 'reserved', 'available'].includes(String(row.status || '')))
@@ -68,11 +69,15 @@ export const handler: Handler = async (event) => {
       if (template.expires_at && template.expires_at < nowIso) continue;
       if (template.audience === 'new_user_first_topup' && Number(paidTopupCount || 0) > 0) continue;
 
-      const { count: usedCount } = await admin
+      const { count: usedCount, error: usedCountError } = await admin
         .from('topup_gift_code_usages')
         .select('id, gift_codes!inner(campaign_key)', { count: 'exact', head: true })
         .eq('gift_codes.campaign_key', campaignKey)
         .in('status', ['reserved', 'applied']);
+
+      if (usedCountError && !/topup_gift_code_usages|gift_codes|schema|relation|foreign key/i.test(usedCountError.message || '')) {
+        throw usedCountError;
+      }
 
       if (Number(usedCount || 0) >= Number(template.total_limit || 0)) continue;
 

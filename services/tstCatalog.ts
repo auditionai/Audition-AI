@@ -153,7 +153,7 @@ const TST_DOCS_VIDEO_ASPECT_RATIO_FALLBACKS: Record<string, string[]> = {
   'kling-o1-video': ['9:16', '16:9', '1:1'],
   'kling-3.0-video': ['16:9', '9:16', '1:1'],
 };
-const GROK_VIDEO_DURATIONS = ['5s', '10s'];
+const GROK_VIDEO_DURATIONS = ['6s', '10s'];
 
 const tierToModelId: Record<TstGenerationTier, string> = {
   flash: 'nano-banana-2',

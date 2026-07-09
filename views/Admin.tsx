@@ -1295,6 +1295,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       return 'Thất bại';
   };
 
+  const getTopupGiftcodeLabel = (giftcode?: string | null) => {
+      const clean = String(giftcode || '').trim().toUpperCase();
+      return clean || null;
+  };
+
   const isHistoryItemInScope = (item: HistoryItem) => {
       if (userLedgerDateScope === 'all') return true;
       const createdAt = new Date(item.createdAt).getTime();
@@ -2668,7 +2673,15 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           />
                                       </td>
                                       <td className="px-6 py-4 text-xs font-mono">{new Date(tx.createdAt).toLocaleString()}</td>
-                                      <td className="px-6 py-4 font-mono font-bold text-white">{tx.order_code || tx.code}</td>
+                                      <td className="px-6 py-4">
+                                          <div className="font-mono font-bold text-white">{tx.order_code || tx.code}</div>
+                                          {getTopupGiftcodeLabel(tx.topupGiftcode) && (
+                                              <div className="mt-2 inline-flex max-w-[180px] items-center gap-1 rounded-lg border border-audi-cyan/20 bg-audi-cyan/10 px-2 py-1 text-[10px] font-bold text-audi-cyan">
+                                                  <Icons.Gift className="h-3 w-3 shrink-0" />
+                                                  <span className="truncate font-mono">{getTopupGiftcodeLabel(tx.topupGiftcode)}</span>
+                                              </div>
+                                          )}
+                                      </td>
                                       <td className="px-6 py-4">
                                           <div className="flex items-center gap-3">
                                               <img src={tx.userAvatar || 'https://picsum.photos/100/100'} className="w-8 h-8 rounded-full border border-white/10 object-cover" />
@@ -2679,7 +2692,14 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           </div>
                                       </td>
                                       <td className="px-6 py-4 text-audi-pink font-bold">+{tx.vcoin_received} Vcoin</td>
-                                      <td className="px-6 py-4 text-right font-bold text-white">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(tx.amount || tx.price || 0)}</td>
+                                      <td className="px-6 py-4 text-right">
+                                          <div className="font-bold text-white">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(tx.amount || tx.price || 0)}</div>
+                                          {Number(tx.discountAmount || 0) > 0 && (
+                                              <div className="mt-1 text-[10px] font-bold text-emerald-300">
+                                                  Giảm {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(Number(tx.discountAmount || 0))}
+                                              </div>
+                                          )}
+                                      </td>
                                       <td className="px-6 py-4">
                                           <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
                                               tx.status === 'paid' ? 'bg-green-500/20 text-green-500' : 
@@ -2719,6 +2739,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           <div>
                                               <div className="font-bold text-white text-sm">{tx.userName || 'Unknown'}</div>
                                               <div className="text-xs text-slate-500 font-mono">{tx.order_code || tx.code}</div>
+                                              {getTopupGiftcodeLabel(tx.topupGiftcode) && (
+                                                  <div className="mt-1 inline-flex items-center gap-1 rounded-md border border-audi-cyan/20 bg-audi-cyan/10 px-2 py-0.5 text-[10px] font-bold text-audi-cyan">
+                                                      <Icons.Gift className="h-3 w-3" />
+                                                      <span className="font-mono">{getTopupGiftcodeLabel(tx.topupGiftcode)}</span>
+                                                  </div>
+                                              )}
                                           </div>
                                       </div>
                                       <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
@@ -2733,6 +2759,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       <div>
                                           <div className="text-[10px] text-slate-500 uppercase font-bold">Số tiền</div>
                                           <div className="text-white font-bold">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(tx.amount || tx.price || 0)}</div>
+                                          {Number(tx.discountAmount || 0) > 0 && (
+                                              <div className="text-[10px] font-bold text-emerald-300">Giảm {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(Number(tx.discountAmount || 0))}</div>
+                                          )}
                                       </div>
                                       <div>
                                           <div className="text-[10px] text-slate-500 uppercase font-bold">Gói nạp</div>
@@ -5343,6 +5372,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                                                               Admin Transaction
                                                                                           </span>
                                                                                       )}
+                                                                                      {getTopupGiftcodeLabel(item.topupGiftcode) && (
+                                                                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-bold bg-audi-cyan/10 text-audi-cyan border-audi-cyan/20">
+                                                                                              <Icons.Gift className="w-3 h-3" />
+                                                                                              Giftcode nạp
+                                                                                          </span>
+                                                                                      )}
                                                                                       {generatedAsset && (
                                                                                           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-bold ${
                                                                                               assetKind === 'video'
@@ -5357,6 +5392,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                                                   <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-1 text-[11px] text-slate-500">
                                                                                       <div className="break-all">ID: <span className="font-mono text-slate-300">{item.referenceId || item.id}</span></div>
                                                                                       <div className="break-all">Mã: <span className="font-mono text-slate-300">{item.code || item.referenceType || '-'}</span></div>
+                                                                                      {getTopupGiftcodeLabel(item.topupGiftcode) && (
+                                                                                          <div className="break-all">Giftcode nạp: <span className="font-mono font-bold text-audi-cyan">{getTopupGiftcodeLabel(item.topupGiftcode)}</span></div>
+                                                                                      )}
+                                                                                      {Number(item.discountAmount || 0) > 0 && (
+                                                                                          <div>Giảm giá: <span className="font-bold text-emerald-300">{Number(item.discountAmount || 0).toLocaleString('vi-VN')}đ</span></div>
+                                                                                      )}
                                                                                       {item.toolName && <div className="break-all">Công cụ: <span className="text-slate-300">{item.toolName}</span></div>}
                                                                                       {item.jobStatus && <div>Job: <span className="text-slate-300 uppercase">{item.jobStatus}</span></div>}
                                                                                   </div>

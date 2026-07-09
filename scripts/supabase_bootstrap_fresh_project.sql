@@ -515,6 +515,10 @@ create table if not exists public.payment_transactions (
   provider_payment_link_id text,
   checkout_url text,
   provider_status text,
+  topup_giftcode text,
+  topup_gift_code_id uuid references public.gift_codes(id) on delete set null,
+  original_amount_vnd numeric,
+  discount_amount_vnd numeric not null default 0,
   provider_payload jsonb not null default '{}'::jsonb,
   paid_at timestamptz,
   created_at timestamptz not null default now(),
@@ -538,6 +542,34 @@ create unique index if not exists uq_payment_transactions_order_code
 
 create index if not exists idx_payment_transactions_user_created_at
   on public.payment_transactions(user_id, created_at desc);
+
+create table if not exists public.topup_gift_code_usages (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.users(id) on delete cascade,
+  gift_code_id uuid not null references public.gift_codes(id) on delete cascade,
+  payment_transaction_id uuid references public.payment_transactions(id) on delete set null,
+  status text not null default 'reserved',
+  original_amount_vnd numeric not null default 0,
+  discount_amount_vnd numeric not null default 0,
+  final_amount_vnd numeric not null default 0,
+  created_at timestamptz not null default now(),
+  applied_at timestamptz,
+  cancelled_at timestamptz
+);
+
+alter table public.topup_gift_code_usages
+  drop constraint if exists topup_gift_code_usages_status_check;
+
+alter table public.topup_gift_code_usages
+  add constraint topup_gift_code_usages_status_check
+  check (status in ('reserved', 'applied', 'cancelled'));
+
+create index if not exists idx_topup_gift_code_usages_user_created
+  on public.topup_gift_code_usages(user_id, created_at desc);
+
+create unique index if not exists uq_topup_gift_code_usage_user_code_active
+  on public.topup_gift_code_usages(user_id, gift_code_id)
+  where status in ('reserved', 'applied');
 
 create table if not exists public.style_presets (
   id uuid primary key default gen_random_uuid(),
@@ -832,6 +864,7 @@ alter table public.gift_codes enable row level security;
 alter table public.gift_code_usages enable row level security;
 alter table public.vcoin_transactions enable row level security;
 alter table public.payment_transactions enable row level security;
+alter table public.topup_gift_code_usages enable row level security;
 alter table public.style_presets enable row level security;
 alter table public.daily_check_ins enable row level security;
 alter table public.milestone_claims enable row level security;
@@ -1006,6 +1039,22 @@ to authenticated
 using (public.check_is_admin())
 with check (public.check_is_admin());
 
+drop policy if exists "Users read own topup giftcode usages" on public.topup_gift_code_usages;
+drop policy if exists "Admin manage topup giftcode usages" on public.topup_gift_code_usages;
+
+create policy "Users read own topup giftcode usages"
+on public.topup_gift_code_usages
+for select
+to authenticated
+using (auth.uid() = user_id or public.check_is_admin());
+
+create policy "Admin manage topup giftcode usages"
+on public.topup_gift_code_usages
+for all
+to authenticated
+using (public.check_is_admin())
+with check (public.check_is_admin());
+
 drop policy if exists "Public read styles" on public.style_presets;
 drop policy if exists "Admin manage styles" on public.style_presets;
 
@@ -1150,6 +1199,302 @@ as $$
       updated_at = now()
   where id = code_id;
 $$;
+
+create or replace function public.get_available_topup_giftcodes(p_user_id uuid)
+returns table (
+  id uuid,
+  code text,
+  campaign_key text,
+  discount_percent numeric,
+  total_limit numeric,
+  used_count bigint,
+  remaining_count numeric,
+  max_per_user numeric,
+  user_used_count bigint,
+  audience text,
+  expires_at timestamptz,
+  status text,
+  last_used_at timestamptz
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if p_user_id is null then
+    raise exception 'USER_REQUIRED';
+  end if;
+
+  return query
+  with paid_topups as (
+    select count(*)::integer as count
+    from public.payment_transactions
+    where user_id = p_user_id
+      and status = 'paid'
+  ),
+  usage_counts as (
+    select gift_code_id, count(*)::bigint as count
+    from public.topup_gift_code_usages
+    where status = 'applied'
+    group by gift_code_id
+  ),
+  user_usage as (
+    select
+      gift_code_id,
+      count(*) filter (where status = 'applied')::bigint as count,
+      max(applied_at) filter (where status = 'applied') as last_used_at,
+      max(status) filter (where status = 'applied') as applied_status
+    from public.topup_gift_code_usages
+    where user_id = p_user_id
+    group by gift_code_id
+  )
+  select
+    gc.id,
+    gc.code,
+    gc.campaign_key,
+    gc.discount_percent,
+    gc.total_limit,
+    coalesce(uc.count, 0) as used_count,
+    greatest(gc.total_limit - coalesce(uc.count, 0), 0) as remaining_count,
+    gc.max_per_user,
+    coalesce(uu.count, 0) as user_used_count,
+    gc.audience,
+    gc.expires_at,
+    case
+      when coalesce(uu.applied_status, '') = 'applied' then 'used'
+      when gc.is_active is not true then 'unavailable'
+      when gc.expires_at is not null and gc.expires_at < now() then 'expired'
+      when coalesce(uc.count, 0) >= gc.total_limit then 'limit_reached'
+      when coalesce(uu.count, 0) >= gc.max_per_user then 'used'
+      when gc.audience = 'specific_user' and gc.assigned_user_id is distinct from p_user_id then 'unavailable'
+      when gc.audience = 'new_user_first_topup' and (select count from paid_topups) > 0 then 'unavailable'
+      else 'available'
+    end as status,
+    uu.last_used_at
+  from public.gift_codes gc
+  left join usage_counts uc on uc.gift_code_id = gc.id
+  left join user_usage uu on uu.gift_code_id = gc.id
+  where gc.code_type = 'topup_discount'
+    and not (
+      gc.assigned_user_id is null
+      and (
+        gc.auto_generate_per_user is true
+        or gc.code !~ '-[A-Z0-9]{5}$'
+      )
+    )
+    and not (
+      gc.assigned_user_id = p_user_id
+      and gc.code ~ '-[A-Z0-9]{5}$'
+      and coalesce(uu.count, 0) = 0
+    )
+    and (gc.assigned_user_id is null or gc.assigned_user_id = p_user_id)
+    and (
+      gc.audience in ('all', 'new_user_first_topup')
+      or (gc.audience = 'specific_user' and gc.assigned_user_id = p_user_id)
+    )
+  order by
+    case
+      when gc.audience = 'new_user_first_topup' then 0
+      when gc.audience = 'specific_user' then 1
+      else 2
+    end,
+    gc.discount_percent desc,
+    gc.created_at desc;
+end;
+$$;
+
+create or replace function public.reserve_topup_giftcode(
+  p_user_id uuid,
+  p_code text,
+  p_payment_transaction_id uuid,
+  p_original_amount_vnd numeric
+)
+returns table (
+  success boolean,
+  gift_code_id uuid,
+  code text,
+  discount_percent numeric,
+  discount_amount_vnd numeric,
+  final_amount_vnd numeric,
+  message text
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_code public.gift_codes%rowtype;
+  v_code_normalized text := upper(btrim(coalesce(p_code, '')));
+  v_total_used integer := 0;
+  v_user_used integer := 0;
+  v_paid_topups integer := 0;
+  v_discount numeric := 0;
+  v_final numeric := 0;
+begin
+  if p_user_id is null then
+    raise exception 'USER_REQUIRED';
+  end if;
+
+  if v_code_normalized = '' then
+    return query select false, null::uuid, null::text, 0::numeric, 0::numeric, p_original_amount_vnd, 'GIFTCODE_REQUIRED'::text;
+    return;
+  end if;
+
+  update public.topup_gift_code_usages tgu
+  set
+    status = 'cancelled',
+    cancelled_at = coalesce(tgu.cancelled_at, now())
+  from public.payment_transactions pt
+  where tgu.payment_transaction_id = pt.id
+    and tgu.user_id = p_user_id
+    and tgu.status = 'reserved'
+    and pt.status in ('cancelled', 'failed');
+
+  select *
+  into v_code
+  from public.gift_codes
+  where upper(code) = v_code_normalized
+    and code_type = 'topup_discount'
+  for update;
+
+  if not found then
+    return query select false, null::uuid, v_code_normalized, 0::numeric, 0::numeric, p_original_amount_vnd, 'GIFT_CODE_INVALID'::text;
+    return;
+  end if;
+
+  if v_code.assigned_user_id is null
+    and (
+      v_code.auto_generate_per_user is true
+      or v_code.code !~ '-[A-Z0-9]{5}$'
+    ) then
+    return query select false, v_code.id, v_code.code, v_code.discount_percent, 0::numeric, p_original_amount_vnd, 'GIFT_CODE_INVALID'::text;
+    return;
+  end if;
+
+  if v_code.is_active is not true
+    or (v_code.expires_at is not null and v_code.expires_at < now()) then
+    return query select false, v_code.id, v_code.code, v_code.discount_percent, 0::numeric, p_original_amount_vnd, 'GIFT_CODE_TOPUP_EXPIRED_OR_LIMIT'::text;
+    return;
+  end if;
+
+  select count(*) into v_total_used
+  from public.topup_gift_code_usages
+  where gift_code_id = v_code.id
+    and status = 'applied';
+
+  if v_total_used >= coalesce(v_code.total_limit, 0) then
+    return query select false, v_code.id, v_code.code, v_code.discount_percent, 0::numeric, p_original_amount_vnd, 'GIFT_CODE_TOPUP_EXPIRED_OR_LIMIT'::text;
+    return;
+  end if;
+
+  select count(*) into v_user_used
+  from public.topup_gift_code_usages
+  where gift_code_id = v_code.id
+    and user_id = p_user_id
+    and status = 'applied';
+
+  if v_user_used >= coalesce(v_code.max_per_user, 1) then
+    return query select false, v_code.id, v_code.code, v_code.discount_percent, 0::numeric, p_original_amount_vnd, 'GIFT_CODE_ALREADY_USED_BY_USER'::text;
+    return;
+  end if;
+
+  if v_code.audience = 'specific_user' and v_code.assigned_user_id is distinct from p_user_id then
+    return query select false, v_code.id, v_code.code, v_code.discount_percent, 0::numeric, p_original_amount_vnd, 'GIFT_CODE_INVALID'::text;
+    return;
+  end if;
+
+  if v_code.assigned_user_id is not null and v_code.assigned_user_id is distinct from p_user_id then
+    return query select false, v_code.id, v_code.code, v_code.discount_percent, 0::numeric, p_original_amount_vnd, 'GIFT_CODE_INVALID'::text;
+    return;
+  end if;
+
+  if v_code.audience = 'new_user_first_topup' then
+    select count(*) into v_paid_topups
+    from public.payment_transactions
+    where user_id = p_user_id
+      and status = 'paid';
+
+    if v_paid_topups > 0 then
+      return query select false, v_code.id, v_code.code, v_code.discount_percent, 0::numeric, p_original_amount_vnd, 'GIFT_CODE_FIRST_TOPUP_ONLY'::text;
+      return;
+    end if;
+  end if;
+
+  v_discount := floor(greatest(p_original_amount_vnd, 0) * least(greatest(v_code.discount_percent, 0), 100) / 100);
+  v_final := greatest(greatest(p_original_amount_vnd, 0) - v_discount, 0);
+
+  insert into public.topup_gift_code_usages (
+    user_id,
+    gift_code_id,
+    payment_transaction_id,
+    original_amount_vnd,
+    discount_amount_vnd,
+    final_amount_vnd
+  )
+  values (
+    p_user_id,
+    v_code.id,
+    p_payment_transaction_id,
+    p_original_amount_vnd,
+    v_discount,
+    v_final
+  );
+
+  return query select true, v_code.id, v_code.code, v_code.discount_percent, v_discount, v_final, 'SUCCESS'::text;
+end;
+$$;
+
+create or replace function public.mark_topup_giftcode_applied(p_transaction_id uuid)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  with updated_usage as (
+    update public.topup_gift_code_usages
+    set status = 'applied',
+        applied_at = coalesce(applied_at, now())
+    where payment_transaction_id = p_transaction_id
+      and status = 'reserved'
+    returning gift_code_id
+  ),
+  applied_codes as (
+    select gc.id, upper(btrim(coalesce(gc.campaign_key, gc.code))) as campaign_key
+    from public.gift_codes gc
+    join updated_usage uu on uu.gift_code_id = gc.id
+  ),
+  updated_concrete as (
+    update public.gift_codes gc
+    set used_count = used_count + 1,
+        updated_at = now()
+    where gc.id in (select id from applied_codes)
+    returning gc.id
+  )
+  update public.gift_codes template
+  set used_count = used_count + 1,
+      updated_at = now()
+  from applied_codes ac
+  where template.code_type = 'topup_discount'
+    and template.assigned_user_id is null
+    and template.auto_generate_per_user is true
+    and upper(btrim(coalesce(template.campaign_key, template.code))) = ac.campaign_key
+    and template.id <> ac.id;
+$$;
+
+create or replace function public.cancel_topup_giftcode_reservation(p_transaction_id uuid)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  update public.topup_gift_code_usages
+  set status = 'cancelled',
+      cancelled_at = coalesce(cancelled_at, now())
+  where payment_transaction_id = p_transaction_id
+    and status = 'reserved';
+$$;
+
+grant execute on function public.cancel_topup_giftcode_reservation(uuid) to authenticated, service_role;
 
 create or replace function public.redeem_giftcode(
   p_user_id uuid,

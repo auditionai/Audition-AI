@@ -397,6 +397,9 @@ export interface HistoryItem {
     referenceType?: string | null;
     referenceId?: string | null;
     code?: string;
+    topupGiftcode?: string | null;
+    discountAmount?: number;
+    originalAmount?: number;
     statusLabel?: string;
     toolName?: string | null;
     assetType?: 'image' | 'video' | null;

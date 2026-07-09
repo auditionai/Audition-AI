@@ -348,6 +348,11 @@ export const Gallery: React.FC = () => {
     }
   };
 
+  const getTopupGiftcodeLabel = (giftcode?: string | null) => {
+    const clean = String(giftcode || '').trim().toUpperCase();
+    return clean || null;
+  };
+
   const DetailModal = () => {
     if (!viewingImage) return null;
 
@@ -591,24 +596,41 @@ export const Gallery: React.FC = () => {
           <div className="py-20 text-center"><Coins className="mx-auto mb-3 h-12 w-12 text-gray-200" /><p className="text-sm text-gray-400 dark:text-zinc-500">Chưa có giao dịch nào.</p></div>
         ) : (
           <div className="space-y-2.5">
-            {transactions.map((transaction) => (
-              <div key={transaction.id} className="rounded-[26px] border border-gray-100 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-[#18181B]">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="mb-1 flex items-center gap-2">
-                      {getTransactionBadge(transaction.type)}
-                      {transaction.status !== 'success' ? <span className={`text-[10px] font-bold ${transaction.status === 'pending' ? 'text-amber-500' : 'text-red-500'}`}>{getTransactionStatusLabel(transaction.status)}</span> : null}
+            {transactions.map((transaction) => {
+              const topupGiftcode = getTopupGiftcodeLabel(transaction.topupGiftcode);
+              return (
+                <div key={transaction.id} className="rounded-[26px] border border-gray-100 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-[#18181B]">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-1 flex items-center gap-2">
+                        {getTransactionBadge(transaction.type)}
+                        {transaction.status !== 'success' ? <span className={`text-[10px] font-bold ${transaction.status === 'pending' ? 'text-amber-500' : 'text-red-500'}`}>{getTransactionStatusLabel(transaction.status)}</span> : null}
+                      </div>
+                      <p className="line-clamp-1 text-sm text-gray-700 dark:text-zinc-200">{transaction.description}</p>
+                      <p className="mt-1 text-[10px] text-gray-400 dark:text-zinc-500">{formatDate(transaction.createdAt)}</p>
                     </div>
-                    <p className="line-clamp-1 text-sm text-gray-700 dark:text-zinc-200">{transaction.description}</p>
-                    <p className="mt-1 text-[10px] text-gray-400 dark:text-zinc-500">{formatDate(transaction.createdAt)}</p>
+                    <div className="shrink-0 text-right">
+                      <p className={`text-sm font-bold ${transaction.vcoinChange >= 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-red-500 dark:text-red-300'}`}>{transaction.vcoinChange >= 0 ? '+' : ''}{transaction.vcoinChange} VC</p>
+                      {transaction.amountVnd ? <p className="text-[10px] text-gray-400 dark:text-zinc-500">{new Intl.NumberFormat('vi-VN').format(transaction.amountVnd)}đ</p> : null}
+                    </div>
                   </div>
-                  <div className="shrink-0 text-right">
-                    <p className={`text-sm font-bold ${transaction.vcoinChange >= 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-red-500 dark:text-red-300'}`}>{transaction.vcoinChange >= 0 ? '+' : ''}{transaction.vcoinChange} VC</p>
-                    {transaction.amountVnd ? <p className="text-[10px] text-gray-400 dark:text-zinc-500">{new Intl.NumberFormat('vi-VN').format(transaction.amountVnd)}đ</p> : null}
-                  </div>
+                  {topupGiftcode && (
+                    <div className="mt-3 rounded-2xl border border-cyan-100 bg-cyan-50 p-3 dark:border-cyan-500/20 dark:bg-cyan-500/10">
+                      <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wide text-cyan-700 dark:text-cyan-300">
+                        <Gift className="h-3.5 w-3.5" />
+                        Giftcode đang áp dụng
+                      </div>
+                      <div className="mt-1 break-all font-mono text-sm font-black text-gray-900 dark:text-white">{topupGiftcode}</div>
+                      {Number(transaction.discountAmount || 0) > 0 && (
+                        <div className="mt-1 text-xs font-bold text-emerald-600 dark:text-emerald-300">
+                          Giảm {Number(transaction.discountAmount || 0).toLocaleString('vi-VN')}đ
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

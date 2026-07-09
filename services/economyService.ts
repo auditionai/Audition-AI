@@ -621,7 +621,10 @@ const mapPaymentTransactionToHistoryItem = (tx: any): HistoryItem => ({
     amountVnd: Number(tx.amount_vnd || 0),
     type: tx.status === 'paid' ? 'topup' : 'pending_topup',
     status: tx.status === 'paid' ? 'success' : tx.status === 'pending' ? 'pending' : 'failed',
-    code: tx.order_code
+    code: tx.order_code,
+    topupGiftcode: tx.topup_giftcode || tx.provider_payload?.topup_giftcode || null,
+    discountAmount: Number(tx.discount_amount_vnd ?? tx.provider_payload?.discount_amount_vnd ?? 0),
+    originalAmount: Number(tx.original_amount_vnd ?? tx.provider_payload?.original_amount_vnd ?? tx.amount_vnd ?? 0),
 });
 
 const mapVcoinTransactionToHistoryItem = (log: any): HistoryItem => ({
@@ -1977,6 +1980,8 @@ export type TopupGiftcodeOffer = {
     usedCount: number;
     remainingCount: number;
     maxPerUser: number;
+    userUsedCount?: number;
+    remainingPerUser?: number;
     audience: 'all' | 'new_user_first_topup' | 'specific_user' | string;
     expiresAt?: string | null;
     status: 'available' | 'used' | 'reserved' | 'expired' | 'limit_reached' | 'unavailable' | string;
@@ -2019,6 +2024,7 @@ const getTopupGiftcodesFromPublicTemplates = async (): Promise<TopupGiftcodeOffe
             const usedCount = Number(row.used_count || 0);
             if (totalLimit > 0 && usedCount >= totalLimit) return null;
 
+            const maxPerUser = Math.max(1, Number(row.max_per_user || 1));
             return {
                 id: `local-template:${row.id}:${Date.now()}:${Math.random().toString(36).slice(2)}`,
                 code: `${prefix}-${buildRandomTopupGiftcodeSuffix()}`,
@@ -2026,7 +2032,9 @@ const getTopupGiftcodesFromPublicTemplates = async (): Promise<TopupGiftcodeOffe
                 totalLimit,
                 usedCount,
                 remainingCount: Math.max(0, totalLimit - usedCount),
-                maxPerUser: 1,
+                maxPerUser,
+                userUsedCount: 0,
+                remainingPerUser: maxPerUser,
                 audience: row.audience || 'all',
                 expiresAt,
                 status: 'available',
@@ -2053,12 +2061,21 @@ export const getTopupGiftcodes = async (): Promise<TopupGiftcodeOffer[]> => {
         }
 
         const rows = Array.isArray(payload.giftcodes) ? payload.giftcodes : [];
-        if (rows.length > 0) return rows;
+        if (rows.length > 0) {
+            return rows.filter((row: TopupGiftcodeOffer) => {
+                const remainingPerUser = Number(row.remainingPerUser ?? row.maxPerUser ?? 1);
+                return row.status === 'available' && remainingPerUser > 0;
+            });
+        }
     } catch (error) {
         console.warn('[TopUp] API giftcode list failed, using public template fallback', error);
     }
 
-    return getTopupGiftcodesFromPublicTemplates();
+    const fallbackRows = await getTopupGiftcodesFromPublicTemplates();
+    return fallbackRows.filter((row) => {
+        const remainingPerUser = Number(row.remainingPerUser ?? row.maxPerUser ?? 1);
+        return row.status === 'available' && remainingPerUser > 0;
+    });
 };
 
 export const createPaymentLink = async (packageId: string, topupGiftcode?: string): Promise<Transaction> => {
@@ -2189,6 +2206,14 @@ export const adminRejectTransaction = async (txId: string): Promise<{success: bo
             .update({ status: 'failed' })
             .eq('id', txId);
         if (error) throw error;
+
+        const { error: giftcodeError } = await supabase.rpc('cancel_topup_giftcode_reservation', {
+            p_transaction_id: txId,
+        });
+        if (giftcodeError && !/cancel_topup_giftcode_reservation|function|schema/i.test(giftcodeError.message || '')) {
+            throw giftcodeError;
+        }
+
         return { success: true };
     } catch (e: any) {
         return { success: false, error: e.message };
@@ -2218,6 +2243,16 @@ export const adminBulkRejectTransactions = async (txIds: string[]): Promise<{suc
             .in('id', txIds);
             
         if (error) throw error;
+
+        for (const id of txIds) {
+            const { error: giftcodeError } = await supabase.rpc('cancel_topup_giftcode_reservation', {
+                p_transaction_id: id,
+            });
+            if (giftcodeError && !/cancel_topup_giftcode_reservation|function|schema/i.test(giftcodeError.message || '')) {
+                throw giftcodeError;
+            }
+        }
+
         return { success: true, count: count || txIds.length };
     } catch (e: any) {
         return { success: false, error: e.message };
@@ -2246,7 +2281,7 @@ export const getUnifiedHistory = async (targetUserId?: string): Promise<HistoryI
     // 1. Get Topup History
     const { data: txs } = await supabase
         .from('payment_transactions')
-        .select('id, created_at, order_code, vcoin_received, amount_vnd, status')
+        .select('id, created_at, order_code, vcoin_received, amount_vnd, status, provider_payload')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(USER_HISTORY_FETCH_LIMIT);
@@ -2270,7 +2305,10 @@ export const getUnifiedHistory = async (targetUserId?: string): Promise<HistoryI
             amountVnd: t.amount_vnd,
             type: t.status === 'paid' ? 'topup' : 'pending_topup',
             status: t.status === 'paid' ? 'success' : t.status === 'pending' ? 'pending' : 'failed',
-            code: t.order_code
+            code: t.order_code,
+            topupGiftcode: t.provider_payload?.topup_giftcode || null,
+            discountAmount: Number(t.provider_payload?.discount_amount_vnd || 0),
+            originalAmount: Number(t.provider_payload?.original_amount_vnd || t.amount_vnd || 0)
         });
     });
 
@@ -3505,7 +3543,7 @@ export const getAdminStats = async () => {
 
     const { data: txs, error: txError } = await supabase
         .from('payment_transactions')
-        .select('id, user_id, package_id, amount_vnd, vcoin_received, status, created_at, order_code, payment_method')
+        .select('id, user_id, package_id, amount_vnd, vcoin_received, status, created_at, order_code, payment_method, provider_payload')
         .order('created_at', { ascending: false })
         .limit(ADMIN_STATS_TRANSACTION_LIMIT);
     if (txError) {
@@ -3657,6 +3695,9 @@ export const getAdminStats = async () => {
              createdAt: t.created_at,
              code: t.order_code,
              order_code: t.order_code,
+             topupGiftcode: t.topup_giftcode || t.provider_payload?.topup_giftcode || null,
+             discountAmount: Number(t.discount_amount_vnd ?? t.provider_payload?.discount_amount_vnd ?? 0),
+             originalAmount: Number(t.original_amount_vnd ?? t.provider_payload?.original_amount_vnd ?? t.amount_vnd ?? 0),
              paymentMethod: t.payment_method || 'sepay'
          };
     }) || [];

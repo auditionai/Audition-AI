@@ -39,6 +39,10 @@ export const ManualPaymentGateway: React.FC<ManualPaymentGatewayProps> = ({ tran
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
+  const appliedGiftcode = String(transaction.topupGiftcode || '').trim().toUpperCase();
+  const discountAmount = Number(transaction.discountAmount || 0);
+  const originalAmount = Number(transaction.originalAmount || transaction.amount || 0);
+
   const handleConfirmPayment = async () => {
       setIsPaid(true);
       updateLastActive();
@@ -76,6 +80,26 @@ export const ManualPaymentGateway: React.FC<ManualPaymentGatewayProps> = ({ tran
                                 <span className="text-sm text-slate-500">So tien</span>
                                 <span className="font-bold text-2xl text-emerald-600">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(transaction.amount || 0)}</span>
                             </div>
+                            {appliedGiftcode && (
+                                <div className="mt-3 rounded-lg border border-cyan-200 bg-cyan-50 p-3">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <span className="text-xs font-bold uppercase text-cyan-700">Giftcode dang ap dung</span>
+                                        <span className="font-mono text-sm font-black text-cyan-800">{appliedGiftcode}</span>
+                                    </div>
+                                    {discountAmount > 0 && (
+                                        <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                                            <div>
+                                                <div className="text-slate-500">Gia goc</div>
+                                                <div className="font-bold text-slate-700">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(originalAmount)}</div>
+                                            </div>
+                                            <div className="text-right">
+                                                <div className="text-slate-500">Da giam</div>
+                                                <div className="font-bold text-emerald-600">-{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(discountAmount)}</div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
 
                         <div className="space-y-4 text-sm">

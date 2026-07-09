@@ -1746,6 +1746,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       action: 'revoke' | 'warn' | 'lock',
       usage: any
   ) => {
+      if (usage.isTopupUsage) {
+          showToast('Lượt giftcode nạp chỉ dùng để đối soát. Hãy xử lý qua giao dịch nạp nếu cần.', 'info');
+          return;
+      }
       const meta = getGiftcodeActionMeta(action);
       try {
            await executeGiftcodeAction(action, usage, meta.reason);
@@ -5777,8 +5781,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       <tr key={idx} className={`transition-colors ${locked ? 'bg-red-500/5 hover:bg-red-500/10' : 'hover:bg-white/5'}`}>
                                           <td className="px-6 py-3 flex items-center gap-3">
                                               <img src={u.userAvatar} className="w-8 h-8 rounded-full bg-white/10" />
-                                              <div>
-                                                  <div className="font-bold text-white">{u.userName}</div>
+                                                  <div>
+                                                      <div className="font-bold text-white">{u.userName}</div>
+                                                  {u.isTopupUsage && u.topupCode && <div className="mt-1 font-mono text-[10px] text-audi-cyan">{u.topupCode}</div>}
                                                   <div className="mt-1 flex flex-wrap gap-1">
                                                       {locked && <span className="rounded bg-red-500/15 px-2 py-0.5 text-[10px] font-bold text-red-300">LOCKED</span>}
                                                       {u.accountWarning && <span className="rounded bg-yellow-500/15 px-2 py-0.5 text-[10px] font-bold text-yellow-300">WARNED</span>}
@@ -5794,15 +5799,26 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               {u.riskFlags?.length > 0 && <div className="mt-1 max-w-[160px] truncate text-[10px] text-slate-500" title={u.riskFlags.join(', ')}>{u.riskFlags.join(', ')}</div>}
                                           </td>
                                           <td className="px-6 py-3">
-                                              <span className={`rounded-full px-2 py-1 text-[10px] font-bold uppercase ${u.rewardStatus === 'granted' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-red-500/15 text-red-300'}`}>{u.rewardStatus || 'granted'}</span>
+                                              {u.isTopupUsage ? (
+                                                  <div>
+                                                      <span className="rounded-full px-2 py-1 text-[10px] font-bold uppercase bg-audi-cyan/15 text-audi-cyan">topup</span>
+                                                      <div className="mt-1 text-[10px] text-slate-500">Giảm {Number(u.discountAmount || 0).toLocaleString()}đ</div>
+                                                  </div>
+                                              ) : (
+                                                  <span className={`rounded-full px-2 py-1 text-[10px] font-bold uppercase ${u.rewardStatus === 'granted' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-red-500/15 text-red-300'}`}>{u.rewardStatus || 'granted'}</span>
+                                              )}
                                               {u.abuseStatus && u.abuseStatus !== 'ok' && <div className="mt-1 text-[10px] text-red-300">{u.abuseStatus}</div>}
                                           </td>
                                           <td className="px-6 py-3">
-                                              <div className="flex flex-wrap gap-1">
-                                                  <button onClick={() => handleGiftcodeUserAction('revoke', u)} disabled={u.rewardStatus === 'revoked'} className="rounded bg-red-500/15 px-2 py-1 text-[10px] font-bold text-red-300 hover:bg-red-500 hover:text-white disabled:opacity-40">Thu hồi</button>
-                                                  <button onClick={() => handleGiftcodeUserAction('warn', u)} className="rounded bg-yellow-500/15 px-2 py-1 text-[10px] font-bold text-yellow-300 hover:bg-yellow-500 hover:text-black">Cảnh báo</button>
-                                                  <button onClick={() => handleGiftcodeUserAction('lock', u)} disabled={locked} className="rounded bg-white/10 px-2 py-1 text-[10px] font-bold text-slate-200 hover:bg-white hover:text-black disabled:opacity-40">Khóa</button>
-                                              </div>
+                                              {u.isTopupUsage ? (
+                                                  <span className="text-[10px] text-slate-500">Đối soát qua giao dịch nạp</span>
+                                              ) : (
+                                                  <div className="flex flex-wrap gap-1">
+                                                      <button onClick={() => handleGiftcodeUserAction('revoke', u)} disabled={u.rewardStatus === 'revoked'} className="rounded bg-red-500/15 px-2 py-1 text-[10px] font-bold text-red-300 hover:bg-red-500 hover:text-white disabled:opacity-40">Thu hồi</button>
+                                                      <button onClick={() => handleGiftcodeUserAction('warn', u)} className="rounded bg-yellow-500/15 px-2 py-1 text-[10px] font-bold text-yellow-300 hover:bg-yellow-500 hover:text-black">Cảnh báo</button>
+                                                      <button onClick={() => handleGiftcodeUserAction('lock', u)} disabled={locked} className="rounded bg-white/10 px-2 py-1 text-[10px] font-bold text-slate-200 hover:bg-white hover:text-black disabled:opacity-40">Khóa</button>
+                                                  </div>
+                                              )}
                                           </td>
                                           <td className="px-6 py-3 text-right font-mono text-xs">{new Date(u.usedAt).toLocaleString()}</td>
                                       </tr>

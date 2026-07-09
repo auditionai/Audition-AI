@@ -1995,6 +1995,20 @@ const buildRandomTopupGiftcodeSuffix = () => {
 
 const isConcreteGeneratedTopupCode = (code: string) => /^.+-[A-Z0-9]{5}$/.test(code.trim().toUpperCase());
 
+const getTopupCampaignKey = (row: any) => {
+    const explicitCampaignKey = String(row?.campaign_key || '').trim().toUpperCase();
+    if (explicitCampaignKey) return explicitCampaignKey;
+    const code = String(row?.code || '').trim().toUpperCase();
+    return isConcreteGeneratedTopupCode(code) ? code.replace(/-[A-Z0-9]{5}$/, '') : code;
+};
+
+const isGeneratedTopupChildRow = (row: any) => {
+    const code = String(row?.code || '').trim().toUpperCase();
+    return String(row?.code_type || '') === 'topup_discount'
+        && row?.auto_generate_per_user !== true
+        && isConcreteGeneratedTopupCode(code);
+};
+
 const getTopupGiftcodesFromPublicTemplates = async (): Promise<TopupGiftcodeOffer[]> => {
     if (!supabase) return [];
 
@@ -3235,6 +3249,75 @@ export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean
 
 export const getGiftcodeUsages = async (codeId: string) => {
     if (!supabase) return [];
+
+    const { data: codeRow, error: codeError } = await supabase
+        .from('gift_codes')
+        .select('id, code, code_type, campaign_key, assigned_user_id, auto_generate_per_user')
+        .eq('id', codeId)
+        .maybeSingle();
+
+    if (codeError) throw codeError;
+
+    if (codeRow?.code_type === 'topup_discount') {
+        const campaignKey = getTopupCampaignKey(codeRow);
+        const { data: campaignCodes, error: campaignCodesError } = await supabase
+            .from('gift_codes')
+            .select('id, code, campaign_key')
+            .eq('code_type', 'topup_discount');
+
+        if (campaignCodesError) throw campaignCodesError;
+
+        const campaignCodeIds = (campaignCodes || [])
+            .filter((row: any) => {
+                const rowCode = String(row?.code || '').trim().toUpperCase();
+                return row.id === codeId
+                    || getTopupCampaignKey(row) === campaignKey
+                    || (campaignKey && rowCode.startsWith(`${campaignKey}-`));
+            })
+            .map((row: any) => row.id)
+            .filter(Boolean);
+
+        if (campaignCodeIds.length === 0) return [];
+
+        const { data: topupUsages, error: topupError } = await supabase
+            .from('topup_gift_code_usages')
+            .select('id, user_id, gift_code_id, status, original_amount_vnd, discount_amount_vnd, final_amount_vnd, created_at, applied_at, gift_codes(code), users(display_name, email, photo_url, account_status, account_warning, account_warning_at, locked_at, lock_reason)')
+            .in('gift_code_id', campaignCodeIds)
+            .eq('status', 'applied')
+            .order('applied_at', { ascending: false });
+
+        if (topupError) throw topupError;
+
+        return (topupUsages || []).map((u: any) => {
+            const userObj = Array.isArray(u.users) ? u.users[0] : u.users;
+            const giftCodeObj = Array.isArray(u.gift_codes) ? u.gift_codes[0] : u.gift_codes;
+            return {
+                usageId: u.id,
+                userId: u.user_id,
+                usedAt: u.applied_at || u.created_at,
+                ipAddress: null,
+                browserKeyHash: null,
+                userName: userObj?.display_name || userObj?.email?.split('@')[0] || 'Unknown',
+                userEmail: userObj?.email || 'No Email',
+                userAvatar: userObj?.photo_url || 'https://picsum.photos/50/50',
+                accountStatus: userObj?.account_status || 'active',
+                accountWarning: userObj?.account_warning || null,
+                accountWarningAt: userObj?.account_warning_at || null,
+                lockedAt: userObj?.locked_at || null,
+                lockReason: userObj?.lock_reason || null,
+                rewardStatus: 'applied',
+                riskScore: 0,
+                riskFlags: [],
+                abuseStatus: 'ok',
+                isTopupUsage: true,
+                topupCode: giftCodeObj?.code || null,
+                originalAmount: Number(u.original_amount_vnd || 0),
+                discountAmount: Number(u.discount_amount_vnd || 0),
+                finalAmount: Number(u.final_amount_vnd || 0)
+            };
+        });
+    }
+
     const { data, error } = await supabase
         .from('gift_code_usages')
         .select('id, user_id, created_at, ip_address, browser_key_hash, reward_status, risk_score, risk_flags, abuse_status, users(display_name, email, photo_url, account_status, account_warning, account_warning_at, locked_at, lock_reason)')
@@ -3754,10 +3837,28 @@ export const getAdminStats = async () => {
              endTime: p.end_time,
              isActive: p.is_active
         })) || [],
-        giftcodes: codes?.map((c: any) => {
+        giftcodes: (() => {
+            const allCodes = codes || [];
+            const topupAppliedCountByCampaign = new Map<string, number>();
+
+            allCodes
+                .filter((c: any) => isGeneratedTopupChildRow(c))
+                .forEach((c: any) => {
+                    const campaignKey = getTopupCampaignKey(c);
+                    if (!campaignKey) return;
+                    topupAppliedCountByCampaign.set(
+                        campaignKey,
+                        (topupAppliedCountByCampaign.get(campaignKey) || 0) + Number(c.used_count || 0)
+                    );
+                });
+
+            return allCodes
+                .filter((c: any) => !isGeneratedTopupChildRow(c))
+                .map((c: any) => {
              // Use count from relation if available, otherwise fallback to column
+             const campaignTopupUsedCount = topupAppliedCountByCampaign.get(getTopupCampaignKey(c)) || 0;
              const realCount = c.code_type === 'topup_discount'
-                 ? (c.used_count || 0)
+                 ? Math.max(Number(c.used_count || 0), campaignTopupUsedCount)
                  : (c.gift_code_usages && c.gift_code_usages[0] ? c.gift_code_usages[0].count : (c.used_count || 0));
              
              return {
@@ -3775,7 +3876,8 @@ export const getAdminStats = async () => {
                  maxPerUser: c.max_per_user,
                  isActive: c.is_active
              };
-        }) || [],
+        });
+        })(),
         transactions
     };
 };

@@ -405,6 +405,11 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
       }
   }
 
+  const getTopupGiftcodeLabel = (giftcode?: string | null) => {
+      const clean = String(giftcode || '').trim().toUpperCase();
+      return clean || null;
+  };
+
   return (
     <div className="pb-32 animate-fade-in max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
@@ -645,6 +650,17 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                     <td className="px-6 py-4 font-bold text-white max-w-[200px] truncate" title={item.description}>
                                         {item.description}
                                         {item.code && <div className="text-[10px] text-slate-500 font-mono mt-0.5">{item.code}</div>}
+                                        {getTopupGiftcodeLabel(item.topupGiftcode) && (
+                                            <div className="mt-2 inline-flex max-w-full items-center gap-1 rounded-lg border border-audi-cyan/20 bg-audi-cyan/10 px-2 py-1 text-[10px] font-bold text-audi-cyan">
+                                                <Icons.Gift className="h-3 w-3 shrink-0" />
+                                                <span className="truncate font-mono">Đang áp dụng {getTopupGiftcodeLabel(item.topupGiftcode)}</span>
+                                            </div>
+                                        )}
+                                        {Number(item.discountAmount || 0) > 0 && (
+                                            <div className="mt-1 text-[10px] font-bold text-emerald-300">
+                                                Giảm {Number(item.discountAmount || 0).toLocaleString('vi-VN')}đ
+                                            </div>
+                                        )}
                                     </td>
                                     <td className="px-6 py-4">
                                         <span className={`px-2 py-1 rounded border text-[10px] font-bold ${getBadgeStyle(item.type)}`}>

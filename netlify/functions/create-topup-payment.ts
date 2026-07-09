@@ -235,6 +235,9 @@ export const handler: Handler = async (event) => {
         order_code: orderCode,
         provider_order_code: providerOrderCode,
         payment_method: 'sepay',
+        topup_giftcode: giftcode || null,
+        original_amount_vnd: originalAmount,
+        discount_amount_vnd: 0,
         provider_payload: {
           topup_giftcode: giftcode || null,
           original_amount_vnd: originalAmount,
@@ -305,6 +308,10 @@ export const handler: Handler = async (event) => {
         .from('payment_transactions')
         .update({
           amount_vnd: finalAmount,
+          topup_giftcode: appliedGiftcode,
+          topup_gift_code_id: reserved.gift_code_id,
+          original_amount_vnd: originalAmount,
+          discount_amount_vnd: discountAmount,
           provider_payload: {
             topup_giftcode: appliedGiftcode,
             topup_gift_code_id: reserved.gift_code_id,
@@ -346,6 +353,9 @@ export const handler: Handler = async (event) => {
       .update({
         checkout_url: checkoutUrl,
         provider_payment_link_id: paymentLinkId,
+        topup_giftcode: appliedGiftcode,
+        original_amount_vnd: originalAmount,
+        discount_amount_vnd: discountAmount,
         provider_payload: {
           gateway: 'sepay',
           sepay_order_code: orderCode,

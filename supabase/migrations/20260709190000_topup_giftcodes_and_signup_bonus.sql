@@ -7,6 +7,12 @@ alter table public.gift_codes
   add column if not exists assigned_user_id uuid references public.users(id) on delete cascade,
   add column if not exists auto_generate_per_user boolean not null default false;
 
+alter table public.payment_transactions
+  add column if not exists topup_giftcode text,
+  add column if not exists topup_gift_code_id uuid references public.gift_codes(id) on delete set null,
+  add column if not exists original_amount_vnd numeric,
+  add column if not exists discount_amount_vnd numeric not null default 0;
+
 do $$
 begin
   if not exists (

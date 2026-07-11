@@ -7,7 +7,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle2, ChevronRight, Flame, Gem, Gift, Loader, QrCode, ShoppingBag, Sparkles, X, Zap } from 'lucide-react';
 import { useNotification } from '../components/NotificationSystem';
-import { createPaymentLink, getActivePromotion, getPackages, getTopupGiftcodes, updateLastActive } from '../services/economyService';
+import { createPaymentLink, getActivePromotion, getCachedTopupGiftcodes, getPackages, getTopupGiftcodePreviews, getTopupGiftcodes, updateLastActive } from '../services/economyService';
 import { syncPaymentTransaction } from '../services/serverQueueService';
 import type { PromotionCampaign, TopupGiftcodeOffer } from '../services/economyService';
 import type { CreditPackage, Transaction } from '../types';
@@ -42,6 +42,34 @@ export const TopUp: React.FC = () => {
         setPackagesLoading(false);
       }
     })();
+  }, []);
+
+  useEffect(() => {
+    let disposed = false;
+
+    getTopupGiftcodePreviews()
+      .then((rows) => {
+        if (!disposed && rows.length > 0) {
+          setTopupGiftcodes(rows);
+        }
+      })
+      .catch((error) => {
+        console.warn('[Mobile TopUp] Failed to prefetch topup giftcode previews', error);
+      });
+
+    getTopupGiftcodes()
+      .then((rows) => {
+        if (!disposed && rows.length > 0) {
+          setTopupGiftcodes(rows);
+        }
+      })
+      .catch((error) => {
+        console.warn('[Mobile TopUp] Failed to prefetch topup giftcodes', error);
+      });
+
+    return () => {
+      disposed = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -164,7 +192,23 @@ export const TopUp: React.FC = () => {
   const openCheckoutModal = async (pkg: CreditPackage) => {
     setSelectedPackage(pkg);
     setGiftcodeInput('');
-    await loadTopupGiftcodes();
+    if (topupGiftcodes.length === 0) {
+      const cachedRows = getCachedTopupGiftcodes();
+      if (cachedRows.length > 0) {
+        setTopupGiftcodes(cachedRows);
+      } else {
+        void getTopupGiftcodePreviews()
+          .then((rows) => {
+            if (rows.length > 0) {
+              setTopupGiftcodes(rows);
+            }
+          })
+          .catch((error) => {
+            console.warn('[Mobile TopUp] Failed to load topup giftcode previews', error);
+          });
+      }
+      void loadTopupGiftcodes();
+    }
   };
 
   const selectedOffer = useMemo(() => {
@@ -388,7 +432,7 @@ export const TopUp: React.FC = () => {
             </div>
 
             <div className="mt-3 space-y-2.5">
-              {loadingGiftcodes ? (
+              {loadingGiftcodes && availableTopupGiftcodes.length === 0 ? (
                 <div className="flex items-center justify-center rounded-2xl bg-gray-50 py-8 text-sm text-gray-400 dark:bg-zinc-800/80">
                   <Loader className="mr-2 h-4 w-4 animate-spin" /> Đang tải mã ưu đãi
                 </div>

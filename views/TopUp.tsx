@@ -2,7 +2,7 @@
 import { createPortal } from 'react-dom';
 import { Language, Transaction, CreditPackage, PromotionCampaign, ViewId } from '../types';
 import { Icons } from '../components/Icons';
-import { getPackages, createPaymentLink, getActivePromotion, updateLastActive, getTopupGiftcodes, TopupGiftcodeOffer } from '../services/economyService';
+import { getPackages, createPaymentLink, getActivePromotion, updateLastActive, getCachedTopupGiftcodes, getTopupGiftcodePreviews, getTopupGiftcodes, TopupGiftcodeOffer } from '../services/economyService';
 import { useNotification } from '../components/NotificationSystem';
 
 interface TopUpProps {
@@ -34,6 +34,34 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
     loadData();
   }, []);
 
+  useEffect(() => {
+      let disposed = false;
+
+      getTopupGiftcodePreviews()
+          .then((rows) => {
+              if (!disposed && rows.length > 0) {
+                  setTopupGiftcodes(rows);
+              }
+          })
+          .catch((error) => {
+              console.warn('Failed to prefetch topup giftcode previews', error);
+          });
+
+      getTopupGiftcodes()
+          .then((rows) => {
+              if (!disposed && rows.length > 0) {
+                  setTopupGiftcodes(rows);
+              }
+          })
+          .catch((error) => {
+              console.warn('Failed to prefetch topup giftcodes', error);
+          });
+
+      return () => {
+          disposed = true;
+      };
+  }, []);
+
   const loadTopupGiftcodes = async () => {
       setLoadingGiftcodes(true);
       try {
@@ -50,7 +78,21 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
   const openCheckoutModal = async (pkg: CreditPackage) => {
       setSelectedPackage(pkg);
       setGiftcodeInput('');
-      await loadTopupGiftcodes();
+      if (topupGiftcodes.length === 0) {
+          const cachedRows = getCachedTopupGiftcodes();
+          if (cachedRows.length > 0) {
+              setTopupGiftcodes(cachedRows);
+          } else {
+              void getTopupGiftcodePreviews().then((rows) => {
+                  if (rows.length > 0) {
+                      setTopupGiftcodes(rows);
+                  }
+              }).catch((error) => {
+                  console.warn('Failed to load topup giftcode previews', error);
+              });
+          }
+          void loadTopupGiftcodes();
+      }
   };
 
   // Update Countdown Timer based on Campaign End Time
@@ -207,7 +249,7 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
                             </div>
 
                             <div className="max-h-[430px] space-y-3 overflow-y-auto pr-1">
-                                {loadingGiftcodes ? (
+                                {loadingGiftcodes && availableTopupGiftcodes.length === 0 ? (
                                     <div className="flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 py-10 text-slate-400">
                                         <Icons.Loader className="mr-2 h-4 w-4 animate-spin" /> Đang tải mã ưu đãi
                                     </div>

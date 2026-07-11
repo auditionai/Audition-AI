@@ -47,6 +47,8 @@ const USER_HISTORY_FETCH_LIMIT = 200;
 const ADMIN_STATS_TRANSACTION_LIMIT = 1000;
 const ADMIN_STATS_USAGE_LOG_LIMIT = 3000;
 const ADMIN_STATS_USER_PAGE_SIZE = 500;
+const TOPUP_GIFTCODE_CACHE_KEY = 'auditionai:topup-giftcodes:v1';
+const TOPUP_GIFTCODE_CACHE_TTL_MS = 10 * 60_000;
 
 type TimedCache<T> = {
     value: T;
@@ -1927,6 +1929,42 @@ export type TopupGiftcodeOffer = {
     lastUsedAt?: string | null;
 };
 
+export const getCachedTopupGiftcodes = (): TopupGiftcodeOffer[] => {
+    if (typeof window === 'undefined') return [];
+
+    try {
+        const raw = window.localStorage.getItem(TOPUP_GIFTCODE_CACHE_KEY);
+        const parsed = raw ? JSON.parse(raw) : null;
+        if (!parsed || !Array.isArray(parsed.rows)) return [];
+        if (!Number.isFinite(Number(parsed.cachedAt)) || Date.now() - Number(parsed.cachedAt) > TOPUP_GIFTCODE_CACHE_TTL_MS) {
+            return [];
+        }
+
+        return parsed.rows.filter((row: TopupGiftcodeOffer) => {
+            const remainingPerUser = Number(row.remainingPerUser ?? row.maxPerUser ?? 1);
+            return row.status === 'available' && remainingPerUser > 0;
+        });
+    } catch {
+        return [];
+    }
+};
+
+const cacheTopupGiftcodes = (rows: TopupGiftcodeOffer[]) => {
+    if (typeof window === 'undefined' || rows.length === 0) return;
+
+    try {
+        window.localStorage.setItem(
+            TOPUP_GIFTCODE_CACHE_KEY,
+            JSON.stringify({
+                cachedAt: Date.now(),
+                rows,
+            }),
+        );
+    } catch {
+        // Ignore cache write failures.
+    }
+};
+
 const buildRandomTopupGiftcodeSuffix = () => {
     const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     return Array.from({ length: 5 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
@@ -1948,7 +1986,7 @@ const isGeneratedTopupChildRow = (row: any) => {
         && isConcreteGeneratedTopupCode(code);
 };
 
-const getTopupGiftcodesFromPublicTemplates = async (): Promise<TopupGiftcodeOffer[]> => {
+export const getTopupGiftcodePreviews = async (): Promise<TopupGiftcodeOffer[]> => {
     if (!supabase) return [];
 
     const { data, error } = await supabase
@@ -1964,7 +2002,7 @@ const getTopupGiftcodesFromPublicTemplates = async (): Promise<TopupGiftcodeOffe
     }
 
     const now = Date.now();
-    return (data || [])
+    const previewRows = (data || [])
         .map((row: any): TopupGiftcodeOffer | null => {
             const prefix = String(row.code || '').trim().toUpperCase();
             if (!prefix) return null;
@@ -1995,6 +2033,9 @@ const getTopupGiftcodesFromPublicTemplates = async (): Promise<TopupGiftcodeOffe
             };
         })
         .filter(Boolean) as TopupGiftcodeOffer[];
+
+    cacheTopupGiftcodes(previewRows);
+    return previewRows;
 };
 
 export const getTopupGiftcodes = async (): Promise<TopupGiftcodeOffer[]> => {
@@ -2015,20 +2056,24 @@ export const getTopupGiftcodes = async (): Promise<TopupGiftcodeOffer[]> => {
 
         const rows = Array.isArray(payload.giftcodes) ? payload.giftcodes : [];
         if (rows.length > 0) {
-            return rows.filter((row: TopupGiftcodeOffer) => {
+            const availableRows = rows.filter((row: TopupGiftcodeOffer) => {
                 const remainingPerUser = Number(row.remainingPerUser ?? row.maxPerUser ?? 1);
                 return row.status === 'available' && remainingPerUser > 0;
             });
+            cacheTopupGiftcodes(availableRows);
+            return availableRows;
         }
     } catch (error) {
         console.warn('[TopUp] API giftcode list failed, using public template fallback', error);
     }
 
-    const fallbackRows = await getTopupGiftcodesFromPublicTemplates();
-    return fallbackRows.filter((row) => {
+    const fallbackRows = await getTopupGiftcodePreviews();
+    const availableFallbackRows = fallbackRows.filter((row) => {
         const remainingPerUser = Number(row.remainingPerUser ?? row.maxPerUser ?? 1);
         return row.status === 'available' && remainingPerUser > 0;
     });
+    cacheTopupGiftcodes(availableFallbackRows);
+    return availableFallbackRows;
 };
 
 export const createPaymentLink = async (packageId: string, topupGiftcode?: string): Promise<Transaction> => {

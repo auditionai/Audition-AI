@@ -1283,12 +1283,12 @@ begin
       gc.assigned_user_id is null
       and (
         gc.auto_generate_per_user is true
-        or gc.code !~ '-[A-Z0-9]{5}$'
+        or gc.code !~ '-[A-Z0-9]{5,8}$'
       )
     )
     and not (
       gc.assigned_user_id = p_user_id
-      and gc.code ~ '-[A-Z0-9]{5}$'
+      and gc.code ~ '-[A-Z0-9]{5,8}$'
       and coalesce(uu.count, 0) = 0
     )
     and (gc.assigned_user_id is null or gc.assigned_user_id = p_user_id)
@@ -1375,7 +1375,7 @@ begin
   if v_code.assigned_user_id is null
     and (
       v_code.auto_generate_per_user is true
-      or v_code.code !~ '-[A-Z0-9]{5}$'
+      or v_code.code !~ '-[A-Z0-9]{5,8}$'
     ) then
     return query select false, v_code.id, v_code.code, v_code.discount_percent, 0::numeric, p_original_amount_vnd, 'GIFT_CODE_INVALID'::text;
     return;
@@ -1383,7 +1383,7 @@ begin
 
   v_campaign_key := upper(btrim(coalesce(
     v_code.campaign_key,
-    regexp_replace(v_code.code, '-[A-Z0-9]{5}$', ''),
+    regexp_replace(v_code.code, '-[A-Z0-9]{5,8}$', ''),
     v_code.code
   )));
 
@@ -1404,7 +1404,7 @@ begin
     and tgu.status = 'reserved'
     and pt.status = 'pending'
     and tgu.payment_transaction_id is distinct from p_payment_transaction_id
-    and upper(btrim(coalesce(gc.campaign_key, regexp_replace(gc.code, '-[A-Z0-9]{5}$', ''), gc.code))) = v_campaign_key
+    and upper(btrim(coalesce(gc.campaign_key, regexp_replace(gc.code, '-[A-Z0-9]{5,8}$', ''), gc.code))) = v_campaign_key
   limit 1;
 
   if v_pending_reservation_id is not null then
@@ -1416,7 +1416,7 @@ begin
   from public.topup_gift_code_usages tgu
   join public.gift_codes gc on gc.id = tgu.gift_code_id
   where tgu.status = 'applied'
-    and upper(btrim(coalesce(gc.campaign_key, regexp_replace(gc.code, '-[A-Z0-9]{5}$', ''), gc.code))) = v_campaign_key;
+    and upper(btrim(coalesce(gc.campaign_key, regexp_replace(gc.code, '-[A-Z0-9]{5,8}$', ''), gc.code))) = v_campaign_key;
 
   if v_total_used >= coalesce(v_code.total_limit, 0) then
     return query select false, v_code.id, v_code.code, v_code.discount_percent, 0::numeric, p_original_amount_vnd, 'GIFT_CODE_TOPUP_EXPIRED_OR_LIMIT'::text;
@@ -1428,7 +1428,7 @@ begin
   join public.gift_codes gc on gc.id = tgu.gift_code_id
   where tgu.user_id = p_user_id
     and tgu.status = 'applied'
-    and upper(btrim(coalesce(gc.campaign_key, regexp_replace(gc.code, '-[A-Z0-9]{5}$', ''), gc.code))) = v_campaign_key;
+    and upper(btrim(coalesce(gc.campaign_key, regexp_replace(gc.code, '-[A-Z0-9]{5,8}$', ''), gc.code))) = v_campaign_key;
 
   if v_user_used >= coalesce(v_code.max_per_user, 1) then
     return query select false, v_code.id, v_code.code, v_code.discount_percent, 0::numeric, p_original_amount_vnd, 'GIFT_CODE_ALREADY_USED_BY_USER'::text;
@@ -1501,7 +1501,7 @@ begin
     returning gift_code_id
   ),
   applied_codes as (
-    select gc.id, upper(btrim(coalesce(gc.campaign_key, regexp_replace(gc.code, '-[A-Z0-9]{5}$', ''), gc.code))) as campaign_key
+    select gc.id, upper(btrim(coalesce(gc.campaign_key, regexp_replace(gc.code, '-[A-Z0-9]{5,8}$', ''), gc.code))) as campaign_key
     from public.gift_codes gc
     join updated_usage uu on uu.gift_code_id = gc.id
   ),

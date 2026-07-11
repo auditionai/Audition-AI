@@ -1,4 +1,5 @@
 import type { Handler } from '@netlify/functions';
+import { randomInt } from 'node:crypto';
 import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 
 const headers = {
@@ -10,7 +11,7 @@ const headers = {
 
 const buildRandomTopupGiftcode = (discountPercent: number) => {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  const suffix = Array.from({ length: 5 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
+  const suffix = Array.from({ length: 8 }, () => alphabet[randomInt(alphabet.length)]).join('');
   return suffix;
 };
 
@@ -62,7 +63,7 @@ export const handler: Handler = async (event) => {
     const syntheticGiftcodes = [];
     for (const template of templates || []) {
       const prefix = String(template.code || '').trim().toUpperCase();
-      const isGeneratedConcreteShape = /^.+-[A-Z0-9]{5}$/.test(prefix);
+      const isGeneratedConcreteShape = /^.+-[A-Z0-9]{5,8}$/.test(prefix);
       if (isGeneratedConcreteShape && template.auto_generate_per_user !== true) continue;
       const campaignKey = String(template.campaign_key || prefix).trim().toUpperCase();
       if (!prefix || concreteCampaigns.has(campaignKey)) continue;

@@ -90,14 +90,19 @@ const ensureGeneratedTopupGiftcode = async (admin: any, userId: string, generate
   const code = generatedCode.trim().toUpperCase();
   const { data: exact, error: exactError } = await admin
     .from('gift_codes')
-    .select('id')
+    .select('id, assigned_user_id, code_type')
     .eq('code', code)
     .maybeSingle();
 
   if (exactError) throw exactError;
-  if (exact?.id) return { giftCodeId: exact.id, templateId: null };
+  if (exact?.id) {
+    if (exact.code_type === 'topup_discount' && exact.assigned_user_id && exact.assigned_user_id !== userId) {
+      throw new Error('GIFT_CODE_GENERATED_COLLISION');
+    }
+    return { giftCodeId: exact.id, templateId: null };
+  }
 
-  const match = code.match(/^(.+)-([A-Z0-9]{5})$/);
+  const match = code.match(/^(.+)-([A-Z0-9]{5,8})$/);
   if (!match) return { giftCodeId: null, templateId: null };
 
   const prefix = match[1];
@@ -111,7 +116,7 @@ const ensureGeneratedTopupGiftcode = async (admin: any, userId: string, generate
 
   if (templateError) throw templateError;
   if (!template?.id) return { giftCodeId: null, templateId: null };
-  if (template.auto_generate_per_user !== true && /^.+-[A-Z0-9]{5}$/.test(String(template.code || '').trim().toUpperCase())) {
+  if (template.auto_generate_per_user !== true && /^.+-[A-Z0-9]{5,8}$/.test(String(template.code || '').trim().toUpperCase())) {
     return { giftCodeId: null, templateId: null };
   }
   if (template.is_active !== true || (template.expires_at && new Date(template.expires_at).getTime() < Date.now())) {

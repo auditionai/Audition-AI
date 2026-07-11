@@ -154,12 +154,12 @@ begin
       gc.assigned_user_id is null
       and (
         gc.auto_generate_per_user is true
-        or gc.code !~ '-[A-Z0-9]{5}$'
+        or gc.code !~ '-[A-Z0-9]{5,8}$'
       )
     )
     and not (
       gc.assigned_user_id = p_user_id
-      and gc.code ~ '-[A-Z0-9]{5}$'
+      and gc.code ~ '-[A-Z0-9]{5,8}$'
       and coalesce(uu.count, 0) = 0
     )
     and (gc.assigned_user_id is null or gc.assigned_user_id = p_user_id)
@@ -230,7 +230,7 @@ begin
   if v_code.assigned_user_id is null
     and (
       v_code.auto_generate_per_user is true
-      or v_code.code !~ '-[A-Z0-9]{5}$'
+      or v_code.code !~ '-[A-Z0-9]{5,8}$'
     ) then
     return query select false, v_code.id, v_code.code, v_code.discount_percent, 0::numeric, p_original_amount_vnd, 'GIFT_CODE_INVALID'::text;
     return;

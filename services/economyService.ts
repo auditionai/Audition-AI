@@ -1967,16 +1967,21 @@ const cacheTopupGiftcodes = (rows: TopupGiftcodeOffer[]) => {
 
 const buildRandomTopupGiftcodeSuffix = () => {
     const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    return Array.from({ length: 5 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
+    if (typeof window !== 'undefined' && window.crypto?.getRandomValues) {
+        const bytes = new Uint8Array(8);
+        window.crypto.getRandomValues(bytes);
+        return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join('');
+    }
+    return Array.from({ length: 8 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
 };
 
-const isConcreteGeneratedTopupCode = (code: string) => /^.+-[A-Z0-9]{5}$/.test(code.trim().toUpperCase());
+const isConcreteGeneratedTopupCode = (code: string) => /^.+-[A-Z0-9]{5,8}$/.test(code.trim().toUpperCase());
 
 const getTopupCampaignKey = (row: any) => {
     const explicitCampaignKey = String(row?.campaign_key || '').trim().toUpperCase();
     if (explicitCampaignKey) return explicitCampaignKey;
     const code = String(row?.code || '').trim().toUpperCase();
-    return isConcreteGeneratedTopupCode(code) ? code.replace(/-[A-Z0-9]{5}$/, '') : code;
+    return isConcreteGeneratedTopupCode(code) ? code.replace(/-[A-Z0-9]{5,8}$/, '') : code;
 };
 
 const isGeneratedTopupChildRow = (row: any) => {

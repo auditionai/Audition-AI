@@ -107,6 +107,14 @@ export const Gallery: React.FC = () => {
     }),
     [images],
   );
+  const hasActiveGenerationJobs = useMemo(
+    () =>
+      images.some((image) => {
+        const status = getImageStatus(image);
+        return status === 'queued' || status === 'processing' || status === 'rescuing';
+      }),
+    [images],
+  );
 
   const loadImages = useCallback(async () => {
     try {
@@ -180,6 +188,17 @@ export const Gallery: React.FC = () => {
       unsubscribe();
     };
   }, [loadImages]);
+
+  useEffect(() => {
+    if (activeTab !== 'generation' || !hasActiveGenerationJobs) return;
+
+    const interval = setInterval(() => {
+      invalidateGalleryCache();
+      void loadImages();
+    }, 8000);
+
+    return () => clearInterval(interval);
+  }, [activeTab, hasActiveGenerationJobs, loadImages]);
 
   useEffect(() => {
     if (activeTab !== 'transactions') return;

@@ -2,7 +2,7 @@
 import { createPortal } from 'react-dom';
 import { GeneratedImage, Language, HistoryItem } from '../types';
 import type { QueueProgressLogEntry } from '../shared/queueRecipes';
-import { checkR2Connection, getAllImagesFromStorage, deleteImageFromStorage, cleanupExpiredImages, getHistoryRetentionDays, publishImageToShowcase, subscribeToGeneratedImagesRealtime } from '../services/storageService';
+import { checkR2Connection, getAllImagesFromStorage, deleteImageFromStorage, cleanupExpiredImages, getHistoryRetentionDays, publishImageToShowcase, subscribeToGeneratedImagesRealtime, invalidateGalleryCache } from '../services/storageService';
 import { getUnifiedHistory } from '../services/economyService';
 import { downloadAssetToBrowser } from '../services/downloadService';
 import { Icons } from '../components/Icons';
@@ -39,6 +39,12 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
       console.error("Failed to load gallery", error);
     }
   }, []);
+  const hasActiveGenerationJobs = useMemo(() => {
+      return images.some((image) => {
+          const status = image.displayStatus || image.status;
+          return status === 'queued' || status === 'processing' || status === 'rescuing';
+      });
+  }, [images]);
 
   useEffect(() => {
     const init = async () => {
@@ -127,6 +133,19 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
           unsubscribe();
       };
   }, [loadImages]);
+
+  useEffect(() => {
+      if (activeTab !== 'generation' || !hasActiveGenerationJobs) return;
+
+      const interval = setInterval(() => {
+          invalidateGalleryCache();
+          loadImages(true).catch((error) => {
+              console.warn('[Gallery] Active job refresh failed', error);
+          });
+      }, 8000);
+
+      return () => clearInterval(interval);
+  }, [activeTab, hasActiveGenerationJobs, loadImages]);
 
   useEffect(() => {
       if (!viewingImage) return;

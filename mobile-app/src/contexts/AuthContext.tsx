@@ -4,9 +4,9 @@
  * Mirrors the auth flow from desktop App.tsx but via React Context.
  */
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { supabase, getSupabaseSession, getSupabaseUser } from '../services/supabaseClient';
-import { getUserProfile, logVisit, updateLastActive, subscribeMaintenanceMode, invalidateUserProfileCache } from '../services/economyService';
+import { getUserProfile, getTopupGiftcodes, logVisit, updateLastActive, subscribeMaintenanceMode, invalidateUserProfileCache } from '../services/economyService';
 import { setAnalyticsUser, trackEvent } from '../services/analyticsService';
 import type { UserProfile } from '../types';
 
@@ -31,6 +31,7 @@ export const useAuth = () => {
 };
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const warmedUserDataRef = useRef<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -65,11 +66,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const warmupAuthenticatedData = (userId: string) => {
+    if (!userId || warmedUserDataRef.current === userId) return;
+    warmedUserDataRef.current = userId;
+
+    void getTopupGiftcodes().catch((error) => {
+      warmedUserDataRef.current = null;
+      console.warn('[AuthContext] Failed to warm up topup giftcodes', error);
+    });
+  };
+
   const logout = async () => {
     if (supabase) {
       await supabase.auth.signOut();
     }
     setAnalyticsUser(null);
+    warmedUserDataRef.current = null;
     setIsAuthenticated(false);
     setUser(null);
     setUserRole('user');
@@ -103,6 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setIsAuthenticated(true);
           setAnalyticsUser(session.user.id);
           await checkAdminRole(session.user.id);
+          warmupAuthenticatedData(session.user.id);
         }
         setIsLoading(false);
       });
@@ -120,6 +133,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
             setIsLoading(true);
             void checkAdminRole(session.user.id)
+              .then(() => {
+                warmupAuthenticatedData(session.user.id);
+              })
               .finally(() => {
                 setIsLoading(false);
               });
@@ -127,6 +143,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         } else {
           setAnalyticsUser(null);
+          warmedUserDataRef.current = null;
           if (event === 'SIGNED_OUT') {
             trackEvent('logout');
           }

@@ -1230,11 +1230,10 @@ begin
   end if;
 
   return query
-  with paid_topups as (
-    select count(*)::integer as count
-    from public.payment_transactions pt
-    where pt.user_id = p_user_id
-      and pt.status = 'paid'
+  with user_profile as (
+    select u.created_at
+    from public.users u
+    where u.id = p_user_id
   ),
   usage_counts as (
     select tgu.gift_code_id, count(*)::bigint as count
@@ -1271,7 +1270,7 @@ begin
       when coalesce(uc.count, 0) >= gc.total_limit then 'limit_reached'
       when coalesce(uu.count, 0) >= gc.max_per_user then 'used'
       when gc.audience = 'specific_user' and gc.assigned_user_id is distinct from p_user_id then 'unavailable'
-      when gc.audience = 'new_user_first_topup' and (select count from paid_topups) > 0 then 'unavailable'
+      when gc.audience = 'new_user_first_topup' and coalesce((select created_at from user_profile), to_timestamp(0)) < timestamptz '2026-06-01 00:00:00+07' then 'unavailable'
       else 'available'
     end as status,
     uu.last_used_at
@@ -1332,7 +1331,7 @@ declare
   v_campaign_key text;
   v_total_used integer := 0;
   v_user_used integer := 0;
-  v_paid_topups integer := 0;
+  v_user_created_at timestamptz;
   v_pending_reservation_id uuid;
   v_discount numeric := 0;
   v_final numeric := 0;
@@ -1446,12 +1445,12 @@ begin
   end if;
 
   if v_code.audience = 'new_user_first_topup' then
-    select count(*) into v_paid_topups
-    from public.payment_transactions pt
-    where pt.user_id = p_user_id
-      and pt.status = 'paid';
+    select u.created_at
+    into v_user_created_at
+    from public.users u
+    where u.id = p_user_id;
 
-    if v_paid_topups > 0 then
+    if coalesce(v_user_created_at, to_timestamp(0)) < timestamptz '2026-06-01 00:00:00+07' then
       return query select false, v_code.id, v_code.code, v_code.discount_percent, 0::numeric, p_original_amount_vnd, 'GIFT_CODE_FIRST_TOPUP_ONLY'::text;
       return;
     end if;

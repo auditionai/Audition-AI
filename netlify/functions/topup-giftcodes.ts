@@ -15,6 +15,14 @@ const buildRandomTopupGiftcode = (discountPercent: number) => {
   return suffix;
 };
 
+const FIRST_TOPUP_GIFTCODE_ELIGIBLE_FROM_MS = Date.parse('2026-06-01T00:00:00+07:00');
+
+const isFirstTopupEligibleCreatedAt = (createdAt?: string | null) => {
+  if (!createdAt) return false;
+  const createdAtMs = new Date(createdAt).getTime();
+  return Number.isFinite(createdAtMs) && createdAtMs >= FIRST_TOPUP_GIFTCODE_ELIGIBLE_FROM_MS;
+};
+
 export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers, body: '' };
@@ -46,11 +54,13 @@ export const handler: Handler = async (event) => {
     const rpcUnavailable = Boolean(error && /get_available_topup_giftcodes|function|schema|campaign_key|structure|topup_gift/i.test(error.message || ''));
     if (error && !rpcUnavailable) throw error;
 
-    const { count: paidTopupCount } = await admin
-      .from('payment_transactions')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .eq('status', 'paid');
+    const { data: profile } = await admin
+      .from('users')
+      .select('created_at')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    const firstTopupEligibleByCreatedAt = isFirstTopupEligibleCreatedAt(profile?.created_at);
 
     const concreteCodes = !rpcUnavailable && Array.isArray(data) ? data : [];
     const concreteCampaigns = new Set(
@@ -68,7 +78,7 @@ export const handler: Handler = async (event) => {
       const campaignKey = String(template.campaign_key || prefix).trim().toUpperCase();
       if (!prefix || concreteCampaigns.has(campaignKey)) continue;
       if (template.expires_at && template.expires_at < nowIso) continue;
-      if (template.audience === 'new_user_first_topup' && Number(paidTopupCount || 0) > 0) continue;
+      if (template.audience === 'new_user_first_topup' && !firstTopupEligibleByCreatedAt) continue;
 
       const { count: usedCount, error: usedCountError } = await admin
         .from('topup_gift_code_usages')

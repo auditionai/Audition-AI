@@ -49,6 +49,7 @@ const ADMIN_STATS_USAGE_LOG_LIMIT = 3000;
 const ADMIN_STATS_USER_PAGE_SIZE = 500;
 const TOPUP_GIFTCODE_CACHE_KEY = 'auditionai:topup-giftcodes:v1';
 const TOPUP_GIFTCODE_CACHE_TTL_MS = 10 * 60_000;
+const FIRST_TOPUP_GIFTCODE_ELIGIBLE_FROM_MS = Date.parse('2026-06-01T00:00:00+07:00');
 
 type TimedCache<T> = {
     value: T;
@@ -649,6 +650,7 @@ const mapUserRowToProfile = (data: any): UserProfile => ({
     role: data.is_admin ? 'admin' : 'user',
     isVip: false,
     usedGiftcodes: [],
+    createdAt: data.created_at || null,
     lastActive: data.last_active || null,
     accountStatus: data.account_status || 'active',
     accountWarning: data.account_warning || null,
@@ -1929,6 +1931,18 @@ export type TopupGiftcodeOffer = {
     lastUsedAt?: string | null;
 };
 
+const isFirstTopupGiftcodeEligibleProfile = (profile?: Pick<UserProfile, 'createdAt'> | null) => {
+    if (!profile?.createdAt) return false;
+    const createdAtMs = new Date(profile.createdAt).getTime();
+    return Number.isFinite(createdAtMs) && createdAtMs >= FIRST_TOPUP_GIFTCODE_ELIGIBLE_FROM_MS;
+};
+
+const canShowTopupGiftcodeAudience = (audience: string, profile?: Pick<UserProfile, 'createdAt'> | null) => {
+    if (audience === 'all') return true;
+    if (audience === 'new_user_first_topup') return isFirstTopupGiftcodeEligibleProfile(profile);
+    return false;
+};
+
 export const getCachedTopupGiftcodes = (): TopupGiftcodeOffer[] => {
     if (typeof window === 'undefined') return [];
 
@@ -1940,9 +1954,10 @@ export const getCachedTopupGiftcodes = (): TopupGiftcodeOffer[] => {
             return [];
         }
 
+        const cachedProfile = userProfileCache?.expiresAt && userProfileCache.expiresAt > Date.now() ? userProfileCache.value : null;
         return parsed.rows.filter((row: TopupGiftcodeOffer) => {
             const remainingPerUser = Number(row.remainingPerUser ?? row.maxPerUser ?? 1);
-            return row.status === 'available' && remainingPerUser > 0;
+            return row.status === 'available' && remainingPerUser > 0 && canShowTopupGiftcodeAudience(String(row.audience || 'all'), cachedProfile);
         });
     } catch {
         return [];
@@ -1952,7 +1967,41 @@ export const getCachedTopupGiftcodes = (): TopupGiftcodeOffer[] => {
 const cacheTopupGiftcodes = (rows: TopupGiftcodeOffer[]) => {
     if (typeof window === 'undefined' || rows.length === 0) return;
 
+    const cacheableRows = rows.filter((row) => ['all', 'new_user_first_topup'].includes(String(row.audience || 'all')));
+    if (cacheableRows.length === 0) return;
+
     try {
+        window.localStorage.setItem(
+            TOPUP_GIFTCODE_CACHE_KEY,
+            JSON.stringify({
+                cachedAt: Date.now(),
+                rows: cacheableRows,
+            }),
+        );
+    } catch {
+        // Ignore cache write failures.
+    }
+};
+
+const removeCachedTopupGiftcode = (code?: string | null) => {
+    if (typeof window === 'undefined' || !code) return;
+
+    try {
+        const normalizedCode = code.trim().toUpperCase();
+        const raw = window.localStorage.getItem(TOPUP_GIFTCODE_CACHE_KEY);
+        const parsed = raw ? JSON.parse(raw) : null;
+        if (!parsed || !Array.isArray(parsed.rows)) return;
+
+        const rows = parsed.rows.filter((row: TopupGiftcodeOffer) => {
+            const rowCode = String(row.code || '').trim().toUpperCase();
+            return rowCode !== normalizedCode && String(row.audience || 'all') !== 'new_user_first_topup';
+        });
+
+        if (rows.length === 0) {
+            window.localStorage.removeItem(TOPUP_GIFTCODE_CACHE_KEY);
+            return;
+        }
+
         window.localStorage.setItem(
             TOPUP_GIFTCODE_CACHE_KEY,
             JSON.stringify({
@@ -1961,7 +2010,7 @@ const cacheTopupGiftcodes = (rows: TopupGiftcodeOffer[]) => {
             }),
         );
     } catch {
-        // Ignore cache write failures.
+        // Ignore cache cleanup failures.
     }
 };
 
@@ -1994,6 +2043,7 @@ const isGeneratedTopupChildRow = (row: any) => {
 export const getTopupGiftcodePreviews = async (): Promise<TopupGiftcodeOffer[]> => {
     if (!supabase) return [];
 
+
     const { data, error } = await supabase
         .from('gift_codes')
         .select('id, code, campaign_key, discount_percent, total_limit, used_count, max_per_user, audience, expires_at, is_active, assigned_user_id, auto_generate_per_user, code_type')
@@ -2010,7 +2060,8 @@ export const getTopupGiftcodePreviews = async (): Promise<TopupGiftcodeOffer[]> 
     const previewRows = (data || [])
         .map((row: any): TopupGiftcodeOffer | null => {
             const prefix = String(row.code || '').trim().toUpperCase();
-            if (!prefix) return null;
+            const audience = String(row.audience || 'all');
+            if (!prefix || audience !== 'all') return null;
             if (isConcreteGeneratedTopupCode(prefix) && row.auto_generate_per_user !== true) return null;
 
             const expiresAt = row.expires_at || null;
@@ -2063,7 +2114,7 @@ export const getTopupGiftcodes = async (): Promise<TopupGiftcodeOffer[]> => {
         if (rows.length > 0) {
             const availableRows = rows.filter((row: TopupGiftcodeOffer) => {
                 const remainingPerUser = Number(row.remainingPerUser ?? row.maxPerUser ?? 1);
-                return row.status === 'available' && remainingPerUser > 0;
+                return row.status === 'available' && remainingPerUser > 0 && ['all', 'new_user_first_topup'].includes(String(row.audience || 'all'));
             });
             cacheTopupGiftcodes(availableRows);
             return availableRows;
@@ -2075,7 +2126,7 @@ export const getTopupGiftcodes = async (): Promise<TopupGiftcodeOffer[]> => {
     const fallbackRows = await getTopupGiftcodePreviews();
     const availableFallbackRows = fallbackRows.filter((row) => {
         const remainingPerUser = Number(row.remainingPerUser ?? row.maxPerUser ?? 1);
-        return row.status === 'available' && remainingPerUser > 0;
+        return row.status === 'available' && remainingPerUser > 0 && ['all', 'new_user_first_topup'].includes(String(row.audience || 'all'));
     });
     cacheTopupGiftcodes(availableFallbackRows);
     return availableFallbackRows;
@@ -2126,6 +2177,8 @@ export const createPaymentLink = async (packageId: string, topupGiftcode?: strin
         if (!res.ok || !paymentData?.success || !tx?.checkoutUrl) {
             throw new Error(paymentData?.desc || paymentData?.error || 'Failed to create payment checkout URL');
         }
+
+        removeCachedTopupGiftcode(tx.topupGiftcode || topupGiftcode);
 
         if (typeof window !== 'undefined') {
             try {

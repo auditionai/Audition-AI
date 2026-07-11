@@ -310,6 +310,7 @@ export interface UserProfile {
   isVip: boolean;
   password?: string; // Mock password field for admin editing
   usedGiftcodes?: string[]; // Track used codes
+  createdAt?: string;
   lastActive?: string; // New: Last active timestamp
   usageCount?: number; // New: Total AI generations/usages
   accountStatus?: 'active' | 'locked' | string;

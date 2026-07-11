@@ -16,7 +16,7 @@ import { ManualPaymentGateway } from './views/ManualPaymentGateway';
 import { Language, Theme, ViewId, Feature } from './types';
 import { APP_CONFIG } from './constants';
 import { getSupabaseSession, getSupabaseUser, supabase } from './services/supabaseClient';
-import { getUserProfile, logVisit, updateLastActive, subscribeMaintenanceMode, getSystemAnnouncementConfig, getFeatureMaintenanceConfig, isFeatureInMaintenance, type FeatureMaintenanceConfig, type SystemAnnouncementConfig } from './services/economyService';
+import { getUserProfile, getTopupGiftcodes, logVisit, updateLastActive, subscribeMaintenanceMode, getSystemAnnouncementConfig, getFeatureMaintenanceConfig, isFeatureInMaintenance, type FeatureMaintenanceConfig, type SystemAnnouncementConfig } from './services/economyService';
 import { NotificationProvider, useNotification } from './components/NotificationSystem';
 import { AppEventPopup, AppEventPopupData, SystemAnnouncementModal } from './components/AppNotificationPopups';
 import { AppTour } from './components/AppTour';
@@ -205,6 +205,7 @@ const buildDesktopPath = (view: ViewId, selectedFeature: Feature | null) => {
 function AppContent() {
   const desktopHistoryModeRef = useRef<'replace' | 'push'>('replace');
   const notifiedTerminalJobsRef = useRef<Set<string>>(new Set());
+  const warmedUserDataRef = useRef<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userRole, setUserRole] = useState<'user' | 'admin'>('user');
   const [lang, setLang] = useState<Language>(APP_CONFIG.ui.default_language);
@@ -265,6 +266,16 @@ function AppContent() {
     });
   }, [readPendingPaymentMeta]);
 
+  const warmupAuthenticatedData = useCallback((userId: string) => {
+    if (!userId || warmedUserDataRef.current === userId) return;
+    warmedUserDataRef.current = userId;
+
+    void getTopupGiftcodes().catch((error) => {
+      warmedUserDataRef.current = null;
+      console.warn('[App] Failed to warm up topup giftcodes', error);
+    });
+  }, []);
+
   const applyDesktopRouteFromLocation = useCallback(() => {
     const resolved = resolveDesktopRoute();
     setCurrentView(resolved.view);
@@ -311,6 +322,7 @@ function AppContent() {
                 setIsAuthenticated(true);
                 setAnalyticsUser(session.user.id);
                 checkAdminRole(session.user.id);
+                warmupAuthenticatedData(session.user.id);
             }
         });
 
@@ -324,10 +336,12 @@ function AppContent() {
                         trackEvent('login', { method: 'supabase' });
                     }
                     checkAdminRole(session.user.id);
+                    warmupAuthenticatedData(session.user.id);
                     updateLastActive();
                 }
             } else {
                 setAnalyticsUser(null);
+                warmedUserDataRef.current = null;
                 if (event === 'SIGNED_OUT') {
                     trackEvent('logout');
                 }
@@ -569,6 +583,7 @@ function AppContent() {
           await supabase.auth.signOut();
       }
       setAnalyticsUser(null);
+      warmedUserDataRef.current = null;
       desktopHistoryModeRef.current = 'replace';
       setIsAuthenticated(false);
       setCurrentView('home');

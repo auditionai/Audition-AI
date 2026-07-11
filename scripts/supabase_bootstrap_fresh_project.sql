@@ -1230,11 +1230,10 @@ begin
   end if;
 
   return query
-  with paid_topups as (
-    select count(*)::integer as count
-    from public.payment_transactions pt
-    where pt.user_id = p_user_id
-      and pt.status = 'paid'
+  with user_profile as (
+    select u.created_at
+    from public.users u
+    where u.id = p_user_id
   ),
   usage_counts as (
     select tgu.gift_code_id, count(*)::bigint as count
@@ -1271,7 +1270,7 @@ begin
       when coalesce(uc.count, 0) >= gc.total_limit then 'limit_reached'
       when coalesce(uu.count, 0) >= gc.max_per_user then 'used'
       when gc.audience = 'specific_user' and gc.assigned_user_id is distinct from p_user_id then 'unavailable'
-      when gc.audience = 'new_user_first_topup' and (select count from paid_topups) > 0 then 'unavailable'
+      when gc.audience = 'new_user_first_topup' and coalesce((select created_at from user_profile), to_timestamp(0)) < timestamptz '2026-06-01 00:00:00+07' then 'unavailable'
       else 'available'
     end as status,
     uu.last_used_at
@@ -1283,12 +1282,12 @@ begin
       gc.assigned_user_id is null
       and (
         gc.auto_generate_per_user is true
-        or gc.code !~ '-[A-Z0-9]{5}$'
+        or gc.code !~ '-[A-Z0-9]{5,8}$'
       )
     )
     and not (
       gc.assigned_user_id = p_user_id
-      and gc.code ~ '-[A-Z0-9]{5}$'
+      and gc.code ~ '-[A-Z0-9]{5,8}$'
       and coalesce(uu.count, 0) = 0
     )
     and (gc.assigned_user_id is null or gc.assigned_user_id = p_user_id)
@@ -1332,7 +1331,7 @@ declare
   v_campaign_key text;
   v_total_used integer := 0;
   v_user_used integer := 0;
-  v_paid_topups integer := 0;
+  v_user_created_at timestamptz;
   v_pending_reservation_id uuid;
   v_discount numeric := 0;
   v_final numeric := 0;
@@ -1375,7 +1374,7 @@ begin
   if v_code.assigned_user_id is null
     and (
       v_code.auto_generate_per_user is true
-      or v_code.code !~ '-[A-Z0-9]{5}$'
+      or v_code.code !~ '-[A-Z0-9]{5,8}$'
     ) then
     return query select false, v_code.id, v_code.code, v_code.discount_percent, 0::numeric, p_original_amount_vnd, 'GIFT_CODE_INVALID'::text;
     return;
@@ -1383,7 +1382,7 @@ begin
 
   v_campaign_key := upper(btrim(coalesce(
     v_code.campaign_key,
-    regexp_replace(v_code.code, '-[A-Z0-9]{5}$', ''),
+    regexp_replace(v_code.code, '-[A-Z0-9]{5,8}$', ''),
     v_code.code
   )));
 
@@ -1404,7 +1403,7 @@ begin
     and tgu.status = 'reserved'
     and pt.status = 'pending'
     and tgu.payment_transaction_id is distinct from p_payment_transaction_id
-    and upper(btrim(coalesce(gc.campaign_key, regexp_replace(gc.code, '-[A-Z0-9]{5}$', ''), gc.code))) = v_campaign_key
+    and upper(btrim(coalesce(gc.campaign_key, regexp_replace(gc.code, '-[A-Z0-9]{5,8}$', ''), gc.code))) = v_campaign_key
   limit 1;
 
   if v_pending_reservation_id is not null then
@@ -1416,7 +1415,7 @@ begin
   from public.topup_gift_code_usages tgu
   join public.gift_codes gc on gc.id = tgu.gift_code_id
   where tgu.status = 'applied'
-    and upper(btrim(coalesce(gc.campaign_key, regexp_replace(gc.code, '-[A-Z0-9]{5}$', ''), gc.code))) = v_campaign_key;
+    and upper(btrim(coalesce(gc.campaign_key, regexp_replace(gc.code, '-[A-Z0-9]{5,8}$', ''), gc.code))) = v_campaign_key;
 
   if v_total_used >= coalesce(v_code.total_limit, 0) then
     return query select false, v_code.id, v_code.code, v_code.discount_percent, 0::numeric, p_original_amount_vnd, 'GIFT_CODE_TOPUP_EXPIRED_OR_LIMIT'::text;
@@ -1428,7 +1427,7 @@ begin
   join public.gift_codes gc on gc.id = tgu.gift_code_id
   where tgu.user_id = p_user_id
     and tgu.status = 'applied'
-    and upper(btrim(coalesce(gc.campaign_key, regexp_replace(gc.code, '-[A-Z0-9]{5}$', ''), gc.code))) = v_campaign_key;
+    and upper(btrim(coalesce(gc.campaign_key, regexp_replace(gc.code, '-[A-Z0-9]{5,8}$', ''), gc.code))) = v_campaign_key;
 
   if v_user_used >= coalesce(v_code.max_per_user, 1) then
     return query select false, v_code.id, v_code.code, v_code.discount_percent, 0::numeric, p_original_amount_vnd, 'GIFT_CODE_ALREADY_USED_BY_USER'::text;
@@ -1446,12 +1445,12 @@ begin
   end if;
 
   if v_code.audience = 'new_user_first_topup' then
-    select count(*) into v_paid_topups
-    from public.payment_transactions pt
-    where pt.user_id = p_user_id
-      and pt.status = 'paid';
+    select u.created_at
+    into v_user_created_at
+    from public.users u
+    where u.id = p_user_id;
 
-    if v_paid_topups > 0 then
+    if coalesce(v_user_created_at, to_timestamp(0)) < timestamptz '2026-06-01 00:00:00+07' then
       return query select false, v_code.id, v_code.code, v_code.discount_percent, 0::numeric, p_original_amount_vnd, 'GIFT_CODE_FIRST_TOPUP_ONLY'::text;
       return;
     end if;
@@ -1501,7 +1500,7 @@ begin
     returning gift_code_id
   ),
   applied_codes as (
-    select gc.id, upper(btrim(coalesce(gc.campaign_key, regexp_replace(gc.code, '-[A-Z0-9]{5}$', ''), gc.code))) as campaign_key
+    select gc.id, upper(btrim(coalesce(gc.campaign_key, regexp_replace(gc.code, '-[A-Z0-9]{5,8}$', ''), gc.code))) as campaign_key
     from public.gift_codes gc
     join updated_usage uu on uu.gift_code_id = gc.id
   ),

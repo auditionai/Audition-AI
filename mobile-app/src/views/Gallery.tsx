@@ -21,10 +21,9 @@ import {
 import { useNotification } from '../components/NotificationSystem';
 import { getUnifiedHistory } from '../services/economyService';
 import { QUEUE_SUBMITTED_EVENT } from '../services/serverQueueService';
-import { deleteImageFromStorage, getAllImagesFromStorage, invalidateGalleryCache, publishImageToShowcase, checkR2Connection, subscribeToGeneratedImagesRealtime } from '../services/storageService';
+import { deleteImageFromStorage, getAllImagesFromStorage, invalidateGalleryCache, publishImageToShowcase, checkR2Connection } from '../services/storageService';
 import { downloadAssetToBrowser } from '../../../services/downloadService';
 import type { GeneratedImage, HistoryItem } from '../types';
-import { getSupabaseUser } from '../services/supabaseClient';
 
 type GalleryFilter = 'all' | 'completed' | 'failed' | 'processing';
 type GalleryMediaFilter = 'all' | 'image' | 'video';
@@ -90,7 +89,6 @@ const getTransactionStatusLabel = (status: HistoryItem['status']) => {
 
 export const Gallery: React.FC = () => {
   const { notify, confirm } = useNotification();
-  const lastRealtimeRefreshAtRef = React.useRef(0);
   const [activeTab, setActiveTab] = useState<GalleryTab>('generation');
   const [images, setImages] = useState<GeneratedImage[]>([]);
   const [loadingImages, setLoadingImages] = useState(true);
@@ -139,9 +137,6 @@ export const Gallery: React.FC = () => {
     const handleQueueSubmitted = () => {
       if (refreshTimer) clearTimeout(refreshTimer);
       refreshTimer = setTimeout(() => {
-        if (Date.now() - lastRealtimeRefreshAtRef.current < 7000) {
-          return;
-        }
         invalidateGalleryCache();
         void loadImages();
       }, 5000);
@@ -151,41 +146,6 @@ export const Gallery: React.FC = () => {
     return () => {
       if (refreshTimer) clearTimeout(refreshTimer);
       window.removeEventListener(QUEUE_SUBMITTED_EVENT, handleQueueSubmitted);
-    };
-  }, [loadImages]);
-
-  useEffect(() => {
-    let isMounted = true;
-    let unsubscribe = () => {};
-    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
-
-    const scheduleRefresh = () => {
-      if (refreshTimer) clearTimeout(refreshTimer);
-      lastRealtimeRefreshAtRef.current = Date.now();
-      refreshTimer = setTimeout(() => {
-        if (!isMounted) return;
-        invalidateGalleryCache();
-        void loadImages();
-      }, 1000);
-    };
-
-    void (async () => {
-      try {
-        const user = await getSupabaseUser();
-        if (!isMounted || !user?.id) return;
-        unsubscribe = subscribeToGeneratedImagesRealtime({
-          userId: user.id,
-          onEvent: scheduleRefresh,
-        });
-      } catch (error) {
-        console.warn('[Gallery] Failed to start realtime subscription', error);
-      }
-    })();
-
-    return () => {
-      isMounted = false;
-      if (refreshTimer) clearTimeout(refreshTimer);
-      unsubscribe();
     };
   }, [loadImages]);
 

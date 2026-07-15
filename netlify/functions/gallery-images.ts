@@ -11,6 +11,7 @@ const headers = {
 
 const GALLERY_PAGE_LIMIT = 100;
 const LEDGER_RECOVERY_LIMIT = 24;
+const GALLERY_HISTORY_LOOKBACK_DAYS = 30;
 const ACTIVE_GALLERY_CACHE_TTL_MS = 10_000;
 const IDLE_GALLERY_CACHE_TTL_MS = 30_000;
 
@@ -30,11 +31,13 @@ const loadImagesFromLedgerReferences = async (
   admin: ReturnType<typeof getServiceRoleClient>,
   userId: string,
 ) => {
+  const sinceIso = new Date(Date.now() - GALLERY_HISTORY_LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString();
   const { data: ledgerRows, error: ledgerError } = await admin
     .from('vcoin_transactions')
     .select('reference_id,created_at')
     .eq('user_id', userId)
     .eq('reference_type', 'generated_image_charge')
+    .gte('created_at', sinceIso)
     .order('created_at', { ascending: false })
     .limit(LEDGER_RECOVERY_LIMIT);
 
@@ -96,7 +99,7 @@ export const handler: Handler = async (event) => {
   }
 
   try {
-    const { user } = await requireAuthenticatedUser(event);
+    const { user } = await requireAuthenticatedUser(event, { checkAccountStatus: false });
     const cached = galleryCache.get(user.id);
     if (cached && cached.expiresAt > Date.now()) {
       return {
@@ -153,6 +156,7 @@ export const handler: Handler = async (event) => {
         .select('reference_id,amount')
         .eq('user_id', user.id)
         .eq('reference_type', 'generated_image_charge')
+        .gte('created_at', new Date(Date.now() - GALLERY_HISTORY_LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString())
         .in('reference_id', idsMissingCost);
 
       if (chargesError) {
@@ -193,7 +197,7 @@ export const handler: Handler = async (event) => {
   } catch (error: any) {
     console.error('[gallery-images] failed:', error);
     try {
-      const { user } = await requireAuthenticatedUser(event);
+      const { user } = await requireAuthenticatedUser(event, { checkAccountStatus: false });
       const cached = galleryCache.get(user.id);
       if (cached?.body) {
         return {

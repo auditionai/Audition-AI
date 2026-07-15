@@ -24,7 +24,6 @@ import { PaymentGatewayView } from './views/PaymentGateway';
 import { syncPaymentTransaction } from './services/serverQueueService';
 import { trackEvent, trackPageView } from './services/analyticsService';
 import { getFeatureMaintenanceConfig, getSystemAnnouncementConfig, isFeatureInMaintenance, type FeatureMaintenanceConfig, type SystemAnnouncementConfig } from './services/economyService';
-import { getSupabaseUser, supabase } from './services/supabaseClient';
 import { AppEventPopup, type AppEventPopupData, SystemAnnouncementModal } from '../../components/AppNotificationPopups';
 import { AppTour } from '../../components/AppTour';
 import './mobile-shell.css';
@@ -160,7 +159,6 @@ function MobileRuntimeEffects() {
   const { isAuthenticated, maintenanceMode, userRole, user, logout } = useAuth();
 
   const handledPaymentReturnRef = useRef<string | null>(null);
-  const notifiedTerminalJobsRef = useRef<Set<string>>(new Set());
   const [systemAnnouncement, setSystemAnnouncement] = useState<SystemAnnouncementConfig | null>(null);
   const [showSystemAnnouncement, setShowSystemAnnouncement] = useState(false);
   const [eventPopup, setEventPopup] = useState<AppEventPopupData | null>(null);
@@ -278,77 +276,6 @@ function MobileRuntimeEffects() {
 
     void handleReturn();
   }, [location.pathname, location.search, navigate, notify, showPaymentSuccessPopup]);
-
-  useEffect(() => {
-    if (!isAuthenticated || !supabase) return;
-
-    let isDisposed = false;
-    let channel: any = null;
-
-    getSupabaseUser().then((authUser: any) => {
-      if (isDisposed || !authUser?.id) return;
-
-      channel = supabase
-        .channel(`mobile-terminal-events:${authUser.id}:${Date.now()}`)
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'generated_images',
-            filter: `user_id=eq.${authUser.id}`,
-          },
-          (payload: any) => {
-            const row = payload?.new || {};
-            const status = row.status;
-            if (status !== 'completed' && status !== 'failed') return;
-
-            const eventKey = `${row.id || row.job_id || payload.commit_timestamp}:${status}`;
-            if (notifiedTerminalJobsRef.current.has(eventKey)) return;
-            notifiedTerminalJobsRef.current.add(eventKey);
-
-            const assetLabel = row.asset_type === 'video' ? 'Video' : 'Ảnh';
-            if (status === 'completed') {
-              trackEvent('generation_job_completed', {
-                asset_type: row.asset_type || 'unknown',
-                tool_id: row.tool_id,
-              });
-              setEventPopup({
-                type: 'generation_success',
-                title: `${assetLabel} đã tạo thành công`,
-                message: `${assetLabel} của bạn đã tạo thành công bởi AUDITION AI.`,
-                actionLabel: 'Xem kết quả',
-              });
-              return;
-            }
-
-            trackEvent('generation_job_failed', {
-              asset_type: row.asset_type || 'unknown',
-              tool_id: row.tool_id,
-              error_message: row.error_message ? String(row.error_message).slice(0, 120) : 'unknown',
-            });
-            setEventPopup({
-              type: 'generation_failed',
-              title: `${assetLabel} tạo thất bại`,
-              message: row.error_message || `${assetLabel} của bạn tạo thất bại. Vui lòng kiểm tra lịch sử tạo để xem chi tiết.`,
-              actionLabel: 'Xem lịch sử',
-            });
-          },
-        )
-        .subscribe((status: string) => {
-          if (status === 'CHANNEL_ERROR') {
-            console.warn('[Mobile] Realtime terminal event subscription failed.');
-          }
-        });
-    });
-
-    return () => {
-      isDisposed = true;
-      if (channel) {
-        void supabase.removeChannel(channel);
-      }
-    };
-  }, [isAuthenticated]);
 
   if (!isAuthenticated) {
     return null;

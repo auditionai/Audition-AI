@@ -719,7 +719,19 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
     }
 
     const cost = calculateCost();
-    const user = await getUserProfile();
+    let user;
+    try {
+      user = await getUserProfile({ force: true });
+    } catch (error) {
+      console.warn('[VideoTool] Failed to verify current balance', error);
+      notify(
+        lang === 'vi'
+          ? 'Không thể xác minh số dư Vcoin lúc này. Vui lòng thử lại.'
+          : 'Unable to verify your Vcoin balance. Please try again.',
+        'error',
+      );
+      return;
+    }
     if (!user) return;
 
     if ((user.vcoin_balance || 0) < cost) {

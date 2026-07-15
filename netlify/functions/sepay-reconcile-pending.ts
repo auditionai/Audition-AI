@@ -22,9 +22,9 @@ type SePayPendingReconcileOptions = {
   maxRuntimeMs?: number;
 };
 
-const DEFAULT_RECONCILE_LIMIT = 25;
-const DEFAULT_RECONCILE_MAX_RUNTIME_MS = 15_000;
-const MIN_RECONCILE_RUNTIME_LEFT_MS = 3_000;
+const DEFAULT_RECONCILE_LIMIT = 5;
+const DEFAULT_RECONCILE_MAX_RUNTIME_MS = 8_000;
+const MIN_RECONCILE_RUNTIME_LEFT_MS = 2_000;
 
 export const runSePayPendingReconcile = async (options: SePayPendingReconcileOptions = {}) => {
   const startedAt = Date.now();
@@ -33,18 +33,20 @@ export const runSePayPendingReconcile = async (options: SePayPendingReconcileOpt
     : DEFAULT_RECONCILE_MAX_RUNTIME_MS;
   const limit = Number.isFinite(options.limit)
     ? Math.max(1, Math.min(Number(options.limit), 100))
-    : 10;
+    : DEFAULT_RECONCILE_LIMIT;
   const hasRuntimeBudget = () => Date.now() - startedAt < maxRuntimeMs - MIN_RECONCILE_RUNTIME_LEFT_MS;
   const admin = getServiceRoleClient();
   const staleBefore = new Date(Date.now() - 60_000).toISOString();
+  const recentWindowStart = new Date(Date.now() - 48 * 60 * 60_000).toISOString();
 
   const { data: transactions, error: listError } = await admin
     .from('payment_transactions')
     .select('id, user_id, amount_vnd, order_code, provider_order_code, status, payment_method, provider_payment_link_id, provider_payload, created_at')
     .in('status', ['pending', 'cancelled', 'failed'])
     .or('payment_method.eq.sepay,provider_payment_link_id.like.sepay:%')
+    .gte('created_at', recentWindowStart)
     .lte('created_at', staleBefore)
-    .order('created_at', { ascending: true })
+    .order('created_at', { ascending: false })
     .limit(limit);
 
   if (listError) throw listError;
@@ -281,4 +283,4 @@ const reconcilePendingSePay: Handler = async (event) => {
   }
 };
 
-export const handler = schedule('*/5 * * * *', reconcilePendingSePay);
+export const handler = schedule('*/15 * * * *', reconcilePendingSePay);

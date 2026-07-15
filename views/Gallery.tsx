@@ -2,13 +2,12 @@
 import { createPortal } from 'react-dom';
 import { GeneratedImage, Language, HistoryItem } from '../types';
 import type { QueueProgressLogEntry } from '../shared/queueRecipes';
-import { checkR2Connection, getAllImagesFromStorage, deleteImageFromStorage, getHistoryRetentionDays, publishImageToShowcase, subscribeToGeneratedImagesRealtime, invalidateGalleryCache } from '../services/storageService';
+import { checkR2Connection, getAllImagesFromStorage, deleteImageFromStorage, getHistoryRetentionDays, publishImageToShowcase, invalidateGalleryCache } from '../services/storageService';
 import { getUnifiedHistory } from '../services/economyService';
 import { downloadAssetToBrowser } from '../services/downloadService';
 import { Icons } from '../components/Icons';
 import { useNotification } from '../components/NotificationSystem';
 import { QUEUE_SUBMITTED_EVENT } from '../services/serverQueueService';
-import { getSupabaseUser } from '../services/supabaseClient';
 
 interface GalleryProps {
   lang: Language;
@@ -16,7 +15,6 @@ interface GalleryProps {
 
 export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
   const { notify, confirm } = useNotification();
-  const lastRealtimeRefreshAtRef = React.useRef(0);
   const [activeTab, setActiveTab] = useState<'generation' | 'transactions'>('generation');
 
   // Generation History State
@@ -70,10 +68,6 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
           }
 
           refreshTimer = setTimeout(() => {
-              if (Date.now() - lastRealtimeRefreshAtRef.current < 7000) {
-                  return;
-              }
-
               loadImages(true).catch((error) => {
                   console.warn('[Gallery] Fallback refresh after queue submit failed', error);
               });
@@ -90,47 +84,6 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
   }, [loadImages]);
 
   useEffect(() => {
-      let isMounted = true;
-      let unsubscribe = () => {};
-      let refreshTimer: ReturnType<typeof setTimeout> | null = null;
-
-      const scheduleRefresh = () => {
-          if (refreshTimer) {
-              clearTimeout(refreshTimer);
-          }
-
-          lastRealtimeRefreshAtRef.current = Date.now();
-          refreshTimer = setTimeout(() => {
-              if (!isMounted) return;
-              loadImages(true).catch((error) => {
-                  console.warn('[Gallery] Realtime refresh failed', error);
-              });
-          }, 1000);
-      };
-
-      void (async () => {
-          try {
-              const user = await getSupabaseUser();
-              if (!isMounted || !user?.id) return;
-              unsubscribe = subscribeToGeneratedImagesRealtime({
-                  userId: user.id,
-                  onEvent: scheduleRefresh,
-              });
-          } catch (error) {
-              console.warn('[Gallery] Failed to start realtime subscription', error);
-          }
-      })();
-
-      return () => {
-          isMounted = false;
-          if (refreshTimer) {
-              clearTimeout(refreshTimer);
-          }
-          unsubscribe();
-      };
-  }, [loadImages]);
-
-  useEffect(() => {
       if (activeTab !== 'generation' || !hasActiveGenerationJobs) return;
 
       const interval = setInterval(() => {
@@ -138,7 +91,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
           loadImages(true).catch((error) => {
               console.warn('[Gallery] Active job refresh failed', error);
           });
-      }, 8000);
+      }, 20_000);
 
       return () => clearInterval(interval);
   }, [activeTab, hasActiveGenerationJobs, loadImages]);

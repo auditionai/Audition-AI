@@ -533,7 +533,7 @@ export function WorkspaceVideo() {
     }
 
     const cost = calculateCost();
-    const profile = await getUserProfile();
+    const profile = await getUserProfile({ force: true });
     if ((profile.vcoin_balance || 0) < cost) {
       notify('Số dư không đủ!', 'error');
       return;

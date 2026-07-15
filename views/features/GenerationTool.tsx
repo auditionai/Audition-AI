@@ -759,7 +759,14 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           return;
       }
 
-      const user = await getUserProfile();
+      let user;
+      try {
+          user = await getUserProfile({ force: true });
+      } catch (error) {
+          console.warn('[GenerationTool] Failed to verify current balance', error);
+          notify('Không thể xác minh số dư Vcoin lúc này. Vui lòng thử lại.', 'error');
+          return;
+      }
       if ((user.vcoin_balance || 0) < pricing.vcoin) {
           notify(`Số dư không đủ, cần ${pricing.vcoin} Vcoin.`, 'error');
           return;
@@ -872,7 +879,19 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
     }
 
     const cost = calculateCost();
-    const user = await getUserProfile();
+    let user;
+    try {
+        user = await getUserProfile({ force: true });
+    } catch (error) {
+        console.warn('[GenerationTool] Failed to verify current balance', error);
+        notify(
+            lang === 'vi'
+                ? 'Không thể xác minh số dư Vcoin lúc này. Vui lòng thử lại.'
+                : 'Unable to verify your Vcoin balance. Please try again.',
+            'error',
+        );
+        return;
+    }
 
     if ((user.vcoin_balance || 0) < cost) {
         notify(lang === 'vi' ? 'Số dư không đủ!' : 'Insufficient balance!', 'error');

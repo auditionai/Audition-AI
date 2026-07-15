@@ -4,10 +4,17 @@ import { areQueueWorkersDisabled, isDedicatedQueueWorkerMode } from './_queue-ru
 import { refreshAutoDisabledServerAvailability } from './_server-availability';
 
 export const config = {
-  schedule: '*/5 * * * *',
+  schedule: '*/15 * * * *',
 };
 
-export const handler: Handler = async () => {
+export const handler: Handler = async (event) => {
+  const expectedSecret = process.env.CRON_SECRET || '';
+  const providedSecret = event.headers['x-cron-secret'] || event.headers['X-Cron-Secret'] || '';
+  const isScheduled = event.headers['x-nf-event'] === 'schedule';
+  if (!isScheduled && (!expectedSecret || providedSecret !== expectedSecret)) {
+    return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
+  }
+
   try {
     if (areQueueWorkersDisabled()) {
       return {
@@ -16,29 +23,26 @@ export const handler: Handler = async () => {
       };
     }
 
+    if (isDedicatedQueueWorkerMode()) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({ success: true, skipped: true, reason: 'dedicated_worker_active' }),
+      };
+    }
+
     const serverAvailabilityAutoRefresh = await refreshAutoDisabledServerAvailability();
-    const dedicatedWorkerMode = isDedicatedQueueWorkerMode();
-    const summary = await runQueueDaemon(
-      dedicatedWorkerMode
-        ? {
-            maxRuntimeMs: 8_000,
-            idleIterationsToStop: 1,
-            activeDelayMs: 50,
-            idleDelayMs: 100,
-          }
-        : {
-            maxRuntimeMs: 12_000,
-            idleIterationsToStop: 2,
-            activeDelayMs: 250,
-            idleDelayMs: 500,
-          },
-    );
+    const summary = await runQueueDaemon({
+      maxRuntimeMs: 12_000,
+      idleIterationsToStop: 1,
+      activeDelayMs: 250,
+      idleDelayMs: 500,
+    });
     return {
       statusCode: 200,
       body: JSON.stringify({
         success: true,
-        watchdog: dedicatedWorkerMode,
-        reason: dedicatedWorkerMode ? 'dedicated_worker_watchdog' : 'scheduled_worker',
+        watchdog: false,
+        reason: 'scheduled_worker',
         serverAvailabilityAutoRefresh,
         summary,
       }),

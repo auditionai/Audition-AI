@@ -33,32 +33,28 @@ export const handler: Handler = async (event) => {
   }
 
   try {
-    const { user } = await requireAuthenticatedUser(event);
+    const { user } = await requireAuthenticatedUser(event, { checkAccountStatus: false });
     const admin = getServiceRoleClient();
     const nowIso = new Date().toISOString();
-    const { data: templates, error: templatesError } = await admin
-      .from('gift_codes')
-      .select('id, code, campaign_key, reward, discount_percent, audience, total_limit, max_per_user, expires_at, is_active, created_at, auto_generate_per_user')
-      .eq('code_type', 'topup_discount')
-      .is('assigned_user_id', null)
-      .eq('is_active', true);
+    const [templateResult, concreteResult, profileResult] = await Promise.all([
+      admin.rpc('get_topup_giftcode_template_availability', { p_user_id: user.id }),
+      admin.rpc('get_available_topup_giftcodes', { p_user_id: user.id }),
+      admin.from('users').select('created_at, account_status').eq('id', user.id).maybeSingle(),
+    ]);
 
-    if (templatesError && !/auto_generate_per_user|assigned_user_id|code_type|column/i.test(templatesError.message || '')) {
-      throw templatesError;
-    }
+    if (templateResult.error) throw templateResult.error;
 
-    const { data, error } = await admin.rpc('get_available_topup_giftcodes', {
-      p_user_id: user.id,
-    });
+    const { data, error } = concreteResult;
 
     const rpcUnavailable = Boolean(error && /get_available_topup_giftcodes|function|schema|campaign_key|structure|topup_gift/i.test(error.message || ''));
     if (error && !rpcUnavailable) throw error;
 
-    const { data: profile } = await admin
-      .from('users')
-      .select('created_at')
-      .eq('id', user.id)
-      .maybeSingle();
+    if (profileResult.error) throw profileResult.error;
+    const profile = profileResult.data;
+
+    if (profile?.account_status === 'locked') {
+      throw new Error('AccountLocked');
+    }
 
     const firstTopupEligibleByCreatedAt = isFirstTopupEligibleCreatedAt(profile?.created_at);
 
@@ -71,7 +67,7 @@ export const handler: Handler = async (event) => {
     );
 
     const syntheticGiftcodes = [];
-    for (const template of templates || []) {
+    for (const template of templateResult.data || []) {
       const prefix = String(template.code || '').trim().toUpperCase();
       const isGeneratedConcreteShape = /^.+-[A-Z0-9]{5,8}$/.test(prefix);
       if (isGeneratedConcreteShape && template.auto_generate_per_user !== true) continue;
@@ -80,53 +76,27 @@ export const handler: Handler = async (event) => {
       if (template.expires_at && template.expires_at < nowIso) continue;
       if (template.audience === 'new_user_first_topup' && !firstTopupEligibleByCreatedAt) continue;
 
-      const { count: usedCount, error: usedCountError } = await admin
-        .from('topup_gift_code_usages')
-        .select('id, gift_codes!inner(campaign_key)', { count: 'exact', head: true })
-        .eq('gift_codes.campaign_key', campaignKey)
-        .eq('status', 'applied');
-
-      if (usedCountError && !/topup_gift_code_usages|gift_codes|schema|relation|foreign key/i.test(usedCountError.message || '')) {
-        throw usedCountError;
-      }
+      const usedCount = Number(template.total_used || 0);
 
       if (Number(usedCount || 0) >= Number(template.total_limit || 0)) continue;
 
-      const { count: userUsedCount, error: userUsedCountError } = await admin
-        .from('topup_gift_code_usages')
-        .select('id, gift_codes!inner(campaign_key)', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .eq('gift_codes.campaign_key', campaignKey)
-        .eq('status', 'applied');
-
-      if (userUsedCountError && !/topup_gift_code_usages|gift_codes|schema|relation|foreign key/i.test(userUsedCountError.message || '')) {
-        throw userUsedCountError;
-      }
+      const userUsedCount = Number(template.user_used || 0);
 
       const maxPerUser = Math.max(1, Number(template.max_per_user || 1));
       const remainingPerUser = Math.max(0, maxPerUser - Number(userUsedCount || 0));
       if (remainingPerUser <= 0) continue;
 
-      let candidate = `${prefix}-${buildRandomTopupGiftcode(Number(template.discount_percent || 0))}`;
-      for (let attempt = 0; attempt < 6; attempt += 1) {
-        const { data: existing } = await admin
-          .from('gift_codes')
-          .select('id')
-          .eq('code', candidate)
-          .maybeSingle();
-        if (!existing?.id) break;
-        candidate = `${prefix}-${buildRandomTopupGiftcode(Number(template.discount_percent || 0))}`;
-      }
+      const candidate = `${prefix}-${buildRandomTopupGiftcode(Number(template.discount_percent || 0))}`;
 
       syntheticGiftcodes.push({
         id: `template:${template.id}:${candidate}`,
         code: candidate,
         discountPercent: Number(template.discount_percent || 0),
         totalLimit: Number(template.total_limit || 0),
-        usedCount: Number(usedCount || 0),
+        usedCount,
         remainingCount: Math.max(0, Number(template.total_limit || 0) - Number(usedCount || 0)),
         maxPerUser,
-        userUsedCount: Number(userUsedCount || 0),
+        userUsedCount,
         remainingPerUser,
         audience: template.audience || 'all',
         expiresAt: template.expires_at || null,

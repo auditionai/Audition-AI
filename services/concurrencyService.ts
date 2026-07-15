@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from './supabaseClient';
 import { getUserProfile } from './economyService';
-import { QUEUE_SUBMITTED_EVENT, triggerServerQueueTick } from './serverQueueService';
+import { QUEUE_SUBMITTED_EVENT } from './serverQueueService';
 import { isSystemQueueKind } from '../shared/queueKinds';
 
 export interface JobState {
@@ -44,15 +44,12 @@ const EMPTY_QUEUE_STATS: QueueStats = {
   systemQueued: 0,
 };
 
-const BUSY_QUEUE_POLL_MS = 10_000;
-const IDLE_QUEUE_POLL_MS = 180_000;
+const BUSY_QUEUE_POLL_MS = 20_000;
+const IDLE_QUEUE_POLL_MS = 300_000;
 const MANUAL_QUEUE_POLL_MIN_INTERVAL_MS = 5_000;
-const REALTIME_STATS_REFRESH_DEBOUNCE_MS = 1_000;
 const SUBMIT_FALLBACK_REFRESH_MS = 5_000;
-const RECENT_REALTIME_WINDOW_MS = 7_000;
 const ACTIVE_JOB_STATUSES = new Set(['queued', 'processing']);
 
-let globalChannel: any = null;
 let currentJobs: JobState[] = [];
 const jobSubscribers = new Set<(jobs: JobState[]) => void>();
 
@@ -66,8 +63,7 @@ let sharedUserId: string | null = null;
 let sharedUserIdPromise: Promise<string | null> | null = null;
 let trackerUserId: string | null = null;
 let trackerInitPromise: Promise<void> | null = null;
-let realtimeRefreshTimer: ReturnType<typeof setTimeout> | null = null;
-let lastRealtimeQueueEventAt = 0;
+let activeJobsFetchPromise: Promise<void> | null = null;
 
 type GeneratedImageQueueRow = {
   id: string;
@@ -87,21 +83,10 @@ const notifyQueueStatsSubscribers = () => {
   queueStatsSubscribers.forEach((subscriber) => subscriber(sharedQueueStats));
 };
 
-const hasQueueActivity = (stats: QueueStats) =>
+const hasMyQueueActivity = (stats: QueueStats) =>
   stats.myImageProcessing > 0 ||
   stats.myVideoProcessing > 0 ||
-  stats.myQueued > 0 ||
-  stats.systemImageProcessing > 0 ||
-  stats.systemVideoProcessing > 0 ||
-  stats.systemQueued > 0;
-
-const shouldNudgeQueueWorker = (stats: QueueStats) =>
-  stats.systemQueued > 0 ||
-  stats.myQueued > 0 ||
-  stats.myImageProcessing > 0 ||
-  stats.myVideoProcessing > 0 ||
-  stats.systemImageProcessing > 0 ||
-  stats.systemVideoProcessing > 0;
+  stats.myQueued > 0;
 
 const sortJobsByTimestampDesc = (jobs: JobState[]) =>
   [...jobs].sort((a, b) => b.timestamp - a.timestamp);
@@ -131,50 +116,7 @@ const replaceCurrentJobs = (jobs: JobState[]) => {
   notifyJobSubscribers();
 };
 
-const upsertCurrentJob = (job: JobState | null) => {
-  if (!job) {
-    return;
-  }
-
-  const nextJobs = currentJobs.filter((entry) => entry.jobId !== job.jobId);
-  nextJobs.push(job);
-  replaceCurrentJobs(nextJobs);
-};
-
-const removeCurrentJob = (jobId?: string | null) => {
-  if (!jobId) {
-    return;
-  }
-
-  const nextJobs = currentJobs.filter((entry) => entry.jobId !== jobId);
-  if (nextJobs.length !== currentJobs.length) {
-    replaceCurrentJobs(nextJobs);
-  }
-};
-
-const clearRealtimeRefreshTimer = () => {
-  if (realtimeRefreshTimer) {
-    clearTimeout(realtimeRefreshTimer);
-    realtimeRefreshTimer = null;
-  }
-};
-
-const scheduleRealtimeStatsRefresh = (triggerReason: string) => {
-  lastRealtimeQueueEventAt = Date.now();
-  clearRealtimeRefreshTimer();
-  realtimeRefreshTimer = setTimeout(() => {
-    fetchSharedQueueStats(true).catch((error) => {
-      console.warn(`[Concurrency] Queue stats refresh after ${triggerReason} failed`, error);
-    });
-  }, REALTIME_STATS_REFRESH_DEBOUNCE_MS);
-};
-
 const cleanupConcurrencyTracker = () => {
-  clearRealtimeRefreshTimer();
-  if (globalChannel && supabase) {
-    supabase.removeChannel(globalChannel).catch(() => undefined);
-  }
-  globalChannel = null;
   trackerUserId = null;
   replaceCurrentJobs([]);
 };
@@ -189,7 +131,9 @@ const scheduleQueueStatsPoll = () => {
     return;
   }
 
-  const delay = hasQueueActivity(sharedQueueStats) ? BUSY_QUEUE_POLL_MS : IDLE_QUEUE_POLL_MS;
+  const delay = hasMyQueueActivity(sharedQueueStats) || currentJobs.length > 0
+    ? BUSY_QUEUE_POLL_MS
+    : IDLE_QUEUE_POLL_MS;
   queueStatsPollTimer = setTimeout(() => {
     fetchSharedQueueStats().catch((error) => {
       console.warn('[Concurrency] Failed to refresh queue stats', error);
@@ -218,6 +162,44 @@ const getSharedUserId = async () => {
   }
 
   return sharedUserIdPromise;
+};
+
+const refreshCurrentJobs = async (userId = sharedUserId) => {
+  if (!supabase || !userId) {
+    replaceCurrentJobs([]);
+    return;
+  }
+
+  if (activeJobsFetchPromise) {
+    return activeJobsFetchPromise;
+  }
+
+  activeJobsFetchPromise = (async () => {
+    const { data, error } = await supabase
+      .from('generated_images')
+      .select('id, user_id, asset_type, queue_kind, status, progress, created_at')
+      .eq('user_id', userId)
+      .in('status', ['queued', 'processing'])
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      throw error;
+    }
+
+    replaceCurrentJobs(
+      (data || [])
+        .map((row: GeneratedImageQueueRow) => mapGeneratedImageToJobState(row))
+        .filter(Boolean) as JobState[],
+    );
+  })()
+    .catch((error) => {
+      console.warn('[Concurrency] Failed to refresh active jobs', error);
+    })
+    .finally(() => {
+      activeJobsFetchPromise = null;
+    });
+
+  return activeJobsFetchPromise;
 };
 
 const fetchSharedQueueStats = async (force = false) => {
@@ -253,12 +235,7 @@ const fetchSharedQueueStats = async (force = false) => {
         systemQueued: Number(row?.system_queued || 0),
       };
       notifyQueueStatsSubscribers();
-
-      if (shouldNudgeQueueWorker(sharedQueueStats)) {
-        triggerServerQueueTick().catch((error) => {
-          console.warn('[Concurrency] Failed to nudge queue worker after stats refresh', error);
-        });
-      }
+      await refreshCurrentJobs();
     } catch (error) {
       console.warn('[Concurrency] Failed to load queue stats', error);
     } finally {
@@ -288,68 +265,13 @@ export const initConcurrencyTracker = async () => {
       return;
     }
 
-    if (globalChannel && trackerUserId === userId) {
+    if (trackerUserId === userId) {
       return;
     }
 
     cleanupConcurrencyTracker();
     trackerUserId = userId;
-
-    try {
-      const { data, error } = await supabase
-        .from('generated_images')
-        .select('id, user_id, asset_type, queue_kind, status, progress, created_at')
-        .eq('user_id', userId)
-        .in('status', ['queued', 'processing'])
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        throw error;
-      }
-
-      replaceCurrentJobs(
-        (data || [])
-          .map((row: GeneratedImageQueueRow) => mapGeneratedImageToJobState(row))
-          .filter(Boolean) as JobState[],
-      );
-    } catch (error) {
-      console.warn('[Concurrency] Failed to seed active jobs from Supabase', error);
-      replaceCurrentJobs([]);
-    }
-
-    if (queueStatsConsumerCount <= 0) {
-      cleanupConcurrencyTracker();
-      return;
-    }
-
-    globalChannel = supabase
-      .channel(`audition:queue:${userId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'generated_images',
-          filter: `user_id=eq.${userId}`,
-        },
-        (payload: any) => {
-          const nextRow = mapGeneratedImageToJobState(payload?.new as GeneratedImageQueueRow | undefined);
-          const previousJobId = payload?.old?.id || payload?.new?.id;
-
-          if (nextRow) {
-            upsertCurrentJob(nextRow);
-          } else {
-            removeCurrentJob(previousJobId);
-          }
-
-          scheduleRealtimeStatsRefresh(`realtime ${payload?.eventType || 'change'}`);
-        },
-      )
-      .subscribe((status: string) => {
-        if (status === 'CHANNEL_ERROR') {
-          console.warn('[Concurrency] Realtime queue channel failed, relying on polling fallback.');
-        }
-      });
+    await refreshCurrentJobs(userId);
   })()
     .finally(() => {
       trackerInitPromise = null;
@@ -398,19 +320,11 @@ export const useConcurrency = () => {
         clearTimeout(queuedRefreshTimer);
       }
 
-      const trackerReady = Boolean(globalChannel) && trackerUserId === sharedUserId;
-      if (!trackerReady) {
-        fetchSharedQueueStats(true).catch((error) => {
-          console.warn('[Concurrency] Queue stats refresh after submit failed', error);
-        });
-        return;
-      }
+      fetchSharedQueueStats(true).catch((error) => {
+        console.warn('[Concurrency] Queue stats refresh after submit failed', error);
+      });
 
       queuedRefreshTimer = setTimeout(() => {
-        if (Date.now() - lastRealtimeQueueEventAt < RECENT_REALTIME_WINDOW_MS) {
-          return;
-        }
-
         fetchSharedQueueStats(true).catch((error) => {
           console.warn('[Concurrency] Fallback queue stats refresh after submit failed', error);
         });

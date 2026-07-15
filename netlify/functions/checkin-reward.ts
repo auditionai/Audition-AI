@@ -282,7 +282,10 @@ export const handler: Handler = async (event) => {
   }
 
   try {
-    const { user, browserKeyHash } = await requireAuthenticatedUser(event);
+    const { user, browserKeyHash } = await requireAuthenticatedUser(event, {
+      bindBrowserKey: true,
+      checkAccountStatus: true,
+    });
     await ensureBrowserKeyCheckinAllowed(user.id, browserKeyHash);
 
     const result = await handleDailyCheckin(user.id);

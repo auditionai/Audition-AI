@@ -345,7 +345,7 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
 
   const { data: userRow, error: userError } = await admin
     .from('users')
-    .select('id, vcoin_balance')
+    .select('id, vcoin_balance, account_status')
     .eq('id', userId)
     .maybeSingle();
 
@@ -355,6 +355,10 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
 
   if (!userRow) {
     throw new Error('USER_NOT_FOUND');
+  }
+
+  if (userRow.account_status === 'locked') {
+    throw new Error('AccountLocked');
   }
 
   if (costVcoin > Number(userRow.vcoin_balance || 0)) {
@@ -574,7 +578,7 @@ export const handler: Handler = async (event) => {
   }
 
   try {
-    const { user } = await requireAuthenticatedUser(event);
+    const { user } = await requireAuthenticatedUser(event, { checkAccountStatus: false });
     const admin = getServiceRoleClient();
     const body = JSON.parse(event.body || '{}') as QueueBody;
     const clientPlatform = resolveQueueClientPlatform(event, body);

@@ -38,10 +38,10 @@ export const handler: Handler = async (event) => {
   if (isDedicatedQueueWorkerMode()) {
     const summary = await runQueueDaemon({
       lane: 'dispatch',
-      maxRuntimeMs: 20_000,
-      idleIterationsToStop: 2,
+      maxRuntimeMs: 8_000,
+      idleIterationsToStop: 1,
       activeDelayMs: 50,
-      idleDelayMs: 250,
+      idleDelayMs: 100,
     });
 
     return {

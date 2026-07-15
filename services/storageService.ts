@@ -12,8 +12,9 @@ import { S3Client, PutObjectCommand, DeleteObjectCommand, DeleteObjectsCommand, 
 const DB_NAME = 'DMP_AI_Studio_DB';
 const STORE_NAME = 'images';
 const TABLE_NAME = 'generated_images';
-const HISTORY_RETENTION_DAYS = 7;
+const HISTORY_RETENTION_DAYS = 30;
 const HISTORY_RETENTION_MS = HISTORY_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+const GALLERY_HISTORY_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000;
 const ACTIVE_GALLERY_CLIENT_CACHE_TTL_MS = 8_000;
 const IDLE_GALLERY_CLIENT_CACHE_TTL_MS = 120_000;
 const GALLERY_API_TIMEOUT_MS = 12_000;
@@ -507,11 +508,13 @@ const getGeneratedImageChargeMap = async (userId: string, imageIds: string[]): P
 
 const fetchCurrentUserGeneratedImagesDirectly = async (userId: string): Promise<any[]> => {
   if (!supabase || !userId) return [];
+  const sinceIso = new Date(Date.now() - GALLERY_HISTORY_LOOKBACK_MS).toISOString();
 
   const { data, error } = await supabase
     .from(TABLE_NAME)
     .select(GENERATED_IMAGE_ROW_LIGHT_SELECT)
     .eq('user_id', userId)
+    .gte('created_at', sinceIso)
     .order('created_at', { ascending: false })
     .limit(100);
 
@@ -524,12 +527,14 @@ const fetchCurrentUserGeneratedImagesDirectly = async (userId: string): Promise<
 
 const fetchCurrentUserGeneratedImagesFromLedger = async (userId: string): Promise<any[]> => {
   if (!supabase || !userId) return [];
+  const sinceIso = new Date(Date.now() - GALLERY_HISTORY_LOOKBACK_MS).toISOString();
 
   const { data: ledgerRows, error: ledgerError } = await supabase
     .from('vcoin_transactions')
     .select('reference_id, created_at')
     .eq('user_id', userId)
     .eq('reference_type', 'generated_image_charge')
+    .gte('created_at', sinceIso)
     .order('created_at', { ascending: false })
     .limit(24);
 
@@ -930,12 +935,15 @@ export const getShowcaseImages = async (): Promise<GeneratedImage[]> => {
 
 export const getAllImagesSystemWide = async (): Promise<GeneratedImage[]> => {
     if (!supabase) return [];
+    const sinceIso = new Date(Date.now() - GALLERY_HISTORY_LOOKBACK_MS).toISOString();
     
     try {
         const { data, error } = await supabase
             .from(TABLE_NAME)
             .select(GENERATED_IMAGE_ROW_SELECT)
-            .order('created_at', { ascending: false });
+            .gte('created_at', sinceIso)
+            .order('created_at', { ascending: false })
+            .limit(500);
 
         if (error || !data) return [];
 
@@ -1065,12 +1073,14 @@ export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
 
 export const getUserImagesFromStorage = async (userId: string, limit = 80): Promise<GeneratedImage[]> => {
     if (!supabase) return [];
+    const sinceIso = new Date(Date.now() - GALLERY_HISTORY_LOOKBACK_MS).toISOString();
     
     try {
         const { data, error } = await supabase
             .from(TABLE_NAME)
             .select(GENERATED_IMAGE_ROW_SELECT)
             .eq('user_id', userId)
+            .gte('created_at', sinceIso)
             .order('created_at', { ascending: false })
             .limit(limit);
 

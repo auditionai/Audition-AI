@@ -39,6 +39,7 @@ as $$
     from public.vcoin_transactions vt
     where vt.user_id = p_user_id
       and vt.reference_type = 'generated_image_charge'
+      and vt.created_at >= now() - interval '30 days'
       and vt.reference_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
     group by vt.reference_id
     order by max(vt.created_at) desc

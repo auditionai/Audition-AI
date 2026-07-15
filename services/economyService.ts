@@ -44,6 +44,8 @@ const MAINTENANCE_MODE_CACHE_TTL_MS = 60_000;
 const MAINTENANCE_MODE_POLL_MS = 300_000;
 const VISIT_LOG_THROTTLE_MS = 30 * 60_000;
 const USER_HISTORY_FETCH_LIMIT = 200;
+const USER_HISTORY_LOOKBACK_DAYS = 30;
+const CHECKIN_HISTORY_LOOKBACK_DAYS = 30;
 const ADMIN_STATS_TRANSACTION_LIMIT = 1000;
 const ADMIN_STATS_USAGE_LOG_LIMIT = 3000;
 const ADMIN_STATS_USER_PAGE_SIZE = 500;
@@ -1551,10 +1553,14 @@ export const getCheckinStatus = async (options?: { force?: boolean }): Promise<C
 
     checkinStatusPromise = (async () => {
         const today = getLocalTodayStr();
+        const since = new Date(Date.now() - CHECKIN_HISTORY_LOOKBACK_DAYS * 24 * 60 * 60 * 1000)
+            .toISOString()
+            .slice(0, 10);
         const { data: checkins, error: checkinError } = await supabase
             .from('daily_check_ins')
             .select('check_in_date')
-            .eq('user_id', user.id);
+            .eq('user_id', user.id)
+            .gte('check_in_date', since);
 
         if (checkinError) {
             throw new Error(checkinError.message);
@@ -2339,12 +2345,14 @@ export const getUnifiedHistory = async (targetUserId?: string): Promise<HistoryI
         const user = await getUserProfile();
         userId = user.id;
     }
+    const sinceIso = new Date(Date.now() - USER_HISTORY_LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString();
     
     // 1. Get Topup History
     const { data: txs } = await supabase
         .from('payment_transactions')
         .select('id, created_at, order_code, vcoin_received, amount_vnd, status, provider_payload')
         .eq('user_id', userId)
+        .gte('created_at', sinceIso)
         .order('created_at', { ascending: false })
         .limit(USER_HISTORY_FETCH_LIMIT);
 
@@ -2353,6 +2361,7 @@ export const getUnifiedHistory = async (targetUserId?: string): Promise<HistoryI
         .from('vcoin_transactions')
         .select('id, created_at, amount, type, description, metadata, reference_type')
         .eq('user_id', userId)
+        .gte('created_at', sinceIso)
         .order('created_at', { ascending: false })
         .limit(USER_HISTORY_FETCH_LIMIT);
 
@@ -3929,5 +3938,4 @@ export const getAdminStats = async () => {
         transactions
     };
 };
-
 

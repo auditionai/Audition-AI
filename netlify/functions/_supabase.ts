@@ -21,7 +21,8 @@ const assertEnv = (value: string, label: string) => {
   return value;
 };
 
-const AUTH_PROFILE_CHECK_TIMEOUT_MS = 2_500;
+const AUTH_DEVICE_BIND_TIMEOUT_MS = 1_500;
+const AUTH_PROFILE_CHECK_TIMEOUT_MS = 1_500;
 
 const getAbortSignal = (timeoutMs: number) => {
   const controller = new AbortController();
@@ -93,12 +94,21 @@ export const requireAuthenticatedUser = async (
 
   const admin = getServiceRoleClient();
   if (browserKeyHash) {
-    const { error: bindError } = await admin.rpc('bind_user_browser_key', {
-      p_user_id: user.id,
-      p_browser_key_hash: browserKeyHash,
-    });
-    if (bindError && !/bind_user_browser_key|function|schema|browser/i.test(bindError.message || '')) {
-      throw bindError;
+    const timeout = getAbortSignal(AUTH_DEVICE_BIND_TIMEOUT_MS);
+    try {
+      const { error: bindError } = await admin
+        .rpc('bind_user_browser_key', {
+          p_user_id: user.id,
+          p_browser_key_hash: browserKeyHash,
+        })
+        .abortSignal(timeout.signal);
+      if (bindError && !/bind_user_browser_key|function|schema|browser/i.test(bindError.message || '')) {
+        throw bindError;
+      }
+    } catch (bindError: any) {
+      console.warn('[auth] skipped browser key bind after timeout/failure:', bindError?.message || bindError);
+    } finally {
+      timeout.clear();
     }
   }
 
@@ -109,8 +119,8 @@ export const requireAuthenticatedUser = async (
       .select('account_status')
       .eq('id', user.id)
       .maybeSingle()
-      .abortSignal(timeout.signal);
-    timeout.clear();
+      .abortSignal(timeout.signal)
+      .finally(() => timeout.clear());
 
     if (profileError && !/account_status|column/i.test(profileError.message || '')) {
       throw profileError;

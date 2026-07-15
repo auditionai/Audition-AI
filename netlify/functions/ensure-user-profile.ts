@@ -8,6 +8,9 @@ const headers = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
+const PROFILE_SELECT =
+  'id, email, display_name, photo_url, vcoin_balance, is_admin, created_at, last_active, account_status, account_warning, account_warning_at, locked_at, lock_reason';
+
 const getDisplayName = (user: any) => {
   const metadata = user?.user_metadata || {};
   return (
@@ -70,7 +73,7 @@ export const handler: Handler = async (event) => {
 
     const { data: existing, error: readError } = await admin
       .from('users')
-      .select('*')
+      .select(PROFILE_SELECT)
       .eq('id', user.id)
       .maybeSingle();
 
@@ -104,7 +107,7 @@ export const handler: Handler = async (event) => {
 
     const { data: profile, error: profileError } = await admin
       .from('users')
-      .select('*')
+      .select(PROFILE_SELECT)
       .eq('id', user.id)
       .maybeSingle();
 

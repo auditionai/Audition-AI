@@ -50,6 +50,8 @@ const ADMIN_STATS_USER_PAGE_SIZE = 500;
 const TOPUP_GIFTCODE_CACHE_KEY = 'auditionai:topup-giftcodes:v1';
 const TOPUP_GIFTCODE_CACHE_TTL_MS = 10 * 60_000;
 const FIRST_TOPUP_GIFTCODE_ELIGIBLE_FROM_MS = Date.parse('2026-06-01T00:00:00+07:00');
+const USER_PROFILE_SELECT =
+    'id, email, display_name, photo_url, vcoin_balance, is_admin, created_at, last_active, account_status, account_warning, account_warning_at, locked_at, lock_reason';
 
 type TimedCache<T> = {
     value: T;
@@ -716,11 +718,23 @@ export const getUserProfile = async (options?: { force?: boolean }): Promise<Use
         let data: any = null;
         let error: { message?: string } | null = null;
 
+        const repairedProfile = await ensureUserProfileViaApi();
+        if (repairedProfile) {
+            const profile = mapUserRowToProfile(repairedProfile);
+            userProfileFailureCache = null;
+            userProfileCache = {
+                userId: user.id,
+                value: profile,
+                expiresAt: Date.now() + USER_PROFILE_CACHE_TTL_MS,
+            };
+            return profile;
+        }
+
         try {
             const response = await readWithRetry<{ data: any; error: { message?: string } | null }>(
                 () => supabase
                     .from('users')
-                    .select('*')
+                    .select(USER_PROFILE_SELECT)
                     .eq('id', user.id)
                     .maybeSingle(),
                 'Fetching user profile',
@@ -733,17 +747,6 @@ export const getUserProfile = async (options?: { force?: boolean }): Promise<Use
             if (cachedProfile && cachedProfile.userId === user.id) {
                 return cachedProfile.value;
             }
-            const repairedProfile = await ensureUserProfileViaApi();
-            if (repairedProfile) {
-                const profile = mapUserRowToProfile(repairedProfile);
-                userProfileFailureCache = null;
-                userProfileCache = {
-                    userId: user.id,
-                    value: profile,
-                    expiresAt: Date.now() + USER_PROFILE_CACHE_TTL_MS,
-                };
-                return profile;
-            }
             const message = "Failed to fetch user profile: " + (readError?.message || 'Network error');
             rememberProfileFailure(message);
             throw new Error(message);
@@ -754,17 +757,6 @@ export const getUserProfile = async (options?: { force?: boolean }): Promise<Use
             const cachedProfile = userProfileCache;
             if (cachedProfile && cachedProfile.userId === user.id) {
                 return cachedProfile.value;
-            }
-            const repairedProfile = await ensureUserProfileViaApi();
-            if (repairedProfile) {
-                const profile = mapUserRowToProfile(repairedProfile);
-                userProfileFailureCache = null;
-                userProfileCache = {
-                    userId: user.id,
-                    value: profile,
-                    expiresAt: Date.now() + USER_PROFILE_CACHE_TTL_MS,
-                };
-                return profile;
             }
             const message = "Failed to fetch user profile: " + error.message;
             rememberProfileFailure(message);
@@ -3937,6 +3929,5 @@ export const getAdminStats = async () => {
         transactions
     };
 };
-
 
 

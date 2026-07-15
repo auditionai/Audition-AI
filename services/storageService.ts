@@ -18,6 +18,8 @@ const ACTIVE_GALLERY_CLIENT_CACHE_TTL_MS = 8_000;
 const IDLE_GALLERY_CLIENT_CACHE_TTL_MS = 120_000;
 const GALLERY_API_TIMEOUT_MS = 12_000;
 const GENERATED_IMAGE_ROW_SELECT = 'id, image_url, prompt, created_at, updated_at, asset_type, queue_kind, tool_id, tool_name, model_used, is_public, user_id, user_name, status, job_id, progress, queue_payload, error_message, cost_vcoin';
+const GENERATED_IMAGE_ROW_LIGHT_SELECT = 'id, image_url, prompt, created_at, updated_at, asset_type, queue_kind, tool_id, tool_name, model_used, is_public, user_id, user_name, status, job_id, progress, error_message, cost_vcoin';
+const GENERATED_IMAGE_ROW_RECOVERY_SELECT = 'id, image_url, created_at, updated_at, asset_type, queue_kind, tool_id, tool_name, model_used, is_public, user_id, user_name, status, job_id, progress, error_message, cost_vcoin';
 
 // --- CLOUDFLARE R2 CONFIGURATION ---
 // Helper to get Env Var from either Vite's import.meta.env or process.env shim
@@ -508,7 +510,7 @@ const fetchCurrentUserGeneratedImagesDirectly = async (userId: string): Promise<
 
   const { data, error } = await supabase
     .from(TABLE_NAME)
-    .select(GENERATED_IMAGE_ROW_SELECT)
+    .select(GENERATED_IMAGE_ROW_LIGHT_SELECT)
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(100);
@@ -518,6 +520,49 @@ const fetchCurrentUserGeneratedImagesDirectly = async (userId: string): Promise<
   }
 
   return data || [];
+};
+
+const fetchCurrentUserGeneratedImagesFromLedger = async (userId: string): Promise<any[]> => {
+  if (!supabase || !userId) return [];
+
+  const { data: ledgerRows, error: ledgerError } = await supabase
+    .from('vcoin_transactions')
+    .select('reference_id, created_at')
+    .eq('user_id', userId)
+    .eq('reference_type', 'generated_image_charge')
+    .order('created_at', { ascending: false })
+    .limit(24);
+
+  if (ledgerError || !ledgerRows) {
+    if (ledgerError) throw ledgerError;
+    return [];
+  }
+
+  const ids = Array.from(new Set(
+    ledgerRows
+      .map((row: any) => String(row?.reference_id || '').trim())
+      .filter((id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))
+  ));
+  const rows: any[] = [];
+
+  for (let index = 0; index < ids.length; index += 8) {
+    const { data: batchRows, error: batchError } = await supabase
+      .from(TABLE_NAME)
+      .select(GENERATED_IMAGE_ROW_RECOVERY_SELECT)
+      .in('id', ids.slice(index, index + 8));
+
+    if (batchError) {
+      console.warn('[Storage] Ledger gallery recovery batch failed', batchError);
+      continue;
+    }
+
+    rows.push(...(batchRows || []));
+  }
+
+  const orderMap = new Map(ids.map((id, index) => [id, index]));
+  return rows
+    .filter((row) => row?.user_id === userId)
+    .sort((a, b) => (orderMap.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (orderMap.get(b.id) ?? Number.MAX_SAFE_INTEGER));
 };
 
 // Modified to return Uint8Array for AWS SDK compatibility
@@ -973,6 +1018,25 @@ export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
                 }
               } catch (directError) {
                 console.warn('[Storage] Direct gallery fallback failed', directError);
+              }
+
+              try {
+                const recoveryRows = await fetchCurrentUserGeneratedImagesFromLedger(user.id);
+                if (recoveryRows.length > 0) {
+                  const recoveryImages = recoveryRows.map((row: any) => mapGeneratedImageRow(row, 'Me'));
+                  const mergedImages = excludeDirectEditHistory(mergeCloudAndLocalImages(recoveryImages, localImagesForUser));
+                  galleryFetchCache = {
+                    userId: user.id,
+                    expiresAt: Date.now() + ACTIVE_GALLERY_CLIENT_CACHE_TTL_MS,
+                    images: mergedImages,
+                  };
+                  void replaceLocalImagesForUser(user.id, mergedImages).catch((syncError) => {
+                    console.warn('[Storage] Failed to sync local cache from ledger gallery recovery', syncError);
+                  });
+                  return mergedImages;
+                }
+              } catch (recoveryError) {
+                console.warn('[Storage] Ledger gallery recovery failed', recoveryError);
               }
 
               const filteredLocalImages = excludeDirectEditHistory(localImagesForUser);

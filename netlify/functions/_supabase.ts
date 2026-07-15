@@ -21,6 +21,14 @@ const assertEnv = (value: string, label: string) => {
   return value;
 };
 
+const AUTH_PROFILE_CHECK_TIMEOUT_MS = 2_500;
+
+const getAbortSignal = (timeoutMs: number) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  return { signal: controller.signal, clear: () => clearTimeout(timeoutId) };
+};
+
 export const getServiceRoleClient = (): SupabaseClient => {
   return createClient(
     assertEnv(supabaseUrl, 'SUPABASE_URL'),
@@ -94,18 +102,28 @@ export const requireAuthenticatedUser = async (
     }
   }
 
-  const { data: profile, error: profileError } = await admin
-    .from('users')
-    .select('account_status')
-    .eq('id', user.id)
-    .maybeSingle();
+  try {
+    const timeout = getAbortSignal(AUTH_PROFILE_CHECK_TIMEOUT_MS);
+    const { data: profile, error: profileError } = await admin
+      .from('users')
+      .select('account_status')
+      .eq('id', user.id)
+      .maybeSingle()
+      .abortSignal(timeout.signal);
+    timeout.clear();
 
-  if (profileError && !/account_status|column/i.test(profileError.message || '')) {
-    throw profileError;
-  }
+    if (profileError && !/account_status|column/i.test(profileError.message || '')) {
+      throw profileError;
+    }
 
-  if (profile?.account_status === 'locked') {
-    throw new Error('AccountLocked');
+    if (profile?.account_status === 'locked') {
+      throw new Error('AccountLocked');
+    }
+  } catch (profileCheckError: any) {
+    if (profileCheckError?.message === 'AccountLocked') {
+      throw profileCheckError;
+    }
+    console.warn('[auth] skipped account status check after profile read failure:', profileCheckError?.message || profileCheckError);
   }
 
   return { user, userClient, browserKeyHash };

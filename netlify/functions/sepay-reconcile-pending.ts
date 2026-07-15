@@ -1,4 +1,4 @@
-import { schedule, type Handler } from '@netlify/functions';
+import type { Handler } from '@netlify/functions';
 import { getServiceRoleClient } from './_supabase';
 import {
   extractSePayPaidAmount,
@@ -259,9 +259,7 @@ const reconcilePendingSePay: Handler = async (event) => {
 
   const cronSecret = process.env.SEPAY_RECONCILE_SECRET || process.env.CRON_SECRET || '';
   const providedSecret = event.headers['x-cron-secret'] || event.headers['X-Cron-Secret'] || '';
-  const isScheduled = event.headers['x-nf-event'] === 'schedule';
-
-  if (!isScheduled && (!cronSecret || providedSecret !== cronSecret)) {
+  if (!cronSecret || providedSecret !== cronSecret) {
     return { statusCode: 401, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
   }
 
@@ -283,4 +281,4 @@ const reconcilePendingSePay: Handler = async (event) => {
   }
 };
 
-export const handler = schedule('*/15 * * * *', reconcilePendingSePay);
+export const handler = reconcilePendingSePay;

@@ -7,14 +7,7 @@ export const config = {
   schedule: '*/15 * * * *',
 };
 
-export const handler: Handler = async (event) => {
-  const expectedSecret = process.env.CRON_SECRET || '';
-  const providedSecret = event.headers['x-cron-secret'] || event.headers['X-Cron-Secret'] || '';
-  const isScheduled = event.headers['x-nf-event'] === 'schedule';
-  if (!isScheduled && (!expectedSecret || providedSecret !== expectedSecret)) {
-    return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
-  }
-
+export const handler: Handler = async () => {
   try {
     if (areQueueWorkersDisabled()) {
       return {

@@ -2,12 +2,12 @@ import type { Handler } from '@netlify/functions';
 import { runQueueWatchdog } from './_queue-watchdog';
 
 export const config = {
-  schedule: '*/1 * * * *',
+  schedule: '*/5 * * * *',
 };
 
 export const handler: Handler = async () => {
   try {
-    const summary = await runQueueWatchdog({ runWorkerAfterRescue: true });
+    const summary = await runQueueWatchdog({ runWorkerAfterRescue: false });
     return {
       statusCode: 200,
       body: JSON.stringify({ success: true, summary }),

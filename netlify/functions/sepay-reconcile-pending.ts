@@ -23,7 +23,7 @@ type SePayPendingReconcileOptions = {
 };
 
 const DEFAULT_RECONCILE_LIMIT = 25;
-const DEFAULT_RECONCILE_MAX_RUNTIME_MS = 45_000;
+const DEFAULT_RECONCILE_MAX_RUNTIME_MS = 15_000;
 const MIN_RECONCILE_RUNTIME_LEFT_MS = 3_000;
 
 export const runSePayPendingReconcile = async (options: SePayPendingReconcileOptions = {}) => {
@@ -33,7 +33,7 @@ export const runSePayPendingReconcile = async (options: SePayPendingReconcileOpt
     : DEFAULT_RECONCILE_MAX_RUNTIME_MS;
   const limit = Number.isFinite(options.limit)
     ? Math.max(1, Math.min(Number(options.limit), 100))
-    : DEFAULT_RECONCILE_LIMIT;
+    : 10;
   const hasRuntimeBudget = () => Date.now() - startedAt < maxRuntimeMs - MIN_RECONCILE_RUNTIME_LEFT_MS;
   const admin = getServiceRoleClient();
   const staleBefore = new Date(Date.now() - 60_000).toISOString();
@@ -281,4 +281,4 @@ const reconcilePendingSePay: Handler = async (event) => {
   }
 };
 
-export const handler = schedule('* * * * *', reconcilePendingSePay);
+export const handler = schedule('*/5 * * * *', reconcilePendingSePay);

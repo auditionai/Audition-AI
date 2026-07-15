@@ -2,7 +2,7 @@
 import { createPortal } from 'react-dom';
 import { GeneratedImage, Language, HistoryItem } from '../types';
 import type { QueueProgressLogEntry } from '../shared/queueRecipes';
-import { checkR2Connection, getAllImagesFromStorage, deleteImageFromStorage, cleanupExpiredImages, getHistoryRetentionDays, publishImageToShowcase, subscribeToGeneratedImagesRealtime, invalidateGalleryCache } from '../services/storageService';
+import { checkR2Connection, getAllImagesFromStorage, deleteImageFromStorage, getHistoryRetentionDays, publishImageToShowcase, subscribeToGeneratedImagesRealtime, invalidateGalleryCache } from '../services/storageService';
 import { getUnifiedHistory } from '../services/economyService';
 import { downloadAssetToBrowser } from '../services/downloadService';
 import { Icons } from '../components/Icons';
@@ -50,10 +50,6 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
     const init = async () => {
         setLoadingImages(true);
         try {
-            const deletedCount = await cleanupExpiredImages();
-            if (deletedCount > 0) {
-                console.log(`[Gallery] Auto-cleaned ${deletedCount} expired images.`);
-            }
             await loadImages();
         } catch (e) {
             console.error("Gallery Init Error", e);

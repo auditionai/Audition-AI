@@ -4,7 +4,7 @@ import { areQueueWorkersDisabled, isDedicatedQueueWorkerMode } from './_queue-ru
 import { refreshAutoDisabledServerAvailability } from './_server-availability';
 
 export const config = {
-  schedule: '*/1 * * * *',
+  schedule: '*/5 * * * *',
 };
 
 export const handler: Handler = async () => {
@@ -21,16 +21,16 @@ export const handler: Handler = async () => {
     const summary = await runQueueDaemon(
       dedicatedWorkerMode
         ? {
-            maxRuntimeMs: 20_000,
-            idleIterationsToStop: 3,
+            maxRuntimeMs: 8_000,
+            idleIterationsToStop: 1,
             activeDelayMs: 50,
-            idleDelayMs: 500,
+            idleDelayMs: 100,
           }
         : {
-            maxRuntimeMs: 45_000,
-            idleIterationsToStop: 8,
+            maxRuntimeMs: 12_000,
+            idleIterationsToStop: 2,
             activeDelayMs: 250,
-            idleDelayMs: 1_000,
+            idleDelayMs: 500,
           },
     );
     return {

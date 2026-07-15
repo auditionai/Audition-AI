@@ -10,8 +10,14 @@ const headers = {
 };
 
 const GALLERY_PAGE_LIMIT = 100;
+const LEDGER_RECOVERY_LIMIT = 24;
 const ACTIVE_GALLERY_CACHE_TTL_MS = 10_000;
 const IDLE_GALLERY_CACHE_TTL_MS = 30_000;
+
+const GALLERY_LIGHT_SELECT =
+  'id,image_url,prompt,created_at,updated_at,asset_type,queue_kind,tool_id,tool_name,model_used,user_id,user_name,is_public,status,job_id,progress,error_message,cost_vcoin';
+const GALLERY_RECOVERY_SELECT =
+  'id,image_url,created_at,updated_at,asset_type,queue_kind,tool_id,tool_name,model_used,user_id,user_name,is_public,status,job_id,progress,error_message,cost_vcoin';
 
 type GalleryCacheEntry = {
   expiresAt: number;
@@ -19,6 +25,58 @@ type GalleryCacheEntry = {
 };
 
 const galleryCache = new Map<string, GalleryCacheEntry>();
+
+const loadImagesFromLedgerReferences = async (
+  admin: ReturnType<typeof getServiceRoleClient>,
+  userId: string,
+) => {
+  const { data: ledgerRows, error: ledgerError } = await admin
+    .from('vcoin_transactions')
+    .select('reference_id,created_at')
+    .eq('user_id', userId)
+    .eq('reference_type', 'generated_image_charge')
+    .order('created_at', { ascending: false })
+    .limit(LEDGER_RECOVERY_LIMIT);
+
+  if (ledgerError) {
+    throw ledgerError;
+  }
+
+  const ids = Array.from(
+    new Set(
+      (ledgerRows || [])
+        .map((row: any) => String(row?.reference_id || '').trim())
+        .filter((id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)),
+    ),
+  );
+
+  if (ids.length === 0) {
+    return [];
+  }
+
+  const imageRows: any[] = [];
+  const batchSize = 8;
+
+  for (let index = 0; index < ids.length; index += batchSize) {
+    const batchIds = ids.slice(index, index + batchSize);
+    const { data: batchRows, error: batchError } = await admin
+      .from('generated_images')
+      .select(GALLERY_RECOVERY_SELECT)
+      .in('id', batchIds);
+
+    if (batchError) {
+      console.warn('[gallery-images] ledger recovery batch failed:', batchError.message || batchError);
+      continue;
+    }
+
+    imageRows.push(...(batchRows || []));
+  }
+
+  const orderMap = new Map(ids.map((id, index) => [id, index]));
+  return (imageRows || [])
+    .filter((row: any) => row?.user_id === userId)
+    .sort((a: any, b: any) => (orderMap.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (orderMap.get(b.id) ?? Number.MAX_SAFE_INTEGER));
+};
 
 export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
@@ -50,12 +108,27 @@ export const handler: Handler = async (event) => {
 
     const admin = getServiceRoleClient();
 
-    const { data, error } = await admin
-      .from('generated_images')
-      .select('id,image_url,prompt,created_at,updated_at,asset_type,queue_kind,tool_id,tool_name,model_used,user_id,user_name,is_public,status,job_id,progress,error_message,cost_vcoin,queue_payload')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(GALLERY_PAGE_LIMIT);
+    const rpcResult = await admin.rpc('get_user_gallery_images_lightweight', {
+      p_user_id: user.id,
+      p_limit: GALLERY_PAGE_LIMIT,
+    });
+
+    const shouldFallbackToTable =
+      rpcResult.error &&
+      (rpcResult.error.code === 'PGRST202' ||
+        /get_user_gallery_images_lightweight|function .* does not exist/i.test(rpcResult.error.message || ''));
+
+    const tableResult = shouldFallbackToTable
+      ? { data: await loadImagesFromLedgerReferences(admin, user.id), error: null }
+      : { data: rpcResult.data, error: rpcResult.error };
+
+    let { data, error } = tableResult;
+
+    if (error?.code === '57014') {
+      console.warn('[gallery-images] user gallery query timed out; falling back to ledger references.');
+      data = await loadImagesFromLedgerReferences(admin, user.id);
+      error = null;
+    }
 
     if (error) {
       throw error;

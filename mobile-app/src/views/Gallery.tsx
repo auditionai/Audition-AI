@@ -195,7 +195,7 @@ export const Gallery: React.FC = () => {
     const interval = setInterval(() => {
       invalidateGalleryCache();
       void loadImages();
-    }, 8000);
+    }, 20_000);
 
     return () => clearInterval(interval);
   }, [activeTab, hasActiveGenerationJobs, loadImages]);

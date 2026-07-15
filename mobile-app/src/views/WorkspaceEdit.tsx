@@ -193,7 +193,7 @@ export function WorkspaceEdit() {
       return;
     }
 
-    const user = await getUserProfile();
+    const user = await getUserProfile({ force: true });
     if ((user.vcoin_balance || 0) < selectedCost.vcoin) {
       notify(`Bạn cần có ít nhất ${selectedCost.vcoin} Vcoin để thực hiện.`, 'error');
       return;

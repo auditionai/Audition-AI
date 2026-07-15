@@ -47,16 +47,6 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
               console.warn('Failed to prefetch topup giftcode previews', error);
           });
 
-      getTopupGiftcodes()
-          .then((rows) => {
-              if (!disposed && rows.length > 0) {
-                  setTopupGiftcodes(rows);
-              }
-          })
-          .catch((error) => {
-              console.warn('Failed to prefetch topup giftcodes', error);
-          });
-
       return () => {
           disposed = true;
       };

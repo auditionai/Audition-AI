@@ -67,6 +67,7 @@ export const getUserClient = (authorizationHeader?: string | null): SupabaseClie
 
 export const requireAuthenticatedUser = async (
   event: HandlerEvent,
+  options: { bindBrowserKey?: boolean; checkAccountStatus?: boolean } = {},
 ): Promise<{ user: User; userClient: SupabaseClient; browserKeyHash: string }> => {
   const authorization = event.headers.authorization || event.headers.Authorization || '';
   if (!authorization.startsWith('Bearer ')) {
@@ -93,7 +94,7 @@ export const requireAuthenticatedUser = async (
     : '';
 
   const admin = getServiceRoleClient();
-  if (browserKeyHash) {
+  if (browserKeyHash && options.bindBrowserKey === true) {
     const timeout = getAbortSignal(AUTH_DEVICE_BIND_TIMEOUT_MS);
     try {
       const { error: bindError } = await admin
@@ -112,7 +113,7 @@ export const requireAuthenticatedUser = async (
     }
   }
 
-  try {
+  if (options.checkAccountStatus !== false) try {
     const timeout = getAbortSignal(AUTH_PROFILE_CHECK_TIMEOUT_MS);
     const { data: profile, error: profileError } = await admin
       .from('users')

@@ -28,7 +28,7 @@ const DEFAULT_GENERATION_PRICES = {
     group5: 8,
 };
 
-const USER_PROFILE_CACHE_TTL_MS = 30_000;
+const USER_PROFILE_CACHE_TTL_MS = 2 * 60_000;
 const PACKAGE_CACHE_TTL_MS = 5 * 60_000;
 const PROMOTION_CACHE_TTL_MS = 5 * 60_000;
 const CHECKIN_STATUS_CACHE_TTL_MS = 30_000;
@@ -38,11 +38,13 @@ const TST_SERVER_AVAILABILITY_CACHE_TTL_MS = 60_000;
 const TST_SUPABASE_READ_TIMEOUT_MS = 12_000;
 const TST_SUPABASE_READ_RETRIES = 1;
 const TST_SUPABASE_READ_RETRY_DELAY_MS = 500;
-const USER_PROFILE_API_TIMEOUT_MS = 8_000;
+const USER_PROFILE_API_TIMEOUT_MS = 3_500;
+const USER_PROFILE_STRICT_DB_TIMEOUT_MS = 4_000;
 const USER_PROFILE_FAILURE_BACKOFF_MS = 45_000;
 const MAINTENANCE_MODE_CACHE_TTL_MS = 60_000;
 const MAINTENANCE_MODE_POLL_MS = 300_000;
 const VISIT_LOG_THROTTLE_MS = 30 * 60_000;
+const LAST_ACTIVE_UPDATE_MIN_INTERVAL_MS = 5 * 60_000;
 const USER_HISTORY_FETCH_LIMIT = 200;
 const USER_HISTORY_LOOKBACK_DAYS = 30;
 const CHECKIN_HISTORY_LOOKBACK_DAYS = 30;
@@ -54,6 +56,7 @@ const TOPUP_GIFTCODE_CACHE_TTL_MS = 10 * 60_000;
 const FIRST_TOPUP_GIFTCODE_ELIGIBLE_FROM_MS = Date.parse('2026-06-01T00:00:00+07:00');
 const USER_PROFILE_SELECT =
     'id, email, display_name, photo_url, vcoin_balance, is_admin, created_at, last_active, account_status, account_warning, account_warning_at, locked_at, lock_reason';
+const USER_PROFILE_PERSIST_CACHE_KEY = 'auditionai:user-profile:v1';
 
 type TimedCache<T> = {
     value: T;
@@ -663,6 +666,69 @@ const mapUserRowToProfile = (data: any): UserProfile => ({
     lockReason: data.lock_reason || null
 });
 
+const readPersistedUserProfile = (userId: string): UserProfile | null => {
+    if (typeof window === 'undefined') return null;
+    try {
+        const raw = window.localStorage.getItem(USER_PROFILE_PERSIST_CACHE_KEY);
+        const parsed = raw ? JSON.parse(raw) : null;
+        if (!parsed || parsed.userId !== userId || !parsed.profile) return null;
+
+        // Persisted profile data is only a shell fallback. Financial and
+        // authorization fields must never be trusted after a page reload.
+        return {
+            ...(parsed.profile as UserProfile),
+            vcoin_balance: 0,
+            role: 'user',
+        };
+    } catch {
+        return null;
+    }
+};
+
+const persistUserProfile = (userId: string, profile: UserProfile) => {
+    if (typeof window === 'undefined') return;
+    try {
+        window.localStorage.setItem(
+            USER_PROFILE_PERSIST_CACHE_KEY,
+            JSON.stringify({
+                userId,
+                cachedAt: Date.now(),
+                profile,
+            }),
+        );
+    } catch {
+        // Ignore storage failures.
+    }
+};
+
+const buildSessionFallbackProfile = (user: any): UserProfile => {
+    const metadata = user?.user_metadata || {};
+    const displayName =
+        metadata.display_name ||
+        metadata.full_name ||
+        metadata.name ||
+        user?.email?.split('@')[0] ||
+        'User';
+
+    return {
+        id: user.id,
+        username: displayName,
+        email: user.email || '',
+        avatar: metadata.avatar_url || metadata.picture || 'https://picsum.photos/100/100',
+        vcoin_balance: 0,
+        role: 'user',
+        isVip: false,
+        usedGiftcodes: [],
+        createdAt: user.created_at || undefined,
+        lastActive: undefined,
+        accountStatus: 'active',
+        accountWarning: null,
+        accountWarningAt: null,
+        lockedAt: null,
+        lockReason: null,
+    };
+};
+
 const ensureUserProfileViaApi = async (): Promise<any | null> => {
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), USER_PROFILE_API_TIMEOUT_MS);
@@ -729,16 +795,38 @@ export const getUserProfile = async (options?: { force?: boolean }): Promise<Use
                 value: profile,
                 expiresAt: Date.now() + USER_PROFILE_CACHE_TTL_MS,
             };
+            persistUserProfile(user.id, profile);
             return profile;
         }
 
+        if (!forceRefresh) {
+            const persistedProfile = readPersistedUserProfile(user.id);
+            if (persistedProfile) {
+                userProfileCache = {
+                    userId: user.id,
+                    value: persistedProfile,
+                    expiresAt: Date.now() + USER_PROFILE_CACHE_TTL_MS,
+                };
+                return persistedProfile;
+            }
+
+            const fallbackProfile = buildSessionFallbackProfile(user);
+            userProfileCache = {
+                userId: user.id,
+                value: fallbackProfile,
+                expiresAt: Date.now() + 10_000,
+            };
+            return fallbackProfile;
+        }
+
         try {
-            const response = await readWithRetry<{ data: any; error: { message?: string } | null }>(
-                () => supabase
+            const response = await withTimeout<{ data: any; error: { message?: string } | null }>(
+                supabase
                     .from('users')
                     .select(USER_PROFILE_SELECT)
                     .eq('id', user.id)
-                    .maybeSingle(),
+                    .maybeSingle() as unknown as Promise<{ data: any; error: { message?: string } | null }>,
+                USER_PROFILE_STRICT_DB_TIMEOUT_MS,
                 'Fetching user profile',
             );
             data = response.data;
@@ -746,7 +834,7 @@ export const getUserProfile = async (options?: { force?: boolean }): Promise<Use
         } catch (readError: any) {
             console.error("Error fetching user profile:", readError);
             const cachedProfile = userProfileCache;
-            if (cachedProfile && cachedProfile.userId === user.id) {
+            if (!forceRefresh && cachedProfile && cachedProfile.userId === user.id) {
                 return cachedProfile.value;
             }
             const message = "Failed to fetch user profile: " + (readError?.message || 'Network error');
@@ -757,7 +845,7 @@ export const getUserProfile = async (options?: { force?: boolean }): Promise<Use
         if (error) {
             console.error("Error fetching user profile:", error);
             const cachedProfile = userProfileCache;
-            if (cachedProfile && cachedProfile.userId === user.id) {
+            if (!forceRefresh && cachedProfile && cachedProfile.userId === user.id) {
                 return cachedProfile.value;
             }
             const message = "Failed to fetch user profile: " + error.message;
@@ -801,6 +889,7 @@ export const getUserProfile = async (options?: { force?: boolean }): Promise<Use
             value: profile,
             expiresAt: Date.now() + USER_PROFILE_CACHE_TTL_MS,
         };
+        persistUserProfile(user.id, profile);
         userProfileFailureCache = null;
 
         return profile;
@@ -1032,7 +1121,7 @@ export const syncTSTPrices = async (): Promise<{success: boolean, error?: string
 
 export const updateLastActive = async () => {
     if (!supabase) return;
-    if (Date.now() - lastActiveUpdateAt < 60_000) return;
+    if (Date.now() - lastActiveUpdateAt < LAST_ACTIVE_UPDATE_MIN_INTERVAL_MS) return;
     try {
         const user = await getCurrentSessionUser();
         if (user) {
@@ -3938,4 +4027,3 @@ export const getAdminStats = async () => {
         transactions
     };
 };
-

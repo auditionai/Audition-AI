@@ -1,14 +1,11 @@
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { Layout } from './components/Layout';
 import { Home } from './views/Home';
-import { ToolWorkspace } from './views/ToolWorkspace';
-import { Admin } from './views/Admin';
 import { Settings } from './views/Settings';
 import { About } from './views/About';
 import { Guide } from './views/Guide';
 import { Support } from './views/Support';
-import { Gallery } from './views/Gallery';
 import { PromptLibrary } from './views/PromptLibrary';
 import { Landing } from './views/Landing';
 import { TopUp } from './views/TopUp';
@@ -23,7 +20,17 @@ import { AppTour } from './components/AppTour';
 import { Icons } from './components/Icons';
 import { syncPaymentTransaction } from './services/serverQueueService';
 import { setAnalyticsUser, trackEvent, trackPageView } from './services/analyticsService';
-import MobileApp from './mobile-app/src/App';
+
+const ToolWorkspace = lazy(() => import('./views/ToolWorkspace').then((module) => ({ default: module.ToolWorkspace })));
+const Admin = lazy(() => import('./views/Admin').then((module) => ({ default: module.Admin })));
+const Gallery = lazy(() => import('./views/Gallery').then((module) => ({ default: module.Gallery })));
+const MobileApp = lazy(() => import('./mobile-app/src/App'));
+
+const AppLoadingFallback = () => (
+  <div className="flex min-h-screen items-center justify-center bg-[#05050A]">
+    <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/15 border-t-audi-cyan" />
+  </div>
+);
 
 const PHONE_USER_AGENT_PATTERN = /iphone|ipod|android.+mobile|windows phone|blackberry|opera mini|mobile safari/i;
 const SHELL_OVERRIDE_STORAGE_KEY = 'auditionai:shell-override';
@@ -270,10 +277,8 @@ function AppContent() {
     if (!userId || warmedUserDataRef.current === userId) return;
     warmedUserDataRef.current = userId;
 
-    void getTopupGiftcodes().catch((error) => {
-      warmedUserDataRef.current = null;
-      console.warn('[App] Failed to warm up topup giftcodes', error);
-    });
+    // Keep startup light. Top-up giftcodes are loaded only when the user opens
+    // the top-up flow, because the authenticated API can be slow during DB load.
   }, []);
 
   const applyDesktopRouteFromLocation = useCallback(() => {
@@ -321,7 +326,9 @@ function AppContent() {
             if (session) {
                 setIsAuthenticated(true);
                 setAnalyticsUser(session.user.id);
-                checkAdminRole(session.user.id);
+                if (resolveDesktopRoute().view === 'admin') {
+                    checkAdminRole(session.user.id);
+                }
                 warmupAuthenticatedData(session.user.id);
             }
         });
@@ -335,7 +342,9 @@ function AppContent() {
                     if (event === 'SIGNED_IN') {
                         trackEvent('login', { method: 'supabase' });
                     }
-                    checkAdminRole(session.user.id);
+                    if (resolveDesktopRoute().view === 'admin') {
+                        checkAdminRole(session.user.id);
+                    }
                     warmupAuthenticatedData(session.user.id);
                     updateLastActive();
                 }
@@ -781,5 +790,9 @@ export default function App() {
         };
     }, []);
 
-    return useMobileShell ? <MobileApp /> : <DesktopApp />;
+    return (
+      <Suspense fallback={<AppLoadingFallback />}>
+        {useMobileShell ? <MobileApp /> : <DesktopApp />}
+      </Suspense>
+    );
 }

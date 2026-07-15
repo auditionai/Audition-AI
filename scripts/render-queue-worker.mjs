@@ -29,18 +29,20 @@ const label = String(process.env.RENDER_QUEUE_WORKER_LABEL || `render-queue-${la
 const lockName = String(process.env.RENDER_QUEUE_WORKER_LOCK_NAME || `queue_worker_lock:${lane}`).trim() || `queue_worker_lock:${lane}`;
 
 const WORKER_LOCK_LEASE_SECONDS = parsePositiveIntEnv('RENDER_QUEUE_WORKER_LEASE_SECONDS', 180, 15);
-const IDLE_DELAY_MS = parsePositiveIntEnv('RENDER_QUEUE_WORKER_IDLE_DELAY_MS', 2_000, 50);
-const ACTIVE_DELAY_MS = parsePositiveIntEnv('RENDER_QUEUE_WORKER_ACTIVE_DELAY_MS', 250, 10);
+const IDLE_DELAY_MS = parsePositiveIntEnv('RENDER_QUEUE_WORKER_IDLE_DELAY_MS', 15_000, 10_000);
+const ACTIVE_DELAY_MS = parsePositiveIntEnv('RENDER_QUEUE_WORKER_ACTIVE_DELAY_MS', 500, 50);
 const LOCKED_DELAY_MS = parsePositiveIntEnv('RENDER_QUEUE_WORKER_LOCKED_DELAY_MS', 5_000, 100);
 const ERROR_DELAY_MS = parsePositiveIntEnv('RENDER_QUEUE_WORKER_ERROR_DELAY_MS', 10_000, 100);
-const DAEMON_MAX_RUNTIME_MS = parsePositiveIntEnv('RENDER_QUEUE_DAEMON_MAX_RUNTIME_MS', 75_000, 5_000);
-const DAEMON_IDLE_ITERATIONS = parsePositiveIntEnv('RENDER_QUEUE_DAEMON_IDLE_ITERATIONS', 30, 1);
+const DAEMON_MAX_RUNTIME_MS = parsePositiveIntEnv('RENDER_QUEUE_DAEMON_MAX_RUNTIME_MS', 30_000, 5_000);
+const DAEMON_IDLE_ITERATIONS = Math.min(parsePositiveIntEnv('RENDER_QUEUE_DAEMON_IDLE_ITERATIONS', 1, 1), 2);
 const DAEMON_ACTIVE_DELAY_MS = parsePositiveIntEnv('RENDER_QUEUE_DAEMON_ACTIVE_DELAY_MS', 50, 10);
 const DAEMON_IDLE_DELAY_MS = parsePositiveIntEnv('RENDER_QUEUE_DAEMON_IDLE_DELAY_MS', 1_000, 50);
-const WATCHDOG_INTERVAL_MS = parsePositiveIntEnv('RENDER_QUEUE_WATCHDOG_INTERVAL_MS', 60_000, 10_000);
+const WATCHDOG_INTERVAL_MS = parsePositiveIntEnv('RENDER_QUEUE_WATCHDOG_INTERVAL_MS', 10 * 60_000, 5 * 60_000);
+const SERVER_AVAILABILITY_INTERVAL_MS = parsePositiveIntEnv('RENDER_SERVER_AVAILABILITY_INTERVAL_MS', 5 * 60_000, 60_000);
 
 let shouldStop = false;
 let lastWatchdogRunAt = 0;
+let lastServerAvailabilityRunAt = 0;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -169,6 +171,36 @@ const registerSignalHandlers = () => {
 
 const shouldRunIntegratedWatchdog = () => lane === 'poll' || lane === 'all';
 
+const hasDueQueueWork = async () => {
+  const admin = getServiceRoleClient();
+  const { data, error } = await admin.rpc('get_queue_worker_due_state', {
+    p_lane: lane,
+  });
+
+  if (error) {
+    if (/get_queue_worker_due_state|function|schema/i.test(String(error.message || ''))) {
+      log('Queue due-state RPC is unavailable; running one compatibility worker tick.');
+      return true;
+    }
+    throw error;
+  }
+
+  const row = Array.isArray(data) ? data[0] : data;
+  return row?.has_dispatch_work === true || row?.has_poll_work === true;
+};
+
+const refreshServerAvailabilityIfDue = async () => {
+  if (lane === 'poll' || Date.now() - lastServerAvailabilityRunAt < SERVER_AVAILABILITY_INTERVAL_MS) {
+    return;
+  }
+
+  lastServerAvailabilityRunAt = Date.now();
+  const summary = await refreshAutoDisabledServerAvailability();
+  if (summary.changed || summary.triggered > 0) {
+    log('Server availability snapshot updated.', summary);
+  }
+};
+
 const runIntegratedWatchdogIfDue = async () => {
   if (!shouldRunIntegratedWatchdog()) {
     return;
@@ -201,6 +233,11 @@ const main = async () => {
     try {
       await runIntegratedWatchdogIfDue();
 
+      if (!(await hasDueQueueWork())) {
+        await sleep(IDLE_DELAY_MS);
+        continue;
+      }
+
       const lockResult = await tryAcquireQueueWorkerLock(owner);
       acquired = lockResult.acquired;
       lockMode = lockResult.mode;
@@ -211,12 +248,7 @@ const main = async () => {
         continue;
       }
 
-      if (lane !== 'poll') {
-        const serverAvailabilitySummary = await refreshAutoDisabledServerAvailability();
-        if (serverAvailabilitySummary.changed || serverAvailabilitySummary.triggered > 0) {
-          log('Server availability snapshot updated.', serverAvailabilitySummary);
-        }
-      }
+      await refreshServerAvailabilityIfDue();
 
       const summary = await runQueueDaemon({
         lane,

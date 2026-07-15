@@ -99,7 +99,7 @@ export const handler: Handler = async (event) => {
   }
 
   try {
-    const { user } = await requireAuthenticatedUser(event);
+    const { user } = await requireAuthenticatedUser(event, { checkAccountStatus: false });
     const cached = galleryCache.get(user.id);
     if (cached && cached.expiresAt > Date.now()) {
       return {
@@ -197,7 +197,7 @@ export const handler: Handler = async (event) => {
   } catch (error: any) {
     console.error('[gallery-images] failed:', error);
     try {
-      const { user } = await requireAuthenticatedUser(event);
+      const { user } = await requireAuthenticatedUser(event, { checkAccountStatus: false });
       const cached = galleryCache.get(user.id);
       if (cached?.body) {
         return {

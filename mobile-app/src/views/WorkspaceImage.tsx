@@ -651,7 +651,7 @@ export function WorkspaceImage() {
       return;
     }
 
-    const profile = await getUserProfile();
+    const profile = await getUserProfile({ force: true });
     if ((profile.vcoin_balance || 0) < pricing.vcoin) {
       notify(`Số dư không đủ, cần ${pricing.vcoin} Vcoin.`, 'error');
       return;
@@ -732,7 +732,7 @@ export function WorkspaceImage() {
     }
 
     const cost = calculateCost();
-    const profile = await getUserProfile();
+    const profile = await getUserProfile({ force: true });
     if ((profile.vcoin_balance || 0) < cost) {
       notify('Số dư không đủ!', 'error');
       return;

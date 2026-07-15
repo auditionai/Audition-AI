@@ -52,7 +52,7 @@ export const handler: Handler = async (event) => {
   }
 
   try {
-    const { user } = await requireAuthenticatedUser(event);
+    const { user } = await requireAuthenticatedUser(event, { checkAccountStatus: false });
     const admin = getServiceRoleClient();
     const nowIso = new Date().toISOString();
 

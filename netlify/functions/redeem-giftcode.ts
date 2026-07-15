@@ -189,7 +189,10 @@ export const handler: Handler = async (event) => {
   }
 
   try {
-    const { user, browserKeyHash } = await requireAuthenticatedUser(event);
+    const { user, browserKeyHash } = await requireAuthenticatedUser(event, {
+      bindBrowserKey: true,
+      checkAccountStatus: true,
+    });
     const body = JSON.parse(event.body || '{}');
     const code = String(body?.code || '').trim().toUpperCase();
     const ipAddress = getClientIp(event);

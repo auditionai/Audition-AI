@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from './supabaseClient';
 import { getUserProfile } from './economyService';
-import { QUEUE_SUBMITTED_EVENT, triggerServerQueueTick } from './serverQueueService';
+import { QUEUE_SUBMITTED_EVENT } from './serverQueueService';
 import { isSystemQueueKind } from '../shared/queueKinds';
 
 export interface JobState {
@@ -44,8 +44,8 @@ const EMPTY_QUEUE_STATS: QueueStats = {
   systemQueued: 0,
 };
 
-const BUSY_QUEUE_POLL_MS = 10_000;
-const IDLE_QUEUE_POLL_MS = 180_000;
+const BUSY_QUEUE_POLL_MS = 20_000;
+const IDLE_QUEUE_POLL_MS = 300_000;
 const MANUAL_QUEUE_POLL_MIN_INTERVAL_MS = 5_000;
 const REALTIME_STATS_REFRESH_DEBOUNCE_MS = 1_000;
 const SUBMIT_FALLBACK_REFRESH_MS = 5_000;
@@ -87,21 +87,10 @@ const notifyQueueStatsSubscribers = () => {
   queueStatsSubscribers.forEach((subscriber) => subscriber(sharedQueueStats));
 };
 
-const hasQueueActivity = (stats: QueueStats) =>
+const hasMyQueueActivity = (stats: QueueStats) =>
   stats.myImageProcessing > 0 ||
   stats.myVideoProcessing > 0 ||
-  stats.myQueued > 0 ||
-  stats.systemImageProcessing > 0 ||
-  stats.systemVideoProcessing > 0 ||
-  stats.systemQueued > 0;
-
-const shouldNudgeQueueWorker = (stats: QueueStats) =>
-  stats.systemQueued > 0 ||
-  stats.myQueued > 0 ||
-  stats.myImageProcessing > 0 ||
-  stats.myVideoProcessing > 0 ||
-  stats.systemImageProcessing > 0 ||
-  stats.systemVideoProcessing > 0;
+  stats.myQueued > 0;
 
 const sortJobsByTimestampDesc = (jobs: JobState[]) =>
   [...jobs].sort((a, b) => b.timestamp - a.timestamp);
@@ -189,7 +178,7 @@ const scheduleQueueStatsPoll = () => {
     return;
   }
 
-  const delay = hasQueueActivity(sharedQueueStats) ? BUSY_QUEUE_POLL_MS : IDLE_QUEUE_POLL_MS;
+  const delay = hasMyQueueActivity(sharedQueueStats) ? BUSY_QUEUE_POLL_MS : IDLE_QUEUE_POLL_MS;
   queueStatsPollTimer = setTimeout(() => {
     fetchSharedQueueStats().catch((error) => {
       console.warn('[Concurrency] Failed to refresh queue stats', error);
@@ -254,11 +243,6 @@ const fetchSharedQueueStats = async (force = false) => {
       };
       notifyQueueStatsSubscribers();
 
-      if (shouldNudgeQueueWorker(sharedQueueStats)) {
-        triggerServerQueueTick().catch((error) => {
-          console.warn('[Concurrency] Failed to nudge queue worker after stats refresh', error);
-        });
-      }
     } catch (error) {
       console.warn('[Concurrency] Failed to load queue stats', error);
     } finally {
@@ -333,6 +317,7 @@ export const initConcurrencyTracker = async () => {
           filter: `user_id=eq.${userId}`,
         },
         (payload: any) => {
+          const previousJob = currentJobs.find((entry) => entry.jobId === (payload?.old?.id || payload?.new?.id));
           const nextRow = mapGeneratedImageToJobState(payload?.new as GeneratedImageQueueRow | undefined);
           const previousJobId = payload?.old?.id || payload?.new?.id;
 
@@ -342,7 +327,10 @@ export const initConcurrencyTracker = async () => {
             removeCurrentJob(previousJobId);
           }
 
-          scheduleRealtimeStatsRefresh(`realtime ${payload?.eventType || 'change'}`);
+          const statusChanged = previousJob?.status !== nextRow?.status;
+          if (payload?.eventType !== 'UPDATE' || statusChanged) {
+            scheduleRealtimeStatsRefresh(`realtime ${payload?.eventType || 'change'}`);
+          }
         },
       )
       .subscribe((status: string) => {

@@ -121,10 +121,18 @@ export const Home: React.FC<HomeProps> = ({ lang, onSelectFeature, onNavigate, o
   const [isCheckedIn, setIsCheckedIn] = useState(true);
 
   useEffect(() => {
-    return subscribeCheckinStatus(
-      (status) => setIsCheckedIn(status.isCheckedInToday),
-      { force: true },
-    );
+    let unsubscribe: (() => void) | null = null;
+    const timer = window.setTimeout(() => {
+      unsubscribe = subscribeCheckinStatus(
+        (status) => setIsCheckedIn(status.isCheckedInToday),
+        { force: false },
+      );
+    }, 1200);
+
+    return () => {
+      window.clearTimeout(timer);
+      unsubscribe?.();
+    };
   }, []);
 
   return (

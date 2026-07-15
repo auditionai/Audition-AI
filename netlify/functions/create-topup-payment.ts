@@ -188,7 +188,7 @@ export const handler: Handler = async (event) => {
   }
 
   try {
-    const { user } = await requireAuthenticatedUser(event);
+    const { user } = await requireAuthenticatedUser(event, { checkAccountStatus: true });
     const body = JSON.parse(event.body || '{}');
     const packageId = String(body?.packageId || '').trim();
     const giftcode = String(body?.giftcode || '').trim().toUpperCase();

@@ -6,7 +6,7 @@ import { runQueueDaemon } from './_queue-daemon';
 const headers = {
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Cron-Secret',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
@@ -24,6 +24,16 @@ export const handler: Handler = async (event) => {
       statusCode: 405,
       headers,
       body: JSON.stringify({ error: 'Method Not Allowed' }),
+    };
+  }
+
+  const expectedSecret = process.env.CRON_SECRET || '';
+  const providedSecret = event.headers['x-cron-secret'] || event.headers['X-Cron-Secret'] || '';
+  if (!expectedSecret || providedSecret !== expectedSecret) {
+    return {
+      statusCode: 401,
+      headers,
+      body: JSON.stringify({ error: 'Unauthorized' }),
     };
   }
 

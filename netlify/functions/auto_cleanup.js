@@ -4,8 +4,8 @@ import { S3Client, DeleteObjectCommand, ListObjectsV2Command, DeleteObjectsComma
 
 // Initialize Supabase
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
 // Initialize R2
 const r2 = new S3Client({
@@ -18,21 +18,32 @@ const r2 = new S3Client({
 });
 
 export const handler = async (event, context) => {
-  // Security check: You might want to add a secret query param here to prevent public triggering
-  // e.g. ?secret=MY_ADMIN_SECRET
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
+  }
+
+  const expectedSecret = process.env.CRON_SECRET || '';
+  const providedSecret = event.headers['x-cron-secret'] || event.headers['X-Cron-Secret'] || '';
+  if (!expectedSecret || providedSecret !== expectedSecret) {
+    return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
+  }
+
+  if (!supabase) {
+    return { statusCode: 503, body: JSON.stringify({ error: 'Cleanup service is not configured' }) };
+  }
   
   try {
-    // 1. Calculate Date Threshold (7 days ago)
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    const isoDate = sevenDaysAgo.toISOString();
+    // 1. Calculate Date Threshold (30 days ago)
+    const retentionThreshold = new Date();
+    retentionThreshold.setDate(retentionThreshold.getDate() - 30);
+    const isoDate = retentionThreshold.toISOString();
     const now = Date.now();
-    const retentionMs = 7 * 24 * 60 * 60 * 1000;
+    const retentionMs = 30 * 24 * 60 * 60 * 1000;
 
     let deletedCount = 0;
     const errors = [];
 
-    // 2. Query assets to delete: Older than 7 days AND NOT public (shared)
+    // 2. Query assets to delete: Older than 30 days AND NOT public (shared)
     const { data: imagesToDelete, error } = await supabase
       .from('generated_images')
       .select('id, user_id, is_public, image_url')

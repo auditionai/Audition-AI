@@ -138,7 +138,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
           loadImages(true).catch((error) => {
               console.warn('[Gallery] Active job refresh failed', error);
           });
-      }, 8000);
+      }, 20_000);
 
       return () => clearInterval(interval);
   }, [activeTab, hasActiveGenerationJobs, loadImages]);

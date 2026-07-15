@@ -246,7 +246,19 @@ export const EditingTool: React.FC<EditingToolProps> = ({
       );
       return;
     }
-    const user = await getUserProfile();
+    let user;
+    try {
+      user = await getUserProfile({ force: true });
+    } catch (error) {
+      console.warn('[EditingTool] Failed to verify current balance', error);
+      notify(
+        lang === 'vi'
+          ? 'Không thể xác minh số dư Vcoin lúc này. Vui lòng thử lại.'
+          : 'Unable to verify your Vcoin balance. Please try again.',
+        'error',
+      );
+      return;
+    }
     if ((user.vcoin_balance || 0) < selectedGenerationCost.vcoin) {
       notify(
         lang === 'vi'

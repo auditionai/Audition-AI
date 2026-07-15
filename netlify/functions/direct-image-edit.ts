@@ -136,7 +136,7 @@ export const handler: Handler = async (event) => {
 
   if (event.httpMethod === 'GET') {
     try {
-      const { user } = await requireAuthenticatedUser(event);
+      const { user } = await requireAuthenticatedUser(event, { checkAccountStatus: false });
       const admin = getServiceRoleClient();
       const requestedId = String(event.queryStringParameters?.id || '').trim();
       if (!UUID_PATTERN.test(requestedId)) {
@@ -201,7 +201,7 @@ export const handler: Handler = async (event) => {
   }
 
   try {
-    const { user } = await requireAuthenticatedUser(event);
+    const { user } = await requireAuthenticatedUser(event, { checkAccountStatus: false });
     const admin = getServiceRoleClient();
     const body = JSON.parse(event.body || '{}') as DirectImageEditBody;
     const jobId = normalizeJobId(body.id);
@@ -258,7 +258,7 @@ export const handler: Handler = async (event) => {
 
     const { data: userRow, error: userError } = await admin
       .from('users')
-      .select('id, vcoin_balance')
+      .select('id, vcoin_balance, account_status')
       .eq('id', user.id)
       .maybeSingle();
 
@@ -268,6 +268,10 @@ export const handler: Handler = async (event) => {
 
     if (!userRow) {
       throw new Error('USER_NOT_FOUND');
+    }
+
+    if (userRow.account_status === 'locked') {
+      throw new Error('AccountLocked');
     }
 
     if (costVcoin > Number(userRow.vcoin_balance || 0)) {

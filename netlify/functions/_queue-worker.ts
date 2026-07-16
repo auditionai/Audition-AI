@@ -1387,7 +1387,6 @@ const requeueJob = async (job: QueueJobRow, errorMessage: string) => {
   await updateGeneratedImageRecord(job.id, {
     status: 'queued',
     job_id: null,
-    image_url: null,
     finished_at: null,
     processing_started_at: null,
     error_message: errorMessage,
@@ -1418,7 +1417,6 @@ const requeueStalePreDispatchJob = async (job: QueueJobRow, errorMessage: string
   await updateGeneratedImageRecord(job.id, {
     status: 'queued',
     job_id: null,
-    image_url: null,
     finished_at: null,
     processing_started_at: null,
     error_message: errorMessage,

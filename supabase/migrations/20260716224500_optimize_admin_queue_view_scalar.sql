@@ -4,6 +4,8 @@ begin;
 -- list and must not detoast large generation payloads just to render a row.
 -- Full logs, diagnostics, and recipe payloads remain available through the
 -- existing on-demand admin queue job detail endpoint.
+drop view if exists public.admin_generated_images_queue_lightweight;
+
 create or replace view public.admin_generated_images_queue_lightweight
 with (security_invoker = true)
 as

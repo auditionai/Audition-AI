@@ -1,7 +1,6 @@
 import type { Handler } from '@netlify/functions';
 import { triggerBackgroundQueueWorker } from './_queue-launcher';
 import { areQueueWorkersDisabled, isDedicatedQueueWorkerMode } from './_queue-runtime-mode';
-import { runQueueDaemon } from './_queue-daemon';
 
 const headers = {
   'Content-Type': 'application/json',
@@ -46,23 +45,14 @@ export const handler: Handler = async (event) => {
   }
 
   if (isDedicatedQueueWorkerMode()) {
-    const summary = await runQueueDaemon({
-      lane: 'dispatch',
-      maxRuntimeMs: 8_000,
-      idleIterationsToStop: 1,
-      activeDelayMs: 50,
-      idleDelayMs: 100,
-    });
-
     return {
-      statusCode: 200,
+      statusCode: 202,
       headers,
       body: JSON.stringify({
         success: true,
         accepted: true,
-        background: false,
-        reason: 'dedicated_worker_inline_dispatch',
-        summary,
+        background: true,
+        reason: 'dedicated_worker_active',
       }),
     };
   }

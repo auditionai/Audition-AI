@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import { getServiceRoleClient } from './_supabase';
 import { runQueueDaemon } from './_queue-daemon';
 import { sendTelegramOperationalAlert } from './_telegram-notify';
-import { runSePayPendingReconcile } from './sepay-reconcile-pending';
 import type { QueueProcessingStage, QueueProgressLogEntry } from '../../shared/queueRecipes';
 import { DIRECT_IMAGE_EDIT_QUEUE_KIND } from '../../shared/queueKinds';
 import { processDirectImageEditJob } from './_direct-image-edit-processor';
@@ -25,8 +24,6 @@ type WatchdogSummary = {
   directEditSkipped: number;
   staleDispatchHeartbeat: boolean;
   alertsSent: number;
-  sepayReconcile?: unknown;
-  sepayReconcileError?: string;
   worker?: Awaited<ReturnType<typeof runQueueDaemon>>;
   workerError?: string;
 };
@@ -590,17 +587,19 @@ const inspectDispatchHeartbeat = async () => {
   const admin = getServiceRoleClient();
   const { data, error } = await admin
     .from('system_settings')
-    .select('value')
-    .eq('key', 'queue_worker_lock:dispatch')
-    .maybeSingle();
+    .select('key, value')
+    .in('key', ['queue_worker_lock:dispatch', 'queue_worker_lock:all']);
 
   if (error) {
     console.warn('[queue-watchdog] Failed to inspect dispatch heartbeat:', error);
     return false;
   }
 
-  const heartbeatAt = String(toPayloadObject(data?.value).heartbeatAt || '');
-  const heartbeatMs = heartbeatAt ? new Date(heartbeatAt).getTime() : 0;
+  const heartbeatMs = (data || []).reduce((latest, row) => {
+    const heartbeatAt = String(toPayloadObject(row.value).heartbeatAt || '');
+    const timestamp = heartbeatAt ? new Date(heartbeatAt).getTime() : 0;
+    return Math.max(latest, Number.isFinite(timestamp) ? timestamp : 0);
+  }, 0);
   return !heartbeatMs || Date.now() - heartbeatMs > DISPATCH_HEARTBEAT_STALE_MS;
 };
 
@@ -664,20 +663,7 @@ export const runQueueWatchdog = async (options: { runWorkerAfterRescue?: boolean
   };
 
   try {
-    const admin = getServiceRoleClient();
     const alertState = await getAlertState();
-    try {
-      summary.sepayReconcile = await runSePayPendingReconcile({
-        limit: 10,
-        maxRuntimeMs: 20_000,
-      });
-    } catch (error: any) {
-      summary.sepayReconcileError = error?.message || 'SePay reconcile failed';
-      if (await sendThrottledAlert(alertState, 'sepay_reconcile_failed', 'SePay reconcile tu dong bi loi', {
-        error: summary.sepayReconcileError,
-      })) summary.alertsSent += 1;
-    }
-
     summary.dbInvariant = await runDbInvariantRepair();
     await rescueStaleDirectImageEditJobs(summary);
     const rows = await fetchQueueHealthRows();
@@ -739,7 +725,7 @@ export const runQueueWatchdog = async (options: { runWorkerAfterRescue?: boolean
       }
     }
 
-    summary.staleDispatchHeartbeat = await inspectDispatchHeartbeat();
+    summary.staleDispatchHeartbeat = summary.queuedStale > 0 && await inspectDispatchHeartbeat();
 
     if (options.runWorkerAfterRescue !== false && (
       summary.requeuedPreDispatch > 0 ||
@@ -761,8 +747,8 @@ export const runQueueWatchdog = async (options: { runWorkerAfterRescue?: boolean
       summary.healthAfter = buildQueueHealthSnapshot(await fetchQueueHealthRows());
     }
 
-    summary.staleDispatchHeartbeat = await inspectDispatchHeartbeat();
     summary.healthAfter = buildQueueHealthSnapshot(await fetchQueueHealthRows());
+    summary.staleDispatchHeartbeat = summary.healthAfter.counts.queued_stale > 0 && await inspectDispatchHeartbeat();
 
     if (summary.queuedStale > 0) {
       if (await sendThrottledAlert(alertState, 'queued_stale', 'Watchdog da day lai job queued qua 5 phut', {

@@ -39,10 +39,16 @@ const DAEMON_ACTIVE_DELAY_MS = parsePositiveIntEnv('RENDER_QUEUE_DAEMON_ACTIVE_D
 const DAEMON_IDLE_DELAY_MS = parsePositiveIntEnv('RENDER_QUEUE_DAEMON_IDLE_DELAY_MS', 1_000, 50);
 const WATCHDOG_INTERVAL_MS = parsePositiveIntEnv('RENDER_QUEUE_WATCHDOG_INTERVAL_MS', 10 * 60_000, 5 * 60_000);
 const SERVER_AVAILABILITY_INTERVAL_MS = parsePositiveIntEnv('RENDER_SERVER_AVAILABILITY_INTERVAL_MS', 5 * 60_000, 60_000);
+const OPERATIONAL_MAINTENANCE_INTERVAL_MS = parsePositiveIntEnv(
+  'RENDER_OPERATIONAL_MAINTENANCE_INTERVAL_MS',
+  20 * 60 * 60_000,
+  6 * 60 * 60_000,
+);
 
 let shouldStop = false;
 let lastWatchdogRunAt = 0;
 let lastServerAvailabilityRunAt = 0;
+let lastOperationalMaintenanceRunAt = 0;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -220,6 +226,46 @@ const runIntegratedWatchdogIfDue = async () => {
   }
 };
 
+const runOperationalMaintenanceIfDue = async () => {
+  const now = Date.now();
+  const vietnamHour = Number(new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    hour: '2-digit',
+    hour12: false,
+  }).format(new Date(now)));
+  if (vietnamHour < 3 || vietnamHour >= 5) {
+    return;
+  }
+
+  if (
+    lastOperationalMaintenanceRunAt > 0 &&
+    now - lastOperationalMaintenanceRunAt < OPERATIONAL_MAINTENANCE_INTERVAL_MS
+  ) {
+    return;
+  }
+
+  lastOperationalMaintenanceRunAt = now;
+  const admin = getServiceRoleClient();
+  const results = {};
+
+  for (const { name, args } of [
+    { name: 'compact_terminal_generated_image_payloads', args: { p_limit: 1, p_failed_min_age_days: 7 } },
+    { name: 'cleanup_expired_operational_history', args: { p_limit: 20, p_retention_days: 30 } },
+  ]) {
+    const { data, error } = await admin.rpc(name, args);
+    if (error) {
+      if (error.code === 'PGRST202' || new RegExp(name, 'i').test(String(error.message || ''))) {
+        results[name] = 'migration_not_available';
+        continue;
+      }
+      throw error;
+    }
+    results[name] = data;
+  }
+
+  log('Operational maintenance cycle finished.', results);
+};
+
 const main = async () => {
   registerSignalHandlers();
 
@@ -231,6 +277,7 @@ const main = async () => {
     let lockMode = 'legacy';
 
     try {
+      await runOperationalMaintenanceIfDue();
       await runIntegratedWatchdogIfDue();
 
       if (!(await hasDueQueueWork())) {

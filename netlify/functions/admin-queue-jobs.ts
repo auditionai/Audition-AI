@@ -403,7 +403,7 @@ export const handler: Handler = async (event) => {
 
     let query = admin
       .from('admin_generated_images_queue_lightweight')
-      .select('id, user_id, tool_name, queue_kind, asset_type, status, job_id, progress, queue_payload, error_message, created_at, updated_at, next_poll_at, processing_started_at, lease_expires_at')
+      .select('id, user_id, tool_name, queue_kind, asset_type, status, job_id, progress, queue_stage, client_platform, tst_touched, dispatch_confirmation_pending, watchdog_recoveries, failed_rescue_attempt_count, failed_rescue_finalized, manually_stopped, next_failed_rescue_at, error_message, created_at, updated_at, next_poll_at, processing_started_at, lease_expires_at')
       .order('updated_at', { ascending: false })
       .limit(queryLimit);
 
@@ -449,9 +449,17 @@ export const handler: Handler = async (event) => {
     );
 
     let jobs: AdminQueueJob[] = rows.map((row: any) => {
-      const payload = row.queue_payload && typeof row.queue_payload === 'object'
-        ? row.queue_payload as Record<string, unknown>
-        : null;
+      const payload: Record<string, unknown> = {
+        __stage: row.queue_stage || undefined,
+        __clientPlatform: row.client_platform || undefined,
+        __tstTouched: row.tst_touched === true,
+        __dispatchConfirmationPending: row.dispatch_confirmation_pending === true,
+        __watchdogRecoveries: Number(row.watchdog_recoveries || 0),
+        __failedRescueAttemptCount: Number(row.failed_rescue_attempt_count || 0),
+        __failedRescueFinalized: row.failed_rescue_finalized === true,
+        __manuallyStopped: row.manually_stopped === true,
+        __nextFailedRescueAt: row.next_failed_rescue_at || undefined,
+      };
       const profile = userMap.get(String(row.user_id || ''));
       const lastQueueLog = getLastQueueLog(payload);
       const normalizedStatus = String(row.status || 'queued').toLowerCase();

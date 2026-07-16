@@ -307,6 +307,7 @@ export const findSePayBankTransactionForOrder = async (input: {
   references?: Array<string | number | null | undefined>;
   maxQueries?: number;
   allowUniqueAmountFallback?: boolean;
+  parallelQueries?: boolean;
 }) => {
   const orderCode = String(input.orderCode || '').trim();
   if (!orderCode) {
@@ -335,8 +336,8 @@ export const findSePayBankTransactionForOrder = async (input: {
     ]),
   ].slice(0, maxQueries);
 
-  for (const [queryIndex, query] of queries.entries()) {
-    const result = await retrieveSePayTransactions({
+  const executeQuery = (query: Record<string, string | number>) =>
+    retrieveSePayTransactions({
       ...query,
       transfer_type: 'in',
       transaction_date_from: formatSePayQueryDate(from),
@@ -346,9 +347,25 @@ export const findSePayBankTransactionForOrder = async (input: {
       timestamp_format: 'iso8601',
     });
 
-    if (!result.ok) {
+  const results = input.parallelQueries === true
+    ? await Promise.all(queries.map(executeQuery))
+    : [];
+  let firstQueryError: Awaited<ReturnType<typeof retrieveSePayTransactions>> | null = null;
+  let successfulQueryCount = 0;
+
+  for (const [queryIndex, query] of queries.entries()) {
+    const result = input.parallelQueries === true
+      ? results[queryIndex]
+      : await executeQuery(query);
+
+    if (!result?.ok) {
+      if (input.parallelQueries === true) {
+        firstQueryError ||= result || null;
+        continue;
+      }
       return { ...result, transaction: null };
     }
+    successfulQueryCount += 1;
 
     const transactions = Array.isArray(result.payload?.data) ? result.payload.data : [];
     const exactAmountTransactions = transactions.filter((transaction: any) => {
@@ -375,6 +392,10 @@ export const findSePayBankTransactionForOrder = async (input: {
         transaction: exactAmountTransactions[0],
       };
     }
+  }
+
+  if (successfulQueryCount === 0 && firstQueryError) {
+    return { ...firstQueryError, transaction: null };
   }
 
   return { ok: true, status: 200, payload: { status: 'success', data: [] }, transaction: null };

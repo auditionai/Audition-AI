@@ -3,7 +3,6 @@ import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 import {
   extractSePayPaidAmount,
   extractSePayProviderOrderId,
-  extractSePayOrderDescription,
   findSePayBankTransactionForOrder,
   normalizeSePayOrderStatus,
   retrieveSePayOrder,
@@ -105,13 +104,27 @@ export const handler: Handler = async (event) => {
       };
     }
 
-    const orderLookup = await retrieveSePayOrder(orderCodeText);
-    const providerOrderId = orderLookup.ok ? extractSePayProviderOrderId(orderLookup.payload) : '';
-    const orderDescription = orderLookup.ok ? extractSePayOrderDescription(orderLookup.payload) : '';
     const storedPayload =
       existingTransaction.provider_payload && typeof existingTransaction.provider_payload === 'object'
         ? existingTransaction.provider_payload as Record<string, unknown>
         : {};
+    const [orderLookup, bankLookup] = await Promise.all([
+      retrieveSePayOrder(orderCodeText),
+      findSePayBankTransactionForOrder({
+        orderCode: orderCodeText,
+        amount: Number(existingTransaction.amount_vnd),
+        createdAt: existingTransaction.created_at,
+        references: [
+          orderCodeText,
+          String(storedPayload.sepay_order_description || ''),
+          String(existingTransaction.provider_payment_link_id || '').replace(/^sepay:/i, ''),
+        ],
+        maxQueries: 3,
+        allowUniqueAmountFallback: false,
+        parallelQueries: true,
+      }),
+    ]);
+    const providerOrderId = orderLookup.ok ? extractSePayProviderOrderId(orderLookup.payload) : '';
     if (orderLookup.ok) {
       const providerStatus = normalizeSePayOrderStatus(orderLookup.payload);
       const paidAmount = extractSePayPaidAmount(orderLookup.payload);
@@ -171,20 +184,6 @@ export const handler: Handler = async (event) => {
         };
       }
     }
-
-    const bankLookup = await findSePayBankTransactionForOrder({
-      orderCode: orderCodeText,
-      amount: Number(existingTransaction.amount_vnd),
-      createdAt: existingTransaction.created_at,
-      references: [
-        orderCodeText,
-        providerOrderId,
-        orderDescription,
-        String(storedPayload.sepay_order_description || ''),
-        String(existingTransaction.provider_payment_link_id || '').replace(/^sepay:/i, ''),
-      ],
-      allowUniqueAmountFallback: false,
-    });
 
     if (!bankLookup.ok) {
       return {

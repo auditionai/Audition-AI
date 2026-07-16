@@ -40,6 +40,7 @@ const TST_SUPABASE_READ_RETRIES = 1;
 const TST_SUPABASE_READ_RETRY_DELAY_MS = 500;
 const USER_PROFILE_API_TIMEOUT_MS = 3_500;
 const USER_PROFILE_STRICT_DB_TIMEOUT_MS = 4_000;
+const USER_PROFILE_FALLBACK_CACHE_TTL_MS = 10_000;
 const USER_PROFILE_FAILURE_BACKOFF_MS = 45_000;
 const MAINTENANCE_MODE_CACHE_TTL_MS = 60_000;
 const MAINTENANCE_MODE_POLL_MS = 300_000;
@@ -755,6 +756,23 @@ const ensureUserProfileViaApi = async (): Promise<any | null> => {
     }
 };
 
+const readUserProfileFromDatabase = async (userId: string) => {
+    if (!supabase) throw new Error("No Database");
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), USER_PROFILE_STRICT_DB_TIMEOUT_MS);
+    try {
+        return await supabase
+            .from('users')
+            .select(USER_PROFILE_SELECT)
+            .eq('id', userId)
+            .maybeSingle()
+            .abortSignal(controller.signal);
+    } finally {
+        window.clearTimeout(timeoutId);
+    }
+};
+
 export const getUserProfile = async (options?: { force?: boolean }): Promise<UserProfile> => {
     if (!supabase) throw new Error("No Database");
 
@@ -786,9 +804,17 @@ export const getUserProfile = async (options?: { force?: boolean }): Promise<Use
         let data: any = null;
         let error: { message?: string } | null = null;
 
-        const repairedProfile = await ensureUserProfileViaApi();
-        if (repairedProfile) {
-            const profile = mapUserRowToProfile(repairedProfile);
+        try {
+            const response = await readUserProfileFromDatabase(user.id);
+            data = response.data;
+            error = response.error;
+        } catch (readError: any) {
+            console.error("Error fetching user profile:", readError);
+            error = { message: readError?.message || 'Network error' };
+        }
+
+        if (!error && data?.email && data?.display_name) {
+            const profile = mapUserRowToProfile(data);
             userProfileFailureCache = null;
             userProfileCache = {
                 userId: user.id,
@@ -799,100 +825,47 @@ export const getUserProfile = async (options?: { force?: boolean }): Promise<Use
             return profile;
         }
 
-        if (!forceRefresh) {
-            const persistedProfile = readPersistedUserProfile(user.id);
-            if (persistedProfile) {
+        // Repair only missing or incomplete rows. A normal profile read should
+        // not invoke a Netlify Function and then perform the same database read.
+        if (!error) {
+            const repairedProfile = await ensureUserProfileViaApi();
+            if (repairedProfile) {
+                const profile = mapUserRowToProfile(repairedProfile);
+                userProfileFailureCache = null;
                 userProfileCache = {
                     userId: user.id,
-                    value: persistedProfile,
+                    value: profile,
                     expiresAt: Date.now() + USER_PROFILE_CACHE_TTL_MS,
                 };
-                return persistedProfile;
+                persistUserProfile(user.id, profile);
+                return profile;
             }
 
-            const fallbackProfile = buildSessionFallbackProfile(user);
+            // Even an incomplete row contains authoritative balance and role.
+            if (data) {
+                const profile = mapUserRowToProfile(data);
+                userProfileCache = {
+                    userId: user.id,
+                    value: profile,
+                    expiresAt: Date.now() + USER_PROFILE_FALLBACK_CACHE_TTL_MS,
+                };
+                return profile;
+            }
+        }
+
+        if (!forceRefresh) {
+            const profile = readPersistedUserProfile(user.id) || buildSessionFallbackProfile(user);
             userProfileCache = {
                 userId: user.id,
-                value: fallbackProfile,
-                expiresAt: Date.now() + 10_000,
+                value: profile,
+                expiresAt: Date.now() + USER_PROFILE_FALLBACK_CACHE_TTL_MS,
             };
-            return fallbackProfile;
+            return profile;
         }
 
-        try {
-            const response = await withTimeout<{ data: any; error: { message?: string } | null }>(
-                supabase
-                    .from('users')
-                    .select(USER_PROFILE_SELECT)
-                    .eq('id', user.id)
-                    .maybeSingle() as unknown as Promise<{ data: any; error: { message?: string } | null }>,
-                USER_PROFILE_STRICT_DB_TIMEOUT_MS,
-                'Fetching user profile',
-            );
-            data = response.data;
-            error = response.error;
-        } catch (readError: any) {
-            console.error("Error fetching user profile:", readError);
-            const cachedProfile = userProfileCache;
-            if (!forceRefresh && cachedProfile && cachedProfile.userId === user.id) {
-                return cachedProfile.value;
-            }
-            const message = "Failed to fetch user profile: " + (readError?.message || 'Network error');
-            rememberProfileFailure(message);
-            throw new Error(message);
-        }
-
-        if (error) {
-            console.error("Error fetching user profile:", error);
-            const cachedProfile = userProfileCache;
-            if (!forceRefresh && cachedProfile && cachedProfile.userId === user.id) {
-                return cachedProfile.value;
-            }
-            const message = "Failed to fetch user profile: " + error.message;
-            rememberProfileFailure(message);
-            throw new Error(message);
-        }
-
-        let profile: UserProfile;
-
-        if (!data || !data.email || !data.display_name) {
-            // Create or update profile if missing or incomplete (fallback for missing trigger)
-            const newProfile = {
-                id: user.id,
-                email: user.email || data?.email || '',
-                display_name: user.user_metadata?.full_name || user.email?.split('@')[0] || data?.display_name || 'User',
-                photo_url: user.user_metadata?.avatar_url || data?.photo_url || 'https://picsum.photos/100/100',
-                vcoin_balance: data?.vcoin_balance ?? 0,
-                is_admin: data?.is_admin ?? false,
-                last_active: new Date().toISOString(),
-                account_status: data?.account_status || 'active',
-                account_warning: data?.account_warning || null,
-                account_warning_at: data?.account_warning_at || null,
-                locked_at: data?.locked_at || null,
-                lock_reason: data?.lock_reason || null
-            };
-
-            try {
-                await supabase.from('users').upsert(newProfile);
-            } catch (e) {
-                console.warn("Failed to auto-create/update user profile", e);
-            }
-
-            const repairedProfile = await ensureUserProfileViaApi();
-            profile = repairedProfile ? mapUserRowToProfile(repairedProfile) : mapUserRowToProfile(newProfile);
-        } else {
-            profile = mapUserRowToProfile(data);
-        }
-
-        userProfileCache = {
-            userId: user.id,
-            value: profile,
-            expiresAt: Date.now() + USER_PROFILE_CACHE_TTL_MS,
-        };
-        persistUserProfile(user.id, profile);
-        userProfileFailureCache = null;
-
-        return profile;
+        const message = "Failed to fetch user profile: " + (error?.message || 'Profile unavailable');
+        rememberProfileFailure(message);
+        throw new Error(message);
     })();
 
     try {

@@ -18,6 +18,18 @@ const getAbortSignal = (timeoutMs: number) => {
   return { signal: controller.signal, clear: () => clearTimeout(timeoutId) };
 };
 
+const runWithAbortTimeout = async <T>(
+  timeoutMs: number,
+  operation: (signal: AbortSignal) => PromiseLike<T>,
+): Promise<T> => {
+  const timeout = getAbortSignal(timeoutMs);
+  try {
+    return await operation(timeout.signal);
+  } finally {
+    timeout.clear();
+  }
+};
+
 const getDisplayName = (user: any) => {
   const metadata = user?.user_metadata || {};
   return (
@@ -68,14 +80,15 @@ export const handler: Handler = async (event) => {
       updated_at: nowIso,
     };
 
-    const readTimeout = getAbortSignal(PROFILE_DB_TIMEOUT_MS);
-    const { data: existing, error: readError } = await admin
-      .from('users')
-      .select(PROFILE_SELECT)
-      .eq('id', user.id)
-      .maybeSingle()
-      .abortSignal(readTimeout.signal)
-      .finally(() => readTimeout.clear());
+    const { data: existing, error: readError } = await runWithAbortTimeout(
+      PROFILE_DB_TIMEOUT_MS,
+      (signal) => admin
+        .from('users')
+        .select(PROFILE_SELECT)
+        .eq('id', user.id)
+        .maybeSingle()
+        .abortSignal(signal),
+    );
 
     if (readError) {
       throw readError;
@@ -104,13 +117,14 @@ export const handler: Handler = async (event) => {
         photo_url: existing.photo_url || payload.photo_url,
         last_active: payload.last_active,
       };
-      const updateTimeout = getAbortSignal(PROFILE_DB_TIMEOUT_MS);
-      const { error: patchError } = await admin
-        .from('users')
-        .update(patch)
-        .eq('id', user.id)
-        .abortSignal(updateTimeout.signal)
-        .finally(() => updateTimeout.clear());
+      const { error: patchError } = await runWithAbortTimeout(
+        PROFILE_DB_TIMEOUT_MS,
+        (signal) => admin
+          .from('users')
+          .update(patch)
+          .eq('id', user.id)
+          .abortSignal(signal),
+      );
 
       if (patchError) {
         throw patchError;
@@ -123,15 +137,16 @@ export const handler: Handler = async (event) => {
       };
     }
 
-    const insertTimeout = getAbortSignal(PROFILE_DB_TIMEOUT_MS);
-    const { error: insertError } = await admin
-      .from('users')
-      .upsert(payload, {
-        onConflict: 'id',
-        ignoreDuplicates: true,
-      })
-      .abortSignal(insertTimeout.signal)
-      .finally(() => insertTimeout.clear());
+    const { error: insertError } = await runWithAbortTimeout(
+      PROFILE_DB_TIMEOUT_MS,
+      (signal) => admin
+        .from('users')
+        .upsert(payload, {
+          onConflict: 'id',
+          ignoreDuplicates: true,
+        })
+        .abortSignal(signal),
+    );
 
     if (insertError) {
       throw insertError;

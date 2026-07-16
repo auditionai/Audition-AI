@@ -326,9 +326,7 @@ function AppContent() {
             if (session) {
                 setIsAuthenticated(true);
                 setAnalyticsUser(session.user.id);
-                if (resolveDesktopRoute().view === 'admin') {
-                    checkAdminRole(session.user.id);
-                }
+                void checkAdminRole(session.user.id);
                 warmupAuthenticatedData(session.user.id);
             }
         });
@@ -342,9 +340,7 @@ function AppContent() {
                     if (event === 'SIGNED_IN') {
                         trackEvent('login', { method: 'supabase' });
                     }
-                    if (resolveDesktopRoute().view === 'admin') {
-                        checkAdminRole(session.user.id);
-                    }
+                    void checkAdminRole(session.user.id);
                     warmupAuthenticatedData(session.user.id);
                     updateLastActive();
                 }
@@ -568,10 +564,9 @@ function AppContent() {
       if (!supabase) return;
       
       try {
-          const user = await getSupabaseUser();
           const profile = await getUserProfile();
 
-          if (user?.email === 'khoknightyb97@gmail.com' || (profile?.id === userId && profile?.role === 'admin')) {
+          if (profile?.id === userId && profile?.role === 'admin') {
               console.log("Admin privileges granted.");
               setUserRole('admin');
           } else {

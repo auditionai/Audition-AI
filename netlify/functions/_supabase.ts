@@ -30,6 +30,18 @@ const getAbortSignal = (timeoutMs: number) => {
   return { signal: controller.signal, clear: () => clearTimeout(timeoutId) };
 };
 
+const runWithAbortTimeout = async <T>(
+  timeoutMs: number,
+  operation: (signal: AbortSignal) => PromiseLike<T>,
+): Promise<T> => {
+  const timeout = getAbortSignal(timeoutMs);
+  try {
+    return await operation(timeout.signal);
+  } finally {
+    timeout.clear();
+  }
+};
+
 export const getServiceRoleClient = (): SupabaseClient => {
   return createClient(
     assertEnv(supabaseUrl, 'SUPABASE_URL'),
@@ -114,14 +126,15 @@ export const requireAuthenticatedUser = async (
   }
 
   if (options.checkAccountStatus !== false) try {
-    const timeout = getAbortSignal(AUTH_PROFILE_CHECK_TIMEOUT_MS);
-    const { data: profile, error: profileError } = await admin
-      .from('users')
-      .select('account_status')
-      .eq('id', user.id)
-      .maybeSingle()
-      .abortSignal(timeout.signal)
-      .finally(() => timeout.clear());
+    const { data: profile, error: profileError } = await runWithAbortTimeout(
+      AUTH_PROFILE_CHECK_TIMEOUT_MS,
+      (signal) => admin
+        .from('users')
+        .select('account_status')
+        .eq('id', user.id)
+        .maybeSingle()
+        .abortSignal(signal),
+    );
 
     if (profileError && !/account_status|column/i.test(profileError.message || '')) {
       throw profileError;

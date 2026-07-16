@@ -1,9 +1,12 @@
 ﻿
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { getSupabaseUser, supabase } from '../services/supabaseClient';
 import { 
-    getAdminStats, 
+    getAdminOverviewStats,
+    getAdminUsers,
+    getAdminTransactions,
+    getAdminCommerceCatalog,
     getApiKeysList, 
     saveSystemApiKey, 
     deleteApiKey, 
@@ -69,7 +72,7 @@ import {
     getGiftcodeAbuseCases,
     GiftcodeAbuseCase
 } from '../services/economyService';
-import { getAllImagesFromStorage, deleteImageFromStorage, checkR2Connection, getUserImagesFromStorage, cleanupExpiredImages, cleanupR2Directly } from '../services/storageService';
+import { checkR2Connection, getUserImagesFromStorage, cleanupExpiredImages, cleanupR2Directly } from '../services/storageService';
 import { checkConnection, analyzeStyleImage } from '../services/geminiService';
 import { checkSupabaseConnection } from '../services/supabaseClient';
 import {
@@ -507,7 +510,6 @@ const toDateInputValue = (date: Date) => date.toISOString().slice(0, 10);
 export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [activeView, setActiveView] = useState<'overview' | 'transactions' | 'users' | 'giftcode_abuse' | 'queue' | 'packages' | 'marketing' | 'pricing' | 'system' | 'styles' | 'tours'>('overview');
   const [stats, setStats] = useState<any>(null);
-  const [allImages, setAllImages] = useState<GeneratedImage[]>([]);
   const [packages, setPackages] = useState<CreditPackage[]>([]);
   const [giftcodes, setGiftcodes] = useState<Giftcode[]>([]);
   const [promotions, setPromotions] = useState<PromotionCampaign[]>([]);
@@ -632,6 +634,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   // Notification State
   const [toasts, setToasts] = useState<ToastMsg[]>([]);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmState>({ show: false, msg: '', onConfirm: () => {} });
+  const loadedAdminViews = useRef(new Set<string>());
 
   // Helpers for Notifications
   const showToast = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
@@ -653,16 +656,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       });
   };
 
-  // Load Data Sequence
+  // Load only the active admin surface. Large ledgers and catalogs are fetched
+  // when the administrator explicitly opens the relevant tab.
   useEffect(() => {
-    if (isAdmin) {
-        const init = async () => {
-            await refreshData();
-            await runSystemChecks(undefined);
-        };
-        init();
-    }
-    // Get current user email for recovery instructions
+    if (!isAdmin) return;
     if (supabase) {
       getSupabaseUser().then((user: any) => {
           if (user?.email) setCurrentUserEmail(user.email);
@@ -707,64 +704,76 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       refreshPricingView();
   }, [activeView, isAdmin]);
 
-  const refreshData = async () => {
-      const s = await getAdminStats();
-      if (s) {
-          setStats(s);
-          setPackages(s.packages || []);
-          setPromotions(s.promotions || []);
-          setGiftcodes(s.giftcodes || []);
-          setTransactions(s.transactions || []); 
-          const imgs = await getAllImagesFromStorage();
-          setAllImages(imgs);
+  const loadAdminViewData = async (view: typeof activeView, force = false) => {
+      if (!isAdmin || (!force && loadedAdminViews.current.has(view))) return;
+
+      if (view === 'overview') {
+          const dashboard = await getAdminOverviewStats();
+          setStats((current: any) => ({ ...(current || {}), dashboard }));
+      } else if (view === 'users') {
+          const usersList = await getAdminUsers({ limit: 200 });
+          setStats((current: any) => ({ ...(current || {}), usersList }));
+      } else if (view === 'transactions') {
+          setTransactions(await getAdminTransactions({ days: 30, limit: 200 }) as Transaction[]);
+      } else if (view === 'packages' || view === 'marketing') {
+          const commerce = await getAdminCommerceCatalog();
+          setPackages(commerce.packages as CreditPackage[]);
+          setPromotions(commerce.promotions as PromotionCampaign[]);
+          setGiftcodes(commerce.giftcodes as Giftcode[]);
+          if (view === 'marketing') setGiftcodePromo(await getGiftcodePromoConfig());
+      } else if (view === 'styles') {
+          setStylePresets(await getStylePresets() || []);
+      } else if (view === 'tours') {
+          const toursConfig = await getAppToursConfig();
+          setAppTours(toursConfig);
+          setSelectedTourId((current) => current && toursConfig.tours.some((tour) => tour.id === current)
+              ? current
+              : toursConfig.tours[0]?.id || '');
+      } else if (view === 'system') {
+          const [keys, tutorial, guideImages, maintenance, featureConfig, gateway, announcement] = await Promise.all([
+              getApiKeysList(),
+              getTutorialVideo(),
+              getGenerationGuideImages(),
+              getMaintenanceMode(),
+              getFeatureMaintenanceConfig(),
+              getPaymentGatewayConfig(),
+              getSystemAnnouncementConfig(),
+          ]);
+          setDbKeys(keys);
+          setTutorialVideo(tutorial);
+          setGenerationGuideImages(guideImages);
+          setMaintenanceMode(maintenance);
+          setFeatureMaintenance(featureConfig);
+          setPaymentGateway(gateway.gateway);
+          setSystemAnnouncement(announcement);
+          await runSystemChecks(undefined);
       }
-      
-      const keys = await getApiKeysList();
-      setDbKeys(keys);
 
-      const promoConfig = await getGiftcodePromoConfig();
-      setGiftcodePromo(promoConfig);
-
-      const tutorialConfig = await getTutorialVideo();
-      setTutorialVideo(tutorialConfig);
-
-      const guideImagesConfig = await getGenerationGuideImages();
-      setGenerationGuideImages(guideImagesConfig);
-
-      const styles = await getStylePresets();
-      setStylePresets(styles || []);
-
-      const maintenance = await getMaintenanceMode();
-      setMaintenanceMode(maintenance);
-
-      const featureMaintenanceConfig = await getFeatureMaintenanceConfig();
-      setFeatureMaintenance(featureMaintenanceConfig);
-
-      const paymentGatewayConfig = await getPaymentGatewayConfig();
-      setPaymentGateway(paymentGatewayConfig.gateway);
-
-      const announcementConfig = await getSystemAnnouncementConfig();
-      setSystemAnnouncement(announcementConfig);
-
-      const toursConfig = await getAppToursConfig();
-      setAppTours(toursConfig);
-      setSelectedTourId((current) => current && toursConfig.tours.some((tour) => tour.id === current)
-          ? current
-          : toursConfig.tours[0]?.id || '');
-
-      const pricing = await getModelPricing();
-      setModelPricing((pricing || []).filter((row) => isAdminManagedPricingModel(row.model_id)));
-      const serverConfig = await getTstServerAvailabilityConfig();
-      setServerAvailabilityConfig(serverConfig);
-
-      try {
-          const livePricingRows = await getPricingRows();
-          setPricingRows(filterAdminManagedPricingRows(livePricingRows));
-      } catch (error) {
-          console.warn('Failed to load live TST pricing rows', error);
-          setPricingRows([]);
-      }
+      loadedAdminViews.current.add(view);
   };
+
+  const refreshData = async () => {
+      loadedAdminViews.current.delete(activeView);
+      await loadAdminViewData(activeView, true);
+  };
+
+  useEffect(() => {
+      if (!isAdmin) return;
+      void loadAdminViewData(activeView).catch((error) => {
+          console.error(`[Admin] Failed to load ${activeView}:`, error);
+          showToast('Không thể tải dữ liệu quản trị. Vui lòng thử lại.', 'error');
+      });
+  }, [activeView, isAdmin]);
+
+  useEffect(() => {
+      if (!isAdmin || activeView !== 'users' || !userSearchEmail.trim()) return;
+      const timer = window.setTimeout(() => {
+          void getAdminUsers({ search: userSearchEmail.trim(), limit: 100 })
+              .then((usersList) => setStats((current: any) => ({ ...(current || {}), usersList })))
+              .catch((error) => console.warn('[Admin] User search failed:', error));
+      }, 350);
+      return () => window.clearTimeout(timer);
+  }, [activeView, isAdmin, userSearchEmail]);
 
   const loadQueueJobs = async (options?: { silent?: boolean }) => {
       if (!options?.silent) {
@@ -1137,11 +1146,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const runSystemChecks = async (specificKey?: string) => {
       const startGemini = Date.now();
       const keyToUse = specificKey !== undefined ? specificKey : (apiKey || undefined);
-      
-      const geminiOk = await checkConnection(keyToUse);
+      const [geminiOk, sbCheck, r2Ok] = await Promise.all([
+          checkConnection(keyToUse),
+          checkSupabaseConnection(),
+          checkR2Connection(),
+      ]);
       const geminiLatency = Date.now() - startGemini;
-      const sbCheck = await checkSupabaseConnection();
-      const r2Ok = await checkR2Connection();
       
       let storageStatus: 'connected' | 'disconnected' = 'disconnected';
       let storageType: 'R2' | 'Supabase' | 'None' = 'None';
@@ -2197,15 +2207,6 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       });
   };
 
-  const handleDeleteContent = async (id: string) => {
-      showConfirm('Xóa vĩnh viễn hình ảnh này?', async () => {
-          const targetImage = allImages.find((img) => img.id === id);
-          await deleteImageFromStorage(id, targetImage?.userId, targetImage?.url);
-          setAllImages(prev => prev.filter(img => img.id !== id));
-          showToast('Đã xóa ảnh');
-      });
-  }
-
   const handleApproveTransaction = async (txId: string) => {
       if (processingTxId) return;
 
@@ -2538,11 +2539,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-6">
                       {[
                           { title: 'Truy cập hôm nay', value: stats?.dashboard?.visitsToday, icon: Icons.Menu, color: 'text-white' },
-                          { title: 'Tổng truy cập', value: new Intl.NumberFormat('de-DE').format(stats?.dashboard?.visitsTotal || 0), icon: Icons.Cloud, color: 'text-audi-cyan' },
+                          { title: 'Truy cập 30 ngày', value: new Intl.NumberFormat('de-DE').format(stats?.dashboard?.visitsTotal || 0), icon: Icons.Cloud, color: 'text-audi-cyan' },
                           { title: 'User mới hôm nay', value: stats?.dashboard?.newUsersToday, icon: Icons.User, color: 'text-white' },
                           { title: 'Tổng User', value: stats?.dashboard?.usersTotal, icon: Icons.User, color: 'text-green-500' },
                           { title: 'Ảnh hôm nay', value: stats?.dashboard?.imagesToday, icon: Icons.Image, color: 'text-white' },
-                          { title: 'Tổng số ảnh', value: new Intl.NumberFormat('de-DE').format(stats?.dashboard?.imagesTotal || 0), icon: Icons.Image, color: 'text-audi-pink' },
+                          { title: 'Ảnh trong 30 ngày', value: new Intl.NumberFormat('de-DE').format(stats?.dashboard?.imagesTotal || 0), icon: Icons.Image, color: 'text-audi-pink' },
                       ].map((item, i) => (
                           <div key={i} className="bg-[#12121a] border border-white/5 rounded-2xl p-4 md:p-6 relative overflow-hidden shadow-lg hover:border-white/10 transition-all">
                               <div className="flex justify-between items-start">

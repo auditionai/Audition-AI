@@ -872,7 +872,7 @@ export const getShowcaseImages = async (): Promise<GeneratedImage[]> => {
             // Fetch images ONLY to avoid 400 errors from missing relationships in schema cache
             const { data: simpleData, error: simpleError } = await supabase
                 .from(TABLE_NAME)
-                .select(GENERATED_IMAGE_ROW_SELECT)
+                .select(GENERATED_IMAGE_ROW_LIGHT_SELECT)
                 .eq('is_public', true)
                 .order('created_at', { ascending: false })
                 .limit(20);

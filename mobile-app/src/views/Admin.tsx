@@ -501,10 +501,6 @@ export function AdminView() {
     void loadStats();
   }, [loadStats]);
 
-  useEffect(() => {
-    void loadQueue();
-  }, [loadQueue]);
-
   const loadAdminExtras = useCallback(async () => {
     try {
       const [
@@ -544,8 +540,16 @@ export function AdminView() {
   }, [notify]);
 
   useEffect(() => {
-    void loadAdminExtras();
-  }, [loadAdminExtras]);
+    if (activeTab === 'queue') {
+      void loadQueue();
+    }
+  }, [activeTab, loadQueue]);
+
+  useEffect(() => {
+    if (activeTab === 'pricing' || activeTab === 'styles' || activeTab === 'system') {
+      void loadAdminExtras();
+    }
+  }, [activeTab, loadAdminExtras]);
 
   const pendingTransactions = useMemo(
     () => ((stats?.transactions || []) as Transaction[]).filter((item: Transaction) => item.status === 'pending'),
@@ -724,7 +728,14 @@ export function AdminView() {
 
   const refreshAll = async () => {
     setRefreshing(true);
-    await Promise.all([loadStats(), loadQueue(), loadAdminExtras()]);
+    const refreshTasks: Array<Promise<void>> = [loadStats()];
+    if (activeTab === 'queue') {
+      refreshTasks.push(loadQueue());
+    }
+    if (activeTab === 'pricing' || activeTab === 'styles' || activeTab === 'system') {
+      refreshTasks.push(loadAdminExtras());
+    }
+    await Promise.all(refreshTasks);
     setRefreshing(false);
   };
 

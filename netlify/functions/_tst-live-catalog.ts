@@ -1,7 +1,7 @@
 import { getServerAvailabilityConfig, isServerAllowedBySnapshot } from './_server-availability';
 
 const TST_API_BASE = 'https://api.tramsangtao.com/v1';
-export const TST_LIVE_CATALOG_TTL_MS = 60_000;
+export const TST_LIVE_CATALOG_TTL_MS = 5 * 60_000;
 
 type TstProviderPricingEntry = {
   model: string;

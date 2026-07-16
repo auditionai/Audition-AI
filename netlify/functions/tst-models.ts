@@ -6,6 +6,14 @@ const jsonHeaders = {
   'Access-Control-Allow-Origin': '*',
 };
 
+const getResponseHeaders = (forceRefresh: boolean) => forceRefresh
+  ? { ...jsonHeaders, 'Cache-Control': 'no-store' }
+  : {
+      ...jsonHeaders,
+      'Cache-Control': 'public, max-age=60',
+      'Netlify-CDN-Cache-Control': 'public, durable, max-age=300, stale-while-revalidate=600',
+    };
+
 export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return {
@@ -29,7 +37,7 @@ export const handler: Handler = async (event) => {
     const metadata = getTstCatalogMetadata();
     return {
       statusCode: 200,
-      headers: jsonHeaders,
+      headers: getResponseHeaders(forceRefresh),
       body: JSON.stringify({
         models,
         fetchedAt: metadata.modelsFetchedAt,
@@ -41,7 +49,7 @@ export const handler: Handler = async (event) => {
     console.error('TST models proxy error:', error);
     return {
       statusCode: 500,
-      headers: jsonHeaders,
+      headers: { ...jsonHeaders, 'Cache-Control': 'no-store' },
       body: JSON.stringify({ error: error.message || 'Internal Server Error' }),
     };
   }

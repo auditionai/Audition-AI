@@ -35,6 +35,7 @@ import { isTerminalRescueFailureMessage, normalizeQueueErrorMessage } from '../.
 import { repairVietnameseMojibake } from '../../shared/queueLogText';
 import { clearFailedRescueMeta, hasFailedRescueFinalized, hasManualStopFlag } from '../../shared/queueRescueState';
 import { SYSTEM_QUEUE_KINDS } from '../../shared/queueKinds';
+import { compactTerminalQueuePayload } from './_queue-payload-retention';
 
 type QueueJobRow = {
   id: string;
@@ -2019,7 +2020,7 @@ const markCompletedWithAssetUrl = async (job: QueueJobRow, assetUrl: string) => 
     .update({
       status: 'completed',
       image_url: assetUrl,
-      queue_payload: nextPayload,
+      queue_payload: compactTerminalQueuePayload(nextPayload),
       progress: 100,
       error_message: null,
       attempt_count: 0,
@@ -2062,18 +2063,19 @@ const completePolledJobWithResultUrl = async (
 
   const admin = getServiceRoleClient();
   const completionPayload = clearProviderLostJobConfirmationMeta(job.queue_payload);
+  const terminalPayload = withQueueLog(
+    completionPayload,
+    'completed',
+    options?.completionMessage || 'Provider da hoan tat. Da luu ket qua.',
+    options?.completionLevel || 'success',
+  );
 
   await admin
     .from('generated_images')
     .update({
       status: 'completed',
       image_url: resultUrl,
-      queue_payload: withQueueLog(
-        completionPayload,
-        'completed',
-        options?.completionMessage || 'Provider da hoan tat. Da luu ket qua.',
-        options?.completionLevel || 'success',
-      ),
+      queue_payload: compactTerminalQueuePayload(terminalPayload),
       progress: 100,
       error_message: null,
       attempt_count: 0,
@@ -2103,7 +2105,7 @@ const completePolledJobWithResultUrl = async (
     costVcoin: job.cost_vcoin,
     resultUrl,
     finishedAt: new Date().toISOString(),
-    queuePayload: completionPayload,
+    queuePayload: terminalPayload,
   });
   return 'completed' as const;
 };

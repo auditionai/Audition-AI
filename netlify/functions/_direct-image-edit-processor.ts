@@ -4,6 +4,7 @@ import type { ImageEditRecipePayload, QueueProcessingStage, QueueProgressLogEntr
 import { DIRECT_IMAGE_EDIT_QUEUE_KIND } from '../../shared/queueKinds';
 import { getServiceRoleClient } from './_supabase';
 import { runVertexImageEdit } from './_vertex-image-edit';
+import { compactTerminalQueuePayload } from './_queue-payload-retention';
 
 const DIRECT_EDIT_LEASE_MS = 10 * 60 * 1000;
 
@@ -300,7 +301,7 @@ export const processDirectImageEditJob = async (jobId: string) => {
       progress: 100,
       image_url: imageUrl,
       error_message: null,
-      queue_payload: runtimePayload,
+      queue_payload: compactTerminalQueuePayload(runtimePayload),
       finished_at: new Date().toISOString(),
       lease_token: null,
       lease_expires_at: null,

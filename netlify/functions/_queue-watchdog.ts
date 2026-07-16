@@ -515,7 +515,6 @@ const requeuePreDispatch = async (row: any, message: string) => {
     .update({
       status: 'queued',
       job_id: null,
-      image_url: null,
       finished_at: null,
       processing_started_at: null,
       error_message: null,

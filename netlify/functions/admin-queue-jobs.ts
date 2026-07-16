@@ -402,9 +402,8 @@ export const handler: Handler = async (event) => {
       : limit;
 
     let query = admin
-      .from('generated_images')
+      .from('admin_generated_images_queue_lightweight')
       .select('id, user_id, tool_name, queue_kind, asset_type, status, job_id, progress, queue_payload, error_message, created_at, updated_at, next_poll_at, processing_started_at, lease_expires_at')
-      .in('queue_kind', [...SYSTEM_QUEUE_KINDS])
       .order('updated_at', { ascending: false })
       .limit(queryLimit);
 

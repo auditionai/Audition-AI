@@ -781,21 +781,25 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       }
 
       try {
-          const result = await getAdminQueueJobs({
-              search: queueEmailFilter.trim() || undefined,
-              status: queueStatusFilter,
-              assetType: queueAssetFilter,
-              timeScope: queueTimeScope,
-              stage: queueStageFilter !== 'all' ? queueStageFilter : undefined,
-              stuckOnly: queueStuckOnly,
-              limit: 120,
-          });
+          const [result, healthResult] = await Promise.all([
+              getAdminQueueJobs({
+                  search: queueEmailFilter.trim() || undefined,
+                  status: queueStatusFilter,
+                  assetType: queueAssetFilter,
+                  timeScope: queueTimeScope,
+                  stage: queueStageFilter !== 'all' ? queueStageFilter : undefined,
+                  stuckOnly: queueStuckOnly,
+                  limit: 120,
+              }),
+              getAdminQueueHealthReport().catch((healthError) => {
+                  console.warn('Failed to load queue health report', healthError);
+                  return null;
+              }),
+          ]);
           setQueueJobs(result.jobs || []);
           setQueueSummary(result.summary || EMPTY_QUEUE_SUMMARY);
-          try {
-              setQueueHealthReport(await getAdminQueueHealthReport());
-          } catch (healthError) {
-              console.warn('Failed to load queue health report', healthError);
+          if (healthResult) {
+              setQueueHealthReport(healthResult);
           }
       } catch (error: any) {
           showToast(`Lỗi tải queue: ${error?.message || error}`, 'error');

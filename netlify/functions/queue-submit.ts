@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import type { Handler } from '@netlify/functions';
 import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 import { triggerBackgroundQueueWorker } from './_queue-launcher';
-import { runQueueDaemon } from './_queue-daemon';
 import { isDedicatedQueueWorkerMode } from './_queue-runtime-mode';
 import { validateQueuePayloadAgainstLiveCatalog } from './_tst-live-catalog';
 import type { QueueProcessingStage, QueueProgressLogEntry } from '../../shared/queueRecipes';
@@ -22,8 +21,6 @@ const USER_VIDEO_LIMIT = 1;
 const USER_QUEUE_LIMIT = 1;
 const TST_QUEUE_KINDS = new Set(['image_generate', 'video_generate', 'motion_generate']);
 const TST_QUEUE_KIND_VALUES = Array.from(TST_QUEUE_KINDS);
-const INLINE_QUEUE_KICK_MAX_RUNTIME_MS = 8_000;
-const INLINE_QUEUE_WAKE_WINDOW_MS = 30_000;
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PHONE_USER_AGENT_PATTERN = /iphone|ipod|android.+mobile|windows phone|blackberry|opera mini|mobile safari/i;
@@ -44,8 +41,6 @@ type QueueBody = {
   queuePayload?: Record<string, unknown>;
   clientPlatform?: QueueClientPlatform | string;
 };
-
-let dedicatedDispatchWakePromise: Promise<void> | null = null;
 
 const buildInitialQueueLogs = (queueKind: string): QueueProgressLogEntry[] => {
   const stage: QueueProcessingStage = 'queued';
@@ -523,34 +518,9 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
 const runSafeWorkerTick = async (rawUrl?: string | null) => {
   try {
     if (isDedicatedQueueWorkerMode()) {
-      if (!dedicatedDispatchWakePromise) {
-        dedicatedDispatchWakePromise = (async () => {
-          const stopAt = Date.now() + INLINE_QUEUE_WAKE_WINDOW_MS;
-          while (Date.now() < stopAt) {
-            const summary = await runQueueDaemon({
-              lane: 'dispatch',
-              maxRuntimeMs: INLINE_QUEUE_KICK_MAX_RUNTIME_MS,
-              idleIterationsToStop: 1,
-              activeDelayMs: 50,
-              idleDelayMs: 100,
-            });
-
-            const hadDispatchActivity =
-              Number(summary.claimedForDispatch || 0) > 0 ||
-              Number(summary.submitted || 0) > 0 ||
-              Number(summary.failed || 0) > 0 ||
-              Number(summary.requeued || 0) > 0;
-
-            if (!hadDispatchActivity) {
-              break;
-            }
-          }
-        })().catch((workerError) => {
-          console.error('[queue-submit] Inline dedicated dispatch wake failed:', workerError);
-        }).finally(() => {
-          dedicatedDispatchWakePromise = null;
-        });
-      }
+      // Render owns dispatch and polling in dedicated mode. Running another
+      // daemon inside this request makes users wait and bills Netlify compute
+      // for work that the background worker will claim on its next cheap probe.
       return;
     }
 

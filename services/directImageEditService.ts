@@ -22,7 +22,7 @@ export interface DirectImageEditResponse {
   updatedAt?: string;
 }
 
-const DIRECT_EDIT_POLL_INTERVAL_MS = 2000;
+const DIRECT_EDIT_POLL_INTERVAL_MS = 4000;
 const DIRECT_EDIT_POLL_TIMEOUT_MS = 15 * 60 * 1000;
 
 const parseJsonResponse = async (response: Response) => {

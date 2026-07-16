@@ -16,6 +16,7 @@ const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const DIRECT_IMAGE_EDIT_BACKGROUND_PATH = '/.netlify/functions/direct-image-edit-background';
+const DIRECT_IMAGE_EDIT_RECOVERY_STALE_MS = 60_000;
 const DIRECT_EDIT_DEFAULT_PRICES: Record<string, Record<string, Record<string, number>>> = {
   magic_editor_pro: {
     flash: { '1k': 2, '2k': 3, '4k': 4 },
@@ -149,7 +150,7 @@ export const handler: Handler = async (event) => {
 
       const { data: existing, error: existingError } = await admin
         .from('generated_images')
-        .select('id, user_id, status, image_url, error_message, updated_at')
+        .select('id, user_id, status, image_url, error_message, updated_at, lease_expires_at')
         .eq('id', requestedId)
         .maybeSingle();
 
@@ -165,8 +166,27 @@ export const handler: Handler = async (event) => {
         };
       }
 
-      if (existing.status === 'queued' || existing.status === 'processing') {
-        void triggerDirectImageEditBackground(event.rawUrl, existing.id);
+      const now = Date.now();
+      const updatedAt = Date.parse(String(existing.updated_at || ''));
+      const leaseExpiresAt = Date.parse(String(existing.lease_expires_at || ''));
+      const isActive = existing.status === 'queued' || existing.status === 'processing';
+      const isStale = Number.isFinite(updatedAt) && now - updatedAt >= DIRECT_IMAGE_EDIT_RECOVERY_STALE_MS;
+      const hasActiveLease = Number.isFinite(leaseExpiresAt) && leaseExpiresAt > now;
+
+      if (isActive && isStale && !hasActiveLease) {
+        const recoveryTouchedAt = new Date().toISOString();
+        const { data: recoveryClaim } = await admin
+          .from('generated_images')
+          .update({ updated_at: recoveryTouchedAt })
+          .eq('id', existing.id)
+          .eq('updated_at', existing.updated_at)
+          .in('status', ['queued', 'processing'])
+          .select('id')
+          .maybeSingle();
+
+        if (recoveryClaim?.id) {
+          void triggerDirectImageEditBackground(event.rawUrl, existing.id);
+        }
       }
 
       return {

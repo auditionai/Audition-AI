@@ -83,7 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Update last active every 5 minutes
     const activeInterval = setInterval(() => {
-      updateLastActive();
+      if (document.visibilityState === 'visible') updateLastActive();
     }, 5 * 60 * 1000);
 
     // Visibility change handler

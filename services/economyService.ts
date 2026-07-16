@@ -46,6 +46,7 @@ const MAINTENANCE_MODE_CACHE_TTL_MS = 60_000;
 const MAINTENANCE_MODE_POLL_MS = 300_000;
 const VISIT_LOG_THROTTLE_MS = 30 * 60_000;
 const LAST_ACTIVE_UPDATE_MIN_INTERVAL_MS = 5 * 60_000;
+const LAST_ACTIVE_STORAGE_KEY = 'auditionai:last-active-update:v1';
 const USER_HISTORY_FETCH_LIMIT = 200;
 const USER_HISTORY_LOOKBACK_DAYS = 30;
 const CHECKIN_HISTORY_LOOKBACK_DAYS = 30;
@@ -1098,8 +1099,26 @@ export const updateLastActive = async () => {
     try {
         const user = await getCurrentSessionUser();
         if (user) {
+            try {
+                const persisted = JSON.parse(window.localStorage.getItem(LAST_ACTIVE_STORAGE_KEY) || '{}');
+                if (persisted.userId === user.id && Date.now() - Number(persisted.updatedAt || 0) < LAST_ACTIVE_UPDATE_MIN_INTERVAL_MS) {
+                    lastActiveUpdateAt = Number(persisted.updatedAt || Date.now());
+                    return;
+                }
+            } catch {
+                // In-memory throttling still applies when storage is unavailable.
+            }
+
             lastActiveUpdateAt = Date.now();
             await supabase.from('users').update({ last_active: new Date().toISOString() }).eq('id', user.id);
+            try {
+                window.localStorage.setItem(LAST_ACTIVE_STORAGE_KEY, JSON.stringify({
+                    userId: user.id,
+                    updatedAt: lastActiveUpdateAt,
+                }));
+            } catch {
+                // Private browsing can reject storage writes.
+            }
             const cachedProfile = userProfileCache;
             if (cachedProfile && cachedProfile.userId === user.id) {
                 userProfileCache = {
@@ -3690,7 +3709,7 @@ const normalizeAdminVietnameseText = (value: string) => {
     return replacements.reduce((text, [bad, good]) => text.split(bad).join(good), value);
 };
 
-export const getAdminStats = async () => {
+const getAdminStatsLegacy = async () => {
     if (!supabase) return {
         dashboard: { visitsToday: 0, visitsTotal: 0, newUsersToday: 0, usersTotal: 0, imagesToday: 0, imagesTotal: 0, aiUsage: [] },
         usersList: [], packages: [], promotions: [], giftcodes: [], transactions: []
@@ -3999,4 +4018,257 @@ export const getAdminStats = async () => {
         })(),
         transactions
     };
+};
+
+const ADMIN_OVERVIEW_LOOKBACK_DAYS = 30;
+const ADMIN_LIST_LIMIT = 200;
+
+const getAdminLookbackIso = (days = ADMIN_OVERVIEW_LOOKBACK_DAYS) =>
+    new Date(Date.now() - Math.max(1, days) * 24 * 60 * 60 * 1000).toISOString();
+
+const mapAdminUser = (user: any, usageCount = 0) => ({
+    id: user.id,
+    username: user.display_name,
+    email: user.email,
+    avatar: user.photo_url,
+    vcoin_balance: user.vcoin_balance,
+    role: user.is_admin ? 'admin' : 'user',
+    created_at: user.created_at,
+    isVip: false,
+    lastActive: user.last_active,
+    usageCount,
+    accountStatus: user.account_status || 'active',
+    accountWarning: user.account_warning || null,
+    accountWarningAt: user.account_warning_at || null,
+    lockedAt: user.locked_at || null,
+    lockReason: user.lock_reason || null,
+});
+
+const buildAdminUsageRows = (logs: any[]) => {
+    const grouped: Record<string, { count: number; vcoins: number }> = {};
+
+    for (const log of logs || []) {
+        const metadata = log.metadata && typeof log.metadata === 'object' ? log.metadata : {};
+        const rawFeature = normalizeAdminVietnameseText(
+            metadata.toolName || metadata.tool_name || metadata.feature || log.description || log.reference_type || 'Khac'
+        );
+        const feature = rawFeature.length > 70 ? `${rawFeature.slice(0, 70)}...` : rawFeature;
+        if (!grouped[feature]) grouped[feature] = { count: 0, vcoins: 0 };
+        grouped[feature].count += 1;
+        grouped[feature].vcoins += Math.abs(Number(log.amount) || 0);
+    }
+
+    return Object.entries(grouped)
+        .map(([feature, values]) => ({
+            feature,
+            count: values.count,
+            vcoins: values.vcoins,
+            revenue: values.vcoins * 1000,
+        }))
+        .sort((left, right) => right.count - left.count);
+};
+
+const countAdminRows = async (tableName: string, since?: string) => {
+    if (!supabase) return 0;
+    let query = supabase.from(tableName).select('id', { count: 'exact', head: true });
+    if (since) query = query.gte('created_at', since);
+    const { count, error } = await query;
+    if (error) {
+        console.warn(`[Admin] Count failed for ${tableName}:`, error.message);
+        return 0;
+    }
+    return count || 0;
+};
+
+export const getAdminOverviewStats = async () => {
+    const emptyDashboard = {
+        visitsToday: 0,
+        visitsTotal: 0,
+        newUsersToday: 0,
+        usersTotal: 0,
+        imagesToday: 0,
+        imagesTotal: 0,
+        aiUsage: [] as Array<{ feature: string; count: number; vcoins: number; revenue: number }>,
+        lookbackDays: ADMIN_OVERVIEW_LOOKBACK_DAYS,
+    };
+    if (!supabase) return emptyDashboard;
+
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    const lookbackIso = getAdminLookbackIso();
+
+    const [
+        usersTotal,
+        newUsersToday,
+        imagesRecent,
+        imagesToday,
+        visitsRecent,
+        visitsToday,
+        usageResult,
+    ] = await Promise.all([
+        countAdminRows('users'),
+        countAdminRows('users', startOfToday),
+        countAdminRows('generated_images', lookbackIso),
+        countAdminRows('generated_images', startOfToday),
+        countAdminRows('app_visits', lookbackIso),
+        countAdminRows('app_visits', startOfToday),
+        supabase
+            .from('vcoin_transactions')
+            .select('amount, description, metadata, reference_type, created_at')
+            .gte('created_at', lookbackIso)
+            .or('type.eq.usage,amount.lt.0')
+            .order('created_at', { ascending: false })
+            .limit(ADMIN_STATS_USAGE_LOG_LIMIT),
+    ]);
+
+    if (usageResult.error) {
+        console.warn('[Admin] Recent usage query failed:', usageResult.error.message);
+    }
+
+    return {
+        visitsToday,
+        visitsTotal: visitsRecent,
+        newUsersToday,
+        usersTotal,
+        imagesToday,
+        imagesTotal: imagesRecent,
+        aiUsage: buildAdminUsageRows(usageResult.data || []),
+        lookbackDays: ADMIN_OVERVIEW_LOOKBACK_DAYS,
+    };
+};
+
+export const getAdminUsers = async (options?: { search?: string; limit?: number }) => {
+    if (!supabase) return [];
+    const limit = Math.max(1, Math.min(options?.limit || ADMIN_LIST_LIMIT, ADMIN_LIST_LIMIT));
+    const search = String(options?.search || '').trim();
+    let query = supabase
+        .from('users')
+        .select('id, email, display_name, photo_url, vcoin_balance, is_admin, created_at, last_active, account_status, account_warning, account_warning_at, locked_at, lock_reason')
+        .order('last_active', { ascending: false, nullsFirst: false })
+        .limit(limit);
+    if (search) query = query.ilike('email', `%${search.replace(/[%_]/g, '\\$&')}%`);
+
+    const { data: users, error } = await query;
+    if (error) throw error;
+    const userIds = (users || []).map((user: any) => user.id).filter(Boolean);
+    if (userIds.length === 0) return [];
+
+    const { data: usageLogs, error: usageError } = await supabase
+        .from('vcoin_transactions')
+        .select('user_id')
+        .in('user_id', userIds)
+        .gte('created_at', getAdminLookbackIso())
+        .or('type.eq.usage,amount.lt.0')
+        .limit(ADMIN_STATS_USAGE_LOG_LIMIT);
+    if (usageError) console.warn('[Admin] User usage counts unavailable:', usageError.message);
+
+    const usageCounts = new Map<string, number>();
+    for (const row of usageLogs || []) {
+        if (!row.user_id) continue;
+        usageCounts.set(row.user_id, (usageCounts.get(row.user_id) || 0) + 1);
+    }
+    return (users || []).map((user: any) => mapAdminUser(user, usageCounts.get(user.id) || 0));
+};
+
+export const getAdminTransactions = async (options?: { limit?: number; days?: number }) => {
+    if (!supabase) return [];
+    const limit = Math.max(1, Math.min(options?.limit || ADMIN_LIST_LIMIT, ADMIN_LIST_LIMIT));
+    const [{ data: txs, error }, { data: packages }] = await Promise.all([
+        supabase
+            .from('payment_transactions')
+            .select('id, user_id, package_id, amount_vnd, original_amount_vnd, discount_amount_vnd, vcoin_received, status, created_at, order_code, payment_method, topup_giftcode, provider_payload')
+            .gte('created_at', getAdminLookbackIso(options?.days || ADMIN_OVERVIEW_LOOKBACK_DAYS))
+            .order('created_at', { ascending: false })
+            .limit(limit),
+        supabase.from('credit_packages').select('id, name, credits_amount, bonus_credits'),
+    ]);
+    if (error) throw error;
+
+    const userIds = Array.from(new Set((txs || []).map((tx: any) => tx.user_id).filter(Boolean)));
+    const { data: users } = userIds.length > 0
+        ? await supabase.from('users').select('id, email, display_name, photo_url').in('id', userIds)
+        : { data: [] as any[] };
+    const userById = new Map((users || []).map((user: any) => [user.id, user]));
+    const packageById = new Map((packages || []).map((pkg: any) => [pkg.id, pkg]));
+
+    return (txs || []).map((tx: any) => {
+        const pkg: any = packageById.get(tx.package_id);
+        const user: any = userById.get(tx.user_id);
+        let coins = Number(tx.vcoin_received) || 0;
+        if (!coins && pkg) coins = Number(pkg.credits_amount || 0) + Math.floor(Number(pkg.credits_amount || 0) * Number(pkg.bonus_credits || 0) / 100);
+        if (!coins && tx.amount_vnd) coins = Math.floor(Number(tx.amount_vnd) / 1000);
+        return {
+            id: tx.id,
+            userId: tx.user_id,
+            userName: user?.display_name || user?.email?.split('@')[0] || 'Unknown',
+            userEmail: user?.email || 'No Email',
+            userAvatar: user?.photo_url,
+            packageId: tx.package_id,
+            amount: Number(tx.amount_vnd) || 0,
+            vcoin_received: coins,
+            status: tx.status,
+            createdAt: tx.created_at,
+            code: tx.order_code,
+            order_code: tx.order_code,
+            topupGiftcode: tx.topup_giftcode || tx.provider_payload?.topup_giftcode || null,
+            discountAmount: Number(tx.discount_amount_vnd ?? tx.provider_payload?.discount_amount_vnd ?? 0),
+            originalAmount: Number(tx.original_amount_vnd ?? tx.provider_payload?.original_amount_vnd ?? tx.amount_vnd ?? 0),
+            paymentMethod: tx.payment_method || 'sepay',
+        };
+    });
+};
+
+export const getAdminCommerceCatalog = async () => {
+    if (!supabase) return { packages: [], promotions: [], giftcodes: [] };
+    const [{ data: pkgs }, { data: promos }, { data: codes }] = await Promise.all([
+        supabase.from('credit_packages').select('id, name, credits_amount, price_vnd, tag, bonus_credits, is_featured, is_active, display_order, transfer_syntax').order('display_order'),
+        supabase.from('promotions').select('id, title, description, bonus_percent, start_time, end_time, is_active'),
+        supabase.from('gift_codes').select('id, code, code_type, campaign_key, reward, discount_percent, audience, assigned_user_id, auto_generate_per_user, total_limit, used_count, max_per_user, is_active, gift_code_usages(count)'),
+    ]);
+
+    const allCodes = codes || [];
+    const topupAppliedCountByCampaign = new Map<string, number>();
+    allCodes.filter(isGeneratedTopupChildRow).forEach((code: any) => {
+        const campaignKey = getTopupCampaignKey(code);
+        if (campaignKey) topupAppliedCountByCampaign.set(campaignKey, (topupAppliedCountByCampaign.get(campaignKey) || 0) + Number(code.used_count || 0));
+    });
+
+    return {
+        packages: (pkgs || []).map((pkg: any) => ({
+            id: pkg.id, name: pkg.name, vcoin: pkg.credits_amount, price: pkg.price_vnd, currency: 'VND', bonusText: pkg.tag,
+            bonusPercent: pkg.bonus_credits, isPopular: pkg.is_featured, isActive: pkg.is_active,
+            displayOrder: pkg.display_order, colorTheme: 'border-white', transferContent: pkg.transfer_syntax,
+        })),
+        promotions: (promos || []).map((promo: any) => ({
+            id: promo.id, name: promo.title, marqueeText: promo.description, bonusPercent: promo.bonus_percent,
+            startTime: promo.start_time, endTime: promo.end_time, isActive: promo.is_active,
+        })),
+        giftcodes: allCodes.filter((code: any) => !isGeneratedTopupChildRow(code)).map((code: any) => ({
+            id: code.id,
+            code: code.code,
+            codeType: code.code_type || 'reward',
+            campaignKey: code.campaign_key || code.code,
+            reward: code.reward,
+            discountPercent: code.discount_percent || 0,
+            audience: code.audience || 'all',
+            assignedUserId: code.assigned_user_id || null,
+            autoGeneratePerUser: Boolean(code.auto_generate_per_user),
+            totalLimit: code.total_limit,
+            usedCount: code.code_type === 'topup_discount'
+                ? Math.max(Number(code.used_count || 0), topupAppliedCountByCampaign.get(getTopupCampaignKey(code)) || 0)
+                : (code.gift_code_usages?.[0]?.count || code.used_count || 0),
+            maxPerUser: code.max_per_user,
+            isActive: code.is_active,
+        })),
+    };
+};
+
+export const getAdminStats = async () => {
+    const [dashboard, usersList, transactions, commerce] = await Promise.all([
+        getAdminOverviewStats(),
+        getAdminUsers(),
+        getAdminTransactions(),
+        getAdminCommerceCatalog(),
+    ]);
+    return { dashboard, usersList, transactions, ...commerce };
 };

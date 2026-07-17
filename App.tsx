@@ -634,9 +634,9 @@ function AppContent() {
     }
   };
 
-  const handleUsePromptLibraryPrompt = () => {
+  const handleUsePromptLibraryPrompt = (featureId: string) => {
     desktopHistoryModeRef.current = 'push';
-    setSelectedFeature(DEFAULT_IMAGE_FEATURE || APP_CONFIG.main_features[0] || null);
+    setSelectedFeature(findFeatureById(featureId) || DEFAULT_IMAGE_FEATURE || APP_CONFIG.main_features[0] || null);
     setCurrentView('tool_workspace');
   };
 

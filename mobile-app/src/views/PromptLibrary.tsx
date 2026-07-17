@@ -13,6 +13,7 @@ import {
   fetchCaulenhauSamples,
   fetchPromptLibrarySearchLearningStats,
   fetchPromptLibraryUsageStats,
+  getPromptLibraryFeatureId,
   getPromptLibraryTags,
   stashPromptForGenerator,
   trackPromptLibrarySampleUse,
@@ -152,7 +153,7 @@ export function PromptLibrary() {
 
     stashPromptForGenerator(prompt);
     notify('Đã nhập sẵn prompt mẫu.', 'success');
-    navigate('/generate/image');
+    navigate(`/generate/image?tool=${encodeURIComponent(getPromptLibraryFeatureId(sample))}`);
   };
 
   return (
@@ -265,6 +266,7 @@ export function PromptLibrary() {
           <div className="grid grid-cols-2 gap-3">
             {samples.map((sample) => {
               const tags = getPromptLibraryTags(sample);
+              const useCount = sample.total_use_count || 0;
               return (
                 <button
                   key={sample.id}
@@ -275,10 +277,12 @@ export function PromptLibrary() {
                   <div className="relative aspect-[3/4] bg-gray-100 dark:bg-zinc-900">
                     <img src={sample.image_url} alt={sample.category} className="h-full w-full object-cover" loading="lazy" />
                     <span className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-1 text-[9px] font-black text-white backdrop-blur">{sample.category}</span>
-                    <span className="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full bg-black/65 px-2 py-1 text-[9px] font-black text-white backdrop-blur">
-                      <Eye className="h-3 w-3 text-yellow-200" />
-                      {formatUseCount(sample.total_use_count)}
-                    </span>
+                    {useCount > 0 && (
+                      <span className="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full bg-black/65 px-2 py-1 text-[9px] font-black text-white backdrop-blur">
+                        <Eye className="h-3 w-3 text-yellow-200" />
+                        {formatUseCount(useCount)}
+                      </span>
+                    )}
                     <span className="absolute right-2 top-2 flex flex-col items-end gap-1">
                       {tags.map((tag) => (
                         <span key={tag} className={`rounded-full px-2 py-1 text-[9px] font-black ${tag === 'HOT' ? 'bg-fuchsia-600 text-white' : 'bg-yellow-300 text-gray-950'}`}>
@@ -290,7 +294,7 @@ export function PromptLibrary() {
                   <div className="p-3">
                     <p className="line-clamp-3 min-h-[45px] text-[11px] leading-relaxed text-gray-600 dark:text-zinc-300">{sample.prompt || 'Prompt mẫu chưa có nội dung.'}</p>
                     <div className="mt-2 flex items-center justify-between text-[10px] font-black text-gray-400 dark:text-zinc-500">
-                      <span>{formatUseCount(sample.total_use_count)} lượt dùng</span>
+                      <span>{useCount > 0 ? `${formatUseCount(useCount)} lượt dùng` : ''}</span>
                       {sample.searchScore ? <span>{sample.searchLearningScore ? `AI học ${sample.searchLearningScore}` : `Khớp ${sample.searchScore}`}</span> : null}
                     </div>
                     <div className="mt-3 flex items-center justify-center gap-1.5 rounded-2xl bg-gradient-to-r from-fuchsia-600 to-violet-600 px-3 py-2 text-[11px] font-black text-white">

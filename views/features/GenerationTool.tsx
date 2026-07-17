@@ -614,9 +614,15 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           } else if (activeMode === 'couple') {
               targetCategoryId = 3;
               catName = "Ảnh Couple";
-          } else if (activeMode.startsWith('group')) {
+          } else if (activeMode === 'group3') {
               targetCategoryId = 4;
-              catName = "Ảnh Nhóm";
+              catName = "Ảnh Nhóm 3";
+          } else if (activeMode === 'group4') {
+              targetCategoryId = 5;
+              catName = "Ảnh Nhóm 4";
+          } else if (activeMode === 'group5') {
+              targetCategoryId = 6;
+              catName = "Ảnh Nhóm 5";
           }
           setCurrentCategoryName(catName);
 

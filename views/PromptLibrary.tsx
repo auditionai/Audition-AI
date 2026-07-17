@@ -12,13 +12,14 @@ import {
   fetchCaulenhauSamples,
   fetchPromptLibrarySearchLearningStats,
   fetchPromptLibraryUsageStats,
+  getPromptLibraryFeatureId,
   getPromptLibraryTags,
   stashPromptForGenerator,
   trackPromptLibrarySampleUse,
 } from '../shared/caulenhauSamples';
 
 interface PromptLibraryProps {
-  onUsePrompt: () => void;
+  onUsePrompt: (featureId: string) => void;
 }
 
 const enrichUsageStats = async (nextSamples: CaulenhauSamplePrompt[], searchQuery: string) => {
@@ -154,7 +155,7 @@ export const PromptLibrary: React.FC<PromptLibraryProps> = ({ onUsePrompt }) => 
 
     stashPromptForGenerator(prompt);
     notify('Đã đưa prompt mẫu sang trang tạo ảnh.', 'success');
-    onUsePrompt();
+    onUsePrompt(getPromptLibraryFeatureId(sample));
   };
 
   return (
@@ -279,6 +280,7 @@ export const PromptLibrary: React.FC<PromptLibraryProps> = ({ onUsePrompt }) => 
         <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
           {samples.map((sample) => {
             const tags = getPromptLibraryTags(sample);
+            const useCount = sample.total_use_count || 0;
             return (
               <article key={sample.id} className="group overflow-hidden rounded-2xl border border-white/10 bg-[#12121a] shadow-xl transition-all hover:-translate-y-1 hover:border-audi-pink/60">
                 <div className="relative aspect-[3/4] bg-white/5">
@@ -294,15 +296,17 @@ export const PromptLibrary: React.FC<PromptLibraryProps> = ({ onUsePrompt }) => 
                       </span>
                     ))}
                   </div>
-                  <div className="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full bg-black/70 px-2 py-1 text-[10px] font-black text-white backdrop-blur">
-                    <Icons.Eye className="h-3 w-3 text-audi-yellow" />
-                    {formatUseCount(sample.total_use_count)}
-                  </div>
+                  {useCount > 0 && (
+                    <div className="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full bg-black/70 px-2 py-1 text-[10px] font-black text-white backdrop-blur">
+                      <Icons.Eye className="h-3 w-3 text-audi-yellow" />
+                      {formatUseCount(useCount)}
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-3 p-3">
                   <p className="line-clamp-3 min-h-[48px] text-xs leading-relaxed text-slate-300">{sample.prompt || 'Prompt mẫu chưa có nội dung.'}</p>
                   <div className="flex items-center justify-between text-[11px] font-bold text-slate-500">
-                    <span>{formatUseCount(sample.total_use_count)} lượt dùng</span>
+                    <span>{useCount > 0 ? `${formatUseCount(useCount)} lượt dùng` : ''}</span>
                     {sample.searchScore ? <span>{sample.searchLearningScore ? `AI học: ${sample.searchLearningScore}` : `Khớp AI: ${sample.searchScore}`}</span> : <span>{sortMode === 'popular' ? 'Xếp theo lượt dùng' : 'Mới nhất'}</span>}
                   </div>
                   <button

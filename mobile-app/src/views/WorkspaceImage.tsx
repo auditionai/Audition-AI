@@ -121,9 +121,9 @@ const MODE_TO_FEATURE_ID: Record<GenMode, string> = {
 const MODE_META: Record<GenMode, { label: string; sampleCategoryId: number; sampleCategoryName: string }> = {
   single: { label: 'Đơn', sampleCategoryId: 2, sampleCategoryName: 'Ảnh nam nữ' },
   couple: { label: 'Đôi', sampleCategoryId: 3, sampleCategoryName: 'Ảnh couple' },
-  trio: { label: 'Nhóm 3', sampleCategoryId: 4, sampleCategoryName: 'Ảnh nhóm' },
-  squad: { label: 'Nhóm 4', sampleCategoryId: 4, sampleCategoryName: 'Ảnh nhóm' },
-  group5: { label: 'Nhóm 5', sampleCategoryId: 4, sampleCategoryName: 'Ảnh nhóm' },
+  trio: { label: 'Nhóm 3', sampleCategoryId: 4, sampleCategoryName: 'Ảnh nhóm 3' },
+  squad: { label: 'Nhóm 4', sampleCategoryId: 5, sampleCategoryName: 'Ảnh nhóm 4' },
+  group5: { label: 'Nhóm 5', sampleCategoryId: 6, sampleCategoryName: 'Ảnh nhóm 5' },
 };
 
 const MODE_TO_CHARACTER_COUNT: Record<GenMode, number> = {

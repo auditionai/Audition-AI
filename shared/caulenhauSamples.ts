@@ -1,7 +1,7 @@
 export const PROMPT_LIBRARY_PAGE_SIZE = 30;
 export const PROMPT_LIBRARY_PENDING_PROMPT_KEY = 'auditionai:pending-caulenhau-prompt';
 export const PROMPT_LIBRARY_APPLY_EVENT = 'auditionai:apply-caulenhau-prompt';
-const PROMPT_LIBRARY_CACHE_PREFIX = 'auditionai:caulenhau-samples';
+const PROMPT_LIBRARY_CACHE_PREFIX = 'auditionai:caulenhau-samples:v2';
 const PROMPT_LIBRARY_CACHE_TTL_MS = 5 * 60 * 1000;
 const PROMPT_LIBRARY_NEW_WINDOW_MS = 48 * 60 * 60 * 1000;
 
@@ -21,6 +21,7 @@ export interface CaulenhauSamplePrompt {
   image_url: string;
   prompt: string;
   category: string;
+  source_category_id?: number;
   created_at?: string;
   external_use_count?: number;
   local_use_count?: number;
@@ -60,24 +61,40 @@ export const CAULENHAU_SAMPLE_CATEGORIES: CaulenhauSampleCategory[] = [
     id: 'group3',
     label: 'Nhóm 3',
     shortLabel: 'Nhóm 3',
-    description: 'Lấy từ chuyên mục Ảnh Nhóm trên CauLenhAu.',
+    description: 'Lấy từ chuyên mục Ảnh Nhóm 3 trên CauLenhAu.',
     categoryId: 4,
   },
   {
     id: 'group4',
     label: 'Nhóm 4',
     shortLabel: 'Nhóm 4',
-    description: 'Lấy từ chuyên mục Ảnh Nhóm trên CauLenhAu.',
-    categoryId: 4,
+    description: 'Lấy từ chuyên mục Ảnh Nhóm 4 trên CauLenhAu.',
+    categoryId: 5,
   },
   {
     id: 'group5',
     label: 'Nhóm 5',
     shortLabel: 'Nhóm 5',
-    description: 'Lấy từ chuyên mục Ảnh Nhóm trên CauLenhAu.',
-    categoryId: 4,
+    description: 'Lấy từ chuyên mục Ảnh Nhóm 5 trên CauLenhAu.',
+    categoryId: 6,
   },
 ];
+
+const CAULENHAU_VISIBLE_CATEGORY_IDS = CAULENHAU_SAMPLE_CATEGORIES
+  .map((category) => category.categoryId)
+  .filter((categoryId): categoryId is number => categoryId !== null);
+
+const PROMPT_LIBRARY_FEATURE_BY_CATEGORY_ID: Record<number, string> = {
+  2: 'single_photo_gen',
+  3: 'couple_photo_gen',
+  4: 'group_3_gen',
+  5: 'group_4_gen',
+  6: 'group_5_gen',
+};
+
+export const getPromptLibraryFeatureId = (sample: CaulenhauSamplePrompt) => (
+  PROMPT_LIBRARY_FEATURE_BY_CATEGORY_ID[sample.source_category_id || 2] || 'single_photo_gen'
+);
 
 const SEMANTIC_SEARCH_TERMS: Record<string, string[]> = {
   'sinh nhat': ['sinh nhat', 'tiec sinh nhat', 'birthday', 'birth day', 'bday', 'birthday party', 'birthday cake', 'cake', 'candle', 'candles', 'celebration', 'balloon', 'balloons', 'gift', 'present', 'happy birthday'],
@@ -195,18 +212,32 @@ const scorePromptSample = (sample: CaulenhauSamplePrompt, query: string) => {
 const buildSampleQuery = (client: any, category: CaulenhauSampleCategory, selectColumns: string) => {
   const query = client.from('images').select(selectColumns);
   return category.categoryId === null
-    ? query
+    ? query.in('image_categories.category_id', CAULENHAU_VISIBLE_CATEGORY_IDS)
     : query.eq('image_categories.category_id', category.categoryId);
 };
 
-const mapCaulenhauSample = (item: any, category: CaulenhauSampleCategory): CaulenhauSamplePrompt => ({
-  id: String(item.id),
-  image_url: item.image_url,
-  prompt: item.prompt || '',
-  category: category.label,
-  created_at: item.created_at || undefined,
-  external_use_count: Number(item.use_count || item.usage_count || item.click_count || 0) || 0,
-});
+const mapCaulenhauSample = (item: any, category: CaulenhauSampleCategory): CaulenhauSamplePrompt => {
+  const categoryRows = Array.isArray(item.image_categories)
+    ? item.image_categories
+    : item.image_categories
+      ? [item.image_categories]
+      : [];
+  const joinedCategoryId = categoryRows
+    .map((row: any) => Number(row?.category_id))
+    .find((categoryId: number) => CAULENHAU_VISIBLE_CATEGORY_IDS.includes(categoryId));
+  const sourceCategoryId = category.categoryId || joinedCategoryId;
+  const resolvedCategory = CAULENHAU_SAMPLE_CATEGORIES.find((candidate) => candidate.categoryId === sourceCategoryId);
+
+  return {
+    id: String(item.id),
+    image_url: item.image_url,
+    prompt: item.prompt || '',
+    category: resolvedCategory?.label || category.label,
+    source_category_id: sourceCategoryId,
+    created_at: item.created_at || undefined,
+    external_use_count: Number(item.use_count || item.usage_count || item.click_count || 0) || 0,
+  };
+};
 
 export const fetchCaulenhauSamples = async (
   client: any,
@@ -240,7 +271,7 @@ export const fetchCaulenhauSamples = async (
   const from = page * sourcePageSize;
   const to = from + sourcePageSize - 1;
 
-  const categoryJoin = category.categoryId === null ? '' : ', image_categories!inner(category_id)';
+  const categoryJoin = ', image_categories!inner(category_id)';
   const selectVariants = [
     `id, image_url, prompt, created_at, use_count${categoryJoin}`,
     `id, image_url, prompt, created_at, usage_count${categoryJoin}`,

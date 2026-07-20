@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Image as ImageIcon, Video, Wand2, CalendarDays, Scissors, Sparkles, ExternalLink } from 'lucide-react';
+import { Image as ImageIcon, Video, Wand2, CalendarDays, Scissors, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { getAllImagesFromStorage } from '../services/storageService';
@@ -93,35 +93,6 @@ export function Home() {
           </span>
         </button>
       </div>
-
-      {/* AuMix3D Partner Banner */}
-      <a
-        data-tour-id="mobile.home.promo"
-        href="https://aumix3d.com/"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex items-center gap-3.5 p-3.5 rounded-2xl border border-gray-100 dark:border-zinc-800 bg-white dark:bg-[#18181B] shadow-sm active:scale-[0.98] transition-all duration-150 group"
-      >
-        {/* Icon */}
-        <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-cyan-500 to-teal-600 flex items-center justify-center shrink-0 shadow-md shadow-cyan-500/20 group-active:scale-95 transition-transform">
-          <span className="text-white text-lg font-black">3D</span>
-        </div>
-
-        {/* Text */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 mb-0.5">
-            <h4 className="text-[13px] font-extrabold text-gray-900 dark:text-white truncate">AuMix 3D Audition</h4>
-            <span className="px-1.5 py-px bg-red-500 text-white text-[8px] font-black uppercase rounded tracking-wider shrink-0">AD</span>
-          </div>
-          <p className="text-[11px] text-gray-500 dark:text-zinc-400 leading-snug truncate">Mix đồ 3D trực tiếp • Kho item khổng lồ</p>
-        </div>
-
-        {/* Arrow */}
-        <div className="w-8 h-8 rounded-full bg-gray-50 dark:bg-zinc-800 flex items-center justify-center shrink-0 group-hover:bg-cyan-50 dark:group-hover:bg-cyan-500/10 transition-colors">
-          <ExternalLink className="w-3.5 h-3.5 text-gray-400 dark:text-zinc-500 group-hover:text-cyan-500 transition-colors" />
-        </div>
-      </a>
-
       {/* Features Grid */}
       <div data-tour-id="mobile.home.features" className="space-y-4">
 

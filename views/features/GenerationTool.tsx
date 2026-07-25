@@ -1430,6 +1430,22 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
             </div>
         </div>
 
+        <div
+            className="w-full mb-6 neu-inset-sm rounded-2xl px-4 py-3 flex items-center gap-3 border border-amber-400/10"
+            aria-live="polite"
+            aria-atomic="true"
+        >
+            <div className="w-7 h-7 rounded-xl bg-amber-400/10 flex items-center justify-center shrink-0">
+                <TipIcon className="w-4 h-4 text-amber-500" />
+            </div>
+            <p className="min-w-0 text-xs font-semibold leading-relaxed text-slate-700 dark:text-slate-300">
+                {SMART_TIPS[currentTipIdx].text}
+            </p>
+            <span className="ml-auto hidden sm:block shrink-0 text-[9px] font-mono font-black text-slate-500 dark:text-slate-500">
+                {currentTipIdx + 1}/{SMART_TIPS.length}
+            </span>
+        </div>
+
         {/* 2. CREATION WORKSPACE GRID - SEPARATE FUNCTIONAL CARDS */}
         <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-6">
             

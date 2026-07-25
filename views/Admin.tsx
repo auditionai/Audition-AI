@@ -89,11 +89,55 @@ import {
 import { Icons } from '../components/Icons';
 import { APP_CONFIG } from '../constants';
 import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, GeneratedImage, Language, StylePreset, HistoryItem, AdminQueueJob, AdminQueueSummary, AdminQueueJobDetail, AdminQueueInputMedia, AdminQueueMediaSection, AdminQueueHealthReport, AdminQueueHealthSnapshot } from '../types';
+import './admin-command-center.css';
 
 interface AdminProps {
   lang: Language;
   isAdmin: boolean;
 }
+
+type AdminView = 'overview' | 'transactions' | 'users' | 'giftcode_abuse' | 'queue' | 'packages' | 'marketing' | 'pricing' | 'system' | 'styles' | 'tours';
+
+const ADMIN_NAV_SECTIONS: Array<{
+    label: string;
+    eyebrow: string;
+    tabs: Array<{
+        id: AdminView;
+        label: string;
+        description: string;
+        icon: React.ComponentType<{ className?: string }>;
+    }>;
+}> = [
+    {
+        label: 'Vận hành',
+        eyebrow: 'Operations',
+        tabs: [
+            { id: 'overview', icon: Icons.BarChart, label: 'Tổng quan', description: 'Chỉ số và doanh thu' },
+            { id: 'transactions', icon: Icons.Gem, label: 'Giao dịch', description: 'Đối soát nạp Vcoin' },
+            { id: 'users', icon: Icons.Users, label: 'Người dùng', description: 'Tài khoản và số dư' },
+            { id: 'giftcode_abuse', icon: Icons.AlertTriangle, label: 'Vi phạm code', description: 'Phát hiện lạm dụng' },
+            { id: 'queue', icon: Icons.Activity, label: 'Queue Jobs', description: 'Luồng render realtime' },
+        ],
+    },
+    {
+        label: 'Kinh doanh',
+        eyebrow: 'Commerce',
+        tabs: [
+            { id: 'packages', icon: Icons.ShoppingBag, label: 'Gói nạp', description: 'Sản phẩm Vcoin' },
+            { id: 'marketing', icon: Icons.Zap, label: 'Sự kiện & Code', description: 'Khuyến mãi và giftcode' },
+            { id: 'pricing', icon: Icons.Gem, label: 'Bảng giá', description: 'Model, server và chi phí' },
+        ],
+    },
+    {
+        label: 'Trải nghiệm',
+        eyebrow: 'Experience',
+        tabs: [
+            { id: 'styles', icon: Icons.Palette, label: 'Style mẫu', description: 'Preset hình ảnh' },
+            { id: 'tours', icon: Icons.Info, label: 'Hướng dẫn', description: 'Tour onboarding' },
+            { id: 'system', icon: Icons.Cpu, label: 'Hệ thống', description: 'Tích hợp và bảo trì' },
+        ],
+    },
+];
 
 interface SystemHealth {
     gemini: { status: string, latency: number };
@@ -508,7 +552,7 @@ const getQueueMediaMeta = (media: AdminQueueInputMedia) => `${media.kind} · ${m
 const toDateInputValue = (date: Date) => date.toISOString().slice(0, 10);
 
 export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
-  const [activeView, setActiveView] = useState<'overview' | 'transactions' | 'users' | 'giftcode_abuse' | 'queue' | 'packages' | 'marketing' | 'pricing' | 'system' | 'styles' | 'tours'>('overview');
+  const [activeView, setActiveView] = useState<AdminView>('overview');
   const [stats, setStats] = useState<any>(null);
   const [packages, setPackages] = useState<CreditPackage[]>([]);
   const [giftcodes, setGiftcodes] = useState<Giftcode[]>([]);
@@ -2441,8 +2485,15 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       return 'Vị trí đã được gắn data-tour-id trong giao diện. Chọn target này để khoanh đúng khu vực tương ứng khi tour chạy.';
   };
 
+  const activeAdminNav = ADMIN_NAV_SECTIONS
+      .flatMap((section) => section.tabs)
+      .find((tab) => tab.id === activeView) || ADMIN_NAV_SECTIONS[0].tabs[0];
+  const ActiveAdminIcon = activeAdminNav.icon;
+  const connectedServices = [health.gemini, health.supabase, health.storage]
+      .filter((service) => service.status === 'connected').length;
+
   return (
-    <div className="min-h-screen pb-24 animate-fade-in bg-slate-100 dark:bg-[#13161F] text-slate-800 dark:text-slate-100 font-sans">
+    <div className="admin-command-center min-h-screen pb-24 animate-fade-in text-slate-800 dark:text-slate-100 font-sans">
       {/* --- TOASTS CONTAINER --- */}
       <div className="fixed top-24 right-4 z-[9999] flex flex-col gap-2 pointer-events-none w-full max-w-sm px-4 md:px-0">
           {toasts.map(t => (
@@ -2482,8 +2533,126 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           </div>
       )}
       
-      {/* 3D NEUMORPHIC ADMIN COMMAND CONSOLE */}
-      <div className="w-full neu-card p-5 rounded-3xl mb-6 shadow-2xl space-y-4">
+      <section className="admin-command-hero" aria-labelledby="admin-command-title">
+          <div className="admin-command-hero__glow admin-command-hero__glow--pink" />
+          <div className="admin-command-hero__glow admin-command-hero__glow--cyan" />
+
+          <div className="admin-command-hero__copy">
+              <div className="admin-command-kicker">
+                  <span className="admin-command-kicker__pulse" />
+                  AUDITION AI · SECURE OPERATIONS
+              </div>
+              <div className="admin-command-title-row">
+                  <div className="admin-command-mark">
+                      <Icons.Shield className="h-7 w-7" />
+                  </div>
+                  <div>
+                      <h1 id="admin-command-title">ADMIN CONTROL CENTER</h1>
+                      <p>Điều hành người dùng, tài chính, hạ tầng AI và luồng render trong một không gian thống nhất.</p>
+                  </div>
+              </div>
+          </div>
+
+          <div className="admin-command-health" aria-label="Tình trạng dịch vụ">
+              {[
+                  { label: 'Gemini AI', value: health.gemini, icon: Icons.Sparkles },
+                  { label: 'Supabase', value: health.supabase, icon: Icons.Database },
+                  { label: 'R2 Storage', value: health.storage, icon: Icons.Cloud },
+              ].map((service) => {
+                  const connected = service.value.status === 'connected';
+                  const checking = service.value.status === 'checking';
+                  return (
+                      <div key={service.label} className={`admin-health-chip ${connected ? 'is-online' : checking ? 'is-checking' : 'is-offline'}`}>
+                          <service.icon className="h-4 w-4" />
+                          <span>
+                              <b>{service.label}</b>
+                              <small>{connected ? 'Ổn định' : checking ? 'Đang kiểm tra' : 'Mất kết nối'}</small>
+                          </span>
+                          <i aria-hidden="true" />
+                      </div>
+                  );
+              })}
+              <button type="button" className="admin-refresh-button" onClick={refreshData} aria-label="Làm mới dữ liệu quản trị">
+                  <Icons.RefreshCw className="h-4 w-4" />
+                  Đồng bộ
+              </button>
+          </div>
+      </section>
+
+      <section className="admin-command-summary" aria-label="Tóm tắt trung tâm quản trị">
+          <div>
+              <span>Dịch vụ trực tuyến</span>
+              <strong>{connectedServices}/3</strong>
+              <small>Hạ tầng lõi</small>
+          </div>
+          <div>
+              <span>Queue đang chạy</span>
+              <strong>{queueSummary.processing || 0}</strong>
+              <small>Jobs processing</small>
+          </div>
+          <div>
+              <span>Đang chờ xử lý</span>
+              <strong>{queueSummary.queued || 0}</strong>
+              <small>Jobs queued</small>
+          </div>
+          <div>
+              <span>Người dùng hệ thống</span>
+              <strong>{new Intl.NumberFormat('vi-VN').format(stats?.dashboard?.usersTotal || 0)}</strong>
+              <small>Tài khoản</small>
+          </div>
+      </section>
+
+      <nav className="admin-command-nav" aria-label="Điều hướng trang quản trị">
+          {ADMIN_NAV_SECTIONS.map((section) => (
+              <div key={section.label} className="admin-command-nav__section">
+                  <div className="admin-command-nav__heading">
+                      <span>{section.eyebrow}</span>
+                      <b>{section.label}</b>
+                  </div>
+                  <div className="admin-command-nav__items">
+                      {section.tabs.map((tab) => {
+                          const selected = activeView === tab.id;
+                          return (
+                              <button
+                                  key={tab.id}
+                                  type="button"
+                                  onClick={() => setActiveView(tab.id)}
+                                  className={selected ? 'is-active' : ''}
+                                  aria-current={selected ? 'page' : undefined}
+                              >
+                                  <span className="admin-command-nav__icon">
+                                      <tab.icon className="h-5 w-5" />
+                                  </span>
+                                  <span className="admin-command-nav__label">
+                                      <b>{tab.label}</b>
+                                      <small>{tab.description}</small>
+                                  </span>
+                                  <Icons.ChevronRight className="admin-command-nav__arrow h-4 w-4" />
+                              </button>
+                          );
+                      })}
+                  </div>
+              </div>
+          ))}
+      </nav>
+
+      <header className="admin-workspace-heading">
+          <div className="admin-workspace-heading__icon">
+              <ActiveAdminIcon className="h-5 w-5" />
+          </div>
+          <div>
+              <span>Admin workspace</span>
+              <h2>{activeAdminNav.label}</h2>
+              <p>{activeAdminNav.description}</p>
+          </div>
+          <div className="admin-workspace-heading__status">
+              <span className="admin-workspace-heading__status-dot" />
+              Live data
+          </div>
+      </header>
+
+      {/* Legacy console is retained temporarily for data parity but fully replaced visually. */}
+      <div className="admin-legacy-console w-full neu-card p-5 rounded-3xl mb-6 shadow-2xl space-y-4" aria-hidden="true">
           {/* Top Admin Header & Live System Health */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-3 border-b border-slate-200/60 dark:border-slate-800">
               <div className="flex items-center gap-3">

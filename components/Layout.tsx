@@ -11,7 +11,6 @@ interface LayoutProps {
   selectedFeature?: Feature | null;
   onNavigate: (view: ViewId) => void;
   lang: Language;
-  setLang: (l: Language) => void;
   theme: Theme;
   setTheme: (t: Theme) => void;
   showCheckin: boolean;
@@ -20,7 +19,7 @@ interface LayoutProps {
 }
 
 export const Layout: React.FC<LayoutProps> = ({
-  children, currentView, selectedFeature, onNavigate, lang, setLang, theme, setTheme, showCheckin, setShowCheckin, onLogout
+  children, currentView, selectedFeature, onNavigate, lang, theme, setTheme, showCheckin, setShowCheckin, onLogout
 }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [promoConfig, setPromoConfig] = useState<PromotionCampaign | null>(null);
@@ -414,7 +413,7 @@ export const Layout: React.FC<LayoutProps> = ({
             </div>
           </div>
 
-          {/* Right Header Actions: Theme Toggle + Language Switcher */}
+          {/* Right Header Actions */}
           <div className="flex items-center gap-2.5">
             {/* Theme Toggle (Sun / Moon) */}
             <button
@@ -424,14 +423,6 @@ export const Layout: React.FC<LayoutProps> = ({
             >
               {theme === 'dark' ? <Icons.Sun className="w-4 h-4 text-amber-400" /> : <Icons.Moon className="w-4 h-4 text-indigo-500" />}
               <span className="hidden md:inline font-accent">{theme === 'dark' ? 'Sáng' : 'Tối'}</span>
-            </button>
-
-            {/* Language Switcher (VN / EN) */}
-            <button
-              onClick={() => setLang(lang === 'vi' ? 'en' : 'vi')}
-              className="neu-button px-3.5 py-2 rounded-2xl text-xs font-black text-slate-800 dark:text-slate-200 hover:text-[#00F2FE] transition-all"
-            >
-              {lang === 'vi' ? '🇻🇳 VN' : '🇺🇸 EN'}
             </button>
 
           </div>

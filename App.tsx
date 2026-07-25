@@ -215,7 +215,7 @@ function AppContent() {
   const warmedUserDataRef = useRef<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userRole, setUserRole] = useState<'user' | 'admin'>('user');
-  const [lang, setLang] = useState<Language>(APP_CONFIG.ui.default_language);
+  const lang = APP_CONFIG.ui.default_language as Language;
   const [theme, setTheme] = useState<Theme>('light');
   const [currentView, setCurrentView] = useState<ViewId>('home');
   const [selectedFeature, setSelectedFeature] = useState<Feature | null>(null);
@@ -690,7 +690,6 @@ function AppContent() {
       selectedFeature={selectedFeature}
       onNavigate={handleNavigate}
       lang={lang}
-      setLang={setLang}
       theme={theme}
       setTheme={setTheme}
       showCheckin={showCheckin}

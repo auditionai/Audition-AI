@@ -75,9 +75,22 @@ export const Home: React.FC<HomeProps> = ({
               </span>
             </div>
 
-            <h1 className="text-3xl sm:text-5xl font-black text-slate-950 dark:text-white leading-tight font-accent tracking-tight">
-              TẠO ẢNH & VIDEO AI <br />
-              <span className="text-[#FF007F]">NHÂN VẬT AUDITION 3D</span>
+            <h1
+              className="flex flex-col items-start gap-3 sm:gap-4 py-1 font-accent font-black uppercase tracking-[-0.035em]"
+              aria-label="Tạo ảnh và video AI nhân vật Audition 3D"
+            >
+              <span
+                className="block text-[clamp(1.8rem,4vw,3.5rem)] leading-[0.9] text-slate-950 dark:text-white"
+                style={{ textShadow: '0 2px 0 rgba(148,163,184,.45), 0 6px 18px rgba(0,0,0,.22)' }}
+              >
+                TẠO ẢNH &amp; VIDEO AI
+              </span>
+              <span
+                className="block text-[clamp(1.8rem,4vw,3.5rem)] leading-[0.9] text-[#FF007F]"
+                style={{ textShadow: '0 2px 0 #9d004f, 0 5px 0 rgba(91,0,53,.45), 0 10px 22px rgba(255,0,127,.28)' }}
+              >
+                NHÂN VẬT AUDITION 3D
+              </span>
             </h1>
 
             <p className="text-xs sm:text-sm text-slate-800 dark:text-slate-200 max-w-xl leading-relaxed font-bold">

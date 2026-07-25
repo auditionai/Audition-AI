@@ -13,7 +13,7 @@ import { ManualPaymentGateway } from './views/ManualPaymentGateway';
 import { Language, Theme, ViewId, Feature } from './types';
 import { APP_CONFIG } from './constants';
 import { getSupabaseSession, getSupabaseUser, supabase } from './services/supabaseClient';
-import { getUserProfile, getTopupGiftcodes, logVisit, updateLastActive, subscribeMaintenanceMode, getSystemAnnouncementConfig, getFeatureMaintenanceConfig, isFeatureInMaintenance, type FeatureMaintenanceConfig, type SystemAnnouncementConfig } from './services/economyService';
+import { getUserProfile, logVisit, updateLastActive, subscribeMaintenanceMode, getSystemAnnouncementConfig, getFeatureMaintenanceConfig, isFeatureInMaintenance, type FeatureMaintenanceConfig, type SystemAnnouncementConfig } from './services/economyService';
 import { NotificationProvider, useNotification } from './components/NotificationSystem';
 import { AppEventPopup, AppEventPopupData, SystemAnnouncementModal } from './components/AppNotificationPopups';
 import { AppTour } from './components/AppTour';
@@ -215,7 +215,7 @@ function AppContent() {
   const warmedUserDataRef = useRef<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userRole, setUserRole] = useState<'user' | 'admin'>('user');
-  const [lang, setLang] = useState<Language>(APP_CONFIG.ui.default_language);
+  const lang = APP_CONFIG.ui.default_language as Language;
   const [theme, setTheme] = useState<Theme>('light');
   const [currentView, setCurrentView] = useState<ViewId>('home');
   const [selectedFeature, setSelectedFeature] = useState<Feature | null>(null);
@@ -600,9 +600,12 @@ function AppContent() {
   const handleNavigate = (view: ViewId, data?: any) => {
     desktopHistoryModeRef.current = 'push';
     if (view === 'tools') {
-      if (!selectedFeature) {
-        setSelectedFeature(DEFAULT_IMAGE_FEATURE || APP_CONFIG.main_features[0]);
-      }
+      setSelectedFeature(DEFAULT_IMAGE_FEATURE || APP_CONFIG.main_features[0]);
+      setCurrentView('tool_workspace');
+      return;
+    }
+    if (view === 'video') {
+      setSelectedFeature(DEFAULT_VIDEO_FEATURE || APP_CONFIG.main_features.find(f => f.toolType === 'video') || APP_CONFIG.main_features[0]);
       setCurrentView('tool_workspace');
       return;
     }
@@ -684,9 +687,9 @@ function AppContent() {
   return (
     <Layout
       currentView={currentView}
+      selectedFeature={selectedFeature}
       onNavigate={handleNavigate}
       lang={lang}
-      setLang={setLang}
       theme={theme}
       setTheme={setTheme}
       showCheckin={showCheckin}
@@ -739,7 +742,6 @@ function AppContent() {
           <ToolWorkspace 
             feature={selectedFeature} 
             lang={lang} 
-            onBack={() => handleNavigate('home')} 
             onNavigateToFeature={handleNavigateToFeature}
             onNavigateView={handleNavigate}
           />

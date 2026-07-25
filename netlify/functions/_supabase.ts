@@ -32,11 +32,11 @@ const getAbortSignal = (timeoutMs: number) => {
 
 const runWithAbortTimeout = async <T>(
   timeoutMs: number,
-  operation: (signal: AbortSignal) => PromiseLike<T>,
-): Promise<T> => {
+  operation: (signal: AbortSignal) => T,
+): Promise<Awaited<T>> => {
   const timeout = getAbortSignal(timeoutMs);
   try {
-    return await operation(timeout.signal);
+    return await operation(timeout.signal) as Awaited<T>;
   } finally {
     timeout.clear();
   }
@@ -132,8 +132,8 @@ export const requireAuthenticatedUser = async (
         .from('users')
         .select('account_status')
         .eq('id', user.id)
-        .maybeSingle()
-        .abortSignal(signal),
+        .abortSignal(signal)
+        .maybeSingle(),
     );
 
     if (profileError && !/account_status|column/i.test(profileError.message || '')) {

@@ -3,8 +3,9 @@ import { createClient } from '@supabase/supabase-js';
 
 // Access Environment Variables (Vite standard)
 const metaEnv = (import.meta as any).env || {};
-const supabaseUrl = metaEnv.VITE_SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = metaEnv.VITE_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+const processEnv = typeof process !== 'undefined' ? process.env : {};
+const supabaseUrl = metaEnv.VITE_SUPABASE_URL || processEnv.VITE_SUPABASE_URL;
+const supabaseAnonKey = metaEnv.VITE_SUPABASE_ANON_KEY || processEnv.VITE_SUPABASE_ANON_KEY;
 
 let client = null;
 const SESSION_CACHE_TTL_MS = 5000;
@@ -133,8 +134,8 @@ export const clearSupabaseSessionCache = () => {
 };
 
 // --- SECONDARY CLIENT: CAULENHAU.IO.VN ---
-const clhUrl = metaEnv.VITE_CAULENHAU_SUPABASE_URL || process.env.CAULENHAU_SUPABASE_URL;
-const clhKey = metaEnv.VITE_CAULENHAU_SUPABASE_ANON_KEY || process.env.CAULENHAU_SUPABASE_ANON_KEY;
+const clhUrl = metaEnv.VITE_CAULENHAU_SUPABASE_URL || processEnv.CAULENHAU_SUPABASE_URL;
+const clhKey = metaEnv.VITE_CAULENHAU_SUPABASE_ANON_KEY || processEnv.CAULENHAU_SUPABASE_ANON_KEY;
 
 export const caulenhauClient = (clhUrl && clhKey) ? createClient(clhUrl, clhKey) : null;
 
@@ -168,6 +169,28 @@ export const signInWithGoogle = async () => {
 export const signInWithEmail = async (email: string, password: string) => {
     if (!supabase) return { data: null, error: { message: "Chức năng yêu cầu kết nối Database." } };
     return await supabase.auth.signInWithPassword({ email, password });
+};
+
+export const updatePasswordWithVerification = async (
+    email: string,
+    currentPassword: string,
+    newPassword: string,
+) => {
+    if (!supabase) {
+        return { error: { message: "Chức năng yêu cầu kết nối Database." } };
+    }
+
+    const { error: verificationError } = await supabase.auth.signInWithPassword({
+        email,
+        password: currentPassword,
+    });
+    if (verificationError) {
+        return { error: { message: "Mật khẩu hiện tại không chính xác." } };
+    }
+
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    clearSupabaseSessionCache();
+    return { error };
 };
 
 export const signUpWithEmail = async (email: string, password: string, preferredDisplayName?: string) => {

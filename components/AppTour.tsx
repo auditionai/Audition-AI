@@ -180,7 +180,6 @@ export const AppTour: React.FC<AppTourProps> = ({ surface, screen, featureId, di
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('scroll', handleResize, true);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTour, currentStep?.targetId, stepIndex]);
 
   const closeTour = () => {
@@ -318,4 +317,3 @@ export const AppTour: React.FC<AppTourProps> = ({ surface, screen, featureId, di
     document.body,
   );
 };
-

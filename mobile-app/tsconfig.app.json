@@ -1,0 +1,32 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "allowJs": false,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": false,
+    "forceConsistentCasingInFileNames": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "types": ["vite/client", "node"],
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx"
+  },
+  "include": [
+    "src",
+    "../components/AppNotificationPopups.tsx",
+    "../components/AppTour.tsx",
+    "../services/downloadService.ts",
+    "../services/directImageEditService.ts",
+    "../services/characterImageAssistService.ts",
+    "../shared",
+    "../utils/imageProcessor.ts",
+    "../views/ManualPaymentGateway.tsx"
+  ]
+}

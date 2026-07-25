@@ -20,11 +20,11 @@ const getAbortSignal = (timeoutMs: number) => {
 
 const runWithAbortTimeout = async <T>(
   timeoutMs: number,
-  operation: (signal: AbortSignal) => PromiseLike<T>,
-): Promise<T> => {
+  operation: (signal: AbortSignal) => T,
+): Promise<Awaited<T>> => {
   const timeout = getAbortSignal(timeoutMs);
   try {
-    return await operation(timeout.signal);
+    return await operation(timeout.signal) as Awaited<T>;
   } finally {
     timeout.clear();
   }
@@ -86,8 +86,8 @@ export const handler: Handler = async (event) => {
         .from('users')
         .select(PROFILE_SELECT)
         .eq('id', user.id)
-        .maybeSingle()
-        .abortSignal(signal),
+        .abortSignal(signal)
+        .maybeSingle(),
     );
 
     if (readError) {

@@ -29,6 +29,7 @@ import {
   type ImageGenerateRecipePayload,
   type MotionGenerateRecipePayload,
   type PromptImageGenerateRecipePayload,
+  type QueueRecipePayload,
   type VideoGenerateRecipePayload,
 } from '../../shared/queueRecipes';
 import { isTerminalRescueFailureMessage, normalizeQueueErrorMessage } from '../../shared/queueErrorClassifier';
@@ -2877,7 +2878,7 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
       const providerPayload = await withTimeout(
         withLeaseHeartbeat(
           job.id,
-          prepareProviderPayloadFromQueueRecipe((job.queue_payload || currentPayload) as PromptImageGenerateRecipePayload),
+          prepareProviderPayloadFromQueueRecipe((job.queue_payload || currentPayload) as unknown as PromptImageGenerateRecipePayload),
           preparationLeaseSeconds,
         ),
         preparationTimeoutMs,
@@ -3276,7 +3277,7 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
       }
 
       const validationPayload = isQueueRecipePayload(currentPayload)
-        ? getRecipeValidationPayload(currentPayload)
+        ? getRecipeValidationPayload(currentPayload as unknown as QueueRecipePayload)
         : stripInternalQueueMeta(currentPayload);
       const validationResult = await validateQueuePayloadForDispatch(job, validationPayload);
       submitValidationResult = validationResult;
@@ -3298,9 +3299,10 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
           continue;
         }
 
-        submitPayload = stagedResult.providerPayload;
-        submitValidationResult = { pricingMatch: { config_key: String(stagedResult.providerPayload.config_key || '') || undefined } };
-        job.queue_payload = stagedResult.storedPayload;
+        const preparedResult = stagedResult as Extract<PreparedQueueDispatchResult, { type: 'prepared' }>;
+        submitPayload = preparedResult.providerPayload;
+        submitValidationResult = { pricingMatch: { config_key: String(preparedResult.providerPayload.config_key || '') || undefined } };
+        job.queue_payload = preparedResult.storedPayload;
       }
 
       if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'prompt_image_generate_recipe_v1') {
@@ -3319,7 +3321,7 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
         const providerPayload = await withTimeout(
           withLeaseHeartbeat(
             job.id,
-            prepareProviderPayloadFromQueueRecipe((job.queue_payload || currentPayload) as PromptImageGenerateRecipePayload),
+            prepareProviderPayloadFromQueueRecipe((job.queue_payload || currentPayload) as unknown as PromptImageGenerateRecipePayload),
             preparationLeaseSeconds,
           ),
           preparationTimeoutMs,
@@ -3364,7 +3366,7 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
             job.id,
             prepareVideoInputsForDirectTstDispatch(
               job,
-              currentPayload as VideoGenerateRecipePayload | MotionGenerateRecipePayload,
+              currentPayload as unknown as VideoGenerateRecipePayload | MotionGenerateRecipePayload,
             ),
             preparationLeaseSeconds,
           ),
@@ -3401,7 +3403,7 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
         const providerPayload = await withTimeout(
           withLeaseHeartbeat(
             job.id,
-            prepareProviderPayloadFromQueueRecipe((job.queue_payload || currentPayload) as typeof currentPayload),
+            prepareProviderPayloadFromQueueRecipe((job.queue_payload || currentPayload) as unknown as QueueRecipePayload),
             preparationLeaseSeconds,
           ),
           preparationTimeoutMs,

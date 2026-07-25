@@ -71,7 +71,7 @@ const appendQueueLog = (
   ...payload,
   __stage: stage,
   __logs: [...(((payload as any).__logs as QueueProgressLogEntry[] | undefined) || []), buildQueueLog(stage, message, level)],
-});
+} as ImageEditRecipePayload);
 
 const parseDataUrl = (value: string) => {
   const match = value.match(/^data:(.*?);base64,(.*)$/);
@@ -226,7 +226,7 @@ const tryClaimJob = async (job: DirectEditJobRow, leaseToken: string) => {
     return { claimed: false, payload: job.queue_payload, reason: 'lease_active' as const };
   }
 
-  return { claimed: true, payload, reason: null as const };
+  return { claimed: true, payload, reason: null };
 };
 
 export const processDirectImageEditJob = async (jobId: string) => {

@@ -8,7 +8,7 @@ const headers = {
   'Access-Control-Allow-Methods': 'GET, OPTIONS',
 };
 
-const timeout = async <T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> => {
+const timeout = async <T>(promise: PromiseLike<T>, timeoutMs: number, label: string): Promise<T> => {
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
   try {
     return await Promise.race([

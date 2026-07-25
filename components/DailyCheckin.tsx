@@ -96,84 +96,104 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
     : ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-fade-in">
-      <div className="w-full max-w-[450px] bg-[#0c0c14] border border-white/20 rounded-[2rem] p-6 relative shadow-[0_0_50px_rgba(0,0,0,0.8)] flex flex-col max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="font-game text-xl font-bold text-white uppercase">
-            {lang === 'vi' ? 'Điểm Danh Hằng Ngày' : 'Daily Check-in'}
+    <div className="fixed inset-0 z-[5000] flex items-center justify-center p-4 animate-fade-in bg-black/60 backdrop-blur-md">
+      <div className="w-full max-w-[480px] neu-card p-6 sm:p-8 relative shadow-2xl flex flex-col max-h-[92vh] overflow-y-auto border border-white/20">
+        
+        {/* Top Header */}
+        <div className="flex justify-between items-center mb-6 pb-3 border-b border-slate-200/60 dark:border-slate-800">
+          <h2 className="font-accent text-xl font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+            <Icons.Calendar className="w-6 h-6 text-[#FF007F]" />
+            <span>{lang === 'vi' ? 'Điểm Danh Hằng Ngày' : 'Daily Check-in'}</span>
           </h2>
-          <button onClick={onClose} className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition-colors">
-            <Icons.X className="w-5 h-5 text-white" />
+          <button 
+            onClick={onClose} 
+            className="neu-button p-2.5 rounded-2xl text-slate-700 dark:text-slate-200 hover:text-red-500 transition-colors"
+          >
+            <Icons.X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="bg-[#1a1a24] rounded-2xl p-4 flex items-center gap-4 border border-white/5 mb-6">
-          <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-audi-pink to-audi-purple flex items-center justify-center shadow-lg">
-            <Icons.Calendar className="w-6 h-6 text-white" />
+        {/* Today Reward Banner Box */}
+        <div className="neu-inset-sm p-4 rounded-3xl flex items-center gap-4 mb-6">
+          <div className="w-12 h-12 rounded-2xl neu-raised-sm bg-gradient-to-br from-[#FF007F] to-[#9D00FF] flex items-center justify-center shadow-lg shrink-0">
+            <Icons.Gift className="w-6 h-6 text-white" />
           </div>
           <div>
-            <p className="text-xs text-slate-400 font-bold uppercase">{lang === 'vi' ? 'Quà hôm nay' : 'Today reward'}</p>
-            <p className="text-2xl font-black text-audi-yellow">+5 Vcoin</p>
+            <p className="text-xs text-slate-700 dark:text-slate-300 font-extrabold uppercase">{lang === 'vi' ? 'Quà hôm nay' : 'Today reward'}</p>
+            <p className="text-2xl font-black text-amber-500 font-accent">+5 VCOIN</p>
           </div>
           <div className="ml-auto text-right">
-            <div className="text-[10px] text-slate-500 uppercase font-bold">{lang === 'vi' ? 'Trạng thái' : 'Status'}</div>
-            <div className={`font-bold ${checkedIn ? 'text-audi-lime' : 'text-audi-pink'}`}>
+            <div className="text-[10px] text-slate-600 dark:text-slate-400 uppercase font-black">{lang === 'vi' ? 'Trạng thái' : 'Status'}</div>
+            <div className={`font-black text-xs uppercase px-2.5 py-1 rounded-xl neu-raised-sm mt-1 ${checkedIn ? 'text-emerald-500' : 'text-[#FF007F]'}`}>
               {checkedIn ? (lang === 'vi' ? 'Đã nhận' : 'Claimed') : (lang === 'vi' ? 'Sẵn sàng' : 'Ready')}
             </div>
           </div>
         </div>
 
-        <div className="flex items-center justify-between mb-4 px-2">
-          <button onClick={() => {
-            const prev = new Date(currentYear, currentMonth - 1);
-            setCurrentMonth(prev.getMonth());
-            setCurrentYear(prev.getFullYear());
-          }} className="text-slate-400 hover:text-white">
+        {/* Month Selector Controls */}
+        <div className="flex items-center justify-between mb-4 px-2 neu-raised-sm p-2 rounded-2xl">
+          <button 
+            onClick={() => {
+              const prev = new Date(currentYear, currentMonth - 1);
+              setCurrentMonth(prev.getMonth());
+              setCurrentYear(prev.getFullYear());
+            }} 
+            className="neu-button p-2 rounded-xl text-slate-700 dark:text-slate-200"
+          >
             <Icons.ChevronLeft className="w-5 h-5" />
           </button>
 
-          <span className="font-bold text-white uppercase tracking-widest text-sm">
+          <span className="font-accent font-black text-slate-900 dark:text-white uppercase tracking-widest text-sm">
             {monthNames[currentMonth]}, {currentYear}
           </span>
 
-          <button onClick={() => {
-            const next = new Date(currentYear, currentMonth + 1);
-            setCurrentMonth(next.getMonth());
-            setCurrentYear(next.getFullYear());
-          }} className="text-slate-400 hover:text-white">
+          <button 
+            onClick={() => {
+              const next = new Date(currentYear, currentMonth + 1);
+              setCurrentMonth(next.getMonth());
+              setCurrentYear(next.getFullYear());
+            }} 
+            className="neu-button p-2 rounded-xl text-slate-700 dark:text-slate-200"
+          >
             <Icons.ChevronRight className="w-5 h-5" />
           </button>
         </div>
 
+        {/* Calendar Grid */}
         <div className="grid grid-cols-7 gap-1 text-center mb-6">
           {weekDays.map((d) => (
-            <div key={d} className="text-[10px] font-bold text-slate-500 mb-2">{d}</div>
+            <div key={d} className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase mb-2 font-accent">{d}</div>
           ))}
           {renderCalendar()}
         </div>
 
         {message && (
-          <div className={`mb-4 p-3 rounded-xl text-center text-sm font-bold animate-fade-in ${message.includes('thành công') || message.includes('success') ? 'bg-green-500/20 text-green-400 border border-green-500/50' : 'bg-red-500/20 text-red-400 border border-red-500/50'}`}>
+          <div className={`mb-4 p-3 rounded-2xl text-center text-xs font-black animate-fade-in ${
+            message.includes('thành công') || message.includes('success') 
+              ? 'neu-inset-sm text-emerald-500 border border-emerald-500/50' 
+              : 'neu-inset-sm text-red-500 border border-red-500/50'
+          }`}>
             {message}
           </div>
         )}
 
+        {/* Action Claim Button */}
         <button
           onClick={handleClaim}
           disabled={checkedIn || loading}
-          className={`w-full py-4 rounded-xl font-bold uppercase tracking-wider text-white shadow-lg flex items-center justify-center gap-2 transition-all transform active:scale-95 ${
+          className={`w-full py-4 rounded-2xl font-black uppercase tracking-wider text-sm shadow-2xl flex items-center justify-center gap-2 transition-all transform ${
             checkedIn
-              ? 'bg-slate-700 cursor-not-allowed text-slate-400'
-              : 'bg-[#D10000] hover:bg-red-600 shadow-[0_0_20px_rgba(209,0,0,0.4)]'
+              ? 'neu-inset-sm text-slate-500 cursor-not-allowed opacity-70'
+              : 'neu-button-primary'
           }`}
         >
           {loading
-            ? <Icons.Loader className="animate-spin w-5 h-5" />
+            ? <Icons.Loader className="animate-spin w-5 h-5 text-white" />
             : checkedIn ? <Icons.Check className="w-5 h-5" /> : <Icons.Hand className="w-5 h-5" />
           }
           {checkedIn
             ? (lang === 'vi' ? 'Đã điểm danh' : 'Checked In')
-            : (lang === 'vi' ? 'Điểm danh ngay' : 'Check In Now')
+            : (lang === 'vi' ? '🚀 Điểm danh ngay (+5 Vcoin)' : '🚀 Check In Now (+5 Vcoin)')
           }
         </button>
       </div>

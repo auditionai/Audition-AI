@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Feature, GeneratedImage, Language, ViewId } from '../../types';
 import { Icons } from '../../components/Icons';
 import { useNotification } from '../../components/NotificationSystem';
@@ -117,8 +117,6 @@ export const EditingTool: React.FC<EditingToolProps> = ({
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [aiModel, setAiModel] = useState<GenerationTier>('flash');
   const [resolution, setResolution] = useState<Resolution>('1K');
-  const [speed, setSpeed] = useState('Nhanh');
-  const [server, setServer] = useState('Vertex AI');
   const [currentTipIdx, setCurrentTipIdx] = useState(0);
   const [guideTopic, setGuideTopic] = useState<'guide' | null>(null);
   const [auditionPricing, setAuditionPricing] = useState<ModelPricing[]>([]);
@@ -127,7 +125,6 @@ export const EditingTool: React.FC<EditingToolProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const isUpscaler = feature.id === 'sharpen_upscale';
   const isRemover = feature.id === 'remove_bg_pro';
   const isMagicEditor = feature.id === 'magic_editor_pro';
   const activeTier: GenerationTier = isMagicEditor ? aiModel : 'flash';
@@ -152,8 +149,6 @@ export const EditingTool: React.FC<EditingToolProps> = ({
   const availableResolutions = (['1K', '2K', '4K'] as Resolution[]).filter(
     (value) => resolutionCostMap[value].vcoin >= 0,
   );
-  const availableSpeedLabels = ['Nhanh'];
-  const availableServerLabels = ['Vertex AI'];
   const isFlashAvailable = true;
   const isProAvailable = isMagicEditor;
   const isCatalogReady = !catalogLoading;
@@ -162,8 +157,6 @@ export const EditingTool: React.FC<EditingToolProps> = ({
     setUploadedImage(null);
     setPrompt('');
     setResolution('1K');
-    setSpeed('Nhanh');
-    setServer('Vertex AI');
     setAiModel('flash');
     setIsSubmitting(false);
   }, [feature.id]);
@@ -448,7 +441,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
   const TipIcon = SMART_TIPS[currentTipIdx].icon;
 
   return (
-    <div className="flex flex-col items-center w-full max-w-5xl mx-auto pb-12 animate-fade-in relative">
+    <div className="w-full pb-12 animate-fade-in relative">
       {guideTopic && (
         <div
           className="fixed inset-0 z-[100] flex items-start justify-center p-4 pt-32 animate-fade-in"
@@ -474,318 +467,233 @@ export const EditingTool: React.FC<EditingToolProps> = ({
         </div>
       )}
 
-      <div data-tour-id="desktop.edit.tabs" className="w-full flex justify-center mb-4">
-        <div className="bg-[#12121a] p-1.5 rounded-2xl border border-white/10 flex gap-1 shadow-lg overflow-x-auto no-scrollbar max-w-full">
-          {EDITING_TABS.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => onNavigateToFeature?.(tab.id)}
-              className={`px-4 py-2.5 rounded-xl flex items-center gap-2 text-xs md:text-sm font-bold transition-all whitespace-nowrap ${
-                feature.id === tab.id
-                  ? 'bg-white text-black shadow-md'
-                  : 'text-slate-500 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <tab.icon className="w-3 h-3 md:w-4 md:h-4" />
-              {tab.label[lang]}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="w-full mb-4 bg-[#1a1500] border border-audi-yellow/20 rounded-xl p-2 md:p-3 flex items-center gap-2 md:gap-3 overflow-hidden relative shadow-[0_0_15px_rgba(251,218,97,0.05)]">
-        <div className="shrink-0 p-1 md:p-1.5 bg-audi-yellow/10 rounded-lg border border-audi-yellow/20">
-          <TipIcon className="w-3 h-3 md:w-4 md:h-4 text-audi-yellow animate-pulse" />
-        </div>
-        <div className="flex-1 overflow-hidden relative h-4 md:h-5">
-          <span key={currentTipIdx} className="absolute inset-0 text-[9px] md:text-[11px] text-audi-yellow/80 font-medium whitespace-nowrap overflow-hidden text-ellipsis animate-slide-up">
-            {SMART_TIPS[currentTipIdx].text}
-          </span>
-        </div>
-      </div>
-
-      <div className="w-full mb-4 bg-yellow-500/5 border border-yellow-500/20 rounded-xl p-3 flex items-center gap-3">
-        <div className="shrink-0 p-1.5 bg-yellow-500/10 rounded-full">
-          <Icons.Flame className="w-4 h-4 text-yellow-500 animate-pulse" />
-        </div>
-        <p className="text-[10px] md:text-xs text-yellow-200/80 font-medium leading-relaxed">
-          <strong className="text-yellow-500">Lưu ý:</strong> Luồng chỉnh sửa giờ chạy ẩn theo hàng chờ.
-          Sau khi bấm tạo, tiến trình sẽ được cập nhật realtime trong Lịch sử.
-        </p>
-      </div>
-
-      <a
-        data-tour-id="desktop.edit.promo"
-        href="https://aumix3d.com/"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="w-full mb-4 md:mb-6 bg-gradient-to-r from-[#001a2c] to-[#000a14] border border-audi-cyan/30 rounded-xl p-3 md:p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 md:gap-4 hover:border-audi-cyan transition-all shadow-[0_0_20px_rgba(33,212,253,0.1)] group relative overflow-hidden"
-      >
-        <div className="absolute top-0 right-0 w-32 h-32 bg-audi-cyan/10 blur-[40px] rounded-full group-hover:bg-audi-cyan/20 transition-all" />
-        <div className="relative z-10 flex items-center gap-3 md:gap-4 w-full md:w-auto">
-          <div className="shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-full bg-audi-cyan/10 flex items-center justify-center border border-audi-cyan/30">
-            <Icons.Sparkles className="w-5 h-5 md:w-6 md:h-6 text-audi-cyan" />
+      {/* 1. TOP CYBER CAPSULE HEADER */}
+      <div className="w-full neu-card p-4 rounded-3xl mb-6 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div data-tour-id="desktop.edit.tabs" className="neu-inset-sm p-1.5 rounded-2xl flex gap-1.5 overflow-x-auto no-scrollbar max-w-full">
+              {EDITING_TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => onNavigateToFeature?.(tab.id)}
+                  className={`px-4 py-2.5 rounded-xl flex items-center gap-2 text-xs md:text-sm font-bold transition-all whitespace-nowrap ${
+                    feature.id === tab.id
+                      ? 'neu-raised-sm text-[#9D00FF] font-accent'
+                      : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'
+                  }`}
+                >
+                  <tab.icon className="w-4 h-4 text-[#9D00FF]" />
+                  {tab.label[lang]}
+                </button>
+              ))}
           </div>
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded uppercase">MỚI</span>
-              <h4 className="text-white font-bold text-xs md:text-sm uppercase tracking-wider group-hover:text-audi-cyan transition-colors">
-                Mix Đồ 3D Audition
-              </h4>
+
+          <div className="flex items-center gap-2">
+              <button
+                onClick={() => setGuideTopic('guide')}
+                className="neu-button px-4 py-2 rounded-2xl text-xs font-black text-amber-600 dark:text-amber-400 flex items-center gap-2 hover:scale-105 transition-all shadow-md"
+              >
+                <Icons.Info className="w-4 h-4 text-amber-500" />
+                <span>Hướng dẫn</span>
+              </button>
+          </div>
+      </div>
+
+      <div className="w-full mb-6 neu-inset-sm rounded-2xl px-4 py-3 flex items-center gap-3" aria-live="polite">
+        <TipIcon className="w-4 h-4 text-amber-500 shrink-0" />
+        <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">{SMART_TIPS[currentTipIdx].text}</p>
+      </div>
+
+      {/* 2. CREATION WORKSPACE GRID - SEPARATE FUNCTIONAL CARDS */}
+      <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        {/* BLOCK 1: UPLOAD SOURCE IMAGE (lg:col-span-7 xl:col-span-8) */}
+        <div data-tour-id="desktop.edit.upload" className="lg:col-span-7 xl:col-span-8 neu-card p-6 rounded-3xl space-y-4 shadow-xl border border-white/20">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200/60 dark:border-slate-800">
+                <h3 className="font-extrabold text-slate-800 dark:text-white text-sm uppercase tracking-wider font-accent flex items-center gap-2">
+                    <Icons.Image className="w-4 h-4 text-[#9D00FF]" /> 1. UPLOAD ẢNH CẦN XỬ LÝ
+                </h3>
             </div>
-            <p className="text-[10px] md:text-xs text-slate-400 leading-relaxed">
-              Bạn chưa có ảnh nhân vật? Mix đồ và chụp ảnh tách nền cực nét ngay trên web.
-            </p>
-          </div>
-        </div>
-        <div className="relative z-10 shrink-0 w-full md:w-auto mt-1 md:mt-0">
-          <div className="w-full md:w-auto px-4 py-2 bg-audi-cyan/20 hover:bg-audi-cyan/30 border border-audi-cyan/50 rounded-lg flex items-center justify-center gap-2 transition-all">
-            <span className="text-[10px] md:text-xs font-bold text-audi-cyan uppercase">Mở AuMix3D</span>
-            <Icons.ExternalLink className="w-3 h-3 md:w-4 md:h-4 text-audi-cyan" />
-          </div>
-        </div>
-      </a>
 
-      <div className="w-full grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4 md:mt-0">
-        <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between px-2">
-            <h3 className="font-bold text-white text-sm uppercase flex items-center gap-2">
-              <Icons.Image className="w-4 h-4 text-audi-pink" /> 1. Upload Ảnh Cần Xử Lý
-            </h3>
-            <button
-              onClick={() => setGuideTopic('guide')}
-              className="text-xs text-audi-cyan hover:text-white flex items-center gap-1 transition-colors bg-audi-cyan/10 px-2 py-1 rounded-lg border border-audi-cyan/20"
-            >
-              <Icons.Info className="w-3 h-3" /> Hướng dẫn
-            </button>
-          </div>
-
-          <div className="flex flex-col gap-4 w-full">
-            <div className="flex justify-center w-full">
-              <div data-tour-id="desktop.edit.upload" className="w-full md:w-[220px] bg-[#12121a] border border-white/10 rounded-2xl p-4 hover:border-white/20 transition-colors relative group shrink-0 shadow-lg">
-                <div className="flex justify-between items-center mb-3">
-                  <span className="text-xs font-bold text-white bg-white/10 px-2 py-1 rounded">ẢNH GỐC</span>
-                </div>
-                <div className="space-y-3">
-                  <div
-                    onClick={() => fileInputRef.current?.click()}
-                    className="w-full h-64 bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-pink cursor-pointer relative overflow-hidden transition-all flex flex-col items-center justify-center"
-                  >
+            <div className="neu-inset-sm p-4 rounded-2xl space-y-3">
+                <div onClick={() => fileInputRef.current?.click()} className="w-full h-64 neu-card rounded-2xl border-2 border-dashed border-[#9D00FF]/40 hover:border-[#9D00FF] cursor-pointer relative overflow-hidden flex flex-col items-center justify-center transition-all group/item">
                     {uploadedImage ? (
-                      <img src={uploadedImage} className="w-full h-full object-contain" alt="Source" />
+                        <>
+                            <img src={uploadedImage} className="w-full h-full object-contain" alt="Source" />
+                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover/item:opacity-100 transition-opacity">
+                                <span className="text-[10px] font-bold text-white neu-button px-3 py-1.5 rounded-xl">Đổi Ảnh</span>
+                            </div>
+                        </>
                     ) : (
-                      <div className="flex flex-col items-center text-slate-500 transition-colors">
-                        <Icons.Upload className="w-8 h-8 mb-1" />
-                        <span className="text-[10px] uppercase font-bold">Tải Ảnh Lên</span>
-                      </div>
+                        <div className="flex flex-col items-center text-slate-400 group-hover/item:text-[#9D00FF] transition-colors p-2 text-center">
+                            <Icons.Upload className="w-10 h-10 mb-2 text-[#9D00FF]" />
+                            <span className="text-xs uppercase font-bold tracking-wider">Tải Ảnh Nguồn Lên</span>
+                        </div>
                     )}
-                  </div>
                 </div>
                 <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept="image/*" />
-              </div>
             </div>
+        </div>
 
-            {isMagicEditor && (
-              <div data-tour-id="desktop.edit.prompt" className="w-full bg-[#12121a] border border-white/10 rounded-2xl p-4 shadow-lg">
-                <div className="flex justify-between items-center mb-3">
-                  <label className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
-                    <Icons.MessageCircle className="w-4 h-4" /> 2. Yêu cầu chỉnh sửa
-                  </label>
+        {/* BLOCK 2: PROMPT OR TOOL DESCRIPTION (lg:col-span-5 xl:col-span-4) */}
+        <div data-tour-id="desktop.edit.prompt" className="lg:col-span-5 xl:col-span-4 neu-card p-6 rounded-3xl space-y-4 shadow-xl border border-white/20 flex flex-col justify-between">
+            {isMagicEditor ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-200/60 dark:border-slate-800">
+                    <h3 className="font-extrabold text-slate-800 dark:text-white text-sm uppercase tracking-wider font-accent flex items-center gap-2">
+                        <Icons.MessageCircle className="w-4 h-4 text-[#FF007F]" /> 2. YÊU CẦU CHỈNH SỬA PROMPT
+                    </h3>
                 </div>
 
-                <div className="flex flex-col gap-4">
-                  <textarea
+                <textarea
                     value={prompt}
                     onChange={(event) => setPrompt(event.target.value)}
-                    placeholder={lang === 'vi' ? 'Mô tả chi tiết yêu cầu chỉnh sửa...' : 'Describe the edit request...'}
-                    className="w-full bg-black/20 border border-white/5 rounded-xl p-3 text-sm text-white focus:border-audi-purple outline-none resize-none min-h-[150px]"
-                  />
+                    placeholder={lang === 'vi' ? 'Mô tả chi tiết yêu cầu chỉnh sửa (trang phục, bối cảnh, tóc, phụ kiện...)' : 'Describe the edit request...'}
+                    rows={6}
+                    className="w-full neu-input rounded-2xl p-4 text-xs leading-relaxed focus:outline-none resize-y placeholder:text-slate-400 font-sans"
+                />
 
-                  <div data-tour-id="desktop.edit.suggestions" className="space-y-2">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase">Gợi ý nhanh</span>
-                    <div className="flex flex-wrap gap-2 max-h-[100px] overflow-y-auto custom-scrollbar">
+                <div className="space-y-1.5">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">Gợi ý nhanh:</span>
+                    <div className="flex flex-wrap gap-1.5 max-h-[90px] overflow-y-auto custom-scrollbar">
                       {SUGGESTIONS.map((suggestion, index) => (
                         <button
                           key={index}
                           onClick={() => setPrompt(suggestion.label[lang])}
-                          className="flex items-center gap-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded-lg px-2 py-1.5 text-[10px] text-slate-300 transition-colors"
+                          className="neu-button rounded-xl px-2.5 py-1 text-[10px] text-slate-300 flex items-center gap-1"
                         >
-                          <suggestion.icon className="w-3 h-3 text-audi-purple" />
+                          <suggestion.icon className="w-3 h-3 text-[#9D00FF]" />
                           {suggestion.label[lang]}
                         </button>
                       ))}
                     </div>
-                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-200/60 dark:border-slate-800">
+                    <h3 className="font-extrabold text-slate-800 dark:text-white text-sm uppercase tracking-wider font-accent flex items-center gap-2">
+                        <Icons.Info className="w-4 h-4 text-[#00F2FE]" /> 2. CHỨC NĂNG XỬ LÝ
+                    </h3>
+                </div>
+                <div className="neu-inset-sm p-4 rounded-2xl space-y-2 text-xs text-slate-300 leading-relaxed">
+                    {isRemover ? 'Chế độ tách nền AI tự động nhận diện nhân vật Audition và đưa về nền đen sạch 100%.' : 'Chế độ làm nét 4K khôi phục khuôn mặt và chi tiết trang phục siêu nét.'}
                 </div>
               </div>
             )}
-          </div>
+
+            <div className="neu-inset-sm p-3 rounded-2xl text-[10px] text-slate-400 leading-relaxed">
+                💡 Tiến trình chỉnh sửa sẽ chạy ẩn. Bạn có thể xem lại tác phẩm trong Lịch Sử Chỉnh Sửa.
+            </div>
         </div>
 
-        <div className="lg:col-span-1 space-y-6">
-          <div data-tour-id="desktop.edit.settings" className="bg-[#12121a] border border-white/10 rounded-2xl p-5 flex flex-col gap-5 shadow-lg h-full">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <h3 className="font-bold text-white flex items-center gap-2">
-                <Icons.Settings className="w-5 h-5 text-slate-400" />
-                {isMagicEditor ? '3. Cấu Hình' : '2. Cấu Hình'}
-              </h3>
+        {/* BLOCK 3: CONFIGURATION (lg:col-span-7 xl:col-span-8) */}
+        <div data-tour-id="desktop.edit.settings" className="lg:col-span-7 xl:col-span-8 neu-card p-6 rounded-3xl space-y-4 shadow-xl border border-white/20">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200/60 dark:border-slate-800">
+                <h3 className="font-extrabold text-slate-800 dark:text-white text-sm uppercase tracking-wider font-accent flex items-center gap-2">
+                    <Icons.Settings className="w-4 h-4 text-[#00F2FE]" /> 3. CẤU HÌNH & ĐỘ PHÂN GIẢI
+                </h3>
             </div>
 
-            {isUpscaler && (
-              <div className="space-y-4 bg-white/5 p-4 rounded-2xl border border-white/10">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-audi-cyan/20 rounded-lg text-audi-cyan">
-                    <Icons.Zap className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-white">Làm Nét 4K</h4>
-                    <p className="text-xs text-slate-400 mt-1">Khôi phục chi tiết ảnh và giữ nguyên khuôn mặt, trang phục.</p>
-                  </div>
-                </div>
+            {!isCatalogReady && (
+              <div role="alert" className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                Đang đồng bộ bảng giá Vertex AI. Nút xử lý sẽ được mở khi dữ liệu sẵn sàng.
               </div>
             )}
 
-            {isRemover && (
-              <div className="space-y-4 bg-white/5 p-4 rounded-2xl border border-white/10">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-audi-pink/20 rounded-lg text-audi-pink">
-                    <Icons.Scissors className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-white">Chế Độ Tách Nền</h4>
-                    <p className="text-xs text-slate-400 mt-1">Tách chủ thể và chuyển nền về đen sạch, vẫn giữ nguyên ảnh gốc.</p>
-                  </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Độ phân giải đầu ra</label>
+                    <div className="grid grid-cols-3 gap-2">
+                        {(['1K', '2K', '4K'] as Resolution[]).map((value) => {
+                          const disabled = !availableResolutions.includes(value);
+                          return (
+                            <button
+                              key={value}
+                              onClick={() => !disabled && setResolution(value)}
+                              disabled={disabled}
+                              className={`p-3 rounded-2xl text-center font-bold text-xs transition-all ${
+                                resolution === value
+                                  ? 'neu-raised-sm text-[#9D00FF] font-accent'
+                                  : 'neu-button text-slate-400'
+                              } ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                            >
+                              {value}
+                            </button>
+                          );
+                        })}
+                    </div>
                 </div>
-              </div>
-            )}
 
-            {isMagicEditor && (
-              <div data-tour-id="desktop.edit.model" className="space-y-3">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Mô hình AI</label>
-                <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
-                  <button
-                    onClick={() => isFlashAvailable && setAiModel('flash')}
-                    disabled={!isFlashAvailable}
-                    className={`flex-1 py-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-                      aiModel === 'flash'
-                        ? 'bg-audi-purple text-white shadow-lg'
-                        : 'text-slate-500 hover:text-white hover:bg-white/5'
-                    } ${!isFlashAvailable ? 'opacity-40 cursor-not-allowed' : ''}`}
-                  >
-                    <Icons.Zap className={`w-4 h-4 ${aiModel === 'flash' ? 'text-white' : 'text-slate-400'}`} />
-                    Flash
-                  </button>
-                  <button
-                    onClick={() => isProAvailable && setAiModel('pro')}
-                    disabled={!isProAvailable}
-                    className={`flex-1 py-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-                      aiModel === 'pro'
-                        ? 'bg-audi-purple text-white shadow-lg'
-                        : 'text-slate-500 hover:text-white hover:bg-white/5'
-                    } ${!isProAvailable ? 'opacity-40 cursor-not-allowed' : ''}`}
-                  >
-                    <Icons.Crown className={`w-4 h-4 ${aiModel === 'pro' ? 'text-white' : 'text-slate-400'}`} />
-                    Pro
-                  </button>
+                <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Engine AI</label>
+                    {isMagicEditor ? (
+                      <div className="grid grid-cols-2 gap-2">
+                        {([
+                          { id: 'flash' as GenerationTier, label: 'Flash', icon: Icons.Zap },
+                          { id: 'pro' as GenerationTier, label: 'Pro', icon: Icons.Crown },
+                        ]).map((model) => {
+                          const available = model.id === 'flash' ? isFlashAvailable : isProAvailable;
+                          const Icon = model.icon;
+                          return (
+                            <button
+                              key={model.id}
+                              type="button"
+                              disabled={!available}
+                              onClick={() => available && setAiModel(model.id)}
+                              className={`p-3 rounded-2xl flex items-center justify-center gap-2 text-xs font-black transition-all ${
+                                aiModel === model.id ? 'neu-raised-sm text-[#9D00FF] ring-2 ring-[#9D00FF]/50' : 'neu-button text-slate-600 dark:text-slate-300'
+                              } ${!available ? 'opacity-40 cursor-not-allowed' : ''}`}
+                            >
+                              <Icon className="w-4 h-4" />
+                              {model.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="neu-inset-sm p-3 rounded-2xl flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-500">Vertex AI Edition:</span>
+                          <span className="text-xs font-black text-[#00F2FE] font-mono">{activeTier.toUpperCase()}</span>
+                      </div>
+                    )}
                 </div>
-              </div>
-            )}
-
-            <div data-tour-id="desktop.edit.resolution" className="space-y-3">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Độ phân giải</label>
-              <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
-                {(['1K', '2K', '4K'] as Resolution[]).map((value) => {
-                  const disabled = !availableResolutions.includes(value);
-                  return (
-                    <button
-                      key={value}
-                      onClick={() => !disabled && setResolution(value)}
-                      disabled={disabled}
-                      className={`flex-1 py-3 rounded-lg text-xs font-bold transition-all ${
-                        resolution === value
-                          ? 'bg-audi-purple text-white shadow-lg'
-                          : 'text-slate-500 hover:text-white hover:bg-white/5'
-                      } ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
-                    >
-                      {value}
-                    </button>
-                  );
-                })}
-              </div>
             </div>
+        </div>
 
-            <div data-tour-id="desktop.edit.speed" className="space-y-3">
-              <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
-                <Icons.Zap className="w-3 h-3" />
-                Tốc độ xử lý
-              </label>
-              <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
-                {availableSpeedLabels.map((label) => (
-                  <button
-                    key={label}
-                    onClick={() => setSpeed(label)}
-                    className={`flex-1 py-3 rounded-lg text-xs font-bold transition-all ${
-                      speed === label
-                        ? 'bg-audi-purple text-white shadow-lg'
-                        : 'text-slate-500 hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div data-tour-id="desktop.edit.server" className="space-y-3">
-              <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
-                <Icons.Database className="w-3 h-3" />
-                Server
-              </label>
-              <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
-                {availableServerLabels.map((label) => (
-                  <button
-                    key={label}
-                    onClick={() => setServer(label)}
-                    className={`flex-1 py-3 rounded-lg text-xs font-bold transition-all ${
-                      server === label
-                        ? 'bg-audi-cyan text-black shadow-lg'
-                        : 'text-slate-500 hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div data-tour-id="desktop.edit.price" className="relative overflow-hidden rounded-xl bg-gradient-to-r from-audi-purple/20 to-audi-pink/20 border border-white/10 p-3 mt-2">
-              <div className="flex justify-between items-center relative z-10">
-                <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Giá hiện tại</span>
-                <div className="flex items-end gap-1">
-                  <span className="text-xl font-black text-white font-game drop-shadow-md">
-                    {selectedGenerationCost.available ? selectedGenerationCost.vcoin : '--'}
-                  </span>
-                  <span className="text-[10px] font-bold text-audi-yellow mb-1">VCOIN</span>
+        {/* BLOCK 4: COST & LAUNCH (lg:col-span-5 xl:col-span-4) */}
+        <div data-tour-id="desktop.edit.price" className="lg:col-span-5 xl:col-span-4 neu-card p-6 rounded-3xl space-y-4 shadow-xl border border-white/20 flex flex-col justify-between">
+            <div className="space-y-3">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-200/60 dark:border-slate-800">
+                    <h3 className="font-extrabold text-slate-800 dark:text-white text-sm uppercase tracking-wider font-accent flex items-center gap-2">
+                        <Icons.Zap className="w-4 h-4 text-amber-500" /> 4. XÁC NHẬN & XỬ LÝ
+                    </h3>
                 </div>
-              </div>
-              <div className="flex justify-between text-[9px] text-slate-500 mt-2 font-mono border-t border-white/5 pt-2">
-                <span className={resolution === '1K' ? 'text-white font-bold' : ''}>1K: {resolutionCostMap['1K'].vcoin}VC</span>
-                <span className={resolution === '2K' ? 'text-white font-bold' : ''}>2K: {resolutionCostMap['2K'].vcoin}VC</span>
-                <span className={resolution === '4K' ? 'text-white font-bold' : ''}>4K: {resolutionCostMap['4K'].vcoin}VC</span>
-              </div>
+
+                <div className="neu-inset-sm p-4 rounded-2xl flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-400 uppercase">Chi Phí VCOIN:</span>
+                    <div className="flex items-baseline gap-1">
+                        <span className="text-2xl font-black text-amber-500 font-accent">
+                          {selectedGenerationCost.available ? selectedGenerationCost.vcoin : '--'}
+                        </span>
+                        <span className="text-xs font-bold text-amber-500">VCOIN</span>
+                    </div>
+                </div>
             </div>
 
             <button
               data-tour-id="desktop.edit.generate"
               onClick={handleExecute}
               disabled={isSubmitting || !uploadedImage || !isCatalogReady || !selectedGenerationCost.available}
-              className={`w-full py-3.5 mt-auto rounded-xl font-bold text-white shadow-[0_0_20px_rgba(255,0,153,0.4)] transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed hover:scale-[1.02] bg-gradient-to-r ${getGradient(feature.id)}`}
+              className={`w-full py-4 rounded-2xl font-black transition-all flex items-center justify-center gap-2 text-sm uppercase tracking-wider shadow-2xl ${
+                (isSubmitting || !uploadedImage || !isCatalogReady || !selectedGenerationCost.available)
+                  ? 'bg-slate-400 text-slate-200 cursor-not-allowed opacity-70 neu-inset-sm'
+                  : 'neu-button-primary'
+              }`}
             >
-              {isSubmitting ? <Icons.Loader className="animate-spin" /> : <Icons.Wand />}
-              {isSubmitting ? 'ĐANG GỬI JOB...' : 'THỰC HIỆN NGAY'}
+              {isSubmitting ? <Icons.Loader className="animate-spin w-5 h-5" /> : <Icons.Wand className="w-5 h-5" />}
+              {isSubmitting ? 'ĐANG GỬI JOB...' : '🚀 THỰC HIỆN NGAY'}
             </button>
-          </div>
         </div>
+
       </div>
     </div>
   );

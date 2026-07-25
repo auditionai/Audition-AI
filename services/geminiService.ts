@@ -80,20 +80,15 @@ export const analyzeStyleImage = async (imageBase64: string): Promise<string> =>
     const result: any = await retryWithBackoff(
         async () => {
             const freshAi = await getAiClient('pro');
-            try {
-                return await freshAi.models.generateContent({
-                    model: model,
-                    contents: {
-                        parts: [
-                            { text: "Analyze this image's visual style for a 3D character generator. Describe the lighting, texture, rendering engine vibe (e.g. Octane, Unreal), and artistic mood. Keep it concise, comma-separated keywords." },
-                            { inlineData: { mimeType: 'image/png', data: cleanBase64(imageBase64) } }
-                        ]
-                    }
-                });
-            } catch (e) {
-                
-                throw e;
-            }
+            return freshAi.models.generateContent({
+                model: model,
+                contents: {
+                    parts: [
+                        { text: "Analyze this image's visual style for a 3D character generator. Describe the lighting, texture, rendering engine vibe (e.g. Octane, Unreal), and artistic mood. Keep it concise, comma-separated keywords." },
+                        { inlineData: { mimeType: 'image/png', data: cleanBase64(imageBase64) } }
+                    ]
+                }
+            });
         },
         3,
         2000,

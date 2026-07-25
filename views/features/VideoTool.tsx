@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Feature, Language, GeneratedImage, ViewId } from '../../types';
 import { Icons } from '../../components/Icons';
 import { useNotification } from '../../components/NotificationSystem';
@@ -107,6 +107,33 @@ const getVideoModelHint = (model: AIModelOption) => {
     return 'Cân bằng chất lượng, tốc độ và chi phí.';
 };
 
+const getVideoModelTags = (model: AIModelOption) => {
+    const text = `${model.id} ${model.name}`.toLowerCase();
+    if (text.includes('grok')) return ['#GIÁ_RẺ', '#TEST_NHANH'];
+    if (text.includes('kling')) return ['#BEST_MOTION', '#CINEMATIC'];
+    if (text.includes('fast')) return ['#TỐC_ĐỘ', '#SEEDANCE'];
+    return ['#HOT', '#CHẤT_LƯỢNG'];
+};
+
+const getVideoFamilyIcon = (family: VideoModelFamily) => {
+    if (family === 'grok') return Icons.Zap;
+    if (family === 'kling') return Icons.Crown;
+    return Icons.Video;
+};
+
+const getVideoFamilyTheme = (family: VideoModelFamily, selected: boolean) => {
+    if (!selected) {
+        return 'neu-button border border-transparent hover:border-slate-300/60 dark:hover:border-white/10';
+    }
+    if (family === 'grok') {
+        return 'neu-inset-sm border border-emerald-400/60 ring-2 ring-emerald-400/20 bg-gradient-to-br from-emerald-400/15 to-cyan-400/5';
+    }
+    if (family === 'kling') {
+        return 'neu-inset-sm border border-amber-400/60 ring-2 ring-amber-400/20 bg-gradient-to-br from-amber-400/15 to-orange-500/5';
+    }
+    return 'neu-inset-sm border border-[#FF007F]/60 ring-2 ring-[#FF007F]/20 bg-gradient-to-br from-[#FF007F]/15 to-[#9D00FF]/5';
+};
+
 const SMART_TIPS = [
     { icon: Icons.Video, text: "🎥 MỚI: Hỗ trợ tạo video từ ảnh tĩnh với độ mượt mà cao." },
     { icon: Icons.Zap, text: "⚡ Tip: Mô hình Kling cho chuyển động chân thực và tự nhiên nhất." },
@@ -121,13 +148,17 @@ const OptionDropdown = ({ label, value, options, onChange, icon: Icon }: any) =>
     const [isOpen, setIsOpen] = useState(false);
     return (
         <div className={`space-y-2 relative ${isOpen ? 'z-50' : 'z-10'}`}>
-            <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
-                {Icon && <Icon className="w-3 h-3" />}
+            <label className="text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                {Icon && <Icon className="w-3.5 h-3.5 text-[#00A8C8] dark:text-[#00F2FE]" />}
                 {label}
             </label>
-            <button 
+            <button
+                type="button"
                 onClick={() => setIsOpen(!isOpen)}
-                className="w-full flex items-center justify-between bg-[#1a1a24] border border-white/5 rounded-xl px-3 py-2.5 text-xs font-bold text-white hover:border-white/10 transition-colors"
+                className={`w-full min-h-[42px] flex items-center justify-between rounded-2xl px-3.5 py-2.5 text-xs font-black text-slate-800 dark:text-white transition-all ${
+                  isOpen ? 'neu-inset-sm ring-2 ring-[#00F2FE]/30' : 'neu-button hover:-translate-y-0.5'
+                }`}
+                aria-expanded={isOpen}
             >
                 <div className="flex items-center gap-2">
                     {options.find((o: any) => o.value === value)?.label || value}
@@ -137,12 +168,15 @@ const OptionDropdown = ({ label, value, options, onChange, icon: Icon }: any) =>
             {isOpen && (
                 <>
                     <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)}></div>
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-[#1a1a24] border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden">
+                    <div className="absolute top-full left-0 right-0 mt-2 neu-card border border-slate-200/80 dark:border-slate-700 rounded-2xl shadow-2xl z-50 overflow-hidden p-1.5">
                         {options.map((opt: any) => (
                             <button
+                                type="button"
                                 key={opt.value}
                                 onClick={() => { onChange(opt.value); setIsOpen(false); }}
-                                className={`w-full text-left px-3 py-2.5 text-xs font-bold transition-colors hover:bg-white/5 ${value === opt.value ? 'text-audi-purple bg-audi-purple/10' : 'text-slate-300'}`}
+                                className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold transition-colors hover:bg-slate-200/50 dark:hover:bg-white/5 ${
+                                  value === opt.value ? 'text-[#FF007F] bg-[#FF007F]/10' : 'text-slate-700 dark:text-slate-300'
+                                }`}
                             >
                                 {opt.label}
                             </button>
@@ -182,7 +216,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
   const [prompt, setPrompt] = useState('');
   const [keyframeImage, setKeyframeImage] = useState<string | null>(null);
   const [videoModel, setVideoModel] = useState('');
-  const [aspectRatio, setAspectRatio] = useState('16:9');
+  const [aspectRatio, setAspectRatio] = useState('9:16');
   const [duration, setDuration] = useState('5s');
   const [quality, setQuality] = useState('720P');
   const [sound, setSound] = useState(false);
@@ -303,6 +337,15 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
       pricingEntries.length > 0 &&
       runtimeModels.length > 0 &&
       (activeMode === 'video_ai' ? videoModelOptions.length > 0 : motionModelOptions.length > 0);
+  const hasRequiredInputs = activeMode === 'video_ai'
+      ? Boolean(keyframeImage)
+      : Boolean(
+          characterImage
+          && motionVideoFile
+          && motionVideoDurationSeconds !== null
+          && motionVideoDurationSeconds >= 3
+          && motionVideoDurationSeconds <= 30
+        );
   const lastAutoSelectedVideoModelRef = useRef<string | null>(null);
   const selectedVideoSpec = getVideoModelSpecs(pricingEntries, runtimeModels).find((spec) => spec.modelId === videoModel);
   const effectiveVideoAudio = activeMode === 'video_ai' && Boolean(selectedVideoSpec?.supportsAudio) && sound;
@@ -898,7 +941,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
   const TipIcon = SMART_TIPS[currentTipIdx].icon;
 
   return (
-    <div className="flex flex-col items-center w-full max-w-5xl mx-auto pb-12 animate-fade-in relative">
+    <div className="w-full pb-12 animate-fade-in relative">
       <input 
         type="file" 
         ref={fileInputRef} 
@@ -907,701 +950,479 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
         accept={uploadTarget === 'motion' ? "video/*" : "image/*"} 
       />
 
-      <div data-tour-id="desktop.video.mode" className="w-full flex justify-center mb-4">
-          <div className="bg-[#12121a] p-1.5 rounded-2xl border border-white/10 flex gap-1 shadow-lg overflow-x-auto no-scrollbar max-w-full">
+      {/* 1. TOP CYBER CAPSULE HEADER */}
+      <div className="w-full neu-card p-4 rounded-3xl mb-6 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div data-tour-id="desktop.video.mode" className="neu-inset-sm p-1.5 rounded-2xl flex gap-1.5 overflow-x-auto no-scrollbar max-w-full">
               <button
-                  onClick={() => setActiveMode('video_ai')}
-                  className={`px-4 py-2.5 rounded-xl flex items-center gap-2 text-xs md:text-sm font-bold transition-all whitespace-nowrap ${activeMode === 'video_ai' ? 'bg-white text-black shadow-md' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}
+                  onClick={() => {
+                    setActiveMode('video_ai');
+                    onNavigateToFeature?.('video_ai_gen');
+                  }}
+                  className={`px-4 py-2.5 rounded-xl flex items-center gap-2 text-xs md:text-sm font-bold transition-all whitespace-nowrap ${
+                    activeMode === 'video_ai' ? 'neu-raised-sm text-[#FF007F] font-accent' : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'
+                  }`}
               >
-                  <Icons.Video className="w-3 h-3 md:w-4 md:h-4" />
+                  <Icons.Video className="w-4 h-4 text-[#FF007F]" />
                   {lang === 'vi' ? 'Tạo Video AI' : 'AI Video'}
               </button>
               <button
-                  onClick={() => setActiveMode('motion_control')}
-                  className={`px-4 py-2.5 rounded-xl flex items-center gap-2 text-xs md:text-sm font-bold transition-all whitespace-nowrap ${activeMode === 'motion_control' ? 'bg-white text-black shadow-md' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}
+                  onClick={() => {
+                    setActiveMode('motion_control');
+                    onNavigateToFeature?.('motion_control_gen');
+                  }}
+                  className={`px-4 py-2.5 rounded-xl flex items-center gap-2 text-xs md:text-sm font-bold transition-all whitespace-nowrap ${
+                    activeMode === 'motion_control' ? 'neu-raised-sm text-[#00F2FE] font-accent' : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'
+                  }`}
               >
-                  <Icons.Activity className="w-3 h-3 md:w-4 md:h-4" />
+                  <Icons.Activity className="w-4 h-4 text-[#00F2FE]" />
                   Motion Control
+              </button>
+          </div>
+
+          <div className="flex items-center gap-2">
+              <button
+                  onClick={() => setShowGuide(true)}
+                  className="neu-button px-4 py-2 rounded-2xl text-xs font-black text-amber-600 dark:text-amber-400 flex items-center gap-2 hover:scale-105 transition-all shadow-md"
+              >
+                  <Icons.Info className="w-4 h-4 text-amber-500" />
+                  <span>Hướng dẫn</span>
               </button>
           </div>
       </div>
 
-      <div className="w-full bg-gradient-to-r from-orange-500/10 via-yellow-500/10 to-orange-500/10 border-y border-white/5 md:border md:rounded-xl md:mb-6 p-2 md:p-3 flex items-center justify-center gap-3 backdrop-blur-md overflow-hidden relative min-h-[40px]">
-          <div key={currentTipIdx} className="flex items-center gap-2 animate-fade-in transition-all duration-500">
-              <TipIcon className="w-4 h-4 md:w-5 md:h-5 text-audi-yellow shrink-0 animate-bounce-slow" />
-              <span className="text-[10px] md:text-xs font-medium text-slate-200 line-clamp-2 md:line-clamp-1 text-center md:text-left">
-                  {SMART_TIPS[currentTipIdx].text}
-              </span>
-          </div>
-          <div className="absolute bottom-1 md:right-3 flex gap-1 justify-center w-full md:w-auto">
-              {SMART_TIPS.map((_, i) => (
-                  <div key={i} className={`w-1 h-1 rounded-full transition-all ${i === currentTipIdx ? 'bg-audi-yellow w-3' : 'bg-white/10'}`}></div>
-              ))}
-          </div>
+      <div className="w-full mb-6 neu-inset-sm rounded-2xl px-4 py-3 flex items-center gap-3" aria-live="polite">
+          <TipIcon className="w-4 h-4 text-amber-500 shrink-0" />
+          <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">{SMART_TIPS[currentTipIdx].text}</p>
       </div>
 
-      <div className="w-full mb-4 bg-yellow-500/5 border border-yellow-500/20 rounded-xl p-3 flex items-center gap-3 animate-fade-in hover:bg-yellow-500/10 transition-colors">
-          <div className="shrink-0 p-1.5 bg-yellow-500/10 rounded-full">
-              <Icons.Flame className="w-4 h-4 text-yellow-500 animate-pulse" />
-          </div>
-          <p className="text-[10px] md:text-xs text-yellow-200/80 font-medium leading-relaxed">
-              <strong className="text-yellow-500">Lưu ý:</strong> Mô hình <span className="text-audi-cyan font-bold">Kling</span> có tốc độ nhanh và chuyển động tự nhiên. Các phiên bản mới nhất mang lại video chất lượng điện ảnh, sắc nét và sống động.
-          </p>
-      </div>
+      {/* 2. CREATION WORKSPACE GRID - SEPARATE FUNCTIONAL CARDS */}
+      <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        {/* BLOCK 1: UPLOAD KEYFRAME / MOTION (lg:col-span-7 xl:col-span-8) */}
+        <div data-tour-id="desktop.video.upload" className="lg:col-span-7 xl:col-span-8 neu-card p-6 rounded-3xl space-y-4 shadow-xl border border-white/20">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200/60 dark:border-slate-800">
+                <h3 className="font-extrabold text-slate-800 dark:text-white text-sm uppercase tracking-wider font-accent flex items-center gap-2">
+                    <Icons.Upload className="w-4 h-4 text-[#00F2FE]" /> 1. UPLOAD KEYFRAME & CHUYỂN ĐỘNG (MOTION)
+                </h3>
+            </div>
 
-      <a 
-          href="https://aumix3d.com/" 
-          target="_blank" 
-          rel="noopener noreferrer"
-          className="w-full mb-4 md:mb-6 bg-gradient-to-r from-[#001a2c] to-[#000a14] border border-audi-cyan/30 rounded-xl p-3 md:p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 md:gap-4 animate-fade-in hover:border-audi-cyan transition-all shadow-[0_0_20px_rgba(33,212,253,0.1)] group relative overflow-hidden"
-      >
-          <div className="absolute top-0 right-0 w-32 h-32 bg-audi-cyan/10 blur-[40px] rounded-full group-hover:bg-audi-cyan/20 transition-all"></div>
-          <div className="relative z-10 flex items-center gap-3 md:gap-4 w-full md:w-auto">
-              <div className="shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-full bg-audi-cyan/10 flex items-center justify-center border border-audi-cyan/30 group-hover:scale-110 transition-transform">
-                  <Icons.Sparkles className="w-5 h-5 md:w-6 md:h-6 text-audi-cyan" />
-              </div>
-              <div>
-                  <div className="flex items-center gap-2 mb-1">
-                      <span className="bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded uppercase animate-pulse">MỚI</span>
-                      <h4 className="text-white font-bold text-xs md:text-sm uppercase tracking-wider group-hover:text-audi-cyan transition-colors">Mix Đồ 3D Audition</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {activeMode === 'video_ai' ? (
+                <div className="neu-inset-sm p-4 rounded-2xl space-y-3 col-span-2">
+                  <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-slate-800 dark:text-white font-accent">Ảnh Keyframe Đầu Tiên</span>
                   </div>
-                  <p className="text-[10px] md:text-xs text-slate-400 leading-relaxed">
-                      Bạn chưa có ảnh nhân vật? Mix đồ và chụp ảnh tách nền cực nét ngay trên web mà không cần vào game.
-                  </p>
-              </div>
-          </div>
-          <div className="relative z-10 shrink-0 w-full md:w-auto mt-1 md:mt-0">
-              <div className="w-full md:w-auto px-4 py-2 bg-audi-cyan/20 hover:bg-audi-cyan/30 border border-audi-cyan/50 rounded-lg flex items-center justify-center gap-2 transition-all group-hover:shadow-[0_0_15px_rgba(33,212,253,0.4)]">
-                  <span className="text-[10px] md:text-xs font-bold text-audi-cyan uppercase">Mở AuMix3D</span>
-                  <Icons.ExternalLink className="w-3 h-3 md:w-4 md:h-4 text-audi-cyan" />
-              </div>
-          </div>
-      </a>
-
-      <div className="w-full grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4 md:mt-0">
-        {/* LEFT PANEL: CONFIGURATION */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between px-2">
-              <h3 className="font-bold text-white text-sm uppercase flex items-center gap-2">
-                  <Icons.Upload className="w-4 h-4 text-audi-pink" /> 1. Upload Dữ Liệu
-              </h3>
-              <div className="flex gap-2 flex-wrap justify-end">
-                  <button 
-                      onClick={() => setShowGuide(true)}
-                      className="flex items-center gap-1 text-[10px] font-bold text-audi-yellow hover:text-white transition-colors bg-audi-yellow/10 px-2 py-1 rounded-full border border-audi-yellow/30"
-                  >
-                      <Icons.Info className="w-3 h-3" /> Hướng dẫn
-                  </button>
-              </div>
-          </div>
-
-          <div data-tour-id="desktop.video.upload" className="flex flex-wrap justify-center gap-4 w-full">
-            {activeMode === 'video_ai' ? (
-              <div className="w-full md:w-[220px] bg-[#12121a] border border-white/10 rounded-2xl p-4 hover:border-white/20 transition-colors relative group shrink-0 shadow-lg block">
-                <div className="flex justify-between items-center mb-3">
-                    <span className="text-xs font-bold text-white bg-white/10 px-2 py-1 rounded">Ảnh Mẫu</span>
+                  <div onClick={() => triggerUpload('keyframe')} className="w-full h-56 neu-card rounded-2xl border-2 border-dashed border-[#00F2FE]/40 hover:border-[#00F2FE] cursor-pointer relative overflow-hidden flex flex-col items-center justify-center transition-all group/item">
+                      {keyframeImage ? (
+                          <>
+                              <img src={keyframeImage} className="w-full h-full object-contain" alt="Keyframe" />
+                              <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover/item:opacity-100 transition-opacity">
+                                  <span className="text-[10px] font-bold text-white neu-button px-3 py-1.5 rounded-xl">Đổi Ảnh</span>
+                              </div>
+                          </>
+                      ) : (
+                          <div className="flex flex-col items-center text-slate-400 group-hover/item:text-[#00F2FE] transition-colors p-2 text-center">
+                              <Icons.Image className="w-8 h-8 mb-1 text-[#00F2FE]" />
+                              <span className="text-[10px] uppercase font-bold tracking-wider">Tải Ảnh Keyframe (Bắt buộc)</span>
+                          </div>
+                      )}
+                  </div>
                 </div>
-                <div className="space-y-3">
-                    <div onClick={() => triggerUpload('keyframe')} className="w-full h-64 bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-pink cursor-pointer relative overflow-hidden group/item transition-all flex flex-col items-center justify-center">
-                        {keyframeImage ? (
-                            <>
-                                <img src={keyframeImage} className="w-full h-full object-contain opacity-80 group-hover/item:opacity-40 transition-opacity" alt="Keyframe" />
-                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/item:opacity-100 transition-opacity">
-                                    <span className="text-[10px] font-bold text-white bg-black/50 px-2 py-1 rounded">Đổi Ảnh</span>
-                                </div>
-                            </>
+              ) : (
+                <>
+                  <div className="neu-inset-sm p-4 rounded-2xl space-y-3">
+                    <div className="flex justify-between items-center">
+                        <span className="text-xs font-bold text-slate-800 dark:text-white font-accent">Ảnh Nhân Vật</span>
+                    </div>
+                    <div onClick={() => triggerUpload('character')} className="w-full h-48 neu-card rounded-2xl border-2 border-dashed border-[#FF007F]/40 hover:border-[#FF007F] cursor-pointer relative overflow-hidden flex flex-col items-center justify-center transition-all">
+                        {characterImage ? (
+                            <img src={characterImage} className="w-full h-full object-contain" alt="Character" />
                         ) : (
-                            <div className="flex flex-col items-center text-slate-500 group-hover/item:text-audi-pink transition-colors">
-                                <Icons.Image className="w-8 h-8 mb-1" />
-                                <span className="text-[10px] uppercase font-bold">Ảnh mẫu (Bắt buộc)</span>
+                            <div className="flex flex-col items-center text-slate-400 p-2 text-center">
+                                <Icons.User className="w-8 h-8 mb-1 text-[#FF007F]" />
+                                <span className="text-[10px] uppercase font-bold">Tải Ảnh NV</span>
                             </div>
                         )}
                     </div>
-                </div>
-              </div>
-            ) : (
-              <>
-                <div className="w-full md:w-[220px] bg-[#12121a] border border-white/10 rounded-2xl p-4 hover:border-white/20 transition-colors relative group shrink-0 shadow-lg block">
-                  <div className="flex justify-between items-center mb-3">
-                      <span className="text-xs font-bold text-white bg-white/10 px-2 py-1 rounded">Nhân Vật</span>
                   </div>
-                  <div className="space-y-3">
-                      <div onClick={() => triggerUpload('character')} className="w-full h-64 bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-slate-500 cursor-pointer relative overflow-hidden group/item transition-all flex flex-col items-center justify-center">
-                          {characterImage ? (
-                              <>
-                                  <img src={characterImage} className="w-full h-full object-contain opacity-80 group-hover/item:opacity-40 transition-opacity" alt="Character" />
-                                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/item:opacity-100 transition-opacity">
-                                      <span className="text-[10px] font-bold text-white bg-black/50 px-2 py-1 rounded">Đổi Ảnh</span>
-                                  </div>
-                              </>
-                          ) : (
-                              <div className="flex flex-col items-center text-slate-500 group-hover/item:text-slate-400 transition-colors">
-                                  <Icons.User className="w-8 h-8 mb-2" />
-                                  <span className="text-[10px] uppercase font-bold">Ảnh Nhân Vật</span>
-                              </div>
-                          )}
-                      </div>
-                  </div>
-                </div>
 
-                <div className="w-full md:w-[220px] bg-[#12121a] border border-white/10 rounded-2xl p-4 hover:border-white/20 transition-colors relative group shrink-0 shadow-lg block">
-                  <div className="flex justify-between items-center mb-3">
-                      <span className="text-xs font-bold text-white bg-white/10 px-2 py-1 rounded">Chuyển Động</span>
-                  </div>
-                  <div className="space-y-3">
-                      <div onClick={() => triggerUpload('motion')} className="w-full h-64 bg-black/40 rounded-xl border-2 border-dashed border-audi-pink hover:border-pink-400 cursor-pointer relative overflow-hidden group/item transition-all flex flex-col items-center justify-center">
-                          {motionVideo ? (
-                              <>
-                                  <video
-                                    key={motionVideo}
-                                    src={motionVideo}
-                                    className="absolute inset-0 w-full h-full object-cover opacity-80 group-hover/item:opacity-45 transition-opacity"
-                                    autoPlay
-                                    loop
-                                    muted
-                                    playsInline
-                                    preload="metadata"
-                                    onLoadedData={(event) => {
-                                      event.currentTarget.play().catch(() => undefined);
-                                    }}
-                                  />
-                                  <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-black/5 to-black/10 pointer-events-none" />
-                                  {motionVideoDurationSeconds !== null && (
-                                    <div className="absolute left-2 bottom-2 rounded-full bg-black/60 px-2 py-1 text-[10px] font-bold text-white backdrop-blur">
-                                      {motionVideoDurationSeconds.toFixed(1)}s
-                                    </div>
-                                  )}
-                                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/item:opacity-100 transition-opacity">
-                                      <span className="text-[10px] font-bold text-white bg-black/50 px-2 py-1 rounded">Đổi Video</span>
-                                  </div>
-                              </>
-                          ) : (
-                              <div className="flex flex-col items-center text-audi-pink group-hover/item:text-pink-400 transition-colors">
-                                  <Icons.Activity className="w-8 h-8 mb-2" />
-                                  <span className="text-[10px] uppercase font-bold">Video Motion</span>
-                              </div>
-                          )}
-                      </div>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-
-          <div data-tour-id="desktop.video.prompt" className="bg-[#12121a] border border-white/10 rounded-2xl p-4 shadow-lg">
-              <div className="flex justify-between items-center mb-3">
-                  <label className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
-                      <Icons.MessageCircle className="w-4 h-4" /> 2. Mô tả
-                  </label>
-                  <div className="flex gap-2">
-                      <button onClick={() => activeMode === 'video_ai' ? setPrompt('') : setMotionPrompt('')} className="text-[10px] font-bold text-slate-500 hover:text-white transition-colors bg-white/5 px-2 py-1 rounded border border-white/10">Xóa</button>
-                  </div>
-              </div>
-              
-              <div className="flex flex-col md:flex-row gap-4">
-                  <textarea 
-                      value={activeMode === 'video_ai' ? prompt : motionPrompt}
-                      onChange={(e) => activeMode === 'video_ai' ? setPrompt(e.target.value) : setMotionPrompt(e.target.value)}
-                      placeholder={activeMode === 'video_ai' ? (lang === 'vi' ? "Nhập kịch bản ngắn hoặc ý tưởng chính. Ví dụ: nhân vật bước ra từ khung ảnh, nhìn camera và tạo dáng tự tin..." : "Enter a short script or core idea. Example: the character steps forward, looks at camera, and poses confidently...") : (lang === 'vi' ? "Mô tả bối cảnh phía sau nhân vật (Tùy chọn)..." : "Describe the background behind the character (Optional)...")}
-                      className="flex-1 bg-black/20 border border-white/5 rounded-xl p-3 text-sm text-white focus:border-audi-purple outline-none resize-none min-h-[100px]"
-                  />
-              </div>
-
-              {activeMode === 'video_ai' && (
-                <div className="mt-4 rounded-2xl border border-audi-cyan/20 bg-audi-cyan/5 p-3 space-y-3">
-                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                    <div>
-                      <div className="text-[10px] font-bold uppercase tracking-wider text-audi-cyan flex items-center gap-1">
-                        <Icons.Sparkles className="w-3 h-3" />
-                        Đạo diễn kịch bản AI
-                      </div>
-                      <p className="mt-1 text-[10px] leading-relaxed text-slate-400">
-                        Viết ý tưởng ngắn trong prompt, tải ảnh mẫu rồi bấm tạo. AI sẽ nhìn ảnh để chọn bố cục, chuyển động và nhịp dựng phù hợp.
-                      </p>
+                  <div className="neu-inset-sm p-4 rounded-2xl space-y-3">
+                    <div className="flex justify-between items-center">
+                        <span className="text-xs font-bold text-slate-800 dark:text-white font-accent">Video Motion Mẫu</span>
                     </div>
-                    <button
-                      onClick={handleGenerateVideoScript}
-                      disabled={isGeneratingScript || !keyframeImage}
-                      className="shrink-0 rounded-lg border border-audi-cyan/40 bg-audi-cyan px-3 py-2 text-[10px] font-bold text-black disabled:border-white/10 disabled:bg-white/10 disabled:text-slate-500"
-                    >
-                      {isGeneratingScript ? 'Đang viết...' : 'Tạo kịch bản chi tiết'}
-                    </button>
+                    <div onClick={() => triggerUpload('motion')} className="w-full h-48 neu-card rounded-2xl border-2 border-dashed border-[#00F2FE]/40 hover:border-[#00F2FE] cursor-pointer relative overflow-hidden flex flex-col items-center justify-center transition-all">
+                        {motionVideo ? (
+                            <video src={motionVideo} className="w-full h-full object-cover" autoPlay loop muted playsInline />
+                        ) : (
+                            <div className="flex flex-col items-center text-slate-400 p-2 text-center">
+                                <Icons.Activity className="w-8 h-8 mb-1 text-[#00F2FE]" />
+                                <span className="text-[10px] uppercase font-bold">Video Motion</span>
+                            </div>
+                        )}
+                    </div>
                   </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <OptionDropdown
-                      label="Phong cách"
-                      value={scriptStyle}
-                      options={[
-                        { label: 'Cinematic điện ảnh', value: 'Cinematic điện ảnh' },
-                        { label: 'Đời thường tự nhiên', value: 'Đời thường tự nhiên' },
-                        { label: 'Thời trang', value: 'Thời trang' },
-                        { label: 'Hành động', value: 'Hành động' },
-                        { label: 'Lãng mạn', value: 'Lãng mạn' },
-                      ]}
-                      onChange={setScriptStyle}
-                      icon={Icons.Image}
-                    />
-                    <OptionDropdown
-                      label="Chủ đề"
-                      value={scriptTheme}
-                      options={[
-                        { label: 'Tự động theo ảnh', value: 'Tự động theo ảnh' },
-                        { label: 'Đời thường', value: 'Đời thường' },
-                        { label: 'Sân khấu', value: 'Sân khấu' },
-                        { label: 'Đường phố', value: 'Đường phố' },
-                      ]}
-                      onChange={setScriptTheme}
-                      icon={Icons.MessageCircle}
-                    />
-                    <OptionDropdown
-                      label="Âm thanh"
-                      value={scriptSoundMood}
-                      options={[
-                        { label: 'Phù hợp bối cảnh', value: 'Phù hợp bối cảnh' },
-                        { label: 'Lãng mạn vui vẻ', value: 'Lãng mạn vui vẻ' },
-                        { label: 'Sôi động hành động', value: 'Sôi động hành động' },
-                        { label: 'Sầu bi buồn bã', value: 'Sầu bi buồn bã' },
-                        { label: 'Vui tươi hài hước', value: 'Vui tươi hài hước' },
-                      ]}
-                      onChange={setScriptSoundMood}
-                      icon={Icons.Volume2}
-                    />
-                    <OptionDropdown
-                      label="Model kịch bản"
-                      value={scriptTargetModel || videoModel}
-                      options={(videoModelOptions.length > 0 ? videoModelOptions : [{ id: videoModel, name: videoModel || 'Model hiện tại', price: 0 }]).map((model) => ({
-                        label: model.name,
-                        value: model.id,
-                      }))}
-                      onChange={setScriptTargetModel}
-                      icon={Icons.Video}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                    {[
-                      {
-                        label: 'Trend Douyin/TikTok',
-                        description: scriptTrendEdit ? 'Dựng nhanh, nhiều góc máy, chuyển cảnh theo beat.' : 'Tắt trend, kịch bản tự nhiên và ít dập khuôn hơn.',
-                        active: scriptTrendEdit,
-                        onClick: () => setScriptTrendEdit((value) => !value),
-                      },
-                      {
-                        label: 'Text trong video',
-                        description: scriptTextOverlay ? 'Có chỉ dẫn text overlay, tránh che mặt.' : 'Không thêm text overlay để tránh lỗi font.',
-                        active: scriptTextOverlay,
-                        onClick: () => setScriptTextOverlay((value) => !value),
-                      },
-                      {
-                        label: 'Lời thoại giọng nói',
-                        description: scriptVoiceDialogue ? 'Có thoại tiếng Việt ngắn khi hợp cảnh.' : 'Không thoại, chỉ hình ảnh và âm thanh.',
-                        active: scriptVoiceDialogue,
-                        onClick: () => setScriptVoiceDialogue((value) => !value),
-                      },
-                    ].map((item) => (
-                      <button
-                        key={item.label}
-                        type="button"
-                        onClick={item.onClick}
-                        className={`rounded-xl border px-3 py-2 text-left transition-all ${
-                          item.active
-                            ? 'border-audi-purple bg-audi-purple/20 text-white'
-                            : 'border-white/10 bg-black/20 text-slate-300 hover:border-white/20'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-[10px] font-bold uppercase">{item.label}</span>
-                          <span className={`h-4 w-7 rounded-full p-0.5 transition-colors ${item.active ? 'bg-audi-cyan' : 'bg-white/10'}`}>
-                            <span className={`block h-3 w-3 rounded-full bg-white transition-transform ${item.active ? 'translate-x-3' : ''}`} />
-                          </span>
-                        </div>
-                        <div className="mt-1 text-[10px] leading-snug text-slate-500">{item.description}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                </>
               )}
-          </div>
+            </div>
         </div>
 
-        {/* RIGHT PANEL: SETTINGS & GENERATE */}
-        <div className="lg:col-span-1 space-y-4">
-          <div data-tour-id="desktop.video.model" className="bg-[#12121a] border border-white/10 rounded-2xl p-5 flex flex-col gap-5 shadow-lg h-full relative z-10">
-            
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
-                <h3 className="font-bold text-white flex items-center gap-2">
-                    <Icons.Settings className="w-5 h-5 text-slate-400" />
-                    3. Cấu Hình
+        {/* BLOCK 2: KỊCH BẢN PROMPT (lg:col-span-5 xl:col-span-4) */}
+        <div data-tour-id="desktop.video.prompt" className="lg:col-span-5 xl:col-span-4 neu-card p-6 rounded-3xl space-y-4 shadow-xl border border-white/20 flex flex-col justify-between">
+            <div className="space-y-3">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-200/60 dark:border-slate-800">
+                    <h3 className="font-extrabold text-slate-800 dark:text-white text-sm uppercase tracking-wider font-accent flex items-center gap-2">
+                        <Icons.MessageCircle className="w-4 h-4 text-[#FF007F]" /> 2. KỊCH BẢN PROMPT
+                    </h3>
+                    <div className="flex items-center gap-2">
+                      <button 
+                        type="button"
+                        onClick={() => onNavigateView ? onNavigateView('prompt_library') : undefined} 
+                        className="neu-button px-3 py-1 rounded-xl text-[10px] font-black text-[#FF007F] dark:text-[#FF007F] flex items-center gap-1 hover:scale-105 transition-all"
+                      >
+                        <Icons.Sparkles className="w-3 h-3 text-[#FF007F]" />
+                        <span>Prompt Mẫu</span>
+                      </button>
+                      <button type="button" onClick={() => activeMode === 'video_ai' ? setPrompt('') : setMotionPrompt('')} className="neu-button px-2.5 py-1 rounded-xl text-[10px] font-bold text-slate-500 hover:text-red-500">Xóa</button>
+                    </div>
+                </div>
+                
+                <textarea 
+                    value={activeMode === 'video_ai' ? prompt : motionPrompt}
+                    onChange={(e) => activeMode === 'video_ai' ? setPrompt(e.target.value) : setMotionPrompt(e.target.value)}
+                    placeholder={activeMode === 'video_ai' ? "Mô tả kịch bản ngắn: nhân vật bước ra từ khung ảnh, xoay người tạo dáng tự tin..." : "Mô tả bối cảnh phía sau nhân vật..."}
+                    rows={6}
+                    className="w-full neu-input rounded-2xl p-4 text-xs leading-relaxed focus:outline-none resize-y font-sans"
+                />
+
+                {activeMode === 'video_ai' && (
+                  <div className="neu-inset-sm p-4 rounded-2xl space-y-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <div className="text-[10px] font-black uppercase tracking-wider text-[#00A8C8] dark:text-[#00F2FE] flex items-center gap-1">
+                          <Icons.Sparkles className="w-3.5 h-3.5" />
+                          Đạo diễn kịch bản AI
+                        </div>
+                        <p className="mt-1 text-[10px] leading-relaxed text-slate-600 dark:text-slate-400">
+                          Vertex AI phân tích keyframe và viết kịch bản chuyển động tối ưu cho model TST đã chọn.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleGenerateVideoScript}
+                        disabled={isGeneratingScript || !keyframeImage}
+                        className="neu-button px-4 py-2.5 rounded-xl text-[10px] font-black text-[#FF007F] disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                      >
+                        {isGeneratingScript ? 'Đang viết kịch bản...' : 'Tạo kịch bản chi tiết'}
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <OptionDropdown
+                        label="Phong cách"
+                        value={scriptStyle}
+                        options={['Cinematic điện ảnh', 'Đời thường tự nhiên', 'Thời trang', 'Hành động', 'Lãng mạn'].map((item) => ({ label: item, value: item }))}
+                        onChange={setScriptStyle}
+                        icon={Icons.Image}
+                      />
+                      <OptionDropdown
+                        label="Chủ đề"
+                        value={scriptTheme}
+                        options={['Tự động theo ảnh', 'Đời thường', 'Sân khấu', 'Đường phố'].map((item) => ({ label: item, value: item }))}
+                        onChange={setScriptTheme}
+                        icon={Icons.MessageCircle}
+                      />
+                      <OptionDropdown
+                        label="Âm thanh"
+                        value={scriptSoundMood}
+                        options={['Phù hợp bối cảnh', 'Lãng mạn vui vẻ', 'Sôi động hành động', 'Sầu bi buồn bã', 'Vui tươi hài hước'].map((item) => ({ label: item, value: item }))}
+                        onChange={setScriptSoundMood}
+                        icon={Icons.Volume2}
+                      />
+                      <OptionDropdown
+                        label="Model kịch bản"
+                        value={scriptTargetModel || videoModel}
+                        options={videoModelOptions.map((model) => ({ label: model.name, value: model.id }))}
+                        onChange={setScriptTargetModel}
+                        icon={Icons.Video}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      {[
+                        { label: 'Trend Douyin/TikTok', active: scriptTrendEdit, toggle: () => setScriptTrendEdit((value) => !value) },
+                        { label: 'Text trong video', active: scriptTextOverlay, toggle: () => setScriptTextOverlay((value) => !value) },
+                        { label: 'Lời thoại giọng nói', active: scriptVoiceDialogue, toggle: () => setScriptVoiceDialogue((value) => !value) },
+                      ].map((item) => (
+                        <button
+                          key={item.label}
+                          type="button"
+                          onClick={item.toggle}
+                          aria-pressed={item.active}
+                          className={`rounded-xl px-3 py-2 text-[10px] font-black text-left transition-all ${
+                            item.active ? 'neu-raised-sm text-[#FF007F] ring-2 ring-[#FF007F]/30' : 'neu-button text-slate-600 dark:text-slate-300'
+                          }`}
+                        >
+                          {item.label}: {item.active ? 'Bật' : 'Tắt'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+            </div>
+
+            <div className="neu-inset-sm p-3 rounded-2xl text-[10px] text-slate-400 leading-relaxed">
+                💡 AI Video hỗ trợ mô hình Kling chất lượng cực cao, nhịp dựng tự nhiên chuẩn điện ảnh.
+            </div>
+        </div>
+
+        {/* BLOCK 3: MÔ HÌNH AI & CẤU HÌNH (lg:col-span-7 xl:col-span-8) */}
+        <div data-tour-id="desktop.video.model" className="lg:col-span-7 xl:col-span-8 neu-card p-6 rounded-3xl space-y-4 shadow-xl border border-white/20">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200/60 dark:border-slate-800">
+                <h3 className="font-extrabold text-slate-800 dark:text-white text-sm uppercase tracking-wider font-accent flex items-center gap-2">
+                    <Icons.Settings className="w-4 h-4 text-[#00F2FE]" /> 3. MÔ HÌNH AI & THAM SỐ VIDEO
                 </h3>
             </div>
 
             {!isCatalogReady && (
-              <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-3 text-xs text-red-200">
-                {catalogLoading
-                  ? 'Đang đồng bộ catalog live từ TST...'
-                  : (catalogError || 'TST đang bảo trì hoặc không sẵn sàng.')}
+              <div role="alert" className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                {catalogLoading ? 'Đang đồng bộ catalog model trực tiếp từ TST...' : (catalogError || 'TST đang bảo trì hoặc không sẵn sàng.')}
               </div>
             )}
 
-            {/* Settings Grid */}
-            <div className="flex flex-col gap-6">
-              <div className="space-y-3 relative z-10">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  Mô hình AI
-                </label>
-                {activeMode === 'video_ai' ? (
-                    <div className="space-y-3">
-                        <div className="grid grid-cols-3 gap-2">
-                            {VIDEO_MODEL_FAMILY_ORDER.map((family) => {
-                                const meta = VIDEO_MODEL_FAMILY_META[family];
-                                const familyModels = getModelsByFamily(videoModelOptions, family);
-                                const isActive = videoModelFamily === family;
-                                return (
-                                    <button
-                                        key={family}
-                                        type="button"
-                                        onClick={() => selectVideoFamily(family)}
-                                        disabled={familyModels.length === 0}
-                                        className={`group relative mt-3 rounded-2xl border px-3 pb-3 pt-5 text-left transition-all ${
-                                            isActive
-                                                ? `bg-gradient-to-br ${meta.accent} shadow-[0_0_22px_rgba(34,211,238,0.22)] scale-[1.02]`
-                                                : 'border-white/10 bg-black/20 text-slate-400 hover:border-white/20 hover:bg-white/5'
-                                        } ${familyModels.length === 0 ? 'opacity-40 cursor-not-allowed' : ''}`}
-                                    >
-                                        <span className={`absolute -top-3 left-2 rounded-full border px-2 py-1 text-[8px] font-black tracking-wider shadow-lg transition-transform ${
-                                            isActive
-                                                ? 'animate-pulse border-white/25 bg-gradient-to-r from-audi-pink to-audi-purple text-white group-hover:scale-105'
-                                                : 'border-white/10 bg-[#252534] text-slate-300'
-                                        }`}>
-                                            #{meta.tag}
-                                        </span>
-                                        <div className="text-sm font-black text-white">{meta.label}</div>
-                                        <div className="mt-1 text-[10px] font-bold text-audi-cyan">{getFamilyPriceLabel(familyModels)}</div>
-                                    </button>
-                                );
-                            })}
-                        </div>
+            <div className="space-y-5">
+              {activeMode === 'video_ai' ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {VIDEO_MODEL_FAMILY_ORDER.map((family) => {
+                      const meta = VIDEO_MODEL_FAMILY_META[family];
+                      const familyModels = getModelsByFamily(videoModelOptions, family);
+                      const FamilyIcon = getVideoFamilyIcon(family);
+                      const selected = videoModelFamily === family;
+                      return (
+                        <button
+                          key={family}
+                          type="button"
+                          disabled={familyModels.length === 0}
+                          onClick={() => selectVideoFamily(family)}
+                          aria-pressed={selected}
+                          className={`group min-h-[94px] p-3.5 rounded-2xl text-left transition-all duration-200 ${getVideoFamilyTheme(family, selected)} ${
+                            familyModels.length === 0 ? 'opacity-35 cursor-not-allowed' : 'hover:-translate-y-0.5'
+                          }`}
+                        >
+                          <span className="flex items-start justify-between gap-2">
+                            <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+                              family === 'grok'
+                                ? 'bg-gradient-to-br from-emerald-400 to-cyan-500 text-slate-950'
+                                : family === 'kling'
+                                  ? 'bg-gradient-to-br from-amber-300 to-orange-500 text-slate-950'
+                                  : 'bg-gradient-to-br from-[#FF007F] to-[#9D00FF] text-white'
+                            }`}>
+                              <FamilyIcon className="w-4 h-4" />
+                            </span>
+                            <span className={`px-2 py-1 rounded-full text-[9px] font-black tracking-wide ${
+                              family === 'grok'
+                                ? 'bg-emerald-400/15 text-emerald-500 dark:text-emerald-300'
+                                : family === 'kling'
+                                  ? 'bg-amber-400/15 text-amber-600 dark:text-amber-300'
+                                  : 'bg-[#FF007F]/15 text-[#FF007F]'
+                            }`}>
+                              #{meta.tag.replace(/\s+/g, '_')}
+                            </span>
+                          </span>
+                          <span className="block mt-2 text-sm font-black font-accent text-slate-900 dark:text-white">{meta.label}</span>
+                          <span className="block mt-0.5 text-[10px] font-bold text-slate-600 dark:text-slate-300">{getFamilyPriceLabel(familyModels)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
 
-                        <div className={`rounded-2xl border bg-gradient-to-br p-3 ${VIDEO_MODEL_FAMILY_META[videoModelFamily].accent}`}>
-                            <div className="text-[10px] leading-relaxed text-slate-200/90">
-                                {VIDEO_MODEL_FAMILY_META[videoModelFamily].description}
-                            </div>
-                        </div>
+                  <div className="neu-inset-sm rounded-2xl px-4 py-3 flex items-start gap-2.5">
+                    <Icons.Sparkles className="w-4 h-4 mt-0.5 shrink-0 text-[#00A8C8] dark:text-[#00F2FE]" />
+                    <p className="text-[10px] leading-relaxed font-semibold text-slate-600 dark:text-slate-300">
+                      {VIDEO_MODEL_FAMILY_META[videoModelFamily].description}
+                    </p>
+                  </div>
 
-                        <div className="space-y-2">
-                            {getModelsByFamily(videoModelOptions, videoModelFamily).map((model) => (
-                                <button
-                                    key={model.id}
-                                    type="button"
-                                    onClick={() => {
-                                        selectVideoModel(model.id);
-                                    }}
-                                    className={`w-full rounded-xl border px-3 py-2.5 text-left transition-all ${
-                                        videoModel === model.id
-                                            ? 'border-audi-cyan bg-audi-cyan/10'
-                                            : 'border-white/10 bg-[#1a1a24] hover:border-white/20 hover:bg-white/5'
-                                    }`}
-                                >
-                                    <div className="flex items-center justify-between gap-3">
-                                        <div>
-                                            <div className="flex items-center gap-2 text-sm font-black text-white">
-                                                {model.name}
-                                                {videoModel === model.id && <Icons.Check className="h-4 w-4 text-audi-cyan" />}
-                                            </div>
-                                            <div className="mt-0.5 text-[10px] text-slate-500">{getVideoModelHint(model)}</div>
-                                        </div>
-                                        <div className="flex shrink-0 items-center gap-1 rounded-full bg-audi-cyan/10 px-2 py-1 text-[10px] font-black text-audi-cyan">
-                                            Từ {model.price} VC <Icons.Gem className="h-3 w-3" />
-                                        </div>
-                                    </div>
-                                </button>
+                  <div className="space-y-2">
+                    {getModelsByFamily(videoModelOptions, videoModelFamily).map((model) => (
+                      <button
+                        key={model.id}
+                        type="button"
+                        onClick={() => selectVideoModel(model.id)}
+                        aria-pressed={videoModel === model.id}
+                        className={`w-full p-3.5 rounded-2xl text-left transition-all flex items-center gap-3 ${
+                          videoModel === model.id
+                            ? 'neu-inset-sm ring-2 ring-[#FF007F] bg-gradient-to-r from-[#FF007F]/10 via-transparent to-[#00F2FE]/5'
+                            : 'neu-button hover:-translate-y-0.5'
+                        }`}
+                      >
+                        <span className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                          videoModel === model.id
+                            ? 'bg-gradient-to-br from-[#FF007F] to-[#9D00FF] text-white shadow-lg shadow-[#FF007F]/20'
+                            : 'neu-inset-sm text-slate-500 dark:text-slate-300'
+                        }`}>
+                          <Icons.Video className="w-5 h-5" />
+                        </span>
+                        <span className="flex-1 min-w-0">
+                          <span className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-xs font-black font-accent text-slate-900 dark:text-white">{model.name}</span>
+                            <span className="px-2.5 py-1 rounded-full bg-amber-400/15 text-[9px] font-black text-amber-600 dark:text-amber-300">
+                              TỪ {model.price} VCOIN
+                            </span>
+                          </span>
+                          <span className="block mt-1 text-[10px] font-semibold text-slate-600 dark:text-slate-400">{getVideoModelHint(model)}</span>
+                          <span className="flex flex-wrap gap-1.5 mt-2">
+                            {getVideoModelTags(model).map((tag) => (
+                              <span key={tag} className="px-2 py-0.5 rounded-md border border-[#00A8C8]/20 bg-[#00F2FE]/5 text-[8px] font-black text-[#0089A3] dark:text-[#00F2FE]">
+                                {tag}
+                              </span>
                             ))}
-                        </div>
-                    </div>
-                ) : (
-                    <div className="space-y-2">
-                        {motionModelOptions.map((model) => (
-                            <button
-                                key={model.id}
-                                onClick={() => setMotionModel(model.id)}
-                                className={`w-full rounded-xl border px-3 py-2.5 text-left transition-all ${
-                                    motionModel === model.id
-                                        ? 'border-audi-cyan bg-audi-cyan/10'
-                                        : 'border-white/10 bg-[#1a1a24] hover:border-white/20 hover:bg-white/5'
-                                }`}
-                            >
-                                <div className="flex items-center justify-between gap-3">
-                                    <span className="text-sm font-black text-white">{model.name}</span>
-                                    <span className="text-[10px] font-black text-audi-cyan">Từ {model.price} VC</span>
-                                </div>
-                            </button>
-                        ))}
-                    </div>
-                )}
-              </div>
-
-              {modelOptions.showAspectRatio && modelOptions.aspectRatios.length > 0 && (
-                <OptionDropdown
-                  label={lang === 'vi' ? 'Tỉ lệ khung hình' : 'Aspect Ratio'}
-                  value={aspectRatio}
-                  options={modelOptions.aspectRatios?.map(r => ({ label: r, value: r })) || []}
-                  onChange={setAspectRatio}
-                  icon={Icons.Monitor}
-                />
+                          </span>
+                        </span>
+                        <span className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center ${
+                          videoModel === model.id ? 'border-[#FF007F]' : 'border-slate-400/50'
+                        }`}>
+                          {videoModel === model.id && <span className="w-2 h-2 rounded-full bg-[#FF007F]" />}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {motionModelOptions.map((model) => (
+                    <button
+                      key={model.id}
+                      type="button"
+                      onClick={() => setMotionModel(model.id)}
+                      aria-pressed={motionModel === model.id}
+                      className={`p-3.5 rounded-2xl text-left transition-all flex items-center gap-3 ${
+                        motionModel === model.id
+                          ? 'neu-inset-sm ring-2 ring-[#00F2FE] bg-gradient-to-r from-[#00F2FE]/10 to-transparent'
+                          : 'neu-button hover:-translate-y-0.5'
+                      }`}
+                    >
+                      <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#00F2FE] to-blue-600 text-white flex items-center justify-center shrink-0">
+                        <Icons.Activity className="w-5 h-5" />
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="text-xs font-black font-accent text-slate-900 dark:text-white block">{model.name}</span>
+                        <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400">Từ {model.price} Vcoin</span>
+                        <span className="flex flex-wrap gap-1.5 mt-1.5">
+                          <span className="px-2 py-0.5 rounded-md bg-[#00F2FE]/10 text-[8px] font-black text-[#0089A3] dark:text-[#00F2FE]">#MOTION_CONTROL</span>
+                          <span className="px-2 py-0.5 rounded-md bg-[#FF007F]/10 text-[8px] font-black text-[#FF007F]">#NHÂN_VẬT</span>
+                        </span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
               )}
 
-              <div className="grid grid-cols-2 gap-3">
-                {modelOptions.qualities.length > 0 ? (
-                <OptionDropdown
-                  label={lang === 'vi' ? 'Chất lượng' : 'Quality'}
-                  value={quality}
-                  options={modelOptions.qualities.map(q => ({ label: q, value: q }))}
-                  onChange={setQuality}
-                  icon={Icons.Video}
-                />
-                ) : (
-                  <div />
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 pt-4 border-t border-slate-200/60 dark:border-slate-800">
+                {modelOptions.showAspectRatio && modelOptions.aspectRatios.length > 0 && (
+                  <OptionDropdown label="Tỉ lệ khung hình" value={aspectRatio} options={modelOptions.aspectRatios.map((value) => ({ label: value, value }))} onChange={setAspectRatio} icon={Icons.Monitor} />
                 )}
-
-                {activeMode === 'video_ai' && modelOptions.durations.length > 0 ? (
-                <OptionDropdown
-                  label={lang === 'vi' ? 'Thời lượng' : 'Duration'}
-                  value={duration}
-                  options={modelOptions.durations.map(d => ({ label: d, value: d }))}
-                  onChange={setDuration}
-                  icon={Icons.Clock}
-                />
-                ) : (
-                  <div />
+                {modelOptions.qualities.length > 0 && (
+                  <OptionDropdown label="Chất lượng" value={quality} options={modelOptions.qualities.map((value) => ({ label: value, value }))} onChange={setQuality} icon={Icons.Video} />
+                )}
+                {activeMode === 'video_ai' && modelOptions.durations.length > 0 && (
+                  <OptionDropdown label="Thời lượng" value={duration} options={modelOptions.durations.map((value) => ({ label: value, value }))} onChange={setDuration} icon={Icons.Clock} />
+                )}
+                {speedOptions.length > 0 && (
+                  <OptionDropdown label="Tốc độ xử lý" value={speed} options={speedOptions} onChange={setSpeed} icon={Icons.Zap} />
+                )}
+                {serverOptions.length > 0 && (
+                  <OptionDropdown label="Server TST" value={server} options={serverOptions} onChange={setServer} icon={Icons.Database} />
                 )}
               </div>
 
               {activeMode === 'video_ai' && modelOptions.supportsAudio && (
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
-                    <Icons.Volume2 className="w-3 h-3" />
-                    {lang === 'vi' ? 'Âm thanh' : 'Sound'}
-                  </label>
-                  <div className="flex bg-black/30 p-1.5 rounded-xl border border-white/5">
-                    <button
-                      onClick={() => setSound(!sound)}
-                      className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${sound ? 'bg-audi-purple text-white shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}
-                    >
-                      {sound ? <Icons.Volume2 className="w-3 h-3" /> : <Icons.VolumeX className="w-3 h-3" />}
-                      {sound ? 'Bật' : 'Tắt'}
-                    </button>
-                  </div>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setSound((value) => !value)}
+                  aria-pressed={sound}
+                  className={`w-full p-3 rounded-2xl flex items-center justify-between text-xs font-black ${sound ? 'neu-raised-sm text-[#FF007F]' : 'neu-button text-slate-600 dark:text-slate-300'}`}
+                >
+                  <span className="flex items-center gap-2">
+                    {sound ? <Icons.Volume2 className="w-4 h-4" /> : <Icons.VolumeX className="w-4 h-4" />}
+                    Âm thanh do model tạo
+                  </span>
+                  <span>{sound ? 'Bật' : 'Tắt'}</span>
+                </button>
               )}
-
-              <div className="grid grid-cols-2 gap-3 mt-3">
-                {speedOptions.length > 0 ? (
-                <OptionDropdown
-                  label={lang === 'vi' ? 'Tốc độ xử lý' : 'Processing speed'}
-                  value={speed}
-                  options={speedOptions}
-                  onChange={setSpeed}
-                  icon={Icons.Zap}
-                />
-                ) : (
-                  <div />
-                )}
-
-                {serverOptions.length > 0 ? (
-                <OptionDropdown
-                  label="Server"
-                  value={server}
-                  options={serverOptions}
-                  onChange={setServer}
-                  icon={Icons.Database}
-                />
-                ) : (
-                  <div />
-                )}
-              </div>
-
-              {/* NEW CONCURRENCY UI */}
-              <div className="space-y-3 pt-4 border-t border-white/10">
-                  <div 
-                      className="cursor-pointer hover:bg-white/5 p-3 rounded-xl transition-colors border border-white/5 bg-[#0a0a0f]"
-                      onClick={() => setIsConcurrencyExpanded(!isConcurrencyExpanded)}
-                  >
-                      <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase">
-                              <Icons.Activity className="w-3 h-3 text-audi-cyan" />
-                              Luồng xử lý
-                          </div>
-                          <div className="flex items-center gap-2">
-                              {isConcurrencyExpanded ? <Icons.ChevronUp className="w-4 h-4 text-slate-500" /> : <Icons.ChevronDown className="w-4 h-4 text-slate-500" />}
-                          </div>
-                      </div>
-                      
-                      {!isConcurrencyExpanded && (
-                          <div className="space-y-3 text-[10px] text-slate-400 mt-2">
-                              <div>
-                                  <div className="font-bold text-audi-cyan mb-1">Luồng Của Bạn</div>
-                                  <div className="flex gap-1.5">
-                                      <span>Video <span className="text-white font-mono">{queueStats.myVideoProcessing}/{CONCURRENCY_LIMITS.user.videoProcessing}</span></span>
-                                      <span>- Hàng Chờ <span className="text-white font-mono">{queueStats.myQueued}/{CONCURRENCY_LIMITS.user.queued}</span></span>
-                                  </div>
-                              </div>
-                              <div>
-                                  <div className="font-bold text-slate-300 mb-1">Luồng Hệ Thống</div>
-                                  <div className="flex gap-1.5">
-                                      <span>Video <span className="text-white font-mono">{queueStats.systemVideoProcessing}/{CONCURRENCY_LIMITS.system.videoProcessing}</span></span>
-                                      <span>- Hàng Chờ <span className="text-white font-mono">{queueStats.systemQueued}/{CONCURRENCY_LIMITS.system.queued}</span></span>
-                                  </div>
-                              </div>
-                          </div>
-                      )}
-                      
-                      {isConcurrencyExpanded && (
-                          <div className="pt-3 mt-2 border-t border-white/5 space-y-4 animate-fade-in">
-                              {/* User Concurrency */}
-                              <div className="space-y-2">
-                                  <div className="flex justify-between items-center">
-                                      <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Của bạn</span>
-                                  </div>
-                                  <div className="space-y-2">
-                                      <div className="flex items-center justify-between text-xs">
-                                          <span className="text-slate-300">Đang xử lý</span>
-                                          <span className="font-mono text-audi-cyan bg-audi-cyan/10 px-2 py-0.5 rounded-md">
-                                              {queueStats.myVideoProcessing}/{CONCURRENCY_LIMITS.user.videoProcessing}
-                                          </span>
-                                      </div>
-                                      <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
-                                          <div 
-                                              className="bg-audi-cyan h-full transition-all duration-500 ease-out" 
-                                              style={{ width: `${Math.min(100, (queueStats.myVideoProcessing / CONCURRENCY_LIMITS.user.videoProcessing) * 100)}%` }}
-                                          />
-                                      </div>
-                                      
-                                      <div className="flex items-center justify-between text-xs pt-1">
-                                          <span className="text-slate-300">Hàng chờ</span>
-                                          <span className="font-mono text-audi-yellow bg-audi-yellow/10 px-2 py-0.5 rounded-md">
-                                              {queueStats.myQueued}/{CONCURRENCY_LIMITS.user.queued}
-                                          </span>
-                                      </div>
-                                      <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
-                                          <div 
-                                              className="bg-audi-yellow h-full transition-all duration-500 ease-out" 
-                                              style={{ width: `${Math.min(100, (queueStats.myQueued / CONCURRENCY_LIMITS.user.queued) * 100)}%` }}
-                                          />
-                                      </div>
-                                  </div>
-                              </div>
-
-                              {/* System Concurrency */}
-                              <div className="space-y-2 pt-3 border-t border-white/5">
-                                  <div className="flex justify-between items-center">
-                                      <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Hệ thống</span>
-                                  </div>
-                                  <div className="space-y-2">
-                                      <div className="flex items-center justify-between text-xs">
-                                          <span className="text-slate-300">Đang xử lý</span>
-                                          <span className="font-mono text-audi-cyan bg-audi-cyan/10 px-2 py-0.5 rounded-md">
-                                              {queueStats.systemVideoProcessing}/{CONCURRENCY_LIMITS.system.videoProcessing}
-                                          </span>
-                                      </div>
-                                      <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
-                                          <div 
-                                              className="bg-audi-cyan h-full transition-all duration-500 ease-out" 
-                                              style={{ width: `${Math.min(100, (queueStats.systemVideoProcessing / CONCURRENCY_LIMITS.system.videoProcessing) * 100)}%` }}
-                                          />
-                                      </div>
-                                      
-                                      <div className="flex items-center justify-between text-xs pt-1">
-                                          <span className="text-slate-300">Hàng chờ</span>
-                                          <span className="font-mono text-audi-yellow bg-audi-yellow/10 px-2 py-0.5 rounded-md">
-                                              {queueStats.systemQueued}/{CONCURRENCY_LIMITS.system.queued}
-                                          </span>
-                                      </div>
-                                      <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
-                                          <div 
-                                              className="bg-audi-yellow h-full transition-all duration-500 ease-out" 
-                                              style={{ width: `${Math.min(100, (queueStats.systemQueued / CONCURRENCY_LIMITS.system.queued) * 100)}%` }}
-                                          />
-                                      </div>
-                                  </div>
-                              </div>
-                          </div>
-                      )}
-                  </div>
-              </div>
-
-              <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-audi-yellow/20 to-orange-500/20 border border-white/10 p-3">
-                  <div className="flex justify-between items-center relative z-10">
-                      <div>
-                          <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Giá hiện tại</span>
-                          {currentCostBreakdown.billingUnit === 'second' && (
-                              <div className="mt-1 inline-flex items-center rounded-full border border-audi-yellow/30 bg-black/25 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-audi-yellow">
-                                  Kling tính theo giây
-                              </div>
-                          )}
-                      </div>
-                      <div className="flex items-end gap-1">
-                          <span className="text-xl font-black text-white font-game drop-shadow-md">
-                              {calculateCost()}
-                          </span>
-                          <span className="text-[10px] font-bold text-audi-yellow mb-1">VCOIN</span>
-                      </div>
-                  </div>
-                  {activeMode === 'video_ai' && modelOptions.durations.length > 0 ? (
-                      <div className="flex justify-between text-[9px] text-slate-500 mt-2 font-mono border-t border-white/5 pt-2">
-                          {modelOptions.durations.map(d => {
-                              const durationPrice = getVideoCostBreakdown({
-                                  modelId: videoModel,
-                                  serverId: uiServerToTst(server) || defaultVideoServerId,
-                                  resolution: quality.toLowerCase(),
-                                  duration: d.toLowerCase(),
-                                  speed: uiSpeedToTst(speed) || 'fast',
-                                  audio: effectiveVideoAudio,
-                                  pricingEntries,
-                                  pricingOverrides
-                                }).vcoin;
-                          return (
-                              <span key={d} className={duration === d ? 'text-white font-bold' : ''}>{d}: {durationPrice}VC</span>
-                          );
-                      })}
-                  </div>
-                  ) : null}
-                  {currentCostBreakdown.billingUnit === 'second' && (
-                      <div className="mt-2 rounded-lg border border-audi-yellow/20 bg-audi-yellow/10 px-2 py-1.5 text-[10px] font-bold text-audi-yellow">
-                          Tính theo giây: {perSecondCostLabel}
-                          {activeMode === 'motion_control' && motionVideoDurationSeconds !== null
-                              ? ` (video mẫu ${motionVideoDurationSeconds.toFixed(1)}s)`
-                              : ''}
-                      </div>
-                  )}
-              </div>
-
-              <button 
-                  data-tour-id="desktop.video.generate"
-                  onClick={handleGenerate}
-                  disabled={isProcessing || !isCatalogReady || !currentCostBreakdown.available}
-                  className={`w-full py-3.5 mt-auto rounded-xl font-bold text-white shadow-[0_0_20px_rgba(251,218,97,0.4)] transition-all flex items-center justify-center gap-2 ${
-                      (isProcessing || !isCatalogReady || !currentCostBreakdown.available)
-                      ? 'bg-slate-600 cursor-not-allowed opacity-70 shadow-none' 
-                      : 'bg-gradient-to-r from-audi-yellow to-orange-500 hover:scale-[1.02] text-black'
-                  }`}
-              >
-                  {isProcessing ? (
-                      <>
-                          <Icons.Loader className="w-5 h-5 animate-spin" />
-                          {lang === 'vi' ? 'Đang xử lý...' : 'Processing...'}
-                      </>
-                  ) : (
-                      <>
-                          <Icons.Sparkles className="w-5 h-5" />
-                          {lang === 'vi' ? 'Tạo Video' : 'Generate Video'}
-                      </>
-                  )}
-              </button>
-
             </div>
-          </div>
         </div>
+
+        {/* BLOCK 4: COST & LAUNCH (lg:col-span-5 xl:col-span-4) */}
+        <div className="lg:col-span-5 xl:col-span-4 neu-card p-6 rounded-3xl space-y-4 shadow-xl border border-white/20 flex flex-col justify-between">
+            <div className="space-y-3">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-200/60 dark:border-slate-800">
+                    <h3 className="font-extrabold text-slate-800 dark:text-white text-sm uppercase tracking-wider font-accent flex items-center gap-2">
+                        <Icons.Zap className="w-4 h-4 text-amber-500" /> 4. XÁC NHẬN & RENDER VIDEO
+                    </h3>
+                </div>
+
+                <div className="neu-inset-sm p-4 rounded-2xl flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-400 uppercase">Chi Phí VCOIN:</span>
+                    <div className="flex items-baseline gap-1">
+                        <span className="text-2xl font-black text-amber-500 font-accent">
+                          {activeMode === 'motion_control' && motionVideoDurationSeconds === null ? '--' : calculateCost()}
+                        </span>
+                        <span className="text-xs font-bold text-amber-500">VCOIN</span>
+                    </div>
+                </div>
+                {perSecondCostLabel && motionVideoDurationSeconds !== null && (
+                  <p className="text-[10px] font-mono text-slate-600 dark:text-slate-400 text-right">{perSecondCostLabel}</p>
+                )}
+
+                <div className="neu-inset-sm rounded-2xl overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setIsConcurrencyExpanded((value) => !value)}
+                    className="w-full px-4 py-3 flex items-center justify-between text-left"
+                    aria-expanded={isConcurrencyExpanded}
+                  >
+                    <span className="text-[10px] font-black uppercase text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                      <Icons.Activity className="w-4 h-4 text-[#00A8C8] dark:text-[#00F2FE]" />
+                      Luồng video
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-600 dark:text-slate-300">
+                      {queueStats.myVideoProcessing}/{CONCURRENCY_LIMITS.user.videoProcessing} · Chờ {queueStats.myQueued}/{CONCURRENCY_LIMITS.user.queued}
+                    </span>
+                  </button>
+                  {isConcurrencyExpanded && (
+                    <div className="px-4 pb-3 pt-2 border-t border-slate-200/60 dark:border-slate-800 text-[10px] text-slate-600 dark:text-slate-300 space-y-2">
+                      <div className="flex justify-between"><span>Video hệ thống</span><span className="font-mono">{queueStats.systemVideoProcessing}/{CONCURRENCY_LIMITS.system.videoProcessing}</span></div>
+                      <div className="flex justify-between"><span>Hàng chờ hệ thống</span><span className="font-mono">{queueStats.systemQueued}/{CONCURRENCY_LIMITS.system.queued}</span></div>
+                    </div>
+                  )}
+                </div>
+            </div>
+
+            <button 
+                data-tour-id="desktop.video.generate"
+                onClick={handleGenerate}
+                disabled={isProcessing || !isCatalogReady || !currentCostBreakdown.available || !hasRequiredInputs}
+                className={`w-full py-4 rounded-2xl font-black transition-all flex items-center justify-center gap-2 text-sm uppercase tracking-wider shadow-2xl ${
+                    (isProcessing || !isCatalogReady || !currentCostBreakdown.available || !hasRequiredInputs)
+                    ? 'bg-slate-400 text-slate-200 cursor-not-allowed opacity-70 neu-inset-sm' 
+                    : 'neu-button-primary'
+                }`}
+            >
+                {isProcessing ? (
+                    <>
+                        <Icons.Loader className="w-5 h-5 animate-spin" />
+                        <span>ĐANG RENDER VIDEO...</span>
+                    </>
+                ) : (
+                    <>
+                        <Icons.Sparkles className="w-5 h-5" />
+                        <span>RENDER VIDEO 3D NGAY</span>
+                    </>
+                )}
+            </button>
+        </div>
+
       </div>
 
       {/* RESULT MODAL (Full screen overlay like GenerationTool) */}
@@ -1669,18 +1490,18 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
 
       {/* GUIDE MODAL */}
       {showGuide && (
-          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-              <div className="w-full max-w-md bg-[#1a1a24] border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
-                  <div className="flex items-center justify-between p-4 border-b border-white/5 bg-black/20 shrink-0">
-                      <h3 className="font-bold text-white flex items-center gap-2">
-                          <Icons.Info className="w-5 h-5 text-audi-cyan" />
-                          {activeMode === 'video_ai' ? 'Hướng dẫn tạo Video AI' : 'Hướng dẫn tạo Motion Control'}
+          <div className="fixed inset-0 z-[5000] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-fade-in">
+              <div className="w-full max-w-2xl sm:max-w-3xl neu-card border border-slate-300 dark:border-slate-700 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+                  <div className="flex items-center justify-between p-5 border-b border-slate-200 dark:border-slate-800 neu-inset-sm shrink-0">
+                      <h3 className="font-black text-slate-950 dark:text-white flex items-center gap-2 font-accent text-sm sm:text-base uppercase tracking-wider">
+                          <Icons.Info className="w-5 h-5 text-[#FF007F]" />
+                          {activeMode === 'video_ai' ? 'HƯỚNG DẪN TẠO VIDEO AI' : 'HƯỚNG DẪN TẠO MOTION CONTROL'}
                       </h3>
-                      <button onClick={() => setShowGuide(false)} className="text-slate-400 hover:text-white transition-colors">
+                      <button onClick={() => setShowGuide(false)} className="neu-button p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:text-red-500 transition-colors">
                           <Icons.X className="w-5 h-5" />
                       </button>
                   </div>
-                  <div className="p-5 overflow-y-auto custom-scrollbar flex flex-col gap-6">
+                  <div className="p-6 overflow-y-auto custom-scrollbar flex flex-col gap-6 text-slate-800 dark:text-slate-200">
                       {activeMode === 'motion_control' ? (
                           <>
                               <div>

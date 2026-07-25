@@ -1,0 +1,283 @@
+
+import React, { useEffect, useState } from 'react';
+import { APP_CONFIG } from '../constants';
+import { Language, Feature, ViewId } from '../types';
+import { Icons } from '../components/Icons';
+import { subscribeCheckinStatus, isFeatureInMaintenance, type FeatureMaintenanceConfig } from '../services/economyService';
+
+interface HomeProps {
+  lang: Language;
+  onSelectFeature: (feature: Feature) => void;
+  onNavigate: (view: ViewId) => void;
+  onOpenCheckin: () => void;
+  isMaintenance?: boolean;
+  maintenanceMessage?: string;
+  featureMaintenance?: FeatureMaintenanceConfig | null;
+}
+
+interface FeatureCardProps {
+  feature: Feature;
+  lang: Language;
+  onClick: () => void;
+  idx: number;
+}
+
+const FeatureCard: React.FC<FeatureCardProps & { isMaintenance?: boolean; maintenanceLabel?: string }> = React.memo(({ feature, lang, onClick, idx, isMaintenance, maintenanceLabel }) => {
+    const isPremium = feature.isPremium;
+    const tag = feature.tag;
+    const isGen = feature.toolType === 'generation';
+    const isVideo = feature.toolType === 'video';
+
+    // Dynamic styles based on category
+    const getCardStyle = () => {
+        if (isMaintenance) return 'from-slate-900 to-black border-slate-800 opacity-50 cursor-not-allowed';
+        if (isVideo) return 'from-[#1a1800] to-[#0a0a00] border-yellow-600/30 hover:border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.1)] hover:shadow-[0_0_30px_rgba(234,179,8,0.2)]';
+        if (isGen) return 'from-[#001a2c] to-[#000a14] border-audi-cyan/20 hover:border-audi-cyan/60 shadow-[0_0_15px_rgba(33,212,253,0.05)] hover:shadow-[0_0_30px_rgba(33,212,253,0.15)]';
+        return 'from-[#1a0024] to-[#0a0014] border-audi-purple/20 hover:border-audi-purple/60 shadow-[0_0_15px_rgba(183,33,255,0.05)] hover:shadow-[0_0_30px_rgba(183,33,255,0.15)]';
+    };
+
+    const getIconColor = () => {
+        if (isMaintenance) return 'text-slate-600';
+        if (isVideo) return 'text-yellow-500';
+        if (isGen) return 'text-audi-cyan';
+        return 'text-audi-purple';
+    };
+
+    const getIconBg = () => {
+        if (isMaintenance) return 'bg-slate-800';
+        if (isVideo) return 'bg-yellow-500/10 group-hover:bg-yellow-500/20';
+        if (isGen) return 'bg-audi-cyan/10 group-hover:bg-audi-cyan/20';
+        return 'bg-audi-purple/10 group-hover:bg-audi-purple/20';
+    };
+
+    return (
+        <div
+            data-tour-id={`desktop.home.feature.${feature.id}`}
+            onClick={isMaintenance ? undefined : onClick}
+            className={`group relative h-[240px] rounded-[2rem] overflow-hidden bg-gradient-to-br border transition-all duration-500 flex flex-col p-6 ${getCardStyle()} ${!isMaintenance && 'hover:-translate-y-2 cursor-pointer'}`}
+        >
+            {/* Abstract Background Glow */}
+            <div className={`absolute -top-20 -right-20 w-40 h-40 blur-[50px] rounded-full transition-all duration-700 group-hover:scale-150 ${isVideo ? 'bg-yellow-500/20' : isGen ? 'bg-audi-cyan/20' : 'bg-audi-purple/20'}`}></div>
+            <div className={`absolute -bottom-20 -left-20 w-40 h-40 blur-[50px] rounded-full transition-all duration-700 group-hover:scale-150 ${isVideo ? 'bg-green-500/10' : isGen ? 'bg-blue-500/10' : 'bg-pink-500/10'}`}></div>
+
+            {/* Header: Icon & Badges */}
+            <div className="flex justify-between items-start relative z-10 mb-auto">
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-500 group-hover:scale-110 group-hover:rotate-3 ${getIconBg()} ${getIconColor()} border border-white/5`}>
+                    {isVideo ? <Icons.Video className="w-6 h-6" /> : isGen ? <Icons.Sparkles className="w-6 h-6" /> : <Icons.Wand className="w-6 h-6" />}
+                </div>
+
+                <div className="flex gap-2 flex-col items-end">
+                    {isMaintenance && (
+                        <span className="text-[9px] font-bold px-2.5 py-1 rounded-full bg-yellow-500/15 border border-yellow-400/50 text-yellow-300 backdrop-blur-md uppercase tracking-wider">
+                            {maintenanceLabel || (lang === 'vi' ? 'Đang bảo trì' : 'Maintenance')}
+                        </span>
+                    )}
+                    <div className="flex gap-2">
+                        <span className={`text-[9px] font-bold px-2.5 py-1 rounded-full backdrop-blur-md border tracking-wider uppercase ${isVideo ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400' : isGen ? 'bg-audi-cyan/10 border-audi-cyan/50 text-audi-cyan' : 'bg-audi-purple/10 border-audi-purple/50 text-audi-purple'}`}>
+                            {isVideo ? 'VIDEO' : isGen ? 'GEN' : 'EDIT'}
+                        </span>
+
+                        {isPremium && (
+                            <span className="text-[9px] font-bold px-2.5 py-1 rounded-full bg-audi-yellow/10 border border-audi-yellow/50 text-audi-yellow backdrop-blur-md flex items-center gap-1 uppercase tracking-wider">
+                                <Icons.Crown className="w-3 h-3" /> VIP
+                            </span>
+                        )}
+                    </div>
+                    {tag === 'HOT' && (
+                        <span className="text-[9px] font-bold px-2.5 py-1 rounded-full bg-gradient-to-r from-red-500 to-orange-500 text-white border border-red-400/50 shadow-[0_0_10px_rgba(239,68,68,0.5)] flex items-center gap-1 animate-pulse uppercase tracking-wider">
+                           <Icons.Flame className="w-3 h-3 fill-white" /> HOT
+                        </span>
+                    )}
+                </div>
+            </div>
+
+            {/* Content Section */}
+            <div className="relative z-20 mt-6">
+                <h3 className="font-game text-xl font-bold text-white mb-2 leading-tight group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-white group-hover:to-slate-300 transition-all drop-shadow-md">
+                    {feature.name[lang]}
+                </h3>
+                <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed font-medium group-hover:text-slate-300 transition-colors">
+                    {feature.description[lang]}
+                </p>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between pt-4 mt-4 border-t border-white/10 relative z-20">
+                 <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest group-hover:text-slate-400 transition-colors">{feature.engine.split(' ')[0]}</span>
+                 <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-500 border ${isVideo ? 'bg-yellow-500/10 border-yellow-500/30 group-hover:bg-yellow-500 group-hover:text-black' : isGen ? 'bg-audi-cyan/10 border-audi-cyan/30 group-hover:bg-audi-cyan group-hover:text-black' : 'bg-audi-purple/10 border-audi-purple/30 group-hover:bg-audi-purple group-hover:text-white'}`}>
+                     <Icons.ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                 </div>
+            </div>
+        </div>
+    );
+});
+
+export const Home: React.FC<HomeProps> = ({ lang, onSelectFeature, onNavigate, onOpenCheckin, isMaintenance, maintenanceMessage, featureMaintenance }) => {
+
+  // Split features into categories
+  const studioFeatures = APP_CONFIG.main_features.filter(f => f.toolType === 'generation');
+  const toolFeatures = APP_CONFIG.main_features.filter(f => f.toolType === 'editing');
+  const videoFeatures = APP_CONFIG.main_features.filter(f => f.toolType === 'video');
+  const [isCheckedIn, setIsCheckedIn] = useState(true);
+
+  useEffect(() => {
+    let unsubscribe: (() => void) | null = null;
+    const timer = window.setTimeout(() => {
+      unsubscribe = subscribeCheckinStatus(
+        (status) => setIsCheckedIn(status.isCheckedInToday),
+        { force: false },
+      );
+    }, 1200);
+
+    return () => {
+      window.clearTimeout(timer);
+      unsubscribe?.();
+    };
+  }, []);
+
+  return (
+    <div className="space-y-16 pb-24 relative">
+
+      {/* Optimized Slim Hero Section */}
+      <div data-tour-id="desktop.home.hero" className="relative rounded-2xl overflow-hidden border border-white/10 bg-gradient-to-r from-[#120024] to-black py-4 px-6 flex items-center justify-between">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-audi-pink/10 blur-[50px] rounded-full animate-pulse"></div>
+
+          <div className="relative z-10 flex items-center gap-4">
+              <div className="w-2 h-2 rounded-full bg-green-500 animate-ping"></div>
+              <div>
+                   <h1 className="font-game text-xl md:text-2xl font-bold text-white leading-none">
+                       HELLO, <span className="text-transparent bg-clip-text bg-gradient-to-r from-audi-pink to-audi-cyan">CREATOR</span>
+                   </h1>
+                   <p className="text-slate-500 text-xs hidden md:block mt-1">
+                       {lang === 'vi' ? 'Hệ thống đã sẵn sàng. Hãy chọn công cụ bên dưới.' : 'System online. Select a tool below to start.'}
+                   </p>
+              </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+             <button
+                data-tour-id="desktop.home.checkin"
+                onClick={onOpenCheckin}
+                className={`px-4 py-1.5 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all active:scale-95 ${
+                    !isCheckedIn
+                    ? 'bg-[#D10000] hover:bg-red-600 text-white border border-red-500 shadow-[0_0_20px_rgba(209,0,0,0.8)] animate-pulse'
+                    : 'bg-white/10 hover:bg-white/20 text-slate-300 border border-white/10'
+                }`}
+             >
+                <div className="relative">
+                     <Icons.Calendar className={`w-3 h-3 ${!isCheckedIn ? 'animate-bounce' : ''}`} />
+                     {!isCheckedIn && (
+                         <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                             <span className="relative inline-flex rounded-full h-2 w-2 bg-audi-yellow"></span>
+                         </span>
+                     )}
+                </div>
+                {lang === 'vi'
+                    ? (!isCheckedIn ? 'Điểm danh ngay' : 'Đã điểm danh')
+                    : (!isCheckedIn ? 'Check-in Now' : 'Checked In')
+                }
+             </button>
+          </div>
+      </div>
+      {/* SECTION 1: STUDIO AI (Generation) */}
+      <div data-tour-id="desktop.home.studio" className="animate-fade-in">
+        <div className="flex items-end justify-between mb-8 border-b border-white/10 pb-4">
+      <div data-tour-id="desktop.home.features">
+                <h2 className="font-game text-3xl font-bold text-white flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-audi-cyan/10 flex items-center justify-center">
+                        <Icons.Wand className="w-5 h-5 text-audi-cyan" />
+                    </div>
+                    STUDIO AI
+                </h2>
+                <p className="text-sm text-slate-500 mt-2 ml-14 max-w-md">
+                    {lang === 'vi' ? 'Bộ công cụ sáng tạo hình ảnh chuyên nghiệp' : 'Professional image generation suite'}
+                </p>
+            </div>
+            <div className="hidden md:block text-xs font-mono text-audi-cyan/50">POWERED BY GEMINI 3.0</div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {studioFeatures.map((feature, idx) => (
+                <FeatureCard
+                    key={feature.id}
+                    feature={feature}
+                    lang={lang}
+                    onClick={() => onSelectFeature(feature)}
+                    idx={idx}
+                    isMaintenance={isMaintenance || isFeatureInMaintenance(featureMaintenance, feature.id)}
+                    maintenanceLabel={isFeatureInMaintenance(featureMaintenance, feature.id) ? (lang === 'vi' ? 'Đang bảo trì' : 'Maintenance') : undefined}
+                />
+            ))}
+        </div>
+      </div>
+
+      {/* SECTION 2: VIDEO LAB */}
+      {videoFeatures.length > 0 && (
+        <div data-tour-id="desktop.home.video" className="animate-fade-in" style={{animationDelay: '0.2s'}}>
+          <div className="flex items-end justify-between mb-8 border-b border-white/10 pb-4">
+              <div>
+                  <h2 className="font-game text-3xl font-bold text-white flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-audi-yellow/10 flex items-center justify-center">
+                          <Icons.Video className="w-5 h-5 text-audi-yellow" />
+                      </div>
+                      VIDEO LAB
+                  </h2>
+                  <p className="text-sm text-slate-500 mt-2 ml-14 max-w-md">
+                      {lang === 'vi' ? 'Bộ công cụ tạo video và Motion Control theo hệ sinh thái TST' : 'Video generation and Motion Control suite'}
+                  </p>
+              </div>
+              <div className="hidden md:block text-xs font-mono text-audi-yellow/50">TST VIDEO SUITE</div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {videoFeatures.map((feature, idx) => (
+                  <FeatureCard
+                      key={feature.id}
+                      feature={feature}
+                      lang={lang}
+                      onClick={() => onSelectFeature(feature)}
+                      idx={idx}
+                      isMaintenance={isMaintenance || isFeatureInMaintenance(featureMaintenance, feature.id)}
+                      maintenanceLabel={isFeatureInMaintenance(featureMaintenance, feature.id) ? (lang === 'vi' ? 'Đang bảo trì' : 'Maintenance') : undefined}
+                  />
+              ))}
+          </div>
+        </div>
+      )}
+
+      {/* SECTION 3: TOOLS (Editing) */}
+      <div data-tour-id="desktop.home.editing" className="animate-fade-in" style={{animationDelay: '0.3s'}}>
+        <div className="flex items-end justify-between mb-8 border-b border-white/10 pb-4">
+            <div>
+                <h2 className="font-game text-3xl font-bold text-white flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-audi-purple/10 flex items-center justify-center">
+                        <Icons.Zap className="w-5 h-5 text-audi-purple" />
+                    </div>
+                    TOOLS
+                </h2>
+                 <p className="text-sm text-slate-500 mt-2 ml-14 max-w-md">
+                    {lang === 'vi' ? 'Công cụ chỉnh sửa và nâng cấp ảnh' : 'Image editing and enhancement tools'}
+                </p>
+            </div>
+             <div className="hidden md:block text-xs font-mono text-audi-purple/50">AI ENHANCEMENT SUITE</div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {toolFeatures.map((feature, idx) => (
+                <FeatureCard
+                    key={feature.id}
+                    feature={feature}
+                    lang={lang}
+                    onClick={() => onSelectFeature(feature)}
+                    idx={idx}
+                    isMaintenance={isMaintenance || isFeatureInMaintenance(featureMaintenance, feature.id)}
+                    maintenanceLabel={isFeatureInMaintenance(featureMaintenance, feature.id) ? (lang === 'vi' ? 'Đang bảo trì' : 'Maintenance') : undefined}
+                />
+            ))}
+        </div>
+      </div>
+
+    </div>
+  );
+};

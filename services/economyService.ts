@@ -15,6 +15,8 @@ import {
   DEFAULT_TST_SERVER_AVAILABILITY_CONFIG,
 } from './tstCatalog';
 
+const processEnv = typeof process !== 'undefined' ? process.env : {};
+
 const DEFAULT_GENERATION_PRICES = {
     flash_1k: 1,
     flash_2k: 2,
@@ -1407,7 +1409,9 @@ export const logVisit = async () => {
         let userId: string | null = null;
         try {
             userId = (await getCurrentSessionUser())?.id || null;
-        } catch {}
+        } catch {
+            // A visit can still be recorded anonymously if session lookup is unavailable.
+        }
 
         const visitData = {
             user_id: userId,
@@ -1780,7 +1784,7 @@ export const getApiKeyName = async (key: string): Promise<string> => {
 };
 
 export const getSystemApiKey = async (tier: 'flash' | 'pro' = 'flash', excludedKeys: string[] = []): Promise<string | null> => {
-    if (!supabase) return process.env.API_KEY || null;
+    if (!supabase) return processEnv.API_KEY || null;
     try {
         // 1. Clean up expired stats
         const now = Date.now();
@@ -1797,7 +1801,7 @@ export const getSystemApiKey = async (tier: 'flash' | 'pro' = 'flash', excludedK
             .eq('status', 'active');
         
         if (error || !allKeys || allKeys.length === 0) {
-            return process.env.API_KEY || null;
+            return processEnv.API_KEY || null;
         }
 
         const serviceAccountKeys = allKeys.filter((k: any) =>
@@ -1850,7 +1854,7 @@ export const getSystemApiKey = async (tier: 'flash' | 'pro' = 'flash', excludedK
             if (allKeys.length > 0) {
                 tierKeys = allKeys; // Borrow from other tier if empty
             } else {
-                return process.env.API_KEY || null;
+                return processEnv.API_KEY || null;
             }
         }
 
@@ -1905,7 +1909,7 @@ export const getSystemApiKey = async (tier: 'flash' | 'pro' = 'flash', excludedK
         return selectedKey.key_value;
     } catch (e) {
         console.error("Key rotation error:", e);
-        return process.env.API_KEY || null;
+        return processEnv.API_KEY || null;
     }
 };
 
@@ -3560,11 +3564,11 @@ export const getGiftcodeAbuseCases = async (limit = 1000): Promise<GiftcodeAbuse
         const riskFlags = Array.isArray(row.risk_flags) ? row.risk_flags : [];
         const abuseStatus = row.abuse_status || 'ok';
         const evidence = [
-            abuseStatus !== 'ok' ? `Tráº¡ng thÃ¡i abuse: ${abuseStatus}` : '',
-            userCampaignCount > 1 ? `${userCampaignCount} lÆ°á»£t cÃ¹ng user/campaign` : '',
-            emailCount > 1 ? `${emailCount} tÃ i khoáº£n/lÆ°á»£t cÃ¹ng cá»¥m email` : '',
-            ipCount > 1 ? `${ipCount} tÃ i khoáº£n/lÆ°á»£t cÃ¹ng IP/network` : '',
-            browserCount > 1 ? `${browserCount} tÃ i khoáº£n/lÆ°á»£t cÃ¹ng browser key` : '',
+            abuseStatus !== 'ok' ? `Trạng thái abuse: ${abuseStatus}` : '',
+            userCampaignCount > 1 ? `${userCampaignCount} lượt cùng user/campaign` : '',
+            emailCount > 1 ? `${emailCount} tài khoản/lượt cùng cụm email` : '',
+            ipCount > 1 ? `${ipCount} tài khoản/lượt cùng IP/network` : '',
+            browserCount > 1 ? `${browserCount} tài khoản/lượt cùng browser key` : '',
             ...riskFlags.map((flag: string) => `Risk flag: ${flag}`),
         ].filter(Boolean);
         const severity = Number(row.risk_score || 0)

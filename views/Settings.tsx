@@ -1,9 +1,9 @@
-
 import React, { useState, useEffect } from 'react';
 import { Language, ViewId, UserProfile } from '../types';
 import { Icons } from '../components/Icons';
 import { redeemGiftcode, getUserProfile, updateMyProfile, getGiftcodePromoConfig } from '../services/economyService';
 import { useNotification } from '../components/NotificationSystem';
+import { updatePasswordWithVerification } from '../services/supabaseClient';
 
 interface SettingsProps {
   lang: Language;
@@ -16,19 +16,18 @@ export const Settings: React.FC<SettingsProps> = ({ lang, onLogout, onNavigate, 
   const { notify } = useNotification();
   const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'giftcode'>('profile');
   
-  // Initialize with empty/loading state rather than hardcoded demo data
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
 
-  // Editable Form State
   const [formName, setFormName] = useState('');
   const [formAvatar, setFormAvatar] = useState('');
-
   const [giftcode, setGiftcode] = useState('');
-  
-  // Announcement State
   const [promoConfig, setPromoConfig] = useState({ text: '', isActive: false });
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
 
   useEffect(() => {
       const loadUser = async () => {
@@ -66,10 +65,7 @@ export const Settings: React.FC<SettingsProps> = ({ lang, onLogout, onNavigate, 
       };
 
       try {
-          // Reuse the generic update function from service
           await updateMyProfile(updatedProfile);
-          
-          // Update local state
           setUserProfile(updatedProfile);
           notify(lang === 'vi' ? 'Đã cập nhật thông tin thành công!' : 'Profile updated successfully!', 'success');
       } catch (e) {
@@ -83,8 +79,6 @@ export const Settings: React.FC<SettingsProps> = ({ lang, onLogout, onNavigate, 
       if (result.success) {
           notify(`Thành công! Bạn nhận được ${result.reward} Vcoin.`, 'success');
           setGiftcode('');
-          
-          // Refresh user profile to show new balance
           const updated = await getUserProfile();
           setUserProfile(updated);
       } else {
@@ -92,21 +86,50 @@ export const Settings: React.FC<SettingsProps> = ({ lang, onLogout, onNavigate, 
       }
   };
 
+  const handleUpdatePassword = async () => {
+      if (!currentPassword || !newPassword || !confirmNewPassword) {
+          notify(lang === 'vi' ? 'Vui lòng nhập đầy đủ thông tin mật khẩu.' : 'Please complete all password fields.', 'warning');
+          return;
+      }
+      if (newPassword.length < 6) {
+          notify(lang === 'vi' ? 'Mật khẩu mới phải có ít nhất 6 ký tự.' : 'The new password must contain at least 6 characters.', 'warning');
+          return;
+      }
+      if (newPassword !== confirmNewPassword) {
+          notify(lang === 'vi' ? 'Xác nhận mật khẩu mới không khớp.' : 'New password confirmation does not match.', 'warning');
+          return;
+      }
+
+      setIsUpdatingPassword(true);
+      try {
+          const { error } = await updatePasswordWithVerification(userProfile?.email || '', currentPassword, newPassword);
+          if (error) throw error;
+          setCurrentPassword('');
+          setNewPassword('');
+          setConfirmNewPassword('');
+          notify(lang === 'vi' ? 'Đã cập nhật mật khẩu thành công.' : 'Password updated successfully.', 'success');
+      } catch (error: any) {
+          notify(error?.message || (lang === 'vi' ? 'Không thể cập nhật mật khẩu.' : 'Could not update password.'), 'error');
+      } finally {
+          setIsUpdatingPassword(false);
+      }
+  };
+
   if (isLoading) {
-      return <div className="flex items-center justify-center h-64"><Icons.Loader className="animate-spin text-white w-8 h-8"/></div>;
+      return <div className="flex items-center justify-center h-64"><Icons.Loader className="animate-spin text-[#FF0099] w-8 h-8"/></div>;
   }
 
   if (!userProfile) {
       return (
-        <div className="max-w-2xl mx-auto glass-panel p-6 rounded-3xl text-center space-y-4">
-            <Icons.AlertTriangle className="w-10 h-10 text-red-400 mx-auto" />
+        <div className="max-w-2xl mx-auto neu-card p-8 rounded-3xl text-center space-y-4">
+            <Icons.AlertTriangle className="w-10 h-10 text-red-500 mx-auto" />
             <div>
-                <h2 className="text-xl font-bold text-white">{lang === 'vi' ? 'Không thể tải tài khoản' : 'Could not load account'}</h2>
-                <p className="text-sm text-slate-400 mt-2">{loadError || (lang === 'vi' ? 'Vui lòng đăng xuất rồi đăng nhập lại.' : 'Please sign out and sign in again.')}</p>
+                <h2 className="text-xl font-bold text-slate-800 dark:text-white font-accent">{lang === 'vi' ? 'Không thể tải tài khoản' : 'Could not load account'}</h2>
+                <p className="text-xs text-slate-400 mt-2">{loadError || (lang === 'vi' ? 'Vui lòng đăng xuất rồi đăng nhập lại.' : 'Please sign out and sign in again.')}</p>
             </div>
             <button
                 onClick={onLogout}
-                className="px-5 py-2.5 bg-red-500/10 hover:bg-red-500 border border-red-500/50 text-red-400 hover:text-white rounded-xl transition-all font-bold text-sm"
+                className="neu-button px-5 py-2.5 rounded-2xl text-red-500 font-bold text-xs"
             >
                 {lang === 'vi' ? 'Đăng xuất' : 'Logout'}
             </button>
@@ -115,35 +138,35 @@ export const Settings: React.FC<SettingsProps> = ({ lang, onLogout, onNavigate, 
   }
 
   return (
-    <div className="max-w-4xl mx-auto pb-24 animate-fade-in">
+    <div className="max-w-4xl mx-auto pb-24 animate-fade-in space-y-8">
         
-        {/* Header */}
-        <div data-tour-id="desktop.settings.profile_header" className="flex items-center gap-4 mb-8">
-            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-audi-pink to-audi-purple p-1 shadow-[0_0_20px_rgba(255,0,153,0.3)]">
-                <img src={userProfile.avatar} alt="Avatar" className="w-full h-full rounded-full object-cover border-2 border-black" onError={(e) => (e.currentTarget.src = 'https://picsum.photos/100/100')} />
+        {/* Header Profile Bar */}
+        <div data-tour-id="desktop.settings.profile_header" className="neu-card p-6 rounded-3xl flex flex-col sm:flex-row items-center gap-5">
+            <div className="w-20 h-20 rounded-full neu-raised-md p-1 shrink-0 overflow-hidden">
+                <img src={userProfile.avatar} alt="Avatar" className="w-full h-full rounded-full object-cover" onError={(e) => (e.currentTarget.src = 'https://picsum.photos/100/100')} />
             </div>
-            <div>
-                <h1 className="text-2xl font-bold text-white font-game">{userProfile.username}</h1>
-                <p className="text-slate-400 text-sm">{userProfile.email}</p>
-                <div className="flex items-center gap-2 mt-1">
-                     {userProfile.isVip && <span className="px-2 py-0.5 rounded bg-audi-yellow/20 text-audi-yellow text-[10px] font-bold border border-audi-yellow/50">VIP MEMBER</span>}
-                     <span className="px-2 py-0.5 rounded bg-green-500/20 text-green-500 text-[10px] font-bold border border-green-500/50">ONLINE</span>
-                     {isAdmin && <span className="px-2 py-0.5 rounded bg-red-500/20 text-red-500 text-[10px] font-bold border border-red-500/50">ADMIN</span>}
+            <div className="text-center sm:text-left space-y-1">
+                <h1 className="text-2xl font-bold text-slate-800 dark:text-white font-accent">{userProfile.username}</h1>
+                <p className="text-slate-400 text-xs font-mono">{userProfile.email}</p>
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
+                     {userProfile.isVip && <span className="neu-inset-sm px-2.5 py-0.5 rounded-full text-[10px] font-bold text-amber-500">VIP MEMBER</span>}
+                     <span className="neu-inset-sm px-2.5 py-0.5 rounded-full text-[10px] font-bold text-emerald-500">ONLINE</span>
+                     {isAdmin && <span className="neu-inset-sm px-2.5 py-0.5 rounded-full text-[10px] font-bold text-red-500">ADMIN</span>}
                 </div>
             </div>
             <button 
                 data-tour-id="desktop.settings.logout"
                 onClick={onLogout}
-                className="ml-auto px-4 py-2 bg-red-500/10 hover:bg-red-500 border border-red-500/50 text-red-500 hover:text-white rounded-xl transition-all font-bold text-sm flex items-center gap-2"
+                className="sm:ml-auto neu-button px-4 py-2.5 rounded-2xl text-xs font-bold text-red-500 flex items-center gap-2"
             >
-                <Icons.Rocket className="w-4 h-4 rotate-180" />
+                <Icons.Rocket className="w-4 h-4" />
                 {lang === 'vi' ? 'Đăng xuất' : 'Logout'}
             </button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             {/* Sidebar Tabs */}
-            <div data-tour-id="desktop.settings.tabs" className="md:col-span-1 space-y-2">
+            <div data-tour-id="desktop.settings.tabs" className="md:col-span-1 space-y-3">
                 {[
                     { id: 'profile', icon: Icons.User, label: { vi: 'Hồ sơ', en: 'Profile' } },
                     { id: 'security', icon: Icons.Shield, label: { vi: 'Bảo mật', en: 'Security' } },
@@ -152,66 +175,67 @@ export const Settings: React.FC<SettingsProps> = ({ lang, onLogout, onNavigate, 
                     <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id as any)}
-                        className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all font-bold text-sm ${activeTab === tab.id ? 'bg-white/10 text-white border-l-4 border-audi-cyan' : 'text-slate-500 hover:bg-white/5 hover:text-slate-300'}`}
+                        className={`w-full flex items-center gap-3 p-3.5 rounded-2xl transition-all font-bold text-xs ${
+                          activeTab === tab.id ? 'neu-inset-sm text-[#FF0099]' : 'neu-button text-slate-500 hover:text-slate-800 dark:hover:text-white'
+                        }`}
                     >
-                        <tab.icon className={`w-5 h-5 ${activeTab === tab.id ? 'text-audi-cyan' : ''}`} />
+                        <tab.icon className={`w-4 h-4 ${activeTab === tab.id ? 'text-[#FF0099]' : ''}`} />
                         {tab.label[lang as 'vi' | 'en']}
                     </button>
                 ))}
 
-                {/* Admin Access Button (Only visible if Admin) */}
                 {isAdmin && (
                     <button
                         onClick={() => onNavigate('admin')}
-                        className="w-full flex items-center gap-3 p-3 rounded-xl transition-all font-bold text-sm mt-4 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white border border-red-500/30"
+                        className="w-full flex items-center gap-3 p-3.5 rounded-2xl transition-all font-bold text-xs mt-4 neu-button text-red-500"
                     >
-                        <Icons.Shield className="w-5 h-5" />
+                        <Icons.Shield className="w-4 h-4" />
                         {lang === 'vi' ? 'Trang Quản Trị' : 'Admin Dashboard'}
                     </button>
                 )}
             </div>
 
             {/* Content Area */}
-            <div data-tour-id="desktop.settings.content" className="md:col-span-3 glass-panel p-6 md:p-8 rounded-3xl min-h-[400px]">
+            <div data-tour-id="desktop.settings.content" className="md:col-span-3 neu-card p-6 sm:p-8 rounded-3xl min-h-[380px]">
                 
                 {/* PROFILE SETTINGS */}
                 {activeTab === 'profile' && (
-                    <div data-tour-id="desktop.settings.profile_form" className="space-y-6 animate-fade-in">
-                        <h2 className="text-xl font-bold text-white mb-4 border-b border-white/10 pb-2">
+                    <div data-tour-id="desktop.settings.profile_form" className="space-y-5 animate-fade-in">
+                        <h2 className="text-lg font-bold text-slate-800 dark:text-white pb-2 border-b border-slate-200 dark:border-slate-800 font-accent">
                             {lang === 'vi' ? 'Thông tin cá nhân' : 'Personal Information'}
                         </h2>
                         
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-xs font-bold text-slate-400 uppercase mb-2">{lang === 'vi' ? 'Tên hiển thị' : 'Display Name'}</label>
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">{lang === 'vi' ? 'Tên hiển thị' : 'Display Name'}</label>
                                 <input 
                                     type="text" 
                                     value={formName}
                                     onChange={(e) => setFormName(e.target.value)}
-                                    className="w-full bg-black/30 border border-white/10 rounded-xl p-3 text-white focus:border-audi-pink outline-none" 
+                                    className="neu-input w-full h-12 rounded-2xl px-4 text-xs font-bold" 
                                 />
                             </div>
                             
                             <div>
-                                <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Email</label>
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Email</label>
                                 <input 
                                     type="email" 
                                     value={userProfile.email}
                                     disabled
-                                    className="w-full bg-black/10 border border-white/5 rounded-xl p-3 text-slate-500 cursor-not-allowed" 
+                                    className="neu-inset-sm w-full h-12 rounded-2xl px-4 text-xs font-mono text-slate-400 opacity-60 cursor-not-allowed" 
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Avatar URL</label>
-                                <div className="flex gap-2">
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Avatar URL</label>
+                                <div className="flex gap-3">
                                     <input 
                                         type="text" 
                                         value={formAvatar}
                                         onChange={(e) => setFormAvatar(e.target.value)}
-                                        className="flex-1 bg-black/30 border border-white/10 rounded-xl p-3 text-white focus:border-audi-pink outline-none text-sm font-mono" 
+                                        className="neu-input flex-1 h-12 rounded-2xl px-4 text-xs font-mono" 
                                     />
-                                    <div className="w-12 h-12 rounded-xl bg-black/30 border border-white/10 overflow-hidden shrink-0">
+                                    <div className="w-12 h-12 rounded-2xl neu-inset-sm overflow-hidden shrink-0">
                                         <img src={formAvatar} alt="" className="w-full h-full object-cover" onError={(e) => (e.currentTarget.src = 'https://picsum.photos/100/100')} />
                                     </div>
                                 </div>
@@ -219,7 +243,7 @@ export const Settings: React.FC<SettingsProps> = ({ lang, onLogout, onNavigate, 
 
                             <button 
                                 onClick={handleSaveProfile}
-                                className="px-6 py-3 bg-audi-pink hover:bg-pink-600 text-white font-bold rounded-xl shadow-[0_0_15px_rgba(255,0,153,0.4)] transition-all"
+                                className="neu-button-primary px-6 py-3 rounded-2xl font-bold text-xs shadow-lg uppercase tracking-wider"
                             >
                                 {lang === 'vi' ? 'Lưu thay đổi' : 'Save Changes'}
                             </button>
@@ -229,27 +253,53 @@ export const Settings: React.FC<SettingsProps> = ({ lang, onLogout, onNavigate, 
 
                 {/* SECURITY SETTINGS */}
                 {activeTab === 'security' && (
-                    <div data-tour-id="desktop.settings.security" className="space-y-6 animate-fade-in">
-                        <h2 className="text-xl font-bold text-white mb-4 border-b border-white/10 pb-2">
+                    <div data-tour-id="desktop.settings.security" className="space-y-5 animate-fade-in">
+                        <h2 className="text-lg font-bold text-slate-800 dark:text-white pb-2 border-b border-slate-200 dark:border-slate-800 font-accent">
                             {lang === 'vi' ? 'Đổi mật khẩu' : 'Change Password'}
                         </h2>
                         
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-xs font-bold text-slate-400 uppercase mb-2">{lang === 'vi' ? 'Mật khẩu hiện tại' : 'Current Password'}</label>
-                                <input type="password" className="w-full bg-black/30 border border-white/10 rounded-xl p-3 text-white focus:border-audi-purple outline-none" />
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">{lang === 'vi' ? 'Mật khẩu hiện tại' : 'Current Password'}</label>
+                                <input
+                                  type="password"
+                                  autoComplete="current-password"
+                                  value={currentPassword}
+                                  onChange={(event) => setCurrentPassword(event.target.value)}
+                                  className="neu-input w-full h-12 rounded-2xl px-4 text-xs"
+                                />
                             </div>
                             <div>
-                                <label className="block text-xs font-bold text-slate-400 uppercase mb-2">{lang === 'vi' ? 'Mật khẩu mới' : 'New Password'}</label>
-                                <input type="password" className="w-full bg-black/30 border border-white/10 rounded-xl p-3 text-white focus:border-audi-purple outline-none" />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-400 uppercase mb-2">{lang === 'vi' ? 'Xác nhận mật khẩu mới' : 'Confirm New Password'}</label>
-                                <input type="password" className="w-full bg-black/30 border border-white/10 rounded-xl p-3 text-white focus:border-audi-purple outline-none" />
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">{lang === 'vi' ? 'Mật khẩu mới' : 'New Password'}</label>
+                                <input
+                                  type="password"
+                                  autoComplete="new-password"
+                                  value={newPassword}
+                                  onChange={(event) => setNewPassword(event.target.value)}
+                                  className="neu-input w-full h-12 rounded-2xl px-4 text-xs"
+                                />
                             </div>
 
-                            <button className="px-6 py-3 bg-audi-purple hover:bg-purple-700 text-white font-bold rounded-xl shadow-[0_0_15px_rgba(183,33,255,0.4)] transition-all">
-                                {lang === 'vi' ? 'Cập nhật mật khẩu' : 'Update Password'}
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">{lang === 'vi' ? 'Xác nhận mật khẩu mới' : 'Confirm New Password'}</label>
+                                <input
+                                  type="password"
+                                  autoComplete="new-password"
+                                  value={confirmNewPassword}
+                                  onChange={(event) => setConfirmNewPassword(event.target.value)}
+                                  className="neu-input w-full h-12 rounded-2xl px-4 text-xs"
+                                />
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={handleUpdatePassword}
+                              disabled={isUpdatingPassword}
+                              className="neu-button-primary px-6 py-3 rounded-2xl font-bold text-xs shadow-lg uppercase tracking-wider disabled:opacity-50"
+                            >
+                                {isUpdatingPassword
+                                  ? (lang === 'vi' ? 'Đang cập nhật...' : 'Updating...')
+                                  : (lang === 'vi' ? 'Cập nhật mật khẩu' : 'Update Password')}
                             </button>
                         </div>
                     </div>
@@ -257,54 +307,44 @@ export const Settings: React.FC<SettingsProps> = ({ lang, onLogout, onNavigate, 
 
                 {/* GIFTCODE SETTINGS */}
                 {activeTab === 'giftcode' && (
-                    <div data-tour-id="desktop.settings.giftcode" className="space-y-6 animate-fade-in">
-                        <h2 className="text-xl font-bold text-white mb-4 border-b border-white/10 pb-2">
-                            {lang === 'vi' ? 'Nhập Giftcode' : 'Redeem Giftcode'}
+                    <div data-tour-id="desktop.settings.giftcode" className="space-y-5 animate-fade-in">
+                        <h2 className="text-lg font-bold text-slate-800 dark:text-white pb-2 border-b border-slate-200 dark:border-slate-800 font-accent">
+                            {lang === 'vi' ? 'Nhập Giftcode Thưởng' : 'Redeem Giftcode'}
                         </h2>
-                        
-                        {/* PROMOTIONAL ANNOUNCEMENT BANNER - FIXED & ENHANCED */}
+
                         {promoConfig.isActive && promoConfig.text && (
-                            <div className="w-full p-4 mb-4 rounded-xl bg-gradient-to-r from-[#9d00ff] to-[#ff0099] flex items-center justify-center gap-3 animate-pulse shadow-[0_0_25px_rgba(255,0,153,0.5)] border border-white/20">
-                                <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center shrink-0 backdrop-blur-md">
-                                    <Icons.Gem className="w-5 h-5 text-white" />
-                                </div>
-                                <span className="font-bold text-white text-sm md:text-base text-center leading-tight drop-shadow-md">
-                                    {promoConfig.text}
-                                </span>
+                            <div className="neu-raised-sm rounded-2xl px-4 py-3 flex items-center gap-3 text-sm font-black text-[#FF007F]">
+                                <Icons.Gem className="w-5 h-5 text-amber-500 shrink-0" />
+                                <span>{promoConfig.text}</span>
                             </div>
                         )}
 
-                        <div className="bg-gradient-to-br from-[#1a0b2e] to-[#240046] p-6 rounded-2xl border border-white/10 text-center space-y-4 relative overflow-hidden group shadow-lg">
-                            {/* Decorative Background Elements */}
-                            <div className="absolute top-0 right-0 w-40 h-40 bg-audi-purple/20 rounded-full blur-[60px] group-hover:bg-audi-purple/30 transition-all duration-1000"></div>
-                            <div className="absolute bottom-0 left-0 w-40 h-40 bg-audi-pink/20 rounded-full blur-[60px] group-hover:bg-audi-pink/30 transition-all duration-1000"></div>
-
-                            <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto text-audi-yellow animate-bounce relative z-10 border border-white/10 backdrop-blur-sm shadow-[0_0_15px_rgba(251,218,97,0.3)]">
-                                <Icons.Gem className="w-8 h-8 drop-shadow-[0_0_5px_rgba(251,218,97,0.8)]" />
+                        <div className="neu-inset-md p-6 rounded-3xl text-center space-y-4">
+                            <div className="w-14 h-14 neu-raised-sm rounded-full flex items-center justify-center mx-auto text-amber-500">
+                                <Icons.Gem className="w-7 h-7" />
                             </div>
-                            
-                            <div className="relative z-10">
-                                <h3 className="font-bold text-lg text-white">
-                                    {lang === 'vi' ? 'Nhận Vcoin & Quà tặng' : 'Get Vcoin & Gifts'}
+                            <div>
+                                <h3 className="font-bold text-sm text-slate-800 dark:text-white font-accent">
+                                    {lang === 'vi' ? 'Đổi mã quà tặng Vcoin' : 'Redeem Giftcode'}
                                 </h3>
-                                <p className="text-sm text-slate-400 mt-1">
-                                    {lang === 'vi' ? 'Nhập mã quà tặng từ các sự kiện để nhận thưởng ngay.' : 'Enter gift codes from events to get rewards instantly.'}
+                                <p className="text-xs text-slate-400 mt-1">
+                                    {lang === 'vi' ? 'Nhập mã giftcode từ sự kiện để nhận Vcoin miễn phí ngay lập tức!' : 'Enter event giftcode to get instant bonus Vcoin!'}
                                 </p>
                             </div>
-                            
-                            <div className="flex gap-2 max-w-sm mx-auto relative z-10 pt-2">
+
+                            <div className="flex gap-2 max-w-sm mx-auto pt-2">
                                 <input 
                                     type="text" 
                                     value={giftcode}
                                     onChange={(e) => setGiftcode(e.target.value.toUpperCase())}
-                                    placeholder="CODE..."
-                                    className="flex-1 bg-black/60 border border-audi-yellow/30 rounded-xl p-3 text-white font-game text-center uppercase tracking-widest focus:border-audi-yellow outline-none placeholder:text-slate-600 focus:shadow-[0_0_15px_rgba(251,218,97,0.2)] transition-all h-12" 
+                                    placeholder="GIFTCODE..."
+                                    className="neu-input flex-1 h-12 rounded-2xl px-4 font-mono text-center uppercase tracking-widest text-xs font-bold" 
                                 />
                                 <button 
                                     onClick={handleRedeemCode}
-                                    className="w-12 h-12 bg-audi-yellow text-black font-bold rounded-xl hover:bg-yellow-300 transition-all shadow-[0_0_15px_rgba(251,218,97,0.4)] hover:scale-105 active:scale-95 flex items-center justify-center"
+                                    className="neu-button-accent px-5 h-12 rounded-2xl text-xs font-bold flex items-center justify-center"
                                 >
-                                    <Icons.Zap className="w-6 h-6" />
+                                    <Icons.Zap className="w-4 h-4" />
                                 </button>
                             </div>
                         </div>

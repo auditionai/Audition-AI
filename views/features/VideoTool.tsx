@@ -107,6 +107,33 @@ const getVideoModelHint = (model: AIModelOption) => {
     return 'Cân bằng chất lượng, tốc độ và chi phí.';
 };
 
+const getVideoModelTags = (model: AIModelOption) => {
+    const text = `${model.id} ${model.name}`.toLowerCase();
+    if (text.includes('grok')) return ['#GIÁ_RẺ', '#TEST_NHANH'];
+    if (text.includes('kling')) return ['#BEST_MOTION', '#CINEMATIC'];
+    if (text.includes('fast')) return ['#TỐC_ĐỘ', '#SEEDANCE'];
+    return ['#HOT', '#CHẤT_LƯỢNG'];
+};
+
+const getVideoFamilyIcon = (family: VideoModelFamily) => {
+    if (family === 'grok') return Icons.Zap;
+    if (family === 'kling') return Icons.Crown;
+    return Icons.Video;
+};
+
+const getVideoFamilyTheme = (family: VideoModelFamily, selected: boolean) => {
+    if (!selected) {
+        return 'neu-button border border-transparent hover:border-slate-300/60 dark:hover:border-white/10';
+    }
+    if (family === 'grok') {
+        return 'neu-inset-sm border border-emerald-400/60 ring-2 ring-emerald-400/20 bg-gradient-to-br from-emerald-400/15 to-cyan-400/5';
+    }
+    if (family === 'kling') {
+        return 'neu-inset-sm border border-amber-400/60 ring-2 ring-amber-400/20 bg-gradient-to-br from-amber-400/15 to-orange-500/5';
+    }
+    return 'neu-inset-sm border border-[#FF007F]/60 ring-2 ring-[#FF007F]/20 bg-gradient-to-br from-[#FF007F]/15 to-[#9D00FF]/5';
+};
+
 const SMART_TIPS = [
     { icon: Icons.Video, text: "🎥 MỚI: Hỗ trợ tạo video từ ảnh tĩnh với độ mượt mà cao." },
     { icon: Icons.Zap, text: "⚡ Tip: Mô hình Kling cho chuyển động chân thực và tự nhiên nhất." },
@@ -121,14 +148,16 @@ const OptionDropdown = ({ label, value, options, onChange, icon: Icon }: any) =>
     const [isOpen, setIsOpen] = useState(false);
     return (
         <div className={`space-y-2 relative ${isOpen ? 'z-50' : 'z-10'}`}>
-            <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
-                {Icon && <Icon className="w-3 h-3" />}
+            <label className="text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                {Icon && <Icon className="w-3.5 h-3.5 text-[#00A8C8] dark:text-[#00F2FE]" />}
                 {label}
             </label>
             <button
                 type="button"
                 onClick={() => setIsOpen(!isOpen)}
-                className="w-full flex items-center justify-between neu-button rounded-xl px-3 py-2.5 text-xs font-bold text-slate-800 dark:text-white transition-colors"
+                className={`w-full min-h-[42px] flex items-center justify-between rounded-2xl px-3.5 py-2.5 text-xs font-black text-slate-800 dark:text-white transition-all ${
+                  isOpen ? 'neu-inset-sm ring-2 ring-[#00F2FE]/30' : 'neu-button hover:-translate-y-0.5'
+                }`}
                 aria-expanded={isOpen}
             >
                 <div className="flex items-center gap-2">
@@ -139,13 +168,15 @@ const OptionDropdown = ({ label, value, options, onChange, icon: Icon }: any) =>
             {isOpen && (
                 <>
                     <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)}></div>
-                    <div className="absolute top-full left-0 right-0 mt-1 neu-card border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl z-50 overflow-hidden">
+                    <div className="absolute top-full left-0 right-0 mt-2 neu-card border border-slate-200/80 dark:border-slate-700 rounded-2xl shadow-2xl z-50 overflow-hidden p-1.5">
                         {options.map((opt: any) => (
                             <button
                                 type="button"
                                 key={opt.value}
                                 onClick={() => { onChange(opt.value); setIsOpen(false); }}
-                                className={`w-full text-left px-3 py-2.5 text-xs font-bold transition-colors hover:bg-slate-200/50 dark:hover:bg-white/5 ${value === opt.value ? 'text-[#FF007F] bg-[#FF007F]/10' : 'text-slate-700 dark:text-slate-300'}`}
+                                className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold transition-colors hover:bg-slate-200/50 dark:hover:bg-white/5 ${
+                                  value === opt.value ? 'text-[#FF007F] bg-[#FF007F]/10' : 'text-slate-700 dark:text-slate-300'
+                                }`}
                             >
                                 {opt.label}
                             </button>
@@ -185,7 +216,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
   const [prompt, setPrompt] = useState('');
   const [keyframeImage, setKeyframeImage] = useState<string | null>(null);
   const [videoModel, setVideoModel] = useState('');
-  const [aspectRatio, setAspectRatio] = useState('16:9');
+  const [aspectRatio, setAspectRatio] = useState('9:16');
   const [duration, setDuration] = useState('5s');
   const [quality, setQuality] = useState('720P');
   const [sound, setSound] = useState(false);
@@ -1160,61 +1191,134 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
 
             <div className="space-y-5">
               {activeMode === 'video_ai' ? (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     {VIDEO_MODEL_FAMILY_ORDER.map((family) => {
                       const meta = VIDEO_MODEL_FAMILY_META[family];
                       const familyModels = getModelsByFamily(videoModelOptions, family);
+                      const FamilyIcon = getVideoFamilyIcon(family);
+                      const selected = videoModelFamily === family;
                       return (
                         <button
                           key={family}
                           type="button"
                           disabled={familyModels.length === 0}
                           onClick={() => selectVideoFamily(family)}
-                          className={`p-3 rounded-2xl text-left transition-all ${
-                            videoModelFamily === family ? `neu-raised-sm ring-2 ring-[#00F2FE]/40 bg-gradient-to-br ${meta.accent}` : 'neu-button'
-                          } ${familyModels.length === 0 ? 'opacity-35 cursor-not-allowed' : ''}`}
+                          aria-pressed={selected}
+                          className={`group min-h-[94px] p-3.5 rounded-2xl text-left transition-all duration-200 ${getVideoFamilyTheme(family, selected)} ${
+                            familyModels.length === 0 ? 'opacity-35 cursor-not-allowed' : 'hover:-translate-y-0.5'
+                          }`}
                         >
-                          <span className="block text-xs font-black text-slate-900 dark:text-white">{meta.label} · {meta.tag}</span>
-                          <span className="block mt-1 text-[9px] font-bold text-amber-600 dark:text-amber-400">{getFamilyPriceLabel(familyModels)}</span>
+                          <span className="flex items-start justify-between gap-2">
+                            <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+                              family === 'grok'
+                                ? 'bg-gradient-to-br from-emerald-400 to-cyan-500 text-slate-950'
+                                : family === 'kling'
+                                  ? 'bg-gradient-to-br from-amber-300 to-orange-500 text-slate-950'
+                                  : 'bg-gradient-to-br from-[#FF007F] to-[#9D00FF] text-white'
+                            }`}>
+                              <FamilyIcon className="w-4 h-4" />
+                            </span>
+                            <span className={`px-2 py-1 rounded-full text-[9px] font-black tracking-wide ${
+                              family === 'grok'
+                                ? 'bg-emerald-400/15 text-emerald-500 dark:text-emerald-300'
+                                : family === 'kling'
+                                  ? 'bg-amber-400/15 text-amber-600 dark:text-amber-300'
+                                  : 'bg-[#FF007F]/15 text-[#FF007F]'
+                            }`}>
+                              #{meta.tag.replace(/\s+/g, '_')}
+                            </span>
+                          </span>
+                          <span className="block mt-2 text-sm font-black font-accent text-slate-900 dark:text-white">{meta.label}</span>
+                          <span className="block mt-0.5 text-[10px] font-bold text-slate-600 dark:text-slate-300">{getFamilyPriceLabel(familyModels)}</span>
                         </button>
                       );
                     })}
                   </div>
-                  <p className="neu-inset-sm rounded-xl px-3 py-2 text-[10px] text-slate-600 dark:text-slate-300">
-                    {VIDEO_MODEL_FAMILY_META[videoModelFamily].description}
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+
+                  <div className="neu-inset-sm rounded-2xl px-4 py-3 flex items-start gap-2.5">
+                    <Icons.Sparkles className="w-4 h-4 mt-0.5 shrink-0 text-[#00A8C8] dark:text-[#00F2FE]" />
+                    <p className="text-[10px] leading-relaxed font-semibold text-slate-600 dark:text-slate-300">
+                      {VIDEO_MODEL_FAMILY_META[videoModelFamily].description}
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
                     {getModelsByFamily(videoModelOptions, videoModelFamily).map((model) => (
                       <button
                         key={model.id}
                         type="button"
                         onClick={() => selectVideoModel(model.id)}
-                        className={`p-3 rounded-2xl text-left transition-all ${videoModel === model.id ? 'neu-inset-sm ring-2 ring-[#FF007F]' : 'neu-button'}`}
+                        aria-pressed={videoModel === model.id}
+                        className={`w-full p-3.5 rounded-2xl text-left transition-all flex items-center gap-3 ${
+                          videoModel === model.id
+                            ? 'neu-inset-sm ring-2 ring-[#FF007F] bg-gradient-to-r from-[#FF007F]/10 via-transparent to-[#00F2FE]/5'
+                            : 'neu-button hover:-translate-y-0.5'
+                        }`}
                       >
-                        <span className="text-xs font-black text-slate-900 dark:text-white block">{model.name}</span>
-                        <span className="text-[9px] text-slate-600 dark:text-slate-400">{getVideoModelHint(model)}</span>
+                        <span className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                          videoModel === model.id
+                            ? 'bg-gradient-to-br from-[#FF007F] to-[#9D00FF] text-white shadow-lg shadow-[#FF007F]/20'
+                            : 'neu-inset-sm text-slate-500 dark:text-slate-300'
+                        }`}>
+                          <Icons.Video className="w-5 h-5" />
+                        </span>
+                        <span className="flex-1 min-w-0">
+                          <span className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-xs font-black font-accent text-slate-900 dark:text-white">{model.name}</span>
+                            <span className="px-2.5 py-1 rounded-full bg-amber-400/15 text-[9px] font-black text-amber-600 dark:text-amber-300">
+                              TỪ {model.price} VCOIN
+                            </span>
+                          </span>
+                          <span className="block mt-1 text-[10px] font-semibold text-slate-600 dark:text-slate-400">{getVideoModelHint(model)}</span>
+                          <span className="flex flex-wrap gap-1.5 mt-2">
+                            {getVideoModelTags(model).map((tag) => (
+                              <span key={tag} className="px-2 py-0.5 rounded-md border border-[#00A8C8]/20 bg-[#00F2FE]/5 text-[8px] font-black text-[#0089A3] dark:text-[#00F2FE]">
+                                {tag}
+                              </span>
+                            ))}
+                          </span>
+                        </span>
+                        <span className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center ${
+                          videoModel === model.id ? 'border-[#FF007F]' : 'border-slate-400/50'
+                        }`}>
+                          {videoModel === model.id && <span className="w-2 h-2 rounded-full bg-[#FF007F]" />}
+                        </span>
                       </button>
                     ))}
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {motionModelOptions.map((model) => (
                     <button
                       key={model.id}
                       type="button"
                       onClick={() => setMotionModel(model.id)}
-                      className={`p-3 rounded-2xl text-left transition-all ${motionModel === model.id ? 'neu-inset-sm ring-2 ring-[#00F2FE]' : 'neu-button'}`}
+                      aria-pressed={motionModel === model.id}
+                      className={`p-3.5 rounded-2xl text-left transition-all flex items-center gap-3 ${
+                        motionModel === model.id
+                          ? 'neu-inset-sm ring-2 ring-[#00F2FE] bg-gradient-to-r from-[#00F2FE]/10 to-transparent'
+                          : 'neu-button hover:-translate-y-0.5'
+                      }`}
                     >
-                      <span className="text-xs font-black text-slate-900 dark:text-white block">{model.name}</span>
-                      <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400">Từ {model.price} VC</span>
+                      <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#00F2FE] to-blue-600 text-white flex items-center justify-center shrink-0">
+                        <Icons.Activity className="w-5 h-5" />
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="text-xs font-black font-accent text-slate-900 dark:text-white block">{model.name}</span>
+                        <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400">Từ {model.price} Vcoin</span>
+                        <span className="flex flex-wrap gap-1.5 mt-1.5">
+                          <span className="px-2 py-0.5 rounded-md bg-[#00F2FE]/10 text-[8px] font-black text-[#0089A3] dark:text-[#00F2FE]">#MOTION_CONTROL</span>
+                          <span className="px-2 py-0.5 rounded-md bg-[#FF007F]/10 text-[8px] font-black text-[#FF007F]">#NHÂN_VẬT</span>
+                        </span>
+                      </span>
                     </button>
                   ))}
                 </div>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 pt-4 border-t border-slate-200/60 dark:border-slate-800">
                 {modelOptions.showAspectRatio && modelOptions.aspectRatios.length > 0 && (
                   <OptionDropdown label="Tỉ lệ khung hình" value={aspectRatio} options={modelOptions.aspectRatios.map((value) => ({ label: value, value }))} onChange={setAspectRatio} icon={Icons.Monitor} />
                 )}

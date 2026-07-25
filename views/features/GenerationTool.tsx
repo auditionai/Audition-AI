@@ -188,7 +188,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const [hasMoreSamples, setHasMoreSamples] = useState(true);
 
   // Default Resolution 1K
-  const [aspectRatio, setAspectRatio] = useState('3:4');
+  const [aspectRatio, setAspectRatio] = useState('9:16');
   const [resolution, setResolution] = useState<Resolution>('1K');
   const [speed, setSpeed] = useState('Nhanh');
   const [server, setServer] = useState('VIP 1');

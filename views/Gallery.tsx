@@ -825,7 +825,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="job-detail-title"
-                    className="neu-card relative z-10 flex h-[min(92dvh,920px)] w-[min(96vw,1320px)] flex-col overflow-hidden rounded-[2rem] border border-slate-300/70 shadow-2xl dark:border-slate-700/70"
+                    className="neu-card relative z-10 flex h-[min(83dvh,828px)] w-[min(94vw,1188px)] flex-col overflow-hidden rounded-[2rem] border border-slate-300/70 shadow-2xl dark:border-slate-700/70"
                 >
                     <header className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-300/60 px-5 py-4 dark:border-slate-700/70 sm:px-6">
                         <div className="flex min-w-0 items-center gap-3">
@@ -902,26 +902,6 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                 )}
                             </div>
 
-                            {viewingImage.url && (
-                                <div className="mt-4 grid shrink-0 grid-cols-2 gap-3">
-                                    <button
-                                        type="button"
-                                        onClick={() => window.open(viewingImage.url, '_blank')}
-                                        className="neu-button flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-xs font-black text-slate-800 dark:text-slate-100"
-                                    >
-                                        <Icons.ExternalLink className="h-4 w-4 text-[#00F2FE]" />
-                                        {lang === 'vi' ? 'Mở file gốc' : 'Open original'}
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => handleDownload(viewingImage.url, getDownloadFilename(viewingImage), getAssetKind(viewingImage))}
-                                        className="neu-button-primary flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-xs font-black"
-                                    >
-                                        <Icons.Download className="h-4 w-4" />
-                                        {lang === 'vi' ? 'Tải về thiết bị' : 'Download'}
-                                    </button>
-                                </div>
-                            )}
                         </div>
 
                         <div className="custom-scrollbar min-h-0 overflow-y-auto border-t border-slate-300/60 p-4 dark:border-slate-700/70 sm:p-6 lg:border-l lg:border-t-0">
@@ -1009,28 +989,38 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                     </details>
                                 )}
 
-                                <div className="grid grid-cols-1 gap-3 pt-1 sm:grid-cols-2">
+                                <div className="grid grid-cols-1 gap-3 pt-1 sm:grid-cols-3">
+                                    {viewingImage.url && (
+                                        <button
+                                            type="button"
+                                            onClick={() => handleDownload(viewingImage.url, getDownloadFilename(viewingImage), getAssetKind(viewingImage))}
+                                            className="neu-button-primary flex min-h-[68px] flex-col items-center justify-center gap-1.5 rounded-2xl px-2 py-3 text-[10px] font-black"
+                                        >
+                                            <Icons.Download className="h-4 w-4" />
+                                            {lang === 'vi' ? 'Tải xuống' : 'Download'}
+                                        </button>
+                                    )}
                                     {getAssetKind(viewingImage) === 'image' && viewingImage.status === 'completed' && (
                                         <button
                                             type="button"
                                             onClick={() => handlePublish(viewingImage)}
                                             disabled={!!viewingImage.isShared}
-                                            className={`neu-button flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-xs font-black ${
+                                            className={`neu-button flex min-h-[68px] flex-col items-center justify-center gap-1.5 rounded-2xl px-2 py-3 text-[10px] font-black ${
                                                 viewingImage.isShared ? 'cursor-default text-emerald-500' : 'text-[#FF007F]'
                                             }`}
                                         >
                                             <Icons.Share className="h-4 w-4" />
-                                            {viewingImage.isShared ? (lang === 'vi' ? 'Đã chia sẻ' : 'Published') : (lang === 'vi' ? 'Chia sẻ tác phẩm' : 'Share asset')}
+                                            {viewingImage.isShared ? (lang === 'vi' ? 'Đã chia sẻ' : 'Published') : (lang === 'vi' ? 'Chia sẻ' : 'Share')}
                                         </button>
                                     )}
                                     {(viewingImage.queueLogs?.length || 0) > 0 && (
                                         <button
                                             type="button"
                                             onClick={() => setShowLogViewer(true)}
-                                            className="neu-button flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-xs font-black text-slate-800 dark:text-slate-100"
+                                            className="neu-button flex min-h-[68px] flex-col items-center justify-center gap-1.5 rounded-2xl px-2 py-3 text-[10px] font-black text-slate-800 dark:text-slate-100"
                                         >
                                             <Icons.Activity className="h-4 w-4 text-[#00BFD8]" />
-                                            {lang === 'vi' ? 'Nhật ký tiến trình' : 'Progress log'}
+                                            {lang === 'vi' ? 'Nhật ký' : 'Progress log'}
                                         </button>
                                     )}
                                     <button
@@ -1040,7 +1030,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                             setShowLogViewer(false);
                                             handleDelete(e, viewingImage.id, viewingImage.url, viewingImage.userId);
                                         }}
-                                        className="neu-button flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-xs font-black text-red-500 sm:col-span-2"
+                                        className="neu-button flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-xs font-black text-red-500 sm:col-span-3"
                                     >
                                         <Icons.Trash className="h-4 w-4" />
                                         {lang === 'vi' ? 'Xóa khỏi lịch sử' : 'Delete from history'}

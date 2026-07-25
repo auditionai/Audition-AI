@@ -18,6 +18,7 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
   const [selectedPackage, setSelectedPackage] = useState<CreditPackage | null>(null);
   const [topupGiftcodes, setTopupGiftcodes] = useState<TopupGiftcodeOffer[]>([]);
   const [giftcodeInput, setGiftcodeInput] = useState('');
+  const [giftcodeSelectionMode, setGiftcodeSelectionMode] = useState<'auto' | 'manual'>('auto');
   const [loadingGiftcodes, setLoadingGiftcodes] = useState(false);
 
   // Timer for Flash Sale
@@ -66,6 +67,7 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
   const openCheckoutModal = async (pkg: CreditPackage) => {
       setSelectedPackage(pkg);
       setGiftcodeInput('');
+      setGiftcodeSelectionMode('auto');
       if (topupGiftcodes.length === 0) {
           const cachedRows = getCachedTopupGiftcodes();
           if (cachedRows.length > 0) {
@@ -148,6 +150,38 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
           .sort((a, b) => b.discountPercent - a.discountPercent);
   }, [topupGiftcodes]);
 
+  useEffect(() => {
+      if (!selectedPackage || giftcodeSelectionMode !== 'auto') return;
+      const bestOffer = availableTopupGiftcodes[0];
+      setGiftcodeInput(bestOffer?.code || '');
+  }, [selectedPackage, availableTopupGiftcodes, giftcodeSelectionMode]);
+
+  const getGiftcodeUsageText = (code: TopupGiftcodeOffer) => {
+      if (code.audience === 'new_user_first_topup') return 'Dành cho lần nạp đầu tiên';
+      const remainingPerUser = Number(code.remainingPerUser ?? code.maxPerUser ?? 1);
+      return `Bạn còn ${remainingPerUser.toLocaleString('vi-VN')} lượt dùng`;
+  };
+
+  const getGiftcodeAvailabilityText = (code: TopupGiftcodeOffer) => {
+      const remainingCount = Number(code.remainingCount || 0);
+      if (remainingCount <= 0 && Number(code.totalLimit || 0) <= 0) return 'Không giới hạn toàn hệ thống';
+      return `Còn ${remainingCount.toLocaleString('vi-VN')} lượt toàn hệ thống`;
+  };
+
+  const getGiftcodeExpiryText = (code: TopupGiftcodeOffer) => {
+      if (!code.expiresAt) return 'Không giới hạn thời gian';
+      const expiresAt = new Date(code.expiresAt);
+      if (Number.isNaN(expiresAt.getTime())) return 'Không giới hạn thời gian';
+      return `Hết hạn ${expiresAt.toLocaleDateString('vi-VN')}`;
+  };
+
+  const getGiftcodeDescription = (code: TopupGiftcodeOffer) => {
+      if (code.audience === 'new_user_first_topup') {
+          return `Giảm ${code.discountPercent}% cho tài khoản đủ điều kiện nạp lần đầu.`;
+      }
+      return `Giảm trực tiếp ${code.discountPercent}% trên tổng giá trị gói nạp.`;
+  };
+
   const handleBuyPackage = async (pkg: CreditPackage, code?: string) => {
       setLoading(true);
       updateLastActive();
@@ -167,111 +201,204 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
   };
 
   const checkoutModal = selectedPackage && checkoutPreview ? (
-    <div className="fixed inset-0 z-[3000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
-      <div className="w-full max-w-3xl neu-raised-xl rounded-3xl p-6 sm:p-8 animate-fade-in relative">
-        <div className="flex justify-between items-start mb-6">
-          <div>
-            <div className="neu-inset-sm px-3 py-1 rounded-full text-xs font-bold text-[#FF0099] inline-flex items-center gap-1.5 mb-2 font-accent">
-              <Icons.Gift className="w-4 h-4 text-[#FF0099]" />
-              Mã giảm giá & Khuyến mãi
+    <div
+      className="fixed inset-0 z-[3000] flex items-center justify-center bg-[#03040a]/80 p-3 backdrop-blur-xl sm:p-6"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="topup-checkout-title"
+    >
+      <div className="relative flex min-h-[540px] max-h-[90vh] w-full max-w-[922px] flex-col overflow-hidden rounded-[30px] border border-white/10 bg-[#11141f] shadow-[0_32px_100px_rgba(0,0,0,0.72),0_0_60px_rgba(255,0,127,0.1)] animate-fade-in">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-36 bg-[radial-gradient(circle_at_20%_0%,rgba(255,0,127,0.18),transparent_48%),radial-gradient(circle_at_75%_0%,rgba(0,242,254,0.12),transparent_42%)]" />
+
+        <header className="relative flex items-start justify-between gap-5 border-b border-white/8 px-5 py-5 sm:px-7">
+          <div className="min-w-0">
+            <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-cyan-300">
+              <Icons.Gift className="h-3.5 w-3.5" />
+              Giftcode ưu đãi
             </div>
-            <h3 className="text-xl font-bold text-slate-800 dark:text-white font-accent">{selectedPackage.name}</h3>
+            <h3 id="topup-checkout-title" className="font-accent text-2xl font-black text-white sm:text-[28px]">
+              {selectedPackage.name}
+            </h3>
+            <p className="mt-1 max-w-xl text-xs leading-relaxed text-slate-400 sm:text-sm">
+              Hệ thống tự động chọn mã giảm giá tốt nhất. Bạn vẫn có thể đổi sang mã khác trước khi quét QR.
+            </p>
           </div>
           <button
             onClick={() => setSelectedPackage(null)}
-            className="neu-button w-10 h-10 rounded-2xl flex items-center justify-center text-slate-500 hover:text-red-500"
+            aria-label="Đóng cửa sổ nạp tiền"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-400 shadow-lg transition hover:border-rose-400/40 hover:bg-rose-500/10 hover:text-rose-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
           >
-            <Icons.X className="w-5 h-5" />
+            <Icons.X className="h-5 w-5" />
           </button>
-        </div>
+        </header>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Giftcodes Selection */}
-          <div className="space-y-4">
-            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Nhập mã giảm giá</label>
-            <div className="flex gap-2">
-              <input
-                value={giftcodeInput}
-                onChange={(e) => setGiftcodeInput(e.target.value.toUpperCase())}
-                placeholder="AUAI-50-XXXXX"
-                className="neu-input flex-1 h-12 rounded-2xl px-4 font-mono text-sm font-bold uppercase tracking-wider"
-              />
-              <button
-                onClick={() => setGiftcodeInput('')}
-                className="neu-button px-4 rounded-2xl text-xs font-bold text-slate-500"
-              >
-                Xóa
-              </button>
+        <div className="relative grid min-h-0 flex-1 grid-cols-1 gap-5 overflow-y-auto p-5 sm:p-7 lg:grid-cols-[minmax(0,1.35fr)_minmax(310px,0.8fr)]">
+          <section className="flex flex-col gap-4 lg:min-h-0">
+            <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <label htmlFor="topup-giftcode-input" className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+                  Nhập hoặc chọn nhanh code
+                </label>
+                {giftcodeSelectionMode === 'auto' && selectedOffer && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-400/10 px-2.5 py-1 text-[10px] font-bold text-emerald-300">
+                    <Icons.Sparkles className="h-3 w-3" />
+                    Đã tự động áp mã tốt nhất
+                  </span>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  id="topup-giftcode-input"
+                  value={giftcodeInput}
+                  onChange={(e) => {
+                    setGiftcodeSelectionMode('manual');
+                    setGiftcodeInput(e.target.value.toUpperCase());
+                  }}
+                  placeholder="AUAI-20-XXXXXX"
+                  className="h-12 min-w-0 flex-1 rounded-2xl border border-white/10 bg-[#080a11] px-4 font-mono text-sm font-black uppercase tracking-wider text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-400/60 focus:ring-2 focus:ring-cyan-400/10"
+                />
+                <button
+                  onClick={() => {
+                    setGiftcodeSelectionMode('manual');
+                    setGiftcodeInput('');
+                  }}
+                  className="h-12 rounded-2xl border border-white/10 bg-white/5 px-4 text-xs font-bold text-slate-300 transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
+                >
+                  Xóa
+                </button>
+              </div>
             </div>
 
-            <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-              {loadingGiftcodes ? (
-                <div className="py-6 flex items-center justify-center gap-2 text-xs font-bold text-slate-500">
-                  <Icons.Loader className="w-4 h-4 animate-spin text-[#FF007F]" />
+            <div className="max-h-[360px] min-h-[245px] space-y-3 overflow-y-auto pr-1 [scrollbar-color:#ff0080_#0a0c13] [scrollbar-width:thin] lg:max-h-none lg:flex-1">
+              {loadingGiftcodes && availableTopupGiftcodes.length === 0 ? (
+                <div className="flex min-h-[220px] items-center justify-center gap-2 rounded-2xl border border-white/8 bg-black/20 text-sm font-bold text-slate-400">
+                  <Icons.Loader className="h-4 w-4 animate-spin text-cyan-300" />
                   Đang đồng bộ giftcode...
                 </div>
               ) : availableTopupGiftcodes.length === 0 ? (
-                <div className="py-6 text-center text-xs font-semibold text-slate-500">
-                  Hiện chưa có mã giảm giá phù hợp cho tài khoản.
+                <div className="flex min-h-[220px] flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-black/20 px-6 text-center">
+                  <Icons.Gift className="mb-3 h-8 w-8 text-slate-600" />
+                  <p className="text-sm font-bold text-slate-300">Chưa có mã giảm giá phù hợp</p>
+                  <p className="mt-1 text-xs leading-relaxed text-slate-500">Bạn vẫn có thể tiếp tục thanh toán theo giá niêm yết.</p>
                 </div>
-              ) : availableTopupGiftcodes.map((code) => {
-                const isSelected = giftcodeInput.toUpperCase() === code.code.toUpperCase();
+              ) : availableTopupGiftcodes.map((code, index) => {
+                const isSelected = giftcodeInput.trim().toUpperCase() === code.code.toUpperCase();
+                const isBestOffer = index === 0;
+                const savingAmount = Math.floor(selectedPackage.price * code.discountPercent / 100);
                 return (
                   <button
                     key={code.id}
-                    onClick={() => setGiftcodeInput(code.code)}
-                    className={`w-full p-3 rounded-2xl text-left transition-all flex items-center justify-between ${
-                      isSelected ? 'neu-inset-sm ring-2 ring-[#FF0099]' : 'neu-button'
+                    onClick={() => {
+                      setGiftcodeSelectionMode('manual');
+                      setGiftcodeInput(code.code);
+                    }}
+                    aria-pressed={isSelected}
+                    className={`group w-full rounded-2xl border p-4 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 ${
+                      isSelected
+                        ? 'border-cyan-300/70 bg-gradient-to-br from-cyan-400/12 to-fuchsia-500/10 shadow-[0_0_28px_rgba(0,242,254,0.1)]'
+                        : 'border-white/10 bg-white/[0.035] hover:border-white/20 hover:bg-white/[0.06]'
                     }`}
                   >
-                    <div>
-                      <div className="font-mono text-xs font-bold text-slate-800 dark:text-white">{code.code}</div>
-                      <div className="text-[10px] text-slate-400">Giảm {code.discountPercent}% cho hóa đơn</div>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="break-all font-mono text-sm font-black text-white">{code.code}</span>
+                          {isBestOffer && (
+                            <span className="rounded-full bg-fuchsia-500/15 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-fuchsia-300">
+                              Tốt nhất
+                            </span>
+                          )}
+                          {code.audience === 'new_user_first_topup' && (
+                            <span className="rounded-full bg-amber-400/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-amber-300">
+                              Nạp lần đầu
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-1.5 text-xs leading-relaxed text-slate-400">{getGiftcodeDescription(code)}</p>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-emerald-400/12 px-3 py-1 text-sm font-black text-emerald-300">
+                        -{code.discountPercent}%
+                      </span>
                     </div>
-                    <span className="neu-inset-sm px-2.5 py-1 rounded-full text-[10px] font-extrabold text-emerald-500">
-                      -{code.discountPercent}%
-                    </span>
+
+                    <div className="mt-3 flex flex-wrap items-center gap-2 text-[10px] font-bold">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-cyan-400/10 px-2.5 py-1 text-cyan-300">
+                        <Icons.Check className="h-3 w-3" />
+                        {getGiftcodeUsageText(code)}
+                      </span>
+                      <span className="rounded-full bg-white/5 px-2.5 py-1 text-slate-400">{getGiftcodeAvailabilityText(code)}</span>
+                      <span className="rounded-full bg-white/5 px-2.5 py-1 text-slate-400">{getGiftcodeExpiryText(code)}</span>
+                      <span className="ml-auto text-emerald-300">Tiết kiệm {savingAmount.toLocaleString('vi-VN')}đ</span>
+                    </div>
                   </button>
                 );
               })}
             </div>
-          </div>
+          </section>
 
-          {/* Order Summary & Pay */}
-          <div className="neu-inset-md rounded-2xl p-5 flex flex-col justify-between">
-            <div className="space-y-3">
-              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Chi tiết đơn nạp</h4>
-              <div className="flex justify-between text-xs text-slate-600 dark:text-slate-300">
-                <span>Số Vcoin nhận:</span>
-                <span className="font-bold text-amber-500 font-accent">{selectedPackage.vcoin} Vcoin</span>
-              </div>
-              <div className="flex justify-between text-xs text-slate-600 dark:text-slate-300">
-                <span>Giá niêm yết:</span>
-                <span className="font-bold">{checkoutPreview.originalAmount.toLocaleString('vi-VN')}đ</span>
-              </div>
-              {checkoutPreview.discountAmount > 0 && (
-                <div className="flex justify-between text-xs text-emerald-500 font-bold">
-                  <span>Giảm giá Giftcode:</span>
-                  <span>-{checkoutPreview.discountAmount.toLocaleString('vi-VN')}đ</span>
-                </div>
+          <aside className="flex flex-col rounded-[24px] border border-white/10 bg-[#080a11] p-5 shadow-inner sm:p-6">
+            <div className={`rounded-2xl border p-4 ${
+              selectedOffer?.status === 'available'
+                ? 'border-emerald-400/25 bg-emerald-400/[0.08]'
+                : 'border-fuchsia-400/25 bg-fuchsia-500/10'
+            }`}>
+              <div className="text-[10px] font-black uppercase tracking-[0.12em] text-fuchsia-300">Ưu đãi đang áp dụng</div>
+              {selectedOffer?.status === 'available' ? (
+                <>
+                  <div className="mt-2 break-all font-mono text-sm font-black text-white">{selectedOffer.code}</div>
+                  <p className="mt-1 text-xs leading-relaxed text-emerald-200">
+                    Đã giảm {selectedOffer.discountPercent}% — bạn tiết kiệm {checkoutPreview.discountAmount.toLocaleString('vi-VN')}đ.
+                  </p>
+                </>
+              ) : (
+                <p className="mt-2 text-sm leading-relaxed text-slate-300">Chưa áp dụng giftcode. Đơn hàng đang tính theo giá gốc.</p>
               )}
-              <div className="pt-3 border-t border-slate-300 dark:border-slate-700 flex justify-between items-center">
-                <span className="text-xs font-bold text-slate-800 dark:text-white uppercase">Tổng thanh toán:</span>
-                <span className="text-2xl font-black text-[#FF0099] font-accent">
+            </div>
+
+            <div className="mt-5 space-y-3 text-sm">
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-slate-400">Gói nhận</span>
+                <span className="font-accent text-lg font-black text-amber-300">{selectedPackage.vcoin.toLocaleString('vi-VN')} Vcoin</span>
+              </div>
+              <div className="h-px bg-white/10" />
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-slate-400">Giá niêm yết</span>
+                <span className="font-bold text-white">{checkoutPreview.originalAmount.toLocaleString('vi-VN')}đ</span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-slate-400">Giftcode giảm</span>
+                <span className="font-bold text-emerald-300">-{checkoutPreview.discountAmount.toLocaleString('vi-VN')}đ</span>
+              </div>
+              <div className="h-px bg-white/10" />
+              <div className="flex items-end justify-between gap-4">
+                <span className="pb-1 text-sm font-black text-white">Cần thanh toán</span>
+                <span className="font-accent text-3xl font-black text-cyan-300">
                   {checkoutPreview.finalAmount.toLocaleString('vi-VN')}đ
                 </span>
               </div>
             </div>
 
-            <button
-              onClick={() => handleBuyPackage(selectedPackage, selectedOffer?.status === 'available' ? giftcodeInput : undefined)}
-              disabled={loading}
-              className="w-full py-3.5 mt-6 rounded-2xl neu-button-primary font-extrabold text-xs uppercase tracking-wider flex items-center justify-center gap-2"
-            >
-              {loading ? <Icons.Loader className="w-5 h-5 animate-spin" /> : <Icons.QrCode className="w-5 h-5" />}
-              <span>Quét QR Chuyển Khoản Ngay</span>
-            </button>
-          </div>
+            {giftcodeInput && selectedOffer?.status !== 'available' && (
+              <p className="mt-4 rounded-2xl border border-amber-400/20 bg-amber-400/10 p-3 text-xs leading-relaxed text-amber-200">
+                Mã này không còn khả dụng hoặc không áp dụng cho tài khoản của bạn. Hãy chọn một mã trong danh sách.
+              </p>
+            )}
+
+            <div className="mt-auto pt-5">
+              <div className="mb-3 flex items-start gap-2 rounded-2xl bg-white/[0.035] p-3 text-[11px] leading-relaxed text-slate-400">
+                <Icons.Shield className="mt-0.5 h-4 w-4 shrink-0 text-cyan-300" />
+                Giftcode được xác thực lại khi tạo đơn. Vcoin sẽ tự động cộng sau khi SePay xác nhận thanh toán.
+              </div>
+              <button
+                onClick={() => handleBuyPackage(selectedPackage, selectedOffer?.status === 'available' ? giftcodeInput : undefined)}
+                disabled={loading || Boolean(giftcodeInput && selectedOffer?.status !== 'available')}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#ff007f] via-fuchsia-500 to-[#00d9ff] px-5 py-4 text-sm font-black text-white shadow-[0_10px_30px_rgba(255,0,127,0.24)] transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                {loading ? <Icons.Loader className="h-5 w-5 animate-spin" /> : <Icons.QrCode className="h-5 w-5" />}
+                Quét QR để thanh toán
+              </button>
+            </div>
+          </aside>
         </div>
       </div>
     </div>

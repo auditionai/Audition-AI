@@ -26,6 +26,7 @@ export const TopUp: React.FC = () => {
   const [selectedPackage, setSelectedPackage] = useState<CreditPackage | null>(null);
   const [topupGiftcodes, setTopupGiftcodes] = useState<TopupGiftcodeOffer[]>([]);
   const [giftcodeInput, setGiftcodeInput] = useState('');
+  const [giftcodeSelectionMode, setGiftcodeSelectionMode] = useState<'auto' | 'manual'>('auto');
   const [loadingGiftcodes, setLoadingGiftcodes] = useState(false);
   const [timeLeft, setTimeLeft] = useState({ d: 0, h: 0, m: 0, s: 0 });
 
@@ -192,6 +193,7 @@ export const TopUp: React.FC = () => {
   const openCheckoutModal = async (pkg: CreditPackage) => {
     setSelectedPackage(pkg);
     setGiftcodeInput('');
+    setGiftcodeSelectionMode('auto');
     if (topupGiftcodes.length === 0) {
       const cachedRows = getCachedTopupGiftcodes();
       if (cachedRows.length > 0) {
@@ -221,12 +223,17 @@ export const TopUp: React.FC = () => {
     return topupGiftcodes
       .filter((code) => code.status === 'available' && Number(code.remainingPerUser ?? code.maxPerUser ?? 1) > 0)
       .sort((a, b) => {
+        if (a.discountPercent !== b.discountPercent) return b.discountPercent - a.discountPercent;
         const aFeatured = a.audience === 'new_user_first_topup' ? 1 : 0;
         const bFeatured = b.audience === 'new_user_first_topup' ? 1 : 0;
-        if (aFeatured !== bFeatured) return bFeatured - aFeatured;
-        return b.discountPercent - a.discountPercent;
+        return bFeatured - aFeatured;
       });
   }, [topupGiftcodes]);
+
+  useEffect(() => {
+    if (!selectedPackage || giftcodeSelectionMode !== 'auto') return;
+    setGiftcodeInput(availableTopupGiftcodes[0]?.code || '');
+  }, [selectedPackage, availableTopupGiftcodes, giftcodeSelectionMode]);
 
   const checkoutPreview = useMemo(() => {
     if (!selectedPackage) return null;
@@ -411,7 +418,7 @@ export const TopUp: React.FC = () => {
                   Giftcode ưu đãi
                 </div>
                 <h3 className="text-xl font-black text-gray-900 dark:text-white">{selectedPackage.name}</h3>
-                <p className="mt-1 text-xs text-gray-500 dark:text-zinc-400">Chọn mã trước khi quét QR thanh toán.</p>
+                <p className="mt-1 text-xs text-gray-500 dark:text-zinc-400">Mã giảm giá tốt nhất được tự động áp dụng trước khi thanh toán.</p>
               </div>
               <button onClick={() => setSelectedPackage(null)} className="rounded-2xl bg-gray-100 p-2 text-gray-500 dark:bg-zinc-800 dark:text-zinc-300">
                 <X className="h-5 w-5" />
@@ -419,15 +426,33 @@ export const TopUp: React.FC = () => {
             </div>
 
             <div className="rounded-2xl bg-gray-50 p-3 dark:bg-zinc-800/80">
-              <label className="text-[10px] font-black uppercase tracking-wide text-gray-400 dark:text-zinc-500">Nhập hoặc chọn nhanh code</label>
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-[10px] font-black uppercase tracking-wide text-gray-400 dark:text-zinc-500">Nhập hoặc chọn nhanh code</label>
+                {giftcodeSelectionMode === 'auto' && selectedOffer && (
+                  <span className="rounded-full bg-emerald-100 px-2 py-1 text-[9px] font-black text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
+                    Tự động chọn tốt nhất
+                  </span>
+                )}
+              </div>
               <div className="mt-2 flex gap-2">
                 <input
                   value={giftcodeInput}
-                  onChange={(e) => setGiftcodeInput(e.target.value.toUpperCase())}
+                  onChange={(e) => {
+                    setGiftcodeSelectionMode('manual');
+                    setGiftcodeInput(e.target.value.toUpperCase());
+                  }}
                   placeholder="AUAI-50-XXXXX"
                   className="min-w-0 flex-1 rounded-2xl border border-gray-200 bg-white px-4 py-3 font-mono text-sm font-black uppercase outline-none focus:border-cyan-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
                 />
-                <button onClick={() => setGiftcodeInput('')} className="rounded-2xl bg-gray-900 px-4 text-xs font-bold text-white dark:bg-white dark:text-black">Xóa</button>
+                <button
+                  onClick={() => {
+                    setGiftcodeSelectionMode('manual');
+                    setGiftcodeInput('');
+                  }}
+                  className="rounded-2xl bg-gray-900 px-4 text-xs font-bold text-white dark:bg-white dark:text-black"
+                >
+                  Xóa
+                </button>
               </div>
             </div>
 
@@ -438,13 +463,16 @@ export const TopUp: React.FC = () => {
                 </div>
               ) : availableTopupGiftcodes.length === 0 ? (
                 <div className="rounded-2xl bg-gray-50 p-4 text-sm text-gray-500 dark:bg-zinc-800/80 dark:text-zinc-400">Hiện chưa có giftcode nạp tiền khả dụng cho tài khoản này.</div>
-              ) : availableTopupGiftcodes.map((code) => {
+              ) : availableTopupGiftcodes.map((code, index) => {
                 const selected = giftcodeInput.trim().toUpperCase() === code.code.toUpperCase();
                 const featured = code.audience === 'new_user_first_topup';
                 return (
                   <button
                     key={code.id}
-                    onClick={() => setGiftcodeInput(code.code)}
+                    onClick={() => {
+                      setGiftcodeSelectionMode('manual');
+                      setGiftcodeInput(code.code);
+                    }}
                     className={`w-full rounded-2xl border p-3 text-left transition-all ${
                       selected
                         ? 'border-cyan-400 bg-cyan-50 dark:bg-cyan-500/10'
@@ -457,6 +485,7 @@ export const TopUp: React.FC = () => {
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="break-all font-mono text-sm font-black text-gray-900 dark:text-white">{code.code}</span>
+                          {index === 0 && <span className="rounded-full bg-fuchsia-100 px-2 py-0.5 text-[9px] font-black uppercase text-fuchsia-700 dark:bg-fuchsia-500/20 dark:text-fuchsia-300">Tốt nhất</span>}
                           {featured && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">Nạp lần đầu</span>}
                         </div>
                         <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-zinc-400">{getGiftcodeDescription(code)}</p>

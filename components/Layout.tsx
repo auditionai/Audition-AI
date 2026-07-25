@@ -42,9 +42,9 @@ export const Layout: React.FC<LayoutProps> = ({
   }, []);
 
   const navItems = [
-    { id: 'home' as ViewId, label: { vi: 'Tổng quan', en: 'Dashboard' }, icon: 'LayoutDashboard' },
+    { id: 'home' as ViewId, label: { vi: 'Tổng quan', en: 'Dashboard' }, icon: 'Home' },
     { id: 'prompt_library' as ViewId, label: { vi: 'Prompt mẫu', en: 'Prompts' }, icon: 'Sparkles', badge: true },
-    { id: 'tools' as ViewId, label: { vi: 'Công cụ', en: 'Tools' }, icon: 'Wand2' },
+    { id: 'tools' as ViewId, label: { vi: 'Công cụ', en: 'Tools' }, icon: 'Wand' },
     { id: 'gallery' as ViewId, label: { vi: 'Lịch sử', en: 'Gallery' }, icon: 'Image' },
     { id: 'topup' as ViewId, label: { vi: 'Nạp VCoin', en: 'Top Up' }, icon: 'Gem' },
     { id: 'settings' as ViewId, label: { vi: 'Cài đặt', en: 'Settings' }, icon: 'Settings' },

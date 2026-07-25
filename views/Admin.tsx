@@ -91,6 +91,7 @@ import { APP_CONFIG } from '../constants';
 import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, GeneratedImage, Language, StylePreset, HistoryItem, AdminQueueJob, AdminQueueSummary, AdminQueueJobDetail, AdminQueueInputMedia, AdminQueueMediaSection, AdminQueueHealthReport, AdminQueueHealthSnapshot } from '../types';
 import './admin-command-center.css';
 import { GiftcodeAbuseWorkspaceV2, TransactionsWorkspaceV2, UsersWorkspaceV2 } from './admin-v2/AdminOperations';
+import QueueWorkspaceV2 from './admin-v2/QueueWorkspaceV2';
 
 interface AdminProps {
   lang: Language;
@@ -2383,7 +2384,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   // --- BULK ACTIONS ---
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.checked) {
-          setSelectedTxIds(transactions.map(t => t.id));
+          setSelectedTxIds(transactions.filter((transaction) => transaction.status === 'pending').map((transaction) => transaction.id));
       } else {
           setSelectedTxIds([]);
       }
@@ -2486,13 +2487,6 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       return 'Vị trí đã được gắn data-tour-id trong giao diện. Chọn target này để khoanh đúng khu vực tương ứng khi tour chạy.';
   };
 
-  const activeAdminNav = ADMIN_NAV_SECTIONS
-      .flatMap((section) => section.tabs)
-      .find((tab) => tab.id === activeView) || ADMIN_NAV_SECTIONS[0].tabs[0];
-  const ActiveAdminIcon = activeAdminNav.icon;
-  const connectedServices = [health.gemini, health.supabase, health.storage]
-      .filter((service) => service.status === 'connected').length;
-
   return (
     <div className="admin-command-center min-h-screen pb-24 animate-fade-in text-slate-800 dark:text-slate-100 font-sans">
       {/* --- TOASTS CONTAINER --- */}
@@ -2580,29 +2574,6 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           </div>
       </section>
 
-      <section className="admin-command-summary" aria-label="Tóm tắt trung tâm quản trị">
-          <div>
-              <span>Dịch vụ trực tuyến</span>
-              <strong>{connectedServices}/3</strong>
-              <small>Hạ tầng lõi</small>
-          </div>
-          <div>
-              <span>Queue đang chạy</span>
-              <strong>{queueSummary.processing || 0}</strong>
-              <small>Jobs processing</small>
-          </div>
-          <div>
-              <span>Đang chờ xử lý</span>
-              <strong>{queueSummary.queued || 0}</strong>
-              <small>Jobs queued</small>
-          </div>
-          <div>
-              <span>Người dùng hệ thống</span>
-              <strong>{new Intl.NumberFormat('vi-VN').format(stats?.dashboard?.usersTotal || 0)}</strong>
-              <small>Tài khoản</small>
-          </div>
-      </section>
-
       <nav className="admin-command-nav" aria-label="Điều hướng trang quản trị">
           {ADMIN_NAV_SECTIONS.map((section) => (
               <div key={section.label} className="admin-command-nav__section">
@@ -2636,21 +2607,6 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               </div>
           ))}
       </nav>
-
-      <header className="admin-workspace-heading">
-          <div className="admin-workspace-heading__icon">
-              <ActiveAdminIcon className="h-5 w-5" />
-          </div>
-          <div>
-              <span>Admin workspace</span>
-              <h2>{activeAdminNav.label}</h2>
-              <p>{activeAdminNav.description}</p>
-          </div>
-          <div className="admin-workspace-heading__status">
-              <span className="admin-workspace-heading__status-dot" />
-              Live data
-          </div>
-      </header>
 
       {false && <div className="admin-legacy-console w-full neu-card p-5 rounded-3xl mb-6 shadow-2xl space-y-4" aria-hidden="true">
           {/* Top Admin Header & Live System Health */}
@@ -2827,6 +2783,40 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   onToggleAll={toggleAllGiftcodeAbuseSelection}
                   onBulk={runBulkGiftcodeAction}
                   onAction={confirmGiftcodeUserAction}
+              />
+          )}
+
+          {activeView === 'queue' && (
+              <QueueWorkspaceV2
+                  jobs={filteredQueueJobs}
+                  summary={queueSummary}
+                  healthReport={queueHealthReport}
+                  loading={loadingQueueJobs}
+                  reconciling={reconcilingQueue}
+                  rescuing={rescuingFailedQueueJobs}
+                  emailFilter={queueEmailFilter}
+                  statusFilter={queueStatusFilter}
+                  assetFilter={queueAssetFilter}
+                  timeScope={queueTimeScope}
+                  stageFilter={queueStageFilter}
+                  stuckOnly={queueStuckOnly}
+                  summaryFilter={queueSummaryFilter}
+                  stageOptions={queueStageOptions}
+                  onEmailFilter={setQueueEmailFilter}
+                  onStatusFilter={setQueueStatusFilter}
+                  onAssetFilter={setQueueAssetFilter}
+                  onTimeScope={setQueueTimeScope}
+                  onStageFilter={setQueueStageFilter}
+                  onStuckOnly={setQueueStuckOnly}
+                  onSummaryFilter={handleQueueSummaryFilter}
+                  onRefresh={() => loadQueueJobs({ silent: false })}
+                  onRescue={handleRescueFailedJobs}
+                  onReconcile={handleQueueReconcile}
+                  onOpen={handleOpenQueueJobDetail}
+                  stageLabel={getQueueStageLabel}
+                  statusLabel={getQueueStatusLabel}
+                  platformLabel={getQueuePlatformLabel}
+                  timeAgo={getTimeAgo}
               />
           )}
           
@@ -3489,7 +3479,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               </div>
           )}
 
-          {activeView === 'queue' && (
+          {activeView === 'queue' && Boolean(false) && (
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
                       <div>

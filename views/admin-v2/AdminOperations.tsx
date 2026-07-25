@@ -3,6 +3,7 @@ import { Icons } from '../../components/Icons';
 import type { GiftcodeAbuseCase } from '../../services/economyService';
 import type { Transaction, UserProfile } from '../../types';
 import './admin-operations.css';
+import './admin-transaction-metrics.css';
 
 const money = (value: number) => new Intl.NumberFormat('vi-VN').format(Number(value || 0));
 const dateTime = (value?: string | null) => value
@@ -38,13 +39,22 @@ type TransactionsProps = {
 
 export function TransactionsWorkspaceV2(props: TransactionsProps) {
     const pending = props.transactions.filter((item: any) => item.status === 'pending').length;
-    const approved = props.transactions.filter((item: any) => ['completed', 'success', 'approved'].includes(item.status)).length;
+    const approved = props.transactions.filter((item: any) => ['paid', 'completed', 'success', 'approved'].includes(String(item.status || '').toLowerCase())).length;
+    const pendingIds = props.transactions.filter((item: any) => String(item.status || '').toLowerCase() === 'pending').map((item) => item.id);
     const volume = props.transactions.reduce((sum: number, item: any) => sum + Number(item.amount || item.price || 0), 0);
+    const vietnamToday = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
+    const todayTransactions = props.transactions.filter((item) =>
+        new Date(item.createdAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }) === vietnamToday
+    );
+    const todayPaid = todayTransactions.filter((item) =>
+        ['paid', 'completed', 'success', 'approved'].includes(String(item.status || '').toLowerCase())
+    ).length;
 
     return (
         <section className="admin-v2-page">
-            <div className="admin-v2-metrics">
+            <div className="admin-v2-metrics admin-v2-metrics--transactions">
                 <article><span>Tổng giao dịch</span><strong>{money(props.transactions.length)}</strong><small>Toàn bộ yêu cầu nạp</small></article>
+                <article><span>Nạp hôm nay</span><strong className="is-accent">{money(todayTransactions.length)}</strong><small>{money(todayPaid)} giao dịch đã thanh toán</small></article>
                 <article><span>Chờ đối soát</span><strong className="is-warning">{money(pending)}</strong><small>Cần quản trị viên xử lý</small></article>
                 <article><span>Đã hoàn tất</span><strong className="is-success">{money(approved)}</strong><small>Đã cộng Vcoin</small></article>
                 <article><span>Giá trị ghi nhận</span><strong className="is-accent">{money(volume)}đ</strong><small>Tổng giá trị danh sách</small></article>
@@ -72,15 +82,15 @@ export function TransactionsWorkspaceV2(props: TransactionsProps) {
                     <div className="admin-v2-table-wrap">
                         <table className="admin-v2-table">
                             <thead><tr>
-                                <th><input aria-label="Chọn tất cả" type="checkbox" checked={props.selectedIds.length === props.transactions.length} onChange={props.onToggleAll} /></th>
+                                <th><input aria-label="Chọn tất cả giao dịch chờ duyệt" type="checkbox" disabled={pendingIds.length === 0} checked={pendingIds.length > 0 && pendingIds.every((id) => props.selectedIds.includes(id))} onChange={props.onToggleAll} /></th>
                                 <th>Giao dịch</th><th>Khách hàng</th><th>Gói nạp</th><th>Thanh toán</th><th>Trạng thái</th><th>Thao tác</th>
                             </tr></thead>
                             <tbody>{props.transactions.map((tx: any) => {
                                 const status = String(tx.status || 'pending').toLowerCase();
-                                const done = ['completed', 'success', 'approved'].includes(status);
+                                const done = ['paid', 'completed', 'success', 'approved'].includes(status);
                                 const failed = ['failed', 'rejected', 'cancelled'].includes(status);
                                 return <tr key={tx.id} className={props.processingId === tx.id ? 'is-processing' : ''}>
-                                    <td><input aria-label={`Chọn ${tx.order_code || tx.code}`} type="checkbox" checked={props.selectedIds.includes(tx.id)} onChange={() => props.onToggle(tx.id)} /></td>
+                                    <td><input aria-label={`Chọn ${tx.order_code || tx.code}`} type="checkbox" disabled={status !== 'pending'} checked={props.selectedIds.includes(tx.id)} onChange={() => props.onToggle(tx.id)} /></td>
                                     <td><strong className="admin-v2-code">{tx.order_code || tx.code || `#${String(tx.id).slice(0, 8)}`}</strong><small>{dateTime(tx.createdAt)}</small>{props.giftcodeLabel(tx.topupGiftcode) && <StatePill tone="info">{props.giftcodeLabel(tx.topupGiftcode)}</StatePill>}</td>
                                     <td><div className="admin-v2-person"><span>{String(tx.userName || tx.userEmail || 'U').slice(0, 1).toUpperCase()}</span><div><strong>{tx.userName || 'Người dùng'}</strong><small>{tx.userEmail || 'Không có email'}</small></div></div></td>
                                     <td><strong>{money(tx.vcoin_received || 0)} Vcoin</strong><small>{tx.code || 'Gói nạp trực tiếp'}</small></td>

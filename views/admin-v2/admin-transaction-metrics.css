@@ -1,0 +1,21 @@
+.admin-v2-metrics.admin-v2-metrics--transactions {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+@media (max-width: 1250px) {
+    .admin-v2-metrics.admin-v2-metrics--transactions {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 850px) {
+    .admin-v2-metrics.admin-v2-metrics--transactions {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 520px) {
+    .admin-v2-metrics.admin-v2-metrics--transactions {
+        grid-template-columns: 1fr;
+    }
+}

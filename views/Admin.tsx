@@ -90,6 +90,7 @@ import { Icons } from '../components/Icons';
 import { APP_CONFIG } from '../constants';
 import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, GeneratedImage, Language, StylePreset, HistoryItem, AdminQueueJob, AdminQueueSummary, AdminQueueJobDetail, AdminQueueInputMedia, AdminQueueMediaSection, AdminQueueHealthReport, AdminQueueHealthSnapshot } from '../types';
 import './admin-command-center.css';
+import { GiftcodeAbuseWorkspaceV2, TransactionsWorkspaceV2, UsersWorkspaceV2 } from './admin-v2/AdminOperations';
 
 interface AdminProps {
   lang: Language;
@@ -2651,8 +2652,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           </div>
       </header>
 
-      {/* Legacy console is retained temporarily for data parity but fully replaced visually. */}
-      <div className="admin-legacy-console w-full neu-card p-5 rounded-3xl mb-6 shadow-2xl space-y-4" aria-hidden="true">
+      {false && <div className="admin-legacy-console w-full neu-card p-5 rounded-3xl mb-6 shadow-2xl space-y-4" aria-hidden="true">
           {/* Top Admin Header & Live System Health */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-3 border-b border-slate-200/60 dark:border-slate-800">
               <div className="flex items-center gap-3">
@@ -2769,10 +2769,66 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               </div>
 
           </div>
-      </div>
+      </div>}
 
       {/* ADMIN WORKSPACE VIEWS */}
       <div className="w-full space-y-6">
+
+          {activeView === 'transactions' && (
+              <TransactionsWorkspaceV2
+                  transactions={transactions}
+                  selectedIds={selectedTxIds}
+                  processingId={processingTxId}
+                  onToggleAll={handleSelectAll}
+                  onToggle={handleSelectTx}
+                  onBulkApprove={handleBulkApprove}
+                  onBulkReject={handleBulkReject}
+                  onApprove={handleApproveTransaction}
+                  onReject={handleRejectTransaction}
+                  onDelete={handleDeleteTransaction}
+                  onRefresh={refreshData}
+                  giftcodeLabel={getTopupGiftcodeLabel}
+              />
+          )}
+
+          {activeView === 'users' && (
+              <UsersWorkspaceV2
+                  users={visibleUsers}
+                  total={filteredUsers.length}
+                  search={userSearchEmail}
+                  activityFilter={userActivityFilter}
+                  sortMode={userSortMode}
+                  hasMore={filteredUsers.length > userListLimit}
+                  onSearch={setUserSearchEmail}
+                  onFilter={setUserActivityFilter}
+                  onSort={setUserSortMode}
+                  onMore={() => setUserListLimit((current) => current + 30)}
+                  onView={handleViewUser}
+                  onEdit={openEditUser}
+                  isOnline={isUserOnline}
+                  timeAgo={getTimeAgo}
+              />
+          )}
+
+          {activeView === 'giftcode_abuse' && (
+              <GiftcodeAbuseWorkspaceV2
+                  cases={filteredGiftcodeAbuseCases}
+                  allCases={giftcodeAbuseCases}
+                  loading={loadingGiftcodeAbuse}
+                  search={giftcodeAbuseSearch}
+                  filter={giftcodeAbuseFilter}
+                  selectedIds={selectedGiftcodeAbuseIds}
+                  allSelected={allVisibleGiftcodeAbuseSelected}
+                  bulkLoading={bulkGiftcodeActionLoading}
+                  onSearch={setGiftcodeAbuseSearch}
+                  onFilter={setGiftcodeAbuseFilter}
+                  onRefresh={loadGiftcodeAbuseCases}
+                  onToggle={toggleGiftcodeAbuseSelection}
+                  onToggleAll={toggleAllGiftcodeAbuseSelection}
+                  onBulk={runBulkGiftcodeAction}
+                  onAction={confirmGiftcodeUserAction}
+              />
+          )}
           
           {/* 1. OVERVIEW VIEW */}
           {activeView === 'overview' && (
@@ -2873,7 +2929,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               </div>
           )}
 
-          {activeView === 'transactions' && (
+          {false && activeView === 'transactions' && (
               <div className="space-y-6 animate-fade-in">
                   <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 neu-card p-6 rounded-3xl shadow-xl border border-slate-300 dark:border-slate-800">
                       <div>
@@ -3046,7 +3102,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               </div>
           )}
 
-          {activeView === 'users' && (
+          {false && activeView === 'users' && (
               <div className="space-y-6 animate-fade-in">
                   <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 neu-card p-6 rounded-3xl shadow-xl border border-slate-300 dark:border-slate-800">
                       <div>
@@ -3226,7 +3282,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               </div>
           )}
 
-          {activeView === 'giftcode_abuse' && (
+          {false && activeView === 'giftcode_abuse' && (
               <div className="space-y-6 animate-fade-in">
                   <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 neu-card p-6 rounded-3xl shadow-xl border border-slate-300 dark:border-slate-800">
                       <div>

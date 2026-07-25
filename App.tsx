@@ -743,7 +743,6 @@ function AppContent() {
           <ToolWorkspace 
             feature={selectedFeature} 
             lang={lang} 
-            onBack={() => handleNavigate('home')} 
             onNavigateToFeature={handleNavigateToFeature}
             onNavigateView={handleNavigate}
           />

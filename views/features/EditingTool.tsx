@@ -509,7 +509,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
         <div data-tour-id="desktop.edit.upload" className="lg:col-span-7 xl:col-span-8 neu-card p-6 rounded-3xl space-y-4 shadow-xl border border-white/20">
             <div className="flex items-center justify-between pb-3 border-b border-slate-200/60 dark:border-slate-800">
                 <h3 className="font-extrabold text-slate-800 dark:text-white text-sm uppercase tracking-wider font-accent flex items-center gap-2">
-                    <Icons.Image className="w-4 h-4 text-[#9D00FF]" /> 1. UPLOAD ÁNH CẦN XỬ LÝ
+                    <Icons.Image className="w-4 h-4 text-[#9D00FF]" /> 1. UPLOAD ẢNH CẦN XỬ LÝ
                 </h3>
             </div>
 

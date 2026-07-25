@@ -10,7 +10,9 @@ interface SupportProps {
 export const Support: React.FC<SupportProps> = ({ lang, onNavigate }) => {
   const devInfo = {
     email: 'support@auditionai.vn',
-    zalo: 'https://zalo.me/g/kodwgn037'
+    zalo: 'https://zalo.me/g/kodwgn037',
+    facebook: 'https://www.facebook.com/iam.cody.real/',
+    facebookChat: 'https://www.facebook.com/groups/-837625495307432/chats/1641021490531432/'
   };
 
   return (
@@ -54,6 +56,46 @@ export const Support: React.FC<SupportProps> = ({ lang, onNavigate }) => {
           </p>
           <a href={devInfo.zalo} target="_blank" rel="noreferrer" className="neu-button-accent block py-3 rounded-2xl text-center text-xs font-bold uppercase tracking-wider">
             Tham gia nhóm Zalo
+          </a>
+        </div>
+
+        <div className="neu-card p-6 rounded-3xl space-y-4">
+          <h2 className="text-base font-bold text-slate-800 dark:text-white flex items-center gap-2 font-accent">
+            <Icons.Facebook className="w-5 h-5 text-blue-500" />
+            {lang === 'vi' ? 'Liên hệ qua Facebook' : 'Facebook Contact'}
+          </h2>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            {lang === 'vi'
+              ? 'Liên hệ trực tiếp với Cody CN để được hỗ trợ về tài khoản, Vcoin và các chức năng của ứng dụng.'
+              : 'Contact Cody CN directly for help with your account, Vcoin, and application features.'}
+          </p>
+          <a
+            href={devInfo.facebook}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="neu-button block py-3 rounded-2xl text-center text-xs font-bold uppercase tracking-wider text-blue-500 hover:text-blue-400"
+          >
+            Facebook Cody CN
+          </a>
+        </div>
+
+        <div className="neu-card p-6 rounded-3xl space-y-4">
+          <h2 className="text-base font-bold text-slate-800 dark:text-white flex items-center gap-2 font-accent">
+            <Icons.MessageSquare className="w-5 h-5 text-[#FF0099]" />
+            {lang === 'vi' ? 'Nhóm chat Facebook' : 'Facebook Group Chat'}
+          </h2>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            {lang === 'vi'
+              ? 'Tham gia nhóm chat cộng đồng để trao đổi kinh nghiệm, nhận thông báo và được hỗ trợ nhanh hơn.'
+              : 'Join the community chat to exchange experience, receive updates, and get faster support.'}
+          </p>
+          <a
+            href={devInfo.facebookChat}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="neu-button-primary block py-3 rounded-2xl text-center text-xs font-bold uppercase tracking-wider"
+          >
+            {lang === 'vi' ? 'Tham gia nhóm chat Facebook' : 'Join Facebook group chat'}
           </a>
         </div>
       </div>

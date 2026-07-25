@@ -31,7 +31,6 @@ import {
   getCompatibleGenerationResolutions,
   getCompatibleGenerationSpeeds,
   getGenerationCostBreakdown,
-  getVertexEditToolCostBreakdown,
   getGenerationModelId,
   getResolutionCostMap,
   resolveGenerationSelection,
@@ -45,11 +44,6 @@ import {
   type TstRuntimeModel,
 } from '../../services/tstCatalog';
 import type { CharacterReferenceGroup, ImageGenerateRecipePayload } from '../../shared/queueRecipes';
-import {
-  CHARACTER_ASSISTANT_RESOLUTION,
-  runCharacterAssistantAction,
-  type CharacterAssistantToolId,
-} from '../../services/characterImageAssistService';
 
 interface GenerationToolProps {
   feature: Feature;
@@ -210,8 +204,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const [guidePreviewCacheKey] = useState(() => Date.now());
 
   const [resultImage, setResultImage] = useState<string | null>(null);
-  const [assistLoadingByCharId, setAssistLoadingByCharId] = useState<Record<number, CharacterAssistantToolId | null>>({});
-  const [assistantErrorByCharId, setAssistantErrorByCharId] = useState<Record<number, string | null>>({});
   const [guideImageMeta, setGuideImageMeta] = useState<Record<'character' | 'sample', { width: number; height: number } | null>>({
       character: null,
       sample: null,
@@ -381,30 +373,15 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   };
   const isCatalogReady = !catalogLoading && !catalogError && pricingEntries.length > 0 && runtimeModels.length > 0;
   const hasCharacterImagesReady = characters.every((char) => !!char.bodyImage);
-  const isAnyCharacterAssistRunning = characters.some((char) => !!assistLoadingByCharId[char.id]);
   const isGenerateDisabled =
       cooldownRemaining > 0 ||
       !isCatalogReady ||
       !selectedGenerationCost.available ||
       !prompt.trim() ||
       !hasCharacterImagesReady ||
-      isAnyCharacterAssistRunning ||
       (aiModel === 'flash' ? !isFlashAvailable : aiModel === 'pro' ? !isProAvailable : !isGptAvailable);
   const availableSpeedLabels = availableSpeeds.map((speedId) => speedId === 'slow' ? 'Tiết Kiệm' : 'Nhanh');
   const availableServerLabels = availableServers.map((serverId) => tstServerToUi(serverId));
-  const removeBgCost = getVertexEditToolCostBreakdown({
-      toolId: 'remove_bg_pro',
-      tier: 'flash',
-      resolution: CHARACTER_ASSISTANT_RESOLUTION,
-      pricingOverrides,
-  });
-  const sharpenCost = getVertexEditToolCostBreakdown({
-      toolId: 'sharpen_upscale',
-      tier: 'flash',
-      resolution: CHARACTER_ASSISTANT_RESOLUTION,
-      pricingOverrides,
-  });
-
   useEffect(() => {
       // Load Default Style Preset
       const loadStyle = async () => {
@@ -726,7 +703,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
              setRefImage(result);
           } else if (currentType?.charId && currentType.type === 'body') {
               setCharacters(prev => prev.map(c => c.id === currentType.charId ? { ...c, bodyImage: result } : c));
-              setAssistantErrorByCharId((prev) => ({ ...prev, [currentType.charId!]: null }));
           }
       };
       reader.readAsDataURL(file);
@@ -769,74 +745,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const addLog = (msg: string) => {
       setProgressLogs(prev => [...prev, msg]);
       setProgressMsg(msg);
-  };
-
-  const handleCharacterAssistant = async (charId: number, toolId: CharacterAssistantToolId) => {
-      const character = characters.find((item) => item.id === charId);
-      if (!character?.bodyImage) {
-          notify('Vui lòng tải ảnh nhân vật trước.', 'warning');
-          return;
-      }
-
-      const pricing = toolId === 'remove_bg_pro' ? removeBgCost : sharpenCost;
-      if (!pricing.available) {
-          notify('Công cụ này hiện chưa khả dụng.', 'error');
-          return;
-      }
-
-      let user;
-      try {
-          user = await getUserProfile({ force: true });
-      } catch (error) {
-          console.warn('[GenerationTool] Failed to verify current balance', error);
-          notify('Không thể xác minh số dư Vcoin lúc này. Vui lòng thử lại.', 'error');
-          return;
-      }
-      if ((user.vcoin_balance || 0) < pricing.vcoin) {
-          notify(`Số dư không đủ, cần ${pricing.vcoin} Vcoin.`, 'error');
-          return;
-      }
-
-      setAssistLoadingByCharId((prev) => ({ ...prev, [charId]: toolId }));
-      setAssistantErrorByCharId((prev) => ({ ...prev, [charId]: null }));
-      try {
-          const result = await runCharacterAssistantAction({
-              sourceImage: character.bodyImage,
-              toolId,
-              costVcoin: pricing.vcoin,
-              storageFolder: `inputs/character-assist/${toolId}/character-${charId}`,
-              showInGenerationHistory: false,
-          });
-
-          if (!result.imageUrl) {
-              throw new Error('Vertex AI không trả về ảnh kết quả.');
-          }
-
-          const refreshedUrl = result.imageUrl.includes('?')
-              ? `${result.imageUrl}&t=${Date.now()}`
-              : `${result.imageUrl}?t=${Date.now()}`;
-          setCharacters((prev) => prev.map((item) => (
-              item.id === charId
-                  ? { ...item, bodyImage: refreshedUrl || item.bodyImage }
-                  : item
-          )));
-          window.dispatchEvent(new Event('balance_updated'));
-          notify(
-              toolId === 'remove_bg_pro'
-                  ? 'Đã tách nền xong cho ảnh nhân vật.'
-                  : 'Đã làm nét xong cho ảnh nhân vật.',
-              'success',
-          );
-      } catch (error) {
-          console.error('[GenerationTool] Character assistant failed', error);
-          setAssistantErrorByCharId((prev) => ({
-              ...prev,
-              [charId]: error instanceof Error ? error.message : 'Không thể xử lý ảnh lúc này.',
-          }));
-          notify(error instanceof Error ? error.message : 'Không thể xử lý ảnh lúc này.', 'error');
-      } finally {
-          setAssistLoadingByCharId((prev) => ({ ...prev, [charId]: null }));
-      }
   };
 
   const handleGenerate = async () => {
@@ -1538,12 +1446,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
                 {/* Character Slots Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                    {characters.map((char) => {
-                        const assistantError = assistantErrorByCharId[char.id];
-                        const activeAssist = assistLoadingByCharId[char.id];
-                        const isAssistRunning = !!activeAssist;
-
-                        return (
+                    {characters.map((char) => (
                             <div key={char.id} className="neu-inset-sm p-4 rounded-2xl space-y-3 relative group">
                                 <div className="flex justify-between items-center">
                                     <span className="text-xs font-black text-slate-900 dark:text-white font-accent">Nhân Vật {char.id}</span>
@@ -1569,34 +1472,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                     )}
                                 </div>
 
-                                {char.bodyImage && (
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <button
-                                            type="button"
-                                            onClick={(e) => { e.stopPropagation(); if (isAssistRunning) return; void handleCharacterAssistant(char.id, 'remove_bg_pro'); }}
-                                            className="px-2 py-1.5 rounded-xl text-[10px] font-black neu-button text-sky-600 dark:text-[#00F2FE] flex items-center justify-center gap-1"
-                                        >
-                                            {activeAssist === 'remove_bg_pro' ? <Icons.Loader className="w-3.5 h-3.5 animate-spin" /> : <Icons.Scissors className="w-3.5 h-3.5" />}
-                                            <span>Tách Nền</span>
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={(e) => { e.stopPropagation(); if (isAssistRunning) return; void handleCharacterAssistant(char.id, 'sharpen_upscale'); }}
-                                            className="px-2 py-1.5 rounded-xl text-[10px] font-black neu-button text-[#FF007F] flex items-center justify-center gap-1"
-                                        >
-                                            {activeAssist === 'sharpen_upscale' ? <Icons.Loader className="w-3.5 h-3.5 animate-spin" /> : <Icons.Sparkles className="w-3.5 h-3.5" />}
-                                            <span>Làm Nét</span>
-                                        </button>
-                                    </div>
-                                )}
-                                {assistantError && (
-                                    <p role="alert" className="text-[10px] font-semibold text-red-600 dark:text-red-400">
-                                        {assistantError}
-                                    </p>
-                                )}
                             </div>
-                        );
-                    })}
+                    ))}
 
                     {/* Pose Reference Slot */}
                     <div className="neu-inset-sm p-4 rounded-2xl space-y-3">

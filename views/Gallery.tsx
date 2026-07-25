@@ -13,6 +13,21 @@ interface GalleryProps {
   lang: Language;
 }
 
+const decodeLegacyUtf8 = (value?: string | null) => {
+  if (!value || !/[ÃÂÄÆáºá»â]/.test(value)) return value || '';
+
+  try {
+    const bytes = Uint8Array.from(Array.from(value, (character) => {
+      const code = character.charCodeAt(0);
+      if (code > 255) throw new Error('Text is not a legacy byte string');
+      return code;
+    }));
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    return value;
+  }
+};
+
 export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
   const { notify, confirm } = useNotification();
   const [activeTab, setActiveTab] = useState<'generation' | 'transactions'>('generation');
@@ -117,6 +132,28 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
           setViewingImage(updatedImage);
       }
   }, [images, viewingImage]);
+
+  useEffect(() => {
+      if (!viewingImage || typeof document === 'undefined') return;
+
+      const previousOverflow = document.body.style.overflow;
+      const handleKeyDown = (event: KeyboardEvent) => {
+          if (event.key !== 'Escape') return;
+          if (showLogViewer) {
+              setShowLogViewer(false);
+          } else {
+              setViewingImage(null);
+          }
+      };
+
+      document.body.style.overflow = 'hidden';
+      document.addEventListener('keydown', handleKeyDown);
+
+      return () => {
+          document.body.style.overflow = previousOverflow;
+          document.removeEventListener('keydown', handleKeyDown);
+      };
+  }, [showLogViewer, viewingImage]);
 
   useEffect(() => {
       if (activeTab === 'transactions') {
@@ -300,15 +337,6 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
           case 'completed': return lang === 'vi' ? 'Hoàn thành' : 'Completed';
           case 'failed': return lang === 'vi' ? 'Thất bại' : 'Failed';
           default: return lang === 'vi' ? 'Tiến trình' : 'Progress';
-      }
-  };
-
-  const getQueueLogLevelStyle = (level?: string) => {
-      switch (level) {
-          case 'success': return 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20';
-          case 'warning': return 'bg-yellow-500/10 text-yellow-300 border-yellow-500/20';
-          case 'error': return 'bg-red-500/10 text-red-300 border-red-500/20';
-          default: return 'bg-white/5 text-slate-300 border-white/10';
       }
   };
 
@@ -650,9 +678,9 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                 <tr><td colSpan={5} className="text-center py-12 text-slate-500 italic">Chưa có giao dịch nào</td></tr>
                             ) : transactions.map(item => (
                                 <tr key={item.id} className="hover:bg-white/[0.02] transition-colors group">
-                                    <td className="px-6 py-4 font-mono text-xs">{new Date(item.createdAt).toLocaleString()}</td>
-                                    <td className="px-6 py-4 font-bold text-white max-w-[200px] truncate" title={item.description}>
-                                        {item.description}
+                                    <td className="px-6 py-4 font-mono text-xs">{new Date(item.createdAt).toLocaleString(lang === 'vi' ? 'vi-VN' : 'en-US')}</td>
+                                    <td className="px-6 py-4 font-bold text-white max-w-[200px] truncate" title={decodeLegacyUtf8(item.description)}>
+                                        {decodeLegacyUtf8(item.description)}
                                         {item.code && <div className="text-[10px] text-slate-500 font-mono mt-0.5">{item.code}</div>}
                                         {getTopupGiftcodeLabel(item.topupGiftcode) && (
                                             <div className="mt-2 inline-flex max-w-full items-center gap-1 rounded-lg border border-audi-cyan/20 bg-audi-cyan/10 px-2 py-1 text-[10px] font-bold text-audi-cyan">
@@ -719,7 +747,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                     </div>
 
                                     <div className="space-y-2">
-                                        <div className="font-bold leading-snug text-white">{item.description}</div>
+                                        <div className="font-bold leading-snug text-white">{decodeLegacyUtf8(item.description)}</div>
                                         {item.code && (
                                             <div className="break-all text-[11px] text-slate-500">
                                                 Mã đơn: <span className="font-mono text-slate-300">{item.code}</span>
@@ -783,306 +811,294 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
             </div>
         </div>
 
-        {/* Image Details Modal */}
+        {/* Job Details Modal */}
         {viewingImage && createPortal(
-            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 animate-fade-in">
-                <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => { setViewingImage(null); setShowLogViewer(false); }}></div>
-                <div className="relative w-full max-w-4xl bg-[#12121a] rounded-3xl border border-white/10 shadow-2xl overflow-hidden flex flex-col md:flex-row max-h-[90vh]">
-                    {/* Close Button */}
-                    <button
-                        onClick={() => { setViewingImage(null); setShowLogViewer(false); }}
-                        className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-black/50 border border-white/10 flex items-center justify-center text-white hover:bg-white/10 transition-colors"
-                    >
-                        <Icons.X className="w-5 h-5" />
-                    </button>
+            <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-slate-950/80 p-3 backdrop-blur-md sm:p-6">
+                <button
+                    type="button"
+                    className="absolute inset-0 cursor-default"
+                    onClick={() => { setViewingImage(null); setShowLogViewer(false); }}
+                    aria-label={lang === 'vi' ? 'Đóng chi tiết job' : 'Close job details'}
+                />
 
-                    {/* Left: Image Preview */}
-                    <div className="w-full md:w-3/5 bg-black/50 flex items-center justify-center p-6 relative group min-h-[300px]">
-                        {viewingImage.url ? (
-                            getAssetKind(viewingImage) === 'video' ? (<video src={viewingImage.url} className="max-w-full max-h-full object-contain rounded-xl shadow-2xl" controls autoPlay loop playsInline />) : (<img src={viewingImage.url} alt="Generated" className="max-w-full max-h-full object-contain rounded-xl shadow-2xl" />)
-                        ) : (
-                            <div className="flex flex-col items-center justify-center text-slate-500">
-                                {(viewingImage.displayStatus || viewingImage.status) === 'failed' ? (
-                                    <Icons.AlertTriangle className="w-16 h-16 mb-4 text-red-500/50" />
-                                ) : (viewingImage.displayStatus || viewingImage.status) === 'processing' || (viewingImage.displayStatus || viewingImage.status) === 'queued' || (viewingImage.displayStatus || viewingImage.status) === 'rescuing' ? (
-                                    <Icons.Loader className="w-16 h-16 mb-4 animate-spin text-audi-cyan/50" />
-                                ) : (
-                                    <Icons.Image className="w-16 h-16 mb-4 opacity-50" />
-                                )}
-                                <p>{(viewingImage.displayStatus || viewingImage.status) === 'failed' ? getFailedAssetTitle(viewingImage) : (viewingImage.displayStatus || viewingImage.status) === 'processing' || (viewingImage.displayStatus || viewingImage.status) === 'queued' || (viewingImage.displayStatus || viewingImage.status) === 'rescuing' ? getProcessingAssetTitle(viewingImage) : (lang === 'vi' ? 'Không có dữ liệu' : 'No asset available')}</p>
-                                {(viewingImage.displayStatus || viewingImage.status) === 'failed' && (
-                                    <p className="mt-2 max-w-[320px] text-center text-sm text-red-300 leading-relaxed">
-                                        {getFailedAssetMessage(viewingImage)}
-                                    </p>
-                                )}
+                <section
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="job-detail-title"
+                    className="neu-card relative z-10 flex h-[min(92dvh,920px)] w-[min(96vw,1320px)] flex-col overflow-hidden rounded-[2rem] border border-slate-300/70 shadow-2xl dark:border-slate-700/70"
+                >
+                    <header className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-300/60 px-5 py-4 dark:border-slate-700/70 sm:px-6">
+                        <div className="flex min-w-0 items-center gap-3">
+                            <span className="neu-inset-sm flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-[#FF007F]">
+                                {getAssetKind(viewingImage) === 'video'
+                                    ? <Icons.Video className="h-5 w-5" />
+                                    : <Icons.Image className="h-5 w-5" />}
+                            </span>
+                            <div className="min-w-0">
+                                <div className="mb-1 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                    <span>{getAssetKind(viewingImage) === 'video' ? 'Video job' : 'Image job'}</span>
+                                    <span className="h-1 w-1 rounded-full bg-[#00F2FE]" />
+                                    <span className="font-mono">#{viewingImage.id.substring(0, 8)}</span>
+                                </div>
+                                <h2 id="job-detail-title" className="truncate font-accent text-lg font-black text-slate-950 dark:text-white sm:text-xl">
+                                    {lang === 'vi' ? 'Chi tiết job sáng tạo' : 'Creative job details'}
+                                </h2>
                             </div>
-                        )}
+                        </div>
 
-                        {/* Image Actions Overlay */}
-                        {viewingImage.url && (
-                            <div className="absolute bottom-6 right-6 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button
-                                    onClick={() => window.open(viewingImage.url, '_blank')}
-                                    className="bg-black/70 backdrop-blur-md border border-white/20 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-white/20 transition-colors shadow-lg"
-                                >
-                                    <Icons.ExternalLink className="w-4 h-4" />
-                                </button>
-                                <button
-                                    onClick={() => handleDownload(viewingImage.url, getDownloadFilename(viewingImage), getAssetKind(viewingImage))}
-                                    className="bg-black/70 backdrop-blur-md border border-white/20 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-white/20 transition-colors shadow-lg"
-                                >
-                                    <Icons.Download className="w-4 h-4" />
-                                    {lang === 'vi' ? 'Tải xuống' : 'Download'}
-                                </button>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Right: Details */}
-                    <div className="w-full md:w-2/5 p-6 md:p-8 overflow-y-auto custom-scrollbar border-t md:border-t-0 md:border-l border-white/10 bg-gradient-to-b from-white/[0.02] to-transparent">
-                        <h3 className="text-2xl font-game font-bold text-white mb-6 flex items-center gap-3">
-                            {getAssetKind(viewingImage) === 'video' ? (
-                                <Icons.Video className="w-6 h-6 text-audi-cyan" />
-                            ) : (
-                                <Icons.Image className="w-6 h-6 text-audi-cyan" />
+                        <div className="flex items-center gap-3">
+                            {(!viewingImage.status || viewingImage.status === 'completed') && (
+                                <span className="hidden items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-emerald-500 sm:inline-flex">
+                                    <span className="h-2 w-2 rounded-full bg-emerald-500" /> {lang === 'vi' ? 'Hoàn thành' : 'Completed'}
+                                </span>
                             )}
-                            {getAssetKind(viewingImage) === 'video' ? (lang === 'vi' ? 'Chi tiết video' : 'Video Details') : (lang === 'vi' ? 'Chi tiết ảnh' : 'Image Details')}
-                        </h3>
+                            {(viewingImage.displayStatus || viewingImage.status) === 'failed' && (
+                                <span className="hidden items-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-red-500 sm:inline-flex">
+                                    <span className="h-2 w-2 rounded-full bg-red-500" /> {lang === 'vi' ? 'Thất bại' : 'Failed'}
+                                </span>
+                            )}
+                            {['processing', 'queued', 'rescuing'].includes(viewingImage.displayStatus || viewingImage.status || '') && (
+                                <span className="hidden items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-amber-500 sm:inline-flex">
+                                    <Icons.Loader className="h-3.5 w-3.5 animate-spin" /> {getProcessingStageLabel(viewingImage)}
+                                </span>
+                            )}
+                            <button
+                                type="button"
+                                onClick={() => { setViewingImage(null); setShowLogViewer(false); }}
+                                className="neu-button flex h-10 w-10 items-center justify-center rounded-2xl text-slate-700 hover:text-red-500 dark:text-slate-200"
+                                aria-label={lang === 'vi' ? 'Đóng chi tiết job' : 'Close job details'}
+                            >
+                                <Icons.X className="h-5 w-5" />
+                            </button>
+                        </div>
+                    </header>
 
-                        <div className="space-y-6">
-                            {/* Prompt */}
-                            <div>
-                                <div className="flex items-center justify-between mb-2">
-                                    <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">{lang === 'vi' ? 'Prompt người dùng' : 'User Prompt'}</div>
-                                    {(viewingImage.userPrompt || viewingImage.prompt) && (
+                    <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1.35fr)_minmax(380px,0.65fr)]">
+                        <div className="flex min-h-[340px] min-w-0 flex-col p-4 sm:p-6">
+                            <div className="neu-inset-sm relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-[1.75rem] p-3 sm:p-5">
+                                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(0,242,254,0.08),transparent_42%),radial-gradient(circle_at_bottom,rgba(255,0,127,0.08),transparent_42%)]" />
+                                {viewingImage.url ? (
+                                    getAssetKind(viewingImage) === 'video'
+                                        ? <video src={viewingImage.url} className="relative max-h-full max-w-full rounded-2xl object-contain shadow-2xl" controls autoPlay loop playsInline />
+                                        : <img src={viewingImage.url} alt="Generated asset" className="relative max-h-full max-w-full rounded-2xl object-contain shadow-2xl" />
+                                ) : (
+                                    <div className="relative flex max-w-md flex-col items-center px-6 text-center">
+                                        {(viewingImage.displayStatus || viewingImage.status) === 'failed'
+                                            ? <Icons.AlertTriangle className="mb-5 h-16 w-16 text-red-500/60" />
+                                            : ['processing', 'queued', 'rescuing'].includes(viewingImage.displayStatus || viewingImage.status || '')
+                                                ? <Icons.Loader className="mb-5 h-16 w-16 animate-spin text-[#00F2FE]/60" />
+                                                : <Icons.Image className="mb-5 h-16 w-16 text-slate-500/50" />}
+                                        <h3 className="font-accent text-base font-black text-slate-900 dark:text-white">
+                                            {(viewingImage.displayStatus || viewingImage.status) === 'failed'
+                                                ? getFailedAssetTitle(viewingImage)
+                                                : ['processing', 'queued', 'rescuing'].includes(viewingImage.displayStatus || viewingImage.status || '')
+                                                    ? getProcessingAssetTitle(viewingImage)
+                                                    : (lang === 'vi' ? 'Chưa có dữ liệu kết quả' : 'No result available')}
+                                        </h3>
+                                        {(viewingImage.displayStatus || viewingImage.status) === 'failed' && (
+                                            <p className="mt-2 text-sm leading-relaxed text-red-400">{getFailedAssetMessage(viewingImage)}</p>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            {viewingImage.url && (
+                                <div className="mt-4 grid shrink-0 grid-cols-2 gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => window.open(viewingImage.url, '_blank')}
+                                        className="neu-button flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-xs font-black text-slate-800 dark:text-slate-100"
+                                    >
+                                        <Icons.ExternalLink className="h-4 w-4 text-[#00F2FE]" />
+                                        {lang === 'vi' ? 'Mở file gốc' : 'Open original'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleDownload(viewingImage.url, getDownloadFilename(viewingImage), getAssetKind(viewingImage))}
+                                        className="neu-button-primary flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-xs font-black"
+                                    >
+                                        <Icons.Download className="h-4 w-4" />
+                                        {lang === 'vi' ? 'Tải về thiết bị' : 'Download'}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="custom-scrollbar min-h-0 overflow-y-auto border-t border-slate-300/60 p-4 dark:border-slate-700/70 sm:p-6 lg:border-l lg:border-t-0">
+                            <div className="space-y-4">
+                                <section className="neu-inset-sm rounded-2xl p-4">
+                                    <div className="mb-3 flex items-center justify-between gap-3">
+                                        <h3 className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+                                            {lang === 'vi' ? 'Prompt người dùng' : 'User prompt'}
+                                        </h3>
+                                        {(viewingImage.userPrompt || viewingImage.prompt) && (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    navigator.clipboard.writeText(viewingImage.userPrompt || viewingImage.prompt);
+                                                    notify(lang === 'vi' ? 'Đã sao chép prompt!' : 'Prompt copied!', 'success');
+                                                }}
+                                                className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-[#00BFD8] transition-colors hover:text-[#FF007F]"
+                                            >
+                                                <Icons.Copy className="h-3.5 w-3.5" />
+                                                {lang === 'vi' ? 'Sao chép' : 'Copy'}
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="custom-scrollbar max-h-40 overflow-y-auto whitespace-pre-wrap break-words text-sm font-medium leading-6 text-slate-700 dark:text-slate-200">
+                                        {viewingImage.userPrompt || viewingImage.prompt || <span className="italic text-slate-500">{lang === 'vi' ? 'Không có prompt.' : 'No prompt provided.'}</span>}
+                                    </div>
+                                </section>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    {[
+                                        { label: 'ID', value: `#${viewingImage.id.substring(0, 8)}`, icon: Icons.Database, tone: 'text-violet-500', mono: true },
+                                        { label: lang === 'vi' ? 'Thời gian' : 'Time', value: formatDate(viewingImage.timestamp), icon: Icons.Clock, tone: 'text-amber-500', mono: true },
+                                        { label: lang === 'vi' ? 'Công cụ' : 'Tool', value: viewingImage.toolName || 'AI Studio', icon: Icons.Wand, tone: 'text-[#00BFD8]' },
+                                        { label: lang === 'vi' ? 'Chi phí' : 'Cost', value: typeof viewingImage.cost === 'number' ? `${viewingImage.cost} Vcoin` : 'N/A', icon: Icons.Gem, tone: 'text-[#FF007F]' },
+                                    ].map((meta) => {
+                                        const MetaIcon = meta.icon;
+                                        return (
+                                            <div key={meta.label} className="neu-inset-sm min-w-0 rounded-2xl p-3.5">
+                                                <div className="mb-2 flex items-center gap-2">
+                                                    <MetaIcon className={`h-3.5 w-3.5 ${meta.tone}`} />
+                                                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-500">{meta.label}</span>
+                                                </div>
+                                                <div className={`truncate text-xs font-black text-slate-900 dark:text-white ${meta.mono ? 'font-mono' : ''}`} title={meta.value}>{meta.value}</div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                {getLatestQueueLog(viewingImage) && (
+                                    <section className="neu-inset-sm rounded-2xl p-4">
+                                        <div className="mb-3 flex items-center justify-between gap-3">
+                                            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.15em] text-slate-500">
+                                                <Icons.Activity className="h-4 w-4 text-emerald-500" />
+                                                {lang === 'vi' ? 'Cập nhật gần nhất' : 'Latest update'}
+                                            </div>
+                                            <span className="font-mono text-[9px] text-slate-500">{formatDate(new Date(getLatestQueueLog(viewingImage)!.at).getTime())}</span>
+                                        </div>
+                                        <div className="text-[10px] font-black uppercase tracking-wider text-emerald-500">
+                                            {getQueueStageDisplay(getLatestQueueLog(viewingImage)?.stage)}
+                                        </div>
+                                        <p className="mt-1.5 text-sm font-medium leading-relaxed text-slate-700 dark:text-slate-200">
+                                            {getLatestQueueLog(viewingImage)?.message}
+                                        </p>
+                                    </section>
+                                )}
+
+                                {(viewingImage.displayStatus || viewingImage.status) === 'failed' && viewingImage.error && (
+                                    <section className="rounded-2xl border border-red-500/25 bg-red-500/10 p-4">
+                                        <div className="mb-1 flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-red-500">
+                                            <Icons.AlertTriangle className="h-4 w-4" />
+                                            {lang === 'vi' ? 'Lý do thất bại' : 'Failure reason'}
+                                        </div>
+                                        <p className="text-sm leading-relaxed text-red-400">{getFailedAssetMessage(viewingImage)}</p>
+                                    </section>
+                                )}
+
+                                {viewingImage.providerPrompt && (
+                                    <details className="neu-inset-sm group rounded-2xl p-4">
+                                        <summary className="cursor-pointer select-none text-[10px] font-black uppercase tracking-[0.15em] text-slate-500 group-open:text-[#00BFD8]">
+                                            {lang === 'vi' ? 'Dữ liệu kỹ thuật của provider' : 'Provider technical data'}
+                                        </summary>
+                                        <div className="custom-scrollbar mt-3 max-h-52 overflow-y-auto whitespace-pre-wrap break-words rounded-xl bg-black/10 p-3 font-mono text-[10px] leading-relaxed text-slate-600 dark:bg-black/20 dark:text-slate-400">
+                                            {viewingImage.providerPrompt}
+                                        </div>
+                                    </details>
+                                )}
+
+                                <div className="grid grid-cols-1 gap-3 pt-1 sm:grid-cols-2">
+                                    {getAssetKind(viewingImage) === 'image' && viewingImage.status === 'completed' && (
                                         <button
-                                            onClick={() => {
-                                                navigator.clipboard.writeText(viewingImage.userPrompt || viewingImage.prompt);
-                                                notify(lang === 'vi' ? 'Đã sao chép prompt!' : 'Prompt copied!', 'success');
-                                            }}
-                                            className="text-[10px] font-bold text-audi-cyan uppercase tracking-wider hover:text-white transition-colors flex items-center gap-1"
+                                            type="button"
+                                            onClick={() => handlePublish(viewingImage)}
+                                            disabled={!!viewingImage.isShared}
+                                            className={`neu-button flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-xs font-black ${
+                                                viewingImage.isShared ? 'cursor-default text-emerald-500' : 'text-[#FF007F]'
+                                            }`}
                                         >
-                                            <Icons.Copy className="w-3 h-3" />
-                                            {lang === 'vi' ? 'Sao chép' : 'Copy'}
+                                            <Icons.Share className="h-4 w-4" />
+                                            {viewingImage.isShared ? (lang === 'vi' ? 'Đã chia sẻ' : 'Published') : (lang === 'vi' ? 'Chia sẻ tác phẩm' : 'Share asset')}
                                         </button>
                                     )}
-                                </div>
-                                <div className="bg-black/30 border border-white/5 rounded-xl p-4 text-sm text-slate-300 leading-relaxed break-words whitespace-pre-wrap max-h-40 overflow-y-auto custom-scrollbar" title={viewingImage.userPrompt || viewingImage.prompt}>
-                                    {viewingImage.userPrompt || viewingImage.prompt || <span className="italic text-slate-600">No prompt provided</span>}
-                                </div>
-                            </div>
-
-                            {viewingImage.providerPrompt && (
-                                <details className="group rounded-xl border border-white/5 bg-black/20 p-4">
-                                    <summary className="cursor-pointer select-none text-xs font-bold uppercase tracking-wider text-slate-500 group-open:text-audi-cyan">
-                                        {lang === 'vi' ? 'Prompt nội bộ / provider' : 'Internal / Provider Prompt'}
-                                    </summary>
-                                    <div className="mt-3 max-h-56 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-black/30 p-3 font-mono text-[11px] leading-relaxed text-slate-400 custom-scrollbar">
-                                        {viewingImage.providerPrompt}
-                                    </div>
-                                </details>
-                            )}
-
-                            {/* Meta Grid */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="bg-black/20 border border-white/5 rounded-xl p-4">
-                                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">ID</div>
-                                    <div className="font-mono text-xs text-white truncate">#{viewingImage.id.substring(0, 8)}</div>
-                                </div>
-                                <div className="bg-black/20 border border-white/5 rounded-xl p-4">
-                                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{lang === 'vi' ? 'Thời gian' : 'Time'}</div>
-                                    <div className="font-mono text-xs text-white">{formatDate(viewingImage.timestamp)}</div>
-                                </div>
-                                <div className="bg-black/20 border border-white/5 rounded-xl p-4">
-                                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{lang === 'vi' ? 'Công cụ' : 'Tool'}</div>
-                                    <div className="text-sm font-bold text-audi-cyan truncate" title={viewingImage.toolName}>{viewingImage.toolName}</div>
-                                </div>
-                                <div className="bg-black/20 border border-white/5 rounded-xl p-4">
-                                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{lang === 'vi' ? 'Chi phí' : 'Cost'}</div>
-                                    <div className="text-sm font-bold text-audi-pink">
-                                        {typeof viewingImage.cost === 'number' ? `${viewingImage.cost} Vcoin` : 'N/A'}
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Status */}
-                            <div className="bg-black/20 border border-white/5 rounded-xl p-4 flex items-center justify-between">
-                                <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">{lang === 'vi' ? 'Trạng thái' : 'Status'}</div>
-                                <div>
-                                    {(!viewingImage.status || viewingImage.status === 'completed') && (
-                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/20 text-xs font-bold uppercase tracking-wider">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-green-500"></div> Hoàn thành
-                                        </span>
+                                    {(viewingImage.queueLogs?.length || 0) > 0 && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowLogViewer(true)}
+                                            className="neu-button flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-xs font-black text-slate-800 dark:text-slate-100"
+                                        >
+                                            <Icons.Activity className="h-4 w-4 text-[#00BFD8]" />
+                                            {lang === 'vi' ? 'Nhật ký tiến trình' : 'Progress log'}
+                                        </button>
                                     )}
-                                    {(viewingImage.displayStatus || viewingImage.status) === 'failed' && (
-                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 text-xs font-bold uppercase tracking-wider">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-red-500"></div> Thất bại
-                                        </span>
-                                    )}
-                                    {((viewingImage.displayStatus || viewingImage.status) === 'processing' || (viewingImage.displayStatus || viewingImage.status) === 'queued' || (viewingImage.displayStatus || viewingImage.status) === 'rescuing') && (
-                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 text-xs font-bold uppercase tracking-wider">
-                                            <Icons.Loader className="w-3 h-3 animate-spin" /> {getProcessingStageLabel(viewingImage)}
-                                        </span>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Error Message if failed */}
-                            {(viewingImage.displayStatus || viewingImage.status) === 'failed' && viewingImage.error && (
-                                <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4">
-                                    <div className="text-xs font-bold text-red-400 uppercase tracking-wider mb-1">
-                                        {lang === 'vi' ? 'Lý do thất bại' : 'Failure reason'}
-                                    </div>
-                                    <div className="text-sm text-red-300 leading-relaxed">{getFailedAssetMessage(viewingImage)}</div>
-                                </div>
-                            )}
-
-                            {getLatestQueueLog(viewingImage) && (
-                                <div className={`rounded-xl p-4 border ${getQueueLogLevelStyle(getLatestQueueLog(viewingImage)?.level)}`}>
-                                    <div className="flex items-center justify-between gap-3 mb-2">
-                                        <div className="text-xs font-bold uppercase tracking-wider">
-                                            {lang === 'vi' ? 'Bước gần nhất' : 'Latest step'}
-                                        </div>
-                                        <div className="text-[10px] font-mono opacity-70">
-                                            {formatDate(new Date(getLatestQueueLog(viewingImage)!.at).getTime())}
-                                        </div>
-                                    </div>
-                                    <div className="text-[11px] font-bold uppercase tracking-wider mb-1 opacity-80">
-                                        {getQueueStageDisplay(getLatestQueueLog(viewingImage)?.stage)}
-                                    </div>
-                                    <div className="text-sm leading-relaxed">
-                                        {getLatestQueueLog(viewingImage)?.message}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Actions */}
-                            <div className="pt-4 border-t border-white/10 space-y-2.5">
-                                {viewingImage.url && (
                                     <button
-                                        onClick={() => handleDownload(viewingImage.url, getDownloadFilename(viewingImage), getAssetKind(viewingImage))}
-                                        className="w-full px-4 py-3 rounded-2xl bg-gradient-to-br from-audi-cyan/20 via-audi-cyan/10 to-transparent text-audi-cyan border border-audi-cyan/25 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_10px_24px_rgba(34,211,238,0.12)] hover:from-audi-cyan/25 hover:via-audi-cyan/15 hover:to-audi-cyan/5 transition-all flex items-center justify-between text-left"
+                                        type="button"
+                                        onClick={(e) => {
+                                            setViewingImage(null);
+                                            setShowLogViewer(false);
+                                            handleDelete(e, viewingImage.id, viewingImage.url, viewingImage.userId);
+                                        }}
+                                        className="neu-button flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-xs font-black text-red-500 sm:col-span-2"
                                     >
-                                        <span className="flex items-center gap-3">
-                                            <span className="w-9 h-9 rounded-xl bg-black/30 border border-audi-cyan/20 flex items-center justify-center shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
-                                                <Icons.Download className="w-4 h-4" />
-                                            </span>
-                                            <span className="min-w-0">
-                                                <span className="block text-sm font-extrabold tracking-wide">{lang === 'vi' ? 'Tải xuống' : 'Download'}</span>
-                                                <span className="block text-[10px] text-audi-cyan/70">{lang === 'vi' ? 'Lưu file gốc về thiết bị' : 'Save original file to your device'}</span>
-                                            </span>
-                                        </span>
-                                        <Icons.ChevronRight className="w-4 h-4 text-audi-cyan/70 shrink-0" />
+                                        <Icons.Trash className="h-4 w-4" />
+                                        {lang === 'vi' ? 'Xóa khỏi lịch sử' : 'Delete from history'}
                                     </button>
-                                )}
-                                {getAssetKind(viewingImage) === 'image' && viewingImage.status === 'completed' && (
-                                    <button
-                                        onClick={() => handlePublish(viewingImage)}
-                                        disabled={!!viewingImage.isShared}
-                                        className={`w-full px-4 py-3 rounded-2xl transition-all flex items-center justify-between text-left ${
-                                            viewingImage.isShared
-                                                ? 'bg-gradient-to-br from-emerald-500/18 via-emerald-500/10 to-transparent text-emerald-400 border border-emerald-500/20 cursor-default shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_10px_24px_rgba(16,185,129,0.12)]'
-                                                : 'bg-gradient-to-br from-audi-pink/18 via-audi-pink/10 to-transparent text-audi-pink border border-audi-pink/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_10px_24px_rgba(236,72,153,0.12)] hover:from-audi-pink/25 hover:via-audi-pink/15 hover:to-audi-pink/5'
-                                        }`}
-                                    >
-                                        <span className="flex items-center gap-3">
-                                            <span className={`w-9 h-9 rounded-xl flex items-center justify-center shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ${viewingImage.isShared ? 'bg-black/25 border border-emerald-500/20' : 'bg-black/25 border border-audi-pink/20'}`}>
-                                                <Icons.Share className="w-4 h-4" />
-                                            </span>
-                                            <span className="min-w-0">
-                                                <span className="block text-sm font-extrabold tracking-wide">
-                                                    {viewingImage.isShared ? (lang === 'vi' ? 'Đã publish' : 'Published') : (lang === 'vi' ? 'Chia sẻ' : 'Share')}
-                                                </span>
-                                                <span className={`block text-[10px] ${viewingImage.isShared ? 'text-emerald-300/70' : 'text-audi-pink/70'}`}>
-                                                    {viewingImage.isShared ? (lang === 'vi' ? 'Hiển thị trên trang chủ và lưu dài hạn' : 'Visible on home and stored long-term') : (lang === 'vi' ? 'Đưa ảnh lên trang chủ và lưu lâu dài' : 'Publish to home and store long-term')}
-                                                </span>
-                                            </span>
-                                        </span>
-                                        <Icons.ChevronRight className={`w-4 h-4 shrink-0 ${viewingImage.isShared ? 'text-emerald-300/70' : 'text-audi-pink/70'}`} />
-                                    </button>
-                                )}
-                                {(viewingImage.queueLogs?.length || 0) > 0 && (
-                                    <button
-                                        onClick={() => setShowLogViewer(true)}
-                                        className="w-full px-4 py-3 rounded-2xl bg-gradient-to-br from-white/10 via-white/5 to-transparent text-white border border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_10px_24px_rgba(255,255,255,0.06)] hover:from-white/15 hover:via-white/8 hover:to-white/5 transition-all flex items-center justify-between text-left"
-                                    >
-                                        <span className="flex items-center gap-3">
-                                            <span className="w-9 h-9 rounded-xl bg-black/25 border border-white/10 flex items-center justify-center shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
-                                                <Icons.Activity className="w-4 h-4" />
-                                            </span>
-                                            <span className="min-w-0">
-                                                <span className="block text-sm font-extrabold tracking-wide">{lang === 'vi' ? 'Xem log tiến trình' : 'View progress log'}</span>
-                                                <span className="block text-[10px] text-slate-300/70">{lang === 'vi' ? 'Kiểm tra job đang chạy tới đâu hoặc dừng ở bước nào' : 'Inspect the current step and where the job stopped'}</span>
-                                            </span>
-                                        </span>
-                                        <Icons.ChevronRight className="w-4 h-4 text-slate-300/70 shrink-0" />
-                                    </button>
-                                )}
-                                <button
-                                    onClick={(e) => {
-                                        setViewingImage(null);
-                                        setShowLogViewer(false);
-                                        handleDelete(e, viewingImage.id, viewingImage.url, viewingImage.userId);
-                                    }}
-                                    className="w-full px-4 py-3 rounded-2xl bg-gradient-to-br from-red-500/16 via-red-500/10 to-transparent text-red-400 border border-red-500/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_10px_24px_rgba(239,68,68,0.1)] hover:from-red-500/22 hover:via-red-500/14 hover:to-red-500/5 transition-all flex items-center justify-between text-left"
-                                >
-                                    <span className="flex items-center gap-3">
-                                        <span className="w-9 h-9 rounded-xl bg-black/25 border border-red-500/20 flex items-center justify-center shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
-                                            <Icons.Trash className="w-4 h-4" />
-                                        </span>
-                                        <span className="min-w-0">
-                                            <span className="block text-sm font-extrabold tracking-wide">{lang === 'vi' ? (getAssetKind(viewingImage) === 'video' ? 'Xóa video' : 'Xóa ảnh') : 'Delete'}</span>
-                                            <span className="block text-[10px] text-red-300/70">{lang === 'vi' ? 'Gỡ khỏi lịch sử tạo của bạn' : 'Remove this item from your history'}</span>
-                                        </span>
-                                    </span>
-                                    <Icons.ChevronRight className="w-4 h-4 text-red-300/70 shrink-0" />
-                                </button>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
+                </section>
             </div>,
             document.body
         )}
         {viewingImage && showLogViewer && createPortal(
-            <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6 animate-fade-in">
-                <div className="absolute inset-0 bg-black/85 backdrop-blur-sm" onClick={() => setShowLogViewer(false)}></div>
-                <div className="relative w-full max-w-2xl bg-[#12121a] rounded-3xl border border-white/10 shadow-2xl overflow-hidden max-h-[85vh] flex flex-col">
-                    <div className="flex items-center justify-between px-6 py-5 border-b border-white/10">
-                        <div>
-                            <h3 className="text-xl font-game font-bold text-white flex items-center gap-3">
-                                <Icons.Activity className="w-5 h-5 text-audi-cyan" />
-                                {lang === 'vi' ? 'Nhật ký tiến trình' : 'Progress log'}
-                            </h3>
-                            <div className="mt-1 text-xs text-slate-400 font-mono">#{viewingImage.id.substring(0, 8)}</div>
+            <div className="fixed inset-0 z-[5010] flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-md sm:p-6">
+                <button type="button" className="absolute inset-0 cursor-default" onClick={() => setShowLogViewer(false)} aria-label={lang === 'vi' ? 'Đóng nhật ký tiến trình' : 'Close progress log'} />
+                <section role="dialog" aria-modal="true" aria-labelledby="progress-log-title" className="neu-card relative z-10 flex max-h-[86dvh] w-full max-w-2xl flex-col overflow-hidden rounded-[2rem] border border-slate-300/70 shadow-2xl dark:border-slate-700/70">
+                    <header className="flex items-center justify-between border-b border-slate-300/60 px-5 py-4 dark:border-slate-700/70 sm:px-6">
+                        <div className="flex items-center gap-3">
+                            <span className="neu-inset-sm flex h-10 w-10 items-center justify-center rounded-2xl">
+                                <Icons.Activity className="h-5 w-5 text-[#00BFD8]" />
+                            </span>
+                            <div>
+                                <h3 id="progress-log-title" className="font-accent text-lg font-black text-slate-950 dark:text-white">
+                                    {lang === 'vi' ? 'Nhật ký tiến trình' : 'Progress log'}
+                                </h3>
+                                <div className="mt-0.5 font-mono text-[10px] text-slate-500">JOB #{viewingImage.id.substring(0, 8)}</div>
+                            </div>
                         </div>
                         <button
+                            type="button"
                             onClick={() => setShowLogViewer(false)}
-                            className="w-10 h-10 rounded-full bg-black/50 border border-white/10 flex items-center justify-center text-white hover:bg-white/10 transition-colors"
+                            className="neu-button flex h-10 w-10 items-center justify-center rounded-2xl text-slate-700 hover:text-red-500 dark:text-slate-200"
+                            aria-label={lang === 'vi' ? 'Đóng nhật ký tiến trình' : 'Close progress log'}
                         >
-                            <Icons.X className="w-5 h-5" />
+                            <Icons.X className="h-5 w-5" />
                         </button>
-                    </div>
-                    <div className="p-6 overflow-y-auto custom-scrollbar space-y-3">
+                    </header>
+                    <div className="custom-scrollbar space-y-3 overflow-y-auto p-4 sm:p-6">
                         {getQueueLogs(viewingImage).length === 0 ? (
-                            <div className="text-sm text-slate-400 italic">
+                            <div className="neu-inset-sm rounded-2xl px-5 py-12 text-center text-sm italic text-slate-500">
                                 {lang === 'vi' ? 'Chưa có log tiến trình cho job này.' : 'No progress logs available for this job yet.'}
                             </div>
                         ) : getQueueLogs(viewingImage).map((entry, index) => (
-                            <div key={`${entry.at}-${index}`} className={`rounded-2xl border p-4 ${getQueueLogLevelStyle(entry.level)}`}>
-                                <div className="flex items-center justify-between gap-3 mb-2">
-                                    <div className="text-[11px] font-bold uppercase tracking-wider">
+                            <article key={`${entry.at}-${index}`} className="neu-inset-sm rounded-2xl p-4">
+                                <div className="mb-2 flex items-center justify-between gap-3">
+                                    <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-[#00BFD8]">
+                                        <span className={`h-2 w-2 rounded-full ${entry.level === 'error' ? 'bg-red-500' : entry.level === 'warning' ? 'bg-amber-500' : 'bg-emerald-500'}`} />
                                         {getQueueStageDisplay(entry.stage)}
                                     </div>
-                                    <div className="text-[10px] font-mono opacity-70">
+                                    <div className="font-mono text-[9px] text-slate-500">
                                         {formatDate(new Date(entry.at).getTime())}
                                     </div>
                                 </div>
-                                <div className="text-sm leading-relaxed">{entry.message}</div>
-                            </div>
+                                <div className="text-sm font-medium leading-relaxed text-slate-700 dark:text-slate-200">{entry.message}</div>
+                            </article>
                         ))}
                     </div>
-                </div>
+                </section>
             </div>,
             document.body
         )}

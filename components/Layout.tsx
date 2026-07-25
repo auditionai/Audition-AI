@@ -414,19 +414,9 @@ export const Layout: React.FC<LayoutProps> = ({
             </div>
           </div>
 
-          {/* Right Header Actions: Checkin + Theme Toggle + Language Switcher */}
+          {/* Right Header Actions: Theme Toggle + Language Switcher */}
           <div className="flex items-center gap-2.5">
-            
-            {/* 1. Daily Checkin Button */}
-            <button
-              onClick={() => setShowCheckin(true)}
-              className="neu-button-accent px-4 py-2 rounded-2xl text-xs font-black flex items-center gap-2 shadow-md hover:scale-105 transition-all"
-            >
-              <Icons.Calendar className="w-4 h-4 text-slate-950" />
-              <span className="hidden sm:inline font-accent text-slate-950 uppercase tracking-wider">Điểm danh +Vcoin</span>
-            </button>
-
-            {/* 2. Theme Toggle (Sun / Moon) */}
+            {/* Theme Toggle (Sun / Moon) */}
             <button
               onClick={toggleTheme}
               className="neu-button px-3.5 py-2 rounded-2xl flex items-center gap-2 text-xs font-black text-slate-800 dark:text-slate-200 hover:text-[#FF007F] transition-all"
@@ -436,7 +426,7 @@ export const Layout: React.FC<LayoutProps> = ({
               <span className="hidden md:inline font-accent">{theme === 'dark' ? 'Sáng' : 'Tối'}</span>
             </button>
 
-            {/* 3. Language Switcher (VN / EN) */}
+            {/* Language Switcher (VN / EN) */}
             <button
               onClick={() => setLang(lang === 'vi' ? 'en' : 'vi')}
               className="neu-button px-3.5 py-2 rounded-2xl text-xs font-black text-slate-800 dark:text-slate-200 hover:text-[#00F2FE] transition-all"

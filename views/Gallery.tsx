@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { GeneratedImage, Language, HistoryItem } from '../types';
 import type { QueueProgressLogEntry } from '../shared/queueRecipes';
@@ -30,11 +30,14 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
   const [loadingTransactions, setLoadingTransactions] = useState(false);
   const retentionDays = getHistoryRetentionDays();
   const loadImages = useCallback(async (silent = false) => {
+    if (!silent) setLoadingImages(true);
     try {
       const storedImages = await getAllImagesFromStorage();
       setImages(storedImages);
     } catch (error) {
       console.error("Failed to load gallery", error);
+    } finally {
+      if (!silent) setLoadingImages(false);
     }
   }, []);
   const hasActiveGenerationJobs = useMemo(() => {
@@ -379,58 +382,90 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
   };
 
   return (
-    <div className="pb-32 animate-fade-in max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="w-full pb-24 animate-fade-in space-y-6">
 
-        {/* STORAGE POLICY WARNING BANNER */}
-        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 flex items-start gap-3 mb-6 shrink-0">
-            <Icons.AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-            <div className="space-y-1">
-                <h4 className="text-sm font-bold text-red-400">LƯU Ý QUAN TRỌNG: Chính sách lưu trữ lịch sử tạo</h4>
-                <p className="text-xs text-red-400/80 leading-relaxed">
-                    Ảnh và video trong lịch sử tạo sẽ tự động bị xóa sau <b className="text-red-500">{retentionDays} ngày</b> nếu chưa publish.
-                    Giao dịch Vcoin vẫn được giữ lại. Ảnh đã publish sẽ được lưu trữ lâu dài và không bị xóa theo mốc này.
-                </p>
+        {/* 3D NEUMORPHIC HERO BANNER & STORAGE POLICY */}
+        <div className="w-full neu-card p-6 sm:p-8 rounded-3xl shadow-2xl border border-white/20 relative overflow-hidden space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <div className="inline-flex items-center gap-2 neu-inset-sm px-3.5 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-wider text-[#FF007F] font-accent mb-2">
+                        <Icons.Image className="w-3.5 h-3.5 text-[#FF007F]" />
+                        AUDITION 3D CREATIVE VAULT
+                    </div>
+                    <h1 className="font-accent text-2xl sm:text-3xl font-black text-slate-800 dark:text-white uppercase tracking-wider">
+                        THƯ VIỆN & LỊCH SỬ SÁNG TẠO
+                    </h1>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                        Quản lý toàn bộ tác phẩm Ảnh & Video AI 3D, theo dõi trạng thái render realtime và lưu trữ tác phẩm lâu dài.
+                    </p>
+                </div>
+
+                <div className="flex items-center gap-3">
+                    <div className="neu-inset-sm px-4 py-2.5 rounded-2xl flex items-center gap-3">
+                        <div className="w-9 h-9 neu-raised-sm rounded-xl flex items-center justify-center text-[#00F2FE]">
+                            <Icons.Sparkles className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <div className="text-[10px] font-bold text-slate-400 uppercase">Tổng Tác Phẩm</div>
+                            <div className="text-base font-black font-accent text-slate-800 dark:text-white">{images.length} File</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* STORAGE POLICY WARNING BANNER */}
+            <div className="neu-inset-sm p-4 rounded-2xl flex items-start gap-3 border border-red-500/20">
+                <Icons.AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                    <h4 className="text-xs font-bold text-red-500 dark:text-red-400 uppercase font-accent">LƯU Ý QUAN TRỌNG: Chính sách lưu trữ lịch sử tạo</h4>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
+                        Ảnh và video trong lịch sử tạo sẽ tự động bị xóa sau <b className="text-red-500 font-extrabold">{retentionDays} ngày</b> nếu chưa publish.
+                        Giao dịch Vcoin vẫn được giữ lại. Tác phẩm đã publish sẽ được lưu trữ lâu dài và không bị xóa.
+                    </p>
+                </div>
             </div>
         </div>
 
-        <div data-tour-id="desktop.gallery.panel" className="bg-[#12121a] rounded-3xl border border-white/10 overflow-hidden shadow-2xl">
-            {/* Header / Tabs */}
-            <div className="flex flex-col md:flex-row items-center justify-between p-6 border-b border-white/10 gap-4">
-                <div data-tour-id="desktop.gallery.tabs" className="flex bg-black/50 p-1 rounded-xl border border-white/5">
+        {/* 3D NEUMORPHIC GALLERY WORKSPACE */}
+        <div data-tour-id="desktop.gallery.panel" className="w-full neu-card rounded-3xl overflow-hidden shadow-2xl p-6 space-y-6">
+            {/* Header / Tabs & Filter Bar */}
+            <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 pb-4 border-b border-slate-200/60 dark:border-slate-800">
+                <div data-tour-id="desktop.gallery.tabs" className="flex neu-inset-sm p-1.5 rounded-2xl shrink-0">
                     <button
                         onClick={() => setActiveTab('generation')}
-                        className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'generation' ? 'bg-white/10 text-white shadow-sm' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                        className={`px-5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'generation' ? 'neu-raised-sm text-[#FF007F] font-accent' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
                     >
-                        {lang === 'vi' ? 'Lịch sử tạo' : 'Generation History'}
+                        {lang === 'vi' ? '🖼️ Lịch sử tạo' : 'Generation History'}
                     </button>
                     <button
                         onClick={() => setActiveTab('transactions')}
-                        className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'transactions' ? 'bg-white/10 text-white shadow-sm' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                        className={`px-5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'transactions' ? 'neu-raised-sm text-[#00F2FE] font-accent' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
                     >
-                        {lang === 'vi' ? 'Giao dịch Vcoin' : 'Vcoin Transactions'}
+                        {lang === 'vi' ? '💎 Giao dịch Vcoin' : 'Vcoin Transactions'}
                     </button>
                 </div>
 
                 {activeTab === 'generation' && (
-                    <div data-tour-id="desktop.gallery.filters" className="flex items-center gap-4 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 custom-scrollbar">
-                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">LỌC THEO:</span>
-                        <div className="flex gap-2">
-                            <button onClick={() => setFilter('all')} className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-colors whitespace-nowrap ${filter === 'all' ? 'bg-audi-cyan/20 border-audi-cyan/50 text-audi-cyan' : 'border-white/10 text-slate-400 hover:bg-white/5'}`}>Tất cả</button>
-                            <button onClick={() => setFilter('completed')} className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-colors whitespace-nowrap ${filter === 'completed' ? 'bg-green-500/20 border-green-500/50 text-green-400' : 'border-white/10 text-slate-400 hover:bg-white/5'}`}>Hoàn thành</button>
-                            <button onClick={() => setFilter('failed')} className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-colors whitespace-nowrap ${filter === 'failed' ? 'bg-red-500/20 border-red-500/50 text-red-400' : 'border-white/10 text-slate-400 hover:bg-white/5'}`}>Thất bại</button>
-                            <button onClick={() => setFilter('rescuing')} className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-colors whitespace-nowrap ${filter === 'rescuing' ? 'bg-violet-500/20 border-violet-500/50 text-violet-300' : 'border-white/10 text-slate-400 hover:bg-white/5'}`}>Đang cứu</button>
-                            <button onClick={() => setFilter('processing')} className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-colors whitespace-nowrap ${filter === 'processing' || filter === 'queued' ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-400' : 'border-white/10 text-slate-400 hover:bg-white/5'}`}>Đang chờ</button>
+                    <div data-tour-id="desktop.gallery.filters" className="flex flex-wrap items-center gap-3">
+                        <span className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">LỌC THEO:</span>
+                        <div className="flex flex-wrap gap-1.5 neu-inset-sm p-1 rounded-2xl">
+                            <button onClick={() => setFilter('all')} className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all ${filter === 'all' ? 'neu-raised-sm text-[#FF007F]' : 'text-slate-500 dark:text-slate-400'}`}>Tất cả ({images.length})</button>
+                            <button onClick={() => setFilter('completed')} className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all ${filter === 'completed' ? 'neu-raised-sm text-emerald-500' : 'text-slate-500 dark:text-slate-400'}`}>Hoàn thành</button>
+                            <button onClick={() => setFilter('failed')} className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all ${filter === 'failed' ? 'neu-raised-sm text-red-500' : 'text-slate-500 dark:text-slate-400'}`}>Thất bại</button>
+                            <button onClick={() => setFilter('rescuing')} className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all ${filter === 'rescuing' ? 'neu-raised-sm text-purple-500' : 'text-slate-500 dark:text-slate-400'}`}>Đang cứu</button>
+                            <button onClick={() => setFilter('processing')} className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all ${filter === 'processing' || filter === 'queued' ? 'neu-raised-sm text-amber-500' : 'text-slate-500 dark:text-slate-400'}`}>Đang xử lý</button>
                         </div>
-                        <div className="w-px h-6 bg-white/10 mx-2 hidden md:block"></div>
-                        <button
-                            data-tour-id="desktop.gallery.bulk_actions"
-                            onClick={handleDeleteSelected}
-                            disabled={selectedIds.size === 0}
-                            className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold transition-colors whitespace-nowrap ${selectedIds.size > 0 ? 'text-red-400 hover:bg-red-500/10' : 'text-slate-600 cursor-not-allowed'}`}
-                        >
-                            <Icons.Trash className="w-4 h-4" />
-                            {lang === 'vi' ? 'Xóa trang này' : 'Delete selected'}
-                        </button>
+                        
+                        {selectedIds.size > 0 && (
+                            <button
+                                data-tour-id="desktop.gallery.bulk_actions"
+                                onClick={handleDeleteSelected}
+                                className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold neu-button text-red-500 hover:scale-105 transition-all"
+                            >
+                                <Icons.Trash className="w-4 h-4" />
+                                {lang === 'vi' ? `Xóa (${selectedIds.size})` : `Delete (${selectedIds.size})`}
+                            </button>
+                        )}
                     </div>
                 )}
             </div>
@@ -774,7 +809,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                 ) : (
                                     <Icons.Image className="w-16 h-16 mb-4 opacity-50" />
                                 )}
-                                <p>{(viewingImage.displayStatus || viewingImage.status) === 'failed' ? (lang === 'vi' ? 'Tạo ảnh thất bại' : 'Image generation failed') : (viewingImage.displayStatus || viewingImage.status) === 'processing' || (viewingImage.displayStatus || viewingImage.status) === 'queued' || (viewingImage.displayStatus || viewingImage.status) === 'rescuing' ? getProcessingStageLabel(viewingImage) : (lang === 'vi' ? 'Không có ảnh' : 'No image available')}</p>
+                                <p>{(viewingImage.displayStatus || viewingImage.status) === 'failed' ? getFailedAssetTitle(viewingImage) : (viewingImage.displayStatus || viewingImage.status) === 'processing' || (viewingImage.displayStatus || viewingImage.status) === 'queued' || (viewingImage.displayStatus || viewingImage.status) === 'rescuing' ? getProcessingAssetTitle(viewingImage) : (lang === 'vi' ? 'Không có dữ liệu' : 'No asset available')}</p>
                                 {(viewingImage.displayStatus || viewingImage.status) === 'failed' && (
                                     <p className="mt-2 max-w-[320px] text-center text-sm text-red-300 leading-relaxed">
                                         {getFailedAssetMessage(viewingImage)}

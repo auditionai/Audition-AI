@@ -170,6 +170,28 @@ export const signInWithEmail = async (email: string, password: string) => {
     return await supabase.auth.signInWithPassword({ email, password });
 };
 
+export const updatePasswordWithVerification = async (
+    email: string,
+    currentPassword: string,
+    newPassword: string,
+) => {
+    if (!supabase) {
+        return { error: { message: "Chức năng yêu cầu kết nối Database." } };
+    }
+
+    const { error: verificationError } = await supabase.auth.signInWithPassword({
+        email,
+        password: currentPassword,
+    });
+    if (verificationError) {
+        return { error: { message: "Mật khẩu hiện tại không chính xác." } };
+    }
+
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    clearSupabaseSessionCache();
+    return { error };
+};
+
 export const signUpWithEmail = async (email: string, password: string, preferredDisplayName?: string) => {
     if (!supabase) return { data: null, error: { message: "Chức năng yêu cầu kết nối Database." } };
     

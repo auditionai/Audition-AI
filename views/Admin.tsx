@@ -1,4 +1,4 @@
-﻿
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { getSupabaseUser, supabase } from '../services/supabaseClient';
@@ -389,12 +389,12 @@ END $$;
 
 -- 3. AUDIT SUSPICIOUS BALANCES
 /*
-SELECT u.email, u.vcoin_balance, u.display_name
+SELECT u.email, u.vcoin_balance?.toLocaleString(), u.display_name
 FROM public.users u
 LEFT JOIN public.payment_transactions t ON u.id = t.user_id AND t.status = 'paid'
 WHERE u.is_admin = false
-GROUP BY u.email, u.vcoin_balance, u.display_name
-HAVING u.vcoin_balance > 500 AND COUNT(t.id) = 0;
+GROUP BY u.email, u.vcoin_balance?.toLocaleString(), u.display_name
+HAVING u.vcoin_balance?.toLocaleString() > 500 AND COUNT(t.id) = 0;
 */
 `;
 
@@ -2385,8 +2385,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               <div className="w-24 h-24 bg-red-500/10 rounded-full flex items-center justify-center mb-6 animate-pulse">
                   <Icons.Lock className="w-10 h-10 text-red-500" />
               </div>
-              <h1 className="text-4xl font-game font-bold text-white mb-2">ACCESS DENIED</h1>
-              <p className="text-slate-400 font-mono">Khu vực hạn chế. Cần quyền Admin cấp 5.</p>
+              <h1 className="text-4xl font-game font-bold text-slate-900 dark:text-white mb-2">ACCESS DENIED</h1>
+              <p className="text-slate-700 dark:text-slate-300 font-semibold font-mono">Khu vực hạn chế. Cần quyền Admin cấp 5.</p>
           </div>
       );
   }
@@ -2442,39 +2442,39 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   };
 
   return (
-    <div className="min-h-screen pb-24 animate-fade-in bg-[#05050A]">
+    <div className="min-h-screen pb-24 animate-fade-in bg-slate-100 dark:bg-[#13161F] text-slate-800 dark:text-slate-100 font-sans">
       {/* --- TOASTS CONTAINER --- */}
       <div className="fixed top-24 right-4 z-[9999] flex flex-col gap-2 pointer-events-none w-full max-w-sm px-4 md:px-0">
           {toasts.map(t => (
-              <div key={t.id} className={`pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-xl border shadow-xl animate-fade-in backdrop-blur-md ${
-                  t.type === 'success' ? 'bg-[#0f1f12]/90 border-green-500/50 text-green-400' : 
-                  t.type === 'error' ? 'bg-[#1f0f0f]/90 border-red-500/50 text-red-400' : 'bg-[#0f151f]/90 border-blue-500/50 text-blue-400'
+              <div key={t.id} className={`pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-2xl neu-raised-md backdrop-blur-md ${
+                  t.type === 'success' ? 'text-emerald-500' : 
+                  t.type === 'error' ? 'text-red-500' : 'text-cyan-500'
               }`}>
                   {t.type === 'success' && <Icons.Check className="w-5 h-5 shrink-0" />}
                   {t.type === 'error' && <Icons.X className="w-5 h-5 shrink-0" />}
                   {t.type === 'info' && <Icons.Info className="w-5 h-5 shrink-0" />}
-                  <span className="text-sm font-bold break-words">{t.msg}</span>
+                  <span className="text-xs font-bold break-words">{t.msg}</span>
               </div>
           ))}
       </div>
 
-      {/* --- CONFIRM / ALERT DIALOG (Updated Overlay) --- */}
+      {/* --- CONFIRM / ALERT DIALOG --- */}
       {confirmDialog.show && (
-          <div className="fixed inset-0 z-[10000] flex items-start justify-center p-4 pt-24 animate-fade-in overflow-y-auto">
-              <div className="bg-[#12121a] border border-white/20 p-6 rounded-2xl max-w-lg w-full shadow-[0_0_50px_rgba(0,0,0,0.8)] transform scale-100 transition-all m-4 max-h-[90vh] overflow-y-auto custom-scrollbar">
-                  <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center mb-4 text-audi-yellow mx-auto">
-                      <Icons.Bell className="w-6 h-6 animate-swing" />
+          <div className="fixed inset-0 z-[10000] flex items-start justify-center p-4 pt-24 animate-fade-in overflow-y-auto bg-black/60 backdrop-blur-sm">
+              <div className="neu-card p-6 rounded-3xl max-w-lg w-full m-4 max-h-[90vh] overflow-y-auto custom-scrollbar">
+                  <div className="w-12 h-12 neu-inset-sm rounded-full flex items-center justify-center mb-4 text-amber-500 mx-auto">
+                      <Icons.Bell className="w-6 h-6 animate-pulse" />
                   </div>
-                  <h3 className="text-lg font-bold text-white text-center mb-2">{confirmDialog.title || 'Thông báo'}</h3>
-                  <p className="text-slate-400 text-center text-sm mb-6 leading-relaxed whitespace-pre-line">{confirmDialog.msg}</p>
+                  <h3 className="text-base font-bold text-slate-800 dark:text-white text-center mb-2 font-accent">{confirmDialog.title || 'Thông báo'}</h3>
+                  <p className="text-slate-700 dark:text-slate-400 font-semibold text-center text-xs mb-6 leading-relaxed whitespace-pre-line">{confirmDialog.msg}</p>
                   
                   <div className="flex gap-3">
                       {!confirmDialog.isAlertOnly && (
-                          <button onClick={() => setConfirmDialog(prev => ({...prev, show: false}))} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold transition-colors">
+                          <button onClick={() => setConfirmDialog(prev => ({...prev, show: false}))} className="flex-1 py-3 rounded-2xl neu-button text-slate-700 dark:text-slate-400 font-semibold font-bold text-xs">
                               Hủy
                           </button>
                       )}
-                      <button onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(prev => ({...prev, show: false})) }} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold transition-colors shadow-lg">
+                      <button onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(prev => ({...prev, show: false})) }} className="flex-1 py-3 rounded-2xl neu-button-primary font-bold text-xs shadow-lg">
                           {confirmDialog.isAlertOnly ? 'Đã hiểu' : 'Đồng ý'}
                       </button>
                   </div>
@@ -2482,145 +2482,222 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           </div>
       )}
       
-      {/* Top Command Bar */}
-      <div className="bg-[#12121a] border-b border-white/10 sticky top-[72px] z-40 shadow-lg">
-          <div className="w-full max-w-[1920px] mx-auto px-4 xl:px-6 2xl:px-8 py-3 flex flex-row justify-between items-center gap-4">
+      {/* 3D NEUMORPHIC ADMIN COMMAND CONSOLE */}
+      <div className="w-full neu-card p-5 rounded-3xl mb-6 shadow-2xl space-y-4">
+          {/* Top Admin Header & Live System Health */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-3 border-b border-slate-200/60 dark:border-slate-800">
               <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-audi-pink flex items-center justify-center text-white font-bold shadow-lg shadow-audi-pink/30">
-                      <Icons.Shield className="w-5 h-5 md:w-6 md:h-6" />
+                  <div className="w-12 h-12 neu-inset-sm rounded-2xl flex items-center justify-center text-[#FF007F] shadow-inner">
+                      <Icons.Shield className="w-6 h-6 text-[#FF007F]" />
                   </div>
                   <div>
-                      <h1 className="font-game text-base md:text-xl font-bold text-white leading-none">QUẢN TRỊ</h1>
-                      <p className="text-[9px] md:text-[10px] text-audi-cyan font-mono tracking-widest mt-0.5 hidden md:block">V42.0.0-RELEASE • SYSTEM MONITOR</p>
+                      <div className="flex items-center gap-2">
+                          <h1 className="font-accent text-base md:text-xl font-black text-slate-800 dark:text-white uppercase tracking-wider">
+                              TRANG QUẢN TRỊ AUDITION 3D
+                          </h1>
+                          <span className="neu-inset-sm px-2.5 py-0.5 rounded-full text-[9px] font-mono font-bold text-[#00F2FE]">
+                              v42.0 PRO
+                          </span>
+                      </div>
+                      <p className="text-[10px] text-slate-700 dark:text-slate-400 font-semibold dark:text-slate-700 dark:text-slate-300 font-semibold font-mono tracking-widest mt-0.5">
+                          SYSTEM MONITOR • MANAGEMENT CONSOLE
+                      </p>
                   </div>
               </div>
 
-              {/* Quick Health Indicators (Compact Mobile) */}
-              <div className="flex items-center gap-2 bg-black/40 px-2 py-1 rounded-full border border-white/5">
-                  <div title="Gemini" className={`w-2 h-2 rounded-full ${health.gemini.status === 'connected' ? 'bg-blue-500' : 'bg-red-500'}`}></div>
-                  <div title="DB" className={`w-2 h-2 rounded-full ${health.supabase.status === 'connected' ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                  <div title="Storage" className={`w-2 h-2 rounded-full ${health.storage.status === 'connected' ? 'bg-orange-500' : 'bg-red-500'}`}></div>
+              {/* Quick Health Indicators Badges */}
+              <div className="flex items-center gap-3 neu-inset-sm px-4 py-2 rounded-2xl">
+                  <span className="text-[10px] font-bold text-slate-700 dark:text-slate-400 font-semibold dark:text-slate-700 dark:text-slate-300 font-semibold uppercase tracking-wider">Hệ thống:</span>
+                  <div className="flex items-center gap-2 text-[10px] font-bold">
+                      <div className="flex items-center gap-1.5" title="Gemini AI Engine">
+                          <span className={`w-2.5 h-2.5 rounded-full ${health.gemini.status === 'connected' ? 'bg-emerald-500 shadow-[0_0_8px_#10B981]' : 'bg-red-500'}`} />
+                          <span className="text-slate-700 dark:text-slate-300">Gemini</span>
+                      </div>
+                      <span className="text-slate-700 dark:text-slate-300 font-semibold dark:text-slate-600">•</span>
+                      <div className="flex items-center gap-1.5" title="Supabase Database">
+                          <span className={`w-2.5 h-2.5 rounded-full ${health.supabase.status === 'connected' ? 'bg-emerald-500 shadow-[0_0_8px_#10B981]' : 'bg-red-500'}`} />
+                          <span className="text-slate-700 dark:text-slate-300">Database</span>
+                      </div>
+                      <span className="text-slate-700 dark:text-slate-300 font-semibold dark:text-slate-600">•</span>
+                      <div className="flex items-center gap-1.5" title="Cloudflare R2 Storage">
+                          <span className={`w-2.5 h-2.5 rounded-full ${health.storage.status === 'connected' ? 'bg-emerald-500 shadow-[0_0_8px_#10B981]' : 'bg-red-500'}`} />
+                          <span className="text-slate-700 dark:text-slate-300">R2 Storage</span>
+                      </div>
+                  </div>
               </div>
           </div>
 
-          {/* Navigation Tabs (Scrollable) */}
-          <div className="w-full max-w-[1920px] mx-auto px-4 xl:px-6 2xl:px-8 flex gap-2 overflow-x-auto no-scrollbar py-2 border-t border-white/5">
-              {[
-                  { id: 'overview', icon: Icons.Home, label: 'Tổng Quan' },
-                  { id: 'transactions', icon: Icons.Gem, label: 'Giao Dịch' },
-                  { id: 'users', icon: Icons.User, label: 'Người Dùng' },
-                  { id: 'giftcode_abuse', icon: Icons.AlertTriangle, label: 'Vi Phạm Code' },
-                  { id: 'queue', icon: Icons.Clock, label: 'Queue Jobs' },
-                  { id: 'packages', icon: Icons.ShoppingBag, label: 'Gói Nạp' },
-                  { id: 'marketing', icon: Icons.Zap, label: 'Sự Kiện & Code' },
-                  { id: 'pricing', icon: Icons.Gem, label: 'Bảng Giá' },
-                  { id: 'styles', icon: Icons.Palette, label: 'Style Mẫu' },
-                  { id: 'tours', icon: Icons.Info, label: 'Hướng Dẫn' },
-                  { id: 'system', icon: Icons.Cpu, label: 'Hệ Thống' },
-              ].map(tab => (
-                  <button
-                      key={tab.id}
-                      onClick={() => setActiveView(tab.id as any)}
-                      className={`px-3 py-1.5 md:px-4 md:py-2 rounded-lg flex items-center gap-2 text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap shrink-0 ${
-                          activeView === tab.id 
-                          ? 'bg-white text-black shadow-md' 
-                          : 'text-slate-400 hover:text-white hover:bg-white/5 bg-white/5 border border-white/5'
-                      }`}
-                  >
-                      <tab.icon className="w-3 h-3 md:w-4 md:h-4" />
-                      {tab.label}
-                  </button>
-              ))}
+          {/* Navigation Tabs (Categorized 2-Group Admin Console Navigation) */}
+          <div className="w-full neu-card p-4 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl space-y-4">
+              
+              {/* Category 1: VẬN HÀNH HỆ THỐNG */}
+              <div>
+                  <div className="text-[10px] font-black uppercase tracking-wider text-[#FF007F] mb-2 px-1 font-accent flex items-center gap-1.5">
+                      <Icons.Activity className="w-3.5 h-3.5" />
+                      <span>VẬN HÀNH & ĐỒNG BỘ</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                      {[
+                          { id: 'overview', icon: Icons.Home, label: 'Tổng Quan' },
+                          { id: 'transactions', icon: Icons.Gem, label: 'Giao Dịch' },
+                          { id: 'users', icon: Icons.User, label: 'Người Dùng' },
+                          { id: 'giftcode_abuse', icon: Icons.AlertTriangle, label: 'Vi Phạm Code' },
+                          { id: 'queue', icon: Icons.Clock, label: 'Queue Jobs' },
+                      ].map(tab => {
+                          const isActive = activeView === tab.id;
+                          return (
+                              <button
+                                  key={tab.id}
+                                  type="button"
+                                  onClick={() => setActiveView(tab.id as any)}
+                                  className={`px-3 py-2.5 rounded-xl flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider transition-all w-full text-center ${
+                                      isActive 
+                                      ? 'neu-inset-sm text-[#FF007F] ring-2 ring-[#FF007F] bg-[#FF007F]/10 shadow-md font-accent scale-[1.02]' 
+                                      : 'neu-button text-slate-700 dark:text-slate-300 hover:text-[#FF007F] hover:scale-[1.01]'
+                                  }`}
+                              >
+                                  <tab.icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#FF007F]' : 'text-slate-700 dark:text-slate-400 font-semibold'}`} />
+                                  <span className="truncate">{tab.label}</span>
+                              </button>
+                          );
+                      })}
+                  </div>
+              </div>
+
+              {/* Category 2: CẤU HÌNH & KINH DOANH */}
+              <div>
+                  <div className="text-[10px] font-black uppercase tracking-wider text-purple-600 dark:text-purple-400 mb-2 px-1 font-accent flex items-center gap-1.5">
+                      <Icons.Settings className="w-3.5 h-3.5" />
+                      <span>CẤU HÌNH & KINH DOANH</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+                      {[
+                          { id: 'packages', icon: Icons.ShoppingBag, label: 'Gói Nạp' },
+                          { id: 'marketing', icon: Icons.Zap, label: 'Sự Kiện & Code' },
+                          { id: 'pricing', icon: Icons.Gem, label: 'Bảng Giá' },
+                          { id: 'styles', icon: Icons.Palette, label: 'Style Mẫu' },
+                          { id: 'tours', icon: Icons.Info, label: 'Hướng Dẫn' },
+                          { id: 'system', icon: Icons.Cpu, label: 'Hệ Thống' },
+                      ].map(tab => {
+                          const isActive = activeView === tab.id;
+                          return (
+                              <button
+                                  key={tab.id}
+                                  type="button"
+                                  onClick={() => setActiveView(tab.id as any)}
+                                  className={`px-3 py-2.5 rounded-xl flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider transition-all w-full text-center ${
+                                      isActive 
+                                      ? 'neu-inset-sm text-purple-600 dark:text-purple-400 ring-2 ring-purple-500 bg-purple-500/10 shadow-md font-accent scale-[1.02]' 
+                                      : 'neu-button text-slate-700 dark:text-slate-300 hover:text-purple-500 hover:scale-[1.01]'
+                                  }`}
+                              >
+                                  <tab.icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-purple-600 dark:text-purple-400' : 'text-slate-700 dark:text-slate-400 font-semibold'}`} />
+                                  <span className="truncate">{tab.label}</span>
+                              </button>
+                          );
+                      })}
+                  </div>
+              </div>
+
           </div>
       </div>
 
-      <div className="w-full max-w-[1920px] mx-auto px-4 xl:px-6 2xl:px-8 py-6 space-y-6">
+      {/* ADMIN WORKSPACE VIEWS */}
+      <div className="w-full space-y-6">
           
-          {/* ... (Existing Views) ... */}
+          {/* 1. OVERVIEW VIEW */}
           {activeView === 'overview' && (
-              <div className="space-y-6 animate-slide-in-right">
-                  {/* Grid 3x2 Dashboard */}
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-6">
+              <div className="space-y-6 animate-fade-in">
+                  {/* Grid 6 Metric Cards */}
+                  <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
                       {[
-                          { title: 'Truy cập hôm nay', value: stats?.dashboard?.visitsToday, icon: Icons.Menu, color: 'text-white' },
-                          { title: 'Truy cập 30 ngày', value: new Intl.NumberFormat('de-DE').format(stats?.dashboard?.visitsTotal || 0), icon: Icons.Cloud, color: 'text-audi-cyan' },
-                          { title: 'User mới hôm nay', value: stats?.dashboard?.newUsersToday, icon: Icons.User, color: 'text-white' },
-                          { title: 'Tổng User', value: stats?.dashboard?.usersTotal, icon: Icons.User, color: 'text-green-500' },
-                          { title: 'Ảnh hôm nay', value: stats?.dashboard?.imagesToday, icon: Icons.Image, color: 'text-white' },
-                          { title: 'Ảnh trong 30 ngày', value: new Intl.NumberFormat('de-DE').format(stats?.dashboard?.imagesTotal || 0), icon: Icons.Image, color: 'text-audi-pink' },
+                          { title: 'Truy Cập Hôm Nay', value: stats?.dashboard?.visitsToday, icon: Icons.Activity, color: 'text-[#00F2FE]', badge: 'LIVE' },
+                          { title: 'Truy Cập 30 Ngày', value: new Intl.NumberFormat('de-DE').format(stats?.dashboard?.visitsTotal || 0), icon: Icons.Cloud, color: 'text-[#00F2FE]', badge: '30 DAYS' },
+                          { title: 'User Mới Hôm Nay', value: stats?.dashboard?.newUsersToday, icon: Icons.User, color: 'text-amber-500', badge: 'TODAY' },
+                          { title: 'Tổng User Hệ Thống', value: stats?.dashboard?.usersTotal, icon: Icons.User, color: 'text-emerald-500', badge: 'TOTAL' },
+                          { title: 'Ảnh Render Hôm Nay', value: stats?.dashboard?.imagesToday, icon: Icons.Image, color: 'text-[#FF007F]', badge: 'RENDER' },
+                          { title: 'Ảnh Render 30 Ngày', value: new Intl.NumberFormat('de-DE').format(stats?.dashboard?.imagesTotal || 0), icon: Icons.Sparkles, color: 'text-[#FF007F]', badge: 'TOTAL' },
                       ].map((item, i) => (
-                          <div key={i} className="bg-[#12121a] border border-white/5 rounded-2xl p-4 md:p-6 relative overflow-hidden shadow-lg hover:border-white/10 transition-all">
-                              <div className="flex justify-between items-start">
-                                  <div>
-                                      <p className="text-[9px] md:text-xs font-bold text-slate-400 uppercase mb-1 md:mb-2 truncate">{item.title}</p>
-                                      <h3 className={`text-2xl md:text-4xl font-game font-bold ${item.color} drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]`}>
-                                          {item.value}
-                                      </h3>
+                          <div key={i} className="neu-card p-5 rounded-3xl space-y-3 relative overflow-hidden group hover:scale-[1.02] transition-transform">
+                              <div className="flex justify-between items-center">
+                                  <div className="w-10 h-10 neu-inset-sm rounded-2xl flex items-center justify-center text-slate-700 dark:text-slate-400 font-semibold dark:text-slate-700 dark:text-slate-300 font-semibold group-hover:text-[#FF007F] transition-colors">
+                                      <item.icon className="w-5 h-5" />
                                   </div>
-                                  <div className="p-2 md:p-3 bg-white/5 rounded-xl text-slate-400 hidden md:block">
-                                      <item.icon className="w-6 h-6" />
-                                  </div>
+                                  <span className="neu-inset-sm px-2 py-0.5 rounded-full text-[9px] font-mono font-bold text-slate-700 dark:text-slate-400 font-semibold dark:text-slate-700 dark:text-slate-300 font-semibold">
+                                      {item.badge}
+                                  </span>
                               </div>
-                              <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none"></div>
+                              <div>
+                                  <p className="text-[10px] font-extrabold text-slate-700 dark:text-slate-400 font-semibold dark:text-slate-700 dark:text-slate-300 font-semibold uppercase tracking-wider truncate mb-1">{item.title}</p>
+                                  <h3 className={`text-2xl md:text-3xl font-black font-accent ${item.color}`}>
+                                      {item.value ?? 0}
+                                  </h3>
+                              </div>
                           </div>
                       ))}
                   </div>
 
-                  {/* AI Stats Table */}
-                  <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 md:p-6 shadow-xl">
-                      <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                          <Icons.BarChart className="w-5 h-5 text-audi-yellow" />
-                          Thống Kê Sử Dụng
-                      </h3>
-                      {/* ... (Existing table) ... */}
-                      <div className="hidden md:block overflow-x-auto">
-                          <table className="w-full text-left text-sm text-slate-400">
-                              <thead className="bg-[#090014] text-xs font-bold text-slate-500 uppercase">
+                  {/* AI Usage Statistics Table */}
+                  <div className="neu-card p-6 rounded-3xl space-y-4 shadow-2xl">
+                      <div className="flex items-center justify-between pb-3 border-b border-slate-200/60 dark:border-slate-800">
+                          <h3 className="font-extrabold text-slate-800 dark:text-white text-base uppercase tracking-wider font-accent flex items-center gap-2">
+                              <Icons.BarChart className="w-5 h-5 text-amber-500" />
+                              THỐNG KÊ SỬ DỤNG VÀ DOANH THU FEATURES AI
+                          </h3>
+                      </div>
+
+                      <div className="hidden md:block overflow-x-auto neu-inset-sm rounded-2xl p-2">
+                          <table className="w-full text-left text-xs text-slate-700 dark:text-slate-300">
+                              <thead className="neu-raised-sm text-[10px] font-black text-slate-700 dark:text-slate-400 font-semibold dark:text-slate-700 dark:text-slate-300 font-semibold uppercase font-accent">
                                   <tr>
-                                      <th className="px-6 py-4">Tính năng</th>
-                                      <th className="px-6 py-4 text-audi-cyan">Số lượt</th>
-                                      <th className="px-6 py-4 text-audi-pink">Vcoin tiêu thụ</th>
-                                      <th className="px-6 py-4 text-right text-green-500">Doanh Thu (Ước tính)</th>
+                                      <th className="px-6 py-4 rounded-l-xl">Tính Năng AI</th>
+                                      <th className="px-6 py-4 text-[#00F2FE]">Số Lượt Sử Dụng</th>
+                                      <th className="px-6 py-4 text-[#FF007F]">Vcoin Tiêu Thụ</th>
+                                      <th className="px-6 py-4 text-right text-emerald-500 rounded-r-xl">Doanh Thu (Ước Tính)</th>
                                   </tr>
                               </thead>
-                              <tbody className="divide-y divide-white/5">
+                              <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                                   {stats?.dashboard?.aiUsage && stats.dashboard.aiUsage.length > 0 ? (
                                       stats.dashboard.aiUsage.map((row: any, i: number) => (
-                                          <tr key={i} className="hover:bg-white/5 transition-colors">
-                                              <td className="px-6 py-4 font-bold text-white capitalize">{row.feature}</td>
-                                              <td className="px-6 py-4 text-audi-cyan font-mono">{new Intl.NumberFormat('de-DE').format(row.count)}</td>
-                                              <td className="px-6 py-4 text-audi-pink font-bold">{new Intl.NumberFormat('de-DE').format(row.vcoins)} Vcoin</td>
-                                              <td className="px-6 py-4 text-right text-green-500 font-bold">
+                                          <tr key={i} className="hover:bg-slate-200/50 dark:hover:neu-inset-sm transition-colors">
+                                              <td className="px-6 py-4 font-extrabold text-slate-800 dark:text-white capitalize font-accent flex items-center gap-2">
+                                                  <Icons.Sparkles className="w-4 h-4 text-[#FF007F]" />
+                                                  {row.feature}
+                                              </td>
+                                              <td className="px-6 py-4 text-[#00F2FE] font-mono font-bold">{new Intl.NumberFormat('de-DE').format(row.count)}</td>
+                                              <td className="px-6 py-4 text-[#FF007F] font-extrabold font-accent">{new Intl.NumberFormat('de-DE').format(row.vcoins)} VCOIN</td>
+                                              <td className="px-6 py-4 text-right text-emerald-500 font-extrabold font-mono text-sm">
                                                   {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(row.revenue)}
                                               </td>
                                           </tr>
                                       ))
                                   ) : (
                                       <tr>
-                                          <td colSpan={4} className="px-6 py-8 text-center text-slate-500 italic">Chưa có dữ liệu.</td>
+                                          <td colSpan={4} className="px-6 py-8 text-center text-slate-700 dark:text-slate-400 font-semibold italic">Chưa có dữ liệu thống kê.</td>
                                       </tr>
                                   )}
                               </tbody>
                           </table>
                       </div>
+
                       <div className="md:hidden space-y-3">
                           {stats?.dashboard?.aiUsage && stats.dashboard.aiUsage.length > 0 ? (
                               stats.dashboard.aiUsage.map((row: any, i: number) => (
-                                  <div key={i} className="bg-white/5 rounded-xl p-3 border border-white/5 flex justify-between items-center">
+                                  <div key={i} className="neu-inset-sm rounded-2xl p-4 flex justify-between items-center">
                                       <div>
-                                          <div className="font-bold text-white capitalize text-sm">{row.feature}</div>
-                                          <div className="text-xs text-slate-500">{new Intl.NumberFormat('de-DE').format(row.count)} lượt</div>
+                                          <div className="font-bold text-slate-800 dark:text-white capitalize text-xs font-accent">{row.feature}</div>
+                                          <div className="text-[10px] text-slate-700 dark:text-slate-400 font-semibold dark:text-slate-700 dark:text-slate-300 font-semibold mt-0.5">{new Intl.NumberFormat('de-DE').format(row.count)} lượt sử dụng</div>
                                       </div>
                                       <div className="text-right">
-                                          <div className="text-audi-pink font-bold text-sm">{new Intl.NumberFormat('de-DE').format(row.vcoins)} VC</div>
-                                          <div className="text-green-500 text-[10px] font-bold">
+                                          <div className="text-[#FF007F] font-black text-xs font-accent">{new Intl.NumberFormat('de-DE').format(row.vcoins)} VC</div>
+                                          <div className="text-emerald-400 text-[10px] font-bold font-mono">
                                               {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(row.revenue)}
                                           </div>
                                       </div>
                                   </div>
                               ))
                           ) : (
-                              <div className="text-center text-slate-500 italic text-sm py-4">Chưa có dữ liệu.</div>
+                              <div className="text-center text-slate-700 dark:text-slate-400 font-semibold italic text-xs py-4">Chưa có dữ liệu thống kê.</div>
                           )}
                       </div>
                   </div>
@@ -2628,62 +2705,68 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           )}
 
           {activeView === 'transactions' && (
-              // ... existing transaction view ...
-              <div className="space-y-6 animate-slide-in-right">
-                  <div className="flex justify-between items-center">
-                      <h2 className="text-lg md:text-2xl font-bold text-white">Giao Dịch</h2>
-                      <div className="text-xs text-slate-400">Users fetched: {stats?.usersList?.length || 0}</div>
-                      <div className="flex gap-2">
+              <div className="space-y-6 animate-fade-in">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 neu-card p-6 rounded-3xl shadow-xl border border-slate-300 dark:border-slate-800">
+                      <div>
+                          <h2 className="text-xl font-black text-slate-950 dark:text-white font-accent uppercase tracking-wider flex items-center gap-2">
+                              <Icons.Gem className="w-5 h-5 text-[#FF007F]" />
+                              QUẢN LÝ GIAO DỊCH NẠP VCOIN
+                          </h2>
+                          <p className="text-xs text-slate-700 dark:text-slate-300 font-bold mt-1">Danh sách đối soát giao dịch ngân hàng & phê duyệt nạp Vcoin tự động</p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap">
                           {selectedTxIds.length > 0 && (
-                              <div className="flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-lg animate-fade-in">
-                                  <span className="text-xs font-bold text-white">{selectedTxIds.length} đã chọn</span>
-                                  <button onClick={handleBulkApprove} className="p-1.5 bg-green-500/20 text-green-500 rounded hover:bg-green-500 hover:text-white" title="Duyệt tất cả"><Icons.Check className="w-4 h-4" /></button>
-                                  <button onClick={handleBulkReject} className="p-1.5 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white" title="Hủy tất cả"><Icons.X className="w-4 h-4" /></button>
+                              <div className="flex items-center gap-2 neu-inset-sm px-3 py-1.5 rounded-xl border border-[#FF007F]/40 animate-fade-in">
+                                  <span className="text-xs font-black text-[#FF007F]">{selectedTxIds.length} đã chọn</span>
+                                  <button onClick={handleBulkApprove} className="neu-button p-1.5 text-emerald-600 dark:text-emerald-400 hover:scale-105" title="Duyệt tất cả"><Icons.Check className="w-4 h-4" /></button>
+                                  <button onClick={handleBulkReject} className="neu-button p-1.5 text-red-500 hover:scale-105" title="Hủy tất cả"><Icons.X className="w-4 h-4" /></button>
                               </div>
                           )}
-                          <button onClick={refreshData} className="px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs md:text-sm font-bold text-white flex items-center gap-2">
-                              <Icons.Clock className="w-3 h-3 md:w-4 md:h-4" /> Làm mới
+                          <button onClick={refreshData} className="neu-button px-4 py-2.5 rounded-xl text-xs font-black text-slate-950 dark:text-white flex items-center gap-2 hover:border-[#FF007F] transition-all">
+                              <Icons.Clock className="w-4 h-4 text-[#FF007F]" /> Làm mới dữ liệu
                           </button>
                       </div>
                   </div>
-                  {/* ... same table content ... */}
-                  <div className="hidden md:block bg-[#12121a] border border-white/10 rounded-2xl overflow-hidden">
-                      <table className="w-full text-left text-sm text-slate-400">
-                          <thead className="bg-black/30 text-xs font-bold text-slate-300 uppercase">
-                              <tr>
-                                  <th className="px-6 py-4 w-10">
-                                      <input 
-                                          type="checkbox" 
-                                          className="rounded border-white/20 bg-white/5 checked:bg-audi-pink"
-                                          checked={transactions.length > 0 && selectedTxIds.length === transactions.length}
-                                          onChange={handleSelectAll}
-                                      />
-                                  </th>
-                                  <th className="px-6 py-4">Thời gian</th>
-                                  <th className="px-6 py-4">Mã đơn</th>
-                                  <th className="px-6 py-4">Người dùng</th>
-                                  <th className="px-6 py-4">Gói nạp</th>
-                                  <th className="px-6 py-4 text-right">Số tiền</th>
-                                  <th className="px-6 py-4">Trạng thái</th>
-                                  <th className="px-6 py-4 text-right">Hành động</th>
-                              </tr>
-                          </thead>
-                          <tbody className="divide-y divide-white/5">
+
+                  {/* Desktop Transactions Table */}
+                  <div className="hidden md:block neu-card p-5 rounded-3xl shadow-2xl border border-slate-300 dark:border-slate-800 space-y-4">
+                      <div className="neu-inset-sm rounded-2xl overflow-hidden p-1">
+                          <table className="w-full text-left text-xs text-slate-800 dark:text-slate-200">
+                              <thead className="neu-raised-sm text-[11px] font-black text-slate-950 dark:text-white uppercase font-accent border-b border-slate-300 dark:border-slate-700">
+                                  <tr>
+                                      <th className="px-5 py-4 w-10">
+                                          <input 
+                                              type="checkbox" 
+                                              className="rounded border-slate-400 checked:bg-[#FF007F]"
+                                              checked={transactions.length > 0 && selectedTxIds.length === transactions.length}
+                                              onChange={handleSelectAll}
+                                          />
+                                      </th>
+                                      <th className="px-5 py-4">Thời Gian</th>
+                                      <th className="px-5 py-4">Mã Đơn</th>
+                                      <th className="px-5 py-4">Người Dùng</th>
+                                      <th className="px-5 py-4">Gói Nạp</th>
+                                      <th className="px-5 py-4 text-right">Số Tiền</th>
+                                      <th className="px-5 py-4">Trạng Thái</th>
+                                      <th className="px-5 py-4 text-right">Hành Động</th>
+                                  </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                               {transactions.length === 0 ? (
                                   <tr><td colSpan={8} className="text-center py-8">Chưa có giao dịch nào.</td></tr>
                               ) : transactions.map(tx => (
-                                  <tr key={tx.id} className={`hover:bg-white/5 transition-colors ${processingTxId === tx.id ? 'opacity-50 pointer-events-none' : ''} ${selectedTxIds.includes(tx.id) ? 'bg-white/5' : ''}`}>
+                                  <tr key={tx.id} className={`hover:neu-inset-sm transition-colors ${processingTxId === tx.id ? 'opacity-50 pointer-events-none' : ''} ${selectedTxIds.includes(tx.id) ? 'neu-inset-sm' : ''}`}>
                                       <td className="px-6 py-4">
                                           <input 
                                               type="checkbox" 
-                                              className="rounded border-white/20 bg-white/5 checked:bg-audi-pink"
+                                              className="rounded border-white/20 neu-inset-sm checked:bg-audi-pink"
                                               checked={selectedTxIds.includes(tx.id)}
                                               onChange={() => handleSelectTx(tx.id)}
                                           />
                                       </td>
                                       <td className="px-6 py-4 text-xs font-mono">{new Date(tx.createdAt).toLocaleString()}</td>
                                       <td className="px-6 py-4">
-                                          <div className="font-mono font-bold text-white">{tx.order_code || tx.code}</div>
+                                          <div className="font-mono font-bold text-slate-900 dark:text-white">{tx.order_code || tx.code}</div>
                                           {getTopupGiftcodeLabel(tx.topupGiftcode) && (
                                               <div className="mt-2 inline-flex max-w-[180px] items-center gap-1 rounded-lg border border-audi-cyan/20 bg-audi-cyan/10 px-2 py-1 text-[10px] font-bold text-audi-cyan">
                                                   <Icons.Gift className="h-3 w-3 shrink-0" />
@@ -2695,14 +2778,14 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           <div className="flex items-center gap-3">
                                               <img src={tx.userAvatar || 'https://picsum.photos/100/100'} className="w-8 h-8 rounded-full border border-white/10 object-cover" />
                                               <div className="flex flex-col">
-                                                  <span className="font-bold text-white text-xs">{tx.userName || 'Unknown'}</span>
-                                                  <span className="text-[10px] text-slate-500">{tx.userEmail || 'No Email'}</span>
+                                                  <span className="font-bold text-slate-900 dark:text-white text-xs">{tx.userName || 'Unknown'}</span>
+                                                  <span className="text-[10px] text-slate-700 dark:text-slate-400 font-semibold">{tx.userEmail || 'No Email'}</span>
                                               </div>
                                           </div>
                                       </td>
                                       <td className="px-6 py-4 text-audi-pink font-bold">+{tx.vcoin_received} Vcoin</td>
                                       <td className="px-6 py-4 text-right">
-                                          <div className="font-bold text-white">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(tx.amount || tx.price || 0)}</div>
+                                          <div className="font-bold text-slate-900 dark:text-white">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(tx.amount || tx.price || 0)}</div>
                                           {Number(tx.discountAmount || 0) > 0 && (
                                               <div className="mt-1 text-[10px] font-bold text-emerald-300">
                                                   Giảm {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(Number(tx.discountAmount || 0))}
@@ -2711,8 +2794,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       </td>
                                       <td className="px-6 py-4">
                                           <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
-                                              tx.status === 'paid' ? 'bg-green-500/20 text-green-500' : 
-                                              tx.status === 'pending' ? 'bg-yellow-500/20 text-yellow-500' : 'bg-red-500/20 text-red-500'
+                                              tx.status === 'paid' ? 'neu-inset-sm px-3 py-1 rounded-xl text-emerald-600 dark:text-emerald-400 font-black font-accent border border-emerald-500/30' : 
+                                              tx.status === 'pending' ? 'neu-inset-sm px-3 py-1 rounded-xl text-amber-600 dark:text-amber-400 font-black font-accent border border-amber-500/30' : 'neu-inset-sm px-2.5 py-1 rounded-lg text-red-600 dark:text-red-400 font-black font-accent'
                                           }`}>
                                               {tx.status}
                                           </span>
@@ -2721,22 +2804,23 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           <div className="flex justify-end gap-2">
                                               {tx.status === 'pending' && (
                                                   <>
-                                                      <button onClick={() => handleApproveTransaction(tx.id)} className="p-2 bg-green-500/20 text-green-500 rounded hover:bg-green-500 hover:text-white" title="Duyệt"><Icons.Check className="w-4 h-4" /></button>
-                                                      <button onClick={() => handleRejectTransaction(tx.id)} className="p-2 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white" title="Hủy"><Icons.X className="w-4 h-4" /></button>
+                                                      <button onClick={() => handleApproveTransaction(tx.id)} className="neu-button p-2.5 rounded-xl text-emerald-600 dark:text-emerald-400 hover:scale-105" title="Duyệt"><Icons.Check className="w-4 h-4" /></button>
+                                                      <button onClick={() => handleRejectTransaction(tx.id)} className="neu-button p-2.5 rounded-xl text-red-500 hover:scale-105" title="Hủy"><Icons.X className="w-4 h-4" /></button>
                                                   </>
                                               )}
-                                              <button onClick={() => handleDeleteTransaction(tx.id)} className="p-2 bg-slate-500/20 text-slate-500 rounded hover:bg-slate-500 hover:text-white" title="Xóa"><Icons.Trash className="w-4 h-4" /></button>
+                                              <button onClick={() => handleDeleteTransaction(tx.id)} className="neu-button p-2.5 rounded-xl text-slate-600 dark:text-slate-400 hover:scale-105" title="Xóa"><Icons.Trash className="w-4 h-4" /></button>
                                           </div>
                                       </td>
                                   </tr>
                               ))}
                           </tbody>
                       </table>
+                      </div>
                   </div>
                   {/* Mobile cards also same */}
                   <div className="md:hidden space-y-4">
                       {transactions.map(tx => (
-                          <div key={tx.id} className="bg-[#12121a] border border-white/10 rounded-xl p-4 relative overflow-hidden shadow-md">
+                          <div key={tx.id} className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl p-4 relative overflow-hidden shadow-md">
                               <div className={`absolute top-0 left-0 w-1 h-full ${
                                   tx.status === 'paid' ? 'bg-green-500' : 
                                   tx.status === 'pending' ? 'bg-yellow-500' : 'bg-red-500'
@@ -2746,8 +2830,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       <div className="flex items-center gap-3">
                                           <img src={tx.userAvatar || 'https://picsum.photos/100/100'} className="w-10 h-10 rounded-full border border-white/10 object-cover bg-black" />
                                           <div>
-                                              <div className="font-bold text-white text-sm">{tx.userName || 'Unknown'}</div>
-                                              <div className="text-xs text-slate-500 font-mono">{tx.order_code || tx.code}</div>
+                                              <div className="font-bold text-slate-900 dark:text-white text-sm">{tx.userName || 'Unknown'}</div>
+                                              <div className="text-xs text-slate-700 dark:text-slate-400 font-semibold font-mono">{tx.order_code || tx.code}</div>
                                               {getTopupGiftcodeLabel(tx.topupGiftcode) && (
                                                   <div className="mt-1 inline-flex items-center gap-1 rounded-md border border-audi-cyan/20 bg-audi-cyan/10 px-2 py-0.5 text-[10px] font-bold text-audi-cyan">
                                                       <Icons.Gift className="h-3 w-3" />
@@ -2764,16 +2848,16 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           {tx.status}
                                       </span>
                                   </div>
-                                  <div className="grid grid-cols-2 gap-4 mb-3 bg-white/5 p-3 rounded-lg">
+                                  <div className="grid grid-cols-2 gap-4 mb-3 neu-inset-sm p-3 rounded-lg">
                                       <div>
-                                          <div className="text-[10px] text-slate-500 uppercase font-bold">Số tiền</div>
-                                          <div className="text-white font-bold">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(tx.amount || tx.price || 0)}</div>
+                                          <div className="text-[10px] text-slate-700 dark:text-slate-400 font-semibold uppercase font-bold">Số tiền</div>
+                                          <div className="text-slate-900 dark:text-white font-bold">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(tx.amount || tx.price || 0)}</div>
                                           {Number(tx.discountAmount || 0) > 0 && (
                                               <div className="text-[10px] font-bold text-emerald-300">Giảm {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(Number(tx.discountAmount || 0))}</div>
                                           )}
                                       </div>
                                       <div>
-                                          <div className="text-[10px] text-slate-500 uppercase font-bold">Gói nạp</div>
+                                          <div className="text-[10px] text-slate-700 dark:text-slate-400 font-semibold uppercase font-bold">Gói nạp</div>
                                           <div className="text-audi-pink font-bold">+{tx.vcoin_received} Vcoin</div>
                                       </div>
                                   </div>
@@ -2784,7 +2868,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               <button onClick={() => handleRejectTransaction(tx.id)} className="flex-1 py-2 bg-red-500/10 text-red-500 border border-red-500/30 rounded-lg font-bold text-xs active:scale-95 transition-all">HỦY</button>
                                           </>
                                       )}
-                                      <button onClick={() => handleDeleteTransaction(tx.id)} className="px-3 py-2 bg-slate-800 text-slate-400 rounded-lg font-bold text-xs border border-white/10 active:scale-95"><Icons.Trash className="w-4 h-4" /></button>
+                                      <button onClick={() => handleDeleteTransaction(tx.id)} className="px-3 py-2 bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold rounded-lg font-bold text-xs border border-white/10 active:scale-95"><Icons.Trash className="w-4 h-4" /></button>
                                   </div>
                               </div>
                           </div>
@@ -2794,59 +2878,66 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           )}
 
           {activeView === 'users' && (
-              // ... existing users view ...
-              <div className="space-y-6 animate-slide-in-right">
-                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                      <h2 className="text-lg md:text-2xl font-bold text-white">Người Dùng</h2>
+              <div className="space-y-6 animate-fade-in">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 neu-card p-6 rounded-3xl shadow-xl border border-slate-300 dark:border-slate-800">
+                      <div>
+                          <h2 className="text-xl font-black text-slate-950 dark:text-white font-accent uppercase tracking-wider flex items-center gap-2">
+                              <Icons.User className="w-5 h-5 text-[#FF007F]" />
+                              QUẢN LÝ NGƯỜI DÙNG & TÀI KHOẢN
+                          </h2>
+                          <p className="text-xs text-slate-700 dark:text-slate-300 font-bold mt-1">Quản lý số dư Vcoin, trạng thái tài khoản, khóa / mở khóa & phân quyền Admin</p>
+                      </div>
                       <div className="w-full md:w-auto flex flex-col md:flex-row gap-3">
-                          <div className="flex items-center gap-2 bg-white/5 rounded-xl border border-white/10 px-3 py-2 w-full md:w-64">
-                              <Icons.Search className="w-4 h-4 text-slate-500" />
-                              <input type="text" placeholder="Tìm email..." value={userSearchEmail} onChange={(e) => setUserSearchEmail(e.target.value)} className="bg-transparent border-none outline-none text-sm text-white w-full placeholder-slate-500" />
+                          <div className="flex items-center gap-2 neu-input px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 w-full md:w-64">
+                              <Icons.Search className="w-4 h-4 text-slate-700 dark:text-slate-400 font-semibold shrink-0" />
+                              <input type="text" placeholder="Tìm email hoặc username..." value={userSearchEmail} onChange={(e) => setUserSearchEmail(e.target.value)} className="bg-transparent border-none outline-none text-xs font-bold text-slate-900 dark:text-white w-full placeholder-slate-500" />
                           </div>
                           <select
                               value={userActivityFilter}
                               onChange={(e) => setUserActivityFilter(e.target.value as typeof userActivityFilter)}
-                              className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none min-w-[210px]"
+                              className="neu-input font-bold text-slate-900 dark:text-white text-xs px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 outline-none min-w-[200px]"
                           >
-                              <option value="all" className="bg-[#12121a]">Tất cả người dùng</option>
-                              <option value="online" className="bg-[#12121a]">Đang online</option>
-                              <option value="locked" className="bg-[#12121a]">Tài khoản bị khóa</option>
-                              <option value="warned" className="bg-[#12121a]">Đã cảnh báo</option>
-                              <option value="inactive_60" className="bg-[#12121a]">Không online từ 60 ngày</option>
-                              <option value="inactive_90" className="bg-[#12121a]">Không online từ 90 ngày</option>
+                              <option value="all" className="bg-[#DFE4ED] dark:bg-[#12121a]">Tất cả người dùng</option>
+                              <option value="online" className="bg-[#DFE4ED] dark:bg-[#12121a]">Đang online</option>
+                              <option value="locked" className="bg-[#DFE4ED] dark:bg-[#12121a]">Tài khoản bị khóa</option>
+                              <option value="warned" className="bg-[#DFE4ED] dark:bg-[#12121a]">Đã cảnh báo</option>
+                              <option value="inactive_60" className="bg-[#DFE4ED] dark:bg-[#12121a]">Không online 60 ngày</option>
+                              <option value="inactive_90" className="bg-[#DFE4ED] dark:bg-[#12121a]">Không online 90 ngày</option>
                           </select>
                           <select
                               value={userSortMode}
                               onChange={(e) => setUserSortMode(e.target.value as typeof userSortMode)}
-                              className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none min-w-[190px]"
+                              className="neu-input font-bold text-slate-900 dark:text-white text-xs px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 outline-none min-w-[180px]"
                           >
-                              <option value="last_active_desc" className="bg-[#12121a]">Mới hoạt động gần đây</option>
-                              <option value="vcoin_desc" className="bg-[#12121a]">Nhiều Vcoin nhất</option>
-                              <option value="usage_desc" className="bg-[#12121a]">Hoạt động nhiều nhất</option>
-                              <option value="name_asc" className="bg-[#12121a]">Tên A-Z</option>
+                              <option value="last_active_desc" className="bg-[#DFE4ED] dark:bg-[#12121a]">Mới hoạt động</option>
+                              <option value="vcoin_desc" className="bg-[#DFE4ED] dark:bg-[#12121a]">Nhiều Vcoin nhất</option>
+                              <option value="usage_desc" className="bg-[#DFE4ED] dark:bg-[#12121a]">Hoạt động nhiều nhất</option>
+                              <option value="name_asc" className="bg-[#DFE4ED] dark:bg-[#12121a]">Tên A-Z</option>
                           </select>
                       </div>
                   </div>
                   
-                  <div className="hidden md:block bg-[#12121a] border border-white/10 rounded-2xl overflow-hidden">
-                      <table className="w-full text-left text-sm text-slate-400">
-                          <thead className="bg-black/30 text-xs font-bold text-slate-300 uppercase">
-                              <tr>
-                                  <th className="px-6 py-4">User</th>
-                                  <th className="px-6 py-4">Trạng thái</th>
-                                  <th className="px-6 py-4">Số dư</th>
+                  {/* Desktop Users Table */}
+                  <div className="hidden md:block neu-card p-5 rounded-3xl shadow-2xl border border-slate-300 dark:border-slate-800 space-y-4">
+                      <div className="neu-inset-sm rounded-2xl overflow-hidden p-1">
+                          <table className="w-full text-left text-xs text-slate-800 dark:text-slate-200">
+                              <thead className="neu-raised-sm text-[11px] font-black text-slate-950 dark:text-white uppercase font-accent border-b border-slate-300 dark:border-slate-700">
+                                  <tr>
+                                      <th className="px-5 py-4">Tài Khoản</th>
+                                      <th className="px-5 py-4">Trạng Thái</th>
+                                      <th className="px-5 py-4">Số Dư Vcoin</th>
                                   <th className="px-6 py-4">Hoạt động (Gen)</th>
                                   <th className="px-6 py-4">Vai trò</th>
                                   <th className="px-6 py-4 text-right">Hành động</th>
                               </tr>
                           </thead>
-                          <tbody className="divide-y divide-white/5">
+                          <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                               {visibleUsers
                                    .map((u: UserProfile) => {
                                        const online = isUserOnline(u.lastActive);
                                       const locked = u.accountStatus === 'locked';
                                        return (
-                                          <tr key={u.id} className={`transition-colors ${locked ? 'bg-red-500/5 hover:bg-red-500/10' : 'hover:bg-white/5'}`}>
+                                          <tr key={u.id} className={`transition-colors ${locked ? 'bg-red-500/5 hover:bg-red-500/10' : 'hover:neu-inset-sm'}`}>
                                               <td className="px-6 py-4">
                                                   <div className="flex items-center gap-3">
                                                       <div className="relative">
@@ -2854,8 +2945,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                           {online && <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border-2 border-[#12121a] rounded-full animate-pulse"></div>}
                                                       </div>
                                                       <div>
-                                                          <div className="font-bold text-white">{u.username}</div>
-                                                          <div className="text-xs text-slate-500">{u.email}</div>
+                                                          <div className="font-bold text-slate-900 dark:text-white">{u.username}</div>
+                                                          <div className="text-xs text-slate-700 dark:text-slate-400 font-semibold">{u.email}</div>
                                                           <div className="mt-1 flex flex-wrap gap-1">
                                                               {locked && <span className="rounded bg-red-500/15 px-2 py-0.5 text-[10px] font-bold text-red-300">LOCKED</span>}
                                                               {u.accountWarning && <span className="rounded bg-yellow-500/15 px-2 py-0.5 text-[10px] font-bold text-yellow-300">WARNED</span>}
@@ -2867,30 +2958,31 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               <td className="px-6 py-4">
                                                   <div className="flex items-center gap-2">
                                                       <div className={`w-1.5 h-1.5 rounded-full ${online ? 'bg-green-500' : 'bg-slate-600'}`}></div>
-                                                      <span className={`text-xs font-bold ${online ? 'text-green-500' : 'text-slate-500'}`}>
+                                                      <span className={`text-xs font-bold ${online ? 'text-green-500' : 'text-slate-700 dark:text-slate-400 font-semibold'}`}>
                                                           {online ? 'Online' : getTimeAgo(u.lastActive)}
                                                       </span>
                                                   </div>
                                               </td>
-                                              <td className="px-6 py-4 text-audi-yellow font-bold font-mono">{u.vcoin_balance}</td>
+                                              <td className="px-6 py-4 text-audi-yellow font-bold font-mono">{u.vcoin_balance?.toLocaleString()}</td>
                                               <td className="px-6 py-4">
-                                                  <span className="text-white font-bold">{u.usageCount || 0}</span>
-                                                  <span className="text-xs text-slate-500 ml-1">lượt</span>
+                                                  <span className="text-slate-900 dark:text-white font-bold">{u.usageCount || 0}</span>
+                                                  <span className="text-xs text-slate-700 dark:text-slate-400 font-semibold ml-1">lượt</span>
                                               </td>
                                               <td className="px-6 py-4">
-                                                  <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${u.role === 'admin' ? 'bg-red-500/20 text-red-500' : 'bg-blue-500/20 text-blue-500'}`}>
+                                                  <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${u.role === 'admin' ? 'neu-inset-sm px-2.5 py-1 rounded-lg text-red-600 dark:text-red-400 font-black font-accent' : 'neu-inset-sm px-2.5 py-1 rounded-lg text-sky-600 dark:text-sky-400 font-black font-accent'}`}>
                                                       {u.role}
                                                   </span>
                                               </td>
                                               <td className="px-6 py-4 text-right flex justify-end gap-2">
-                                                  <button onClick={() => handleViewUser(u)} className="text-xs font-bold text-audi-pink hover:text-white bg-audi-pink/10 hover:bg-audi-pink/30 px-3 py-1.5 rounded transition-colors">Chi tiết</button>
-                                                  <button onClick={() => openEditUser(u)} className="text-xs font-bold text-audi-cyan hover:text-white bg-audi-cyan/10 hover:bg-audi-cyan/30 px-3 py-1.5 rounded transition-colors">Sửa</button>
+                                                  <button onClick={() => handleViewUser(u)} className="neu-button px-3.5 py-1.5 rounded-xl text-xs font-black text-[#FF007F] hover:scale-105">Chi tiết</button>
+                                                  <button onClick={() => openEditUser(u)} className="neu-button px-3.5 py-1.5 rounded-xl text-xs font-black text-sky-500 dark:text-sky-400 hover:scale-105">Sửa</button>
                                               </td>
                                           </tr>
                                       );
                                   })}
                           </tbody>
                       </table>
+                      </div>
                   </div>
                   
                   {/* Mobile View */}
@@ -2900,7 +2992,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                const online = isUserOnline(u.lastActive);
                               const locked = u.accountStatus === 'locked';
                                return (
-                                  <div key={u.id} className={`rounded-xl p-4 relative overflow-hidden border ${locked ? 'bg-red-500/5 border-red-500/20' : 'bg-[#12121a] border-white/10'}`}>
+                                  <div key={u.id} className={`rounded-xl p-4 relative overflow-hidden border ${locked ? 'bg-red-500/5 border-red-500/20' : 'neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl'}`}>
                                       <div className="flex justify-between items-start mb-3">
                                           <div className="flex items-center gap-3">
                                               <div className="relative">
@@ -2908,15 +3000,15 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                   {online && <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-[#12121a] rounded-full animate-pulse"></div>}
                                               </div>
                                                <div>
-                                                   <div className="font-bold text-white text-sm">{u.username}</div>
-                                                   <div className="text-xs text-slate-500">{u.email}</div>
+                                                   <div className="font-bold text-slate-900 dark:text-white text-sm">{u.username}</div>
+                                                   <div className="text-xs text-slate-700 dark:text-slate-400 font-semibold">{u.email}</div>
                                                   <div className="mt-1 flex flex-wrap gap-1">
                                                       {locked && <span className="rounded bg-red-500/15 px-2 py-0.5 text-[10px] font-bold text-red-300">LOCKED</span>}
                                                       {u.accountWarning && <span className="rounded bg-yellow-500/15 px-2 py-0.5 text-[10px] font-bold text-yellow-300">WARNED</span>}
                                                   </div>
                                                </div>
                                            </div>
-                                          <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${u.role === 'admin' ? 'bg-red-500/20 text-red-500' : 'bg-blue-500/20 text-blue-500'}`}>
+                                          <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${u.role === 'admin' ? 'neu-inset-sm px-2.5 py-1 rounded-lg text-red-600 dark:text-red-400 font-black font-accent' : 'neu-inset-sm px-2.5 py-1 rounded-lg text-sky-600 dark:text-sky-400 font-black font-accent'}`}>
                                               {u.role}
                                           </span>
                                        </div>
@@ -2926,26 +3018,26 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           </div>
                                       )}
 
-                                       <div className="grid grid-cols-3 gap-2 mb-3 bg-white/5 p-2 rounded-lg">
+                                       <div className="grid grid-cols-3 gap-2 mb-3 neu-inset-sm p-2 rounded-lg">
                                           <div className="text-center">
-                                              <div className="text-[10px] text-slate-500 uppercase font-bold">Trạng thái</div>
-                                              <div className={`text-xs font-bold ${online ? 'text-green-500' : 'text-slate-400'}`}>
+                                              <div className="text-[10px] text-slate-700 dark:text-slate-400 font-semibold uppercase font-bold">Trạng thái</div>
+                                              <div className={`text-xs font-bold ${online ? 'text-green-500' : 'text-slate-700 dark:text-slate-300 font-semibold'}`}>
                                                   {online ? 'Online' : getTimeAgo(u.lastActive)}
                                               </div>
                                           </div>
                                           <div className="text-center border-l border-white/10">
-                                              <div className="text-[10px] text-slate-500 uppercase font-bold">Số dư</div>
-                                              <div className="text-xs font-bold text-audi-yellow">{u.vcoin_balance} VC</div>
+                                              <div className="text-[10px] text-slate-700 dark:text-slate-400 font-semibold uppercase font-bold">Số dư</div>
+                                              <div className="text-xs font-bold text-audi-yellow">{u.vcoin_balance?.toLocaleString()} VC</div>
                                           </div>
                                           <div className="text-center border-l border-white/10">
-                                              <div className="text-[10px] text-slate-500 uppercase font-bold">Hoạt động</div>
-                                              <div className="text-xs font-bold text-white">{u.usageCount || 0} gen</div>
+                                              <div className="text-[10px] text-slate-700 dark:text-slate-400 font-semibold uppercase font-bold">Hoạt động</div>
+                                              <div className="text-xs font-bold text-slate-900 dark:text-white">{u.usageCount || 0} gen</div>
                                           </div>
                                       </div>
 
                                       <div className="flex gap-2 border-t border-white/5 pt-3">
-                                          <button onClick={() => handleViewUser(u)} className="flex-1 py-2 bg-audi-pink/10 text-audi-pink rounded-lg font-bold text-xs border border-audi-pink/30">Chi tiết</button>
-                                          <button onClick={() => openEditUser(u)} className="flex-1 py-2 bg-audi-cyan/10 text-audi-cyan rounded-lg font-bold text-xs border border-audi-cyan/30">Sửa</button>
+                                          <button onClick={() => handleViewUser(u)} className="flex-1 neu-button py-2 rounded-xl text-xs font-black text-[#FF007F]">Chi tiết</button>
+                                          <button onClick={() => openEditUser(u)} className="flex-1 neu-button py-2 rounded-xl text-xs font-black text-sky-500 dark:text-sky-400">Sửa</button>
                                       </div>
                                   </div>
                               );
@@ -2956,7 +3048,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       <div className="flex justify-center pt-2">
                           <button
                               onClick={() => setUserListLimit(prev => prev + 30)}
-                              className="px-5 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-bold text-white transition-colors"
+                              className="px-5 py-2.5 rounded-xl neu-inset-sm hover:bg-white/10 border border-white/10 text-sm font-bold text-slate-900 dark:text-white transition-colors"
                           >
                               Xem thêm 30 người dùng
                           </button>
@@ -2966,29 +3058,32 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           )}
 
           {activeView === 'giftcode_abuse' && (
-              <div className="space-y-6 animate-slide-in-right">
-                  <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+              <div className="space-y-6 animate-fade-in">
+                  <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 neu-card p-6 rounded-3xl shadow-xl border border-slate-300 dark:border-slate-800">
                       <div>
-                          <h2 className="text-lg md:text-2xl font-bold text-white flex items-center gap-2"><Icons.AlertTriangle className="w-6 h-6 text-audi-yellow" /> Vi phạm giftcode</h2>
-                          <p className="text-sm text-slate-400 mt-1">Tách riêng các tài khoản/cụm nghi spam tạo tài khoản để nhập giftcode, có bằng chứng IP, email, browser key và risk flags.</p>
+                          <h2 className="text-xl font-black text-slate-950 dark:text-white font-accent uppercase tracking-wider flex items-center gap-2">
+                              <Icons.AlertTriangle className="w-5 h-5 text-amber-500" />
+                              CẢNH BÁO VI PHẠM & LẠM DỤNG GIFTCODE
+                          </h2>
+                          <p className="text-xs text-slate-700 dark:text-slate-300 font-bold mt-1">Tự động phát hiện các cụm IP/Thiết bị tạo tài khoản ảo để trục lợi Giftcode và tự động cảnh báo/khóa tài khoản</p>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                          <button onClick={loadGiftcodeAbuseCases} disabled={loadingGiftcodeAbuse} className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-bold text-white disabled:opacity-60 flex items-center gap-2">
-                              <Icons.RefreshCw className={`w-4 h-4 ${loadingGiftcodeAbuse ? 'animate-spin' : ''}`} /> Làm mới
+                          <button onClick={loadGiftcodeAbuseCases} disabled={loadingGiftcodeAbuse} className="neu-button px-4 py-2.5 rounded-xl text-xs font-black text-slate-950 dark:text-white disabled:opacity-60 flex items-center gap-2 hover:border-[#FF007F] transition-all">
+                              <Icons.RefreshCw className={`w-4 h-4 text-[#FF007F] ${loadingGiftcodeAbuse ? 'animate-spin' : ''}`} /> Làm mới danh sách
                           </button>
                       </div>
                   </div>
 
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                       {[
-                          { label: 'Tổng case', value: giftcodeAbuseCases.length, tone: 'text-white' },
-                          { label: 'Chưa xử lý', value: giftcodeAbuseCases.filter((i) => i.rewardStatus !== 'revoked' && i.accountStatus !== 'locked' && !i.accountWarning).length, tone: 'text-audi-yellow' },
-                          { label: 'Đã thu hồi', value: giftcodeAbuseCases.filter((i) => i.rewardStatus === 'revoked').length, tone: 'text-red-300' },
-                          { label: 'Đã khóa', value: giftcodeAbuseCases.filter((i) => i.accountStatus === 'locked').length, tone: 'text-audi-pink' },
+                          { label: 'Tổng Trường Hợp', value: giftcodeAbuseCases.length, tone: 'text-slate-950 dark:text-white' },
+                          { label: 'Chưa Xử Lý', value: giftcodeAbuseCases.filter((i) => i.rewardStatus !== 'revoked' && i.accountStatus !== 'locked' && !i.accountWarning).length, tone: 'text-amber-500' },
+                          { label: 'Đã Thu Hồi Vcoin', value: giftcodeAbuseCases.filter((i) => i.rewardStatus === 'revoked').length, tone: 'text-red-500' },
+                          { label: 'Tài Khoản Đã Khóa', value: giftcodeAbuseCases.filter((i) => i.accountStatus === 'locked').length, tone: 'text-[#FF007F]' },
                       ].map((item) => (
-                          <div key={item.label} className="bg-[#12121a] border border-white/10 rounded-xl p-4">
-                              <div className="text-[10px] uppercase font-bold text-slate-500">{item.label}</div>
-                              <div className={`text-2xl font-black mt-1 ${item.tone}`}>{item.value}</div>
+                          <div key={item.label} className="neu-card p-4.5 rounded-2xl space-y-1">
+                              <div className="text-[10px] uppercase font-black text-slate-700 dark:text-slate-300 tracking-wider font-accent">{item.label}</div>
+                              <div className={`text-2xl font-black font-mono ${item.tone}`}>{item.value}</div>
                           </div>
                       ))}
                   </div>
@@ -3002,10 +3097,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   ? 'border-yellow-500/20 bg-yellow-500/5 text-yellow-100'
                                   : 'border-audi-pink/20 bg-audi-pink/5 text-pink-100';
                           return (
-                              <div key={action} className={`rounded-2xl border p-4 ${toneClass}`}>
+                              <div key={action} className={`neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl ${toneClass}`}>
                                   <div className="flex items-center justify-between gap-3">
-                                      <div className="font-black text-white">{meta.label}</div>
-                                      <span className="rounded-full bg-black/30 px-2 py-1 text-[10px] font-bold uppercase">{action}</span>
+                                      <div className="font-black text-slate-900 dark:text-white">{meta.label}</div>
+                                      <span className="rounded-full neu-inset-sm px-2 py-1 text-[10px] font-bold uppercase">{action}</span>
                                   </div>
                                   <p className="mt-2 text-xs leading-relaxed opacity-90">{meta.effect}</p>
                               </div>
@@ -3013,24 +3108,24 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       })}
                   </div>
 
-                  <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 space-y-4">
+                  <div className="neu-card p-6 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl space-y-4">
                       <div className="flex flex-col xl:flex-row gap-3 xl:items-center xl:justify-between">
                           <div className="flex flex-col md:flex-row gap-3 flex-1">
-                              <div className="flex items-center gap-2 bg-black/30 rounded-xl border border-white/10 px-3 py-2 w-full md:max-w-md">
-                                  <Icons.Search className="w-4 h-4 text-slate-500" />
+                              <div className="flex items-center gap-2 neu-inset-sm rounded-xl border border-white/10 px-3 py-2 w-full md:max-w-md">
+                                  <Icons.Search className="w-4 h-4 text-slate-700 dark:text-slate-400 font-semibold" />
                                   <input value={giftcodeAbuseSearch} onChange={(e) => setGiftcodeAbuseSearch(e.target.value)} placeholder="Tìm email, IP, code, campaign, browser key..." className="bg-transparent border-none outline-none text-sm text-white w-full placeholder-slate-500" />
                               </div>
-                              <select value={giftcodeAbuseFilter} onChange={(e) => setGiftcodeAbuseFilter(e.target.value as typeof giftcodeAbuseFilter)} className="bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none min-w-[190px]">
-                                  <option value="unhandled" className="bg-[#12121a]">Chưa xử lý</option>
-                                  <option value="all" className="bg-[#12121a]">Tất cả case</option>
-                                  <option value="duplicates" className="bg-[#12121a]">Trùng cụm</option>
-                                  <option value="high_risk" className="bg-[#12121a]">Risk cao</option>
-                                  <option value="revoked" className="bg-[#12121a]">Đã thu hồi</option>
-                                  <option value="locked" className="bg-[#12121a]">Đã khóa</option>
+                              <select value={giftcodeAbuseFilter} onChange={(e) => setGiftcodeAbuseFilter(e.target.value as typeof giftcodeAbuseFilter)} className="neu-inset-sm border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none min-w-[190px]">
+                                  <option value="unhandled" className="bg-[#DFE4ED] dark:bg-[#13161F] text-slate-900 dark:text-white font-bold">Chưa xử lý</option>
+                                  <option value="all" className="bg-[#DFE4ED] dark:bg-[#13161F] text-slate-900 dark:text-white font-bold">Tất cả case</option>
+                                  <option value="duplicates" className="bg-[#DFE4ED] dark:bg-[#13161F] text-slate-900 dark:text-white font-bold">Trùng cụm</option>
+                                  <option value="high_risk" className="bg-[#DFE4ED] dark:bg-[#13161F] text-slate-900 dark:text-white font-bold">Risk cao</option>
+                                  <option value="revoked" className="bg-[#DFE4ED] dark:bg-[#13161F] text-slate-900 dark:text-white font-bold">Đã thu hồi</option>
+                                  <option value="locked" className="bg-[#DFE4ED] dark:bg-[#13161F] text-slate-900 dark:text-white font-bold">Đã khóa</option>
                               </select>
                           </div>
                           <div className="flex flex-wrap gap-2">
-                              <button onClick={toggleAllGiftcodeAbuseSelection} className="px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-white">
+                              <button onClick={toggleAllGiftcodeAbuseSelection} className="px-3 py-2 rounded-xl neu-inset-sm hover:bg-white/10 border border-white/10 text-xs font-bold text-slate-900 dark:text-white">
                                   {allVisibleGiftcodeAbuseSelected ? 'Bỏ chọn' : 'Chọn tất cả'} ({filteredGiftcodeAbuseCases.length})
                               </button>
                               <button onClick={() => runBulkGiftcodeAction('revoke')} disabled={bulkGiftcodeActionLoading || selectedGiftcodeAbuseCases.length === 0} className="px-3 py-2 rounded-xl bg-red-500/15 hover:bg-red-500 text-red-300 hover:text-white border border-red-500/20 text-xs font-bold disabled:opacity-50">Thu hồi chọn</button>
@@ -3039,14 +3134,14 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           </div>
                       </div>
 
-                      <div className="text-xs text-slate-500">
-                          Đã chọn <span className="text-white font-bold">{selectedGiftcodeAbuseCases.length}</span> mục. Severity = risk score + điểm trùng cụm email/IP/browser/user.
+                      <div className="text-xs text-slate-700 dark:text-slate-400 font-semibold">
+                          Đã chọn <span className="text-slate-900 dark:text-white font-bold">{selectedGiftcodeAbuseCases.length}</span> mục. Severity = risk score + điểm trùng cụm email/IP/browser/user.
                       </div>
                   </div>
 
-                  <div className="hidden xl:block bg-[#12121a] border border-white/10 rounded-2xl overflow-hidden">
-                      <table className="w-full text-left text-xs text-slate-400">
-                          <thead className="bg-black/40 text-[10px] font-bold text-slate-500 uppercase">
+                  <div className="hidden xl:block neu-card p-5 rounded-3xl shadow-2xl border border-slate-300 dark:border-slate-800 space-y-4">
+                      <table className="w-full text-left text-xs text-slate-700 dark:text-slate-300 font-semibold">
+                          <thead className="neu-inset-sm text-[10px] font-bold text-slate-700 dark:text-slate-400 font-semibold uppercase">
                               <tr>
                                   <th className="px-4 py-3 w-10"></th>
                                   <th className="px-4 py-3">User</th>
@@ -3057,16 +3152,16 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   <th className="px-4 py-3 text-right">Xử lý</th>
                               </tr>
                           </thead>
-                          <tbody className="divide-y divide-white/5">
+                          <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                               {loadingGiftcodeAbuse ? (
-                                  <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-500"><Icons.Loader className="w-6 h-6 animate-spin mx-auto mb-2 text-audi-cyan" />Đang tải dữ liệu vi phạm...</td></tr>
+                                  <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-700 dark:text-slate-400 font-semibold"><Icons.Loader className="w-6 h-6 animate-spin mx-auto mb-2 text-audi-cyan" />Đang tải dữ liệu vi phạm...</td></tr>
                               ) : filteredGiftcodeAbuseCases.length === 0 ? (
-                                  <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-500">Không có case phù hợp bộ lọc.</td></tr>
+                                  <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-700 dark:text-slate-400 font-semibold">Không có case phù hợp bộ lọc.</td></tr>
                               ) : filteredGiftcodeAbuseCases.map((item) => {
                                   const caseStatus = getGiftcodeCaseStatus(item);
                                   const justActed = Boolean(giftcodeActionState[item.usageId]?.status === 'success');
                                   return (
-                                  <tr key={item.usageId} className={`transition-colors align-top ${justActed ? 'bg-cyan-500/5 ring-1 ring-inset ring-cyan-500/20' : 'hover:bg-white/5'}`}>
+                                  <tr key={item.usageId} className={`transition-colors align-top ${justActed ? 'bg-cyan-500/5 ring-1 ring-inset ring-cyan-500/20' : 'hover:neu-inset-sm'}`}>
                                       <td className="px-4 py-4">
                                           <input type="checkbox" checked={selectedGiftcodeAbuseIds.includes(item.usageId)} onChange={() => toggleGiftcodeAbuseSelection(item.usageId)} className="accent-audi-pink w-4 h-4" />
                                       </td>
@@ -3074,8 +3169,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           <div className="flex items-center gap-3">
                                               <img src={item.userAvatar} className="w-9 h-9 rounded-full bg-white/10 object-cover" />
                                               <div>
-                                                  <div className="font-bold text-white">{item.userName}</div>
-                                                  <div className="text-slate-400">{item.userEmail}</div>
+                                                  <div className="font-bold text-slate-900 dark:text-white">{item.userName}</div>
+                                                  <div className="text-slate-700 dark:text-slate-300 font-semibold">{item.userEmail}</div>
                                                   <div className="mt-1 flex gap-2 text-[10px]">
                                                       <span className="text-audi-yellow">{item.userBalance} VC</span>
                                                       <span className={item.accountStatus === 'locked' ? 'text-red-300' : 'text-emerald-300'}>{item.accountStatus}</span>
@@ -3084,10 +3179,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           </div>
                                       </td>
                                       <td className="px-4 py-4 min-w-[150px]">
-                                          <div className="font-mono font-bold text-white">{item.giftCode}</div>
-                                          <div className="text-[10px] text-slate-500">Campaign: {item.campaignKey}</div>
+                                          <div className="font-mono font-bold text-slate-900 dark:text-white">{item.giftCode}</div>
+                                          <div className="text-[10px] text-slate-700 dark:text-slate-400 font-semibold">Campaign: {item.campaignKey}</div>
                                           <div className="text-[10px] text-audi-yellow">+{item.reward} VC</div>
-                                          <div className="text-[10px] text-slate-500 mt-1">{formatVietnamDateTimeDisplay(item.usedAt)}</div>
+                                          <div className="text-[10px] text-slate-700 dark:text-slate-400 font-semibold mt-1">{formatVietnamDateTimeDisplay(item.usedAt)}</div>
                                       </td>
                                       <td className="px-4 py-4 min-w-[260px]">
                                           <div className="flex flex-wrap gap-1 mb-2">
@@ -3096,28 +3191,28 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           </div>
                                           <div className="space-y-1">
                                               {item.evidence.slice(0, 5).map((evidence) => <div key={evidence} className="text-[11px] text-slate-300">• {evidence}</div>)}
-                                              {item.evidence.length > 5 && <div className="text-[10px] text-slate-500">+{item.evidence.length - 5} bằng chứng khác</div>}
+                                              {item.evidence.length > 5 && <div className="text-[10px] text-slate-700 dark:text-slate-400 font-semibold">+{item.evidence.length - 5} bằng chứng khác</div>}
                                           </div>
                                       </td>
                                       <td className="px-4 py-4 min-w-[260px] font-mono text-[10px]">
                                           <div className="space-y-1">
-                                              <div><span className="text-slate-500">IP:</span> <span className="text-white">{item.ipAddress || 'Ẩn/cũ'}</span> {item.clusterCounts.ip > 1 && <span className="text-red-300">({item.clusterCounts.ip})</span>}</div>
-                                              <div className="truncate max-w-[280px]" title={item.ipHash || ''}><span className="text-slate-500">IP hash:</span> {item.ipHash || '-'}</div>
-                                              <div className="truncate max-w-[280px]" title={item.browserKeyHash || ''}><span className="text-slate-500">Browser:</span> {item.browserKeyHash || '-'} {item.clusterCounts.browser > 1 && <span className="text-red-300">({item.clusterCounts.browser})</span>}</div>
-                                              <div className="truncate max-w-[280px]" title={item.emailFingerprint || ''}><span className="text-slate-500">Email cluster:</span> {item.emailFingerprint || '-'} {item.clusterCounts.email > 1 && <span className="text-red-300">({item.clusterCounts.email})</span>}</div>
+                                              <div><span className="text-slate-700 dark:text-slate-400 font-semibold">IP:</span> <span className="text-white">{item.ipAddress || 'Ẩn/cũ'}</span> {item.clusterCounts.ip > 1 && <span className="text-red-300">({item.clusterCounts.ip})</span>}</div>
+                                              <div className="truncate max-w-[280px]" title={item.ipHash || ''}><span className="text-slate-700 dark:text-slate-400 font-semibold">IP hash:</span> {item.ipHash || '-'}</div>
+                                              <div className="truncate max-w-[280px]" title={item.browserKeyHash || ''}><span className="text-slate-700 dark:text-slate-400 font-semibold">Browser:</span> {item.browserKeyHash || '-'} {item.clusterCounts.browser > 1 && <span className="text-red-300">({item.clusterCounts.browser})</span>}</div>
+                                              <div className="truncate max-w-[280px]" title={item.emailFingerprint || ''}><span className="text-slate-700 dark:text-slate-400 font-semibold">Email cluster:</span> {item.emailFingerprint || '-'} {item.clusterCounts.email > 1 && <span className="text-red-300">({item.clusterCounts.email})</span>}</div>
                                           </div>
                                       </td>
                                       <td className="px-4 py-4 min-w-[130px]">
                                           <span className={`block w-fit rounded px-2 py-1 text-[10px] font-bold uppercase ${caseStatus.className}`}>{caseStatus.label}</span>
-                                          {caseStatus.detail && <div className="mt-1 max-w-[170px] truncate text-[10px] text-slate-500" title={caseStatus.detail}>{caseStatus.detail}</div>}
+                                          {caseStatus.detail && <div className="mt-1 max-w-[170px] truncate text-[10px] text-slate-700 dark:text-slate-400 font-semibold" title={caseStatus.detail}>{caseStatus.detail}</div>}
                                           <span className={`mt-2 block w-fit rounded px-2 py-1 text-[10px] font-bold uppercase ${item.rewardStatus === 'revoked' ? 'bg-red-500/15 text-red-300' : 'bg-emerald-500/15 text-emerald-300'}`}>{item.rewardStatus}</span>
                                           <span className={`mt-1 block w-fit rounded px-2 py-1 text-[10px] font-bold uppercase ${item.abuseStatus === 'ok' ? 'bg-white/10 text-slate-300' : 'bg-yellow-500/15 text-yellow-300'}`}>{item.abuseStatus}</span>
                                       </td>
                                       <td className="px-4 py-4 text-right">
                                           <div className="flex justify-end gap-1">
-                                              <button title={getGiftcodeActionMeta('revoke').effect} onClick={() => confirmGiftcodeUserAction('revoke', item)} disabled={item.rewardStatus === 'revoked'} className="rounded bg-red-500/15 px-2 py-1 text-[10px] font-bold text-red-300 hover:bg-red-500 hover:text-white disabled:opacity-40">Thu hồi</button>
-                                              <button title={getGiftcodeActionMeta('warn').effect} onClick={() => confirmGiftcodeUserAction('warn', item)} disabled={Boolean(item.accountWarning)} className="rounded bg-yellow-500/15 px-2 py-1 text-[10px] font-bold text-yellow-300 hover:bg-yellow-500 hover:text-black disabled:opacity-40">Cảnh báo</button>
-                                              <button title={getGiftcodeActionMeta('lock').effect} onClick={() => confirmGiftcodeUserAction('lock', item)} disabled={item.accountStatus === 'locked'} className="rounded bg-white/10 px-2 py-1 text-[10px] font-bold text-slate-200 hover:bg-white hover:text-black disabled:opacity-40">Khóa</button>
+                                              <button title={getGiftcodeActionMeta('revoke').effect} onClick={() => confirmGiftcodeUserAction('revoke', item)} disabled={item.rewardStatus === 'revoked'} className="neu-button px-3 py-1.5 rounded-xl text-xs font-black text-red-500 hover:scale-105 disabled:opacity-40">Thu hồi</button>
+                                              <button title={getGiftcodeActionMeta('warn').effect} onClick={() => confirmGiftcodeUserAction('warn', item)} disabled={Boolean(item.accountWarning)} className="neu-button px-3 py-1.5 rounded-xl text-xs font-black text-amber-500 hover:scale-105 disabled:opacity-40">Cảnh báo</button>
+                                              <button title={getGiftcodeActionMeta('lock').effect} onClick={() => confirmGiftcodeUserAction('lock', item)} disabled={item.accountStatus === 'locked'} className="neu-button px-3 py-1.5 rounded-xl text-xs font-black text-slate-700 dark:text-slate-300 hover:scale-105 disabled:opacity-40">Khóa</button>
                                           </div>
                                       </td>
                                   </tr>
@@ -3129,18 +3224,18 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
                   <div className="xl:hidden space-y-3">
                       {loadingGiftcodeAbuse ? (
-                          <div className="rounded-2xl border border-white/10 bg-[#12121a] p-8 text-center text-slate-500"><Icons.Loader className="w-6 h-6 animate-spin mx-auto mb-2 text-audi-cyan" />Đang tải dữ liệu vi phạm...</div>
+                          <div className="rounded-2xl border neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl p-8 text-center text-slate-700 dark:text-slate-400 font-semibold"><Icons.Loader className="w-6 h-6 animate-spin mx-auto mb-2 text-audi-cyan" />Đang tải dữ liệu vi phạm...</div>
                       ) : filteredGiftcodeAbuseCases.map((item) => {
                           const caseStatus = getGiftcodeCaseStatus(item);
                           const justActed = Boolean(giftcodeActionState[item.usageId]?.status === 'success');
                           return (
-                          <div key={item.usageId} className={`rounded-2xl border p-4 space-y-3 ${justActed ? 'border-cyan-500/30 bg-cyan-500/5' : 'border-white/10 bg-[#12121a]'}`}>
+                          <div key={item.usageId} className={`rounded-2xl border p-4 space-y-3 ${justActed ? 'border-cyan-500/30 bg-cyan-500/5' : 'neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl'}`}>
                               <div className="flex items-start justify-between gap-3">
                                   <label className="flex items-start gap-3">
                                       <input type="checkbox" checked={selectedGiftcodeAbuseIds.includes(item.usageId)} onChange={() => toggleGiftcodeAbuseSelection(item.usageId)} className="mt-1 accent-audi-pink w-4 h-4" />
                                       <div>
-                                          <div className="font-bold text-white">{item.userName}</div>
-                                          <div className="text-xs text-slate-400">{item.userEmail}</div>
+                                          <div className="font-bold text-slate-900 dark:text-white">{item.userName}</div>
+                                          <div className="text-xs text-slate-700 dark:text-slate-300 font-semibold">{item.userEmail}</div>
                                       </div>
                                   </label>
                                   <div className="flex flex-col items-end gap-1">
@@ -3149,10 +3244,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   </div>
                               </div>
                               <div className="grid grid-cols-2 gap-2 text-xs">
-                                  <div className="rounded-lg bg-black/30 p-2"><div className="text-slate-500">Code</div><div className="font-mono text-white">{item.giftCode}</div></div>
-                                  <div className="rounded-lg bg-black/30 p-2"><div className="text-slate-500">IP</div><div className="font-mono text-white truncate">{item.ipAddress || 'Ẩn/cũ'}</div></div>
-                                  <div className="rounded-lg bg-black/30 p-2 col-span-2"><div className="text-slate-500">Email cluster</div><div className="font-mono text-white truncate">{item.emailFingerprint || '-'}</div></div>
-                                  <div className="rounded-lg bg-black/30 p-2 col-span-2"><div className="text-slate-500">Browser key</div><div className="font-mono text-white truncate">{item.browserKeyHash || '-'}</div></div>
+                                  <div className="rounded-lg neu-inset-sm p-2"><div className="text-slate-700 dark:text-slate-400 font-semibold">Code</div><div className="font-mono font-bold text-slate-900 dark:text-white">{item.giftCode}</div></div>
+                                  <div className="rounded-lg neu-inset-sm p-2"><div className="text-slate-700 dark:text-slate-400 font-semibold">IP</div><div className="font-mono font-bold text-slate-900 dark:text-white truncate">{item.ipAddress || 'Ẩn/cũ'}</div></div>
+                                  <div className="rounded-lg neu-inset-sm p-2 col-span-2"><div className="text-slate-700 dark:text-slate-400 font-semibold">Email cluster</div><div className="font-mono font-bold text-slate-900 dark:text-white truncate">{item.emailFingerprint || '-'}</div></div>
+                                  <div className="rounded-lg neu-inset-sm p-2 col-span-2"><div className="text-slate-700 dark:text-slate-400 font-semibold">Browser key</div><div className="font-mono font-bold text-slate-900 dark:text-white truncate">{item.browserKeyHash || '-'}</div></div>
                               </div>
                               <div className="space-y-1">
                                   {item.evidence.slice(0, 4).map((evidence) => <div key={evidence} className="text-xs text-slate-300">• {evidence}</div>)}
@@ -3173,17 +3268,17 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
                       <div>
-                          <h2 className="text-lg md:text-2xl font-bold text-white">Queue Jobs</h2>
-                          <p className="text-sm text-slate-400 mt-1">Theo dõi job đang kẹt, poll quá hạn và queued quá lâu.</p>
+                          <h2 className="text-lg md:text-2xl font-bold text-slate-900 dark:text-white">Queue Jobs</h2>
+                          <p className="text-sm text-slate-700 dark:text-slate-300 font-semibold mt-1">Theo dõi job đang kẹt, poll quá hạn và queued quá lâu.</p>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                          <button onClick={() => loadQueueJobs({ silent: false })} disabled={loadingQueueJobs} className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-bold text-white disabled:opacity-60">
+                          <button onClick={() => loadQueueJobs({ silent: false })} disabled={loadingQueueJobs} className="px-4 py-2 rounded-xl neu-inset-sm hover:bg-white/10 border border-white/10 text-sm font-bold text-slate-900 dark:text-white disabled:opacity-60">
                               {loadingQueueJobs ? 'Đang tải...' : 'Làm mới'}
                           </button>
-                          <button onClick={handleRescueFailedJobs} disabled={rescuingFailedQueueJobs} className="px-4 py-2 rounded-xl bg-violet-500 hover:bg-violet-600 text-white text-sm font-bold disabled:opacity-60">
+                          <button onClick={handleRescueFailedJobs} disabled={rescuingFailedQueueJobs} className="px-4 py-2 rounded-xl bg-violet-500 hover:bg-violet-600 text-slate-900 dark:text-white text-sm font-bold disabled:opacity-60">
                               {rescuingFailedQueueJobs ? 'Đang cứu TST...' : 'Cứu job TST timeout'}
                           </button>
-                          <button onClick={handleQueueReconcile} disabled={reconcilingQueue} className="px-4 py-2 rounded-xl bg-audi-pink hover:bg-pink-600 text-white text-sm font-bold disabled:opacity-60">
+                          <button onClick={handleQueueReconcile} disabled={reconcilingQueue} className="px-4 py-2 rounded-xl bg-audi-pink hover:bg-pink-600 text-slate-900 dark:text-white text-sm font-bold disabled:opacity-60">
                               {reconcilingQueue ? 'Đang reconcile...' : 'Reconcile Queue'}
                           </button>
                       </div>
@@ -3204,31 +3299,31 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                               key={item.label}
                               type="button"
                               onClick={() => handleQueueSummaryFilter(item.key as typeof queueSummaryFilter)}
-                              className={`text-left bg-[#12121a] border rounded-2xl p-4 transition-all hover:border-white/30 hover:bg-white/[0.07] ${
+                              className={`text-left neu-card p-4.5 rounded-2xl transition-all hover:scale-[1.02] ${
                                   queueSummaryFilter === item.key || (item.key === 'all' && queueSummaryFilter === 'all')
                                       ? 'border-audi-pink/60 shadow-[0_0_0_1px_rgba(255,0,153,0.25)]'
                                       : 'border-white/10'
                               }`}
                           >
-                              <div className="text-[11px] uppercase tracking-wider text-slate-500 font-bold">{item.label}</div>
+                              <div className="text-[11px] uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold font-bold">{item.label}</div>
                               <div className={`text-2xl font-black mt-2 ${item.color}`}>{item.value}</div>
                           </button>
                       ))}
                   </div>
 
                   {queueHealthReport && (
-                      <div className="rounded-2xl border border-white/10 bg-[#12121a] p-4">
+                      <div className="neu-card p-6 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl space-y-4">
                           <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
                               <div>
-                                  <div className="text-sm font-black text-white">Queue Health Report</div>
-                                  <div className="mt-1 text-xs text-slate-400">
+                                  <div className="text-base font-black text-slate-950 dark:text-white uppercase font-accent">BÁO CÁO SỨC KHỎE HÀNG CHỜ (QUEUE HEALTH)</div>
+                                  <div className="mt-1 text-xs font-bold text-slate-700 dark:text-slate-300">
                                       Live DB: {
                                           isQueueHealthSnapshot(queueHealthReport.liveDbReport)
                                               ? `${queueHealthReport.liveDbReport.scanned || 0} job, ${queueHealthReport.liveDbReport.watchdogDue || 0} cần watchdog`
                                               : `chưa có RPC hoặc lỗi: ${'error' in (queueHealthReport.liveDbReport || {}) ? (queueHealthReport.liveDbReport as any).error : 'N/A'}`
                                       }
                                   </div>
-                                  <div className="mt-1 text-xs text-slate-500">
+                                  <div className="mt-1 text-xs font-semibold text-slate-600 dark:text-slate-700 dark:text-slate-300 font-semibold">
                                       Watchdog gần nhất: {queueHealthReport.lastWatchdogReportUpdatedAt ? getTimeAgo(queueHealthReport.lastWatchdogReportUpdatedAt) : 'chưa ghi snapshot'}
                                   </div>
                               </div>
@@ -3237,77 +3332,64 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       const live = isQueueHealthSnapshot(queueHealthReport.liveDbReport) ? queueHealthReport.liveDbReport : null;
                                       const counts = live?.counts || {};
                                       return [
-                                          ['Queued stale', counts.queued_stale || 0, 'text-orange-300'],
-                                          ['Safe requeue', counts.pre_dispatch_safe_requeue_due || 0, 'text-pink-300'],
-                                          ['Provider risk', counts.pre_dispatch_provider_risk || 0, 'text-red-300'],
-                                          ['Poll quá hạn', counts.poll_overdue || 0, 'text-red-200'],
+                                          ['Queued stale', counts.queued_stale || 0, 'text-amber-500'],
+                                          ['Safe requeue', counts.pre_dispatch_safe_requeue_due || 0, 'text-pink-500'],
+                                          ['Provider risk', counts.pre_dispatch_provider_risk || 0, 'text-red-500'],
+                                          ['Poll quá hạn', counts.poll_overdue || 0, 'text-red-400'],
                                       ].map(([label, value, color]) => (
-                                          <div key={String(label)} className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
-                                              <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">{label}</div>
-                                              <div className={`mt-1 text-lg font-black ${color}`}>{value}</div>
+                                          <div key={String(label)} className="neu-card p-3 rounded-2xl space-y-1">
+                                              <div className="text-[10px] uppercase font-black text-slate-700 dark:text-slate-300 tracking-wider font-accent">{label}</div>
+                                              <div className={`text-lg font-black font-mono ${color}`}>{value}</div>
                                           </div>
                                       ));
                                   })()}
                               </div>
                           </div>
-                          {queueHealthReport.lastWatchdogReport?.summary?.healthAfter?.examples?.length ? (
-                              <div className="mt-4 border-t border-white/10 pt-3">
-                                  <div className="text-[11px] uppercase tracking-wider text-slate-500 font-bold mb-2">Ví dụ job còn rủi ro sau watchdog</div>
-                                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
-                                      {queueHealthReport.lastWatchdogReport.summary.healthAfter.examples.slice(0, 6).map((item) => (
-                                          <div key={item.id} className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs">
-                                              <div className="font-mono text-white">{item.id.slice(0, 12)}</div>
-                                              <div className="mt-1 text-slate-400">{item.code || 'unknown'} · {item.stage || 'unknown'} · {item.ageSeconds || 0}s</div>
-                                          </div>
-                                      ))}
-                                  </div>
-                              </div>
-                          ) : null}
                       </div>
                   )}
 
-                  <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 space-y-4">
+                  <div className="neu-card p-6 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl space-y-4">
                       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[minmax(220px,1.2fr)_170px_repeat(3,minmax(0,1fr))_170px] gap-3">
-                          <div className="flex h-12 items-center gap-2 bg-white/5 rounded-xl border border-white/10 px-3">
-                              <Icons.Search className="w-4 h-4 text-slate-500" />
-                              <input type="text" placeholder="Email hoặc job id" value={queueEmailFilter} onChange={(e) => setQueueEmailFilter(e.target.value)} className="bg-transparent border-none outline-none text-sm text-white w-full placeholder-slate-500" />
+                          <div className="flex h-12 items-center gap-2 neu-input px-3.5 rounded-xl border border-slate-300 dark:border-slate-700">
+                              <Icons.Search className="w-4 h-4 text-slate-700 dark:text-slate-400 font-semibold shrink-0" />
+                              <input type="text" placeholder="Email hoặc job id..." value={queueEmailFilter} onChange={(e) => setQueueEmailFilter(e.target.value)} className="bg-transparent border-none outline-none text-xs font-bold text-slate-900 dark:text-white w-full placeholder-slate-500" />
                           </div>
-                          <div className="flex h-12 items-center gap-1 bg-white/5 rounded-xl border border-white/10 p-1">
+                          <div className="flex h-12 items-center gap-1 neu-inset-sm rounded-xl border border-white/10 p-1">
                               <button
                                   type="button"
                                   onClick={() => setQueueTimeScope('today')}
-                                  className={`flex-1 rounded-lg px-3 py-2 text-sm font-bold transition-colors ${queueTimeScope === 'today' ? 'bg-audi-cyan text-slate-950' : 'text-white hover:bg-white/5'}`}
+                                  className={`flex-1 rounded-lg px-3 py-2 text-sm font-bold transition-colors ${queueTimeScope === 'today' ? 'bg-audi-cyan text-slate-950' : 'text-white hover:neu-inset-sm'}`}
                               >
                                   Hôm nay
                               </button>
                               <button
                                   type="button"
                                   onClick={() => setQueueTimeScope('all')}
-                                  className={`flex-1 rounded-lg px-3 py-2 text-sm font-bold transition-colors ${queueTimeScope === 'all' ? 'bg-audi-pink text-white' : 'text-white hover:bg-white/5'}`}
+                                  className={`flex-1 rounded-lg px-3 py-2 text-sm font-bold transition-colors ${queueTimeScope === 'all' ? 'bg-audi-pink text-white' : 'text-white hover:neu-inset-sm'}`}
                               >
                                   Tất cả
                               </button>
                           </div>
-                          <select value={queueStatusFilter} onChange={(e) => setQueueStatusFilter(e.target.value as typeof queueStatusFilter)} className="h-12 bg-white/5 border border-white/10 rounded-xl px-3 text-sm text-white outline-none">
-                              <option value="all" className="bg-[#12121a]">Trạng thái</option>
-                              <option value="queued" className="bg-[#12121a]">Đang chờ</option>
-                              <option value="processing" className="bg-[#12121a]">Đang xử lý</option>
-                              <option value="rescuing" className="bg-[#12121a]">Đang cứu kết quả</option>
-                              <option value="completed" className="bg-[#12121a]">Hoàn thành</option>
-                              <option value="failed" className="bg-[#12121a]">Thất bại</option>
+                          <select value={queueStatusFilter} onChange={(e) => setQueueStatusFilter(e.target.value as typeof queueStatusFilter)} className="h-12 neu-input font-bold text-slate-900 dark:text-white text-xs px-3.5 rounded-xl border border-slate-300 dark:border-slate-700 outline-none">
+                              <option value="all" className="bg-[#DFE4ED] dark:bg-[#13161F] text-slate-900 dark:text-white font-bold">Trạng thái</option>
+                              <option value="queued" className="bg-[#DFE4ED] dark:bg-[#13161F] text-slate-900 dark:text-white font-bold">Đang chờ</option>
+                              <option value="processing" className="bg-[#DFE4ED] dark:bg-[#13161F] text-slate-900 dark:text-white font-bold">Đang xử lý</option>
+                              <option value="rescuing" className="bg-[#DFE4ED] dark:bg-[#13161F] text-slate-900 dark:text-white font-bold">Đang cứu kết quả</option>
+                              <option value="completed" className="bg-[#DFE4ED] dark:bg-[#13161F] text-slate-900 dark:text-white font-bold">Hoàn thành</option>
+                              <option value="failed" className="bg-[#DFE4ED] dark:bg-[#13161F] text-slate-900 dark:text-white font-bold">Thất bại</option>
                           </select>
-                          <select value={queueAssetFilter} onChange={(e) => setQueueAssetFilter(e.target.value as typeof queueAssetFilter)} className="h-12 bg-white/5 border border-white/10 rounded-xl px-3 text-sm text-white outline-none">
-                              <option value="all" className="bg-[#12121a]">Ảnh + Video</option>
-                              <option value="image" className="bg-[#12121a]">Chỉ ảnh</option>
-                              <option value="video" className="bg-[#12121a]">Chỉ video</option>
+                          <select value={queueAssetFilter} onChange={(e) => setQueueAssetFilter(e.target.value as typeof queueAssetFilter)} className="h-12 neu-input font-bold text-slate-900 dark:text-white text-xs px-3.5 rounded-xl border border-slate-300 dark:border-slate-700 outline-none">
+                              <option value="all" className="bg-[#DFE4ED] dark:bg-[#13161F] text-slate-900 dark:text-white font-bold">Ảnh + Video</option>
+                              <option value="image" className="bg-[#DFE4ED] dark:bg-[#13161F] text-slate-900 dark:text-white font-bold">Chỉ ảnh</option>
+                              <option value="video" className="bg-[#DFE4ED] dark:bg-[#13161F] text-slate-900 dark:text-white font-bold">Chỉ video</option>
                           </select>
-                          <select value={queueStageFilter} onChange={(e) => setQueueStageFilter(e.target.value)} className="h-12 bg-white/5 border border-white/10 rounded-xl px-3 text-sm text-white outline-none">
-                              <option value="all" className="bg-[#12121a]">Stage</option>
+                          <select value={queueStageFilter} onChange={(e) => setQueueStageFilter(e.target.value)} className="h-12 neu-input font-bold text-slate-900 dark:text-white text-xs px-3.5 rounded-xl border border-slate-300 dark:border-slate-700 outline-none">
+                              <option value="all" className="bg-[#DFE4ED] dark:bg-[#13161F] text-slate-900 dark:text-white font-bold">Stage</option>
                               {queueStageOptions.map((stage) => (
-                                  <option key={stage} value={stage} className="bg-[#12121a]">{getQueueStageLabel(stage)}</option>
+                                  <option key={stage} value={stage} className="bg-[#DFE4ED] dark:bg-[#13161F] text-slate-900 dark:text-white font-bold">{getQueueStageLabel(stage)}</option>
                               ))}
                           </select>
-                          <label className="flex h-12 items-center justify-between gap-3 bg-white/5 border border-white/10 rounded-xl px-3 text-sm text-white">
+                          <label className="flex h-12 items-center justify-between gap-3 neu-input font-bold text-slate-900 dark:text-white text-xs px-3.5 rounded-xl border border-slate-300 dark:border-slate-700">
                               <span>Đang kẹt</span>
                               <input type="checkbox" className="accent-audi-pink" checked={queueStuckOnly} onChange={(e) => setQueueStuckOnly(e.target.checked)} />
                           </label>
@@ -3315,7 +3397,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
                       <div className="hidden xl:block overflow-x-auto">
                           <table className="w-full text-left text-sm text-slate-300">
-                              <thead className="text-[11px] uppercase tracking-wider text-slate-500 border-b border-white/10">
+                              <thead className="text-[11px] uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold border-b border-white/10">
                                   <tr>
                                       <th className="px-3 py-3">User</th>
                                       <th className="px-3 py-3">Job</th>
@@ -3327,23 +3409,23 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       <th className="px-3 py-3 text-right">Chi tiết</th>
                                   </tr>
                               </thead>
-                              <tbody className="divide-y divide-white/5">
+                              <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                                   {filteredQueueJobs.length === 0 ? (
                                       <tr>
-                                          <td colSpan={8} className="px-3 py-8 text-center text-slate-500">Không có job nào khớp bộ lọc.</td>
+                                          <td colSpan={8} className="px-3 py-8 text-center text-slate-700 dark:text-slate-400 font-semibold">Không có job nào khớp bộ lọc.</td>
                                       </tr>
                                   ) : filteredQueueJobs.map((job) => {
                                       const lastLogMessage = job.lastLogMessage || (job.queueLogs && job.queueLogs.length > 0 ? job.queueLogs[job.queueLogs.length - 1]?.message : '') || job.error || '-';
                                       return (
-                                          <tr key={job.id} className="align-top hover:bg-white/5">
+                                          <tr key={job.id} className="align-top hover:neu-inset-sm">
                                               <td className="px-3 py-3">
-                                                  <div className="font-bold text-white">{job.userName || 'Unknown'}</div>
-                                                  <div className="text-xs text-slate-500">{job.userEmail || job.userId}</div>
+                                                  <div className="font-bold text-slate-900 dark:text-white">{job.userName || 'Unknown'}</div>
+                                                  <div className="text-xs text-slate-700 dark:text-slate-400 font-semibold">{job.userEmail || job.userId}</div>
                                               </td>
                                               <td className="px-3 py-3">
                                                   <div className="text-white font-mono text-xs">{job.id.slice(0, 12)}</div>
-                                                  <div className="text-xs text-slate-500 mt-1">{job.assetType === 'video' ? 'Video' : 'Ảnh'}</div>
-                                                  <div className="text-[11px] text-slate-500 mt-1">thiết bị: {getQueuePlatformLabel(job.clientPlatform)}</div>
+                                                  <div className="text-xs text-slate-700 dark:text-slate-400 font-semibold mt-1">{job.assetType === 'video' ? 'Video' : 'Ảnh'}</div>
+                                                  <div className="text-[11px] text-slate-700 dark:text-slate-400 font-semibold mt-1">thiết bị: {getQueuePlatformLabel(job.clientPlatform)}</div>
                                               </td>
                                               <td className="px-3 py-3">
                                                   <div className={`inline-flex px-2 py-1 rounded text-[11px] font-bold uppercase ${getQueueStatusClass(job.displayStatus || job.status)}`}>
@@ -3353,26 +3435,26 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               </td>
                                               <td className="px-3 py-3 text-xs text-slate-300">{getQueueStageLabel(job.queueStage)}</td>
                                               <td className="px-3 py-3">
-                                                  <div className="text-sm font-bold text-white">{job.progress || 0}%</div>
+                                                  <div className="text-sm font-bold text-slate-900 dark:text-white">{job.progress || 0}%</div>
                                                   <div className="w-24 h-2 rounded-full bg-white/10 mt-2 overflow-hidden">
                                                       <div className={`h-full ${(job.displayStatus || job.status) === 'queued' ? 'bg-yellow-400' : (job.displayStatus || job.status) === 'rescuing' ? 'bg-violet-400' : 'bg-audi-cyan'}`} style={{ width: `${Math.max(0, Math.min(100, job.progress || 0))}%` }} />
                                                   </div>
                                               </td>
-                                              <td className="px-3 py-3 text-xs text-slate-400">
+                                              <td className="px-3 py-3 text-xs text-slate-700 dark:text-slate-300 font-semibold">
                                                   <div>{getTimeAgo(job.updatedAt)}</div>
                                                   {job.nextPollAt && <div className="mt-1">poll: {getTimeAgo(job.nextPollAt)}</div>}
                                               </td>
-                                              <td className="px-3 py-3 text-xs text-slate-400 max-w-[360px]">
+                                              <td className="px-3 py-3 text-xs text-slate-700 dark:text-slate-300 font-semibold max-w-[360px]">
                                                   {job.health && (
                                                       <div className={`mb-2 rounded-lg border p-2 ${getQueueHealthClass(job.health.severity)}`}>
                                                           <div className="font-bold">{job.health.label}</div>
                                                           <div className="mt-1 text-[11px] leading-relaxed opacity-90">{job.health.detail}</div>
                                                           <div className="mt-1 text-[11px] font-bold opacity-95">Hành động: {job.health.action}</div>
                                                           <div className="mt-1 flex flex-wrap gap-1 text-[10px]">
-                                                              <span className="rounded bg-black/20 px-1.5 py-0.5">lease: {job.health.leaseState || '-'}</span>
-                                                              {typeof job.health.recoveries === 'number' && <span className="rounded bg-black/20 px-1.5 py-0.5">recoveries: {job.health.recoveries}</span>}
-                                                              {job.health.providerRisk && <span className="rounded bg-black/20 px-1.5 py-0.5">provider-risk</span>}
-                                                              {job.health.safeToRequeue && <span className="rounded bg-black/20 px-1.5 py-0.5">safe-requeue</span>}
+                                                              <span className="rounded neu-inset-sm px-1.5 py-0.5">lease: {job.health.leaseState || '-'}</span>
+                                                              {typeof job.health.recoveries === 'number' && <span className="rounded neu-inset-sm px-1.5 py-0.5">recoveries: {job.health.recoveries}</span>}
+                                                              {job.health.providerRisk && <span className="rounded neu-inset-sm px-1.5 py-0.5">provider-risk</span>}
+                                                              {job.health.safeToRequeue && <span className="rounded neu-inset-sm px-1.5 py-0.5">safe-requeue</span>}
                                                           </div>
                                                       </div>
                                                   )}
@@ -3386,7 +3468,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                   {job.jobId && <div className="mt-1 text-[11px] text-audi-cyan">Provider ID: {job.jobId}</div>}
                                               </td>
                                               <td className="px-3 py-3 text-right">
-                                                  <button onClick={() => handleOpenQueueJobDetail(job.id)} className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white text-xs font-bold">
+                                                  <button onClick={() => handleOpenQueueJobDetail(job.id)} className="neu-button px-3.5 py-1.5 rounded-xl text-xs font-black text-[#FF007F] hover:scale-105">
                                                       Xem
                                                   </button>
                                               </td>
@@ -3399,15 +3481,15 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
                       <div className="xl:hidden space-y-3">
                           {filteredQueueJobs.length === 0 ? (
-                              <div className="text-center text-slate-500 py-6">Không có job nào khớp bộ lọc.</div>
+                              <div className="text-center text-slate-700 dark:text-slate-400 font-semibold py-6">Không có job nào khớp bộ lọc.</div>
                           ) : filteredQueueJobs.map((job) => {
                               const lastLogMessage = job.lastLogMessage || (job.queueLogs && job.queueLogs.length > 0 ? job.queueLogs[job.queueLogs.length - 1]?.message : '') || job.error || 'Chưa có log mới';
                               return (
-                                  <div key={job.id} className="border border-white/10 rounded-xl p-4 bg-black/20">
+                                  <div key={job.id} className="border border-white/10 rounded-xl p-4 neu-inset-sm">
                                       <div className="flex items-start justify-between gap-3">
                                           <div>
-                                              <div className="font-bold text-white text-sm">{job.userName || 'Unknown'}</div>
-                                              <div className="text-xs text-slate-500">{job.userEmail || job.userId}</div>
+                                              <div className="font-bold text-slate-900 dark:text-white text-sm">{job.userName || 'Unknown'}</div>
+                                              <div className="text-xs text-slate-700 dark:text-slate-400 font-semibold">{job.userEmail || job.userId}</div>
                                           </div>
                                           <div className="text-right">
                                               <div className={`inline-flex px-2 py-1 rounded text-[11px] font-bold uppercase ${getQueueStatusClass(job.displayStatus || job.status)}`}>{getQueueStatusLabel(job.displayStatus || job.status)}</div>
@@ -3415,11 +3497,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           </div>
                                       </div>
                                           <div className="grid grid-cols-2 gap-3 mt-3 text-xs">
-                                          <div><span className="text-slate-500">Job</span><div className="text-white font-mono mt-1">{job.id.slice(0, 12)}</div></div>
-                                          <div><span className="text-slate-500">Stage</span><div className="text-white mt-1">{getQueueStageLabel(job.queueStage)}</div></div>
-                                          <div><span className="text-slate-500">Loại</span><div className="text-white mt-1">{job.assetType === 'video' ? 'Video' : 'Ảnh'}</div></div>
-                                          <div><span className="text-slate-500">Thiết bị</span><div className="text-white mt-1">{getQueuePlatformLabel(job.clientPlatform)}</div></div>
-                                          <div><span className="text-slate-500">Cập nhật</span><div className="text-white mt-1">{getTimeAgo(job.updatedAt)}</div></div>
+                                          <div><span className="text-slate-700 dark:text-slate-400 font-semibold">Job</span><div className="text-white font-mono mt-1">{job.id.slice(0, 12)}</div></div>
+                                          <div><span className="text-slate-700 dark:text-slate-400 font-semibold">Stage</span><div className="text-white mt-1">{getQueueStageLabel(job.queueStage)}</div></div>
+                                          <div><span className="text-slate-700 dark:text-slate-400 font-semibold">Loại</span><div className="text-white mt-1">{job.assetType === 'video' ? 'Video' : 'Ảnh'}</div></div>
+                                          <div><span className="text-slate-700 dark:text-slate-400 font-semibold">Thiết bị</span><div className="text-white mt-1">{getQueuePlatformLabel(job.clientPlatform)}</div></div>
+                                          <div><span className="text-slate-700 dark:text-slate-400 font-semibold">Cập nhật</span><div className="text-white mt-1">{getTimeAgo(job.updatedAt)}</div></div>
                                       </div>
                                       {job.errorCategory && job.error && (
                                           <div className={`inline-flex mt-3 px-2 py-1 rounded border text-[10px] font-bold uppercase ${getQueueErrorCategoryClass(job.errorCategory)}`}>
@@ -3432,16 +3514,16 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               <div className="mt-1 leading-relaxed opacity-90">{job.health.detail}</div>
                                               <div className="mt-2 font-bold">Hành động: {job.health.action}</div>
                                               <div className="mt-2 flex flex-wrap gap-1 text-[10px]">
-                                                  <span className="rounded bg-black/20 px-1.5 py-0.5">lease: {job.health.leaseState || '-'}</span>
-                                                  {typeof job.health.recoveries === 'number' && <span className="rounded bg-black/20 px-1.5 py-0.5">recoveries: {job.health.recoveries}</span>}
-                                                  {job.health.providerRisk && <span className="rounded bg-black/20 px-1.5 py-0.5">provider-risk</span>}
-                                                  {job.health.safeToRequeue && <span className="rounded bg-black/20 px-1.5 py-0.5">safe-requeue</span>}
+                                                  <span className="rounded neu-inset-sm px-1.5 py-0.5">lease: {job.health.leaseState || '-'}</span>
+                                                  {typeof job.health.recoveries === 'number' && <span className="rounded neu-inset-sm px-1.5 py-0.5">recoveries: {job.health.recoveries}</span>}
+                                                  {job.health.providerRisk && <span className="rounded neu-inset-sm px-1.5 py-0.5">provider-risk</span>}
+                                                  {job.health.safeToRequeue && <span className="rounded neu-inset-sm px-1.5 py-0.5">safe-requeue</span>}
                                               </div>
                                           </div>
                                       )}
                                       <div className="mt-3 text-xs text-slate-300">{lastLogMessage}</div>
                                       {job.jobId && <div className="mt-1 text-[11px] text-audi-cyan">Provider ID: {job.jobId}</div>}
-                                      <button onClick={() => handleOpenQueueJobDetail(job.id)} className="mt-3 w-full py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white text-xs font-bold">
+                                      <button onClick={() => handleOpenQueueJobDetail(job.id)} className="mt-3 w-full py-2 rounded-lg neu-inset-sm hover:bg-white/10 border border-white/10 text-slate-900 dark:text-white text-xs font-bold">
                                           Xem chi tiết input
                                       </button>
                                   </div>
@@ -3453,27 +3535,47 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           )}
 
           {activeView === 'packages' && (
-              // ... existing packages view ...
-              <div className="space-y-6 animate-slide-in-right">
-                  <div className="flex justify-between items-center">
-                      <h2 className="text-lg md:text-2xl font-bold text-white">Gói Nạp</h2>
-                      <button onClick={() => setEditingPackage({id: `temp_${Date.now()}`, name: 'Gói Mới', vcoin: 100, price: 50000, currency: 'VND', bonusText: '', bonusPercent: 0, isPopular: false, isActive: true, displayOrder: packages.length, colorTheme: 'border-slate-600', transferContent: 'NAP 50K'})} className="px-3 py-1.5 md:px-4 md:py-2 bg-audi-pink text-white rounded-lg font-bold flex items-center gap-2 hover:bg-pink-600 text-xs md:text-sm"><Icons.Plus className="w-4 h-4" /> Thêm Gói</button>
+              <div className="space-y-6 animate-fade-in">
+                  <div className="flex justify-between items-center neu-card p-6 rounded-3xl shadow-xl border border-slate-300 dark:border-slate-800">
+                      <div>
+                          <h2 className="text-xl font-black text-slate-950 dark:text-white font-accent uppercase tracking-wider flex items-center gap-2">
+                              <Icons.ShoppingBag className="w-5 h-5 text-[#FF007F]" />
+                              QUẢN LÝ GÓI NẠP VCOIN
+                          </h2>
+                          <p className="text-xs text-slate-700 dark:text-slate-300 font-bold mt-1">Cấu hình giá bán, số Vcoin nhận được và nhãn khuyến mãi cho từng gói nạp</p>
+                      </div>
+                      <button onClick={() => setEditingPackage({id: `temp_${Date.now()}`, name: 'Gói Mới', vcoin: 100, price: 50000, currency: 'VND', bonusText: '', bonusPercent: 0, isPopular: false, isActive: true, displayOrder: packages.length, colorTheme: 'border-slate-600', transferContent: 'NAP 50K'})} className="neu-button-primary px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-lg hover:scale-105 transition-all">
+                          <Icons.Plus className="w-4 h-4 text-white" /> Thêm Gói Nạp Mới
+                      </button>
                   </div>
                   <div className="grid grid-cols-1 gap-4">
                       {packages.map((pkg, idx) => (
-                          <div key={pkg.id} className="bg-[#12121a] border border-white/10 rounded-xl p-4 flex items-center justify-between group hover:border-white/30 transition-all shadow-md">
-                              <div className="flex items-center gap-3 md:gap-4">
-                                  <div className="flex flex-col gap-1 pr-3 md:pr-4 border-r border-white/10">
-                                      <button onClick={() => handleMovePackage(idx, -1)} disabled={idx === 0} className="p-1 hover:bg-white/10 rounded text-slate-500 disabled:opacity-30"><Icons.ArrowUp className="w-3 h-3" /></button>
-                                      <button onClick={() => handleMovePackage(idx, 1)} disabled={idx === packages.length - 1} className="p-1 hover:bg-white/10 rounded text-slate-500 disabled:opacity-30"><Icons.ArrowUp className="w-3 h-3 rotate-180" /></button>
+                          <div key={pkg.id} className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 flex items-center justify-between group hover:scale-[1.01] transition-all shadow-xl">
+                              <div className="flex items-center gap-4">
+                                  <div className="flex flex-col gap-1 pr-4 border-r border-slate-300 dark:border-slate-800">
+                                      <button onClick={() => handleMovePackage(idx, -1)} disabled={idx === 0} className="p-1.5 neu-button rounded-xl text-slate-600 dark:text-slate-700 dark:text-slate-300 font-semibold disabled:opacity-30"><Icons.ArrowUp className="w-3.5 h-3.5" /></button>
+                                      <button onClick={() => handleMovePackage(idx, 1)} disabled={idx === packages.length - 1} className="p-1.5 neu-button rounded-xl text-slate-600 dark:text-slate-700 dark:text-slate-300 font-semibold disabled:opacity-30"><Icons.ArrowUp className="w-3.5 h-3.5 rotate-180" /></button>
                                   </div>
-                                  <div className={`w-10 h-10 rounded-full border-2 ${pkg.colorTheme} flex items-center justify-center bg-black/50 shrink-0`}><Icons.Gem className="w-5 h-5 text-white" /></div>
+                                  <div className="w-12 h-12 neu-inset-sm rounded-2xl flex items-center justify-center text-amber-500 shrink-0">
+                                      <Icons.Gem className="w-6 h-6 text-amber-500" />
+                                  </div>
                                   <div>
-                                      <h4 className="font-bold text-white flex items-center gap-2 text-sm md:text-base">{pkg.name} {!pkg.isActive && <span className="text-[9px] bg-red-500 text-white px-1.5 py-0.5 rounded">HIDDEN</span>} {pkg.isPopular && <span className="text-[9px] bg-audi-pink text-white px-1.5 py-0.5 rounded">HOT</span>}</h4>
-                                      <div className="flex gap-3 text-xs text-slate-400 mt-1"><span><b className="text-green-400">{(pkg.price || 0).toLocaleString()}đ</b></span><span><b className="text-audi-yellow">{pkg.vcoin || 0} VC</b></span>{pkg.bonusPercent > 0 && <span className="text-audi-pink">+{pkg.bonusPercent}%</span>}</div>
+                                      <h4 className="font-black text-slate-950 dark:text-white flex items-center gap-2 text-base font-accent">
+                                          {pkg.name} 
+                                          {!pkg.isActive && <span className="text-[9px] font-black bg-red-500 text-white px-2 py-0.5 rounded-full">ẨN</span>} 
+                                          {pkg.isPopular && <span className="text-[9px] font-black bg-[#FF007F] text-white px-2 py-0.5 rounded-full">HOT</span>}
+                                      </h4>
+                                      <div className="flex gap-4 text-xs font-bold mt-1">
+                                          <span className="text-emerald-600 dark:text-emerald-400 font-mono">{(pkg.price || 0).toLocaleString()}đ</span>
+                                          <span className="text-amber-600 dark:text-amber-400 font-accent">{pkg.vcoin || 0} VCOIN</span>
+                                          {pkg.bonusPercent > 0 && <span className="text-[#FF007F] font-black">+{pkg.bonusPercent}% Thưởng</span>}
+                                      </div>
                                   </div>
                               </div>
-                              <div className="flex gap-2"><button onClick={() => setEditingPackage({ id: pkg.id || '', name: pkg.name || '', price: pkg.price || 0, vcoin: pkg.vcoin || 0, bonusPercent: pkg.bonusPercent || 0, bonusText: pkg.bonusText || '', transferContent: pkg.transferContent || '', isPopular: !!pkg.isPopular, isActive: pkg.isActive !== false, colorTheme: pkg.colorTheme || 'border-slate-600', displayOrder: pkg.displayOrder || 0, currency: pkg.currency || 'VND' })} className="p-2 bg-blue-500/20 text-blue-500 rounded hover:bg-blue-500 hover:text-white"><Icons.Settings className="w-4 h-4" /></button><button onClick={() => handleDeletePackage(pkg.id)} className="p-2 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white"><Icons.Trash className="w-4 h-4" /></button></div>
+                              <div className="flex gap-2">
+                                  <button onClick={() => setEditingPackage({ id: pkg.id || '', name: pkg.name || '', price: pkg.price || 0, vcoin: pkg.vcoin || 0, bonusPercent: pkg.bonusPercent || 0, bonusText: pkg.bonusText || '', transferContent: pkg.transferContent || '', isPopular: !!pkg.isPopular, isActive: pkg.isActive !== false, colorTheme: pkg.colorTheme || 'border-slate-600', displayOrder: pkg.displayOrder || 0, currency: pkg.currency || 'VND' })} className="neu-button p-2.5 rounded-xl text-blue-600 dark:text-blue-400 hover:scale-105"><Icons.Settings className="w-4.5 h-4.5" /></button>
+                                  <button onClick={() => handleDeletePackage(pkg.id)} className="neu-button p-2.5 rounded-xl text-red-500 hover:scale-105"><Icons.Trash className="w-4.5 h-4.5" /></button>
+                              </div>
                           </div>
                       ))}
                   </div>
@@ -3481,52 +3583,97 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           )}
 
           {activeView === 'marketing' && (
-              <div className="space-y-10 animate-slide-in-right">
+              <div className="space-y-8 animate-fade-in">
                   {/* Promotion Section */}
-                  <div className="space-y-6">
-                      <div className="flex justify-between items-center">
-                          <h2 className="text-lg md:text-2xl font-bold text-white">Chiến Dịch Khuyến Mãi</h2>
-                          <div className="flex gap-2"><button onClick={refreshData} className="px-3 py-2 bg-white/10 text-white rounded-lg font-bold hover:bg-white/20" title="Làm mới danh sách"><Icons.Clock className="w-4 h-4" /></button><button onClick={() => setEditingPromotion({id: `temp_${Date.now()}`, name: '', marqueeText: '', bonusPercent: 10, startTime: new Date().toISOString(), endTime: new Date(Date.now() + 86400000).toISOString(), isActive: true})} className="px-3 py-2 md:px-4 bg-audi-pink text-white rounded-lg font-bold flex items-center gap-2 hover:bg-pink-600 text-xs md:text-sm"><Icons.Plus className="w-4 h-4" /> <span className="hidden md:inline">Tạo Chiến Dịch Mới</span><span className="md:hidden">Mới</span></button></div>
+                  <div className="space-y-5">
+                      <div className="flex justify-between items-center neu-card p-6 rounded-3xl shadow-xl border border-slate-300 dark:border-slate-800">
+                          <div>
+                              <h2 className="text-xl font-black text-slate-950 dark:text-white font-accent uppercase tracking-wider flex items-center gap-2">
+                                  <Icons.Zap className="w-5 h-5 text-amber-500" />
+                                  CHIẾN DỊCH KHUYẾN MÃI VCOIN
+                              </h2>
+                              <p className="text-xs text-slate-700 dark:text-slate-300 font-bold mt-1">Cấu hình thời gian chạy sự kiện thưởng % Vcoin nạp cho toàn hệ thống</p>
+                          </div>
+                          <div className="flex gap-2">
+                              <button onClick={refreshData} className="neu-button p-3 rounded-2xl text-slate-700 dark:text-slate-300 hover:border-[#FF007F]" title="Làm mới danh sách"><Icons.Clock className="w-4.5 h-4.5 text-[#FF007F]" /></button>
+                              <button onClick={() => setEditingPromotion({id: `temp_${Date.now()}`, name: '', marqueeText: '', bonusPercent: 10, startTime: new Date().toISOString(), endTime: new Date(Date.now() + 86400000).toISOString(), isActive: true})} className="neu-button-primary px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-lg hover:scale-105 transition-all">
+                                  <Icons.Plus className="w-4 h-4 text-white" /> Tạo Chiến Dịch Mới
+                              </button>
+                          </div>
                       </div>
                       <div className="grid grid-cols-1 gap-4">
                           {promotions.map(p => {
                               const now = new Date().getTime(); const start = new Date(p.startTime).getTime(); const end = new Date(p.endTime).getTime();
-                              let statusBadge = <span className="text-slate-500 text-xs font-bold border border-slate-500/20 px-2 py-1 rounded">Stopped</span>;
-                              if (p.isActive) { if (now < start) statusBadge = <span className="text-yellow-500 text-xs font-bold border border-yellow-500/20 px-2 py-1 rounded flex items-center gap-1"><Icons.Clock className="w-3 h-3" /> Scheduled</span>; else if (now > end) statusBadge = <span className="text-slate-500 text-xs font-bold border border-slate-500/20 px-2 py-1 rounded">Expired</span>; else statusBadge = <span className="text-green-500 text-xs font-bold border border-green-500/20 px-2 py-1 rounded flex items-center gap-1 animate-pulse"><Icons.Zap className="w-3 h-3" /> Running</span>; } else { statusBadge = <span className="text-red-500 text-xs font-bold border border-red-500/20 px-2 py-1 rounded">Disabled</span>; }
-                              return (<div key={p.id} className="bg-[#12121a] border border-white/10 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm"><div className="flex-1"><div className="flex justify-between items-start"><div><div className="font-bold text-white text-lg">{p.name}</div><div className="text-audi-pink font-bold text-sm">+{p.bonusPercent}% Vcoin Bonus</div></div><div className="md:hidden">{statusBadge}</div></div><div className="text-xs font-mono mt-2 space-y-1 bg-black/20 p-2 rounded-lg border border-white/5"><div className="text-green-400 flex items-center gap-2"><Icons.Calendar className="w-3 h-3"/> Start: {formatVietnamDateTimeDisplay(p.startTime)}</div><div className="text-red-400 flex items-center gap-2"><Icons.Calendar className="w-3 h-3"/> End: {formatVietnamDateTimeDisplay(p.endTime)}</div></div></div><div className="flex items-center justify-between md:justify-end gap-4 border-t md:border-t-0 border-white/5 pt-3 md:pt-0"><div className="hidden md:block">{statusBadge}</div><div className="flex gap-2"><button onClick={() => setEditingPromotion(p)} className="px-3 py-2 bg-blue-500/20 text-blue-500 rounded-lg hover:bg-blue-500 hover:text-white font-bold text-xs"><Icons.Settings className="w-4 h-4" /></button><button onClick={() => handleDeletePromotion(p.id)} className="px-3 py-2 bg-red-500/20 text-red-500 rounded-lg hover:bg-red-500 hover:text-white font-bold text-xs"><Icons.Trash className="w-4 h-4" /></button></div></div></div>);
+                              let statusBadge = <span className="text-slate-700 dark:text-slate-400 font-semibold text-xs font-black neu-inset-sm px-3 py-1 rounded-xl">ĐÃ DỪNG</span>;
+                              if (p.isActive) { if (now < start) statusBadge = <span className="text-amber-500 text-xs font-black neu-inset-sm px-3 py-1 rounded-xl flex items-center gap-1"><Icons.Clock className="w-3 h-3" /> HẸN GIỜ</span>; else if (now > end) statusBadge = <span className="text-slate-700 dark:text-slate-400 font-semibold text-xs font-black neu-inset-sm px-3 py-1 rounded-xl">HẾT HẠN</span>; else statusBadge = <span className="text-emerald-500 text-xs font-black neu-inset-sm px-3 py-1 rounded-xl flex items-center gap-1 animate-pulse"><Icons.Zap className="w-3 h-3" /> ĐANG CHẠY</span>; } else { statusBadge = <span className="text-red-500 text-xs font-black neu-inset-sm px-3 py-1 rounded-xl">TẮT</span>; }
+                              return (
+                                  <div key={p.id} className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
+                                      <div className="flex-1">
+                                          <div className="flex justify-between items-start">
+                                              <div>
+                                                  <div className="font-black text-slate-950 dark:text-slate-900 dark:text-white text-lg font-accent">{p.name}</div>
+                                                  <div className="text-[#FF007F] font-black text-sm">+{p.bonusPercent}% Vcoin Bonus Thưởng</div>
+                                              </div>
+                                              <div className="md:hidden">{statusBadge}</div>
+                                          </div>
+                                          <div className="text-xs font-mono mt-2 space-y-1 neu-inset-sm p-3 rounded-2xl border border-slate-300 dark:border-slate-800">
+                                              <div className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-2"><Icons.Calendar className="w-3.5 h-3.5"/> Bắt đầu: {formatVietnamDateTimeDisplay(p.startTime)}</div>
+                                              <div className="text-red-500 font-bold flex items-center gap-2"><Icons.Calendar className="w-3.5 h-3.5"/> Kết thúc: {formatVietnamDateTimeDisplay(p.endTime)}</div>
+                                          </div>
+                                      </div>
+                                      <div className="flex items-center justify-between md:justify-end gap-4 border-t md:border-t-0 border-slate-300 dark:border-slate-800 pt-3 md:pt-0">
+                                          <div className="hidden md:block">{statusBadge}</div>
+                                          <div className="flex gap-2">
+                                              <button onClick={() => setEditingPromotion(p)} className="neu-button p-2.5 rounded-xl text-blue-600 dark:text-blue-400 hover:scale-105"><Icons.Settings className="w-4.5 h-4.5" /></button>
+                                              <button onClick={() => handleDeletePromotion(p.id)} className="neu-button p-2.5 rounded-xl text-red-500 hover:scale-105"><Icons.Trash className="w-4.5 h-4.5" /></button>
+                                          </div>
+                                      </div>
+                                  </div>
+                              );
                           })}
                       </div>
                   </div>
 
                   {/* Giftcode Section */}
-                  <div className="space-y-6 pt-6 border-t border-white/10">
-                      <div className="flex justify-between items-center">
-                          <h2 className="text-lg md:text-2xl font-bold text-white">Quản Lý Giftcode</h2>
-                          <div className="flex gap-2">
-                              <button onClick={() => setEditingGiftcode({id: `temp_${Date.now()}`, code: '', codeType: 'reward', campaignKey: '', reward: 10, discountPercent: 0, audience: 'all', assignedUserId: null, autoGeneratePerUser: false, totalLimit: 100, usedCount: 0, maxPerUser: 1, isActive: true})} className="px-3 py-2 bg-audi-pink text-white rounded-lg font-bold flex items-center gap-2 hover:bg-pink-600 text-xs md:text-sm"><Icons.Plus className="w-4 h-4" /> <span className="hidden md:inline">Tạo Code</span><span className="md:hidden">Tạo</span></button>
+                  <div className="space-y-6 pt-6 border-t border-slate-300 dark:border-slate-800">
+                      <div className="flex justify-between items-center neu-card p-6 rounded-3xl shadow-xl border border-slate-300 dark:border-slate-800">
+                          <div>
+                              <h2 className="text-xl font-black text-slate-950 dark:text-white font-accent uppercase tracking-wider flex items-center gap-2">
+                                  <Icons.Gift className="w-5 h-5 text-[#FF007F]" />
+                                  QUẢN LÝ THƯỞNG GIFTCODE
+                              </h2>
+                              <p className="text-xs text-slate-700 dark:text-slate-300 font-bold mt-1">Tạo mã quà tặng Vcoin hoặc mã giảm giá nạp dành riêng cho các sự kiện</p>
                           </div>
+                          <button onClick={() => setEditingGiftcode({id: `temp_${Date.now()}`, code: '', codeType: 'reward', campaignKey: '', reward: 10, discountPercent: 0, audience: 'all', assignedUserId: null, autoGeneratePerUser: false, totalLimit: 100, usedCount: 0, maxPerUser: 1, isActive: true})} className="neu-button-primary px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-lg hover:scale-105 transition-all">
+                              <Icons.Plus className="w-4 h-4 text-white" /> Tạo Giftcode Mới
+                          </button>
                       </div>
-                      <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 md:p-6 mb-6">
-                          <h3 className="font-bold text-white mb-4 flex items-center gap-2"><Icons.Bell className="w-5 h-5 text-audi-yellow" /> Cấu Hình Thông Báo Sự Kiện (Nổi bật)</h3>
+                      <div className="neu-card p-6 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl mb-6 space-y-4">
+                          <h3 className="font-black text-slate-950 dark:text-white mb-2 flex items-center gap-2 font-accent text-sm uppercase">
+                              <Icons.Bell className="w-5 h-5 text-amber-500" /> CẤU HÌNH THÔNG BÁO SỰ KIỆN GIFTCODE
+                          </h3>
                           <div className="space-y-4">
-                              <input type="text" value={giftcodePromo.text} onChange={(e) => setGiftcodePromo({...giftcodePromo, text: e.target.value})} placeholder="Ví dụ: Nhập CODE 'HELLO2026' để nhận 20 Vcoin miễn phí" className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white focus:border-audi-cyan outline-none" />
+                              <input type="text" value={giftcodePromo.text} onChange={(e) => setGiftcodePromo({...giftcodePromo, text: e.target.value})} placeholder="Ví dụ: Nhập CODE 'HELLO2026' để nhận 20 Vcoin miễn phí" className="w-full neu-input rounded-2xl p-4 text-xs font-bold text-slate-900 dark:text-white focus:outline-none" />
                               <div className="flex items-center justify-between">
-                                  <label className="flex items-center gap-2 cursor-pointer bg-white/5 px-4 py-2 rounded-lg border border-white/5 hover:bg-white/10 transition-colors"><input type="checkbox" checked={giftcodePromo.isActive} onChange={(e) => setGiftcodePromo({...giftcodePromo, isActive: e.target.checked})} className="accent-audi-cyan w-4 h-4" /><span className="text-sm font-bold text-white">Hiển thị thông báo này</span></label>
-                                  <button onClick={handleSaveGiftcodePromo} className="px-4 py-2 bg-audi-cyan/20 text-audi-cyan hover:bg-audi-cyan hover:text-black font-bold rounded-lg transition-colors border border-audi-cyan/30 text-xs md:text-sm">Lưu Cấu Hình</button>
+                                  <label className="flex items-center gap-2.5 cursor-pointer neu-inset-sm px-4 py-2.5 rounded-2xl">
+                                      <input type="checkbox" checked={giftcodePromo.isActive} onChange={(e) => setGiftcodePromo({...giftcodePromo, isActive: e.target.checked})} className="accent-[#FF007F] w-4 h-4" />
+                                      <span className="text-xs font-black text-slate-950 dark:text-white">Hiển thị thông báo này trên màn hình chính</span>
+                                  </label>
+                                  <button onClick={handleSaveGiftcodePromo} className="neu-button px-5 py-2.5 rounded-xl text-xs font-black text-[#FF007F] hover:scale-105 transition-all">Lưu Cấu Hình</button>
                               </div>
                           </div>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                           {giftcodes.map(code => (
-                              <div key={code.id} className="bg-[#12121a] border border-white/10 rounded-xl p-4 shadow-sm relative overflow-hidden">
-                                  <div className="flex justify-between items-start mb-3"><div><div className="font-mono font-bold text-white text-lg tracking-wider">{code.code}</div><div className="text-[10px] text-slate-400 font-bold uppercase mt-1">Chiến dịch: {code.campaignKey || code.code}</div><div className="mt-1 flex flex-wrap gap-2"><span className={`rounded px-2 py-1 text-[10px] font-bold uppercase ${code.codeType === 'topup_discount' ? 'bg-audi-cyan/15 text-audi-cyan' : 'bg-audi-yellow/15 text-audi-yellow'}`}>{code.codeType === 'topup_discount' ? 'Giảm giá nạp' : 'Thưởng Vcoin'}</span><span className="text-audi-yellow font-bold text-sm">{code.codeType === 'topup_discount' ? `-${code.discountPercent || 0}%` : `+${code.reward} Vcoin`}</span></div></div>{code.isActive ? <span className="text-green-500 text-[10px] font-bold border border-green-500/20 px-2 py-1 rounded bg-green-500/10">ACTIVE</span> : <span className="text-red-500 text-[10px] font-bold border border-red-500/20 px-2 py-1 rounded bg-red-500/10">INACTIVE</span>}</div>
-                                  <div className="mb-3"><div className="flex justify-between text-[10px] text-slate-500 mb-1 font-bold uppercase"><span>Sử dụng</span><span>{code.usedCount}/{code.totalLimit}</span></div><div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden"><div className="h-full bg-green-500" style={{ width: `${Math.min(100, (code.usedCount / code.totalLimit) * 100)}%` }}></div></div></div>
+                              <div key={code.id} className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl p-4 shadow-sm relative overflow-hidden">
+                                  <div className="flex justify-between items-start mb-3"><div><div className="font-mono font-bold text-slate-900 dark:text-white text-lg tracking-wider">{code.code}</div><div className="text-[10px] text-slate-700 dark:text-slate-300 font-semibold font-bold uppercase mt-1">Chiến dịch: {code.campaignKey || code.code}</div><div className="mt-1 flex flex-wrap gap-2"><span className={`rounded px-2 py-1 text-[10px] font-bold uppercase ${code.codeType === 'topup_discount' ? 'bg-audi-cyan/15 text-audi-cyan' : 'bg-audi-yellow/15 text-audi-yellow'}`}>{code.codeType === 'topup_discount' ? 'Giảm giá nạp' : 'Thưởng Vcoin'}</span><span className="text-audi-yellow font-bold text-sm">{code.codeType === 'topup_discount' ? `-${code.discountPercent || 0}%` : `+${code.reward} Vcoin`}</span></div></div>{code.isActive ? <span className="text-green-500 text-[10px] font-bold border border-green-500/20 px-2 py-1 rounded bg-green-500/10">ACTIVE</span> : <span className="text-red-500 text-[10px] font-bold border border-red-500/20 px-2 py-1 rounded bg-red-500/10">INACTIVE</span>}</div>
+                                  <div className="mb-3"><div className="flex justify-between text-[10px] text-slate-700 dark:text-slate-400 font-semibold mb-1 font-bold uppercase"><span>Sử dụng</span><span>{code.usedCount}/{code.totalLimit}</span></div><div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden"><div className="h-full bg-green-500" style={{ width: `${Math.min(100, (code.usedCount / code.totalLimit) * 100)}%` }}></div></div></div>
                                   <div className="flex justify-between items-center border-t border-white/5 pt-3">
-                                      <span className="text-[10px] text-slate-500">Max: {code.maxPerUser}/người</span>
+                                      <span className="text-[10px] text-slate-700 dark:text-slate-400 font-semibold">Max: {code.maxPerUser}/người</span>
                                       <div className="flex gap-2">
                                           <button onClick={() => handleViewGiftcodeUsage(code)} className="p-1.5 bg-green-500/20 text-green-500 rounded hover:bg-green-500 hover:text-white transition-colors" title="Xem người dùng"><Icons.Users className="w-4 h-4" /></button>
-                                          <button onClick={() => setEditingGiftcode(code)} className="p-1.5 bg-blue-500/20 text-blue-500 rounded hover:bg-blue-500 hover:text-white transition-colors"><Icons.Settings className="w-4 h-4" /></button>
-                                          <button onClick={() => handleDeleteGiftcode(code.id)} className="p-1.5 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white transition-colors"><Icons.Trash className="w-4 h-4" /></button>
+                                          <button onClick={() => setEditingGiftcode(code)} className="p-1.5 neu-inset-sm px-2.5 py-1 rounded-lg text-sky-600 dark:text-sky-400 font-black font-accent rounded hover:bg-blue-500 hover:text-white transition-colors"><Icons.Settings className="w-4 h-4" /></button>
+                                          <button onClick={() => handleDeleteGiftcode(code.id)} className="p-1.5 neu-inset-sm px-2.5 py-1 rounded-lg text-red-600 dark:text-red-400 font-black font-accent rounded hover:bg-red-500 hover:text-white transition-colors"><Icons.Trash className="w-4 h-4" /></button>
                                       </div>
                                   </div>
                               </div>
@@ -3536,50 +3683,52 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               </div>
           )}
 
-           {/* ================= VIEW: STYLES ================= */}
+           {/* ================= VIEW: PRICING ================= */}
            {activeView === 'pricing' && (
-              <div className="space-y-6 animate-slide-in-right">
-                  <div className="flex justify-between items-center">
-                      <div>
-                          <h2 className="text-lg md:text-2xl font-bold text-white">Bảng Giá Dịch Vụ AI</h2>
-                          <p className="text-sm text-slate-400 mt-1">
-                              TST là chi phí gốc live theo Trạm Sáng Tạo. 3 tool chỉnh sửa ảnh đang dùng giá riêng trên Vertex/AUDITION AI để bạn chỉnh độc lập.
-                          </p>
-                      </div>
-                      <div className="flex gap-2">
-                          <button
-                              onClick={async () => {
-                                  try {
-                                      clearTstCatalogCache();
-                                      await syncTSTPrices();
-                                      await refreshData();
-                                      showToast('Đã làm mới giá TST live.', 'success');
-                                  } catch (error) {
-                                      showToast('Lỗi khi làm mới bảng giá TST.', 'error');
-                                  }
-                              }}
-                              className="px-3 py-2 bg-audi-cyan/20 text-audi-cyan rounded-lg font-bold flex items-center gap-2 hover:bg-audi-cyan hover:text-black text-xs md:text-sm transition-colors"
-                          >
-                              <Icons.RefreshCw className="w-4 h-4" />
-                              <span className="hidden md:inline">Làm Mới TST</span>
-                              <span className="md:hidden">Làm mới</span>
-                          </button>
-                      </div>
-                  </div>
+               <div className="space-y-6 animate-fade-in">
+                   <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 neu-card p-6 rounded-3xl shadow-xl border border-slate-300 dark:border-slate-800">
+                       <div>
+                           <h2 className="text-xl font-black text-slate-950 dark:text-white font-accent uppercase tracking-wider flex items-center gap-2">
+                               <Icons.Gem className="w-5 h-5 text-amber-500" />
+                               BẢNG GIÁ DỊCH VỤ AI & ĐỒNG BỘ NGUỒN CUNG
+                           </h2>
+                           <p className="text-xs text-slate-700 dark:text-slate-300 font-bold mt-1">
+                               Tùy chỉnh giá Vcoin tiêu thụ của từng mô hình AI render (Single/Couple Character, Video Motion, Tách nền...)
+                           </p>
+                       </div>
+                       <div className="flex gap-2">
+                           <button
+                               onClick={async () => {
+                                   try {
+                                       clearTstCatalogCache();
+                                       await syncTSTPrices();
+                                       await refreshData();
+                                       showToast('Đã làm mới giá TST live.', 'success');
+                                   } catch (error) {
+                                       showToast('Lỗi khi làm mới bảng giá TST.', 'error');
+                                   }
+                               }}
+                               className="neu-button px-4 py-2.5 rounded-xl text-xs font-black text-[#FF007F] flex items-center gap-2 hover:scale-105 transition-all"
+                           >
+                               <Icons.RefreshCw className="w-4 h-4 text-[#FF007F]" />
+                               <span>Làm Mới TST Live</span>
+                           </button>
+                       </div>
+                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4">
-                          <div className="text-xs uppercase tracking-wider text-slate-500 font-bold">Cấu hình live</div>
-                          <div className="mt-2 text-3xl font-bold text-white">{pricingRows.length}</div>
-                          <div className="text-xs text-slate-400 mt-1">Bao gồm image, video, motion control và 3 tool Vertex.</div>
+                      <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl p-4">
+                          <div className="text-xs uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold font-bold">Cấu hình live</div>
+                          <div className="mt-2 text-3xl font-bold text-slate-900 dark:text-white">{pricingRows.length}</div>
+                          <div className="text-xs text-slate-700 dark:text-slate-300 font-semibold mt-1">Bao gồm image, video, motion control và 3 tool Vertex.</div>
                       </div>
-                      <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4">
-                          <div className="text-xs uppercase tracking-wider text-slate-500 font-bold">Models</div>
+                      <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl p-4">
+                          <div className="text-xs uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold font-bold">Models</div>
                           <div className="mt-2 text-3xl font-bold text-audi-cyan">{new Set(pricingRows.map(row => row.modelId)).size}</div>
-                          <div className="text-xs text-slate-400 mt-1">Nguồn live lấy trực tiếp từ catalog runtime của TST.</div>
+                          <div className="text-xs text-slate-700 dark:text-slate-300 font-semibold mt-1">Nguồn live lấy trực tiếp từ catalog runtime của TST.</div>
                       </div>
-                      <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4">
-                          <div className="text-xs uppercase tracking-wider text-slate-500 font-bold">Quy đổi gốc</div>
+                      <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl p-4">
+                          <div className="text-xs uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold font-bold">Quy đổi gốc</div>
                           <div className="mt-2 text-sm text-slate-300 leading-relaxed">
                               1 Credit = 40đ. 1 Vcoin = 1000đ. Bạn có thể chỉnh giá AUDITION AI cao hơn hoặc thấp hơn tùy chiến lược lợi nhuận.
                           </div>
@@ -3593,11 +3742,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       </div>
                   </div>
 
-                  <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 md:p-5">
+                  <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl p-4 md:p-5">
                       <div className="flex items-center justify-between gap-3 mb-4">
                           <div>
-                              <h3 className="text-sm md:text-base font-bold text-white">Điều khiển Server</h3>
-                              <p className="text-xs text-slate-400 mt-1">
+                              <h3 className="text-sm md:text-base font-bold text-slate-900 dark:text-white">Điều khiển Server</h3>
+                              <p className="text-xs text-slate-700 dark:text-slate-300 font-semibold mt-1">
                                   Bật hoặc khóa từng server theo từng model. UI và backend sẽ cùng chặn các server đang khóa.
                               </p>
                           </div>
@@ -3616,7 +3765,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                               </button>
                               <button
                                   onClick={handleRestorePricingServersFromLive}
-                                  className="px-3 py-2 rounded-xl border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10 text-xs font-bold transition-colors"
+                                  className="px-3 py-2 rounded-xl border border-white/10 neu-inset-sm text-slate-200 hover:bg-white/10 text-xs font-bold transition-colors"
                               >
                                   {'Kh\u00f4i ph\u1ee5c theo TST live'}
                               </button>
@@ -3625,13 +3774,13 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           {pricingServerGroups.map((group) => (
-                              <div key={group.modelId} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                              <div key={group.modelId} className="rounded-2xl border border-white/10 neu-inset-sm p-4">
                                   <div className="flex items-start justify-between gap-3">
                                       <div>
-                                          <div className="text-sm font-bold text-white">{group.modelName}</div>
-                                          <div className="text-[10px] mt-1 font-mono text-slate-500">{group.modelId}</div>
+                                          <div className="text-sm font-bold text-slate-900 dark:text-white">{group.modelName}</div>
+                                          <div className="text-[10px] mt-1 font-mono text-slate-700 dark:text-slate-400 font-semibold">{group.modelId}</div>
                                       </div>
-                                      <span className="px-2 py-1 rounded-full border border-white/10 bg-white/5 text-[10px] font-bold uppercase tracking-wider text-slate-300">
+                                      <span className="px-2 py-1 rounded-full border border-white/10 neu-inset-sm text-[10px] font-bold uppercase tracking-wider text-slate-300">
                                           {group.type === 'motion-control' ? 'Motion' : group.type}
                                       </span>
                                   </div>
@@ -3661,11 +3810,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       </div>
                   </div>
 
-                  <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 md:p-5">
+                  <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl p-4 md:p-5">
                       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                           <div>
-                              <h3 className="text-sm md:text-base font-bold text-white">Lưu giá AUDITION AI</h3>
-                              <p className="text-xs text-slate-400 mt-1">
+                              <h3 className="text-sm md:text-base font-bold text-slate-900 dark:text-white">Lưu giá AUDITION AI</h3>
+                              <p className="text-xs text-slate-700 dark:text-slate-300 font-semibold mt-1">
                                   Mỗi thay đổi giá sẽ được giữ tạm ngay trên máy của bạn. Nếu chưa bấm lưu, F5 vẫn giữ lại bản nháp nhưng sẽ chưa cập nhật vào database.
                               </p>
                           </div>
@@ -3688,21 +3837,21 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       </div>
                   </div>
 
-                  <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 md:p-5">
+                  <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl p-4 md:p-5">
                       <div className="flex items-center justify-between gap-3 mb-4">
                           <div>
-                              <h3 className="text-sm md:text-base font-bold text-white">Combo Auto-Hide Đang Hoạt Động</h3>
-                              <p className="text-xs text-slate-400 mt-1">
+                              <h3 className="text-sm md:text-base font-bold text-slate-900 dark:text-white">Combo Auto-Hide Đang Hoạt Động</h3>
+                              <p className="text-xs text-slate-700 dark:text-slate-300 font-semibold mt-1">
                                   Tự động khóa tạm đúng combo model + tốc độ + server nếu có hơn 5 job timeout trong 5 giờ.
                               </p>
                           </div>
-                          <span className="px-3 py-2 rounded-xl border border-white/10 bg-white/5 text-xs font-bold text-slate-200">
+                          <span className="px-3 py-2 rounded-xl border border-white/10 neu-inset-sm text-xs font-bold text-slate-200">
                               {activeAutoDisabledCombos.length} combo
                           </span>
                       </div>
 
                       {activeAutoDisabledCombos.length === 0 ? (
-                          <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-slate-400">
+                          <div className="rounded-2xl border border-white/10 neu-inset-sm p-4 text-sm text-slate-700 dark:text-slate-300 font-semibold">
                               Hiện chưa có combo nào đang bị auto-hide.
                           </div>
                       ) : (
@@ -3710,7 +3859,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                               {activeAutoDisabledCombos.map((entry) => {
                                   const reopenKey = `${entry.modelId}::${entry.serverId}::${entry.speed}`;
                                   return (
-                                      <div key={reopenKey} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                                      <div key={reopenKey} className="rounded-2xl border border-white/10 neu-inset-sm p-4">
                                           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                                               <div className="grid flex-1 grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3">
                                                   {[
@@ -3724,8 +3873,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                       { label: 'Mở lại lúc', value: entry.disabledUntil ? new Date(entry.disabledUntil).toLocaleString() : '-' },
                                                   ].map((item) => (
                                                       <div key={`${reopenKey}_${item.label}`} className="rounded-xl border border-white/10 bg-[#101018] p-3">
-                                                          <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">{item.label}</div>
-                                                          <div className="mt-2 break-words text-sm font-bold text-white">{item.value}</div>
+                                                          <div className="text-[10px] uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold font-bold">{item.label}</div>
+                                                          <div className="mt-2 break-words text-sm font-bold text-slate-900 dark:text-white">{item.value}</div>
                                                       </div>
                                                   ))}
                                               </div>
@@ -3744,10 +3893,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       )}
                   </div>
 
-                  <div className="bg-[#12121a] border border-white/10 rounded-2xl overflow-hidden">
+                  <div className="neu-card p-5 rounded-3xl shadow-2xl border border-slate-300 dark:border-slate-800 space-y-4">
                       <div className="overflow-x-auto">
                           <table className="w-full text-left text-sm text-slate-300">
-                              <thead className="text-xs text-slate-400 uppercase bg-black/40 border-b border-white/10">
+                              <thead className="text-xs text-slate-700 dark:text-slate-300 font-semibold uppercase neu-inset-sm border-b border-white/10">
                                   <tr>
                                       <th className="px-4 py-3 font-bold">Loại</th>
                                       <th className="px-4 py-3 font-bold">Model</th>
@@ -3764,10 +3913,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       <th className="px-4 py-3 font-bold">Config Key</th>
                                   </tr>
                               </thead>
-                              <tbody className="divide-y divide-white/5">
+                              <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                                   {pricingRows.length === 0 ? (
                                       <tr>
-                                          <td colSpan={13} className="px-4 py-8 text-center text-slate-500">
+                                          <td colSpan={13} className="px-4 py-8 text-center text-slate-700 dark:text-slate-400 font-semibold">
                                               Chưa tải được bảng giá live từ Trạm Sáng Tạo.
                                           </td>
                                       </tr>
@@ -3787,15 +3936,15 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           const grossProfit = Number.isFinite(auditionPrice) ? auditionPrice - row.vcoin : 0;
 
                                           return (
-                                              <tr key={`${row.modelId}_${row.configKey}`} className="hover:bg-white/5 transition-colors">
+                                              <tr key={`${row.modelId}_${row.configKey}`} className="hover:neu-inset-sm transition-colors">
                                                   <td className="px-4 py-3">
-                                                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-[10px] font-bold uppercase tracking-wider">
+                                                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full neu-inset-sm border border-white/10 text-[10px] font-bold uppercase tracking-wider">
                                                           {typeLabel}
                                                       </span>
                                                   </td>
                                                   <td className="px-4 py-3">
-                                                      <div className="font-bold text-white">{row.modelName}</div>
-                                                      <div className="text-[10px] text-slate-500 font-mono mt-1">{row.modelId}</div>
+                                                      <div className="font-bold text-slate-900 dark:text-white">{row.modelName}</div>
+                                                      <div className="text-[10px] text-slate-700 dark:text-slate-400 font-semibold font-mono mt-1">{row.modelId}</div>
                                                   </td>
                                                   <td className="px-4 py-3 text-white">
                                                       <div className="flex items-center gap-2">
@@ -3839,7 +3988,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                                       [draftKey]: e.target.value
                                                                   }))
                                                               }
-                                                              className={`w-24 bg-black/40 border rounded-lg px-3 py-2 text-right text-white font-mono focus:outline-none focus:ring-2 ${
+                                                              className={`w-24 neu-inset-sm border rounded-lg px-3 py-2 text-right text-white font-mono focus:outline-none focus:ring-2 ${
                                                                   rowIsDirty
                                                                       ? 'border-yellow-500/40 focus:ring-yellow-500/30'
                                                                       : 'border-white/10 focus:ring-audi-cyan/40'
@@ -3857,7 +4006,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                           </button>
                                                       </div>
                                                       {row.billingUnit === 'second' && (
-                                                          <div className="mt-1 text-right text-[10px] text-slate-500">
+                                                          <div className="mt-1 text-right text-[10px] text-slate-700 dark:text-slate-400 font-semibold">
                                                               Ví dụ: 5s = {(Number(pricingDrafts[draftKey] ?? savedPricing?.audition_price_vcoin ?? row.defaultAuditionVcoin ?? row.vcoin) || 0) * 5} VC
                                                           </div>
                                                       )}
@@ -3882,7 +4031,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 {activeView === 'styles' && (
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex justify-between items-center">
-                      <h2 className="text-lg md:text-2xl font-bold text-white">Quản Lý Style Mẫu</h2>
+                      <h2 className="text-lg md:text-2xl font-bold text-slate-900 dark:text-white">Quản Lý Style Mẫu</h2>
                       <button 
                           onClick={() => setEditingStyle({
                               id: `temp_${Date.now()}`, 
@@ -3900,8 +4049,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                       {stylePresets.map(style => (
-                          <div key={style.id} className="bg-[#12121a] border border-white/10 rounded-2xl p-4 relative overflow-hidden group hover:border-white/30 transition-all">
-                              <div className="aspect-[3/4] w-full bg-black/50 rounded-xl mb-4 overflow-hidden relative">
+                          <div key={style.id} className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl p-4 relative overflow-hidden group hover:border-white/30 transition-all">
+                              <div className="aspect-[3/4] w-full neu-inset-sm rounded-xl mb-4 overflow-hidden relative">
                                   <img src={style.image_url} alt={style.name} className="w-full h-full object-cover" />
                                   {style.is_default && (
                                       <div className="absolute top-2 right-2 bg-audi-yellow text-black text-[10px] font-bold px-2 py-1 rounded shadow-lg flex items-center gap-1">
@@ -3917,19 +4066,19 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                               
                               <div className="flex justify-between items-start mb-2">
                                   <div>
-                                      <h3 className="font-bold text-white text-lg">{style.name}</h3>
-                                      <p className="text-xs text-slate-500 font-mono truncate max-w-[200px]">{style.trigger_prompt || 'No prompt'}</p>
+                                      <h3 className="font-bold text-slate-900 dark:text-white text-lg">{style.name}</h3>
+                                      <p className="text-xs text-slate-700 dark:text-slate-400 font-semibold font-mono truncate max-w-[200px]">{style.trigger_prompt || 'No prompt'}</p>
                                   </div>
                                   <div className="flex gap-2">
-                                      <button onClick={() => setEditingStyle(style)} className="p-2 bg-blue-500/20 text-blue-500 rounded hover:bg-blue-500 hover:text-white transition-colors"><Icons.Settings className="w-4 h-4" /></button>
-                                      <button onClick={() => showConfirm('Xóa style này?', async () => { await deleteStylePreset(style.id); refreshData(); showToast('Đã xóa style'); })} className="p-2 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white transition-colors"><Icons.Trash className="w-4 h-4" /></button>
+                                      <button onClick={() => setEditingStyle(style)} className="p-2 neu-inset-sm px-2.5 py-1 rounded-lg text-sky-600 dark:text-sky-400 font-black font-accent rounded hover:bg-blue-500 hover:text-white transition-colors"><Icons.Settings className="w-4 h-4" /></button>
+                                      <button onClick={() => showConfirm('Xóa style này?', async () => { await deleteStylePreset(style.id); refreshData(); showToast('Đã xóa style'); })} className="p-2 neu-inset-sm px-2.5 py-1 rounded-lg text-red-600 dark:text-red-400 font-black font-accent rounded hover:bg-red-500 hover:text-white transition-colors"><Icons.Trash className="w-4 h-4" /></button>
                                   </div>
                               </div>
                           </div>
                       ))}
                       
                       {stylePresets.length === 0 && (
-                          <div className="col-span-full py-12 text-center text-slate-500 italic border border-dashed border-white/10 rounded-2xl">
+                          <div className="col-span-full py-12 text-center text-slate-700 dark:text-slate-400 font-semibold italic border border-dashed border-white/10 rounded-2xl">
                               Chưa có style mẫu nào. Hãy thêm mới!
                           </div>
                       )}
@@ -3940,39 +4089,39 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
            {/* ================= VIEW: TOURS ================= */}
            {activeView === 'tours' && (
               <div className="space-y-6 animate-slide-in-right">
-                  <div className="bg-[#12121a] border border-white/10 rounded-2xl p-5 shadow-xl">
+                  <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl p-5 shadow-xl">
                       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                           <div>
-                              <h2 className="text-lg md:text-2xl font-bold text-white flex items-center gap-2">
+                              <h2 className="text-lg md:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
                                   <Icons.Info className="w-5 h-5 text-audi-cyan" />
                                   Hướng Dẫn Ứng Dụng
                               </h2>
-                              <p className="mt-1 text-xs text-slate-400">Tạo tour riêng cho máy tính và điện thoại, theo từng màn hình hoặc từng công cụ.</p>
+                              <p className="mt-1 text-xs text-slate-700 dark:text-slate-300 font-semibold">Tạo tour riêng cho máy tính và điện thoại, theo từng màn hình hoặc từng công cụ.</p>
                           </div>
                           <div className="flex gap-2">
-                              <button onClick={handleAddTour} className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-bold">Thêm tour</button>
+                              <button onClick={handleAddTour} className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-slate-900 dark:text-white text-xs font-bold">Thêm tour</button>
                               <button onClick={handleSaveAppTours} className="px-5 py-2 rounded-xl bg-audi-cyan hover:bg-cyan-300 text-black text-xs font-black">Lưu cấu hình</button>
                           </div>
                       </div>
                       <div className="mt-5 grid gap-4 md:grid-cols-3">
-                          <label className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Trạng thái</span>
-                              <select value={appTours.isActive ? 'on' : 'off'} onChange={(e) => setAppTours((c) => ({ ...c, isActive: e.target.value === 'on' }))} className="mt-2 w-full rounded-xl border border-white/10 bg-[#090914] px-3 py-2 text-sm font-bold text-white outline-none">
+                          <label className="rounded-2xl border border-white/10 neu-inset-sm p-4">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold">Trạng thái</span>
+                              <select value={appTours.isActive ? 'on' : 'off'} onChange={(e) => setAppTours((c) => ({ ...c, isActive: e.target.value === 'on' }))} className="mt-2 w-full rounded-xl border border-white/10 bg-[#090914] px-3 py-2 text-sm font-bold text-slate-900 dark:text-white outline-none">
                                   <option value="on">Bật toàn bộ</option>
                                   <option value="off">Tắt toàn bộ</option>
                               </select>
                           </label>
-                          <label className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Tần suất</span>
-                              <select value={appTours.showFrequency} onChange={(e) => setAppTours((c) => ({ ...c, showFrequency: e.target.value as AppToursConfig['showFrequency'] }))} className="mt-2 w-full rounded-xl border border-white/10 bg-[#090914] px-3 py-2 text-sm font-bold text-white outline-none">
+                          <label className="rounded-2xl border border-white/10 neu-inset-sm p-4">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold">Tần suất</span>
+                              <select value={appTours.showFrequency} onChange={(e) => setAppTours((c) => ({ ...c, showFrequency: e.target.value as AppToursConfig['showFrequency'] }))} className="mt-2 w-full rounded-xl border border-white/10 bg-[#090914] px-3 py-2 text-sm font-bold text-slate-900 dark:text-white outline-none">
                                   <option value="daily">Mỗi ngày một lần</option>
                                   <option value="once">Chỉ một lần</option>
                                   <option value="always">Luôn hiển thị</option>
                               </select>
                           </label>
-                          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Tổng tour</span>
-                              <div className="mt-2 text-3xl font-game font-bold text-white">{appTours.tours.length}</div>
+                          <div className="rounded-2xl border border-white/10 neu-inset-sm p-4">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold">Tổng tour</span>
+                              <div className="mt-2 text-3xl font-game font-bold text-slate-900 dark:text-white">{appTours.tours.length}</div>
                           </div>
                       </div>
                   </div>
@@ -3980,12 +4129,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   <div className="grid gap-6 xl:grid-cols-[340px_1fr]">
                       <div className="space-y-3">
                           {appTours.tours.map((tour) => (
-                              <button key={tour.id} onClick={() => setSelectedTourId(tour.id)} className={`w-full rounded-2xl border p-4 text-left transition-all ${selectedTour?.id === tour.id ? 'border-audi-cyan bg-audi-cyan/10' : 'border-white/10 bg-[#12121a] hover:border-white/20'}`}>
+                              <button key={tour.id} onClick={() => setSelectedTourId(tour.id)} className={`w-full rounded-2xl border p-4 text-left transition-all ${selectedTour?.id === tour.id ? 'border-audi-cyan bg-audi-cyan/10' : 'neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl hover:border-white/20'}`}>
                                   <div className="flex items-center justify-between gap-3">
-                                      <span className="text-sm font-black text-white">{tour.title}</span>
+                                      <span className="text-sm font-black text-slate-900 dark:text-white">{tour.title}</span>
                                       <span className={`rounded-full px-2 py-1 text-[9px] font-black uppercase ${tour.surface === 'mobile' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-cyan-500/15 text-cyan-300'}`}>{tour.surface}</span>
                                   </div>
-                                  <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-bold text-slate-500">
+                                  <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-bold text-slate-700 dark:text-slate-400 font-semibold">
                                       <span>{tour.screen}</span>
                                       {tour.featureId && <span>{tour.featureId}</span>}
                                       <span>{tour.steps.length} bước</span>
@@ -3997,19 +4146,19 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
                       {selectedTour && (
                           <div className="space-y-4">
-                              <div className="rounded-2xl border border-white/10 bg-[#12121a] p-5">
+                              <div className="rounded-2xl border neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl p-5">
                                   <div className="grid gap-4 md:grid-cols-2">
-                                      <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Tên tour</span><input value={selectedTour.title} onChange={(e) => updateAppTour(selectedTour.id, (t) => ({ ...t, title: e.target.value }))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan" /></label>
-                                      <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Màn hình</span><input value={selectedTour.screen} onChange={(e) => updateAppTour(selectedTour.id, (t) => ({ ...t, screen: e.target.value.trim() || 'global' }))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan" /></label>
-                                      <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Giao diện</span><select value={selectedTour.surface} onChange={(e) => updateAppTour(selectedTour.id, (t) => ({ ...t, surface: e.target.value as AppTourDefinition['surface'] }))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan"><option value="desktop">Máy tính</option><option value="mobile">Điện thoại</option></select></label>
-                                      <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Feature ID</span><input value={selectedTour.featureId || ''} placeholder="Ví dụ: ai_image_tool, video_ai_gen" onChange={(e) => updateAppTour(selectedTour.id, (t) => ({ ...t, featureId: e.target.value.trim() || undefined }))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan" /></label>
+                                      <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold">Tên tour</span><input value={selectedTour.title} onChange={(e) => updateAppTour(selectedTour.id, (t) => ({ ...t, title: e.target.value }))} className="mt-2 w-full rounded-xl border border-white/10 neu-inset-sm px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan" /></label>
+                                      <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold">Màn hình</span><input value={selectedTour.screen} onChange={(e) => updateAppTour(selectedTour.id, (t) => ({ ...t, screen: e.target.value.trim() || 'global' }))} className="mt-2 w-full rounded-xl border border-white/10 neu-inset-sm px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan" /></label>
+                                      <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold">Giao diện</span><select value={selectedTour.surface} onChange={(e) => updateAppTour(selectedTour.id, (t) => ({ ...t, surface: e.target.value as AppTourDefinition['surface'] }))} className="mt-2 w-full rounded-xl border border-white/10 neu-inset-sm px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan"><option value="desktop">Máy tính</option><option value="mobile">Điện thoại</option></select></label>
+                                      <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold">Feature ID</span><input value={selectedTour.featureId || ''} placeholder="Ví dụ: ai_image_tool, video_ai_gen" onChange={(e) => updateAppTour(selectedTour.id, (t) => ({ ...t, featureId: e.target.value.trim() || undefined }))} className="mt-2 w-full rounded-xl border border-white/10 neu-inset-sm px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan" /></label>
                                   </div>
                                   <div className="mt-4 flex flex-wrap gap-2">
                                       <button onClick={() => updateAppTour(selectedTour.id, (t) => ({ ...t, isActive: !t.isActive }))} className={`px-4 py-2 rounded-xl text-xs font-bold ${selectedTour.isActive ? 'bg-green-500/15 text-green-300' : 'bg-white/10 text-slate-300'}`}>{selectedTour.isActive ? 'Tour đang bật' : 'Tour đang tắt'}</button>
-                                      <button onClick={() => handleDuplicateTour(selectedTour)} className="px-4 py-2 rounded-xl bg-white/10 text-xs font-bold text-white hover:bg-white/15">Nhân bản</button>
-                                      <button onClick={() => handleAddTourStep(selectedTour.id)} className="px-4 py-2 rounded-xl bg-audi-purple text-xs font-bold text-white hover:bg-purple-600">Thêm bước</button>
-                                      <button onClick={() => setAllTourStepsCollapsed(orderedTourSteps, true)} className="px-4 py-2 rounded-xl bg-white/10 text-xs font-bold text-white hover:bg-white/15">Thu gọn tất cả</button>
-                                      <button onClick={() => setAllTourStepsCollapsed(orderedTourSteps, false)} className="px-4 py-2 rounded-xl bg-white/10 text-xs font-bold text-white hover:bg-white/15">Mở tất cả</button>
+                                      <button onClick={() => handleDuplicateTour(selectedTour)} className="px-4 py-2 rounded-xl bg-white/10 text-xs font-bold text-slate-900 dark:text-white hover:bg-white/15">Nhân bản</button>
+                                      <button onClick={() => handleAddTourStep(selectedTour.id)} className="px-4 py-2 rounded-xl bg-audi-purple text-xs font-bold text-slate-900 dark:text-white hover:bg-purple-600">Thêm bước</button>
+                                      <button onClick={() => setAllTourStepsCollapsed(orderedTourSteps, true)} className="px-4 py-2 rounded-xl bg-white/10 text-xs font-bold text-slate-900 dark:text-white hover:bg-white/15">Thu gọn tất cả</button>
+                                      <button onClick={() => setAllTourStepsCollapsed(orderedTourSteps, false)} className="px-4 py-2 rounded-xl bg-white/10 text-xs font-bold text-slate-900 dark:text-white hover:bg-white/15">Mở tất cả</button>
                                       <button onClick={() => handleDeleteTour(selectedTour.id)} className="ml-auto px-4 py-2 rounded-xl bg-red-500/15 text-xs font-bold text-red-300 hover:bg-red-500/25">Xóa tour</button>
                                   </div>
                               </div>
@@ -4044,13 +4193,13 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                       event.dataTransfer.setData('text/plain', step.id);
                                                   }}
                                                   onDragEnd={() => setDraggingTourStepId(null)}
-                                                  className="grid h-8 w-8 cursor-grab place-items-center rounded-xl border border-white/10 bg-black/30 text-slate-400 active:cursor-grabbing"
+                                                  className="grid h-8 w-8 cursor-grab place-items-center rounded-xl border border-white/10 neu-inset-sm text-slate-700 dark:text-slate-300 font-semibold active:cursor-grabbing"
                                                   title="Kéo để sắp xếp bước"
                                               >
                                                   <Icons.Menu className="h-4 w-4" />
                                               </button>
                                               <span className="grid h-8 w-8 place-items-center rounded-full bg-audi-cyan text-sm font-black text-black">{index + 1}</span>
-                                              <span className="truncate text-sm font-black text-white">{step.title}</span>
+                                              <span className="truncate text-sm font-black text-slate-900 dark:text-white">{step.title}</span>
                                           </div>
                                           <div className="flex shrink-0 items-center gap-2">
                                               <button onClick={() => toggleCollapsedTourStep(step.id)} className="rounded-lg bg-white/10 px-3 py-1.5 text-xs font-bold text-slate-200 hover:bg-white/15">{isStepCollapsed ? 'Mở' : 'Thu gọn'}</button>
@@ -4060,12 +4209,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       {!isStepCollapsed && (
                                       <>
                                       <div className="grid gap-4 md:grid-cols-2">
-                                          <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Vùng khoanh</span><select value={step.targetId} onChange={(e) => updateAppTourStep(selectedTour.id, step.id, (s) => ({ ...s, targetId: e.target.value }))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan">{getTourTargetOptions(selectedTour).map((target) => <option key={target.id} value={target.id}>{target.label}</option>)}</select></label>
-                                          <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Vị trí hộp</span><select value={step.placement || 'auto'} onChange={(e) => updateAppTourStep(selectedTour.id, step.id, (s) => ({ ...s, placement: e.target.value as AppTourStep['placement'] }))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan"><option value="auto">Tự động</option><option value="top">Trên</option><option value="right">Phải</option><option value="bottom">Dưới</option><option value="left">Trái</option></select></label>
+                                          <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold">Vùng khoanh</span><select value={step.targetId} onChange={(e) => updateAppTourStep(selectedTour.id, step.id, (s) => ({ ...s, targetId: e.target.value }))} className="mt-2 w-full rounded-xl border border-white/10 neu-inset-sm px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan">{getTourTargetOptions(selectedTour).map((target) => <option key={target.id} value={target.id}>{target.label}</option>)}</select></label>
+                                          <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold">Vị trí hộp</span><select value={step.placement || 'auto'} onChange={(e) => updateAppTourStep(selectedTour.id, step.id, (s) => ({ ...s, placement: e.target.value as AppTourStep['placement'] }))} className="mt-2 w-full rounded-xl border border-white/10 neu-inset-sm px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan"><option value="auto">Tự động</option><option value="top">Trên</option><option value="right">Phải</option><option value="bottom">Dưới</option><option value="left">Trái</option></select></label>
                                           <div className="md:col-span-2 rounded-2xl border border-audi-cyan/20 bg-audi-cyan/5 p-4">
                                               <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                                                   <div>
-                                                      <div className="text-sm font-black text-white">{getTourTargetMeta(step.targetId)?.label || 'Chưa chọn vùng khoanh'}</div>
+                                                      <div className="text-sm font-black text-slate-900 dark:text-white">{getTourTargetMeta(step.targetId)?.label || 'Chưa chọn vùng khoanh'}</div>
                                                       <div className="mt-1 font-mono text-[10px] text-audi-cyan">{step.targetId || 'data-tour-id'}</div>
                                                   </div>
                                                   {getTourTargetMeta(step.targetId) && (
@@ -4078,9 +4227,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               </div>
                                               <p className="mt-3 text-xs leading-relaxed text-slate-300">{getTourTargetDescription(step.targetId)}</p>
                                           </div>
-                                          <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Tiêu đề</span><input value={step.title} onChange={(e) => updateAppTourStep(selectedTour.id, step.id, (s) => ({ ...s, title: e.target.value }))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan" /></label>
-                                          <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Thứ tự</span><input type="number" value={step.order || index + 1} onChange={(e) => updateAppTourStep(selectedTour.id, step.id, (s) => ({ ...s, order: Number(e.target.value) || index + 1 }))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan" /></label>
-                                          <label className="md:col-span-2"><span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Nội dung hướng dẫn</span><textarea value={step.description} onChange={(e) => updateAppTourStep(selectedTour.id, step.id, (s) => ({ ...s, description: e.target.value }))} rows={3} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm leading-relaxed text-white outline-none focus:border-audi-cyan" /></label>
+                                          <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold">Tiêu đề</span><input value={step.title} onChange={(e) => updateAppTourStep(selectedTour.id, step.id, (s) => ({ ...s, title: e.target.value }))} className="mt-2 w-full rounded-xl border border-white/10 neu-inset-sm px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan" /></label>
+                                          <label><span className="text-[10px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold">Thứ tự</span><input type="number" value={step.order || index + 1} onChange={(e) => updateAppTourStep(selectedTour.id, step.id, (s) => ({ ...s, order: Number(e.target.value) || index + 1 }))} className="mt-2 w-full rounded-xl border border-white/10 neu-inset-sm px-3 py-2 text-sm text-white outline-none focus:border-audi-cyan" /></label>
+                                          <label className="md:col-span-2"><span className="text-[10px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold">Nội dung hướng dẫn</span><textarea value={step.description} onChange={(e) => updateAppTourStep(selectedTour.id, step.id, (s) => ({ ...s, description: e.target.value }))} rows={3} className="mt-2 w-full rounded-xl border border-white/10 neu-inset-sm px-3 py-2 text-sm leading-relaxed text-white outline-none focus:border-audi-cyan" /></label>
                                       </div>
                                       <button onClick={() => updateAppTourStep(selectedTour.id, step.id, (s) => ({ ...s, isActive: s.isActive === false }))} className={`mt-4 rounded-xl px-4 py-2 text-xs font-bold ${step.isActive === false ? 'bg-white/10 text-slate-300' : 'bg-green-500/15 text-green-300'}`}>{step.isActive === false ? 'Bước đang tắt' : 'Bước đang bật'}</button>
                                       </>
@@ -4099,41 +4248,41 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
            {activeView === 'system' && (
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex justify-between items-center">
-                      <h2 className="text-lg md:text-2xl font-bold text-white">Hệ Thống</h2>
-                      <button onClick={() => runSystemChecks(undefined)} className="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-bold text-white flex items-center gap-2">
+                      <h2 className="text-lg md:text-2xl font-bold text-slate-900 dark:text-white">Hệ Thống</h2>
+                      <button onClick={() => runSystemChecks(undefined)} className="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
                           <Icons.Rocket className="w-4 h-4" /> <span className="hidden md:inline">Quét Ngay</span>
                       </button>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                       {/* Health Cards */}
-                      <div className="bg-[#12121a] border border-white/10 rounded-2xl p-6 relative overflow-hidden">
+                      <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl p-6 relative overflow-hidden">
                           <h3 className="font-bold text-lg text-white mb-1">Gemini AI Engine</h3>
                           <div className="flex items-center justify-between mb-4">
-                              <span className="text-sm text-slate-400">Kết nối</span>
+                              <span className="text-sm text-slate-700 dark:text-slate-300 font-semibold">Kết nối</span>
                               <StatusBadge status={health.gemini.status} latency={health.gemini.latency} />
                           </div>
                       </div>
 
-                      <div className="bg-[#12121a] border border-white/10 rounded-2xl p-6 relative overflow-hidden">
+                      <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl p-6 relative overflow-hidden">
                           <h3 className="font-bold text-lg text-white mb-1">Database</h3>
                           <div className="flex items-center justify-between mb-4">
-                              <span className="text-sm text-slate-400">Trạng thái</span>
+                              <span className="text-sm text-slate-700 dark:text-slate-300 font-semibold">Trạng thái</span>
                               <StatusBadge status={health.supabase.status} latency={health.supabase.latency} />
                           </div>
                       </div>
 
-                      <div className="bg-[#12121a] border border-white/10 rounded-2xl p-6 relative overflow-hidden">
+                      <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl p-6 relative overflow-hidden">
                           <h3 className="font-bold text-lg text-white mb-1">Cloud Storage</h3>
                           <div className="flex items-center justify-between mb-4">
-                              <span className="text-sm text-slate-400">Loại: {health.storage.type}</span>
+                              <span className="text-sm text-slate-700 dark:text-slate-300 font-semibold">Loại: {health.storage.type}</span>
                               <StatusBadge status={health.storage.status} />
                           </div>
                       </div>
                   </div>
 
                   {/* Tutorial Video Configuration */}
-                  <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
+                  <div className="neu-card p-6 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl">
                       <div className="flex justify-between items-center mb-4">
                           <h3 className="font-bold text-lg text-white flex items-center gap-2">
                               <Icons.Play className="w-5 h-5 text-audi-pink" />
@@ -4154,27 +4303,27 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   id="tutorialVideoToggle"
                                   checked={tutorialVideo.isActive}
                                   onChange={(e) => setTutorialVideo({...tutorialVideo, isActive: e.target.checked})}
-                                  className="w-5 h-5 rounded border-white/20 bg-black/50 text-audi-pink focus:ring-audi-pink focus:ring-offset-gray-900"
+                                  className="w-5 h-5 rounded border-white/20 neu-inset-sm text-audi-pink focus:ring-audi-pink focus:ring-offset-gray-900"
                               />
-                              <label htmlFor="tutorialVideoToggle" className="text-white font-medium">Hiển thị video hướng dẫn</label>
+                              <label htmlFor="tutorialVideoToggle" className="text-slate-900 dark:text-white font-medium">Hiển thị video hướng dẫn</label>
                           </div>
                           <div>
-                              <label className="text-xs text-slate-400 mb-1 block">Link Video YouTube (URL)</label>
+                              <label className="text-xs text-slate-700 dark:text-slate-300 font-semibold mb-1 block">Link Video YouTube (URL)</label>
                               <input 
                                   type="text"
                                   value={tutorialVideo.url} 
                                   onChange={e => setTutorialVideo({...tutorialVideo, url: e.target.value})} 
-                                  className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-white"
+                                  className="w-full neu-inset-sm border border-white/10 rounded-lg p-3 text-white"
                                   placeholder="Ví dụ: https://www.youtube.com/watch?v=ba2WR8txe_c"
                               />
-                              <p className="text-xs text-slate-500 mt-2">
+                              <p className="text-xs text-slate-700 dark:text-slate-400 font-semibold mt-2">
                                   Hỗ trợ các định dạng link: youtube.com/watch?v=..., youtu.be/..., youtube.com/embed/...
                               </p>
                           </div>
                       </div>
                   </div>
 
-                  <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
+                  <div className="neu-card p-6 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl">
                       <div className="flex justify-between items-center mb-4">
                           <h3 className="font-bold text-lg text-white flex items-center gap-2">
                               <Icons.Image className="w-5 h-5 text-audi-cyan" />
@@ -4190,35 +4339,35 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
-                              <label className="text-xs text-slate-400 mb-1 block">Link VD Ảnh Nhân Vật</label>
+                              <label className="text-xs text-slate-700 dark:text-slate-300 font-semibold mb-1 block">Link VD Ảnh Nhân Vật</label>
                               <input
                                   type="text"
                                   value={generationGuideImages.characterUrl}
                                   onChange={(e) => setGenerationGuideImages({ ...generationGuideImages, characterUrl: e.target.value })}
-                                  className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-white"
+                                  className="w-full neu-inset-sm border border-white/10 rounded-lg p-3 text-white"
                                   placeholder="https://..."
                               />
-                              <p className="text-xs text-slate-500 mt-2">
+                              <p className="text-xs text-slate-700 dark:text-slate-400 font-semibold mt-2">
                                   Ảnh mẫu dùng cho nút "VD Ảnh NV" ở desktop và mobile.
                               </p>
                           </div>
                           <div>
-                              <label className="text-xs text-slate-400 mb-1 block">Link VD Ảnh Mẫu</label>
+                              <label className="text-xs text-slate-700 dark:text-slate-300 font-semibold mb-1 block">Link VD Ảnh Mẫu</label>
                               <input
                                   type="text"
                                   value={generationGuideImages.sampleUrl}
                                   onChange={(e) => setGenerationGuideImages({ ...generationGuideImages, sampleUrl: e.target.value })}
-                                  className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-white"
+                                  className="w-full neu-inset-sm border border-white/10 rounded-lg p-3 text-white"
                                   placeholder="https://..."
                               />
-                              <p className="text-xs text-slate-500 mt-2">
+                              <p className="text-xs text-slate-700 dark:text-slate-400 font-semibold mt-2">
                                   Ảnh mẫu dùng cho nút "VD Ảnh Mẫu" để người dùng xem bố cục mẫu phù hợp.
                               </p>
                           </div>
                       </div>
                   </div>
 
-                  <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
+                  <div className="neu-card p-6 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl">
                       <div className="flex justify-between items-center mb-4">
                           <h3 className="font-bold text-lg text-white flex items-center gap-2">
                               <Icons.Bell className="w-5 h-5 text-audi-cyan" />
@@ -4233,7 +4382,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       </div>
 
                       <div className="space-y-4">
-                          <label className="flex items-center gap-3 text-sm font-bold text-white">
+                          <label className="flex items-center gap-3 text-sm font-bold text-slate-900 dark:text-white">
                               <input
                                   type="checkbox"
                                   checked={systemAnnouncement.isActive}
@@ -4245,21 +4394,21 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               <div>
-                                  <label className="text-xs text-slate-400 mb-1 block">Tiêu đề</label>
+                                  <label className="text-xs text-slate-700 dark:text-slate-300 font-semibold mb-1 block">Tiêu đề</label>
                                   <input
                                       type="text"
                                       value={systemAnnouncement.title}
                                       onChange={(e) => setSystemAnnouncement({ ...systemAnnouncement, title: e.target.value })}
-                                      className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-white"
+                                      className="w-full neu-inset-sm border border-white/10 rounded-lg p-3 text-white"
                                       placeholder="Thông báo từ AUDITION AI"
                                   />
                               </div>
                               <div>
-                                  <label className="text-xs text-slate-400 mb-1 block">Kiểu hiển thị</label>
+                                  <label className="text-xs text-slate-700 dark:text-slate-300 font-semibold mb-1 block">Kiểu hiển thị</label>
                                   <select
                                       value={systemAnnouncement.variant}
                                       onChange={(e) => setSystemAnnouncement({ ...systemAnnouncement, variant: e.target.value as SystemAnnouncementConfig['variant'] })}
-                                      className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-white"
+                                      className="w-full neu-inset-sm border border-white/10 rounded-lg p-3 text-white"
                                   >
                                       <option value="info">Thông tin</option>
                                       <option value="promo">Khuyến mại</option>
@@ -4269,14 +4418,14 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           </div>
 
                           <div>
-                              <label className="text-xs text-slate-400 mb-1 block">Nội dung</label>
+                              <label className="text-xs text-slate-700 dark:text-slate-300 font-semibold mb-1 block">Nội dung</label>
                               <textarea
                                   value={systemAnnouncement.message}
                                   onChange={(e) => setSystemAnnouncement({ ...systemAnnouncement, message: e.target.value })}
-                                  className="w-full min-h-[120px] bg-black/40 border border-white/10 rounded-lg p-3 text-white leading-relaxed"
+                                  className="w-full min-h-[120px] neu-inset-sm border border-white/10 rounded-lg p-3 text-white leading-relaxed"
                                   placeholder="Nhập nội dung thông báo sẽ hiển thị cho người dùng..."
                               />
-                              <p className="text-xs text-slate-500 mt-2">
+                              <p className="text-xs text-slate-700 dark:text-slate-400 font-semibold mt-2">
                                   Người dùng đóng thông báo thì thông báo sẽ ẩn trong phiên hiện tại. Tải lại ứng dụng sẽ hiển thị lại nếu cấu hình đang bật.
                               </p>
                           </div>
@@ -4284,7 +4433,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   </div>
 
                   {/* Payment Gateway Configuration */}
-                  <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
+                  <div className="neu-card p-6 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl">
                       <div className="flex justify-between items-center mb-4">
                           <h3 className="font-bold text-lg text-white flex items-center gap-2">
                               <Icons.QrCode className="w-5 h-5 text-emerald-400" />
@@ -4310,18 +4459,18 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       className={`rounded-2xl border p-4 text-left transition-all ${
                                           active
                                               ? 'border-emerald-400 bg-emerald-500/15 shadow-[0_0_24px_rgba(16,185,129,0.18)]'
-                                              : 'border-white/10 bg-black/20 hover:border-white/25'
+                                              : 'border-white/10 neu-inset-sm hover:border-white/25'
                                       }`}
                                   >
                                       <div className="flex items-center justify-between gap-3">
-                                          <div className="font-black text-white">{gatewayOption.title}</div>
+                                          <div className="font-black text-slate-900 dark:text-white">{gatewayOption.title}</div>
                                           <span className={`text-[10px] font-black uppercase px-2 py-1 rounded-full ${
-                                              active ? 'bg-emerald-400 text-black' : 'bg-white/10 text-slate-400'
+                                              active ? 'bg-emerald-400 text-black' : 'bg-white/10 text-slate-700 dark:text-slate-300 font-semibold'
                                           }`}>
                                               {active ? 'Đang bật' : 'Tắt'}
                                           </span>
                                       </div>
-                                      <p className="mt-2 text-xs leading-relaxed text-slate-400">{gatewayOption.desc}</p>
+                                      <p className="mt-2 text-xs leading-relaxed text-slate-700 dark:text-slate-300 font-semibold">{gatewayOption.desc}</p>
                                   </button>
                               );
                           })}
@@ -4333,7 +4482,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   </div>
 
                   {/* Maintenance Mode Configuration */}
-                  <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
+                  <div className="neu-card p-6 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl">
                       <div className="flex justify-between items-center mb-4">
                           <h3 className="font-bold text-lg text-white flex items-center gap-2">
                               <Icons.AlertTriangle className="w-5 h-5 text-red-500" />
@@ -4345,7 +4494,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   if (res.success) showToast("Đã lưu cấu hình bảo trì thành công!", "success");
                                   else showToast(`Lỗi khi lưu cấu hình bảo trì: ${res.error}`, "error");
                               }}
-                              className="px-4 py-2 bg-red-500 text-white font-bold rounded-lg text-sm hover:bg-red-600 transition-colors"
+                              className="px-4 py-2 bg-red-500 text-slate-900 dark:text-white font-bold rounded-lg text-sm hover:bg-red-600 transition-colors"
                           >
                               Lưu Cấu Hình
                           </button>
@@ -4358,16 +4507,16 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   id="maintenanceToggle"
                                   checked={maintenanceMode.isActive}
                                   onChange={(e) => setMaintenanceMode({...maintenanceMode, isActive: e.target.checked})}
-                                  className="w-5 h-5 rounded border-white/20 bg-black/50 text-red-500 focus:ring-red-500 focus:ring-offset-gray-900"
+                                  className="w-5 h-5 rounded border-white/20 neu-inset-sm text-red-500 focus:ring-red-500 focus:ring-offset-gray-900"
                               />
-                              <label htmlFor="maintenanceToggle" className="text-white font-medium">Bật chế độ bảo trì</label>
+                              <label htmlFor="maintenanceToggle" className="text-slate-900 dark:text-white font-medium">Bật chế độ bảo trì</label>
                           </div>
                           <div>
-                              <label className="text-xs text-slate-400 mb-1 block">Thông báo bảo trì</label>
+                              <label className="text-xs text-slate-700 dark:text-slate-300 font-semibold mb-1 block">Thông báo bảo trì</label>
                               <textarea 
                                   value={maintenanceMode.message} 
                                   onChange={e => setMaintenanceMode({...maintenanceMode, message: e.target.value})} 
-                                  className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-white h-24 resize-none"
+                                  className="w-full neu-inset-sm border border-white/10 rounded-lg p-3 text-white h-24 resize-none"
                                   placeholder="Hệ thống đang bảo trì, vui lòng quay lại sau."
                               />
                           </div>
@@ -4375,14 +4524,14 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   </div>
 
                   {/* Feature Maintenance Configuration */}
-                  <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
+                  <div className="neu-card p-6 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl">
                       <div className="flex justify-between items-center mb-4">
                           <div>
                               <h3 className="font-bold text-lg text-white flex items-center gap-2">
                                   <Icons.Lock className="w-5 h-5 text-yellow-400" />
                                   Bảo trì từng chức năng
                               </h3>
-                              <p className="text-xs text-slate-500 mt-1">
+                              <p className="text-xs text-slate-700 dark:text-slate-400 font-semibold mt-1">
                                   Người dùng thường sẽ thấy nhãn Đang bảo trì và không mở được chức năng. Admin vẫn truy cập bình thường.
                               </p>
                           </div>
@@ -4395,12 +4544,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       </div>
 
                       <div className="mb-4">
-                          <label className="text-xs text-slate-400 mb-1 block">Thông báo khi người dùng mở chức năng đang bảo trì</label>
+                          <label className="text-xs text-slate-700 dark:text-slate-300 font-semibold mb-1 block">Thông báo khi người dùng mở chức năng đang bảo trì</label>
                           <input
                               type="text"
                               value={featureMaintenance.message || ''}
                               onChange={(e) => setFeatureMaintenance((current) => ({ ...current, message: e.target.value }))}
-                              className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-white"
+                              className="w-full neu-inset-sm border border-white/10 rounded-lg p-3 text-white"
                               placeholder="Tính năng đang bảo trì. Vui lòng quay lại sau."
                           />
                       </div>
@@ -4415,13 +4564,13 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       className={`rounded-2xl border p-4 text-left transition-all ${
                                           isLocked
                                               ? 'border-yellow-400 bg-yellow-500/15 shadow-[0_0_24px_rgba(234,179,8,0.16)]'
-                                              : 'border-white/10 bg-black/20 hover:border-white/25'
+                                              : 'border-white/10 neu-inset-sm hover:border-white/25'
                                       }`}
                                   >
                                       <div className="flex items-start justify-between gap-3">
                                           <div>
-                                              <div className="font-black text-white">{feature.name.vi}</div>
-                                              <div className="mt-1 text-[10px] uppercase tracking-widest text-slate-500">{feature.id}</div>
+                                              <div className="font-black text-slate-900 dark:text-white">{feature.name.vi}</div>
+                                              <div className="mt-1 text-[10px] uppercase tracking-widest text-slate-700 dark:text-slate-400 font-semibold">{feature.id}</div>
                                           </div>
                                           <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-black uppercase ${
                                               isLocked ? 'bg-yellow-400 text-black' : 'bg-emerald-500/15 text-emerald-300'
@@ -4429,7 +4578,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               {isLocked ? 'Bảo trì' : 'Đang mở'}
                                           </span>
                                       </div>
-                                      <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-slate-400">{feature.description.vi}</p>
+                                      <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-slate-700 dark:text-slate-300 font-semibold">{feature.description.vi}</p>
                                   </button>
                               );
                           })}
@@ -4437,7 +4586,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   </div>
 
                   {/* API Key Configuration */}
-                  <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
+                  <div className="neu-card p-6 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl">
                       <h3 className="font-bold text-lg text-white mb-4 flex items-center gap-2">
                           <Icons.Lock className="w-5 h-5 text-audi-pink" />
                           Thêm mới Google Cloud Service Account JSON (Vertex AI)
@@ -4445,13 +4594,13 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       <div className="space-y-4">
                           <div>
                               <div className="flex justify-between items-end mb-2">
-                                  <label className="text-xs font-bold text-slate-400 uppercase">Service Account JSON</label>
+                                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase">Service Account JSON</label>
                                   <div className="flex items-center gap-2">
                                       <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${
                                           keyStatus === 'valid' ? 'bg-green-500/20 text-green-400' :
                                           keyStatus === 'invalid' ? 'bg-red-500/20 text-red-400' :
                                           keyStatus === 'checking' ? 'bg-yellow-500/20 text-yellow-400' :
-                                          'bg-white/10 text-slate-400'
+                                          'bg-white/10 text-slate-700 dark:text-slate-300 font-semibold'
                                       }`}>
                                           {keyStatus === 'valid' ? 'VALID' :
                                            keyStatus === 'invalid' ? 'INVALID' :
@@ -4463,7 +4612,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   <select
                                       value={apiKeyTier}
                                       onChange={(e) => setApiKeyTier(e.target.value as 'flash' | 'pro')}
-                                      className="bg-black/40 border border-white/10 rounded-lg p-3 text-white text-sm outline-none focus:border-audi-pink"
+                                      className="neu-inset-sm border border-white/10 rounded-lg p-3 text-slate-900 dark:text-white text-sm outline-none focus:border-audi-pink"
                                   >
                                       <option value="flash">Flash Key</option>
                                       <option value="pro">Pro Key</option>
@@ -4477,21 +4626,21 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               setKeyStatus('unknown');
                                           }}
                                           placeholder='{"type": "service_account", "project_id": "...", ...}'
-                                          className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-white font-mono text-sm pr-12"
+                                          className="w-full neu-inset-sm border border-white/10 rounded-lg p-3 text-white font-mono text-sm pr-12"
                                       />
                                       <button 
                                         onClick={() => setShowKey(!showKey)} 
-                                        className="absolute right-3 top-3 text-slate-500 hover:text-white hidden md:block"
+                                        className="absolute right-3 top-3 text-slate-700 dark:text-slate-400 font-semibold hover:text-white hidden md:block"
                                         title="Hiện/Ẩn Key"
                                       >
                                           {showKey ? <Icons.Eye className="w-5 h-5" /> : <Icons.Lock className="w-5 h-5" />}
                                       </button>
                                   </div>
-                                  <button onClick={handleSaveApiKey} disabled={keyStatus === 'checking'} className="px-6 py-3 bg-audi-pink text-white font-bold rounded-lg hover:bg-pink-600 disabled:opacity-50 text-sm whitespace-nowrap">
+                                  <button onClick={handleSaveApiKey} disabled={keyStatus === 'checking'} className="px-6 py-3 bg-audi-pink text-slate-900 dark:text-white font-bold rounded-lg hover:bg-pink-600 disabled:opacity-50 text-sm whitespace-nowrap">
                                       {keyStatus === 'checking' ? <Icons.Loader className="animate-spin w-5 h-5"/> : 'Thêm Key'}
                                   </button>
                               </div>
-                              <p className="text-xs text-slate-500 mt-2">
+                              <p className="text-xs text-slate-700 dark:text-slate-400 font-semibold mt-2">
                                   Key sẽ được lưu vào Database. Hệ thống sẽ tự động xoay vòng ngẫu nhiên giữa các key đang hoạt động để tránh quá tải.
                               </p>
                           </div>
@@ -4499,15 +4648,15 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   </div>
 
                   {/* List of Keys in DB */}
-                  <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
+                  <div className="neu-card p-6 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl">
                       <h3 className="font-bold text-lg text-white mb-4 flex items-center gap-2">
                           <Icons.Database className="w-5 h-5 text-audi-cyan" />
                           Danh sách Service Account trong Database
                       </h3>
                       
                       <div className="hidden md:block overflow-x-auto">
-                          <table className="w-full text-left text-sm text-slate-400">
-                              <thead className="bg-black/30 text-xs font-bold text-slate-300 uppercase">
+                          <table className="w-full text-left text-sm text-slate-700 dark:text-slate-300 font-semibold">
+                              <thead className="neu-raised-sm text-xs font-black text-slate-950 dark:text-white uppercase font-accent border-b border-slate-300 dark:border-slate-700">
                                   <tr>
                                       <th className="px-4 py-3 w-24">Loại</th>
                                       <th className="px-4 py-3">Tên / ID</th>
@@ -4517,15 +4666,15 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       <th className="px-4 py-3 text-right">Thao tác</th>
                                   </tr>
                               </thead>
-                              <tbody className="divide-y divide-white/5">
+                              <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                                   {dbKeys.length === 0 ? (
-                                      <tr><td colSpan={6} className="text-center py-6 text-slate-500">Chưa tìm thấy key nào trong database.</td></tr>
+                                      <tr><td colSpan={6} className="text-center py-6 text-slate-700 dark:text-slate-400 font-semibold">Chưa tìm thấy key nào trong database.</td></tr>
                                   ) : dbKeys.map((k) => {
                                       const isPro = k.name?.includes('[PRO]');
                                       const displayName = k.name?.replace('[PRO]', '').replace('[FLASH]', '').trim() || 'Unnamed Key';
                                       
                                       return (
-                                      <tr key={k.id} className="hover:bg-white/5">
+                                      <tr key={k.id} className="hover:neu-inset-sm">
                                           <td className="px-4 py-3">
                                               {isPro ? (
                                                   <span className="inline-flex items-center justify-center px-2 py-1 rounded bg-audi-pink/20 text-audi-pink border border-audi-pink/30 text-[10px] font-bold w-16">
@@ -4537,7 +4686,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                   </span>
                                               )}
                                           </td>
-                                          <td className="px-4 py-3 font-bold text-white">
+                                          <td className="px-4 py-3 font-bold text-slate-900 dark:text-white">
                                               <div className="text-sm">{displayName}</div>
                                               <div className="text-[10px] text-slate-600 font-mono">{k.id.substring(0,8)}...</div>
                                           </td>
@@ -4545,7 +4694,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               {k.key_value ? `${k.key_value.substring(0, 8)}...${k.key_value.substring(k.key_value.length - 6)}` : 'N/A'}
                                           </td>
                                           <td className="px-4 py-3">
-                                              <span className={`text-[10px] font-bold px-2 py-1 rounded border ${k.status === 'active' ? 'bg-green-500/20 text-green-500 border-green-500/50' : 'bg-slate-500/20 text-slate-500 border-slate-500/50'}`}>
+                                              <span className={`text-[10px] font-bold px-2 py-1 rounded border ${k.status === 'active' ? 'bg-green-500/20 text-green-500 border-green-500/50' : 'bg-slate-500/20 text-slate-700 dark:text-slate-400 font-semibold border-slate-500/50'}`}>
                                                   {k.status?.toUpperCase() || 'UNKNOWN'}
                                               </span>
                                           </td>
@@ -4562,13 +4711,13 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       </div>
                       <div className="md:hidden space-y-4">
                           {dbKeys.length === 0 ? (
-                              <div className="text-center py-4 text-slate-500 text-sm">Chưa có key.</div>
+                              <div className="text-center py-4 text-slate-700 dark:text-slate-400 font-semibold text-sm">Chưa có key.</div>
                           ) : dbKeys.map((k) => {
                               const isPro = k.name?.includes('[PRO]');
                               const displayName = k.name?.replace('[PRO]', '').replace('[FLASH]', '').trim() || 'Unnamed Key';
                               
                               return (
-                              <div key={k.id} className="bg-white/5 rounded-xl p-4 border border-white/5 relative overflow-hidden">
+                              <div key={k.id} className="neu-inset-sm rounded-xl p-4 border border-white/5 relative overflow-hidden">
                                   {/* Badge at top right */}
                                   <div className="absolute top-0 right-0">
                                       {isPro ? (
@@ -4580,18 +4729,18 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
                                   <div className="flex justify-between items-start mb-2 pr-12">
                                       <div>
-                                          <div className="font-bold text-white text-sm">{displayName}</div>
-                                          <div className="font-mono text-[10px] text-slate-500">{k.id}</div>
+                                          <div className="font-bold text-slate-900 dark:text-white text-sm">{displayName}</div>
+                                          <div className="font-mono text-[10px] text-slate-700 dark:text-slate-400 font-semibold">{k.id}</div>
                                       </div>
-                                      <span className={`text-[10px] font-bold px-2 py-1 rounded border ${k.status === 'active' ? 'bg-green-500/20 text-green-500 border-green-500/50' : 'bg-slate-500/20 text-slate-500 border-slate-500/50'}`}>
+                                      <span className={`text-[10px] font-bold px-2 py-1 rounded border ${k.status === 'active' ? 'bg-green-500/20 text-green-500 border-green-500/50' : 'bg-slate-500/20 text-slate-700 dark:text-slate-400 font-semibold border-slate-500/50'}`}>
                                           {k.status?.toUpperCase()}
                                       </span>
                                   </div>
-                                  <div className="font-mono text-xs text-slate-300 break-all mb-3 bg-black/30 p-2 rounded">
+                                  <div className="font-mono text-xs text-slate-300 break-all mb-3 neu-inset-sm p-2 rounded">
                                       {k.key_value ? `${k.key_value.substring(0, 15)}...` : 'N/A'}
                                   </div>
                                   <div className="flex justify-between items-center mt-3 border-t border-white/5 pt-3">
-                                      <span className="text-[10px] text-slate-500">{new Date(k.created_at).toLocaleDateString()}</span>
+                                      <span className="text-[10px] text-slate-700 dark:text-slate-400 font-semibold">{new Date(k.created_at).toLocaleDateString()}</span>
                                       <div className="flex gap-2">
                                           <button onClick={() => handleTestKey(k.key_value)} className="px-3 py-1.5 bg-audi-purple/20 text-audi-purple rounded text-xs font-bold border border-audi-purple/30">Test</button>
                                           <button onClick={() => handleDeleteApiKey(k.id)} className="px-3 py-1.5 bg-red-500/10 text-red-500 rounded text-xs font-bold border border-red-500/30">Xóa</button>
@@ -4604,7 +4753,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   </div>
 
                   {/* Database Maintenance */}
-                  <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10 mt-6">
+                  <div className="neu-card p-6 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl mt-6">
                       <h3 className="font-bold text-lg text-white mb-4 flex items-center gap-2">
                           <Icons.Database className="w-5 h-5 text-audi-cyan" />
                           Bảo trì Database
@@ -4612,65 +4761,65 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <button 
                               onClick={() => setShowGiftcodeFix(true)}
-                              className="p-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-left transition-colors group"
+                              className="p-4 neu-inset-sm hover:bg-white/10 border border-white/10 rounded-xl text-left transition-colors group"
                           >
                               <div className="flex items-center gap-3 mb-2">
                                   <div className="w-10 h-10 rounded-full bg-audi-purple/20 flex items-center justify-center text-audi-purple group-hover:scale-110 transition-transform">
                                       <Icons.Gift className="w-5 h-5" />
                                   </div>
-                                  <span className="font-bold text-white">Fix Giftcode Table</span>
+                                  <span className="font-bold text-slate-900 dark:text-white">Fix Giftcode Table</span>
                               </div>
-                              <p className="text-xs text-slate-400">Sửa lỗi thiếu bảng gift_codes hoặc system_settings.</p>
+                              <p className="text-xs text-slate-700 dark:text-slate-300 font-semibold">Sửa lỗi thiếu bảng gift_codes hoặc system_settings.</p>
                           </button>
 
                           <button 
                               onClick={() => setShowUserFix(true)}
-                              className="p-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-left transition-colors group"
+                              className="p-4 neu-inset-sm hover:bg-white/10 border border-white/10 rounded-xl text-left transition-colors group"
                           >
                               <div className="flex items-center gap-3 mb-2">
                                   <div className="w-10 h-10 rounded-full bg-audi-pink/20 flex items-center justify-center text-audi-pink group-hover:scale-110 transition-transform">
                                       <Icons.Users className="w-5 h-5" />
                                   </div>
-                                  <span className="font-bold text-white">Fix Users Table</span>
+                                  <span className="font-bold text-slate-900 dark:text-white">Fix Users Table</span>
                               </div>
-                              <p className="text-xs text-slate-400">Sửa lỗi thiếu bảng users hoặc lỗi phân quyền (RLS).</p>
+                              <p className="text-xs text-slate-700 dark:text-slate-300 font-semibold">Sửa lỗi thiếu bảng users hoặc lỗi phân quyền (RLS).</p>
                           </button>
 
                           <button 
                               onClick={() => setShowBalanceFix(true)}
-                              className="p-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-left transition-colors group"
+                              className="p-4 neu-inset-sm hover:bg-white/10 border border-white/10 rounded-xl text-left transition-colors group"
                           >
                               <div className="flex items-center gap-3 mb-2">
                                   <div className="w-10 h-10 rounded-full bg-yellow-500/20 flex items-center justify-center text-yellow-500 group-hover:scale-110 transition-transform">
                                       <Icons.Gem className="w-5 h-5" />
                                   </div>
-                                  <span className="font-bold text-white">Fix Negative Balance</span>
+                                  <span className="font-bold text-slate-900 dark:text-white">Fix Negative Balance</span>
                               </div>
-                              <p className="text-xs text-slate-400">Sửa lỗi số dư âm (-Vcoin) cho tất cả tài khoản.</p>
+                              <p className="text-xs text-slate-700 dark:text-slate-300 font-semibold">Sửa lỗi số dư âm (-Vcoin) cho tất cả tài khoản.</p>
                           </button>
 
                           <button 
                               onClick={handleCleanupImages}
-                              className="p-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-left transition-colors group"
+                              className="p-4 neu-inset-sm hover:bg-white/10 border border-white/10 rounded-xl text-left transition-colors group"
                           >
                               <div className="flex items-center gap-3 mb-2">
                                   <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center text-red-500 group-hover:scale-110 transition-transform">
                                       <Icons.Trash className="w-5 h-5" />
                                   </div>
-                                  <span className="font-bold text-white">Dọn asset hết hạn</span>
+                                  <span className="font-bold text-slate-900 dark:text-white">Dọn asset hết hạn</span>
                               </div>
-                              <p className="text-xs text-slate-400">Xóa toàn bộ asset chưa publish đã quá 7 ngày trong lịch sử tạo (giữ lại ảnh public).</p>
+                              <p className="text-xs text-slate-700 dark:text-slate-300 font-semibold">Xóa toàn bộ asset chưa publish đã quá 7 ngày trong lịch sử tạo (giữ lại ảnh public).</p>
                           </button>
                       </div>
 
                       <div className="mt-6 rounded-2xl border border-orange-500/20 bg-orange-500/5 p-4">
                           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                               <div>
-                                  <h4 className="flex items-center gap-2 text-sm font-black text-white">
+                                  <h4 className="flex items-center gap-2 text-sm font-black text-slate-900 dark:text-white">
                                       <Icons.Cloud className="h-4 w-4 text-orange-300" />
                                       Xóa R2 thủ công theo thời gian
                                   </h4>
-                                  <p className="mt-1 text-xs leading-relaxed text-slate-400">
+                                  <p className="mt-1 text-xs leading-relaxed text-slate-700 dark:text-slate-300 font-semibold">
                                       Chọn khoảng ngày để preview rồi xoá file R2 và metadata lịch sử. Mặc định giữ ảnh public và bỏ qua job đang chạy.
                                   </p>
                                   <p className="mt-2 text-xs font-bold text-red-200">
@@ -4681,7 +4830,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   <button
                                       onClick={handlePreviewR2Cleanup}
                                       disabled
-                                      className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/10 px-3 py-2 text-xs font-bold text-white hover:bg-white/15 disabled:opacity-50"
+                                      className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/10 px-3 py-2 text-xs font-bold text-slate-900 dark:text-white hover:bg-white/15 disabled:opacity-50"
                                   >
                                       {r2CleanupLoading ? <Icons.Loader className="h-4 w-4 animate-spin" /> : <Icons.Search className="h-4 w-4" />}
                                       Xem trước
@@ -4689,7 +4838,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   <button
                                       onClick={handleExecuteR2Cleanup}
                                       disabled
-                                      className="inline-flex items-center gap-2 rounded-lg bg-red-500 px-3 py-2 text-xs font-bold text-white hover:bg-red-600 disabled:opacity-50"
+                                      className="inline-flex items-center gap-2 rounded-lg bg-red-500 px-3 py-2 text-xs font-bold text-slate-900 dark:text-white hover:bg-red-600 disabled:opacity-50"
                                   >
                                       <Icons.Trash className="h-4 w-4" />
                                       Xóa thật
@@ -4699,7 +4848,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
                           <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
                               <div>
-                                  <label className="mb-1 block text-xs font-bold uppercase text-slate-500">Từ ngày</label>
+                                  <label className="mb-1 block text-xs font-bold uppercase text-slate-700 dark:text-slate-400 font-semibold">Từ ngày</label>
                                   <input
                                       type="date"
                                       value={r2CleanupStartDate}
@@ -4707,11 +4856,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           setR2CleanupStartDate(e.target.value);
                                           setR2CleanupPreview(null);
                                       }}
-                                      className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-orange-300"
+                                      className="w-full rounded-lg border border-white/10 neu-inset-sm px-3 py-2 text-sm text-white outline-none focus:border-orange-300"
                                   />
                               </div>
                               <div>
-                                  <label className="mb-1 block text-xs font-bold uppercase text-slate-500">Đến ngày</label>
+                                  <label className="mb-1 block text-xs font-bold uppercase text-slate-700 dark:text-slate-400 font-semibold">Đến ngày</label>
                                   <input
                                       type="date"
                                       value={r2CleanupEndDate}
@@ -4719,11 +4868,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           setR2CleanupEndDate(e.target.value);
                                           setR2CleanupPreview(null);
                                       }}
-                                      className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-orange-300"
+                                      className="w-full rounded-lg border border-white/10 neu-inset-sm px-3 py-2 text-sm text-white outline-none focus:border-orange-300"
                                   />
                               </div>
                               <div className="xl:col-span-2">
-                                  <label className="mb-1 block text-xs font-bold uppercase text-slate-500">Prefix R2</label>
+                                  <label className="mb-1 block text-xs font-bold uppercase text-slate-700 dark:text-slate-400 font-semibold">Prefix R2</label>
                                   <input
                                       type="text"
                                       value={r2CleanupPrefix}
@@ -4732,13 +4881,13 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           setR2CleanupPreview(null);
                                       }}
                                       placeholder="Ví dụ: inputs/ hoặc để trống"
-                                      className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none placeholder:text-slate-600 focus:border-orange-300"
+                                      className="w-full rounded-lg border border-white/10 neu-inset-sm px-3 py-2 text-sm text-white outline-none placeholder:text-slate-600 focus:border-orange-300"
                                   />
                               </div>
                           </div>
 
                           <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
-                              <label className="flex items-start gap-3 rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-slate-300">
+                              <label className="flex items-start gap-3 rounded-xl border border-white/10 neu-inset-sm p-3 text-xs text-slate-300">
                                   <input
                                       type="checkbox"
                                       checked={r2CleanupIncludeOrphans}
@@ -4750,7 +4899,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   />
                                   <span>
                                       <b className="text-white">Quét file mồ côi trên R2</b>
-                                      <span className="mt-1 block text-slate-500">Cần nhập prefix, ví dụ inputs/. Nếu tắt, preview chỉ quét metadata DB nên chạy nhanh hơn.</span>
+                                      <span className="mt-1 block text-slate-700 dark:text-slate-400 font-semibold">Cần nhập prefix, ví dụ inputs/. Nếu tắt, preview chỉ quét metadata DB nên chạy nhanh hơn.</span>
                                   </span>
                               </label>
                               <label className="flex items-start gap-3 rounded-xl border border-red-500/20 bg-red-500/5 p-3 text-xs text-red-100">
@@ -4771,7 +4920,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           </div>
 
                           {r2CleanupPreview && (
-                              <div className="mt-4 rounded-xl border border-white/10 bg-black/30 p-4">
+                              <div className="mt-4 rounded-xl border border-white/10 neu-inset-sm p-4">
                                   <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                                       {[
                                           ['DB rows', r2CleanupPreview.matched.dbRows],
@@ -4779,16 +4928,16 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           ['R2 mồ côi', r2CleanupPreview.matched.orphanR2Objects],
                                           [r2CleanupPreview.dryRun ? 'Sẽ xoá R2' : 'Đã xoá R2', r2CleanupPreview.dryRun ? r2CleanupPreview.matched.totalR2Objects : r2CleanupPreview.deleted.r2Objects],
                                       ].map(([label, value]) => (
-                                          <div key={String(label)} className="rounded-lg bg-white/5 p-3">
-                                              <div className="text-[10px] font-bold uppercase text-slate-500">{label}</div>
-                                              <div className="mt-1 text-xl font-black text-white">{Number(value || 0).toLocaleString('vi-VN')}</div>
+                                          <div key={String(label)} className="rounded-lg neu-inset-sm p-3">
+                                              <div className="text-[10px] font-bold uppercase text-slate-700 dark:text-slate-400 font-semibold">{label}</div>
+                                              <div className="mt-1 text-xl font-black text-slate-900 dark:text-white">{Number(value || 0).toLocaleString('vi-VN')}</div>
                                           </div>
                                       ))}
                                   </div>
                                   <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
                                       <div>
-                                          <div className="mb-2 text-xs font-bold uppercase text-slate-500">Mẫu DB</div>
-                                          <div className="max-h-40 space-y-1 overflow-auto rounded-lg bg-black/30 p-2 text-[11px] text-slate-400">
+                                          <div className="mb-2 text-xs font-bold uppercase text-slate-700 dark:text-slate-400 font-semibold">Mẫu DB</div>
+                                          <div className="max-h-40 space-y-1 overflow-auto rounded-lg neu-inset-sm p-2 text-[11px] text-slate-700 dark:text-slate-300 font-semibold">
                                               {(r2CleanupPreview.samples?.dbRows || []).length === 0 ? (
                                                   <div>Không có dòng DB trong khoảng này.</div>
                                               ) : r2CleanupPreview.samples?.dbRows?.map((row) => (
@@ -4797,8 +4946,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           </div>
                                       </div>
                                       <div>
-                                          <div className="mb-2 text-xs font-bold uppercase text-slate-500">Mẫu R2</div>
-                                          <div className="max-h-40 space-y-1 overflow-auto rounded-lg bg-black/30 p-2 text-[11px] text-slate-400">
+                                          <div className="mb-2 text-xs font-bold uppercase text-slate-700 dark:text-slate-400 font-semibold">Mẫu R2</div>
+                                          <div className="max-h-40 space-y-1 overflow-auto rounded-lg neu-inset-sm p-2 text-[11px] text-slate-700 dark:text-slate-300 font-semibold">
                                               {(r2CleanupPreview.samples?.r2Objects || []).length === 0 ? (
                                                   <div>Không có file R2 mồ côi theo bộ lọc.</div>
                                               ) : r2CleanupPreview.samples?.r2Objects?.map((obj) => (
@@ -4827,8 +4976,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           <Icons.Gem className="w-6 h-6" />
                       </div>
                       <div>
-                          <h3 className="text-xl font-bold text-white">SỬA LỖI SỐ DƯ ÂM</h3>
-                          <p className="text-slate-400 text-xs">Reset số dư về 0 cho các tài khoản bị âm Vcoin</p>
+                          <h3 className="text-xl font-bold text-slate-900 dark:text-white">SỬA LỖI SỐ DƯ ÂM</h3>
+                          <p className="text-slate-700 dark:text-slate-300 font-semibold text-xs">Reset số dư về 0 cho các tài khoản bị âm Vcoin</p>
                       </div>
                   </div>
                   
@@ -4841,7 +4990,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
                   <div className="flex-1 overflow-hidden flex flex-col">
                       <p className="text-sm font-bold text-green-400 mb-2 uppercase">Copy mã SQL này và chạy trong Supabase SQL Editor</p>
-                      <div className="relative h-64 bg-black/50 border border-white/10 rounded-xl overflow-hidden">
+                      <div className="relative h-64 neu-inset-sm border border-white/10 rounded-xl overflow-hidden">
                           <pre className="absolute inset-0 p-4 text-[10px] md:text-xs font-mono text-slate-300 overflow-auto whitespace-pre-wrap selection:bg-audi-pink selection:text-white">
                               {BALANCE_FIX_SQL}
                           </pre>
@@ -4875,8 +5024,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           <Icons.Database className="w-6 h-6" />
                       </div>
                       <div>
-                          <h3 className="text-xl font-bold text-white">LỖI DATABASE: BẢNG DỮ LIỆU</h3>
-                          <p className="text-slate-400 text-xs">Phát hiện thiếu bảng Giftcode hoặc System Settings</p>
+                          <h3 className="text-xl font-bold text-slate-900 dark:text-white">LỖI DATABASE: BẢNG DỮ LIỆU</h3>
+                          <p className="text-slate-700 dark:text-slate-300 font-semibold text-xs">Phát hiện thiếu bảng Giftcode hoặc System Settings</p>
                       </div>
                   </div>
                   
@@ -4889,7 +5038,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
                   <div className="flex-1 overflow-hidden flex flex-col">
                       <p className="text-sm font-bold text-green-400 mb-2 uppercase">Giải pháp: Copy mã SQL này và chạy trong Supabase SQL Editor</p>
-                      <div className="relative h-64 bg-black/50 border border-white/10 rounded-xl overflow-hidden">
+                      <div className="relative h-64 neu-inset-sm border border-white/10 rounded-xl overflow-hidden">
                           <pre className="absolute inset-0 p-4 text-[10px] md:text-xs font-mono text-slate-300 overflow-auto whitespace-pre-wrap selection:bg-audi-pink selection:text-white">
                               {GIFTCODE_FIX_SQL}
                           </pre>
@@ -4931,8 +5080,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           <Icons.Database className="w-6 h-6" />
                       </div>
                       <div>
-                          <h3 className="text-xl font-bold text-white">LỖI DATABASE: BẢNG USERS</h3>
-                          <p className="text-slate-400 text-xs">Phát hiện thiếu bảng Users hoặc lỗi RLS Policy</p>
+                          <h3 className="text-xl font-bold text-slate-900 dark:text-white">LỖI DATABASE: BẢNG USERS</h3>
+                          <p className="text-slate-700 dark:text-slate-300 font-semibold text-xs">Phát hiện thiếu bảng Users hoặc lỗi RLS Policy</p>
                       </div>
                   </div>
                   
@@ -4945,7 +5094,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
                   <div className="flex-1 overflow-hidden flex flex-col">
                       <p className="text-sm font-bold text-green-400 mb-2 uppercase">Giải pháp: Copy mã SQL này và chạy trong Supabase SQL Editor</p>
-                      <div className="relative h-64 bg-black/50 border border-white/10 rounded-xl overflow-hidden">
+                      <div className="relative h-64 neu-inset-sm border border-white/10 rounded-xl overflow-hidden">
                           <pre className="absolute inset-0 p-4 text-[10px] md:text-xs font-mono text-slate-300 overflow-auto whitespace-pre-wrap selection:bg-audi-pink selection:text-white">
                               {USER_FIX_SQL}
                           </pre>
@@ -4963,7 +5112,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       <div className="mt-4 bg-audi-pink/10 border border-audi-pink/30 p-3 rounded-xl">
                           <p className="text-xs font-bold text-audi-pink mb-1 uppercase">Khôi phục quyền Admin:</p>
                           <div className="flex gap-2">
-                              <code className="flex-1 bg-black/50 p-2 rounded text-[10px] font-mono text-white overflow-x-auto whitespace-nowrap">
+                              <code className="flex-1 neu-inset-sm p-2 rounded text-[10px] font-mono text-white overflow-x-auto whitespace-nowrap">
                                   UPDATE public.users SET is_admin = true WHERE email = '{currentUserEmail || 'YOUR_EMAIL'}';
                               </code>
                               <button 
@@ -5002,8 +5151,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               <div className="bg-[#12121a] w-full max-w-6xl rounded-2xl border border-white/20 shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
                   <div className="flex items-center justify-between gap-4 px-6 py-4 border-b border-white/10">
                       <div>
-                          <h3 className="text-xl font-bold text-white">Chi tiết Queue Job</h3>
-                          <p className="text-xs text-slate-400 font-mono mt-1">{selectedQueueJobId}</p>
+                          <h3 className="text-xl font-bold text-slate-900 dark:text-white">Chi tiết Queue Job</h3>
+                          <p className="text-xs text-slate-700 dark:text-slate-300 font-semibold font-mono mt-1">{selectedQueueJobId}</p>
                       </div>
                       <div className="flex items-center gap-2">
                           {selectedQueueJobDetail && ['queued', 'processing', 'rescuing'].includes(selectedQueueJobDetail.job.displayStatus || selectedQueueJobDetail.job.status) && (
@@ -5015,7 +5164,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   {stoppingQueueJob ? 'Đang dừng...' : 'Dừng tiến trình'}
                               </button>
                           )}
-                          <button onClick={() => { setSelectedQueueJobId(null); setSelectedQueueJobDetail(null); setQueuePromptExpanded(false); }} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white">
+                          <button onClick={() => { setSelectedQueueJobId(null); setSelectedQueueJobDetail(null); setQueuePromptExpanded(false); }} className="p-2 rounded-lg neu-inset-sm hover:bg-white/10 text-white">
                               <Icons.X className="w-5 h-5" />
                           </button>
                       </div>
@@ -5023,45 +5172,45 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
                   <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
                       {loadingQueueJobDetail ? (
-                          <div className="py-20 text-center text-slate-400">Đang tải chi tiết job...</div>
+                          <div className="py-20 text-center text-slate-700 dark:text-slate-300 font-semibold">Đang tải chi tiết job...</div>
                       ) : !selectedQueueJobDetail ? (
-                          <div className="py-20 text-center text-slate-400">Không tải được dữ liệu chi tiết cho job này.</div>
+                          <div className="py-20 text-center text-slate-700 dark:text-slate-300 font-semibold">Không tải được dữ liệu chi tiết cho job này.</div>
                       ) : (
                           <div className="space-y-6">
                               <div className="grid grid-cols-1 xl:grid-cols-[1.3fr_0.9fr] gap-6">
                                   <div className="space-y-6">
                                       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                          <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-                                              <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Người dùng</div>
-                                              <div className="mt-2 text-lg font-bold text-white break-words">{selectedQueueJobDetail.job.userName || 'Unknown'}</div>
-                                              <div className="mt-1 text-xs text-slate-400 break-all">{selectedQueueJobDetail.job.userEmail || '-'}</div>
+                                          <div className="rounded-2xl border border-white/10 neu-inset-sm p-4">
+                                              <div className="text-[10px] uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold font-bold">Người dùng</div>
+                                              <div className="mt-2 text-lg font-bold text-slate-900 dark:text-white break-words">{selectedQueueJobDetail.job.userName || 'Unknown'}</div>
+                                              <div className="mt-1 text-xs text-slate-700 dark:text-slate-300 font-semibold break-all">{selectedQueueJobDetail.job.userEmail || '-'}</div>
                                           </div>
-                                          <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-                                              <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Trạng thái</div>
+                                          <div className="rounded-2xl border border-white/10 neu-inset-sm p-4">
+                                              <div className="text-[10px] uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold font-bold">Trạng thái</div>
                                               <div className={`mt-2 inline-flex px-3 py-1.5 rounded-full text-xs font-bold uppercase ${getQueueStatusClass(selectedQueueStatus)}`}>
                                                   {getQueueStatusLabel(selectedQueueStatus)}
                                               </div>
                                               <div className="mt-3 text-sm text-slate-300">{getQueueStageLabel(selectedQueueJobDetail.job.queueStage)}</div>
                                           </div>
-                                          <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-                                              <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Tiến trình</div>
-                                              <div className="mt-2 text-3xl font-black text-white">{Math.round(selectedQueueJobDetail.job.progress || 0)}%</div>
+                                          <div className="rounded-2xl border border-white/10 neu-inset-sm p-4">
+                                              <div className="text-[10px] uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold font-bold">Tiến trình</div>
+                                              <div className="mt-2 text-3xl font-black text-slate-900 dark:text-white">{Math.round(selectedQueueJobDetail.job.progress || 0)}%</div>
                                               <div className="mt-3 h-2 rounded-full bg-white/10 overflow-hidden">
                                                   <div className={`h-full ${selectedQueueStatus === 'failed' ? 'bg-red-400' : selectedQueueStatus === 'completed' ? 'bg-emerald-400' : 'bg-audi-cyan'}`} style={{ width: `${Math.max(0, Math.min(100, selectedQueueJobDetail.job.progress || 0))}%` }} />
                                               </div>
                                           </div>
                                       </div>
 
-                                      <div className="bg-black/20 border border-white/10 rounded-2xl p-4">
+                                      <div className="neu-inset-sm border border-white/10 rounded-2xl p-4">
                                           <div className="flex items-center justify-between gap-3 mb-3">
                                               <div>
-                                                  <div className="text-sm font-bold text-white">Prompt</div>
-                                                  <div className="text-xs text-slate-500 mt-1">{selectedQueuePrompt.length.toLocaleString('vi-VN')} ký tự</div>
+                                                  <div className="text-sm font-bold text-slate-900 dark:text-white">Prompt</div>
+                                                  <div className="text-xs text-slate-700 dark:text-slate-400 font-semibold mt-1">{selectedQueuePrompt.length.toLocaleString('vi-VN')} ký tự</div>
                                               </div>
                                               {selectedQueuePrompt.length > 240 && (
                                                   <button
                                                       onClick={() => setQueuePromptExpanded((current) => !current)}
-                                                      className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white text-xs font-bold"
+                                                      className="neu-button px-3.5 py-1.5 rounded-xl text-xs font-black text-[#FF007F] hover:scale-105"
                                                   >
                                                       {queuePromptExpanded ? 'Thu gọn' : 'Xem toàn bộ'}
                                                   </button>
@@ -5074,24 +5223,24 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
                                       <div className="space-y-4">
                                           {orderedQueueMediaSections.length === 0 ? (
-                                              <div className="bg-black/20 border border-white/10 rounded-2xl p-4 text-sm text-slate-500">
+                                              <div className="neu-inset-sm border border-white/10 rounded-2xl p-4 text-sm text-slate-700 dark:text-slate-400 font-semibold">
                                                   Không tìm thấy ảnh tham chiếu, ảnh mẫu hoặc kết quả để hiển thị cho job này.
                                               </div>
                                           ) : orderedQueueMediaSections.map((section) => (
                                               <div key={section.key} className={`rounded-2xl border p-4 ${getQueueMediaSectionTone(section.key)}`}>
                                                   <div className="flex items-center justify-between gap-3 mb-4">
                                                       <div>
-                                                          <div className="text-sm font-bold text-white">{section.label}</div>
-                                                          {section.description && <div className="text-xs text-slate-400 mt-1">{section.description}</div>}
+                                                          <div className="text-sm font-bold text-slate-900 dark:text-white">{section.label}</div>
+                                                          {section.description && <div className="text-xs text-slate-700 dark:text-slate-300 font-semibold mt-1">{section.description}</div>}
                                                       </div>
-                                                      <div className="text-xs text-slate-500">{section.items.length} mục</div>
+                                                      <div className="text-xs text-slate-700 dark:text-slate-400 font-semibold">{section.items.length} mục</div>
                                                   </div>
                                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                       {section.items.map((media, index) => (
                                                           <div key={`${section.key}-${media.role}-${index}`} className="rounded-2xl overflow-hidden border border-white/10 bg-[#0f0f16]">
                                                               <div className="px-3 py-2 border-b border-white/10">
-                                                                  <div className="text-sm font-bold text-white">{media.label}</div>
-                                                                  <div className="text-[11px] text-slate-500 mt-1">{getQueueMediaMeta(media)}</div>
+                                                                  <div className="text-sm font-bold text-slate-900 dark:text-white">{media.label}</div>
+                                                                  <div className="text-[11px] text-slate-700 dark:text-slate-400 font-semibold mt-1">{getQueueMediaMeta(media)}</div>
                                                               </div>
                                                               <div className="p-3">
                                                                   {media.url ? (
@@ -5119,29 +5268,29 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           <div className={`rounded-2xl border p-4 ${getQueueHealthClass(selectedQueueJobDetail.job.health.severity)}`}>
                                               <div className="flex items-start justify-between gap-3">
                                                   <div>
-                                                      <div className="text-sm font-black text-white">Queue Health</div>
+                                                      <div className="text-sm font-black text-slate-900 dark:text-white">Queue Health</div>
                                                       <div className="mt-2 text-lg font-black">{selectedQueueJobDetail.job.health.label}</div>
                                                   </div>
-                                                  <div className="rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[10px] font-bold uppercase">
+                                                  <div className="rounded-full border border-white/10 neu-inset-sm px-2.5 py-1 text-[10px] font-bold uppercase">
                                                       {selectedQueueJobDetail.job.health.code}
                                                   </div>
                                               </div>
                                               <div className="mt-3 text-sm leading-relaxed opacity-90">{selectedQueueJobDetail.job.health.detail}</div>
                                               <div className="mt-3 text-sm font-bold opacity-95">Hành động: {selectedQueueJobDetail.job.health.action}</div>
                                               <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-bold">
-                                                  <span className="rounded-full bg-black/20 px-2 py-1">lease: {selectedQueueJobDetail.job.health.leaseState || '-'}</span>
-                                                  {typeof selectedQueueJobDetail.job.health.recoveries === 'number' && <span className="rounded-full bg-black/20 px-2 py-1">recoveries: {selectedQueueJobDetail.job.health.recoveries}</span>}
-                                                  {typeof selectedQueueJobDetail.job.health.secondsSinceUpdated === 'number' && <span className="rounded-full bg-black/20 px-2 py-1">updated: {selectedQueueJobDetail.job.health.secondsSinceUpdated}s</span>}
-                                                  {typeof selectedQueueJobDetail.job.health.secondsUntilWatchdogDue === 'number' && selectedQueueJobDetail.job.health.secondsUntilWatchdogDue > 0 && <span className="rounded-full bg-black/20 px-2 py-1">watchdog còn: {selectedQueueJobDetail.job.health.secondsUntilWatchdogDue}s</span>}
-                                                  {selectedQueueJobDetail.job.health.providerRisk && <span className="rounded-full bg-black/20 px-2 py-1">provider-risk</span>}
-                                                  {selectedQueueJobDetail.job.health.safeToRequeue && <span className="rounded-full bg-black/20 px-2 py-1">safe-requeue</span>}
-                                                  {selectedQueueJobDetail.job.health.watchdogDue && <span className="rounded-full bg-black/20 px-2 py-1">watchdog-due</span>}
+                                                  <span className="rounded-full neu-inset-sm px-2 py-1">lease: {selectedQueueJobDetail.job.health.leaseState || '-'}</span>
+                                                  {typeof selectedQueueJobDetail.job.health.recoveries === 'number' && <span className="rounded-full neu-inset-sm px-2 py-1">recoveries: {selectedQueueJobDetail.job.health.recoveries}</span>}
+                                                  {typeof selectedQueueJobDetail.job.health.secondsSinceUpdated === 'number' && <span className="rounded-full neu-inset-sm px-2 py-1">updated: {selectedQueueJobDetail.job.health.secondsSinceUpdated}s</span>}
+                                                  {typeof selectedQueueJobDetail.job.health.secondsUntilWatchdogDue === 'number' && selectedQueueJobDetail.job.health.secondsUntilWatchdogDue > 0 && <span className="rounded-full neu-inset-sm px-2 py-1">watchdog còn: {selectedQueueJobDetail.job.health.secondsUntilWatchdogDue}s</span>}
+                                                  {selectedQueueJobDetail.job.health.providerRisk && <span className="rounded-full neu-inset-sm px-2 py-1">provider-risk</span>}
+                                                  {selectedQueueJobDetail.job.health.safeToRequeue && <span className="rounded-full neu-inset-sm px-2 py-1">safe-requeue</span>}
+                                                  {selectedQueueJobDetail.job.health.watchdogDue && <span className="rounded-full neu-inset-sm px-2 py-1">watchdog-due</span>}
                                               </div>
                                           </div>
                                       )}
 
-                                      <div className="bg-black/20 border border-white/10 rounded-2xl p-4">
-                                          <div className="text-sm font-bold text-white mb-4">Tóm tắt nhanh</div>
+                                      <div className="neu-inset-sm border border-white/10 rounded-2xl p-4">
+                                          <div className="text-sm font-bold text-slate-900 dark:text-white mb-4">Tóm tắt nhanh</div>
                                           <div className="grid grid-cols-2 gap-3">
                                               {[
                                                   { label: 'Thiết bị', value: getQueuePlatformLabel(selectedQueueJobDetail.job.clientPlatform) },
@@ -5152,16 +5301,16 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                   { label: 'Cập nhật', value: getTimeAgo(selectedQueueJobDetail.job.updatedAt) },
                                               ].map((item) => (
                                                   <div key={item.label} className="rounded-xl border border-white/10 bg-[#11111a] px-3 py-3">
-                                                      <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">{item.label}</div>
-                                                      <div className="mt-2 text-sm font-bold text-white break-words">{item.value}</div>
+                                                      <div className="text-[10px] uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold font-bold">{item.label}</div>
+                                                      <div className="mt-2 text-sm font-bold text-slate-900 dark:text-white break-words">{item.value}</div>
                                                   </div>
                                               ))}
                                           </div>
                                       </div>
 
                                       {selectedQueueJobDetail.runtimeConfig && (
-                                          <div className="bg-black/20 border border-white/10 rounded-2xl p-4">
-                                              <div className="text-sm font-bold text-white mb-4">Cấu hình chạy</div>
+                                          <div className="neu-inset-sm border border-white/10 rounded-2xl p-4">
+                                              <div className="text-sm font-bold text-slate-900 dark:text-white mb-4">Cấu hình chạy</div>
                                               <div className="grid grid-cols-2 gap-3">
                                                   {[
                                                       { label: 'Chế độ tạo', value: selectedQueueJobDetail.runtimeConfig.generationMode || '-' },
@@ -5176,8 +5325,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                       { label: 'Số nhân vật', value: selectedQueueJobDetail.runtimeConfig.characterCount != null ? String(selectedQueueJobDetail.runtimeConfig.characterCount) : '-' },
                                                   ].map((item) => (
                                                       <div key={item.label} className="rounded-xl border border-white/10 bg-[#11111a] px-3 py-3">
-                                                          <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">{item.label}</div>
-                                                          <div className="mt-2 text-sm font-bold text-white break-words">{item.value}</div>
+                                                          <div className="text-[10px] uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold font-bold">{item.label}</div>
+                                                          <div className="mt-2 text-sm font-bold text-slate-900 dark:text-white break-words">{item.value}</div>
                                                       </div>
                                                   ))}
                                               </div>
@@ -5185,9 +5334,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       )}
 
                                       {(selectedQueueJobDetail.job.error || selectedQueueJobDetail.job.errorRaw) && (
-                                          <div className="bg-black/20 border border-white/10 rounded-2xl p-4 space-y-3">
+                                          <div className="neu-inset-sm border border-white/10 rounded-2xl p-4 space-y-3">
                                               <div className="flex items-center gap-3">
-                                                  <div className="text-sm font-bold text-white">Phân tích lỗi</div>
+                                                  <div className="text-sm font-bold text-slate-900 dark:text-white">Phân tích lỗi</div>
                                                   {selectedQueueJobDetail.job.errorCategory && (
                                                       <div className={`inline-flex px-2 py-1 rounded border text-[10px] font-bold uppercase ${getQueueErrorCategoryClass(selectedQueueJobDetail.job.errorCategory)}`}>
                                                           {getQueueErrorCategoryLabel(selectedQueueJobDetail.job.errorCategory)}
@@ -5196,14 +5345,14 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               </div>
                                               {selectedQueueJobDetail.job.error && (
                                                   <div>
-                                                      <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Tóm tắt dễ hiểu</div>
+                                                      <div className="text-[10px] uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold font-bold">Tóm tắt dễ hiểu</div>
                                                       <div className="text-sm text-red-300 mt-2 leading-relaxed">{selectedQueueJobDetail.job.error}</div>
                                                   </div>
                                               )}
                                               {selectedQueueJobDetail.job.errorRaw && selectedQueueJobDetail.job.errorRaw !== selectedQueueJobDetail.job.error && (
                                                   <div>
-                                                      <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Lỗi gốc từ hệ thống</div>
-                                                      <div className="text-sm text-slate-400 mt-2 leading-relaxed break-all">{selectedQueueJobDetail.job.errorRaw}</div>
+                                                      <div className="text-[10px] uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold font-bold">Lỗi gốc từ hệ thống</div>
+                                                      <div className="text-sm text-slate-700 dark:text-slate-300 font-semibold mt-2 leading-relaxed break-all">{selectedQueueJobDetail.job.errorRaw}</div>
                                                   </div>
                                               )}
                                           </div>
@@ -5212,17 +5361,17 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                               </div>
 
                               <div className="grid grid-cols-1 xl:grid-cols-[1.1fr_0.9fr] gap-6">
-                                  <div className="bg-black/20 border border-white/10 rounded-2xl p-4">
-                                      <div className="text-sm font-bold text-white mb-3">Log tiến trình</div>
+                                  <div className="neu-inset-sm border border-white/10 rounded-2xl p-4">
+                                      <div className="text-sm font-bold text-slate-900 dark:text-white mb-3">Log tiến trình</div>
                                       <div className="space-y-3 max-h-[420px] overflow-y-auto custom-scrollbar pr-2">
                                           {(selectedQueueJobDetail.job.queueLogs || []).length === 0 ? (
-                                              <div className="text-sm text-slate-500">Chưa có log cho job này.</div>
+                                              <div className="text-sm text-slate-700 dark:text-slate-400 font-semibold">Chưa có log cho job này.</div>
                                           ) : (
                                               (selectedQueueJobDetail.job.queueLogs || []).map((log, index) => (
                                                   <div key={`${log.at}-${index}`} className="border border-white/10 rounded-xl p-3 bg-[#0f0f16]">
                                                       <div className="flex items-center justify-between gap-3">
-                                                          <div className="text-xs font-bold text-white uppercase">{getQueueStageLabel(log.stage)}</div>
-                                                          <div className="text-[11px] text-slate-500">{new Date(log.at).toLocaleString()}</div>
+                                                          <div className="text-xs font-bold text-slate-900 dark:text-white uppercase">{getQueueStageLabel(log.stage)}</div>
+                                                          <div className="text-[11px] text-slate-700 dark:text-slate-400 font-semibold">{new Date(log.at).toLocaleString()}</div>
                                                       </div>
                                                       <div className="text-sm text-slate-300 mt-2">{log.message}</div>
                                                   </div>
@@ -5231,10 +5380,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       </div>
                                   </div>
 
-                                  <details className="bg-black/20 border border-white/10 rounded-2xl p-4">
-                                      <summary className="cursor-pointer list-none flex items-center justify-between gap-3 text-sm font-bold text-white">
+                                  <details className="neu-inset-sm border border-white/10 rounded-2xl p-4">
+                                      <summary className="cursor-pointer list-none flex items-center justify-between gap-3 text-sm font-bold text-slate-900 dark:text-white">
                                           <span>Payload Preview</span>
-                                          <span className="text-xs text-slate-500">Mở khi cần debug sâu</span>
+                                          <span className="text-xs text-slate-700 dark:text-slate-400 font-semibold">Mở khi cần debug sâu</span>
                                       </summary>
                                       <pre className="mt-4 text-[11px] text-slate-300 bg-[#0f0f16] border border-white/10 rounded-xl p-4 overflow-auto max-h-[420px] whitespace-pre-wrap break-all">
 {JSON.stringify(selectedQueueJobDetail.queuePayloadPreview || {}, null, 2)}
@@ -5257,16 +5406,16 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       <div className="flex items-center gap-4 min-w-0">
                           <img src={viewingUser.avatar || 'https://picsum.photos/100/100'} className="w-14 h-14 md:w-16 md:h-16 rounded-full border-2 border-audi-pink object-cover shrink-0" />
                           <div>
-                              <h3 className="text-xl md:text-2xl font-bold text-white break-words">{viewingUser.username}</h3>
-                              <p className="text-slate-400 text-sm break-all">{viewingUser.email}</p>
+                              <h3 className="text-xl md:text-2xl font-bold text-slate-900 dark:text-white break-words">{viewingUser.username}</h3>
+                              <p className="text-slate-700 dark:text-slate-300 font-semibold text-sm break-all">{viewingUser.email}</p>
                               <div className="flex flex-wrap gap-2 mt-1">
                                   <span className="text-audi-yellow font-bold text-xs bg-audi-yellow/10 px-2 py-0.5 rounded">{viewingUser.vcoin_balance} Vcoin</span>
                                   <span className="text-blue-400 font-bold text-xs bg-blue-400/10 px-2 py-0.5 rounded uppercase">{viewingUser.role}</span>
-                                  <span className="text-slate-300 font-bold text-xs bg-white/5 px-2 py-0.5 rounded">{filteredUserHistory.length} giao dịch</span>
+                                  <span className="text-slate-300 font-bold text-xs neu-inset-sm px-2 py-0.5 rounded">{filteredUserHistory.length} giao dịch</span>
                               </div>
                           </div>
                       </div>
-                      <button onClick={() => setViewingUser(null)} className="self-end md:self-auto p-2 bg-white/5 hover:bg-white/10 rounded-xl text-slate-400 hover:text-white transition-colors">
+                      <button onClick={() => setViewingUser(null)} className="self-end md:self-auto p-2 neu-inset-sm hover:bg-white/10 rounded-xl text-slate-700 dark:text-slate-300 font-semibold hover:text-white transition-colors">
                           <Icons.X className="w-6 h-6" />
                       </button>
                   </div>
@@ -5280,11 +5429,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           <div>
                               <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
                                   <div>
-                                      <h4 className="text-lg font-bold text-white flex items-center gap-2">
+                                      <h4 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                                           <Icons.History className="w-5 h-5 text-audi-cyan" />
                                           Lịch sử VCoin chi tiết
                                       </h4>
-                                      <div className="text-xs text-slate-400 mt-1">Hiển thị theo từng nhóm, có mã đối soát và số dư sau giao dịch.</div>
+                                      <div className="text-xs text-slate-700 dark:text-slate-300 font-semibold mt-1">Hiển thị theo từng nhóm, có mã đối soát và số dư sau giao dịch.</div>
                                   </div>
                                   <div className="grid grid-cols-2 sm:flex gap-2">
                                       {[
@@ -5299,7 +5448,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               className={`px-3 py-2 rounded-lg border text-xs font-bold transition-colors ${
                                                   userLedgerDateScope === option.id
                                                       ? 'bg-audi-pink text-white border-audi-pink'
-                                                      : 'bg-white/5 text-slate-300 border-white/10 hover:bg-white/10'
+                                                      : 'neu-inset-sm text-slate-300 border-white/10 hover:bg-white/10'
                                               }`}
                                           >
                                               {option.label}
@@ -5309,7 +5458,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                               </div>
 
                               {filteredUserHistory.length === 0 ? (
-                                  <div className="text-center py-10 text-slate-500 italic bg-black/30 rounded-xl border border-white/5">
+                                  <div className="text-center py-10 text-slate-700 dark:text-slate-400 font-semibold italic neu-inset-sm rounded-xl border border-white/5">
                                       Không có giao dịch trong bộ lọc này.
                                   </div>
                               ) : (
@@ -5323,16 +5472,16 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               <div key={section.id} className="rounded-xl border border-white/10 bg-black/25 overflow-hidden">
                                                   <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 px-4 py-4 border-b border-white/10 bg-white/[0.03]">
                                                       <div className="flex items-start gap-3">
-                                                          <div className="w-9 h-9 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
+                                                          <div className="w-9 h-9 rounded-lg neu-inset-sm border border-white/10 flex items-center justify-center shrink-0">
                                                               <SectionIcon className="w-5 h-5 text-audi-cyan" />
                                                           </div>
                                                           <div>
-                                                              <div className="font-bold text-white">{section.title}</div>
-                                                              <div className="text-xs text-slate-400 mt-0.5">{section.description}</div>
+                                                              <div className="font-bold text-slate-900 dark:text-white">{section.title}</div>
+                                                              <div className="text-xs text-slate-700 dark:text-slate-300 font-semibold mt-0.5">{section.description}</div>
                                                           </div>
                                                       </div>
                                                       <div className="flex flex-wrap gap-2 text-xs">
-                                                          <span className="px-2 py-1 rounded bg-white/5 text-slate-300 border border-white/10">{section.items.length} giao dịch</span>
+                                                          <span className="px-2 py-1 rounded neu-inset-sm text-slate-300 border border-white/10">{section.items.length} giao dịch</span>
                                                           <span className={`px-2 py-1 rounded border font-bold ${sectionTotal >= 0 ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20' : 'bg-pink-500/10 text-audi-pink border-pink-500/20'}`}>
                                                               {sectionTotal > 0 ? '+' : ''}{formatVcoinValue(sectionTotal)}
                                                           </span>
@@ -5340,9 +5489,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                   </div>
 
                                                   {section.items.length === 0 ? (
-                                                      <div className="px-4 py-6 text-sm text-slate-500 italic">Không có dữ liệu.</div>
+                                                      <div className="px-4 py-6 text-sm text-slate-700 dark:text-slate-400 font-semibold italic">Không có dữ liệu.</div>
                                                   ) : (
-                                                      <div className="divide-y divide-white/5">
+                                                      <div className="divide-y divide-slate-200 dark:divide-slate-800">
                                                           {visibleItems.map((item) => {
                                                               const generatedAsset = getHistoryGeneratedAsset(item);
                                                               const assetKind = generatedAsset ? getAssetKind(generatedAsset) : null;
@@ -5350,7 +5499,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                               <div key={item.id} className="p-4 hover:bg-white/[0.03] transition-colors">
                                                                   <div className="grid grid-cols-1 xl:grid-cols-[160px_1fr_120px_120px] gap-3 xl:items-center">
                                                                       <div>
-                                                                          <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Thời gian</div>
+                                                                          <div className="text-[10px] uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold font-bold">Thời gian</div>
                                                                           <div className="mt-1 text-xs font-mono text-slate-300">{new Date(item.createdAt).toLocaleString('vi-VN')}</div>
                                                                       </div>
                                                                       <div className="min-w-0">
@@ -5360,7 +5509,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                                                       href={generatedAsset.url}
                                                                                       target="_blank"
                                                                                       rel="noreferrer"
-                                                                                      className="block w-full sm:w-24 h-32 sm:h-24 rounded-lg overflow-hidden border border-white/10 bg-black/40 shrink-0"
+                                                                                      className="block w-full sm:w-24 h-32 sm:h-24 rounded-lg overflow-hidden border border-white/10 neu-inset-sm shrink-0"
                                                                                       title="Mở tài sản đã tạo từ job này"
                                                                                   >
                                                                                       {assetKind === 'video' ? (
@@ -5372,7 +5521,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                                               )}
                                                                               <div className="min-w-0 flex-1">
                                                                                   <div className="flex flex-wrap items-center gap-2">
-                                                                                      <div className="font-bold text-white break-words">{item.description}</div>
+                                                                                      <div className="font-bold text-slate-900 dark:text-white break-words">{item.description}</div>
                                                                                       <span className={`inline-flex px-2 py-0.5 rounded border text-[10px] font-bold ${getHistoryStatusClass(item)}`}>
                                                                                           {getHistoryStatusLabel(item)}
                                                                                       </span>
@@ -5398,7 +5547,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                                                           </span>
                                                                                       )}
                                                                                   </div>
-                                                                                  <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-1 text-[11px] text-slate-500">
+                                                                                  <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-1 text-[11px] text-slate-700 dark:text-slate-400 font-semibold">
                                                                                       <div className="break-all">ID: <span className="font-mono text-slate-300">{item.referenceId || item.id}</span></div>
                                                                                       <div className="break-all">Mã: <span className="font-mono text-slate-300">{item.code || item.referenceType || '-'}</span></div>
                                                                                       {getTopupGiftcodeLabel(item.topupGiftcode) && (
@@ -5414,13 +5563,13 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                                           </div>
                                                                       </div>
                                                                       <div>
-                                                                          <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold xl:text-right">Biến động</div>
+                                                                          <div className="text-[10px] uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold font-bold xl:text-right">Biến động</div>
                                                                           <div className={`mt-1 text-sm font-black xl:text-right ${item.vcoinChange > 0 ? 'text-emerald-300' : item.vcoinChange < 0 ? 'text-audi-pink' : 'text-slate-300'}`}>
                                                                               {item.vcoinChange > 0 ? '+' : ''}{formatVcoinValue(item.vcoinChange)}
                                                                           </div>
                                                                       </div>
                                                                       <div>
-                                                                          <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold xl:text-right">Số dư sau</div>
+                                                                          <div className="text-[10px] uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold font-bold xl:text-right">Số dư sau</div>
                                                                           <div className="mt-1 text-sm font-black text-audi-yellow xl:text-right">{formatVcoinValue(item.balanceAfter)}</div>
                                                                       </div>
                                                                   </div>
@@ -5428,10 +5577,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                               );
                                                           })}
                                                           {section.items.length > sectionLimit && (
-                                                              <div className="px-4 py-3 text-center bg-black/20">
+                                                              <div className="px-4 py-3 text-center neu-inset-sm">
                                                                   <button
                                                                       onClick={() => showMoreUserLedgerSection(section.id)}
-                                                                      className="text-xs font-bold text-audi-cyan hover:text-white transition-colors py-2 px-4 rounded-lg hover:bg-white/5 border border-white/10"
+                                                                      className="text-xs font-bold text-audi-cyan hover:text-white transition-colors py-2 px-4 rounded-lg hover:neu-inset-sm border border-white/10"
                                                                   >
                                                                       Xem thêm 10 giao dịch ({section.items.length - sectionLimit} còn lại)
                                                                   </button>
@@ -5457,33 +5606,33 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           <AdminModalPortal>
           <div className="fixed inset-0 z-[2000] bg-black/70 backdrop-blur-sm flex justify-center items-center p-4 md:p-6 animate-fade-in overflow-y-auto">
               <div className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-white/20 shadow-2xl relative max-h-[90vh] overflow-y-auto custom-scrollbar">
-                  <h3 className="text-xl font-bold text-white mb-4">Sửa Người Dùng</h3>
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-4">Sửa Người Dùng</h3>
                   <div className="space-y-4 mb-6">
                       <div>
-                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Tên hiển thị</label>
-                          <input value={editingUser.username || ''} onChange={e => setEditingUser({...editingUser, username: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white focus:border-audi-pink outline-none" />
+                          <label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase mb-1 block">Tên hiển thị</label>
+                          <input value={editingUser.username || ''} onChange={e => setEditingUser({...editingUser, username: e.target.value})} className="w-full neu-inset-sm border border-white/10 rounded-xl p-3 text-white focus:border-audi-pink outline-none" />
                       </div>
                       <div>
-                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Số dư Vcoin</label>
-                          <input type="number" value={editingUser.vcoin_balance || 0} onChange={e => setEditingUser({...editingUser, vcoin_balance: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-yellow font-bold focus:border-audi-pink outline-none" />
+                          <label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase mb-1 block">Số dư Vcoin</label>
+                          <input type="number" value={editingUser.vcoin_balance || 0} onChange={e => setEditingUser({...editingUser, vcoin_balance: Number(e.target.value)})} className="w-full neu-inset-sm border border-white/10 rounded-xl p-3 text-audi-yellow font-bold focus:border-audi-pink outline-none" />
                       </div>
                       <div>
-                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Nội dung giao dịch sửa VCoin</label>
+                          <label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase mb-1 block">Nội dung giao dịch sửa VCoin</label>
                           <textarea
                               value={adminUserAdjustmentReason}
                               onChange={(e) => setAdminUserAdjustmentReason(e.target.value)}
                               rows={3}
                               placeholder="VD: Bù lỗi nạp tiền, cộng thưởng hỗ trợ khách hàng..."
-                              className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white text-sm focus:border-audi-pink outline-none resize-none"
+                              className="w-full neu-inset-sm border border-white/10 rounded-xl p-3 text-slate-900 dark:text-white text-sm focus:border-audi-pink outline-none resize-none"
                           />
-                          <div className="mt-1 text-[11px] text-slate-500">Bắt buộc khi thay đổi số dư VCoin. Nội dung này sẽ hiển thị trong lịch sử giao dịch.</div>
+                          <div className="mt-1 text-[11px] text-slate-700 dark:text-slate-400 font-semibold">Bắt buộc khi thay đổi số dư VCoin. Nội dung này sẽ hiển thị trong lịch sử giao dịch.</div>
                       </div>
                       <div>
-                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Ảnh đại diện URL</label>
-                          <input value={editingUser.avatar || ''} onChange={e => setEditingUser({...editingUser, avatar: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-slate-300 text-xs font-mono focus:border-audi-pink outline-none" />
+                          <label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase mb-1 block">Ảnh đại diện URL</label>
+                          <input value={editingUser.avatar || ''} onChange={e => setEditingUser({...editingUser, avatar: e.target.value})} className="w-full neu-inset-sm border border-white/10 rounded-xl p-3 text-slate-300 text-xs font-mono focus:border-audi-pink outline-none" />
                       </div>
                   </div>
-                  <div className="flex gap-3"><button onClick={() => { setEditingUser(null); setEditingUserOriginalBalance(null); setAdminUserAdjustmentReason(''); }} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold">Hủy</button><button onClick={handleSaveUser} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold">Lưu</button></div>
+                  <div className="flex gap-3"><button onClick={() => { setEditingUser(null); setEditingUserOriginalBalance(null); setAdminUserAdjustmentReason(''); }} className="flex-1 py-3 rounded-xl neu-inset-sm hover:bg-white/10 text-slate-300 font-bold">Hủy</button><button onClick={handleSaveUser} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-slate-900 dark:text-white font-bold">Lưu</button></div>
               </div>
           </div>
           </AdminModalPortal>
@@ -5492,60 +5641,60 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       {editingPackage && (
           <div className="fixed inset-0 z-[2000] flex justify-center items-start p-4 pt-24 overflow-y-auto">
               <div className="bg-[#12121a] w-full max-w-lg p-6 rounded-2xl border border-white/20 shadow-2xl flex flex-col max-h-[90vh] overflow-y-auto custom-scrollbar">
-                  <h3 className="text-xl font-bold text-white mb-6">{editingPackage.id.startsWith('temp_') ? 'Thêm Gói Mới' : 'Sửa Gói Nạp'}</h3>
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-6">{editingPackage.id.startsWith('temp_') ? 'Thêm Gói Mới' : 'Sửa Gói Nạp'}</h3>
                   <div className="space-y-4 mb-6">
-                      <div className="grid grid-cols-2 gap-4"><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Tên gói</label><input value={editingPackage.name} onChange={e => setEditingPackage({...editingPackage, name: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" /></div><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Tag (VD: Mới)</label><input value={editingPackage.bonusText} onChange={e => setEditingPackage({...editingPackage, bonusText: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" /></div></div>
-                      <div className="grid grid-cols-2 gap-4"><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Giá (VND)</label><input type="number" value={editingPackage.price} onChange={e => setEditingPackage({...editingPackage, price: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-green-400 font-bold" /></div><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Vcoin nhận</label><input type="number" value={editingPackage.vcoin} onChange={e => setEditingPackage({...editingPackage, vcoin: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-yellow font-bold" /></div></div>
-                      <div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">% Bonus thêm (Mặc định)</label><div className="relative"><input type="number" value={editingPackage.bonusPercent} onChange={e => setEditingPackage({...editingPackage, bonusPercent: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-pink font-bold pl-3" /><span className="absolute right-3 top-3.5 text-xs text-slate-500 font-bold">%</span></div></div>
-                      <div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Cú pháp chuyển khoản</label><input value={editingPackage.transferContent} onChange={e => setEditingPackage({...editingPackage, transferContent: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono" /></div>
-                      <div className="flex gap-4 pt-2"><label className="flex items-center gap-2 cursor-pointer bg-white/5 p-3 rounded-xl border border-white/10 flex-1 hover:bg-white/10 transition-colors"><input type="checkbox" checked={editingPackage.isPopular} onChange={e => setEditingPackage({...editingPackage, isPopular: e.target.checked})} className="accent-audi-pink w-4 h-4" /><span className="text-sm font-bold text-white">Gói HOT (Nổi bật)</span></label><label className="flex items-center gap-2 cursor-pointer bg-white/5 p-3 rounded-xl border border-white/10 flex-1 hover:bg-white/10 transition-colors"><input type="checkbox" checked={editingPackage.isActive} onChange={e => setEditingPackage({...editingPackage, isActive: e.target.checked})} className="accent-green-500 w-4 h-4" /><span className="text-sm font-bold text-white">Đang bán (Active)</span></label></div>
+                      <div className="grid grid-cols-2 gap-4"><div><label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase mb-1 block">Tên gói</label><input value={editingPackage.name} onChange={e => setEditingPackage({...editingPackage, name: e.target.value})} className="w-full neu-inset-sm border border-white/10 rounded-xl p-3 text-white" /></div><div><label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase mb-1 block">Tag (VD: Mới)</label><input value={editingPackage.bonusText} onChange={e => setEditingPackage({...editingPackage, bonusText: e.target.value})} className="w-full neu-inset-sm border border-white/10 rounded-xl p-3 text-white" /></div></div>
+                      <div className="grid grid-cols-2 gap-4"><div><label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase mb-1 block">Giá (VND)</label><input type="number" value={editingPackage.price} onChange={e => setEditingPackage({...editingPackage, price: Number(e.target.value)})} className="w-full neu-inset-sm border border-white/10 rounded-xl p-3 text-green-400 font-bold" /></div><div><label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase mb-1 block">Vcoin nhận</label><input type="number" value={editingPackage.vcoin} onChange={e => setEditingPackage({...editingPackage, vcoin: Number(e.target.value)})} className="w-full neu-inset-sm border border-white/10 rounded-xl p-3 text-audi-yellow font-bold" /></div></div>
+                      <div><label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase mb-1 block">% Bonus thêm (Mặc định)</label><div className="relative"><input type="number" value={editingPackage.bonusPercent} onChange={e => setEditingPackage({...editingPackage, bonusPercent: Number(e.target.value)})} className="w-full neu-inset-sm border border-white/10 rounded-xl p-3 text-audi-pink font-bold pl-3" /><span className="absolute right-3 top-3.5 text-xs text-slate-700 dark:text-slate-400 font-semibold font-bold">%</span></div></div>
+                      <div><label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase mb-1 block">Cú pháp chuyển khoản</label><input value={editingPackage.transferContent} onChange={e => setEditingPackage({...editingPackage, transferContent: e.target.value})} className="w-full neu-inset-sm border border-white/10 rounded-xl p-3 text-white font-mono" /></div>
+                      <div className="flex gap-4 pt-2"><label className="flex items-center gap-2 cursor-pointer neu-inset-sm p-3 rounded-xl border border-white/10 flex-1 hover:bg-white/10 transition-colors"><input type="checkbox" checked={editingPackage.isPopular} onChange={e => setEditingPackage({...editingPackage, isPopular: e.target.checked})} className="accent-audi-pink w-4 h-4" /><span className="text-sm font-bold text-slate-900 dark:text-white">Gói HOT (Nổi bật)</span></label><label className="flex items-center gap-2 cursor-pointer neu-inset-sm p-3 rounded-xl border border-white/10 flex-1 hover:bg-white/10 transition-colors"><input type="checkbox" checked={editingPackage.isActive} onChange={e => setEditingPackage({...editingPackage, isActive: e.target.checked})} className="accent-green-500 w-4 h-4" /><span className="text-sm font-bold text-slate-900 dark:text-white">Đang bán (Active)</span></label></div>
                   </div>
-                  <div className="flex gap-3"><button onClick={() => setEditingPackage(null)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold">Hủy</button><button onClick={handleSavePackage} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold">Lưu Thay Đổi</button></div>
+                  <div className="flex gap-3"><button onClick={() => setEditingPackage(null)} className="flex-1 py-3 rounded-xl neu-inset-sm hover:bg-white/10 text-slate-300 font-bold">Hủy</button><button onClick={handleSavePackage} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-slate-900 dark:text-white font-bold">Lưu Thay Đổi</button></div>
               </div>
           </div>
       )}
       {editingPromotion && (
           <div className="fixed inset-0 z-[2000] flex justify-center items-start p-4 pt-24 overflow-y-auto">
               <div className="bg-[#12121a] w-full max-w-lg p-6 rounded-2xl border border-white/20 shadow-2xl flex flex-col max-h-[90vh]">
-                  <h3 className="text-xl font-bold text-white mb-6 sticky top-0 bg-[#12121a] z-10 py-2 border-b border-white/10 shrink-0">
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-6 sticky top-0 bg-[#12121a] z-10 py-2 border-b border-white/10 shrink-0">
                       {editingPromotion.id.startsWith('temp_') ? 'Tạo Chiến Dịch Mới' : 'Sửa Chiến Dịch'}
                   </h3>
                   <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar">
                       <div>
-                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Tên chiến dịch (Nội bộ)</label>
-                          <input value={editingPromotion.name} onChange={e => setEditingPromotion({...editingPromotion, name: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-bold" placeholder="Ví dụ: Sale 8/3"/>
+                          <label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase mb-1 block">Tên chiến dịch (Nội bộ)</label>
+                          <input value={editingPromotion.name} onChange={e => setEditingPromotion({...editingPromotion, name: e.target.value})} className="w-full neu-inset-sm border border-white/10 rounded-xl p-3 text-slate-900 dark:text-white font-bold" placeholder="Ví dụ: Sale 8/3"/>
                       </div>
                       <div>
-                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Thông báo chạy (Marquee)</label>
-                          <input value={editingPromotion.marqueeText} onChange={e => setEditingPromotion({...editingPromotion, marqueeText: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" placeholder="Khuyến mãi đặc biệt..."/>
+                          <label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase mb-1 block">Thông báo chạy (Marquee)</label>
+                          <input value={editingPromotion.marqueeText} onChange={e => setEditingPromotion({...editingPromotion, marqueeText: e.target.value})} className="w-full neu-inset-sm border border-white/10 rounded-xl p-3 text-white" placeholder="Khuyến mãi đặc biệt..."/>
                       </div>
                       <div>
-                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">% Bonus Vcoin</label>
+                          <label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase mb-1 block">% Bonus Vcoin</label>
                           <div className="relative">
-                              <input type="number" value={editingPromotion.bonusPercent} onChange={e => setEditingPromotion({...editingPromotion, bonusPercent: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-pink font-bold pl-3" />
-                              <span className="absolute right-3 top-3.5 text-xs text-slate-500 font-bold">%</span>
+                              <input type="number" value={editingPromotion.bonusPercent} onChange={e => setEditingPromotion({...editingPromotion, bonusPercent: Number(e.target.value)})} className="w-full neu-inset-sm border border-white/10 rounded-xl p-3 text-audi-pink font-bold pl-3" />
+                              <span className="absolute right-3 top-3.5 text-xs text-slate-700 dark:text-slate-400 font-semibold font-bold">%</span>
                           </div>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                           <div>
-                              <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Bắt đầu (giờ Việt Nam)</label>
-                              <input type="datetime-local" value={formatVietnamDateTimeLocal(editingPromotion.startTime)} onChange={e => setEditingPromotion({...editingPromotion, startTime: parseVietnamDateTimeLocalToIso(e.target.value, editingPromotion.startTime)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono text-xs" />
+                              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase mb-1 block">Bắt đầu (giờ Việt Nam)</label>
+                              <input type="datetime-local" value={formatVietnamDateTimeLocal(editingPromotion.startTime)} onChange={e => setEditingPromotion({...editingPromotion, startTime: parseVietnamDateTimeLocalToIso(e.target.value, editingPromotion.startTime)})} className="w-full neu-inset-sm border border-white/10 rounded-xl p-3 text-white font-mono text-xs" />
                           </div>
                           <div>
-                              <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Kết thúc (giờ Việt Nam)</label>
-                              <input type="datetime-local" value={formatVietnamDateTimeLocal(editingPromotion.endTime)} onChange={e => setEditingPromotion({...editingPromotion, endTime: parseVietnamDateTimeLocalToIso(e.target.value, editingPromotion.endTime)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono text-xs" />
+                              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase mb-1 block">Kết thúc (giờ Việt Nam)</label>
+                              <input type="datetime-local" value={formatVietnamDateTimeLocal(editingPromotion.endTime)} onChange={e => setEditingPromotion({...editingPromotion, endTime: parseVietnamDateTimeLocalToIso(e.target.value, editingPromotion.endTime)})} className="w-full neu-inset-sm border border-white/10 rounded-xl p-3 text-white font-mono text-xs" />
                           </div>
                       </div>
                       <p className="text-[10px] text-audi-cyan font-bold -mt-2">Múi giờ áp dụng: Việt Nam (UTC+7). Lưu xuống hệ thống bằng ISO để chạy khuyến mãi chính xác.</p>
-                      <div className="bg-white/5 rounded-xl p-3 flex items-center gap-3 border border-white/10 cursor-pointer hover:bg-white/10 transition-colors" onClick={() => setEditingPromotion({...editingPromotion, isActive: !editingPromotion.isActive})}>
+                      <div className="neu-inset-sm rounded-xl p-3 flex items-center gap-3 border border-white/10 cursor-pointer hover:bg-white/10 transition-colors" onClick={() => setEditingPromotion({...editingPromotion, isActive: !editingPromotion.isActive})}>
                           <div className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${editingPromotion.isActive ? 'bg-audi-lime border-audi-lime' : 'border-slate-500'}`}>{editingPromotion.isActive && <Icons.Check className="w-3 h-3 text-black" />}</div>
-                          <label className="text-sm font-bold text-white cursor-pointer select-none">Kích hoạt (Manual Switch)</label>
+                          <label className="text-sm font-bold text-slate-900 dark:text-white cursor-pointer select-none">Kích hoạt (Manual Switch)</label>
                       </div>
-                      <p className="text-[10px] text-slate-500 italic">Chiến dịch chỉ chạy khi BẬT và trong khoảng thời gian quy định.</p>
+                      <p className="text-[10px] text-slate-700 dark:text-slate-400 font-semibold italic">Chiến dịch chỉ chạy khi BẬT và trong khoảng thời gian quy định.</p>
                   </div>
                   <div className="flex gap-3 pt-6 mt-2 border-t border-white/10 shrink-0">
-                      <button onClick={() => setEditingPromotion(null)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold transition-colors">Hủy</button>
-                      <button onClick={handleSavePromotion} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold shadow-lg transition-all">Lưu Chiến Dịch</button>
+                      <button onClick={() => setEditingPromotion(null)} className="flex-1 py-3 rounded-xl neu-inset-sm hover:bg-white/10 text-slate-300 font-bold transition-colors">Hủy</button>
+                      <button onClick={handleSavePromotion} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-slate-900 dark:text-white font-bold shadow-lg transition-all">Lưu Chiến Dịch</button>
                   </div>
               </div>
           </div>
@@ -5553,33 +5702,33 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       {editingGiftcode && (
           <div className="fixed inset-0 z-[2000] flex justify-center items-start p-4 pt-24 overflow-y-auto">
               <div className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-white/20 shadow-2xl">
-                  <h3 className="text-xl font-bold text-white mb-6">{editingGiftcode.id.startsWith('temp_') ? 'Tạo Giftcode' : 'Sửa Giftcode'}</h3>
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-6">{editingGiftcode.id.startsWith('temp_') ? 'Tạo Giftcode' : 'Sửa Giftcode'}</h3>
                   <div className="space-y-4 mb-6">
                       <div>
-                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Loại code</label>
-                          <select value={editingGiftcode.codeType || 'reward'} onChange={e => setEditingGiftcode({...editingGiftcode, codeType: e.target.value as any})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-bold">
+                          <label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase mb-1 block">Loại code</label>
+                          <select value={editingGiftcode.codeType || 'reward'} onChange={e => setEditingGiftcode({...editingGiftcode, codeType: e.target.value as any})} className="w-full neu-inset-sm border border-white/10 rounded-xl p-3 text-slate-900 dark:text-white font-bold">
                               <option value="reward">Thưởng Vcoin</option>
                               <option value="topup_discount">Giảm giá nạp tiền</option>
                           </select>
                       </div>
                       <div>
-                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Mã Code (Tự động in hoa)</label>
-                          <input value={editingGiftcode.code} onChange={e => setEditingGiftcode({...editingGiftcode, code: e.target.value.toUpperCase()})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono font-bold" placeholder={editingGiftcode.codeType === 'topup_discount' ? 'Vd: AUAI-50-8K2QD' : 'Vd: CHAOMUNG'} />
+                          <label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase mb-1 block">Mã Code (Tự động in hoa)</label>
+                          <input value={editingGiftcode.code} onChange={e => setEditingGiftcode({...editingGiftcode, code: e.target.value.toUpperCase()})} className="w-full neu-inset-sm border border-white/10 rounded-xl p-3 text-white font-mono font-bold" placeholder={editingGiftcode.codeType === 'topup_discount' ? 'Vd: AUAI-50-8K2QD' : 'Vd: CHAOMUNG'} />
                       </div>
                       <div>
-                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Mã chiến dịch</label>
-                          <input value={editingGiftcode.campaignKey || ''} onChange={e => setEditingGiftcode({...editingGiftcode, campaignKey: e.target.value.toUpperCase()})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono font-bold" placeholder="Vd: TET2026" />
+                          <label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase mb-1 block">Mã chiến dịch</label>
+                          <input value={editingGiftcode.campaignKey || ''} onChange={e => setEditingGiftcode({...editingGiftcode, campaignKey: e.target.value.toUpperCase()})} className="w-full neu-inset-sm border border-white/10 rounded-xl p-3 text-white font-mono font-bold" placeholder="Vd: TET2026" />
                       </div>
-                      <p className="text-[11px] text-slate-500 -mt-2">Code thưởng dùng cho mục Giftcode. Code giảm giá nạp tiền dùng ở màn nạp và được reserve theo giao dịch SePay.</p>
+                      <p className="text-[11px] text-slate-700 dark:text-slate-400 font-semibold -mt-2">Code thưởng dùng cho mục Giftcode. Code giảm giá nạp tiền dùng ở màn nạp và được reserve theo giao dịch SePay.</p>
                       {editingGiftcode.codeType === 'topup_discount' ? (
                           <>
                               <div>
-                                  <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Giảm giá (%)</label>
-                                  <input type="number" min={1} max={100} value={editingGiftcode.discountPercent || 0} onChange={e => setEditingGiftcode({...editingGiftcode, discountPercent: Number(e.target.value), reward: 0})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-cyan font-bold" />
+                                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase mb-1 block">Giảm giá (%)</label>
+                                  <input type="number" min={1} max={100} value={editingGiftcode.discountPercent || 0} onChange={e => setEditingGiftcode({...editingGiftcode, discountPercent: Number(e.target.value), reward: 0})} className="w-full neu-inset-sm border border-white/10 rounded-xl p-3 text-audi-cyan font-bold" />
                               </div>
                               <div>
-                                  <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Áp dụng cho</label>
-                                  <select value={editingGiftcode.audience || 'all'} onChange={e => setEditingGiftcode({...editingGiftcode, audience: e.target.value as any})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-bold">
+                                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase mb-1 block">Áp dụng cho</label>
+                                  <select value={editingGiftcode.audience || 'all'} onChange={e => setEditingGiftcode({...editingGiftcode, audience: e.target.value as any})} className="w-full neu-inset-sm border border-white/10 rounded-xl p-3 text-slate-900 dark:text-white font-bold">
                                       <option value="all">Tất cả tài khoản</option>
                                       <option value="new_user_first_topup">Chỉ lần nạp đầu tiên</option>
                                       <option value="specific_user">Một tài khoản cụ thể</option>
@@ -5587,34 +5736,34 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                               </div>
                               {editingGiftcode.audience === 'specific_user' && (
                                   <div>
-                                      <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">User ID</label>
-                                      <input value={editingGiftcode.assignedUserId || ''} onChange={e => setEditingGiftcode({...editingGiftcode, assignedUserId: e.target.value.trim() || null})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono text-xs" placeholder="UUID tài khoản" />
+                                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase mb-1 block">User ID</label>
+                                      <input value={editingGiftcode.assignedUserId || ''} onChange={e => setEditingGiftcode({...editingGiftcode, assignedUserId: e.target.value.trim() || null})} className="w-full neu-inset-sm border border-white/10 rounded-xl p-3 text-white font-mono text-xs" placeholder="UUID tài khoản" />
                                   </div>
                               )}
-                              <label className="flex items-center gap-2 cursor-pointer bg-white/5 p-3 rounded-xl border border-white/10 hover:bg-white/10 transition-colors">
+                              <label className="flex items-center gap-2 cursor-pointer neu-inset-sm p-3 rounded-xl border border-white/10 hover:bg-white/10 transition-colors">
                                   <input type="checkbox" checked={Boolean(editingGiftcode.autoGeneratePerUser)} onChange={e => setEditingGiftcode({...editingGiftcode, autoGeneratePerUser: e.target.checked})} className="accent-audi-cyan w-4 h-4" />
-                                  <span className="text-sm font-bold text-white">Đánh dấu mẫu tạo code riêng từng user</span>
+                                  <span className="text-sm font-bold text-slate-900 dark:text-white">Đánh dấu mẫu tạo code riêng từng user</span>
                               </label>
                           </>
                       ) : (
                           <div>
-                              <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Phần thưởng (Vcoin)</label>
-                              <input type="number" value={editingGiftcode.reward} onChange={e => setEditingGiftcode({...editingGiftcode, reward: Number(e.target.value), discountPercent: 0})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-yellow font-bold" />
+                              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase mb-1 block">Phần thưởng (Vcoin)</label>
+                              <input type="number" value={editingGiftcode.reward} onChange={e => setEditingGiftcode({...editingGiftcode, reward: Number(e.target.value), discountPercent: 0})} className="w-full neu-inset-sm border border-white/10 rounded-xl p-3 text-audi-yellow font-bold" />
                           </div>
                       )}
                       <div className="grid grid-cols-2 gap-4">
                           <div>
-                              <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Giới hạn tổng</label>
-                              <input type="number" value={editingGiftcode.totalLimit} onChange={e => setEditingGiftcode({...editingGiftcode, totalLimit: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" />
+                              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase mb-1 block">Giới hạn tổng</label>
+                              <input type="number" value={editingGiftcode.totalLimit} onChange={e => setEditingGiftcode({...editingGiftcode, totalLimit: Number(e.target.value)})} className="w-full neu-inset-sm border border-white/10 rounded-xl p-3 text-white" />
                           </div>
                           <div>
-                              <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Max/Người</label>
-                              <input type="number" value={editingGiftcode.maxPerUser} onChange={e => setEditingGiftcode({...editingGiftcode, maxPerUser: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" />
+                              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase mb-1 block">Max/Người</label>
+                              <input type="number" value={editingGiftcode.maxPerUser} onChange={e => setEditingGiftcode({...editingGiftcode, maxPerUser: Number(e.target.value)})} className="w-full neu-inset-sm border border-white/10 rounded-xl p-3 text-white" />
                           </div>
                       </div>
-                      <label className="flex items-center gap-2 cursor-pointer bg-white/5 p-3 rounded-xl border border-white/10 hover:bg-white/10 transition-colors mt-2"><input type="checkbox" checked={editingGiftcode.isActive} onChange={e => setEditingGiftcode({...editingGiftcode, isActive: e.target.checked})} className="accent-green-500 w-4 h-4" /><span className="text-sm font-bold text-white">Kích hoạt ngay</span></label>
+                      <label className="flex items-center gap-2 cursor-pointer neu-inset-sm p-3 rounded-xl border border-white/10 hover:bg-white/10 transition-colors mt-2"><input type="checkbox" checked={editingGiftcode.isActive} onChange={e => setEditingGiftcode({...editingGiftcode, isActive: e.target.checked})} className="accent-green-500 w-4 h-4" /><span className="text-sm font-bold text-slate-900 dark:text-white">Kích hoạt ngay</span></label>
                   </div>
-                  <div className="flex gap-3"><button onClick={() => setEditingGiftcode(null)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold">Hủy</button><button onClick={handleSaveGiftcode} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold">Lưu Code</button></div>
+                  <div className="flex gap-3"><button onClick={() => setEditingGiftcode(null)} className="flex-1 py-3 rounded-xl neu-inset-sm hover:bg-white/10 text-slate-300 font-bold">Hủy</button><button onClick={handleSaveGiftcode} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-slate-900 dark:text-white font-bold">Lưu Code</button></div>
               </div>
           </div>
       )}
@@ -5622,24 +5771,24 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       {editingStyle && (
           <div className="fixed inset-0 z-[2000] flex justify-center items-start p-4 pt-24 overflow-y-auto">
               <div className="bg-[#12121a] w-full max-w-lg p-6 rounded-2xl border border-white/20 shadow-2xl flex flex-col max-h-[90vh]">
-                  <h3 className="text-xl font-bold text-white mb-6 sticky top-0 bg-[#12121a] z-10 py-2 border-b border-white/10 shrink-0">
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-6 sticky top-0 bg-[#12121a] z-10 py-2 border-b border-white/10 shrink-0">
                       {editingStyle.id.startsWith('temp_') ? 'Thêm Style Mới' : 'Sửa Style'}
                   </h3>
                   <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar">
                       <div>
-                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Tên Style</label>
+                          <label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase mb-1 block">Tên Style</label>
                           <input 
                               value={editingStyle.name} 
                               onChange={e => setEditingStyle({...editingStyle, name: e.target.value})} 
-                              className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-bold" 
+                              className="w-full neu-inset-sm border border-white/10 rounded-xl p-3 text-slate-900 dark:text-white font-bold" 
                               placeholder="Ví dụ: 3D Audition"
                           />
                       </div>
                       
                       <div>
-                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Ảnh Mẫu (Reference)</label>
+                          <label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase mb-1 block">Ảnh Mẫu (Reference)</label>
                           <div className="flex gap-4 items-start">
-                              <div className="w-24 h-32 bg-black/50 rounded-lg border border-white/10 overflow-hidden shrink-0">
+                              <div className="w-24 h-32 neu-inset-sm rounded-lg border border-white/10 overflow-hidden shrink-0">
                                   {editingStyle.image_url ? (
                                       <img src={editingStyle.image_url} className="w-full h-full object-cover" />
                                   ) : (
@@ -5660,19 +5809,19 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               reader.readAsDataURL(file);
                                           }
                                       }}
-                                      className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-audi-pink file:text-white hover:file:bg-pink-600 mb-2"
+                                      className="block w-full text-sm text-slate-700 dark:text-slate-400 font-semibold file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-audi-pink file:text-white hover:file:bg-pink-600 mb-2"
                                   />
-                                  <p className="text-[10px] text-slate-500">Upload ảnh chất lượng cao để làm mẫu chuẩn cho AI.</p>
+                                  <p className="text-[10px] text-slate-700 dark:text-slate-400 font-semibold">Upload ảnh chất lượng cao để làm mẫu chuẩn cho AI.</p>
                               </div>
                           </div>
                       </div>
 
                       <div>
-                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Trigger Prompt (Optional)</label>
+                          <label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase mb-1 block">Trigger Prompt (Optional)</label>
                           <textarea 
                               value={editingStyle.trigger_prompt || ''} 
                               onChange={e => setEditingStyle({...editingStyle, trigger_prompt: e.target.value})} 
-                              className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono text-xs h-24" 
+                              className="w-full neu-inset-sm border border-white/10 rounded-xl p-3 text-white font-mono text-xs h-24" 
                               placeholder="Các từ khóa bổ sung để kích hoạt style này..."
                           />
                           <button 
@@ -5697,29 +5846,29 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       </div>
 
                       <div className="flex gap-4 pt-2">
-                          <label className="flex items-center gap-2 cursor-pointer bg-white/5 p-3 rounded-xl border border-white/10 flex-1 hover:bg-white/10 transition-colors">
+                          <label className="flex items-center gap-2 cursor-pointer neu-inset-sm p-3 rounded-xl border border-white/10 flex-1 hover:bg-white/10 transition-colors">
                               <input 
                                   type="checkbox" 
                                   checked={editingStyle.is_default} 
                                   onChange={e => setEditingStyle({...editingStyle, is_default: e.target.checked})} 
                                   className="accent-audi-yellow w-4 h-4" 
                               />
-                              <span className="text-sm font-bold text-white">Đặt làm Mặc Định</span>
+                              <span className="text-sm font-bold text-slate-900 dark:text-white">Đặt làm Mặc Định</span>
                           </label>
-                          <label className="flex items-center gap-2 cursor-pointer bg-white/5 p-3 rounded-xl border border-white/10 flex-1 hover:bg-white/10 transition-colors">
+                          <label className="flex items-center gap-2 cursor-pointer neu-inset-sm p-3 rounded-xl border border-white/10 flex-1 hover:bg-white/10 transition-colors">
                               <input 
                                   type="checkbox" 
                                   checked={editingStyle.is_active} 
                                   onChange={e => setEditingStyle({...editingStyle, is_active: e.target.checked})} 
                                   className="accent-green-500 w-4 h-4" 
                               />
-                              <span className="text-sm font-bold text-white">Kích hoạt</span>
+                              <span className="text-sm font-bold text-slate-900 dark:text-white">Kích hoạt</span>
                           </label>
                       </div>
                   </div>
                   
                   <div className="flex gap-3 pt-6 mt-2 border-t border-white/10 shrink-0">
-                      <button onClick={() => setEditingStyle(null)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold transition-colors">Hủy</button>
+                      <button onClick={() => setEditingStyle(null)} className="flex-1 py-3 rounded-xl neu-inset-sm hover:bg-white/10 text-slate-300 font-bold transition-colors">Hủy</button>
                       <button 
                           onClick={async () => {
                               if (!editingStyle.name || !editingStyle.image_url) {
@@ -5735,7 +5884,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   showToast('Lỗi: ' + res.error, 'error');
                               }
                           }} 
-                          className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold shadow-lg transition-all"
+                          className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-slate-900 dark:text-white font-bold shadow-lg transition-all"
                       >
                           Lưu Style
                       </button>
@@ -5749,26 +5898,26 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
               <div className="bg-[#1a1a24] w-full max-w-2xl rounded-2xl border border-white/10 shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
                   <div className="p-6 border-b border-white/10 flex justify-between items-center shrink-0">
-                      <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                      <h3 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
                           <Icons.Users className="w-6 h-6 text-green-500" />
                           Người dùng đã nhập code <span className="text-audi-yellow font-mono">{viewingGiftcodeUsage.code}</span>
                       </h3>
-                      <button onClick={() => setViewingGiftcodeUsage(null)} className="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-colors"><Icons.X className="w-5 h-5" /></button>
+                      <button onClick={() => setViewingGiftcodeUsage(null)} className="p-2 hover:bg-white/10 rounded-lg text-slate-700 dark:text-slate-300 font-semibold hover:text-white transition-colors"><Icons.X className="w-5 h-5" /></button>
                   </div>
                   
                   <div className="p-0 overflow-y-auto custom-scrollbar flex-1">
                       {loadingGiftcodeUsers ? (
-                          <div className="flex flex-col items-center justify-center py-12 text-slate-500 gap-3">
+                          <div className="flex flex-col items-center justify-center py-12 text-slate-700 dark:text-slate-400 font-semibold gap-3">
                               <Icons.Loader className="w-8 h-8 animate-spin text-audi-cyan" />
                               <p>Đang tải danh sách...</p>
                           </div>
                       ) : giftcodeUsers.length === 0 ? (
-                          <div className="text-center py-12 text-slate-500 italic">
+                          <div className="text-center py-12 text-slate-700 dark:text-slate-400 font-semibold italic">
                               Chưa có ai sử dụng mã này.
                           </div>
                       ) : (
-                          <table className="w-full text-left text-sm text-slate-400">
-                              <thead className="bg-black/40 text-xs font-bold text-slate-500 uppercase sticky top-0 backdrop-blur-md z-10">
+                          <table className="w-full text-left text-sm text-slate-700 dark:text-slate-300 font-semibold">
+                              <thead className="neu-inset-sm text-xs font-bold text-slate-700 dark:text-slate-400 font-semibold uppercase sticky top-0 backdrop-blur-md z-10">
                                   <tr>
                                       <th className="px-6 py-3">Người dùng</th>
                                       <th className="px-6 py-3">Email</th>
@@ -5779,15 +5928,15 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       <th className="px-6 py-3 text-right">Thời gian</th>
                                   </tr>
                               </thead>
-                              <tbody className="divide-y divide-white/5">
+                              <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                                   {giftcodeUsers.map((u, idx) => {
                                       const locked = u.accountStatus === 'locked';
                                       return (
-                                      <tr key={idx} className={`transition-colors ${locked ? 'bg-red-500/5 hover:bg-red-500/10' : 'hover:bg-white/5'}`}>
+                                      <tr key={idx} className={`transition-colors ${locked ? 'bg-red-500/5 hover:bg-red-500/10' : 'hover:neu-inset-sm'}`}>
                                           <td className="px-6 py-3 flex items-center gap-3">
                                               <img src={u.userAvatar} className="w-8 h-8 rounded-full bg-white/10" />
                                                   <div>
-                                                      <div className="font-bold text-white">{u.userName}</div>
+                                                      <div className="font-bold text-slate-900 dark:text-white">{u.userName}</div>
                                                   {u.isTopupUsage && u.topupCode && <div className="mt-1 font-mono text-[10px] text-audi-cyan">{u.topupCode}</div>}
                                                   <div className="mt-1 flex flex-wrap gap-1">
                                                       {locked && <span className="rounded bg-red-500/15 px-2 py-0.5 text-[10px] font-bold text-red-300">LOCKED</span>}
@@ -5801,13 +5950,13 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           <td className="px-6 py-3">
                                               <div className="font-mono text-xs text-audi-yellow">{u.riskScore || 0}</div>
                                               {u.browserKeyHash && <div className="mt-1 max-w-[160px] truncate font-mono text-[10px] text-audi-cyan" title={u.browserKeyHash}>key:{u.browserKeyHash.slice(0, 10)}</div>}
-                                              {u.riskFlags?.length > 0 && <div className="mt-1 max-w-[160px] truncate text-[10px] text-slate-500" title={u.riskFlags.join(', ')}>{u.riskFlags.join(', ')}</div>}
+                                              {u.riskFlags?.length > 0 && <div className="mt-1 max-w-[160px] truncate text-[10px] text-slate-700 dark:text-slate-400 font-semibold" title={u.riskFlags.join(', ')}>{u.riskFlags.join(', ')}</div>}
                                           </td>
                                           <td className="px-6 py-3">
                                               {u.isTopupUsage ? (
                                                   <div>
                                                       <span className="rounded-full px-2 py-1 text-[10px] font-bold uppercase bg-audi-cyan/15 text-audi-cyan">topup</span>
-                                                      <div className="mt-1 text-[10px] text-slate-500">Giảm {Number(u.discountAmount || 0).toLocaleString()}đ</div>
+                                                      <div className="mt-1 text-[10px] text-slate-700 dark:text-slate-400 font-semibold">Giảm {Number(u.discountAmount || 0).toLocaleString()}đ</div>
                                                   </div>
                                               ) : (
                                                   <span className={`rounded-full px-2 py-1 text-[10px] font-bold uppercase ${u.rewardStatus === 'granted' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-red-500/15 text-red-300'}`}>{u.rewardStatus || 'granted'}</span>
@@ -5816,12 +5965,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           </td>
                                           <td className="px-6 py-3">
                                               {u.isTopupUsage ? (
-                                                  <span className="text-[10px] text-slate-500">Đối soát qua giao dịch nạp</span>
+                                                  <span className="text-[10px] text-slate-700 dark:text-slate-400 font-semibold">Đối soát qua giao dịch nạp</span>
                                               ) : (
                                                   <div className="flex flex-wrap gap-1">
-                                                      <button onClick={() => handleGiftcodeUserAction('revoke', u)} disabled={u.rewardStatus === 'revoked'} className="rounded bg-red-500/15 px-2 py-1 text-[10px] font-bold text-red-300 hover:bg-red-500 hover:text-white disabled:opacity-40">Thu hồi</button>
+                                                      <button onClick={() => handleGiftcodeUserAction('revoke', u)} disabled={u.rewardStatus === 'revoked'} className="neu-button px-3 py-1.5 rounded-xl text-xs font-black text-red-500 hover:scale-105 disabled:opacity-40">Thu hồi</button>
                                                       <button onClick={() => handleGiftcodeUserAction('warn', u)} className="rounded bg-yellow-500/15 px-2 py-1 text-[10px] font-bold text-yellow-300 hover:bg-yellow-500 hover:text-black">Cảnh báo</button>
-                                                      <button onClick={() => handleGiftcodeUserAction('lock', u)} disabled={locked} className="rounded bg-white/10 px-2 py-1 text-[10px] font-bold text-slate-200 hover:bg-white hover:text-black disabled:opacity-40">Khóa</button>
+                                                      <button onClick={() => handleGiftcodeUserAction('lock', u)} disabled={locked} className="neu-button px-3 py-1.5 rounded-xl text-xs font-black text-slate-700 dark:text-slate-300 hover:scale-105 disabled:opacity-40">Khóa</button>
                                                   </div>
                                               )}
                                           </td>
@@ -5834,7 +5983,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       )}
                   </div>
 
-                  <div className="p-4 border-t border-white/10 bg-black/20 shrink-0 text-right">
+                  <div className="p-4 border-t border-white/10 neu-inset-sm shrink-0 text-right">
                       <button onClick={() => setViewingGiftcodeUsage(null)} className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg font-bold transition-colors">Đóng</button>
                   </div>
               </div>

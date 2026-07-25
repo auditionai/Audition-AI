@@ -1,4 +1,4 @@
-﻿
+
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Feature, Language, GeneratedImage, ViewId } from '../../types';
 import { Icons } from '../../components/Icons';
@@ -1299,7 +1299,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const TipIcon = SMART_TIPS[currentTipIdx].icon;
 
   return (
-    <div className="flex flex-col items-center w-full max-w-5xl mx-auto pb-12 animate-fade-in relative">
+    <div className="w-full pb-12 animate-fade-in relative">
         <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
 
         {showVideo && (
@@ -1324,14 +1324,24 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
         )}
 
         {guideTopic && (
-            <div className="fixed inset-0 z-[100] flex items-start justify-center p-4 pt-32 animate-fade-in" onClick={() => setGuideTopic(null)}>
-                <div className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-audi-yellow/50 shadow-[0_0_30px_rgba(251,218,97,0.2)] relative" onClick={e => e.stopPropagation()}>
-                    <button onClick={() => setGuideTopic(null)} className="absolute top-4 right-4 text-slate-500 hover:text-white">
-                        <Icons.X className="w-6 h-6" />
-                    </button>
-                    {renderGuideContent()}
-                    <div className="mt-6 pt-4 border-t border-white/10 text-center">
-                        <button onClick={() => setGuideTopic(null)} className="px-6 py-2 bg-white/10 hover:bg-white/20 rounded-full text-xs font-bold text-white transition-colors">
+            <div className="fixed inset-0 z-[5000] flex items-center justify-center p-4 animate-fade-in bg-black/60 backdrop-blur-md" onClick={() => setGuideTopic(null)}>
+                <div className="neu-card w-full max-w-3xl p-6 sm:p-8 rounded-[2.5rem] border border-white/20 relative shadow-2xl flex flex-col max-h-[85vh] overflow-hidden text-slate-900 dark:text-white" onClick={e => e.stopPropagation()}>
+                    <div className="flex justify-between items-center pb-4 border-b border-slate-200 dark:border-slate-800 mb-4 shrink-0">
+                        <h3 className="font-accent text-xl font-black text-slate-900 dark:text-white flex items-center gap-2.5">
+                            <Icons.BookOpen className="w-6 h-6 text-[#FF007F]" />
+                            <span>{guideTopic === 'chars' ? 'Hướng Dẫn Tạo Ảnh Chi Tiết' : 'Cấu Hình Nâng Cao'}</span>
+                        </h3>
+                        <button onClick={() => setGuideTopic(null)} className="neu-button p-2.5 rounded-2xl text-slate-700 dark:text-slate-200 hover:text-red-500 transition-colors">
+                            <Icons.X className="w-5 h-5" />
+                        </button>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
+                        {renderGuideContent()}
+                    </div>
+
+                    <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800 text-right shrink-0">
+                        <button onClick={() => setGuideTopic(null)} className="neu-button-primary px-8 py-3 rounded-2xl text-xs font-black uppercase tracking-wider shadow-lg">
                             Đã Hiểu
                         </button>
                     </div>
@@ -1404,15 +1414,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                 </button>
                             </div>
                         )}
-
-                        {loadingSamples && samplePrompts.length > 0 && (
-                            <div className="w-full flex justify-center mt-6 pb-4">
-                                <div className="px-6 py-2 bg-audi-purple/20 border border-audi-purple/50 rounded-full text-sm font-bold text-white flex items-center gap-2 opacity-70">
-                                    <Icons.Loader className="w-4 h-4 animate-spin" />
-                                    Đang tải...
-                                </div>
-                            </div>
-                        )}
                     </div>
                     <div className="p-3 border-t border-white/10 bg-black/20 text-center text-[10px] text-slate-500">
                         Dữ liệu được cung cấp bởi caulenhau.io.vn
@@ -1421,363 +1422,227 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
             </div>
         )}
 
-        <div className="w-full flex justify-center mb-4">
-            <div className="bg-[#12121a] p-1.5 rounded-2xl border border-white/10 flex gap-1 shadow-lg overflow-x-auto no-scrollbar max-w-full">
-                {[
-                    { id: 'single', label: { vi: 'Đơn', en: 'Single' }, icon: Icons.User },
-                    { id: 'couple', label: { vi: 'Đôi', en: 'Couple' }, icon: Icons.Heart },
-                    { id: 'group3', label: { vi: 'Nhóm 3', en: 'Group 3' }, icon: Icons.User },
-                    { id: 'group4', label: { vi: 'Nhóm 4', en: 'Group 4' }, icon: Icons.User },
-                    { id: 'group5', label: { vi: 'Nhóm 5', en: 'Group 5' }, icon: Icons.User },
-                ].map(mode => (
-                    <button
-                        key={mode.id}
-                        onClick={() => handleModeChange(mode.id as GenMode)}
-                        className={`px-4 py-2.5 rounded-xl flex items-center gap-2 text-xs md:text-sm font-bold transition-all whitespace-nowrap ${activeMode === mode.id ? 'bg-white text-black shadow-md' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}
-                    >
-                        {mode.id === 'group4' || mode.id === 'group5' ? <div className="flex -space-x-1"><Icons.User className="w-3 h-3"/><Icons.User className="w-3 h-3"/></div> : <mode.icon className="w-3 h-3 md:w-4 md:h-4" />}
-                        {mode.label[lang === 'vi' ? 'vi' : 'en']}
-                    </button>
-                ))}
-            </div>
-        </div>
-
-        <div className="w-full bg-gradient-to-r from-orange-500/10 via-yellow-500/10 to-orange-500/10 border-y border-white/5 md:border md:rounded-xl md:mb-6 p-2 md:p-3 flex items-center justify-center gap-3 backdrop-blur-md overflow-hidden relative min-h-[40px]">
-            <div key={currentTipIdx} className="flex items-center gap-2 animate-fade-in transition-all duration-500">
-                <TipIcon className="w-4 h-4 md:w-5 md:h-5 text-audi-yellow shrink-0 animate-bounce-slow" />
-                <span className="text-[10px] md:text-xs font-medium text-slate-200 line-clamp-2 md:line-clamp-1 text-center md:text-left">
-                    {SMART_TIPS[currentTipIdx].text}
-                </span>
-            </div>
-            <div className="absolute bottom-1 md:right-3 flex gap-1 justify-center w-full md:w-auto">
-                {SMART_TIPS.map((_, i) => (
-                    <div key={i} className={`w-1 h-1 rounded-full transition-all ${i === currentTipIdx ? 'bg-audi-yellow w-3' : 'bg-white/10'}`}></div>
-                ))}
-            </div>
-        </div>
-
-        {/* MOVED NOTIFICATION BANNER */}
-        <div className="w-full mb-4 bg-yellow-500/5 border border-yellow-500/20 rounded-xl p-3 flex items-center gap-3 animate-fade-in hover:bg-yellow-500/10 transition-colors">
-            <div className="shrink-0 p-1.5 bg-yellow-500/10 rounded-full">
-                <Icons.Flame className="w-4 h-4 text-yellow-500 animate-pulse" />
-            </div>
-            <p className="text-[10px] md:text-xs text-yellow-200/80 font-medium leading-relaxed">
-                <strong className="text-yellow-500">Lưu ý:</strong> Mô hình <span className="text-audi-cyan font-bold">Flash</span> có tốc độ nhanh nhưng chất lượng ảnh thấp hơn, chi tiết nhân vật và độ khối 3D kém hơn. Hãy chọn <span className="text-audi-pink font-bold">Pro</span> để có những bức ảnh đẹp nhất, sắc nét và sống động.
-            </p>
-        </div>
-
-        {/* NEW HORIZONTAL AUMIX3D PROMO BANNER */}
-        <a
-            href="https://aumix3d.com/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full mb-4 md:mb-6 bg-gradient-to-r from-[#001a2c] to-[#000a14] border border-audi-cyan/30 rounded-xl p-3 md:p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 md:gap-4 animate-fade-in hover:border-audi-cyan transition-all shadow-[0_0_20px_rgba(33,212,253,0.1)] group relative overflow-hidden"
-        >
-            <div className="absolute top-0 right-0 w-32 h-32 bg-audi-cyan/10 blur-[40px] rounded-full group-hover:bg-audi-cyan/20 transition-all"></div>
-            <div className="relative z-10 flex items-center gap-3 md:gap-4 w-full md:w-auto">
-                <div className="shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-full bg-audi-cyan/10 flex items-center justify-center border border-audi-cyan/30 group-hover:scale-110 transition-transform">
-                    <Icons.Sparkles className="w-5 h-5 md:w-6 md:h-6 text-audi-cyan" />
-                </div>
-                <div>
-                    <div className="flex items-center gap-2 mb-1">
-                        <span className="bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded uppercase animate-pulse">MỚI</span>
-                        <h4 className="text-white font-bold text-xs md:text-sm uppercase tracking-wider group-hover:text-audi-cyan transition-colors">Mix Đồ 3D Audition</h4>
-                    </div>
-                    <p className="text-[10px] md:text-xs text-slate-400 leading-relaxed">
-                        Bạn chưa có ảnh nhân vật? Mix đồ và chụp ảnh tách nền cực nét ngay trên web mà không cần vào game.
-                    </p>
-                </div>
-            </div>
-            <div className="relative z-10 shrink-0 w-full md:w-auto mt-1 md:mt-0">
-                <div className="w-full md:w-auto px-4 py-2 bg-audi-cyan/20 hover:bg-audi-cyan/30 border border-audi-cyan/50 rounded-lg flex items-center justify-center gap-2 transition-all group-hover:shadow-[0_0_15px_rgba(33,212,253,0.4)]">
-                    <span className="text-[10px] md:text-xs font-bold text-audi-cyan uppercase">Mở AuMix3D</span>
-                    <Icons.ExternalLink className="w-3 h-3 md:w-4 md:h-4 text-audi-cyan" />
-                </div>
-            </div>
-        </a>
-
-        <div className="w-full grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4 md:mt-0">
-            <div className="lg:col-span-2 space-y-4">
-                <div className="flex items-center justify-between px-2">
-                    <h3 className="font-bold text-white text-sm uppercase flex items-center gap-2">
-                        <Icons.User className="w-4 h-4 text-audi-pink" /> 1. Upload Nhân Vật
-                    </h3>
-                    <div className="relative flex gap-2 flex-wrap justify-end">
-                        <button
-                            onMouseEnter={() => setHoveredGuidePreview('character')}
-                            onMouseLeave={() => setHoveredGuidePreview((prev) => prev === 'character' ? null : prev)}
-                            onFocus={() => setHoveredGuidePreview('character')}
-                            onBlur={() => setHoveredGuidePreview((prev) => prev === 'character' ? null : prev)}
-                            className={`flex items-center gap-1 text-[10px] font-bold text-white hover:scale-105 transition-transform px-3 py-1 rounded-full border ${
-                                guideImages.characterUrl
-                                    ? 'bg-audi-cyan/20 border-audi-cyan/50'
-                                    : 'bg-white/5 border-white/10 opacity-60'
-                            }`}
-                        >
-                            <Icons.Image className="w-3 h-3 text-audi-cyan" /> VD Ảnh NV
-                        </button>
-                        <button
-                            onMouseEnter={() => setHoveredGuidePreview('sample')}
-                            onMouseLeave={() => setHoveredGuidePreview((prev) => prev === 'sample' ? null : prev)}
-                            onFocus={() => setHoveredGuidePreview('sample')}
-                            onBlur={() => setHoveredGuidePreview((prev) => prev === 'sample' ? null : prev)}
-                            className={`flex items-center gap-1 text-[10px] font-bold text-white hover:scale-105 transition-transform px-3 py-1 rounded-full border ${
-                                guideImages.sampleUrl
-                                    ? 'bg-audi-pink/20 border-audi-pink/50'
-                                    : 'bg-white/5 border-white/10 opacity-60'
-                            }`}
-                        >
-                            <Icons.Image className="w-3 h-3 text-audi-pink" /> VD Ảnh Mẫu
-                        </button>
-                        {tutorialVideoUrl && (
+        {/* 1. TOP VISUAL MODE SELECTOR BANNER */}
+        <div className="w-full neu-card p-4 rounded-3xl mb-6 shadow-xl">
+            <div className="flex flex-col xl:flex-row items-center justify-between gap-4">
+                {/* Visual Mode Selector Tabs */}
+                <div data-tour-id="desktop.generation.mode" className="w-full xl:w-auto neu-inset-sm p-1.5 rounded-2xl flex gap-2 overflow-x-auto no-scrollbar">
+                    {[
+                        { id: 'single', label: { vi: 'Ảnh Đơn', en: 'Single' }, desc: '1 Nhân vật', icon: Icons.User, color: 'text-[#FF007F]' },
+                        { id: 'couple', label: { vi: 'Ảnh Đôi', en: 'Couple' }, desc: '2 Nhân vật', icon: Icons.Heart, color: 'text-sky-600 dark:text-[#00F2FE]' },
+                        { id: 'group3', label: { vi: 'Nhóm 3', en: 'Group 3' }, desc: '3 Nhân vật', icon: Icons.User, color: 'text-amber-600 dark:text-amber-400' },
+                        { id: 'group4', label: { vi: 'Nhóm 4', en: 'Group 4' }, desc: '4 Nhân vật', icon: Icons.User, color: 'text-emerald-600 dark:text-emerald-400' },
+                        { id: 'group5', label: { vi: 'Nhóm 5', en: 'Group 5' }, desc: '5 Nhân vật', icon: Icons.User, color: 'text-purple-600 dark:text-purple-400' },
+                    ].map(mode => {
+                        const isActive = activeMode === mode.id;
+                        return (
                             <button
-                                onClick={() => setShowVideo(true)}
-                                className="flex items-center gap-1 text-[10px] font-bold text-white hover:scale-105 transition-transform bg-red-600 px-3 py-1 rounded-full shadow-[0_0_10px_rgba(220,38,38,0.5)] border border-red-400 group"
-                            >
-                                <Icons.Play className="w-3 h-3 fill-white group-hover:animate-pulse" />
-                                Video HD
-                            </button>
-                        )}
-                        <button
-                            onClick={() => setGuideTopic('chars')}
-                            className="flex items-center gap-1 text-[10px] font-bold text-audi-yellow hover:text-white transition-colors bg-audi-yellow/10 px-2 py-1 rounded-full border border-audi-yellow/30"
-                        >
-                            <Icons.Info className="w-3 h-3" /> Hướng dẫn
-                        </button>
-                        {hoveredGuidePreview && (
-                            <div
-                                className="absolute top-full right-0 mt-2 w-64 rounded-2xl border border-white/10 bg-[#0b0b14] p-3 shadow-[0_0_30px_rgba(0,0,0,0.45)] z-20"
-                                onMouseEnter={() => setHoveredGuidePreview(hoveredGuidePreview)}
-                                onMouseLeave={() => setHoveredGuidePreview(null)}
-                            >
-                                {((hoveredGuidePreview === 'character' && guideImages.characterUrl) || (hoveredGuidePreview === 'sample' && guideImages.sampleUrl)) ? (
-                                    <>
-                                        <div className="w-full h-80 rounded-xl border border-white/10 bg-black/40 flex items-center justify-center overflow-hidden">
-                                            <img
-                                                src={hoveredGuidePreview === 'character' ? guidePreviewUrls.character : guidePreviewUrls.sample}
-                                                alt={hoveredGuidePreview === 'character' ? 'Ví dụ ảnh nhân vật' : 'Ví dụ ảnh mẫu'}
-                                                className="max-w-full max-h-full object-contain rounded-xl"
-                                            />
-                                        </div>
-                                        <p className="mt-2 text-[10px] text-slate-300 leading-relaxed">
-                                            {hoveredGuidePreview === 'character'
-                                                ? 'Ảnh nhân vật đạt chuẩn: rõ mặt, rõ đồ, tách nền sạch.'
-                                                : 'Ảnh mẫu nên rõ bố cục, góc máy và tư thế.'}
-                                        </p>
-                                    </>
-                                ) : (
-                                    <p className="text-[10px] text-slate-400 leading-relaxed">
-                                        Chưa có ảnh ví dụ trong phần cài đặt admin.
-                                    </p>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                {characters.length > 1 && (
-                    <div className="flex md:hidden overflow-x-auto gap-2 pb-2 no-scrollbar">
-                        {characters.map((char) => (
-                            <button
-                                key={char.id}
-                                onClick={() => setActiveCharTab(char.id)}
-                                className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${
-                                    activeCharTab === char.id
-                                    ? 'bg-audi-pink text-white border-audi-pink shadow-lg'
-                                    : 'bg-[#12121a] text-slate-400 border-white/10 hover:border-white/30'
+                                key={mode.id}
+                                onClick={() => handleModeChange(mode.id as GenMode)}
+                                className={`px-5 py-3 rounded-xl flex items-center gap-3 text-xs md:text-sm font-black transition-all whitespace-nowrap ${
+                                    isActive 
+                                        ? 'neu-raised-sm border-2 border-[#FF007F] text-slate-950 dark:text-white shadow-xl scale-105' 
+                                        : 'neu-button text-slate-800 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white'
                                 }`}
                             >
-                                {lang === 'vi' ? `Nhân vật ${char.id}` : `Char ${char.id}`}
-                                {char.bodyImage && <span className="ml-1 text-green-400">✓</span>}
+                                <div className={`p-2 rounded-lg neu-inset-sm ${isActive ? mode.color : 'text-slate-500 dark:text-slate-400'}`}>
+                                    <mode.icon className="w-4 h-4" />
+                                </div>
+                                <div className="text-left">
+                                    <div className={`font-accent font-black leading-tight ${isActive ? 'text-slate-900 dark:text-white' : 'text-slate-700 dark:text-slate-300'}`}>{mode.label[lang === 'vi' ? 'vi' : 'en']}</div>
+                                    <div className="text-[10px] font-bold text-slate-600 dark:text-slate-400">{mode.desc}</div>
+                                </div>
                             </button>
-                        ))}
-                    </div>
-                )}
+                        );
+                    })}
+                </div>
 
-                <div data-tour-id="desktop.generation.characters" className="flex flex-wrap justify-center gap-4 w-full">
+                {/* Quick Actions & Navigation */}
+                <div className="flex items-center gap-2 shrink-0">
+                    <button
+                        type="button"
+                        onClick={() => onNavigateToFeature?.('magic_editor_pro')}
+                        className="neu-button px-4 py-2.5 rounded-2xl text-xs font-black text-purple-600 dark:text-purple-400 flex items-center gap-2 hover:scale-105 transition-all"
+                    >
+                        <Icons.Wand className="w-4 h-4" />
+                        <span>Chỉnh sửa AI</span>
+                    </button>
+                    {tutorialVideoUrl && (
+                        <button
+                            onClick={() => setShowVideo(true)}
+                            className="neu-button px-4 py-2.5 rounded-2xl text-xs font-black text-red-500 flex items-center gap-2 hover:scale-105 transition-all"
+                        >
+                            <Icons.Play className="w-4 h-4 text-red-500" />
+                            <span>Video HD</span>
+                        </button>
+                    )}
+
+                    <button
+                        onClick={() => setGuideTopic('chars')}
+                        className="neu-button px-4 py-2.5 rounded-2xl text-xs font-black text-amber-500 flex items-center gap-2 hover:scale-105 transition-all"
+                    >
+                        <Icons.Info className="w-4 h-4 text-amber-500" />
+                        <span>Hướng dẫn</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        {/* 2. CREATION WORKSPACE GRID - SEPARATE FUNCTIONAL CARDS */}
+        <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            {/* BLOCK 1: UPLOAD CHARACTERS & POSE REF (lg:col-span-7 xl:col-span-8) */}
+            <div data-tour-id="desktop.generation.characters" className="lg:col-span-7 xl:col-span-8 neu-card p-6 rounded-3xl space-y-4 shadow-xl">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-200/60 dark:border-slate-800">
+                    <h3 className="font-black text-slate-900 dark:text-white text-sm uppercase tracking-wider font-accent flex items-center gap-2">
+                        <Icons.User className="w-4 h-4 text-[#FF007F]" /> 1. UPLOAD NHÂN VẬT THAM CHIẾU & POSE
+                    </h3>
+                    <span className="neu-inset-sm px-3 py-1 rounded-full text-[10px] font-mono font-black text-[#FF007F] dark:text-[#00F2FE]">
+                        CHẾ ĐỘ: {activeMode.toUpperCase()} ({characters.length} NHÂN VẬT)
+                    </span>
+                </div>
+
+                {/* Character Slots Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
                     {characters.map((char) => {
                         const assistantError = assistantErrorByCharId[char.id];
                         const activeAssist = assistLoadingByCharId[char.id];
                         const isAssistRunning = !!activeAssist;
 
                         return (
-                            <div
-                                key={char.id}
-                                className={`w-full md:w-[220px] bg-[#12121a] border border-white/10 rounded-2xl p-4 hover:border-white/20 transition-colors relative group shrink-0 shadow-lg ${
-                                    char.id === activeCharTab ? 'block' : 'hidden md:block'
-                                }`}
-                            >
-                                <div className="flex justify-between items-center mb-3">
-                                    <span className="text-xs font-bold text-white bg-white/10 px-2 py-1 rounded">NV {char.id}</span>
-                                    <div className="flex bg-black/40 rounded-lg p-0.5 border border-white/10">
-                                        <button onClick={() => toggleGender(char.id, 'female')} className={`px-2 py-0.5 rounded text-[9px] font-bold ${char.gender === 'female' ? 'bg-audi-pink text-white' : 'text-slate-500'}`}>Nữ</button>
-                                        <button onClick={() => toggleGender(char.id, 'male')} className={`px-2 py-0.5 rounded text-[9px] font-bold ${char.gender === 'male' ? 'bg-blue-500 text-white' : 'text-slate-500'}`}>Nam</button>
+                            <div key={char.id} className="neu-inset-sm p-4 rounded-2xl space-y-3 relative group">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-xs font-black text-slate-900 dark:text-white font-accent">Nhân Vật {char.id}</span>
+                                    <div className="flex neu-raised-sm rounded-xl p-1 bg-slate-200 dark:bg-black/40">
+                                        <button onClick={() => toggleGender(char.id, 'female')} className={`px-2.5 py-0.5 rounded-lg text-[10px] font-black transition-all ${char.gender === 'female' ? 'bg-[#FF007F] text-white shadow-md' : 'text-slate-800 dark:text-slate-400'}`}>Nữ</button>
+                                        <button onClick={() => toggleGender(char.id, 'male')} className={`px-2.5 py-0.5 rounded-lg text-[10px] font-black transition-all ${char.gender === 'male' ? 'bg-sky-600 dark:bg-[#00F2FE] text-white dark:text-slate-950 shadow-md' : 'text-slate-800 dark:text-slate-400'}`}>Nam</button>
                                     </div>
                                 </div>
 
-                                <div className="space-y-3">
-                                    <div onClick={() => handleUploadClick(char.id)} className="w-full h-64 bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-pink cursor-pointer relative overflow-hidden group/item transition-all flex flex-col items-center justify-center">
-                                        {char.bodyImage ? (
+                                <div onClick={() => handleUploadClick(char.id)} className="w-full h-52 neu-card rounded-xl border-2 border-dashed border-[#FF007F]/60 hover:border-[#FF007F] cursor-pointer relative overflow-hidden flex flex-col items-center justify-center transition-all group/item">
+                                    {char.bodyImage ? (
+                                        <>
                                             <img src={char.bodyImage} className="w-full h-full object-contain" alt="Body" />
-                                        ) : (
-                                            <div className="flex flex-col items-center text-slate-500 group-hover/item:text-audi-pink transition-colors">
-                                                <Icons.User className="w-8 h-8 mb-1" />
-                                                <span className="text-[10px] uppercase font-bold">Ảnh Nhân Vật</span>
+                                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover/item:opacity-100 transition-opacity">
+                                                <span className="text-[10px] font-black text-white neu-button px-3 py-1.5 rounded-xl">Đổi Ảnh</span>
                                             </div>
-                                        )}
-                                    </div>
-
-                                    {char.bodyImage && (
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    if (isAssistRunning) return;
-                                                    void handleCharacterAssistant(char.id, 'remove_bg_pro');
-                                                }}
-                                                aria-disabled={isAssistRunning}
-                                                className={`px-2 py-2 rounded-xl text-[10px] font-bold border border-audi-cyan/40 bg-audi-cyan/10 text-audi-cyan flex flex-col items-center gap-1 min-h-[76px] relative z-10 pointer-events-auto ${
-                                                    isAssistRunning ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:bg-audi-cyan/15'
-                                                }`}
-                                            >
-                                                {activeAssist === 'remove_bg_pro' ? <Icons.Loader className="w-3.5 h-3.5 animate-spin" /> : <Icons.Scissors className="w-3.5 h-3.5" />}
-                                                <span>{activeAssist === 'remove_bg_pro' ? 'Đang Tách...' : 'Tách Nền'}</span>
-                                                <span className="flex items-center gap-1 text-[9px] text-white/80">
-                                                    {activeAssist === 'remove_bg_pro'
-                                                        ? 'Vertex AI đang xử lý'
-                                                        : <>{CHARACTER_ASSISTANT_RESOLUTION} <Icons.Gem className="w-3 h-3 text-audi-yellow" /> {removeBgCost.vcoin}</>}
-                                                </span>
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    if (isAssistRunning) return;
-                                                    void handleCharacterAssistant(char.id, 'sharpen_upscale');
-                                                }}
-                                                aria-disabled={isAssistRunning}
-                                                className={`px-2 py-2 rounded-xl text-[10px] font-bold border border-audi-pink/40 bg-audi-pink/10 text-audi-pink flex flex-col items-center gap-1 min-h-[76px] relative z-10 pointer-events-auto ${
-                                                    isAssistRunning ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:bg-audi-pink/15'
-                                                }`}
-                                            >
-                                                {activeAssist === 'sharpen_upscale' ? <Icons.Loader className="w-3.5 h-3.5 animate-spin" /> : <Icons.Sparkles className="w-3.5 h-3.5" />}
-                                                <span>{activeAssist === 'sharpen_upscale' ? 'Đang Nét...' : 'Làm Nét'}</span>
-                                                <span className="flex items-center gap-1 text-[9px] text-white/80">
-                                                    {activeAssist === 'sharpen_upscale'
-                                                        ? 'Vertex AI đang xử lý'
-                                                        : <>{CHARACTER_ASSISTANT_RESOLUTION} <Icons.Gem className="w-3 h-3 text-audi-yellow" /> {sharpenCost.vcoin}</>}
-                                                </span>
-                                            </button>
-                                        </div>
-                                    )}
-                                    {assistantError && (
-                                        <div className="rounded-xl border border-orange-500/30 bg-orange-500/10 px-3 py-2 flex items-start gap-2">
-                                            <Icons.AlertTriangle className="w-3.5 h-3.5 text-orange-300 shrink-0 mt-0.5" />
-                                            <p className="text-[10px] leading-relaxed text-orange-200">Lỗi xử lý ảnh: {assistantError}</p>
+                                        </>
+                                    ) : (
+                                        <div className="flex flex-col items-center text-slate-800 dark:text-slate-300 group-hover/item:text-[#FF007F] transition-colors p-2 text-center">
+                                            <Icons.User className="w-8 h-8 mb-1 text-[#FF007F]" />
+                                            <span className="text-[10px] uppercase font-black tracking-wider">Tải Ảnh Nhân Vật {char.id}</span>
                                         </div>
                                     )}
                                 </div>
+
+                                {char.bodyImage && (
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); if (isAssistRunning) return; void handleCharacterAssistant(char.id, 'remove_bg_pro'); }}
+                                            className="px-2 py-1.5 rounded-xl text-[10px] font-black neu-button text-sky-600 dark:text-[#00F2FE] flex items-center justify-center gap-1"
+                                        >
+                                            {activeAssist === 'remove_bg_pro' ? <Icons.Loader className="w-3.5 h-3.5 animate-spin" /> : <Icons.Scissors className="w-3.5 h-3.5" />}
+                                            <span>Tách Nền</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); if (isAssistRunning) return; void handleCharacterAssistant(char.id, 'sharpen_upscale'); }}
+                                            className="px-2 py-1.5 rounded-xl text-[10px] font-black neu-button text-[#FF007F] flex items-center justify-center gap-1"
+                                        >
+                                            {activeAssist === 'sharpen_upscale' ? <Icons.Loader className="w-3.5 h-3.5 animate-spin" /> : <Icons.Sparkles className="w-3.5 h-3.5" />}
+                                            <span>Làm Nét</span>
+                                        </button>
+                                    </div>
+                                )}
+                                {assistantError && (
+                                    <p role="alert" className="text-[10px] font-semibold text-red-600 dark:text-red-400">
+                                        {assistantError}
+                                    </p>
+                                )}
                             </div>
                         );
                     })}
-                </div>
 
-                <div className="flex justify-center w-full">
-                    <div className="w-full md:w-[220px] bg-[#12121a] border border-white/10 rounded-2xl p-4 shadow-lg">
-                        <div className="flex justify-between items-center mb-3">
-                            <label className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
-                                <Icons.Image className="w-4 h-4" /> 2. Ảnh mẫu bố cục
-                            </label>
+                    {/* Pose Reference Slot */}
+                    <div className="neu-inset-sm p-4 rounded-2xl space-y-3">
+                        <div className="flex justify-between items-center">
+                            <span className="text-xs font-black text-slate-900 dark:text-white font-accent">Ảnh Mẫu (Pose Ref)</span>
                             {refImage && (
-                                <button
-                                    type="button"
-                                    onClick={() => setRefImage(null)}
-                                    className="text-[10px] font-bold text-slate-400 hover:text-white transition-colors bg-white/5 px-3 py-1.5 rounded-full border border-white/10"
-                                >
-                                    Xóa ảnh mẫu
-                                </button>
+                                <button type="button" onClick={() => setRefImage(null)} className="text-[10px] font-black text-red-500">Xóa</button>
                             )}
                         </div>
 
                         <button
                             type="button"
                             onClick={handleRefUploadClick}
-                            className="w-full h-64 bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-purple cursor-pointer relative overflow-hidden group flex flex-col items-center justify-center transition-all"
+                            className="w-full h-52 neu-card rounded-xl border-2 border-dashed border-[#9D00FF]/60 hover:border-[#9D00FF] cursor-pointer relative overflow-hidden flex flex-col items-center justify-center transition-all group/item"
                         >
                             {refImage ? (
                                 <>
-                                    <img src={refImage} className="w-full h-full object-contain opacity-90 bg-black/30" alt="Ref" />
-                                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <span className="text-xs font-bold text-white uppercase tracking-wider">Thay ảnh mẫu</span>
-                                    </div>
-                                    <div className="absolute bottom-0 left-0 right-0 bg-audi-purple/80 text-white text-[10px] font-bold text-center py-2">
-                                        POSE REF
+                                    <img src={refImage} className="w-full h-full object-contain" alt="Ref" />
+                                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover/item:opacity-100 transition-opacity">
+                                        <span className="text-[10px] font-black text-white neu-button px-3 py-1.5 rounded-xl">Đổi Pose</span>
                                     </div>
                                 </>
                             ) : (
-                                <div className="flex flex-col items-center text-slate-500 p-4 text-center">
-                                    <Icons.Image className="w-8 h-8 mb-2" />
-                                    <span className="text-[10px] font-bold uppercase leading-tight">Ảnh mẫu<br/>(Pose)</span>
+                                <div className="flex flex-col items-center text-slate-600 dark:text-slate-300 group-hover/item:text-[#9D00FF] transition-colors p-2 text-center">
+                                    <Icons.Image className="w-8 h-8 mb-1 text-[#9D00FF]" />
+                                    <span className="text-[10px] uppercase font-black tracking-wider">Tải Ảnh Mẫu Bố Cục</span>
                                 </div>
                             )}
                         </button>
                     </div>
                 </div>
+            </div>
 
-                <div data-tour-id="desktop.generation.prompt" className="bg-[#12121a] border border-white/10 rounded-2xl p-4 shadow-lg">
-                    <div className="flex justify-between items-center mb-3">
-                        <label className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
-                            <Icons.MessageCircle className="w-4 h-4" /> 3. Mô tả
-                        </label>
-                        <div className="flex gap-2">
-                            <button
-                                onClick={handleOpenSamples}
-                                className="text-[10px] font-bold text-audi-yellow hover:text-white flex items-center gap-1 bg-audi-yellow/10 px-3 py-1.5 rounded-full border border-audi-yellow/30 animate-pulse transition-all hover:bg-audi-yellow/20"
-                            >
-                                <Icons.Image className="w-3 h-3" /> Sử dụng Prompt Mẫu
-                            </button>
-                        </div>
+            {/* BLOCK 2: PROMPT EDITOR (lg:col-span-5 xl:col-span-4) */}
+            <div data-tour-id="desktop.generation.prompt" className="lg:col-span-5 xl:col-span-4 neu-card p-6 rounded-3xl space-y-4 shadow-xl flex flex-col justify-between">
+                <div className="space-y-3">
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-200/60 dark:border-slate-800">
+                        <h3 className="font-black text-slate-900 dark:text-white text-sm uppercase tracking-wider font-accent flex items-center gap-2">
+                            <Icons.MessageCircle className="w-4 h-4 text-[#FF007F]" /> 2. MÔ TẢ KỊCH BẢN PROMPT
+                        </h3>
+                        <button onClick={handleOpenSamples} className="neu-button px-3 py-1 rounded-xl text-[10px] font-black text-amber-500 flex items-center gap-1 hover:scale-105 transition-transform">
+                            <Icons.Image className="w-3.5 h-3.5 text-amber-500" /> Prompt Mẫu
+                        </button>
                     </div>
 
                     <textarea
                         value={prompt}
                         onChange={(e) => setPrompt(e.target.value)}
-                        placeholder={lang === 'vi' ? "Mô tả chi tiết: trang phục, bối cảnh, ánh sáng..." : "Detailed prompt: clothes, scene, lighting..."}
-                        rows={12}
-                        className="block w-full min-h-[340px] max-h-[760px] bg-black/20 border border-white/5 rounded-xl p-4 text-sm leading-relaxed text-white focus:border-audi-purple outline-none resize-y overflow-auto placeholder:text-slate-500"
+                        placeholder={lang === 'vi' ? "Mô tả chi tiết kịch bản: bối cảnh sân khấu Audition, ánh sáng hoàng hôn, hiệu ứng tuyết rơi..." : "Detailed prompt description..."}
+                        rows={7}
+                        className="w-full neu-input rounded-2xl p-4 text-xs font-semibold leading-relaxed focus:outline-none resize-y text-slate-900 dark:text-white placeholder:text-slate-500 dark:placeholder:text-slate-400 font-sans"
                     />
                 </div>
 
+                <div className="neu-inset-sm p-3 rounded-2xl text-[11px] text-slate-800 dark:text-slate-200 font-medium leading-relaxed">
+                    💡 <b>Mẹo Prompt 3D:</b> Bạn có thể chọn <b>"Prompt Mẫu"</b> từ thư viện để lấy các câu lệnh chuẩn thiết kế riêng cho game Audition 3D.
+                </div>
             </div>
 
-            <div className="lg:col-span-1 space-y-6">
+            {/* BLOCK 3: AI MODEL & ASPECT RATIO (lg:col-span-7 xl:col-span-8) */}
+            <div data-tour-id="desktop.generation.settings" className="lg:col-span-7 xl:col-span-8 neu-card p-6 rounded-3xl space-y-4 shadow-xl">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-200/60 dark:border-slate-800">
+                    <h3 className="font-black text-slate-900 dark:text-white text-sm uppercase tracking-wider font-accent flex items-center gap-2">
+                        <Icons.Settings className="w-4 h-4 text-[#FF007F] dark:text-[#00F2FE]" /> 3. CẤU HÌNH MÔ HÌNH AI & TỶ LỆ KHUNG HÌNH
+                    </h3>
+                </div>
 
-                <div data-tour-id="desktop.generation.settings" className="bg-[#12121a] border border-white/10 rounded-2xl p-5 flex flex-col gap-5 shadow-lg h-full">
-                    <div className="flex items-center justify-between border-b border-white/10 pb-3">
-                        <h3 className="font-bold text-white flex items-center gap-2">
-                            <Icons.Settings className="w-5 h-5 text-slate-400" />
-                            4. Cấu Hình
-                        </h3>
-                        <button
-                            onClick={() => setGuideTopic('settings')}
-                            className="text-audi-yellow hover:text-white transition-colors animate-pulse"
-                        >
-                            <Icons.Info className="w-4 h-4" />
-                        </button>
+                {!isCatalogReady && (
+                    <div role="alert" className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                        {catalogLoading
+                            ? 'Đang đồng bộ model và bảng giá trực tiếp từ TST...'
+                            : (catalogError || 'TST đang bảo trì hoặc chưa có cấu hình giá khả dụng.')}
                     </div>
+                )}
 
-                    {!isCatalogReady && (
-                        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-3 text-xs text-red-200">
-                            {catalogLoading
-                                ? 'Đang đồng bộ catalog live từ TST...'
-                                : (catalogError || 'TST đang bảo trì hoặc không sẵn sàng.')}
-                        </div>
-                    )}
-
-                    <div className="space-y-3">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Mô hình AI</label>
-                        <div className="grid gap-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Model Picker */}
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider">Mô hình AI Engine</label>
+                        <div className="space-y-2">
                             {IMAGE_MODEL_OPTIONS.map((model) => {
                                 const Icon = model.icon;
                                 const available = imageModelAvailability[model.tier];
@@ -1788,28 +1653,21 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                         type="button"
                                         onClick={() => available && setAiModel(model.tier)}
                                         disabled={!available}
-                                        className={`group relative overflow-hidden rounded-2xl border p-3 text-left transition-all ${
-                                            selected
-                                                ? 'border-audi-cyan/80 bg-audi-cyan/10 shadow-[0_0_22px_rgba(34,211,238,0.18)]'
-                                                : 'border-white/10 bg-black/30 hover:border-white/25 hover:bg-white/[0.04]'
-                                        } ${!available ? 'cursor-not-allowed opacity-40' : ''}`}
+                                        className={`w-full p-3 rounded-2xl text-left transition-all flex items-center gap-3 ${
+                                            selected ? 'neu-inset-sm ring-2 ring-[#FF007F]' : 'neu-button'
+                                        } ${!available ? 'opacity-40 cursor-not-allowed' : ''}`}
                                     >
-                                        <div className={`absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r ${model.accent}`} />
-                                        <div className="flex items-start gap-3">
-                                            <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br ${model.accent} text-white shadow-lg`}>
-                                                <Icon className="h-4 w-4" />
+                                        <div className={`w-8 h-8 rounded-xl bg-gradient-to-br ${model.accent} flex items-center justify-center text-white shrink-0`}>
+                                            <Icon className="w-4 h-4" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-xs font-black text-slate-900 dark:text-white font-accent">{model.label}</span>
+                                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-black text-white bg-gradient-to-r ${model.accent}`}>
+                                                    {model.tag}
+                                                </span>
                                             </div>
-                                            <div className="min-w-0 flex-1">
-                                                <div className="flex flex-wrap items-center gap-2">
-                                                    <span className="text-sm font-black text-white">{model.label}</span>
-                                                    <span className={`rounded-full bg-gradient-to-r ${model.accent} px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-white shadow-sm`}>
-                                                        {model.tag}
-                                                    </span>
-                                                    {selected && <Icons.Check className="h-3.5 w-3.5 text-audi-cyan" />}
-                                                </div>
-                                                <p className="mt-0.5 text-[10px] font-bold text-slate-300">{model.title}</p>
-                                                <p className="mt-1 text-[10px] leading-relaxed text-slate-500">{model.description}</p>
-                                            </div>
+                                            <p className="text-[10px] text-slate-700 dark:text-slate-300 font-semibold truncate">{model.title}</p>
                                         </div>
                                     </button>
                                 );
@@ -1817,291 +1675,193 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                         </div>
                     </div>
 
-                    <div className="space-y-3">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase">Tỷ lệ khung hình</label>
-                        <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
-                            {ratios.map(r => (
-                                <button
-                                    key={r.id}
-                                    onClick={() => setAspectRatio(r.id)}
-                                    className={`flex-1 py-3 rounded-lg text-[10px] font-bold transition-all flex items-center justify-center ${aspectRatio === r.id ? 'bg-audi-purple text-white shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}
-                                >
-                                    {r.label}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    <div className={`${availableResolutions.length === 0 ? 'hidden ' : ''}space-y-3 animate-fade-in`}>
-                        <label className="text-[10px] font-bold text-slate-400 uppercase">Độ phân giải</label>
-                        <div className={`flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5`}>
-                            {availableResolutions.map(r => (
-                                <button
-                                    key={r}
-                                    onClick={() => setResolution(r as any)}
-                                    className={`flex-1 py-3 rounded-lg text-xs font-bold transition-all ${resolution === r ? 'bg-audi-purple text-white shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}
-                                >
-                                    {r}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    {aiModel === 'gpt' && (
-                        <div className="space-y-3 animate-fade-in">
-                            <label className="text-[10px] font-bold text-slate-400 uppercase">Chất lượng ảnh GPT</label>
-                            <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
-                                {(['low', 'medium', 'high'] as const).map((quality) => (
+                    {/* Aspect Ratios */}
+                    <div className="space-y-2 flex flex-col justify-between">
+                        <div>
+                            <label className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2 block">Tỷ lệ khung hình</label>
+                            <div className="grid grid-cols-3 gap-2">
+                                {ratios.map(r => (
                                     <button
-                                        key={quality}
-                                        onClick={() => setGptQuality(quality)}
-                                        className={`flex-1 py-3 rounded-lg text-[10px] font-bold uppercase transition-all ${
-                                            gptQuality === quality
-                                                ? 'bg-audi-purple text-white shadow-lg'
-                                                : 'text-slate-500 hover:text-white hover:bg-white/5'
+                                        key={r.id}
+                                        onClick={() => setAspectRatio(r.id)}
+                                        className={`p-3 rounded-2xl text-center font-black text-xs transition-all ${
+                                          aspectRatio === r.id ? 'neu-raised-sm text-[#FF007F] font-accent' : 'neu-button text-slate-700 dark:text-slate-300'
                                         }`}
                                     >
-                                        {quality}
+                                        <div>{r.label}</div>
+                                        <div className="text-[9px] font-semibold text-slate-600 dark:text-slate-400 mt-0.5">{r.id === '1:1' ? 'Vuông' : r.id === '16:9' ? 'Ngang' : 'Dọc'}</div>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="neu-inset-sm p-3 rounded-2xl flex items-center justify-between">
+                            <span className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase">Tỷ lệ được chọn:</span>
+                            <span className="text-xs font-black text-[#FF007F] dark:text-[#00F2FE] font-mono">{aspectRatio}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 pt-4 border-t border-slate-200/60 dark:border-slate-800">
+                    {aiModel === 'gpt' && (
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider">Chất lượng GPT</label>
+                            <div className="grid grid-cols-3 gap-1 neu-inset-sm p-1.5 rounded-2xl">
+                                {(['low', 'medium', 'high'] as const).map((value) => (
+                                    <button
+                                        key={value}
+                                        type="button"
+                                        onClick={() => setGptQuality(value)}
+                                        className={`px-2 py-2 rounded-xl text-[10px] font-black capitalize ${
+                                            gptQuality === value ? 'neu-raised-sm text-[#FF007F]' : 'text-slate-600 dark:text-slate-400'
+                                        }`}
+                                    >
+                                        {value}
                                     </button>
                                 ))}
                             </div>
                         </div>
                     )}
 
-                    <div className={`${availableSpeedLabels.length === 0 ? 'hidden ' : ''}space-y-3 animate-fade-in`}>
-                        <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
-                            <Icons.Zap className="w-3 h-3" />
-                            Tốc độ xử lý
-                        </label>
-                        <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
-                            {availableSpeedLabels.map(s => (
-                                <button
-                                    key={s}
-                                    onClick={() => setSpeed(s)}
-                                    className={`flex-1 py-3 rounded-lg text-xs font-bold transition-all ${
-                                        speed === s
-                                            ? 'bg-audi-purple text-white shadow-lg'
-                                            : 'text-slate-500 hover:text-white hover:bg-white/5'
-                                    }`}
-                                >
-                                    {s}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    <div className={`${availableServerLabels.length === 0 ? 'hidden ' : ''}space-y-3 animate-fade-in`}>
-                        <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
-                            <Icons.Database className="w-3 h-3" />
-                            Server
-                        </label>
-                        <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
-                            {availableServerLabels.map(s => (
-                                <button
-                                    key={s}
-                                    onClick={() => setServer(s)}
-                                    className={`flex-1 py-3 rounded-lg text-xs font-bold transition-all ${
-                                        server === s
-                                            ? 'bg-audi-cyan text-black shadow-lg'
-                                            : 'text-slate-500 hover:text-white hover:bg-white/5'
-                                    }`}
-                                >
-                                    {s}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* NEW CONCURRENCY UI */}
-                    <div className="space-y-3 pt-4 border-t border-white/10">
-                        <div
-                            className="cursor-pointer hover:bg-white/5 p-3 rounded-xl transition-colors border border-white/5 bg-[#0a0a0f]"
-                            onClick={() => setIsConcurrencyExpanded(!isConcurrencyExpanded)}
-                        >
-                            <div className="flex items-center justify-between mb-2">
-                                <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase">
-                                    <Icons.Activity className="w-3 h-3 text-audi-cyan" />
-                                    Luồng xử lý
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <button onClick={(e) => { e.stopPropagation(); triggerPoll(); }} className="text-slate-500 hover:text-white transition-colors">
-                                        <Icons.RefreshCw className="w-3 h-3" />
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider">Độ phân giải</label>
+                        <div className="grid grid-cols-3 gap-1 neu-inset-sm p-1.5 rounded-2xl">
+                            {(['1K', '2K', '4K'] as Resolution[]).map((value) => {
+                                const available = availableResolutions.includes(value);
+                                return (
+                                    <button
+                                        key={value}
+                                        type="button"
+                                        disabled={!available}
+                                        onClick={() => available && setResolution(value)}
+                                        className={`px-2 py-2 rounded-xl text-[10px] font-black ${
+                                            resolution === value ? 'neu-raised-sm text-[#FF007F]' : 'text-slate-600 dark:text-slate-400'
+                                        } ${!available ? 'opacity-35 cursor-not-allowed' : ''}`}
+                                    >
+                                        {value}
                                     </button>
-                                    {isConcurrencyExpanded ? <Icons.ChevronUp className="w-4 h-4 text-slate-500" /> : <Icons.ChevronDown className="w-4 h-4 text-slate-500" />}
-                                </div>
-                            </div>
-
-                            {!isConcurrencyExpanded && (
-                                <div className="space-y-3 text-[10px] text-slate-400 mt-2">
-                                    <div>
-                                        <div className="font-bold text-audi-cyan mb-1">Luồng Của Bạn</div>
-                                        <div className="flex gap-1.5">
-                                            <span>Ảnh <span className="text-white font-mono">{queueStats.myImageProcessing}/{CONCURRENCY_LIMITS.user.imageProcessing}</span></span>
-                                            <span>- Video <span className="text-white font-mono">{queueStats.myVideoProcessing}/{CONCURRENCY_LIMITS.user.videoProcessing}</span></span>
-                                            <span>- Hàng Chờ <span className="text-white font-mono">{queueStats.myQueued}/{CONCURRENCY_LIMITS.user.queued}</span></span>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <div className="font-bold text-slate-300 mb-1">Luồng Hệ Thống</div>
-                                        <div className="flex gap-1.5">
-                                            <span>Ảnh <span className="text-white font-mono">{queueStats.systemImageProcessing}/{CONCURRENCY_LIMITS.system.imageProcessing}</span></span>
-                                            <span>- Video <span className="text-white font-mono">{queueStats.systemVideoProcessing}/{CONCURRENCY_LIMITS.system.videoProcessing}</span></span>
-                                            <span>- Hàng Chờ <span className="text-white font-mono">{queueStats.systemQueued}/{CONCURRENCY_LIMITS.system.queued}</span></span>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
-                            {isConcurrencyExpanded && (
-                                <div className="pt-3 mt-2 border-t border-white/5 space-y-4 animate-fade-in">
-                                    {/* User Concurrency */}
-                                    <div className="space-y-2">
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Của bạn</span>
-                                        </div>
-                                        <div className="space-y-2">
-                                            <div className="flex items-center justify-between text-xs">
-                                                <span className="text-slate-300">Đang xử lý</span>
-                                                <span className="font-mono text-audi-cyan bg-audi-cyan/10 px-2 py-0.5 rounded-md">
-                                                    {queueStats.myImageProcessing}/{CONCURRENCY_LIMITS.user.imageProcessing}
-                                                </span>
-                                            </div>
-                                            <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
-                                                <div
-                                                    className="bg-audi-cyan h-full transition-all duration-500 ease-out"
-                                                    style={{ width: `${Math.min(100, (queueStats.myImageProcessing / CONCURRENCY_LIMITS.user.imageProcessing) * 100)}%` }}
-                                                />
-                                            </div>
-
-                                            <div className="flex items-center justify-between text-xs pt-1">
-                                                <span className="text-slate-300">Hàng chờ</span>
-                                                <span className="font-mono text-audi-yellow bg-audi-yellow/10 px-2 py-0.5 rounded-md">
-                                                    {queueStats.myQueued}/{CONCURRENCY_LIMITS.user.queued}
-                                                </span>
-                                            </div>
-                                            <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
-                                                <div
-                                                    className="bg-audi-yellow h-full transition-all duration-500 ease-out"
-                                                    style={{ width: `${Math.min(100, (queueStats.myQueued / CONCURRENCY_LIMITS.user.queued) * 100)}%` }}
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="h-px bg-white/5 w-full" />
-
-                                    {/* System Concurrency */}
-                                    <div className="space-y-2">
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Hệ thống</span>
-                                        </div>
-                                        <div className="space-y-2">
-                                            <div className="flex items-center justify-between text-xs">
-                                                <span className="text-slate-300">Ảnh</span>
-                                                <span className="font-mono text-slate-400 bg-white/5 px-2 py-0.5 rounded-md">
-                                                    {queueStats.systemImageProcessing}/{CONCURRENCY_LIMITS.system.imageProcessing}
-                                                </span>
-                                            </div>
-                                            <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
-                                                <div
-                                                    className="bg-slate-400 h-full transition-all duration-500 ease-out"
-                                                    style={{ width: `${Math.min(100, (queueStats.systemImageProcessing / CONCURRENCY_LIMITS.system.imageProcessing) * 100)}%` }}
-                                                />
-                                            </div>
-
-                                            <div className="flex items-center justify-between text-xs pt-1">
-                                                <span className="text-slate-300">Video</span>
-                                                <span className="font-mono text-slate-400 bg-white/5 px-2 py-0.5 rounded-md">
-                                                    {queueStats.systemVideoProcessing}/{CONCURRENCY_LIMITS.system.videoProcessing}
-                                                </span>
-                                            </div>
-                                            <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
-                                                <div
-                                                    className="bg-slate-400 h-full transition-all duration-500 ease-out"
-                                                    style={{ width: `${Math.min(100, (queueStats.systemVideoProcessing / CONCURRENCY_LIMITS.system.videoProcessing) * 100)}%` }}
-                                                />
-                                            </div>
-
-                                            <div className="flex items-center justify-between text-xs pt-1">
-                                                <span className="text-slate-300">Hàng chờ chung</span>
-                                                <span className="font-mono text-orange-400 bg-orange-400/10 px-2 py-0.5 rounded-md">
-                                                    {queueStats.systemQueued}/{CONCURRENCY_LIMITS.system.queued}
-                                                </span>
-                                            </div>
-                                            <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
-                                                <div
-                                                    className="bg-orange-400 h-full transition-all duration-500 ease-out"
-                                                    style={{ width: `${Math.min(100, (queueStats.systemQueued / CONCURRENCY_LIMITS.system.queued) * 100)}%` }}
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
+                                );
+                            })}
                         </div>
                     </div>
 
-                    {/* Redesigned Pricing Display */}
-                    <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-audi-purple/20 to-audi-pink/20 border border-white/10 p-3 mt-4">
-                        <div className="flex justify-between items-center relative z-10">
-                            <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Giá hiện tại</span>
-                            <div className="flex items-end gap-1">
-                                <span className="text-xl font-black text-white font-game drop-shadow-md">
-                                    {calculateCost()}
-                                </span>
-                                <span className="text-[10px] font-bold text-audi-yellow mb-1">VCOIN</span>
-                            </div>
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider">Tốc độ xử lý</label>
+                        <div className="flex gap-1 neu-inset-sm p-1.5 rounded-2xl">
+                            {availableSpeedLabels.map((label) => (
+                                <button
+                                    key={label}
+                                    type="button"
+                                    onClick={() => setSpeed(label)}
+                                    className={`flex-1 px-2 py-2 rounded-xl text-[10px] font-black ${
+                                        speed === label ? 'neu-raised-sm text-[#00A8C8] dark:text-[#00F2FE]' : 'text-slate-600 dark:text-slate-400'
+                                    }`}
+                                >
+                                    {label}
+                                </button>
+                            ))}
                         </div>
-                        {aiModel === 'pro' ? (
-                            <div className="flex justify-between text-[9px] text-slate-500 mt-2 font-mono border-t border-white/5 pt-2">
-                                <span className={resolution === '1K' ? 'text-white font-bold' : ''}>1K: {prices.pro_1k}VC</span>
-                                <span className={resolution === '2K' ? 'text-white font-bold' : ''}>2K: {prices.pro_2k}VC</span>
-                                <span className={resolution === '4K' ? 'text-white font-bold' : ''}>4K: {prices.pro_4k}VC</span>
-                            </div>
-                        ) : aiModel === 'gpt' ? (
-                            <div className="flex justify-between text-[9px] text-slate-500 mt-2 font-mono border-t border-white/5 pt-2">
-                                <span className={resolution === '1K' ? 'text-white font-bold' : ''}>1K: {prices.gpt_1k}VC</span>
-                                <span className={resolution === '2K' ? 'text-white font-bold' : ''}>2K: {prices.gpt_2k}VC</span>
-                                <span className={resolution === '4K' ? 'text-white font-bold' : ''}>4K: {prices.gpt_4k}VC</span>
-                            </div>
-                        ) : (
-                            <div className="flex justify-between text-[9px] text-slate-500 mt-2 font-mono border-t border-white/5 pt-2">
-                                <span className={resolution === '1K' ? 'text-white font-bold' : ''}>1K: {prices.flash_1k}VC</span>
-                                <span className={resolution === '2K' ? 'text-white font-bold' : ''}>2K: {prices.flash_2k}VC</span>
-                                <span className={resolution === '4K' ? 'text-white font-bold' : ''}>4K: {prices.flash_4k}VC</span>
-                            </div>
-                        )}
                     </div>
 
-                    <button
-                        data-tour-id="desktop.generation.generate"
-                        onClick={handleGenerate}
-                        disabled={isGenerateDisabled || isSubmitting}
-                        className={`w-full py-3.5 mt-auto rounded-xl font-bold text-white shadow-[0_0_20px_rgba(255,0,153,0.4)] transition-all flex items-center justify-center gap-2 ${
-                            (isGenerateDisabled || isSubmitting)
-                            ? 'bg-slate-600 cursor-not-allowed opacity-70 shadow-none'
-                            : 'bg-gradient-to-r from-audi-pink to-audi-purple hover:scale-[1.02]'
-                        }`}
-                    >
-                        {isSubmitting ? (
-                            <>
-                                <Icons.Loader className="w-5 h-5 animate-spin" />
-                                <span>{lang === 'vi' ? 'ĐANG GỬI JOB...' : 'SUBMITTING...'}</span>
-                            </>
-                        ) : cooldownRemaining > 0 ? (
-                            <>
-                                <Icons.Clock className="w-5 h-5 animate-spin-slow" />
-                                <span>{lang === 'vi' ? `ĐỢI ${cooldownRemaining}s` : `WAIT ${cooldownRemaining}s`}</span>
-                            </>
-                        ) : (
-                            <>
-                                <Icons.Wand className="w-5 h-5" />
-                                <span>{lang === 'vi' ? 'TẠO ẢNH NGAY' : 'GENERATE'}</span>
-                            </>
-                        )}
-                    </button>
-
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider">Server TST</label>
+                        <div className="flex gap-1 neu-inset-sm p-1.5 rounded-2xl">
+                            {availableServerLabels.map((label) => (
+                                <button
+                                    key={label}
+                                    type="button"
+                                    onClick={() => setServer(label)}
+                                    className={`flex-1 px-2 py-2 rounded-xl text-[10px] font-black ${
+                                        server === label ? 'neu-raised-sm text-purple-600 dark:text-purple-400' : 'text-slate-600 dark:text-slate-400'
+                                    }`}
+                                >
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
                 </div>
+            </div>
+
+            {/* BLOCK 4: COST CALCULATOR & LAUNCH CTA (lg:col-span-5 xl:col-span-4) */}
+            <div data-tour-id="desktop.generation.generate" className="lg:col-span-5 xl:col-span-4 neu-card p-6 rounded-3xl space-y-4 shadow-xl flex flex-col justify-between">
+                <div className="space-y-4">
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-200/60 dark:border-slate-800">
+                        <h3 className="font-black text-slate-900 dark:text-white text-sm uppercase tracking-wider font-accent flex items-center gap-2">
+                            <Icons.Zap className="w-4 h-4 text-amber-500" /> 4. XÁC NHẬN & RENDER 3D
+                        </h3>
+                    </div>
+
+                    <div className="neu-inset-sm p-4 rounded-2xl space-y-2">
+                        <div className="flex items-center justify-between">
+                            <span className="text-xs font-black text-slate-700 dark:text-slate-300">Chi phí Vcoin:</span>
+                            <div className="flex items-baseline gap-1">
+                                <span className="text-2xl font-black text-amber-500 font-accent">{calculateCost()}</span>
+                                <span className="text-xs font-black text-amber-500">VCOIN</span>
+                            </div>
+                        </div>
+                        <p className="text-[10px] text-slate-700 dark:text-slate-300 font-semibold">Trừ trực tiếp số dư khi bắt đầu khởi tạo job render AI.</p>
+                    </div>
+
+                    <div className="neu-inset-sm rounded-2xl overflow-hidden">
+                        <button
+                            type="button"
+                            onClick={() => setIsConcurrencyExpanded((value) => !value)}
+                            className="w-full px-4 py-3 flex items-center justify-between text-left"
+                            aria-expanded={isConcurrencyExpanded}
+                        >
+                            <span className="text-[10px] font-black uppercase text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                                <Icons.Activity className="w-4 h-4 text-[#00A8C8] dark:text-[#00F2FE]" />
+                                Luồng xử lý
+                            </span>
+                            <span className="text-[10px] font-mono text-slate-600 dark:text-slate-300">
+                                Ảnh {queueStats.myImageProcessing}/{CONCURRENCY_LIMITS.user.imageProcessing} · Chờ {queueStats.myQueued}/{CONCURRENCY_LIMITS.user.queued}
+                            </span>
+                        </button>
+                        {isConcurrencyExpanded && (
+                            <div className="px-4 pb-3 pt-2 border-t border-slate-200/60 dark:border-slate-800 space-y-2 text-[10px] text-slate-600 dark:text-slate-300">
+                                <div className="flex justify-between">
+                                    <span>Hệ thống xử lý ảnh</span>
+                                    <span className="font-mono">{queueStats.systemImageProcessing}/{CONCURRENCY_LIMITS.system.imageProcessing}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span>Hàng chờ hệ thống</span>
+                                    <span className="font-mono">{queueStats.systemQueued}/{CONCURRENCY_LIMITS.system.queued}</span>
+                                </div>
+                                <button type="button" onClick={triggerPoll} className="neu-button w-full py-2 rounded-xl font-black text-[#FF007F]">
+                                    Làm mới trạng thái
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <button
+                    onClick={handleGenerate}
+                    disabled={isGenerateDisabled || isSubmitting}
+                    className={`w-full py-4 rounded-2xl font-black transition-all flex items-center justify-center gap-2 text-sm uppercase tracking-wider shadow-2xl ${
+                        (isGenerateDisabled || isSubmitting)
+                        ? 'bg-slate-400 text-slate-200 cursor-not-allowed opacity-70 neu-inset-sm'
+                        : 'neu-button-primary'
+                    }`}
+                >
+                    {isSubmitting ? (
+                        <>
+                            <Icons.Loader className="w-5 h-5 animate-spin" />
+                            <span>ĐANG GỬI JOB RENDER...</span>
+                        </>
+                    ) : cooldownRemaining > 0 ? (
+                        <>
+                            <Icons.Clock className="w-5 h-5 animate-spin-slow" />
+                            <span>ĐỢI {cooldownRemaining}s</span>
+                        </>
+                    ) : (
+                        <>
+                            <Icons.Wand className="w-5 h-5" />
+                            <span>RENDER ẢNH AI 3D NGAY</span>
+                        </>
+                    )}
+                </button>
             </div>
 
         </div>

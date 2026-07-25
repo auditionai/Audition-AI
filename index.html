@@ -3,12 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Audition AI Studio - App Tạo Ảnh AI HOT 2026</title>
+    <title>Audition AI Studio - App Tạo Ảnh & Video AI 2026</title>
     
-    <!-- Import Google Font: Montserrat (Body) & Chakra Petch (Game UI - Vietnamese Supported) -->
+    <!-- Import Google Fonts: Be Vietnam Pro & Inter (Super Clean & 100% Perfect Vietnamese Support) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500;1,600;1,700&family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,600&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
     <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-32R3PLY2JT"></script>
@@ -31,17 +31,18 @@
         theme: {
           extend: {
             fontFamily: {
-              sans: ['Montserrat', 'sans-serif'],
-              game: ['"Chakra Petch"', 'sans-serif'], // Font Game hỗ trợ Tiếng Việt
+              sans: ['"Be Vietnam Pro"', 'Inter', 'system-ui', 'sans-serif'],
+              game: ['"Be Vietnam Pro"', 'Inter', 'system-ui', 'sans-serif'],
+              accent: ['"Be Vietnam Pro"', 'Inter', 'system-ui', 'sans-serif'],
             },
             colors: {
               audi: {
-                pink: '#FF0099',    // Audition Pink
-                purple: '#B721FF',  // Audition Purple
-                cyan: '#21D4FD',    // Audition Blue
-                lime: '#ccff00',    // Perfect Green
-                yellow: '#FBDA61',  // Gold Item
-                dark: '#090014',    // Deep Space
+                pink: '#FF007F',    // Electric Cyber Pink
+                purple: '#9D00FF',  // Deep Cyber Purple
+                cyan: '#00F2FE',    // Neon Cyber Cyan
+                lime: '#00FF87',    // Vibrant Neon Lime
+                yellow: '#FFB800',  // Gold Item
+                dark: '#0B0D14',    // Midnight Obsidian
                 glass: 'rgba(255, 255, 255, 0.05)'
               }
             },
@@ -50,72 +51,30 @@
               'float': 'float 4s ease-in-out infinite',
               'float-fast': 'float 2.5s ease-in-out infinite',
               'spin-slow': 'spin 8s linear infinite',
-              'floor-move': 'floorMove 0.8s linear infinite', 
-              'laser': 'laser 3s infinite',
-              'shimmer': 'shimmer 2s linear infinite',
-              'perfect-pop': 'pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
-              'arrow-flow': 'arrowFlow 1.5s linear infinite',
-              'shake': 'shake 0.5s cubic-bezier(.36,.07,.19,.97) both',
-              'neon-flash': 'neonFlash 1.5s infinite alternate',
-              'bounce-slow': 'bounce 3s infinite',
-              'marquee': 'marquee 40s linear infinite',
-              'fade-in': 'fadeIn 0.8s ease-out forwards',
+              'pulse-glow': 'pulseGlow 2s ease-in-out infinite',
+              'fade-in': 'fadeIn 0.5s ease-out forwards',
               'slide-in-right': 'slideInRight 0.4s ease-out forwards',
             },
             keyframes: {
               beat: {
                 '0%, 100%': { transform: 'scale(1)' },
-                '15%': { transform: 'scale(1.15)' },
+                '15%': { transform: 'scale(1.08)' },
                 '30%': { transform: 'scale(1)' },
-                '45%': { transform: 'scale(1.15)' },
               },
               float: {
-                '0%, 100%': { transform: 'translateY(0) rotate(0deg)' },
-                '50%': { transform: 'translateY(-20px) rotate(5deg)' },
+                '0%, 100%': { transform: 'translateY(0)' },
+                '50%': { transform: 'translateY(-10px)' },
               },
-              floorMove: {
-                '0%': { backgroundPosition: '0px 0px' },
-                '100%': { backgroundPosition: '0px 60px' },
-              },
-              laser: {
-                '0%': { transform: 'rotate(-15deg) translateX(-100%)', opacity: '0' },
-                '50%': { opacity: '0.8' },
-                '100%': { transform: 'rotate(-15deg) translateX(100%)', opacity: '0' },
-              },
-              shimmer: {
-                '0%': { backgroundPosition: '200% 0' },
-                '100%': { backgroundPosition: '-200% 0' },
-              },
-              pop: {
-                '0%': { transform: 'scale(0.5)', opacity: '0' },
-                '80%': { transform: 'scale(1.1)', opacity: '1' },
-                '100%': { transform: 'scale(1)', opacity: '1' },
-              },
-              arrowFlow: {
-                '0%': { transform: 'translateY(100%)', opacity: '0' },
-                '50%': { opacity: '1' },
-                '100%': { transform: 'translateY(-100%)', opacity: '0' },
-              },
-              shake: {
-                '10%, 90%': { transform: 'translate3d(-1px, 0, 0)' },
-                '20%, 80%': { transform: 'translate3d(2px, 0, 0)' },
-                '30%, 50%, 70%': { transform: 'translate3d(-4px, 0, 0)' },
-                '40%, 60%': { transform: 'translate3d(4px, 0, 0)' }
-              },
-              neonFlash: {
-                '0%': { textShadow: '0 0 10px #FF0099, 0 0 20px #FF0099' },
-                '100%': { textShadow: '0 0 20px #21D4FD, 0 0 40px #21D4FD' }
-              },
-              marquee: {
-                '0%': { transform: 'translateX(0%)' },
-                '100%': { transform: 'translateX(-50%)' }
+              pulseGlow: {
+                '0%, 100%': { opacity: '0.6', filter: 'drop-shadow(0 0 15px rgba(0, 242, 254, 0.4))' },
+                '50%': { opacity: '1', filter: 'drop-shadow(0 0 25px rgba(255, 0, 127, 0.7))' },
               },
               fadeIn: {
-                '0%': { opacity: '0', transform: 'translateY(10px)' },
+                '0%': { opacity: '0', transform: 'translateY(8px)' },
                 '100%': { opacity: '1', transform: 'none' },
               },
               slideInRight: {
-                '0%': { opacity: '0', transform: 'translateX(50px)' },
+                '0%': { opacity: '0', transform: 'translateX(30px)' },
                 '100%': { opacity: '1', transform: 'none' },
               }
             }
@@ -124,80 +83,163 @@
       }
     </script>
     <style>
+      /* DESIGN SYSTEM 3.0 - MATTE PLATINUM SLATE LIGHT THEME & OBSIDIAN DARK THEME */
+      :root {
+        --neu-bg: #CFD5E1;        /* Soft matte warm platinum slate - 0% glare */
+        --neu-surface: #DFE4ED;   /* Matte slate card surface - NO PURE WHITE */
+        --neu-shadow-dark: rgba(15, 23, 42, 0.20);
+        --neu-shadow-light: #EEF2F8;
+        --neu-text-primary: #000000;   /* Ultra black 100% sharp contrast */
+        --neu-text-secondary: #0F172A; /* Deep charcoal slate */
+        --neu-text-muted: #1E293B;     /* Crisp readable dark text */
+        --neu-border: #B4BFD2;        /* Soft subtle border */
+        --neu-accent: #E11D48;
+      }
+
+      .dark {
+        --neu-bg: #0B0D14;
+        --neu-surface: #151824;
+        --neu-shadow-dark: rgba(0, 0, 0, 0.9);
+        --neu-shadow-light: rgba(255, 255, 255, 0.05);
+        --neu-text-primary: #FFFFFF;
+        --neu-text-secondary: #F1F5F9;
+        --neu-text-muted: #CBD5E1;
+        --neu-border: rgba(255, 255, 255, 0.14);
+        --neu-accent: #00F2FE;
+      }
+
       html, body {
         height: 100%;
         margin: 0;
         padding: 0;
         overflow: hidden;
+        background-color: var(--neu-bg);
+        color: var(--neu-text-primary);
+        transition: background-color 0.3s ease, color 0.3s ease;
       }
+
       #root {
         height: 100%;
         overflow-y: auto;
         overflow-x: hidden;
       }
+      
       body {
         -webkit-tap-highlight-color: transparent;
-        background-color: #05050A;
-      }
-      
-      /* Pause animation on hover */
-      .pause-on-hover:hover {
-        animation-play-state: paused;
       }
 
-      /* 3D Floor Grid - Enhanced */
-      .dance-floor-container {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        width: 100%;
-        height: 60vh;
-        perspective: 1000px;
-        z-index: -1;
-        pointer-events: none;
-        overflow: hidden;
+      /* 3D NEUMORPHISM 2.0 UTILITY CLASSES */
+      .neu-base {
+        background-color: var(--neu-bg);
+        color: var(--neu-text-primary);
       }
-      
-      .dance-floor {
-        position: absolute;
-        bottom: -20%;
-        left: -50%;
-        width: 200%;
-        height: 150%;
-        background-image: 
-          linear-gradient(rgba(255, 0, 153, 0.4) 2px, transparent 2px),
-          linear-gradient(90deg, rgba(33, 212, 253, 0.4) 2px, transparent 2px);
-        background-size: 80px 80px;
-        transform-origin: 50% 100%;
-        transform: rotateX(75deg);
-        animation: floorMove 0.6s linear infinite;
-        box-shadow: 0 -100px 100px rgba(0,0,0,0.8) inset;
-        mask-image: linear-gradient(to top, black 40%, transparent 100%);
+      .neu-surface {
+        background-color: var(--neu-surface);
       }
 
-      /* Glow Effects */
-      .neon-box {
-        box-shadow: 0 0 10px rgba(33, 212, 253, 0.5), inset 0 0 20px rgba(33, 212, 253, 0.2);
-        border: 1px solid rgba(33, 212, 253, 0.8);
+      /* Raised 3D Surface Depth */
+      .neu-raised-sm {
+        background: var(--neu-surface);
+        box-shadow: 4px 4px 10px var(--neu-shadow-dark), -4px -4px 10px var(--neu-shadow-light);
+        border: 1px solid var(--neu-border);
       }
-      .neon-box-pink {
-        box-shadow: 0 0 10px rgba(255, 0, 153, 0.5), inset 0 0 20px rgba(255, 0, 153, 0.2);
-        border: 1px solid rgba(255, 0, 153, 0.8);
+      .neu-raised-md {
+        background: var(--neu-surface);
+        box-shadow: 8px 8px 18px var(--neu-shadow-dark), -8px -8px 18px var(--neu-shadow-light);
+        border: 1px solid var(--neu-border);
+      }
+      .neu-raised-lg {
+        background: var(--neu-surface);
+        box-shadow: 12px 12px 24px var(--neu-shadow-dark), -12px -12px 24px var(--neu-shadow-light);
+        border: 1px solid var(--neu-border);
+      }
+      .neu-raised-xl {
+        background: var(--neu-surface);
+        box-shadow: 16px 16px 36px var(--neu-shadow-dark), -16px -16px 36px var(--neu-shadow-light);
+        border: 1px solid var(--neu-border);
       }
 
-      /* Better Text Outline for Vietnamese */
-      .text-outline-heavy {
-        text-shadow: 
-          -2px -2px 0 #fff,  
-           2px -2px 0 #fff,
-          -2px  2px 0 #fff,
-           2px  2px 0 #fff,
-           0 0 20px #FF0099;
-        color: #090014; /* Dark fill for contrast */
+      /* Inset 3D Sunken Wells */
+      .neu-inset-sm {
+        background: var(--neu-bg);
+        box-shadow: inset 3px 3px 6px var(--neu-shadow-dark), inset -3px -3px 6px var(--neu-shadow-light);
       }
-      
-      .perspective-text {
-        transform: perspective(500px) rotateX(20deg);
+      .neu-inset-md {
+        background: var(--neu-bg);
+        box-shadow: inset 6px 6px 14px var(--neu-shadow-dark), inset -6px -6px 14px var(--neu-shadow-light);
+      }
+
+      /* Tactile Buttons */
+      .neu-button {
+        background: var(--neu-surface);
+        box-shadow: 6px 6px 14px var(--neu-shadow-dark), -6px -6px 14px var(--neu-shadow-light);
+        border: 1px solid var(--neu-border);
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .neu-button:hover {
+        transform: translateY(-2px);
+        box-shadow: 8px 8px 18px var(--neu-shadow-dark), -8px -8px 18px var(--neu-shadow-light);
+      }
+      .neu-button:active, .neu-button-active {
+        transform: translateY(0);
+        box-shadow: inset 4px 4px 8px var(--neu-shadow-dark), inset -4px -4px 8px var(--neu-shadow-light);
+      }
+
+      /* Cyber Gradient Buttons */
+      .neu-button-primary {
+        background: linear-gradient(135deg, #FF007F 0%, #9D00FF 50%, #00F2FE 100%);
+        color: #FFFFFF;
+        box-shadow: 0 4px 18px rgba(255, 0, 127, 0.45);
+        transition: all 0.25s ease;
+      }
+      .neu-button-primary:hover {
+        transform: translateY(-2px) scale(1.02);
+        box-shadow: 0 8px 24px rgba(0, 242, 254, 0.55);
+      }
+
+      .neu-button-accent {
+        background: linear-gradient(135deg, #00F2FE 0%, #00FF87 100%);
+        color: #0B0D14;
+        font-weight: 800;
+        box-shadow: 0 4px 16px rgba(0, 242, 254, 0.4);
+        transition: all 0.25s ease;
+      }
+
+      /* Inputs */
+      .neu-input {
+        background: var(--neu-bg);
+        box-shadow: inset 4px 4px 8px var(--neu-shadow-dark), inset -4px -4px 8px var(--neu-shadow-light);
+        border: 1px solid transparent;
+        color: var(--neu-text-primary);
+        transition: all 0.25s ease;
+      }
+      .neu-input:focus {
+        outline: none;
+        border-color: #00F2FE;
+        box-shadow: inset 4px 4px 8px var(--neu-shadow-dark), 0 0 16px rgba(0, 242, 254, 0.4);
+      }
+
+      /* Cards */
+      .neu-card {
+        background: var(--neu-surface);
+        box-shadow: 10px 10px 24px var(--neu-shadow-dark), -10px -10px 24px var(--neu-shadow-light);
+        border-radius: 24px;
+        border: 1px solid var(--neu-border);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .neu-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 14px 14px 30px var(--neu-shadow-dark), -14px -14px 30px var(--neu-shadow-light);
+      }
+
+      /* Neon Glow Border Effects */
+      .cyber-glow-pink {
+        box-shadow: 0 0 20px rgba(255, 0, 127, 0.35);
+        border-color: rgba(255, 0, 127, 0.6);
+      }
+      .cyber-glow-cyan {
+        box-shadow: 0 0 20px rgba(0, 242, 254, 0.35);
+        border-color: rgba(0, 242, 254, 0.6);
       }
 
       /* Custom Scrollbar */
@@ -205,11 +247,11 @@
         width: 8px;
       }
       ::-webkit-scrollbar-track {
-        background: #090014;
+        background: var(--neu-bg);
       }
       ::-webkit-scrollbar-thumb {
-        background: linear-gradient(180deg, #FF0099, #21D4FD);
-        border-radius: 4px;
+        background: linear-gradient(180deg, #FF007F, #00F2FE);
+        border-radius: 6px;
       }
     </style>
   <script type="importmap">
@@ -229,9 +271,8 @@
 }
 </script>
 </head>
-  <body class="antialiased text-white font-sans selection:bg-audi-pink selection:text-white">
+  <body class="antialiased font-sans selection:bg-[#FF007F] selection:text-white">
     <div id="root"></div>
-    <!-- Entry Point for React Application -->
     <script type="module" src="./index.tsx"></script>
   </body>
 </html>

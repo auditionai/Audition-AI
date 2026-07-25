@@ -7,6 +7,8 @@ module.exports = {
     './components/**/*.{js,ts,jsx,tsx}',
     './views/**/*.{js,ts,jsx,tsx}',
     './services/**/*.{js,ts,jsx,tsx}',
+    './mobile-app/index.html',
+    './mobile-app/src/**/*.{js,ts,jsx,tsx}',
   ],
   theme: {
     extend: {

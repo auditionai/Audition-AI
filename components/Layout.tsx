@@ -22,246 +22,174 @@ interface LayoutProps {
 export const Layout: React.FC<LayoutProps> = ({
   children, currentView, onNavigate, lang, setLang, theme, setTheme, showCheckin, setShowCheckin, onLogout
 }) => {
-  const [scrolled, setScrolled] = useState(false);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [promoConfig, setPromoConfig] = useState<PromotionCampaign | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   useEffect(() => {
-    const root = document.getElementById('root');
-    const handleScroll = () => setScrolled((root?.scrollTop || 0) > 20);
     const refreshUser = (force = false) => getUserProfile(force ? { force: true } : undefined).then(setUser).catch(() => setUser(null));
     const refreshPromotion = () => getActivePromotion().then(setPromoConfig).catch(() => setPromoConfig(null));
-    let lastPassiveRefreshAt = 0;
-    const refreshOnAttention = () => {
-      const now = Date.now();
-      if (now - lastPassiveRefreshAt < 15_000) {
-        return;
-      }
-      lastPassiveRefreshAt = now;
-      refreshUser();
-      refreshPromotion();
-    };
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        refreshOnAttention();
-      }
-    };
-
-    root?.addEventListener('scroll', handleScroll);
 
     refreshUser();
     refreshPromotion();
 
-    // Listen for instant balance updates
     const handleBalanceUpdated = () => refreshUser(true);
-    const handleWindowFocus = () => refreshOnAttention();
     window.addEventListener('balance_updated', handleBalanceUpdated);
-    window.addEventListener('focus', handleWindowFocus);
-    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
-        root?.removeEventListener('scroll', handleScroll);
-        window.removeEventListener('balance_updated', handleBalanceUpdated);
-        window.removeEventListener('focus', handleWindowFocus);
-        document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('balance_updated', handleBalanceUpdated);
     };
   }, []);
 
-  const dockItems = [
-    { id: 'home' as ViewId, label: { vi: 'Trang chủ', en: 'Home' }, icon: 'Home' },
-    { id: 'prompt_library' as ViewId, label: { vi: 'Prompt', en: 'Prompts' }, icon: 'Sparkles', badge: true },
-    { id: 'tools' as ViewId, label: { vi: 'Công cụ', en: 'Tools' }, icon: 'Wand' },
+  const navItems = [
+    { id: 'home' as ViewId, label: { vi: 'Tổng quan', en: 'Dashboard' }, icon: 'LayoutDashboard' },
+    { id: 'prompt_library' as ViewId, label: { vi: 'Prompt mẫu', en: 'Prompts' }, icon: 'Sparkles', badge: true },
+    { id: 'tools' as ViewId, label: { vi: 'Công cụ', en: 'Tools' }, icon: 'Wand2' },
     { id: 'gallery' as ViewId, label: { vi: 'Lịch sử', en: 'Gallery' }, icon: 'Image' },
+    { id: 'topup' as ViewId, label: { vi: 'Nạp VCoin', en: 'Top Up' }, icon: 'Gem' },
+    { id: 'settings' as ViewId, label: { vi: 'Cài đặt', en: 'Settings' }, icon: 'Settings' },
   ];
 
-  const showMarquee = promoConfig?.isActive && promoConfig?.marqueeText;
   const isAccountLocked = user?.accountStatus === 'locked';
-  const accountWarning = user?.accountWarning?.trim();
-  const lockedAtText = user?.lockedAt
-    ? new Date(user.lockedAt).toLocaleString('vi-VN', {
-        hour12: false,
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    : '';
 
   return (
-    <div className="min-h-screen bg-neomorph-base text-text-primary font-sans selection:bg-primary selection:text-white relative overflow-x-hidden">
+    <div className="min-h-screen modern-base font-sans" style={{ fontFamily: 'Inter, sans-serif' }}>
       {showCheckin && <DailyCheckin onClose={() => setShowCheckin(false)} onSuccess={() => getUserProfile({ force: true }).then(setUser)} lang={lang === 'vi' ? 'vi' : 'en'} />}
 
-      {accountWarning && !isAccountLocked && (
-          <div className={`${showMarquee ? 'top-9' : 'top-2'} fixed left-1/2 z-[80] w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 neomorph-raised px-4 py-3 text-sm`}>
-              <div className="flex items-start gap-3">
-                  <Icons.AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-secondary" />
-                  <div>
-                      <div className="font-bold text-text-primary">Cảnh báo tài khoản</div>
-                      <div className="text-text-secondary">{accountWarning}</div>
-                  </div>
-              </div>
-          </div>
-      )}
-
       {isAccountLocked && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4 backdrop-blur-md">
-              <div className="w-full max-w-lg neomorph-float p-8 text-center animate-fade-in">
-                  <div className="mx-auto mb-5 neomorph-icon w-20 h-20">
-                      <Icons.Lock className="h-10 w-10 text-secondary" />
-                  </div>
-                  <h2 className="text-2xl font-black text-text-primary font-accent">Tài khoản đã bị khóa</h2>
-                  <p className="mt-3 text-sm leading-relaxed text-text-secondary">
-                      Tài khoản này đang bị tạm khóa do hệ thống phát hiện dấu hiệu vi phạm hoặc lạm dụng tính năng.
-                  </p>
-                  <div className="mt-5 space-y-3 neomorph-inset p-4 text-left text-sm">
-                      <div>
-                          <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Lý do</div>
-                          <div className="mt-1 text-text-primary">{user?.lockReason || 'Vi phạm quy định sử dụng hệ thống.'}</div>
-                      </div>
-                      {lockedAtText && (
-                          <div>
-                              <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Thời gian khóa</div>
-                              <div className="mt-1 text-text-primary">{lockedAtText}</div>
-                          </div>
-                      )}
-                      <div>
-                          <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Tài khoản</div>
-                          <div className="mt-1 break-all text-text-primary">{user?.email}</div>
-                      </div>
-                  </div>
-                  <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <a href="mailto:support@auditionai.vn" className="neomorph-btn px-4 py-3 text-sm font-bold text-text-primary hover:text-primary transition-colors">
-                          Liên hệ hỗ trợ
-                      </a>
-                      <button onClick={() => void onLogout?.()} className="neomorph-btn px-4 py-3 text-sm font-bold text-text-secondary hover:text-text-primary transition-colors">
-                          Đăng xuất
-                      </button>
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {/* --- PROMOTION MARQUEE --- */}
-      {showMarquee && (
-          <div className="fixed top-0 left-0 right-0 h-8 gradient-primary z-[60] flex items-center overflow-hidden border-b border-white/20 shadow-lg">
-              <div className="animate-[marquee_20s_linear_infinite] whitespace-nowrap flex gap-10 items-center font-accent text-xs font-bold text-white uppercase tracking-widest">
-                  <span>{promoConfig.marqueeText}</span>
-                  <span>{promoConfig.marqueeText}</span>
-                  <span>{promoConfig.marqueeText}</span>
-              </div>
-          </div>
-      )}
-
-      {/* --- HEADER --- */}
-      <header className={`fixed ${showMarquee ? 'top-8' : 'top-0'} left-0 right-0 z-50 transition-all duration-300 ${scrolled ? 'py-2' : 'py-4 md:py-5'}`}>
-         <div className={`max-w-7xl mx-auto px-4 md:px-6 neomorph-flat py-3 ${scrolled ? 'shadow-lg' : ''} transition-all`}>
-            <div className="flex justify-between items-center">
-               {/* Logo */}
-               <div
-                 data-tour-id="desktop.layout.logo"
-                 className="flex items-center gap-3 cursor-pointer group"
-                 onClick={() => onNavigate('home')}
-               >
-                   <div className="w-10 h-10 md:w-12 md:h-12 neomorph-icon gradient-primary p-2 group-hover:scale-105 transition-transform">
-                       <Icons.Sparkles className="text-white w-full h-full" />
-                   </div>
-                   <div className="flex flex-col">
-                       <span className="font-accent text-xl md:text-2xl font-bold tracking-wider text-text-primary leading-none">
-                           AUDITION
-                       </span>
-                       <span className="text-[10px] font-bold text-primary tracking-[0.3em] uppercase">AI STUDIO</span>
-                   </div>
-               </div>
-
-               {/* Right section */}
-               <div className="flex items-center gap-3">
-                    <button
-                       data-tour-id="desktop.layout.language"
-                       onClick={() => setLang(lang === 'vi' ? 'en' : 'vi')}
-                       className="neomorph-btn px-3 py-1.5 text-[10px] font-bold text-text-secondary hover:text-primary transition-colors uppercase tracking-wider"
-                   >
-                       {lang === 'vi' ? 'VN' : 'EN'}
-                   </button>
-               </div>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4 backdrop-blur-md">
+          <div className="w-full max-w-lg modern-card p-8 text-center">
+            <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-red-100">
+              <Icons.Lock className="h-10 w-10 text-red-600" />
             </div>
-         </div>
-      </header>
-
-      <main className={`relative z-10 ${showMarquee ? 'pt-32' : 'pt-24'} pb-32 min-h-screen`}>
-         <div className={`${currentView === 'admin' ? 'w-full max-w-[1920px] px-4 xl:px-6 2xl:px-8' : 'max-w-7xl px-4 md:px-6'} mx-auto animate-fade-in`}>
-             {children}
-         </div>
-      </main>
-
-      {/* --- DOCK NAVIGATION --- */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex justify-center w-auto">
-          <div data-tour-id="desktop.layout.dock" className="neomorph-float px-4 py-3 flex items-center gap-6 animate-slide-in-right">
-
-              {/* Main nav icons */}
-              <div className="flex items-center gap-2">
-                {dockItems.map((item) => {
-                    const Icon = Icons[item.icon as keyof typeof Icons];
-                    const isActive = currentView === item.id;
-                    return (
-                        <button
-                          key={item.id}
-                          data-tour-id={`desktop.layout.nav.${item.id}`}
-                          onClick={() => onNavigate(item.id)}
-                          className={`relative group flex items-center justify-center w-12 h-12 md:w-14 md:h-14 rounded-2xl transition-all duration-300 ${
-                            isActive ? 'neomorph-inset' : 'neomorph-flat hover:neomorph-raised'
-                          }`}
-                        >
-                            {item.badge && !isActive && (
-                                <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-secondary shadow-lg" />
-                            )}
-                            <Icon className={`w-5 h-5 md:w-6 md:h-6 transition-all duration-300 ${
-                              isActive ? 'text-primary scale-110' : 'text-text-secondary group-hover:text-primary'
-                            }`} />
-                            {isActive && <div className="absolute bottom-2 w-1 h-1 rounded-full bg-primary"></div>}
-                        </button>
-                    );
-                })}
-              </div>
-
-              <div className="w-px h-8 bg-text-muted/30"></div>
-
-              {/* VCoin & Profile */}
-              <div className="flex items-center gap-3">
-                  {/* Balance */}
-                  <button
-                    data-tour-id="desktop.layout.vcoin"
-                    onClick={() => onNavigate('topup')}
-                    className="flex items-center gap-2 neomorph-btn px-3 py-2 hover:neomorph-raised transition-all group"
-                  >
-                       <Icons.Gem className="w-3.5 h-3.5 text-secondary group-hover:rotate-12 transition-transform" />
-                       <div className="flex flex-col leading-none">
-                           <span className="text-sm font-bold text-primary font-accent">{user?.vcoin_balance?.toLocaleString() || 0}</span>
-                           <span className="text-[8px] text-text-muted font-bold uppercase">VCOIN</span>
-                       </div>
-                       <Icons.ArrowUp className="w-3 h-3 text-secondary" />
-                  </button>
-
-                  {/* Avatar */}
-                  <button
-                      data-tour-id="desktop.layout.profile"
-                      onClick={() => onNavigate('settings')}
-                      className={`relative w-11 h-11 md:w-12 md:h-12 rounded-full overflow-hidden transition-all group ${
-                        currentView === 'settings' ? 'neomorph-inset ring-2 ring-primary' : 'neomorph-raised hover:neomorph-float'
-                      }`}
-                  >
-                      <img
-                        src={user?.avatar || "https://picsum.photos/100/100"}
-                        alt="User"
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                        onError={(e) => { e.currentTarget.src = "https://picsum.photos/100/100"; }}
-                      />
-                  </button>
-              </div>
-
+            <h2 className="text-2xl font-bold text-gray-900">Tài khoản đã bị khóa</h2>
+            <p className="mt-3 text-sm text-gray-600">
+              Tài khoản này đang bị tạm khóa do hệ thống phát hiện dấu hiệu vi phạm.
+            </p>
+            <div className="mt-6 flex gap-3">
+              <a href="mailto:support@auditionai.vn" className="flex-1 rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700">
+                Liên hệ hỗ trợ
+              </a>
+              <button onClick={() => void onLogout?.()} className="flex-1 rounded-lg bg-gray-200 px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-300">
+                Đăng xuất
+              </button>
+            </div>
           </div>
-      </div>
+        </div>
+      )}
 
+      <div className="flex h-screen overflow-hidden">
+        {/* SIDEBAR */}
+        <aside className={`modern-sidebar flex flex-col transition-all duration-300 ${sidebarCollapsed ? 'w-20' : 'w-64'} fixed left-0 top-0 bottom-0 z-40`}>
+          {/* Logo */}
+          <div className="flex h-16 items-center gap-3 border-b border-gray-200 px-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-purple-600">
+              <Icons.Sparkles className="h-5 w-5 text-white" />
+            </div>
+            {!sidebarCollapsed && (
+              <div>
+                <div className="text-sm font-bold text-gray-900">AUDITION AI</div>
+                <div className="text-[10px] text-gray-500">AI Studio</div>
+              </div>
+            )}
+          </div>
+
+          {/* Nav Items */}
+          <nav className="flex-1 overflow-y-auto p-3">
+            {navItems.map((item) => {
+              const Icon = Icons[item.icon as keyof typeof Icons];
+              const isActive = currentView === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => onNavigate(item.id)}
+                  className={`group relative mb-1 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all ${
+                    isActive
+                      ? 'bg-blue-50 text-blue-600'
+                      : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  <Icon className="h-5 w-5 shrink-0" />
+                  {!sidebarCollapsed && (
+                    <>
+                      <span className="flex-1 text-left">{item.label[lang]}</span>
+                      {item.badge && !isActive && (
+                        <span className="h-2 w-2 rounded-full bg-orange-500"></span>
+                      )}
+                    </>
+                  )}
+                  {isActive && <div className="absolute right-0 top-1/2 h-8 w-1 -translate-y-1/2 rounded-l-full bg-blue-600"></div>}
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* User Profile */}
+          <div className="border-t border-gray-200 p-3">
+            <div className="flex items-center gap-3">
+              <img
+                src={user?.avatar || "https://picsum.photos/100/100"}
+                alt="Avatar"
+                className="h-10 w-10 rounded-full object-cover ring-2 ring-gray-200"
+              />
+              {!sidebarCollapsed && (
+                <div className="flex-1 overflow-hidden">
+                  <div className="truncate text-sm font-semibold text-gray-900">{user?.display_name || 'User'}</div>
+                  <div className="flex items-center gap-1 text-xs text-gray-500">
+                    <Icons.Gem className="h-3 w-3" />
+                    <span className="font-semibold">{user?.vcoin_balance?.toLocaleString() || 0}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </aside>
+
+        {/* MAIN CONTENT */}
+        <main className={`flex-1 transition-all duration-300 ${sidebarCollapsed ? 'ml-20' : 'ml-64'} flex flex-col overflow-hidden`}>
+          {/* Top Bar */}
+          <header className="flex h-16 items-center justify-between border-b border-gray-200 bg-white px-6">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                className="rounded-lg p-2 hover:bg-gray-100"
+              >
+                <Icons.Menu className="h-5 w-5 text-gray-600" />
+              </button>
+              <h1 className="text-lg font-semibold text-gray-900">
+                {navItems.find(item => item.id === currentView)?.label[lang] || 'Dashboard'}
+              </h1>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowCheckin(true)}
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium hover:bg-gray-100"
+              >
+                <Icons.Calendar className="h-4 w-4" />
+                <span className="hidden sm:inline">{lang === 'vi' ? 'Điểm danh' : 'Check-in'}</span>
+              </button>
+
+              <button
+                onClick={() => setLang(lang === 'vi' ? 'en' : 'vi')}
+                className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-gray-100"
+              >
+                {lang === 'vi' ? 'VN' : 'EN'}
+              </button>
+
+              <button className="relative rounded-lg p-2 hover:bg-gray-100">
+                <Icons.Bell className="h-5 w-5 text-gray-600" />
+                <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500"></span>
+              </button>
+            </div>
+          </header>
+
+          {/* Page Content */}
+          <div className="flex-1 overflow-y-auto p-6" style={{ background: '#F8F9FA' }}>
+            {children}
+          </div>
+        </main>
+      </div>
     </div>
   );
 };

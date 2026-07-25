@@ -256,9 +256,7 @@ const normalizeReviewResult = (raw: any, pixelMetrics?: PixelQualityMetrics): Ch
     normalizedSharpness === 'blurry'
     || normalizedNoise === 'high'
     || normalizedDetail === 'poor'
-    || explicitSharpnessIssue
-    || (normalizedSharpness === 'unknown' && normalizedNoise === 'high')
-    || (normalizedSharpness === 'unknown' && normalizedDetail === 'poor');
+    || explicitSharpnessIssue;
   const moderateSharpnessIssue =
     normalizedSharpness === 'soft'
     && (
@@ -288,7 +286,6 @@ const normalizeReviewResult = (raw: any, pixelMetrics?: PixelQualityMetrics): Ch
     heuristicNeedsBackgroundRemoval
     && !strongSharpnessIssue
     && normalizedDetail === 'clear'
-    && normalizedNoise !== 'high'
     && !pixelSuggestsSharpenStrong
     && !pixelSuggestsSharpenModerate;
   const heuristicNeedsSharpen =

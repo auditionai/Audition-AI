@@ -1201,21 +1201,38 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           storage: { ...current.storage, status: 'checking' },
       }));
 
+      const withHealthTimeout = <T,>(promise: Promise<T>, fallback: T, timeoutMs = 18000): Promise<T> =>
+          Promise.race([
+              promise,
+              new Promise<T>((resolve) => {
+                  window.setTimeout(() => resolve(fallback), timeoutMs);
+              }),
+          ]);
+
       const startGemini = Date.now();
       const keyToUse = specificKey !== undefined ? specificKey : (apiKey || undefined);
       const [geminiCheck, sbCheck, r2Ok] = await Promise.all([
-          checkConnection(keyToUse).catch((error) => {
-              console.warn('[Admin] Gemini health check failed', error);
-              return { success: false, message: error?.message || 'Connection failed' };
-          }),
-          checkSupabaseConnection().catch((error) => {
-              console.warn('[Admin] Supabase health check failed', error);
-              return { db: false, storage: false, latency: 0 };
-          }),
-          checkR2Connection().catch((error) => {
-              console.warn('[Admin] R2 health check failed', error);
-              return false;
-          }),
+          withHealthTimeout(
+              checkConnection(keyToUse).catch((error) => {
+                  console.warn('[Admin] Gemini health check failed', error);
+                  return { success: false, message: error?.message || 'Connection failed' };
+              }),
+              { success: false, message: 'Health check timed out' },
+          ),
+          withHealthTimeout(
+              checkSupabaseConnection().catch((error) => {
+                  console.warn('[Admin] Supabase health check failed', error);
+                  return { db: false, storage: false, latency: 0 };
+              }),
+              { db: false, storage: false, latency: 0 },
+          ),
+          withHealthTimeout(
+              checkR2Connection().catch((error) => {
+                  console.warn('[Admin] R2 health check failed', error);
+                  return false;
+              }),
+              false,
+          ),
       ]);
       const geminiLatency = Date.now() - startGemini;
       
@@ -2347,59 +2364,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       });
   };
 
-  const buildR2CleanupParams = (dryRun: boolean) => ({
-      startDate: r2CleanupStartDate,
-      endDate: r2CleanupEndDate,
-      dryRun,
-      includePublic: r2CleanupIncludePublic,
-      includeOrphanR2: r2CleanupIncludeOrphans,
-      prefix: r2CleanupPrefix.trim(),
-  });
-
   const handlePreviewR2Cleanup = async () => {
       showToast('Tính năng cleanup R2 theo DB đang tạm khóa để bảo vệ Supabase. Hãy dùng R2 lifecycle/prefix cleanup.', 'error');
-      return;
-
-      if (!r2CleanupStartDate || !r2CleanupEndDate) {
-          showToast('Vui lòng chọn ngày bắt đầu và ngày kết thúc.', 'error');
-          return;
-      }
-
-      setR2CleanupLoading(true);
-      try {
-          const result = await runAdminR2Cleanup(buildR2CleanupParams(true));
-          setR2CleanupPreview(result);
-          showToast(`Tìm thấy ${result.matched.dbRows} dòng DB và ${result.matched.totalR2Objects} file R2 có thể xoá.`, 'info');
-      } catch (e: any) {
-          showToast(`Lỗi preview R2: ${e.message || e}`, 'error');
-      } finally {
-          setR2CleanupLoading(false);
-      }
   };
 
   const handleExecuteR2Cleanup = async () => {
       showToast('Tính năng cleanup R2 theo DB đang tạm khóa để bảo vệ Supabase. Hãy dùng R2 lifecycle/prefix cleanup.', 'error');
-      return;
-
-      const preview = r2CleanupPreview;
-      const totalR2 = preview?.matched?.totalR2Objects ?? 0;
-      const totalDb = preview?.matched?.dbRows ?? 0;
-      showConfirm(
-          `Xóa thật ${totalDb} dòng lịch sử và ${totalR2} file R2 trong khoảng ${r2CleanupStartDate} -> ${r2CleanupEndDate}? Hành động này không thể hoàn tác.`,
-          async () => {
-              setR2CleanupLoading(true);
-              try {
-                  const result = await runAdminR2Cleanup(buildR2CleanupParams(false));
-                  setR2CleanupPreview(result);
-                  showToast(`Đã xoá ${result.deleted.dbRows} dòng DB và ${result.deleted.r2Objects} file R2.`, 'success');
-                  await refreshData();
-              } catch (e: any) {
-                  showToast(`Lỗi xoá R2: ${e.message || e}`, 'error');
-              } finally {
-                  setR2CleanupLoading(false);
-              }
-          },
-      );
   };
 
   // --- BULK ACTIONS ---
@@ -2573,7 +2543,15 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               {[
                   { label: 'Gemini AI', value: health.gemini, icon: Icons.Sparkles },
                   { label: 'Supabase', value: health.supabase, icon: Icons.Database },
-                  { label: 'R2 Storage', value: health.storage, icon: Icons.Cloud },
+                  {
+                      label: health.storage.type === 'R2'
+                          ? 'R2 Storage'
+                          : health.storage.type === 'Supabase'
+                              ? 'Supabase Storage'
+                              : 'Cloud Storage',
+                      value: health.storage,
+                      icon: Icons.Cloud,
+                  },
               ].map((service) => {
                   const connected = service.value.status === 'connected';
                   const checking = service.value.status === 'checking';
@@ -2670,9 +2648,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           <span className="text-slate-700 dark:text-slate-300">Database</span>
                       </div>
                       <span className="text-slate-700 dark:text-slate-300 font-semibold dark:text-slate-600">•</span>
-                      <div className="flex items-center gap-1.5" title="Cloudflare R2 Storage">
+                      <div className="flex items-center gap-1.5" title={health.storage.type === 'R2' ? 'Cloudflare R2 Storage' : 'Supabase Storage'}>
                           <span className={`w-2.5 h-2.5 rounded-full ${health.storage.status === 'connected' ? 'bg-emerald-500 shadow-[0_0_8px_#10B981]' : 'bg-red-500'}`} />
-                          <span className="text-slate-700 dark:text-slate-300">R2 Storage</span>
+                          <span className="text-slate-700 dark:text-slate-300">
+                              {health.storage.type === 'R2' ? 'R2 Storage' : health.storage.type === 'Supabase' ? 'Supabase Storage' : 'Cloud Storage'}
+                          </span>
                       </div>
                   </div>
               </div>

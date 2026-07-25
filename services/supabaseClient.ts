@@ -3,8 +3,9 @@ import { createClient } from '@supabase/supabase-js';
 
 // Access Environment Variables (Vite standard)
 const metaEnv = (import.meta as any).env || {};
-const supabaseUrl = metaEnv.VITE_SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = metaEnv.VITE_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+const processEnv = typeof process !== 'undefined' ? process.env : {};
+const supabaseUrl = metaEnv.VITE_SUPABASE_URL || processEnv.VITE_SUPABASE_URL;
+const supabaseAnonKey = metaEnv.VITE_SUPABASE_ANON_KEY || processEnv.VITE_SUPABASE_ANON_KEY;
 
 let client = null;
 const SESSION_CACHE_TTL_MS = 5000;
@@ -133,8 +134,8 @@ export const clearSupabaseSessionCache = () => {
 };
 
 // --- SECONDARY CLIENT: CAULENHAU.IO.VN ---
-const clhUrl = metaEnv.VITE_CAULENHAU_SUPABASE_URL || process.env.CAULENHAU_SUPABASE_URL;
-const clhKey = metaEnv.VITE_CAULENHAU_SUPABASE_ANON_KEY || process.env.CAULENHAU_SUPABASE_ANON_KEY;
+const clhUrl = metaEnv.VITE_CAULENHAU_SUPABASE_URL || processEnv.CAULENHAU_SUPABASE_URL;
+const clhKey = metaEnv.VITE_CAULENHAU_SUPABASE_ANON_KEY || processEnv.CAULENHAU_SUPABASE_ANON_KEY;
 
 export const caulenhauClient = (clhUrl && clhKey) ? createClient(clhUrl, clhKey) : null;
 

@@ -384,8 +384,8 @@ npm run dev
 
 ### 2. Login
 ```
-Email: admin.test@auditionai.vn
-Password: Admin@Test2026!
+Email: cấu hình qua E2E_ADMIN_EMAIL
+Password: cấu hình qua E2E_ADMIN_PASSWORD
 ```
 
 ### 3. Check Components

@@ -172,7 +172,7 @@ export const Home: React.FC<HomeProps> = ({
                 <p className="text-[10px] text-slate-700 dark:text-slate-300 font-semibold mt-0.5">Biến ảnh thành Video vũ đạo</p>
               </div>
               <div className="mt-3 pt-2 border-t border-slate-200 dark:border-slate-800 text-[10px] font-black text-[#FF007F]">
-                Giá từ 25 Vcoin
+                Giá từ 15 Vcoin
               </div>
             </div>
 

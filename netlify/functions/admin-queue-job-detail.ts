@@ -551,7 +551,7 @@ const buildMediaSections = (
   const referenceMedia = inputMedia.filter((media) => media.kind === 'image' && referenceRoles.has(media.role));
   const sampleMedia = inputMedia.filter((media) => media.kind === 'image' && media.role === 'sample');
 
-  return [
+  const sections: AdminQueueMediaSection[] = [
     {
       key: 'reference',
       label: 'Ảnh tham chiếu nhân vật',
@@ -570,7 +570,8 @@ const buildMediaSections = (
       description: 'Ảnh hoặc video đã được provider trả về và lưu thành công.',
       items: resultMedia,
     },
-  ].filter((section) => section.items.length > 0);
+  ];
+  return sections.filter((section) => section.items.length > 0);
 };
 
 export const handler: Handler = async (event) => {

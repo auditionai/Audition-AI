@@ -5,8 +5,11 @@ dotenv.config();
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const configuredTestEmail = process.env.E2E_ADMIN_EMAIL;
+const configuredTestPassword = process.env.E2E_ADMIN_PASSWORD;
+const configuredDisplayName = process.env.E2E_ADMIN_DISPLAY_NAME || 'Admin Test';
 
-if (!supabaseUrl || !supabaseServiceKey) {
+if (!supabaseUrl || !supabaseServiceKey || !configuredTestEmail || !configuredTestPassword) {
   console.error('❌ Missing VITE_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env');
   process.exit(1);
 }
@@ -16,9 +19,9 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 async function createAdminTestAccount() {
   console.log('🔧 Creating Admin Test Account...\n');
 
-  const testEmail = 'admin.test@auditionai.vn';
-  const testPassword = 'Admin@Test2026!';
-  const displayName = 'Admin Test';
+  const testEmail = configuredTestEmail;
+  const testPassword = configuredTestPassword;
+  const displayName = configuredDisplayName;
 
   try {
     // 1. Check if user already exists

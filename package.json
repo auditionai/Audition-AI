@@ -10,12 +10,14 @@
     "dev:functions": "node ./scripts/run-netlify-functions-with-timeout.mjs",
     "dev:netlify": "netlify dev",
     "build": "tsc && vite build",
+    "typecheck:functions": "tsc -p tsconfig.functions.json",
     "render:queue-worker": "tsx ./scripts/render-queue-worker.mjs",
     "render:queue-watchdog": "tsx ./scripts/render-queue-watchdog.mjs",
     "queue:hardening-audit": "tsx ./scripts/queue-hardening-audit.mjs",
     "render:web": "tsx ./scripts/render-web.mjs",
     "r2:cleanup": "node ./scripts/r2-cleanup-only.mjs",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "check": "npm run lint && npm run build && npm run typecheck:functions",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -34,7 +36,7 @@
     "react-router-dom": "^6.30.3",
     "recharts": "^2.12.7",
     "serverless-http": "^4.0.0",
-    "sharp": "^0.34.5",
+    "sharp": "^0.35.3",
     "tsx": "^4.21.0"
   },
   "devDependencies": {
@@ -44,9 +46,16 @@
     "@types/node": "^25.5.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
+    "@typescript-eslint/eslint-plugin": "^8.65.0",
+    "@typescript-eslint/parser": "^8.65.0",
     "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.5.4",
+    "eslint": "^8.57.1",
+    "eslint-plugin-react-hooks": "^5.2.0",
     "netlify-cli": "^23.9.0",
     "playwright": "^1.52.0",
+    "postcss": "^8.5.23",
+    "tailwindcss": "^3.4.17",
     "typescript": "^5.5.3",
     "vite": "^5.4.1"
   }

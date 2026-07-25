@@ -64,7 +64,7 @@ export const APP_CONFIG: AppConfig = {
         vi: "Tạo ảnh nhóm 3 nhân vật game với bố cục chuẩn.",
         en: "Generate a squad of 3 game characters with perfect composition."
       },
-      engine: "Giá 15 Vcoin / nhóm",
+      engine: "Giá từ 15 Vcoin / nhóm",
       preview_image: "https://picsum.photos/400/303?grayscale",
       toolType: 'generation',
       defaultPrompt: "A high quality 3D render of a squad of 3 game characters, standing together, cool poses, detailed faces, game asset style, 8k: ",
@@ -78,7 +78,7 @@ export const APP_CONFIG: AppConfig = {
         vi: "Tạo ảnh Clan 4 thành viên phong cách Audition.",
         en: "Generate a Clan photo of 4 members in Audition style."
       },
-      engine: "Giá 15 Vcoin / nhóm",
+      engine: "Giá từ 20 Vcoin / nhóm",
       preview_image: "https://picsum.photos/400/304?grayscale",
       toolType: 'generation',
       defaultPrompt: "A high quality 3D render of a group of 4 game characters, family or clan, standing together, vivid colors, unreal engine 5: ",
@@ -92,7 +92,7 @@ export const APP_CONFIG: AppConfig = {
         vi: "Tạo ảnh nhóm 5 nhân vật với đầy đủ ảnh tham chiếu.",
         en: "Generate a group photo with 5 referenced characters."
       },
-      engine: "Giá 15 Vcoin / nhóm",
+      engine: "Giá từ 25 Vcoin / nhóm",
       preview_image: "https://picsum.photos/400/305?grayscale",
       toolType: 'generation',
       defaultPrompt: "A high quality 3D render of a group of 5 game characters, standing together in a balanced composition, vivid colors, unreal engine 5: ",
@@ -121,7 +121,7 @@ export const APP_CONFIG: AppConfig = {
         vi: "Tạo video từ prompt hoặc ảnh keyframe với các model AI Motion đỉnh cao.",
         en: "Generate video from prompt or keyframe image with top AI Motion models."
       },
-      engine: "Giá chỉ từ 25 Vcoin",
+      engine: "Giá chỉ từ 15 Vcoin",
       preview_image: "https://picsum.photos/400/310?grayscale",
       toolType: 'video',
       category: 'video',

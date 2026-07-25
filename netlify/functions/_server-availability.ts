@@ -1,5 +1,6 @@
 import { getServiceRoleClient } from './_supabase';
 import { pickQueueFailureMessage } from '../../shared/queueErrorClassifier';
+import type { QueueProgressLogEntry } from '../../shared/queueRecipes';
 
 type AutoDisabledServerCombo = {
   serverId: string;
@@ -16,13 +17,6 @@ type ServerAvailabilityConfig = {
   autoDisabledCombos?: Record<string, AutoDisabledServerCombo[]>;
   manualReopenedCombos?: Record<string, Array<{ serverId: string; speed: string; reopenedAt: string }>>;
   updatedAt?: string;
-};
-
-type QueueProgressLogEntry = {
-  at: string;
-  stage: string;
-  level: string;
-  message: string;
 };
 
 const CACHE_TTL_MS = 30_000;
@@ -48,7 +42,8 @@ const getQueueLogs = (payload?: Record<string, unknown> | null): QueueProgressLo
       Boolean(entry) &&
       typeof entry === 'object' &&
       typeof (entry as QueueProgressLogEntry).message === 'string' &&
-      typeof (entry as QueueProgressLogEntry).stage === 'string',
+      typeof (entry as QueueProgressLogEntry).stage === 'string' &&
+      typeof (entry as QueueProgressLogEntry).level === 'string',
   );
 };
 

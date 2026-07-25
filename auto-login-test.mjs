@@ -1,6 +1,14 @@
 import { chromium } from 'playwright';
 
 (async () => {
+  const email = process.env.E2E_ADMIN_EMAIL;
+  const password = process.env.E2E_ADMIN_PASSWORD;
+  if (!email || !password) {
+    console.error('Set E2E_ADMIN_EMAIL and E2E_ADMIN_PASSWORD before running this authenticated test.');
+    process.exitCode = 1;
+    return;
+  }
+
   const browser = await chromium.launch({ headless: false });
   const context = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
   const page = await context.newPage();
@@ -26,10 +34,10 @@ import { chromium } from 'playwright';
     
     if (await emailInput.isVisible()) {
       console.log('📧 Found email login form');
-      await emailInput.fill('admin.test@auditionai.vn');
+      await emailInput.fill(email);
       
       const passwordInput = await page.locator('input[type="password"]').first();
-      await passwordInput.fill('Admin@Test2026!');
+      await passwordInput.fill(password);
       
       // Click login button
       const submitBtn = await page.locator('button:has-text("Đăng nhập"), button:has-text("Login"), button[type="submit"]').first();

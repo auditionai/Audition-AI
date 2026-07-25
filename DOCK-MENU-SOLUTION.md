@@ -31,8 +31,8 @@ return (
 3. Trong modal đăng nhập, chọn tab **"Đăng nhập"**
 4. Nhập thông tin:
    ```
-   📧 Email: admin.test@auditionai.vn
-   🔑 Password: Admin@Test2026!
+   📧 Email: đặt qua biến môi trường `E2E_ADMIN_EMAIL`
+   🔑 Password: đặt qua biến môi trường `E2E_ADMIN_PASSWORD`
    ```
 5. Click **"Đăng nhập"**
 6. ✅ Sau khi đăng nhập thành công, bạn sẽ thấy:
@@ -115,7 +115,7 @@ Sau khi đăng nhập thành công, test các chức năng:
    - Mở Settings
    - Xem profile, logout, etc.
 
-4. **Admin features (với tài khoản admin.test@auditionai.vn):**
+4. **Admin features (với tài khoản admin kiểm thử):**
    - Icon Shield xuất hiện trong header menu
    - Click để vào Admin Panel
    - Xem user stats, transactions, queue status
@@ -148,7 +148,7 @@ Nếu dock element tồn tại nhưng không nhìn thấy:
 ## 📝 Summary
 
 **TL;DR:** Dock menu chỉ hiển thị sau khi đăng nhập. Hãy đăng nhập bằng:
-- Email: `admin.test@auditionai.vn` / Password: `Admin@Test2026!`
+- Email/password: cấu hình bằng `E2E_ADMIN_EMAIL` và `E2E_ADMIN_PASSWORD`
 - Hoặc Google OAuth
 - Hoặc đăng ký tài khoản mới
 

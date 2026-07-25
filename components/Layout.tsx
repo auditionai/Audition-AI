@@ -69,6 +69,19 @@ export const Layout: React.FC<LayoutProps> = ({
     ...(user?.role === 'admin' ? [{ id: 'admin' as ViewId, label: { vi: 'Quản Trị Admin', en: 'Admin Portal' }, icon: Icons.Shield }] : []),
   ];
 
+  const fallbackViewLabels: Partial<Record<ViewId, { vi: string; en: string }>> = {
+    support: { vi: 'Hỗ trợ khách hàng', en: 'Customer Support' },
+    settings: { vi: 'Cài đặt', en: 'Settings' },
+    guide: { vi: 'Hướng dẫn sử dụng', en: 'User Guide' },
+    about: { vi: 'Thông tin ứng dụng', en: 'About' },
+    payment_gateway: { vi: 'Thanh toán', en: 'Payment' },
+  };
+  const activePageLabel = currentView === 'tool_workspace' && selectedFeature
+    ? selectedFeature.name[lang]
+    : navItems.find((item) => item.id === currentView)?.label[lang]
+      || fallbackViewLabels[currentView]?.[lang]
+      || currentView.replace(/_/g, ' ');
+
   const isAccountLocked = user?.accountStatus === 'locked';
 
   return (
@@ -118,7 +131,9 @@ export const Layout: React.FC<LayoutProps> = ({
         <div className="space-y-6">
           <div 
             onClick={() => onNavigate('home')}
-            className="flex items-center gap-3 cursor-pointer group px-1 py-1"
+            className={`flex items-center cursor-pointer group py-1 ${
+              sidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-1'
+            }`}
           >
             <div className="w-12 h-12 neu-raised-sm rounded-2xl flex items-center justify-center text-[#FF007F] group-hover:scale-110 transition-transform bg-gradient-to-br from-[#FF007F]/20 to-[#00F2FE]/20 shrink-0">
               <Icons.Sparkles className="w-6 h-6 text-[#FF007F] animate-pulse" />
@@ -149,7 +164,9 @@ export const Layout: React.FC<LayoutProps> = ({
                   key={item.id}
                   onClick={() => onNavigate(item.id)}
                   title={sidebarCollapsed ? item.label[lang] : undefined}
-                  className={`w-full flex items-center gap-3.5 px-3.5 py-3 rounded-2xl transition-all text-xs font-black group ${
+                  className={`w-full flex items-center py-3 rounded-2xl transition-all text-xs font-black group ${
+                    sidebarCollapsed ? 'justify-center gap-0 px-0' : 'gap-3.5 px-3.5'
+                  } ${
                     isActive 
                       ? 'neu-inset-sm text-[#FF007F] ring-2 ring-[#FF007F]' 
                       : 'neu-button text-slate-700 dark:text-slate-300 hover:text-[#FF007F]'
@@ -409,7 +426,7 @@ export const Layout: React.FC<LayoutProps> = ({
             <div className="hidden lg:flex items-center gap-2 text-xs font-black text-slate-500 uppercase tracking-wider font-accent">
               <span>Studio</span>
               <Icons.ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-              <span className="text-slate-900 dark:text-white font-black">{currentView}</span>
+              <span className="text-slate-900 dark:text-white font-black">{activePageLabel}</span>
             </div>
           </div>
 

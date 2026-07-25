@@ -430,7 +430,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                   if (/^[a-zA-Z0-9_-]{11}$/.test(urlStr)) {
                       videoId = urlStr;
                   } else {
-                      const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|shorts\/|live\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+                      const regExp = /^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|shorts\/|live\/|watch\?v=|&v=)([^#&?]*).*/;
                       const match = urlStr.match(regExp);
                       if (match && match[2].length === 11) {
                           videoId = match[2];

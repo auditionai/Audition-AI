@@ -1,5 +1,6 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { Feature, Language, GeneratedImage, ViewId } from '../../types';
 import { Icons } from '../../components/Icons';
 import {
@@ -165,6 +166,24 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const [prompt, setPrompt] = useState('');
 
   const [showSampleModal, setShowSampleModal] = useState(false);
+
+  useEffect(() => {
+      if (!showSampleModal || typeof document === 'undefined') return;
+
+      const previousOverflow = document.body.style.overflow;
+      const handleKeyDown = (event: KeyboardEvent) => {
+          if (event.key === 'Escape') setShowSampleModal(false);
+      };
+
+      document.body.style.overflow = 'hidden';
+      document.addEventListener('keydown', handleKeyDown);
+
+      return () => {
+          document.body.style.overflow = previousOverflow;
+          document.removeEventListener('keydown', handleKeyDown);
+      };
+  }, [showSampleModal]);
+
   const [samplePrompts, setSamplePrompts] = useState<SamplePrompt[]>([]);
   const [loadingSamples, setLoadingSamples] = useState(false);
   const [currentCategoryName, setCurrentCategoryName] = useState('');
@@ -1349,23 +1368,38 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
             </div>
         )}
 
-        {showSampleModal && (
-            <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowSampleModal(false)}>
-                <div className="bg-[#12121a] w-full max-w-xl h-[500px] rounded-[2rem] border border-audi-purple/50 shadow-[0_0_50px_rgba(183,33,255,0.2)] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-                    <div className="p-4 border-b border-white/10 flex justify-between items-center bg-black/20">
-                        <div className="flex items-center gap-2">
+        {showSampleModal && typeof document !== 'undefined' && createPortal(
+            <div
+                className="fixed inset-0 z-[5000] flex items-center justify-center overflow-hidden bg-black/70 p-3 backdrop-blur-sm sm:p-6"
+                onClick={() => setShowSampleModal(false)}
+                role="presentation"
+            >
+                <div
+                    className="flex h-[min(84dvh,820px)] w-[min(94vw,1180px)] min-h-[520px] flex-col overflow-hidden rounded-[2rem] border border-audi-purple/60 bg-[#12121a] shadow-[0_0_70px_rgba(183,33,255,0.3)]"
+                    onClick={e => e.stopPropagation()}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="sample-prompt-modal-title"
+                >
+                    <div className="flex shrink-0 items-center justify-between border-b border-white/10 bg-black/20 px-5 py-4 sm:px-6">
+                        <div className="flex min-w-0 items-center gap-2.5">
                             <Icons.Image className="w-5 h-5 text-audi-purple" />
-                            <h3 className="font-bold text-white text-lg">Thư viện Prompt Mẫu</h3>
-                            <span className="text-xs bg-audi-purple/20 text-audi-purple px-2 py-0.5 rounded border border-audi-purple/30 truncate max-w-[150px]">
+                            <h3 id="sample-prompt-modal-title" className="whitespace-nowrap text-lg font-bold text-white sm:text-xl">Thư viện Prompt Mẫu</h3>
+                            <span className="max-w-[180px] truncate rounded border border-audi-purple/30 bg-audi-purple/20 px-2 py-0.5 text-xs text-audi-purple">
                                 {currentCategoryName || activeMode.toUpperCase()}
                             </span>
                         </div>
-                        <button onClick={() => setShowSampleModal(false)} className="p-2 hover:bg-white/10 rounded-full text-white">
+                        <button
+                            type="button"
+                            onClick={() => setShowSampleModal(false)}
+                            className="ml-3 rounded-full p-2 text-white transition-colors hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-audi-purple"
+                            aria-label="Đóng thư viện Prompt Mẫu"
+                        >
                             <Icons.X className="w-6 h-6" />
                         </button>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-black/10">
+                    <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain bg-black/10 p-4 sm:p-6">
                         {loadingSamples ? (
                             <div className="flex flex-col items-center justify-center h-full gap-4">
                                 <Icons.Loader className="w-10 h-10 text-audi-purple animate-spin" />
@@ -1385,7 +1419,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                 </button>
                             </div>
                         ) : (
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                                 {samplePrompts.map((sample) => (
                                     <div
                                         key={sample.id}
@@ -1415,12 +1449,12 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                             </div>
                         )}
                     </div>
-                    <div className="p-3 border-t border-white/10 bg-black/20 text-center text-[10px] text-slate-500">
+                    <div className="shrink-0 border-t border-white/10 bg-black/20 p-3 text-center text-[10px] text-slate-500">
                         Dữ liệu được cung cấp bởi caulenhau.io.vn
                     </div>
                 </div>
             </div>
-        )}
+        , document.body)}
 
         {/* 1. TOP VISUAL MODE SELECTOR BANNER */}
         <div className="w-full neu-card p-4 rounded-3xl mb-6 shadow-xl">

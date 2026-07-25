@@ -2,6 +2,54 @@
     grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
+.admin-v2-metric-card {
+    position: relative;
+    min-height: 128px;
+    overflow: hidden;
+    padding: 20px;
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    border-radius: 18px;
+    background: linear-gradient(145deg, rgba(17, 24, 39, 0.96), rgba(8, 12, 22, 0.98));
+    box-shadow: 0 16px 45px rgba(0, 0, 0, 0.22);
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 160ms ease, transform 160ms ease, background 160ms ease;
+}
+
+.admin-v2-metric-card::after {
+    content: "";
+    position: absolute;
+    right: -28px;
+    bottom: -34px;
+    width: 90px;
+    height: 90px;
+    border-radius: 50%;
+    background: rgba(0, 242, 254, 0.07);
+}
+
+.admin-v2-metric-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(0, 234, 246, 0.35);
+}
+
+.admin-v2-metric-card.is-active {
+    border-color: rgba(0, 234, 246, 0.55);
+    background: linear-gradient(145deg, rgba(0, 234, 246, 0.1), rgba(8, 12, 22, 0.98));
+    box-shadow: 0 0 0 1px rgba(0, 234, 246, 0.1), 0 18px 48px rgba(0, 0, 0, 0.25);
+}
+
+.admin-v2-metric-card.is-active::before {
+    content: "";
+    position: absolute;
+    left: 18px;
+    right: 18px;
+    bottom: 0;
+    height: 2px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #00eaf6, #14f195);
+}
+
 @media (max-width: 1250px) {
     .admin-v2-metrics.admin-v2-metrics--transactions {
         grid-template-columns: repeat(3, minmax(0, 1fr));

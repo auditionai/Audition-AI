@@ -38,9 +38,9 @@ type TransactionsProps = {
 };
 
 export function TransactionsWorkspaceV2(props: TransactionsProps) {
+    const [quickFilter, setQuickFilter] = React.useState<'all' | 'today' | 'pending' | 'completed'>('all');
     const pending = props.transactions.filter((item: any) => item.status === 'pending').length;
     const approved = props.transactions.filter((item: any) => ['paid', 'completed', 'success', 'approved'].includes(String(item.status || '').toLowerCase())).length;
-    const pendingIds = props.transactions.filter((item: any) => String(item.status || '').toLowerCase() === 'pending').map((item) => item.id);
     const volume = props.transactions.reduce((sum: number, item: any) => sum + Number(item.amount || item.price || 0), 0);
     const vietnamToday = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
     const todayTransactions = props.transactions.filter((item) =>
@@ -49,15 +49,27 @@ export function TransactionsWorkspaceV2(props: TransactionsProps) {
     const todayPaid = todayTransactions.filter((item) =>
         ['paid', 'completed', 'success', 'approved'].includes(String(item.status || '').toLowerCase())
     ).length;
+    const visibleTransactions = props.transactions.filter((item) => {
+        const status = String(item.status || '').toLowerCase();
+        if (quickFilter === 'today') {
+            return new Date(item.createdAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }) === vietnamToday;
+        }
+        if (quickFilter === 'pending') return status === 'pending';
+        if (quickFilter === 'completed') return ['paid', 'completed', 'success', 'approved'].includes(status);
+        return true;
+    });
+    const pendingIds = visibleTransactions
+        .filter((item) => String(item.status || '').toLowerCase() === 'pending')
+        .map((item) => item.id);
 
     return (
         <section className="admin-v2-page">
             <div className="admin-v2-metrics admin-v2-metrics--transactions">
-                <article><span>Tổng giao dịch</span><strong>{money(props.transactions.length)}</strong><small>Toàn bộ yêu cầu nạp</small></article>
-                <article><span>Nạp hôm nay</span><strong className="is-accent">{money(todayTransactions.length)}</strong><small>{money(todayPaid)} giao dịch đã thanh toán</small></article>
-                <article><span>Chờ đối soát</span><strong className="is-warning">{money(pending)}</strong><small>Cần quản trị viên xử lý</small></article>
-                <article><span>Đã hoàn tất</span><strong className="is-success">{money(approved)}</strong><small>Đã cộng Vcoin</small></article>
-                <article><span>Giá trị ghi nhận</span><strong className="is-accent">{money(volume)}đ</strong><small>Tổng giá trị danh sách</small></article>
+                <button type="button" className={`admin-v2-metric-card ${quickFilter === 'all' ? 'is-active' : ''}`} onClick={() => setQuickFilter('all')}><span>Tổng giao dịch</span><strong>{money(props.transactions.length)}</strong><small>Toàn bộ yêu cầu nạp</small></button>
+                <button type="button" className={`admin-v2-metric-card ${quickFilter === 'today' ? 'is-active' : ''}`} onClick={() => setQuickFilter('today')}><span>Nạp hôm nay</span><strong className="is-accent">{money(todayTransactions.length)}</strong><small>{money(todayPaid)} giao dịch đã thanh toán</small></button>
+                <button type="button" className={`admin-v2-metric-card ${quickFilter === 'pending' ? 'is-active' : ''}`} onClick={() => setQuickFilter('pending')}><span>Chờ đối soát</span><strong className="is-warning">{money(pending)}</strong><small>Bấm để lọc giao dịch chờ</small></button>
+                <button type="button" className={`admin-v2-metric-card ${quickFilter === 'completed' ? 'is-active' : ''}`} onClick={() => setQuickFilter('completed')}><span>Đã hoàn tất</span><strong className="is-success">{money(approved)}</strong><small>Đã cộng Vcoin</small></button>
+                <button type="button" className="admin-v2-metric-card admin-v2-metric-card--static" onClick={() => setQuickFilter('all')}><span>Giá trị ghi nhận</span><strong className="is-accent">{money(volume)}đ</strong><small>Tổng giá trị danh sách</small></button>
             </div>
 
             <div className="admin-v2-panel">
@@ -76,8 +88,8 @@ export function TransactionsWorkspaceV2(props: TransactionsProps) {
                     </div>
                 </div>
 
-                {props.transactions.length === 0 ? (
-                    <EmptyPanel icon={Icons.Gem} title="Chưa có giao dịch" description="Các yêu cầu nạp Vcoin mới sẽ xuất hiện tại đây." />
+                {visibleTransactions.length === 0 ? (
+                    <EmptyPanel icon={Icons.Gem} title="Không có giao dịch phù hợp" description="Không tìm thấy giao dịch trong nhóm thống kê đang chọn." />
                 ) : (
                     <div className="admin-v2-table-wrap">
                         <table className="admin-v2-table">
@@ -85,7 +97,7 @@ export function TransactionsWorkspaceV2(props: TransactionsProps) {
                                 <th><input aria-label="Chọn tất cả giao dịch chờ duyệt" type="checkbox" disabled={pendingIds.length === 0} checked={pendingIds.length > 0 && pendingIds.every((id) => props.selectedIds.includes(id))} onChange={props.onToggleAll} /></th>
                                 <th>Giao dịch</th><th>Khách hàng</th><th>Gói nạp</th><th>Thanh toán</th><th>Trạng thái</th><th>Thao tác</th>
                             </tr></thead>
-                            <tbody>{props.transactions.map((tx: any) => {
+                            <tbody>{visibleTransactions.map((tx: any) => {
                                 const status = String(tx.status || 'pending').toLowerCase();
                                 const done = ['paid', 'completed', 'success', 'approved'].includes(status);
                                 const failed = ['failed', 'rejected', 'cancelled'].includes(status);

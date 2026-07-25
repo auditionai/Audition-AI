@@ -92,6 +92,7 @@ import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, G
 import './admin-command-center.css';
 import { GiftcodeAbuseWorkspaceV2, TransactionsWorkspaceV2, UsersWorkspaceV2 } from './admin-v2/AdminOperations';
 import QueueWorkspaceV2 from './admin-v2/QueueWorkspaceV2';
+import AIUsageAnalyticsV2 from './admin-v2/AIUsageAnalyticsV2';
 
 interface AdminProps {
   lang: Language;
@@ -1194,12 +1195,27 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   };
 
   const runSystemChecks = async (specificKey?: string) => {
+      setHealth((current) => ({
+          gemini: { ...current.gemini, status: 'checking' },
+          supabase: { ...current.supabase, status: 'checking' },
+          storage: { ...current.storage, status: 'checking' },
+      }));
+
       const startGemini = Date.now();
       const keyToUse = specificKey !== undefined ? specificKey : (apiKey || undefined);
-      const [geminiOk, sbCheck, r2Ok] = await Promise.all([
-          checkConnection(keyToUse),
-          checkSupabaseConnection(),
-          checkR2Connection(),
+      const [geminiCheck, sbCheck, r2Ok] = await Promise.all([
+          checkConnection(keyToUse).catch((error) => {
+              console.warn('[Admin] Gemini health check failed', error);
+              return { success: false, message: error?.message || 'Connection failed' };
+          }),
+          checkSupabaseConnection().catch((error) => {
+              console.warn('[Admin] Supabase health check failed', error);
+              return { db: false, storage: false, latency: 0 };
+          }),
+          checkR2Connection().catch((error) => {
+              console.warn('[Admin] R2 health check failed', error);
+              return false;
+          }),
       ]);
       const geminiLatency = Date.now() - startGemini;
       
@@ -1215,15 +1231,20 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       }
 
       setHealth({
-          gemini: { status: geminiOk ? 'connected' : 'disconnected', latency: geminiLatency },
+          gemini: { status: geminiCheck.success ? 'connected' : 'disconnected', latency: geminiLatency },
           supabase: { status: sbCheck.db ? 'connected' : 'disconnected', latency: sbCheck.latency },
           storage: { status: storageStatus, type: storageType }
       });
       
-      if (keyToUse || geminiOk) {
-          setKeyStatus(geminiOk ? 'valid' : 'invalid');
+      if (keyToUse || geminiCheck.success) {
+          setKeyStatus(geminiCheck.success ? 'valid' : 'invalid');
       }
   };
+
+  useEffect(() => {
+      if (!isAdmin) return;
+      void runSystemChecks();
+  }, [isAdmin]);
 
   // --- ACTIONS ---
 
@@ -2567,7 +2588,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       </div>
                   );
               })}
-              <button type="button" className="admin-refresh-button" onClick={refreshData} aria-label="Làm mới dữ liệu quản trị">
+              <button
+                  type="button"
+                  className="admin-refresh-button"
+                  onClick={() => void Promise.all([refreshData(), runSystemChecks()])}
+                  aria-label="Làm mới dữ liệu và kiểm tra kết nối quản trị"
+              >
                   <Icons.RefreshCw className="h-4 w-4" />
                   Đồng bộ
               </button>
@@ -2853,7 +2879,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   </div>
 
                   {/* AI Usage Statistics Table */}
-                  <div className="neu-card p-6 rounded-3xl space-y-4 shadow-2xl">
+                  <AIUsageAnalyticsV2 rows={stats?.dashboard?.aiUsage || []} />
+                  <div className="hidden neu-card p-6 rounded-3xl space-y-4 shadow-2xl">
                       <div className="flex items-center justify-between pb-3 border-b border-slate-200/60 dark:border-slate-800">
                           <h3 className="font-extrabold text-slate-800 dark:text-white text-base uppercase tracking-wider font-accent flex items-center gap-2">
                               <Icons.BarChart className="w-5 h-5 text-amber-500" />

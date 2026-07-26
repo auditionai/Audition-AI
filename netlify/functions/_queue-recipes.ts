@@ -17,6 +17,7 @@ import {
   synthesizeStrictImagePrompt,
 } from './_vertex-director';
 import { analyzeImageGenerationVision } from './_vertex-image-vision';
+import { VERTEX_TEXT_PRO_MODEL } from './_vertex-models';
 
 const TST_API_BASE = 'https://api.tramsangtao.com/v1';
 const TST_UPLOAD_STATUS_POLL_INTERVAL_MS = 2_000;
@@ -348,7 +349,7 @@ export const synthesizeImageGeneratePrompt = async (
         at: new Date().toISOString(),
         task: 'image_prompt_synthesis',
         status: 'warning',
-        model: 'gemini-3.1-pro-preview',
+        model: VERTEX_TEXT_PRO_MODEL,
         message: `Skipped Vertex prompt synthesis and used the local JSON prompt builder. Reasons: ${bypassDecision.reasons.join(', ')}`,
       });
     }
@@ -369,7 +370,7 @@ export const synthesizeImageGeneratePrompt = async (
         at: new Date().toISOString(),
         task: 'image_prompt_synthesis',
         status: 'warning',
-        model: 'gemini-3.1-pro-preview',
+        model: VERTEX_TEXT_PRO_MODEL,
         message: `Vertex prompt synthesis fell back to the local JSON prompt builder. Original error: ${
           error instanceof Error ? error.message : String(error || 'Unknown error')
         }`,
@@ -488,7 +489,7 @@ const synthesizeImageGeneratePromptWithLastResortFallback = async (
         at: new Date().toISOString(),
         task: 'image_prompt_synthesis',
         status: 'warning',
-        model: 'gemini-3.1-pro-preview',
+        model: VERTEX_TEXT_PRO_MODEL,
         message: `Vertex prompt synthesis hit the last-resort local JSON fallback. Original error: ${
           error instanceof Error ? error.message : String(error || 'Unknown error')
         }`,
@@ -529,7 +530,7 @@ export const prepareImageGeneratePromptWithinLimit = async (
           at: new Date().toISOString(),
           task: 'image_reference_analysis',
           status: 'warning',
-          model: 'gemini-3.1-pro-preview',
+          model: VERTEX_TEXT_PRO_MODEL,
           message: `Vertex vision analysis fell back to rule-based prompting only. Original error: ${
             error instanceof Error ? error.message : String(error || 'Unknown error')
           }`,

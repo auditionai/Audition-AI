@@ -1,7 +1,9 @@
 import { runWithVertexCredentialFailover } from './_vertex-credentials';
-
-const FLASH_IMAGE_MODEL = 'gemini-3.1-flash-image-preview';
-const PRO_IMAGE_MODEL = 'gemini-3-pro-image-preview';
+import {
+  buildVertexGenerateContentUrl,
+  VERTEX_IMAGE_FLASH_MODEL,
+  VERTEX_IMAGE_PRO_MODEL,
+} from './_vertex-models';
 
 const parseErrorMessage = async (response: Response) => {
   try {
@@ -151,7 +153,7 @@ export const runVertexImageEdit = async ({
   aspectRatio,
 }: RunVertexImageEditParams): Promise<string> => {
   const preferPro = modelId.toLowerCase().includes('pro');
-  const modelName = preferPro ? PRO_IMAGE_MODEL : FLASH_IMAGE_MODEL;
+  const modelName = preferPro ? VERTEX_IMAGE_PRO_MODEL : VERTEX_IMAGE_FLASH_MODEL;
   const imageSize = normalizeImageSize(resolution);
   const normalizedAspectRatio = normalizeAspectRatio(aspectRatio);
   const imageConfig = {
@@ -163,7 +165,7 @@ export const runVertexImageEdit = async ({
     taskName: `image editing (${modelName})`,
     operation: async ({ projectId, accessToken }) => {
       const response = await fetch(
-        `https://aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/global/publishers/google/models/${modelName}:generateContent`,
+        buildVertexGenerateContentUrl(projectId, modelName),
         {
           method: 'POST',
           headers: {

@@ -1,7 +1,8 @@
 import { runWithVertexCredentialFailover } from './_vertex-credentials';
+import { buildVertexGenerateContentUrl, VERTEX_TEXT_PRO_MODEL } from './_vertex-models';
 import sharp from 'sharp';
 
-const VERTEX_MODEL = 'gemini-3.1-pro-preview';
+const VERTEX_MODEL = VERTEX_TEXT_PRO_MODEL;
 
 export type CharacterImageReviewIssue =
   | 'no_character'
@@ -329,7 +330,7 @@ export const reviewCharacterImage = async (
     taskName: 'character image review',
     operation: async ({ projectId, accessToken }) => {
       const response = await fetch(
-        `https://aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/global/publishers/google/models/${VERTEX_MODEL}:generateContent`,
+        buildVertexGenerateContentUrl(projectId, VERTEX_MODEL),
         {
           method: 'POST',
           headers: {

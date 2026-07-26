@@ -9,8 +9,9 @@ import {
   type StyleVisionAnalysis,
 } from '../../shared/queueRecipes';
 import { runWithVertexCredentialFailover } from './_vertex-credentials';
+import { buildVertexGenerateContentUrl, VERTEX_TEXT_PRO_MODEL } from './_vertex-models';
 
-const VERTEX_MODEL = 'gemini-3.1-pro-preview';
+const VERTEX_MODEL = VERTEX_TEXT_PRO_MODEL;
 
 type VertexDiagnosticCallback = (entry: QueueVertexDiagnosticEntry) => Promise<void> | void;
 type VisionAnalysisMode = 'default' | 'pro_structured';
@@ -96,7 +97,7 @@ const generateVisionJson = async <T>(
     taskName,
     operation: async ({ projectId, accessToken, credentialName }) => {
       const response = await fetch(
-        `https://aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/global/publishers/google/models/${VERTEX_MODEL}:generateContent`,
+        buildVertexGenerateContentUrl(projectId, VERTEX_MODEL),
         {
           method: 'POST',
           headers: {

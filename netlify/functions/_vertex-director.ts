@@ -6,8 +6,9 @@ import {
   type QueueVertexDiagnosticEntry,
 } from '../../shared/queueRecipes';
 import { runWithVertexCredentialFailover } from './_vertex-credentials';
+import { buildVertexGenerateContentUrl, VERTEX_TEXT_PRO_MODEL } from './_vertex-models';
 
-const VERTEX_MODEL = 'gemini-3.1-pro-preview';
+const VERTEX_MODEL = VERTEX_TEXT_PRO_MODEL;
 const normalizePromptWhitespace = (value: string) => value.replace(/\s+/g, ' ').trim();
 type VertexDiagnosticTask = QueueVertexDiagnosticEntry['task'];
 type VertexDiagnosticCallback = (entry: QueueVertexDiagnosticEntry) => Promise<void> | void;
@@ -342,7 +343,7 @@ const requestVertexPromptSynthesis = async (
   outputTokenLimit: number,
 ) => {
   const response = await fetch(
-    `https://aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/global/publishers/google/models/${VERTEX_MODEL}:generateContent`,
+    buildVertexGenerateContentUrl(projectId, VERTEX_MODEL),
     {
       method: 'POST',
       headers: {
@@ -591,7 +592,7 @@ export const rewriteUserPromptToFitLimit = async (
     },
     operation: async ({ projectId, accessToken, credentialName }) => {
       const response = await fetch(
-        `https://aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/global/publishers/google/models/${VERTEX_MODEL}:generateContent`,
+        buildVertexGenerateContentUrl(projectId, VERTEX_MODEL),
         {
           method: 'POST',
           headers: {

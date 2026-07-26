@@ -1,6 +1,7 @@
 import { runWithVertexCredentialFailover } from './_vertex-credentials';
+import { buildVertexGenerateContentUrl, VERTEX_TEXT_PRO_MODEL } from './_vertex-models';
 
-const VERTEX_MODEL = 'gemini-3.1-pro-preview';
+const VERTEX_MODEL = VERTEX_TEXT_PRO_MODEL;
 
 export type VideoInputReviewIssue =
   | 'no_character'
@@ -178,7 +179,7 @@ const reviewImageInput = async (
     taskName: mode === 'motion_character' ? 'motion control input review' : 'video keyframe input review',
     operation: async ({ projectId, accessToken }) => {
       const response = await fetch(
-        `https://aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/global/publishers/google/models/${VERTEX_MODEL}:generateContent`,
+        buildVertexGenerateContentUrl(projectId, VERTEX_MODEL),
         {
           method: 'POST',
           headers: {

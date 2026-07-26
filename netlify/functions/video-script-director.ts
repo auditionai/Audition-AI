@@ -1,10 +1,15 @@
 import type { Handler } from '@netlify/functions';
 import { runWithVertexCredentialFailover } from './_vertex-credentials';
+import {
+  buildVertexGenerateContentUrl,
+  VERTEX_TEXT_FLASH_MODEL,
+  VERTEX_TEXT_PRO_MODEL,
+} from './_vertex-models';
 
 const VERTEX_MODELS = Array.from(new Set([
-  'gemini-3.1-pro-preview',
   process.env.VERTEX_VIDEO_SCRIPT_MODEL,
-  'gemini-3.1-flash-preview',
+  VERTEX_TEXT_PRO_MODEL,
+  VERTEX_TEXT_FLASH_MODEL,
 ].filter(Boolean))) as string[];
 const VERTEX_VIDEO_SCRIPT_TIMEOUT_MS = 55_000;
 const VIDEO_SCRIPT_DEADLINE_ERROR = 'VIDEO_SCRIPT_VERTEX_DEADLINE';
@@ -240,7 +245,7 @@ export const handler: Handler = async (event) => {
           let response: Response;
           try {
             response = await fetch(
-              `https://aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/global/publishers/google/models/${modelName}:generateContent`,
+              buildVertexGenerateContentUrl(projectId, modelName),
               {
                 method: 'POST',
                 headers: {

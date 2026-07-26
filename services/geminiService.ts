@@ -4,7 +4,7 @@ import { getSystemApiKey, reportKeyFailure, getApiKeyName } from "./economyServi
 
 const VERTEX_TEXT_FLASH_MODEL = 'gemini-3-flash-preview';
 const VERTEX_TEXT_PRO_MODEL = 'gemini-3.1-pro-preview';
-const VERTEX_IMAGE_FLASH_MODEL = 'gemini-3.1-flash-image-preview';
+const VERTEX_IMAGE_FLASH_MODEL = 'gemini-3.1-flash-image';
 const VERTEX_IMAGE_PRO_MODEL = 'gemini-3-pro-image-preview';
 
 export interface CharacterData {
@@ -215,7 +215,7 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     // Map model names for Vertex AI
                     let vertexModel = params.model;
                     let endpoint = 'generateContent';
-                    let apiVersion = 'v1beta1'; // Default to v1beta1 for preview models
+                    let apiVersion = 'v1';
                     let isGlobalImageModel = false;
                     
                     // --- STANDARD PIPELINE ---
@@ -223,25 +223,25 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     if (vertexModel.includes('image')) {
                         if (vertexModel.includes('flash')) {
                             vertexModel = VERTEX_IMAGE_FLASH_MODEL;
-                            apiVersion = 'v1beta1';
+                            apiVersion = 'v1';
                         } else if (vertexModel.includes('pro')) {
                             vertexModel = VERTEX_IMAGE_PRO_MODEL;
-                            apiVersion = 'v1beta1';
+                            apiVersion = 'v1';
                         } else {
                             vertexModel = VERTEX_IMAGE_FLASH_MODEL;
-                            apiVersion = 'v1beta1';
+                            apiVersion = 'v1';
                         }
                         isGlobalImageModel = true; // Both use global location
                     } else {
                         if (vertexModel.includes('flash')) {
                             vertexModel = VERTEX_TEXT_FLASH_MODEL;
-                            apiVersion = 'v1beta1'; 
+                            apiVersion = 'v1';
                         } else if (vertexModel.includes('pro')) {
                             vertexModel = VERTEX_TEXT_PRO_MODEL;
-                            apiVersion = 'v1beta1'; 
+                            apiVersion = 'v1';
                         } else {
                             vertexModel = VERTEX_TEXT_FLASH_MODEL;
-                            apiVersion = 'v1beta1';
+                            apiVersion = 'v1';
                         }
                     }
 

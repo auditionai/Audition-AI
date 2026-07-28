@@ -25,7 +25,9 @@ export function MobileV2BottomNav() {
             to={path}
             className={({ isActive }) => {
               const isPreviewHome = path === '/home' && location.pathname === '/mobile-v2-preview';
-              return `v2-nav-item v2-tap${isActive || isPreviewHome ? ' is-active' : ''}`;
+              const isStudioRoute = path === '/home'
+                && (location.pathname.startsWith('/generate/') || location.pathname.startsWith('/tools/'));
+              return `v2-nav-item v2-tap${isActive || isPreviewHome || isStudioRoute ? ' is-active' : ''}`;
             }}
             aria-label={label}
           >

@@ -108,6 +108,7 @@ function FeatureMaintenanceGuard({ children }: { children: React.ReactElement })
 
 function AppRoutes() {
   const { isAuthenticated, isLoading } = useAuth();
+  const location = useLocation();
   const mobileUiVersion = useMobileUiVersion();
   const isMobileV2 = mobileUiVersion === 'v2';
 
@@ -130,10 +131,17 @@ function AppRoutes() {
         <Route path="/mobile-v2-preview" element={<HomeV2 />} />
       </Route>
       {!isAuthenticated ? (
-        <>
-          <Route path="/" element={<Splash />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </>
+        isMobileV2 ? (
+          <Route element={<MobileV2Layout />}>
+            <Route path="/" element={<Splash />} />
+            <Route path="*" element={<Navigate to={`/${location.search}`} replace />} />
+          </Route>
+        ) : (
+          <>
+            <Route path="/" element={<Splash />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </>
+        )
       ) : (
         <>
           <Route element={isMobileV2 ? <MobileV2Layout /> : <MobileLayout />}>

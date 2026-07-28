@@ -9,12 +9,27 @@ export function MobileV2Layout() {
   const isStandalonePreview = location.pathname === '/mobile-v2-preview';
   const previewTheme = new URLSearchParams(location.search).get('preview-theme');
   const forceLightPreview = isStandalonePreview && previewTheme !== 'dark';
+  const routeTone = (() => {
+    if (location.pathname.startsWith('/generate/image')) return 'raspberry';
+    if (location.pathname.startsWith('/generate/video')) return 'violet';
+    if (location.pathname.startsWith('/tools')) return 'teal';
+    if (location.pathname === '/prompt-library') return 'violet';
+    if (location.pathname === '/gallery') return 'indigo';
+    if (location.pathname === '/topup' || location.pathname === '/payment-gateway') return 'amber';
+    if (location.pathname === '/profile') return 'wine';
+    if (location.pathname === '/admin') return 'amber';
+    if (['/about', '/support', '/guide'].includes(location.pathname)) return 'teal';
+    return 'raspberry';
+  })();
 
   return (
-    <div className={`mobile-v2-shell${forceLightPreview ? ' v2-force-light' : ''}`}>
+    <div
+      className={`mobile-v2-shell v2-tone-${routeTone}${forceLightPreview ? ' v2-force-light' : ''}`}
+      data-v2-route={location.pathname}
+    >
       <AuroraBackdrop />
       <MobileV2TopBar />
-      <main className="mobile-v2-content">
+      <main className={`mobile-v2-content${location.pathname === '/home' || isStandalonePreview ? '' : ' v2-screen'}`}>
         <Outlet />
       </main>
       <MobileV2BottomNav />

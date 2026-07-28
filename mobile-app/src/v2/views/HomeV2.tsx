@@ -1,4 +1,4 @@
-import { useEffect, useState, type ComponentType } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ArrowRight,
   Bell,
@@ -12,6 +12,7 @@ import {
   Sparkles,
   UsersRound,
   Video,
+  type LucideIcon,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { DailyCheckin } from '../../components/DailyCheckin';
@@ -28,7 +29,7 @@ type QuickAction = {
   helper: string;
   path: string;
   featureId?: string;
-  Icon: ComponentType<{ size?: number; strokeWidth?: number; 'aria-hidden'?: boolean }>;
+  Icon: LucideIcon;
   accent: string;
 };
 

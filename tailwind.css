@@ -32,8 +32,9 @@
     overflow: hidden;
     pointer-events: none;
     background:
-      radial-gradient(circle at 50% -20%, rgba(55, 35, 76, 0.3), transparent 45%),
-      linear-gradient(135deg, #040509 0%, #090a11 48%, #030408 100%);
+      radial-gradient(circle at 54% 48%, rgba(67, 31, 103, 0.26), transparent 34%),
+      radial-gradient(circle at 15% 85%, rgba(0, 125, 160, 0.14), transparent 32%),
+      linear-gradient(135deg, #020307 0%, #070811 48%, #020205 100%);
   }
 
   .desktop-atmosphere::before,
@@ -67,7 +68,7 @@
   .desktop-atmosphere__aurora {
     position: absolute;
     inset: -40%;
-    opacity: 0.2;
+    opacity: 0.24;
     background: conic-gradient(
       from 90deg at 50% 50%,
       transparent 0deg,
@@ -77,7 +78,35 @@
       transparent 280deg
     );
     filter: blur(80px);
-    animation: audition-aurora-spin 32s linear infinite;
+    animation: audition-aurora-spin 38s linear infinite;
+  }
+
+  .desktop-atmosphere__galaxy-band {
+    position: absolute;
+    top: 48%;
+    left: 50%;
+    width: 150%;
+    height: 38%;
+    transform: translate(-50%, -50%) rotate(-21deg);
+    border-radius: 50%;
+    opacity: 0.48;
+    background:
+      radial-gradient(ellipse at center, rgba(255, 255, 255, 0.14) 0%, rgba(102, 225, 255, 0.11) 11%, rgba(184, 62, 255, 0.13) 26%, rgba(255, 0, 127, 0.08) 39%, transparent 70%);
+    filter: blur(26px);
+    animation: audition-galaxy-breathe 11s ease-in-out infinite alternate;
+  }
+
+  .desktop-atmosphere__galaxy-dust {
+    position: absolute;
+    inset: -25%;
+    opacity: 0.36;
+    transform: rotate(-18deg);
+    background:
+      radial-gradient(ellipse at 32% 55%, rgba(0, 0, 0, 0.86) 0 7%, transparent 22%),
+      radial-gradient(ellipse at 66% 42%, rgba(0, 0, 0, 0.72) 0 6%, transparent 21%),
+      repeating-radial-gradient(ellipse at center, rgba(133, 91, 255, 0.06) 0 1px, transparent 2px 13px);
+    filter: blur(5px);
+    animation: audition-galaxy-dust 24s ease-in-out infinite alternate;
   }
 
   .desktop-atmosphere__grid {
@@ -96,7 +125,7 @@
   .desktop-atmosphere__scan {
     position: absolute;
     inset: 0;
-    opacity: 0.13;
+    opacity: 0.08;
     background: repeating-linear-gradient(
       180deg,
       transparent 0,
@@ -109,9 +138,9 @@
     position: absolute;
     inset: 0;
     background: radial-gradient(
-      420px circle at var(--pointer-x) var(--pointer-y),
-      rgba(255, 0, 127, 0.095),
-      rgba(0, 242, 254, 0.035) 35%,
+      360px circle at var(--pointer-x) var(--pointer-y),
+      rgba(98, 61, 255, 0.075),
+      rgba(0, 242, 254, 0.025) 35%,
       transparent 70%
     );
   }
@@ -128,18 +157,72 @@
     width: var(--particle-size);
     height: var(--particle-size);
     border-radius: 999px;
-    opacity: 0;
-    animation: audition-particle-float var(--particle-duration) ease-in-out var(--particle-delay) infinite;
+    opacity: 0.18;
+    will-change: transform, opacity;
+    animation: audition-galaxy-flight var(--particle-duration) linear var(--particle-delay) infinite;
   }
 
   .desktop-atmosphere__particle--pink {
-    background: #ff4fa7;
-    box-shadow: 0 0 9px 2px rgba(255, 0, 127, 0.7);
+    background: #ff61b3;
+    box-shadow: 0 0 8px 1px rgba(255, 0, 127, 0.75);
   }
 
   .desktop-atmosphere__particle--cyan {
-    background: #78f8ff;
-    box-shadow: 0 0 9px 2px rgba(0, 242, 254, 0.65);
+    background: #92fbff;
+    box-shadow: 0 0 8px 1px rgba(0, 242, 254, 0.72);
+  }
+
+  .desktop-atmosphere__particle--violet {
+    background: #b681ff;
+    box-shadow: 0 0 9px 1px rgba(157, 0, 255, 0.72);
+  }
+
+  .desktop-atmosphere__particle--white {
+    background: #f5fbff;
+    box-shadow: 0 0 6px rgba(206, 235, 255, 0.88);
+  }
+
+  .desktop-atmosphere__particle--far {
+    filter: blur(0.15px);
+  }
+
+  .desktop-atmosphere__particle--mid {
+    z-index: 1;
+  }
+
+  .desktop-atmosphere__particle--near {
+    z-index: 2;
+    filter: brightness(1.45);
+  }
+
+  .desktop-atmosphere__streaks {
+    position: absolute;
+    inset: -15%;
+    overflow: hidden;
+  }
+
+  .desktop-atmosphere__streak {
+    position: absolute;
+    left: var(--streak-x);
+    top: var(--streak-y);
+    width: var(--streak-length);
+    height: 1px;
+    border-radius: 999px;
+    opacity: 0;
+    transform: rotate(32deg);
+    transform-origin: left center;
+    will-change: transform, opacity;
+    animation: audition-star-streak var(--streak-duration) linear var(--streak-delay) infinite;
+  }
+
+  .desktop-atmosphere__streak--cyan {
+    background: linear-gradient(90deg, transparent, rgba(164, 251, 255, 0.95));
+    box-shadow: 10px 0 8px rgba(0, 242, 254, 0.4);
+  }
+
+  .desktop-atmosphere__streak--pink {
+    background: linear-gradient(90deg, transparent, rgba(255, 94, 178, 0.95));
+    box-shadow: 10px 0 8px rgba(255, 0, 127, 0.42);
   }
 
   .desktop-cursor {
@@ -164,68 +247,20 @@
     position: absolute;
     top: -3px;
     left: -3px;
-    width: 25px;
-    height: 31px;
-    filter: drop-shadow(0 0 6px rgba(255, 0, 127, 0.8));
+    width: 28px;
+    height: 34px;
+    filter: drop-shadow(1px 2px 2px rgba(0, 0, 0, 0.9));
     transform-origin: 5px 5px;
     transition: transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
   }
 
-  .desktop-cursor__ring {
-    position: absolute;
-    top: -17px;
-    left: -17px;
-    width: 34px;
-    height: 34px;
-    border: 1px solid rgba(0, 242, 254, 0.65);
-    border-radius: 50%;
-    box-shadow:
-      0 0 12px rgba(0, 242, 254, 0.2),
-      inset 0 0 8px rgba(255, 0, 127, 0.12);
-    transition:
-      width 180ms ease,
-      height 180ms ease,
-      top 180ms ease,
-      left 180ms ease,
-      border-color 180ms ease,
-      transform 120ms ease;
-  }
-
-  .desktop-cursor__dot {
-    position: absolute;
-    top: -2px;
-    left: -2px;
-    width: 4px;
-    height: 4px;
-    border-radius: 50%;
-    background: #ffffff;
-    box-shadow: 0 0 8px #ff007f;
-    opacity: 0;
-    transition: opacity 150ms ease;
-  }
-
   .desktop-cursor.is-active .desktop-cursor__pointer {
-    transform: scale(0.72) rotate(-8deg);
-  }
-
-  .desktop-cursor.is-active .desktop-cursor__ring {
-    top: -23px;
-    left: -23px;
-    width: 46px;
-    height: 46px;
-    border-color: rgba(255, 0, 127, 0.75);
-  }
-
-  .desktop-cursor.is-active .desktop-cursor__dot {
-    opacity: 1;
-  }
-
-  .desktop-cursor.is-pressed .desktop-cursor__ring {
-    transform: scale(0.68);
+    transform: scale(0.82) rotate(-5deg);
+    filter: drop-shadow(1px 2px 2px rgba(0, 0, 0, 0.9)) saturate(1.35);
   }
 
   .desktop-cursor.is-pressed .desktop-cursor__pointer {
-    transform: scale(0.62);
+    transform: scale(0.68) rotate(-3deg);
   }
 
   @keyframes audition-orb-pink {
@@ -246,10 +281,39 @@
     to { background-position: 54px 54px, 54px 54px; }
   }
 
-  @keyframes audition-particle-float {
-    0%, 100% { opacity: 0; transform: translate3d(0, 18px, 0) scale(0.65); }
-    18%, 75% { opacity: 0.8; }
-    50% { opacity: 1; transform: translate3d(16px, -34px, 0) scale(1.2); }
+  @keyframes audition-galaxy-breathe {
+    from { transform: translate(-52%, -52%) rotate(-23deg) scale(0.92); opacity: 0.34; }
+    to { transform: translate(-47%, -46%) rotate(-18deg) scale(1.1); opacity: 0.58; }
+  }
+
+  @keyframes audition-galaxy-dust {
+    from { transform: translate3d(-3%, -2%, 0) rotate(-20deg) scale(0.96); }
+    to { transform: translate3d(4%, 3%, 0) rotate(-15deg) scale(1.05); }
+  }
+
+  @keyframes audition-galaxy-flight {
+    0% {
+      opacity: 0;
+      transform: translate3d(var(--particle-from-x), var(--particle-from-y), 0) scale(0.25);
+    }
+    14% { opacity: 0.28; }
+    58% { opacity: 0.9; }
+    100% {
+      opacity: 0;
+      transform: translate3d(var(--particle-to-x), var(--particle-to-y), 0) scale(2.35);
+    }
+  }
+
+  @keyframes audition-star-streak {
+    0%, 68% {
+      opacity: 0;
+      transform: translate3d(-12vw, -10vh, 0) rotate(32deg) scaleX(0.25);
+    }
+    72% { opacity: 0.82; }
+    100% {
+      opacity: 0;
+      transform: translate3d(42vw, 34vh, 0) rotate(32deg) scaleX(1.15);
+    }
   }
 }
 

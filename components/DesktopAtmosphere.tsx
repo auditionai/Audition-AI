@@ -1,19 +1,29 @@
 import React, { useEffect, useRef, useState } from 'react';
 
-const PARTICLES = [
-  { x: 7, y: 16, size: 2, delay: -2, duration: 14, color: 'pink' },
-  { x: 14, y: 74, size: 1, delay: -7, duration: 18, color: 'cyan' },
-  { x: 23, y: 42, size: 2, delay: -11, duration: 16, color: 'cyan' },
-  { x: 31, y: 87, size: 1, delay: -4, duration: 20, color: 'pink' },
-  { x: 39, y: 23, size: 1, delay: -9, duration: 15, color: 'pink' },
-  { x: 48, y: 66, size: 2, delay: -1, duration: 19, color: 'cyan' },
-  { x: 57, y: 11, size: 1, delay: -13, duration: 17, color: 'cyan' },
-  { x: 64, y: 81, size: 2, delay: -6, duration: 21, color: 'pink' },
-  { x: 72, y: 37, size: 1, delay: -10, duration: 15, color: 'cyan' },
-  { x: 79, y: 91, size: 1, delay: -3, duration: 18, color: 'pink' },
-  { x: 86, y: 19, size: 2, delay: -8, duration: 20, color: 'pink' },
-  { x: 93, y: 58, size: 1, delay: -12, duration: 16, color: 'cyan' },
-] as const;
+const GALAXY_PARTICLES = Array.from({ length: 84 }, (_, index) => {
+  const depth = index % 7 === 0 ? 'near' : index % 3 === 0 ? 'mid' : 'far';
+  const durationBase = depth === 'near' ? 5 : depth === 'mid' ? 9 : 15;
+
+  return {
+    x: (index * 37 + 11) % 101,
+    y: (index * 61 + 17) % 103,
+    size: depth === 'near' ? 2.6 + (index % 3) * 0.7 : depth === 'mid' ? 1.7 + (index % 2) * 0.6 : 0.9 + (index % 3) * 0.35,
+    delay: -((index * 1.73) % 19),
+    duration: durationBase + (index % 5) * 0.85,
+    drift: 10 + (index * 13) % 42,
+    color: index % 11 === 0 ? 'violet' : index % 4 === 0 ? 'pink' : index % 3 === 0 ? 'cyan' : 'white',
+    depth,
+  };
+});
+
+const STAR_STREAKS = Array.from({ length: 18 }, (_, index) => ({
+  x: (index * 29 + 7) % 100,
+  y: (index * 47 + 5) % 100,
+  length: 54 + (index % 6) * 20,
+  delay: -((index * 1.37) % 13),
+  duration: 4.8 + (index % 5) * 0.9,
+  color: index % 3 === 0 ? 'pink' : 'cyan',
+}));
 
 const INTERACTIVE_SELECTOR = 'a, button, input, textarea, select, summary, [role="button"], [data-cursor="interactive"]';
 
@@ -79,20 +89,41 @@ export const DesktopAtmosphere: React.FC = () => {
     <>
       <div className="desktop-atmosphere" aria-hidden="true">
         <div className="desktop-atmosphere__aurora" />
+        <div className="desktop-atmosphere__galaxy-band" />
+        <div className="desktop-atmosphere__galaxy-dust" />
         <div className="desktop-atmosphere__grid" />
         <div className="desktop-atmosphere__scan" />
         <div className="desktop-atmosphere__spotlight" />
         <div className="desktop-atmosphere__particles">
-          {PARTICLES.map((particle, index) => (
+          {GALAXY_PARTICLES.map((particle, index) => (
             <span
               key={index}
-              className={`desktop-atmosphere__particle desktop-atmosphere__particle--${particle.color}`}
+              className={`desktop-atmosphere__particle desktop-atmosphere__particle--${particle.color} desktop-atmosphere__particle--${particle.depth}`}
               style={{
                 '--particle-x': `${particle.x}%`,
                 '--particle-y': `${particle.y}%`,
                 '--particle-size': `${particle.size}px`,
                 '--particle-delay': `${particle.delay}s`,
                 '--particle-duration': `${particle.duration}s`,
+                '--particle-from-x': `${particle.drift * -0.35}px`,
+                '--particle-from-y': `${particle.drift * -0.25}px`,
+                '--particle-to-x': `${particle.drift}px`,
+                '--particle-to-y': `${particle.drift * 0.72}px`,
+              } as React.CSSProperties}
+            />
+          ))}
+        </div>
+        <div className="desktop-atmosphere__streaks">
+          {STAR_STREAKS.map((streak, index) => (
+            <span
+              key={index}
+              className={`desktop-atmosphere__streak desktop-atmosphere__streak--${streak.color}`}
+              style={{
+                '--streak-x': `${streak.x}%`,
+                '--streak-y': `${streak.y}%`,
+                '--streak-length': `${streak.length}px`,
+                '--streak-delay': `${streak.delay}s`,
+                '--streak-duration': `${streak.duration}s`,
               } as React.CSSProperties}
             />
           ))}
@@ -109,24 +140,25 @@ export const DesktopAtmosphere: React.FC = () => {
         ].join(' ')}
         aria-hidden="true"
       >
-        <span className="desktop-cursor__ring" />
-        <svg className="desktop-cursor__pointer" viewBox="0 0 28 34" role="presentation">
+        <svg className="desktop-cursor__pointer" viewBox="0 0 34 40" role="presentation">
           <defs>
-            <linearGradient id="audition-cursor-gradient" x1="3" y1="2" x2="24" y2="31">
+            <linearGradient id="audition-cursor-gradient" x1="5" y1="3" x2="27" y2="35">
               <stop stopColor="#ffffff" />
-              <stop offset="0.3" stopColor="#ff4fa7" />
-              <stop offset="1" stopColor="#ff007f" />
+              <stop offset="0.28" stopColor="#70f8ff" />
+              <stop offset="0.62" stopColor="#00d9e8" />
+              <stop offset="1" stopColor="#ff168b" />
             </linearGradient>
           </defs>
           <path
-            d="M3.3 2.4 24.8 21c1 .9.4 2.6-.9 2.6h-8.2l4.5 7.1-5 2.9-4.3-7.2-4.5 6c-.8 1-2.5.5-2.5-.8L2 3.5c-.1-1.2.6-1.8 1.3-1.1Z"
+            d="M4 2.6 29.2 20c1.3.9.8 2.9-.8 3.1l-9.2 1.1 5.1 8.3-6 3.7-5.2-8.5-5.6 7.1c-1 1.2-3 .5-2.9-1L2 4.2c-.1-1.4.9-2.2 2-1.6Z"
             fill="url(#audition-cursor-gradient)"
-            stroke="#070912"
-            strokeWidth="2"
+            stroke="#021317"
+            strokeWidth="2.2"
             strokeLinejoin="round"
           />
+          <path d="m7 8 1.2 17.4 4-5 7-.8L7 8Z" fill="#07131b" opacity="0.72" />
+          <path d="m24.5 26.8 3.2 5.2-5.9 3.6" fill="none" stroke="#ff168b" strokeWidth="1.6" strokeLinecap="round" />
         </svg>
-        <span className="desktop-cursor__dot" />
       </div>
     </>
   );

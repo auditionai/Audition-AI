@@ -1,18 +1,18 @@
 import type { ReactNode } from 'react';
 import { About } from '../../views/About';
 import { AdminView } from '../../views/Admin';
-import { Gallery } from '../../views/Gallery';
 import { Guide } from '../../views/Guide';
 import { PaymentGatewayView } from '../../views/PaymentGateway';
-import { PromptLibrary } from '../../views/PromptLibrary';
-import { Settings } from '../../views/Settings';
 import { Support } from '../../views/Support';
-import { TopUp } from '../../views/TopUp';
 import { WorkspaceEdit } from '../../views/WorkspaceEdit';
 import { WorkspaceImage } from '../../views/WorkspaceImage';
 import { WorkspacePromptImage } from '../../views/WorkspacePromptImage';
 import { WorkspaceVideo } from '../../views/WorkspaceVideo';
 import { V2RouteHero } from '../components/V2RouteHero';
+import { GalleryV2 as NativeGalleryV2 } from './GalleryV2';
+import { ProfileV2 as NativeProfileV2 } from './ProfileV2';
+import { PromptLibraryV2 as NativePromptLibraryV2 } from './PromptLibraryV2';
+import { TopUpV2 as NativeTopUpV2 } from './TopUpV2';
 
 type V2FeatureFrameProps = {
   kind: string;
@@ -33,11 +33,11 @@ export const ImageStudioV2 = () => <V2FeatureFrame kind="image" immersive><Works
 export const VideoStudioV2 = () => <V2FeatureFrame kind="video" immersive><WorkspaceVideo /></V2FeatureFrame>;
 export const PromptImageStudioV2 = () => <V2FeatureFrame kind="composer" immersive><WorkspacePromptImage /></V2FeatureFrame>;
 export const EditStudioV2 = () => <V2FeatureFrame kind="editor" immersive><WorkspaceEdit /></V2FeatureFrame>;
-export const PromptLibraryV2 = () => <V2FeatureFrame kind="templates"><PromptLibrary /></V2FeatureFrame>;
-export const GalleryV2 = () => <V2FeatureFrame kind="history"><Gallery /></V2FeatureFrame>;
-export const TopUpV2 = () => <V2FeatureFrame kind="wallet"><TopUp /></V2FeatureFrame>;
+export const PromptLibraryV2 = () => <NativePromptLibraryV2 />;
+export const GalleryV2 = () => <NativeGalleryV2 />;
+export const TopUpV2 = () => <NativeTopUpV2 />;
 export const PaymentGatewayV2 = () => <V2FeatureFrame kind="payment"><PaymentGatewayView /></V2FeatureFrame>;
-export const ProfileV2 = () => <V2FeatureFrame kind="profile"><Settings /></V2FeatureFrame>;
+export const ProfileV2 = () => <NativeProfileV2 />;
 export const AboutV2 = () => <V2FeatureFrame kind="academy"><About /></V2FeatureFrame>;
 export const SupportV2 = () => <V2FeatureFrame kind="academy"><Support /></V2FeatureFrame>;
 export const GuideV2 = () => <V2FeatureFrame kind="academy"><Guide /></V2FeatureFrame>;

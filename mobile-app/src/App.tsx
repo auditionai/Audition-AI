@@ -9,7 +9,9 @@ import { MobileLayout } from './components/layout/MobileLayout';
 import { MobileV2Layout } from './v2/components/MobileV2Layout';
 import { AuditionV2Logo } from './v2/components/AuditionV2Logo';
 import { HomeV2 } from './v2/views/HomeV2';
+import { MobileV2Preview } from './v2/views/MobileV2Preview';
 import { AuthV2 } from './v2/views/AuthV2';
+import { ToolsHubV2 } from './v2/views/ToolsHubV2';
 import {
   AboutV2,
   AdminV2,
@@ -159,7 +161,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route element={<MobileV2Layout />}>
-        <Route path="/mobile-v2-preview" element={<HomeV2 />} />
+        <Route path="/mobile-v2-preview" element={<MobileV2Preview />} />
       </Route>
       {!isAuthenticated ? (
         isMobileV2 ? (
@@ -177,6 +179,8 @@ function AppRoutes() {
         <>
           <Route element={isMobileV2 ? <MobileV2Layout /> : <MobileLayout />}>
             <Route path="/home" element={isMobileV2 ? <HomeV2 /> : <Home />} />
+            {isMobileV2 && <Route path="/tools-hub" element={<ToolsHubV2 />} />}
+            {isMobileV2 && <Route path="/tools-hub/:category" element={<ToolsHubV2 />} />}
             <Route path="/generate/image" element={<FeatureMaintenanceGuard>{isMobileV2 ? <ImageStudioV2 /> : <WorkspaceImage />}</FeatureMaintenanceGuard>} />
             <Route path="/generate/video" element={<FeatureMaintenanceGuard>{isMobileV2 ? <VideoStudioV2 /> : <WorkspaceVideo />}</FeatureMaintenanceGuard>} />
             <Route path="/tools/ai-image" element={<FeatureMaintenanceGuard>{isMobileV2 ? <PromptImageStudioV2 /> : <WorkspacePromptImage />}</FeatureMaintenanceGuard>} />

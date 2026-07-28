@@ -1,17 +1,16 @@
 import { useEffect, useState } from 'react';
 import {
   ArrowRight,
-  Bell,
   BookOpenText,
   CalendarCheck2,
   ChevronLeft,
   ChevronRight,
   Coins,
+  Crop,
   Film,
   Image,
   Images,
   LockKeyhole,
-  MessageSquareText,
   Palette,
   Rocket,
   Sparkles,
@@ -42,33 +41,26 @@ type QuickAction = {
 const quickActions: QuickAction[] = [
   {
     label: 'Tạo ảnh AI',
-    helper: 'Nhân vật 3D',
-    path: '/generate/image',
+    helper: '',
+    path: '/tools-hub/image',
     featureId: 'single_photo_gen',
     Icon: Image,
     accent: 'raspberry',
   },
   {
-    label: 'Video AI Lab',
-    helper: 'Ảnh thành video',
-    path: '/generate/video',
+    label: 'Tạo Video AI',
+    helper: '',
+    path: '/tools-hub/video',
     featureId: 'video_ai_gen',
     Icon: Video,
     accent: 'violet',
   },
   {
-    label: 'Prompt Hub',
-    helper: 'Mẫu sáng tạo',
-    path: '/prompt-library',
-    Icon: MessageSquareText,
+    label: 'Chỉnh Sửa Ảnh',
+    helper: '',
+    path: '/tools-hub/edit',
+    Icon: Crop,
     accent: 'teal',
-  },
-  {
-    label: 'Store Vcoin',
-    helper: 'Ưu đãi nạp',
-    path: '/topup',
-    Icon: Coins,
-    accent: 'wine',
   },
 ];
 
@@ -168,10 +160,7 @@ export function HomeV2() {
             aria-label={isCheckedIn ? 'Đã điểm danh hôm nay' : 'Điểm danh nhận Vcoin'}
           >
             <CalendarCheck2 size={18} />
-          </button>
-          <button type="button" className="v2-icon-button v2-tap" aria-label="Thông báo">
-            <Bell size={19} />
-            <span className="v2-notification-dot" />
+            <span>Điểm danh</span>
           </button>
           <button
             type="button"
@@ -245,11 +234,10 @@ export function HomeV2() {
               data-accent={accent}
               onClick={() => openFeature(path, featureId)}
               disabled={locked}
-              aria-label={`${label}: ${helper}${locked ? ' - đang bảo trì' : ''}`}
+              aria-label={`${label}${locked ? ' - đang bảo trì' : ''}`}
             >
               <span className="v2-quick-card__icon"><Icon size={25} strokeWidth={1.8} /></span>
               <strong>{label}</strong>
-              <small>{helper}</small>
               {locked && <LockKeyhole className="v2-lock" size={15} aria-hidden="true" />}
             </button>
           );
@@ -262,8 +250,8 @@ export function HomeV2() {
             <span className="v2-section-heading__kicker"><BookOpenText size={14} /> Studio sáng tạo</span>
             <h2>Công cụ nổi bật</h2>
           </div>
-          <button type="button" className="v2-text-button v2-tap" onClick={() => navigate('/prompt-library')}>
-            Xem tất cả <ArrowRight size={16} />
+          <button type="button" className="v2-text-button v2-tap" onClick={() => navigate('/tools-hub')}>
+            Tất cả công cụ <ArrowRight size={16} />
           </button>
         </div>
 

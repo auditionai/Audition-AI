@@ -12,7 +12,7 @@ import {
   Video, Music, VolumeX 
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../components/NotificationSystem';
 import { getUserProfile, getModelPricing, getTstServerAvailabilityConfig } from '../services/economyService';
@@ -99,6 +99,7 @@ const SMART_TIPS = [
 
 export function WorkspaceVideo() {
   const navigate = useNavigate();
+  const location = useLocation();
   useAuth();
   const { notify } = useNotification();
   const { queueStats } = useConcurrency();
@@ -158,6 +159,12 @@ export function WorkspaceVideo() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadTarget, setUploadTarget] = useState<'keyframe' | 'character' | 'motion' | null>(null);
+
+  useEffect(() => {
+    const toolId = new URLSearchParams(location.search).get('tool');
+    if (toolId === 'motion_control_gen') setActiveMode('motion_control');
+    if (toolId === 'video_ai_gen') setActiveMode('video_ai');
+  }, [location.search]);
 
   // --- Load Catalog ---
   useEffect(() => {

@@ -29,7 +29,7 @@ export function MobileV2Layout() {
     >
       <AuroraBackdrop />
       <MobileV2TopBar />
-      <main className={`mobile-v2-content${location.pathname === '/home' || isStandalonePreview ? '' : ' v2-screen'}`}>
+      <main className={`mobile-v2-content${location.pathname === '/home' || isStandalonePreview || location.pathname === '/' ? '' : ' v2-screen'}`}>
         <Outlet />
       </main>
       <MobileV2BottomNav />

@@ -4,11 +4,16 @@ import {
   Bell,
   BookOpenText,
   CalendarCheck2,
+  ChevronLeft,
+  ChevronRight,
   Coins,
+  Film,
   Image,
   Images,
   LockKeyhole,
   MessageSquareText,
+  Palette,
+  Rocket,
   Sparkles,
   UsersRound,
   Video,
@@ -23,6 +28,7 @@ import {
   subscribeCheckinStatus,
   type FeatureMaintenanceConfig,
 } from '../../services/economyService';
+import { AuditionV2Logo } from '../components/AuditionV2Logo';
 
 type QuickAction = {
   label: string;
@@ -66,12 +72,50 @@ const quickActions: QuickAction[] = [
   },
 ];
 
+const heroSlides = [
+  {
+    kicker: 'Character Dream Lab',
+    title: 'Biến bạn thành',
+    highlight: 'nhân vật 3D',
+    description: 'Giữ đúng gương mặt, phối trang phục và tạo thế giới Audition mang dấu ấn riêng.',
+    cta: 'Tạo nhân vật ngay',
+    path: '/generate/image?tool=single_photo_gen',
+    featureId: 'single_photo_gen',
+    Icon: Palette,
+    accent: 'pink',
+  },
+  {
+    kicker: 'Couple Universe',
+    title: 'Kể câu chuyện',
+    highlight: 'của hai người',
+    description: 'Dựng khoảnh khắc couple lãng mạn với bố cục, ánh sáng và phong cách game 3D.',
+    cta: 'Mở Couple Mode',
+    path: '/generate/image?tool=couple_photo_gen',
+    featureId: 'couple_photo_gen',
+    Icon: Sparkles,
+    accent: 'cyan',
+  },
+  {
+    kicker: 'Motion Galaxy',
+    title: 'Cho hình ảnh',
+    highlight: 'chuyển động',
+    description: 'Đạo diễn video AI từ một khung hình với chuyển động điện ảnh và âm thanh sống động.',
+    cta: 'Khám phá Video Lab',
+    path: '/generate/video',
+    featureId: 'video_ai_gen',
+    Icon: Film,
+    accent: 'violet',
+  },
+];
+
 export function HomeV2() {
   const navigate = useNavigate();
   const { user, userRole } = useAuth();
   const [showCheckin, setShowCheckin] = useState(false);
   const [isCheckedIn, setIsCheckedIn] = useState(true);
   const [featureMaintenance, setFeatureMaintenance] = useState<FeatureMaintenanceConfig>({ disabledFeatureIds: [] });
+  const [activeSlide, setActiveSlide] = useState(0);
+  const [carouselPaused, setCarouselPaused] = useState(false);
 
   useEffect(() => subscribeCheckinStatus(
     (status) => setIsCheckedIn(status.isCheckedInToday),
@@ -84,6 +128,14 @@ export function HomeV2() {
     });
   }, []);
 
+  useEffect(() => {
+    if (carouselPaused) return undefined;
+    const timer = window.setInterval(() => {
+      setActiveSlide((current) => (current + 1) % heroSlides.length);
+    }, 5200);
+    return () => window.clearInterval(timer);
+  }, [carouselPaused]);
+
   const isLocked = (featureId?: string) => Boolean(
     featureId
     && userRole !== 'admin'
@@ -93,6 +145,8 @@ export function HomeV2() {
   const openFeature = (path: string, featureId?: string) => {
     if (!isLocked(featureId)) navigate(path);
   };
+  const slide = heroSlides[activeSlide];
+  const SlideIcon = slide.Icon;
 
   return (
     <div className="v2-home">
@@ -103,8 +157,7 @@ export function HomeV2() {
           onClick={() => navigate('/home')}
           aria-label="Audition AI - Trang chủ"
         >
-          <span className="v2-brand__mark"><Sparkles size={21} aria-hidden="true" /></span>
-          <span className="v2-brand__name">AUDITION <b>AI</b></span>
+          <AuditionV2Logo />
         </button>
 
         <div className="v2-topbar__actions">
@@ -132,26 +185,52 @@ export function HomeV2() {
         </div>
       </header>
 
-      <section className="v2-hero v2-neon-frame" data-accent="rainbow">
+      <section
+        className="v2-hero v2-neon-frame v2-hero--carousel"
+        data-accent={slide.accent}
+        onPointerEnter={() => setCarouselPaused(true)}
+        onPointerLeave={() => setCarouselPaused(false)}
+        onFocus={() => setCarouselPaused(true)}
+        onBlur={() => setCarouselPaused(false)}
+        aria-roledescription="carousel"
+        aria-label="Khám phá tính năng nổi bật"
+      >
         <div className="v2-hero__art" aria-hidden="true">
           <span className="v2-orbit v2-orbit--one" />
           <span className="v2-orbit v2-orbit--two" />
+          <span className="v2-hero__planet"><SlideIcon size={48} strokeWidth={1.25} /></span>
           <Sparkles className="v2-hero__spark v2-hero__spark--one" />
           <Sparkles className="v2-hero__spark v2-hero__spark--two" />
         </div>
         <div className="v2-hero__scrim" />
-        <div className="v2-hero__content">
-          <span className="v2-eyebrow"><Sparkles size={13} /> Audition AI Studio</span>
-          <h1>Sáng tạo cùng<br /><span>Audition AI</span></h1>
-          <p>Biến ý tưởng thành ảnh, video và nhân vật 3D mang phong cách riêng.</p>
+        <div className="v2-hero__content" key={slide.kicker}>
+          <span className="v2-eyebrow"><Rocket size={13} /> {slide.kicker}</span>
+          <h1>{slide.title}<br /><span>{slide.highlight}</span></h1>
+          <p>{slide.description}</p>
           <button
             type="button"
             className="v2-primary-button v2-tap"
-            onClick={() => openFeature('/generate/image', 'single_photo_gen')}
+            onClick={() => openFeature(slide.path, slide.featureId)}
           >
             <Sparkles size={18} aria-hidden="true" />
-            Bắt đầu tạo ảnh
+            {slide.cta}
           </button>
+        </div>
+        <div className="v2-carousel-controls">
+          <button type="button" onClick={() => setActiveSlide((activeSlide - 1 + heroSlides.length) % heroSlides.length)} aria-label="Banner trước"><ChevronLeft size={18} /></button>
+          <div className="v2-carousel-dots">
+            {heroSlides.map((item, index) => (
+              <button
+                type="button"
+                key={item.kicker}
+                className={activeSlide === index ? 'is-active' : ''}
+                onClick={() => setActiveSlide(index)}
+                aria-label={`Xem banner ${index + 1}`}
+                aria-current={activeSlide === index ? 'true' : undefined}
+              />
+            ))}
+          </div>
+          <button type="button" onClick={() => setActiveSlide((activeSlide + 1) % heroSlides.length)} aria-label="Banner sau"><ChevronRight size={18} /></button>
         </div>
       </section>
 

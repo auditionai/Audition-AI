@@ -1,6 +1,7 @@
-import { Bell, Coins, Sparkles } from 'lucide-react';
+import { Bell, Coins } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { AuditionV2Logo } from './AuditionV2Logo';
 
 export function MobileV2TopBar() {
   const location = useLocation();
@@ -19,8 +20,7 @@ export function MobileV2TopBar() {
         onClick={() => navigate('/home')}
         aria-label="Về trang chủ"
       >
-        <span className="v2-brand__mark"><Sparkles size={19} aria-hidden="true" /></span>
-        <span className="v2-brand__name">AUDITION <b>AI</b></span>
+        <AuditionV2Logo compact />
       </button>
       <div className="v2-topbar__actions">
         <button type="button" className="v2-icon-button v2-tap" aria-label="Thông báo">

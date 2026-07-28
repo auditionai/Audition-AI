@@ -7,7 +7,24 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { MobileLayout } from './components/layout/MobileLayout';
 import { MobileV2Layout } from './v2/components/MobileV2Layout';
+import { AuditionV2Logo } from './v2/components/AuditionV2Logo';
 import { HomeV2 } from './v2/views/HomeV2';
+import { AuthV2 } from './v2/views/AuthV2';
+import {
+  AboutV2,
+  AdminV2,
+  EditStudioV2,
+  GalleryV2,
+  GuideV2,
+  ImageStudioV2,
+  PaymentGatewayV2,
+  ProfileV2,
+  PromptImageStudioV2,
+  PromptLibraryV2,
+  SupportV2,
+  TopUpV2,
+  VideoStudioV2,
+} from './v2/views/V2FeatureViews';
 import { useMobileUiVersion } from './v2/mobileUiVersion';
 import { Splash } from './views/Splash';
 import { Home } from './views/Home';
@@ -113,6 +130,20 @@ function AppRoutes() {
   const isMobileV2 = mobileUiVersion === 'v2';
 
   if (isLoading) {
+    if (isMobileV2) {
+      return (
+        <div className="mobile-v2-shell v2-loading-screen">
+          <div className="v2-loading-screen__universe" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </div>
+          <AuditionV2Logo />
+          <div className="v2-loading-screen__bar"><span /></div>
+          <p>Đang mở Creative Universe…</p>
+        </div>
+      );
+    }
     return (
       <div className="min-h-screen flex items-center justify-center bg-white dark:bg-[#18181B]">
         <div className="flex flex-col items-center gap-4">
@@ -133,7 +164,7 @@ function AppRoutes() {
       {!isAuthenticated ? (
         isMobileV2 ? (
           <Route element={<MobileV2Layout />}>
-            <Route path="/" element={<Splash />} />
+            <Route path="/" element={<AuthV2 />} />
             <Route path="*" element={<Navigate to={`/${location.search}`} replace />} />
           </Route>
         ) : (
@@ -146,19 +177,19 @@ function AppRoutes() {
         <>
           <Route element={isMobileV2 ? <MobileV2Layout /> : <MobileLayout />}>
             <Route path="/home" element={isMobileV2 ? <HomeV2 /> : <Home />} />
-            <Route path="/generate/image" element={<FeatureMaintenanceGuard><WorkspaceImage /></FeatureMaintenanceGuard>} />
-            <Route path="/generate/video" element={<FeatureMaintenanceGuard><WorkspaceVideo /></FeatureMaintenanceGuard>} />
-            <Route path="/tools/ai-image" element={<FeatureMaintenanceGuard><WorkspacePromptImage /></FeatureMaintenanceGuard>} />
-            <Route path="/tools/:toolId" element={<FeatureMaintenanceGuard><WorkspaceEdit /></FeatureMaintenanceGuard>} />
-            <Route path="/gallery" element={<Gallery />} />
-            <Route path="/prompt-library" element={<PromptLibrary />} />
-            <Route path="/topup" element={<TopUp />} />
-            <Route path="/payment-gateway" element={<PaymentGatewayView />} />
-            <Route path="/profile" element={<Settings />} />
-            <Route path="/about" element={<About />} />
-            <Route path="/support" element={<Support />} />
-            <Route path="/guide" element={<Guide />} />
-            <Route path="/admin" element={<AdminView />} />
+            <Route path="/generate/image" element={<FeatureMaintenanceGuard>{isMobileV2 ? <ImageStudioV2 /> : <WorkspaceImage />}</FeatureMaintenanceGuard>} />
+            <Route path="/generate/video" element={<FeatureMaintenanceGuard>{isMobileV2 ? <VideoStudioV2 /> : <WorkspaceVideo />}</FeatureMaintenanceGuard>} />
+            <Route path="/tools/ai-image" element={<FeatureMaintenanceGuard>{isMobileV2 ? <PromptImageStudioV2 /> : <WorkspacePromptImage />}</FeatureMaintenanceGuard>} />
+            <Route path="/tools/:toolId" element={<FeatureMaintenanceGuard>{isMobileV2 ? <EditStudioV2 /> : <WorkspaceEdit />}</FeatureMaintenanceGuard>} />
+            <Route path="/gallery" element={isMobileV2 ? <GalleryV2 /> : <Gallery />} />
+            <Route path="/prompt-library" element={isMobileV2 ? <PromptLibraryV2 /> : <PromptLibrary />} />
+            <Route path="/topup" element={isMobileV2 ? <TopUpV2 /> : <TopUp />} />
+            <Route path="/payment-gateway" element={isMobileV2 ? <PaymentGatewayV2 /> : <PaymentGatewayView />} />
+            <Route path="/profile" element={isMobileV2 ? <ProfileV2 /> : <Settings />} />
+            <Route path="/about" element={isMobileV2 ? <AboutV2 /> : <About />} />
+            <Route path="/support" element={isMobileV2 ? <SupportV2 /> : <Support />} />
+            <Route path="/guide" element={isMobileV2 ? <GuideV2 /> : <Guide />} />
+            <Route path="/admin" element={isMobileV2 ? <AdminV2 /> : <AdminView />} />
           </Route>
           <Route path="/" element={<Navigate to="/home" replace />} />
           <Route path="*" element={<Navigate to="/home" replace />} />

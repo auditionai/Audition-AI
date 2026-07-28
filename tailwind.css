@@ -1,3 +1,271 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Desktop-only cyber atmosphere and branded pointer. */
+:root {
+  --pointer-x: 50vw;
+  --pointer-y: 50vh;
+}
+
+.desktop-atmosphere,
+.desktop-cursor {
+  display: none;
+}
+
+@media (min-width: 1024px) and (pointer: fine) {
+  .desktop-atmosphere-shell.neu-base {
+    isolation: isolate;
+    background: #05060a;
+  }
+
+  .desktop-atmosphere-shell,
+  .desktop-atmosphere-shell * {
+    cursor: none !important;
+  }
+
+  .desktop-atmosphere {
+    position: absolute;
+    z-index: 0;
+    inset: 0;
+    display: block;
+    overflow: hidden;
+    pointer-events: none;
+    background:
+      radial-gradient(circle at 50% -20%, rgba(55, 35, 76, 0.3), transparent 45%),
+      linear-gradient(135deg, #040509 0%, #090a11 48%, #030408 100%);
+  }
+
+  .desktop-atmosphere::before,
+  .desktop-atmosphere::after {
+    content: "";
+    position: absolute;
+    width: 46vw;
+    height: 46vw;
+    min-width: 580px;
+    min-height: 580px;
+    border-radius: 50%;
+    filter: blur(100px);
+    opacity: 0.14;
+    will-change: transform;
+  }
+
+  .desktop-atmosphere::before {
+    top: -31vw;
+    right: -8vw;
+    background: #ff007f;
+    animation: audition-orb-pink 18s ease-in-out infinite alternate;
+  }
+
+  .desktop-atmosphere::after {
+    bottom: -35vw;
+    left: 4vw;
+    background: #00f2fe;
+    animation: audition-orb-cyan 22s ease-in-out infinite alternate;
+  }
+
+  .desktop-atmosphere__aurora {
+    position: absolute;
+    inset: -40%;
+    opacity: 0.2;
+    background: conic-gradient(
+      from 90deg at 50% 50%,
+      transparent 0deg,
+      rgba(255, 0, 127, 0.18) 52deg,
+      transparent 105deg,
+      rgba(0, 242, 254, 0.12) 210deg,
+      transparent 280deg
+    );
+    filter: blur(80px);
+    animation: audition-aurora-spin 32s linear infinite;
+  }
+
+  .desktop-atmosphere__grid {
+    position: absolute;
+    inset: -30%;
+    transform: perspective(700px) rotateX(63deg) translateY(32%);
+    transform-origin: center bottom;
+    background-image:
+      linear-gradient(rgba(0, 242, 254, 0.055) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 0, 127, 0.045) 1px, transparent 1px);
+    background-size: 54px 54px;
+    mask-image: radial-gradient(ellipse at center, black 0%, transparent 64%);
+    animation: audition-grid-drift 14s linear infinite;
+  }
+
+  .desktop-atmosphere__scan {
+    position: absolute;
+    inset: 0;
+    opacity: 0.13;
+    background: repeating-linear-gradient(
+      180deg,
+      transparent 0,
+      transparent 5px,
+      rgba(255, 255, 255, 0.018) 6px
+    );
+  }
+
+  .desktop-atmosphere__spotlight {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(
+      420px circle at var(--pointer-x) var(--pointer-y),
+      rgba(255, 0, 127, 0.095),
+      rgba(0, 242, 254, 0.035) 35%,
+      transparent 70%
+    );
+  }
+
+  .desktop-atmosphere__particles {
+    position: absolute;
+    inset: 0;
+  }
+
+  .desktop-atmosphere__particle {
+    position: absolute;
+    left: var(--particle-x);
+    top: var(--particle-y);
+    width: var(--particle-size);
+    height: var(--particle-size);
+    border-radius: 999px;
+    opacity: 0;
+    animation: audition-particle-float var(--particle-duration) ease-in-out var(--particle-delay) infinite;
+  }
+
+  .desktop-atmosphere__particle--pink {
+    background: #ff4fa7;
+    box-shadow: 0 0 9px 2px rgba(255, 0, 127, 0.7);
+  }
+
+  .desktop-atmosphere__particle--cyan {
+    background: #78f8ff;
+    box-shadow: 0 0 9px 2px rgba(0, 242, 254, 0.65);
+  }
+
+  .desktop-cursor {
+    position: fixed;
+    z-index: 10000;
+    top: 0;
+    left: 0;
+    display: block;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 150ms ease;
+    will-change: transform;
+  }
+
+  .desktop-cursor.is-visible {
+    opacity: 1;
+  }
+
+  .desktop-cursor__pointer {
+    position: absolute;
+    top: -3px;
+    left: -3px;
+    width: 25px;
+    height: 31px;
+    filter: drop-shadow(0 0 6px rgba(255, 0, 127, 0.8));
+    transform-origin: 5px 5px;
+    transition: transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .desktop-cursor__ring {
+    position: absolute;
+    top: -17px;
+    left: -17px;
+    width: 34px;
+    height: 34px;
+    border: 1px solid rgba(0, 242, 254, 0.65);
+    border-radius: 50%;
+    box-shadow:
+      0 0 12px rgba(0, 242, 254, 0.2),
+      inset 0 0 8px rgba(255, 0, 127, 0.12);
+    transition:
+      width 180ms ease,
+      height 180ms ease,
+      top 180ms ease,
+      left 180ms ease,
+      border-color 180ms ease,
+      transform 120ms ease;
+  }
+
+  .desktop-cursor__dot {
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 0 8px #ff007f;
+    opacity: 0;
+    transition: opacity 150ms ease;
+  }
+
+  .desktop-cursor.is-active .desktop-cursor__pointer {
+    transform: scale(0.72) rotate(-8deg);
+  }
+
+  .desktop-cursor.is-active .desktop-cursor__ring {
+    top: -23px;
+    left: -23px;
+    width: 46px;
+    height: 46px;
+    border-color: rgba(255, 0, 127, 0.75);
+  }
+
+  .desktop-cursor.is-active .desktop-cursor__dot {
+    opacity: 1;
+  }
+
+  .desktop-cursor.is-pressed .desktop-cursor__ring {
+    transform: scale(0.68);
+  }
+
+  .desktop-cursor.is-pressed .desktop-cursor__pointer {
+    transform: scale(0.62);
+  }
+
+  @keyframes audition-orb-pink {
+    from { transform: translate3d(-4vw, -2vh, 0) scale(0.88); }
+    to { transform: translate3d(13vw, 20vh, 0) scale(1.08); }
+  }
+
+  @keyframes audition-orb-cyan {
+    from { transform: translate3d(-5vw, 8vh, 0) scale(0.9); }
+    to { transform: translate3d(16vw, -12vh, 0) scale(1.12); }
+  }
+
+  @keyframes audition-aurora-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  @keyframes audition-grid-drift {
+    to { background-position: 54px 54px, 54px 54px; }
+  }
+
+  @keyframes audition-particle-float {
+    0%, 100% { opacity: 0; transform: translate3d(0, 18px, 0) scale(0.65); }
+    18%, 75% { opacity: 0.8; }
+    50% { opacity: 1; transform: translate3d(16px, -34px, 0) scale(1.2); }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .desktop-atmosphere *,
+  .desktop-atmosphere::before,
+  .desktop-atmosphere::after {
+    animation: none !important;
+  }
+
+  .desktop-cursor {
+    display: none !important;
+  }
+
+  .desktop-atmosphere-shell,
+  .desktop-atmosphere-shell * {
+    cursor: auto !important;
+  }
+}

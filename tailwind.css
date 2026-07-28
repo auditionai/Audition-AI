@@ -342,6 +342,192 @@
   }
 
   /* Light theme: daylight aurora background and higher-contrast neon borders. */
+  html:not(.dark) .desktop-atmosphere-shell {
+    --light-ink-primary: #172033;
+    --light-ink-secondary: #2c374c;
+    --light-ink-muted: #46536b;
+    --light-ink-subtle: #56637a;
+    --light-ink-burgundy: #8d174b;
+    --light-ink-plum: #55277d;
+    --light-ink-teal: #075b69;
+    --light-ink-forest: #185b40;
+    --light-ink-ochre: #704709;
+    --light-ink-navy: #234a73;
+    --light-ink-danger: #8b2639;
+    --light-ink-umber: #783f1d;
+    color: var(--light-ink-primary);
+  }
+
+  html:not(.dark) .desktop-atmosphere-shell :is(
+    [class~="text-white"],
+    [class~="text-white/90"],
+    [class~="text-white/80"],
+    [class~="text-white/70"],
+    [class~="text-white/50"],
+    [class~="text-white/45"],
+    [class~="text-slate-100"],
+    [class~="text-slate-200"],
+    [class~="text-zinc-100"],
+    [class~="text-zinc-200"]
+  ) {
+    color: var(--light-ink-primary) !important;
+  }
+
+  html:not(.dark) .desktop-atmosphere-shell :is(
+    [class~="text-slate-300"],
+    [class~="text-zinc-300"],
+    [class~="text-gray-300"]
+  ) {
+    color: var(--light-ink-secondary) !important;
+  }
+
+  html:not(.dark) .desktop-atmosphere-shell :is(
+    [class~="text-slate-400"],
+    [class~="text-slate-500"],
+    [class~="text-slate-600"],
+    [class~="text-gray-400"],
+    [class~="text-gray-500"],
+    [class~="text-gray-600"],
+    [class~="text-zinc-400"],
+    [class~="text-zinc-500"]
+  ) {
+    color: var(--light-ink-muted) !important;
+  }
+
+  html:not(.dark) .desktop-atmosphere-shell :is(
+    [class~="text-[#FF007F]"],
+    [class~="text-[#FF0099]"],
+    [class~="text-pink-100"],
+    [class~="text-pink-300"],
+    [class~="text-pink-400"],
+    [class~="text-pink-500"]
+  ) {
+    color: var(--light-ink-burgundy) !important;
+    text-shadow: none !important;
+  }
+
+  html:not(.dark) .desktop-atmosphere-shell :is(
+    [class~="text-[#9D00FF]"],
+    [class~="text-purple-300"],
+    [class~="text-purple-400"],
+    [class~="text-purple-500"],
+    [class~="text-purple-600"],
+    [class~="text-violet-300"],
+    [class~="text-violet-400"],
+    [class~="text-violet-500"],
+    [class~="text-fuchsia-300"],
+    [class~="text-fuchsia-400"]
+  ) {
+    color: var(--light-ink-plum) !important;
+  }
+
+  html:not(.dark) .desktop-atmosphere-shell :is(
+    [class~="text-[#00F2FE]"],
+    [class~="text-[#00A8C8]"],
+    [class~="text-[#00BFD8]"],
+    [class~="text-[#21D4FD]"],
+    [class~="text-[#0089A3]"],
+    [class~="text-cyan-200"],
+    [class~="text-cyan-300"],
+    [class~="text-cyan-400"],
+    [class~="text-cyan-500"]
+  ) {
+    color: var(--light-ink-teal) !important;
+    text-shadow: none !important;
+  }
+
+  html:not(.dark) .desktop-atmosphere-shell :is(
+    [class~="text-blue-200"],
+    [class~="text-blue-300"],
+    [class~="text-blue-400"],
+    [class~="text-blue-500"],
+    [class~="text-blue-600"],
+    [class~="text-sky-300"],
+    [class~="text-sky-400"],
+    [class~="text-sky-500"],
+    [class~="text-sky-600"],
+    [class~="text-indigo-400"],
+    [class~="text-indigo-500"]
+  ) {
+    color: var(--light-ink-navy) !important;
+  }
+
+  html:not(.dark) .desktop-atmosphere-shell :is(
+    [class~="text-amber-100"],
+    [class~="text-amber-200"],
+    [class~="text-amber-300"],
+    [class~="text-amber-400"],
+    [class~="text-amber-500"],
+    [class~="text-amber-600"],
+    [class~="text-yellow-100"],
+    [class~="text-yellow-200"],
+    [class~="text-yellow-300"],
+    [class~="text-yellow-400"],
+    [class~="text-yellow-500"]
+  ) {
+    color: var(--light-ink-ochre) !important;
+  }
+
+  html:not(.dark) .desktop-atmosphere-shell :is(
+    [class~="text-emerald-200"],
+    [class~="text-emerald-300"],
+    [class~="text-emerald-400"],
+    [class~="text-emerald-500"],
+    [class~="text-emerald-600"],
+    [class~="text-green-300"],
+    [class~="text-green-400"],
+    [class~="text-green-500"],
+    [class~="text-green-600"]
+  ) {
+    color: var(--light-ink-forest) !important;
+  }
+
+  html:not(.dark) .desktop-atmosphere-shell :is(
+    [class~="text-red-100"],
+    [class~="text-red-200"],
+    [class~="text-red-300"],
+    [class~="text-red-400"],
+    [class~="text-red-500"],
+    [class~="text-red-600"],
+    [class~="text-rose-300"],
+    [class~="text-rose-400"],
+    [class~="text-rose-500"]
+  ) {
+    color: var(--light-ink-danger) !important;
+  }
+
+  html:not(.dark) .desktop-atmosphere-shell :is(
+    [class~="text-orange-300"],
+    [class~="text-orange-400"],
+    [class~="text-orange-500"],
+    [class~="text-orange-600"]
+  ) {
+    color: var(--light-ink-umber) !important;
+  }
+
+  html:not(.dark) .desktop-atmosphere-shell :is(input, textarea)::placeholder {
+    color: var(--light-ink-subtle) !important;
+    opacity: 0.92;
+  }
+
+  html:not(.dark) .desktop-atmosphere-shell .neu-button-primary {
+    color: #28172b !important;
+  }
+
+  /* Contextual exception: dark overlays use muted lavender, never pure white. */
+  html:not(.dark) .desktop-atmosphere-shell :is(
+    [class*="bg-black"],
+    [class*="bg-[#0"],
+    [class*="bg-[#1"]
+  )[class~="text-white"],
+  html:not(.dark) .desktop-atmosphere-shell :is(
+    [class*="bg-black"],
+    [class*="bg-[#0"],
+    [class*="bg-[#1"]
+  ) [class~="text-white"] {
+    color: #d4cfdf !important;
+  }
+
   html:not(.dark) .desktop-atmosphere-shell :where(.neu-card) {
     --desktop-auto-neon: #c40067;
   }

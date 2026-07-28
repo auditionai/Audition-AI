@@ -290,6 +290,206 @@
     box-shadow: 10px 0 8px rgba(255, 0, 127, 0.42);
   }
 
+  /* Light theme: daylight aurora background and higher-contrast neon borders. */
+  html:not(.dark) .desktop-neon-frame--magenta,
+  html:not(.dark) .desktop-neon-card.desktop-neon-frame--magenta {
+    --desktop-neon-border: #c40067;
+  }
+
+  html:not(.dark) .desktop-neon-frame--violet,
+  html:not(.dark) .desktop-neon-card.desktop-neon-frame--violet {
+    --desktop-neon-border: #6d27c7;
+  }
+
+  html:not(.dark) .desktop-neon-frame--cyan,
+  html:not(.dark) .desktop-neon-card.desktop-neon-frame--cyan {
+    --desktop-neon-border: #007d96;
+  }
+
+  html:not(.dark) .desktop-neon-frame--emerald,
+  html:not(.dark) .desktop-neon-card.desktop-neon-frame--emerald {
+    --desktop-neon-border: #00814c;
+  }
+
+  html:not(.dark) .desktop-neon-frame--amber,
+  html:not(.dark) .desktop-neon-card.desktop-neon-frame--amber {
+    --desktop-neon-border: #a45a00;
+  }
+
+  html:not(.dark) .desktop-neon-frame--blue,
+  html:not(.dark) .desktop-neon-card.desktop-neon-frame--blue {
+    --desktop-neon-border: #2559c7;
+  }
+
+  html:not(.dark) .desktop-neon-card {
+    box-shadow: 8px 10px 22px rgba(39, 53, 78, 0.17) !important;
+  }
+
+  html:not(.dark) .desktop-neon-card:hover {
+    border-color: color-mix(in srgb, var(--desktop-neon-border) 86%, #151f38) !important;
+    box-shadow: 10px 13px 26px rgba(39, 53, 78, 0.22) !important;
+  }
+
+  html:not(.dark) .desktop-rainbow-frame {
+    background:
+      linear-gradient(var(--neu-surface), var(--neu-surface)) padding-box,
+      conic-gradient(
+        from var(--audition-rainbow-angle),
+        #c40067 0deg,
+        #b44700 52deg,
+        #8b7600 103deg,
+        #00814c 154deg,
+        #007d96 206deg,
+        #2559c7 258deg,
+        #6d27c7 309deg,
+        #c40067 360deg
+      ) border-box !important;
+    box-shadow: 10px 14px 30px rgba(39, 53, 78, 0.19) !important;
+  }
+
+  html:not(.dark) .desktop-atmosphere-shell.neu-base {
+    background: #edf3fb;
+  }
+
+  html:not(.dark) .desktop-atmosphere {
+    background:
+      radial-gradient(circle at 72% 18%, rgba(255, 191, 223, 0.48), transparent 28%),
+      radial-gradient(circle at 16% 82%, rgba(148, 229, 240, 0.4), transparent 31%),
+      radial-gradient(circle at 48% 53%, rgba(202, 184, 255, 0.3), transparent 38%),
+      linear-gradient(135deg, #f8fbff 0%, #eaf1fb 48%, #f9f4fc 100%);
+  }
+
+  html:not(.dark) .desktop-atmosphere::before {
+    top: -24vw;
+    right: -4vw;
+    background: #ff6bab;
+    opacity: 0.16;
+    filter: blur(120px);
+    animation: audition-light-orb-pink 16s ease-in-out infinite alternate;
+  }
+
+  html:not(.dark) .desktop-atmosphere::after {
+    bottom: -28vw;
+    left: 9vw;
+    background: #15b8d5;
+    opacity: 0.14;
+    filter: blur(120px);
+    animation: audition-light-orb-cyan 19s ease-in-out infinite alternate;
+  }
+
+  html:not(.dark) .desktop-atmosphere__aurora {
+    inset: -34%;
+    opacity: 0.42;
+    background: conic-gradient(
+      from 35deg at 52% 48%,
+      transparent 0deg,
+      rgba(255, 75, 158, 0.16) 58deg,
+      transparent 112deg,
+      rgba(50, 105, 226, 0.13) 178deg,
+      transparent 235deg,
+      rgba(0, 160, 134, 0.12) 292deg,
+      transparent 360deg
+    );
+    filter: blur(72px);
+    animation: audition-light-aurora 26s ease-in-out infinite alternate;
+  }
+
+  html:not(.dark) .desktop-atmosphere__galaxy-band {
+    top: 50%;
+    width: 145%;
+    height: 32%;
+    opacity: 0.5;
+    background:
+      linear-gradient(
+        90deg,
+        transparent 2%,
+        rgba(34, 89, 199, 0.08) 18%,
+        rgba(0, 125, 150, 0.12) 36%,
+        rgba(109, 39, 199, 0.1) 55%,
+        rgba(196, 0, 103, 0.1) 75%,
+        transparent 98%
+      );
+    filter: blur(34px);
+    animation: audition-daylight-ribbon 12s ease-in-out infinite alternate;
+  }
+
+  html:not(.dark) .desktop-atmosphere__galaxy-dust {
+    inset: -18%;
+    opacity: 0.5;
+    background:
+      radial-gradient(circle at 17% 28%, rgba(37, 89, 199, 0.12) 0 1px, transparent 2px),
+      radial-gradient(circle at 69% 73%, rgba(196, 0, 103, 0.11) 0 1px, transparent 2px),
+      radial-gradient(circle at 45% 51%, rgba(0, 129, 76, 0.09) 0 1px, transparent 2px);
+    background-size: 31px 31px, 43px 43px, 57px 57px;
+    filter: none;
+    animation: audition-light-dust 20s linear infinite;
+  }
+
+  html:not(.dark) .desktop-atmosphere__grid {
+    opacity: 0.38;
+    background-image:
+      linear-gradient(rgba(37, 89, 199, 0.075) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(196, 0, 103, 0.055) 1px, transparent 1px);
+    mask-image: radial-gradient(ellipse at center, black 0%, transparent 61%);
+  }
+
+  html:not(.dark) .desktop-atmosphere__scan {
+    opacity: 0.2;
+    background: repeating-linear-gradient(
+      180deg,
+      transparent 0,
+      transparent 7px,
+      rgba(37, 89, 199, 0.026) 8px
+    );
+  }
+
+  html:not(.dark) .desktop-atmosphere__spotlight {
+    background: radial-gradient(
+      350px circle at var(--pointer-x) var(--pointer-y),
+      rgba(255, 255, 255, 0.5),
+      rgba(67, 113, 219, 0.055) 38%,
+      transparent 72%
+    );
+  }
+
+  html:not(.dark) .desktop-atmosphere__particle--pink {
+    background: #bd0064;
+    box-shadow: none;
+  }
+
+  html:not(.dark) .desktop-atmosphere__particle--cyan {
+    background: #007b91;
+    box-shadow: none;
+  }
+
+  html:not(.dark) .desktop-atmosphere__particle--violet {
+    background: #6423b8;
+    box-shadow: none;
+  }
+
+  html:not(.dark) .desktop-atmosphere__particle--white {
+    background: #234475;
+    box-shadow: none;
+  }
+
+  html:not(.dark) .desktop-atmosphere__particle--near {
+    filter: none;
+  }
+
+  html:not(.dark) .desktop-atmosphere__streak--cyan {
+    background: linear-gradient(90deg, transparent, rgba(0, 102, 130, 0.75));
+    box-shadow: none;
+  }
+
+  html:not(.dark) .desktop-atmosphere__streak--pink {
+    background: linear-gradient(90deg, transparent, rgba(177, 0, 92, 0.72));
+    box-shadow: none;
+  }
+
+  html:not(.dark) .desktop-cursor__pointer {
+    filter: drop-shadow(1px 2px 1px rgba(20, 29, 48, 0.45));
+  }
+
   .desktop-cursor {
     position: fixed;
     z-index: 10000;
@@ -383,6 +583,30 @@
 
   @keyframes audition-rainbow-border {
     to { --audition-rainbow-angle: 360deg; }
+  }
+
+  @keyframes audition-light-orb-pink {
+    from { transform: translate3d(-6vw, -3vh, 0) scale(0.86); }
+    to { transform: translate3d(11vw, 17vh, 0) scale(1.12); }
+  }
+
+  @keyframes audition-light-orb-cyan {
+    from { transform: translate3d(-5vw, 9vh, 0) scale(0.9); }
+    to { transform: translate3d(14vw, -9vh, 0) scale(1.08); }
+  }
+
+  @keyframes audition-light-aurora {
+    from { transform: translate3d(-4%, -3%, 0) rotate(-7deg) scale(0.96); }
+    to { transform: translate3d(5%, 4%, 0) rotate(12deg) scale(1.08); }
+  }
+
+  @keyframes audition-daylight-ribbon {
+    from { transform: translate(-54%, -54%) rotate(-13deg) scale(0.94); }
+    to { transform: translate(-45%, -46%) rotate(-6deg) scale(1.08); }
+  }
+
+  @keyframes audition-light-dust {
+    to { background-position: 31px 31px, -43px 43px, 57px -57px; }
   }
 }
 

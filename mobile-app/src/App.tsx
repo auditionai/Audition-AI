@@ -6,6 +6,9 @@ import { NotificationProvider, useNotification } from './components/Notification
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { MobileLayout } from './components/layout/MobileLayout';
+import { MobileV2Layout } from './v2/components/MobileV2Layout';
+import { HomeV2 } from './v2/views/HomeV2';
+import { useMobileUiVersion } from './v2/mobileUiVersion';
 import { Splash } from './views/Splash';
 import { Home } from './views/Home';
 import { WorkspaceImage } from './views/WorkspaceImage';
@@ -105,6 +108,8 @@ function FeatureMaintenanceGuard({ children }: { children: React.ReactElement })
 
 function AppRoutes() {
   const { isAuthenticated, isLoading } = useAuth();
+  const mobileUiVersion = useMobileUiVersion();
+  const isMobileV2 = mobileUiVersion === 'v2';
 
   if (isLoading) {
     return (
@@ -121,6 +126,9 @@ function AppRoutes() {
 
   return (
     <Routes>
+      <Route element={<MobileV2Layout />}>
+        <Route path="/mobile-v2-preview" element={<HomeV2 />} />
+      </Route>
       {!isAuthenticated ? (
         <>
           <Route path="/" element={<Splash />} />
@@ -128,8 +136,8 @@ function AppRoutes() {
         </>
       ) : (
         <>
-          <Route element={<MobileLayout />}>
-            <Route path="/home" element={<Home />} />
+          <Route element={isMobileV2 ? <MobileV2Layout /> : <MobileLayout />}>
+            <Route path="/home" element={isMobileV2 ? <HomeV2 /> : <Home />} />
             <Route path="/generate/image" element={<FeatureMaintenanceGuard><WorkspaceImage /></FeatureMaintenanceGuard>} />
             <Route path="/generate/video" element={<FeatureMaintenanceGuard><WorkspaceVideo /></FeatureMaintenanceGuard>} />
             <Route path="/tools/ai-image" element={<FeatureMaintenanceGuard><WorkspacePromptImage /></FeatureMaintenanceGuard>} />

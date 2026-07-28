@@ -4,6 +4,8 @@ import { Language, Feature, ViewId } from '../types';
 import { Icons } from '../components/Icons';
 import { subscribeCheckinStatus, isFeatureInMaintenance, type FeatureMaintenanceConfig } from '../services/economyService';
 
+const NEON_FRAME_TONES = ['magenta', 'violet', 'cyan', 'emerald', 'amber', 'blue'] as const;
+
 interface HomeProps {
   lang: Language;
   onSelectFeature: (feature: Feature) => void;
@@ -58,7 +60,7 @@ export const Home: React.FC<HomeProps> = ({
       {/* ====================================================
           1. 3D HERO CONSOLE (Banner Giới Thiệu Ứng Dụng)
          ==================================================== */}
-      <section className="w-full neu-raised-lg p-6 sm:p-10 relative overflow-hidden border border-slate-300/80 dark:border-slate-800 shadow-2xl rounded-[2.5rem]">
+      <section className="desktop-rainbow-frame w-full neu-raised-lg p-6 sm:p-10 relative overflow-hidden border border-slate-300/80 dark:border-slate-800 shadow-2xl rounded-[2.5rem]">
         
         {/* Subtle Ambient Accent */}
         <div className="absolute -top-20 -right-20 w-80 h-80 bg-[#FF007F]/10 rounded-full blur-[100px] pointer-events-none" />
@@ -145,7 +147,7 @@ export const Home: React.FC<HomeProps> = ({
               onKeyDown={(event) => {
                 if (event.key === 'Enter' || event.key === ' ') onNavigate('video');
               }}
-              className="neu-card p-4 rounded-2xl cursor-pointer hover:border-[#FF007F] transition-all group flex flex-col justify-between"
+              className="desktop-neon-card desktop-neon-frame--magenta neu-card p-4 rounded-2xl cursor-pointer transition-all group flex flex-col justify-between"
             >
               <div>
                 <div className="w-9 h-9 neu-inset-sm rounded-xl flex items-center justify-center text-[#FF007F] mb-2.5 group-hover:scale-110 transition-transform">
@@ -162,7 +164,7 @@ export const Home: React.FC<HomeProps> = ({
             {/* Card 2: Video AI */}
             <div 
               onClick={() => onNavigate('tools')}
-              className="neu-card p-4 rounded-2xl cursor-pointer hover:border-[#FF007F] transition-all group flex flex-col justify-between"
+              className="desktop-neon-card desktop-neon-frame--violet neu-card p-4 rounded-2xl cursor-pointer transition-all group flex flex-col justify-between"
             >
               <div>
                 <div className="w-9 h-9 neu-inset-sm rounded-xl flex items-center justify-center text-[#FF007F] mb-2.5 group-hover:scale-110 transition-transform">
@@ -179,7 +181,7 @@ export const Home: React.FC<HomeProps> = ({
             {/* Card 3: Prompt Hub */}
             <div 
               onClick={() => onNavigate('prompt_library')}
-              className="neu-card p-4 rounded-2xl cursor-pointer hover:border-[#FF007F] transition-all group flex flex-col justify-between"
+              className="desktop-neon-card desktop-neon-frame--cyan neu-card p-4 rounded-2xl cursor-pointer transition-all group flex flex-col justify-between"
             >
               <div>
                 <div className="w-9 h-9 neu-inset-sm rounded-xl flex items-center justify-center text-[#FF007F] mb-2.5 group-hover:scale-110 transition-transform">
@@ -196,7 +198,7 @@ export const Home: React.FC<HomeProps> = ({
             {/* Card 4: Store Vcoin */}
             <div 
               onClick={() => onNavigate('topup')}
-              className="neu-card p-4 rounded-2xl cursor-pointer hover:border-[#FF007F] transition-all group flex flex-col justify-between"
+              className="desktop-neon-card desktop-neon-frame--amber neu-card p-4 rounded-2xl cursor-pointer transition-all group flex flex-col justify-between"
             >
               <div>
                 <div className="w-9 h-9 neu-inset-sm rounded-xl flex items-center justify-center text-amber-500 mb-2.5 group-hover:scale-110 transition-transform">
@@ -222,7 +224,7 @@ export const Home: React.FC<HomeProps> = ({
       <section className="space-y-6">
         
         {/* Header & Filter Pills */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 neu-raised-sm p-4 rounded-3xl shadow-xl">
+        <div className="desktop-neon-frame desktop-neon-frame--emerald flex flex-col sm:flex-row sm:items-center justify-between gap-4 neu-raised-sm p-4 rounded-3xl shadow-xl">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 neu-inset-sm rounded-2xl flex items-center justify-center text-[#FF007F]">
               <Icons.Wand className="w-5 h-5" />
@@ -268,8 +270,9 @@ export const Home: React.FC<HomeProps> = ({
 
         {/* Feature Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredFeatures.map((feat: Feature) => {
+          {filteredFeatures.map((feat: Feature, featureIndex) => {
             const inMaint = isFeatureInMaintenance(featureMaintenance, feat.id);
+            const neonTone = NEON_FRAME_TONES[featureIndex % NEON_FRAME_TONES.length];
             
             // Unique icon for each feature card
             const renderUniqueIcon = () => {
@@ -305,7 +308,7 @@ export const Home: React.FC<HomeProps> = ({
               <div
                 key={feat.id}
                 onClick={() => !inMaint && onSelectFeature(feat)}
-                className={`neu-card p-6 flex flex-col justify-between group cursor-pointer hover:scale-[1.02] transition-all relative shadow-xl ${
+                className={`desktop-neon-card desktop-neon-frame--${neonTone} neu-card p-6 flex flex-col justify-between group cursor-pointer hover:scale-[1.02] transition-all relative shadow-xl ${
                   inMaint ? 'opacity-50 cursor-not-allowed' : ''
                 }`}
               >

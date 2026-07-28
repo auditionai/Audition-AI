@@ -20,6 +20,51 @@
 }
 
 @media (min-width: 1024px) and (pointer: fine) {
+  .desktop-atmosphere-shell :where(
+    .neu-card,
+    .neu-raised-sm,
+    .neu-raised-md,
+    .neu-raised-lg,
+    .neu-raised-xl,
+    .neu-inset-sm,
+    .neu-inset-md,
+    .neu-input
+  ) {
+    border: 1px solid var(--desktop-auto-neon, #4d2b87) !important;
+  }
+
+  .desktop-atmosphere-shell :where(.neu-card) {
+    --desktop-auto-neon: #65173f;
+  }
+
+  .desktop-atmosphere-shell :where(.neu-raised-sm) {
+    --desktop-auto-neon: #1d4968;
+  }
+
+  .desktop-atmosphere-shell :where(.neu-raised-md) {
+    --desktop-auto-neon: #4d2b87;
+  }
+
+  .desktop-atmosphere-shell :where(.neu-raised-lg) {
+    --desktop-auto-neon: #15543e;
+  }
+
+  .desktop-atmosphere-shell :where(.neu-raised-xl) {
+    --desktop-auto-neon: #6d4a12;
+  }
+
+  .desktop-atmosphere-shell :where(.neu-inset-sm) {
+    --desktop-auto-neon: #0a5268;
+  }
+
+  .desktop-atmosphere-shell :where(.neu-inset-md) {
+    --desktop-auto-neon: #65173f;
+  }
+
+  .desktop-atmosphere-shell :where(.neu-input) {
+    --desktop-auto-neon: #264d7c;
+  }
+
   .desktop-neon-frame,
   .desktop-neon-card {
     --desktop-neon-border: #4d2b87;
@@ -290,7 +335,45 @@
     box-shadow: 10px 0 8px rgba(255, 0, 127, 0.42);
   }
 
+  .desktop-atmosphere__wind,
+  .desktop-atmosphere__light-motes,
+  .desktop-atmosphere__cute-symbols {
+    display: none;
+  }
+
   /* Light theme: daylight aurora background and higher-contrast neon borders. */
+  html:not(.dark) .desktop-atmosphere-shell :where(.neu-card) {
+    --desktop-auto-neon: #c40067;
+  }
+
+  html:not(.dark) .desktop-atmosphere-shell :where(.neu-raised-sm) {
+    --desktop-auto-neon: #16769d;
+  }
+
+  html:not(.dark) .desktop-atmosphere-shell :where(.neu-raised-md) {
+    --desktop-auto-neon: #6d27c7;
+  }
+
+  html:not(.dark) .desktop-atmosphere-shell :where(.neu-raised-lg) {
+    --desktop-auto-neon: #00814c;
+  }
+
+  html:not(.dark) .desktop-atmosphere-shell :where(.neu-raised-xl) {
+    --desktop-auto-neon: #a45a00;
+  }
+
+  html:not(.dark) .desktop-atmosphere-shell :where(.neu-inset-sm) {
+    --desktop-auto-neon: #007d96;
+  }
+
+  html:not(.dark) .desktop-atmosphere-shell :where(.neu-inset-md) {
+    --desktop-auto-neon: #c40067;
+  }
+
+  html:not(.dark) .desktop-atmosphere-shell :where(.neu-input) {
+    --desktop-auto-neon: #2559c7;
+  }
+
   html:not(.dark) .desktop-neon-frame--magenta,
   html:not(.dark) .desktop-neon-card.desktop-neon-frame--magenta {
     --desktop-neon-border: #c40067;
@@ -486,6 +569,125 @@
     box-shadow: none;
   }
 
+  html:not(.dark) .desktop-atmosphere__wind,
+  html:not(.dark) .desktop-atmosphere__light-motes,
+  html:not(.dark) .desktop-atmosphere__cute-symbols {
+    position: absolute;
+    inset: 0;
+    display: block;
+    overflow: hidden;
+  }
+
+  html:not(.dark) .desktop-atmosphere__wind-stream {
+    position: absolute;
+    top: var(--wind-y);
+    left: -38vw;
+    width: var(--wind-width);
+    height: 4px;
+    border-radius: 999px;
+    opacity: 0.36;
+    filter: blur(1.5px);
+    will-change: transform, opacity;
+    animation: audition-wind-sweep var(--wind-duration) cubic-bezier(0.45, 0, 0.55, 1) var(--wind-delay) infinite alternate;
+  }
+
+  html:not(.dark) .desktop-atmosphere__wind-stream::after {
+    content: "";
+    position: absolute;
+    right: 8%;
+    top: 9px;
+    width: 64%;
+    height: 1px;
+    border-radius: inherit;
+    background: inherit;
+    opacity: 0.7;
+  }
+
+  html:not(.dark) .desktop-atmosphere__wind-stream--pink {
+    background: linear-gradient(90deg, transparent, rgba(196, 0, 103, 0.55), transparent);
+  }
+
+  html:not(.dark) .desktop-atmosphere__wind-stream--cyan {
+    background: linear-gradient(90deg, transparent, rgba(0, 125, 150, 0.5), transparent);
+  }
+
+  html:not(.dark) .desktop-atmosphere__wind-stream--violet {
+    background: linear-gradient(90deg, transparent, rgba(109, 39, 199, 0.48), transparent);
+  }
+
+  html:not(.dark) .desktop-atmosphere__wind-stream--emerald {
+    background: linear-gradient(90deg, transparent, rgba(0, 129, 76, 0.44), transparent);
+  }
+
+  html:not(.dark) .desktop-atmosphere__light-mote {
+    position: absolute;
+    left: var(--mote-x);
+    top: var(--mote-y);
+    width: var(--mote-size);
+    height: var(--mote-size);
+    border-radius: 50%;
+    opacity: 0;
+    will-change: transform, opacity;
+    animation: audition-light-mote-wind var(--mote-duration) ease-in-out var(--mote-delay) infinite alternate;
+  }
+
+  html:not(.dark) .desktop-atmosphere__light-mote--pink {
+    background: #c40067;
+  }
+
+  html:not(.dark) .desktop-atmosphere__light-mote--cyan {
+    background: #007d96;
+  }
+
+  html:not(.dark) .desktop-atmosphere__light-mote--violet {
+    background: #6d27c7;
+  }
+
+  html:not(.dark) .desktop-atmosphere__light-mote--emerald {
+    background: #00814c;
+  }
+
+  html:not(.dark) .desktop-atmosphere__light-mote--amber {
+    background: #a45a00;
+  }
+
+  html:not(.dark) .desktop-atmosphere__cute-symbol {
+    position: absolute;
+    left: var(--cute-x);
+    top: var(--cute-y);
+    width: var(--cute-size);
+    height: var(--cute-size);
+    opacity: 0.16;
+    will-change: transform, opacity;
+    animation: audition-cute-symbol-wind var(--cute-duration) ease-in-out var(--cute-delay) infinite alternate;
+  }
+
+  html:not(.dark) .desktop-atmosphere__cute-symbol svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  html:not(.dark) .desktop-atmosphere__cute-symbol--pink {
+    color: #bd0064;
+  }
+
+  html:not(.dark) .desktop-atmosphere__cute-symbol--cyan {
+    color: #00778f;
+  }
+
+  html:not(.dark) .desktop-atmosphere__cute-symbol--violet {
+    color: #6423b8;
+  }
+
+  html:not(.dark) .desktop-atmosphere__cute-symbol--emerald {
+    color: #007747;
+  }
+
+  html:not(.dark) .desktop-atmosphere__cute-symbol--amber {
+    color: #965300;
+  }
+
   html:not(.dark) .desktop-cursor__pointer {
     filter: drop-shadow(1px 2px 1px rgba(20, 29, 48, 0.45));
   }
@@ -607,6 +809,42 @@
 
   @keyframes audition-light-dust {
     to { background-position: 31px 31px, -43px 43px, 57px -57px; }
+  }
+
+  @keyframes audition-wind-sweep {
+    0% {
+      opacity: 0.12;
+      transform: translate3d(-8vw, -10px, 0) skewX(-18deg) scaleX(0.7);
+    }
+    45% { opacity: 0.58; }
+    100% {
+      opacity: 0.22;
+      transform: translate3d(150vw, 18px, 0) skewX(12deg) scaleX(1.25);
+    }
+  }
+
+  @keyframes audition-light-mote-wind {
+    0% {
+      opacity: 0.12;
+      transform: translate3d(var(--mote-travel-back), -18px, 0) scale(0.55);
+    }
+    42% { opacity: 0.78; }
+    100% {
+      opacity: 0.18;
+      transform: translate3d(var(--mote-travel), 24px, 0) scale(1.25);
+    }
+  }
+
+  @keyframes audition-cute-symbol-wind {
+    0% {
+      opacity: 0.1;
+      transform: translate3d(var(--cute-travel-back), -22px, 0) rotate(-18deg) scale(0.72);
+    }
+    48% { opacity: 0.48; }
+    100% {
+      opacity: 0.16;
+      transform: translate3d(var(--cute-travel), 28px, 0) rotate(24deg) scale(1.08);
+    }
   }
 }
 

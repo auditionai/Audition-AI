@@ -1,6 +1,7 @@
 import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import { createTextureSheet, optimizePayload, createSolidFence } from "../utils/imageProcessor";
 import { getSystemApiKey, reportKeyFailure, getApiKeyName } from "./economyService";
+import { getSupabaseAuthHeader } from './supabaseClient';
 
 const VERTEX_TEXT_FLASH_MODEL = 'gemini-3-flash-preview';
 const VERTEX_TEXT_PRO_MODEL = 'gemini-3.1-pro-preview';
@@ -201,9 +202,10 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     const tokenRequestBody = specificKey
                         ? { service_account_json: apiKey, useProvidedCredential: true }
                         : {};
+                    const authHeader = await getSupabaseAuthHeader();
                     const tokenRes = await fetch('/api/get-vertex-token', { 
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: { 'Content-Type': 'application/json', ...authHeader },
                         body: JSON.stringify(tokenRequestBody)
                     });
                     if (!tokenRes.ok) {
@@ -703,8 +705,10 @@ const uploadBase64ToTramsangtao = async (base64Data: string, mimeType: string, o
     const formData = new FormData();
     formData.append('file', blob, 'image.jpg');
 
+    const authHeader = await getSupabaseAuthHeader();
     const uploadRes = await fetch('/api/tst-upload', {
         method: 'POST',
+        headers: authHeader,
         body: formData
     });
 
@@ -825,9 +829,10 @@ const submitTramsangtaoJob = async (
 ): Promise<string> => {
     onLog(`Calling Image API (Model: ${payload.model})...`);
 
+    const authHeader = await getSupabaseAuthHeader();
     const genRes = await fetch('/api/tst-generate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeader },
         body: JSON.stringify(payload)
     });
 
@@ -860,7 +865,10 @@ const pollTramsangtaoJob = async (
     while (Date.now() - startedAt < timeoutMs) {
         await new Promise(resolve => setTimeout(resolve, TST_POLL_INTERVAL_MS));
 
-        const pollRes = await fetch(`/api/tst-poll?jobId=${encodeURIComponent(jobId)}`);
+        const authHeader = await getSupabaseAuthHeader();
+        const pollRes = await fetch(`/api/tst-poll?jobId=${encodeURIComponent(jobId)}`, {
+            headers: authHeader,
+        });
         if (!pollRes.ok) {
             const errMessage = await parseTramsangtaoError(pollRes);
             onLog(`Polling retry: ${errMessage}`);

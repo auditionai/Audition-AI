@@ -3,6 +3,7 @@ import type { Handler } from '@netlify/functions';
 import type { ImageEditRecipePayload, QueueProgressLogEntry } from '../../shared/queueRecipes';
 import { DIRECT_IMAGE_EDIT_QUEUE_KIND, isDirectImageEditToolId } from '../../shared/queueKinds';
 import { triggerBackgroundFunction } from './_queue-launcher';
+import { createInternalRequestHeaders } from './_internal-request-auth';
 import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 
 const headers = {
@@ -116,9 +117,13 @@ const triggerDirectImageEditBackground = async (rawUrl?: string | null, jobId?: 
   }
 
   try {
+    const body = JSON.stringify({ jobId });
     const launched = await triggerBackgroundFunction(DIRECT_IMAGE_EDIT_BACKGROUND_PATH, rawUrl, 5_000, {
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jobId }),
+      headers: {
+        'Content-Type': 'application/json',
+        ...createInternalRequestHeaders('direct-image-edit-background', body),
+      },
+      body,
     });
     return { launched, errorMessage: launched ? null : 'Background launch returned false' };
   } catch (error: any) {

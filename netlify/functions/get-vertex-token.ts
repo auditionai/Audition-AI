@@ -1,6 +1,7 @@
 import type { Handler } from '@netlify/functions';
 import { GoogleAuth } from 'google-auth-library';
 import { isVertexServiceAccountJson, runWithVertexCredentialFailover } from './_vertex-credentials';
+import { getAuthenticatedRequestErrorStatus, requireAdminUser } from './_supabase';
 
 const buildTokenFromCredential = async (serviceAccountJson: string) => {
   if (!serviceAccountJson || !isVertexServiceAccountJson(serviceAccountJson)) {
@@ -35,6 +36,7 @@ export const handler: Handler = async (event) => {
   }
 
   try {
+    await requireAdminUser(event);
     const body = event.body ? JSON.parse(event.body) : {};
     const providedCredential = typeof body?.service_account_json === 'string' ? body.service_account_json : '';
     const useProvidedCredential = body?.useProvidedCredential === true;
@@ -68,9 +70,10 @@ export const handler: Handler = async (event) => {
       body: JSON.stringify(tokenPayload),
     };
   } catch (error: any) {
-    console.error('Token Generation Error:', error);
+    const statusCode = error?.message === 'Forbidden' ? 403 : getAuthenticatedRequestErrorStatus(error);
+    if (statusCode >= 500) console.error('Token Generation Error:', error);
     return {
-      statusCode: 500,
+      statusCode,
       body: JSON.stringify({ error: error.message || 'Internal Server Error' }),
     };
   }

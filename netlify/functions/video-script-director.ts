@@ -5,6 +5,7 @@ import {
   VERTEX_TEXT_FLASH_MODEL,
   VERTEX_TEXT_PRO_MODEL,
 } from './_vertex-models';
+import { getAuthenticatedRequestErrorStatus, requireAuthenticatedUser } from './_supabase';
 
 const VERTEX_MODELS = Array.from(new Set([
   process.env.VERTEX_VIDEO_SCRIPT_MODEL,
@@ -224,6 +225,7 @@ export const handler: Handler = async (event) => {
   }
 
   try {
+    await requireAuthenticatedUser(event);
     const body = JSON.parse(event.body || '{}');
     const imageSource = String(body.imageSource || '').trim();
     const durationSeconds = clampDurationSeconds(body.durationSeconds);
@@ -310,7 +312,7 @@ export const handler: Handler = async (event) => {
     }
 
     return {
-      statusCode: 500,
+      statusCode: getAuthenticatedRequestErrorStatus(error),
       headers: jsonHeaders,
       body: JSON.stringify({ error: error?.message || 'Failed to generate video script.' }),
     };

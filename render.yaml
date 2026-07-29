@@ -17,15 +17,23 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
-      - key: VITE_R2_ENDPOINT
+      - key: R2_ENDPOINT
         sync: false
-      - key: VITE_R2_ACCESS_KEY_ID
+      - key: R2_ACCESS_KEY_ID
         sync: false
-      - key: VITE_R2_SECRET_ACCESS_KEY
+      - key: R2_SECRET_ACCESS_KEY
         sync: false
-      - key: VITE_R2_BUCKET_NAME
+      - key: R2_BUCKET_NAME
+        sync: false
+      - key: R2_PUBLIC_URL
         sync: false
       - key: VITE_R2_PUBLIC_URL
+        sync: false
+      - key: GOOGLE_CLOUD_PROJECT
+        sync: false
+      - key: GOOGLE_CLOUD_LOCATION
+        value: global
+      - key: GOOGLE_CREDENTIALS_JSON
         sync: false
       - key: VITE_CAULENHAU_SUPABASE_URL
         sync: false
@@ -57,6 +65,10 @@ services:
         sync: false
       - key: SEPAY_IPN_URL
         sync: false
+      - key: CRON_SECRET
+        sync: false
+      - key: SEPAY_RECONCILE_SECRET
+        sync: false
       - key: TELEGRAM_NOTIFY_WEBHOOK_URL
         sync: false
       - key: TELEGRAM_NOTIFY_WEBHOOK_SECRET
@@ -80,6 +92,16 @@ services:
         sync: false
       - key: TST_API_KEY
         sync: false
+      - key: SEPAY_MERCHANT_ID
+        sync: false
+      - key: SEPAY_SECRET_KEY
+        sync: false
+      - key: SEPAY_API_TOKEN
+        sync: false
+      - key: SEPAY_ENV
+        value: production
+      - key: SEPAY_PAYMENT_METHOD
+        value: BANK_TRANSFER
       - key: TELEGRAM_NOTIFY_WEBHOOK_URL
         sync: false
       - key: TELEGRAM_NOTIFY_WEBHOOK_SECRET

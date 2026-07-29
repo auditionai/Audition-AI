@@ -1,4 +1,5 @@
 import { trackEvent } from './analyticsService';
+import { getSupabaseAuthHeader } from './supabaseClient';
 
 const dataUrlToBlob = (dataUrl: string) => {
   const [header, body] = dataUrl.split(',', 2);
@@ -22,15 +23,6 @@ const downloadBlob = (blob: Blob, filename: string) => {
   window.URL.revokeObjectURL(objectUrl);
 };
 
-const triggerBrowserDownload = (href: string, filename: string) => {
-  const link = document.createElement('a');
-  link.href = href;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-};
-
 export const downloadAssetToBrowser = async (url: string, filename: string) => {
   if (!url) {
     throw new Error('Missing asset URL');
@@ -48,17 +40,17 @@ export const downloadAssetToBrowser = async (url: string, filename: string) => {
     blob = await response.blob();
   } else {
     const proxyUrl = `/api/download-proxy?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`;
-    triggerBrowserDownload(proxyUrl, filename);
-    trackEvent('asset_download', {
-      source_type: 'remote',
-      file_extension: filename.split('.').pop()?.toLowerCase() || 'unknown',
-    });
-    return;
+    const authHeader = await getSupabaseAuthHeader();
+    const response = await fetch(proxyUrl, { headers: authHeader });
+    if (!response.ok) {
+      throw new Error(`Failed to download remote asset: ${response.status}`);
+    }
+    blob = await response.blob();
   }
 
   downloadBlob(blob, filename);
   trackEvent('asset_download', {
-    source_type: url.startsWith('data:') ? 'data_url' : 'blob_url',
+    source_type: url.startsWith('data:') ? 'data_url' : url.startsWith('blob:') ? 'blob_url' : 'remote',
     file_extension: filename.split('.').pop()?.toLowerCase() || 'unknown',
   });
 };

@@ -27,7 +27,7 @@ as $$
       count(*) filter (where coalesce(gi.asset_type, 'image') = 'video')::integer as system_video_processing
     from public.generated_images gi
     where gi.status = 'processing'
-      and coalesce(gi.queue_kind, '') in ('image_generate', 'video_generate', 'motion_generate')
+      and gi.queue_kind in ('image_generate', 'video_generate', 'motion_generate')
   ),
   user_processing as (
     select
@@ -36,7 +36,7 @@ as $$
       count(*) filter (where coalesce(gi.asset_type, 'image') = 'video')::integer as video_processing
     from public.generated_images gi
     where gi.status = 'processing'
-      and coalesce(gi.queue_kind, '') in ('image_generate', 'video_generate', 'motion_generate')
+      and gi.queue_kind in ('image_generate', 'video_generate', 'motion_generate')
     group by gi.user_id
   ),
   eligible as (
@@ -54,7 +54,7 @@ as $$
     left join user_processing up on up.user_id = gi.user_id
     where gi.status = 'queued'
       and gi.queue_payload is not null
-      and coalesce(gi.queue_kind, '') in ('image_generate', 'video_generate', 'motion_generate')
+      and gi.queue_kind in ('image_generate', 'video_generate', 'motion_generate')
       and (gi.lease_expires_at is null or gi.lease_expires_at < now())
       and (
         (
@@ -114,7 +114,7 @@ as $$
     where gi.id in (select picked.id from picked)
       and gi.status = 'queued'
       and gi.queue_payload is not null
-      and coalesce(gi.queue_kind, '') in ('image_generate', 'video_generate', 'motion_generate')
+      and gi.queue_kind in ('image_generate', 'video_generate', 'motion_generate')
       and (gi.lease_expires_at is null or gi.lease_expires_at < now())
     returning gi.*
   )
@@ -158,7 +158,7 @@ as $$
     from public.generated_images gi
     where gi.status = 'processing'
       and gi.job_id is not null
-      and coalesce(gi.queue_kind, '') in ('image_generate', 'video_generate', 'motion_generate')
+      and gi.queue_kind in ('image_generate', 'video_generate', 'motion_generate')
       and (gi.next_poll_at is null or gi.next_poll_at <= now())
       and (gi.lease_expires_at is null or gi.lease_expires_at < now())
     order by coalesce(gi.next_poll_at, gi.processing_started_at, gi.created_at), gi.created_at, gi.id
@@ -174,7 +174,7 @@ as $$
     where gi.id in (select picked.id from picked)
       and gi.status = 'processing'
       and gi.job_id is not null
-      and coalesce(gi.queue_kind, '') in ('image_generate', 'video_generate', 'motion_generate')
+      and gi.queue_kind in ('image_generate', 'video_generate', 'motion_generate')
       and (gi.next_poll_at is null or gi.next_poll_at <= now())
       and (gi.lease_expires_at is null or gi.lease_expires_at < now())
     returning gi.*

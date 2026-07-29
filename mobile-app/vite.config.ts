@@ -26,7 +26,6 @@ export default defineConfig(({ mode }) => {
         VITE_SUPABASE_ANON_KEY: env.VITE_SUPABASE_ANON_KEY,
         CAULENHAU_SUPABASE_URL: env.CAULENHAU_SUPABASE_URL,
         CAULENHAU_SUPABASE_ANON_KEY: env.CAULENHAU_SUPABASE_ANON_KEY,
-        API_KEY: env.API_KEY,
       }),
     },
   };

@@ -1,6 +1,6 @@
 ﻿import { useEffect, useRef } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { useCallback, useState } from 'react';
+import { lazy, Suspense, useCallback, useState } from 'react';
 import { AlertTriangle, Loader, Lock } from 'lucide-react';
 import { NotificationProvider, useNotification } from './components/NotificationSystem';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -8,47 +8,49 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { MobileLayout } from './components/layout/MobileLayout';
 import { MobileV2Layout } from './v2/components/MobileV2Layout';
 import { AuditionV2Logo } from './v2/components/AuditionV2Logo';
-import { HomeV2 } from './v2/views/HomeV2';
-import { MobileV2Preview } from './v2/views/MobileV2Preview';
-import { AuthV2 } from './v2/views/AuthV2';
-import { ToolsHubV2 } from './v2/views/ToolsHubV2';
-import {
-  AboutV2,
-  AdminV2,
-  EditStudioV2,
-  GalleryV2,
-  GuideV2,
-  ImageStudioV2,
-  PaymentGatewayV2,
-  ProfileV2,
-  PromptImageStudioV2,
-  PromptLibraryV2,
-  SupportV2,
-  TopUpV2,
-  VideoStudioV2,
-} from './v2/views/V2FeatureViews';
 import { useMobileUiVersion } from './v2/mobileUiVersion';
-import { Splash } from './views/Splash';
-import { Home } from './views/Home';
-import { WorkspaceImage } from './views/WorkspaceImage';
-import { WorkspaceVideo } from './views/WorkspaceVideo';
-import { WorkspaceEdit } from './views/WorkspaceEdit';
-import { WorkspacePromptImage } from './views/WorkspacePromptImage';
-import { Gallery } from './views/Gallery';
-import { PromptLibrary } from './views/PromptLibrary';
-import { TopUp } from './views/TopUp';
-import { Settings } from './views/Settings';
-import { About } from './views/About';
-import { Support } from './views/Support';
-import { Guide } from './views/Guide';
-import { AdminView } from './views/Admin';
-import { PaymentGatewayView } from './views/PaymentGateway';
 import { syncPaymentTransaction } from './services/serverQueueService';
 import { trackEvent, trackPageView } from './services/analyticsService';
 import { getFeatureMaintenanceConfig, getSystemAnnouncementConfig, isFeatureInMaintenance, type FeatureMaintenanceConfig, type SystemAnnouncementConfig } from './services/economyService';
 import { AppEventPopup, type AppEventPopupData, SystemAnnouncementModal } from '../../components/AppNotificationPopups';
 import { AppTour } from '../../components/AppTour';
 import './mobile-shell.css';
+
+const HomeV2 = lazy(() => import('./v2/views/HomeV2').then((module) => ({ default: module.HomeV2 })));
+const MobileV2Preview = lazy(() => import('./v2/views/MobileV2Preview').then((module) => ({ default: module.MobileV2Preview })));
+const AuthV2 = lazy(() => import('./v2/views/AuthV2').then((module) => ({ default: module.AuthV2 })));
+const ToolsHubV2 = lazy(() => import('./v2/views/ToolsHubV2').then((module) => ({ default: module.ToolsHubV2 })));
+const loadV2Feature = <T extends keyof typeof import('./v2/views/V2FeatureViews')>(name: T) =>
+  lazy(() => import('./v2/views/V2FeatureViews').then((module) => ({ default: module[name] })));
+const AboutV2 = loadV2Feature('AboutV2');
+const AdminV2 = loadV2Feature('AdminV2');
+const EditStudioV2 = loadV2Feature('EditStudioV2');
+const GalleryV2 = loadV2Feature('GalleryV2');
+const GuideV2 = loadV2Feature('GuideV2');
+const ImageStudioV2 = loadV2Feature('ImageStudioV2');
+const PaymentGatewayV2 = loadV2Feature('PaymentGatewayV2');
+const ProfileV2 = loadV2Feature('ProfileV2');
+const PromptImageStudioV2 = loadV2Feature('PromptImageStudioV2');
+const PromptLibraryV2 = loadV2Feature('PromptLibraryV2');
+const SupportV2 = loadV2Feature('SupportV2');
+const TopUpV2 = loadV2Feature('TopUpV2');
+const VideoStudioV2 = loadV2Feature('VideoStudioV2');
+
+const Splash = lazy(() => import('./views/Splash').then((module) => ({ default: module.Splash })));
+const Home = lazy(() => import('./views/Home').then((module) => ({ default: module.Home })));
+const WorkspaceImage = lazy(() => import('./views/WorkspaceImage').then((module) => ({ default: module.WorkspaceImage })));
+const WorkspaceVideo = lazy(() => import('./views/WorkspaceVideo').then((module) => ({ default: module.WorkspaceVideo })));
+const WorkspaceEdit = lazy(() => import('./views/WorkspaceEdit').then((module) => ({ default: module.WorkspaceEdit })));
+const WorkspacePromptImage = lazy(() => import('./views/WorkspacePromptImage').then((module) => ({ default: module.WorkspacePromptImage })));
+const Gallery = lazy(() => import('./views/Gallery').then((module) => ({ default: module.Gallery })));
+const PromptLibrary = lazy(() => import('./views/PromptLibrary').then((module) => ({ default: module.PromptLibrary })));
+const TopUp = lazy(() => import('./views/TopUp').then((module) => ({ default: module.TopUp })));
+const Settings = lazy(() => import('./views/Settings').then((module) => ({ default: module.Settings })));
+const About = lazy(() => import('./views/About').then((module) => ({ default: module.About })));
+const Support = lazy(() => import('./views/Support').then((module) => ({ default: module.Support })));
+const Guide = lazy(() => import('./views/Guide').then((module) => ({ default: module.Guide })));
+const AdminView = lazy(() => import('./views/Admin').then((module) => ({ default: module.AdminView })));
+const PaymentGatewayView = lazy(() => import('./views/PaymentGateway').then((module) => ({ default: module.PaymentGatewayView })));
 
 const SYSTEM_ANNOUNCEMENT_DISMISS_STORAGE_KEY = 'auditionai:system-announcement-dismissed';
 const SYSTEM_ANNOUNCEMENT_DISMISS_MS = 12 * 60 * 60 * 1000;
@@ -159,7 +161,12 @@ function AppRoutes() {
   }
 
   return (
-    <Routes>
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center" role="status" aria-label="Đang tải trang">
+        <Loader className="w-7 h-7 animate-spin text-fuchsia-500" />
+      </div>
+    }>
+      <Routes>
       <Route element={<MobileV2Layout />}>
         <Route path="/mobile-v2-preview" element={<MobileV2Preview />} />
       </Route>
@@ -199,7 +206,8 @@ function AppRoutes() {
           <Route path="*" element={<Navigate to="/home" replace />} />
         </>
       )}
-    </Routes>
+      </Routes>
+    </Suspense>
   );
 }
 

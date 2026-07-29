@@ -613,7 +613,8 @@ const fetchAssetBlobForPersistence = async (assetUrl: string): Promise<Blob> => 
         return await response.blob();
     } catch (directError) {
         const proxyUrl = `/api/download-proxy?url=${encodeURIComponent(assetUrl)}`;
-        const proxyResponse = await fetch(proxyUrl);
+        const authHeader = await getSessionAuthHeader();
+        const proxyResponse = await fetch(proxyUrl, { headers: authHeader });
         if (!proxyResponse.ok) {
             throw directError instanceof Error ? directError : new Error('Failed to fetch asset for publish');
         }

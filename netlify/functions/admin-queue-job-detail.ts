@@ -4,7 +4,7 @@ import type { QueueProgressLogEntry, QueueNotificationMediaEntry, QueueVertexDia
 import { normalizeQueueProgressLogs, repairVietnameseMojibake } from '../../shared/queueLogText';
 import { classifyQueueError, isTerminalRescueFailureMessage, normalizeQueueErrorMessage, pickQueueFailureMessage } from '../../shared/queueErrorClassifier';
 import { isFailedRescueStillActive } from '../../shared/queueRescueState';
-import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
+import { getAuthenticatedRequestErrorStatus, getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 
 const headers = {
   'Content-Type': 'application/json',
@@ -664,7 +664,7 @@ export const handler: Handler = async (event) => {
   } catch (error: any) {
     console.error('[admin-queue-job-detail] failed:', error);
     return {
-      statusCode: 500,
+      statusCode: getAuthenticatedRequestErrorStatus(error),
       headers,
       body: JSON.stringify({ error: error?.message || 'Internal Server Error' }),
     };

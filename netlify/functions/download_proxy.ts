@@ -1,4 +1,6 @@
 import { stream, type StreamingHandler } from '@netlify/functions';
+import { requireAuthenticatedUser } from './_supabase';
+import { fetchSafeRemoteAsset } from './_safe-remote-fetch';
 
 const jsonHeaders = {
   'Content-Type': 'application/json',
@@ -74,10 +76,8 @@ const handlerImpl: StreamingHandler = async (event) => {
   }
 
   try {
-    const upstreamResponse = await fetch(url, {
-      redirect: 'follow',
-      signal: AbortSignal.timeout(120000),
-    });
+    await requireAuthenticatedUser(event);
+    const upstreamResponse = await fetchSafeRemoteAsset(url);
 
     if (!upstreamResponse.ok || !upstreamResponse.body) {
       return {
@@ -95,9 +95,10 @@ const handlerImpl: StreamingHandler = async (event) => {
       body: upstreamResponse.body,
     };
   } catch (error: any) {
-    console.error('Proxy Download Error:', error);
+    const statusCode = error?.message === 'Unauthorized' ? 401 : /not allowed|private network/i.test(error?.message || '') ? 403 : 500;
+    if (statusCode >= 500) console.error('Proxy Download Error:', error);
     return {
-      statusCode: 500,
+      statusCode,
       headers: jsonHeaders,
       body: JSON.stringify({ error: error?.message || 'Download proxy failed' }),
     };

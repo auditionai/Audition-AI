@@ -5,6 +5,7 @@ import { triggerBackgroundQueueWorker } from './_queue-launcher';
 import { areQueueWorkersDisabled, isDedicatedQueueWorkerMode } from './_queue-runtime-mode';
 import { getServiceRoleClient } from './_supabase';
 import { SYSTEM_QUEUE_KINDS } from '../../shared/queueKinds';
+import { verifyInternalRequest } from './_internal-request-auth';
 
 const WORKER_LOCK_LEASE_SECONDS = 180;
 
@@ -78,6 +79,17 @@ export const handler: Handler = async (event) => {
     return {
       statusCode: 405,
       body: JSON.stringify({ error: 'Method Not Allowed' }),
+    };
+  }
+
+  if (!verifyInternalRequest(
+    'queue-worker-background',
+    event.body || '',
+    (name) => event.headers[name] || event.headers[name.toLowerCase()] || '',
+  )) {
+    return {
+      statusCode: 401,
+      body: JSON.stringify({ error: 'Unauthorized internal request' }),
     };
   }
 

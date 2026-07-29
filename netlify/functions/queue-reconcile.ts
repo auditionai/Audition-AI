@@ -3,7 +3,7 @@ import type { Handler } from '@netlify/functions';
 import { runQueueDaemon } from './_queue-daemon';
 import { triggerBackgroundQueueWorker } from './_queue-launcher';
 import { isDedicatedQueueWorkerMode } from './_queue-runtime-mode';
-import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
+import { getAuthenticatedRequestErrorStatus, getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 import { refreshAutoDisabledServerAvailability } from './_server-availability';
 import type { QueueProgressLogEntry } from '../../shared/queueRecipes';
 import { classifyQueueError, isTerminalRescueFailureMessage, normalizeQueueErrorMessage, pickQueueFailureMessage } from '../../shared/queueErrorClassifier';
@@ -378,7 +378,7 @@ export const handler: Handler = async (event) => {
   } catch (error: any) {
     console.error('[queue-reconcile] failed:', error);
     return {
-      statusCode: 500,
+      statusCode: getAuthenticatedRequestErrorStatus(error),
       headers,
       body: JSON.stringify({ error: error?.message || 'Internal Server Error' }),
     };

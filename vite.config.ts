@@ -43,8 +43,6 @@ export default defineConfig(({ mode }) => {
       // Expose non-VITE prefixed variables explicitly
       'process.env.CAULENHAU_SUPABASE_URL': JSON.stringify(env.CAULENHAU_SUPABASE_URL),
       'process.env.CAULENHAU_SUPABASE_ANON_KEY': JSON.stringify(env.CAULENHAU_SUPABASE_ANON_KEY),
-      // Ensure API_KEY is also available if it was set without VITE_ prefix
-      'process.env.API_KEY': JSON.stringify(env.API_KEY),
     }
   }
 })

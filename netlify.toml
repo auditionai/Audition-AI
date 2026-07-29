@@ -6,6 +6,10 @@
 [functions]
   node_bundler = "esbuild"
 
+[context.production.environment]
+  QUEUE_WORKER_MODE = "dedicated"
+  DISABLE_BACKGROUND_QUEUE_TRIGGER = "true"
+
 [[headers]]
   for = "/assets/*"
   [headers.values]

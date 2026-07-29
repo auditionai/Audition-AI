@@ -1,13 +1,9 @@
 import type { Handler } from '@netlify/functions';
 import { processDirectImageEditJob } from './_direct-image-edit-processor';
+import { verifyInternalRequest } from './_internal-request-auth';
 
 type DirectImageEditBackgroundBody = {
   jobId?: string;
-};
-
-const getJobIdFromRequest = async (request: Request) => {
-  const body = (await request.json().catch(() => ({}))) as DirectImageEditBackgroundBody;
-  return String(body.jobId || '').trim();
 };
 
 const runDirectImageEditBackground = async (jobId: string) => {
@@ -24,6 +20,13 @@ const parseJobIdFromEventBody = (body?: string | null) => {
   return String(parsed.jobId || '').trim();
 };
 
+const isAuthorizedEvent = (body: string, headers: Record<string, string | undefined>) =>
+  verifyInternalRequest(
+    'direct-image-edit-background',
+    body,
+    (name) => headers[name] || headers[name.toLowerCase()] || '',
+  );
+
 export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return {
@@ -36,6 +39,13 @@ export const handler: Handler = async (event) => {
     return {
       statusCode: 405,
       body: JSON.stringify({ error: 'Method Not Allowed' }),
+    };
+  }
+
+  if (!isAuthorizedEvent(event.body || '', event.headers)) {
+    return {
+      statusCode: 401,
+      body: JSON.stringify({ error: 'Unauthorized internal request' }),
     };
   }
 
@@ -77,6 +87,13 @@ export const localHandler: Handler = async (event) => {
     };
   }
 
+  if (!isAuthorizedEvent(event.body || '', event.headers)) {
+    return {
+      statusCode: 401,
+      body: JSON.stringify({ error: 'Unauthorized internal request' }),
+    };
+  }
+
   try {
     const jobId = parseJobIdFromEventBody(event.body);
     if (!jobId) {
@@ -109,7 +126,17 @@ export default async (request: Request) => {
     throw new Error('Method Not Allowed');
   }
 
-  const jobId = await getJobIdFromRequest(request);
+  const body = await request.text();
+  if (!verifyInternalRequest(
+    'direct-image-edit-background',
+    body,
+    (name) => request.headers.get(name),
+  )) {
+    throw new Error('Unauthorized internal request');
+  }
+
+  const parsed = JSON.parse(body || '{}') as DirectImageEditBackgroundBody;
+  const jobId = String(parsed.jobId || '').trim();
   if (!jobId) {
     throw new Error('Missing jobId');
   }

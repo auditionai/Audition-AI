@@ -1,5 +1,5 @@
 import type { Handler } from '@netlify/functions';
-import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
+import { getAuthenticatedRequestErrorStatus, getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 import { isSystemQueueKind, SYSTEM_QUEUE_KINDS } from '../../shared/queueKinds';
 
 const headers = {
@@ -199,7 +199,7 @@ export const handler: Handler = async (event) => {
   } catch (error: any) {
     console.error('[admin-queue-health-report] failed:', error);
     return {
-      statusCode: 500,
+      statusCode: getAuthenticatedRequestErrorStatus(error),
       headers,
       body: JSON.stringify({ error: error?.message || 'Internal Server Error' }),
     };

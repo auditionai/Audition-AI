@@ -6,6 +6,39 @@ import { subscribeCheckinStatus, isFeatureInMaintenance, type FeatureMaintenance
 
 const NEON_FRAME_TONES = ['magenta', 'violet', 'cyan', 'emerald', 'amber', 'blue'] as const;
 
+const DESKTOP_HERO_SLIDES = [
+  {
+    eyebrow: 'AUDITION AI STUDIO v4.2',
+    title: 'TẠO ẢNH & VIDEO AI',
+    highlight: 'NHÂN VẬT AUDITION 3D',
+    description: 'Studio AI dành riêng cho cộng đồng Audition: tạo ảnh nhân vật 3D sắc nét, đội hình nhiều người và video chuyển động điện ảnh.',
+    buttonLabel: 'Bắt đầu tạo ảnh',
+    view: 'tools' as ViewId,
+    imageLight: '/assets/audition-characters/desktop-hero-crew-light.webp',
+    imageDark: '/assets/audition-characters/desktop-hero-crew.webp',
+  },
+  {
+    eyebrow: 'COUPLE UNIVERSE',
+    title: 'KỂ CÂU CHUYỆN',
+    highlight: 'CỦA HAI NGƯỜI',
+    description: 'Ghép đôi nhân vật Audition trong những khung hình hip-hop, ánh sáng neon và bố cục 3D được tối ưu tự động.',
+    buttonLabel: 'Mở Couple Mode',
+    view: 'tools' as ViewId,
+    imageLight: '/assets/audition-characters/desktop-hero-couple-v2.webp',
+    imageDark: '/assets/audition-characters/desktop-hero-couple-v2.webp',
+  },
+  {
+    eyebrow: 'CREATIVE SQUAD',
+    title: 'KHÁM PHÁ MỌI',
+    highlight: 'CÔNG CỤ AI NỔI BẬT',
+    description: 'Tạo đội hình, dựng video, chỉnh sửa ảnh và quản lý toàn bộ tác phẩm trong một hệ sinh thái sáng tạo thống nhất.',
+    buttonLabel: 'Xem tất cả công cụ',
+    view: 'tools' as ViewId,
+    imageLight: '/assets/audition-characters/desktop-hero-squad-v2.webp',
+    imageDark: '/assets/audition-characters/desktop-hero-squad-v2.webp',
+  },
+];
+
 interface HomeProps {
   lang: Language;
   onSelectFeature: (feature: Feature) => void;
@@ -27,6 +60,8 @@ export const Home: React.FC<HomeProps> = ({
 }) => {
   const [isCheckedInToday, setIsCheckedInToday] = useState(false);
   const [activeCategory, setActiveCategory] = useState<'all' | 'generation' | 'video' | 'editing'>('all');
+  const [activeHeroSlide, setActiveHeroSlide] = useState(0);
+  const [heroPaused, setHeroPaused] = useState(false);
 
   useEffect(() => {
     return subscribeCheckinStatus((status) => {
@@ -34,7 +69,16 @@ export const Home: React.FC<HomeProps> = ({
     });
   }, []);
 
+  useEffect(() => {
+    if (heroPaused) return undefined;
+    const timer = window.setInterval(() => {
+      setActiveHeroSlide((current) => (current + 1) % DESKTOP_HERO_SLIDES.length);
+    }, 5600);
+    return () => window.clearInterval(timer);
+  }, [heroPaused]);
+
   const features: Feature[] = APP_CONFIG.main_features;
+  const heroSlide = DESKTOP_HERO_SLIDES[activeHeroSlide];
 
   const filteredFeatures = features.filter((feat: Feature) => {
     if (activeCategory === 'all') return true;
@@ -60,7 +104,19 @@ export const Home: React.FC<HomeProps> = ({
       {/* ====================================================
           1. 3D HERO CONSOLE (Banner Giới Thiệu Ứng Dụng)
          ==================================================== */}
-      <section className="desktop-character-hero desktop-rainbow-frame w-full neu-raised-lg p-6 sm:p-10 relative overflow-hidden border border-slate-300/80 dark:border-slate-800 shadow-2xl rounded-[2.5rem]">
+      <section
+        className="desktop-character-hero desktop-rainbow-frame w-full neu-raised-lg p-6 sm:p-10 relative overflow-hidden border border-slate-300/80 dark:border-slate-800 shadow-2xl rounded-[2.5rem]"
+        style={{
+          '--desktop-hero-image-light': `url("${heroSlide.imageLight}")`,
+          '--desktop-hero-image-dark': `url("${heroSlide.imageDark}")`,
+        } as React.CSSProperties}
+        onPointerEnter={() => setHeroPaused(true)}
+        onPointerLeave={() => setHeroPaused(false)}
+        onFocus={() => setHeroPaused(true)}
+        onBlur={() => setHeroPaused(false)}
+        aria-roledescription="carousel"
+        aria-label="Tính năng nổi bật Audition AI"
+      >
         
         {/* Subtle Ambient Accent */}
         <div className="absolute -top-20 -right-20 w-80 h-80 bg-[#FF007F]/10 rounded-full blur-[100px] pointer-events-none" />
@@ -68,12 +124,12 @@ export const Home: React.FC<HomeProps> = ({
         <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
           
           {/* Left Intro Copy */}
-          <div className="lg:col-span-7 space-y-4">
+          <div className="lg:col-span-7 space-y-4 desktop-hero-copy" key={heroSlide.eyebrow}>
             
             <div className="inline-flex items-center gap-2 neu-inset-sm px-3.5 py-1.5 rounded-full border border-slate-300 dark:border-slate-700">
               <span className="w-2 h-2 rounded-full bg-[#FF007F]" />
               <span className="text-[11px] font-black uppercase tracking-wider text-[#FF007F] dark:text-[#FF007F] font-accent">
-                AUDITION AI STUDIO v4.2
+                {heroSlide.eyebrow}
               </span>
             </div>
 
@@ -85,28 +141,28 @@ export const Home: React.FC<HomeProps> = ({
                 className="block text-[clamp(1.8rem,4vw,3.5rem)] leading-[0.9] text-slate-950 dark:text-white"
                 style={{ textShadow: '0 2px 0 rgba(148,163,184,.45), 0 6px 18px rgba(0,0,0,.22)' }}
               >
-                TẠO ẢNH &amp; VIDEO AI
+                {heroSlide.title}
               </span>
               <span
                 className="block text-[clamp(1.8rem,4vw,3.5rem)] leading-[0.9] text-[#FF007F]"
                 style={{ textShadow: '0 2px 0 #9d004f, 0 5px 0 rgba(91,0,53,.45), 0 10px 22px rgba(255,0,127,.28)' }}
               >
-                NHÂN VẬT AUDITION 3D
+                {heroSlide.highlight}
               </span>
             </h1>
 
             <p className="text-xs sm:text-sm text-slate-800 dark:text-slate-200 max-w-xl leading-relaxed font-bold">
-              Công cụ trí tuệ nhân tạo dành riêng cho cộng đồng Audition. Giúp bạn tự do tạo ảnh nhân vật 3D sắc nét (Đơn, Đôi, Nhóm), chuyển đổi Video AI vũ đạo mượt mà và tách nền ghép phối cảnh tự động.
+              {heroSlide.description}
             </p>
 
             {/* Action Buttons */}
             <div className="flex flex-wrap items-center gap-3 pt-2">
               <button
-                onClick={() => onNavigate('tools')}
+                onClick={() => onNavigate(heroSlide.view)}
                 className="neu-button-primary px-7 py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-xl hover:scale-105 transition-all"
               >
                 <Icons.Wand className="w-4 h-4 text-white" />
-                <span>Bắt Đầu Tạo Ảnh</span>
+                <span>{heroSlide.buttonLabel}</span>
               </button>
 
               <button
@@ -214,6 +270,35 @@ export const Home: React.FC<HomeProps> = ({
 
           </div>
 
+        </div>
+
+        <div className="desktop-hero-carousel" aria-label="Điều khiển banner">
+          <button
+            type="button"
+            onClick={() => setActiveHeroSlide((activeHeroSlide - 1 + DESKTOP_HERO_SLIDES.length) % DESKTOP_HERO_SLIDES.length)}
+            aria-label="Banner trước"
+          >
+            <Icons.ChevronLeft className="w-4 h-4" />
+          </button>
+          <div>
+            {DESKTOP_HERO_SLIDES.map((slide, index) => (
+              <button
+                type="button"
+                key={slide.eyebrow}
+                className={activeHeroSlide === index ? 'is-active' : ''}
+                onClick={() => setActiveHeroSlide(index)}
+                aria-label={`Xem banner ${index + 1}`}
+                aria-current={activeHeroSlide === index ? 'true' : undefined}
+              />
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => setActiveHeroSlide((activeHeroSlide + 1) % DESKTOP_HERO_SLIDES.length)}
+            aria-label="Banner sau"
+          >
+            <Icons.ChevronRight className="w-4 h-4" />
+          </button>
         </div>
 
       </section>

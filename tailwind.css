@@ -135,7 +135,7 @@
     inset: 0;
     background:
       linear-gradient(90deg, var(--neu-surface) 0 48%, color-mix(in srgb, var(--neu-surface) 86%, transparent) 61%, transparent 76%),
-      url("/assets/audition-characters/desktop-hero-crew.webp") right center / cover no-repeat;
+      var(--desktop-hero-image-dark, url("/assets/audition-characters/desktop-hero-crew.webp")) right center / auto 100% no-repeat;
     pointer-events: none;
   }
 
@@ -281,7 +281,73 @@
   html:not(.dark) .desktop-character-hero::after {
     background:
       linear-gradient(90deg, rgba(242, 246, 252, .99) 0 42%, rgba(242, 246, 252, .82) 56%, rgba(242, 246, 252, .08) 74%),
-      url("/assets/audition-characters/desktop-hero-crew-light.webp") right center / cover no-repeat;
+      var(--desktop-hero-image-light, url("/assets/audition-characters/desktop-hero-crew-light.webp")) right center / auto 100% no-repeat;
+  }
+
+  .desktop-hero-copy {
+    animation: desktop-hero-copy-in .52s cubic-bezier(.2,.72,.2,1) both;
+  }
+
+  .desktop-hero-carousel {
+    position: absolute;
+    z-index: 20;
+    right: 24px;
+    bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px;
+    border: 1px solid color-mix(in srgb, #7d4ed0 28%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--neu-surface) 82%, transparent);
+    box-shadow: 0 9px 24px rgba(20, 10, 28, .18);
+    backdrop-filter: blur(16px);
+  }
+
+  .desktop-hero-carousel > button {
+    display: grid;
+    width: 34px;
+    height: 34px;
+    place-items: center;
+    border: 1px solid color-mix(in srgb, #8b4fd1 22%, transparent);
+    border-radius: 50%;
+    color: #54213b;
+    background: color-mix(in srgb, var(--neu-surface) 90%, transparent);
+    transition: transform .2s ease, border-color .2s ease;
+  }
+
+  .desktop-hero-carousel > button:hover {
+    border-color: #b02975;
+    transform: scale(1.06);
+  }
+
+  .desktop-hero-carousel > div {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .desktop-hero-carousel > div button {
+    width: 7px;
+    height: 7px;
+    padding: 0;
+    border: 0;
+    border-radius: 99px;
+    background: rgba(103, 70, 89, .34);
+    transition: width .25s ease, background .25s ease;
+  }
+
+  .desktop-hero-carousel > div button.is-active {
+    width: 26px;
+    background: linear-gradient(90deg, #c51d70, #754bd0, #168c9a);
+  }
+
+  .dark .desktop-hero-carousel > button { color: #f6edf3; }
+  .dark .desktop-hero-carousel > div button { background: rgba(226, 198, 214, .34); }
+
+  @keyframes desktop-hero-copy-in {
+    from { opacity: 0; transform: translateY(9px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 
   html:not(.dark) .desktop-primary-tool {

@@ -336,14 +336,15 @@
 }
 
 .v2-hero--characters .v2-hero__art {
-  background-image: url("/assets/audition-characters/mobile-hero-crew-light.webp");
+  background-image: var(--mobile-v2-hero-image-light, url("/assets/audition-characters/mobile-hero-crew-light.webp"));
   background-position: right center;
   background-size: auto 100%;
   filter: saturate(.9) contrast(.98);
+  animation: v2HeroImageIn .65s cubic-bezier(.2,.75,.2,1) both;
 }
 
 .dark .mobile-v2-shell:not(.v2-force-light) .v2-hero--characters .v2-hero__art {
-  background-image: url("/assets/audition-characters/mobile-hero-crew.webp");
+  background-image: var(--mobile-v2-hero-image-dark, url("/assets/audition-characters/mobile-hero-crew.webp"));
   filter: saturate(.86) contrast(.96);
 }
 
@@ -409,6 +410,11 @@
 .v2-hero__spark { position: absolute; width: 18px; color: rgba(178, 10, 79, .55); }
 .v2-hero__spark--one { top: 48px; right: 42px; }
 .v2-hero__spark--two { right: 155px; bottom: 39px; color: rgba(40, 111, 142, .45); }
+
+@keyframes v2HeroImageIn {
+  from { opacity: .25; transform: scale(1.025); }
+  to { opacity: 1; transform: scale(1); }
+}
 
 .v2-quick-grid {
   display: grid;
@@ -2267,7 +2273,12 @@
   margin: 11px 0 12px;
   color: var(--v2-ink);
   font-size: clamp(31px, 9.3vw, 41px);
-  line-height: 1;
+  line-height: 1.1;
+}
+
+.v2-auth__showcase h1 span {
+  display: inline-block;
+  margin-top: 4px;
 }
 
 .v2-auth__showcase > p {

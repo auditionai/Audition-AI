@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import {
   ArrowRight,
   BookOpenText,
@@ -75,6 +75,8 @@ const heroSlides = [
     featureId: 'single_photo_gen',
     Icon: Palette,
     accent: 'pink',
+    imageLight: '/assets/audition-characters/mobile-hero-crew-light.webp',
+    imageDark: '/assets/audition-characters/mobile-hero-crew.webp',
   },
   {
     kicker: 'Couple Universe',
@@ -86,6 +88,8 @@ const heroSlides = [
     featureId: 'couple_photo_gen',
     Icon: Sparkles,
     accent: 'cyan',
+    imageLight: '/assets/audition-characters/mobile-hero-couple-v2.webp',
+    imageDark: '/assets/audition-characters/mobile-hero-couple-v2.webp',
   },
   {
     kicker: 'Motion Galaxy',
@@ -97,6 +101,8 @@ const heroSlides = [
     featureId: 'video_ai_gen',
     Icon: Film,
     accent: 'violet',
+    imageLight: '/assets/audition-characters/mobile-hero-squad-v2.webp',
+    imageDark: '/assets/audition-characters/mobile-hero-squad-v2.webp',
   },
 ];
 
@@ -184,8 +190,12 @@ export function HomeV2() {
         onBlur={() => setCarouselPaused(false)}
         aria-roledescription="carousel"
         aria-label="Khám phá tính năng nổi bật"
+        style={{
+          '--mobile-v2-hero-image-light': `url("${slide.imageLight}")`,
+          '--mobile-v2-hero-image-dark': `url("${slide.imageDark}")`,
+        } as CSSProperties}
       >
-        <div className="v2-hero__art" aria-hidden="true">
+        <div className="v2-hero__art" key={slide.imageDark} aria-hidden="true">
           <span className="v2-orbit v2-orbit--one" />
           <span className="v2-orbit v2-orbit--two" />
           <span className="v2-hero__planet"><SlideIcon size={48} strokeWidth={1.25} /></span>

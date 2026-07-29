@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Language, CreditPackage, PromotionCampaign, ViewId } from '../types';
 import { Icons } from '../components/Icons';
-import { getPackages, createPaymentLink, getActivePromotion, updateLastActive, getCachedTopupGiftcodes, getTopupGiftcodePreviews, getTopupGiftcodes, TopupGiftcodeOffer } from '../services/economyService';
+import { getPackages, createPaymentLink, getActivePromotion, updateLastActive, getTopupGiftcodes, TopupGiftcodeOffer } from '../services/economyService';
 import { useNotification } from '../components/NotificationSystem';
 
 interface TopUpProps {
@@ -36,14 +36,23 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
 
   useEffect(() => {
       let disposed = false;
-      getTopupGiftcodePreviews()
+      setLoadingGiftcodes(true);
+      getTopupGiftcodes()
           .then((rows) => {
-              if (!disposed && rows.length > 0) {
+              if (!disposed) {
                   setTopupGiftcodes(rows);
               }
           })
           .catch((error) => {
-              console.warn('Failed to prefetch topup giftcode previews', error);
+              console.warn('Failed to load account topup giftcodes', error);
+              if (!disposed) {
+                  setTopupGiftcodes([]);
+              }
+          })
+          .finally(() => {
+              if (!disposed) {
+                  setLoadingGiftcodes(false);
+              }
           });
 
       return () => {
@@ -57,6 +66,7 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
           const rows = await getTopupGiftcodes();
           setTopupGiftcodes(rows);
       } catch (error) {
+          setTopupGiftcodes([]);
           console.warn('Failed to load topup giftcodes', error);
           notify(error instanceof Error ? error.message : 'Không thể tải giftcode nạp tiền', 'error');
       } finally {
@@ -68,21 +78,9 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
       setSelectedPackage(pkg);
       setGiftcodeInput('');
       setGiftcodeSelectionMode('auto');
-      if (topupGiftcodes.length === 0) {
-          const cachedRows = getCachedTopupGiftcodes();
-          if (cachedRows.length > 0) {
-              setTopupGiftcodes(cachedRows);
-          } else {
-              void getTopupGiftcodePreviews().then((rows) => {
-                  if (rows.length > 0) {
-                      setTopupGiftcodes(rows);
-                  }
-              }).catch((error) => {
-                  console.warn('Failed to load topup giftcode previews', error);
-              });
-          }
-          void loadTopupGiftcodes();
-      }
+      // Giftcode availability is account-specific and changes after payment.
+      setTopupGiftcodes([]);
+      void loadTopupGiftcodes();
   };
 
   useEffect(() => {
@@ -195,6 +193,7 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
       } catch (e) {
           console.error(e);
           notify(e instanceof Error ? e.message : (lang === 'vi' ? 'Có lỗi khi tạo giao dịch' : 'Error creating transaction'), 'error');
+          await loadTopupGiftcodes();
       } finally {
           setLoading(false);
       }

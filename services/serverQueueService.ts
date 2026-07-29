@@ -2,33 +2,17 @@ import { getSupabaseAuthHeader } from './supabaseClient';
 import { trackEvent } from './analyticsService';
 import type { QueueRecipePayload } from '../shared/queueRecipes';
 import type { QueueClientPlatform } from '../types';
+import { resolveAppShell } from '../shared/shellDetection';
 
 export type QueueAssetType = 'image' | 'video';
 export type QueueKind = 'image_generate' | 'video_generate' | 'motion_generate';
-
-const SHELL_OVERRIDE_STORAGE_KEY = 'auditionai:shell-override';
-const PHONE_USER_AGENT_PATTERN = /iphone|ipod|android.+mobile|windows phone|blackberry|opera mini|mobile safari/i;
 
 const detectQueueClientPlatform = (): QueueClientPlatform => {
   if (typeof window === 'undefined' || typeof navigator === 'undefined') {
     return 'unknown';
   }
 
-  const params = new URLSearchParams(window.location.search);
-  if (params.get('desktop') === '1') return 'desktop';
-  if (params.get('mobile') === '1') return 'mobile';
-
-  const savedOverride = window.localStorage.getItem(SHELL_OVERRIDE_STORAGE_KEY);
-  if (savedOverride === 'mobile' || savedOverride === 'desktop') {
-    return savedOverride;
-  }
-
-  const navigatorWithUAData = navigator as Navigator & { userAgentData?: { mobile?: boolean } };
-  if (typeof navigatorWithUAData.userAgentData?.mobile === 'boolean') {
-    return navigatorWithUAData.userAgentData.mobile ? 'mobile' : 'desktop';
-  }
-
-  return PHONE_USER_AGENT_PATTERN.test(navigator.userAgent.toLowerCase()) ? 'mobile' : 'desktop';
+  return resolveAppShell();
 };
 
 export interface QueueEnqueueRequest {

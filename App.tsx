@@ -20,6 +20,7 @@ import { AppTour } from './components/AppTour';
 import { Icons } from './components/Icons';
 import { syncPaymentTransaction } from './services/serverQueueService';
 import { setAnalyticsUser, trackEvent, trackPageView } from './services/analyticsService';
+import { shouldUseMobileShell } from './shared/shellDetection';
 
 const ToolWorkspace = lazy(() => import('./views/ToolWorkspace').then((module) => ({ default: module.ToolWorkspace })));
 const Admin = lazy(() => import('./views/Admin').then((module) => ({ default: module.Admin })));
@@ -32,9 +33,6 @@ const AppLoadingFallback = () => (
   </div>
 );
 
-const PHONE_USER_AGENT_PATTERN = /iphone|ipod|android.+mobile|windows phone|blackberry|opera mini|mobile safari/i;
-const SHELL_OVERRIDE_STORAGE_KEY = 'auditionai:shell-override';
-const LEGACY_SHELL_PREFERENCE_STORAGE_KEY = 'auditionai:shell-preference';
 const SYSTEM_ANNOUNCEMENT_DISMISS_STORAGE_KEY = 'auditionai:system-announcement-dismissed';
 const SYSTEM_ANNOUNCEMENT_DISMISS_MS = 12 * 60 * 60 * 1000;
 
@@ -69,53 +67,6 @@ const dismissSystemAnnouncementForTwelveHours = (config: SystemAnnouncementConfi
   } catch {
     // Ignore storage failures; the modal can still be closed for this render.
   }
-};
-
-const clearLegacyShellPreference = () => {
-  if (typeof window === 'undefined') return;
-  window.localStorage.removeItem(LEGACY_SHELL_PREFERENCE_STORAGE_KEY);
-};
-
-const readShellOverride = () => {
-  if (typeof window === 'undefined') return null;
-  const saved = window.localStorage.getItem(SHELL_OVERRIDE_STORAGE_KEY);
-  return saved === 'mobile' || saved === 'desktop' ? saved : null;
-};
-
-const writeShellOverride = (value: 'mobile' | 'desktop') => {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(SHELL_OVERRIDE_STORAGE_KEY, value);
-  clearLegacyShellPreference();
-};
-
-const detectPhoneBrowserShell = () => {
-  const navigatorWithUAData = navigator as Navigator & { userAgentData?: { mobile?: boolean } };
-  if (typeof navigatorWithUAData.userAgentData?.mobile === 'boolean') {
-    return navigatorWithUAData.userAgentData.mobile;
-  }
-
-  return PHONE_USER_AGENT_PATTERN.test(navigator.userAgent.toLowerCase());
-};
-
-const shouldUseMobileShell = () => {
-  if (typeof window === 'undefined') return false;
-
-  const params = new URLSearchParams(window.location.search);
-  if (params.get('desktop') === '1') {
-    writeShellOverride('desktop');
-    return false;
-  }
-  if (params.get('mobile') === '1') {
-    writeShellOverride('mobile');
-    return true;
-  }
-
-  clearLegacyShellPreference();
-  const savedOverride = readShellOverride();
-  if (savedOverride === 'mobile') return true;
-  if (savedOverride === 'desktop') return false;
-
-  return detectPhoneBrowserShell();
 };
 
 const DEFAULT_IMAGE_FEATURE = APP_CONFIG.main_features.find((feature) => feature.toolType === 'generation') || APP_CONFIG.main_features[0] || null;

@@ -19,7 +19,7 @@ import {
   saveMaintenanceMode,
   type FeatureMaintenanceConfig,
 } from '../../services/economyService';
-import type { AdminQueueJob, AdminQueueSummary, Transaction } from '../../types';
+import type { AdminQueueJob, AdminQueueSummary, Transaction, UserProfile } from '../../types';
 
 type AdminTab = 'overview' | 'queue' | 'finance' | 'users' | 'system';
 type AdminStats = Awaited<ReturnType<typeof getAdminStats>>;
@@ -268,7 +268,7 @@ export function AdminV2() {
             <section className="v2-admin-panel">
               <div className="v2-admin-section-title"><span><Users size={18} /></span><div><h2>Người dùng</h2><p>Tài khoản hoạt động gần đây.</p></div></div>
               <div className="v2-admin-users">
-                {(stats?.usersList || []).map((user) => (
+                {(stats?.usersList || []).map((user: UserProfile) => (
                   <article key={user.id}>
                     <div className="v2-admin-avatar">{user.avatar ? <img src={user.avatar} alt="" /> : (user.username || user.email || 'U').slice(0, 1).toUpperCase()}</div>
                     <div><strong>{user.username || user.email?.split('@')[0] || 'Người dùng'}</strong><span>{user.email}</span><small><Clock3 size={12} /> {formatTime(user.lastActive)}</small></div>

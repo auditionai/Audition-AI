@@ -124,7 +124,8 @@
   }
 
   .desktop-character-hero {
-    min-height: 400px;
+    height: clamp(450px, 40vw, 488px);
+    min-height: 450px;
     isolation: isolate;
   }
 
@@ -140,7 +141,8 @@
   }
 
   .desktop-character-hero > .relative {
-    min-height: 320px;
+    height: 100%;
+    min-height: 0;
   }
 
   .desktop-primary-tool {

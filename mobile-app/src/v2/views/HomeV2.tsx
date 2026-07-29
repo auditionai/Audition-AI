@@ -88,7 +88,7 @@ const heroSlides = [
     featureId: 'couple_photo_gen',
     Icon: Sparkles,
     accent: 'cyan',
-    imageLight: '/assets/audition-characters/mobile-hero-couple-v2.webp',
+    imageLight: '/assets/audition-characters/mobile-hero-couple-light-v2.webp',
     imageDark: '/assets/audition-characters/mobile-hero-couple-v2.webp',
   },
   {
@@ -101,7 +101,7 @@ const heroSlides = [
     featureId: 'video_ai_gen',
     Icon: Film,
     accent: 'violet',
-    imageLight: '/assets/audition-characters/mobile-hero-squad-v2.webp',
+    imageLight: '/assets/audition-characters/mobile-hero-squad-light-v2.webp',
     imageDark: '/assets/audition-characters/mobile-hero-squad-v2.webp',
   },
 ];

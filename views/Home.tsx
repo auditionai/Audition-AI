@@ -24,7 +24,7 @@ const DESKTOP_HERO_SLIDES = [
     description: 'Ghép đôi nhân vật Audition trong những khung hình hip-hop, ánh sáng neon và bố cục 3D được tối ưu tự động.',
     buttonLabel: 'Mở Couple Mode',
     view: 'tools' as ViewId,
-    imageLight: '/assets/audition-characters/desktop-hero-couple-v2.webp',
+    imageLight: '/assets/audition-characters/desktop-hero-couple-light-v2.webp',
     imageDark: '/assets/audition-characters/desktop-hero-couple-v2.webp',
   },
   {
@@ -34,7 +34,7 @@ const DESKTOP_HERO_SLIDES = [
     description: 'Tạo đội hình, dựng video, chỉnh sửa ảnh và quản lý toàn bộ tác phẩm trong một hệ sinh thái sáng tạo thống nhất.',
     buttonLabel: 'Xem tất cả công cụ',
     view: 'tools' as ViewId,
-    imageLight: '/assets/audition-characters/desktop-hero-squad-v2.webp',
+    imageLight: '/assets/audition-characters/desktop-hero-squad-light-v2.webp',
     imageDark: '/assets/audition-characters/desktop-hero-squad-v2.webp',
   },
 ];

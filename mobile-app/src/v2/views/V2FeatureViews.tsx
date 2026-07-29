@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
 import { About } from '../../views/About';
-import { AdminView } from '../../views/Admin';
 import { Guide } from '../../views/Guide';
 import { PaymentGatewayView } from '../../views/PaymentGateway';
 import { Support } from '../../views/Support';
@@ -13,6 +12,7 @@ import { GalleryV2 as NativeGalleryV2 } from './GalleryV2';
 import { ProfileV2 as NativeProfileV2 } from './ProfileV2';
 import { PromptLibraryV2 as NativePromptLibraryV2 } from './PromptLibraryV2';
 import { TopUpV2 as NativeTopUpV2 } from './TopUpV2';
+import { AdminV2 as NativeAdminV2 } from './AdminV2';
 
 type V2FeatureFrameProps = {
   kind: string;
@@ -41,4 +41,4 @@ export const ProfileV2 = () => <NativeProfileV2 />;
 export const AboutV2 = () => <V2FeatureFrame kind="academy"><About /></V2FeatureFrame>;
 export const SupportV2 = () => <V2FeatureFrame kind="academy"><Support /></V2FeatureFrame>;
 export const GuideV2 = () => <V2FeatureFrame kind="academy"><Guide /></V2FeatureFrame>;
-export const AdminV2 = () => <V2FeatureFrame kind="admin"><AdminView /></V2FeatureFrame>;
+export const AdminV2 = () => <NativeAdminV2 />;

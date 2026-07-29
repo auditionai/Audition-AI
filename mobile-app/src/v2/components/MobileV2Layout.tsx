@@ -7,6 +7,7 @@ import '../mobile-v2.css';
 export function MobileV2Layout() {
   const location = useLocation();
   const isStandalonePreview = location.pathname === '/mobile-v2-preview';
+  const hasBottomNav = !['/', '/login', '/payment-gateway', '/admin'].includes(location.pathname);
   const previewTheme = new URLSearchParams(location.search).get('preview-theme');
   const forceLightPreview = isStandalonePreview && previewTheme !== 'dark';
   const routeTone = (() => {
@@ -29,7 +30,7 @@ export function MobileV2Layout() {
     >
       <AuroraBackdrop />
       <MobileV2TopBar />
-      <main className={`mobile-v2-content${location.pathname === '/home' || isStandalonePreview || location.pathname === '/' ? '' : ' v2-screen'}`}>
+      <main className={`mobile-v2-content${hasBottomNav ? ' has-bottom-nav' : ''}${location.pathname === '/home' || isStandalonePreview || location.pathname === '/' ? '' : ' v2-screen'}`}>
         <Outlet />
       </main>
       <MobileV2BottomNav />

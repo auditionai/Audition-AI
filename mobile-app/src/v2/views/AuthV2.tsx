@@ -84,7 +84,7 @@ export function AuthV2() {
           <div className="v2-auth__scene" aria-hidden="true" />
           <div className="v2-auth__logo"><AuditionV2Logo /></div>
           <span className="v2-auth__badge"><Sparkles size={13} /> Creative access</span>
-          <h1>Chạm vào<br /><span>thế giới Audition</span></h1>
+          <h1>Ứng Dụng Tạo Ảnh 3D<br /><span>Audition AI</span></h1>
           <p>Đăng nhập để tiếp tục tạo nhân vật, hình ảnh và video AI mang phong cách riêng của bạn.</p>
           <div className="v2-auth__metrics">
             <span><strong>4K</strong><small>Hình ảnh</small></span>

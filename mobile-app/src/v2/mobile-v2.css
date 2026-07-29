@@ -23,7 +23,7 @@
   box-shadow: 0 0 42px rgba(56, 17, 38, 0.16);
 }
 
-.dark .mobile-v2-shell:not(.v2-force-light) {
+.dark .mobile-v2-shell {
   --v2-bg: #0c0b14;
   --v2-surface: rgba(22, 20, 34, 0.88);
   --v2-surface-solid: #171420;
@@ -69,7 +69,7 @@
     linear-gradient(160deg, rgba(255, 255, 255, 0.5), transparent 48%);
 }
 
-.dark .mobile-v2-shell:not(.v2-force-light) .v2-aurora-backdrop {
+.dark .mobile-v2-shell .v2-aurora-backdrop {
   background:
     radial-gradient(circle at 8% 24%, rgba(255, 55, 143, 0.12), transparent 31%),
     radial-gradient(circle at 92% 48%, rgba(34, 171, 181, 0.09), transparent 34%),
@@ -160,7 +160,7 @@
   box-shadow: 0 7px 18px rgba(107, 18, 61, 0.11);
 }
 
-.dark .mobile-v2-shell:not(.v2-force-light) .v2-brand__mark {
+.dark .mobile-v2-shell .v2-brand__mark {
   color: #ff4e91;
   background: linear-gradient(145deg, #23182a, #17141f);
   border-color: rgba(255, 78, 145, 0.24);
@@ -259,7 +259,7 @@
   pointer-events: none;
 }
 
-.dark .mobile-v2-shell:not(.v2-force-light) .v2-hero {
+.dark .mobile-v2-shell .v2-hero {
   background: linear-gradient(130deg, rgba(25,20,32,.98), rgba(33,23,39,.91) 58%, rgba(21,25,38,.9));
 }
 
@@ -343,7 +343,7 @@
   animation: v2HeroImageIn .65s cubic-bezier(.2,.75,.2,1) both;
 }
 
-.dark .mobile-v2-shell:not(.v2-force-light) .v2-hero--characters .v2-hero__art {
+.dark .mobile-v2-shell .v2-hero--characters .v2-hero__art {
   background-image: var(--mobile-v2-hero-image-dark, url("/assets/audition-characters/mobile-hero-crew.webp"));
   filter: saturate(.86) contrast(.96);
 }
@@ -359,7 +359,7 @@
   background: linear-gradient(90deg, var(--v2-surface-solid) 0 37%, color-mix(in srgb, var(--v2-surface-solid) 94%, transparent) 52%, color-mix(in srgb, var(--v2-surface-solid) 48%, transparent) 69%, transparent 88%);
 }
 
-.dark .mobile-v2-shell:not(.v2-force-light) .v2-hero--characters .v2-hero__scrim {
+.dark .mobile-v2-shell .v2-hero--characters .v2-hero__scrim {
   background: linear-gradient(90deg, #171420 0 37%, rgba(23,20,32,.95) 52%, rgba(23,20,32,.5) 69%, transparent 88%);
 }
 
@@ -385,7 +385,7 @@
   background: linear-gradient(90deg, var(--v2-surface-solid) 4%, rgba(255,253,253,.92) 48%, rgba(255,253,253,.12) 82%);
 }
 
-.dark .mobile-v2-shell:not(.v2-force-light) .v2-hero__scrim {
+.dark .mobile-v2-shell .v2-hero__scrim {
   background: linear-gradient(90deg, #171420 4%, rgba(23,20,32,.93) 48%, rgba(23,20,32,.12) 82%);
 }
 
@@ -457,17 +457,17 @@
   background-image: url("/assets/audition-characters/feature-edit-ai-light.webp");
 }
 
-.dark .mobile-v2-shell:not(.v2-force-light) .v2-quick-card::before {
+.dark .mobile-v2-shell .v2-quick-card::before {
   background-image: url("/assets/audition-characters/feature-image-ai.webp");
   opacity: .13;
   filter: saturate(.75);
 }
 
-.dark .mobile-v2-shell:not(.v2-force-light) .v2-quick-card[data-accent="violet"]::before {
+.dark .mobile-v2-shell .v2-quick-card[data-accent="violet"]::before {
   background-image: url("/assets/audition-characters/feature-video-ai.webp");
 }
 
-.dark .mobile-v2-shell:not(.v2-force-light) .v2-quick-card[data-accent="teal"]::before {
+.dark .mobile-v2-shell .v2-quick-card[data-accent="teal"]::before {
   background-image: url("/assets/audition-characters/feature-edit-ai.webp");
 }
 
@@ -580,11 +580,11 @@
   background-image: url("/assets/audition-characters/feature-edit-ai-light.webp");
 }
 
-.dark .mobile-v2-shell:not(.v2-force-light) .v2-feature-card--single .v2-feature-card__art {
+.dark .mobile-v2-shell .v2-feature-card--single .v2-feature-card__art {
   background-image: url("/assets/audition-characters/feature-image-ai.webp");
 }
 
-.dark .mobile-v2-shell:not(.v2-force-light) .v2-feature-card--couple .v2-feature-card__art {
+.dark .mobile-v2-shell .v2-feature-card--couple .v2-feature-card__art {
   background-image: url("/assets/audition-characters/feature-edit-ai.webp");
 }
 
@@ -604,7 +604,7 @@
   backdrop-filter: blur(3px);
 }
 
-.dark .mobile-v2-shell:not(.v2-force-light) .v2-art-avatar {
+.dark .mobile-v2-shell .v2-art-avatar {
   color: rgba(255,255,255,.38);
   background: rgba(255,255,255,.05);
 }
@@ -831,37 +831,37 @@
   --v2-route-border: rgba(116, 18, 47, 0.4);
 }
 
-.dark .mobile-v2-shell:not(.v2-force-light).v2-tone-raspberry {
+.dark .mobile-v2-shell.v2-tone-raspberry {
   --v2-route-accent: #ff4f91;
   --v2-route-accent-soft: rgba(255, 79, 145, 0.1);
   --v2-route-border: rgba(255, 79, 145, 0.34);
 }
 
-.dark .mobile-v2-shell:not(.v2-force-light).v2-tone-violet {
+.dark .mobile-v2-shell.v2-tone-violet {
   --v2-route-accent: #b98aff;
   --v2-route-accent-soft: rgba(185, 138, 255, 0.1);
   --v2-route-border: rgba(185, 138, 255, 0.34);
 }
 
-.dark .mobile-v2-shell:not(.v2-force-light).v2-tone-teal {
+.dark .mobile-v2-shell.v2-tone-teal {
   --v2-route-accent: #58c9cd;
   --v2-route-accent-soft: rgba(88, 201, 205, 0.1);
   --v2-route-border: rgba(88, 201, 205, 0.34);
 }
 
-.dark .mobile-v2-shell:not(.v2-force-light).v2-tone-indigo {
+.dark .mobile-v2-shell.v2-tone-indigo {
   --v2-route-accent: #9a91ff;
   --v2-route-accent-soft: rgba(154, 145, 255, 0.1);
   --v2-route-border: rgba(154, 145, 255, 0.34);
 }
 
-.dark .mobile-v2-shell:not(.v2-force-light).v2-tone-amber {
+.dark .mobile-v2-shell.v2-tone-amber {
   --v2-route-accent: #d2a93c;
   --v2-route-accent-soft: rgba(210, 169, 60, 0.1);
   --v2-route-border: rgba(210, 169, 60, 0.34);
 }
 
-.dark .mobile-v2-shell:not(.v2-force-light).v2-tone-wine {
+.dark .mobile-v2-shell.v2-tone-wine {
   --v2-route-accent: #ff789a;
   --v2-route-accent-soft: rgba(255, 120, 154, 0.1);
   --v2-route-border: rgba(255, 120, 154, 0.34);
@@ -944,7 +944,7 @@
   box-shadow: 0 12px 30px rgba(65, 22, 44, 0.07);
 }
 
-.dark .mobile-v2-shell:not(.v2-force-light) .v2-screen :is(
+.dark .mobile-v2-shell .v2-screen :is(
   [class*="rounded-2xl"],
   [class*="rounded-3xl"],
   [class*="rounded-[18px]"],
@@ -1713,7 +1713,7 @@
     linear-gradient(155deg, #fff8fc 0%, #f9f7ff 47%, #f3fbff 100%);
 }
 
-.dark .mobile-v2-shell:not(.v2-force-light) {
+.dark .mobile-v2-shell {
   --v2-depth-1: 0 9px 0 rgba(0, 0, 0, .18), 0 24px 55px rgba(0, 0, 0, .38);
   --v2-depth-2: 0 13px 0 rgba(0, 0, 0, .2), 0 34px 75px rgba(0, 0, 0, .48);
   background:
@@ -1774,7 +1774,7 @@
   transform: rotate(-4deg);
 }
 
-.dark .mobile-v2-shell:not(.v2-force-light) .v2-logo__symbol {
+.dark .mobile-v2-shell .v2-logo__symbol {
   background: linear-gradient(145deg, #2d1731, #151525);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 7px 0 rgba(0,0,0,.24), 0 14px 26px rgba(0,0,0,.32);
 }
@@ -1874,7 +1874,7 @@
   animation: v2PlanetFloat 4.6s ease-in-out infinite alternate;
 }
 
-.dark .mobile-v2-shell:not(.v2-force-light) .v2-hero__planet {
+.dark .mobile-v2-shell .v2-hero__planet {
   background:
     radial-gradient(circle at 34% 28%, rgba(255,255,255,.28), transparent 17%),
     linear-gradient(145deg, color-mix(in srgb, var(--v2-slide) 35%, #1c1329), #121421);
@@ -1944,7 +1944,7 @@
   perspective: 850px;
 }
 
-.dark .mobile-v2-shell:not(.v2-force-light) .v2-auth__showcase {
+.dark .mobile-v2-shell .v2-auth__showcase {
   background:
     linear-gradient(145deg, rgba(28,18,35,.96), rgba(13,20,29,.92)) padding-box,
     conic-gradient(from 20deg, #ff2c9c, #8258ff, #1acbdc, #ffac24, #ff2c9c) border-box;
@@ -2223,7 +2223,7 @@
   box-shadow: none;
 }
 
-.dark .mobile-v2-shell:not(.v2-force-light) .v2-auth__showcase {
+.dark .mobile-v2-shell .v2-auth__showcase {
   background: transparent;
 }
 
@@ -2241,12 +2241,12 @@
     linear-gradient(180deg, transparent 66%, var(--v2-surface-solid) 100%);
 }
 
-.dark .mobile-v2-shell:not(.v2-force-light) .v2-auth__scene {
+.dark .mobile-v2-shell .v2-auth__scene {
   background-image: url("/assets/audition-characters/auth-login-dark.webp");
   filter: saturate(.9) contrast(.97);
 }
 
-.dark .mobile-v2-shell:not(.v2-force-light) .v2-auth__scene::after {
+.dark .mobile-v2-shell .v2-auth__scene::after {
   background:
     linear-gradient(90deg, rgba(19,15,27,.99) 0 41%, rgba(19,15,27,.92) 53%, rgba(19,15,27,.2) 76%, transparent 100%),
     linear-gradient(180deg, transparent 66%, var(--v2-surface-solid) 100%);

@@ -11,16 +11,6 @@ const tabs = [
 
 export function MobileV2BottomNav() {
   const location = useLocation();
-  const previewScreen = new URLSearchParams(location.search).get('screen');
-  const previewTargets: Record<string, string> = {
-    hot: '/prompt-library',
-    history: '/gallery',
-    wallet: '/topup',
-    profile: '/profile',
-  };
-  const activePreviewPath = location.pathname === '/mobile-v2-preview'
-    ? previewTargets[previewScreen || ''] || '/home'
-    : null;
 
   if (['/', '/login', '/payment-gateway', '/admin'].includes(location.pathname)) {
     return null;
@@ -34,10 +24,9 @@ export function MobileV2BottomNav() {
             key={path}
             to={path}
             className={({ isActive }) => {
-              const isPreviewScreen = path === activePreviewPath;
               const isStudioRoute = path === '/home'
                 && (location.pathname.startsWith('/generate/') || location.pathname.startsWith('/tools/') || location.pathname.startsWith('/tools-hub'));
-              return `v2-nav-item v2-tap${isActive || isPreviewScreen || isStudioRoute ? ' is-active' : ''}`;
+              return `v2-nav-item v2-tap${isActive || isStudioRoute ? ' is-active' : ''}`;
             }}
             aria-label={label}
           >

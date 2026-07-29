@@ -15,7 +15,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
 type ToolCategoryId = 'image' | 'video' | 'edit';
 
@@ -77,7 +77,6 @@ const categories: Record<ToolCategoryId, {
 
 export function ToolsHubV2() {
   const navigate = useNavigate();
-  const location = useLocation();
   const { category } = useParams<{ category?: string }>();
   const routeCategory = category && category in categories ? category as ToolCategoryId : null;
   const [openCategory, setOpenCategory] = useState<ToolCategoryId | null>(routeCategory);
@@ -89,9 +88,7 @@ export function ToolsHubV2() {
   const toggleCategory = (id: ToolCategoryId) => {
     const nextCategory = openCategory === id ? null : id;
     setOpenCategory(nextCategory);
-    if (location.pathname !== '/mobile-v2-preview') {
-      navigate(nextCategory ? `/tools-hub/${nextCategory}` : '/tools-hub', { replace: true });
-    }
+    navigate(nextCategory ? `/tools-hub/${nextCategory}` : '/tools-hub', { replace: true });
   };
 
   return (

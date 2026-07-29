@@ -1,22 +1,22 @@
 import { useState, useRef, useEffect } from 'react';
 import { Sparkles, Scissors, ImagePlus, Wand2, Zap, Crown, Loader, ArrowLeft } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Button } from '../components/ui/Button';
-import { useAuth } from '../contexts/AuthContext';
-import { useNotification } from '../components/NotificationSystem';
-import { getUserProfile, getModelPricing } from '../services/economyService';
-import { useConcurrency, CONCURRENCY_LIMITS } from '../services/concurrencyService';
-import { saveImageToLocalCache, uploadFileToR2 } from '../services/storageService';
+import { Button } from '../../components/ui/Button';
+import { useAuth } from '../../contexts/AuthContext';
+import { useNotification } from '../../components/NotificationSystem';
+import { getUserProfile, getModelPricing } from '../../services/economyService';
+import { useConcurrency, CONCURRENCY_LIMITS } from '../../services/concurrencyService';
+import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import {
   getVertexEditToolCostBreakdown,
   getVertexEditResolutionCostMap,
   type AuditionPricingOverride,
-} from '../services/tstCatalog';
-import type { GeneratedImage } from '../types';
-import { enqueueDirectImageEdit } from '../../../services/directImageEditService';
-import { buildEnhancedVertexEditInstruction } from '../../../services/characterImageAssistService';
-import type { ImageEditRecipePayload } from '../../../shared/queueRecipes';
-import { DIRECT_IMAGE_EDIT_QUEUE_KIND } from '../../../shared/queueKinds';
+} from '../../services/tstCatalog';
+import type { GeneratedImage } from '../../types';
+import { enqueueDirectImageEdit } from '../../../../services/directImageEditService';
+import { buildEnhancedVertexEditInstruction } from '../../../../services/characterImageAssistService';
+import type { ImageEditRecipePayload } from '../../../../shared/queueRecipes';
+import { DIRECT_IMAGE_EDIT_QUEUE_KIND } from '../../../../shared/queueKinds';
 
 const loadImageWithTimeout = (url: string, timeoutMs: number = 10000): Promise<HTMLImageElement> => {
   return new Promise((resolve, reject) => {

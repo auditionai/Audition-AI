@@ -6,10 +6,7 @@ import '../mobile-v2.css';
 
 export function MobileV2Layout() {
   const location = useLocation();
-  const isStandalonePreview = location.pathname === '/mobile-v2-preview';
   const hasBottomNav = !['/', '/login', '/payment-gateway', '/admin'].includes(location.pathname);
-  const previewTheme = new URLSearchParams(location.search).get('preview-theme');
-  const forceLightPreview = isStandalonePreview && previewTheme !== 'dark';
   const routeTone = (() => {
     if (location.pathname.startsWith('/generate/image')) return 'raspberry';
     if (location.pathname.startsWith('/generate/video')) return 'violet';
@@ -25,12 +22,12 @@ export function MobileV2Layout() {
 
   return (
     <div
-      className={`mobile-v2-shell v2-tone-${routeTone}${forceLightPreview ? ' v2-force-light' : ''}`}
+      className={`mobile-v2-shell v2-tone-${routeTone}`}
       data-v2-route={location.pathname}
     >
       <AuroraBackdrop />
       <MobileV2TopBar />
-      <main className={`mobile-v2-content${hasBottomNav ? ' has-bottom-nav' : ''}${location.pathname === '/home' || isStandalonePreview || location.pathname === '/' ? '' : ' v2-screen'}`}>
+      <main className={`mobile-v2-content${hasBottomNav ? ' has-bottom-nav' : ''}${location.pathname === '/home' || location.pathname === '/' ? '' : ' v2-screen'}`}>
         <Outlet />
       </main>
       <MobileV2BottomNav />

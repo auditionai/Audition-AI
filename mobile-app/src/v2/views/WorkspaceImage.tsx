@@ -10,11 +10,11 @@ import {
   X, User, Zap, Crown, RefreshCw, Loader, AlertTriangle, Wand2, Scissors,
   Workflow, Cpu, Server, ImageDown, ArrowRight,
 } from 'lucide-react';
-import { Button } from '../components/ui/Button';
+import { Button } from '../../components/ui/Button';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
-import { useNotification } from '../components/NotificationSystem';
-import { APP_CONFIG } from '../constants';
+import { useAuth } from '../../contexts/AuthContext';
+import { useNotification } from '../../components/NotificationSystem';
+import { APP_CONFIG } from '../../constants';
 import {
   getUserProfile,
   getStylePresets,
@@ -22,10 +22,10 @@ import {
   getTstServerAvailabilityConfig,
   getGenerationGuideImages,
   type GenerationGuideImagesConfig,
-} from '../services/economyService';
-import { useConcurrency, CONCURRENCY_LIMITS } from '../services/concurrencyService';
-import { enqueueServerJob } from '../services/serverQueueService';
-import { saveImageToLocalCache, uploadFileToR2 } from '../services/storageService';
+} from '../../services/economyService';
+import { useConcurrency, CONCURRENCY_LIMITS } from '../../services/concurrencyService';
+import { enqueueServerJob } from '../../services/serverQueueService';
+import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import {
   fetchTstPricing, fetchTstModels,
   getCompatibleGenerationResolutions, getCompatibleGenerationServers, getCompatibleGenerationSpeeds,
@@ -34,19 +34,19 @@ import {
   applyServerAvailabilityToRuntimeModels, sanitizePricingEntriesWithRuntimeModels,
   uiSpeedToTst, uiServerToTst, tstServerToUi,
   type TstPricingEntry, type TstRuntimeModel, type AuditionPricingOverride, type TstResolution, type TstGenerationTier,
-} from '../services/tstCatalog';
-import type { ModelPricing } from '../services/economyService';
-import type { GeneratedImage } from '../types';
-import { caulenhauClient } from '../services/supabaseClient';
-import { buildAuditionKoreaMmoStylePrompt, DEFAULT_IMAGE_NEGATIVE_PROMPT } from '../../../shared/imagePromptDefaults';
-import { PROMPT_LIBRARY_APPLY_EVENT, consumeStashedPromptForGenerator } from '../../../shared/caulenhauSamples';
-import type { CharacterReferenceGroup, ImageGenerateRecipePayload } from '../../../shared/queueRecipes';
-import { analyzeCharacterAppearanceProfile, createPoseOnlyReference, optimizePayload } from '../../../utils/imageProcessor';
+} from '../../services/tstCatalog';
+import type { ModelPricing } from '../../services/economyService';
+import type { GeneratedImage } from '../../types';
+import { caulenhauClient } from '../../services/supabaseClient';
+import { buildAuditionKoreaMmoStylePrompt, DEFAULT_IMAGE_NEGATIVE_PROMPT } from '../../../../shared/imagePromptDefaults';
+import { PROMPT_LIBRARY_APPLY_EVENT, consumeStashedPromptForGenerator } from '../../../../shared/caulenhauSamples';
+import type { CharacterReferenceGroup, ImageGenerateRecipePayload } from '../../../../shared/queueRecipes';
+import { analyzeCharacterAppearanceProfile, createPoseOnlyReference, optimizePayload } from '../../../../utils/imageProcessor';
 import {
   CHARACTER_ASSISTANT_RESOLUTION,
   runCharacterAssistantAction,
   type CharacterAssistantToolId,
-} from '../../../services/characterImageAssistService';
+} from '../../../../services/characterImageAssistService';
 
 type GenMode = 'single' | 'couple' | 'trio' | 'squad' | 'group5';
 type Stage = 'input' | 'submitting';

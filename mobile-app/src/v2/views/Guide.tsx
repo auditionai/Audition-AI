@@ -1,5 +1,5 @@
 /**
- * Guide View (Mobile)
+ * Guide View (Mobile V2)
  */
 import { Menu, Wand, Zap, Download, Sparkles } from 'lucide-react';
 

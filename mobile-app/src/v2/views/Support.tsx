@@ -1,5 +1,5 @@
 /**
- * Support View (Mobile)
+ * Support View (Mobile V2)
  */
 import { Globe2, Heart, Phone, Mail, MessageCircle, MonitorSmartphone } from 'lucide-react';
 

@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { ManualPaymentGateway } from '../../../views/ManualPaymentGateway';
-import type { Transaction } from '../types';
+import { ManualPaymentGateway } from '../../../../views/ManualPaymentGateway';
+import type { Transaction } from '../../types';
 
 const PENDING_TRANSACTION_STORAGE_KEY = 'audition-mobile-pending-transaction';
 

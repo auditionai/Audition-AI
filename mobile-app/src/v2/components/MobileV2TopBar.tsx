@@ -18,7 +18,7 @@ export function MobileV2TopBar() {
     { force: true },
   ), []);
 
-  if (['/', '/login', '/payment-gateway', '/admin', '/home', '/mobile-v2-preview'].includes(location.pathname)) {
+  if (['/', '/login', '/payment-gateway', '/admin', '/home'].includes(location.pathname)) {
     return null;
   }
 

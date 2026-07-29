@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Bot, Crown, Gem, ImagePlus, Loader, Plus, Sparkles, X, Zap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useNotification } from '../components/NotificationSystem';
-import { getModelPricing, getTstServerAvailabilityConfig, getUserProfile } from '../services/economyService';
-import { useConcurrency, CONCURRENCY_LIMITS } from '../services/concurrencyService';
-import { enqueueServerJob } from '../services/serverQueueService';
-import { saveImageToLocalCache, uploadFileToR2 } from '../services/storageService';
+import { useNotification } from '../../components/NotificationSystem';
+import { getModelPricing, getTstServerAvailabilityConfig, getUserProfile } from '../../services/economyService';
+import { useConcurrency, CONCURRENCY_LIMITS } from '../../services/concurrencyService';
+import { enqueueServerJob } from '../../services/serverQueueService';
+import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import {
   fetchTstPricing,
   fetchTstModels,
@@ -24,12 +24,12 @@ import {
   type TstPricingEntry,
   type TstResolution,
   type AuditionPricingOverride,
-} from '../services/tstCatalog';
-import { optimizePayload } from '../../../utils/imageProcessor';
-import { buildAuditionKoreaMmoStylePrompt, DEFAULT_IMAGE_NEGATIVE_PROMPT } from '../../../shared/imagePromptDefaults';
-import type { GeneratedImage } from '../types';
-import type { ModelPricing } from '../services/economyService';
-import type { PromptImageGenerateRecipePayload } from '../../../shared/queueRecipes';
+} from '../../services/tstCatalog';
+import { optimizePayload } from '../../../../utils/imageProcessor';
+import { buildAuditionKoreaMmoStylePrompt, DEFAULT_IMAGE_NEGATIVE_PROMPT } from '../../../../shared/imagePromptDefaults';
+import type { GeneratedImage } from '../../types';
+import type { ModelPricing } from '../../services/economyService';
+import type { PromptImageGenerateRecipePayload } from '../../../../shared/queueRecipes';
 
 const DEFAULT_REFERENCE_IMAGE_LIMIT = 4;
 const GPT_REFERENCE_IMAGE_LIMIT = 5;

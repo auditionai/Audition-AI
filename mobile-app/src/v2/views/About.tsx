@@ -1,5 +1,5 @@
 /**
- * About View (Mobile)
+ * About View (Mobile V2)
  */
 import { Bot, BrainCircuit, Film, Info, Sparkles, Video, WandSparkles, Zap } from 'lucide-react';
 

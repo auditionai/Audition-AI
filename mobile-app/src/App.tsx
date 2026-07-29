@@ -5,19 +5,15 @@ import { AlertTriangle, Loader, Lock } from 'lucide-react';
 import { NotificationProvider, useNotification } from './components/NotificationSystem';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
-import { MobileLayout } from './components/layout/MobileLayout';
 import { MobileV2Layout } from './v2/components/MobileV2Layout';
 import { AuditionV2Logo } from './v2/components/AuditionV2Logo';
-import { useMobileUiVersion } from './v2/mobileUiVersion';
 import { syncPaymentTransaction } from './services/serverQueueService';
 import { trackEvent, trackPageView } from './services/analyticsService';
 import { getFeatureMaintenanceConfig, getSystemAnnouncementConfig, isFeatureInMaintenance, type FeatureMaintenanceConfig, type SystemAnnouncementConfig } from './services/economyService';
 import { AppEventPopup, type AppEventPopupData, SystemAnnouncementModal } from '../../components/AppNotificationPopups';
 import { AppTour } from '../../components/AppTour';
-import './mobile-shell.css';
 
 const HomeV2 = lazy(() => import('./v2/views/HomeV2').then((module) => ({ default: module.HomeV2 })));
-const MobileV2Preview = lazy(() => import('./v2/views/MobileV2Preview').then((module) => ({ default: module.MobileV2Preview })));
 const AuthV2 = lazy(() => import('./v2/views/AuthV2').then((module) => ({ default: module.AuthV2 })));
 const ToolsHubV2 = lazy(() => import('./v2/views/ToolsHubV2').then((module) => ({ default: module.ToolsHubV2 })));
 const loadV2Feature = <T extends keyof typeof import('./v2/views/V2FeatureViews')>(name: T) =>
@@ -35,22 +31,6 @@ const PromptLibraryV2 = loadV2Feature('PromptLibraryV2');
 const SupportV2 = loadV2Feature('SupportV2');
 const TopUpV2 = loadV2Feature('TopUpV2');
 const VideoStudioV2 = loadV2Feature('VideoStudioV2');
-
-const Splash = lazy(() => import('./views/Splash').then((module) => ({ default: module.Splash })));
-const Home = lazy(() => import('./views/Home').then((module) => ({ default: module.Home })));
-const WorkspaceImage = lazy(() => import('./views/WorkspaceImage').then((module) => ({ default: module.WorkspaceImage })));
-const WorkspaceVideo = lazy(() => import('./views/WorkspaceVideo').then((module) => ({ default: module.WorkspaceVideo })));
-const WorkspaceEdit = lazy(() => import('./views/WorkspaceEdit').then((module) => ({ default: module.WorkspaceEdit })));
-const WorkspacePromptImage = lazy(() => import('./views/WorkspacePromptImage').then((module) => ({ default: module.WorkspacePromptImage })));
-const Gallery = lazy(() => import('./views/Gallery').then((module) => ({ default: module.Gallery })));
-const PromptLibrary = lazy(() => import('./views/PromptLibrary').then((module) => ({ default: module.PromptLibrary })));
-const TopUp = lazy(() => import('./views/TopUp').then((module) => ({ default: module.TopUp })));
-const Settings = lazy(() => import('./views/Settings').then((module) => ({ default: module.Settings })));
-const About = lazy(() => import('./views/About').then((module) => ({ default: module.About })));
-const Support = lazy(() => import('./views/Support').then((module) => ({ default: module.Support })));
-const Guide = lazy(() => import('./views/Guide').then((module) => ({ default: module.Guide })));
-const AdminView = lazy(() => import('./views/Admin').then((module) => ({ default: module.AdminView })));
-const PaymentGatewayView = lazy(() => import('./views/PaymentGateway').then((module) => ({ default: module.PaymentGatewayView })));
 
 const SYSTEM_ANNOUNCEMENT_DISMISS_STORAGE_KEY = 'auditionai:system-announcement-dismissed';
 const SYSTEM_ANNOUNCEMENT_DISMISS_MS = 12 * 60 * 60 * 1000;
@@ -129,33 +109,18 @@ function FeatureMaintenanceGuard({ children }: { children: React.ReactElement })
 
 function AppRoutes() {
   const { isAuthenticated, isLoading } = useAuth();
-  const location = useLocation();
-  const mobileUiVersion = useMobileUiVersion();
-  const isMobileV2 = mobileUiVersion === 'v2';
 
   if (isLoading) {
-    if (isMobileV2) {
-      return (
-        <div className="mobile-v2-shell v2-loading-screen">
-          <div className="v2-loading-screen__universe" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-          </div>
-          <AuditionV2Logo />
-          <div className="v2-loading-screen__bar"><span /></div>
-          <p>Đang mở Creative Universe…</p>
-        </div>
-      );
-    }
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white dark:bg-[#18181B]">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#111] to-[#444] shadow-2xl flex items-center justify-center">
-            <span className="text-white text-3xl font-bold">A</span>
-          </div>
-          <Loader className="w-6 h-6 animate-spin text-gray-400 dark:text-zinc-500" />
+      <div className="mobile-v2-shell v2-loading-screen">
+        <div className="v2-loading-screen__universe" aria-hidden="true">
+          <span />
+          <span />
+          <span />
         </div>
+        <AuditionV2Logo />
+        <div className="v2-loading-screen__bar"><span /></div>
+        <p>Đang mở Creative Universe…</p>
       </div>
     );
   }
@@ -167,40 +132,30 @@ function AppRoutes() {
       </div>
     }>
       <Routes>
-      <Route element={<MobileV2Layout />}>
-        <Route path="/mobile-v2-preview" element={<MobileV2Preview />} />
-      </Route>
       {!isAuthenticated ? (
-        isMobileV2 ? (
-          <Route element={<MobileV2Layout />}>
-            <Route path="/" element={<AuthV2 />} />
-            <Route path="*" element={<Navigate to={`/${location.search}`} replace />} />
-          </Route>
-        ) : (
-          <>
-            <Route path="/" element={<Splash />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </>
-        )
+        <Route element={<MobileV2Layout />}>
+          <Route path="/" element={<AuthV2 />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Route>
       ) : (
         <>
-          <Route element={isMobileV2 ? <MobileV2Layout /> : <MobileLayout />}>
-            <Route path="/home" element={isMobileV2 ? <HomeV2 /> : <Home />} />
-            {isMobileV2 && <Route path="/tools-hub" element={<ToolsHubV2 />} />}
-            {isMobileV2 && <Route path="/tools-hub/:category" element={<ToolsHubV2 />} />}
-            <Route path="/generate/image" element={<FeatureMaintenanceGuard>{isMobileV2 ? <ImageStudioV2 /> : <WorkspaceImage />}</FeatureMaintenanceGuard>} />
-            <Route path="/generate/video" element={<FeatureMaintenanceGuard>{isMobileV2 ? <VideoStudioV2 /> : <WorkspaceVideo />}</FeatureMaintenanceGuard>} />
-            <Route path="/tools/ai-image" element={<FeatureMaintenanceGuard>{isMobileV2 ? <PromptImageStudioV2 /> : <WorkspacePromptImage />}</FeatureMaintenanceGuard>} />
-            <Route path="/tools/:toolId" element={<FeatureMaintenanceGuard>{isMobileV2 ? <EditStudioV2 /> : <WorkspaceEdit />}</FeatureMaintenanceGuard>} />
-            <Route path="/gallery" element={isMobileV2 ? <GalleryV2 /> : <Gallery />} />
-            <Route path="/prompt-library" element={isMobileV2 ? <PromptLibraryV2 /> : <PromptLibrary />} />
-            <Route path="/topup" element={isMobileV2 ? <TopUpV2 /> : <TopUp />} />
-            <Route path="/payment-gateway" element={isMobileV2 ? <PaymentGatewayV2 /> : <PaymentGatewayView />} />
-            <Route path="/profile" element={isMobileV2 ? <ProfileV2 /> : <Settings />} />
-            <Route path="/about" element={isMobileV2 ? <AboutV2 /> : <About />} />
-            <Route path="/support" element={isMobileV2 ? <SupportV2 /> : <Support />} />
-            <Route path="/guide" element={isMobileV2 ? <GuideV2 /> : <Guide />} />
-            <Route path="/admin" element={isMobileV2 ? <AdminV2 /> : <AdminView />} />
+          <Route element={<MobileV2Layout />}>
+            <Route path="/home" element={<HomeV2 />} />
+            <Route path="/tools-hub" element={<ToolsHubV2 />} />
+            <Route path="/tools-hub/:category" element={<ToolsHubV2 />} />
+            <Route path="/generate/image" element={<FeatureMaintenanceGuard><ImageStudioV2 /></FeatureMaintenanceGuard>} />
+            <Route path="/generate/video" element={<FeatureMaintenanceGuard><VideoStudioV2 /></FeatureMaintenanceGuard>} />
+            <Route path="/tools/ai-image" element={<FeatureMaintenanceGuard><PromptImageStudioV2 /></FeatureMaintenanceGuard>} />
+            <Route path="/tools/:toolId" element={<FeatureMaintenanceGuard><EditStudioV2 /></FeatureMaintenanceGuard>} />
+            <Route path="/gallery" element={<GalleryV2 />} />
+            <Route path="/prompt-library" element={<PromptLibraryV2 />} />
+            <Route path="/topup" element={<TopUpV2 />} />
+            <Route path="/payment-gateway" element={<PaymentGatewayV2 />} />
+            <Route path="/profile" element={<ProfileV2 />} />
+            <Route path="/about" element={<AboutV2 />} />
+            <Route path="/support" element={<SupportV2 />} />
+            <Route path="/guide" element={<GuideV2 />} />
+            <Route path="/admin" element={<AdminV2 />} />
           </Route>
           <Route path="/" element={<Navigate to="/home" replace />} />
           <Route path="*" element={<Navigate to="/home" replace />} />

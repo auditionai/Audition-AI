@@ -161,7 +161,9 @@ const ensureGeneratedTopupGiftcode = async (admin: any, userId: string, generate
       assigned_user_id: userId,
       auto_generate_per_user: false,
       total_limit: 1,
-      max_per_user: 1,
+      // Generated codes inherit the campaign allowance. Otherwise the first
+      // successful payment exhausts a campaign that permits multiple uses.
+      max_per_user: Math.max(1, Number(template.max_per_user || 1)),
       expires_at: template.expires_at || null,
       is_active: true,
     })

@@ -56,7 +56,7 @@ const CHECKIN_HISTORY_LOOKBACK_DAYS = 30;
 const ADMIN_STATS_TRANSACTION_LIMIT = 1000;
 const ADMIN_STATS_USAGE_LOG_LIMIT = 3000;
 const ADMIN_STATS_USER_PAGE_SIZE = 500;
-const TOPUP_GIFTCODE_CACHE_KEY = 'auditionai:topup-giftcodes:v1';
+const TOPUP_GIFTCODE_CACHE_KEY = 'auditionai:topup-giftcodes:v2';
 const TOPUP_GIFTCODE_CACHE_TTL_MS = 10 * 60_000;
 const FIRST_TOPUP_GIFTCODE_ELIGIBLE_FROM_MS = Date.parse('2026-06-01T00:00:00+07:00');
 const USER_PROFILE_SELECT =
@@ -2153,7 +2153,6 @@ export const getTopupGiftcodePreviews = async (): Promise<TopupGiftcodeOffer[]> 
         })
         .filter(Boolean) as TopupGiftcodeOffer[];
 
-    cacheTopupGiftcodes(previewRows);
     return previewRows;
 };
 
@@ -2183,16 +2182,14 @@ export const getTopupGiftcodes = async (): Promise<TopupGiftcodeOffer[]> => {
             return availableRows;
         }
     } catch (error) {
-        console.warn('[TopUp] API giftcode list failed, using public template fallback', error);
+        console.warn('[TopUp] API giftcode list failed', error);
+        if (typeof window !== 'undefined') {
+            window.localStorage.removeItem(TOPUP_GIFTCODE_CACHE_KEY);
+        }
+        throw error;
     }
 
-    const fallbackRows = await getTopupGiftcodePreviews();
-    const availableFallbackRows = fallbackRows.filter((row) => {
-        const remainingPerUser = Number(row.remainingPerUser ?? row.maxPerUser ?? 1);
-        return row.status === 'available' && remainingPerUser > 0 && ['all', 'new_user_first_topup'].includes(String(row.audience || 'all'));
-    });
-    cacheTopupGiftcodes(availableFallbackRows);
-    return availableFallbackRows;
+    return [];
 };
 
 export const createPaymentLink = async (packageId: string, topupGiftcode?: string): Promise<Transaction> => {
@@ -2238,6 +2235,7 @@ export const createPaymentLink = async (packageId: string, topupGiftcode?: strin
         const tx = paymentData?.transaction;
 
         if (!res.ok || !paymentData?.success || !tx?.checkoutUrl) {
+            removeCachedTopupGiftcode(topupGiftcode);
             throw new Error(paymentData?.desc || paymentData?.error || 'Failed to create payment checkout URL');
         }
 

@@ -112,6 +112,11 @@ export function TopUpV2() {
       navigate('/payment-gateway', { state: { transaction } });
     } catch (error) {
       notify(error instanceof Error ? error.message : 'Không thể tạo giao dịch.', 'error');
+      try {
+        setGiftcodes(await getTopupGiftcodes());
+      } catch {
+        setGiftcodes([]);
+      }
     } finally {
       setPaying(false);
     }

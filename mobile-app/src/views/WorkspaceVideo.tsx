@@ -7,7 +7,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 
 import {
-  Sparkles, ImagePlus, Coins,
+  Sparkles, ImagePlus, Gem,
   Film, User, Loader, AlertTriangle,
   Video, Music, VolumeX 
 } from 'lucide-react';
@@ -1145,7 +1145,7 @@ export function WorkspaceVideo() {
 
           <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-black/20 px-2.5 py-1 rounded-full backdrop-blur-md">
             <span className="text-[12px] font-bold text-white">{isCatalogReady ? calculateCost() : '...'}</span>
-            <Coins className="w-3 h-3 text-yellow-300" />
+            <Gem className="w-3 h-3 text-yellow-300" />
           </div>
         </Button>
       </div>

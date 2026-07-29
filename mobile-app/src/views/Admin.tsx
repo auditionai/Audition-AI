@@ -7,7 +7,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronUp,
-  Coins,
+  Gem,
   CreditCard,
   Gift,
   Image as ImageIcon,
@@ -1155,7 +1155,7 @@ export function AdminView() {
               ['users', 'User', Users],
               ['packages', 'Gói nạp', Package],
               ['marketing', 'Sự kiện', Gift],
-              ['pricing', 'Bảng giá', Coins],
+              ['pricing', 'Bảng giá', Gem],
               ['styles', 'Style', Palette],
               ['system', 'Hệ thống', Server],
             ] as Array<[AdminTab, string, typeof Activity]>).map(([tab, label, Icon]) => (
@@ -1194,7 +1194,7 @@ export function AdminView() {
               </Card>
 
               <Card>
-                <div className="mb-4 flex items-start gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gray-100 dark:bg-zinc-800"><Coins className="h-5 w-5 text-gray-700 dark:text-white" /></div><div><h2 className="text-base font-black text-gray-900 dark:text-white">Thống kê sử dụng</h2><p className="mt-1 text-xs text-gray-500 dark:text-zinc-400">Top công cụ được sử dụng nhiều nhất</p></div></div>
+                <div className="mb-4 flex items-start gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gray-100 dark:bg-zinc-800"><Gem className="h-5 w-5 text-gray-700 dark:text-white" /></div><div><h2 className="text-base font-black text-gray-900 dark:text-white">Thống kê sử dụng</h2><p className="mt-1 text-xs text-gray-500 dark:text-zinc-400">Top công cụ được sử dụng nhiều nhất</p></div></div>
                 <div className="space-y-3">{aiUsageRows.length === 0 ? <div className="rounded-[24px] bg-gray-50 px-4 py-5 text-sm text-gray-500 dark:bg-zinc-800/80 dark:text-zinc-400">Chưa có dữ liệu sử dụng.</div> : aiUsageRows.map((row) => <div key={row.feature} className="flex items-center justify-between rounded-[24px] bg-gray-50 px-4 py-4 dark:bg-zinc-800/80"><div className="min-w-0"><div className="truncate text-sm font-bold text-gray-900 dark:text-white">{row.feature}</div><div className="mt-1 text-xs text-gray-500 dark:text-zinc-400">{row.count} lượt</div></div><div className="text-right"><div className="text-sm font-black text-pink-500">{row.vcoins} VC</div><div className="text-[11px] text-emerald-500">{new Intl.NumberFormat('vi-VN').format(row.revenue)}đ</div></div></div>)}</div>
               </Card>
 
@@ -1571,7 +1571,7 @@ export function AdminView() {
 
         {activeTab === 'pricing' && (
           <Card>
-            <div className="mb-4 flex items-start gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gray-100 dark:bg-zinc-800"><Coins className="h-5 w-5 text-gray-700 dark:text-white" /></div><div><h2 className="text-base font-black text-gray-900 dark:text-white">Bảng giá AI</h2><p className="mt-1 text-xs text-gray-500 dark:text-zinc-400">Sửa giá Vcoin theo model, server, độ phân giải và duration.</p></div></div>
+            <div className="mb-4 flex items-start gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gray-100 dark:bg-zinc-800"><Gem className="h-5 w-5 text-gray-700 dark:text-white" /></div><div><h2 className="text-base font-black text-gray-900 dark:text-white">Bảng giá AI</h2><p className="mt-1 text-xs text-gray-500 dark:text-zinc-400">Sửa giá Vcoin theo model, server, độ phân giải và duration.</p></div></div>
             <div className="mb-3 grid grid-cols-3 gap-2 text-xs">
               <div className={compactPanelClass}><div className="text-gray-400">Rows</div><div className="mt-1 text-lg font-black dark:text-white">{pricingRows.length}</div></div>
               <div className={compactPanelClass}><div className="text-gray-400">Model</div><div className="mt-1 text-lg font-black text-cyan-500">{new Set(pricingRows.map((row) => row.modelId)).size}</div></div>

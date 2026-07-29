@@ -33,6 +33,7 @@ export function PromptLibraryV2() {
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [failedSampleIds, setFailedSampleIds] = useState<Set<string | number>>(() => new Set());
 
   const category = useMemo(
     () => CAULENHAU_SAMPLE_CATEGORIES.find((item) => item.id === categoryId) || CAULENHAU_SAMPLE_CATEGORIES[0],
@@ -63,6 +64,7 @@ export function PromptLibraryV2() {
       const learning = await fetchPromptLibrarySearchLearningStats(supabase, query, enriched.map((item) => item.id));
       let learned = applyPromptLibraryLearningScores(enriched, learning, query);
       if (sort === 'popular') learned = [...learned].sort((a, b) => (b.total_use_count || 0) - (a.total_use_count || 0));
+      if (nextPage === 0) setFailedSampleIds(new Set());
       setSamples((current) => nextPage === 0 ? learned : [...current, ...learned]);
       setPage(nextPage);
       setHasMore(rows.length === PROMPT_LIBRARY_PAGE_SIZE);
@@ -89,8 +91,16 @@ export function PromptLibraryV2() {
     navigate(`/generate/image?tool=${encodeURIComponent(getPromptLibraryFeatureId(sample))}`);
   };
 
-  const featured = samples[0];
-  const remaining = samples.slice(1);
+  const visibleSamples = samples.filter((sample) => !failedSampleIds.has(sample.id));
+  const featured = visibleSamples[0];
+  const remaining = visibleSamples.slice(1);
+  const hideBrokenSample = (sampleId: string | number) => {
+    setFailedSampleIds((current) => {
+      const next = new Set(current);
+      next.add(sampleId);
+      return next;
+    });
+  };
 
   return (
     <div className="v2-hot-page">
@@ -138,7 +148,12 @@ export function PromptLibraryV2() {
 
       {featured && (
         <button type="button" className="v2-hot-featured v2-tap" onClick={() => void useSample(featured)}>
-          <img src={featured.image_url} alt={featured.category} />
+          <img
+            src={featured.image_url}
+            alt={featured.category}
+            decoding="async"
+            onError={() => hideBrokenSample(featured.id)}
+          />
           <span className="v2-hot-featured__shade" />
           <span className="v2-hot-featured__copy">
             <small><Flame size={13} /> Mẫu nổi bật hôm nay</small>
@@ -157,9 +172,7 @@ export function PromptLibraryV2() {
               alt={`Mẫu ${sample.category}`}
               loading="lazy"
               decoding="async"
-              onError={(event) => {
-                event.currentTarget.hidden = true;
-              }}
+              onError={() => hideBrokenSample(sample.id)}
             />
             <span className="v2-hot-card__tags">
               {getPromptLibraryTags(sample).map((tag) => <b key={tag}>{tag}</b>)}

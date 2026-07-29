@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, Coins, Crown, ImagePlus, Loader, Plus, Sparkles, X, Zap } from 'lucide-react';
+import { Bot, Crown, Gem, ImagePlus, Loader, Plus, Sparkles, X, Zap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../components/NotificationSystem';
 import { getModelPricing, getTstServerAvailabilityConfig, getUserProfile } from '../services/economyService';
@@ -103,7 +103,7 @@ export function WorkspacePromptImage() {
   const [activeUploadIndex, setActiveUploadIndex] = useState(0);
   const [prompt, setPrompt] = useState('');
   const [aiModel, setAiModel] = useState<TstGenerationTier>('gpt');
-  const [aspectRatio, setAspectRatio] = useState('3:4');
+  const [aspectRatio, setAspectRatio] = useState('9:16');
   const [resolution, setResolution] = useState<TstResolution>('1K');
   const [speed, setSpeed] = useState('Nhanh');
   const [server, setServer] = useState('VIP 1');
@@ -583,7 +583,7 @@ export function WorkspacePromptImage() {
               <div className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-zinc-500">Chi phí</div>
               <div className="mt-1 flex items-center justify-end gap-1 text-sm font-bold text-gray-900 dark:text-white">
                 {costDisplay}
-                <Coins className="h-3.5 w-3.5 text-[var(--color-accent)]" />
+                <Gem className="h-3.5 w-3.5 text-[var(--color-accent)]" />
               </div>
             </div>
           </div>
@@ -616,7 +616,7 @@ export function WorkspacePromptImage() {
         className="fixed left-4 right-4 bottom-24 z-20 rounded-2xl bg-gradient-to-r from-fuchsia-600 to-cyan-500 py-3.5 text-white font-black shadow-2xl flex items-center justify-center gap-2 disabled:opacity-60"
       >
         {isSubmitting ? <Loader className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
-        {isSubmitting ? 'Đang gửi job...' : <span className="flex items-center gap-1">Tạo ảnh {selectedCost.available ? totalCost : '?'} <Coins className="w-4 h-4" /></span>}
+        {isSubmitting ? 'Đang gửi job...' : <span className="flex items-center gap-1">Tạo ảnh {selectedCost.available ? totalCost : '?'} <Gem className="w-4 h-4" /></span>}
       </button>
     </div>
   );

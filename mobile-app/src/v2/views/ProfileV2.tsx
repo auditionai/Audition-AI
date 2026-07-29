@@ -5,8 +5,10 @@ import {
   Check,
   ChevronRight,
   CircleHelp,
-  Coins,
+  FileText,
+  Gem,
   Gift,
+  Info,
   KeyRound,
   Loader,
   LogOut,
@@ -15,7 +17,6 @@ import {
   Sparkles,
   SunMedium,
   UserRound,
-  WandSparkles,
   X,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -140,8 +141,8 @@ export function ProfileV2() {
       </section>
 
       <section className="v2-profile-wallet" onClick={() => navigate('/topup')}>
-        <span><Coins size={24} /></span>
-        <div><small>Năng lượng hiện có</small><strong>{(user?.vcoin_balance || 0).toLocaleString('vi-VN')} <em>Vcoin</em></strong></div>
+        <span><Gem size={25} /></span>
+        <div><small>Số dư khả dụng</small><strong>{(user?.vcoin_balance || 0).toLocaleString('vi-VN')} <em>Vcoin</em></strong></div>
         <button type="button">Nạp thêm <ArrowRight size={16} /></button>
       </section>
 
@@ -185,14 +186,27 @@ export function ProfileV2() {
           <div><strong>Bảo mật tài khoản</strong><small>Đổi mật khẩu đăng nhập</small></div>
           <ChevronRight size={19} />
         </button>
+      </section>
+
+      <div className="v2-profile-section-label">
+        <span>Hỗ trợ</span>
+        <h2>Hỗ trợ &amp; thông tin</h2>
+      </div>
+
+      <section className="v2-profile-actions v2-profile-actions--support">
         <button type="button" onClick={() => navigate('/guide')}>
-          <span className="is-cyan"><WandSparkles size={23} /></span>
-          <div><strong>Học viện sáng tạo</strong><small>Hướng dẫn dùng các công cụ AI</small></div>
+          <span className="is-cyan"><FileText size={23} /></span>
+          <div><strong>Hướng dẫn sử dụng</strong><small>Khám phá cách dùng từng công cụ AI</small></div>
           <ChevronRight size={19} />
         </button>
         <button type="button" onClick={() => navigate('/support')}>
           <span className="is-gold"><CircleHelp size={23} /></span>
           <div><strong>Trung tâm hỗ trợ</strong><small>Giải đáp và liên hệ đội ngũ</small></div>
+          <ChevronRight size={19} />
+        </button>
+        <button type="button" onClick={() => navigate('/about')}>
+          <span className="is-rose"><Info size={23} /></span>
+          <div><strong>Về chúng tôi</strong><small>Thông tin về Audition AI Studio</small></div>
           <ChevronRight size={19} />
         </button>
         {userRole === 'admin' && (

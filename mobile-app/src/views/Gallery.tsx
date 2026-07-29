@@ -5,7 +5,7 @@ import {
   ArrowUpCircle,
   CheckCircle2,
   Clock3,
-  Coins,
+  Gem,
   Download,
   Filter,
   Gift,
@@ -572,7 +572,7 @@ export const Gallery: React.FC = () => {
         ) : loadingTransactions ? (
           <div className="flex justify-center py-20"><Loader className="h-7 w-7 animate-spin text-gray-300" /></div>
         ) : transactions.length === 0 ? (
-          <div className="py-20 text-center"><Coins className="mx-auto mb-3 h-12 w-12 text-gray-200" /><p className="text-sm text-gray-400 dark:text-zinc-500">Chưa có giao dịch nào.</p></div>
+          <div className="py-20 text-center"><Gem className="mx-auto mb-3 h-12 w-12 text-gray-200" /><p className="text-sm text-gray-400 dark:text-zinc-500">Chưa có giao dịch nào.</p></div>
         ) : (
           <div className="space-y-2.5">
             {transactions.map((transaction) => {

@@ -5,7 +5,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { Coins, Gift, Settings, Zap } from 'lucide-react';
+import { Gem, Gift, Settings, Zap } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { getActivePromotion, getGiftcodePromoConfig, type PromotionCampaign } from '../../services/economyService';
@@ -124,7 +124,7 @@ export function TopBar() {
         <div className="flex items-center gap-3">
           <Link to="/topup" data-tour-id="mobile.layout.vcoin">
             <div className="flex items-center gap-1.5 bg-gray-100 dark:bg-zinc-800 px-3 py-1.5 rounded-full active:scale-95 transition-transform">
-              <Coins className="w-3.5 h-3.5 text-yellow-600" />
+              <Gem className="w-3.5 h-3.5 text-yellow-600" />
               <span className="text-xs font-bold text-gray-700 dark:text-zinc-200">{vcoinDisplay}</span>
             </div>
           </Link>

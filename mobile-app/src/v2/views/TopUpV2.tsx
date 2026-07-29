@@ -4,7 +4,6 @@ import {
   BadgePercent,
   Check,
   CheckCircle2,
-  Coins,
   Crown,
   Gem,
   Gift,
@@ -170,7 +169,7 @@ export function TopUpV2() {
 
       <section className="v2-wallet-heading">
         <div><span>Chọn mức năng lượng</span><h2>Gói Vcoin dành cho bạn</h2></div>
-        <Coins size={25} />
+        <Gem size={25} />
       </section>
 
       {loading ? (

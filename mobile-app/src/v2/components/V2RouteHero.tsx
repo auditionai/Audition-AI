@@ -1,6 +1,6 @@
 import {
   ArrowLeft,
-  Coins,
+  Gem,
   Crown,
   Film,
   History,
@@ -30,7 +30,7 @@ const routeMeta: Array<[RegExp, HeroMeta]> = [
   [/^\/tools\//, { eyebrow: 'Magic Toolbox', title: 'Phòng chỉnh sửa', description: 'Tách nền, làm nét và biến đổi ảnh trong không gian chỉnh sửa chuyên dụng.', Icon: Sparkles, accent: 'cyan' }],
   [/^\/prompt-library/, { eyebrow: 'Trending Now', title: 'Vũ trụ mẫu HOT', description: 'Khám phá công thức đang thịnh hành và đưa thẳng vào studio chỉ bằng một chạm.', Icon: MessageSquareText, accent: 'orange' }],
   [/^\/gallery/, { eyebrow: 'Creation Timeline', title: 'Dòng thời gian sáng tạo', description: 'Theo dõi tiến trình, xem lại tác phẩm và quản lý toàn bộ lịch sử giao dịch.', Icon: History, accent: 'blue' }],
-  [/^\/topup|^\/payment-gateway/, { eyebrow: 'Vcoin Planet', title: 'Kho năng lượng Vcoin', description: 'Chọn gói năng lượng, nhận ưu đãi và theo dõi thanh toán an toàn.', Icon: Coins, accent: 'gold' }],
+  [/^\/topup|^\/payment-gateway/, { eyebrow: 'Vcoin Planet', title: 'Kho năng lượng Vcoin', description: 'Chọn gói năng lượng, nhận ưu đãi và theo dõi thanh toán an toàn.', Icon: Gem, accent: 'gold' }],
   [/^\/profile/, { eyebrow: 'My Universe', title: 'Hồ sơ nhà sáng tạo', description: 'Quản lý danh tính, giao diện, bảo mật và các đặc quyền tài khoản.', Icon: Settings, accent: 'pink' }],
   [/^\/admin/, { eyebrow: 'Command Center', title: 'Trung tâm điều hành', description: 'Quan sát hệ thống, hàng đợi, người dùng, kinh tế và chiến dịch theo thời gian thực.', Icon: ShieldCheck, accent: 'gold' }],
   [/^\/about|^\/support|^\/guide/, { eyebrow: 'Creator Academy', title: 'Trạm hỗ trợ sáng tạo', description: 'Tìm hiểu công cụ, quy trình và nhận hỗ trợ khi bạn cần.', Icon: Crown, accent: 'cyan' }],

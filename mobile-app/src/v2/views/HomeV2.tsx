@@ -5,7 +5,7 @@ import {
   CalendarCheck2,
   ChevronLeft,
   ChevronRight,
-  Coins,
+  Gem,
   Crop,
   Film,
   Image,
@@ -169,7 +169,7 @@ export function HomeV2() {
             onClick={() => navigate('/topup')}
             aria-label={`Số dư ${(user?.vcoin_balance ?? 0).toLocaleString('vi-VN')} Vcoin`}
           >
-            <Coins size={17} />
+            <Gem size={18} />
             <span>{(user?.vcoin_balance ?? 0).toLocaleString('vi-VN')}</span>
           </button>
         </div>

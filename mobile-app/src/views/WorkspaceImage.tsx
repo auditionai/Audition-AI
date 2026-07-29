@@ -6,7 +6,7 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
-  Sparkles, ImagePlus, Coins,
+  Sparkles, ImagePlus, Gem,
   X, User, Zap, Crown, RefreshCw, Loader, AlertTriangle, Wand2, Scissors,
   Workflow, Cpu, Server, ImageDown, ArrowRight,
 } from 'lucide-react';
@@ -192,7 +192,7 @@ export function WorkspaceImage() {
 
   const [prompt, setPrompt] = useState('');
   const [refImage, setRefImage] = useState<string | null>(null);
-  const [aspectRatio, setAspectRatio] = useState('3:4');
+  const [aspectRatio, setAspectRatio] = useState('9:16');
   const [resolution, setResolution] = useState<TstResolution>('1K');
   const [speed, setSpeed] = useState<'Nhanh' | 'Tiết Kiệm'>('Nhanh');
   const [server, setServer] = useState('VIP 1');
@@ -1264,7 +1264,7 @@ export function WorkspaceImage() {
               <div className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-zinc-500">Chi phí</div>
               <div className="mt-1 flex items-center justify-end gap-1 text-sm font-bold text-gray-900 dark:text-white">
                 {costDisplay}
-                <Coins className="w-3.5 h-3.5 text-[var(--color-accent)]" />
+                <Gem className="w-3.5 h-3.5 text-[var(--color-accent)]" />
               </div>
             </div>
           </div>
@@ -1346,7 +1346,7 @@ export function WorkspaceImage() {
             <small>{generateHelperText}</small>
           </span>
           <span className="v2-image-generate-button__meta">
-            <span><b>{costDisplay}</b><Coins className="w-3.5 h-3.5" /></span>
+            <span><b>{costDisplay}</b><Gem className="w-3.5 h-3.5" /></span>
             <ArrowRight className="w-4 h-4" />
           </span>
         </Button>
@@ -1361,7 +1361,7 @@ export function WorkspaceImage() {
       />
 
       {previewGuide && (
-        <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/50 p-5 backdrop-blur-sm" onClick={() => setPreviewGuide(null)}>
+        <div className="v2-viewport-modal fixed inset-0 z-[140] flex items-center justify-center bg-black/50 p-5 backdrop-blur-sm" onClick={() => setPreviewGuide(null)}>
           <div className="w-full max-w-md rounded-[28px] border border-gray-200 bg-white p-4 shadow-2xl dark:border-zinc-800 dark:bg-[#12121A]" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <div>
@@ -1396,7 +1396,7 @@ export function WorkspaceImage() {
       )}
 
       {showSampleModal && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm" onClick={() => setShowSampleModal(false)}>
+        <div className="v2-viewport-modal fixed inset-0 z-[150] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm" onClick={() => setShowSampleModal(false)}>
           <div className="flex h-[78vh] w-full max-w-xl flex-col overflow-hidden rounded-[32px] border border-gray-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-[#12121A]" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-gray-100 px-4 py-4 dark:border-white/10">
               <div>

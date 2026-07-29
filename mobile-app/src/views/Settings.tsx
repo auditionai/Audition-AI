@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Palette, LifeBuoy, FileText, LogOut, ChevronRight, Coins, Info, Key, Gift, CircleUser, X, Loader, Shield } from 'lucide-react';
+import { Palette, LifeBuoy, FileText, LogOut, ChevronRight, Gem, Info, Key, Gift, CircleUser, X, Loader, Shield } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../components/NotificationSystem';
@@ -181,7 +181,7 @@ export function Settings() {
 
   const generalItems = [
     { icon: Gift, label: 'Nhập Giftcode', value: '', action: () => setShowGiftcodeModal(true) },
-    { icon: Coins, label: 'Số dư Vcoin', value: user?.vcoin_balance?.toLocaleString() || '0', action: () => navigate('/topup') },
+    { icon: Gem, label: 'Số dư Vcoin', value: user?.vcoin_balance?.toLocaleString() || '0', action: () => navigate('/topup') },
     { icon: Palette, label: 'Giao diện', value: getThemeLabel(theme), action: handleThemeToggle },
   ];
 

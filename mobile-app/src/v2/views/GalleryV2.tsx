@@ -3,7 +3,7 @@ import {
   ArrowDownToLine,
   CheckCircle2,
   Clock3,
-  Coins,
+  Gem,
   Download,
   Image as ImageIcon,
   Loader,
@@ -137,7 +137,7 @@ export function GalleryV2() {
 
       <section className="v2-history-switch">
         <button type="button" className={mode === 'creations' ? 'is-active' : ''} onClick={() => setMode('creations')}><Sparkles size={17} /> Tác phẩm</button>
-        <button type="button" className={mode === 'wallet' ? 'is-active' : ''} onClick={() => setMode('wallet')}><Coins size={17} /> Dòng Vcoin</button>
+        <button type="button" className={mode === 'wallet' ? 'is-active' : ''} onClick={() => setMode('wallet')}><Gem size={17} /> Chi tiêu Vcoin</button>
       </section>
 
       {mode === 'creations' && (
@@ -188,7 +188,7 @@ export function GalleryV2() {
         <section className="v2-coin-timeline">
           {loading && history.length === 0 ? <div className="v2-state-card"><Loader className="v2-spin" /></div> : history.map((entry) => (
             <article key={entry.id}>
-              <span className={entry.vcoinChange >= 0 ? 'is-plus' : 'is-minus'}>{entry.vcoinChange >= 0 ? <Coins size={18} /> : <ArrowDownToLine size={18} />}</span>
+              <span className={entry.vcoinChange >= 0 ? 'is-plus' : 'is-minus'}>{entry.vcoinChange >= 0 ? <Gem size={18} /> : <ArrowDownToLine size={18} />}</span>
               <div><strong>{entry.description}</strong><small>{new Date(entry.createdAt).toLocaleString('vi-VN')}</small></div>
               <b className={entry.vcoinChange >= 0 ? 'is-plus' : 'is-minus'}>{entry.vcoinChange >= 0 ? '+' : ''}{entry.vcoinChange.toLocaleString('vi-VN')}</b>
             </article>

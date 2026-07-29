@@ -150,14 +150,25 @@ export function ProfileV2() {
           <div><span>Không gian hiển thị</span><h2>Chọn giao diện</h2></div>
           <CurrentThemeIcon size={23} />
         </div>
-        <div>
+        <div className="v2-theme-options" role="group" aria-label="Chọn chế độ giao diện">
           {([
             ['light', 'Sáng', SunMedium],
             ['dark', 'Tối', MoonStar],
             ['system', 'Hệ thống', Sparkles],
           ] as const).map(([value, label, Icon]) => (
-            <button type="button" key={value} className={theme === value ? 'is-active' : ''} onClick={() => setTheme(value)}>
-              <Icon size={22} /><span>{label}</span>{theme === value && <Check size={15} />}
+            <button
+              type="button"
+              key={value}
+              className={`v2-theme-option${theme === value ? ' is-active' : ''}`}
+              aria-pressed={theme === value}
+              onClick={() => setTheme(value)}
+            >
+              <span className="v2-theme-option__icon"><Icon size={20} /></span>
+              <span className="v2-theme-option__copy">
+                <strong>{label}</strong>
+                <small>{value === 'light' ? 'Nền sáng' : value === 'dark' ? 'Nền tối' : 'Theo thiết bị'}</small>
+              </span>
+              <span className="v2-theme-option__check">{theme === value && <Check size={14} />}</span>
             </button>
           ))}
         </div>

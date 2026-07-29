@@ -159,12 +159,12 @@ export function GalleryV2() {
             <div className="v2-state-card"><Sparkles /><strong>Chưa có tác phẩm ở bộ lọc này</strong><p>Hãy mở studio và tạo điều gì đó thật nổi bật.</p></div>
           ) : (
             <section className="v2-creation-stream">
-              {filtered.map((item, index) => {
+              {filtered.map((item) => {
                 const kind = assetKind(item);
                 const status = itemStatus(item);
                 const active = ['queued', 'processing', 'rescuing'].includes(status);
                 return (
-                  <button type="button" key={item.id} className={`v2-creation-card v2-tap${index % 4 === 0 ? ' is-featured' : ''}`} onClick={() => setSelected(item)}>
+                  <button type="button" key={item.id} className="v2-creation-card v2-tap" onClick={() => setSelected(item)}>
                     <span className="v2-creation-card__media">
                       {item.url ? (
                         kind === 'video' ? <video src={item.url} muted playsInline /> : <img src={item.url} alt={item.toolName || 'Tác phẩm AI'} loading="lazy" />

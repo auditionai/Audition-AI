@@ -150,9 +150,17 @@ export function PromptLibraryV2() {
       )}
 
       <section className="v2-hot-mosaic">
-        {remaining.map((sample, index) => (
-          <button type="button" key={sample.id} className={`v2-hot-card v2-tap${index % 5 === 0 ? ' is-tall' : ''}`} onClick={() => void useSample(sample)}>
-            <img src={sample.image_url} alt={sample.category} loading="lazy" />
+        {remaining.map((sample) => (
+          <button type="button" key={sample.id} className="v2-hot-card v2-tap" onClick={() => void useSample(sample)}>
+            <img
+              src={sample.image_url}
+              alt={`Mẫu ${sample.category}`}
+              loading="lazy"
+              decoding="async"
+              onError={(event) => {
+                event.currentTarget.hidden = true;
+              }}
+            />
             <span className="v2-hot-card__tags">
               {getPromptLibraryTags(sample).map((tag) => <b key={tag}>{tag}</b>)}
             </span>

@@ -2522,3 +2522,427 @@
     padding-inline: 10px;
   }
 }
+
+/* V2.3 — stable media grids, giftcode clarity and theme selector repair. */
+.mobile-v2-shell .v2-hot-mosaic {
+  grid-auto-flow: row;
+  grid-auto-rows: auto;
+  align-items: start;
+}
+
+.mobile-v2-shell .v2-hot-card,
+.mobile-v2-shell .v2-hot-card.is-tall {
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  aspect-ratio: 4 / 5;
+  grid-row: auto;
+}
+
+.mobile-v2-shell .v2-hot-card > img {
+  display: block;
+  object-position: center top;
+}
+
+.mobile-v2-shell .v2-creation-stream {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+.mobile-v2-shell .v2-creation-card,
+.mobile-v2-shell .v2-creation-card.is-featured {
+  display: grid;
+  grid-column: auto;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  min-width: 0;
+  min-height: 0;
+}
+
+.mobile-v2-shell .v2-creation-card__media,
+.mobile-v2-shell .v2-creation-card.is-featured .v2-creation-card__media {
+  width: 100%;
+  min-height: 0;
+  aspect-ratio: 4 / 5;
+  background: #09080d;
+}
+
+.mobile-v2-shell .v2-creation-card__media img,
+.mobile-v2-shell .v2-creation-card__media video {
+  position: absolute;
+  inset: 0;
+  display: block;
+  object-fit: contain;
+}
+
+.mobile-v2-shell .v2-creation-card__copy,
+.mobile-v2-shell .v2-creation-card.is-featured .v2-creation-card__copy {
+  align-content: start;
+  min-width: 0;
+  min-height: 78px;
+  padding: 12px;
+}
+
+.mobile-v2-shell .v2-creation-card__copy small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-v2-shell .v2-creation-card.is-featured .v2-creation-card__copy strong {
+  font-size: 12px;
+}
+
+.v2-voucher-board {
+  display: grid;
+  gap: 13px;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--v2-electric-violet) 34%, var(--v2-line));
+  border-radius: 25px;
+  background:
+    radial-gradient(circle at 100% 0, color-mix(in srgb, var(--v2-hot-pink) 15%, transparent), transparent 42%),
+    linear-gradient(145deg, color-mix(in srgb, var(--v2-electric-violet) 8%, var(--v2-surface)), var(--v2-surface));
+  box-shadow: 0 14px 30px rgba(65, 38, 111, .1);
+}
+
+.v2-voucher-board__heading {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.v2-voucher-board__heading > span {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  color: var(--v2-electric-violet);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--v2-electric-violet) 12%, var(--v2-surface-solid));
+}
+
+.v2-voucher-board__heading > div {
+  min-width: 0;
+}
+
+.v2-voucher-board__heading small {
+  display: block;
+  color: var(--v2-primary);
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+}
+
+.v2-voucher-board__heading h2 {
+  margin: 3px 0 0;
+  color: var(--v2-ink);
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.v2-voucher-board__heading p {
+  margin: 3px 0 0;
+  color: var(--v2-ink-muted);
+  font-size: 9px;
+}
+
+.v2-voucher-board__heading > b {
+  display: grid;
+  place-items: center;
+  min-width: 35px;
+  height: 30px;
+  padding-inline: 8px;
+  color: var(--v2-electric-violet);
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--v2-electric-violet) 11%, var(--v2-surface-solid));
+  font-size: 11px;
+}
+
+.v2-voucher-benefits {
+  display: grid;
+  gap: 8px;
+}
+
+.v2-voucher-benefits article {
+  display: grid;
+  grid-template-columns: 35px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  min-height: 62px;
+  padding: 10px;
+  border: 1px solid var(--v2-line);
+  border-radius: 17px;
+  background: color-mix(in srgb, var(--v2-surface-solid) 88%, transparent);
+}
+
+.v2-voucher-benefits article > span {
+  display: grid;
+  place-items: center;
+  width: 35px;
+  height: 35px;
+  color: var(--v2-hot-pink);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--v2-hot-pink) 10%, var(--v2-surface-solid));
+}
+
+.v2-voucher-benefits article > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.v2-voucher-benefits strong {
+  color: var(--v2-ink);
+  font-size: 11px;
+}
+
+.v2-voucher-benefits small {
+  color: var(--v2-ink-muted);
+  font-size: 8px;
+}
+
+.v2-voucher-benefits article > b {
+  padding: 6px 8px;
+  color: #087267;
+  border-radius: 10px;
+  background: rgba(22, 188, 159, .1);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.v2-voucher-board__state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 58px;
+  color: var(--v2-ink-muted);
+  border: 1px dashed var(--v2-line);
+  border-radius: 16px;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.v2-checkout-offers {
+  display: grid;
+  gap: 9px;
+  margin-bottom: 13px;
+}
+
+.v2-checkout-offers > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.v2-checkout-offers > div:first-child strong {
+  color: var(--v2-ink);
+  font-size: 11px;
+}
+
+.v2-checkout-offers > div:first-child small {
+  color: var(--v2-ink-muted);
+  font-size: 9px;
+}
+
+.v2-checkout-offers__list {
+  display: grid;
+  gap: 8px;
+  max-height: 248px;
+  overflow-y: auto;
+  padding: 2px;
+  scrollbar-width: thin;
+}
+
+.v2-checkout-offers__list > button {
+  position: relative;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto 21px;
+  align-items: center;
+  gap: 9px;
+  min-height: 67px;
+  padding: 10px;
+  color: var(--v2-ink);
+  border: 1px solid var(--v2-line);
+  border-radius: 17px;
+  background: var(--v2-surface);
+  text-align: left;
+}
+
+.v2-checkout-offers__list > button.is-selected {
+  border-color: color-mix(in srgb, var(--v2-electric-violet) 65%, var(--v2-line));
+  background: color-mix(in srgb, var(--v2-electric-violet) 10%, var(--v2-surface-solid));
+  box-shadow: 0 8px 18px rgba(87, 55, 155, .11);
+}
+
+.v2-checkout-offers__list > button > span {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  color: var(--v2-electric-violet);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--v2-electric-violet) 11%, var(--v2-surface-solid));
+}
+
+.v2-checkout-offers__list > button > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.v2-checkout-offers__list > button strong {
+  overflow: hidden;
+  color: var(--v2-ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2-checkout-offers__list > button small {
+  color: var(--v2-ink-muted);
+  font-size: 8px;
+}
+
+.v2-checkout-offers__list > button > b {
+  color: #087267;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.v2-checkout-offers__list > button > em {
+  position: absolute;
+  top: -5px;
+  right: 9px;
+  padding: 3px 6px;
+  color: #fff;
+  border-radius: 99px;
+  background: linear-gradient(135deg, var(--v2-coral), var(--v2-hot-pink));
+  font-size: 7px;
+  font-style: normal;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.v2-checkout-offers__list > button > i {
+  display: grid;
+  place-items: center;
+  color: var(--v2-electric-violet);
+  font-style: normal;
+}
+
+.v2-checkout-offers__list > button.is-none {
+  grid-template-columns: 38px minmax(0, 1fr) 21px;
+}
+
+.v2-checkout-offers > p {
+  margin: 0;
+  padding: 12px;
+  color: var(--v2-ink-muted);
+  border: 1px dashed var(--v2-line);
+  border-radius: 15px;
+  font-size: 10px;
+}
+
+.mobile-v2-shell .v2-profile-theme .v2-theme-options {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  width: 100%;
+}
+
+.mobile-v2-shell .v2-profile-theme .v2-theme-option {
+  position: relative;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 28px;
+  place-items: initial;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  min-height: 64px;
+  padding: 10px 12px;
+  color: var(--v2-ink);
+  border: 1px solid var(--v2-line);
+  border-radius: 18px;
+  background: var(--v2-surface);
+  text-align: left;
+}
+
+.mobile-v2-shell .v2-profile-theme .v2-theme-option.is-active {
+  color: var(--v2-electric-violet);
+  border-color: color-mix(in srgb, var(--v2-electric-violet) 55%, var(--v2-line));
+  background: linear-gradient(110deg, color-mix(in srgb, var(--v2-electric-violet) 11%, var(--v2-surface-solid)), color-mix(in srgb, var(--v2-hot-pink) 5%, var(--v2-surface-solid)));
+}
+
+.mobile-v2-shell .v2-profile-theme .v2-theme-option svg,
+.mobile-v2-shell .v2-profile-theme .v2-theme-option svg:last-child {
+  position: static;
+  inset: auto;
+}
+
+.v2-theme-option__icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  color: var(--v2-ink-muted);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--v2-ink) 5%, var(--v2-surface-solid));
+}
+
+.v2-theme-option.is-active .v2-theme-option__icon {
+  color: var(--v2-electric-violet);
+  background: color-mix(in srgb, var(--v2-electric-violet) 13%, var(--v2-surface-solid));
+}
+
+.v2-theme-option__copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.v2-theme-option__copy strong {
+  color: var(--v2-ink);
+  font-size: 11px;
+}
+
+.v2-theme-option__copy small {
+  color: var(--v2-ink-muted);
+  font-size: 8px;
+}
+
+.v2-theme-option__check {
+  position: static;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  color: #fff;
+  border-radius: 9px;
+  background: transparent;
+}
+
+.v2-theme-option.is-active .v2-theme-option__check {
+  background: var(--v2-electric-violet);
+}
+
+@media (max-width: 374px) {
+  .mobile-v2-shell .v2-hot-mosaic,
+  .mobile-v2-shell .v2-creation-stream {
+    gap: 8px;
+  }
+
+  .v2-voucher-board {
+    padding: 13px;
+  }
+
+  .v2-voucher-board__heading {
+    grid-template-columns: 38px minmax(0, 1fr) auto;
+  }
+}

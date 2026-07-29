@@ -14,8 +14,7 @@
   initial-value: 0deg;
 }
 
-.desktop-atmosphere,
-.desktop-cursor {
+.desktop-atmosphere {
   display: none;
 }
 
@@ -279,14 +278,71 @@
     transform: scale(1.025);
   }
 
+  html:not(.dark) .desktop-character-hero::after {
+    background:
+      linear-gradient(90deg, rgba(242, 246, 252, .99) 0 42%, rgba(242, 246, 252, .82) 56%, rgba(242, 246, 252, .08) 74%),
+      url("/assets/audition-characters/desktop-hero-crew-light.webp") right center / cover no-repeat;
+  }
+
+  html:not(.dark) .desktop-primary-tool {
+    color: #45162b;
+    background: #fffafb;
+    box-shadow: 8px 12px 24px rgba(83, 42, 70, .12);
+  }
+
+  html:not(.dark) .desktop-primary-tool--image {
+    --tool-art: url("/assets/audition-characters/feature-image-ai-light.webp");
+  }
+
+  html:not(.dark) .desktop-primary-tool--video {
+    --tool-art: url("/assets/audition-characters/feature-video-ai-light.webp");
+  }
+
+  html:not(.dark) .desktop-primary-tool--editing {
+    --tool-art: url("/assets/audition-characters/feature-edit-ai-light.webp");
+  }
+
+  html:not(.dark) .desktop-primary-tool::before {
+    filter: saturate(.92) contrast(.98);
+  }
+
+  html:not(.dark) .desktop-primary-tool::after {
+    background: linear-gradient(90deg, rgba(255, 251, 253, .99) 0 48%, rgba(255, 251, 253, .88) 62%, rgba(255, 251, 253, .08) 100%);
+  }
+
+  html:not(.dark) .desktop-primary-tool small {
+    color: #755469;
+  }
+
+  html:not(.dark) .desktop-primary-tool__action {
+    color: #5c2943;
+  }
+
+  html:not(.dark) .desktop-primary-tool__icon {
+    background: rgba(255, 255, 255, .76);
+  }
+
+  html:not(.dark) .desktop-feature-art-card::before {
+    background-image: url("/assets/audition-characters/feature-image-ai-light.webp");
+    opacity: .76;
+    filter: saturate(.8) contrast(.94);
+  }
+
+  html:not(.dark) .desktop-feature-art-card--video::before {
+    background-image: url("/assets/audition-characters/feature-video-ai-light.webp");
+  }
+
+  html:not(.dark) .desktop-feature-art-card--editing::before {
+    background-image: url("/assets/audition-characters/feature-edit-ai-light.webp");
+  }
+
+  html:not(.dark) .desktop-feature-art-card:hover::before {
+    opacity: .88;
+  }
+
   .desktop-atmosphere-shell.neu-base {
     isolation: isolate;
     background: #05060a;
-  }
-
-  .desktop-atmosphere-shell,
-  .desktop-atmosphere-shell * {
-    cursor: none !important;
   }
 
   .desktop-atmosphere {
@@ -1029,48 +1085,6 @@
     color: #965300;
   }
 
-  html:not(.dark) .desktop-cursor__pointer {
-    filter: drop-shadow(1px 2px 1px rgba(20, 29, 48, 0.45));
-  }
-
-  .desktop-cursor {
-    position: fixed;
-    z-index: 10000;
-    top: 0;
-    left: 0;
-    display: block;
-    width: 1px;
-    height: 1px;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 150ms ease;
-    will-change: transform;
-  }
-
-  .desktop-cursor.is-visible {
-    opacity: 1;
-  }
-
-  .desktop-cursor__pointer {
-    position: absolute;
-    top: -3px;
-    left: -3px;
-    width: 28px;
-    height: 34px;
-    filter: drop-shadow(1px 2px 2px rgba(0, 0, 0, 0.9));
-    transform-origin: 5px 5px;
-    transition: transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
-  }
-
-  .desktop-cursor.is-active .desktop-cursor__pointer {
-    transform: scale(0.82) rotate(-5deg);
-    filter: drop-shadow(1px 2px 2px rgba(0, 0, 0, 0.9)) saturate(1.35);
-  }
-
-  .desktop-cursor.is-pressed .desktop-cursor__pointer {
-    transform: scale(0.68) rotate(-3deg);
-  }
-
   @keyframes audition-orb-pink {
     from { transform: translate3d(-4vw, -2vh, 0) scale(0.88); }
     to { transform: translate3d(13vw, 20vh, 0) scale(1.08); }
@@ -1200,12 +1214,4 @@
     animation: none !important;
   }
 
-  .desktop-cursor {
-    display: none !important;
-  }
-
-  .desktop-atmosphere-shell,
-  .desktop-atmosphere-shell * {
-    cursor: auto !important;
-  }
 }

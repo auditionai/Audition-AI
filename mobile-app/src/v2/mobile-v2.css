@@ -333,9 +333,14 @@
 }
 
 .v2-hero--characters .v2-hero__art {
-  background-image: url("/assets/audition-characters/mobile-hero-crew.webp");
+  background-image: url("/assets/audition-characters/mobile-hero-crew-light.webp");
   background-position: right center;
   background-size: auto 100%;
+  filter: saturate(.9) contrast(.98);
+}
+
+.dark .mobile-v2-shell:not(.v2-force-light) .v2-hero--characters .v2-hero__art {
+  background-image: url("/assets/audition-characters/mobile-hero-crew.webp");
   filter: saturate(.86) contrast(.96);
 }
 
@@ -429,17 +434,31 @@
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: url("/assets/audition-characters/feature-image-ai.webp") 78% center / auto 100% no-repeat;
-  opacity: .13;
-  filter: saturate(.75);
+  background: url("/assets/audition-characters/feature-image-ai-light.webp") 78% center / auto 100% no-repeat;
+  opacity: .48;
+  filter: saturate(.78) contrast(.94);
   pointer-events: none;
 }
 
 .v2-quick-card[data-accent="violet"]::before {
-  background-image: url("/assets/audition-characters/feature-video-ai.webp");
+  background-image: url("/assets/audition-characters/feature-video-ai-light.webp");
 }
 
 .v2-quick-card[data-accent="teal"]::before {
+  background-image: url("/assets/audition-characters/feature-edit-ai-light.webp");
+}
+
+.dark .mobile-v2-shell:not(.v2-force-light) .v2-quick-card::before {
+  background-image: url("/assets/audition-characters/feature-image-ai.webp");
+  opacity: .13;
+  filter: saturate(.75);
+}
+
+.dark .mobile-v2-shell:not(.v2-force-light) .v2-quick-card[data-accent="violet"]::before {
+  background-image: url("/assets/audition-characters/feature-video-ai.webp");
+}
+
+.dark .mobile-v2-shell:not(.v2-force-light) .v2-quick-card[data-accent="teal"]::before {
   background-image: url("/assets/audition-characters/feature-edit-ai.webp");
 }
 
@@ -545,10 +564,18 @@
 }
 
 .v2-feature-card--single .v2-feature-card__art {
-  background-image: url("/assets/audition-characters/feature-image-ai.webp");
+  background-image: url("/assets/audition-characters/feature-image-ai-light.webp");
 }
 
 .v2-feature-card--couple .v2-feature-card__art {
+  background-image: url("/assets/audition-characters/feature-edit-ai-light.webp");
+}
+
+.dark .mobile-v2-shell:not(.v2-force-light) .v2-feature-card--single .v2-feature-card__art {
+  background-image: url("/assets/audition-characters/feature-image-ai.webp");
+}
+
+.dark .mobile-v2-shell:not(.v2-force-light) .v2-feature-card--couple .v2-feature-card__art {
   background-image: url("/assets/audition-characters/feature-edit-ai.webp");
 }
 

@@ -140,6 +140,16 @@
   status = 200
 
 [[redirects]]
+  from = "/api/storage-upload-url"
+  to = "/.netlify/functions/storage-upload-url"
+  status = 200
+
+[[redirects]]
+  from = "/api/storage-delete"
+  to = "/.netlify/functions/storage-delete"
+  status = 200
+
+[[redirects]]
   from = "/api/checkin-reward"
   to = "/.netlify/functions/checkin-reward"
   status = 200

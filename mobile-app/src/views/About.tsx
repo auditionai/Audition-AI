@@ -1,7 +1,46 @@
 /**
  * About View (Mobile)
  */
-import { Sparkles, Info, Zap, Image as ImageIcon } from 'lucide-react';
+import { Bot, BrainCircuit, Film, Info, Sparkles, Video, WandSparkles, Zap } from 'lucide-react';
+
+const coreModels = [
+  {
+    name: 'GPT 2',
+    description: 'Mô hình tạo ảnh và hiểu yêu cầu hình ảnh nâng cao.',
+    Icon: Bot,
+    color: 'text-blue-600 bg-blue-500/10',
+  },
+  {
+    name: 'Nano Banana 2',
+    description: 'Mô hình tạo ảnh nhanh, tối ưu cho tác vụ hằng ngày.',
+    Icon: Sparkles,
+    color: 'text-cyan-600 bg-cyan-500/10',
+  },
+  {
+    name: 'Nano Banana Pro',
+    description: 'Mô hình ảnh chất lượng cao cho chi tiết và bố cục phức tạp.',
+    Icon: WandSparkles,
+    color: 'text-purple-600 bg-purple-500/10',
+  },
+  {
+    name: 'Grok',
+    description: 'Mô hình AI hỗ trợ phân tích ý tưởng và nội dung sáng tạo.',
+    Icon: BrainCircuit,
+    color: 'text-rose-600 bg-rose-500/10',
+  },
+  {
+    name: 'Seedance 2.0',
+    description: 'Mô hình tạo video AI với chuyển động tự nhiên.',
+    Icon: Film,
+    color: 'text-orange-600 bg-orange-500/10',
+  },
+  {
+    name: 'Kling 3.0',
+    description: 'Mô hình video AI chất lượng cao và chuyển động điện ảnh.',
+    Icon: Video,
+    color: 'text-indigo-600 bg-indigo-500/10',
+  },
+];
 
 export function About() {
   return (
@@ -32,25 +71,18 @@ export function About() {
             <Zap className="w-4 h-4 text-yellow-500" />
             Công nghệ cốt lõi
           </h2>
-          <ul className="space-y-3">
-            <li className="flex gap-3">
-              <div className="p-2 shrink-0 h-8 w-8 bg-blue-500/10 rounded-lg text-blue-500 flex items-center justify-center">
-                <Sparkles className="w-4 h-4" />
-              </div>
-              <div>
-                <p className="text-sm font-bold text-gray-900 dark:text-white">Google Gemini 3 Pro</p>
-                <p className="text-xs text-gray-500 dark:text-zinc-400 mt-0.5">Mô hình tạo ảnh AI mới nhất.</p>
-              </div>
-            </li>
-            <li className="flex gap-3">
-              <div className="p-2 shrink-0 h-8 w-8 bg-purple-500/10 rounded-lg text-purple-500 flex items-center justify-center">
-                <ImageIcon className="w-4 h-4" />
-              </div>
-              <div>
-                <p className="text-sm font-bold text-gray-900 dark:text-white">Kling Video 3.0</p>
-                <p className="text-xs text-gray-500 dark:text-zinc-400 mt-0.5">Mô hình tạo video AI mới nhất.</p>
-              </div>
-            </li>
+          <ul className="grid gap-3">
+            {coreModels.map(({ name, description, Icon, color }) => (
+              <li key={name} className="flex gap-3 rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-zinc-800 dark:bg-zinc-900/50">
+                <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${color}`}>
+                  <Icon className="h-4.5 w-4.5" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-gray-900 dark:text-white">{name}</p>
+                  <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-zinc-400">{description}</p>
+                </div>
+              </li>
+            ))}
           </ul>
         </div>
 

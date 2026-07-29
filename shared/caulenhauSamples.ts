@@ -272,21 +272,16 @@ export const fetchCaulenhauSamples = async (
   const to = from + sourcePageSize - 1;
 
   const categoryJoin = ', image_categories!inner(category_id)';
-  const selectVariants = [
-    `id, image_url, prompt, created_at, use_count${categoryJoin}`,
-    `id, image_url, prompt, created_at, usage_count${categoryJoin}`,
-    `id, image_url, prompt, created_at, click_count${categoryJoin}`,
+  // Keep this query aligned with the stable public schema. Probing optional
+  // counter columns causes multiple expected 400 responses to be printed by
+  // browsers before the fallback succeeds. Audition usage is merged separately.
+  const response = await buildSampleQuery(
+    client,
+    category,
     `id, image_url, prompt, created_at${categoryJoin}`,
-    `id, image_url, prompt${categoryJoin}`,
-  ];
-
-  let response: any = null;
-  for (const selectColumns of selectVariants) {
-    response = await buildSampleQuery(client, category, selectColumns)
-      .order('created_at', { ascending: false })
-      .range(from, to);
-    if (!response.error) break;
-  }
+  )
+    .order('created_at', { ascending: false })
+    .range(from, to);
 
   if (response.error) {
     throw response.error;

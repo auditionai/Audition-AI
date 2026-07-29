@@ -1,7 +1,7 @@
 /**
  * Support View (Mobile)
  */
-import { Heart, Phone, Mail, MessageCircle, MonitorSmartphone } from 'lucide-react';
+import { Globe2, Heart, Phone, Mail, MessageCircle, MonitorSmartphone } from 'lucide-react';
 
 export function Support() {
   return (
@@ -60,6 +60,18 @@ export function Support() {
               <div>
                 <p className="text-sm font-bold text-blue-800 dark:text-blue-500">Cộng đồng Facebook</p>
                 <p className="text-[10px] text-blue-600">Trang chủ nhóm Audition AI</p>
+              </div>
+            </div>
+          </a>
+          <div className="h-px bg-[var(--color-border)] mx-4" />
+          <a href="https://www.facebook.com/iam.cody.real/" target="_blank" rel="noreferrer" className="flex items-center justify-between p-3 bg-indigo-50 dark:bg-indigo-500/10 m-2 rounded-xl active:opacity-80 transition-colors">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white shrink-0">
+                <Globe2 className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-indigo-800 dark:text-indigo-400">Facebook Cody CN</p>
+                <p className="text-[10px] text-indigo-600 dark:text-indigo-400">Liên hệ trực tiếp với nhà phát triển</p>
               </div>
             </div>
           </a>

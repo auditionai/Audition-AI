@@ -13,7 +13,7 @@ import {
   type AuditionPricingOverride,
 } from '../services/tstCatalog';
 import type { GeneratedImage } from '../types';
-import { runDirectImageEdit } from '../../../services/directImageEditService';
+import { enqueueDirectImageEdit } from '../../../services/directImageEditService';
 import { buildEnhancedVertexEditInstruction } from '../../../services/characterImageAssistService';
 import type { ImageEditRecipePayload } from '../../../shared/queueRecipes';
 import { DIRECT_IMAGE_EDIT_QUEUE_KIND } from '../../../shared/queueKinds';
@@ -231,66 +231,57 @@ export function WorkspaceEdit() {
       await saveImageToLocalCache(placeholderImage);
     } catch { }
 
-    notify('Đang gửi lệnh xử lý...');
+    notify('Đang tải ảnh và gửi job nền...');
 
-    setTimeout(async () => {
+    try {
+      const stagedSource = await tryStageInputToStorage(sourceImage, `inputs/editing/${featureId}`);
+      let aspectRatio = '1:1';
       try {
-        const stagedSource = await tryStageInputToStorage(sourceImage, `inputs/editing/${featureId}`);
-        let aspectRatio = '1:1';
-        try {
-          const image = await loadImageWithTimeout(sourceImage);
-          aspectRatio = calculateAspectRatioString(image.width, image.height);
-        } catch { }
+        const image = await loadImageWithTimeout(sourceImage);
+        aspectRatio = calculateAspectRatioString(image.width, image.height);
+      } catch { }
 
-        const queuePayload: ImageEditRecipePayload = {
-          recipeType: 'image_edit_recipe_v1',
-          modelId: activeTier === 'flash' ? 'vertex-flash' : 'vertex-pro',
-          prompt: buildInstructionPrompt(featureId, prompt, resolution),
-          sourceImage: stagedSource,
-          mimeType: extractMimeType(stagedSource) || extractMimeType(sourceImage),
-          resolution,
-          aspectRatio,
-        };
+      const queuePayload: ImageEditRecipePayload = {
+        recipeType: 'image_edit_recipe_v1',
+        modelId: activeTier === 'flash' ? 'vertex-flash' : 'vertex-pro',
+        prompt: buildInstructionPrompt(featureId, prompt, resolution),
+        sourceImage: stagedSource,
+        mimeType: extractMimeType(stagedSource) || extractMimeType(sourceImage),
+        resolution,
+        aspectRatio,
+      };
 
-        const result = await runDirectImageEdit({
-          id: jobId,
-          prompt: displayPrompt,
-          toolId: featureId,
-          toolName: toolConfig.name,
-          engine: engineLabel,
-          costVcoin: selectedCost.vcoin,
-          showInGenerationHistory: true,
-          queuePayload,
+      const accepted = await enqueueDirectImageEdit({
+        id: jobId,
+        prompt: displayPrompt,
+        toolId: featureId,
+        toolName: toolConfig.name,
+        engine: engineLabel,
+        costVcoin: selectedCost.vcoin,
+        showInGenerationHistory: true,
+        queuePayload,
+      });
+
+      window.dispatchEvent(new Event('balance_updated'));
+      notify(
+        accepted.status === 'completed'
+          ? 'Ảnh đã xử lý xong.'
+          : 'Job đã vào hàng đợi. Theo dõi tiến độ trong Lịch sử tạo.',
+        'success',
+      );
+      navigate('/gallery');
+    } catch (err: any) {
+      setStage('input');
+      notify(err.message || 'Không thể gửi job chỉnh sửa ảnh.', 'error');
+      try {
+        await saveImageToLocalCache({
+          ...placeholderImage,
+          status: 'failed',
+          error: err.message || 'Failed',
+          updatedAt: Date.now(),
         });
-
-        window.dispatchEvent(new Event('balance_updated'));
-
-        try {
-          await saveImageToLocalCache({
-            ...placeholderImage,
-            url: result.imageUrl || '',
-            status: 'completed',
-            updatedAt: result.updatedAt ? new Date(result.updatedAt).getTime() : Date.now(),
-            progress: 100,
-          });
-        } catch { }
-        
-        // Return to Gallery
-        navigate('/gallery');
-      } catch (err: any) {
-        setStage('input');
-        notify(err.message || 'Có lỗi xảy ra', 'error');
-        // Update local cache error
-        try {
-          await saveImageToLocalCache({
-            ...placeholderImage,
-            status: 'failed',
-            error: err.message || 'Failed',
-            updatedAt: Date.now()
-          });
-        } catch { }
-      }
-    }, 300);
+      } catch { }
+    }
   };
 
   const ToolIcon = toolConfig.icon;

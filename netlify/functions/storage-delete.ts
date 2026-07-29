@@ -17,10 +17,10 @@ const getEnv = (...keys: string[]) => {
   return '';
 };
 
-const R2_ENDPOINT = getEnv('R2_ENDPOINT');
-const R2_ACCESS_KEY_ID = getEnv('R2_ACCESS_KEY_ID');
-const R2_SECRET_ACCESS_KEY = getEnv('R2_SECRET_ACCESS_KEY');
-const R2_BUCKET_NAME = getEnv('R2_BUCKET_NAME');
+const R2_ENDPOINT = getEnv('R2_ENDPOINT', 'VITE_R2_ENDPOINT');
+const R2_ACCESS_KEY_ID = getEnv('R2_ACCESS_KEY_ID', 'VITE_R2_ACCESS_KEY_ID');
+const R2_SECRET_ACCESS_KEY = getEnv('R2_SECRET_ACCESS_KEY', 'VITE_R2_SECRET_ACCESS_KEY');
+const R2_BUCKET_NAME = getEnv('R2_BUCKET_NAME', 'VITE_R2_BUCKET_NAME');
 const R2_PUBLIC_URL = getEnv('R2_PUBLIC_URL', 'VITE_R2_PUBLIC_URL').replace(/\/+$/, '');
 
 const extractR2Key = (assetUrl: string) => {

@@ -152,3 +152,24 @@ export const requireAuthenticatedUser = async (
 
   return { user, userClient, browserKeyHash };
 };
+
+export const getAuthenticatedRequestErrorStatus = (error: unknown, fallback = 500) => {
+  const message = error instanceof Error ? error.message : String(error || '');
+  if (message === 'Unauthorized') return 401;
+  if (message === 'AccountLocked') return 403;
+  return fallback;
+};
+
+export const requireAdminUser = async (event: HandlerEvent) => {
+  const authenticated = await requireAuthenticatedUser(event);
+  const admin = getServiceRoleClient();
+  const { data: profile, error } = await admin
+    .from('users')
+    .select('is_admin')
+    .eq('id', authenticated.user.id)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!profile?.is_admin) throw new Error('Forbidden');
+  return authenticated;
+};

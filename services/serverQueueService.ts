@@ -62,6 +62,9 @@ const notifyQueueSubmitted = (payload: any) => {
   );
 };
 
+const waitForQueueRetry = (ms: number) =>
+  new Promise((resolve) => window.setTimeout(resolve, ms));
+
 export const enqueueServerJob = async (request: QueueEnqueueRequest) => {
   const authHeader = await getAuthHeader();
   const clientPlatform = request.clientPlatform || detectQueueClientPlatform();
@@ -77,18 +80,31 @@ export const enqueueServerJob = async (request: QueueEnqueueRequest) => {
   trackEvent('generation_job_enqueue_start', analyticsBase);
 
   try {
-    const response = await fetch('/api/queue-submit', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-client-platform': clientPlatform,
-        ...authHeader,
-      },
-      body: JSON.stringify({
-        ...request,
-        clientPlatform,
-      }),
-    });
+    const submit = () => fetch('/api/queue-submit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-client-platform': clientPlatform,
+          ...authHeader,
+        },
+        body: JSON.stringify({
+          ...request,
+          clientPlatform,
+        }),
+      });
+
+    let response: Response;
+    try {
+      response = await submit();
+    } catch {
+      await waitForQueueRetry(300);
+      response = await submit();
+    }
+
+    if (response.status >= 500) {
+      await waitForQueueRetry(300);
+      response = await submit();
+    }
 
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {

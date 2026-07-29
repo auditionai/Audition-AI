@@ -4,6 +4,7 @@ import { Icons } from './Icons';
 import { DailyCheckin } from './DailyCheckin';
 import { getUserProfile, getActivePromotion } from '../services/economyService';
 import { useConcurrency, CONCURRENCY_LIMITS } from '../services/concurrencyService';
+import { DesktopAtmosphere } from './DesktopAtmosphere';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -85,7 +86,8 @@ export const Layout: React.FC<LayoutProps> = ({
   const isAccountLocked = user?.accountStatus === 'locked';
 
   return (
-    <div className="flex h-screen neu-base transition-colors duration-300 relative overflow-hidden font-sans">
+    <div className="desktop-atmosphere-shell flex h-screen neu-base transition-colors duration-300 relative overflow-hidden font-sans">
+      <DesktopAtmosphere />
       
       {showCheckin && (
         <DailyCheckin 
@@ -125,7 +127,7 @@ export const Layout: React.FC<LayoutProps> = ({
          ==================================================== */}
       <aside className={`hidden lg:flex flex-col justify-between ${
         sidebarCollapsed ? 'w-20' : 'w-64'
-      } neu-raised-md m-3 rounded-3xl p-4 z-40 shrink-0 transition-all duration-300 relative`}>
+      } desktop-neon-frame desktop-neon-frame--violet neu-raised-md m-3 rounded-3xl p-4 z-40 shrink-0 transition-all duration-300 relative`}>
         
         {/* Top Brand Logo */}
         <div className="space-y-6">
@@ -394,10 +396,10 @@ export const Layout: React.FC<LayoutProps> = ({
       {/* ====================================================
           2. MAIN CONTENT & TOP STATUS BAR
          ==================================================== */}
-      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+      <div className="relative z-10 flex-1 flex flex-col min-w-0 h-full overflow-hidden">
         
         {/* Top Floating Cyber Header */}
-        <header className="neu-raised-sm m-3 mb-0 rounded-3xl px-4 py-3 flex items-center justify-between z-30 shrink-0 shadow-lg">
+        <header className="desktop-neon-frame desktop-neon-frame--blue neu-raised-sm m-3 mb-0 rounded-3xl px-4 py-3 flex items-center justify-between z-30 shrink-0 shadow-lg">
           
           {/* Left Controls & Page Title */}
           <div className="flex items-center gap-3">

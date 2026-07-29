@@ -6,6 +6,7 @@ import { runQueueDaemon } from '../netlify/functions/_queue-daemon.ts';
 import { runQueueWatchdog } from '../netlify/functions/_queue-watchdog.ts';
 import { refreshAutoDisabledServerAvailability } from '../netlify/functions/_server-availability.ts';
 import { getServiceRoleClient } from '../netlify/functions/_supabase.ts';
+import { runSePayPendingReconcile } from '../netlify/functions/sepay-reconcile-pending.ts';
 
 const normalizeLane = (value) => {
   if (value === 'dispatch' || value === 'poll') {
@@ -39,6 +40,11 @@ const DAEMON_ACTIVE_DELAY_MS = parsePositiveIntEnv('RENDER_QUEUE_DAEMON_ACTIVE_D
 const DAEMON_IDLE_DELAY_MS = parsePositiveIntEnv('RENDER_QUEUE_DAEMON_IDLE_DELAY_MS', 1_000, 50);
 const WATCHDOG_INTERVAL_MS = parsePositiveIntEnv('RENDER_QUEUE_WATCHDOG_INTERVAL_MS', 10 * 60_000, 5 * 60_000);
 const SERVER_AVAILABILITY_INTERVAL_MS = parsePositiveIntEnv('RENDER_SERVER_AVAILABILITY_INTERVAL_MS', 5 * 60_000, 60_000);
+const PAYMENT_RECONCILE_INTERVAL_MS = parsePositiveIntEnv(
+  'RENDER_PAYMENT_RECONCILE_INTERVAL_MS',
+  15 * 60_000,
+  5 * 60_000,
+);
 const OPERATIONAL_MAINTENANCE_INTERVAL_MS = parsePositiveIntEnv(
   'RENDER_OPERATIONAL_MAINTENANCE_INTERVAL_MS',
   20 * 60 * 60_000,
@@ -48,6 +54,7 @@ const OPERATIONAL_MAINTENANCE_INTERVAL_MS = parsePositiveIntEnv(
 let shouldStop = false;
 let lastWatchdogRunAt = 0;
 let lastServerAvailabilityRunAt = 0;
+let lastPaymentReconcileRunAt = 0;
 let lastOperationalMaintenanceRunAt = 0;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -226,6 +233,23 @@ const runIntegratedWatchdogIfDue = async () => {
   }
 };
 
+const runPaymentReconcileIfDue = async () => {
+  const now = Date.now();
+  if (lastPaymentReconcileRunAt > 0 && now - lastPaymentReconcileRunAt < PAYMENT_RECONCILE_INTERVAL_MS) {
+    return;
+  }
+
+  lastPaymentReconcileRunAt = now;
+  try {
+    const summary = await runSePayPendingReconcile({ limit: 10, maxRuntimeMs: 20_000 });
+    if (summary.checked > 0 || summary.failed > 0) {
+      log('SePay reconciliation cycle finished.', summary);
+    }
+  } catch (error) {
+    console.warn(`[${label}] SePay reconciliation failed:`, error);
+  }
+};
+
 const runOperationalMaintenanceIfDue = async () => {
   const now = Date.now();
   const vietnamHour = Number(new Intl.DateTimeFormat('en-US', {
@@ -279,6 +303,7 @@ const main = async () => {
     try {
       await runOperationalMaintenanceIfDue();
       await runIntegratedWatchdogIfDue();
+      await runPaymentReconcileIfDue();
 
       if (!(await hasDueQueueWork())) {
         await sleep(IDLE_DELAY_MS);

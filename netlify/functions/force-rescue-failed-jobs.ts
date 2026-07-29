@@ -1,5 +1,5 @@
 import type { Handler } from '@netlify/functions';
-import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
+import { getAuthenticatedRequestErrorStatus, getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 import { triggerBackgroundQueueWorker } from './_queue-launcher';
 import { clearFailedRescueMeta, hasFailedRescueFinalized, hasManualStopFlag } from '../../shared/queueRescueState';
 
@@ -364,7 +364,7 @@ export const handler: Handler = async (event) => {
   } catch (error: any) {
     console.error('[force-rescue-failed-jobs] failed:', error);
     return {
-      statusCode: 500,
+      statusCode: getAuthenticatedRequestErrorStatus(error),
       headers,
       body: JSON.stringify({ error: error?.message || 'Internal Server Error' }),
     };

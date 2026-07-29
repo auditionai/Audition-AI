@@ -1,5 +1,6 @@
 import type { Handler } from '@netlify/functions';
 import { normalizeTstOutboundPayload } from './_tst-payload-normalizer';
+import { getAuthenticatedRequestErrorStatus, requireAdminUser } from './_supabase';
 
 const jsonHeaders = {
   'Content-Type': 'application/json',
@@ -24,6 +25,7 @@ export const handler: Handler = async (event) => {
   }
 
   try {
+    await requireAdminUser(event);
     const TST_API_KEY = process.env.TST_API_KEY;
     if (!TST_API_KEY) {
       return {
@@ -68,9 +70,10 @@ export const handler: Handler = async (event) => {
     };
 
   } catch (error: any) {
-    console.error("TST API Proxy Error:", error);
+    const statusCode = error?.message === 'Forbidden' ? 403 : getAuthenticatedRequestErrorStatus(error);
+    if (statusCode >= 500) console.error("TST API Proxy Error:", error);
     return {
-      statusCode: 500,
+      statusCode,
       headers: jsonHeaders,
       body: JSON.stringify({ error: error.message || 'Internal Server Error' })
     };

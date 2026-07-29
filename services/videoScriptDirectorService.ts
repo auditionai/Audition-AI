@@ -1,3 +1,5 @@
+import { getSupabaseAuthHeader } from './supabaseClient';
+
 export type VideoScriptDirectorOptions = {
   style?: string;
   theme?: string;
@@ -82,6 +84,7 @@ export const generateVideoScriptWithVertex = async ({
   scriptOptions?: VideoScriptDirectorOptions;
 }) => {
   const preparedImageSource = await compressDataImageForDirector(imageSource);
+  const authHeader = await getSupabaseAuthHeader();
   const requestBody = JSON.stringify({
     imageSource: preparedImageSource,
     durationSeconds,
@@ -100,7 +103,7 @@ export const generateVideoScriptWithVertex = async ({
   for (const endpoint of endpoints) {
     response = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeader },
       body: requestBody,
       signal: AbortSignal.timeout(75_000),
     });

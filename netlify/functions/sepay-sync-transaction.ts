@@ -1,5 +1,5 @@
 import type { Handler } from '@netlify/functions';
-import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
+import { getAuthenticatedRequestErrorStatus, getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 import {
   extractSePayPaidAmount,
   extractSePayProviderOrderId,
@@ -222,7 +222,7 @@ export const handler: Handler = async (event) => {
   } catch (error: any) {
     console.error('[sepay-sync-transaction] Failed to sync transaction:', error);
     return {
-      statusCode: 500,
+      statusCode: getAuthenticatedRequestErrorStatus(error),
       headers,
       body: JSON.stringify({ error: error?.message || 'Internal Server Error' }),
     };

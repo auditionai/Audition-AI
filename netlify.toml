@@ -6,6 +6,10 @@
 [functions]
   node_bundler = "esbuild"
 
+[context.production.environment]
+  QUEUE_WORKER_MODE = "dedicated"
+  DISABLE_BACKGROUND_QUEUE_TRIGGER = "true"
+
 [[headers]]
   for = "/assets/*"
   [headers.values]
@@ -137,6 +141,16 @@
 [[redirects]]
   from = "/api/gallery-images"
   to = "/.netlify/functions/gallery-images"
+  status = 200
+
+[[redirects]]
+  from = "/api/storage-upload-url"
+  to = "/.netlify/functions/storage-upload-url"
+  status = 200
+
+[[redirects]]
+  from = "/api/storage-delete"
+  to = "/.netlify/functions/storage-delete"
   status = 200
 
 [[redirects]]

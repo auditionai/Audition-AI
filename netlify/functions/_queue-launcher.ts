@@ -1,4 +1,5 @@
 import { isDedicatedQueueWorkerMode } from './_queue-runtime-mode';
+import { createInternalRequestHeaders } from './_internal-request-auth';
 
 const DEFAULT_LAUNCH_TIMEOUT_MS = 10_000;
 const BACKGROUND_WORKER_PATH = '/.netlify/functions/queue-worker-background';
@@ -110,5 +111,7 @@ export const triggerBackgroundQueueWorker = async (
     return false;
   }
 
-  return triggerBackgroundFunction(BACKGROUND_WORKER_PATH, rawUrl, timeoutMs);
+  return triggerBackgroundFunction(BACKGROUND_WORKER_PATH, rawUrl, timeoutMs, {
+    headers: createInternalRequestHeaders('queue-worker-background'),
+  });
 };

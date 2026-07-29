@@ -1,5 +1,5 @@
 import type { Handler } from '@netlify/functions';
-import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
+import { getAuthenticatedRequestErrorStatus, getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 import { markManualStopMeta } from '../../shared/queueRescueState';
 
 const headers = {
@@ -210,7 +210,7 @@ export const handler: Handler = async (event) => {
   } catch (error: any) {
     console.error('[admin-stop-queue-job] failed:', error);
     return {
-      statusCode: 500,
+      statusCode: getAuthenticatedRequestErrorStatus(error),
       headers,
       body: JSON.stringify({ error: error?.message || 'Internal Server Error' }),
     };

@@ -7,7 +7,7 @@ import { hasFailedRescuePending } from '../shared/queueRescueState';
 import { isDirectImageEditQueueKind } from '../shared/queueKinds';
 import { getSupabaseAuthHeader, getSupabaseUser, supabase } from './supabaseClient';
 import { getUserProfile } from './economyService';
-import { S3Client, PutObjectCommand, DeleteObjectCommand, DeleteObjectsCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
+import { DeleteObjectsCommand, ListObjectsV2Command, type S3Client } from '@aws-sdk/client-s3';
 
 const DB_NAME = 'DMP_AI_Studio_DB';
 const STORE_NAME = 'images';
@@ -37,13 +37,12 @@ const getEnv = (key: string) => {
     }
 };
 
-const R2_ENDPOINT = getEnv('VITE_R2_ENDPOINT');
-const R2_ACCESS_KEY_ID = getEnv('VITE_R2_ACCESS_KEY_ID');
-const R2_SECRET_ACCESS_KEY = getEnv('VITE_R2_SECRET_ACCESS_KEY');
-const R2_BUCKET_NAME = getEnv('VITE_R2_BUCKET_NAME');
 const R2_PUBLIC_URL = getEnv('VITE_R2_PUBLIC_URL'); 
+const R2_BUCKET_NAME = getEnv('VITE_R2_BUCKET_NAME');
 
-let r2Client: S3Client | null = null;
+// Browser code never receives R2 credentials. All writes are authorized by server endpoints.
+const getBrowserR2Client = (): S3Client | null => null;
+const r2Client = getBrowserR2Client();
 let galleryFetchPromise: Promise<GeneratedImage[]> | null = null;
 let galleryFetchCache: { userId: string; expiresAt: number; images: GeneratedImage[] } | null = null;
 
@@ -71,37 +70,17 @@ export const invalidateGalleryCache = () => {
     galleryFetchCache = null;
 };
 
-// Debug Log on Init
-console.log("[System] R2 Config Check:", {
-    hasEndpoint: !!R2_ENDPOINT,
-    hasKeyId: !!R2_ACCESS_KEY_ID,
-    hasSecret: !!R2_SECRET_ACCESS_KEY,
-    bucket: R2_BUCKET_NAME
-});
-
-if (R2_ENDPOINT && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY) {
-    try {
-        r2Client = new S3Client({
-            region: "auto",
-            endpoint: R2_ENDPOINT,
-            credentials: {
-                accessKeyId: R2_ACCESS_KEY_ID,
-                secretAccessKey: R2_SECRET_ACCESS_KEY,
-            },
-        });
-        console.log("[System] R2 Storage Client Initialized");
-    } catch (e) {
-        console.error("Failed to init R2 Client", e);
-    }
-} else {
-    console.warn("[System] R2 Config Missing. Please ensure Env Vars start with 'VITE_'. Falling back to Local/Supabase Storage.");
-}
-
 export const checkR2Connection = async (): Promise<boolean> => {
-    // FIX: Do not make a network request (like ListBuckets) here.
-    // Browsers block ListBuckets by default due to CORS policies, causing red errors in console.
-    // We simply return true if the client was initialized with keys.
-    return !!r2Client;
+    try {
+        const authHeader = await getSessionAuthHeader();
+        const response = await fetch('/api/storage-upload-url', {
+            method: 'GET',
+            headers: authHeader,
+        });
+        return response.ok;
+    } catch {
+        return false;
+    }
 };
 
 // --- INDEXED DB HELPERS (FALLBACK) ---
@@ -546,7 +525,7 @@ const fetchCurrentUserGeneratedImagesFromLedger = async (userId: string): Promis
 };
 
 // Modified to return Uint8Array for AWS SDK compatibility
-const processBase64Data = (base64: string): { blob: Blob, type: string, buffer: Uint8Array } => {
+const processBase64Data = (base64: string): { blob: Blob, type: string } => {
   const parts = base64.split(';base64,');
   const contentType = parts[0].split(':')[1];
   const raw = window.atob(parts[1]);
@@ -555,79 +534,70 @@ const processBase64Data = (base64: string): { blob: Blob, type: string, buffer: 
   for (let i = 0; i < rawLength; ++i) {
     uInt8Array[i] = raw.charCodeAt(i);
   }
-  return { 
-      blob: new Blob([uInt8Array], { type: contentType }), 
+  return {
+      blob: new Blob([uInt8Array], { type: contentType }),
       type: contentType,
-      buffer: uInt8Array // Direct buffer for R2
   };
-};
-
-const mimeTypeToFileExtension = (contentType: string) => {
-    const normalized = String(contentType || '').split(';', 1)[0].trim().toLowerCase();
-    const overrides: Record<string, string> = {
-        'image/jpeg': 'jpg',
-        'image/jpg': 'jpg',
-        'video/quicktime': 'mov',
-        'video/x-m4v': 'm4v',
-    };
-    return overrides[normalized] || normalized.split('/')[1] || 'bin';
 };
 
 // --- NEW: UPLOAD INPUT FILE TO R2 ---
 export const uploadFileToR2 = async (file: File | Blob | string, folder: string = 'inputs'): Promise<string> => {
     try {
-        let buffer: Uint8Array;
         let blob: Blob;
         let contentType: string;
-        let extension = 'png';
 
         if (typeof file === 'string') {
-            // Base64
             const processed = processBase64Data(file);
-            buffer = processed.buffer;
             blob = processed.blob;
             contentType = processed.type;
-            extension = mimeTypeToFileExtension(contentType);
         } else {
-            // File or Blob
             const arrayBuffer = await file.arrayBuffer();
-            buffer = new Uint8Array(arrayBuffer);
             contentType = file.type || 'image/png';
             blob = new Blob([arrayBuffer], { type: contentType });
-            extension = mimeTypeToFileExtension(contentType);
         }
 
-        const fileName = `${folder}/${Date.now()}_${Math.random().toString(36).substring(7)}.${extension}`;
-
-        if (r2Client) {
-            const command = new PutObjectCommand({
-                Bucket: R2_BUCKET_NAME,
-                Key: fileName,
-                Body: buffer,
-                ContentType: contentType,
-            });
-
-            await r2Client.send(command);
-            return `${R2_PUBLIC_URL}/${fileName}`;
+        const authHeader = await getSessionAuthHeader();
+        const prepareResponse = await fetch('/api/storage-upload-url', {
+            method: 'POST',
+            headers: {
+                ...authHeader,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ folder, contentType }),
+        });
+        const preparePayload = await prepareResponse.json().catch(() => ({}));
+        if (!prepareResponse.ok || !preparePayload?.publicUrl) {
+            throw new Error(preparePayload?.error || 'Không thể chuẩn bị vùng tải tệp.');
         }
 
-        if (supabase) {
-            const { error: uploadError } = await supabase.storage
-                .from('images')
-                .upload(fileName, blob, { upsert: true, contentType });
-
-            if (uploadError) throw uploadError;
-
-            const { data } = supabase.storage.from('images').getPublicUrl(fileName);
-            if (data?.publicUrl) {
-                return data.publicUrl;
+        if (preparePayload.provider === 'supabase') {
+            if (!supabase || !preparePayload.path || !preparePayload.token) {
+                throw new Error('Thông tin tải tệp dự phòng không hợp lệ.');
             }
+            const { error } = await supabase.storage
+                .from('images')
+                .uploadToSignedUrl(preparePayload.path, preparePayload.token, blob, { contentType });
+            if (error) {
+                throw error;
+            }
+            return String(preparePayload.publicUrl);
         }
 
-        throw new Error("R2 Client not initialized");
+        if (!preparePayload.uploadUrl) {
+            throw new Error('URL tải tệp R2 không hợp lệ.');
+        }
+        const uploadResponse = await fetch(preparePayload.uploadUrl, {
+            method: 'PUT',
+            headers: { 'Content-Type': contentType },
+            body: blob,
+        });
+        if (!uploadResponse.ok) {
+            throw new Error(`Tải tệp thất bại (${uploadResponse.status}).`);
+        }
 
+        return String(preparePayload.publicUrl);
     } catch (error) {
-        console.error("R2 Upload Input Error:", error);
+        console.error("Secure storage upload failed:", error);
         throw error;
     }
 };
@@ -643,7 +613,8 @@ const fetchAssetBlobForPersistence = async (assetUrl: string): Promise<Blob> => 
         return await response.blob();
     } catch (directError) {
         const proxyUrl = `/api/download-proxy?url=${encodeURIComponent(assetUrl)}`;
-        const proxyResponse = await fetch(proxyUrl);
+        const authHeader = await getSessionAuthHeader();
+        const proxyResponse = await fetch(proxyUrl, { headers: authHeader });
         if (!proxyResponse.ok) {
             throw directError instanceof Error ? directError : new Error('Failed to fetch asset for publish');
         }
@@ -679,64 +650,19 @@ export const saveImageToStorage = async (image: GeneratedImage): Promise<void> =
       }
   }
   // 1. CLOUDFLARE R2 + SUPABASE METADATA (PRIMARY - For Base64)
-  else if (image.url && image.url.startsWith('data:') && r2Client && supabase && user.id.length > 20) {
-    console.log("[Storage] Attempting R2 Upload...");
+  else if (image.url && image.url.startsWith('data:') && supabase && user.id.length > 20) {
     try {
-        const { blob, type, buffer } = processBase64Data(image.url);
-        const fileName = `${user.id}/${image.id}.png`; 
-        
-        // A. Upload file to R2
-        // FIX: Using 'buffer' (Uint8Array) instead of 'blob' to avoid "getReader is not a function" error
-        const command = new PutObjectCommand({
-            Bucket: R2_BUCKET_NAME,
-            Key: fileName,
-            Body: buffer, 
-            ContentType: type,
-            // ACL: 'public-read' // Uncomment if bucket is not public by default but allows ACL
-        });
-
-        await r2Client.send(command);
-        console.log("[Storage] R2 Upload Success");
-        
-        // B. Construct Public URL
-        const publicUrl = `${R2_PUBLIC_URL}/${fileName}`;
-
-        // C. Save Metadata to Supabase DB
+        const publicUrl = await uploadFileToR2(image.url, `generated/${image.id}`);
         await upsertImageMetadata({ ...imageWithUser, url: publicUrl }, user, publicUrl);
         await persistLocal();
         return;
 
-    } catch (error: any) {
-        console.error("R2 Upload Error details:", error);
-        if (error.name === 'TypeError' && error.message === 'Failed to fetch') {
-             console.error("⚠️ LỖI MẠNG/CORS: Vui lòng kiểm tra cấu hình CORS trên R2 Bucket.");
-        }
+    } catch (error) {
+        console.error("Secure asset persistence failed:", error);
         // Fallback continues below...
     }
   } 
   
-  // 2. SUPABASE STORAGE (LEGACY BACKUP - For Base64)
-  else if (image.url && image.url.startsWith('data:') && supabase && user.id.length > 20 && !r2Client) {
-    try {
-      const { blob } = processBase64Data(image.url);
-      const fileName = `${image.id}.png`;
-      
-      const { error: uploadError } = await supabase.storage
-        .from('images')
-        .upload(fileName, blob, { upsert: true });
-
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage.from('images').getPublicUrl(fileName);
-
-      await upsertImageMetadata({ ...imageWithUser, url: publicUrl }, user, publicUrl);
-      await persistLocal();
-      return; 
-    } catch (error) {
-      console.error("Supabase Storage Error (Fallback to Local):", error);
-    }
-  }
-
   if (supabase && user.id.length > 20) {
     try {
       await upsertImageMetadata(imageWithUser, user, image.url || null);
@@ -745,7 +671,7 @@ export const saveImageToStorage = async (image: GeneratedImage): Promise<void> =
     }
   }
 
-  // 3. INDEXED DB (OFFLINE/LOCAL FALLBACK)
+  // 2. INDEXED DB (OFFLINE/LOCAL FALLBACK)
   console.log("[Storage] Saving to Local (Fallback)");
   await persistLocal();
 };
@@ -797,26 +723,10 @@ export const publishImageToShowcase = async (image: GeneratedImage): Promise<Gen
     if (!supabase) {
         throw new Error('No Database');
     }
-    if (!r2Client || !R2_PUBLIC_URL || !R2_BUCKET_NAME) {
-        throw new Error('R2 storage is not configured for publishing');
-    }
-
     const user = await getUserProfile();
     const ownerId = image.userId || user.id;
     const blob = await fetchAssetBlobForPersistence(image.url);
-    const contentType = blob.type || 'image/png';
-    const extension = contentType.includes('jpeg') ? 'jpg' : (contentType.split('/')[1] || 'png');
-    const fileName = `published/${ownerId}/${image.id}.${extension}`;
-
-    const buffer = new Uint8Array(await blob.arrayBuffer());
-    await r2Client.send(new PutObjectCommand({
-        Bucket: R2_BUCKET_NAME,
-        Key: fileName,
-        Body: buffer,
-        ContentType: contentType,
-    }));
-
-    const persistentUrl = `${R2_PUBLIC_URL}/${fileName}`;
+    const persistentUrl = await uploadFileToR2(blob, `published/${ownerId}/${image.id}`);
     const updatedImage: GeneratedImage = {
         ...image,
         url: persistentUrl,
@@ -1115,63 +1025,21 @@ export const getUserImagesFromStorage = async (userId: string, limit = 80): Prom
 
 
 
-export const deleteImageFromStorage = async (id: string, targetUserId?: string, imageUrl?: string): Promise<void> => {
-  const user = await getUserProfile();
-  const userId = targetUserId || user.id;
-
-  if (supabase && userId) {
-    // A. Delete from R2 (if configured)
-    if (r2Client && (!imageUrl || isR2Url(imageUrl))) {
-        try {
-            let fileName = `${userId}/${id}.png`; // Default fallback
-            
-            // Robust Key Extraction Strategy
-            if (imageUrl && imageUrl.startsWith('http')) {
-                // Strategy 1: Remove R2_PUBLIC_URL prefix (Handles custom domains/paths)
-                if (R2_PUBLIC_URL && imageUrl.startsWith(R2_PUBLIC_URL)) {
-                    fileName = imageUrl.replace(`${R2_PUBLIC_URL}/`, '');
-                }
-                // Strategy 2: Use Pathname (Handles domain changes)
-                else {
-                    try {
-                        const urlObj = new URL(imageUrl);
-                        const path = decodeURIComponent(urlObj.pathname);
-                        fileName = path.startsWith('/') ? path.substring(1) : path;
-                    } catch (e) {
-                        console.warn(`[Storage] URL Parse Failed for ${imageUrl}`);
-                    }
-                }
-            }
-
-            console.warn(`[Storage] DELETING R2 KEY: [${fileName}]`);
-            await r2Client.send(new DeleteObjectCommand({
-                Bucket: R2_BUCKET_NAME,
-                Key: fileName
-            }));
-            console.warn(`[Storage] R2 Delete Sent for: ${fileName}`);
-        } catch (e) {
-            console.error("[Storage] R2 Delete Failed:", e);
-            throw e;
-        }
-    } 
-    
-    try {
-        // B. Delete from Supabase Storage (Legacy - only if R2 not active)
-        if (!r2Client) {
-             await supabase.storage.from('images').remove([`${id}.png`]);
-        }
-
-        // C. Delete Metadata from DB
-        const { error } = await supabase.from(TABLE_NAME).delete().eq('id', id);
-        if (error) throw error;
-
-    } catch (e) { 
-        console.warn("Delete DB/Metadata error", e); 
-        throw e;
-    }
+export const deleteImageFromStorage = async (id: string, _targetUserId?: string, _imageUrl?: string): Promise<void> => {
+  const authHeader = await getSessionAuthHeader();
+  const response = await fetch('/api/storage-delete', {
+    method: 'POST',
+    headers: {
+      ...authHeader,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ imageId: id }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.error || 'Không thể xóa tác phẩm.');
   }
 
-  // D. Delete from Local
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction([STORE_NAME], 'readwrite');

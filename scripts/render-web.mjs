@@ -7,12 +7,14 @@ import { Readable } from 'node:stream';
 
 import { handler as adminQueueJobDetailHandler } from '../netlify/functions/admin-queue-job-detail.ts';
 import { handler as adminQueueJobsHandler } from '../netlify/functions/admin-queue-jobs.ts';
+import { handler as adminQueueHealthReportHandler } from '../netlify/functions/admin-queue-health-report.ts';
 import { handler as adminGiftcodeActionHandler } from '../netlify/functions/admin-giftcode-action.ts';
 import { handler as adminStopQueueJobHandler } from '../netlify/functions/admin-stop-queue-job.ts';
 import { handler as adminUserHistoryHandler } from '../netlify/functions/admin-user-history.ts';
 import { handler as adminR2CleanupHandler } from '../netlify/functions/admin-r2-cleanup.ts';
 import { handler as checkinRewardHandler } from '../netlify/functions/checkin-reward.ts';
 import { handler as createPaymentHandler } from '../netlify/functions/create_payment.ts';
+import { handler as createTopupPaymentHandler } from '../netlify/functions/create-topup-payment.ts';
 import { handler as directImageEditHandler } from '../netlify/functions/direct-image-edit.ts';
 import { localHandler as directImageEditBackgroundHandler } from '../netlify/functions/direct-image-edit-background.ts';
 import { handler as ensureUserProfileHandler } from '../netlify/functions/ensure-user-profile.ts';
@@ -31,6 +33,9 @@ import { handler as sepayCheckoutHandler } from '../netlify/functions/sepay-chec
 import { handler as sepayIpnHandler } from '../netlify/functions/sepay-ipn.ts';
 import { handler as sepayReconcilePendingHandler } from '../netlify/functions/sepay-reconcile-pending.ts';
 import { handler as supabaseHealthHandler } from '../netlify/functions/supabase-health.ts';
+import { handler as storageDeleteHandler } from '../netlify/functions/storage-delete.ts';
+import { handler as storageUploadUrlHandler } from '../netlify/functions/storage-upload-url.ts';
+import { handler as topupGiftcodesHandler } from '../netlify/functions/topup-giftcodes.ts';
 import { handler as tstGenerateHandler } from '../netlify/functions/tst-generate.ts';
 import { handler as tstModelsPricingHandler } from '../netlify/functions/tst-models-pricing.ts';
 import { handler as tstModelsHandler } from '../netlify/functions/tst-models.ts';
@@ -39,6 +44,9 @@ import { handler as tstPollHandler } from '../netlify/functions/tst-poll.ts';
 import { handler as tstUploadHandler } from '../netlify/functions/tst-upload.ts';
 import { handler as tstUploadVideoHandler } from '../netlify/functions/tst-upload-video.ts';
 import { handler as tstVideoGenerateHandler } from '../netlify/functions/tst-video-generate.ts';
+import { handler as videoScriptDirectorHandler } from '../netlify/functions/video-script-director.ts';
+import { requireAuthenticatedUser } from '../netlify/functions/_supabase.ts';
+import { fetchSafeRemoteAsset } from '../netlify/functions/_safe-remote-fetch.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -70,23 +78,29 @@ const handlerConfigs = [
   { fnName: 'queue-watchdog', apiPath: '/api/queue-watchdog', handler: queueWatchdogHandler },
   { fnName: 'admin-queue-jobs', apiPath: '/api/admin-queue-jobs', handler: adminQueueJobsHandler },
   { fnName: 'admin-queue-job-detail', apiPath: '/api/admin-queue-job-detail', handler: adminQueueJobDetailHandler },
+  { fnName: 'admin-queue-health-report', apiPath: '/api/admin-queue-health-report', handler: adminQueueHealthReportHandler },
   { fnName: 'admin-user-history', apiPath: '/api/admin-user-history', handler: adminUserHistoryHandler },
   { fnName: 'admin-stop-queue-job', apiPath: '/api/admin-stop-queue-job', handler: adminStopQueueJobHandler },
   { fnName: 'admin-r2-cleanup', apiPath: '/api/admin-r2-cleanup', handler: adminR2CleanupHandler },
   { fnName: 'force-rescue-failed-jobs', apiPath: '/api/force-rescue-failed-jobs', handler: forceRescueFailedJobsHandler },
   { fnName: 'ensure-user-profile', apiPath: '/api/ensure-user-profile', handler: ensureUserProfileHandler },
   { fnName: 'gallery-images', apiPath: '/api/gallery-images', handler: galleryImagesHandler },
+  { fnName: 'storage-upload-url', apiPath: '/api/storage-upload-url', handler: storageUploadUrlHandler },
+  { fnName: 'storage-delete', apiPath: '/api/storage-delete', handler: storageDeleteHandler },
   { fnName: 'checkin-reward', apiPath: '/api/checkin-reward', handler: checkinRewardHandler },
   { fnName: 'redeem-giftcode', apiPath: '/api/redeem-giftcode', handler: redeemGiftcodeHandler },
   { fnName: 'admin-giftcode-action', apiPath: '/api/admin-giftcode-action', handler: adminGiftcodeActionHandler },
   { fnName: 'sepay-sync-transaction', apiPath: '/api/sepay-sync-transaction', handler: sepaySyncTransactionHandler },
   { fnName: 'create_payment', apiPath: '/api/create-payment', handler: createPaymentHandler },
+  { fnName: 'create-topup-payment', apiPath: '/api/create-topup-payment', handler: createTopupPaymentHandler },
+  { fnName: 'topup-giftcodes', apiPath: '/api/topup-giftcodes', handler: topupGiftcodesHandler },
   { fnName: 'sepay-checkout', apiPath: '/api/sepay-checkout', handler: sepayCheckoutHandler },
   { fnName: 'sepay-ipn', apiPath: '/api/sepay-ipn', handler: sepayIpnHandler, extraApiPaths: ['/api/sepay-webhook'] },
   { fnName: 'sepay-reconcile-pending', apiPath: '/api/sepay-reconcile-pending', handler: sepayReconcilePendingHandler },
   { fnName: 'direct-image-edit', apiPath: '/api/direct-image-edit', handler: directImageEditHandler },
   { fnName: 'direct-image-edit-background', apiPath: '/api/direct-image-edit-background', handler: directImageEditBackgroundHandler },
   { fnName: 'review-character-image', apiPath: '/api/review-character-image', handler: reviewCharacterImageHandler },
+  { fnName: 'video-script-director', apiPath: '/api/video-script-director', handler: videoScriptDirectorHandler },
   { fnName: 'supabase-health', apiPath: '/api/supabase-health', handler: supabaseHealthHandler },
 ];
 
@@ -267,10 +281,8 @@ const handleDownloadProxy = async (req, res) => {
   }
 
   try {
-    const upstreamResponse = await fetch(url, {
-      redirect: 'follow',
-      signal: AbortSignal.timeout(120000),
-    });
+    await requireAuthenticatedUser(buildNetlifyEvent(req));
+    const upstreamResponse = await fetchSafeRemoteAsset(url);
 
     if (!upstreamResponse.ok || !upstreamResponse.body) {
       res.status(upstreamResponse.status || 502).json({
@@ -294,8 +306,9 @@ const handleDownloadProxy = async (req, res) => {
 
     Readable.fromWeb(upstreamResponse.body).pipe(res);
   } catch (error) {
-    console.error('[render-web] download proxy failed:', error);
-    res.status(500).json({ error: error?.message || 'Download proxy failed' });
+    const statusCode = error?.message === 'Unauthorized' ? 401 : /not allowed|private network/i.test(error?.message || '') ? 403 : 500;
+    if (statusCode >= 500) console.error('[render-web] download proxy failed:', error);
+    res.status(statusCode).json({ error: error?.message || 'Download proxy failed' });
   }
 };
 

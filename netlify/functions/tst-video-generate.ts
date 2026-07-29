@@ -1,4 +1,5 @@
 import type { Handler } from '@netlify/functions';
+import { getAuthenticatedRequestErrorStatus, requireAdminUser } from './_supabase';
 import { normalizeTstOutboundPayload } from './_tst-payload-normalizer';
 import { getTstVideoGeneratePath } from './_tst-generate-endpoints';
 
@@ -25,6 +26,7 @@ export const handler: Handler = async (event) => {
   }
 
   try {
+    await requireAdminUser(event);
     const TST_API_KEY = process.env.TST_API_KEY;
     if (!TST_API_KEY) {
       return {
@@ -60,9 +62,10 @@ export const handler: Handler = async (event) => {
       body: JSON.stringify(data),
     };
   } catch (error: any) {
-    console.error('TST video generate proxy error:', error);
+    const statusCode = error?.message === 'Forbidden' ? 403 : getAuthenticatedRequestErrorStatus(error);
+    if (statusCode >= 500) console.error('TST video generate proxy error:', error);
     return {
-      statusCode: 500,
+      statusCode,
       headers: jsonHeaders,
       body: JSON.stringify({ error: error.message || 'Internal Server Error' }),
     };

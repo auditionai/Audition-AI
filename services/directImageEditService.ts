@@ -55,18 +55,33 @@ const fetchDirectImageEditStatus = async (
 
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
-export const runDirectImageEdit = async (
+export const enqueueDirectImageEdit = async (
   request: DirectImageEditRequest,
 ): Promise<DirectImageEditResponse> => {
   const authHeader = await getSupabaseAuthHeader();
-  const response = await fetch('/api/direct-image-edit', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...authHeader,
-    },
-    body: JSON.stringify(request),
-  });
+  const submit = () => fetch('/api/direct-image-edit', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeader,
+      },
+      body: JSON.stringify(request),
+    });
+
+  let response: Response;
+  try {
+    response = await submit();
+  } catch {
+    // The job id is idempotent on the server. Retrying once safely recovers
+    // when the request reached the server but the browser lost the response.
+    await wait(300);
+    response = await submit();
+  }
+
+  if (response.status >= 500) {
+    await wait(300);
+    response = await submit();
+  }
 
   const payload = await parseJsonResponse(response);
 
@@ -75,6 +90,18 @@ export const runDirectImageEdit = async (
   }
 
   const initial = payload as DirectImageEditResponse;
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('audition:queue-submitted', {
+      detail: { request, response: initial },
+    }));
+  }
+  return initial;
+};
+
+export const runDirectImageEdit = async (
+  request: DirectImageEditRequest,
+): Promise<DirectImageEditResponse> => {
+  const initial = await enqueueDirectImageEdit(request);
   if (initial.status === 'completed') {
     return initial;
   }
@@ -82,6 +109,7 @@ export const runDirectImageEdit = async (
     throw new Error(initial.error || 'Direct image edit failed');
   }
 
+  const authHeader = await getSupabaseAuthHeader();
   const startedAt = Date.now();
   while (Date.now() - startedAt < DIRECT_EDIT_POLL_TIMEOUT_MS) {
     await wait(DIRECT_EDIT_POLL_INTERVAL_MS);

@@ -1,4 +1,5 @@
 import { optimizePayload } from '../utils/imageProcessor';
+import { getSupabaseAuthHeader } from './supabaseClient';
 
 const TST_IMAGE_UPLOAD_MAX_WIDTH = 1280;
 const TST_VIDEO_AND_MOTION_POLL_INTERVAL_MS = 10 * 60 * 1000;
@@ -114,8 +115,10 @@ const uploadMedia = async (
   const formData = new FormData();
   formData.append('file', blob, filename);
 
+  const authHeader = await getSupabaseAuthHeader();
   const response = await fetch(kind === 'video' ? '/api/tst-upload-video' : '/api/tst-upload', {
     method: 'POST',
+    headers: authHeader,
     body: formData,
   });
 
@@ -135,9 +138,10 @@ const uploadMedia = async (
 const submitJob = async (endpoint: string, payload: Record<string, unknown>, onLog: (message: string) => void) => {
   onLog('Submitting job to Trạm Sáng Tạo...');
 
+  const authHeader = await getSupabaseAuthHeader();
   const response = await fetch(endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeader },
     body: JSON.stringify(payload),
   });
 
@@ -260,7 +264,10 @@ const pollJob = async (
 
   while (Date.now() - startedAt < timeoutMs) {
     await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
-    const response = await fetch(`/api/tst-poll?jobId=${encodeURIComponent(jobId)}`);
+    const authHeader = await getSupabaseAuthHeader();
+    const response = await fetch(`/api/tst-poll?jobId=${encodeURIComponent(jobId)}`, {
+      headers: authHeader,
+    });
 
     if (!response.ok) {
       onLog(`Polling retry: ${await parseErrorMessage(response)}`);

@@ -30,8 +30,6 @@ if (supabaseUrl && supabaseAnonKey) {
         sessionFetchedAt = Date.now();
         inFlightSessionPromise = null;
     });
-    const projectId = supabaseUrl.split('//')[1]?.split('.')[0] || 'Unknown';
-    console.log(`[System] Supabase Initialized. Project ID: ${projectId}`);
   } catch (e) {
     console.warn("Lỗi khởi tạo Supabase, chuyển sang chế độ Local Storage", e);
   }
@@ -217,8 +215,6 @@ export const signUpWithEmail = async (email: string, password: string, preferred
     // We try to insert using the schema that matches economyService.ts (vcoin_balance, photo_url)
     // This allows the app to work even if the Server Trigger fails or is missing.
     if (data.user) {
-        console.log("Auth User created. Attempting manual profile creation...");
-        
         // Wait briefly for any triggers
         await new Promise(r => setTimeout(r, 500));
 
@@ -226,8 +222,6 @@ export const signUpWithEmail = async (email: string, password: string, preferred
         const { data: profile } = await supabase.from('users').select('id').eq('id', data.user.id).maybeSingle();
 
         if (!profile) {
-            console.warn("Profile missing. Executing Manual Insert with Legacy Schema...");
-            
             // USING CORRECT COLUMN NAMES BASED ON YOUR ECONOMY SERVICE
             const { error: insertError } = await supabase.from('users').upsert({
                 id: data.user.id,
@@ -241,13 +235,9 @@ export const signUpWithEmail = async (email: string, password: string, preferred
 
             if (insertError) {
                 // If this fails with 23505, it means the Trigger actually worked -> Good
-                if (insertError.code === '23505') {
-                    console.log("Profile already exists (Trigger worked).");
-                } else {
+                if (insertError.code !== '23505') {
                     console.error("Manual Insert Failed:", insertError);
                 }
-            } else {
-                console.log("Manual Insert Successful.");
             }
         }
     }

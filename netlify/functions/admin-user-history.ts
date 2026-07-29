@@ -1,6 +1,6 @@
 import type { Handler } from '@netlify/functions';
 import type { HistoryItem } from '../../types';
-import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
+import { getAuthenticatedRequestErrorStatus, getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 
 const headers = {
   'Content-Type': 'application/json',
@@ -271,7 +271,7 @@ export const handler: Handler = async (event) => {
   } catch (error: any) {
     console.error('[admin-user-history] failed:', error);
     return {
-      statusCode: 500,
+      statusCode: getAuthenticatedRequestErrorStatus(error),
       headers,
       body: JSON.stringify({ error: error?.message || 'Internal Server Error' }),
     };

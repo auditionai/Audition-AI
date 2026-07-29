@@ -8,6 +8,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   Sparkles, ImagePlus, Coins,
   X, User, Zap, Crown, RefreshCw, Loader, AlertTriangle, Wand2, Scissors,
+  Workflow, Cpu, Server, ImageDown, ArrowRight,
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -301,6 +302,19 @@ export function WorkspaceImage() {
     || !hasCharacterImagesReady
     || isAnyCharacterAssistRunning
     || (aiModel === 'flash' ? !isFlashAvailable : aiModel === 'pro' ? !isProAvailable : !isGptAvailable);
+  const generateHelperText = stage === 'submitting'
+    ? submissionMessage || 'Đang chuẩn bị và gửi tác vụ vào hàng đợi'
+    : cooldownRemaining > 0
+      ? `Có thể tạo tiếp sau ${cooldownRemaining} giây`
+      : !hasCharacterImagesReady
+        ? `Tải đủ ${characters.length} ảnh nhân vật để tiếp tục`
+        : !prompt.trim()
+          ? 'Nhập mô tả ảnh để kích hoạt nút tạo'
+          : !isCatalogReady
+            ? 'Đang kết nối hệ thống tạo ảnh'
+            : !selectedCost.available
+              ? 'Cấu hình hiện tại chưa khả dụng'
+              : `${aiModel === 'gpt' ? 'GPT' : aiModel === 'pro' ? 'Pro' : 'Flash'} • ${resolution} • ${aspectRatio}`;
   const removeBgCost = getVertexEditToolCostBreakdown({
     toolId: 'remove_bg_pro',
     tier: 'flash',
@@ -1055,21 +1069,26 @@ export function WorkspaceImage() {
 
         {/* Prompt & Ref Image */}
         <div data-tour-id="mobile.generation.prompt" className="relative group space-y-3">
-          <div className="bg-white dark:bg-[#18181B] rounded-[24px] p-4 shadow-sm border border-gray-100 dark:border-zinc-800 flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-bold text-gray-800 dark:text-zinc-100">Ảnh mẫu bố cục</h3>
-              <p className="text-xs text-gray-400 dark:text-zinc-500 mt-0.5">Tùy chọn, dùng để giữ pose hoặc khung hình</p>
+          <div className="v2-image-sample-card bg-white dark:bg-[#18181B] rounded-[24px] p-4 shadow-sm border border-gray-100 dark:border-zinc-800">
+            <div className="v2-image-sample-card__heading">
+              <span><ImagePlus className="w-5 h-5" /></span>
+              <div>
+                <div><h3 className="text-sm font-bold text-gray-800 dark:text-zinc-100">Ảnh mẫu bố cục</h3><b>Tùy chọn</b></div>
+                <p className="text-xs text-gray-400 dark:text-zinc-500">Giúp AI bám đúng tư thế, góc máy và khung hình.</p>
+              </div>
             </div>
             {refImage ? (
-              <div className="relative w-16 h-16 rounded-xl overflow-hidden ring-2 ring-gray-100 dark:ring-zinc-800">
+              <div className="v2-image-sample-card__preview relative overflow-hidden ring-2 ring-gray-100 dark:ring-zinc-800">
                 <img src={refImage} alt="Ảnh mẫu" className="w-full h-full object-cover" />
-                <button onClick={() => setRefImage(null)} className="absolute top-1 right-1 bg-black/60 rounded-full p-1 hover:bg-black transition-colors">
-                  <X className="w-3 h-3 text-white" />
+                <button type="button" onClick={() => setRefImage(null)} className="absolute bg-black/60 rounded-full hover:bg-black transition-colors" aria-label="Xóa ảnh mẫu">
+                  <X className="w-4 h-4 text-white" />
                 </button>
               </div>
             ) : (
-              <button onClick={handleRefUploadClick} className="w-16 h-16 rounded-xl bg-gray-50 dark:bg-[#27272A] border-2 border-dashed border-gray-200 dark:border-zinc-700 flex items-center justify-center text-gray-400 dark:text-zinc-500 hover:text-gray-900 dark:hover:text-white hover:border-[var(--color-primary)] transition-colors">
-                <ImagePlus className="w-5 h-5" />
+              <button type="button" onClick={handleRefUploadClick} className="v2-image-sample-upload bg-gray-50 dark:bg-[#27272A] border-2 border-dashed border-gray-200 dark:border-zinc-700 text-gray-400 dark:text-zinc-500 hover:text-gray-900 dark:hover:text-white hover:border-[var(--color-primary)] transition-colors">
+                <span><ImagePlus className="w-7 h-7" /></span>
+                <strong>Chạm để tải ảnh mẫu</strong>
+                <small>JPG, PNG hoặc WEBP</small>
               </button>
             )}
           </div>
@@ -1232,12 +1251,16 @@ export function WorkspaceImage() {
           </div>
         )}
 
-        <div className="rounded-[24px] border border-gray-100 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-[#18181B]">
-          <div className="flex items-start justify-between gap-4">
+        <div className="v2-image-flow-card rounded-[24px] border border-gray-100 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-[#18181B]">
+          <div className="v2-image-flow-card__heading flex items-start justify-between gap-4">
             <div>
-              <h3 className="text-sm font-bold text-gray-800 dark:text-zinc-100">Luồng xử lý</h3>
+              <span><Workflow className="w-5 h-5" /></span>
+              <div>
+                <h3 className="text-sm font-bold text-gray-800 dark:text-zinc-100">Luồng xử lý</h3>
+                <p>Kiểm tra cấu hình trước khi tạo ảnh</p>
+              </div>
             </div>
-            <div className="rounded-2xl bg-gray-50 px-3 py-2 text-right dark:bg-[#27272A]">
+            <div className="v2-image-flow-card__cost rounded-2xl bg-gray-50 px-3 py-2 text-right dark:bg-[#27272A]">
               <div className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-zinc-500">Chi phí</div>
               <div className="mt-1 flex items-center justify-end gap-1 text-sm font-bold text-gray-900 dark:text-white">
                 {costDisplay}
@@ -1245,11 +1268,11 @@ export function WorkspaceImage() {
               </div>
             </div>
           </div>
-          <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-            <div className="rounded-2xl bg-gray-50 p-3 dark:bg-[#27272A]"><p className="text-gray-400 dark:text-zinc-500">Model</p><p className="mt-1 font-semibold text-gray-700 dark:text-zinc-200">{aiModel === 'flash' ? 'Flash' : aiModel === 'pro' ? 'Pro' : 'GPT'}</p></div>
-            <div className="rounded-2xl bg-gray-50 p-3 dark:bg-[#27272A]"><p className="text-gray-400 dark:text-zinc-500">Queue</p><p className="mt-1 font-semibold text-gray-700 dark:text-zinc-200">{queueStats.myImageProcessing} đang xử lý • {queueStats.myQueued} chờ</p></div>
-            <div className="rounded-2xl bg-gray-50 p-3 dark:bg-[#27272A]"><p className="text-gray-400 dark:text-zinc-500">Server</p><p className="mt-1 font-semibold text-gray-700 dark:text-zinc-200">{server}</p></div>
-            <div className="rounded-2xl bg-gray-50 p-3 dark:bg-[#27272A]"><p className="text-gray-400 dark:text-zinc-500">Output</p><p className="mt-1 font-semibold text-gray-700 dark:text-zinc-200">{resolution} • {aspectRatio}</p></div>
+          <div className="v2-image-flow-grid mt-4 grid grid-cols-2 gap-2 text-xs">
+            <div className="rounded-2xl bg-gray-50 p-3 dark:bg-[#27272A]"><Cpu /><span><small>Model AI</small><strong>{aiModel === 'flash' ? 'Flash' : aiModel === 'pro' ? 'Pro' : 'GPT'}</strong></span></div>
+            <div className="rounded-2xl bg-gray-50 p-3 dark:bg-[#27272A]"><Workflow /><span><small>Hàng đợi</small><strong>{queueStats.myImageProcessing} xử lý • {queueStats.myQueued} chờ</strong></span></div>
+            <div className="rounded-2xl bg-gray-50 p-3 dark:bg-[#27272A]"><Server /><span><small>Máy chủ</small><strong>{server}</strong></span></div>
+            <div className="rounded-2xl bg-gray-50 p-3 dark:bg-[#27272A]"><ImageDown /><span><small>Đầu ra</small><strong>{resolution} • {aspectRatio}</strong></span></div>
           </div>
         </div>
 
@@ -1301,32 +1324,31 @@ export function WorkspaceImage() {
         )}
       </div>
 
-      <div className="fixed bottom-[70px] left-0 right-0 p-5 pt-8 bg-gradient-to-t from-[#fcfcfc] via-[#fcfcfc] dark:from-[#09090b] dark:via-[#09090b] to-transparent max-w-md mx-auto xl:absolute xl:bottom-0">
+      <div className="v2-image-generate-dock fixed bottom-[70px] left-0 right-0 p-5 pt-8 bg-gradient-to-t from-[#fcfcfc] via-[#fcfcfc] dark:from-[#09090b] dark:via-[#09090b] to-transparent max-w-md mx-auto xl:absolute xl:bottom-0">
         <Button
           data-tour-id="mobile.generation.generate"
           size="lg"
-          className="w-full shadow-2xl shadow-black/10 flex items-center justify-center gap-3 bg-[var(--color-primary)] relative overflow-hidden group"
+          className="v2-image-generate-button w-full shadow-2xl shadow-black/10 flex items-center gap-3 bg-[var(--color-primary)] relative overflow-hidden group"
           disabled={isGenerateDisabled || stage === 'submitting'}
           onClick={handleGenerate}
         >
-          {stage === 'submitting' ? (
-            <>
-              <Loader className="w-5 h-5 animate-spin" />
-              <span className="text-sm font-semibold">Đang gửi job...</span>
-            </>
-          ) : cooldownRemaining > 0 ? (
-            <span className="text-sm font-semibold">Đợi {cooldownRemaining}s</span>
-          ) : (
-            <>
-              <Sparkles className="w-5 h-5 text-white/90" />
-              <span className="font-semibold text-[15px]">Bắt đầu sáng tạo</span>
-            </>
-          )}
-
-          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-black/40 px-2.5 py-1 rounded-full backdrop-blur-md">
-            <span className="text-[12px] font-bold text-white">{costDisplay}</span>
-            <Coins className="w-3 h-3 text-[var(--color-accent)]" />
-          </div>
+          <span className="v2-image-generate-button__icon">
+            {stage === 'submitting' ? <Loader className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
+          </span>
+          <span className="v2-image-generate-button__copy">
+            <strong>
+              {stage === 'submitting'
+                ? 'Đang gửi tác vụ…'
+                : cooldownRemaining > 0
+                  ? `Đợi ${cooldownRemaining}s`
+                  : 'Bắt đầu tạo ảnh'}
+            </strong>
+            <small>{generateHelperText}</small>
+          </span>
+          <span className="v2-image-generate-button__meta">
+            <span><b>{costDisplay}</b><Coins className="w-3.5 h-3.5" /></span>
+            <ArrowRight className="w-4 h-4" />
+          </span>
         </Button>
       </div>
 

@@ -9,6 +9,7 @@ import {
   Gem,
   Gift,
   Loader,
+  QrCode,
   ShieldCheck,
   Sparkles,
   TicketPercent,
@@ -257,8 +258,8 @@ export function TopUpV2() {
           </div>
 
           <button type="button" className="v2-checkout-submit" onClick={() => void checkout()} disabled={paying}>
-            {paying ? <Loader className="v2-spin" size={19} /> : <ShieldCheck size={19} />}
-            {paying ? 'Đang tạo giao dịch…' : 'Thanh toán an toàn'}
+            {paying ? <Loader className="v2-spin" size={19} /> : <QrCode size={19} />}
+            {paying ? 'Đang tạo mã QR…' : 'Quét QR thanh toán qua SePay'}
             {!paying && <ArrowRight size={19} />}
           </button>
         </div>

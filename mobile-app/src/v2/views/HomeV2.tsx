@@ -155,12 +155,13 @@ export function HomeV2() {
         <div className="v2-topbar__actions">
           <button
             type="button"
-            className={`v2-checkin v2-tap${isCheckedIn ? ' is-complete' : ''}`}
+            className={`v2-checkin v2-tap ${isCheckedIn ? 'is-complete' : 'is-pending'}`}
             onClick={() => setShowCheckin(true)}
             aria-label={isCheckedIn ? 'Đã điểm danh hôm nay' : 'Điểm danh nhận Vcoin'}
           >
             <CalendarCheck2 size={18} />
             <span>Điểm danh</span>
+            {!isCheckedIn && <i aria-hidden="true" />}
           </button>
           <button
             type="button"

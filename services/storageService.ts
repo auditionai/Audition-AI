@@ -1036,7 +1036,7 @@ export const deleteImageFromStorage = async (id: string, _targetUserId?: string,
     body: JSON.stringify({ imageId: id }),
   });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
+  if (!response.ok && response.status !== 404) {
     throw new Error(payload?.error || 'Không thể xóa tác phẩm.');
   }
 

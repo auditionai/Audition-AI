@@ -19,14 +19,53 @@ const getEnv = (...keys: string[]) => {
   return '';
 };
 
-const R2_ENDPOINT = getEnv('R2_ENDPOINT');
-const R2_ACCESS_KEY_ID = getEnv('R2_ACCESS_KEY_ID');
-const R2_SECRET_ACCESS_KEY = getEnv('R2_SECRET_ACCESS_KEY');
-const R2_BUCKET_NAME = getEnv('R2_BUCKET_NAME');
+const R2_ENDPOINT = getEnv('R2_ENDPOINT', 'VITE_R2_ENDPOINT');
+const R2_ACCESS_KEY_ID = getEnv('R2_ACCESS_KEY_ID', 'VITE_R2_ACCESS_KEY_ID');
+const R2_SECRET_ACCESS_KEY = getEnv('R2_SECRET_ACCESS_KEY', 'VITE_R2_SECRET_ACCESS_KEY');
+const R2_BUCKET_NAME = getEnv('R2_BUCKET_NAME', 'VITE_R2_BUCKET_NAME');
 const R2_PUBLIC_URL = getEnv('R2_PUBLIC_URL', 'VITE_R2_PUBLIC_URL').replace(/\/+$/, '');
+const SUPABASE_STORAGE_BUCKET = 'images';
 
 const isR2Configured = () =>
   Boolean(R2_ENDPOINT && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY && R2_BUCKET_NAME && R2_PUBLIC_URL);
+
+let supabaseBucketReadyPromise: Promise<void> | null = null;
+
+const ensureSupabaseStorageBucket = () => {
+  if (supabaseBucketReadyPromise) return supabaseBucketReadyPromise;
+
+  supabaseBucketReadyPromise = (async () => {
+    const admin = getServiceRoleClient();
+    const { data: existingBucket, error: lookupError } = await admin.storage.getBucket(SUPABASE_STORAGE_BUCKET);
+
+    if (existingBucket) {
+      if (existingBucket.public !== true) {
+        const { error: updateError } = await admin.storage.updateBucket(SUPABASE_STORAGE_BUCKET, {
+          public: true,
+        });
+        if (updateError) throw updateError;
+      }
+      return;
+    }
+
+    const { error: createError } = await admin.storage.createBucket(SUPABASE_STORAGE_BUCKET, {
+      public: true,
+    });
+    const createMessage = String(createError?.message || '');
+    if (createError && !/already exists|duplicate/i.test(createMessage)) {
+      throw createError;
+    }
+
+    if (lookupError) {
+      console.warn('[storage-upload-url] Supabase bucket was missing and has been recreated:', lookupError.message);
+    }
+  })().catch((error) => {
+    supabaseBucketReadyPromise = null;
+    throw error;
+  });
+
+  return supabaseBucketReadyPromise;
+};
 
 const getR2Client = () => {
   if (!isR2Configured()) {
@@ -74,6 +113,9 @@ export const handler: Handler = async (event) => {
     const { user } = await requireAuthenticatedUser(event, { checkAccountStatus: true });
 
     if (event.httpMethod === 'GET') {
+      if (!isR2Configured()) {
+        await ensureSupabaseStorageBucket();
+      }
       return {
         statusCode: 200,
         headers,
@@ -103,8 +145,9 @@ export const handler: Handler = async (event) => {
     const key = `users/${user.id}/${requestedFolder}/${Date.now()}-${randomUUID()}.${extensionForMime(contentType)}`;
 
     if (!isR2Configured()) {
+      await ensureSupabaseStorageBucket();
       const admin = getServiceRoleClient();
-      const bucket = admin.storage.from('images');
+      const bucket = admin.storage.from(SUPABASE_STORAGE_BUCKET);
       const { data, error } = await bucket.createSignedUploadUrl(key, { upsert: false });
       if (error || !data?.signedUrl || !data?.token) {
         throw error || new Error('Không thể tạo URL tải lên dự phòng.');

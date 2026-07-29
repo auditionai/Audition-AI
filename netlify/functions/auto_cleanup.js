@@ -10,12 +10,14 @@ const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabase
 // Initialize R2
 const r2 = new S3Client({
   region: "auto",
-  endpoint: process.env.R2_ENDPOINT,
+  endpoint: process.env.R2_ENDPOINT || process.env.VITE_R2_ENDPOINT,
   credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+    accessKeyId: process.env.R2_ACCESS_KEY_ID || process.env.VITE_R2_ACCESS_KEY_ID,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || process.env.VITE_R2_SECRET_ACCESS_KEY,
   },
 });
+
+const r2BucketName = process.env.R2_BUCKET_NAME || process.env.VITE_R2_BUCKET_NAME;
 
 export const handler = async (event, context) => {
   if (event.httpMethod !== 'POST') {
@@ -66,7 +68,7 @@ export const handler = async (event, context) => {
                 // A. Delete from R2 only for legacy/published objects stored there
                 if (fileName) {
                     await r2.send(new DeleteObjectCommand({
-                        Bucket: process.env.R2_BUCKET_NAME,
+                        Bucket: r2BucketName,
                         Key: fileName
                     }));
                 }
@@ -92,7 +94,7 @@ export const handler = async (event, context) => {
     let continuationToken = undefined;
     while (isTruncated) {
         const listCommand = new ListObjectsV2Command({
-            Bucket: process.env.R2_BUCKET_NAME,
+            Bucket: r2BucketName,
             Prefix: 'inputs/',
             ContinuationToken: continuationToken,
         });
@@ -107,7 +109,7 @@ export const handler = async (event, context) => {
 
         if (objectsToDelete.length > 0) {
             await r2.send(new DeleteObjectsCommand({
-                Bucket: process.env.R2_BUCKET_NAME,
+                Bucket: r2BucketName,
                 Delete: { Objects: objectsToDelete }
             }));
             deletedCount += objectsToDelete.length;

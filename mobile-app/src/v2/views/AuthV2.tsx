@@ -7,6 +7,17 @@ import { AuditionV2Logo } from '../components/AuditionV2Logo';
 
 type AuthMode = 'login' | 'register';
 
+function GoogleMark() {
+  return (
+    <svg className="v2-auth__google-mark" viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="#4285F4" d="M21.6 12.23c0-.74-.07-1.45-.19-2.14H12v4.05h5.38a4.6 4.6 0 0 1-2 3.02v2.63h3.24c1.9-1.75 2.98-4.33 2.98-7.56Z" />
+      <path fill="#34A853" d="M12 22c2.7 0 4.97-.9 6.62-2.43l-3.24-2.63c-.9.6-2.05.96-3.38.96-2.61 0-4.82-1.76-5.61-4.13H3.04v2.72A10 10 0 0 0 12 22Z" />
+      <path fill="#FBBC05" d="M6.39 13.77A6.02 6.02 0 0 1 6.08 12c0-.61.1-1.21.31-1.77V7.51H3.04A10 10 0 0 0 2 12c0 1.61.38 3.14 1.04 4.49l3.35-2.72Z" />
+      <path fill="#EA4335" d="M12 6.1c1.47 0 2.78.5 3.82 1.49l2.87-2.87A9.62 9.62 0 0 0 12 2a10 10 0 0 0-8.96 5.51l3.35 2.72C7.18 7.86 9.39 6.1 12 6.1Z" />
+    </svg>
+  );
+}
+
 export function AuthV2() {
   const navigate = useNavigate();
   const { notify } = useNotification();
@@ -68,73 +79,71 @@ export function AuthV2() {
 
   return (
     <div className="v2-auth">
-      <section className="v2-auth__showcase">
-        <div className="v2-auth__logo"><AuditionV2Logo /></div>
-        <div className="v2-auth__scene" aria-hidden="true">
-          <span className="v2-auth__planet" />
-          <span className="v2-auth__orbit v2-auth__orbit--one" />
-          <span className="v2-auth__orbit v2-auth__orbit--two" />
-          <Sparkles className="v2-auth__spark v2-auth__spark--one" />
-          <Sparkles className="v2-auth__spark v2-auth__spark--two" />
-        </div>
-        <span className="v2-auth__badge"><Sparkles size={13} /> Mobile experience V2</span>
-        <h1>Đăng nhập vào<br /><span>vũ trụ sáng tạo</span></h1>
-        <p>Tạo nhân vật, hình ảnh và video AI trong một studio sống động dành riêng cho cộng đồng Audition.</p>
-        <div className="v2-auth__metrics">
-          <span><strong>4K</strong><small>AI Image</small></span>
-          <span><strong>3D</strong><small>Character</small></span>
-          <span><strong>24/7</strong><small>Creative</small></span>
-        </div>
-      </section>
+      <div className="v2-auth__card">
+        <section className="v2-auth__showcase">
+          <div className="v2-auth__scene" aria-hidden="true" />
+          <div className="v2-auth__logo"><AuditionV2Logo /></div>
+          <span className="v2-auth__badge"><Sparkles size={13} /> Creative access</span>
+          <h1>Chạm vào<br /><span>thế giới Audition</span></h1>
+          <p>Đăng nhập để tiếp tục tạo nhân vật, hình ảnh và video AI mang phong cách riêng của bạn.</p>
+          <div className="v2-auth__metrics">
+            <span><strong>4K</strong><small>Hình ảnh</small></span>
+            <span><strong>3D</strong><small>Nhân vật</small></span>
+            <span><strong>AI</strong><small>Sáng tạo</small></span>
+          </div>
+        </section>
 
-      <section className="v2-auth__panel" aria-label={mode === 'login' ? 'Đăng nhập' : 'Đăng ký'}>
-        <div className="v2-auth__tabs" role="tablist">
-          <button type="button" className={mode === 'login' ? 'is-active' : ''} onClick={() => setMode('login')}>Đăng nhập</button>
-          <button type="button" className={mode === 'register' ? 'is-active' : ''} onClick={() => setMode('register')}>Tạo tài khoản</button>
-        </div>
+        <section className="v2-auth__panel" aria-label={mode === 'login' ? 'Đăng nhập' : 'Đăng ký'}>
+          <div className="v2-auth__tabs" role="tablist" aria-label="Chọn hình thức xác thực">
+            <button type="button" role="tab" aria-selected={mode === 'login'} className={mode === 'login' ? 'is-active' : ''} onClick={() => setMode('login')}>Đăng nhập</button>
+            <button type="button" role="tab" aria-selected={mode === 'register'} className={mode === 'register' ? 'is-active' : ''} onClick={() => setMode('register')}>Tạo tài khoản</button>
+          </div>
 
-        <div className="v2-auth__intro">
-          <span>{mode === 'login' ? 'Welcome back' : 'New creator'}</span>
-          <h2>{mode === 'login' ? 'Tiếp tục hành trình' : 'Bắt đầu câu chuyện mới'}</h2>
-        </div>
+          <div className="v2-auth__intro">
+            <span>{mode === 'login' ? 'Chào mừng trở lại' : 'Nhà sáng tạo mới'}</span>
+            <h2>{mode === 'login' ? 'Đăng nhập tài khoản' : 'Tạo hồ sơ sáng tạo'}</h2>
+            <p>{mode === 'login' ? 'Nhập thông tin của bạn để mở lại studio.' : 'Chỉ mất một phút để bắt đầu hành trình.'}</p>
+          </div>
 
-        <div className="v2-auth__fields">
-          {mode === 'register' && (
-            <label className={errors.displayName ? 'has-error' : ''}>
-              <span>Tên hiển thị</span>
-              <div><UserRound size={19} /><input value={displayName} onChange={(event) => setDisplayName(event.target.value)} autoComplete="name" /></div>
-              {errors.displayName && <small>{errors.displayName}</small>}
+          <div className="v2-auth__fields">
+            {mode === 'register' && (
+              <label className={errors.displayName ? 'has-error' : ''}>
+                <span>Tên hiển thị</span>
+                <div><UserRound size={19} /><input value={displayName} onChange={(event) => setDisplayName(event.target.value)} autoComplete="name" placeholder="Tên bạn muốn hiển thị" /></div>
+                {errors.displayName && <small>{errors.displayName}</small>}
+              </label>
+            )}
+            <label className={errors.email ? 'has-error' : ''}>
+              <span>Email</span>
+              <div><Mail size={19} /><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" inputMode="email" placeholder="name@example.com" /></div>
+              {errors.email && <small>{errors.email}</small>}
             </label>
-          )}
-          <label className={errors.email ? 'has-error' : ''}>
-            <span>Email</span>
-            <div><Mail size={19} /><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" inputMode="email" /></div>
-            {errors.email && <small>{errors.email}</small>}
-          </label>
-          <label className={errors.password ? 'has-error' : ''}>
-            <span>Mật khẩu</span>
-            <div>
-              <LockKeyhole size={19} />
-              <input type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} />
-              <button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}>
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-            {errors.password && <small>{errors.password}</small>}
-          </label>
-        </div>
+            <label className={errors.password ? 'has-error' : ''}>
+              <span>Mật khẩu</span>
+              <div>
+                <LockKeyhole size={19} />
+                <input type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} placeholder="Tối thiểu 6 ký tự" />
+                <button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}>
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+              {errors.password && <small>{errors.password}</small>}
+            </label>
+          </div>
 
-        <button type="button" className="v2-auth__submit v2-tap" onClick={() => void submit()} disabled={isLoading}>
-          {isLoading ? <Loader className="v2-spin" size={20} /> : <Sparkles size={19} />}
-          {mode === 'login' ? 'Khám phá ngay' : 'Tạo tài khoản'}
-          {!isLoading && <ArrowRight size={19} />}
-        </button>
-        <div className="v2-auth__divider"><span>hoặc tiếp tục với</span></div>
-        <button type="button" className="v2-auth__google v2-tap" onClick={() => void googleLogin()} disabled={isLoading}>
-          <b>G</b> Google
-        </button>
-        <p className="v2-auth__terms">Bằng việc tiếp tục, bạn đồng ý với Điều khoản sử dụng và Chính sách bảo mật.</p>
-      </section>
+          <button type="button" className="v2-auth__submit v2-tap" onClick={() => void submit()} disabled={isLoading}>
+            <span className="v2-auth__submit-icon">{isLoading ? <Loader className="v2-spin" size={19} /> : <LockKeyhole size={19} />}</span>
+            <span>{mode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}</span>
+            {!isLoading && <ArrowRight size={19} />}
+          </button>
+          <div className="v2-auth__divider"><span>Hoặc</span></div>
+          <button type="button" className="v2-auth__google v2-tap" onClick={() => void googleLogin()} disabled={isLoading}>
+            <GoogleMark />
+            <span>Đăng nhập bằng Google</span>
+          </button>
+          <p className="v2-auth__terms">Bằng việc tiếp tục, bạn đồng ý với Điều khoản sử dụng và Chính sách bảo mật.</p>
+        </section>
+      </div>
     </div>
   );
 }

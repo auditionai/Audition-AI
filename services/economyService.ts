@@ -1,6 +1,7 @@
 ﻿import { getSupabaseAuthHeader, getSupabaseUser, supabase } from './supabaseClient';
 import { trackEvent } from './analyticsService';
 import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, HistoryItem, VcoinLog, AdminQueueJob, AdminQueueSummary, AdminQueueJobDetail, AdminQueueHealthReport, AdminQueueRescueResult } from '../types';
+import { shouldUseMobileShell } from '../shared/shellDetection';
 import {
   creditsToVcoin,
   fetchTstModels,
@@ -1960,32 +1961,13 @@ export const getApiKeysList = async () => {
 
 // --- TRANSACTIONS ---
 
-const SHELL_OVERRIDE_STORAGE_KEY = 'auditionai:shell-override';
 const PENDING_SEPAY_ORDERS_STORAGE_KEY = 'auditionai:pending-sepay-orders';
-const PHONE_USER_AGENT_PATTERN = /iphone|ipod|android.+mobile|windows phone|blackberry|opera mini|mobile safari/i;
-
-const shouldPreferMobileShell = () => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('desktop') === '1') return false;
-    if (params.get('mobile') === '1') return true;
-
-    const savedOverride = window.localStorage.getItem(SHELL_OVERRIDE_STORAGE_KEY);
-    if (savedOverride === 'mobile') return true;
-    if (savedOverride === 'desktop') return false;
-
-    const navigatorWithUAData = navigator as Navigator & { userAgentData?: { mobile?: boolean } };
-    if (typeof navigatorWithUAData.userAgentData?.mobile === 'boolean') {
-        return navigatorWithUAData.userAgentData.mobile;
-    }
-
-    return PHONE_USER_AGENT_PATTERN.test(navigator.userAgent.toLowerCase());
-};
 
 const buildPaymentReturnUrls = () => {
     const baseUrl = new URL('/topup', window.location.origin);
     const cancelUrl = new URL('/topup', window.location.origin);
 
-    if (shouldPreferMobileShell()) {
+    if (shouldUseMobileShell()) {
         baseUrl.searchParams.set('mobile', '1');
         cancelUrl.searchParams.set('mobile', '1');
     }

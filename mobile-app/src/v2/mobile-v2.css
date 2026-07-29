@@ -332,6 +332,28 @@
   background-repeat: no-repeat;
 }
 
+.v2-hero--characters .v2-hero__art {
+  background-image: url("/assets/audition-characters/mobile-hero-crew.webp");
+  background-position: right center;
+  background-size: auto 100%;
+  filter: saturate(.86) contrast(.96);
+}
+
+.v2-hero--characters .v2-hero__art::after,
+.v2-hero--characters .v2-orbit,
+.v2-hero--characters .v2-hero__planet,
+.v2-hero--characters .v2-hero__spark {
+  display: none;
+}
+
+.v2-hero--characters .v2-hero__scrim {
+  background: linear-gradient(90deg, var(--v2-surface-solid) 0 37%, color-mix(in srgb, var(--v2-surface-solid) 94%, transparent) 52%, color-mix(in srgb, var(--v2-surface-solid) 48%, transparent) 69%, transparent 88%);
+}
+
+.dark .mobile-v2-shell:not(.v2-force-light) .v2-hero--characters .v2-hero__scrim {
+  background: linear-gradient(90deg, #171420 0 37%, rgba(23,20,32,.95) 52%, rgba(23,20,32,.5) 69%, transparent 88%);
+}
+
 .v2-hero__art::after {
   content: "";
   position: absolute;
@@ -400,6 +422,30 @@
   background: var(--v2-surface);
   box-shadow: 0 9px 22px rgba(93, 24, 57, .055);
   text-align: center;
+}
+
+.v2-quick-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: url("/assets/audition-characters/feature-image-ai.webp") 78% center / auto 100% no-repeat;
+  opacity: .13;
+  filter: saturate(.75);
+  pointer-events: none;
+}
+
+.v2-quick-card[data-accent="violet"]::before {
+  background-image: url("/assets/audition-characters/feature-video-ai.webp");
+}
+
+.v2-quick-card[data-accent="teal"]::before {
+  background-image: url("/assets/audition-characters/feature-edit-ai.webp");
+}
+
+.v2-quick-card > * {
+  position: relative;
+  z-index: 1;
 }
 
 .v2-quick-card__icon {
@@ -499,16 +545,14 @@
 }
 
 .v2-feature-card--single .v2-feature-card__art {
-  background-image:
-    var(--mobile-v2-single-image, radial-gradient(circle at 80% 45%, rgba(229, 76, 145, .34), transparent 34%),
-    linear-gradient(120deg, transparent 40%, rgba(117, 53, 126, .22)));
+  background-image: url("/assets/audition-characters/feature-image-ai.webp");
 }
 
 .v2-feature-card--couple .v2-feature-card__art {
-  background-image:
-    var(--mobile-v2-couple-image, radial-gradient(circle at 82% 46%, rgba(37, 147, 151, .28), transparent 34%),
-    linear-gradient(120deg, transparent 40%, rgba(79, 54, 148, .2)));
+  background-image: url("/assets/audition-characters/feature-edit-ai.webp");
 }
+
+.v2-feature-card .v2-art-avatar { display: none; }
 
 .v2-art-avatar {
   position: absolute;
@@ -1763,6 +1807,11 @@
   max-width: 73%;
   padding-bottom: 46px;
   animation: v2SlideCopy .42s cubic-bezier(.2,.8,.2,1);
+}
+
+.v2-hero--carousel.v2-hero--characters .v2-hero__content {
+  width: 66%;
+  max-width: 66%;
 }
 
 .v2-hero--carousel .v2-hero__content h1 span { color: var(--v2-slide, var(--v2-hot-pink)); }

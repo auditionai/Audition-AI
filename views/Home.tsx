@@ -60,7 +60,7 @@ export const Home: React.FC<HomeProps> = ({
       {/* ====================================================
           1. 3D HERO CONSOLE (Banner Giới Thiệu Ứng Dụng)
          ==================================================== */}
-      <section className="desktop-rainbow-frame w-full neu-raised-lg p-6 sm:p-10 relative overflow-hidden border border-slate-300/80 dark:border-slate-800 shadow-2xl rounded-[2.5rem]">
+      <section className="desktop-character-hero desktop-rainbow-frame w-full neu-raised-lg p-6 sm:p-10 relative overflow-hidden border border-slate-300/80 dark:border-slate-800 shadow-2xl rounded-[2.5rem]">
         
         {/* Subtle Ambient Accent */}
         <div className="absolute -top-20 -right-20 w-80 h-80 bg-[#FF007F]/10 rounded-full blur-[100px] pointer-events-none" />
@@ -137,7 +137,7 @@ export const Home: React.FC<HomeProps> = ({
           </div>
 
           {/* Right Clean 2x2 Feature Grid */}
-          <div className="lg:col-span-5 grid grid-cols-2 gap-3">
+          <div className="hidden lg:col-span-5 grid-cols-2 gap-3">
             
             {/* Card 1: Tạo Ảnh */}
             <div 
@@ -216,6 +216,47 @@ export const Home: React.FC<HomeProps> = ({
 
         </div>
 
+      </section>
+
+      <section className="desktop-primary-tools grid grid-cols-1 md:grid-cols-3 gap-4" aria-label="Công cụ sáng tạo chính">
+        <button
+          type="button"
+          onClick={() => onNavigate('tools')}
+          className="desktop-primary-tool desktop-primary-tool--image desktop-neon-frame desktop-neon-frame--magenta text-left"
+        >
+          <span className="desktop-primary-tool__copy">
+            <span className="desktop-primary-tool__icon"><Icons.Sparkles className="w-5 h-5" /></span>
+            <strong>Tạo Ảnh AI</strong>
+            <small>Ảnh đơn, couple và đội hình 3–5 người</small>
+          </span>
+          <span className="desktop-primary-tool__action">Khám phá <Icons.ChevronRight className="w-4 h-4" /></span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onNavigate('tools')}
+          className="desktop-primary-tool desktop-primary-tool--video desktop-neon-frame desktop-neon-frame--violet text-left"
+        >
+          <span className="desktop-primary-tool__copy">
+            <span className="desktop-primary-tool__icon"><Icons.Video className="w-5 h-5" /></span>
+            <strong>Tạo Video AI</strong>
+            <small>Biến ảnh thành thước phim và vũ đạo 3D</small>
+          </span>
+          <span className="desktop-primary-tool__action">Khám phá <Icons.ChevronRight className="w-4 h-4" /></span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onNavigate('tools')}
+          className="desktop-primary-tool desktop-primary-tool--editing desktop-neon-frame desktop-neon-frame--cyan text-left"
+        >
+          <span className="desktop-primary-tool__copy">
+            <span className="desktop-primary-tool__icon"><Icons.Wand className="w-5 h-5" /></span>
+            <strong>Chỉnh Sửa Ảnh</strong>
+            <small>Tách nền, làm nét và chỉnh sửa bằng AI</small>
+          </span>
+          <span className="desktop-primary-tool__action">Khám phá <Icons.ChevronRight className="w-4 h-4" /></span>
+        </button>
       </section>
 
       {/* ====================================================
@@ -308,7 +349,7 @@ export const Home: React.FC<HomeProps> = ({
               <div
                 key={feat.id}
                 onClick={() => !inMaint && onSelectFeature(feat)}
-                className={`desktop-neon-card desktop-neon-frame--${neonTone} neu-card p-6 flex flex-col justify-between group cursor-pointer hover:scale-[1.02] transition-all relative shadow-xl ${
+                className={`desktop-feature-art-card desktop-feature-art-card--${feat.toolType} desktop-neon-card desktop-neon-frame--${neonTone} neu-card p-6 flex flex-col justify-between group cursor-pointer hover:scale-[1.02] transition-all relative overflow-hidden shadow-xl ${
                   inMaint ? 'opacity-50 cursor-not-allowed' : ''
                 }`}
               >

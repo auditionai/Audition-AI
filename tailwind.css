@@ -124,6 +124,161 @@
     animation: audition-rainbow-border 7s linear infinite;
   }
 
+  .desktop-character-hero {
+    min-height: 400px;
+    isolation: isolate;
+  }
+
+  .desktop-character-hero::after {
+    content: "";
+    position: absolute;
+    z-index: 0;
+    inset: 0;
+    background:
+      linear-gradient(90deg, var(--neu-surface) 0 48%, color-mix(in srgb, var(--neu-surface) 86%, transparent) 61%, transparent 76%),
+      url("/assets/audition-characters/desktop-hero-crew.webp") right center / cover no-repeat;
+    pointer-events: none;
+  }
+
+  .desktop-character-hero > .relative {
+    min-height: 320px;
+  }
+
+  .desktop-primary-tool {
+    --tool-art: url("/assets/audition-characters/feature-image-ai.webp");
+    position: relative;
+    isolation: isolate;
+    min-height: 220px;
+    overflow: hidden;
+    padding: 24px;
+    color: #fff;
+    border-radius: 26px;
+    background: #11131e;
+    box-shadow: 10px 14px 26px rgba(0, 0, 0, .3);
+    transition: transform .25s ease, border-color .25s ease;
+  }
+
+  .desktop-primary-tool--video {
+    --tool-art: url("/assets/audition-characters/feature-video-ai.webp");
+  }
+
+  .desktop-primary-tool--editing {
+    --tool-art: url("/assets/audition-characters/feature-edit-ai.webp");
+  }
+
+  .desktop-primary-tool::before {
+    content: "";
+    position: absolute;
+    z-index: -2;
+    inset: 0;
+    background: var(--tool-art) right center / cover no-repeat;
+    filter: saturate(.9) contrast(.96);
+    transition: transform .45s cubic-bezier(.2,.8,.2,1);
+  }
+
+  .desktop-primary-tool::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    background: linear-gradient(90deg, rgba(9, 10, 17, .98) 0 48%, rgba(9, 10, 17, .84) 62%, rgba(9, 10, 17, .08) 100%);
+  }
+
+  .desktop-primary-tool:hover {
+    transform: translateY(-4px);
+  }
+
+  .desktop-primary-tool:hover::before {
+    transform: scale(1.035);
+  }
+
+  .desktop-primary-tool__copy {
+    display: flex;
+    align-items: flex-start;
+    flex-direction: column;
+    width: 61%;
+    min-height: 130px;
+  }
+
+  .desktop-primary-tool__icon {
+    display: grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    margin-bottom: 14px;
+    color: #ff3f9f;
+    border: 1px solid currentColor;
+    border-radius: 12px;
+    background: rgba(12, 12, 20, .68);
+  }
+
+  .desktop-primary-tool--video .desktop-primary-tool__icon { color: #8f6cff; }
+  .desktop-primary-tool--editing .desktop-primary-tool__icon { color: #31c8d3; }
+
+  .desktop-primary-tool strong {
+    font-family: var(--font-accent, inherit);
+    font-size: 17px;
+    font-weight: 900;
+    line-height: 1.15;
+    text-transform: uppercase;
+  }
+
+  .desktop-primary-tool small {
+    margin-top: 7px;
+    color: rgba(255, 255, 255, .72);
+    font-size: 11px;
+    font-weight: 650;
+    line-height: 1.45;
+  }
+
+  .desktop-primary-tool__action {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: rgba(255,255,255,.9);
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+
+  .desktop-feature-art-card {
+    isolation: isolate;
+    min-height: 248px;
+  }
+
+  .desktop-feature-art-card::before {
+    content: "";
+    position: absolute;
+    z-index: -2;
+    inset: 0;
+    background: url("/assets/audition-characters/feature-image-ai.webp") right center / cover no-repeat;
+    opacity: .58;
+    filter: saturate(.75) contrast(.88);
+    transition: transform .45s ease, opacity .3s ease;
+  }
+
+  .desktop-feature-art-card--video::before {
+    background-image: url("/assets/audition-characters/feature-video-ai.webp");
+  }
+
+  .desktop-feature-art-card--editing::before {
+    background-image: url("/assets/audition-characters/feature-edit-ai.webp");
+  }
+
+  .desktop-feature-art-card::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    background: linear-gradient(90deg, var(--neu-surface) 0 53%, color-mix(in srgb, var(--neu-surface) 84%, transparent) 70%, transparent 100%);
+  }
+
+  .desktop-feature-art-card:hover::before {
+    opacity: .72;
+    transform: scale(1.025);
+  }
+
   .desktop-atmosphere-shell.neu-base {
     isolation: isolate;
     background: #05060a;

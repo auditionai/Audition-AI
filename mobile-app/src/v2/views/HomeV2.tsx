@@ -176,7 +176,7 @@ export function HomeV2() {
       </header>
 
       <section
-        className="v2-hero v2-neon-frame v2-hero--carousel"
+        className="v2-hero v2-neon-frame v2-hero--carousel v2-hero--characters"
         data-accent={slide.accent}
         onPointerEnter={() => setCarouselPaused(true)}
         onPointerLeave={() => setCarouselPaused(false)}

@@ -7,30 +7,47 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { MobileV2Layout } from './v2/components/MobileV2Layout';
 import { AuditionV2Logo } from './v2/components/AuditionV2Logo';
+import { V2RouteHero } from './v2/components/V2RouteHero';
 import { syncPaymentTransaction } from './services/serverQueueService';
 import { trackEvent, trackPageView } from './services/analyticsService';
-import { getFeatureMaintenanceConfig, getSystemAnnouncementConfig, isFeatureInMaintenance, type FeatureMaintenanceConfig, type SystemAnnouncementConfig } from './services/economyService';
+import { getStartupSettings, isFeatureInMaintenance, type FeatureMaintenanceConfig, type SystemAnnouncementConfig } from './services/economyService';
 import { AppEventPopup, type AppEventPopupData, SystemAnnouncementModal } from '../../components/AppNotificationPopups';
 import { AppTour } from '../../components/AppTour';
 
 const HomeV2 = lazy(() => import('./v2/views/HomeV2').then((module) => ({ default: module.HomeV2 })));
 const AuthV2 = lazy(() => import('./v2/views/AuthV2').then((module) => ({ default: module.AuthV2 })));
 const ToolsHubV2 = lazy(() => import('./v2/views/ToolsHubV2').then((module) => ({ default: module.ToolsHubV2 })));
-const loadV2Feature = <T extends keyof typeof import('./v2/views/V2FeatureViews')>(name: T) =>
-  lazy(() => import('./v2/views/V2FeatureViews').then((module) => ({ default: module[name] })));
-const AboutV2 = loadV2Feature('AboutV2');
-const AdminV2 = loadV2Feature('AdminV2');
-const EditStudioV2 = loadV2Feature('EditStudioV2');
-const GalleryV2 = loadV2Feature('GalleryV2');
-const GuideV2 = loadV2Feature('GuideV2');
-const ImageStudioV2 = loadV2Feature('ImageStudioV2');
-const PaymentGatewayV2 = loadV2Feature('PaymentGatewayV2');
-const ProfileV2 = loadV2Feature('ProfileV2');
-const PromptImageStudioV2 = loadV2Feature('PromptImageStudioV2');
-const PromptLibraryV2 = loadV2Feature('PromptLibraryV2');
-const SupportV2 = loadV2Feature('SupportV2');
-const TopUpV2 = loadV2Feature('TopUpV2');
-const VideoStudioV2 = loadV2Feature('VideoStudioV2');
+const WorkspaceImage = lazy(() => import('./v2/views/WorkspaceImage').then((module) => ({ default: module.WorkspaceImage })));
+const WorkspaceVideo = lazy(() => import('./v2/views/WorkspaceVideo').then((module) => ({ default: module.WorkspaceVideo })));
+const WorkspacePromptImage = lazy(() => import('./v2/views/WorkspacePromptImage').then((module) => ({ default: module.WorkspacePromptImage })));
+const WorkspaceEdit = lazy(() => import('./v2/views/WorkspaceEdit').then((module) => ({ default: module.WorkspaceEdit })));
+const GalleryV2 = lazy(() => import('./v2/views/GalleryV2').then((module) => ({ default: module.GalleryV2 })));
+const PromptLibraryV2 = lazy(() => import('./v2/views/PromptLibraryV2').then((module) => ({ default: module.PromptLibraryV2 })));
+const TopUpV2 = lazy(() => import('./v2/views/TopUpV2').then((module) => ({ default: module.TopUpV2 })));
+const PaymentGatewayView = lazy(() => import('./v2/views/PaymentGateway').then((module) => ({ default: module.PaymentGatewayView })));
+const ProfileV2 = lazy(() => import('./v2/views/ProfileV2').then((module) => ({ default: module.ProfileV2 })));
+const AboutView = lazy(() => import('./v2/views/About').then((module) => ({ default: module.About })));
+const SupportView = lazy(() => import('./v2/views/Support').then((module) => ({ default: module.Support })));
+const GuideView = lazy(() => import('./v2/views/Guide').then((module) => ({ default: module.Guide })));
+const AdminV2 = lazy(() => import('./v2/views/AdminV2').then((module) => ({ default: module.AdminV2 })));
+
+function V2FeatureFrame({ kind, children, immersive = false }: { kind: string; children: React.ReactNode; immersive?: boolean }) {
+  return (
+    <div className={`v2-native-page v2-native-page--${kind}${immersive ? ' is-immersive' : ''}`}>
+      <V2RouteHero />
+      <div className="v2-native-page__workspace">{children}</div>
+    </div>
+  );
+}
+
+const ImageStudioV2 = () => <V2FeatureFrame kind="image" immersive><WorkspaceImage /></V2FeatureFrame>;
+const VideoStudioV2 = () => <V2FeatureFrame kind="video" immersive><WorkspaceVideo /></V2FeatureFrame>;
+const PromptImageStudioV2 = () => <V2FeatureFrame kind="composer" immersive><WorkspacePromptImage /></V2FeatureFrame>;
+const EditStudioV2 = () => <V2FeatureFrame kind="editor" immersive><WorkspaceEdit /></V2FeatureFrame>;
+const PaymentGatewayV2 = () => <V2FeatureFrame kind="payment"><PaymentGatewayView /></V2FeatureFrame>;
+const AboutV2 = () => <V2FeatureFrame kind="academy"><AboutView /></V2FeatureFrame>;
+const SupportV2 = () => <V2FeatureFrame kind="academy"><SupportView /></V2FeatureFrame>;
+const GuideV2 = () => <V2FeatureFrame kind="academy"><GuideView /></V2FeatureFrame>;
 
 const SYSTEM_ANNOUNCEMENT_DISMISS_STORAGE_KEY = 'auditionai:system-announcement-dismissed';
 const SYSTEM_ANNOUNCEMENT_DISMISS_MS = 12 * 60 * 60 * 1000;
@@ -94,7 +111,7 @@ function FeatureMaintenanceGuard({ children }: { children: React.ReactElement })
   const [featureMaintenance, setFeatureMaintenance] = useState<FeatureMaintenanceConfig>({ disabledFeatureIds: [] });
 
   useEffect(() => {
-    getFeatureMaintenanceConfig().then(setFeatureMaintenance).catch(() => {
+    getStartupSettings().then((settings) => setFeatureMaintenance(settings.featureMaintenance)).catch(() => {
       setFeatureMaintenance({ disabledFeatureIds: [] });
     });
   }, []);
@@ -215,9 +232,9 @@ function MobileRuntimeEffects() {
   }, [readPendingPaymentMeta]);
 
   useEffect(() => {
-    getSystemAnnouncementConfig().then((config) => {
-      setSystemAnnouncement(config);
-      setShowSystemAnnouncement(shouldShowSystemAnnouncement(config));
+    getStartupSettings().then((settings) => {
+      setSystemAnnouncement(settings.systemAnnouncement);
+      setShowSystemAnnouncement(shouldShowSystemAnnouncement(settings.systemAnnouncement));
     });
   }, []);
 

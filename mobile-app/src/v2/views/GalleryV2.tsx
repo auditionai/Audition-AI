@@ -167,7 +167,9 @@ export function GalleryV2() {
                   <button type="button" key={item.id} className="v2-creation-card v2-tap" onClick={() => setSelected(item)}>
                     <span className="v2-creation-card__media">
                       {item.url ? (
-                        kind === 'video' ? <video src={item.url} muted playsInline /> : <img src={item.url} alt={item.toolName || 'Tác phẩm AI'} loading="lazy" />
+                        kind === 'video'
+                          ? <video src={item.url} muted playsInline preload="metadata" />
+                          : <img src={item.url} alt={item.toolName || 'Tác phẩm AI'} loading="lazy" decoding="async" />
                       ) : <Sparkles size={30} />}
                       {active && <span className="v2-creation-card__progress"><i style={{ width: `${item.progress || 12}%` }} /></span>}
                     </span>

@@ -557,7 +557,9 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                                             <Icons.Loader className="w-5 h-5 text-audi-cyan animate-spin" />
                                                         </div>
                                                     ) : img.url ? (
-                                                        getAssetKind(img) === 'video' ? (<video src={img.url} className="w-full h-full object-cover" muted playsInline />) : (<img src={img.url} alt="preview" className="w-full h-full object-cover" />)
+                                                        getAssetKind(img) === 'video'
+                                                            ? (<video src={img.url} className="w-full h-full object-cover" muted playsInline preload="metadata" />)
+                                                            : (<img src={img.url} alt="preview" className="w-full h-full object-cover" loading="lazy" decoding="async" />)
                                                     ) : (
                                                         <Icons.Image className="w-5 h-5 text-slate-600" />
                                                     )}

@@ -4,7 +4,7 @@
  * Giúp Flash 2.5 phân biệt rõ đâu là Cấu trúc (Pose), đâu là Giao diện (Skin/Clothes)
  */
 
-import { FilesetResolver, PoseLandmarker, type NormalizedLandmark } from '@mediapipe/tasks-vision';
+import type { NormalizedLandmark, PoseLandmarker } from '@mediapipe/tasks-vision';
 
 const MEDIAPIPE_VISION_WASM_ROOT = '/mediapipe/wasm';
 const MEDIAPIPE_POSE_MODEL_PATH = '/mediapipe/models/pose_landmarker_lite.task';
@@ -20,6 +20,7 @@ type PoseOverlayDetection = {
 };
 
 let poseLandmarkerPromise: Promise<PoseLandmarker | null> | null = null;
+let poseConnections: ReadonlyArray<{ start: number; end: number }> = [];
 
 export const urlToBase64 = async (url: string): Promise<string | null> => {
     try {
@@ -385,6 +386,8 @@ const getPoseLandmarker = async (): Promise<PoseLandmarker | null> => {
     if (!poseLandmarkerPromise) {
         poseLandmarkerPromise = (async () => {
             try {
+                const { FilesetResolver, PoseLandmarker } = await import('@mediapipe/tasks-vision');
+                poseConnections = PoseLandmarker.POSE_CONNECTIONS || [];
                 const vision = await FilesetResolver.forVisionTasks(MEDIAPIPE_VISION_WASM_ROOT);
                 return await PoseLandmarker.createFromOptions(vision, {
                     baseOptions: {
@@ -513,7 +516,7 @@ const drawPoseSkeletonGuide = (
     drawW: number,
     drawH: number,
 ) => {
-    const connections = PoseLandmarker.POSE_CONNECTIONS || [];
+    const connections = poseConnections;
 
     ctx.save();
     ctx.strokeStyle = 'rgba(0, 255, 188, 0.9)';

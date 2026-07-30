@@ -1,19 +1,10 @@
 
 import React, { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { Layout } from './components/Layout';
-import { Home } from './views/Home';
-import { Settings } from './views/Settings';
-import { About } from './views/About';
-import { Guide } from './views/Guide';
-import { Support } from './views/Support';
-import { PromptLibrary } from './views/PromptLibrary';
-import { Landing } from './views/Landing';
-import { TopUp } from './views/TopUp';
-import { ManualPaymentGateway } from './views/ManualPaymentGateway'; 
 import { Language, Theme, ViewId, Feature } from './types';
 import { APP_CONFIG } from './constants';
 import { getSupabaseSession, getSupabaseUser, supabase } from './services/supabaseClient';
-import { getUserProfile, logVisit, updateLastActive, subscribeMaintenanceMode, getSystemAnnouncementConfig, getFeatureMaintenanceConfig, isFeatureInMaintenance, type FeatureMaintenanceConfig, type SystemAnnouncementConfig } from './services/economyService';
+import { getUserProfile, logVisit, updateLastActive, subscribeMaintenanceMode, getStartupSettings, isFeatureInMaintenance, type FeatureMaintenanceConfig, type SystemAnnouncementConfig } from './services/economyService';
 import { NotificationProvider, useNotification } from './components/NotificationSystem';
 import { AppEventPopup, AppEventPopupData, SystemAnnouncementModal } from './components/AppNotificationPopups';
 import { AppTour } from './components/AppTour';
@@ -21,10 +12,20 @@ import { Icons } from './components/Icons';
 import { syncPaymentTransaction } from './services/serverQueueService';
 import { setAnalyticsUser, trackEvent, trackPageView } from './services/analyticsService';
 import { shouldUseMobileShell } from './shared/shellDetection';
+import { scheduleDeferredBrowserTask } from './utils/browserTasks';
 
 const ToolWorkspace = lazy(() => import('./views/ToolWorkspace').then((module) => ({ default: module.ToolWorkspace })));
 const Admin = lazy(() => import('./views/Admin').then((module) => ({ default: module.Admin })));
 const Gallery = lazy(() => import('./views/Gallery').then((module) => ({ default: module.Gallery })));
+const Home = lazy(() => import('./views/Home').then((module) => ({ default: module.Home })));
+const Settings = lazy(() => import('./views/Settings').then((module) => ({ default: module.Settings })));
+const About = lazy(() => import('./views/About').then((module) => ({ default: module.About })));
+const Guide = lazy(() => import('./views/Guide').then((module) => ({ default: module.Guide })));
+const Support = lazy(() => import('./views/Support').then((module) => ({ default: module.Support })));
+const PromptLibrary = lazy(() => import('./views/PromptLibrary').then((module) => ({ default: module.PromptLibrary })));
+const Landing = lazy(() => import('./views/Landing').then((module) => ({ default: module.Landing })));
+const TopUp = lazy(() => import('./views/TopUp').then((module) => ({ default: module.TopUp })));
+const ManualPaymentGateway = lazy(() => import('./views/ManualPaymentGateway').then((module) => ({ default: module.ManualPaymentGateway })));
 const MobileApp = lazy(() => import('./mobile-app/src/App'));
 
 const AppLoadingFallback = () => (
@@ -247,14 +248,17 @@ function AppContent() {
       document.documentElement.classList.add('dark');
     }
 
-    // Log Visit (Tracks every reload)
-    logVisit();
-    updateLastActive();
-    getSystemAnnouncementConfig().then((config) => {
-        setSystemAnnouncement(config);
-        setShowSystemAnnouncement(shouldShowSystemAnnouncement(config));
+    const cancelDeferredActivity = scheduleDeferredBrowserTask(() => {
+        void logVisit();
+        void updateLastActive();
     });
-    getFeatureMaintenanceConfig().then(setFeatureMaintenance);
+
+    void getStartupSettings().then((settings) => {
+        setMaintenanceMode(settings.maintenanceMode);
+        setFeatureMaintenance(settings.featureMaintenance);
+        setSystemAnnouncement(settings.systemAnnouncement);
+        setShowSystemAnnouncement(shouldShowSystemAnnouncement(settings.systemAnnouncement));
+    });
 
     // Update last active every 5 minutes
     const activeInterval = setInterval(() => {
@@ -271,7 +275,7 @@ function AppContent() {
 
     // Check for existing session on load
     if (supabase) {
-        const unsubscribeMaintenanceMode = subscribeMaintenanceMode(setMaintenanceMode);
+        const unsubscribeMaintenanceMode = subscribeMaintenanceMode(setMaintenanceMode, { fetchImmediately: false });
 
         getSupabaseSession().then((session: any) => {
             if (session) {
@@ -310,8 +314,15 @@ function AppContent() {
             unsubscribeMaintenanceMode();
             clearInterval(activeInterval);
             document.removeEventListener('visibilitychange', handleVisibilityChange);
+            cancelDeferredActivity();
         };
     }
+
+    return () => {
+        clearInterval(activeInterval);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        cancelDeferredActivity();
+    };
   }, []);
 
   // --- HANDLE PAYMENT RETURN ---

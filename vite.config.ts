@@ -19,6 +19,7 @@ export default defineConfig(({ mode }) => {
             if (!normalizedId.includes('node_modules')) return;
             if (normalizedId.includes('react-dom') || normalizedId.includes('react') || normalizedId.includes('scheduler') || normalizedId.includes('react-router-dom')) return 'vendor-react';
             if (normalizedId.includes('@supabase/supabase-js')) return 'vendor-supabase';
+            if (normalizedId.includes('@mediapipe/tasks-vision')) return 'vendor-mediapipe';
             if (normalizedId.includes('recharts')) return 'vendor-charts';
             if (normalizedId.includes('lucide-react')) return 'vendor-icons';
             if (normalizedId.includes('@google/genai') || normalizedId.includes('google-auth-library') || normalizedId.includes('/gaxios/') || normalizedId.includes('/gcp-metadata/') || normalizedId.includes('/gtoken/')) return 'vendor-ai';

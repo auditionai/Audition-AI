@@ -22,7 +22,7 @@ import { useNavigate } from 'react-router-dom';
 import { DailyCheckin } from '../../components/DailyCheckin';
 import { useAuth } from '../../contexts/AuthContext';
 import {
-  getFeatureMaintenanceConfig,
+  getStartupSettings,
   isFeatureInMaintenance,
   subscribeCheckinStatus,
   type FeatureMaintenanceConfig,
@@ -121,7 +121,7 @@ export function HomeV2() {
   ), []);
 
   useEffect(() => {
-    getFeatureMaintenanceConfig().then(setFeatureMaintenance).catch(() => {
+    getStartupSettings().then((settings) => setFeatureMaintenance(settings.featureMaintenance)).catch(() => {
       setFeatureMaintenance({ disabledFeatureIds: [] });
     });
   }, []);

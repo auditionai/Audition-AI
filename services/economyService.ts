@@ -132,6 +132,17 @@ export type FeatureMaintenanceConfig = {
     updatedAt?: string;
 };
 
+export type MaintenanceModeState = {
+    isActive: boolean;
+    message: string;
+};
+
+export type StartupSettings = {
+    maintenanceMode: MaintenanceModeState;
+    featureMaintenance: FeatureMaintenanceConfig;
+    systemAnnouncement: SystemAnnouncementConfig;
+};
+
 export type AppTourSurface = 'desktop' | 'mobile';
 export type AppTourPlacement = 'auto' | 'top' | 'right' | 'bottom' | 'left';
 
@@ -438,11 +449,12 @@ let lastCheckinStatusAttentionAt = 0;
 let modelPricingCache: TimedCache<ModelPricing[]> | null = null;
 let tstServerAvailabilityCache: TimedCache<TstServerAvailabilityConfig> | null = null;
 let featureMaintenanceCache: TimedCache<FeatureMaintenanceConfig> | null = null;
-const DEFAULT_MAINTENANCE_MODE = {
+let systemAnnouncementCache: TimedCache<SystemAnnouncementConfig> | null = null;
+let startupSettingsPromise: Promise<StartupSettings> | null = null;
+const DEFAULT_MAINTENANCE_MODE: MaintenanceModeState = {
     isActive: false,
     message: "Há»‡ thá»‘ng Ä‘ang báº£o trÃ¬, vui lÃ²ng quay láº¡i sau."
 };
-type MaintenanceModeState = typeof DEFAULT_MAINTENANCE_MODE;
 let maintenanceModeCache: TimedCache<MaintenanceModeState> | null = null;
 let maintenanceModePromise: Promise<MaintenanceModeState> | null = null;
 const maintenanceModeSubscribers = new Set<(value: MaintenanceModeState) => void>();
@@ -478,11 +490,13 @@ export const invalidateTstServerAvailabilityCache = () => {
 
 export const invalidateFeatureMaintenanceCache = () => {
     featureMaintenanceCache = null;
+    startupSettingsPromise = null;
 };
 
 export const invalidateMaintenanceModeCache = () => {
     maintenanceModeCache = null;
     maintenanceModePromise = null;
+    startupSettingsPromise = null;
 };
 
 const notifyMaintenanceModeSubscribers = (value: MaintenanceModeState) => {
@@ -2790,7 +2804,7 @@ export const getMaintenanceMode = async (options?: { force?: boolean }) => {
 
 export const subscribeMaintenanceMode = (
     subscriber: (value: MaintenanceModeState) => void,
-    options?: { immediate?: boolean }
+    options?: { immediate?: boolean; fetchImmediately?: boolean }
 ) => {
     maintenanceModeSubscribers.add(subscriber);
 
@@ -2799,7 +2813,9 @@ export const subscribeMaintenanceMode = (
     }
 
     ensureMaintenanceModePolling();
-    void getMaintenanceMode();
+    if (options?.fetchImmediately !== false) {
+        void getMaintenanceMode();
+    }
 
     return () => {
         maintenanceModeSubscribers.delete(subscriber);
@@ -2958,8 +2974,12 @@ const normalizeSystemAnnouncement = (value: any): SystemAnnouncementConfig => {
     };
 };
 
-export const getSystemAnnouncementConfig = async (): Promise<SystemAnnouncementConfig> => {
+export const getSystemAnnouncementConfig = async (options?: { force?: boolean }): Promise<SystemAnnouncementConfig> => {
     if (!supabase) return DEFAULT_SYSTEM_ANNOUNCEMENT_CONFIG;
+    if (!options?.force && systemAnnouncementCache && systemAnnouncementCache.expiresAt > Date.now()) {
+        return systemAnnouncementCache.value;
+    }
+
     try {
         const { data, error } = await supabase
             .from('system_settings')
@@ -2968,10 +2988,91 @@ export const getSystemAnnouncementConfig = async (): Promise<SystemAnnouncementC
             .maybeSingle();
         if (error) throw error;
 
-        return normalizeSystemAnnouncement(data?.value);
+        const normalized = normalizeSystemAnnouncement(data?.value);
+        systemAnnouncementCache = {
+            value: normalized,
+            expiresAt: Date.now() + MAINTENANCE_MODE_CACHE_TTL_MS,
+        };
+        return normalized;
     } catch (e) {
         console.error("Get System Announcement Config Error", e);
         return DEFAULT_SYSTEM_ANNOUNCEMENT_CONFIG;
+    }
+};
+
+export const getStartupSettings = async (options?: { force?: boolean }): Promise<StartupSettings> => {
+    const now = Date.now();
+    const hasFreshCaches = (
+        (maintenanceModeCache?.expiresAt || 0) > now
+        && (featureMaintenanceCache?.expiresAt || 0) > now
+        && (systemAnnouncementCache?.expiresAt || 0) > now
+    );
+
+    if (!options?.force && hasFreshCaches) {
+        return {
+            maintenanceMode: maintenanceModeCache!.value,
+            featureMaintenance: featureMaintenanceCache!.value,
+            systemAnnouncement: systemAnnouncementCache!.value,
+        };
+    }
+
+    if (!supabase) {
+        return {
+            maintenanceMode: DEFAULT_MAINTENANCE_MODE,
+            featureMaintenance: DEFAULT_FEATURE_MAINTENANCE_CONFIG,
+            systemAnnouncement: DEFAULT_SYSTEM_ANNOUNCEMENT_CONFIG,
+        };
+    }
+
+    if (!options?.force && startupSettingsPromise) {
+        return startupSettingsPromise;
+    }
+
+    startupSettingsPromise = (async () => {
+        try {
+            const { data, error } = await supabase
+                .from('system_settings')
+                .select('key,value')
+                .in('key', ['maintenance_mode', 'feature_maintenance', 'system_announcement']);
+            if (error) throw error;
+
+            const settings = new Map((data || []).map((row: any) => [String(row.key), row.value]));
+            const maintenanceValue = parseSettingValue(settings.get('maintenance_mode'), DEFAULT_MAINTENANCE_MODE);
+            const maintenanceMode = setSharedMaintenanceMode({
+                isActive: !!maintenanceValue?.isActive,
+                message: maintenanceValue?.message || DEFAULT_MAINTENANCE_MODE.message,
+            });
+            const featureMaintenance = normalizeFeatureMaintenanceConfig(settings.get('feature_maintenance'));
+            const systemAnnouncement = normalizeSystemAnnouncement(settings.get('system_announcement'));
+            const expiresAt = Date.now() + MAINTENANCE_MODE_CACHE_TTL_MS;
+
+            featureMaintenanceCache = { value: featureMaintenance, expiresAt };
+            systemAnnouncementCache = { value: systemAnnouncement, expiresAt };
+
+            return { maintenanceMode, featureMaintenance, systemAnnouncement };
+        } catch (e) {
+            console.error("Get Startup Settings Error", e);
+            const maintenanceMode = setSharedMaintenanceMode(DEFAULT_MAINTENANCE_MODE);
+            featureMaintenanceCache = {
+                value: DEFAULT_FEATURE_MAINTENANCE_CONFIG,
+                expiresAt: Date.now() + MAINTENANCE_MODE_CACHE_TTL_MS,
+            };
+            systemAnnouncementCache = {
+                value: DEFAULT_SYSTEM_ANNOUNCEMENT_CONFIG,
+                expiresAt: Date.now() + MAINTENANCE_MODE_CACHE_TTL_MS,
+            };
+            return {
+                maintenanceMode,
+                featureMaintenance: DEFAULT_FEATURE_MAINTENANCE_CONFIG,
+                systemAnnouncement: DEFAULT_SYSTEM_ANNOUNCEMENT_CONFIG,
+            };
+        }
+    })();
+
+    try {
+        return await startupSettingsPromise;
+    } finally {
+        startupSettingsPromise = null;
     }
 };
 
@@ -2979,18 +3080,23 @@ export const saveSystemAnnouncementConfig = async (config: SystemAnnouncementCon
     if (!supabase) return { success: false, error: "No Database" };
     try {
         const normalizedConfig = normalizeSystemAnnouncement(config);
+        const payload: SystemAnnouncementConfig = {
+            ...normalizedConfig,
+            updatedAt: new Date().toISOString(),
+        };
         const { error } = await supabase.from('system_settings').upsert(
             {
                 key: 'system_announcement',
-                value: {
-                    ...normalizedConfig,
-                    updatedAt: new Date().toISOString(),
-                },
+                value: payload,
             },
             { onConflict: 'key' },
         );
 
         if (error) throw error;
+        systemAnnouncementCache = {
+            value: payload,
+            expiresAt: Date.now() + MAINTENANCE_MODE_CACHE_TTL_MS,
+        };
         return { success: true };
     } catch (e: any) {
         console.error("Save System Announcement Config Error", e);

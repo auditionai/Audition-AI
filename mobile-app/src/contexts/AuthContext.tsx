@@ -6,9 +6,10 @@
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { supabase, getSupabaseSession, getSupabaseUser } from '../services/supabaseClient';
-import { getUserProfile, logVisit, updateLastActive, subscribeMaintenanceMode, invalidateUserProfileCache } from '../services/economyService';
+import { getUserProfile, logVisit, updateLastActive, subscribeMaintenanceMode, invalidateUserProfileCache, getStartupSettings } from '../services/economyService';
 import { setAnalyticsUser, trackEvent } from '../services/analyticsService';
 import type { UserProfile } from '../types';
+import { scheduleDeferredBrowserTask } from '../../../utils/browserTasks';
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -77,9 +78,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    // Log visit on mount
-    logVisit();
-    updateLastActive();
+    const cancelDeferredActivity = scheduleDeferredBrowserTask(() => {
+      void logVisit();
+      void updateLastActive();
+    });
+
+    void getStartupSettings().then((settings) => {
+      setMaintenanceMode(settings.maintenanceMode);
+    });
 
     // Update last active every 5 minutes
     const activeInterval = setInterval(() => {
@@ -95,7 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     if (supabase) {
-      const unsubscribeMaintenanceMode = subscribeMaintenanceMode(setMaintenanceMode);
+      const unsubscribeMaintenanceMode = subscribeMaintenanceMode(setMaintenanceMode, { fetchImmediately: false });
 
       // Check existing session
       getSupabaseSession().then(async (session: any) => {
@@ -149,6 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         clearInterval(activeInterval);
         document.removeEventListener('visibilitychange', handleVisibilityChange);
         window.removeEventListener('balance_updated', handleBalanceUpdate);
+        cancelDeferredActivity();
       };
     } else {
       setIsLoading(false);
@@ -157,6 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       clearInterval(activeInterval);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      cancelDeferredActivity();
     };
   }, []);
 

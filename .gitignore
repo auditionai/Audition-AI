@@ -32,3 +32,26 @@ dist-ssr
 .env.*
 !.env.example
 !.env.*.example
+
+# Local AI-agent tooling and generated inspection artifacts
+/.claude/
+/.codex-logs/
+/screenshots/
+/.video-projects/
+
+# Local video production sources (kept under E:\Tools Video)
+/video_rebuild/
+/tools/
+
+# Generated database dumps/backups; keep real migrations tracked
+/supabase/cloud-sync/
+*.dump
+*.backup
+
+# Local test/build reports
+/coverage/
+/playwright-report/
+/test-results/
+
+# Machine-specific workspace files
+*.code-workspace

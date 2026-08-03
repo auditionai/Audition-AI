@@ -136,6 +136,7 @@ export type GenerationProviderMode = 'tst' | 'gommo';
 
 export type GenerationProviderConfig = {
     provider: GenerationProviderMode;
+    providerByModel: Record<string, GenerationProviderMode>;
     updatedAt?: string;
 };
 
@@ -199,6 +200,7 @@ export const DEFAULT_FEATURE_MAINTENANCE_CONFIG: FeatureMaintenanceConfig = {
 
 export const DEFAULT_GENERATION_PROVIDER_CONFIG: GenerationProviderConfig = {
     provider: 'tst',
+    providerByModel: {},
 };
 
 export const APP_TOUR_TARGETS: Array<{ id: string; label: string; surface: AppTourSurface; screen: string; featureId?: string; description?: string }> = [
@@ -2929,8 +2931,17 @@ export const getGenerationProviderConfig = async (): Promise<GenerationProviderC
             .eq('key', 'generation_provider_mode')
             .maybeSingle();
         if (error) throw error;
+        const providerByModel = Object.fromEntries(
+            Object.entries(data?.value?.providerByModel || {})
+                .map(([modelId, provider]) => [
+                    String(modelId || '').trim().toLowerCase(),
+                    provider === 'gommo' ? 'gommo' : provider === 'tst' ? 'tst' : null,
+                ])
+                .filter(([modelId, provider]) => Boolean(modelId && provider)),
+        ) as Record<string, GenerationProviderMode>;
         return {
             provider: data?.value?.provider === 'gommo' ? 'gommo' : 'tst',
+            providerByModel,
             updatedAt: typeof data?.value?.updatedAt === 'string' ? data.value.updatedAt : undefined,
         };
     } catch (e) {
@@ -2939,11 +2950,25 @@ export const getGenerationProviderConfig = async (): Promise<GenerationProviderC
     }
 };
 
-export const saveGenerationProviderConfig = async (provider: GenerationProviderMode) => {
+export const saveGenerationProviderConfig = async (
+    config: GenerationProviderConfig | GenerationProviderMode,
+) => {
     if (!supabase) return { success: false, error: 'No Database' };
     try {
+        const input = typeof config === 'string'
+            ? { provider: config, providerByModel: {} }
+            : config;
+        const providerByModel = Object.fromEntries(
+            Object.entries(input.providerByModel || {})
+                .map(([modelId, provider]) => [
+                    String(modelId || '').trim().toLowerCase(),
+                    provider === 'gommo' ? 'gommo' : provider === 'tst' ? 'tst' : null,
+                ])
+                .filter(([modelId, provider]) => Boolean(modelId && provider)),
+        ) as Record<string, GenerationProviderMode>;
         const payload: GenerationProviderConfig = {
-            provider: provider === 'gommo' ? 'gommo' : 'tst',
+            provider: input.provider === 'gommo' ? 'gommo' : 'tst',
+            providerByModel,
             updatedAt: new Date().toISOString(),
         };
         const { error } = await supabase.from('system_settings').upsert(

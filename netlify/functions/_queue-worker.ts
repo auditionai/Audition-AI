@@ -191,7 +191,14 @@ const STALE_PROVIDER_POLL_RECOVERY_MIN_AGE_MS = 45_000;
 const AMBIGUOUS_DISPATCH_DUPLICATE_PROTECTION_MESSAGE =
   'Khong nhan duoc xac nhan provider job goc sau loi mang/timeout. Job da dung de tranh tao them provider moi.';
 
-const getGlobalGenerationProvider = async (): Promise<GenerationProvider> => {
+const getQueuePayloadModelId = (payload: Record<string, unknown>) => {
+  const recipe = payload.__recipePayload && typeof payload.__recipePayload === 'object'
+    ? payload.__recipePayload as Record<string, unknown>
+    : payload;
+  return String(payload.model || payload.modelId || recipe.model || recipe.modelId || '').trim().toLowerCase();
+};
+
+const getGlobalGenerationProvider = async (modelId: string): Promise<GenerationProvider> => {
   try {
     const admin = getServiceRoleClient();
     const { data, error } = await admin
@@ -200,6 +207,8 @@ const getGlobalGenerationProvider = async (): Promise<GenerationProvider> => {
       .eq('key', 'generation_provider_mode')
       .maybeSingle();
     if (error) throw error;
+    const modelProvider = String(data?.value?.providerByModel?.[modelId] || '').trim().toLowerCase();
+    if (modelProvider === 'gommo' || modelProvider === 'tst') return modelProvider;
     const selected = String(data?.value?.provider || '').trim().toLowerCase();
     return selected === 'gommo' ? 'gommo' : selected === 'tst' ? 'tst' : GENERATION_PROVIDER_DEFAULT;
   } catch (error) {
@@ -211,7 +220,7 @@ const getGlobalGenerationProvider = async (): Promise<GenerationProvider> => {
 const resolveDispatchProvider = async (payload: Record<string, unknown>): Promise<GenerationProvider> => {
   const stored = String(payload.__targetProvider || '').trim().toLowerCase();
   if (stored === 'tst' || stored === 'gommo') return stored;
-  return getGlobalGenerationProvider();
+  return getGlobalGenerationProvider(getQueuePayloadModelId(payload));
 };
 
 const isTransientError = (message: string) => {

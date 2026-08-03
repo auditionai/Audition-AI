@@ -329,6 +329,7 @@ const findPricingMatch = (
 export const validateQueuePayloadAgainstLiveCatalog = async (
   queueKind: string,
   queuePayload: Record<string, unknown> | null | undefined,
+  options?: { ignoreServerAvailability?: boolean },
 ) => {
   if (!queuePayload || typeof queuePayload !== 'object') {
     throw new Error('INVALID_TST_CONFIG: Queue payload is missing');
@@ -361,7 +362,7 @@ export const validateQueuePayloadAgainstLiveCatalog = async (
   }
 
   const modelPricing = getMatchingPricingEntries(modelId, pricing).filter(
-    (entry) => isServerAllowedBySnapshot(serverAvailabilityConfig, modelId, entry.server, entry.speed),
+    (entry) => options?.ignoreServerAvailability || isServerAllowedBySnapshot(serverAvailabilityConfig, modelId, entry.server, entry.speed),
   );
   if (modelPricing.length === 0) {
     throw new Error(`INVALID_TST_CONFIG: Model ${modelId} has no live pricing on TST`);
@@ -375,11 +376,11 @@ export const validateQueuePayloadAgainstLiveCatalog = async (
   const audio = typeof queuePayload.audio === 'boolean' ? queuePayload.audio : undefined;
   const aspectRatio = String(queuePayload.aspect_ratio || queuePayload.aspectRatio || '').trim();
 
-  if (serverId && !isServerAllowedBySnapshot(serverAvailabilityConfig, modelId, serverId, speed)) {
+  if (!options?.ignoreServerAvailability && serverId && !isServerAllowedBySnapshot(serverAvailabilityConfig, modelId, serverId, speed)) {
     throw new Error(`INVALID_TST_CONFIG: Server ${serverId} đang tạm ẩn do quá tải ở chế độ ${speed || 'default'}. Vui lòng chọn server khác.`);
   }
 
-  if (serverId && Array.isArray(model.servers) && model.servers.length > 0) {
+  if (!options?.ignoreServerAvailability && serverId && Array.isArray(model.servers) && model.servers.length > 0) {
     const availableServers = model.servers
       .map((value) => normalizeServer(value))
       .filter((value) => !(serverAvailabilityConfig.disabledByModel[modelId] || []).includes(value));

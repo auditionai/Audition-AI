@@ -114,6 +114,9 @@ export interface TstPricingRow {
   modelId: string;
   modelName: string;
   server: string;
+  providerServerId?: string;
+  providerServerLabel?: string;
+  providerModeLabel?: string;
   resolution?: string;
   quality?: string;
   duration?: string;

@@ -111,6 +111,7 @@ import {
     getGommoPriceComparison,
     type GommoProviderCatalog,
 } from '../services/providerCatalog';
+import { getGommoServerGroups } from '../shared/gommoServerRouting';
 
 interface AdminProps {
   lang: Language;
@@ -765,7 +766,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   getModelPricing(),
                   getPricingRows(true),
                   getTstServerAvailabilityConfig(),
-                  fetchProviderCatalog(true).catch((error) => {
+                  fetchProviderCatalog(true, true).catch((error) => {
                       setGommoCatalogError(error instanceof Error ? error.message : String(error));
                       return null;
                   }),
@@ -908,11 +909,21 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               const convertedVcoin = gommoCatalog.vndPerCredit && providerCredits > 0
                   ? Math.max(1, Math.ceil((providerCredits * gommoCatalog.vndPerCredit) / 1000))
                   : 0;
+              const gommoServerGroups = getGommoServerGroups(model);
+              const gommoMode = model.modes.find((mode) =>
+                  mode.type.trim().toLowerCase() === String(price.mode || '').trim().toLowerCase(),
+              );
+              const gommoServerGroup = gommoServerGroups.find((group) =>
+                  group.modeTypes.some((modeType) => modeType.trim().toLowerCase() === String(price.mode || '').trim().toLowerCase()),
+              ) || gommoServerGroups[0];
               return {
                   type: model.kind === 'motion' ? 'motion-control' : model.kind,
                   modelId: model.auditionModelId,
                   modelName: model.name,
                   server: 'gommo',
+                  providerServerId: gommoServerGroup?.id,
+                  providerServerLabel: gommoServerGroup?.label || model.server || 'Gommo Gateway',
+                  providerModeLabel: gommoMode?.name || price.mode || undefined,
                   resolution: price.resolution || undefined,
                   duration: duration || undefined,
                   speed: price.mode || undefined,
@@ -4221,7 +4232,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                        clearTstCatalogCache();
                                        const [, providerCatalog] = await Promise.all([
                                            syncTSTPrices(),
-                                           fetchProviderCatalog(true),
+                                           fetchProviderCatalog(true, true),
                                        ]);
                                        setGommoCatalog(providerCatalog);
                                        setGommoCatalogError('');
@@ -4369,10 +4380,15 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                {visibleModelOptions.map((model) => {
                                                    const tstGroup = pricingServerGroups.find((group) => group.modelId.trim().toLowerCase() === model.id);
                                                    const gommoModel = gommoCatalog?.models.find((entry) => entry.auditionModelId.trim().toLowerCase() === model.id);
-                                                   const servers = effectiveProvider === 'tst'
-                                                       ? tstGroup?.servers || []
+                                                   const serverOptions = effectiveProvider === 'tst'
+                                                       ? (tstGroup?.servers || []).map((serverId) => ({
+                                                           id: serverId,
+                                                           label: tstServerToUi(serverId),
+                                                           subtitle: '',
+                                                           modeTypes: [] as string[],
+                                                       }))
                                                        : gommoModel
-                                                           ? [gommoModel.server || gommoModel.model]
+                                                           ? getGommoServerGroups(gommoModel)
                                                            : [];
                                                    return (
                                                        <div key={`${route.key}_${effectiveProvider}_${model.id}_servers`} className="rounded-xl border border-white/5 p-2">
@@ -4383,22 +4399,21 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                                )}
                                                            </div>
                                                            <div className="mt-1.5 flex flex-wrap gap-1.5">
-                                                               {servers.map((serverId) => {
-                                                                   const enabled = isProviderServerEnabledForModel(serverAvailabilityConfig, effectiveProvider, model.id, serverId);
+                                                               {serverOptions.map((serverOption) => {
+                                                                   const enabled = isProviderServerEnabledForModel(serverAvailabilityConfig, effectiveProvider, model.id, serverOption.id);
                                                                    return (
                                                                        <button
-                                                                           key={`${route.key}_${effectiveProvider}_${model.id}_${serverId}`}
+                                                                           key={`${route.key}_${effectiveProvider}_${model.id}_${serverOption.id}`}
                                                                            type="button"
-                                                                           onClick={() => handleToggleProviderServer(effectiveProvider, model.id, serverId)}
+                                                                           title={serverOption.subtitle || serverOption.modeTypes.join(', ')}
+                                                                           onClick={() => handleToggleProviderServer(effectiveProvider, model.id, serverOption.id)}
                                                                            className={`rounded-lg border px-2 py-1.5 text-[9px] font-black uppercase ${enabled ? 'border-audi-cyan/35 bg-audi-cyan/10 text-audi-cyan' : 'border-red-500/30 bg-red-500/10 text-red-300'}`}
                                                                        >
-                                                                           {effectiveProvider === 'tst'
-                                                                               ? tstServerToUi(serverId)
-                                                                               : gommoModel?.server || 'Gateway mặc định'} · {enabled ? 'Bật' : 'Khóa'}
+                                                                           {serverOption.label} · {enabled ? 'Bật' : 'Khóa'}
                                                                        </button>
                                                                    );
                                                                })}
-                                                               {servers.length === 0 && (
+                                                               {serverOptions.length === 0 && (
                                                                    <span className="text-[9px] text-amber-500">API chưa trả server khả dụng cho model này.</span>
                                                                )}
                                                            </div>
@@ -4673,8 +4688,13 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                   </td>
                                                   <td className="px-4 py-3 text-white">
                                                       <div className="flex items-center gap-2">
-                                                          <span>{row.server === 'gommo' ? 'Gommo' : tstServerToUi(row.server) || '-'}</span>
-                                                          {row.server !== 'gommo' && !isServerEnabledForModel(serverAvailabilityConfig, row.modelId, row.server) && (
+                                                          <span>{row.server === 'gommo' ? row.providerServerLabel || 'Gommo Gateway' : tstServerToUi(row.server) || '-'}</span>
+                                                          {!isProviderServerEnabledForModel(
+                                                              serverAvailabilityConfig,
+                                                              row.server === 'gommo' ? 'gommo' : 'tst',
+                                                              row.modelId,
+                                                              row.server === 'gommo' ? row.providerServerId : row.server,
+                                                          ) && (
                                                               <span className="px-2 py-0.5 rounded-full border border-red-500/30 bg-red-500/10 text-[10px] font-bold uppercase tracking-wider text-red-300">
                                                                   Khóa
                                                               </span>
@@ -4691,7 +4711,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                           </div>
                                                       )}
                                                   </td>
-                                                  <td className="px-4 py-3 text-white">{tstSpeedToUi(row.speed) || '-'}</td>
+                                                  <td className="px-4 py-3 text-white">{row.server === 'gommo' ? row.providerModeLabel || row.speed || '-' : tstSpeedToUi(row.speed) || '-'}</td>
                                                   <td className="px-4 py-3 text-center text-white">{row.audio ? 'Có' : '-'}</td>
                                                   <td className="px-4 py-3 text-right font-mono text-audi-cyan">{row.type === 'edit' || row.server === 'gommo' ? '-' : row.credits}</td>
                                                    <td className="px-4 py-3 text-right font-mono text-slate-200">

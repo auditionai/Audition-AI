@@ -6,6 +6,7 @@ import { isDedicatedQueueWorkerMode } from './_queue-runtime-mode';
 import { validateQueuePayloadAgainstLiveCatalog } from './_tst-live-catalog';
 import { normalizeAndValidateGommoPayload } from './_gommo-provider';
 import { isProviderServerAllowedByConfig } from './_server-availability';
+import { getGommoServerIdForMode } from '../../shared/gommoServerRouting';
 import {
   DEFAULT_PROVIDER_BY_FEATURE,
   getAllowedModelsForFeature,
@@ -764,7 +765,7 @@ export const handler: Handler = async (event) => {
         ? getRecipeValidationPayload(body.queuePayload)
         : { ...body.queuePayload, model: modelId };
       const gommoValidation = await normalizeAndValidateGommoPayload(body.queueKind, gommoValidationPayload);
-      const gommoServerId = String(gommoValidation.model.server || gommoValidation.mapping.gommoModelId || '').trim();
+      const gommoServerId = getGommoServerIdForMode(gommoValidation.model, gommoValidation.mode);
       if (!(await isProviderServerAllowedByConfig('gommo', modelId, gommoServerId))) {
         return {
           statusCode: 503,

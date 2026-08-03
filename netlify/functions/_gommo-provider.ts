@@ -1,4 +1,9 @@
-import { isProviderServerAllowedByConfig } from './_server-availability';
+import {
+  getServerAvailabilityConfig,
+  isProviderServerAllowedByConfig,
+  isProviderServerAllowedBySnapshot,
+} from './_server-availability';
+import { getGommoServerIdForMode } from '../../shared/gommoServerRouting';
 
 type QueueKind = 'image_generate' | 'video_generate' | 'motion_generate' | string;
 
@@ -352,7 +357,7 @@ export const submitGommoJob = async (
 ): Promise<GommoSubmitResult> => {
   const normalized = await normalizeAndValidateGommoPayload(queueKind, payload);
   const { mapping, payload: providerPayload, mode, providerCost } = normalized;
-  const gommoServerId = String(normalized.model.server || mapping.gommoModelId || '').trim();
+  const gommoServerId = getGommoServerIdForMode(normalized.model, mode);
   if (!(await isProviderServerAllowedByConfig('gommo', mapping.auditionModelId, gommoServerId))) {
     throw new Error(`GOMMO_SERVER_DISABLED: Server ${gommoServerId || '(unknown)'} của model ${mapping.auditionModelId} đang bị khóa trong Admin.`);
   }
@@ -443,9 +448,10 @@ export const getGommoProviderCatalog = async (forceRefresh = false) => {
     };
   }
 
-  const [imageModels, videoModels] = await Promise.all([
+  const [imageModels, videoModels, serverAvailabilityConfig] = await Promise.all([
     getGommoModels('image', forceRefresh),
     getGommoModels('video', forceRefresh),
+    getServerAvailabilityConfig(forceRefresh),
   ]);
   const modelByProviderId = new Map(
     [...imageModels, ...videoModels].map((model) => [normalize(model.model), model]),
@@ -454,7 +460,7 @@ export const getGommoProviderCatalog = async (forceRefresh = false) => {
     .map((mapping) => ({ mapping, model: modelByProviderId.get(normalize(mapping.gommoModelId)) }))
     .filter((entry): entry is { mapping: GommoCatalogMapping; model: GommoModel } => Boolean(entry.model))
     .map(({ mapping, model }) => {
-      const serializeOptions = (options?: GommoModelOption[]) => getAvailableOptions(options).map((option) => ({
+      const serializeOptions = (options?: GommoModelOption[], applyServerAvailability = false) => getAvailableOptions(options).map((option) => ({
         name: String(option.name || option.type || ''),
         type: getOptionType(option),
         description: option.description || '',
@@ -462,6 +468,12 @@ export const getGommoProviderCatalog = async (forceRefresh = false) => {
         groupSubtitle: option.group_subtitle || '',
         status: option.status || 'on',
         statusMessage: option.status_message || '',
+        adminEnabled: !applyServerAvailability || isProviderServerAllowedBySnapshot(
+          serverAvailabilityConfig,
+          'gommo',
+          mapping.auditionModelId,
+          getGommoServerIdForMode(model, getOptionType(option)),
+        ),
       }));
       const modes = [...(model.modes || []), ...(model.mode || [])];
       const uniqueModes = Array.from(new Map(modes.map((option) => [normalize(getOptionType(option)), option])).values());
@@ -482,7 +494,7 @@ export const getGommoProviderCatalog = async (forceRefresh = false) => {
         ratios: serializeOptions(model.ratios),
         resolutions: serializeOptions(model.resolutions),
         durations: serializeOptions(model.durations),
-        modes: serializeOptions(uniqueModes),
+        modes: serializeOptions(uniqueModes, true),
         prices: (model.prices || []).map((price) => ({
           mode: price.mode || null,
           resolution: price.resolution || null,

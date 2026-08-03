@@ -45,6 +45,14 @@ services:
         sync: false
       - key: TST_API_KEY
         sync: false
+      - key: GOMMO_ACCESS_TOKEN
+        sync: false
+      - key: GOMMO_DOMAIN
+        value: vmedia.ai
+      - key: GOMMO_PROJECT_ID
+        value: default
+      - key: GENERATION_PROVIDER_DEFAULT
+        value: tst
       - key: PAYMENT_GATEWAY
         value: sepay
       - key: SEPAY_ENV
@@ -92,6 +100,14 @@ services:
         sync: false
       - key: TST_API_KEY
         sync: false
+      - key: GOMMO_ACCESS_TOKEN
+        sync: false
+      - key: GOMMO_DOMAIN
+        value: vmedia.ai
+      - key: GOMMO_PROJECT_ID
+        value: default
+      - key: GENERATION_PROVIDER_DEFAULT
+        value: tst
       - key: SEPAY_MERCHANT_ID
         sync: false
       - key: SEPAY_SECRET_KEY

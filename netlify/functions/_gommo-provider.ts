@@ -133,9 +133,9 @@ const getMapping = (modelId: unknown, queueKind: QueueKind) => {
   return mapping;
 };
 
-const isAvailableModel = (model: GommoModel) => {
+export const isGommoModelAvailable = (model: GommoModel) => {
   const status = normalize(model.status || 'on');
-  return !['maintenance', 'off', 'disabled', 'inactive'].includes(status);
+  return !['maintenance', 'off', 'disabled', 'inactive', 'unavailable'].includes(status);
 };
 
 const selectMode = (modelId: string, payload: Record<string, unknown>, model: GommoModel) => {
@@ -229,7 +229,7 @@ export const canUseGommoForPayload = async (queueKind: QueueKind, payload: Recor
   const mapping = getMapping(payload.model, queueKind);
   if (!mapping) return false;
   const models = await getGommoModels(mapping.kind as GommoProviderKind);
-  return models.some((model) => normalize(model.model) === normalize(mapping.gommoModelId) && isAvailableModel(model));
+  return models.some((model) => normalize(model.model) === normalize(mapping.gommoModelId) && isGommoModelAvailable(model));
 };
 
 export const submitGommoJob = async (
@@ -243,7 +243,7 @@ export const submitGommoJob = async (
 
   const models = await getGommoModels(mapping.kind as GommoProviderKind);
   const model = models.find((entry) => normalize(entry.model) === normalize(mapping.gommoModelId));
-  if (!model || !isAvailableModel(model)) {
+  if (!model || !isGommoModelAvailable(model)) {
     throw new Error(`GOMMO_MODEL_UNAVAILABLE: ${mapping.gommoModelId}`);
   }
 

@@ -13,7 +13,8 @@ values
   ('maintenance_mode', jsonb_build_object('isActive', false, 'message', 'Hệ thống đang bảo trì, vui lòng quay lại sau.')),
   ('tutorial_video', jsonb_build_object('url', 'https://www.youtube.com/watch?v=ba2WR8txe_c', 'isActive', true)),
   ('giftcode_promo', jsonb_build_object('text', 'Nhập CODE "HELLO2026" để nhận 20 Vcoin miễn phí !!!', 'isActive', true)),
-  ('tst_server_availability', jsonb_build_object('disabledByModel', jsonb_build_object(), 'updatedAt', now()))
+  ('tst_server_availability', jsonb_build_object('disabledByModel', jsonb_build_object(), 'updatedAt', now())),
+  ('generation_provider_mode', jsonb_build_object('provider', 'tst', 'providerByModel', jsonb_build_object(), 'smartFallbackEnabled', true, 'updatedAt', now()))
 on conflict (key) do update
 set
   value = excluded.value,

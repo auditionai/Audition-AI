@@ -61,10 +61,9 @@ type GommoSubmitResult = {
   mappedModelId: string;
 };
 
-// Gommo's current public gateway (documented in the API Playground) uses
-// Bearer auth, live /ai/models discovery and the asynchronous /ai/jobs routes.
-// GOMMO_API_BASE remains overridable for staging/white-label gateways.
-const GOMMO_API_BASE = String(process.env.GOMMO_API_BASE || 'https://v2.api.gommo.net').replace(/\/+$/, '');
+// Keep the production default on Gommo's documented public API. The base remains
+// overridable for an explicitly configured staging/white-label environment.
+const GOMMO_API_BASE = String(process.env.GOMMO_API_BASE || 'https://api.gommo.net').replace(/\/+$/, '');
 const GOMMO_ACCESS_TOKEN = String(process.env.GOMMO_ACCESS_TOKEN || process.env.GOMMO_API_TOKEN || '').trim();
 const GOMMO_DOMAIN = String(process.env.GOMMO_DOMAIN || 'vmedia.ai').trim();
 const GOMMO_PROJECT_ID = String(process.env.GOMMO_PROJECT_ID || 'default').trim();
@@ -136,6 +135,10 @@ const parseGommoError = (data: any, fallback: string) => {
     data?.data?.message,
     data?.data?.error,
     data?.data?.detail,
+    data?.imageInfo?.message,
+    data?.imageInfo?.error,
+    data?.videoInfo?.message,
+    data?.videoInfo?.error,
     data?.raw?.imageInfo?.message,
     data?.raw?.imageInfo?.error,
     data?.raw?.imageInfo?.detail,
@@ -150,7 +153,7 @@ const parseGommoError = (data: any, fallback: string) => {
 const postForm = async (path: string, values: Record<string, unknown>, timeoutMs = GOMMO_TIMEOUT_MS) => {
   const form = new URLSearchParams();
   const credentials = getCredentials();
-  const payload = { domain: credentials.domain, ...values };
+  const payload = { access_token: credentials.access_token, domain: credentials.domain, ...values };
 
   for (const [key, value] of Object.entries(payload)) {
     if (value === undefined || value === null || value === '') continue;
@@ -186,16 +189,7 @@ export const getGommoModels = async (kind: GommoProviderKind, forceRefresh = fal
     return cached.models;
   }
 
-  const credentials = getCredentials();
-  const response = await fetch(`${GOMMO_API_BASE}/ai/models?type=${encodeURIComponent(kind)}`, {
-    method: 'GET',
-    headers: { Authorization: `Bearer ${credentials.access_token}` },
-    signal: AbortSignal.timeout(GOMMO_TIMEOUT_MS),
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || data?.success === false) {
-    throw new Error(`GOMMO_ERROR: ${parseGommoError(data, `${response.status} ${response.statusText}`)}`);
-  }
+  const data = await postForm('/ai/models', { type: kind });
   const models = Array.isArray(data?.data)
     ? data.data.filter((entry: any) => entry && typeof entry === 'object' && String(entry.model || '').trim()) as GommoModel[]
     : [];
@@ -340,24 +334,76 @@ const getSources = (payload: Record<string, unknown>) => {
   return values.map((value) => String(value || '').trim()).filter(Boolean);
 };
 
-// Gommo documents arrays/objects in x-www-form-urlencoded requests as one JSON
-// string. postForm serializes this array, producing e.g.
-// subjects=[{"url":"https://..."}] instead of PHP-style subjects[0][url].
-const getUrlObjects = (sources: string[]) => sources.map((url) => ({ url }));
+type GommoMediaReference = {
+  id_base: string;
+  url: string;
+  data: string;
+};
 
-const getImageSourceFields = (model: GommoModel, sources: string[]) => {
+const GOMMO_MAX_INPUT_IMAGE_BYTES = 25 * 1024 * 1024;
+
+const getGommoUploadFileName = (sourceUrl: string, index: number) => {
+  try {
+    const pathname = new URL(sourceUrl).pathname;
+    const candidate = decodeURIComponent(pathname.split('/').filter(Boolean).pop() || '').trim();
+    if (candidate) return candidate.slice(-180);
+  } catch {
+    // Use the deterministic fallback below.
+  }
+  return `audition-reference-${index + 1}.jpg`;
+};
+
+const uploadImageToGommo = async (sourceUrl: string, index: number): Promise<GommoMediaReference> => {
+  const response = await fetch(sourceUrl, { signal: AbortSignal.timeout(GOMMO_TIMEOUT_MS) });
+  if (!response.ok) {
+    throw new Error(`GOMMO_UPLOAD_ERROR: Cannot download reference image ${index + 1} (${response.status})`);
+  }
+  const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+  if (contentType && !contentType.startsWith('image/')) {
+    throw new Error(`GOMMO_UPLOAD_ERROR: Reference ${index + 1} is not an image (${contentType})`);
+  }
+  const declaredSize = Number(response.headers.get('content-length') || 0);
+  if (declaredSize > GOMMO_MAX_INPUT_IMAGE_BYTES) {
+    throw new Error(`GOMMO_UPLOAD_ERROR: Reference ${index + 1} exceeds 25 MB`);
+  }
+  const bytes = await response.arrayBuffer();
+  if (!bytes.byteLength || bytes.byteLength > GOMMO_MAX_INPUT_IMAGE_BYTES) {
+    throw new Error(`GOMMO_UPLOAD_ERROR: Reference ${index + 1} is empty or exceeds 25 MB`);
+  }
+
+  const upload = await postForm('/ai/image-upload', {
+    data: Buffer.from(bytes).toString('base64'),
+    project_id: GOMMO_PROJECT_ID,
+    file_name: getGommoUploadFileName(sourceUrl, index),
+    size: bytes.byteLength,
+  });
+  const imageInfo = upload?.imageInfo || upload?.data?.imageInfo || upload?.data;
+  const idBase = String(imageInfo?.id_base || '').trim();
+  const url = String(imageInfo?.url || '').trim();
+  if (!idBase || !/^https?:\/\//i.test(url)) {
+    throw new Error(`GOMMO_UPLOAD_ERROR: Upload Image did not return imageInfo.id_base and imageInfo.url for reference ${index + 1}`);
+  }
+  return { id_base: idBase, url, data: '' };
+};
+
+const getImageSourceFields = (model: GommoModel, sources: GommoMediaReference[]) => {
   const providerLimit = Number(model.maxSubject);
   const limit = Number.isFinite(providerLimit) && providerLimit > 0 ? Math.floor(providerLimit) : 8;
   const limitedSources = sources.slice(0, limit);
   if (!limitedSources.length) return {};
-  if (model.withSubject) return { subjects: getUrlObjects(limitedSources) };
-  if (model.withReference) return { references: getUrlObjects(limitedSources) };
+  if (model.withSubject) return { subjects: limitedSources };
+  if (model.withReference) return { references: limitedSources };
   return {
-    images: getUrlObjects(model.startImageAndEnd ? limitedSources.slice(0, 2) : limitedSources.slice(0, 1)),
+    images: model.startImageAndEnd ? limitedSources.slice(0, 2) : limitedSources.slice(0, 1),
   };
 };
 
-const getGatewayJobData = (data: any) => data?.data && typeof data.data === 'object' ? data.data : data;
+const getGatewayJobData = (data: any) => {
+  if (data?.data && typeof data.data === 'object' && !Array.isArray(data.data)) return data.data;
+  if (data?.imageInfo && typeof data.imageInfo === 'object') return data.imageInfo;
+  if (data?.videoInfo && typeof data.videoInfo === 'object') return data.videoInfo;
+  return data;
+};
 
 const extractGommoGatewayJobId = (data: any) => {
   const job = getGatewayJobData(data);
@@ -391,9 +437,12 @@ export const submitGommoJob = async (
 
   if (queueKind === 'image_generate') {
     const sources = getSources(providerPayload).filter((source) => /^https?:\/\//i.test(source));
-    const data = await postForm(`/ai/jobs/image/${encodeURIComponent(mapping.gommoModelId)}`, {
+    const uploadedSources = await Promise.all(sources.map((source, index) => uploadImageToGommo(source, index)));
+    const data = await postForm('/ai/generateImage', {
       ...common,
-      ...getImageSourceFields(normalized.model, sources),
+      action_type: 'create',
+      model: mapping.gommoModelId,
+      ...getImageSourceFields(normalized.model, uploadedSources),
       ratio: providerPayload.aspect_ratio,
       resolution: providerPayload.resolution,
       mode,
@@ -404,9 +453,13 @@ export const submitGommoJob = async (
   }
 
   const imageSources = getSources(providerPayload).filter((source) => /^https?:\/\//i.test(source)).slice(0, 2);
-  const data = await postForm(`/ai/jobs/video/${encodeURIComponent(mapping.gommoModelId)}`, {
+  const uploadedImages = await Promise.all(imageSources.map((source, index) => uploadImageToGommo(source, index)));
+  const data = await postForm('/ai/create-video', {
     ...common,
-    images: imageSources.length ? getUrlObjects(imageSources) : undefined,
+    model: mapping.gommoModelId,
+    privacy: 'PRIVATE',
+    translate_to_en: 'false',
+    images: uploadedImages.length ? uploadedImages : undefined,
     ratio: String(providerPayload.aspect_ratio || '').trim() || undefined,
     resolution: normalizeResolution(providerPayload.resolution) || undefined,
     duration: normalizeDuration(providerPayload.duration) || undefined,
@@ -419,8 +472,9 @@ export const submitGommoJob = async (
 
 export const pollGommoJob = async (queueKind: QueueKind, providerJobId: string) => {
   const media = queueKind === 'image_generate' ? 'image' : 'video';
-  const data = await postForm(`/ai/jobs/${encodeURIComponent(providerJobId)}?media=${media}`, {
+  const data = await postForm(media === 'image' ? '/ai/image' : '/ai/video', {
     project_id: GOMMO_PROJECT_ID,
+    ...(media === 'image' ? { id_base: providerJobId } : { videoId: providerJobId }),
   });
   const job = getGatewayJobData(data);
   const rawStatus = normalize(job?.status || data?.raw?.imageInfo?.status || data?.raw?.videoInfo?.status);

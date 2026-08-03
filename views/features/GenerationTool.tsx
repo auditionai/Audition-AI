@@ -59,6 +59,7 @@ import {
 import { getImageProviderRouteKey, isModelAllowedForFeature } from '../../shared/providerRouting';
 import type { CharacterReferenceGroup, ImageGenerateRecipePayload } from '../../shared/queueRecipes';
 import { GENERATION_SECTION_TIPS } from '../../shared/generationSectionTips';
+import { getGommoServerGroups, getPreferredGommoBasicMode } from '../../shared/gommoServerRouting';
 
 interface GenerationToolProps {
   feature: Feature;
@@ -342,9 +343,14 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       speed: generationSpeedId,
       quality: aiModel === 'gpt' ? gptQuality : undefined,
   });
+  const tstRuntimeResolutions = Array.from(new Set(
+      (runtimeModels.find((model) => model.model.trim().toLowerCase() === selectedModelId)?.capabilities?.resolutions || [])
+          .map((value) => String(value || '').trim().toUpperCase())
+          .filter(Boolean),
+  ));
   const availableResolutions = isGommoSelected
       ? (selectedGommoModel?.resolutions || []).map((option) => option.type.toUpperCase())
-      : tstAvailableResolutions;
+      : tstAvailableResolutions.length > 0 ? tstAvailableResolutions : tstRuntimeResolutions;
   const availableSpeeds = getCompatibleGenerationSpeeds({
       tier: generationTier,
       pricingEntries,
@@ -457,6 +463,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const availableSpeedLabels = isGommoSelected ? [] : availableSpeeds.map((speedId) => speedId === 'slow' ? 'Tiết Kiệm' : 'Nhanh');
   const availableServerLabels = isGommoSelected ? [] : availableServers.map((serverId) => tstServerToUi(serverId));
   const gommoModes = isGommoSelected ? (selectedGommoModel?.modes || []) : [];
+  const gommoModeGroups = isGommoSelected && selectedGommoModel
+      ? getGommoServerGroups(selectedGommoModel)
+      : [];
   useEffect(() => {
       // Load Default Style Preset
       const loadStyle = async () => {
@@ -681,6 +690,13 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           setSpeed(nextSpeedLabel);
       }
   }, [aiModel, aspectRatio, gptQuality, isGommoSelected, pricingEntries, providerMode, resolution, selectedGommoModel, server, speed, tstAspectRatios]);
+
+  useEffect(() => {
+      if (!isGommoSelected || !['group6', 'group7', 'group8'].includes(activeMode)) return;
+      const modeTypes = (selectedGommoModel?.modes || []).map((option) => option.type);
+      const basicMode = getPreferredGommoBasicMode(modeTypes, gptQuality);
+      if (basicMode) setProviderMode(basicMode);
+  }, [activeMode, gptQuality, isGommoSelected, selectedGommoModel]);
 
   const formatTime = (seconds: number) => {
       const mins = Math.floor(seconds / 60);
@@ -1711,14 +1727,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                     </div>
                 )}
 
-                <div className={`rounded-xl border px-3 py-2 text-[10px] font-black uppercase tracking-wider ${
-                    isGommoSelected
-                        ? 'border-cyan-400/30 bg-cyan-400/10 text-cyan-700 dark:text-cyan-300'
-                        : 'border-purple-400/30 bg-purple-400/10 text-purple-700 dark:text-purple-300'
-                }`}>
-                    Luồng đang dùng: {isGommoSelected ? `Gommo · ${selectedGommoModel?.name || selectedModelId}` : `TST · ${selectedModelId}`}
-                </div>
-
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Model Picker */}
                     <div className="space-y-2">
@@ -1783,7 +1791,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 pt-4 border-t border-slate-200/60 dark:border-slate-800">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-slate-200/60 dark:border-slate-800">
                     {aiModel === 'gpt' && !isGommoSelected && (
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider">Chất lượng GPT</label>
@@ -1804,7 +1812,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                         </div>
                     )}
 
-                    <div className="space-y-2">
+                    {availableResolutions.length > 0 && <div className="space-y-2">
                         <label className="text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider">Độ phân giải</label>
                         <div className="grid grid-cols-3 gap-1 neu-inset-sm p-1.5 rounded-2xl">
                             {availableResolutions.map((value) => {
@@ -1824,33 +1832,46 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                 );
                             })}
                         </div>
-                    </div>
+                    </div>}
 
                     {isGommoSelected && gommoModes.length > 0 && (
-                        <div className="space-y-2 sm:col-span-2">
+                        <div className="space-y-3 md:col-span-2">
                             <label className="text-[10px] font-black text-cyan-600 dark:text-cyan-300 uppercase tracking-wider">
-                                Máy chủ / chế độ Gommo · đồng bộ realtime
+                                Server và chất lượng Gommo · đồng bộ realtime
                             </label>
-                            <div className="grid grid-cols-2 lg:grid-cols-3 gap-1 neu-inset-sm p-1.5 rounded-2xl">
-                                {gommoModes.map((option) => (
-                                    <button
-                                        key={option.type}
-                                        type="button"
-                                        title={option.description || option.group}
-                                        onClick={() => setProviderMode(option.type)}
-                                        className={`px-2 py-2 rounded-xl text-[10px] font-black ${
-                                            providerMode === option.type ? 'neu-raised-sm text-cyan-600 dark:text-cyan-300' : 'text-slate-600 dark:text-slate-400'
-                                        }`}
-                                    >
-                                        <span className="block">{option.name || option.type}</span>
-                                        {option.group && <span className="block mt-0.5 text-[8px] font-semibold opacity-70">{option.group}</span>}
-                                    </button>
-                                ))}
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                                {gommoModeGroups.map((group) => {
+                                    const groupModes = gommoModes.filter((option) => group.modeTypes.includes(option.type));
+                                    if (groupModes.length === 0) return null;
+                                    return (
+                                        <section key={group.id} className="rounded-2xl border border-cyan-500/20 bg-cyan-500/[0.04] p-3">
+                                            <div className="mb-2">
+                                                <div className="text-[10px] font-black uppercase text-slate-800 dark:text-white">{group.label}</div>
+                                                {group.subtitle && <p className="mt-0.5 text-[9px] font-semibold text-slate-500 dark:text-slate-400">{group.subtitle}</p>}
+                                            </div>
+                                            <div className="grid grid-cols-3 gap-1 neu-inset-sm p-1.5 rounded-xl">
+                                                {groupModes.map((option) => (
+                                                    <button
+                                                        key={option.type}
+                                                        type="button"
+                                                        title={option.description || group.label}
+                                                        onClick={() => setProviderMode(option.type)}
+                                                        className={`px-2 py-2 rounded-lg text-[10px] font-black ${
+                                                            providerMode === option.type ? 'neu-raised-sm text-cyan-600 dark:text-cyan-300' : 'text-slate-600 dark:text-slate-400'
+                                                        }`}
+                                                    >
+                                                        {option.name || option.type}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </section>
+                                    );
+                                })}
                             </div>
                         </div>
                     )}
 
-                    <div className="space-y-2">
+                    {availableSpeedLabels.length > 0 && <div className="space-y-2">
                         <label className="text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider">Tốc độ xử lý</label>
                         <div className="flex gap-1 neu-inset-sm p-1.5 rounded-2xl">
                             {availableSpeedLabels.map((label) => (
@@ -1866,9 +1887,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                 </button>
                             ))}
                         </div>
-                    </div>
+                    </div>}
 
-                    <div className="space-y-2">
+                    {availableServerLabels.length > 0 && <div className="space-y-2">
                         <label className="text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider">Server TST</label>
                         <div className="flex gap-1 neu-inset-sm p-1.5 rounded-2xl">
                             {availableServerLabels.map((label) => (
@@ -1884,7 +1905,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                 </button>
                             ))}
                         </div>
-                    </div>
+                    </div>}
                 </div>
             </div>
 

@@ -1305,13 +1305,23 @@ export const getCompatibleGenerationResolutions = ({
   speed?: string;
   quality?: string;
 }) => {
-  const entries = getMatchingEntries({
+  let entries = getMatchingEntries({
     modelId: tierToModelId[tier],
     pricingEntries,
     serverId,
     speed,
     quality,
   });
+  if (entries.length === 0) {
+    entries = getMatchingEntries({
+      modelId: tierToModelId[tier],
+      pricingEntries,
+      quality,
+    });
+  }
+  if (entries.length === 0) {
+    entries = getPricingEntriesForModel(tierToModelId[tier], pricingEntries);
+  }
   if (entries.length === 0) {
     return [];
   }
@@ -1914,7 +1924,6 @@ export const getPricingRows = async (forceRefresh = false): Promise<TstPricingRo
       billingUnit: perSecond ? 'second' : 'flat',
     };
   });
-
   return [...rows.filter((row): row is TstPricingRow => row !== null), ...getVertexEditPricingRows()]
     .sort((a, b) => {
       if (a.type !== b.type) return a.type.localeCompare(b.type);

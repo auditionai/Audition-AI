@@ -594,12 +594,6 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
               </div>
             </div>
 
-            <div className={`rounded-xl border px-3 py-2 text-[10px] font-black uppercase tracking-wide ${
-              isGommoSelected ? 'border-cyan-400/30 bg-cyan-400/10 text-cyan-300' : 'border-purple-400/30 bg-purple-400/10 text-purple-300'
-            }`}>
-              Luồng đang dùng: {isGommoSelected ? `Gommo · ${selectedGommoModel?.name || selectedModelId}` : `TST · ${selectedModelId}`}
-            </div>
-
             <div className="space-y-3">
               <label className="text-[10px] font-bold text-slate-400 uppercase">Tỷ lệ khung hình</label>
               <div className="grid grid-cols-3 gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">

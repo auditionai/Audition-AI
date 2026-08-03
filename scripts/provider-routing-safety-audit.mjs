@@ -6,7 +6,7 @@ import { sortTstFallbackServers } from '../netlify/functions/_queue-worker.ts';
 import { buildLocalPricingOptionCandidates } from '../netlify/functions/queue-submit.ts';
 import { getAuditionProviderPricing, getGommoPricingInput, resolveProviderForModel } from '../services/providerCatalog.ts';
 import { getAllowedModelsForFeature, inferGenerationProviderRouteKey, isModelAllowedForFeature } from '../shared/providerRouting.ts';
-import { getGommoServerGroups, getGommoServerIdForMode } from '../shared/gommoServerRouting.ts';
+import { getGommoServerGroups, getGommoServerIdForMode, getPreferredGommoBasicMode } from '../shared/gommoServerRouting.ts';
 import { getVideoModelPresentation } from '../shared/videoModelPresentation.ts';
 
 const gommoGptServerModel = {
@@ -20,6 +20,7 @@ const gommoGptServerModel = {
 assert.equal(getGommoServerIdForMode(gommoGptServerModel, 'low'), 'premium-server');
 assert.equal(getGommoServerIdForMode(gommoGptServerModel, 'low_basic'), 'basic-server');
 assert.deepEqual(getGommoServerGroups(gommoGptServerModel).map((group) => group.label), ['Premium Server', 'Basic Server']);
+assert.equal(getPreferredGommoBasicMode(['low', 'low_basic', 'medium_basic'], 'medium'), 'medium_basic');
 
 const gptOptions = buildLocalPricingOptionCandidates({
   model: 'image-gpt-2',
@@ -166,6 +167,11 @@ for (const filename of ['../views/features/GenerationTool.tsx', '../mobile-app/s
   assert(source.includes('GENERATION_SECTION_TIPS.character'));
   assert(source.includes('GENERATION_SECTION_TIPS.settings'));
   assert(source.includes('GENERATION_SECTION_TIPS.render'));
+  assert(source.includes("['group6', 'group7', 'group8'].includes(activeMode)"));
+  assert(source.includes('getPreferredGommoBasicMode'));
+  assert(source.includes('getGommoServerGroups'));
+  assert(source.includes('tstRuntimeResolutions'));
+  assert(!source.includes('Luồng đang dùng:'));
 }
 
 const generationTipsSource = await readFile(new URL('../shared/generationSectionTips.ts', import.meta.url), 'utf8');

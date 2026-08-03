@@ -60,6 +60,7 @@ import {
 } from '../../services/providerCatalog';
 import { getImageProviderRouteKey, isModelAllowedForFeature } from '../../../../shared/providerRouting';
 import { GENERATION_SECTION_TIPS } from '../../../../shared/generationSectionTips';
+import { getGommoServerGroups, getPreferredGommoBasicMode } from '../../../../shared/gommoServerRouting';
 
 type GenMode = 'single' | 'couple' | 'trio' | 'squad' | 'group5' | 'group6' | 'group7' | 'group8';
 type Stage = 'input' | 'submitting';
@@ -299,9 +300,14 @@ export function WorkspaceImage() {
     tier: generationTier, pricingEntries, serverId: generationServerId, speed: generationSpeedId,
     quality: aiModel === 'gpt' ? gptQuality : undefined,
   });
+  const tstRuntimeResolutions = Array.from(new Set(
+    (runtimeModels.find((model) => model.model.trim().toLowerCase() === selectedModelId)?.capabilities?.resolutions || [])
+      .map((value) => String(value || '').trim().toUpperCase())
+      .filter(Boolean),
+  ));
   const availableResolutions = isGommoSelected
     ? (selectedGommoModel?.resolutions || []).map((option) => option.type.toUpperCase())
-    : tstAvailableResolutions;
+    : tstAvailableResolutions.length > 0 ? tstAvailableResolutions : tstRuntimeResolutions;
   const availableServers = getCompatibleGenerationServers({
     tier: generationTier, pricingEntries, speed: generationSpeedId, resolution: resolution as TstResolution,
     quality: aiModel === 'gpt' ? gptQuality : undefined,
@@ -329,6 +335,9 @@ export function WorkspaceImage() {
   const availableSpeedLabels = isGommoSelected ? [] : availableSpeeds.map((speedId) => (speedId === 'slow' ? 'Tiết Kiệm' : 'Nhanh'));
   const availableServerLabels = isGommoSelected ? [] : availableServers.map((serverId) => ({ id: serverId, label: tstServerToUi(serverId) || serverId.toUpperCase() }));
   const gommoModes = isGommoSelected ? (selectedGommoModel?.modes || []) : [];
+  const gommoModeGroups = isGommoSelected && selectedGommoModel
+    ? getGommoServerGroups(selectedGommoModel)
+    : [];
 
   const runtimeImageModelIds = new Set(
     runtimeModels.filter((m) => m.type === 'image').map((m) => m.model.trim().toLowerCase()),
@@ -573,6 +582,13 @@ export function WorkspaceImage() {
       setSpeed(nextSpeedLabel);
     }
   }, [aiModel, aspectRatio, gptQuality, isGommoSelected, pricingEntries, providerMode, resolution, selectedGommoModel, server, speed, tstAspectRatios]);
+
+  useEffect(() => {
+    if (!isGommoSelected || !['group6', 'group7', 'group8'].includes(activeMode)) return;
+    const modeTypes = (selectedGommoModel?.modes || []).map((option) => option.type);
+    const basicMode = getPreferredGommoBasicMode(modeTypes, gptQuality);
+    if (basicMode) setProviderMode(basicMode);
+  }, [activeMode, gptQuality, isGommoSelected, selectedGommoModel]);
 
   // --- Rotating tips ---
   useEffect(() => {
@@ -1219,12 +1235,6 @@ export function WorkspaceImage() {
         </div>
 
         {/* Aspect Ratio */}
-        <div className={`rounded-2xl border px-4 py-3 text-xs font-black ${
-          isGommoSelected ? 'border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-300' : 'border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300'
-        }`}>
-          Luồng đang dùng: {isGommoSelected ? `Gommo · ${selectedGommoModel?.name || selectedModelId}` : `TST · ${selectedModelId}`}
-        </div>
-
         <div role="note" className="rounded-2xl border border-cyan-200 bg-cyan-50/70 px-4 py-3 text-xs font-medium leading-relaxed text-cyan-900 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-100">
           <span aria-hidden="true">💡</span>{' '}
           <strong>{GENERATION_SECTION_TIPS.settings.title}:</strong>{' '}
@@ -1329,21 +1339,34 @@ export function WorkspaceImage() {
         )}
 
         {isGommoSelected && gommoModes.length > 0 && (
-          <div className="space-y-2">
-            <h3 className="text-xs font-semibold text-cyan-600 dark:text-cyan-400 tracking-wider ml-1">MÁY CHỦ / CHẾ ĐỘ GOMMO · REALTIME</h3>
-            <div className="grid grid-cols-2 gap-2">
-              {gommoModes.map((option) => (
-                <button
-                  key={option.type}
-                  onClick={() => setProviderMode(option.type)}
-                  className={`rounded-xl border px-3 py-2 text-left text-xs font-bold ${
-                    providerMode === option.type ? 'border-cyan-300 bg-cyan-50 text-cyan-700 dark:border-cyan-500/40 dark:bg-cyan-500/10 dark:text-cyan-300' : 'border-gray-100 bg-white text-gray-500 dark:border-zinc-800 dark:bg-[#18181B] dark:text-zinc-400'
-                  }`}
-                >
-                  <span className="block">{option.name || option.type}</span>
-                  {option.group && <span className="block text-[9px] opacity-70">{option.group}</span>}
-                </button>
-              ))}
+          <div className="space-y-3">
+            <h3 className="ml-1 text-xs font-semibold tracking-wider text-cyan-600 dark:text-cyan-400">SERVER VÀ CHẤT LƯỢNG GOMMO · REALTIME</h3>
+            <div className="space-y-3">
+              {gommoModeGroups.map((group) => {
+                const groupModes = gommoModes.filter((option) => group.modeTypes.includes(option.type));
+                if (groupModes.length === 0) return null;
+                return (
+                  <section key={group.id} className="rounded-2xl border border-cyan-200 bg-cyan-50/40 p-3 dark:border-cyan-500/20 dark:bg-cyan-500/[0.04]">
+                    <div className="mb-2">
+                      <div className="text-xs font-black uppercase text-gray-900 dark:text-white">{group.label}</div>
+                      {group.subtitle && <p className="mt-0.5 text-[10px] text-gray-500 dark:text-zinc-400">{group.subtitle}</p>}
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {groupModes.map((option) => (
+                        <button
+                          key={option.type}
+                          onClick={() => setProviderMode(option.type)}
+                          className={`rounded-xl border px-2 py-2.5 text-xs font-bold ${
+                            providerMode === option.type ? 'border-cyan-300 bg-white text-cyan-700 shadow-sm dark:border-cyan-500/40 dark:bg-cyan-500/10 dark:text-cyan-300' : 'border-gray-100 bg-white/70 text-gray-500 dark:border-zinc-800 dark:bg-[#18181B] dark:text-zinc-400'
+                          }`}
+                        >
+                          {option.name || option.type}
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                );
+              })}
             </div>
           </div>
         )}

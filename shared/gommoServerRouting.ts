@@ -65,3 +65,11 @@ export const getGommoServerGroups = (model: GommoServerModelLike) => {
   return Array.from(groups.values());
 };
 
+export const getPreferredGommoBasicMode = (
+  modeTypes: string[],
+  quality: 'low' | 'medium' | 'high' = 'low',
+) => {
+  const preferred = `${quality}_basic`;
+  if (modeTypes.includes(preferred)) return preferred;
+  return modeTypes.find((modeType) => normalize(modeType).endsWith('_basic')) || null;
+};

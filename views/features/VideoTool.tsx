@@ -1295,16 +1295,6 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
               </div>
             )}
 
-            {activeMode === 'video_ai' && (
-              <div className={`rounded-xl border px-3 py-2 text-[10px] font-black uppercase tracking-wide ${
-                isGommoVideoSelected
-                  ? 'border-cyan-400/30 bg-cyan-400/10 text-cyan-700 dark:text-cyan-300'
-                  : 'border-purple-400/30 bg-purple-400/10 text-purple-700 dark:text-purple-300'
-              }`}>
-                Luồng đang dùng: {isGommoVideoSelected ? `Gommo · ${selectedGommoVideoModel?.name || videoModel}` : `TST · ${videoModel}`}
-              </div>
-            )}
-
             <div className="space-y-5">
               {activeMode === 'video_ai' ? (
                 <div className="space-y-4">

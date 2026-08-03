@@ -1441,13 +1441,22 @@ export const getGenerationCostBreakdown = ({
       !entry.speed,
   ]);
 
-  if (exactEntry) {
-    const fallbackVcoin = creditsToVcoin(exactEntry.credits);
+  const compatibleEntry = exactEntry || pickExactEntry(modelEntries, [
+    (entry) =>
+      normalizeResolution(entry.resolution) === normalizedResolution &&
+      (!normalizedQuality || normalizeQuality(entry.quality) === normalizedQuality),
+    (entry) => normalizeResolution(entry.resolution) === normalizedResolution,
+    (entry) => !normalizedQuality || normalizeQuality(entry.quality) === normalizedQuality,
+    () => true,
+  ]);
+
+  if (compatibleEntry) {
+    const fallbackVcoin = creditsToVcoin(compatibleEntry.credits);
     return {
       available: true,
-      credits: exactEntry.credits,
-      vcoin: getAuditionPrice(modelId, exactEntry.config_key, fallbackVcoin, pricingOverrides),
-      configKey: exactEntry.config_key,
+      credits: compatibleEntry.credits,
+      vcoin: getAuditionPrice(modelId, compatibleEntry.config_key, fallbackVcoin, pricingOverrides),
+      configKey: compatibleEntry.config_key,
       modelId,
     };
   }

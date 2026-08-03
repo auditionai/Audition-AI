@@ -136,15 +136,15 @@ const MODE_TO_FEATURE_ID: Record<GenMode, string> = {
   group8: 'group_8_gen',
 };
 
-const MODE_META: Record<GenMode, { label: string; sampleCategoryId: number; sampleCategoryName: string }> = {
-  single: { label: 'Đơn', sampleCategoryId: 2, sampleCategoryName: 'Ảnh nam nữ' },
-  couple: { label: 'Đôi', sampleCategoryId: 3, sampleCategoryName: 'Ảnh couple' },
-  trio: { label: 'Nhóm 3', sampleCategoryId: 4, sampleCategoryName: 'Ảnh nhóm 3' },
-  squad: { label: 'Nhóm 4', sampleCategoryId: 5, sampleCategoryName: 'Ảnh nhóm 4' },
-  group5: { label: 'Nhóm 5', sampleCategoryId: 6, sampleCategoryName: 'Ảnh nhóm 5' },
-  group6: { label: 'Nhóm 6', sampleCategoryId: 6, sampleCategoryName: 'Ảnh nhóm 6' },
-  group7: { label: 'Nhóm 7', sampleCategoryId: 6, sampleCategoryName: 'Ảnh nhóm 7' },
-  group8: { label: 'Nhóm 8', sampleCategoryId: 6, sampleCategoryName: 'Ảnh nhóm 8' },
+const MODE_META: Record<GenMode, { label: string; title: string; sampleCategoryId: number; sampleCategoryName: string }> = {
+  single: { label: 'Đơn', title: 'Tạo ảnh đơn', sampleCategoryId: 2, sampleCategoryName: 'Ảnh nam nữ' },
+  couple: { label: 'Đôi', title: 'Tạo ảnh đôi', sampleCategoryId: 3, sampleCategoryName: 'Ảnh couple' },
+  trio: { label: 'Nhóm 3', title: 'Tạo ảnh nhóm 3 người', sampleCategoryId: 4, sampleCategoryName: 'Ảnh nhóm 3' },
+  squad: { label: 'Nhóm 4', title: 'Tạo ảnh nhóm 4 người', sampleCategoryId: 5, sampleCategoryName: 'Ảnh nhóm 4' },
+  group5: { label: 'Nhóm 5', title: 'Tạo ảnh nhóm 5 người', sampleCategoryId: 6, sampleCategoryName: 'Ảnh nhóm 5' },
+  group6: { label: 'Nhóm 6', title: 'Tạo ảnh nhóm 6 người', sampleCategoryId: 6, sampleCategoryName: 'Ảnh nhóm 6' },
+  group7: { label: 'Nhóm 7', title: 'Tạo ảnh nhóm 7 người', sampleCategoryId: 6, sampleCategoryName: 'Ảnh nhóm 7' },
+  group8: { label: 'Nhóm 8', title: 'Tạo ảnh nhóm 8 người', sampleCategoryId: 6, sampleCategoryName: 'Ảnh nhóm 8' },
 };
 
 const MODE_TO_CHARACTER_COUNT: Record<GenMode, number> = {
@@ -1024,28 +1024,11 @@ export function WorkspaceImage() {
         {/* Header */}
         <div className="text-center">
           <h2 className="text-lg font-semibold tracking-tight text-gray-900 dark:text-white flex items-center justify-center gap-2">
-            <Sparkles className="w-4 h-4 text-[var(--color-accent)]" /> Tạo ảnh AI
+            <Sparkles className="w-4 h-4 text-[var(--color-accent)]" /> {MODE_META[activeMode].title}
           </h2>
           <p className="text-xs text-gray-400 dark:text-zinc-500 mt-1">
             {catalogLoading ? 'Đang tải catalog...' : catalogError || `${aiModel === 'flash' ? 'Flash' : aiModel === 'pro' ? 'Pro' : 'GPT'} Engine • ${resolution}`}
           </p>
-        </div>
-
-        {/* Mode Toggle */}
-        <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
-          {(Object.keys(MODE_META) as GenMode[]).map((mode) => (
-            <button
-              key={mode}
-              onClick={() => handleModeChange(mode)}
-              className={`min-w-[82px] flex-1 py-2.5 rounded-2xl text-[11px] font-bold transition-all ${
-                activeMode === mode
-                  ? 'bg-gray-900 text-white shadow-md'
-                  : 'bg-white dark:bg-[#18181B] text-gray-500 dark:text-zinc-400 border border-gray-100 dark:border-zinc-800'
-              }`}
-            >
-              {MODE_META[mode].label}
-            </button>
-          ))}
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -1247,12 +1230,12 @@ export function WorkspaceImage() {
 
         <div data-tour-id="mobile.generation.settings" className="space-y-2">
           <h3 className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider ml-1">Khung hình</h3>
-          <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
+          <div className="grid grid-cols-4 gap-2">
             {ratios.map((r) => (
               <button
                 key={r}
                 onClick={() => setAspectRatio(r)}
-                className={`flex-shrink-0 px-4 py-2 rounded-full text-xs font-medium transition-all ${
+                className={`min-w-0 px-2 py-2.5 rounded-2xl text-xs font-bold transition-all ${
                   aspectRatio === r ? 'bg-gray-900 text-white shadow-md' : 'bg-white dark:bg-[#18181B] text-gray-500 dark:text-zinc-400 border border-gray-100 dark:border-zinc-800'
                 }`}
               >
@@ -1344,7 +1327,6 @@ export function WorkspaceImage() {
 
         {isGommoSelected && gommoModes.length > 0 && (
           <div className="space-y-3">
-            <h3 className="ml-1 text-xs font-semibold tracking-wider text-cyan-600 dark:text-cyan-400">SERVER VÀ CHẤT LƯỢNG GOMMO · REALTIME</h3>
             <div className="space-y-3 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm dark:border-zinc-800 dark:bg-[#18181B]">
               <div className="space-y-2">
                 <div className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500">Server Gommo</div>

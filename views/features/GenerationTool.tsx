@@ -1852,9 +1852,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
                         {isGommoSelected && gommoModes.length > 0 && (
                             <div className="space-y-3">
-                                <label className="text-[10px] font-black text-cyan-600 dark:text-cyan-300 uppercase tracking-wider">
-                                    Server và chất lượng Gommo · đồng bộ realtime
-                                </label>
                                 <div className="space-y-1.5">
                                     <span className="text-[9px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">Server Gommo</span>
                                     <div className={`grid gap-2 ${gommoModeGroups.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>

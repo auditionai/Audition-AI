@@ -484,13 +484,13 @@ export function WorkspacePromptImage() {
       <div data-tour-id="mobile.image.settings" className="space-y-4">
         <div className="space-y-2">
           <h3 className="ml-1 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-zinc-500">KHUNG HÌNH</h3>
-          <div className="flex gap-2 overflow-x-auto pb-1">
+          <div className="grid grid-cols-4 gap-2">
             {aspectRatioOptions.map((ratio) => (
               <button
                 key={ratio}
                 type="button"
                 onClick={() => setAspectRatio(ratio)}
-                className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium transition-all ${
+                className={`min-w-0 rounded-2xl px-2 py-2.5 text-xs font-bold transition-all ${
                   aspectRatio === ratio
                     ? 'bg-gray-900 text-white shadow-md dark:bg-white dark:text-gray-950'
                     : 'border border-gray-100 bg-white text-gray-500 dark:border-zinc-800 dark:bg-[#18181B] dark:text-zinc-400'

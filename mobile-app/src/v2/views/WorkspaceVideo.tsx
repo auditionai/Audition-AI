@@ -788,28 +788,11 @@ export function WorkspaceVideo() {
         {/* Header */}
         <div className="text-center">
           <h2 className="text-lg font-semibold tracking-tight text-gray-900 dark:text-white flex items-center justify-center gap-2">
-            <Video className="w-4 h-4 text-purple-500" /> Tạo Video AI
+            <Video className="w-4 h-4 text-purple-500" /> {activeMode === 'video_ai' ? 'Tạo Video AI' : 'Motion Control'}
           </h2>
           <p className="text-xs text-gray-400 dark:text-zinc-500 mt-1">
             {catalogLoading ? 'Đang tải catalog...' : catalogError || 'Trạm Sáng Tạo Video Engine'}
           </p>
-        </div>
-
-        {/* Mode Toggle */}
-        <div className="flex gap-2 p-1.5 bg-gray-100 dark:bg-zinc-800/50 rounded-2xl border border-gray-100 dark:border-zinc-800">
-          {(['video_ai', 'motion_control'] as VideoMode[]).map((mode) => (
-            <button
-              key={mode}
-              onClick={() => setActiveMode(mode)}
-              className={`flex-1 py-2.5 rounded-[12px] text-sm font-medium transition-all ${
-                activeMode === mode
-                  ? 'bg-white dark:bg-[#18181B] text-gray-900 dark:text-white shadow-[0_2px_8px_rgb(0,0,0,0.06)]'
-                  : 'text-gray-500 dark:text-zinc-400 hover:text-gray-700 dark:text-zinc-200'
-              }`}
-            >
-              {mode === 'video_ai' ? '🎬 Video AI' : '🚶 Motion Control'}
-            </button>
-          ))}
         </div>
 
         {activeMode === 'video_ai' ? (

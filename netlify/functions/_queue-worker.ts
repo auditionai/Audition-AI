@@ -37,6 +37,11 @@ import { repairVietnameseMojibake } from '../../shared/queueLogText';
 import { clearFailedRescueMeta, hasFailedRescueFinalized, hasManualStopFlag } from '../../shared/queueRescueState';
 import { SYSTEM_QUEUE_KINDS } from '../../shared/queueKinds';
 import { compactTerminalQueuePayload } from './_queue-payload-retention';
+import {
+  isGommoConfigured,
+  pollGommoJob,
+  submitGommoJob,
+} from './_gommo-provider';
 
 type QueueJobRow = {
   id: string;
@@ -87,6 +92,15 @@ type PreparedQueueDispatchResult =
       storedPayload: Record<string, unknown>;
     };
 
+type GenerationProvider = 'tst' | 'gommo';
+
+type ProviderSubmission = {
+  jobId: string;
+  provider: GenerationProvider;
+  providerCost?: number | null;
+  mappedModelId?: string | null;
+};
+
 const getNormalizedProviderJobId = (job: Pick<QueueJobRow, 'job_id'>) => {
   const providerJobId = typeof job.job_id === 'string' ? job.job_id.trim() : '';
   return providerJobId || null;
@@ -135,6 +149,8 @@ const activeWorkerRuns = new Map<QueueWorkerLane, Promise<QueueWorkerSummary>>()
 
 const TST_API_KEY = process.env.TST_API_KEY || '';
 const TST_API_BASE = 'https://api.tramsangtao.com/v1';
+const GENERATION_PROVIDER_DEFAULT: GenerationProvider =
+  String(process.env.GENERATION_PROVIDER_DEFAULT || 'tst').trim().toLowerCase() === 'gommo' ? 'gommo' : 'tst';
 const POLL_INTERVAL_SECONDS = parsePositiveIntEnv('QUEUE_POLL_INTERVAL_SECONDS', 5);
 const VIDEO_POLL_INTERVAL_SECONDS = parsePositiveIntEnv('QUEUE_VIDEO_POLL_INTERVAL_SECONDS', 60);
 const PROVIDER_FAILURE_GRACE_SECONDS = parsePositiveIntEnv('QUEUE_PROVIDER_FAILURE_GRACE_SECONDS', 90, 5);
@@ -174,6 +190,29 @@ const STALE_RECOVERY_MIN_AGE_MS = 45_000;
 const STALE_PROVIDER_POLL_RECOVERY_MIN_AGE_MS = 45_000;
 const AMBIGUOUS_DISPATCH_DUPLICATE_PROTECTION_MESSAGE =
   'Khong nhan duoc xac nhan provider job goc sau loi mang/timeout. Job da dung de tranh tao them provider moi.';
+
+const getGlobalGenerationProvider = async (): Promise<GenerationProvider> => {
+  try {
+    const admin = getServiceRoleClient();
+    const { data, error } = await admin
+      .from('system_settings')
+      .select('value')
+      .eq('key', 'generation_provider_mode')
+      .maybeSingle();
+    if (error) throw error;
+    const selected = String(data?.value?.provider || '').trim().toLowerCase();
+    return selected === 'gommo' ? 'gommo' : selected === 'tst' ? 'tst' : GENERATION_PROVIDER_DEFAULT;
+  } catch (error) {
+    console.warn('[queue-worker] Could not read generation provider mode; using deployment default.', error);
+    return GENERATION_PROVIDER_DEFAULT;
+  }
+};
+
+const resolveDispatchProvider = async (payload: Record<string, unknown>): Promise<GenerationProvider> => {
+  const stored = String(payload.__targetProvider || '').trim().toLowerCase();
+  if (stored === 'tst' || stored === 'gommo') return stored;
+  return getGlobalGenerationProvider();
+};
 
 const isTransientError = (message: string) => {
   const normalized = message.toLowerCase();
@@ -550,6 +589,27 @@ const withQueueMeta = (
     nextPayload.__tstTouched = true;
   }
 
+  const previousProvider = toQueuePayloadObject(previousPayload).__provider;
+  if (previousProvider === 'tst' || previousProvider === 'gommo') {
+    nextPayload.__provider = previousProvider;
+  }
+
+  const previousProviderCost = toQueuePayloadObject(previousPayload).__providerCost;
+  if (typeof previousProviderCost === 'number' && Number.isFinite(previousProviderCost)) {
+    nextPayload.__providerCost = previousProviderCost;
+  }
+
+  const previousProviderModel = toQueuePayloadObject(previousPayload).__providerModel;
+  if (typeof previousProviderModel === 'string' && previousProviderModel.trim()) {
+    nextPayload.__providerModel = previousProviderModel;
+  }
+
+  const targetProvider =
+    toQueuePayloadObject(previousPayload).__targetProvider ?? toQueuePayloadObject(providerPayload).__targetProvider;
+  if (targetProvider === 'tst' || targetProvider === 'gommo') {
+    nextPayload.__targetProvider = targetProvider;
+  }
+
   const previousClientPlatform = toQueuePayloadObject(previousPayload).__clientPlatform;
   if (typeof previousClientPlatform === 'string' && previousClientPlatform.trim()) {
     nextPayload.__clientPlatform = previousClientPlatform.trim().toLowerCase();
@@ -575,6 +635,10 @@ const withQueueMeta = (
 const hasTstBeenTouched = (
   payload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
 ) => toQueuePayloadObject(payload).__tstTouched === true;
+
+const getJobProvider = (
+  payload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
+): GenerationProvider => toQueuePayloadObject(payload).__provider === 'gommo' ? 'gommo' : 'tst';
 
 const hasDispatchConfirmationPending = (
   payload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
@@ -1153,19 +1217,42 @@ const assertRequiredProviderMediaPayload = (queueKind: string, payload: Record<s
   }
 };
 
-const submitProviderJob = async (queueKind: string, providerPayload: Record<string, unknown>) => {
-  if (!TST_API_KEY) {
-    throw new Error('Missing TST_API_KEY environment variable');
-  }
+const submitProviderJob = async (
+  queueKind: string,
+  providerPayload: Record<string, unknown>,
+  targetProvider: GenerationProvider,
+): Promise<ProviderSubmission> => {
   if (!providerPayload || typeof providerPayload !== 'object') {
     throw new Error('Queue payload is missing');
   }
 
-  const outboundPayload = normalizeTstOutboundPayload(stripInternalQueueMeta(providerPayload));
+  const plainPayload = stripInternalQueueMeta(providerPayload);
+  if (targetProvider === 'gommo') {
+    if (queueKind === 'motion_generate') {
+      throw new Error('GOMMO_UNSUPPORTED_MODEL: Motion Control chưa được Gommo công bố payload chính thức.');
+    }
+    if (!isGommoConfigured()) {
+      throw new Error('GOMMO_NOT_CONFIGURED: Missing GOMMO_ACCESS_TOKEN or GOMMO_DOMAIN environment variable');
+    }
+    const gommo = await submitGommoJob(queueKind, plainPayload);
+    return {
+      jobId: gommo.jobId,
+      provider: 'gommo',
+      providerCost: gommo.providerCost,
+      mappedModelId: gommo.mappedModelId,
+    };
+  }
+
+  const outboundPayload = normalizeTstOutboundPayload(plainPayload);
   if (queueKind === 'image_generate' && typeof outboundPayload.prompt === 'string') {
     outboundPayload.prompt = trimProviderPromptForServer(outboundPayload.prompt, String(outboundPayload.server_id || ''));
   }
   assertRequiredProviderMediaPayload(queueKind, outboundPayload);
+
+  if (!TST_API_KEY) {
+    throw new Error('Missing TST_API_KEY environment variable');
+  }
+
   logQueueWorkerEvent('Dispatching provider payload.', {
     queueKind,
     endpoint: getGenerateEndpoint(queueKind, outboundPayload),
@@ -1192,7 +1279,7 @@ const submitProviderJob = async (queueKind: string, providerPayload: Record<stri
     throw new Error(`Provider did not return job_id: ${JSON.stringify(data)}`);
   }
 
-  return providerJobId;
+  return { jobId: providerJobId, provider: 'tst' };
 };
 
 const applyLivePricingConfigToPayload = (
@@ -1215,7 +1302,14 @@ const applyLivePricingConfigToPayload = (
   };
 };
 
-const pollProviderJob = async (providerJobId: string) => {
+const pollProviderJob = async (
+  providerJobId: string,
+  queueKind: string,
+  payload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
+) => {
+  if (getJobProvider(payload) === 'gommo') {
+    return pollGommoJob(queueKind, providerJobId);
+  }
   if (!TST_API_KEY) {
     throw new Error('Missing TST_API_KEY environment variable');
   }
@@ -1235,8 +1329,14 @@ const pollProviderJob = async (providerJobId: string) => {
   return response.json();
 };
 
-const cancelProviderJobBestEffort = async (providerJobId?: string | null) => {
+const cancelProviderJobBestEffort = async (
+  providerJobId?: string | null,
+  payload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
+) => {
   const normalizedJobId = String(providerJobId || '').trim();
+  if (getJobProvider(payload) === 'gommo') {
+    return false;
+  }
   if (!normalizedJobId || !TST_API_KEY) {
     return false;
   }
@@ -1673,11 +1773,27 @@ const shouldSkipDispatch = async (job: QueueJobRow) => {
   return false;
 };
 
-const markSubmitted = async (job: QueueJobRow, providerJobId: string) => {
-  const nextPayload = withQueueLog(job.queue_payload, 'submitted', `Provider đã nhận job: ${providerJobId}.`, 'success');
+const withProviderSubmission = (
+  payload: Record<string, unknown> | ImageGenerateRecipePayload | null | undefined,
+  submission: ProviderSubmission,
+) => ({
+  ...toQueuePayloadObject(payload),
+  __provider: submission.provider,
+  __providerCost: submission.providerCost ?? undefined,
+  __providerModel: submission.mappedModelId ?? undefined,
+});
+
+const markSubmitted = async (job: QueueJobRow, submission: ProviderSubmission) => {
+  const providerLabel = submission.provider === 'gommo' ? 'Gommo' : 'TST';
+  const nextPayload = withQueueLog(
+    withProviderSubmission(job.queue_payload, submission),
+    'submitted',
+    `${providerLabel} đã nhận job: ${submission.jobId}.`,
+    'success',
+  );
   await updateGeneratedImageRecord(job.id, {
     status: 'processing',
-    job_id: providerJobId,
+    job_id: submission.jobId,
     queue_payload: nextPayload,
     progress: 60,
     error_message: null,
@@ -1691,21 +1807,22 @@ const markSubmitted = async (job: QueueJobRow, providerJobId: string) => {
   return nextPayload;
 };
 
-const markSubmittedWithOwnership = async (job: QueueJobRow, providerJobId: string) => {
+const markSubmittedWithOwnership = async (job: QueueJobRow, submission: ProviderSubmission) => {
+  const providerLabel = submission.provider === 'gommo' ? 'Gommo' : 'TST';
   const nextPayload = withQueueLog(
     {
-      ...toQueuePayloadObject(job.queue_payload),
+      ...withProviderSubmission(job.queue_payload, submission),
       __dispatchConfirmationPending: false,
       __dispatchAttemptId: null,
     },
     'submitted',
-    `Provider đã nhận job: ${providerJobId}.`,
+    `${providerLabel} đã nhận job: ${submission.jobId}.`,
     'success',
   );
 
   await updateGeneratedImageRecord(job.id, {
     status: 'processing',
-    job_id: providerJobId,
+    job_id: submission.jobId,
     queue_payload: nextPayload,
     progress: 60,
     error_message: null,
@@ -2228,7 +2345,7 @@ const rescueFailedJobsWithProviderResults = async () => {
 
   for (const job of candidates as QueueJobRow[]) {
     try {
-      const providerData = await pollProviderJob(String(job.job_id || ''));
+      const providerData = await pollProviderJob(String(job.job_id || ''), job.queue_kind, job.queue_payload);
       const providerStatus = String(providerData?.status || '').toLowerCase();
       const resultUrl = extractResultUrl(providerData);
 
@@ -2342,7 +2459,7 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
   }
 
   if (processingAgeMs >= getProviderProcessingTimeoutMs(job, job.queue_payload)) {
-    await cancelProviderJobBestEffort(job.job_id);
+    await cancelProviderJobBestEffort(job.job_id, job.queue_payload);
     await markFailedRespectingRefundPolicy(job, getProcessingTimeoutUserMessage(job, job.queue_payload));
     return 'failed';
   }
@@ -2397,7 +2514,7 @@ const handlePollFailure = async (job: QueueJobRow, errorMessage: string) => {
         ? getProcessingTimeoutUserMessage(job, job.queue_payload)
         : errorMessage;
     if (processingAgeMs >= getProviderProcessingTimeoutMs(job, job.queue_payload)) {
-      await cancelProviderJobBestEffort(job.job_id);
+      await cancelProviderJobBestEffort(job.job_id, job.queue_payload);
     }
     await markFailedRespectingRefundPolicy(job, finalMessage);
     return 'failed';
@@ -2835,13 +2952,42 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
       return { completed: 1 };
     }
 
-    const validationPayload = isQueueRecipePayload(currentPayload)
-      ? getRecipeValidationPayload(currentPayload)
-      : stripInternalQueueMeta(currentPayload);
-    const validationResult = await validateQueuePayloadForDispatch(job, validationPayload);
-    submitValidationResult = validationResult;
+    const targetProvider = await resolveDispatchProvider(currentPayload);
+    job.queue_payload = {
+      ...(job.queue_payload || currentPayload),
+      __targetProvider: targetProvider,
+    };
 
-    if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'image_generate_recipe_v1') {
+    if (targetProvider === 'tst') {
+      const validationPayload = isQueueRecipePayload(currentPayload)
+        ? getRecipeValidationPayload(currentPayload)
+        : stripInternalQueueMeta(currentPayload);
+      submitValidationResult = await validateQueuePayloadForDispatch(job, validationPayload);
+    }
+
+    if (targetProvider === 'gommo' && isQueueRecipePayload(currentPayload)) {
+      if (currentPayload.recipeType === 'motion_generate_recipe_v1') {
+        throw new Error('GOMMO_UNSUPPORTED_MODEL: Motion Control chưa được Gommo công bố payload chính thức.');
+      }
+      job.queue_payload = await persistQueueLog(
+        job.id,
+        job.queue_payload,
+        'building_payload',
+        'Đang chuẩn bị payload để gửi trực tiếp sang Gommo.',
+      );
+      submitPayload = await withTimeout(
+        withLeaseHeartbeat(
+          job.id,
+          prepareProviderPayloadFromQueueRecipe(currentPayload, { uploadReferencesToTst: false }),
+          preparationLeaseSeconds,
+        ),
+        preparationTimeoutMs,
+        'Queue preparation timed out before dispatching to provider.',
+      );
+      job.queue_payload = await persistPreparedPayload(job.id, submitPayload, job.queue_payload);
+    }
+
+    if (targetProvider === 'tst' && isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'image_generate_recipe_v1') {
       await updatePreProviderStage(job.id, 20);
       const stagedResult = await withTimeout(
         withLeaseHeartbeat(
@@ -2862,7 +3008,7 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
       job.queue_payload = stagedResult.storedPayload;
     }
 
-    if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'prompt_image_generate_recipe_v1') {
+    if (targetProvider === 'tst' && isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'prompt_image_generate_recipe_v1') {
       await updatePreProviderStage(job.id, 20);
       job.queue_payload = await persistQueueLog(
         job.id,
@@ -2903,6 +3049,7 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
     }
 
     if (
+      targetProvider === 'tst' &&
       isQueueRecipePayload(currentPayload) &&
       (currentPayload.recipeType === 'video_generate_recipe_v1' || currentPayload.recipeType === 'motion_generate_recipe_v1')
     ) {
@@ -3004,15 +3151,16 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
       return {};
     }
     providerDispatchStarted = true;
-    const providerJobId = await withLeaseHeartbeat(
+    const providerSubmission = await withLeaseHeartbeat(
       job.id,
-      submitProviderJob(job.queue_kind, providerPayloadForSubmit),
+      submitProviderJob(job.queue_kind, providerPayloadForSubmit, targetProvider),
       DISPATCH_CLAIM_LEASE_SECONDS,
     );
-    job.queue_payload = await markSubmittedWithOwnership(job, providerJobId);
+    job.queue_payload = await markSubmittedWithOwnership(job, providerSubmission);
     logQueueWorkerEvent('Submitted job to provider.', {
       ...getQueueWorkerLogJob(job),
-      providerJobId,
+      providerJobId: providerSubmission.jobId,
+      provider: providerSubmission.provider,
     });
     return { submitted: 1 };
   } catch (error: any) {
@@ -3071,7 +3219,7 @@ const processPollJob = async (job: QueueJobRow, workerStartedAt: number): Promis
   }
 
   try {
-    const providerData = await pollProviderJob(String(job.job_id || ''));
+    const providerData = await pollProviderJob(String(job.job_id || ''), job.queue_kind, job.queue_payload);
     const state = await markPolledState(job, providerData);
     if (state === 'completed') {
       logQueueWorkerEvent('Completed polled job.', getQueueWorkerLogJob(job));
@@ -3276,13 +3424,42 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
         continue;
       }
 
-      const validationPayload = isQueueRecipePayload(currentPayload)
-        ? getRecipeValidationPayload(currentPayload as unknown as QueueRecipePayload)
-        : stripInternalQueueMeta(currentPayload);
-      const validationResult = await validateQueuePayloadForDispatch(job, validationPayload);
-      submitValidationResult = validationResult;
+      const targetProvider = await resolveDispatchProvider(currentPayload);
+      job.queue_payload = {
+        ...(job.queue_payload || currentPayload),
+        __targetProvider: targetProvider,
+      };
 
-      if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'image_generate_recipe_v1') {
+      if (targetProvider === 'tst') {
+        const validationPayload = isQueueRecipePayload(currentPayload)
+          ? getRecipeValidationPayload(currentPayload as unknown as QueueRecipePayload)
+          : stripInternalQueueMeta(currentPayload);
+        submitValidationResult = await validateQueuePayloadForDispatch(job, validationPayload);
+      }
+
+      if (targetProvider === 'gommo' && isQueueRecipePayload(currentPayload)) {
+        if (currentPayload.recipeType === 'motion_generate_recipe_v1') {
+          throw new Error('GOMMO_UNSUPPORTED_MODEL: Motion Control chưa được Gommo công bố payload chính thức.');
+        }
+        job.queue_payload = await persistQueueLog(
+          job.id,
+          job.queue_payload,
+          'building_payload',
+          'Đang chuẩn bị payload để gửi trực tiếp sang Gommo.',
+        );
+        submitPayload = await withTimeout(
+          withLeaseHeartbeat(
+            job.id,
+            prepareProviderPayloadFromQueueRecipe(currentPayload as unknown as QueueRecipePayload, { uploadReferencesToTst: false }),
+            preparationLeaseSeconds,
+          ),
+          preparationTimeoutMs,
+          'Queue preparation timed out before dispatching to provider.',
+        );
+        job.queue_payload = await persistPreparedPayload(job.id, submitPayload, job.queue_payload);
+      }
+
+      if (targetProvider === 'tst' && isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'image_generate_recipe_v1') {
         await updatePreProviderStage(job.id, 20);
         const stagedResult = await withTimeout(
           withLeaseHeartbeat(
@@ -3305,7 +3482,7 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
         job.queue_payload = preparedResult.storedPayload;
       }
 
-      if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'prompt_image_generate_recipe_v1') {
+      if (targetProvider === 'tst' && isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'prompt_image_generate_recipe_v1') {
         await updatePreProviderStage(job.id, 20);
         job.queue_payload = await persistQueueLog(
           job.id,
@@ -3347,6 +3524,7 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
       }
 
       if (
+        targetProvider === 'tst' &&
         isQueueRecipePayload(currentPayload) &&
         (currentPayload.recipeType === 'video_generate_recipe_v1' || currentPayload.recipeType === 'motion_generate_recipe_v1')
       ) {
@@ -3439,12 +3617,12 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
 
       job.queue_payload = await markSubmittingPreparedPayload(job.id, job.queue_payload);
       providerDispatchStarted = true;
-      const providerJobId = await withLeaseHeartbeat(
+      const providerSubmission = await withLeaseHeartbeat(
         job.id,
-        submitProviderJob(job.queue_kind, providerPayloadForSubmit),
+        submitProviderJob(job.queue_kind, providerPayloadForSubmit, targetProvider),
         DISPATCH_CLAIM_LEASE_SECONDS,
       );
-      job.queue_payload = await markSubmitted(job, providerJobId);
+      job.queue_payload = await markSubmitted(job, providerSubmission);
       summary.submitted += 1;
     } catch (error: any) {
       const message = error?.message || 'Queue dispatch failed';
@@ -3495,7 +3673,7 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
     }
 
     try {
-      const providerData = await pollProviderJob(String(job.job_id || ''));
+      const providerData = await pollProviderJob(String(job.job_id || ''), job.queue_kind, job.queue_payload);
       const state = await markPolledState(job, providerData);
       if (state === 'completed') summary.completed += 1;
       if (state === 'failed') summary.failed += 1;

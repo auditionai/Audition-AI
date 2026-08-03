@@ -128,3 +128,8 @@ Use `multipart/form-data` when uploading files.
   - [Files](endpoints/files.md)
   - [Account](endpoints/account.md)
   - [Download](endpoints/download.md)
+# Gommo provider switch
+
+AUDITION AI supports a global TST/Gommo switch for compatible image and video models. Configure `GOMMO_ACCESS_TOKEN`, `GOMMO_DOMAIN=vmedia.ai`, and optionally `GOMMO_PROJECT_ID` in the deployment environment. The administrator selects the active provider in **Bảng giá**; every newly dispatched job goes directly to that provider without probing the other one first. Jobs that already have a provider job ID continue polling their original provider. `GENERATION_PROVIDER_DEFAULT=tst` is used only if the database setting cannot be read.
+
+The user-facing Vcoin price is still resolved exclusively from the existing AUDITION AI pricing table. Gommo's live `credits_ai` price is shown separately in Admin for comparison. Set `GOMMO_VND_PER_CREDIT` only after Gommo confirms that conversion; leaving it blank avoids an unsafe monetary assumption.

@@ -47,6 +47,9 @@ import {
     getFeatureMaintenanceConfig,
     saveFeatureMaintenanceConfig,
     FeatureMaintenanceConfig,
+    getGenerationProviderConfig,
+    saveGenerationProviderConfig,
+    GenerationProviderMode,
     getSystemAnnouncementConfig,
     saveSystemAnnouncementConfig,
     SystemAnnouncementConfig,
@@ -93,6 +96,11 @@ import './admin-command-center.css';
 import { GiftcodeAbuseWorkspaceV2, TransactionsWorkspaceV2, UsersWorkspaceV2 } from './admin-v2/AdminOperations';
 import QueueWorkspaceV2 from './admin-v2/QueueWorkspaceV2';
 import AIUsageAnalyticsV2 from './admin-v2/AIUsageAnalyticsV2';
+import {
+    fetchProviderCatalog,
+    getGommoPriceComparison,
+    type GommoProviderCatalog,
+} from '../services/providerCatalog';
 
 interface AdminProps {
   lang: Language;
@@ -564,6 +572,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [stylePresets, setStylePresets] = useState<StylePreset[]>([]);
   const [modelPricing, setModelPricing] = useState<ModelPricing[]>([]);
   const [pricingRows, setPricingRows] = useState<TstPricingRow[]>([]);
+  const [gommoCatalog, setGommoCatalog] = useState<GommoProviderCatalog | null>(null);
+  const [gommoCatalogError, setGommoCatalogError] = useState('');
+  const [generationProvider, setGenerationProvider] = useState<GenerationProviderMode>('tst');
+  const [switchingGenerationProvider, setSwitchingGenerationProvider] = useState(false);
   const [pricingDrafts, setPricingDrafts] = useState<Record<string, string>>({});
   const [savingAllPricing, setSavingAllPricing] = useState(false);
   const [serverAvailabilityConfig, setServerAvailabilityConfig] = useState<TstServerAvailabilityConfig>({ disabledByModel: {}, autoDisabledCombos: {} });
@@ -734,14 +746,22 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       const refreshPricingView = async () => {
           try {
               clearTstCatalogCache();
-              const [pricing, livePricingRows, serverConfig] = await Promise.all([
+              const [pricing, livePricingRows, serverConfig, providerCatalog, providerConfig] = await Promise.all([
                   getModelPricing(),
                   getPricingRows(true),
-                  getTstServerAvailabilityConfig()
+                  getTstServerAvailabilityConfig(),
+                  fetchProviderCatalog(true).catch((error) => {
+                      setGommoCatalogError(error instanceof Error ? error.message : String(error));
+                      return null;
+                  }),
+                  getGenerationProviderConfig(),
               ]);
               setModelPricing((pricing || []).filter((row) => isAdminManagedPricingModel(row.model_id)));
               setPricingRows(filterAdminManagedPricingRows(livePricingRows));
               setServerAvailabilityConfig(serverConfig);
+              setGommoCatalog(providerCatalog);
+              setGenerationProvider(providerConfig.provider);
+              if (providerCatalog) setGommoCatalogError('');
           } catch (error) {
               console.warn('Failed to auto-refresh pricing view', error);
               setPricingRows([]);
@@ -985,6 +1005,23 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       } else {
           showToast(`Lỗi lưu giá: ${result.error}`, 'error');
       }
+  };
+
+  const handleSwitchGenerationProvider = async (provider: GenerationProviderMode) => {
+      if (provider === generationProvider || switchingGenerationProvider) return;
+      if (provider === 'gommo' && !gommoCatalog?.configured) {
+          showToast('Gommo chưa được cấu hình trên server nên chưa thể kích hoạt.', 'error');
+          return;
+      }
+      setSwitchingGenerationProvider(true);
+      const result = await saveGenerationProviderConfig(provider);
+      setSwitchingGenerationProvider(false);
+      if (!result.success) {
+          showToast(`Không thể chuyển provider: ${result.error}`, 'error');
+          return;
+      }
+      setGenerationProvider(provider);
+      showToast(`Đã chuyển toàn bộ job mới sang ${provider === 'gommo' ? 'Gommo' : 'TST'}.`, 'success');
   };
 
   const handleSaveAllPricing = async () => {
@@ -3923,22 +3960,61 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                onClick={async () => {
                                    try {
                                        clearTstCatalogCache();
-                                       await syncTSTPrices();
+                                       const [, providerCatalog] = await Promise.all([
+                                           syncTSTPrices(),
+                                           fetchProviderCatalog(true),
+                                       ]);
+                                       setGommoCatalog(providerCatalog);
+                                       setGommoCatalogError('');
                                        await refreshData();
-                                       showToast('Đã làm mới giá TST live.', 'success');
-                                   } catch (error) {
-                                       showToast('Lỗi khi làm mới bảng giá TST.', 'error');
+                                       showToast('Đã làm mới giá TST và Gommo realtime.', 'success');
+                                    } catch (error) {
+                                       showToast('Lỗi khi làm mới bảng giá provider.', 'error');
                                    }
                                }}
                                className="neu-button px-4 py-2.5 rounded-xl text-xs font-black text-[#FF007F] flex items-center gap-2 hover:scale-105 transition-all"
                            >
                                <Icons.RefreshCw className="w-4 h-4 text-[#FF007F]" />
-                               <span>Làm Mới TST Live</span>
+                               <span>Làm mới 2 provider</span>
                            </button>
                        </div>
                    </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                   <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl">
+                       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                           <div>
+                               <div className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">Provider đang dùng toàn ứng dụng</div>
+                               <p className="mt-1 text-xs leading-relaxed text-slate-700 dark:text-slate-300 font-semibold">
+                                   Job mới sẽ đi thẳng tới provider được chọn, không gọi thử provider còn lại. Job đã có ID tiếp tục được theo dõi tại đúng provider ban đầu.
+                               </p>
+                               {generationProvider === 'gommo' && (
+                                   <p className="mt-2 text-xs font-bold text-amber-500">
+                                       Motion Control chưa chuyển qua Gommo vì API công khai chưa mô tả payload video chuyển động.
+                                   </p>
+                               )}
+                           </div>
+                           <div className="grid grid-cols-2 gap-2 rounded-2xl neu-inset-sm p-2 min-w-[280px]">
+                               {(['tst', 'gommo'] as GenerationProviderMode[]).map((provider) => {
+                                   const active = generationProvider === provider;
+                                   const disabled = switchingGenerationProvider || (provider === 'gommo' && !gommoCatalog?.configured);
+                                   return (
+                                       <button
+                                           key={provider}
+                                           type="button"
+                                           disabled={disabled}
+                                           onClick={() => handleSwitchGenerationProvider(provider)}
+                                           className={`rounded-xl px-4 py-3 text-xs font-black uppercase tracking-wider transition-all disabled:cursor-not-allowed disabled:opacity-50 ${active ? 'bg-[#FF007F] text-white shadow-lg' : 'text-slate-700 dark:text-slate-300 hover:text-[#FF007F]'}`}
+                                       >
+                                           {provider === 'tst' ? 'TST' : 'Gommo'}
+                                           {active && <span className="block mt-0.5 text-[9px] opacity-80">Đang hoạt động</span>}
+                                       </button>
+                                   );
+                               })}
+                           </div>
+                       </div>
+                   </div>
+
+                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                       <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl p-4">
                           <div className="text-xs uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold font-bold">Cấu hình live</div>
                           <div className="mt-2 text-3xl font-bold text-slate-900 dark:text-white">{pricingRows.length}</div>
@@ -3949,12 +4025,23 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           <div className="mt-2 text-3xl font-bold text-audi-cyan">{new Set(pricingRows.map(row => row.modelId)).size}</div>
                           <div className="text-xs text-slate-700 dark:text-slate-300 font-semibold mt-1">Nguồn live lấy trực tiếp từ catalog runtime của TST.</div>
                       </div>
-                      <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl p-4">
-                          <div className="text-xs uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold font-bold">Quy đổi gốc</div>
+                       <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl p-4">
+                           <div className="text-xs uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold font-bold">Quy đổi gốc</div>
                           <div className="mt-2 text-sm text-slate-300 leading-relaxed">
                               1 Credit = 40đ. 1 Vcoin = 1000đ. Bạn có thể chỉnh giá AUDITION AI cao hơn hoặc thấp hơn tùy chiến lược lợi nhuận.
-                          </div>
-                      </div>
+                           </div>
+                       </div>
+                       <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl p-4">
+                           <div className="text-xs uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold font-bold">Gommo dự phòng</div>
+                           <div className={`mt-2 text-2xl font-bold ${gommoCatalog?.configured ? 'text-emerald-400' : 'text-amber-400'}`}>
+                               {gommoCatalog?.configured ? `${gommoCatalog.models.length} model` : 'Chưa cấu hình'}
+                           </div>
+                           <div className="text-xs text-slate-700 dark:text-slate-300 font-semibold mt-1">
+                               {gommoCatalogError || (gommoCatalog?.vndPerCredit
+                                   ? `Quy đổi ${gommoCatalog.vndPerCredit}đ / Gommo Credit.`
+                                   : 'Giá realtime giữ nguyên đơn vị Gommo Credit; chưa giả định tỷ giá.')}
+                           </div>
+                       </div>
                   </div>
 
                   <div className="rounded-2xl border border-audi-yellow/25 bg-audi-yellow/10 p-4 text-sm text-audi-yellow">
@@ -4128,9 +4215,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       <th className="px-4 py-3 font-bold">Thời lượng</th>
                                       <th className="px-4 py-3 font-bold">Tốc độ</th>
                                       <th className="px-4 py-3 font-bold text-center">Audio</th>
-                                      <th className="px-4 py-3 font-bold text-right">TST Credits</th>
-                                      <th className="px-4 py-3 font-bold text-right">TST Quy Đổi</th>
-                                      <th className="px-4 py-3 font-bold text-right">AUDITION AI</th>
+                                       <th className="px-4 py-3 font-bold text-right">TST Credits</th>
+                                       <th className="px-4 py-3 font-bold text-right">TST Quy Đổi</th>
+                                       <th className="px-4 py-3 font-bold text-right">Gommo Realtime</th>
+                                       <th className="px-4 py-3 font-bold">Gommo Route</th>
+                                       <th className="px-4 py-3 font-bold text-right">AUDITION AI</th>
                                       <th className="px-4 py-3 font-bold text-right">Lãi Gộp</th>
                                       <th className="px-4 py-3 font-bold">Config Key</th>
                                   </tr>
@@ -4138,7 +4227,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                               <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                                   {pricingRows.length === 0 ? (
                                       <tr>
-                                          <td colSpan={13} className="px-4 py-8 text-center text-slate-700 dark:text-slate-400 font-semibold">
+                                           <td colSpan={15} className="px-4 py-8 text-center text-slate-700 dark:text-slate-400 font-semibold">
                                               Chưa tải được bảng giá live từ Trạm Sáng Tạo.
                                           </td>
                                       </tr>
@@ -4154,8 +4243,14 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           const draftKey = getPricingLookupKey(row.modelId, row.configKey);
                                           const savedPricing = getSavedAuditionPrice(row);
                                           const rowIsDirty = isPricingRowDirty(row);
-                                          const auditionPrice = getDraftAuditionPrice(row);
-                                          const grossProfit = Number.isFinite(auditionPrice) ? auditionPrice - row.vcoin : 0;
+                                           const auditionPrice = getDraftAuditionPrice(row);
+                                           const grossProfit = Number.isFinite(auditionPrice) ? auditionPrice - row.vcoin : 0;
+                                           const gommo = getGommoPriceComparison(row, gommoCatalog);
+                                           const gommoCreditText = gommo?.minCredits === null || gommo?.minCredits === undefined
+                                               ? '-'
+                                               : gommo.minCredits === gommo.maxCredits
+                                                   ? `${gommo.minCredits} GCr`
+                                                   : `${gommo.minCredits}–${gommo.maxCredits} GCr`;
 
                                           return (
                                               <tr key={`${row.modelId}_${row.configKey}`} className="hover:neu-inset-sm transition-colors">
@@ -4191,14 +4286,38 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                   <td className="px-4 py-3 text-white">{tstSpeedToUi(row.speed) || '-'}</td>
                                                   <td className="px-4 py-3 text-center text-white">{row.audio ? 'Có' : '-'}</td>
                                                   <td className="px-4 py-3 text-right font-mono text-audi-cyan">{row.type === 'edit' ? '-' : row.credits}</td>
-                                                  <td className="px-4 py-3 text-right font-mono text-slate-200">
+                                                   <td className="px-4 py-3 text-right font-mono text-slate-200">
                                                       {row.type === 'edit'
                                                           ? '-'
                                                           : row.billingUnit === 'second'
                                                               ? `${row.vcoin} VC/s`
-                                                              : `${row.vcoin} VC`}
-                                                  </td>
-                                                  <td className="px-4 py-3">
+                                                           : `${row.vcoin} VC`}
+                                                   </td>
+                                                   <td className="px-4 py-3 text-right font-mono text-violet-300">
+                                                       <div>{gommoCreditText}</div>
+                                                       {gommo?.minCostVcoin !== null && gommo?.minCostVcoin !== undefined && (
+                                                           <div className="mt-1 text-[10px] text-slate-400">
+                                                               ≈ {gommo.minCostVcoin === gommo.maxCostVcoin
+                                                                   ? gommo.minCostVcoin
+                                                                   : `${gommo.minCostVcoin}–${gommo.maxCostVcoin}`} VC vốn
+                                                           </div>
+                                                       )}
+                                                   </td>
+                                                   <td className="px-4 py-3">
+                                                       {gommo ? (
+                                                           <div>
+                                                               <div className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${
+                                                                   gommo.fallbackSupported && !['maintenance', 'off', 'unavailable'].includes(gommo.status.toLowerCase())
+                                                                       ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                                                                       : 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+                                                               }`}>
+                                                                   {gommo.fallbackSupported ? gommo.status : 'Chỉ đối chiếu'}
+                                                               </div>
+                                                               <div className="mt-1 max-w-[160px] text-[10px] text-slate-400" title={gommo.modelId}>{gommo.modelName}</div>
+                                                           </div>
+                                                       ) : <span className="text-slate-500">-</span>}
+                                                   </td>
+                                                   <td className="px-4 py-3">
                                                       <div className="flex items-center justify-end gap-2">
                                                           <input
                                                               type="number"

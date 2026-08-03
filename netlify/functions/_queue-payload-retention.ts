@@ -46,6 +46,9 @@ export const compactTerminalQueuePayload = (value: unknown): QueuePayload => {
     __stage: keepValue(payload, '__stage'),
     __showInGenerationHistory: keepValue(payload, '__showInGenerationHistory'),
     __clientPlatform: keepValue(payload, '__clientPlatform'),
+    __provider: keepValue(payload, '__provider'),
+    __providerCost: keepValue(payload, '__providerCost'),
+    __providerModel: keepValue(payload, '__providerModel'),
     __recipePayload: Object.fromEntries(
       Object.entries(compactRecipe).filter(([, entry]) => entry !== undefined),
     ),

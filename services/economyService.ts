@@ -132,6 +132,13 @@ export type FeatureMaintenanceConfig = {
     updatedAt?: string;
 };
 
+export type GenerationProviderMode = 'tst' | 'gommo';
+
+export type GenerationProviderConfig = {
+    provider: GenerationProviderMode;
+    updatedAt?: string;
+};
+
 export type MaintenanceModeState = {
     isActive: boolean;
     message: string;
@@ -188,6 +195,10 @@ export const DEFAULT_SYSTEM_ANNOUNCEMENT_CONFIG: SystemAnnouncementConfig = {
 export const DEFAULT_FEATURE_MAINTENANCE_CONFIG: FeatureMaintenanceConfig = {
     disabledFeatureIds: [],
     message: 'TÃ­nh nÄƒng Ä‘ang báº£o trÃ¬. Vui lÃ²ng quay láº¡i sau.',
+};
+
+export const DEFAULT_GENERATION_PROVIDER_CONFIG: GenerationProviderConfig = {
+    provider: 'tst',
 };
 
 export const APP_TOUR_TARGETS: Array<{ id: string; label: string; surface: AppTourSurface; screen: string; featureId?: string; description?: string }> = [
@@ -2905,6 +2916,44 @@ export const saveFeatureMaintenanceConfig = async (config: FeatureMaintenanceCon
         return { success: true };
     } catch (e: any) {
         console.error("Save Feature Maintenance Config Error", e);
+        return { success: false, error: e?.message || e };
+    }
+};
+
+export const getGenerationProviderConfig = async (): Promise<GenerationProviderConfig> => {
+    if (!supabase) return DEFAULT_GENERATION_PROVIDER_CONFIG;
+    try {
+        const { data, error } = await supabase
+            .from('system_settings')
+            .select('value')
+            .eq('key', 'generation_provider_mode')
+            .maybeSingle();
+        if (error) throw error;
+        return {
+            provider: data?.value?.provider === 'gommo' ? 'gommo' : 'tst',
+            updatedAt: typeof data?.value?.updatedAt === 'string' ? data.value.updatedAt : undefined,
+        };
+    } catch (e) {
+        console.error('Get Generation Provider Config Error', e);
+        return DEFAULT_GENERATION_PROVIDER_CONFIG;
+    }
+};
+
+export const saveGenerationProviderConfig = async (provider: GenerationProviderMode) => {
+    if (!supabase) return { success: false, error: 'No Database' };
+    try {
+        const payload: GenerationProviderConfig = {
+            provider: provider === 'gommo' ? 'gommo' : 'tst',
+            updatedAt: new Date().toISOString(),
+        };
+        const { error } = await supabase.from('system_settings').upsert(
+            { key: 'generation_provider_mode', value: payload },
+            { onConflict: 'key' },
+        );
+        if (error) throw error;
+        return { success: true, config: payload };
+    } catch (e: any) {
+        console.error('Save Generation Provider Config Error', e);
         return { success: false, error: e?.message || e };
     }
 };

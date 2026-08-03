@@ -607,7 +607,11 @@ export const prepareImageGeneratePromptWithinLimit = async (
   );
 };
 
-export const prepareProviderPayloadFromQueueRecipe = async (payload: QueueRecipePayload): Promise<Record<string, unknown>> => {
+export const prepareProviderPayloadFromQueueRecipe = async (
+  payload: QueueRecipePayload,
+  options?: { uploadReferencesToTst?: boolean },
+): Promise<Record<string, unknown>> => {
+  const uploadReferencesToTst = options?.uploadReferencesToTst !== false;
   switch (payload.recipeType) {
     case 'image_generate_recipe_v1': {
       const structuredPayload = payload as ImageGenerateRecipePayload;
@@ -620,11 +624,13 @@ export const prepareProviderPayloadFromQueueRecipe = async (payload: QueueRecipe
         throw new Error('CRITICAL FAILURE: No valid image references were prepared for the generation payload.');
       }
 
-      const uploadedUrls = await Promise.all(
-        uploadSources
-          .filter((value): value is string => Boolean(value))
-          .map((source) => uploadImageToTst(source)),
-      );
+      const uploadedUrls = uploadReferencesToTst
+        ? await Promise.all(
+            uploadSources
+              .filter((value): value is string => Boolean(value))
+              .map((source) => uploadImageToTst(source)),
+          )
+        : uploadSources.filter((value): value is string => Boolean(value));
       const promptPreparation = directorSources.length > 0
         ? await prepareImageGeneratePromptWithinLimit(structuredPayload)
         : {
@@ -664,7 +670,9 @@ export const prepareProviderPayloadFromQueueRecipe = async (payload: QueueRecipe
       const referenceImages = Array.isArray(payload.referenceImages)
         ? payload.referenceImages.filter((value): value is string => Boolean(value)).slice(0, isUserOnlyPrompt ? 5 : 4)
         : [];
-      const uploadedUrls = await Promise.all(referenceImages.map((source) => uploadImageToTst(source)));
+      const uploadedUrls = uploadReferencesToTst
+        ? await Promise.all(referenceImages.map((source) => uploadImageToTst(source)))
+        : referenceImages;
       const providerPayload: Record<string, unknown> = {
         prompt: providerPrompt,
         model: payload.modelId,
@@ -720,7 +728,7 @@ export const prepareProviderPayloadFromQueueRecipe = async (payload: QueueRecipe
       if (payload.serverId) providerPayload.server_id = payload.serverId;
       if (typeof payload.audio === 'boolean') providerPayload.audio = payload.audio;
       if (payload.keyframeImage) {
-        const keyframeUrl = isHttpUrl(payload.keyframeImage)
+        const keyframeUrl = !uploadReferencesToTst || isHttpUrl(payload.keyframeImage)
           ? String(payload.keyframeImage).trim()
           : await uploadImageToTst(payload.keyframeImage);
         providerPayload.img_url = keyframeUrl;

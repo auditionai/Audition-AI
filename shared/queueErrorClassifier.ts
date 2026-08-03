@@ -15,7 +15,7 @@ const withRawDetail = (message: string, rawMessage: string) => {
   if (!rawMessage || message.includes(rawMessage)) {
     return message;
   }
-  return `${message}\nChi tiet TST: ${rawMessage}`;
+  return `${message}\nChi tiet provider: ${rawMessage}`;
 };
 
 const buildSuggestedFailureMessage = (rawMessage: string, lower: string) => {
@@ -150,11 +150,11 @@ export const classifyQueueError = (message?: string | null): QueueErrorInfo => {
     };
   }
 
-  if (lower.includes('missing tst_api_key')) {
+  if (lower.includes('missing tst_api_key') || lower.includes('missing gommo_access_token')) {
     return {
       rawMessage,
       displayMessage: withRawDetail(
-        'May chu Audition AI dang thieu TST_API_KEY. Day la loi cau hinh server cua app, khong phai loi input cua user.',
+        'May chu Audition AI dang thieu khoa API provider. Day la loi cau hinh server cua app, khong phai loi input cua user.',
         rawMessage,
       ),
       category: 'config',
@@ -216,6 +216,9 @@ export const classifyQueueError = (message?: string | null): QueueErrorInfo => {
   }
 
   if (
+    lower.includes('gommo_error') ||
+    lower.includes('gommo_model_unavailable') ||
+    lower.includes('gommo_unsupported_model') ||
     isUpstreamGatewayError ||
     /^524\b/.test(lower) ||
     lower.includes('524 <none>') ||

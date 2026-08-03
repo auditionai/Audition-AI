@@ -21,6 +21,7 @@ const USER_VIDEO_LIMIT = 1;
 const USER_QUEUE_LIMIT = 1;
 const TST_QUEUE_KINDS = new Set(['image_generate', 'video_generate', 'motion_generate']);
 const TST_QUEUE_KIND_VALUES = Array.from(TST_QUEUE_KINDS);
+type GenerationProvider = 'tst' | 'gommo';
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PHONE_USER_AGENT_PATTERN = /iphone|ipod|android.+mobile|windows phone|blackberry|opera mini|mobile safari/i;
@@ -89,16 +90,46 @@ const asQueueAssetType = (value: unknown): 'image' | 'video' => {
   return value === 'video' ? 'video' : 'image';
 };
 
-const ensureProviderConfiguredForQueueKind = (queueKind?: string) => {
+const getGenerationProvider = async (
+  admin: ReturnType<typeof getServiceRoleClient>,
+): Promise<GenerationProvider> => {
+  const fallback = String(process.env.GENERATION_PROVIDER_DEFAULT || 'tst').trim().toLowerCase() === 'gommo'
+    ? 'gommo'
+    : 'tst';
+  try {
+    const { data, error } = await admin
+      .from('system_settings')
+      .select('value')
+      .eq('key', 'generation_provider_mode')
+      .maybeSingle();
+    if (error) throw error;
+    const selected = String(data?.value?.provider || '').trim().toLowerCase();
+    return selected === 'gommo' ? 'gommo' : selected === 'tst' ? 'tst' : fallback;
+  } catch (error) {
+    console.warn('[queue-submit] Could not read generation provider mode; using deployment default.', error);
+    return fallback;
+  }
+};
+
+const ensureProviderConfiguredForQueueKind = (queueKind: string | undefined, provider: GenerationProvider) => {
   const normalizedQueueKind = String(queueKind || '').trim().toLowerCase();
   if (!TST_QUEUE_KINDS.has(normalizedQueueKind)) {
     return;
   }
 
-  if (!String(process.env.TST_API_KEY || '').trim()) {
-    throw new Error(
-      'May chu Audition AI dang thieu TST_API_KEY nen tam thoi khong the nhan job moi. Day la loi cau hinh server cua app, khong phai TST ben ngoai bi down.',
-    );
+  const hasTst = Boolean(String(process.env.TST_API_KEY || '').trim());
+  const hasGommo = Boolean(
+    String(process.env.GOMMO_ACCESS_TOKEN || process.env.GOMMO_API_TOKEN || '').trim() &&
+    String(process.env.GOMMO_DOMAIN || 'vmedia.ai').trim(),
+  );
+  if (provider === 'tst' && !hasTst) {
+    throw new Error('May chu Audition AI dang thieu TST_API_KEY nen tam thoi khong the nhan job moi.');
+  }
+  if (provider === 'gommo' && !hasGommo) {
+    throw new Error('May chu Audition AI dang thieu GOMMO_ACCESS_TOKEN nen tam thoi khong the nhan job moi.');
+  }
+  if (provider === 'gommo' && normalizedQueueKind === 'motion_generate') {
+    throw new Error('GOMMO_UNSUPPORTED_MODEL: Motion Control chưa được Gommo công bố payload chính thức.');
   }
 };
 
@@ -561,7 +592,12 @@ export const handler: Handler = async (event) => {
       };
     }
 
-    ensureProviderConfiguredForQueueKind(body.queueKind);
+    const targetProvider = await getGenerationProvider(admin);
+    ensureProviderConfiguredForQueueKind(body.queueKind, targetProvider);
+    body.queuePayload = {
+      ...body.queuePayload,
+      __targetProvider: targetProvider,
+    };
 
     let row: any;
     const queuePayloadWithLogs = buildInitialQueuePayload(body.queuePayload, body.queueKind, clientPlatform);
@@ -573,6 +609,7 @@ export const handler: Handler = async (event) => {
       toolId: normalizedToolMeta.toolId,
       toolName: normalizedToolMeta.toolName,
       clientPlatform,
+      queuePayload: queuePayloadWithLogs,
     };
 
     const rpcResult = await admin.rpc('server_enqueue_generated_job', {

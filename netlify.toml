@@ -69,6 +69,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/provider-catalog"
+  to = "/.netlify/functions/provider-catalog"
+  status = 200
+
+[[redirects]]
   from = "/api/tst-video-generate"
   to = "/.netlify/functions/tst-video-generate"
   status = 200

@@ -296,7 +296,7 @@ export function WorkspaceVideo() {
         pricingOverrides
       });
   const gommoPricingInput = getGommoPricingInput(videoModel, { resolution: quality, duration, audio: effectiveVideoAudio, providerMode });
-  const gommoPricing = getAuditionProviderPricing(auditionPricing, videoModel, gommoPricingInput, { allowGenericFallback: false });
+  const gommoPricing = getAuditionProviderPricing(auditionPricing, videoModel, gommoPricingInput, { allowGenericFallback: true });
   const currentCostBreakdown = isGommoVideoSelected
     ? { available: gommoPricing !== null && isGommoCatalogModelAvailable(selectedGommoVideoModel), vcoin: gommoPricing?.vcoin || 0, billingUnit: 'job' as const, unitVcoin: null, billedSeconds: null }
     : tstCostBreakdown;

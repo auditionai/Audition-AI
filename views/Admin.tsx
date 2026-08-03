@@ -105,6 +105,8 @@ import QueueWorkspaceV2 from './admin-v2/QueueWorkspaceV2';
 import AIUsageAnalyticsV2 from './admin-v2/AIUsageAnalyticsV2';
 import {
     fetchProviderCatalog,
+    getAuditionProviderPricing,
+    getGommoPricingInput,
     getGommoPriceComparison,
     type GommoProviderCatalog,
 } from '../services/providerCatalog';
@@ -932,6 +934,33 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       return Array.from(union.values());
   }, [gommoPricingRows, pricingRows]);
 
+  const getDirectAuditionPricing = (row: TstPricingRow) =>
+      modelPricing.find((item) => item.model_id === row.modelId && item.option_id === row.configKey);
+
+  const getInheritedAuditionPricing = (row: TstPricingRow) => {
+      if (row.server !== 'gommo') return null;
+      const match = getAuditionProviderPricing(
+          modelPricing,
+          row.modelId,
+          getGommoPricingInput(row.modelId, {
+              resolution: row.resolution,
+              duration: row.duration,
+              providerMode: row.speed,
+              audio: row.audio,
+          }),
+      );
+      if (!match || match.optionId === row.configKey) return null;
+      const source = modelPricing.find((item) => item.model_id === row.modelId && item.option_id === match.optionId);
+      return source ? { source, vcoin: match.vcoin } : null;
+  };
+
+  const getEffectiveAuditionPricing = (row: TstPricingRow) => {
+      const direct = getDirectAuditionPricing(row);
+      if (direct) return { source: direct, vcoin: direct.audition_price_vcoin, inherited: false };
+      const inherited = getInheritedAuditionPricing(row);
+      return inherited ? { ...inherited, inherited: true } : null;
+  };
+
   const featureModelOptions = useMemo(() => {
       const result = {} as Record<GenerationProviderRouteKey, Array<{ id: string; name: string }>>;
       for (const route of GENERATION_PROVIDER_ROUTE_OPTIONS) {
@@ -959,8 +988,14 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           const next = { ...prev };
           for (const row of allPricingRows) {
               const key = `${row.modelId}::${row.configKey}`;
-              const saved = modelPricing.find((item) => item.model_id === row.modelId && item.option_id === row.configKey);
-              next[key] = prev[key] ?? (saved ? String(saved.audition_price_vcoin) : row.defaultAuditionVcoin !== undefined ? String(row.defaultAuditionVcoin) : '');
+              const effective = getEffectiveAuditionPricing(row);
+              next[key] = prev[key] !== undefined && prev[key] !== ''
+                  ? prev[key]
+                  : effective
+                      ? String(effective.vcoin)
+                      : row.defaultAuditionVcoin !== undefined
+                          ? String(row.defaultAuditionVcoin)
+                          : '';
           }
           return next;
       });
@@ -978,12 +1013,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const getPricingLookupKey = (modelId: string, configKey: string) => `${modelId}::${configKey}`;
 
   const getSavedAuditionPrice = (row: TstPricingRow) =>
-      modelPricing.find((item) => item.model_id === row.modelId && item.option_id === row.configKey);
+      getDirectAuditionPricing(row);
 
   const getDraftAuditionPrice = (row: TstPricingRow) => {
       const draftKey = getPricingLookupKey(row.modelId, row.configKey);
-      const savedPricing = getSavedAuditionPrice(row);
-      const fallbackValue = savedPricing?.audition_price_vcoin ?? row.defaultAuditionVcoin ?? row.vcoin;
+      const effectivePricing = getEffectiveAuditionPricing(row);
+      const fallbackValue = effectivePricing?.vcoin ?? row.defaultAuditionVcoin ?? row.vcoin;
       const rawDraft = pricingDrafts[draftKey];
       const parsedDraft = Number(rawDraft);
       return Number.isFinite(parsedDraft) && parsedDraft > 0 ? parsedDraft : fallbackValue;
@@ -993,8 +1028,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       const draftKey = getPricingLookupKey(row.modelId, row.configKey);
       const rawDraft = pricingDrafts[draftKey];
       if (rawDraft === undefined) return false;
-      const savedPricing = getSavedAuditionPrice(row);
-      const baseline = savedPricing?.audition_price_vcoin ?? row.defaultAuditionVcoin ?? row.vcoin;
+      const effectivePricing = getEffectiveAuditionPricing(row);
+      const baseline = effectivePricing?.vcoin ?? row.defaultAuditionVcoin ?? row.vcoin;
       const parsedDraft = Number(rawDraft);
 
       if (!Number.isFinite(parsedDraft) || parsedDraft <= 0) {
@@ -1006,9 +1041,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
   const dirtyPricingRows = allPricingRows.filter(isPricingRowDirty);
   const dirtyPricingCount = dirtyPricingRows.length;
-  const missingPricingCount = allPricingRows.filter((row) => !getSavedAuditionPrice(row)).length;
+  const missingPricingCount = allPricingRows.filter((row) => !getEffectiveAuditionPricing(row)).length;
   const filteredPricingRows = pricingConfigFilter === 'missing'
-      ? allPricingRows.filter((row) => !getSavedAuditionPrice(row))
+      ? allPricingRows.filter((row) => !getEffectiveAuditionPricing(row))
       : allPricingRows;
 
   useEffect(() => {
@@ -4617,7 +4652,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                           <div>
                               <h3 className="text-sm font-black text-slate-900 dark:text-white">Cấu hình giá Vcoin</h3>
-                              <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">{missingPricingCount} cấu hình live chưa có giá bán AUDITION AI.</p>
+                              <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                                  Giá AUDITION AI dùng chung cho hai provider. Cấu hình Gommo tương thích sẽ tự kế thừa giá hệ thống TST; chỉ còn {missingPricingCount} cấu hình chưa có giá.
+                              </p>
                           </div>
                           <div className="grid grid-cols-2 gap-2 rounded-2xl neu-inset-sm p-1.5">
                               <button type="button" onClick={() => setPricingConfigFilter('all')} className={`rounded-xl px-4 py-2 text-xs font-black transition-all ${pricingConfigFilter === 'all' ? 'bg-[#FF007F] text-white' : 'text-slate-600 dark:text-slate-300'}`}>
@@ -4666,7 +4703,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                       ? 'Motion'
                                                       : 'Edit';
                                           const draftKey = getPricingLookupKey(row.modelId, row.configKey);
-                                          const savedPricing = getSavedAuditionPrice(row);
+                                          const effectivePricing = getEffectiveAuditionPricing(row);
                                           const rowIsDirty = isPricingRowDirty(row);
                                            const auditionPrice = getDraftAuditionPrice(row);
                                            const grossProfit = Number.isFinite(auditionPrice) ? auditionPrice - row.vcoin : 0;
@@ -4748,7 +4785,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                           <input
                                                               type="number"
                                                               min="1"
-                                                              value={pricingDrafts[draftKey] ?? savedPricing?.audition_price_vcoin ?? row.defaultAuditionVcoin ?? ''}
+                                                              value={pricingDrafts[draftKey] ?? effectivePricing?.vcoin ?? row.defaultAuditionVcoin ?? ''}
                                                               onChange={(e) =>
                                                                   setPricingDrafts((prev) => ({
                                                                       ...prev,
@@ -4772,9 +4809,14 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                                Lưu
                                                           </button>
                                                       </div>
+                                                      {effectivePricing?.inherited && !rowIsDirty && (
+                                                          <div className="mt-1 text-right text-[10px] font-semibold text-cyan-600 dark:text-cyan-300">
+                                                              Kế thừa giá hệ thống từ {effectivePricing.source.option_id}
+                                                          </div>
+                                                      )}
                                                       {row.billingUnit === 'second' && (
                                                           <div className="mt-1 text-right text-[10px] text-slate-700 dark:text-slate-400 font-semibold">
-                                                              Ví dụ: 5s = {(Number(pricingDrafts[draftKey] ?? savedPricing?.audition_price_vcoin ?? row.defaultAuditionVcoin ?? row.vcoin) || 0) * 5} VC
+                                                              Ví dụ: 5s = {(Number(pricingDrafts[draftKey] ?? effectivePricing?.vcoin ?? row.defaultAuditionVcoin ?? row.vcoin) || 0) * 5} VC
                                                           </div>
                                                       )}
                                                   </td>

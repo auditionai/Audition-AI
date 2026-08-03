@@ -291,7 +291,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
     speed: generationSpeedId,
     providerMode,
   });
-  const gommoPricing = getAuditionProviderPricing(pricingOverrides, selectedModelId, gommoPricingInput, { allowGenericFallback: false });
+  const gommoPricing = getAuditionProviderPricing(pricingOverrides, selectedModelId, gommoPricingInput, { allowGenericFallback: true });
   const selectedCost = isGommoSelected
     ? { available: gommoPricing !== null && isGommoCatalogModelAvailable(selectedGommoModel), vcoin: gommoPricing?.vcoin || 0 }
     : tstSelectedCost;
@@ -307,7 +307,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
                 quality: aiModel === 'gpt' ? gptQuality : undefined,
                 speed: generationSpeedId,
                 providerMode,
-              }), { allowGenericFallback: false })?.vcoin || 0
+              }), { allowGenericFallback: true })?.vcoin || 0
             : getGenerationCostBreakdown({
             tier: aiModel,
             resolution: item as TstResolution,

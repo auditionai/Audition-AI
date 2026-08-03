@@ -425,7 +425,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
       audio: effectiveVideoAudio,
       providerMode,
   });
-  const gommoVideoPricing = getAuditionProviderPricing(auditionPricing, videoModel, gommoVideoPricingInput, { allowGenericFallback: false });
+  const gommoVideoPricing = getAuditionProviderPricing(auditionPricing, videoModel, gommoVideoPricingInput, { allowGenericFallback: true });
   const currentCostBreakdown = isGommoVideoSelected
       ? {
           available: gommoVideoPricing !== null && isGommoCatalogModelAvailable(selectedGommoVideoModel),

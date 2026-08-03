@@ -46,7 +46,10 @@ const categories: Record<ToolCategoryId, {
       { title: 'Couple Mode', description: 'Hai nhân vật trong cùng một câu chuyện và bố cục.', path: '/generate/image?tool=couple_photo_gen', Icon: UsersRound, tag: 'HOT' },
       { title: 'Nhóm 3 người', description: 'Bố cục cân bằng cho bộ ba nhân vật.', path: '/generate/image?tool=group_3_gen', Icon: Users },
       { title: 'Nhóm 4 người', description: 'Tạo đội hình squad với bốn nhân vật.', path: '/generate/image?tool=group_4_gen', Icon: Images },
-      { title: 'Nhóm 5 người', description: 'Đội hình lớn nhất với năm nhân vật riêng biệt.', path: '/generate/image?tool=group_5_gen', Icon: Sparkles, tag: 'MAX' },
+      { title: 'Nhóm 5 người', description: 'Tạo đội hình gồm năm nhân vật riêng biệt.', path: '/generate/image?tool=group_5_gen', Icon: Sparkles },
+      { title: 'Nhóm 6 người', description: 'Tạo ảnh nhóm sáu nhân vật bằng luồng Gommo.', path: '/generate/image?tool=group_6_gen', Icon: Users },
+      { title: 'Nhóm 7 người', description: 'Tạo ảnh nhóm bảy nhân vật với đầy đủ ảnh tham chiếu.', path: '/generate/image?tool=group_7_gen', Icon: Images },
+      { title: 'Nhóm 8 người', description: 'Tạo đội hình tám nhân vật, không sử dụng ảnh mẫu bố cục.', path: '/generate/image?tool=group_8_gen', Icon: Sparkles, tag: 'MAX' },
     ],
   },
   video: {

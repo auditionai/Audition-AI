@@ -267,7 +267,7 @@ export function WorkspacePromptImage() {
     pricingOverrides: pricingOverrideRows,
   });
   const gommoPricingInput = getGommoPricingInput(selectedModelId, { resolution, quality: aiModel === 'gpt' ? gptQuality : undefined, speed: generationSpeedId, providerMode });
-  const gommoPricing = getAuditionProviderPricing(pricingOverrides, selectedModelId, gommoPricingInput, { allowGenericFallback: false });
+  const gommoPricing = getAuditionProviderPricing(pricingOverrides, selectedModelId, gommoPricingInput, { allowGenericFallback: true });
   const selectedCost = isGommoSelected
     ? { available: gommoPricing !== null && isGommoCatalogModelAvailable(selectedGommoModel), vcoin: gommoPricing?.vcoin || 0 }
     : tstSelectedCost;

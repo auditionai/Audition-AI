@@ -69,6 +69,15 @@ assert.equal(
   ),
   null,
 );
+assert.deepEqual(
+  getAuditionProviderPricing(
+    samplePricing,
+    'image-gpt-2',
+    getGommoPricingInput('image-gpt-2', { resolution: '8k', providerMode: 'low_basic' }),
+    { allowGenericFallback: true },
+  ),
+  { optionId: 'default', vcoin: 10 },
+);
 
 assert.deepEqual(
   sortTstFallbackServers(['vip3', 'vip2', 'fast', 'vip1', 'custom']),
@@ -173,6 +182,8 @@ assert(adminSource.includes("pricingConfigFilter === 'missing'"));
 assert(adminSource.includes('GENERATION_PROVIDER_ROUTE_OPTIONS'));
 assert(adminSource.includes('allowedModelsByFeature'));
 assert(adminSource.includes('Model được phép'));
+assert(adminSource.includes('getInheritedAuditionPricing'));
+assert(adminSource.includes('Kế thừa giá hệ thống từ'));
 
 const migrationSource = await readFile(new URL('./supabase_fix_queue_provider_safety.sql', import.meta.url), 'utf8');
 assert(migrationSource.includes("raise exception 'ACCOUNT_LOCKED'"));

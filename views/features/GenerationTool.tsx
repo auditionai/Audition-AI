@@ -58,6 +58,7 @@ import {
 } from '../../services/providerCatalog';
 import { getImageProviderRouteKey, isModelAllowedForFeature } from '../../shared/providerRouting';
 import type { CharacterReferenceGroup, ImageGenerateRecipePayload } from '../../shared/queueRecipes';
+import { GENERATION_SECTION_TIPS } from '../../shared/generationSectionTips';
 
 interface GenerationToolProps {
   feature: Feature;
@@ -1598,6 +1599,12 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                     </span>
                 </div>
 
+                <div role="note" className="rounded-2xl border border-cyan-500/35 bg-cyan-500/5 px-4 py-3 text-[11px] font-semibold leading-relaxed text-slate-700 dark:bg-black/20 dark:text-slate-200">
+                    <span aria-hidden="true">💡</span>{' '}
+                    <strong className="text-slate-900 dark:text-white">{GENERATION_SECTION_TIPS.character.title}:</strong>{' '}
+                    {GENERATION_SECTION_TIPS.character.text}
+                </div>
+
                 {/* Character Slots Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
                     {characters.map((char) => (
@@ -1693,6 +1700,12 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                     <h3 className="font-black text-slate-900 dark:text-white text-sm uppercase tracking-wider font-accent flex items-center gap-2">
                         <Icons.Settings className="w-4 h-4 text-[#FF007F] dark:text-[#00F2FE]" /> 3. CẤU HÌNH MÔ HÌNH AI & TỶ LỆ KHUNG HÌNH
                     </h3>
+                </div>
+
+                <div role="note" className="rounded-2xl border border-cyan-500/35 bg-cyan-500/5 px-4 py-3 text-[11px] font-semibold leading-relaxed text-slate-700 dark:bg-black/20 dark:text-slate-200">
+                    <span aria-hidden="true">💡</span>{' '}
+                    <strong className="text-slate-900 dark:text-white">{GENERATION_SECTION_TIPS.settings.title}:</strong>{' '}
+                    {GENERATION_SECTION_TIPS.settings.text}
                 </div>
 
                 {!isCatalogReady && (
@@ -1889,6 +1902,12 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                         <h3 className="font-black text-slate-900 dark:text-white text-sm uppercase tracking-wider font-accent flex items-center gap-2">
                             <Icons.Zap className="w-4 h-4 text-amber-500" /> 4. XÁC NHẬN & RENDER 3D
                         </h3>
+                    </div>
+
+                    <div role="note" className="rounded-2xl border border-cyan-500/35 bg-cyan-500/5 px-4 py-3 text-[11px] font-semibold leading-relaxed text-slate-700 dark:bg-black/20 dark:text-slate-200">
+                        <span aria-hidden="true">💡</span>{' '}
+                        <strong className="text-slate-900 dark:text-white">{GENERATION_SECTION_TIPS.render.title}:</strong>{' '}
+                        {GENERATION_SECTION_TIPS.render.text}
                     </div>
 
                     <div className="neu-inset-sm p-4 rounded-2xl space-y-2">

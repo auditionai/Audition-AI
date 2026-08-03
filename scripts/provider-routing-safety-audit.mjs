@@ -128,7 +128,14 @@ for (const filename of ['../views/features/GenerationTool.tsx', '../mobile-app/s
   assert(source.includes('group8'));
   assert(source.includes("activeMode !== 'group8'"));
   assert(source.includes('isModelAllowedForFeature'));
+  assert(source.includes('GENERATION_SECTION_TIPS.character'));
+  assert(source.includes('GENERATION_SECTION_TIPS.settings'));
+  assert(source.includes('GENERATION_SECTION_TIPS.render'));
 }
+
+const generationTipsSource = await readFile(new URL('../shared/generationSectionTips.ts', import.meta.url), 'utf8');
+assert(generationTipsSource.includes('1K hoặc 2K'));
+assert(generationTipsSource.includes('Pro hoặc Flash'));
 
 const adminSource = await readFile(new URL('../views/Admin.tsx', import.meta.url), 'utf8');
 assert(adminSource.includes("pricingConfigFilter === 'missing'"));

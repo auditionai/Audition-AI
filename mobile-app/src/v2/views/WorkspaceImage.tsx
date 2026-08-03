@@ -59,6 +59,7 @@ import {
   type GommoProviderCatalog,
 } from '../../services/providerCatalog';
 import { getImageProviderRouteKey, isModelAllowedForFeature } from '../../../../shared/providerRouting';
+import { GENERATION_SECTION_TIPS } from '../../../../shared/generationSectionTips';
 
 type GenMode = 'single' | 'couple' | 'trio' | 'squad' | 'group5' | 'group6' | 'group7' | 'group8';
 type Stage = 'input' | 'submitting';
@@ -1046,6 +1047,12 @@ export function WorkspaceImage() {
           </button>
         </div>
 
+        <div role="note" className="rounded-2xl border border-cyan-200 bg-cyan-50/70 px-4 py-3 text-xs font-medium leading-relaxed text-cyan-900 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-100">
+          <span aria-hidden="true">💡</span>{' '}
+          <strong>{GENERATION_SECTION_TIPS.character.title}:</strong>{' '}
+          {GENERATION_SECTION_TIPS.character.text}
+        </div>
+
         {/* Character Tabs */}
         {activeMode !== 'single' && (
           <div className="flex gap-2">
@@ -1218,6 +1225,12 @@ export function WorkspaceImage() {
           Luồng đang dùng: {isGommoSelected ? `Gommo · ${selectedGommoModel?.name || selectedModelId}` : `TST · ${selectedModelId}`}
         </div>
 
+        <div role="note" className="rounded-2xl border border-cyan-200 bg-cyan-50/70 px-4 py-3 text-xs font-medium leading-relaxed text-cyan-900 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-100">
+          <span aria-hidden="true">💡</span>{' '}
+          <strong>{GENERATION_SECTION_TIPS.settings.title}:</strong>{' '}
+          {GENERATION_SECTION_TIPS.settings.text}
+        </div>
+
         <div data-tour-id="mobile.generation.settings" className="space-y-2">
           <h3 className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider ml-1">Khung hình</h3>
           <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
@@ -1387,6 +1400,11 @@ export function WorkspaceImage() {
                 <Gem className="w-3.5 h-3.5 text-[var(--color-accent)]" />
               </div>
             </div>
+          </div>
+          <div role="note" className="mt-4 rounded-2xl border border-cyan-200 bg-cyan-50/70 px-3 py-3 text-xs font-medium leading-relaxed text-cyan-900 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-100">
+            <span aria-hidden="true">💡</span>{' '}
+            <strong>{GENERATION_SECTION_TIPS.render.title}:</strong>{' '}
+            {GENERATION_SECTION_TIPS.render.text}
           </div>
           <div className="v2-image-flow-grid mt-4 grid grid-cols-2 gap-2 text-xs">
             <div className="rounded-2xl bg-gray-50 p-3 dark:bg-[#27272A]"><Cpu /><span><small>Model AI</small><strong>{aiModel === 'flash' ? 'Flash' : aiModel === 'pro' ? 'Pro' : 'GPT'}</strong></span></div>

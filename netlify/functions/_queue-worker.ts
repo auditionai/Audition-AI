@@ -12,7 +12,8 @@ import { normalizeTstOutboundPayload } from './_tst-payload-normalizer';
 import {
   buildImageGenerateProviderPayload,
   prepareImageGeneratePromptWithinLimit,
-  prepareProviderPayloadFromQueueRecipe,
+  prepareGommoProviderPayloadFromQueueRecipe,
+  prepareTstProviderPayloadFromQueueRecipe,
   TST_PROMPT_MAX_CHARACTERS,
   uploadImageToTst,
 } from './_queue-recipes';
@@ -3195,7 +3196,7 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
       submitPayload = await withTimeout(
         withLeaseHeartbeat(
           job.id,
-          prepareProviderPayloadFromQueueRecipe(currentPayload, { uploadReferencesToTst: false }),
+          prepareGommoProviderPayloadFromQueueRecipe(currentPayload),
           preparationLeaseSeconds,
         ),
         preparationTimeoutMs,
@@ -3241,7 +3242,7 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
       const providerPayload = await withTimeout(
         withLeaseHeartbeat(
           job.id,
-          prepareProviderPayloadFromQueueRecipe((job.queue_payload || currentPayload) as unknown as PromptImageGenerateRecipePayload),
+          prepareTstProviderPayloadFromQueueRecipe((job.queue_payload || currentPayload) as unknown as PromptImageGenerateRecipePayload),
           preparationLeaseSeconds,
         ),
         preparationTimeoutMs,
@@ -3323,7 +3324,7 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
       const providerPayload = await withTimeout(
         withLeaseHeartbeat(
           job.id,
-          prepareProviderPayloadFromQueueRecipe((job.queue_payload || currentPayload) as typeof currentPayload),
+          prepareTstProviderPayloadFromQueueRecipe((job.queue_payload || currentPayload) as typeof currentPayload),
           preparationLeaseSeconds,
         ),
         preparationTimeoutMs,

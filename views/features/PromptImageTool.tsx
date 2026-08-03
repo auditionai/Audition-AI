@@ -43,6 +43,7 @@ import {
   type GommoProviderCatalog,
 } from '../../services/providerCatalog';
 import type { GenerationProviderConfig } from '../../services/economyService';
+import { getPreferredGommoBasicMode } from '../../shared/gommoServerRouting';
 
 interface PromptImageToolProps {
   feature: Feature;
@@ -129,6 +130,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
   const [server, setServer] = useState('VIP 1');
   const [gptQuality, setGptQuality] = useState<'low' | 'medium' | 'high'>('low');
   const [providerMode, setProviderMode] = useState('');
+  const gommoDefaultSelectionKeyRef = useRef('');
   const [pricingEntries, setPricingEntries] = useState<TstPricingEntry[]>([]);
   const [runtimeModels, setRuntimeModels] = useState<TstRuntimeModel[]>([]);
   const [pricingOverrides, setPricingOverrides] = useState<ModelPricing[]>([]);
@@ -239,11 +241,18 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
         .map((option) => option.type.toUpperCase());
       const ratios = (selectedGommoModel?.ratios || []).map((option) => option.type);
       const modes = (selectedGommoModel?.modes || []).map((option) => option.type);
+      const gommoSelectionKey = `${selectedModelId}:${modes.join('|')}`;
       if (resolutions.length > 0 && !resolutions.includes(resolution)) setResolution(resolutions[0]);
       if (ratios.length > 0 && !ratios.includes(aspectRatio)) setAspectRatio(ratios[0]);
-      if (modes.length > 0 && !modes.includes(providerMode)) setProviderMode(modes[0]);
+      if (modes.length > 0 && gommoDefaultSelectionKeyRef.current !== gommoSelectionKey) {
+        gommoDefaultSelectionKeyRef.current = gommoSelectionKey;
+        setProviderMode(getPreferredGommoBasicMode(modes, gptQuality) || modes[0]);
+      } else if (modes.length > 0 && !modes.includes(providerMode)) {
+        setProviderMode(getPreferredGommoBasicMode(modes, gptQuality) || modes[0]);
+      }
       return;
     }
+    gommoDefaultSelectionKeyRef.current = '';
     if (tstAspectRatios.length > 0 && !tstAspectRatios.includes(aspectRatio)) {
       setAspectRatio(tstAspectRatios[0]);
       return;

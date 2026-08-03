@@ -608,11 +608,11 @@ export const prepareImageGeneratePromptWithinLimit = async (
   );
 };
 
-export const prepareProviderPayloadFromQueueRecipe = async (
+const prepareProviderPayloadFromQueueRecipe = async (
   payload: QueueRecipePayload,
-  options?: { uploadReferencesToTst?: boolean },
+  options: { uploadReferencesToTst: boolean },
 ): Promise<Record<string, unknown>> => {
-  const uploadReferencesToTst = options?.uploadReferencesToTst !== false;
+  const uploadReferencesToTst = options.uploadReferencesToTst;
   switch (payload.recipeType) {
     case 'image_generate_recipe_v1': {
       const structuredPayload = payload as ImageGenerateRecipePayload;
@@ -781,4 +781,17 @@ export const prepareProviderPayloadFromQueueRecipe = async (
     default:
       return payload;
   }
+};
+
+// Keep provider preparation entry points explicit. TST owns its upload flow;
+// Gommo keeps the application's original HTTP media URLs and lets its adapter
+// serialize them as subjects/images according to the Gommo contract.
+export const prepareTstProviderPayloadFromQueueRecipe = (payload: QueueRecipePayload) =>
+  prepareProviderPayloadFromQueueRecipe(payload, { uploadReferencesToTst: true });
+
+export const prepareGommoProviderPayloadFromQueueRecipe = (payload: QueueRecipePayload) => {
+  if (!['image_generate_recipe_v1', 'prompt_image_generate_recipe_v1', 'video_generate_recipe_v1'].includes(payload.recipeType)) {
+    throw new Error(`GOMMO_UNSUPPORTED_RECIPE: ${payload.recipeType}`);
+  }
+  return prepareProviderPayloadFromQueueRecipe(payload, { uploadReferencesToTst: false });
 };

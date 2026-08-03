@@ -123,6 +123,9 @@ const workerSource = await readFile(new URL('../netlify/functions/_queue-worker.
 assert(workerSource.includes(".contains('queue_payload', { __dispatchAttemptId: dispatchAttemptId })"));
 assert.equal((workerSource.match(/return summary;/g) || []).length, 1);
 assert(workerSource.includes('providerByFeature'));
+assert(workerSource.includes('prepareGommoProviderPayloadFromQueueRecipe(currentPayload)'));
+assert(workerSource.includes('prepareTstProviderPayloadFromQueueRecipe'));
+assert(!workerSource.includes('prepareProviderPayloadFromQueueRecipe(currentPayload, { uploadReferencesToTst: false })'));
 
 const gommoSource = await readFile(new URL('../netlify/functions/_gommo-provider.ts', import.meta.url), 'utf8');
 assert(gommoSource.includes('resolution: providerPayload.resolution'));
@@ -136,6 +139,13 @@ assert(gommoSource.includes('maxReferenceImages'));
 assert(gommoSource.includes('GOMMO_SERVER_DISABLED'));
 assert(gommoSource.includes("isProviderServerAllowedByConfig('gommo'"));
 assert(gommoSource.includes('getGommoServerIdForMode(normalized.model, mode)'));
+assert(gommoSource.includes("case 'image-gpt-2': return `${quality || 'low'}_basic`;"));
+assert(gommoSource.includes('subjects: getUrlObjects(limitedSources)'));
+assert(gommoSource.includes('references: getUrlObjects(limitedSources)'));
+assert(gommoSource.includes('images: imageSources.length ? getUrlObjects(imageSources) : undefined'));
+assert(!gommoSource.includes('[${index}][url]'));
+assert(gommoSource.includes('data?.raw?.imageInfo?.message'));
+assert(gommoSource.includes('data?.raw?.videoInfo?.message'));
 
 const tstCatalogSource = await readFile(new URL('../services/tstCatalog.ts', import.meta.url), 'utf8');
 assert(tstCatalogSource.includes("String(entry.key || entry.config_key || '')"));
@@ -161,6 +171,13 @@ assert(queueSubmitSource.includes('GOMMO_SERVER_DISABLED'));
 
 const recipeSource = await readFile(new URL('../netlify/functions/_queue-recipes.ts', import.meta.url), 'utf8');
 assert(recipeSource.includes('uploadReferencesToTst ? (isUserOnlyPrompt ? 5 : 4) : 8'));
+assert(recipeSource.includes('export const prepareTstProviderPayloadFromQueueRecipe'));
+assert(recipeSource.includes('export const prepareGommoProviderPayloadFromQueueRecipe'));
+assert(recipeSource.includes('prepareProviderPayloadFromQueueRecipe(payload, { uploadReferencesToTst: true })'));
+assert(recipeSource.includes('prepareProviderPayloadFromQueueRecipe(payload, { uploadReferencesToTst: false })'));
+assert(recipeSource.includes('GOMMO_UNSUPPORTED_RECIPE'));
+assert(!gommoSource.includes('uploadImageToTst'));
+assert(!gommoSource.includes('TST_API'));
 
 for (const filename of ['../views/features/GenerationTool.tsx', '../mobile-app/src/v2/views/WorkspaceImage.tsx']) {
   const source = await readFile(new URL(filename, import.meta.url), 'utf8');
@@ -173,8 +190,16 @@ for (const filename of ['../views/features/GenerationTool.tsx', '../mobile-app/s
   assert(source.includes("['group6', 'group7', 'group8'].includes(activeMode)"));
   assert(source.includes('getPreferredGommoBasicMode'));
   assert(source.includes('getGommoServerGroups'));
+  assert(source.includes('gommoDefaultSelectionKeyRef'));
+  assert(source.includes('getPreferredGommoBasicMode(gommoModeTypes, gptQuality)') || source.includes('getPreferredGommoBasicMode(modes, gptQuality)'));
   assert(source.includes('tstRuntimeResolutions'));
   assert(!source.includes('Luồng đang dùng:'));
+}
+
+for (const filename of ['../views/features/PromptImageTool.tsx', '../mobile-app/src/v2/views/WorkspacePromptImage.tsx']) {
+  const source = await readFile(new URL(filename, import.meta.url), 'utf8');
+  assert(source.includes('gommoDefaultSelectionKeyRef'));
+  assert(source.includes('getPreferredGommoBasicMode(modes, gptQuality)'));
 }
 
 const generationTipsSource = await readFile(new URL('../shared/generationSectionTips.ts', import.meta.url), 'utf8');

@@ -45,6 +45,8 @@ import {
   type GommoProviderCatalog,
 } from '../../services/providerCatalog';
 import { isModelAllowedForFeature } from '../../shared/providerRouting';
+import { VIDEO_GENERATION_TIPS } from '../../shared/videoGenerationTips';
+import { getVideoModelPresentation } from '../../shared/videoModelPresentation';
 
 interface VideoToolProps {
   feature: Feature;
@@ -112,6 +114,8 @@ const getFamilyPriceLabel = (models: AIModelOption[]) => {
 
 const getVideoModelHint = (model: AIModelOption) => {
     const text = `${model.id} ${model.name}`.toLowerCase();
+    const presentation = getVideoModelPresentation(model);
+    if (presentation) return presentation.description;
     if (text.includes('grok')) return 'Tiết kiệm chi phí, hợp test ý tưởng nhanh.';
     if (text.includes('kling')) return 'Ưu tiên chuyển động, độ hoàn thiện và độ mượt.';
     if (text.includes('fast')) return 'Xử lý nhanh hơn, phù hợp thử nhiều biến thể.';
@@ -120,6 +124,8 @@ const getVideoModelHint = (model: AIModelOption) => {
 
 const getVideoModelTags = (model: AIModelOption) => {
     const text = `${model.id} ${model.name}`.toLowerCase();
+    const presentation = getVideoModelPresentation(model);
+    if (presentation) return presentation.tags;
     if (text.includes('grok')) return ['#GIÁ_RẺ', '#TEST_NHANH'];
     if (text.includes('kling')) return ['#BEST_MOTION', '#CINEMATIC'];
     if (text.includes('fast')) return ['#TỐC_ĐỘ', '#SEEDANCE'];
@@ -1019,6 +1025,9 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
   };
 
   const TipIcon = SMART_TIPS[currentTipIdx].icon;
+  const activeSectionTips = activeMode === 'motion_control'
+    ? VIDEO_GENERATION_TIPS.motionControl
+    : VIDEO_GENERATION_TIPS.videoAi;
 
   return (
     <div className="w-full pb-12 animate-fade-in relative">
@@ -1068,6 +1077,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                   <span>Hướng dẫn</span>
               </button>
           </div>
+
       </div>
 
       <div className="w-full mb-6 neu-inset-sm rounded-2xl px-4 py-3 flex items-center gap-3" aria-live="polite">
@@ -1084,6 +1094,12 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                 <h3 className="font-extrabold text-slate-800 dark:text-white text-sm uppercase tracking-wider font-accent flex items-center gap-2">
                     <Icons.Upload className="w-4 h-4 text-[#00F2FE]" /> 1. UPLOAD KEYFRAME & CHUYỂN ĐỘNG (MOTION)
                 </h3>
+            </div>
+
+            <div role="note" className="rounded-2xl border border-cyan-500/35 bg-cyan-500/5 px-4 py-3 text-[11px] font-semibold leading-relaxed text-slate-700 dark:bg-black/20 dark:text-slate-200">
+              <span aria-hidden="true">💡</span>{' '}
+              <strong className="text-slate-900 dark:text-white">{activeSectionTips.upload.title}:</strong>{' '}
+              {activeSectionTips.upload.text}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1261,6 +1277,12 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                 <h3 className="font-extrabold text-slate-800 dark:text-white text-sm uppercase tracking-wider font-accent flex items-center gap-2">
                     <Icons.Settings className="w-4 h-4 text-[#00F2FE]" /> 3. MÔ HÌNH AI & THAM SỐ VIDEO
                 </h3>
+            </div>
+
+            <div role="note" className="rounded-2xl border border-cyan-500/35 bg-cyan-500/5 px-4 py-3 text-[11px] font-semibold leading-relaxed text-slate-700 dark:bg-black/20 dark:text-slate-200">
+              <span aria-hidden="true">💡</span>{' '}
+              <strong className="text-slate-900 dark:text-white">{activeSectionTips.settings.title}:</strong>{' '}
+              {activeSectionTips.settings.text}
             </div>
 
             {!isCatalogReady && (
@@ -1466,6 +1488,12 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                     <h3 className="font-extrabold text-slate-800 dark:text-white text-sm uppercase tracking-wider font-accent flex items-center gap-2">
                         <Icons.Zap className="w-4 h-4 text-amber-500" /> 4. XÁC NHẬN & RENDER VIDEO
                     </h3>
+                </div>
+
+                <div role="note" className="rounded-2xl border border-cyan-500/35 bg-cyan-500/5 px-4 py-3 text-[11px] font-semibold leading-relaxed text-slate-700 dark:bg-black/20 dark:text-slate-200">
+                  <span aria-hidden="true">💡</span>{' '}
+                  <strong className="text-slate-900 dark:text-white">{activeSectionTips.render.title}:</strong>{' '}
+                  {activeSectionTips.render.text}
                 </div>
 
                 <div className="neu-inset-sm p-4 rounded-2xl flex items-center justify-between">

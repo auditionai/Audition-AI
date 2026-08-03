@@ -33,6 +33,8 @@ import type { ModelPricing } from '../../services/economyService';
 import type { GeneratedImage } from '../../types';
 import { fetchProviderCatalog, getAuditionProviderPricing, getGommoPricingInput, getMinimumAuditionModelPrice, getGommoModelForAudition, isGommoCatalogModelAvailable, resolveProviderForModel, type GommoProviderCatalog } from '../../services/providerCatalog';
 import { isModelAllowedForFeature } from '../../../../shared/providerRouting';
+import { VIDEO_GENERATION_TIPS } from '../../../../shared/videoGenerationTips';
+import { getVideoModelPresentation } from '../../../../shared/videoModelPresentation';
 
 type VideoMode = 'video_ai' | 'motion_control';
 type Stage = 'input' | 'submitting';
@@ -84,6 +86,8 @@ const getFamilyPriceLabel = (models: AIModelOption[]) => {
 
 const getVideoModelHint = (model: AIModelOption) => {
   const text = `${model.id} ${model.name}`.toLowerCase();
+  const presentation = getVideoModelPresentation(model);
+  if (presentation) return presentation.description;
   if (text.includes('grok')) return 'Tiết kiệm chi phí, hợp test ý tưởng.';
   if (text.includes('kling')) return 'Ưu tiên chuyển động và độ mượt.';
   if (text.includes('fast')) return 'Xử lý nhanh hơn.';
@@ -774,6 +778,10 @@ export function WorkspaceVideo() {
     </div>
   ) : null;
 
+  const activeSectionTips = activeMode === 'motion_control'
+    ? VIDEO_GENERATION_TIPS.motionControl
+    : VIDEO_GENERATION_TIPS.videoAi;
+
   return (
     <div className="flex flex-col h-full bg-[#FAFAFA] dark:bg-[#09090B]">
       <div className="flex-1 overflow-y-auto p-5 space-y-6 pb-40 hide-scrollbar">
@@ -830,6 +838,12 @@ export function WorkspaceVideo() {
               </button>
             </div>
 
+            <div role="note" className="rounded-2xl border border-cyan-200 bg-cyan-50/70 px-4 py-3 text-xs font-medium leading-relaxed text-cyan-900 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-100">
+              <span aria-hidden="true">💡</span>{' '}
+              <strong>{activeSectionTips.upload.title}:</strong>{' '}
+              {activeSectionTips.upload.text}
+            </div>
+
             {/* Prompt */}
             <div data-tour-id="mobile.video.prompt" className="relative group">
               <h3 className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider ml-1 mb-2">Chuyển động mong muốn</h3>
@@ -845,6 +859,12 @@ export function WorkspaceVideo() {
             </div>
 
             {scriptDirectorPanel}
+
+            <div role="note" className="rounded-2xl border border-cyan-200 bg-cyan-50/70 px-4 py-3 text-xs font-medium leading-relaxed text-cyan-900 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-100">
+              <span aria-hidden="true">💡</span>{' '}
+              <strong>{activeSectionTips.settings.title}:</strong>{' '}
+              {activeSectionTips.settings.text}
+            </div>
 
             {/* Config Grids */}
             {modelOptions.showAspectRatio && modelOptions.aspectRatios.length > 0 && (
@@ -1088,6 +1108,18 @@ export function WorkspaceVideo() {
               </div>
             </div>
 
+            <div role="note" className="rounded-2xl border border-cyan-200 bg-cyan-50/70 px-4 py-3 text-xs font-medium leading-relaxed text-cyan-900 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-100">
+              <span aria-hidden="true">💡</span>{' '}
+              <strong>{activeSectionTips.upload.title}:</strong>{' '}
+              {activeSectionTips.upload.text}
+            </div>
+
+            <div role="note" className="rounded-2xl border border-cyan-200 bg-cyan-50/70 px-4 py-3 text-xs font-medium leading-relaxed text-cyan-900 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-100">
+              <span aria-hidden="true">💡</span>{' '}
+              <strong>{activeSectionTips.settings.title}:</strong>{' '}
+              {activeSectionTips.settings.text}
+            </div>
+
             {/* Setup Options for Motion */}
             <div data-tour-id="mobile.video.settings" className="grid grid-cols-2 gap-4 border-t border-gray-100 dark:border-zinc-800 pt-5">
               <div className="space-y-2">
@@ -1173,6 +1205,12 @@ export function WorkspaceVideo() {
             </div>
           </div>
         )}
+
+        <div role="note" className="rounded-2xl border border-cyan-200 bg-cyan-50/70 px-4 py-3 text-xs font-medium leading-relaxed text-cyan-900 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-100">
+          <span aria-hidden="true">💡</span>{' '}
+          <strong>{activeSectionTips.render.title}:</strong>{' '}
+          {activeSectionTips.render.text}
+        </div>
 
         {/* Smart Tip */}
         <div className="bg-purple-50 dark:bg-purple-500/10 rounded-[16px] p-3 flex items-start gap-2 border border-purple-100 dark:border-purple-500/30 mt-4">

@@ -9,6 +9,6 @@ export const GENERATION_SECTION_TIPS = {
   },
   render: {
     title: 'Mẹo xử lý khi render thất bại',
-    text: 'Ứng dụng hoạt động dựa trên Sever Tạo Ảnh riêng biệt nên nếu bạn ảnh tạo ra thất bại, hãy thử quay lại và chọn Sever khác hoặc Mô hình AI khác như Pro hoặc Flash. Vì nhiều khi sever bị quá tải, hoặc đang bảo trì, nếu thấy tạo ảnh thất bại nhiều lần, hãy báo ngay cho ADMIN để xử lý phía sever tạo ảnh.',
+    text: 'Ứng dụng hoạt động dựa trên Sever Tạo Ảnh riêng biệt nên nếu bạn tạo ảnh thất bại, hãy thử quay lại và chọn Sever khác hoặc Mô hình AI khác như Pro hoặc Flash. Vì nhiều khi sever bị quá tải, hoặc đang bảo trì, nếu thấy tạo ảnh thất bại nhiều lần, hãy báo ngay cho ADMIN để xử lý phía sever tạo ảnh.',
   },
 } as const;

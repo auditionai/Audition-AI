@@ -161,7 +161,7 @@ const tryStageGenerationInput = async (source: string, folder: string) => {
     }
 };
 
-export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, onNavigateToFeature, onNavigateView }) => {
+export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, onNavigateView }) => {
   const { notify } = useNotification();
   const { userId, queueStats, triggerPoll } = useConcurrency();
   const [stage, setStage] = useState<Stage>('input');
@@ -1540,14 +1540,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
                 {/* Quick Actions & Navigation */}
                 <div className="flex items-center gap-2 shrink-0">
-                    <button
-                        type="button"
-                        onClick={() => onNavigateToFeature?.('magic_editor_pro')}
-                        className="neu-button px-4 py-2.5 rounded-2xl text-xs font-black text-purple-600 dark:text-purple-400 flex items-center gap-2 hover:scale-105 transition-all"
-                    >
-                        <Icons.Wand className="w-4 h-4" />
-                        <span>Chỉnh sửa AI</span>
-                    </button>
                     {tutorialVideoUrl && (
                         <button
                             onClick={() => setShowVideo(true)}
@@ -1565,6 +1557,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                         <Icons.Info className="w-4 h-4 text-amber-500" />
                         <span>Hướng dẫn</span>
                     </button>
+
                 </div>
             </div>
         </div>

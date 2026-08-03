@@ -6,6 +6,7 @@ import { sortTstFallbackServers } from '../netlify/functions/_queue-worker.ts';
 import { buildLocalPricingOptionCandidates } from '../netlify/functions/queue-submit.ts';
 import { getAuditionProviderPricing, getGommoPricingInput, resolveProviderForModel } from '../services/providerCatalog.ts';
 import { getAllowedModelsForFeature, inferGenerationProviderRouteKey, isModelAllowedForFeature } from '../shared/providerRouting.ts';
+import { getVideoModelPresentation } from '../shared/videoModelPresentation.ts';
 
 const gptOptions = buildLocalPricingOptionCandidates({
   model: 'image-gpt-2',
@@ -81,6 +82,14 @@ assert.deepEqual(getAllowedModelsForFeature(null, 'image_group_8'), ['image-gpt-
 assert.equal(isModelAllowedForFeature(null, 'image_group_8', 'nano-banana-2'), false);
 assert.equal(isModelAllowedForFeature({ allowedModelsByFeature: { image_group_8: ['*'] } }, 'image_group_8', 'nano-banana-2'), true);
 assert.equal(isModelAllowedForFeature({ allowedModelsByFeature: { image_single: ['nano-banana-pro'] } }, 'image_single', 'image-gpt-2'), false);
+assert.match(getVideoModelPresentation({ id: 'kling-2.5-turbo' })?.description || '', /tốc độ và chi phí/);
+assert.match(getVideoModelPresentation({ id: 'kling-2.6' })?.description || '', /âm thanh gốc/);
+assert.match(getVideoModelPresentation({ id: 'kling-3.0-video' })?.description || '', /nhiều phân đoạn/);
+assert.match(getVideoModelPresentation({ id: 'kling-o1-video' })?.description || '', /nhiều loại tham chiếu/);
+assert.notDeepEqual(
+  getVideoModelPresentation({ id: 'kling-2.5-turbo' })?.tags,
+  getVideoModelPresentation({ id: 'kling-3.0-video' })?.tags,
+);
 assert.equal(resolveProviderForModel({ provider: 'tst', providerByModel: { 'image-gpt-2': 'tst' }, providerByFeature: {}, smartFallbackEnabled: true }, 'image-gpt-2', 'image_group_8'), 'gommo');
 assert.equal(resolveProviderForModel({ provider: 'tst', providerByModel: {}, providerByFeature: { image_single: 'gommo' }, smartFallbackEnabled: true }, 'image-gpt-2', 'image_single'), 'gommo');
 
@@ -136,6 +145,28 @@ for (const filename of ['../views/features/GenerationTool.tsx', '../mobile-app/s
 const generationTipsSource = await readFile(new URL('../shared/generationSectionTips.ts', import.meta.url), 'utf8');
 assert(generationTipsSource.includes('1K hoặc 2K'));
 assert(generationTipsSource.includes('Pro hoặc Flash'));
+
+const videoTipsSource = await readFile(new URL('../shared/videoGenerationTips.ts', import.meta.url), 'utf8');
+assert(videoTipsSource.includes('ảnh AI rõ nét'));
+assert(videoTipsSource.includes('chất lượng video và thời lượng video'));
+assert(videoTipsSource.includes('Sever Tạo Video'));
+assert(videoTipsSource.includes('ảnh kích thước 9:16'));
+assert(videoTipsSource.includes('Motion Controlphù hợp'));
+assert(videoTipsSource.includes('Sever Tạo Motion Control'));
+for (const filename of ['../views/features/VideoTool.tsx', '../mobile-app/src/v2/views/WorkspaceVideo.tsx']) {
+  const source = await readFile(new URL(filename, import.meta.url), 'utf8');
+  assert(source.includes('VIDEO_GENERATION_TIPS.motionControl'));
+  assert(source.includes('VIDEO_GENERATION_TIPS.videoAi'));
+  assert(source.includes('activeSectionTips.upload'));
+  assert(source.includes('activeSectionTips.settings'));
+  assert(source.includes('activeSectionTips.render'));
+}
+const desktopImageSource = await readFile(new URL('../views/features/GenerationTool.tsx', import.meta.url), 'utf8');
+const desktopVideoSource = await readFile(new URL('../views/features/VideoTool.tsx', import.meta.url), 'utf8');
+assert(!desktopImageSource.includes("onNavigateToFeature?.('magic_editor_pro')"));
+assert(desktopImageSource.includes("setGuideTopic('chars')"));
+assert(desktopImageSource.includes('Video HD'));
+assert(desktopVideoSource.includes('setShowGuide(true)'));
 
 const adminSource = await readFile(new URL('../views/Admin.tsx', import.meta.url), 'utf8');
 assert(adminSource.includes("pricingConfigFilter === 'missing'"));

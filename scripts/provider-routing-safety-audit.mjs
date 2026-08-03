@@ -123,6 +123,9 @@ const workerSource = await readFile(new URL('../netlify/functions/_queue-worker.
 assert(workerSource.includes(".contains('queue_payload', { __dispatchAttemptId: dispatchAttemptId })"));
 assert.equal((workerSource.match(/return summary;/g) || []).length, 1);
 assert(workerSource.includes('providerByFeature'));
+assert(workerSource.includes('prepareGommoProviderPayloadFromQueueRecipe(currentPayload)'));
+assert(workerSource.includes('prepareTstProviderPayloadFromQueueRecipe'));
+assert(!workerSource.includes('prepareProviderPayloadFromQueueRecipe(currentPayload, { uploadReferencesToTst: false })'));
 
 const gommoSource = await readFile(new URL('../netlify/functions/_gommo-provider.ts', import.meta.url), 'utf8');
 assert(gommoSource.includes('resolution: providerPayload.resolution'));
@@ -168,6 +171,13 @@ assert(queueSubmitSource.includes('GOMMO_SERVER_DISABLED'));
 
 const recipeSource = await readFile(new URL('../netlify/functions/_queue-recipes.ts', import.meta.url), 'utf8');
 assert(recipeSource.includes('uploadReferencesToTst ? (isUserOnlyPrompt ? 5 : 4) : 8'));
+assert(recipeSource.includes('export const prepareTstProviderPayloadFromQueueRecipe'));
+assert(recipeSource.includes('export const prepareGommoProviderPayloadFromQueueRecipe'));
+assert(recipeSource.includes('prepareProviderPayloadFromQueueRecipe(payload, { uploadReferencesToTst: true })'));
+assert(recipeSource.includes('prepareProviderPayloadFromQueueRecipe(payload, { uploadReferencesToTst: false })'));
+assert(recipeSource.includes('GOMMO_UNSUPPORTED_RECIPE'));
+assert(!gommoSource.includes('uploadImageToTst'));
+assert(!gommoSource.includes('TST_API'));
 
 for (const filename of ['../views/features/GenerationTool.tsx', '../mobile-app/src/v2/views/WorkspaceImage.tsx']) {
   const source = await readFile(new URL(filename, import.meta.url), 'utf8');

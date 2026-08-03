@@ -2381,6 +2381,7 @@ as $$
 declare
   v_existing public.generated_images%rowtype;
   v_user_balance numeric := 0;
+  v_account_status text := 'active';
   v_my_image_processing integer := 0;
   v_my_video_processing integer := 0;
   v_my_queued integer := 0;
@@ -2430,14 +2431,18 @@ begin
     return;
   end if;
 
-  select coalesce(u.vcoin_balance, 0)
-  into v_user_balance
+  select coalesce(u.vcoin_balance, 0), coalesce(u.account_status, 'active')
+  into v_user_balance, v_account_status
   from public.users u
   where u.id = p_user_id
   for update;
 
   if not found then
     raise exception 'USER_NOT_FOUND';
+  end if;
+
+  if lower(v_account_status) = 'locked' then
+    raise exception 'ACCOUNT_LOCKED';
   end if;
 
   if v_cost > 0 and v_user_balance < v_cost then
@@ -2505,7 +2510,9 @@ begin
   ) values (
     p_id, p_user_id, '', coalesce(p_prompt, ''), coalesce(p_engine, p_tool_name, p_queue_kind, 'Queued Job'),
     now(), false, p_tool_id, p_tool_name, 'queued', 0, v_cost, v_asset_type, now(), p_queue_kind,
-    coalesce(p_queue_payload, '{}'::jsonb), 'tst', null, null, null, null, null, null, 0, null, null
+    coalesce(p_queue_payload, '{}'::jsonb),
+    case when lower(coalesce(p_queue_payload->>'__targetProvider', 'tst')) = 'gommo' then 'gommo' else 'tst' end,
+    null, null, null, null, null, null, 0, null, null
   );
 
   return query
@@ -2513,26 +2520,6 @@ begin
     p_id,
     'queued'::text,
     case when v_can_dispatch_now then 0 else v_system_queued + 1 end::integer;
-exception
-  when others then
-    if v_charge_applied and v_cost > 0 then
-      perform public.apply_balance_transaction(
-        p_user_id,
-        v_cost,
-        'Refund: enqueue failed',
-        'refund',
-        'generated_image_refund',
-        p_id::text,
-        jsonb_build_object(
-          'generated_image_id', p_id,
-          'tool_id', p_tool_id,
-          'queue_kind', p_queue_kind,
-          'asset_type', v_asset_type,
-          'cost_vcoin', v_cost
-        )
-      );
-    end if;
-    raise;
 end;
 $$;
 
@@ -2835,6 +2822,9 @@ grant execute on function public.unlock_user_account(uuid) to service_role;
 revoke execute on function public.apply_balance_transaction(uuid, numeric, text, text, text, text, jsonb) from public, anon, authenticated;
 grant execute on function public.apply_balance_transaction(uuid, numeric, text, text, text, text, jsonb) to service_role;
 
+revoke execute on function public.server_enqueue_generated_job(uuid, uuid, text, text, text, text, text, integer, text, jsonb) from public, anon, authenticated;
+grant execute on function public.server_enqueue_generated_job(uuid, uuid, text, text, text, text, text, integer, text, jsonb) to service_role;
+
 revoke execute on function public.secure_update_balance(numeric, text, text) from public, anon, authenticated;
 grant execute on function public.secure_update_balance(numeric, text, text) to service_role;
 
@@ -2868,7 +2858,8 @@ values
   ('maintenance_mode', jsonb_build_object('isActive', false, 'message', 'He thong dang bao tri, vui long quay lai sau.')),
   ('tutorial_video', jsonb_build_object('url', 'https://www.youtube.com/watch?v=ba2WR8txe_c', 'isActive', true)),
   ('giftcode_promo', jsonb_build_object('text', 'Nhap CODE "HELLO2026" de nhan 20 Vcoin mien phi !!!', 'isActive', true)),
-  ('tst_server_availability', jsonb_build_object('disabledByModel', jsonb_build_object(), 'updatedAt', now()))
+  ('tst_server_availability', jsonb_build_object('disabledByModel', jsonb_build_object(), 'updatedAt', now())),
+  ('generation_provider_mode', jsonb_build_object('provider', 'tst', 'providerByModel', jsonb_build_object(), 'smartFallbackEnabled', true, 'updatedAt', now()))
 on conflict (key) do nothing;
 
 commit;

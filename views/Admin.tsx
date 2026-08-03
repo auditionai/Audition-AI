@@ -576,6 +576,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [gommoCatalogError, setGommoCatalogError] = useState('');
   const [generationProvider, setGenerationProvider] = useState<GenerationProviderMode>('tst');
   const [generationProviderByModel, setGenerationProviderByModel] = useState<Record<string, GenerationProviderMode>>({});
+  const [smartProviderFallbackEnabled, setSmartProviderFallbackEnabled] = useState(true);
   const [switchingGenerationProvider, setSwitchingGenerationProvider] = useState(false);
   const [pricingDrafts, setPricingDrafts] = useState<Record<string, string>>({});
   const [savingAllPricing, setSavingAllPricing] = useState(false);
@@ -763,6 +764,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               setGommoCatalog(providerCatalog);
               setGenerationProvider(providerConfig.provider);
               setGenerationProviderByModel(providerConfig.providerByModel || {});
+              setSmartProviderFallbackEnabled(providerConfig.smartFallbackEnabled !== false);
               if (providerCatalog) setGommoCatalogError('');
           } catch (error) {
               console.warn('Failed to auto-refresh pricing view', error);
@@ -1019,6 +1021,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       const result = await saveGenerationProviderConfig({
           provider,
           providerByModel: generationProviderByModel,
+          smartFallbackEnabled: smartProviderFallbackEnabled,
       });
       setSwitchingGenerationProvider(false);
       if (!result.success) {
@@ -1062,6 +1065,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       const result = await saveGenerationProviderConfig({
           provider: generationProvider,
           providerByModel: nextProviderByModel,
+          smartFallbackEnabled: smartProviderFallbackEnabled,
       });
       setSwitchingGenerationProvider(false);
       if (!result.success) {
@@ -1071,6 +1075,29 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       setGenerationProviderByModel(nextProviderByModel);
       const resolvedProvider = provider === 'default' ? generationProvider : provider;
       showToast(`${modelId} sẽ gửi job mới qua ${resolvedProvider === 'gommo' ? 'Gommo' : 'TST'}.`, 'success');
+  };
+
+  const handleToggleSmartProviderFallback = async () => {
+      if (switchingGenerationProvider) return;
+      const nextEnabled = !smartProviderFallbackEnabled;
+      setSwitchingGenerationProvider(true);
+      const result = await saveGenerationProviderConfig({
+          provider: generationProvider,
+          providerByModel: generationProviderByModel,
+          smartFallbackEnabled: nextEnabled,
+      });
+      setSwitchingGenerationProvider(false);
+      if (!result.success) {
+          showToast(`Không thể lưu cấu hình backup: ${result.error}`, 'error');
+          return;
+      }
+      setSmartProviderFallbackEnabled(nextEnabled);
+      showToast(
+          nextEnabled
+              ? 'Đã bật backup thông minh TST server → Gommo cho job ảnh.'
+              : 'Đã tắt backup thông minh; job sẽ chạy theo provider đã chọn.',
+          'success',
+      );
   };
 
   const handleSaveAllPricing = async () => {
@@ -4034,7 +4061,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                            <div>
                                <div className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">Provider mặc định toàn ứng dụng</div>
                                <p className="mt-1 text-xs leading-relaxed text-slate-700 dark:text-slate-300 font-semibold">
-                                   Áp dụng cho model chưa có route riêng. Bạn có thể chọn TST/Gommo cho từng model bên dưới; job mới đi thẳng provider đã định tuyến và không gọi thử nguồn còn lại.
+                                   Áp dụng cho model chưa có route riêng. Bạn có thể chọn TST/Gommo cho từng model bên dưới; route Gommo đi thẳng Gommo, còn route TST có thể dùng chuỗi backup thông minh bên dưới.
                                </p>
                                {generationProvider === 'gommo' && (
                                    <p className="mt-2 text-xs font-bold text-amber-500">
@@ -4060,6 +4087,29 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                    );
                                })}
                            </div>
+                       </div>
+                   </div>
+
+                   <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl">
+                       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                           <div>
+                               <div className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">Backup thông minh cho job tạo ảnh</div>
+                               <p className="mt-1 text-xs leading-relaxed text-slate-700 dark:text-slate-300 font-semibold">
+                                   Khi TST xác nhận job thất bại, hệ thống thử server TST khác đang bật của cùng model (ưu tiên FAST), rồi mới chuyển sang Gommo. Không chuyển nguồn khi chỉ timeout hoặc mất kết nối mơ hồ để tránh tạo ảnh trùng; Vcoin chỉ trừ một lần.
+                               </p>
+                           </div>
+                           <button
+                               type="button"
+                               disabled={switchingGenerationProvider}
+                               onClick={handleToggleSmartProviderFallback}
+                               className={`min-w-[190px] rounded-xl border px-4 py-3 text-xs font-black uppercase tracking-wider transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
+                                   smartProviderFallbackEnabled
+                                       ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-300'
+                                       : 'border-white/10 text-slate-400 hover:border-white/20'
+                               }`}
+                           >
+                               {smartProviderFallbackEnabled ? 'Đang bật backup' : 'Đang tắt backup'}
+                           </button>
                        </div>
                    </div>
 

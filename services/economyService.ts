@@ -137,6 +137,7 @@ export type GenerationProviderMode = 'tst' | 'gommo';
 export type GenerationProviderConfig = {
     provider: GenerationProviderMode;
     providerByModel: Record<string, GenerationProviderMode>;
+    smartFallbackEnabled: boolean;
     updatedAt?: string;
 };
 
@@ -201,6 +202,7 @@ export const DEFAULT_FEATURE_MAINTENANCE_CONFIG: FeatureMaintenanceConfig = {
 export const DEFAULT_GENERATION_PROVIDER_CONFIG: GenerationProviderConfig = {
     provider: 'tst',
     providerByModel: {},
+    smartFallbackEnabled: true,
 };
 
 export const APP_TOUR_TARGETS: Array<{ id: string; label: string; surface: AppTourSurface; screen: string; featureId?: string; description?: string }> = [
@@ -2942,6 +2944,7 @@ export const getGenerationProviderConfig = async (): Promise<GenerationProviderC
         return {
             provider: data?.value?.provider === 'gommo' ? 'gommo' : 'tst',
             providerByModel,
+            smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false,
             updatedAt: typeof data?.value?.updatedAt === 'string' ? data.value.updatedAt : undefined,
         };
     } catch (e) {
@@ -2956,7 +2959,7 @@ export const saveGenerationProviderConfig = async (
     if (!supabase) return { success: false, error: 'No Database' };
     try {
         const input = typeof config === 'string'
-            ? { provider: config, providerByModel: {} }
+            ? { provider: config, providerByModel: {}, smartFallbackEnabled: true }
             : config;
         const providerByModel = Object.fromEntries(
             Object.entries(input.providerByModel || {})
@@ -2969,6 +2972,7 @@ export const saveGenerationProviderConfig = async (
         const payload: GenerationProviderConfig = {
             provider: input.provider === 'gommo' ? 'gommo' : 'tst',
             providerByModel,
+            smartFallbackEnabled: input.smartFallbackEnabled !== false,
             updatedAt: new Date().toISOString(),
         };
         const { error } = await supabase.from('system_settings').upsert(

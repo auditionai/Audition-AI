@@ -52,6 +52,7 @@ grant execute on function public.refund_generated_job(uuid, text) to service_rol
 grant execute on function public.settle_payment_transaction_by_id(uuid, text, jsonb) to authenticated, service_role;
 grant execute on function public.settle_payment_transaction_by_order_code(bigint, text, jsonb) to service_role;
 grant execute on function public.enqueue_generated_job(uuid, text, text, text, text, text, integer, text, jsonb) to authenticated, service_role;
+revoke execute on function public.server_enqueue_generated_job(uuid, uuid, text, text, text, text, text, integer, text, jsonb) from public, anon, authenticated;
 grant execute on function public.server_enqueue_generated_job(uuid, uuid, text, text, text, text, text, integer, text, jsonb) to service_role;
 grant execute on function public.claim_dispatchable_generated_jobs(integer, integer) to service_role;
 grant execute on function public.claim_pollable_generated_jobs(integer, integer) to service_role;

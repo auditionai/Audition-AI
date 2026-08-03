@@ -5,7 +5,12 @@ import { triggerBackgroundQueueWorker } from './_queue-launcher';
 import { isDedicatedQueueWorkerMode } from './_queue-runtime-mode';
 import { validateQueuePayloadAgainstLiveCatalog } from './_tst-live-catalog';
 import { canUseGommoForPayload } from './_gommo-provider';
-import type { QueueProcessingStage, QueueProgressLogEntry } from '../../shared/queueRecipes';
+import {
+  getRecipeValidationPayload,
+  isQueueRecipePayload,
+  type QueueProcessingStage,
+  type QueueProgressLogEntry,
+} from '../../shared/queueRecipes';
 
 const headers = {
   'Content-Type': 'application/json',
@@ -62,6 +67,9 @@ const buildInitialQueueLogs = (queueKind: string): QueueProgressLogEntry[] => {
 };
 
 const mapQueueError = (message: string) => {
+  if (/AccountLocked|ACCOUNT_LOCKED/i.test(message)) {
+    return { statusCode: 403, error: 'AccountLocked' };
+  }
   if (/missing tst_api_key/i.test(message) || /khong the nhan job moi/i.test(message)) {
     return {
       statusCode: 503,
@@ -94,7 +102,7 @@ const asQueueAssetType = (value: unknown): 'image' | 'video' => {
 const getGenerationProvider = async (
   admin: ReturnType<typeof getServiceRoleClient>,
   modelId: string,
-): Promise<GenerationProvider> => {
+): Promise<{ provider: GenerationProvider; smartFallbackEnabled: boolean }> => {
   const fallback = String(process.env.GENERATION_PROVIDER_DEFAULT || 'tst').trim().toLowerCase() === 'gommo'
     ? 'gommo'
     : 'tst';
@@ -106,12 +114,17 @@ const getGenerationProvider = async (
       .maybeSingle();
     if (error) throw error;
     const modelProvider = String(data?.value?.providerByModel?.[modelId] || '').trim().toLowerCase();
-    if (modelProvider === 'gommo' || modelProvider === 'tst') return modelProvider;
+    if (modelProvider === 'gommo' || modelProvider === 'tst') {
+      return { provider: modelProvider, smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false };
+    }
     const selected = String(data?.value?.provider || '').trim().toLowerCase();
-    return selected === 'gommo' ? 'gommo' : selected === 'tst' ? 'tst' : fallback;
+    return {
+      provider: selected === 'gommo' ? 'gommo' : selected === 'tst' ? 'tst' : fallback,
+      smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false,
+    };
   } catch (error) {
     console.warn('[queue-submit] Could not read generation provider mode; using deployment default.', error);
-    return fallback;
+    return { provider: fallback, smartFallbackEnabled: true };
   }
 };
 
@@ -314,6 +327,85 @@ const getImageBillingMultiplier = (queuePayload: Record<string, unknown>) => {
   return 1;
 };
 
+const normalizePricingPart = (value: unknown) => String(value || '').trim().toLowerCase();
+
+const getLocalPricingPayload = (queuePayload: Record<string, unknown>) => {
+  const embeddedRecipe = queuePayload.__recipePayload && typeof queuePayload.__recipePayload === 'object'
+    ? queuePayload.__recipePayload as Record<string, unknown>
+    : null;
+  const candidate = embeddedRecipe || queuePayload;
+  if (isQueueRecipePayload(candidate)) {
+    return getRecipeValidationPayload(candidate);
+  }
+  return candidate;
+};
+
+export const buildLocalPricingOptionCandidates = (queuePayload: Record<string, unknown>) => {
+  const payload = getLocalPricingPayload(queuePayload) as Record<string, unknown>;
+  const explicitConfigKey = normalizePricingPart(payload.config_key || queuePayload.config_key);
+  const resolution = normalizePricingPart(payload.resolution);
+  const quality = normalizePricingPart(payload.quality);
+  const speed = normalizePricingPart(payload.speed);
+  const duration = normalizePricingPart(payload.duration).replace(/s$/, '');
+  const durationWithSuffix = duration ? `${duration}s` : '';
+  const audio = payload.audio === true;
+  const candidates = [
+    explicitConfigKey,
+    quality ? [resolution, quality, speed].filter(Boolean).join('-') : '',
+    [resolution, durationWithSuffix, audio ? 'audio' : '', speed].filter(Boolean).join('-'),
+    [resolution, duration, audio ? 'audio' : '', speed].filter(Boolean).join('-'),
+    [resolution, durationWithSuffix, speed].filter(Boolean).join('-'),
+    [resolution, duration, speed].filter(Boolean).join('-'),
+    [resolution, speed].filter(Boolean).join('-'),
+    resolution,
+    speed,
+    speed ? `default-${speed}` : '',
+    'default',
+  ];
+  return Array.from(new Set(candidates.filter(Boolean)));
+};
+
+const resolveGommoCostFromAuditionPricing = async (
+  admin: ReturnType<typeof getServiceRoleClient>,
+  queueKind: string,
+  queuePayload: Record<string, unknown>,
+) => {
+  const modelId = getQueueModelId(queuePayload);
+  const optionCandidates = buildLocalPricingOptionCandidates(queuePayload);
+  if (!modelId || optionCandidates.length === 0) {
+    throw new Error('INVALID_SERVER_PRICE');
+  }
+
+  const { data, error } = await admin
+    .from('model_pricing')
+    .select('option_id, audition_price_vcoin, tst_price_credits')
+    .eq('model_id', modelId)
+    .in('option_id', optionCandidates);
+  if (error) throw error;
+
+  const rows = Array.isArray(data) ? data : [];
+  const selected = optionCandidates
+    .map((optionId) => rows.find((row) => normalizePricingPart(row.option_id) === optionId))
+    .find((row) => Number(row?.audition_price_vcoin) > 0);
+  if (!selected) {
+    throw new Error(`INVALID_SERVER_PRICE: Missing AUDITION AI price for ${modelId}`);
+  }
+
+  const baseVcoin = Math.ceil(Number(selected.audition_price_vcoin));
+  const multiplier = queueKind === 'image_generate' ? getImageBillingMultiplier(queuePayload) : 1;
+  return {
+    costVcoin: Math.ceil(baseVcoin * multiplier),
+    pricing: {
+      model_id: modelId,
+      config_key: String(selected.option_id || ''),
+      provider_credits: Number(selected.tst_price_credits || 0),
+      base_vcoin: baseVcoin,
+      multiplier,
+      source: 'model_pricing_override',
+    },
+  };
+};
+
 const resolveServerCostVcoin = async (
   admin: ReturnType<typeof getServiceRoleClient>,
   queueKind: string,
@@ -321,8 +413,11 @@ const resolveServerCostVcoin = async (
   targetProvider?: GenerationProvider,
 ) => {
   const resolvedProvider = targetProvider || (queuePayload.__targetProvider === 'gommo' ? 'gommo' : 'tst');
+  if (resolvedProvider === 'gommo') {
+    return resolveGommoCostFromAuditionPricing(admin, queueKind, queuePayload);
+  }
   const validation = await validateQueuePayloadAgainstLiveCatalog(queueKind, queuePayload, {
-    ignoreServerAvailability: resolvedProvider === 'gommo',
+    ignoreServerAvailability: false,
   });
   const modelId = String(validation.modelId || '').trim();
   const configKey = String(validation.pricingMatch?.config_key || '').trim();
@@ -521,7 +616,7 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
     updated_at: now,
     queue_kind: queueKind,
     queue_payload: queuePayloadWithLogs,
-    provider: 'tst',
+    provider: queuePayload.__targetProvider === 'gommo' ? 'gommo' : 'tst',
     job_id: null,
     lease_token: null,
     lease_expires_at: null,
@@ -595,7 +690,7 @@ export const handler: Handler = async (event) => {
   }
 
   try {
-    const { user } = await requireAuthenticatedUser(event, { checkAccountStatus: false });
+    const { user } = await requireAuthenticatedUser(event, { checkAccountStatus: true });
     const admin = getServiceRoleClient();
     const body = JSON.parse(event.body || '{}') as QueueBody;
     const clientPlatform = resolveQueueClientPlatform(event, body);
@@ -609,7 +704,8 @@ export const handler: Handler = async (event) => {
     }
 
     const modelId = getQueueModelId(body.queuePayload);
-    const targetProvider = await getGenerationProvider(admin, modelId);
+    const routingConfig = await getGenerationProvider(admin, modelId);
+    const targetProvider = routingConfig.provider;
     ensureProviderConfiguredForQueueKind(body.queueKind, targetProvider);
     if (
       TST_QUEUE_KINDS.has(String(body.queueKind || '').trim().toLowerCase()) &&
@@ -621,6 +717,7 @@ export const handler: Handler = async (event) => {
     body.queuePayload = {
       ...body.queuePayload,
       __targetProvider: targetProvider,
+      __smartProviderFallbackEnabled: routingConfig.smartFallbackEnabled,
     };
 
     let row: any;

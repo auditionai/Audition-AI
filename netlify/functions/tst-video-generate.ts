@@ -2,6 +2,7 @@ import type { Handler } from '@netlify/functions';
 import { getAuthenticatedRequestErrorStatus, requireAdminUser } from './_supabase';
 import { normalizeTstOutboundPayload } from './_tst-payload-normalizer';
 import { getTstVideoGeneratePath } from './_tst-generate-endpoints';
+import { validateQueuePayloadAgainstLiveCatalog } from './_tst-live-catalog';
 
 const jsonHeaders = {
   'Content-Type': 'application/json',
@@ -37,6 +38,7 @@ export const handler: Handler = async (event) => {
     }
 
     const payload = normalizeTstOutboundPayload(JSON.parse(event.body || '{}'));
+    await validateQueuePayloadAgainstLiveCatalog('video_generate', payload);
     const response = await fetch(`https://api.tramsangtao.com/v1${getTstVideoGeneratePath(payload.model)}`, {
       method: 'POST',
       headers: {
@@ -62,7 +64,11 @@ export const handler: Handler = async (event) => {
       body: JSON.stringify(data),
     };
   } catch (error: any) {
-    const statusCode = error?.message === 'Forbidden' ? 403 : getAuthenticatedRequestErrorStatus(error);
+    const statusCode = String(error?.message || '').startsWith('INVALID_TST_CONFIG:')
+      ? 400
+      : error?.message === 'Forbidden'
+        ? 403
+        : getAuthenticatedRequestErrorStatus(error);
     if (statusCode >= 500) console.error('TST video generate proxy error:', error);
     return {
       statusCode,

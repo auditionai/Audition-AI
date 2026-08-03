@@ -803,23 +803,30 @@ const extractTramsangtaoJobId = (data: any): string | null => {
     return typeof jobId === 'string' && jobId.trim() ? jobId.trim() : null;
 };
 
-const extractTramsangtaoResultUrl = (data: any): string | null => {
-    if (typeof data?.result === 'string' && data.result.trim()) {
-        return data.result.trim();
+const extractTramsangtaoResultUrl = (value: unknown): string | null => {
+    if (typeof value === 'string') {
+        const normalized = value.trim();
+        return /^https?:\/\//i.test(normalized) ? normalized : null;
     }
-
-    if (Array.isArray(data?.result) && typeof data.result[0] === 'string' && data.result[0].trim()) {
-        return data.result[0].trim();
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            const nested = extractTramsangtaoResultUrl(item);
+            if (nested) return nested;
+        }
+        return null;
     }
+    if (!value || typeof value !== 'object') return null;
 
-    if (typeof data?.output === 'string' && data.output.trim()) {
-        return data.output.trim();
+    const objectValue = value as Record<string, unknown>;
+    const keys = [
+        'result', 'output', 'result_url', 'resultUrl', 'output_url', 'outputUrl',
+        'image_url', 'imageUrl', 'file_url', 'fileUrl', 'cdn_url', 'cdnUrl', 'url',
+        'results', 'outputs', 'images', 'files', 'artifacts', 'items', 'data',
+    ];
+    for (const key of keys) {
+        const nested = extractTramsangtaoResultUrl(objectValue[key]);
+        if (nested) return nested;
     }
-
-    if (typeof data?.data?.result === 'string' && data.data.result.trim()) {
-        return data.data.result.trim();
-    }
-
     return null;
 };
 

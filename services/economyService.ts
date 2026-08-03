@@ -29,6 +29,9 @@ const DEFAULT_GENERATION_PRICES = {
     group3: 4,
     group4: 6,
     group5: 8,
+    group6: 10,
+    group7: 12,
+    group8: 14,
 };
 
 const USER_PROFILE_CACHE_TTL_MS = 2 * 60_000;
@@ -137,6 +140,8 @@ export type GenerationProviderMode = 'tst' | 'gommo';
 export type GenerationProviderConfig = {
     provider: GenerationProviderMode;
     providerByModel: Record<string, GenerationProviderMode>;
+    providerByFeature: Record<string, GenerationProviderMode>;
+    allowedModelsByFeature: Record<string, string[]>;
     smartFallbackEnabled: boolean;
     updatedAt?: string;
 };
@@ -202,6 +207,8 @@ export const DEFAULT_FEATURE_MAINTENANCE_CONFIG: FeatureMaintenanceConfig = {
 export const DEFAULT_GENERATION_PROVIDER_CONFIG: GenerationProviderConfig = {
     provider: 'tst',
     providerByModel: {},
+    providerByFeature: {},
+    allowedModelsByFeature: {},
     smartFallbackEnabled: true,
 };
 
@@ -2941,9 +2948,31 @@ export const getGenerationProviderConfig = async (): Promise<GenerationProviderC
                 ])
                 .filter(([modelId, provider]) => Boolean(modelId && provider)),
         ) as Record<string, GenerationProviderMode>;
+        const providerByFeature = Object.fromEntries(
+            Object.entries(data?.value?.providerByFeature || {})
+                .map(([featureKey, provider]) => [
+                    String(featureKey || '').trim().toLowerCase(),
+                    provider === 'gommo' ? 'gommo' : provider === 'tst' ? 'tst' : null,
+                ])
+                .filter(([featureKey, provider]) => Boolean(featureKey && provider)),
+        ) as Record<string, GenerationProviderMode>;
+        const allowedModelsByFeature = Object.fromEntries(
+            Object.entries(data?.value?.allowedModelsByFeature || {})
+                .map(([featureKey, modelIds]) => [
+                    String(featureKey || '').trim().toLowerCase(),
+                    Array.from(new Set(
+                        (Array.isArray(modelIds) ? modelIds : [])
+                            .map((modelId) => String(modelId || '').trim().toLowerCase())
+                            .filter(Boolean),
+                    )),
+                ])
+                .filter(([featureKey, modelIds]) => Boolean(featureKey && (modelIds as string[]).length)),
+        ) as Record<string, string[]>;
         return {
             provider: data?.value?.provider === 'gommo' ? 'gommo' : 'tst',
             providerByModel,
+            providerByFeature,
+            allowedModelsByFeature,
             smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false,
             updatedAt: typeof data?.value?.updatedAt === 'string' ? data.value.updatedAt : undefined,
         };
@@ -2959,7 +2988,7 @@ export const saveGenerationProviderConfig = async (
     if (!supabase) return { success: false, error: 'No Database' };
     try {
         const input = typeof config === 'string'
-            ? { provider: config, providerByModel: {}, smartFallbackEnabled: true }
+            ? { provider: config, providerByModel: {}, providerByFeature: {}, allowedModelsByFeature: {}, smartFallbackEnabled: true }
             : config;
         const providerByModel = Object.fromEntries(
             Object.entries(input.providerByModel || {})
@@ -2969,9 +2998,31 @@ export const saveGenerationProviderConfig = async (
                 ])
                 .filter(([modelId, provider]) => Boolean(modelId && provider)),
         ) as Record<string, GenerationProviderMode>;
+        const providerByFeature = Object.fromEntries(
+            Object.entries(input.providerByFeature || {})
+                .map(([featureKey, provider]) => [
+                    String(featureKey || '').trim().toLowerCase(),
+                    provider === 'gommo' ? 'gommo' : provider === 'tst' ? 'tst' : null,
+                ])
+                .filter(([featureKey, provider]) => Boolean(featureKey && provider)),
+        ) as Record<string, GenerationProviderMode>;
+        const allowedModelsByFeature = Object.fromEntries(
+            Object.entries(input.allowedModelsByFeature || {})
+                .map(([featureKey, modelIds]) => [
+                    String(featureKey || '').trim().toLowerCase(),
+                    Array.from(new Set(
+                        (Array.isArray(modelIds) ? modelIds : [])
+                            .map((modelId) => String(modelId || '').trim().toLowerCase())
+                            .filter(Boolean),
+                    )),
+                ])
+                .filter(([featureKey, modelIds]) => Boolean(featureKey && (modelIds as string[]).length)),
+        ) as Record<string, string[]>;
         const payload: GenerationProviderConfig = {
             provider: input.provider === 'gommo' ? 'gommo' : 'tst',
             providerByModel,
+            providerByFeature,
+            allowedModelsByFeature,
             smartFallbackEnabled: input.smartFallbackEnabled !== false,
             updatedAt: new Date().toISOString(),
         };

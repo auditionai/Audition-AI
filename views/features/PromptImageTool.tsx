@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, Bot, ChevronDown, ChevronUp, Crown, Database, Image as ImageIcon, Info, Loader, MessageSquare, Plus, RefreshCw, Sparkles, Upload, Wand2, X, Zap } from 'lucide-react';
 import { useNotification } from '../../components/NotificationSystem';
-import { getModelPricing, getTstServerAvailabilityConfig, getUserProfile } from '../../services/economyService';
+import { getGenerationProviderConfig, getModelPricing, getTstServerAvailabilityConfig, getUserProfile } from '../../services/economyService';
 import { useConcurrency, CONCURRENCY_LIMITS } from '../../services/concurrencyService';
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
@@ -12,6 +12,7 @@ import {
   getCompatibleGenerationServers,
   getCompatibleGenerationSpeeds,
   getGenerationCostBreakdown,
+  getGenerationAspectRatios,
   getGenerationModelId,
   resolveGenerationSelection,
   tstServerToUi,
@@ -22,6 +23,7 @@ import {
   type TstGenerationTier,
   type TstPricingEntry,
   type TstResolution,
+  type TstRuntimeModel,
   type AuditionPricingOverride,
 } from '../../services/tstCatalog';
 import { optimizePayload } from '../../utils/imageProcessor';
@@ -29,6 +31,17 @@ import { buildAuditionKoreaMmoStylePrompt, DEFAULT_IMAGE_NEGATIVE_PROMPT } from 
 import type { Feature, GeneratedImage, Language, ViewId } from '../../types';
 import type { ModelPricing } from '../../services/economyService';
 import type { PromptImageGenerateRecipePayload } from '../../shared/queueRecipes';
+import { isModelAllowedForFeature } from '../../shared/providerRouting';
+import {
+  fetchProviderCatalog,
+  getAuditionProviderPricing,
+  getGommoPricingInput,
+  getGommoModelForAudition,
+  isGommoCatalogModelAvailable,
+  resolveProviderForModel,
+  type GommoProviderCatalog,
+} from '../../services/providerCatalog';
+import type { GenerationProviderConfig } from '../../services/economyService';
 
 interface PromptImageToolProps {
   feature: Feature;
@@ -110,12 +123,16 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
   const [prompt, setPrompt] = useState('');
   const [aiModel, setAiModel] = useState<TstGenerationTier>('gpt');
   const [aspectRatio, setAspectRatio] = useState('3:4');
-  const [resolution, setResolution] = useState<TstResolution>('1K');
+  const [resolution, setResolution] = useState('1K');
   const [speed, setSpeed] = useState('Nhanh');
   const [server, setServer] = useState('VIP 1');
   const [gptQuality, setGptQuality] = useState<'low' | 'medium' | 'high'>('low');
+  const [providerMode, setProviderMode] = useState('');
   const [pricingEntries, setPricingEntries] = useState<TstPricingEntry[]>([]);
+  const [runtimeModels, setRuntimeModels] = useState<TstRuntimeModel[]>([]);
   const [pricingOverrides, setPricingOverrides] = useState<ModelPricing[]>([]);
+  const [gommoCatalog, setGommoCatalog] = useState<GommoProviderCatalog | null>(null);
+  const [providerConfig, setProviderConfig] = useState<GenerationProviderConfig | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { queueStats, triggerPoll } = useConcurrency();
   const [isConcurrencyExpanded, setIsConcurrencyExpanded] = useState(false);
@@ -137,14 +154,20 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
       fetchTstModels().catch(() => []),
       getModelPricing().catch(() => []),
       getTstServerAvailabilityConfig().catch(() => null),
-    ]).then(([tstPricing, runtimeModels, adminPricing, serverAvailabilityConfig]) => {
+      fetchProviderCatalog(true).catch(() => null),
+      getGenerationProviderConfig().catch(() => null),
+    ]).then(([tstPricing, runtimeModels, adminPricing, serverAvailabilityConfig, providerCatalog, routingConfig]) => {
       if (!alive) return;
       const filteredModels = applyServerAvailabilityToRuntimeModels(runtimeModels, serverAvailabilityConfig);
+      setRuntimeModels(filteredModels);
       setPricingEntries(sanitizePricingEntriesWithRuntimeModels(tstPricing, filteredModels, serverAvailabilityConfig));
       setPricingOverrides(adminPricing);
+      setGommoCatalog(providerCatalog);
+      setProviderConfig(routingConfig);
     }).catch(() => {
       if (!alive) return;
       setPricingEntries([]);
+      setRuntimeModels([]);
       setPricingOverrides([]);
     });
     return () => {
@@ -154,12 +177,24 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
 
   const uploadedImages = referenceImages.filter((value): value is string => Boolean(value));
   const uploadedCount = uploadedImages.length;
-  const maxReferenceImages = aiModel === 'gpt' ? GPT_REFERENCE_IMAGE_LIMIT : DEFAULT_REFERENCE_IMAGE_LIMIT;
-  const modeCountForPrice = Math.max(1, Math.min(maxReferenceImages, uploadedCount));
   const generationSpeedId = speedLabelToTst(speed);
   const generationServerId = uiServerToTst(server) || 'fast';
+  const selectedModelId = getGenerationModelId(aiModel);
+  const isSelectedModelAllowed = isModelAllowedForFeature(providerConfig, 'image_prompt', selectedModelId);
+  const selectedProvider = resolveProviderForModel(providerConfig, selectedModelId, 'image_prompt');
+  const isGommoSelected = selectedProvider === 'gommo';
+  const selectedGommoModel = getGommoModelForAudition(gommoCatalog, selectedModelId);
+  const tstReferenceImageLimit = aiModel === 'gpt' ? GPT_REFERENCE_IMAGE_LIMIT : DEFAULT_REFERENCE_IMAGE_LIMIT;
+  const maxReferenceImages = isGommoSelected && Number(selectedGommoModel?.maxReferenceImages) > 0
+    ? Number(selectedGommoModel?.maxReferenceImages)
+    : tstReferenceImageLimit;
+  const modeCountForPrice = Math.max(1, Math.min(maxReferenceImages, uploadedCount));
+  const tstAspectRatios = useMemo(() => getGenerationAspectRatios(aiModel, runtimeModels), [aiModel, runtimeModels]);
 
   const availableResolutions = useMemo(() => {
+    if (isGommoSelected) {
+      return (selectedGommoModel?.resolutions || []).map((option) => option.type.toUpperCase());
+    }
     const values = getCompatibleGenerationResolutions({
       tier: aiModel,
       pricingEntries,
@@ -168,35 +203,50 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
       quality: aiModel === 'gpt' ? gptQuality : undefined,
     });
     return values;
-  }, [aiModel, generationServerId, generationSpeedId, gptQuality, pricingEntries]);
+  }, [aiModel, generationServerId, generationSpeedId, gptQuality, isGommoSelected, pricingEntries, selectedGommoModel]);
 
   const availableServers = useMemo(() => {
+    if (isGommoSelected) return [];
     const values = getCompatibleGenerationServers({
       tier: aiModel,
       pricingEntries,
       speed: generationSpeedId,
-      resolution,
+      resolution: resolution as TstResolution,
       quality: aiModel === 'gpt' ? gptQuality : undefined,
     });
     return values;
-  }, [aiModel, generationSpeedId, gptQuality, pricingEntries, resolution]);
+  }, [aiModel, generationSpeedId, gptQuality, isGommoSelected, pricingEntries, resolution]);
 
   const availableSpeeds = useMemo(() => {
+    if (isGommoSelected) return [];
     const values = getCompatibleGenerationSpeeds({
       tier: aiModel,
       pricingEntries,
       serverId: generationServerId,
-      resolution,
+      resolution: resolution as TstResolution,
       quality: aiModel === 'gpt' ? gptQuality : undefined,
     });
     return values;
-  }, [aiModel, generationServerId, gptQuality, pricingEntries, resolution]);
+  }, [aiModel, generationServerId, gptQuality, isGommoSelected, pricingEntries, resolution]);
 
   useEffect(() => {
+    if (isGommoSelected) {
+      const resolutions = (selectedGommoModel?.resolutions || []).map((option) => option.type.toUpperCase());
+      const ratios = (selectedGommoModel?.ratios || []).map((option) => option.type);
+      const modes = (selectedGommoModel?.modes || []).map((option) => option.type);
+      if (resolutions.length > 0 && !resolutions.includes(resolution)) setResolution(resolutions[0]);
+      if (ratios.length > 0 && !ratios.includes(aspectRatio)) setAspectRatio(ratios[0]);
+      if (modes.length > 0 && !modes.includes(providerMode)) setProviderMode(modes[0]);
+      return;
+    }
+    if (tstAspectRatios.length > 0 && !tstAspectRatios.includes(aspectRatio)) {
+      setAspectRatio(tstAspectRatios[0]);
+      return;
+    }
     const nextSelection = resolveGenerationSelection({
       tier: aiModel,
       pricingEntries,
-      resolution,
+      resolution: resolution as TstResolution,
       quality: aiModel === 'gpt' ? gptQuality : undefined,
       speed: generationSpeedId,
       serverId: generationServerId,
@@ -217,47 +267,74 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
     if (nextSpeedLabel !== speed) {
       setSpeed(nextSpeedLabel);
     }
-  }, [aiModel, generationServerId, generationSpeedId, gptQuality, pricingEntries, resolution, server, speed]);
+  }, [aiModel, aspectRatio, generationServerId, generationSpeedId, gptQuality, isGommoSelected, pricingEntries, providerMode, resolution, selectedGommoModel, server, speed, tstAspectRatios]);
 
   useEffect(() => {
-    if (aiModel !== 'gpt') {
-      setReferenceImages((prev) => {
-        const next = prev.slice(0, DEFAULT_REFERENCE_IMAGE_LIMIT);
-        return next.length > 0 ? next : [null];
-      });
-    }
-  }, [aiModel]);
+    setReferenceImages((prev) => {
+      const next = prev.slice(0, maxReferenceImages);
+      return next.length > 0 ? next : [null];
+    });
+  }, [maxReferenceImages]);
 
-  const selectedCost = getGenerationCostBreakdown({
+  const tstSelectedCost = getGenerationCostBreakdown({
     tier: aiModel,
-    resolution,
+    resolution: resolution as TstResolution,
     quality: aiModel === 'gpt' ? gptQuality : undefined,
     speed: generationSpeedId,
     serverId: generationServerId,
     pricingEntries,
     pricingOverrides: pricingOverrideRows,
   });
+  const gommoPricingInput = getGommoPricingInput(selectedModelId, {
+    resolution,
+    quality: aiModel === 'gpt' ? gptQuality : undefined,
+    speed: generationSpeedId,
+    providerMode,
+  });
+  const gommoPricing = getAuditionProviderPricing(pricingOverrides, selectedModelId, gommoPricingInput, { allowGenericFallback: false });
+  const selectedCost = isGommoSelected
+    ? { available: gommoPricing !== null && isGommoCatalogModelAvailable(selectedGommoModel), vcoin: gommoPricing?.vcoin || 0 }
+    : tstSelectedCost;
   const totalCost = selectedCost.available ? selectedCost.vcoin * modeCountForPrice : 0;
   const resolutionCostMap = useMemo(
     () =>
       Object.fromEntries(
-        (['1K', '2K', '4K'] as TstResolution[]).map((item) => [
+        availableResolutions.map((item) => [
           item,
-          getGenerationCostBreakdown({
+          (isGommoSelected
+            ? getAuditionProviderPricing(pricingOverrides, selectedModelId, getGommoPricingInput(selectedModelId, {
+                resolution: item,
+                quality: aiModel === 'gpt' ? gptQuality : undefined,
+                speed: generationSpeedId,
+                providerMode,
+              }), { allowGenericFallback: false })?.vcoin || 0
+            : getGenerationCostBreakdown({
             tier: aiModel,
-            resolution: item,
+            resolution: item as TstResolution,
             quality: aiModel === 'gpt' ? gptQuality : undefined,
             speed: generationSpeedId,
             serverId: generationServerId,
             pricingEntries,
             pricingOverrides: pricingOverrideRows,
-          }).vcoin * modeCountForPrice,
+          }).vcoin) * modeCountForPrice,
         ]),
-      ) as Record<TstResolution, number>,
-    [aiModel, generationServerId, generationSpeedId, gptQuality, modeCountForPrice, pricingEntries, pricingOverrideRows],
+      ) as Record<string, number>,
+    [aiModel, availableResolutions, generationServerId, generationSpeedId, gptQuality, isGommoSelected, modeCountForPrice, pricingEntries, pricingOverrideRows, pricingOverrides, providerMode, selectedModelId],
   );
-  const availableSpeedLabels = availableSpeeds.map((speedId) => speedIdToLabel(speedId));
-  const availableServerLabels = availableServers.map((serverId) => tstServerToUi(serverId));
+  const availableSpeedLabels = isGommoSelected ? [] : availableSpeeds.map((speedId) => speedIdToLabel(speedId));
+  const availableServerLabels = isGommoSelected ? [] : availableServers.map((serverId) => tstServerToUi(serverId));
+  const gommoModes = isGommoSelected ? (selectedGommoModel?.modes || []) : [];
+  const aspectRatioOptions = isGommoSelected && selectedGommoModel?.ratios.length
+    ? selectedGommoModel.ratios.map((option) => option.type)
+    : (tstAspectRatios.length ? tstAspectRatios : ASPECT_RATIOS);
+
+  useEffect(() => {
+    if (isSelectedModelAllowed) return;
+    const next = MODEL_TABS.find(({ tier }) =>
+      isModelAllowedForFeature(providerConfig, 'image_prompt', getGenerationModelId(tier)),
+    );
+    if (next) setAiModel(next.tier);
+  }, [isSelectedModelAllowed, providerConfig]);
 
   const handlePickImage = (index: number) => {
     setActiveUploadIndex(index);
@@ -296,6 +373,10 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
   };
 
   const handleSubmit = async () => {
+    if (!isSelectedModelAllowed) {
+      notify('Model này đã bị tắt cho chức năng tạo ảnh bằng prompt.', 'error');
+      return;
+    }
     if (!prompt.trim()) {
       notify('Vui lòng nhập prompt tạo ảnh.', 'error');
       return;
@@ -337,9 +418,11 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
         referenceImages: stagedImages,
         resolution,
         aspectRatio,
-        speed: generationSpeedId,
-        serverId: generationServerId,
-        quality: isGptPromptMode ? gptQuality : undefined,
+        speed: isGommoSelected ? gommoPricingInput.speed : generationSpeedId,
+        serverId: isGommoSelected ? undefined : generationServerId,
+        providerMode: isGommoSelected ? providerMode : undefined,
+        pricingOptionId: isGommoSelected ? gommoPricing?.optionId : undefined,
+        quality: isGommoSelected ? gommoPricingInput.quality : isGptPromptMode ? gptQuality : undefined,
       };
 
       const queuedImage: GeneratedImage = {
@@ -452,7 +535,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
               maxLength={MAX_PROMPT_CHARACTERS}
-              placeholder="Nhập prompt tạo ảnh. Hệ thống chỉ gửi prompt này và ảnh tham chiếu lên TST, không chèn prompt hệ thống Audition."
+              placeholder={`Nhập prompt tạo ảnh. Hệ thống chỉ gửi prompt này và ảnh tham chiếu sang ${isGommoSelected ? 'Gommo' : 'TST'}, không chèn prompt hệ thống Audition.`}
               rows={12}
               className="block w-full min-h-[340px] max-h-[760px] rounded-xl border border-white/10 bg-black/40 p-4 text-sm leading-relaxed text-white outline-none focus:border-audi-pink resize-y overflow-auto placeholder:text-slate-500"
             />
@@ -475,16 +558,18 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
               <div className="grid gap-2">
                 {MODEL_TABS.map(({ tier, label, tag, title, description, icon: Icon, accent }) => {
                   const selected = aiModel === tier;
+                  const available = isModelAllowedForFeature(providerConfig, 'image_prompt', getGenerationModelId(tier));
                   return (
                     <button
                       key={tier}
                       type="button"
-                      onClick={() => setAiModel(tier)}
+                      onClick={() => available && setAiModel(tier)}
+                      disabled={!available}
                       className={`relative overflow-hidden rounded-2xl border p-3 text-left transition-all ${
                         selected
                           ? 'border-cyan-300/70 bg-cyan-500/10 shadow-[0_0_24px_rgba(34,211,238,0.16)]'
                           : 'border-white/10 bg-black/25 hover:border-white/20 hover:bg-white/5'
-                      }`}
+                      } ${!available ? 'cursor-not-allowed opacity-40' : ''}`}
                     >
                       <div className={`absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r ${accent}`} />
                       <div className="flex items-start gap-3">
@@ -509,10 +594,16 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
               </div>
             </div>
 
+            <div className={`rounded-xl border px-3 py-2 text-[10px] font-black uppercase tracking-wide ${
+              isGommoSelected ? 'border-cyan-400/30 bg-cyan-400/10 text-cyan-300' : 'border-purple-400/30 bg-purple-400/10 text-purple-300'
+            }`}>
+              Luồng đang dùng: {isGommoSelected ? `Gommo · ${selectedGommoModel?.name || selectedModelId}` : `TST · ${selectedModelId}`}
+            </div>
+
             <div className="space-y-3">
               <label className="text-[10px] font-bold text-slate-400 uppercase">Tỷ lệ khung hình</label>
-              <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
-                {ASPECT_RATIOS.map((ratio) => (
+              <div className="grid grid-cols-3 gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
+                {aspectRatioOptions.map((ratio) => (
                   <button
                     key={ratio}
                     type="button"
@@ -529,15 +620,16 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
 
             <div className={`${availableResolutions.length === 0 ? 'hidden ' : ''}space-y-3 animate-fade-in`}>
               <label className="text-[10px] font-bold text-slate-400 uppercase">Độ phân giải</label>
-              <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
+              <div className="grid grid-cols-3 gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
                 {availableResolutions.map((value) => (
                   <button
                     key={value}
                     type="button"
-                    onClick={() => setResolution(value)}
+                    disabled={isGommoSelected && !resolutionCostMap[value]}
+                    onClick={() => (!isGommoSelected || resolutionCostMap[value]) && setResolution(value)}
                     className={`flex-1 py-3 rounded-lg text-xs font-bold transition-all ${
                       resolution === value ? 'bg-audi-purple text-white shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'
-                    }`}
+                    } ${isGommoSelected && !resolutionCostMap[value] ? 'cursor-not-allowed opacity-35' : ''}`}
                   >
                     {value}
                   </button>
@@ -545,7 +637,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
               </div>
             </div>
 
-            {aiModel === 'gpt' && (
+            {aiModel === 'gpt' && !isGommoSelected && (
               <div className="space-y-3 animate-fade-in">
                 <label className="text-[10px] font-bold text-slate-400 uppercase">Chất lượng ảnh GPT</label>
                 <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
@@ -559,6 +651,28 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
                       }`}
                     >
                       {quality}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {isGommoSelected && gommoModes.length > 0 && (
+              <div className="space-y-3 animate-fade-in">
+                <label className="text-[10px] font-bold text-cyan-300 uppercase">Máy chủ / chế độ Gommo · realtime</label>
+                <div className="grid grid-cols-2 gap-2 bg-black/30 p-1.5 rounded-xl border border-cyan-400/10">
+                  {gommoModes.map((option) => (
+                    <button
+                      key={option.type}
+                      type="button"
+                      title={option.description || option.group}
+                      onClick={() => setProviderMode(option.type)}
+                      className={`rounded-lg px-2 py-2 text-[10px] font-bold transition-all ${
+                        providerMode === option.type ? 'bg-cyan-400 text-black shadow-lg' : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                      }`}
+                    >
+                      <span className="block">{option.name || option.type}</span>
+                      {option.group && <span className="block text-[8px] opacity-70">{option.group}</span>}
                     </button>
                   ))}
                 </div>
@@ -656,10 +770,12 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
                   <span className="text-[10px] font-bold text-audi-yellow mb-1">VCOIN</span>
                 </div>
               </div>
-              <div className="flex justify-between text-[9px] text-slate-500 mt-2 font-mono border-t border-white/5 pt-2">
-                <span className={resolution === '1K' ? 'text-white font-bold' : ''}>1K: {resolutionCostMap['1K']}VC</span>
-                <span className={resolution === '2K' ? 'text-white font-bold' : ''}>2K: {resolutionCostMap['2K']}VC</span>
-                <span className={resolution === '4K' ? 'text-white font-bold' : ''}>4K: {resolutionCostMap['4K']}VC</span>
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-[9px] text-slate-500 mt-2 font-mono border-t border-white/5 pt-2">
+                {availableResolutions.map((item) => (
+                  <span key={item} className={resolution === item ? 'text-white font-bold' : ''}>
+                    {item}: {resolutionCostMap[item] || '--'}VC
+                  </span>
+                ))}
               </div>
             </div>
 
@@ -667,7 +783,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
               data-tour-id="desktop.image.generate"
               type="button"
               onClick={handleSubmit}
-              disabled={isSubmitting}
+              disabled={isSubmitting || !isSelectedModelAllowed}
               className="w-full py-3.5 mt-auto rounded-xl font-bold text-white shadow-[0_0_20px_rgba(255,0,153,0.4)] transition-all flex items-center justify-center gap-2 bg-gradient-to-r from-audi-pink to-audi-purple hover:scale-[1.02] disabled:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-70 disabled:shadow-none disabled:hover:scale-100"
             >
               {isSubmitting ? <Loader className="w-5 h-5 animate-spin" /> : <Wand2 className="w-5 h-5" />}

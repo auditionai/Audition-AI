@@ -417,6 +417,7 @@ export const buildImageGenerateProviderPayload = (
   if (payload.quality) providerPayload.quality = payload.quality;
   if (payload.speed) providerPayload.speed = payload.speed;
   if (payload.serverId) providerPayload.server_id = payload.serverId;
+  if (payload.providerMode) providerPayload.provider_mode = payload.providerMode;
 
   return providerPayload;
 };
@@ -668,7 +669,9 @@ export const prepareProviderPayloadFromQueueRecipe = async (
             payload.serverId,
           );
       const referenceImages = Array.isArray(payload.referenceImages)
-        ? payload.referenceImages.filter((value): value is string => Boolean(value)).slice(0, isUserOnlyPrompt ? 5 : 4)
+        ? payload.referenceImages
+            .filter((value): value is string => Boolean(value))
+            .slice(0, uploadReferencesToTst ? (isUserOnlyPrompt ? 5 : 4) : 8)
         : [];
       const uploadedUrls = uploadReferencesToTst
         ? await Promise.all(referenceImages.map((source) => uploadImageToTst(source)))
@@ -690,6 +693,7 @@ export const prepareProviderPayloadFromQueueRecipe = async (
       if (payload.quality) providerPayload.quality = payload.quality;
       if (payload.speed) providerPayload.speed = payload.speed;
       if (payload.serverId) providerPayload.server_id = payload.serverId;
+      if (payload.providerMode) providerPayload.provider_mode = payload.providerMode;
 
       return providerPayload;
     }
@@ -707,6 +711,7 @@ export const prepareProviderPayloadFromQueueRecipe = async (
       if (payload.aspectRatio) providerPayload.aspect_ratio = payload.aspectRatio;
       if (payload.speed) providerPayload.speed = payload.speed;
       if (payload.serverId) providerPayload.server_id = payload.serverId;
+      if (payload.providerMode) providerPayload.provider_mode = payload.providerMode;
 
       return providerPayload;
     }
@@ -726,6 +731,7 @@ export const prepareProviderPayloadFromQueueRecipe = async (
       if (payload.aspectRatio) providerPayload.aspect_ratio = payload.aspectRatio;
       if (payload.speed) providerPayload.speed = payload.speed;
       if (payload.serverId) providerPayload.server_id = payload.serverId;
+      if (payload.providerMode) providerPayload.provider_mode = payload.providerMode;
       if (typeof payload.audio === 'boolean') providerPayload.audio = payload.audio;
       if (payload.keyframeImage) {
         const keyframeUrl = !uploadReferencesToTst || isHttpUrl(payload.keyframeImage)

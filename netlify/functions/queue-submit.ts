@@ -4,7 +4,13 @@ import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 import { triggerBackgroundQueueWorker } from './_queue-launcher';
 import { isDedicatedQueueWorkerMode } from './_queue-runtime-mode';
 import { validateQueuePayloadAgainstLiveCatalog } from './_tst-live-catalog';
-import { canUseGommoForPayload } from './_gommo-provider';
+import { normalizeAndValidateGommoPayload } from './_gommo-provider';
+import {
+  DEFAULT_PROVIDER_BY_FEATURE,
+  getAllowedModelsForFeature,
+  inferGenerationProviderRouteKey,
+  type GenerationProviderRouteKey,
+} from '../../shared/providerRouting';
 import {
   getRecipeValidationPayload,
   isQueueRecipePayload,
@@ -102,7 +108,8 @@ const asQueueAssetType = (value: unknown): 'image' | 'video' => {
 const getGenerationProvider = async (
   admin: ReturnType<typeof getServiceRoleClient>,
   modelId: string,
-): Promise<{ provider: GenerationProvider; smartFallbackEnabled: boolean }> => {
+  featureKey?: GenerationProviderRouteKey | null,
+): Promise<{ provider: GenerationProvider; smartFallbackEnabled: boolean; allowedModels: string[] | null }> => {
   const fallback = String(process.env.GENERATION_PROVIDER_DEFAULT || 'tst').trim().toLowerCase() === 'gommo'
     ? 'gommo'
     : 'tst';
@@ -113,18 +120,28 @@ const getGenerationProvider = async (
       .eq('key', 'generation_provider_mode')
       .maybeSingle();
     if (error) throw error;
+    const allowedModels = getAllowedModelsForFeature(data?.value, featureKey);
+    const featureProvider = String(featureKey ? data?.value?.providerByFeature?.[featureKey] || '' : '').trim().toLowerCase();
+    if (featureProvider === 'gommo' || featureProvider === 'tst') {
+      return { provider: featureProvider, smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false, allowedModels };
+    }
+    const featureDefault = featureKey ? DEFAULT_PROVIDER_BY_FEATURE[featureKey] : undefined;
+    if (featureDefault) {
+      return { provider: featureDefault, smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false, allowedModels };
+    }
     const modelProvider = String(data?.value?.providerByModel?.[modelId] || '').trim().toLowerCase();
     if (modelProvider === 'gommo' || modelProvider === 'tst') {
-      return { provider: modelProvider, smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false };
+      return { provider: modelProvider, smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false, allowedModels };
     }
     const selected = String(data?.value?.provider || '').trim().toLowerCase();
     return {
       provider: selected === 'gommo' ? 'gommo' : selected === 'tst' ? 'tst' : fallback,
       smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false,
+      allowedModels,
     };
   } catch (error) {
     console.warn('[queue-submit] Could not read generation provider mode; using deployment default.', error);
-    return { provider: fallback, smartFallbackEnabled: true };
+    return { provider: fallback, smartFallbackEnabled: true, allowedModels: getAllowedModelsForFeature(null, featureKey) };
   }
 };
 
@@ -237,14 +254,8 @@ const getImageGenerateToolMetadata = (
     : 0;
   const characterCount = Math.max(1, Math.floor(Number(recipePayload.characterCount || 0)) || groupCount || flatCount || 1);
 
-  if (characterCount >= 5) {
-    return { toolId: 'group_5_gen', toolName: 'Group of 5' };
-  }
-  if (characterCount === 4) {
-    return { toolId: 'group_4_gen', toolName: 'Clan of 4' };
-  }
-  if (characterCount === 3) {
-    return { toolId: 'group_3_gen', toolName: 'Squad of 3' };
+  if (characterCount >= 3) {
+    return { toolId: `group_${Math.min(8, characterCount)}_gen`, toolName: `Group of ${Math.min(8, characterCount)}` };
   }
   if (characterCount === 2) {
     return { toolId: 'couple_photo_gen', toolName: 'Couple 3D Mode' };
@@ -310,7 +321,7 @@ const getImageBillingMultiplier = (queuePayload: Record<string, unknown>) => {
     const referenceCount = Array.isArray((queuePayload as any).referenceImages)
       ? (queuePayload as any).referenceImages.filter(Boolean).length
       : 0;
-    return Math.max(1, Math.min(5, explicitUnits || referenceCount || 1));
+    return Math.max(1, Math.min(8, explicitUnits || referenceCount || 1));
   }
 
   if (recipeType === 'image_generate_recipe_v1') {
@@ -321,7 +332,7 @@ const getImageBillingMultiplier = (queuePayload: Record<string, unknown>) => {
       ? (queuePayload as any).characterImages.length
       : 0;
     const characterCount = Math.floor(Number((queuePayload as any).characterCount || 0));
-    return Math.max(1, Math.min(5, characterCount || groupCount || flatCount || 1));
+    return Math.max(1, Math.min(8, characterCount || groupCount || flatCount || 1));
   }
 
   return 1;
@@ -349,8 +360,12 @@ export const buildLocalPricingOptionCandidates = (queuePayload: Record<string, u
   const duration = normalizePricingPart(payload.duration).replace(/s$/, '');
   const durationWithSuffix = duration ? `${duration}s` : '';
   const audio = payload.audio === true;
+  const providerMode = normalizePricingPart(payload.provider_mode || payload.providerMode);
   const candidates = [
     explicitConfigKey,
+    providerMode ? [resolution, durationWithSuffix || duration, providerMode].filter(Boolean).join('-') : '',
+    providerMode ? [resolution, providerMode].filter(Boolean).join('-') : '',
+    providerMode,
     quality ? [resolution, quality, speed].filter(Boolean).join('-') : '',
     [resolution, durationWithSuffix, audio ? 'audio' : '', speed].filter(Boolean).join('-'),
     [resolution, duration, audio ? 'audio' : '', speed].filter(Boolean).join('-'),
@@ -703,20 +718,49 @@ export const handler: Handler = async (event) => {
       };
     }
 
+    if (
+      body.queuePayload.recipeType === 'image_generate_recipe_v1' &&
+      Math.floor(Number(body.queuePayload.characterCount || 0)) >= 8
+    ) {
+      body.queuePayload = {
+        ...body.queuePayload,
+        sampleImage: null,
+        sampleAnalysisImage: null,
+      };
+    }
+
     const modelId = getQueueModelId(body.queuePayload);
-    const routingConfig = await getGenerationProvider(admin, modelId);
+    const providerRouteKey = inferGenerationProviderRouteKey({
+      queueKind: body.queueKind,
+      toolId: body.toolId,
+      queuePayload: body.queuePayload,
+    });
+    const routingConfig = await getGenerationProvider(admin, modelId, providerRouteKey);
+    if (routingConfig.allowedModels && !routingConfig.allowedModels.includes(modelId)) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({
+          error: `MODEL_NOT_ALLOWED_FOR_FEATURE: Model ${modelId || '(empty)'} is not enabled for ${providerRouteKey || 'this feature'}.`,
+          allowedModels: routingConfig.allowedModels,
+        }),
+      };
+    }
     const targetProvider = routingConfig.provider;
     ensureProviderConfiguredForQueueKind(body.queueKind, targetProvider);
     if (
       TST_QUEUE_KINDS.has(String(body.queueKind || '').trim().toLowerCase()) &&
-      targetProvider === 'gommo' &&
-      !await canUseGommoForPayload(body.queueKind, { ...body.queuePayload, model: modelId })
+      targetProvider === 'gommo'
     ) {
-      throw new Error(`GOMMO_UNSUPPORTED_MODEL: ${modelId || 'unknown'}`);
+      const gommoValidationPayload = isQueueRecipePayload(body.queuePayload)
+        ? getRecipeValidationPayload(body.queuePayload)
+        : { ...body.queuePayload, model: modelId };
+      await normalizeAndValidateGommoPayload(body.queueKind, gommoValidationPayload);
     }
     body.queuePayload = {
       ...body.queuePayload,
       __targetProvider: targetProvider,
+      __providerRouteKey: providerRouteKey,
       __smartProviderFallbackEnabled: routingConfig.smartFallbackEnabled,
     };
 

@@ -41,7 +41,7 @@ export const handler: Handler = async (event) => {
       };
     }
 
-    const response = await fetch(`https://api.tramsangtao.com/v1/jobs/${jobId}`, {
+    const response = await fetch(`https://api.tramsangtao.com/v1/jobs/${encodeURIComponent(jobId)}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${TST_API_KEY}`

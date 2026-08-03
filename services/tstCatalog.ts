@@ -2,7 +2,9 @@ import modelsMarkdown from '../models.md?raw';
 
 export type TstGenerationTier = 'flash' | 'pro' | 'gpt';
 export type TstGenerationSpeed = 'fast' | 'slow';
-export type TstResolution = '1K' | '2K' | '4K';
+// Resolution is provider-defined and must stay open-ended. TST/Gommo can add
+// values without an AUDITION deployment (for example 8K/10K/12K).
+export type TstResolution = string;
 export type TstMediaType = 'image' | 'video' | 'motion-control' | 'edit';
 
 export interface TstPricingEntry {
@@ -23,6 +25,8 @@ export interface TstRuntimeModel {
   type: string;
   description?: string;
   servers: string[];
+  modes?: string[];
+  params?: Record<string, unknown> | null;
   capabilities?: {
     resolutions?: string[] | null;
     durations?: string[] | null;
@@ -142,16 +146,22 @@ const TST_CATALOG_FETCH_RETRIES = 1;
 const TST_CATALOG_FETCH_RETRY_DELAY_MS = 750;
 const SERVER_ORDER = ['cheap', 'fast', 'standard', 'default', 'vip3', 'vip2', 'vip1'];
 const SPEED_ORDER = ['fast', 'slow'];
-const RESOLUTION_ORDER = ['default', '480p', '720p', '1080p', '1k', '2k', '4k'];
+const RESOLUTION_ORDER = ['default', '480p', '720p', '1080p', '1k', '2k', '4k', '4k_upscale', '8k', '10k', '12k'];
 const GPT_IMAGE_QUALITY_VALUES = ['low', 'medium', 'high'];
-const DURATION_ORDER = ['3s', '5s', '6s', '8s', '10s', '15s', '25s'];
-const ASPECT_RATIO_ORDER = ['16:9', '9:16', '4:3', '3:4', '1:1', '21:9'];
+const DURATION_ORDER = ['3s', '4s', '5s', '6s', '7s', '8s', '9s', '10s', '11s', '12s', '13s', '14s', '15s', '25s'];
+const ASPECT_RATIO_ORDER = ['auto', '1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '5:4', '4:5', '21:9'];
 const TST_DOCS_VIDEO_ASPECT_RATIO_FALLBACKS: Record<string, string[]> = {
   'seedance-2.0-fast': ['16:9', '9:16', '4:3', '3:4', '1:1', '21:9'],
   'seedance-2.0': ['16:9', '9:16', '4:3', '3:4', '1:1', '21:9'],
   'grok-i2v': ['9:16', '16:9', '1:1'],
   'kling-o1-video': ['9:16', '16:9', '1:1'],
   'kling-3.0-video': ['16:9', '9:16', '1:1'],
+  'kling-2.6': ['16:9', '9:16', '1:1'],
+};
+const TST_DOCS_IMAGE_ASPECT_RATIO_FALLBACKS: Record<string, string[]> = {
+  'image-gpt-2': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'],
+  'nano-banana-2': ['auto', '1:1', '4:3', '16:9', '9:16'],
+  'nano-banana-pro': ['auto', '1:1', '4:3', '16:9', '21:9', '9:16', '3:4'],
 };
 const GROK_VIDEO_DURATIONS = ['6s', '10s'];
 
@@ -743,7 +753,7 @@ const getFallbackMotionSpec = (modelId: string, name?: string): TstMotionModelSp
 };
 
 const parseGptImage2ConfigKey = (configKey?: string) => {
-  const match = String(configKey || '').trim().toLowerCase().match(/^(1k|2k|4k)-(low|medium|high)(?:-(fast|slow))?/);
+  const match = String(configKey || '').trim().toLowerCase().match(/^(4k_upscale|\d+k)-(low|medium|high)(?:-(fast|slow))?/);
   return {
     resolution: match?.[1],
     quality: match?.[2],
@@ -796,7 +806,7 @@ export const getPerSecondPricingKey = ({
 
 const parseVideoConfigKey = (configKey?: string) => {
   const normalized = String(configKey || '').trim().toLowerCase();
-  const resolution = normalized.match(/(?:^|[-_|])(480p|720p|1080p|1k|2k|4k)(?:$|[-_|])/)?.[1];
+  const resolution = normalized.match(/(?:^|[-_|])(480p|720p|1080p|4k_upscale|\d+k)(?:$|[-_|])/)?.[1];
   const durationToken = normalized.match(/(?:^|[-_|])(\d+(?:\.\d+)?s?)(?:$|[-_|])/)?.[1];
   const duration = durationToken ? (durationToken.endsWith('s') ? durationToken : `${durationToken}s`) : undefined;
   const speed = normalized.match(/(?:^|[-_|])(fast|slow)(?:$|[-_|])/)?.[1];
@@ -854,7 +864,8 @@ const matchesVideoDurationForModel = (modelId: string, entryDuration?: string, r
 
 const mapPricingEntry = (entry: any): TstPricingEntry => {
   const model = String(entry.model || '');
-  const configKey = String(entry.config_key || '');
+  // `key` is the current TST contract; `config_key` is only a temporary alias.
+  const configKey = String(entry.key || entry.config_key || '');
   let resolution = entry.resolution ? String(entry.resolution) : undefined;
   let quality = entry.quality ? String(entry.quality) : undefined;
   let speed = entry.speed ? String(entry.speed) : undefined;
@@ -902,6 +913,8 @@ const mapRuntimeModel = (entry: any): TstRuntimeModel => ({
   type: String(entry.type || ''),
   description: entry.description ? String(entry.description) : '',
   servers: Array.isArray(entry.servers) ? entry.servers.map((value: string) => String(value)) : [],
+  modes: Array.isArray(entry.modes) ? entry.modes.map((value: string) => String(value)) : [],
+  params: entry.params && typeof entry.params === 'object' ? entry.params : null,
   capabilities: entry.capabilities || {},
 });
 
@@ -979,10 +992,24 @@ const getCapabilityAspectRatios = (model: TstRuntimeModel) =>
     unique([
       ...((model.capabilities?.aspect_ratios || []) as string[]),
       ...((model.capabilities?.aspectRatios || []) as string[]),
+      ...(TST_DOCS_IMAGE_ASPECT_RATIO_FALLBACKS[normalizeModelId(model.model)] || []),
       ...(TST_DOCS_VIDEO_ASPECT_RATIO_FALLBACKS[normalizeModelId(model.model)] || []),
     ].map((value) => String(value).trim()).filter(Boolean)),
     ASPECT_RATIO_ORDER,
   );
+
+export const getGenerationAspectRatios = (
+  tier: TstGenerationTier,
+  runtimeModels: TstRuntimeModel[] = [],
+) => {
+  const modelId = tierToModelId[tier];
+  const model = runtimeModels.find((entry) => normalizeModelId(entry.model) === modelId);
+  if (model) return getCapabilityAspectRatios(model);
+  return sortByOrder(
+    TST_DOCS_IMAGE_ASPECT_RATIO_FALLBACKS[modelId] || [],
+    ASPECT_RATIO_ORDER,
+  );
+};
 
 const pickExactEntry = (entries: TstPricingEntry[], filters: Array<(entry: TstPricingEntry) => boolean>) => {
   for (const filter of filters) {

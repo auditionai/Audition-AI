@@ -2,7 +2,7 @@ import { optimizePayload } from '../utils/imageProcessor';
 import { getSupabaseAuthHeader } from './supabaseClient';
 
 const TST_IMAGE_UPLOAD_MAX_WIDTH = 1280;
-const TST_VIDEO_AND_MOTION_POLL_INTERVAL_MS = 10 * 60 * 1000;
+const TST_VIDEO_AND_MOTION_POLL_INTERVAL_MS = 30 * 1000;
 const TST_DEFAULT_TIMEOUT_MS = 120 * 60 * 1000;
 
 const cleanBase64 = (b64: string) => b64.replace(/^data:image\/\w+;base64,/, '');
@@ -38,23 +38,30 @@ const extractJobId = (data: any): string | null => {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
 };
 
-const extractResultUrl = (data: any): string | null => {
-  if (typeof data?.result === 'string' && data.result.trim()) {
-    return data.result.trim();
+const extractResultUrl = (value: unknown): string | null => {
+  if (typeof value === 'string') {
+    const normalized = value.trim();
+    return /^https?:\/\//i.test(normalized) ? normalized : null;
   }
-
-  if (Array.isArray(data?.result) && typeof data.result[0] === 'string' && data.result[0].trim()) {
-    return data.result[0].trim();
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const nested = extractResultUrl(item);
+      if (nested) return nested;
+    }
+    return null;
   }
+  if (!value || typeof value !== 'object') return null;
 
-  if (typeof data?.output === 'string' && data.output.trim()) {
-    return data.output.trim();
+  const objectValue = value as Record<string, unknown>;
+  const keys = [
+    'result', 'output', 'result_url', 'resultUrl', 'output_url', 'outputUrl',
+    'video_url', 'videoUrl', 'file_url', 'fileUrl', 'cdn_url', 'cdnUrl', 'url',
+    'results', 'outputs', 'videos', 'files', 'artifacts', 'items', 'data',
+  ];
+  for (const key of keys) {
+    const nested = extractResultUrl(objectValue[key]);
+    if (nested) return nested;
   }
-
-  if (typeof data?.data?.result === 'string' && data.data.result.trim()) {
-    return data.data.result.trim();
-  }
-
   return null;
 };
 

@@ -147,9 +147,7 @@ const inferMode = (toolId: string | null | undefined, payload: QueuePayloadObjec
   if (recipeType === 'image_edit_recipe_v1') return String(toolId || 'image_edit');
 
   if (recipeType === 'image_generate_recipe_v1') {
-    if (characterCount >= 5) return 'group5';
-    if (characterCount === 4) return 'group4';
-    if (characterCount === 3) return 'group3';
+    if (characterCount >= 3) return `group${Math.min(8, characterCount)}`;
     if (characterCount === 2) return 'couple';
     return 'single';
   }
@@ -182,9 +180,8 @@ const getDisplayToolName = (
 ) => {
   if (queueKind === 'image_generate') {
     if (config.mode === 'couple') return 'Couple 3D Mode';
-    if (config.mode === 'group3') return 'Squad of 3';
-    if (config.mode === 'group4') return 'Clan of 4';
-    if (config.mode === 'group5') return 'Group of 5';
+    const groupMatch = String(config.mode || '').match(/^group(\d+)$/);
+    if (groupMatch) return `Group of ${groupMatch[1]}`;
     if (config.mode === 'single') return 'Single 3D Character';
   }
 

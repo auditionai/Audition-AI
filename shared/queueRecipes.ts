@@ -175,6 +175,8 @@ export interface ImageGenerateRecipePayload {
   quality?: string;
   speed?: string;
   serverId?: string;
+  providerMode?: string;
+  pricingOptionId?: string;
   negativePrompt?: string;
   characterImages?: string[];
   characterReferenceGroups?: CharacterReferenceGroup[];
@@ -211,6 +213,8 @@ export interface PromptImageGenerateRecipePayload {
   quality?: string;
   speed?: string;
   serverId?: string;
+  providerMode?: string;
+  pricingOptionId?: string;
   __billingUnits?: number;
   __stage?: QueueProcessingStage;
   __logs?: QueueProgressLogEntry[];
@@ -480,6 +484,8 @@ export interface ImageEditRecipePayload {
   aspectRatio?: string;
   speed?: string;
   serverId?: string;
+  providerMode?: string;
+  pricingOptionId?: string;
 }
 
 export interface VideoGenerateRecipePayload {
@@ -491,6 +497,8 @@ export interface VideoGenerateRecipePayload {
   aspectRatio?: string;
   speed?: string;
   serverId?: string;
+  providerMode?: string;
+  pricingOptionId?: string;
   keyframeImage?: string | null;
   audio?: boolean;
 }
@@ -1801,6 +1809,8 @@ export const getRecipeValidationPayload = (payload: QueueRecipePayload) => {
         quality: payload.quality,
         speed: payload.speed,
         server_id: payload.serverId,
+        provider_mode: payload.providerMode,
+        config_key: payload.pricingOptionId,
       };
     case 'prompt_image_generate_recipe_v1':
       return {
@@ -1810,6 +1820,8 @@ export const getRecipeValidationPayload = (payload: QueueRecipePayload) => {
         quality: payload.quality,
         speed: payload.speed,
         server_id: payload.serverId,
+        provider_mode: payload.providerMode,
+        config_key: payload.pricingOptionId,
       };
     case 'image_edit_recipe_v1':
       return {
@@ -1818,6 +1830,8 @@ export const getRecipeValidationPayload = (payload: QueueRecipePayload) => {
         aspect_ratio: payload.aspectRatio,
         speed: payload.speed,
         server_id: payload.serverId,
+        provider_mode: payload.providerMode,
+        config_key: payload.pricingOptionId,
       };
     case 'video_generate_recipe_v1':
       return {
@@ -1827,6 +1841,8 @@ export const getRecipeValidationPayload = (payload: QueueRecipePayload) => {
         aspect_ratio: payload.aspectRatio,
         speed: payload.speed,
         server_id: payload.serverId,
+        provider_mode: payload.providerMode,
+        config_key: payload.pricingOptionId,
         audio: payload.audio,
       };
     case 'motion_generate_recipe_v1':

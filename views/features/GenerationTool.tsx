@@ -10,8 +10,10 @@ import {
   getModelPricing,
   getTstServerAvailabilityConfig,
   getGenerationGuideImages,
+  getGenerationProviderConfig,
   type ModelPricing,
   type GenerationGuideImagesConfig,
+  type GenerationProviderConfig,
 } from '../../services/economyService';
 import { useNotification } from '../../components/NotificationSystem';
 import { caulenhauClient } from '../../services/supabaseClient';
@@ -31,6 +33,7 @@ import {
   getCompatibleGenerationResolutions,
   getCompatibleGenerationSpeeds,
   getGenerationCostBreakdown,
+  getGenerationAspectRatios,
   getGenerationModelId,
   getResolutionCostMap,
   resolveGenerationSelection,
@@ -41,8 +44,19 @@ import {
   uiSpeedToTst,
   type TstGenerationTier,
   type TstPricingEntry,
+  type TstResolution,
   type TstRuntimeModel,
 } from '../../services/tstCatalog';
+import {
+  fetchProviderCatalog,
+  getAuditionProviderPricing,
+  getGommoPricingInput,
+  getGommoModelForAudition,
+  isGommoCatalogModelAvailable,
+  resolveProviderForModel,
+  type GommoProviderCatalog,
+} from '../../services/providerCatalog';
+import { getImageProviderRouteKey, isModelAllowedForFeature } from '../../shared/providerRouting';
 import type { CharacterReferenceGroup, ImageGenerateRecipePayload } from '../../shared/queueRecipes';
 
 interface GenerationToolProps {
@@ -52,9 +66,9 @@ interface GenerationToolProps {
   onNavigateView?: (view: ViewId, data?: any) => void;
 }
 
-type GenMode = 'single' | 'couple' | 'group3' | 'group4' | 'group5';
+type GenMode = 'single' | 'couple' | 'group3' | 'group4' | 'group5' | 'group6' | 'group7' | 'group8';
 type Stage = 'input' | 'processing' | 'result';
-type Resolution = '1K' | '2K' | '4K';
+type Resolution = string;
 
 const IMAGE_MODEL_OPTIONS: Array<{
   tier: TstGenerationTier;
@@ -100,6 +114,9 @@ const MODE_TO_FEATURE_ID: Record<GenMode, string> = {
     group3: 'group_3_gen',
     group4: 'group_4_gen',
     group5: 'group_5_gen',
+    group6: 'group_6_gen',
+    group7: 'group_7_gen',
+    group8: 'group_8_gen',
 };
 
 interface CharacterInput {
@@ -194,6 +211,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const [server, setServer] = useState('VIP 1');
   const [gptQuality, setGptQuality] = useState<'low' | 'medium' | 'high'>('low');
   const [aiModel, setAiModel] = useState<TstGenerationTier>('gpt');
+  const [providerMode, setProviderMode] = useState('');
 
   const [guideTopic, setGuideTopic] = useState<'chars' | 'settings' | null>(null);
   const [currentTipIdx, setCurrentTipIdx] = useState(0);
@@ -242,10 +260,28 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const [runtimeModels, setRuntimeModels] = useState<TstRuntimeModel[]>([]);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [catalogLoading, setCatalogLoading] = useState(true);
+  const [gommoCatalog, setGommoCatalog] = useState<GommoProviderCatalog | null>(null);
+  const [providerConfig, setProviderConfig] = useState<GenerationProviderConfig | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [isConcurrencyExpanded, setIsConcurrencyExpanded] = useState(false);
-  const activeFeature = APP_CONFIG.main_features.find((entry) => entry.id === MODE_TO_FEATURE_ID[activeMode]) || feature;
+  const activeFeature = APP_CONFIG.main_features.find((entry) => entry.id === MODE_TO_FEATURE_ID[activeMode])
+      || (characters.length >= 6 ? APP_CONFIG.main_features.find((entry) => entry.id === 'group_5_gen') : null)
+      || feature;
+  const providerRouteKey = getImageProviderRouteKey(characters.length);
+
+  useEffect(() => {
+      if (!isModelAllowedForFeature(providerConfig, providerRouteKey, getGenerationModelId(aiModel))) {
+          const firstAllowed = IMAGE_MODEL_OPTIONS.find((model) =>
+              isModelAllowedForFeature(providerConfig, providerRouteKey, getGenerationModelId(model.tier)),
+          );
+          if (firstAllowed) setAiModel(firstAllowed.tier);
+      }
+      if (activeMode === 'group8') {
+          if (refImage) setRefImage(null);
+          setPrompt((current) => current.replace(SAMPLE_IMAGE_PROMPT_LOCK, '').trim());
+      }
+  }, [activeMode, aiModel, providerConfig, providerRouteKey, refImage]);
 
   useEffect(() => {
       const applyPrompt = (nextPrompt: string) => {
@@ -290,35 +326,66 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const generationSpeedId = uiSpeedToTst(speed) || 'fast';
   const generationServerId = uiServerToTst(server) || 'fast';
   const generationTier = aiModel;
-  const availableResolutions = getCompatibleGenerationResolutions({
+  const selectedModelId = getGenerationModelId(aiModel);
+  const selectedProvider = resolveProviderForModel(providerConfig, selectedModelId, providerRouteKey);
+  const selectedGommoModel = getGommoModelForAudition(gommoCatalog, selectedModelId);
+  const isGommoSelected = selectedProvider === 'gommo';
+  const tstAspectRatios = useMemo(
+      () => getGenerationAspectRatios(generationTier, runtimeModels),
+      [generationTier, runtimeModels],
+  );
+  const tstAvailableResolutions = getCompatibleGenerationResolutions({
       tier: generationTier,
       pricingEntries,
       serverId: generationServerId,
       speed: generationSpeedId,
       quality: aiModel === 'gpt' ? gptQuality : undefined,
   });
+  const availableResolutions = isGommoSelected
+      ? (selectedGommoModel?.resolutions || []).map((option) => option.type.toUpperCase())
+      : tstAvailableResolutions;
   const availableSpeeds = getCompatibleGenerationSpeeds({
       tier: generationTier,
       pricingEntries,
-      resolution,
+      resolution: resolution as TstResolution,
       quality: aiModel === 'gpt' ? gptQuality : undefined,
   });
   const availableServers = getCompatibleGenerationServers({
       tier: generationTier,
       pricingEntries,
       speed: generationSpeedId,
-      resolution,
+      resolution: resolution as TstResolution,
       quality: aiModel === 'gpt' ? gptQuality : undefined,
   });
-  const selectedGenerationCost = getGenerationCostBreakdown({
+  const tstSelectedGenerationCost = getGenerationCostBreakdown({
       tier: generationTier,
-      resolution,
+      resolution: resolution as TstResolution,
       quality: aiModel === 'gpt' ? gptQuality : undefined,
       speed: generationSpeedId,
       serverId: generationServerId,
       pricingEntries,
       pricingOverrides
   });
+  const gommoPricingInput = getGommoPricingInput(selectedModelId, {
+      resolution,
+      quality: aiModel === 'gpt' ? gptQuality : undefined,
+      speed: generationSpeedId,
+      providerMode,
+  });
+  const gommoSelectedPricing = getAuditionProviderPricing(auditionPricing, selectedModelId, gommoPricingInput, { allowGenericFallback: false });
+  const selectedGenerationCost = isGommoSelected
+      ? { available: gommoSelectedPricing !== null, vcoin: gommoSelectedPricing?.vcoin || 0 }
+      : tstSelectedGenerationCost;
+  const pricedGommoResolutions = new Set(
+      isGommoSelected
+          ? availableResolutions.filter((value) => Boolean(getAuditionProviderPricing(
+              auditionPricing,
+              selectedModelId,
+              getGommoPricingInput(selectedModelId, { ...gommoPricingInput, resolution: value }),
+              { allowGenericFallback: false },
+          )))
+          : availableResolutions,
+  );
   const flashResolutionCosts = getResolutionCostMap({
       tier: 'flash',
       speed: generationSpeedId,
@@ -357,21 +424,27 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           .filter((model) => model.type === 'image')
           .map((model) => model.model.trim().toLowerCase())
   );
-  const isFlashAvailable =
-      runtimeImageModelIds.has(getGenerationModelId('flash')) &&
-      pricingEntries.some((entry) => entry.model.trim().toLowerCase() === getGenerationModelId('flash'));
-  const isProAvailable =
-      runtimeImageModelIds.has(getGenerationModelId('pro')) &&
-      pricingEntries.some((entry) => entry.model.trim().toLowerCase() === getGenerationModelId('pro'));
-  const isGptAvailable =
-      runtimeImageModelIds.has(getGenerationModelId('gpt')) &&
-      pricingEntries.some((entry) => entry.model.trim().toLowerCase() === getGenerationModelId('gpt'));
+  const isTierAvailable = (tier: TstGenerationTier) => {
+      const modelId = getGenerationModelId(tier);
+      if (!isModelAllowedForFeature(providerConfig, providerRouteKey, modelId)) return false;
+      if (resolveProviderForModel(providerConfig, modelId, providerRouteKey) === 'gommo') {
+          return isGommoCatalogModelAvailable(getGommoModelForAudition(gommoCatalog, modelId));
+      }
+      return runtimeImageModelIds.has(modelId) && pricingEntries.some((entry) => entry.model.trim().toLowerCase() === modelId);
+  };
+  const isFlashAvailable = isTierAvailable('flash');
+  const isProAvailable = isTierAvailable('pro');
+  const isGptAvailable = isTierAvailable('gpt');
   const imageModelAvailability: Record<TstGenerationTier, boolean> = {
       flash: isFlashAvailable,
       pro: isProAvailable,
       gpt: isGptAvailable,
   };
-  const isCatalogReady = !catalogLoading && !catalogError && pricingEntries.length > 0 && runtimeModels.length > 0;
+  const isCatalogReady = !catalogLoading && (
+      isGommoSelected
+          ? isGommoCatalogModelAvailable(selectedGommoModel) && selectedGenerationCost.available
+          : !catalogError && pricingEntries.length > 0 && runtimeModels.length > 0
+  );
   const hasCharacterImagesReady = characters.every((char) => !!char.bodyImage);
   const isGenerateDisabled =
       cooldownRemaining > 0 ||
@@ -380,8 +453,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       !prompt.trim() ||
       !hasCharacterImagesReady ||
       (aiModel === 'flash' ? !isFlashAvailable : aiModel === 'pro' ? !isProAvailable : !isGptAvailable);
-  const availableSpeedLabels = availableSpeeds.map((speedId) => speedId === 'slow' ? 'Tiết Kiệm' : 'Nhanh');
-  const availableServerLabels = availableServers.map((serverId) => tstServerToUi(serverId));
+  const availableSpeedLabels = isGommoSelected ? [] : availableSpeeds.map((speedId) => speedId === 'slow' ? 'Tiết Kiệm' : 'Nhanh');
+  const availableServerLabels = isGommoSelected ? [] : availableServers.map((serverId) => tstServerToUi(serverId));
+  const gommoModes = isGommoSelected ? (selectedGommoModel?.modes || []) : [];
   useEffect(() => {
       // Load Default Style Preset
       const loadStyle = async () => {
@@ -397,20 +471,41 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       loadStyle();
 
       const loadCatalog = async (forceRefresh = false) => {
+          setCatalogLoading(true);
           try {
-              const [entries, models, pricingConfig, serverAvailabilityConfig] = await Promise.all([
+              const [pricingConfig, routingConfig, providerCatalog] = await Promise.all([
+                  getModelPricing(),
+                  getGenerationProviderConfig(),
+                  fetchProviderCatalog(true),
+              ]);
+              setAuditionPricing(pricingConfig || []);
+              setProviderConfig(routingConfig);
+              setGommoCatalog(providerCatalog);
+
+              const [entries, models, serverAvailabilityConfig] = await Promise.all([
                   fetchTstPricing(forceRefresh),
                   fetchTstModels(forceRefresh),
-                  getModelPricing(),
                   getTstServerAvailabilityConfig()
               ]);
               const filteredModels = applyServerAvailabilityToRuntimeModels(models, serverAvailabilityConfig);
               setPricingEntries(sanitizePricingEntriesWithRuntimeModels(entries, filteredModels, serverAvailabilityConfig));
               setRuntimeModels(filteredModels);
-              setAuditionPricing(pricingConfig || []);
               setCatalogError(null);
           } catch (error) {
-              console.warn("Failed to load live TST catalog for generation tool", error);
+              console.warn("Failed to load provider catalogs for generation tool", error);
+              try {
+                  const [pricingConfig, routingConfig, providerCatalog] = await Promise.all([
+                      getModelPricing(),
+                      getGenerationProviderConfig(),
+                      fetchProviderCatalog(true),
+                  ]);
+                  setAuditionPricing(pricingConfig || []);
+                  setProviderConfig(routingConfig);
+                  setGommoCatalog(providerCatalog);
+              } catch (gommoError) {
+                  console.warn('Failed to load Gommo catalog for generation tool', gommoError);
+                  setGommoCatalog(null);
+              }
               setPricingEntries([]);
               setRuntimeModels([]);
               setCatalogError(lang === 'vi' ? 'TST đang bảo trì hoặc không sẵn sàng.' : 'TST is unavailable.');
@@ -514,6 +609,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
     else if (feature.id.includes('group_3')) handleModeChange('group3');
     else if (feature.id.includes('group_4')) handleModeChange('group4');
     else if (feature.id.includes('group_5')) handleModeChange('group5');
+    else if (feature.id.includes('group_6')) handleModeChange('group6');
+    else if (feature.id.includes('group_7')) handleModeChange('group7');
+    else if (feature.id.includes('group_8')) handleModeChange('group8');
     else handleModeChange('single');
   }, [feature]);
 
@@ -530,22 +628,37 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   }, [stage]);
 
   useEffect(() => {
-      if (aiModel === 'flash' && !isFlashAvailable && isProAvailable) {
-          setAiModel('pro');
-      } else if (aiModel === 'pro' && !isProAvailable && isFlashAvailable) {
-          setAiModel('flash');
-      } else if (aiModel === 'gpt' && !isGptAvailable && isProAvailable) {
-          setAiModel('pro');
-      }
+      if (imageModelAvailability[aiModel]) return;
+      const next = IMAGE_MODEL_OPTIONS.find((model) => imageModelAvailability[model.tier]);
+      if (next) setAiModel(next.tier);
   }, [aiModel, isFlashAvailable, isGptAvailable, isProAvailable]);
 
   useEffect(() => {
+      if (isGommoSelected) {
+          const gommoResolutions = (selectedGommoModel?.resolutions || []).map((option) => option.type.toUpperCase());
+          const gommoRatios = (selectedGommoModel?.ratios || []).map((option) => option.type);
+          const gommoModeTypes = (selectedGommoModel?.modes || []).map((option) => option.type);
+          if (gommoResolutions.length > 0 && !gommoResolutions.includes(resolution)) {
+              setResolution(gommoResolutions[0]);
+          }
+          if (gommoRatios.length > 0 && !gommoRatios.includes(aspectRatio)) {
+              setAspectRatio(gommoRatios[0]);
+          }
+          if (gommoModeTypes.length > 0 && !gommoModeTypes.includes(providerMode)) {
+              setProviderMode(gommoModeTypes[0]);
+          }
+          return;
+      }
+      if (tstAspectRatios.length > 0 && !tstAspectRatios.includes(aspectRatio)) {
+          setAspectRatio(tstAspectRatios[0]);
+          return;
+      }
       const requestedSpeedId = uiSpeedToTst(speed) || 'fast';
       const requestedServerId = uiServerToTst(server) || 'fast';
       const nextSelection = resolveGenerationSelection({
           tier: aiModel,
           pricingEntries,
-          resolution,
+      resolution: resolution as TstResolution,
           quality: aiModel === 'gpt' ? gptQuality : undefined,
           speed: requestedSpeedId,
           serverId: requestedServerId,
@@ -566,7 +679,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       if (nextSpeedLabel !== speed) {
           setSpeed(nextSpeedLabel);
       }
-  }, [aiModel, gptQuality, pricingEntries, resolution, server, speed]);
+  }, [aiModel, aspectRatio, gptQuality, isGommoSelected, pricingEntries, providerMode, resolution, selectedGommoModel, server, speed, tstAspectRatios]);
 
   const formatTime = (seconds: number) => {
       const mins = Math.floor(seconds / 60);
@@ -582,6 +695,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       if (mode === 'group3') count = 3;
       if (mode === 'group4') count = 4;
       if (mode === 'group5') count = 5;
+      if (mode === 'group6') count = 6;
+      if (mode === 'group7') count = 7;
+      if (mode === 'group8') count = 8;
 
       setCharacters(prev => {
           const newChars = [];
@@ -619,6 +735,15 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           } else if (activeMode === 'group5') {
               targetCategoryId = 6;
               catName = "Ảnh Nhóm 5";
+          } else if (activeMode === 'group6') {
+              targetCategoryId = 6;
+              catName = "Ảnh Nhóm 6";
+          } else if (activeMode === 'group7') {
+              targetCategoryId = 6;
+              catName = "Ảnh Nhóm 7";
+          } else if (activeMode === 'group8') {
+              targetCategoryId = 6;
+              catName = "Ảnh Nhóm 8";
           }
           setCurrentCategoryName(catName);
 
@@ -737,7 +862,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                   ? 3
                   : activeMode === 'group4'
                       ? 4
-                      : 5;
+                      : characters.length;
 
       return baseCost * modeMultiplier;
   };
@@ -758,12 +883,12 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
     }
 
     if (!isCatalogReady) {
-        notify(lang === 'vi' ? 'TST đang bảo trì hoặc không sẵn sàng.' : 'TST is unavailable.', 'error');
+        notify(isGommoSelected ? 'Catalog Gommo đang bảo trì hoặc chưa có cấu hình giá Vcoin.' : 'TST đang bảo trì hoặc không sẵn sàng.', 'error');
         return;
     }
 
     if (!selectedGenerationCost.available) {
-        notify(lang === 'vi' ? 'Cấu hình đang chọn không còn khả dụng trên TST.' : 'Selected configuration is not available on TST.', 'error');
+        notify(`Cấu hình đang chọn không còn khả dụng trên ${isGommoSelected ? 'Gommo' : 'TST'}.`, 'error');
         return;
     }
 
@@ -844,22 +969,26 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
         tier: aiModel,
         pricingEntries,
         speed: requestedSpeedId,
-        resolution,
+        resolution: resolution as TstResolution,
         quality: aiModel === 'gpt' ? gptQuality : undefined,
     });
-    const effectiveServerId = compatibleServers.includes(requestedServerId)
-        ? requestedServerId
-        : (compatibleServers[0] || requestedServerId);
+    const effectiveServerId = isGommoSelected
+        ? undefined
+        : compatibleServers.includes(requestedServerId)
+            ? requestedServerId
+            : (compatibleServers[0] || requestedServerId);
     const compatibleSpeeds = getCompatibleGenerationSpeeds({
         tier: aiModel,
         pricingEntries,
-        serverId: effectiveServerId,
-        resolution,
+        serverId: effectiveServerId || requestedServerId,
+        resolution: resolution as TstResolution,
         quality: aiModel === 'gpt' ? gptQuality : undefined,
     });
-    const effectiveSpeedId = compatibleSpeeds.includes(requestedSpeedId)
-        ? requestedSpeedId
-        : (compatibleSpeeds[0] || requestedSpeedId);
+    const effectiveSpeedId = isGommoSelected
+        ? undefined
+        : compatibleSpeeds.includes(requestedSpeedId)
+            ? requestedSpeedId
+            : (compatibleSpeeds[0] || requestedSpeedId);
     const queuedImage: GeneratedImage = {
         id: queuedJobId,
         url: '',
@@ -950,9 +1079,11 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                 characterCount: characters.length,
                 resolution,
                 aspectRatio,
-                quality: aiModel === 'gpt' ? gptQuality : undefined,
-                speed: effectiveSpeedId,
+                quality: isGommoSelected ? gommoPricingInput.quality : aiModel === 'gpt' ? gptQuality : undefined,
+                speed: isGommoSelected ? gommoPricingInput.speed : effectiveSpeedId,
                 serverId: effectiveServerId,
+                providerMode: isGommoSelected ? providerMode : undefined,
+                pricingOptionId: isGommoSelected ? gommoSelectedPricing?.optionId : undefined,
                 negativePrompt: DEFAULT_IMAGE_NEGATIVE_PROMPT,
                 characterReferenceGroups: stagedCharacterGroups,
                 characterImages: stagedCharacterImages,
@@ -1007,13 +1138,17 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
     return;
   };
 
-  const ratios = [
-      { id: '1:1', label: '1:1', desc: 'Vuông' },
-      { id: '9:16', label: '9:16', desc: 'Story' },
-      { id: '16:9', label: '16:9', desc: 'Cinema' },
-      { id: '3:4', label: '3:4', desc: 'Dọc' },
-      { id: '4:3', label: '4:3', desc: 'Ngang' },
-  ];
+  const ratios = !isGommoSelected
+      ? tstAspectRatios.map((ratio) => ({ id: ratio, label: ratio, desc: 'TST' }))
+      : isGommoSelected && selectedGommoModel?.ratios.length
+      ? selectedGommoModel.ratios.map((option) => ({ id: option.type, label: option.name || option.type, desc: 'Gommo' }))
+      : [
+          { id: '1:1', label: '1:1', desc: 'Vuông' },
+          { id: '9:16', label: '9:16', desc: 'Story' },
+          { id: '16:9', label: '16:9', desc: 'Cinema' },
+          { id: '3:4', label: '3:4', desc: 'Dọc' },
+          { id: '4:3', label: '4:3', desc: 'Ngang' },
+      ];
 
   const renderGuideContent = () => {
       switch(guideTopic) {
@@ -1375,6 +1510,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                         { id: 'group3', label: { vi: 'Nhóm 3', en: 'Group 3' }, desc: '3 Nhân vật', icon: Icons.User, color: 'text-amber-600 dark:text-amber-400' },
                         { id: 'group4', label: { vi: 'Nhóm 4', en: 'Group 4' }, desc: '4 Nhân vật', icon: Icons.User, color: 'text-emerald-600 dark:text-emerald-400' },
                         { id: 'group5', label: { vi: 'Nhóm 5', en: 'Group 5' }, desc: '5 Nhân vật', icon: Icons.User, color: 'text-purple-600 dark:text-purple-400' },
+                        { id: 'group6', label: { vi: 'Nhóm 6', en: 'Group 6' }, desc: '6 Nhân vật', icon: Icons.User, color: 'text-rose-600 dark:text-rose-400' },
+                        { id: 'group7', label: { vi: 'Nhóm 7', en: 'Group 7' }, desc: '7 Nhân vật', icon: Icons.User, color: 'text-indigo-600 dark:text-indigo-400' },
+                        { id: 'group8', label: { vi: 'Nhóm 8', en: 'Group 8' }, desc: '8 Nhân vật', icon: Icons.User, color: 'text-cyan-600 dark:text-cyan-400' },
                     ].map(mode => {
                         const isActive = activeMode === mode.id;
                         return (
@@ -1492,7 +1630,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                     ))}
 
                     {/* Pose Reference Slot */}
-                    <div className="neu-inset-sm p-4 rounded-2xl space-y-3">
+                    {activeMode !== 'group8' && <div className="neu-inset-sm p-4 rounded-2xl space-y-3">
                         <div className="flex justify-between items-center">
                             <span className="text-xs font-black text-slate-900 dark:text-white font-accent">Ảnh Mẫu (Pose Ref)</span>
                             {refImage && (
@@ -1519,7 +1657,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                 </div>
                             )}
                         </button>
-                    </div>
+                    </div>}
                 </div>
             </div>
 
@@ -1560,10 +1698,20 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                 {!isCatalogReady && (
                     <div role="alert" className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs font-semibold text-amber-700 dark:text-amber-300">
                         {catalogLoading
-                            ? 'Đang đồng bộ model và bảng giá trực tiếp từ TST...'
-                            : (catalogError || 'TST đang bảo trì hoặc chưa có cấu hình giá khả dụng.')}
+                            ? 'Đang đồng bộ catalog realtime theo API đã cấu hình...'
+                            : isGommoSelected
+                                ? 'Gommo đang bảo trì, model đã tắt hoặc cấu hình này chưa có giá Vcoin.'
+                                : (catalogError || 'TST đang bảo trì hoặc chưa có cấu hình giá khả dụng.')}
                     </div>
                 )}
+
+                <div className={`rounded-xl border px-3 py-2 text-[10px] font-black uppercase tracking-wider ${
+                    isGommoSelected
+                        ? 'border-cyan-400/30 bg-cyan-400/10 text-cyan-700 dark:text-cyan-300'
+                        : 'border-purple-400/30 bg-purple-400/10 text-purple-700 dark:text-purple-300'
+                }`}>
+                    Luồng đang dùng: {isGommoSelected ? `Gommo · ${selectedGommoModel?.name || selectedModelId}` : `TST · ${selectedModelId}`}
+                </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Model Picker */}
@@ -1630,7 +1778,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 pt-4 border-t border-slate-200/60 dark:border-slate-800">
-                    {aiModel === 'gpt' && (
+                    {aiModel === 'gpt' && !isGommoSelected && (
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider">Chất lượng GPT</label>
                             <div className="grid grid-cols-3 gap-1 neu-inset-sm p-1.5 rounded-2xl">
@@ -1653,8 +1801,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                     <div className="space-y-2">
                         <label className="text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider">Độ phân giải</label>
                         <div className="grid grid-cols-3 gap-1 neu-inset-sm p-1.5 rounded-2xl">
-                            {(['1K', '2K', '4K'] as Resolution[]).map((value) => {
-                                const available = availableResolutions.includes(value);
+                            {availableResolutions.map((value) => {
+                                const available = !isGommoSelected || pricedGommoResolutions.has(value);
                                 return (
                                     <button
                                         key={value}
@@ -1671,6 +1819,30 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                             })}
                         </div>
                     </div>
+
+                    {isGommoSelected && gommoModes.length > 0 && (
+                        <div className="space-y-2 sm:col-span-2">
+                            <label className="text-[10px] font-black text-cyan-600 dark:text-cyan-300 uppercase tracking-wider">
+                                Máy chủ / chế độ Gommo · đồng bộ realtime
+                            </label>
+                            <div className="grid grid-cols-2 lg:grid-cols-3 gap-1 neu-inset-sm p-1.5 rounded-2xl">
+                                {gommoModes.map((option) => (
+                                    <button
+                                        key={option.type}
+                                        type="button"
+                                        title={option.description || option.group}
+                                        onClick={() => setProviderMode(option.type)}
+                                        className={`px-2 py-2 rounded-xl text-[10px] font-black ${
+                                            providerMode === option.type ? 'neu-raised-sm text-cyan-600 dark:text-cyan-300' : 'text-slate-600 dark:text-slate-400'
+                                        }`}
+                                    >
+                                        <span className="block">{option.name || option.type}</span>
+                                        {option.group && <span className="block mt-0.5 text-[8px] font-semibold opacity-70">{option.group}</span>}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     <div className="space-y-2">
                         <label className="text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider">Tốc độ xử lý</label>

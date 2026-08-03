@@ -1,6 +1,7 @@
 import type { Handler } from '@netlify/functions';
 import { getAuthenticatedRequestErrorStatus, requireAdminUser } from './_supabase';
 import { normalizeTstOutboundPayload } from './_tst-payload-normalizer';
+import { validateQueuePayloadAgainstLiveCatalog } from './_tst-live-catalog';
 
 const jsonHeaders = {
   'Content-Type': 'application/json',
@@ -36,6 +37,7 @@ export const handler: Handler = async (event) => {
     }
 
     const payload = normalizeTstOutboundPayload(JSON.parse(event.body || '{}'));
+    await validateQueuePayloadAgainstLiveCatalog('motion_generate', payload);
     const response = await fetch('https://api.tramsangtao.com/v1/motion/generate', {
       method: 'POST',
       headers: {
@@ -61,7 +63,11 @@ export const handler: Handler = async (event) => {
       body: JSON.stringify(data),
     };
   } catch (error: any) {
-    const statusCode = error?.message === 'Forbidden' ? 403 : getAuthenticatedRequestErrorStatus(error);
+    const statusCode = String(error?.message || '').startsWith('INVALID_TST_CONFIG:')
+      ? 400
+      : error?.message === 'Forbidden'
+        ? 403
+        : getAuthenticatedRequestErrorStatus(error);
     if (statusCode >= 500) console.error('TST motion generate proxy error:', error);
     return {
       statusCode,

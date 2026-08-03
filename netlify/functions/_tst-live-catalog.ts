@@ -6,6 +6,7 @@ export const TST_LIVE_CATALOG_TTL_MS = 5 * 60_000;
 type TstProviderPricingEntry = {
   model: string;
   server?: string;
+  key?: string;
   config_key?: string;
   credits?: number;
   resolution?: string;
@@ -20,11 +21,15 @@ type TstProviderModel = {
   name?: string;
   type?: string;
   servers?: string[];
+  modes?: string[];
+  params?: Record<string, unknown> | null;
+  pricing?: Array<Record<string, unknown>>;
   capabilities?: {
     resolutions?: string[] | null;
     durations?: string[] | null;
     aspect_ratios?: string[] | null;
     aspectRatios?: string[] | null;
+    qualities?: string[] | null;
     slow_mode?: boolean;
     audio?: boolean;
   };
@@ -44,13 +49,19 @@ const normalizeQuality = (value?: string | null) => normalize(value);
 const normalizeDuration = (value?: string | null) => normalize(value);
 const normalizeServer = (value?: string | null) => normalize(value);
 const isFresh = (timestamp: number) => timestamp > 0 && Date.now() - timestamp < TST_LIVE_CATALOG_TTL_MS;
-const ASPECT_RATIO_ORDER = ['16:9', '9:16', '4:3', '3:4', '1:1', '21:9'];
+const ASPECT_RATIO_ORDER = ['auto', '1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '5:4', '4:5', '21:9'];
 const TST_DOCS_VIDEO_ASPECT_RATIO_FALLBACKS: Record<string, string[]> = {
   'seedance-2.0-fast': ['16:9', '9:16', '4:3', '3:4', '1:1', '21:9'],
   'seedance-2.0': ['16:9', '9:16', '4:3', '3:4', '1:1', '21:9'],
   'grok-i2v': ['9:16', '16:9', '1:1'],
   'kling-o1-video': ['9:16', '16:9', '1:1'],
   'kling-3.0-video': ['16:9', '9:16', '1:1'],
+  'kling-2.6': ['16:9', '9:16', '1:1'],
+};
+const TST_DOCS_IMAGE_ASPECT_RATIO_FALLBACKS: Record<string, string[]> = {
+  'image-gpt-2': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'],
+  'nano-banana-2': ['auto', '1:1', '4:3', '16:9', '9:16'],
+  'nano-banana-pro': ['auto', '1:1', '4:3', '16:9', '21:9', '9:16', '3:4'],
 };
 const GROK_VIDEO_DURATIONS = ['6s', '10s'];
 
@@ -99,7 +110,7 @@ const fetchCatalogEndpoint = async (path: string) => {
 };
 
 const parseGptImage2ConfigKey = (configKey?: string) => {
-  const match = String(configKey || '').trim().toLowerCase().match(/^(1k|2k|4k)-(low|medium|high)(?:-(fast|slow))?/);
+  const match = String(configKey || '').trim().toLowerCase().match(/^(4k_upscale|\d+k)-(low|medium|high)(?:-(fast|slow))?/);
   return {
     resolution: match?.[1],
     quality: match?.[2],
@@ -109,7 +120,7 @@ const parseGptImage2ConfigKey = (configKey?: string) => {
 
 const parseVideoConfigKey = (configKey?: string) => {
   const normalized = String(configKey || '').trim().toLowerCase();
-  const resolution = normalized.match(/(?:^|[-_|])(480p|720p|1080p|1k|2k|4k)(?:$|[-_|])/)?.[1];
+  const resolution = normalized.match(/(?:^|[-_|])(480p|720p|1080p|4k_upscale|\d+k)(?:$|[-_|])/)?.[1];
   const durationToken = normalized.match(/(?:^|[-_|])(\d+(?:\.\d+)?s?)(?:$|[-_|])/)?.[1];
   const duration = durationToken ? (durationToken.endsWith('s') ? durationToken : `${durationToken}s`) : undefined;
   const speed = normalized.match(/(?:^|[-_|])(fast|slow)(?:$|[-_|])/)?.[1];
@@ -164,10 +175,13 @@ const matchesDurationForModel = (modelId: string, entryDuration?: string, reques
 };
 
 const normalizePricingEntryForValidation = (entry: TstProviderPricingEntry): TstProviderPricingEntry => {
+  const configKey = String(entry.key || entry.config_key || '').trim();
   if (normalize(entry.model) === 'image-gpt-2') {
-    const parsed = parseGptImage2ConfigKey(entry.config_key);
+    const parsed = parseGptImage2ConfigKey(configKey);
   return {
     ...entry,
+    key: configKey,
+    config_key: configKey,
     server: String((entry as any).server || (entry as any).server_id || (entry as any).serverId || getDefaultServerForModel(entry.model)),
     resolution: parsed.resolution || entry.resolution,
     quality: parsed.quality || entry.quality || entry.resolution,
@@ -175,14 +189,82 @@ const normalizePricingEntryForValidation = (entry: TstProviderPricingEntry): Tst
     };
   }
 
-  const parsed = parseVideoConfigKey(entry.config_key);
+  const parsed = parseVideoConfigKey(configKey);
   return {
     ...entry,
+    key: configKey,
+    config_key: configKey,
     server: String((entry as any).server || (entry as any).server_id || (entry as any).serverId || getDefaultServerForModel(entry.model)),
     resolution: parsed.resolution || entry.resolution,
     duration: parsed.duration || entry.duration,
     speed: entry.speed || parsed.speed,
     audio: entry.audio === true || parsed.audio === true,
+  };
+};
+
+const unique = (values: string[]) => Array.from(new Set(values.filter(Boolean)));
+
+const readParamEnums = (value: unknown) => {
+  if (Array.isArray(value)) return value.map((entry) => String(entry).trim()).filter(Boolean);
+  if (value && typeof value === 'object') {
+    const source = value as Record<string, unknown>;
+    for (const key of ['enum', 'values', 'options', 'allowed']) {
+      if (Array.isArray(source[key])) return (source[key] as unknown[]).map((entry) => String(entry).trim()).filter(Boolean);
+    }
+  }
+  if (typeof value !== 'string') return [];
+  return Array.from(value.matchAll(/['"]([^'"]+)['"]/g)).map((match) => match[1].trim()).filter(Boolean);
+};
+
+const enrichTstProviderModel = (model: TstProviderModel): TstProviderModel => {
+  const modelId = normalize(model.model);
+  const embeddedPricing = (Array.isArray(model.pricing) ? model.pricing : []).map((entry) =>
+    normalizePricingEntryForValidation({ ...(entry as TstProviderPricingEntry), model: model.model }),
+  );
+  const params = model.params && typeof model.params === 'object' ? model.params : {};
+  const capabilities = model.capabilities || {};
+  const resolutions = unique([
+    ...((capabilities.resolutions || []) as string[]),
+    ...readParamEnums(params.resolution),
+    ...embeddedPricing.map((entry) => String(entry.resolution || '')).filter(Boolean),
+  ].map((value) => normalizeResolution(value)));
+  const durations = unique([
+    ...((capabilities.durations || []) as string[]),
+    ...readParamEnums(params.duration),
+    ...embeddedPricing.map((entry) => String(entry.duration || '')).filter(Boolean),
+  ].map((value) => {
+    const normalized = normalizeDuration(value);
+    return normalized && /^\d+(?:\.\d+)?$/.test(normalized) ? `${normalized}s` : normalized;
+  }));
+  const qualities = unique([
+    ...((capabilities.qualities || []) as string[]),
+    ...readParamEnums(params.quality),
+    ...embeddedPricing.map((entry) => String(entry.quality || '')).filter(Boolean),
+  ].map((value) => normalizeQuality(value)));
+  const aspectRatios = unique([
+    ...((capabilities.aspect_ratios || []) as string[]),
+    ...((capabilities.aspectRatios || []) as string[]),
+    ...readParamEnums(params.aspect_ratio),
+    ...(TST_DOCS_IMAGE_ASPECT_RATIO_FALLBACKS[modelId] || []),
+    ...(TST_DOCS_VIDEO_ASPECT_RATIO_FALLBACKS[modelId] || []),
+  ].map((value) => String(value).trim()));
+  const servers = unique([
+    ...(model.servers || []),
+    ...embeddedPricing.map((entry) => String(entry.server || '')).filter(Boolean),
+  ].map((value) => normalizeServer(value)));
+
+  return {
+    ...model,
+    servers,
+    capabilities: {
+      ...capabilities,
+      resolutions,
+      durations,
+      qualities,
+      aspect_ratios: sortByOrder(aspectRatios, ASPECT_RATIO_ORDER),
+      slow_mode: capabilities.slow_mode === true || embeddedPricing.some((entry) => normalizeSpeed(entry.speed) === 'slow'),
+      audio: capabilities.audio === true || embeddedPricing.some((entry) => entry.audio === true),
+    },
   };
 };
 
@@ -248,7 +330,7 @@ export const getTstProviderModels = async (forceRefresh = false): Promise<TstPro
   if (!modelsPromise) {
     modelsPromise = fetchCatalogEndpoint('/models')
       .then((data) => {
-        modelsCache = Array.isArray(data?.models) ? data.models : [];
+        modelsCache = Array.isArray(data?.models) ? data.models.map(enrichTstProviderModel) : [];
         modelsFetchedAt = Date.now();
         return modelsCache;
       })
@@ -280,6 +362,7 @@ const getAspectRatios = (model: TstProviderModel) => {
   const ratios = [
     ...((model.capabilities?.aspect_ratios || []) as string[]),
     ...((model.capabilities?.aspectRatios || []) as string[]),
+    ...(TST_DOCS_IMAGE_ASPECT_RATIO_FALLBACKS[normalize(model.model)] || []),
     ...(TST_DOCS_VIDEO_ASPECT_RATIO_FALLBACKS[normalize(model.model)] || []),
   ].map((value) => String(value).trim());
   return sortByOrder(Array.from(new Set(ratios.filter(Boolean))), ASPECT_RATIO_ORDER);

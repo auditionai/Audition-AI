@@ -59,7 +59,7 @@ import {
 import { getImageProviderRouteKey, isModelAllowedForFeature } from '../../shared/providerRouting';
 import type { CharacterReferenceGroup, ImageGenerateRecipePayload } from '../../shared/queueRecipes';
 import { GENERATION_SECTION_TIPS } from '../../shared/generationSectionTips';
-import { getGommoServerGroups, getPreferredGommoBasicMode } from '../../shared/gommoServerRouting';
+import { getGommoModeForServerGroup, getGommoServerGroups, getPreferredGommoBasicMode } from '../../shared/gommoServerRouting';
 
 interface GenerationToolProps {
   feature: Feature;
@@ -465,6 +465,10 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const gommoModes = isGommoSelected ? (selectedGommoModel?.modes || []) : [];
   const gommoModeGroups = isGommoSelected && selectedGommoModel
       ? getGommoServerGroups(selectedGommoModel)
+      : [];
+  const selectedGommoModeGroup = gommoModeGroups.find((group) => group.modeTypes.includes(providerMode)) || gommoModeGroups[0];
+  const selectedGommoQualityModes = selectedGommoModeGroup
+      ? gommoModes.filter((option) => selectedGommoModeGroup.modeTypes.includes(option.type))
       : [];
   useEffect(() => {
       // Load Default Style Preset
@@ -1812,9 +1816,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                         </div>
                     )}
 
-                    {availableResolutions.length > 0 && <div className="space-y-2">
+                    {availableResolutions.length > 0 && <div className="space-y-2 md:col-span-2">
                         <label className="text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider">Độ phân giải</label>
-                        <div className="grid grid-cols-3 gap-1 neu-inset-sm p-1.5 rounded-2xl">
+                        <div className="grid grid-cols-3 gap-2">
                             {availableResolutions.map((value) => {
                                 const available = !isGommoSelected || pricedGommoResolutions.has(value);
                                 return (
@@ -1823,8 +1827,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                         type="button"
                                         disabled={!available}
                                         onClick={() => available && setResolution(value)}
-                                        className={`px-2 py-2 rounded-xl text-[10px] font-black ${
-                                            resolution === value ? 'neu-raised-sm text-[#FF007F]' : 'text-slate-600 dark:text-slate-400'
+                                        className={`p-3 rounded-2xl text-center text-xs font-black transition-all ${
+                                            resolution === value ? 'neu-raised-sm text-[#FF007F] font-accent' : 'neu-button text-slate-700 dark:text-slate-300'
                                         } ${!available ? 'opacity-35 cursor-not-allowed' : ''}`}
                                     >
                                         {value}
@@ -1839,34 +1843,49 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                             <label className="text-[10px] font-black text-cyan-600 dark:text-cyan-300 uppercase tracking-wider">
                                 Server và chất lượng Gommo · đồng bộ realtime
                             </label>
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                                {gommoModeGroups.map((group) => {
-                                    const groupModes = gommoModes.filter((option) => group.modeTypes.includes(option.type));
-                                    if (groupModes.length === 0) return null;
-                                    return (
-                                        <section key={group.id} className="rounded-2xl border border-cyan-500/20 bg-cyan-500/[0.04] p-3">
-                                            <div className="mb-2">
-                                                <div className="text-[10px] font-black uppercase text-slate-800 dark:text-white">{group.label}</div>
-                                                {group.subtitle && <p className="mt-0.5 text-[9px] font-semibold text-slate-500 dark:text-slate-400">{group.subtitle}</p>}
-                                            </div>
-                                            <div className="grid grid-cols-3 gap-1 neu-inset-sm p-1.5 rounded-xl">
-                                                {groupModes.map((option) => (
-                                                    <button
-                                                        key={option.type}
-                                                        type="button"
-                                                        title={option.description || group.label}
-                                                        onClick={() => setProviderMode(option.type)}
-                                                        className={`px-2 py-2 rounded-lg text-[10px] font-black ${
-                                                            providerMode === option.type ? 'neu-raised-sm text-cyan-600 dark:text-cyan-300' : 'text-slate-600 dark:text-slate-400'
-                                                        }`}
-                                                    >
-                                                        {option.name || option.type}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </section>
-                                    );
-                                })}
+                            <div className="neu-inset-sm rounded-2xl p-3 space-y-3">
+                                <div className="space-y-1.5">
+                                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">Server Gommo</span>
+                                    <div className={`grid gap-1.5 ${gommoModeGroups.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                                        {gommoModeGroups.map((group) => (
+                                            <button
+                                                key={group.id}
+                                                type="button"
+                                                title={group.subtitle || group.label}
+                                                onClick={() => {
+                                                    if (!selectedGommoModel) return;
+                                                    const nextMode = getGommoModeForServerGroup(selectedGommoModel, group.id, providerMode);
+                                                    if (nextMode) setProviderMode(nextMode);
+                                                }}
+                                                className={`rounded-xl px-3 py-2 text-[10px] font-black uppercase transition-all ${
+                                                    selectedGommoModeGroup?.id === group.id ? 'neu-raised-sm text-cyan-600 dark:text-cyan-300' : 'text-slate-600 dark:text-slate-400'
+                                                }`}
+                                            >
+                                                {group.label.replace(/\s*server\s*/i, '')}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                {selectedGommoQualityModes.length > 0 && (
+                                    <div className="space-y-1.5 border-t border-slate-200/60 pt-3 dark:border-slate-700/60">
+                                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">Chất lượng</span>
+                                        <div className="grid grid-cols-3 gap-1.5">
+                                            {selectedGommoQualityModes.map((option) => (
+                                                <button
+                                                    key={option.type}
+                                                    type="button"
+                                                    title={option.description || selectedGommoModeGroup?.label}
+                                                    onClick={() => setProviderMode(option.type)}
+                                                    className={`rounded-xl px-2 py-2.5 text-[10px] font-black uppercase transition-all ${
+                                                        providerMode === option.type ? 'neu-raised-sm text-[#FF007F]' : 'text-slate-600 dark:text-slate-400'
+                                                    }`}
+                                                >
+                                                    {option.name || option.type}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}

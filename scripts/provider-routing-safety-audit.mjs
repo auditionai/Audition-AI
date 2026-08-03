@@ -6,7 +6,7 @@ import { sortTstFallbackServers } from '../netlify/functions/_queue-worker.ts';
 import { buildLocalPricingOptionCandidates } from '../netlify/functions/queue-submit.ts';
 import { getAuditionProviderPricing, getGommoPricingInput, resolveProviderForModel } from '../services/providerCatalog.ts';
 import { getAllowedModelsForFeature, inferGenerationProviderRouteKey, isModelAllowedForFeature } from '../shared/providerRouting.ts';
-import { getGommoServerGroups, getGommoServerIdForMode, getPreferredGommoBasicMode } from '../shared/gommoServerRouting.ts';
+import { getGommoModeForServerGroup, getGommoServerGroups, getGommoServerIdForMode, getPreferredGommoBasicMode } from '../shared/gommoServerRouting.ts';
 import { getVideoModelPresentation } from '../shared/videoModelPresentation.ts';
 
 const gommoGptServerModel = {
@@ -20,6 +20,7 @@ const gommoGptServerModel = {
 assert.equal(getGommoServerIdForMode(gommoGptServerModel, 'low'), 'premium-server');
 assert.equal(getGommoServerIdForMode(gommoGptServerModel, 'low_basic'), 'basic-server');
 assert.deepEqual(getGommoServerGroups(gommoGptServerModel).map((group) => group.label), ['Premium Server', 'Basic Server']);
+assert.equal(getGommoModeForServerGroup(gommoGptServerModel, 'basic-server', 'low'), 'low_basic');
 assert.equal(getPreferredGommoBasicMode(['low', 'low_basic', 'medium_basic'], 'medium'), 'medium_basic');
 
 const gptOptions = buildLocalPricingOptionCandidates({

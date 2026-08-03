@@ -60,7 +60,7 @@ import {
 } from '../../services/providerCatalog';
 import { getImageProviderRouteKey, isModelAllowedForFeature } from '../../../../shared/providerRouting';
 import { GENERATION_SECTION_TIPS } from '../../../../shared/generationSectionTips';
-import { getGommoServerGroups, getPreferredGommoBasicMode } from '../../../../shared/gommoServerRouting';
+import { getGommoModeForServerGroup, getGommoServerGroups, getPreferredGommoBasicMode } from '../../../../shared/gommoServerRouting';
 
 type GenMode = 'single' | 'couple' | 'trio' | 'squad' | 'group5' | 'group6' | 'group7' | 'group8';
 type Stage = 'input' | 'submitting';
@@ -337,6 +337,10 @@ export function WorkspaceImage() {
   const gommoModes = isGommoSelected ? (selectedGommoModel?.modes || []) : [];
   const gommoModeGroups = isGommoSelected && selectedGommoModel
     ? getGommoServerGroups(selectedGommoModel)
+    : [];
+  const selectedGommoModeGroup = gommoModeGroups.find((group) => group.modeTypes.includes(providerMode)) || gommoModeGroups[0];
+  const selectedGommoQualityModes = selectedGommoModeGroup
+    ? gommoModes.filter((option) => selectedGommoModeGroup.modeTypes.includes(option.type))
     : [];
 
   const runtimeImageModelIds = new Set(
@@ -1305,15 +1309,15 @@ export function WorkspaceImage() {
             <h3 className="text-xs font-semibold text-gray-400 dark:text-zinc-500 tracking-wider ml-1">ĐỘ PHÂN GIẢI</h3>
             <div className="grid grid-cols-3 gap-2">
               {availableResolutions.map((res) => (
-                <button
-                  key={res}
-                  onClick={() => setResolution(res)}
-                  className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                    resolution === res ? 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 border border-indigo-200 dark:border-indigo-500/30 shadow-sm' : 'bg-white dark:bg-[#18181B] text-gray-500 dark:text-zinc-400 border border-gray-100 dark:border-zinc-800'
-                  }`}
-                >
-                  {res}
-                </button>
+                  <button
+                    key={res}
+                    onClick={() => setResolution(res)}
+                    className={`rounded-[18px] border p-3 text-center text-xs font-black transition-all ${
+                      resolution === res ? 'border-cyan-300 bg-cyan-50 text-cyan-700 shadow-sm dark:border-cyan-400/70 dark:bg-cyan-500/10 dark:text-cyan-300' : 'border-gray-100 bg-white text-gray-600 dark:border-zinc-800 dark:bg-[#18181B] dark:text-zinc-300'
+                    }`}
+                  >
+                    {res}
+                  </button>
               ))}
             </div>
           </div>
@@ -1341,32 +1345,45 @@ export function WorkspaceImage() {
         {isGommoSelected && gommoModes.length > 0 && (
           <div className="space-y-3">
             <h3 className="ml-1 text-xs font-semibold tracking-wider text-cyan-600 dark:text-cyan-400">SERVER VÀ CHẤT LƯỢNG GOMMO · REALTIME</h3>
-            <div className="space-y-3">
-              {gommoModeGroups.map((group) => {
-                const groupModes = gommoModes.filter((option) => group.modeTypes.includes(option.type));
-                if (groupModes.length === 0) return null;
-                return (
-                  <section key={group.id} className="rounded-2xl border border-cyan-200 bg-cyan-50/40 p-3 dark:border-cyan-500/20 dark:bg-cyan-500/[0.04]">
-                    <div className="mb-2">
-                      <div className="text-xs font-black uppercase text-gray-900 dark:text-white">{group.label}</div>
-                      {group.subtitle && <p className="mt-0.5 text-[10px] text-gray-500 dark:text-zinc-400">{group.subtitle}</p>}
-                    </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      {groupModes.map((option) => (
-                        <button
-                          key={option.type}
-                          onClick={() => setProviderMode(option.type)}
-                          className={`rounded-xl border px-2 py-2.5 text-xs font-bold ${
-                            providerMode === option.type ? 'border-cyan-300 bg-white text-cyan-700 shadow-sm dark:border-cyan-500/40 dark:bg-cyan-500/10 dark:text-cyan-300' : 'border-gray-100 bg-white/70 text-gray-500 dark:border-zinc-800 dark:bg-[#18181B] dark:text-zinc-400'
-                          }`}
-                        >
-                          {option.name || option.type}
-                        </button>
-                      ))}
-                    </div>
-                  </section>
-                );
-              })}
+            <div className="space-y-3 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm dark:border-zinc-800 dark:bg-[#18181B]">
+              <div className="space-y-2">
+                <div className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500">Server Gommo</div>
+                <div className={`grid gap-2 ${gommoModeGroups.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                  {gommoModeGroups.map((group) => (
+                    <button
+                      key={group.id}
+                      onClick={() => {
+                        if (!selectedGommoModel) return;
+                        const nextMode = getGommoModeForServerGroup(selectedGommoModel, group.id, providerMode);
+                        if (nextMode) setProviderMode(nextMode);
+                      }}
+                      className={`rounded-xl border px-3 py-2.5 text-xs font-black uppercase transition-all ${
+                        selectedGommoModeGroup?.id === group.id ? 'border-cyan-300 bg-cyan-50 text-cyan-700 dark:border-cyan-500/40 dark:bg-cyan-500/10 dark:text-cyan-300' : 'border-gray-100 bg-gray-50 text-gray-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400'
+                      }`}
+                    >
+                      {group.label.replace(/\s*server\s*/i, '')}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {selectedGommoQualityModes.length > 0 && (
+                <div className="space-y-2 border-t border-gray-100 pt-3 dark:border-zinc-800">
+                  <div className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500">Chất lượng</div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {selectedGommoQualityModes.map((option) => (
+                      <button
+                        key={option.type}
+                        onClick={() => setProviderMode(option.type)}
+                        className={`rounded-xl border px-2 py-2.5 text-xs font-black uppercase transition-all ${
+                          providerMode === option.type ? 'border-pink-300 bg-pink-50 text-pink-700 dark:border-pink-500/40 dark:bg-pink-500/10 dark:text-pink-300' : 'border-gray-100 bg-gray-50 text-gray-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400'
+                        }`}
+                      >
+                        {option.name || option.type}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

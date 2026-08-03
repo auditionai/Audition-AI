@@ -65,6 +65,27 @@ export const getGommoServerGroups = (model: GommoServerModelLike) => {
   return Array.from(groups.values());
 };
 
+export const getGommoModeQuality = (modeType?: string | null) => {
+  const value = normalize(modeType).replace(/[^a-z0-9]+/g, '_');
+  if (value.includes('high')) return 'high';
+  if (value.includes('medium')) return 'medium';
+  if (value.includes('low')) return 'low';
+  return value;
+};
+
+export const getGommoModeForServerGroup = (
+  model: GommoServerModelLike,
+  groupId: string,
+  currentModeType?: string | null,
+) => {
+  const group = getGommoServerGroups(model).find((option) => option.id === groupId);
+  if (!group) return null;
+  const currentQuality = getGommoModeQuality(currentModeType);
+  return group.modeTypes.find((modeType) => getGommoModeQuality(modeType) === currentQuality)
+    || group.modeTypes[0]
+    || null;
+};
+
 export const getPreferredGommoBasicMode = (
   modeTypes: string[],
   quality: 'low' | 'medium' | 'high' = 'low',

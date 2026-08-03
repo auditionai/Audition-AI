@@ -53,6 +53,7 @@ import {
   getGommoPricingInput,
   getGommoModelForAudition,
   isGommoCatalogModelAvailable,
+  isSelectableGommoImageResolution,
   resolveProviderForModel,
   type GommoProviderCatalog,
 } from '../../services/providerCatalog';
@@ -349,7 +350,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           .filter(Boolean),
   ));
   const availableResolutions = isGommoSelected
-      ? (selectedGommoModel?.resolutions || []).map((option) => option.type.toUpperCase())
+      ? (selectedGommoModel?.resolutions || [])
+          .filter((option) => isSelectableGommoImageResolution(selectedModelId, option.type))
+          .map((option) => option.type.toUpperCase())
       : tstAvailableResolutions.length > 0 ? tstAvailableResolutions : tstRuntimeResolutions;
   const availableSpeeds = getCompatibleGenerationSpeeds({
       tier: generationTier,
@@ -649,7 +652,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
   useEffect(() => {
       if (isGommoSelected) {
-          const gommoResolutions = (selectedGommoModel?.resolutions || []).map((option) => option.type.toUpperCase());
+          const gommoResolutions = (selectedGommoModel?.resolutions || [])
+              .filter((option) => isSelectableGommoImageResolution(selectedModelId, option.type))
+              .map((option) => option.type.toUpperCase());
           const gommoRatios = (selectedGommoModel?.ratios || []).map((option) => option.type);
           const gommoModeTypes = (selectedGommoModel?.modes || []).map((option) => option.type);
           if (gommoResolutions.length > 0 && !gommoResolutions.includes(resolution)) {

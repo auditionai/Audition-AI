@@ -38,6 +38,7 @@ import {
   getGommoPricingInput,
   getGommoModelForAudition,
   isGommoCatalogModelAvailable,
+  isSelectableGommoImageResolution,
   resolveProviderForModel,
   type GommoProviderCatalog,
 } from '../../services/providerCatalog';
@@ -193,7 +194,9 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
 
   const availableResolutions = useMemo(() => {
     if (isGommoSelected) {
-      return (selectedGommoModel?.resolutions || []).map((option) => option.type.toUpperCase());
+      return (selectedGommoModel?.resolutions || [])
+        .filter((option) => isSelectableGommoImageResolution(selectedModelId, option.type))
+        .map((option) => option.type.toUpperCase());
     }
     const values = getCompatibleGenerationResolutions({
       tier: aiModel,
@@ -231,7 +234,9 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
 
   useEffect(() => {
     if (isGommoSelected) {
-      const resolutions = (selectedGommoModel?.resolutions || []).map((option) => option.type.toUpperCase());
+      const resolutions = (selectedGommoModel?.resolutions || [])
+        .filter((option) => isSelectableGommoImageResolution(selectedModelId, option.type))
+        .map((option) => option.type.toUpperCase());
       const ratios = (selectedGommoModel?.ratios || []).map((option) => option.type);
       const modes = (selectedGommoModel?.modes || []).map((option) => option.type);
       if (resolutions.length > 0 && !resolutions.includes(resolution)) setResolution(resolutions[0]);

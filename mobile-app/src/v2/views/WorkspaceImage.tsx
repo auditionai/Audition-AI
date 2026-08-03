@@ -55,6 +55,7 @@ import {
   getGommoPricingInput,
   getGommoModelForAudition,
   isGommoCatalogModelAvailable,
+  isSelectableGommoImageResolution,
   resolveProviderForModel,
   type GommoProviderCatalog,
 } from '../../services/providerCatalog';
@@ -306,7 +307,9 @@ export function WorkspaceImage() {
       .filter(Boolean),
   ));
   const availableResolutions = isGommoSelected
-    ? (selectedGommoModel?.resolutions || []).map((option) => option.type.toUpperCase())
+    ? (selectedGommoModel?.resolutions || [])
+      .filter((option) => isSelectableGommoImageResolution(selectedModelId, option.type))
+      .map((option) => option.type.toUpperCase())
     : tstAvailableResolutions.length > 0 ? tstAvailableResolutions : tstRuntimeResolutions;
   const availableServers = getCompatibleGenerationServers({
     tier: generationTier, pricingEntries, speed: generationSpeedId, resolution: resolution as TstResolution,
@@ -547,7 +550,9 @@ export function WorkspaceImage() {
 
   useEffect(() => {
     if (isGommoSelected) {
-      const resolutions = (selectedGommoModel?.resolutions || []).map((option) => option.type.toUpperCase());
+      const resolutions = (selectedGommoModel?.resolutions || [])
+        .filter((option) => isSelectableGommoImageResolution(selectedModelId, option.type))
+        .map((option) => option.type.toUpperCase());
       const ratios = (selectedGommoModel?.ratios || []).map((option) => option.type);
       const modes = (selectedGommoModel?.modes || []).map((option) => option.type);
       if (resolutions.length > 0 && !resolutions.includes(resolution)) setResolution(resolutions[0]);

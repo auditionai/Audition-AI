@@ -33,7 +33,7 @@ import type { GeneratedImage } from '../../types';
 import type { ModelPricing } from '../../services/economyService';
 import type { PromptImageGenerateRecipePayload } from '../../../../shared/queueRecipes';
 import { isModelAllowedForFeature } from '../../../../shared/providerRouting';
-import { fetchProviderCatalog, getAuditionProviderPricing, getGommoPricingInput, getGommoModelForAudition, isGommoCatalogModelAvailable, resolveProviderForModel, type GommoProviderCatalog } from '../../services/providerCatalog';
+import { fetchProviderCatalog, getAuditionProviderPricing, getGommoPricingInput, getGommoModelForAudition, isGommoCatalogModelAvailable, isSelectableGommoImageResolution, resolveProviderForModel, type GommoProviderCatalog } from '../../services/providerCatalog';
 
 const DEFAULT_REFERENCE_IMAGE_LIMIT = 4;
 const GPT_REFERENCE_IMAGE_LIMIT = 5;
@@ -175,7 +175,9 @@ export function WorkspacePromptImage() {
   const tstAspectRatios = useMemo(() => getGenerationAspectRatios(aiModel, runtimeModels), [aiModel, runtimeModels]);
 
   const availableResolutions = useMemo(() => {
-    if (isGommoSelected) return (selectedGommoModel?.resolutions || []).map((option) => option.type.toUpperCase());
+    if (isGommoSelected) return (selectedGommoModel?.resolutions || [])
+      .filter((option) => isSelectableGommoImageResolution(selectedModelId, option.type))
+      .map((option) => option.type.toUpperCase());
     const values = getCompatibleGenerationResolutions({
       tier: aiModel,
       pricingEntries,
@@ -212,7 +214,9 @@ export function WorkspacePromptImage() {
 
   useEffect(() => {
     if (isGommoSelected) {
-      const resolutions = (selectedGommoModel?.resolutions || []).map((option) => option.type.toUpperCase());
+      const resolutions = (selectedGommoModel?.resolutions || [])
+        .filter((option) => isSelectableGommoImageResolution(selectedModelId, option.type))
+        .map((option) => option.type.toUpperCase());
       const ratios = (selectedGommoModel?.ratios || []).map((option) => option.type);
       const modes = (selectedGommoModel?.modes || []).map((option) => option.type);
       if (resolutions.length && !resolutions.includes(resolution)) setResolution(resolutions[0]);

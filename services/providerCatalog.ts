@@ -52,6 +52,12 @@ export type GommoProviderCatalog = {
   models: GommoCatalogModel[];
 };
 
+export const isSelectableGommoImageResolution = (auditionModelId: string, resolution: string) => {
+  const modelId = String(auditionModelId || '').trim().toLowerCase();
+  const normalizedResolution = String(resolution || '').trim().toLowerCase().replace(/[-\s]+/g, '_');
+  return !(modelId === 'image-gpt-2' && normalizedResolution === '4k_upscale');
+};
+
 export type GommoPriceComparison = {
   modelId: string;
   modelName: string;

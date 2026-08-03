@@ -34,6 +34,7 @@ import type { ModelPricing } from '../../services/economyService';
 import type { PromptImageGenerateRecipePayload } from '../../../../shared/queueRecipes';
 import { isModelAllowedForFeature } from '../../../../shared/providerRouting';
 import { fetchProviderCatalog, getAuditionProviderPricing, getGommoPricingInput, getGommoModelForAudition, isGommoCatalogModelAvailable, isSelectableGommoImageResolution, resolveProviderForModel, type GommoProviderCatalog } from '../../services/providerCatalog';
+import { getPreferredGommoBasicMode } from '../../../../shared/gommoServerRouting';
 
 const DEFAULT_REFERENCE_IMAGE_LIMIT = 4;
 const GPT_REFERENCE_IMAGE_LIMIT = 5;
@@ -113,6 +114,7 @@ export function WorkspacePromptImage() {
   const [server, setServer] = useState('VIP 1');
   const [gptQuality, setGptQuality] = useState<'low' | 'medium' | 'high'>('low');
   const [providerMode, setProviderMode] = useState('');
+  const gommoDefaultSelectionKeyRef = useRef('');
   const [pricingEntries, setPricingEntries] = useState<TstPricingEntry[]>([]);
   const [runtimeModels, setRuntimeModels] = useState<TstRuntimeModel[]>([]);
   const [pricingOverrides, setPricingOverrides] = useState<ModelPricing[]>([]);
@@ -219,11 +221,18 @@ export function WorkspacePromptImage() {
         .map((option) => option.type.toUpperCase());
       const ratios = (selectedGommoModel?.ratios || []).map((option) => option.type);
       const modes = (selectedGommoModel?.modes || []).map((option) => option.type);
+      const gommoSelectionKey = `${selectedModelId}:${modes.join('|')}`;
       if (resolutions.length && !resolutions.includes(resolution)) setResolution(resolutions[0]);
       if (ratios.length && !ratios.includes(aspectRatio)) setAspectRatio(ratios[0]);
-      if (modes.length && !modes.includes(providerMode)) setProviderMode(modes[0]);
+      if (modes.length && gommoDefaultSelectionKeyRef.current !== gommoSelectionKey) {
+        gommoDefaultSelectionKeyRef.current = gommoSelectionKey;
+        setProviderMode(getPreferredGommoBasicMode(modes, gptQuality) || modes[0]);
+      } else if (modes.length && !modes.includes(providerMode)) {
+        setProviderMode(getPreferredGommoBasicMode(modes, gptQuality) || modes[0]);
+      }
       return;
     }
+    gommoDefaultSelectionKeyRef.current = '';
     if (tstAspectRatios.length > 0 && !tstAspectRatios.includes(aspectRatio)) {
       setAspectRatio(tstAspectRatios[0]);
       return;

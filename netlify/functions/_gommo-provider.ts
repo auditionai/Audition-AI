@@ -127,7 +127,23 @@ const getCredentials = () => {
 };
 
 const parseGommoError = (data: any, fallback: string) => {
-  const value = data?.message || data?.error || data?.detail || fallback;
+  // The v2 gateway keeps the provider's useful failure reason under `raw`, while
+  // validation/transport failures normally expose it at the response root.
+  const candidates = [
+    data?.message,
+    data?.error,
+    data?.detail,
+    data?.data?.message,
+    data?.data?.error,
+    data?.data?.detail,
+    data?.raw?.imageInfo?.message,
+    data?.raw?.imageInfo?.error,
+    data?.raw?.imageInfo?.detail,
+    data?.raw?.videoInfo?.message,
+    data?.raw?.videoInfo?.error,
+    data?.raw?.videoInfo?.detail,
+  ];
+  const value = candidates.find((candidate) => candidate !== undefined && candidate !== null && candidate !== '') || fallback;
   return typeof value === 'string' ? value : JSON.stringify(value);
 };
 
@@ -212,7 +228,9 @@ const selectMode = (modelId: string, payload: Record<string, unknown>, model: Go
       case 'seedance-2.0-fast': return 'fast';
       case 'seedance-2.0': return 'professional';
       case 'grok-i2v': return 'normal';
-      case 'image-gpt-2': return quality || 'medium';
+      // Basic is the application default for Gommo GPT. An explicit provider_mode
+      // from the UI still wins, so users can intentionally select Premium.
+      case 'image-gpt-2': return `${quality || 'low'}_basic`;
       case 'nano-banana-2':
       case 'nano-banana-pro':
         return server === 'vip3' ? 'vip3' : server === 'vip2' ? 'vip2' : 'vip';
@@ -322,16 +340,21 @@ const getSources = (payload: Record<string, unknown>) => {
   return values.map((value) => String(value || '').trim()).filter(Boolean);
 };
 
-const getIndexedUrlFields = (field: 'images' | 'subjects' | 'references', sources: string[]) =>
-  Object.fromEntries(sources.map((source, index) => [`${field}[${index}][url]`, source]));
+// Gommo documents arrays/objects in x-www-form-urlencoded requests as one JSON
+// string. postForm serializes this array, producing e.g.
+// subjects=[{"url":"https://..."}] instead of PHP-style subjects[0][url].
+const getUrlObjects = (sources: string[]) => sources.map((url) => ({ url }));
 
 const getImageSourceFields = (model: GommoModel, sources: string[]) => {
   const providerLimit = Number(model.maxSubject);
   const limit = Number.isFinite(providerLimit) && providerLimit > 0 ? Math.floor(providerLimit) : 8;
   const limitedSources = sources.slice(0, limit);
-  if (model.withSubject) return getIndexedUrlFields('subjects', limitedSources);
-  if (model.withReference) return getIndexedUrlFields('references', limitedSources);
-  return getIndexedUrlFields('images', model.startImageAndEnd ? limitedSources.slice(0, 2) : limitedSources.slice(0, 1));
+  if (!limitedSources.length) return {};
+  if (model.withSubject) return { subjects: getUrlObjects(limitedSources) };
+  if (model.withReference) return { references: getUrlObjects(limitedSources) };
+  return {
+    images: getUrlObjects(model.startImageAndEnd ? limitedSources.slice(0, 2) : limitedSources.slice(0, 1)),
+  };
 };
 
 const getGatewayJobData = (data: any) => data?.data && typeof data.data === 'object' ? data.data : data;
@@ -383,7 +406,7 @@ export const submitGommoJob = async (
   const imageSources = getSources(providerPayload).filter((source) => /^https?:\/\//i.test(source)).slice(0, 2);
   const data = await postForm(`/ai/jobs/video/${encodeURIComponent(mapping.gommoModelId)}`, {
     ...common,
-    ...getIndexedUrlFields('images', imageSources),
+    images: imageSources.length ? getUrlObjects(imageSources) : undefined,
     ratio: String(providerPayload.aspect_ratio || '').trim() || undefined,
     resolution: normalizeResolution(providerPayload.resolution) || undefined,
     duration: normalizeDuration(providerPayload.duration) || undefined,

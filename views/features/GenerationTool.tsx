@@ -215,6 +215,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const [gptQuality, setGptQuality] = useState<'low' | 'medium' | 'high'>('low');
   const [aiModel, setAiModel] = useState<TstGenerationTier>('gpt');
   const [providerMode, setProviderMode] = useState('');
+  const gommoDefaultSelectionKeyRef = useRef('');
 
   const [guideTopic, setGuideTopic] = useState<'chars' | 'settings' | null>(null);
   const [currentTipIdx, setCurrentTipIdx] = useState(0);
@@ -657,17 +658,22 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
               .map((option) => option.type.toUpperCase());
           const gommoRatios = (selectedGommoModel?.ratios || []).map((option) => option.type);
           const gommoModeTypes = (selectedGommoModel?.modes || []).map((option) => option.type);
+          const gommoSelectionKey = `${selectedModelId}:${gommoModeTypes.join('|')}`;
           if (gommoResolutions.length > 0 && !gommoResolutions.includes(resolution)) {
               setResolution(gommoResolutions[0]);
           }
           if (gommoRatios.length > 0 && !gommoRatios.includes(aspectRatio)) {
               setAspectRatio(gommoRatios[0]);
           }
-          if (gommoModeTypes.length > 0 && !gommoModeTypes.includes(providerMode)) {
-              setProviderMode(gommoModeTypes[0]);
+          if (gommoModeTypes.length > 0 && gommoDefaultSelectionKeyRef.current !== gommoSelectionKey) {
+              gommoDefaultSelectionKeyRef.current = gommoSelectionKey;
+              setProviderMode(getPreferredGommoBasicMode(gommoModeTypes, gptQuality) || gommoModeTypes[0]);
+          } else if (gommoModeTypes.length > 0 && !gommoModeTypes.includes(providerMode)) {
+              setProviderMode(getPreferredGommoBasicMode(gommoModeTypes, gptQuality) || gommoModeTypes[0]);
           }
           return;
       }
+      gommoDefaultSelectionKeyRef.current = '';
       if (tstAspectRatios.length > 0 && !tstAspectRatios.includes(aspectRatio)) {
           setAspectRatio(tstAspectRatios[0]);
           return;

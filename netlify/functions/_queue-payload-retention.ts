@@ -46,6 +46,7 @@ export const compactTerminalQueuePayload = (value: unknown): QueuePayload => {
     __stage: keepValue(payload, '__stage'),
     __showInGenerationHistory: keepValue(payload, '__showInGenerationHistory'),
     __clientPlatform: keepValue(payload, '__clientPlatform'),
+    __targetProvider: keepValue(payload, '__targetProvider'),
     __provider: keepValue(payload, '__provider'),
     __providerCost: keepValue(payload, '__providerCost'),
     __providerModel: keepValue(payload, '__providerModel'),

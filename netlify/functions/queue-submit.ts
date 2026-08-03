@@ -4,6 +4,7 @@ import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 import { triggerBackgroundQueueWorker } from './_queue-launcher';
 import { isDedicatedQueueWorkerMode } from './_queue-runtime-mode';
 import { validateQueuePayloadAgainstLiveCatalog } from './_tst-live-catalog';
+import { canUseGommoForPayload } from './_gommo-provider';
 import type { QueueProcessingStage, QueueProgressLogEntry } from '../../shared/queueRecipes';
 
 const headers = {
@@ -92,6 +93,7 @@ const asQueueAssetType = (value: unknown): 'image' | 'video' => {
 
 const getGenerationProvider = async (
   admin: ReturnType<typeof getServiceRoleClient>,
+  modelId: string,
 ): Promise<GenerationProvider> => {
   const fallback = String(process.env.GENERATION_PROVIDER_DEFAULT || 'tst').trim().toLowerCase() === 'gommo'
     ? 'gommo'
@@ -103,12 +105,22 @@ const getGenerationProvider = async (
       .eq('key', 'generation_provider_mode')
       .maybeSingle();
     if (error) throw error;
+    const modelProvider = String(data?.value?.providerByModel?.[modelId] || '').trim().toLowerCase();
+    if (modelProvider === 'gommo' || modelProvider === 'tst') return modelProvider;
     const selected = String(data?.value?.provider || '').trim().toLowerCase();
     return selected === 'gommo' ? 'gommo' : selected === 'tst' ? 'tst' : fallback;
   } catch (error) {
     console.warn('[queue-submit] Could not read generation provider mode; using deployment default.', error);
     return fallback;
   }
+};
+
+const getQueueModelId = (queuePayload?: Record<string, unknown> | null) => {
+  const raw = queuePayload && typeof queuePayload === 'object' ? queuePayload : {};
+  const recipe = raw.__recipePayload && typeof raw.__recipePayload === 'object'
+    ? raw.__recipePayload as Record<string, unknown>
+    : raw;
+  return String(raw.model || raw.modelId || recipe.model || recipe.modelId || '').trim().toLowerCase();
 };
 
 const ensureProviderConfiguredForQueueKind = (queueKind: string | undefined, provider: GenerationProvider) => {
@@ -306,8 +318,12 @@ const resolveServerCostVcoin = async (
   admin: ReturnType<typeof getServiceRoleClient>,
   queueKind: string,
   queuePayload: Record<string, unknown>,
+  targetProvider?: GenerationProvider,
 ) => {
-  const validation = await validateQueuePayloadAgainstLiveCatalog(queueKind, queuePayload);
+  const resolvedProvider = targetProvider || (queuePayload.__targetProvider === 'gommo' ? 'gommo' : 'tst');
+  const validation = await validateQueuePayloadAgainstLiveCatalog(queueKind, queuePayload, {
+    ignoreServerAvailability: resolvedProvider === 'gommo',
+  });
   const modelId = String(validation.modelId || '').trim();
   const configKey = String(validation.pricingMatch?.config_key || '').trim();
   const fallbackVcoin = creditsToVcoin(Number(validation.pricingMatch?.credits || 0));
@@ -592,8 +608,16 @@ export const handler: Handler = async (event) => {
       };
     }
 
-    const targetProvider = await getGenerationProvider(admin);
+    const modelId = getQueueModelId(body.queuePayload);
+    const targetProvider = await getGenerationProvider(admin, modelId);
     ensureProviderConfiguredForQueueKind(body.queueKind, targetProvider);
+    if (
+      TST_QUEUE_KINDS.has(String(body.queueKind || '').trim().toLowerCase()) &&
+      targetProvider === 'gommo' &&
+      !await canUseGommoForPayload(body.queueKind, { ...body.queuePayload, model: modelId })
+    ) {
+      throw new Error(`GOMMO_UNSUPPORTED_MODEL: ${modelId || 'unknown'}`);
+    }
     body.queuePayload = {
       ...body.queuePayload,
       __targetProvider: targetProvider,
@@ -602,7 +626,7 @@ export const handler: Handler = async (event) => {
     let row: any;
     const queuePayloadWithLogs = buildInitialQueuePayload(body.queuePayload, body.queueKind, clientPlatform);
     const normalizedToolMeta = getImageGenerateToolMetadata(body.queueKind, queuePayloadWithLogs, body.toolId, body.toolName);
-    const serverPrice = await resolveServerCostVcoin(admin, body.queueKind, queuePayloadWithLogs);
+    const serverPrice = await resolveServerCostVcoin(admin, body.queueKind, queuePayloadWithLogs, targetProvider);
     const normalizedBody: QueueBody = {
       ...body,
       costVcoin: serverPrice.costVcoin,

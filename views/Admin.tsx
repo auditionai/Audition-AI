@@ -575,6 +575,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [gommoCatalog, setGommoCatalog] = useState<GommoProviderCatalog | null>(null);
   const [gommoCatalogError, setGommoCatalogError] = useState('');
   const [generationProvider, setGenerationProvider] = useState<GenerationProviderMode>('tst');
+  const [generationProviderByModel, setGenerationProviderByModel] = useState<Record<string, GenerationProviderMode>>({});
   const [switchingGenerationProvider, setSwitchingGenerationProvider] = useState(false);
   const [pricingDrafts, setPricingDrafts] = useState<Record<string, string>>({});
   const [savingAllPricing, setSavingAllPricing] = useState(false);
@@ -761,6 +762,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               setServerAvailabilityConfig(serverConfig);
               setGommoCatalog(providerCatalog);
               setGenerationProvider(providerConfig.provider);
+              setGenerationProviderByModel(providerConfig.providerByModel || {});
               if (providerCatalog) setGommoCatalogError('');
           } catch (error) {
               console.warn('Failed to auto-refresh pricing view', error);
@@ -1014,14 +1016,61 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           return;
       }
       setSwitchingGenerationProvider(true);
-      const result = await saveGenerationProviderConfig(provider);
+      const result = await saveGenerationProviderConfig({
+          provider,
+          providerByModel: generationProviderByModel,
+      });
       setSwitchingGenerationProvider(false);
       if (!result.success) {
           showToast(`Không thể chuyển provider: ${result.error}`, 'error');
           return;
       }
       setGenerationProvider(provider);
-      showToast(`Đã chuyển toàn bộ job mới sang ${provider === 'gommo' ? 'Gommo' : 'TST'}.`, 'success');
+      showToast(`Đã đổi provider mặc định sang ${provider === 'gommo' ? 'Gommo' : 'TST'}; các route riêng theo model được giữ nguyên.`, 'success');
+  };
+
+  const handleSwitchModelGenerationProvider = async (
+      modelId: string,
+      provider: GenerationProviderMode | 'default',
+  ) => {
+      const normalizedModelId = modelId.trim().toLowerCase();
+      if (!normalizedModelId || switchingGenerationProvider) return;
+      const gommoMapping = gommoCatalog?.mappings.find(
+          (entry) => entry.auditionModelId.trim().toLowerCase() === normalizedModelId,
+      );
+      const gommoModel = gommoMapping
+          ? gommoCatalog?.models.find((entry) => entry.model.trim().toLowerCase() === gommoMapping.gommoModelId.trim().toLowerCase())
+          : null;
+      const gommoAvailable = Boolean(
+          gommoCatalog?.configured &&
+          gommoMapping?.fallbackSupported &&
+          gommoModel &&
+          !['maintenance', 'off', 'disabled', 'inactive', 'unavailable'].includes(gommoModel.status.toLowerCase()),
+      );
+      if (provider === 'gommo' && !gommoAvailable) {
+          showToast(`Model ${modelId} chưa sẵn sàng trên Gommo.`, 'error');
+          return;
+      }
+
+      const nextProviderByModel = { ...generationProviderByModel };
+      if (provider === 'default') {
+          delete nextProviderByModel[normalizedModelId];
+      } else {
+          nextProviderByModel[normalizedModelId] = provider;
+      }
+      setSwitchingGenerationProvider(true);
+      const result = await saveGenerationProviderConfig({
+          provider: generationProvider,
+          providerByModel: nextProviderByModel,
+      });
+      setSwitchingGenerationProvider(false);
+      if (!result.success) {
+          showToast(`Không thể lưu route model: ${result.error}`, 'error');
+          return;
+      }
+      setGenerationProviderByModel(nextProviderByModel);
+      const resolvedProvider = provider === 'default' ? generationProvider : provider;
+      showToast(`${modelId} sẽ gửi job mới qua ${resolvedProvider === 'gommo' ? 'Gommo' : 'TST'}.`, 'success');
   };
 
   const handleSaveAllPricing = async () => {
@@ -3983,9 +4032,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                    <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl">
                        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                            <div>
-                               <div className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">Provider đang dùng toàn ứng dụng</div>
+                               <div className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">Provider mặc định toàn ứng dụng</div>
                                <p className="mt-1 text-xs leading-relaxed text-slate-700 dark:text-slate-300 font-semibold">
-                                   Job mới sẽ đi thẳng tới provider được chọn, không gọi thử provider còn lại. Job đã có ID tiếp tục được theo dõi tại đúng provider ban đầu.
+                                   Áp dụng cho model chưa có route riêng. Bạn có thể chọn TST/Gommo cho từng model bên dưới; job mới đi thẳng provider đã định tuyến và không gọi thử nguồn còn lại.
                                </p>
                                {generationProvider === 'gommo' && (
                                    <p className="mt-2 text-xs font-bold text-amber-500">
@@ -4082,7 +4131,25 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {pricingServerGroups.map((group) => (
+                          {pricingServerGroups.map((group) => {
+                              const normalizedModelId = group.modelId.trim().toLowerCase();
+                              const explicitProvider = generationProviderByModel[normalizedModelId];
+                              const effectiveProvider = explicitProvider || generationProvider;
+                              const gommoMapping = gommoCatalog?.mappings.find(
+                                  (entry) => entry.auditionModelId.trim().toLowerCase() === normalizedModelId,
+                              );
+                              const gommoModel = gommoMapping
+                                  ? gommoCatalog?.models.find(
+                                      (entry) => entry.model.trim().toLowerCase() === gommoMapping.gommoModelId.trim().toLowerCase(),
+                                  )
+                                  : null;
+                              const gommoAvailable = Boolean(
+                                  gommoCatalog?.configured &&
+                                  gommoMapping?.fallbackSupported &&
+                                  gommoModel &&
+                                  !['maintenance', 'off', 'disabled', 'inactive', 'unavailable'].includes(gommoModel.status.toLowerCase()),
+                              );
+                              return (
                               <div key={group.modelId} className="rounded-2xl border border-white/10 neu-inset-sm p-4">
                                   <div className="flex items-start justify-between gap-3">
                                       <div>
@@ -4092,6 +4159,38 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       <span className="px-2 py-1 rounded-full border border-white/10 neu-inset-sm text-[10px] font-bold uppercase tracking-wider text-slate-300">
                                           {group.type === 'motion-control' ? 'Motion' : group.type}
                                       </span>
+                                  </div>
+                                  <div className="mt-4">
+                                      <div className="flex items-center justify-between gap-2">
+                                          <div className="text-[10px] font-black uppercase tracking-wider text-slate-500">API tạo job mới</div>
+                                          <div className={`text-[10px] font-black uppercase ${effectiveProvider === 'gommo' ? 'text-violet-300' : 'text-audi-cyan'}`}>
+                                              Đang dùng {effectiveProvider === 'gommo' ? 'Gommo' : 'TST'}
+                                          </div>
+                                      </div>
+                                      <div className="mt-2 grid grid-cols-3 gap-2">
+                                          {(['default', 'tst', 'gommo'] as const).map((provider) => {
+                                              const active = provider === 'default' ? !explicitProvider : explicitProvider === provider;
+                                              const disabled = switchingGenerationProvider || (provider === 'gommo' && !gommoAvailable);
+                                              return (
+                                                  <button
+                                                      key={`${group.modelId}_provider_${provider}`}
+                                                      type="button"
+                                                      disabled={disabled}
+                                                      onClick={() => handleSwitchModelGenerationProvider(group.modelId, provider)}
+                                                      className={`rounded-xl border px-2 py-2 text-[10px] font-black uppercase tracking-wider transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
+                                                          active
+                                                              ? 'border-[#FF007F]/50 bg-[#FF007F]/15 text-[#FF007F]'
+                                                              : 'border-white/10 text-slate-400 hover:border-white/20 hover:text-white'
+                                                      }`}
+                                                  >
+                                                      {provider === 'default' ? `Mặc định (${generationProvider.toUpperCase()})` : provider.toUpperCase()}
+                                                  </button>
+                                              );
+                                          })}
+                                      </div>
+                                      {!gommoAvailable && (
+                                          <div className="mt-2 text-[10px] text-amber-500">Model này chưa hỗ trợ route production qua Gommo.</div>
+                                      )}
                                   </div>
                                   <div className="mt-4 flex flex-wrap gap-2">
                                       {group.servers.map((serverId) => {
@@ -4115,7 +4214,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       })}
                                   </div>
                               </div>
-                          ))}
+                              );
+                          })}
                       </div>
                   </div>
 

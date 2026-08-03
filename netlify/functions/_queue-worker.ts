@@ -48,6 +48,7 @@ import {
   pollGommoJob,
   submitGommoJob,
 } from './_gommo-provider';
+import { DEFAULT_PROVIDER_BY_FEATURE, type GenerationProviderRouteKey } from '../../shared/providerRouting';
 
 type QueueJobRow = {
   id: string;
@@ -204,7 +205,7 @@ const getQueuePayloadModelId = (payload: Record<string, unknown>) => {
   return String(payload.model || payload.modelId || recipe.model || recipe.modelId || '').trim().toLowerCase();
 };
 
-const getGlobalGenerationProvider = async (modelId: string): Promise<GenerationProvider> => {
+const getGlobalGenerationProvider = async (modelId: string, featureKey?: string): Promise<GenerationProvider> => {
   try {
     const admin = getServiceRoleClient();
     const { data, error } = await admin
@@ -213,6 +214,11 @@ const getGlobalGenerationProvider = async (modelId: string): Promise<GenerationP
       .eq('key', 'generation_provider_mode')
       .maybeSingle();
     if (error) throw error;
+    const normalizedFeatureKey = String(featureKey || '').trim().toLowerCase() as GenerationProviderRouteKey;
+    const featureProvider = String(normalizedFeatureKey ? data?.value?.providerByFeature?.[normalizedFeatureKey] || '' : '').trim().toLowerCase();
+    if (featureProvider === 'gommo' || featureProvider === 'tst') return featureProvider;
+    const featureDefault = normalizedFeatureKey ? DEFAULT_PROVIDER_BY_FEATURE[normalizedFeatureKey] : undefined;
+    if (featureDefault) return featureDefault;
     const modelProvider = String(data?.value?.providerByModel?.[modelId] || '').trim().toLowerCase();
     if (modelProvider === 'gommo' || modelProvider === 'tst') return modelProvider;
     const selected = String(data?.value?.provider || '').trim().toLowerCase();
@@ -226,7 +232,10 @@ const getGlobalGenerationProvider = async (modelId: string): Promise<GenerationP
 const resolveDispatchProvider = async (payload: Record<string, unknown>): Promise<GenerationProvider> => {
   const stored = String(payload.__targetProvider || '').trim().toLowerCase();
   if (stored === 'tst' || stored === 'gommo') return stored;
-  return getGlobalGenerationProvider(getQueuePayloadModelId(payload));
+  return getGlobalGenerationProvider(
+    getQueuePayloadModelId(payload),
+    String(payload.__providerRouteKey || ''),
+  );
 };
 
 const isTransientError = (message: string) => {
@@ -1045,8 +1054,8 @@ const resolveImageGenerateStage = (
 const getCharacterCountFromToolId = (toolId?: string | null) => {
   const normalizedToolId = String(toolId || '').trim().toLowerCase();
 
-  if (normalizedToolId.includes('group_4')) return 4;
-  if (normalizedToolId.includes('group_3')) return 3;
+  const groupMatch = normalizedToolId.match(/group[_-]?(\d+)/);
+  if (groupMatch) return Math.max(3, Math.min(8, Number(groupMatch[1])));
   if (normalizedToolId.includes('couple')) return 2;
   if (normalizedToolId.includes('single')) return 1;
 

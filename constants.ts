@@ -100,6 +100,39 @@ export const APP_CONFIG: AppConfig = {
       supportsStyleReference: true
     },
     {
+      id: "group_6_gen",
+      name: {vi: "Team 6 Người", en: "Group of 6"},
+      description: {vi: "Tạo ảnh nhóm 6 nhân vật bằng luồng Gommo nhiều ảnh tham chiếu.", en: "Generate six referenced characters through Gommo."},
+      engine: "Gommo · 6 nhân vật",
+      preview_image: "https://picsum.photos/400/306?grayscale",
+      toolType: 'generation',
+      defaultPrompt: "A high quality 3D render of exactly 6 game characters in one balanced group composition: ",
+      category: 'generation',
+      supportsStyleReference: true
+    },
+    {
+      id: "group_7_gen",
+      name: {vi: "Team 7 Người", en: "Group of 7"},
+      description: {vi: "Tạo ảnh nhóm 7 nhân vật bằng luồng Gommo nhiều ảnh tham chiếu.", en: "Generate seven referenced characters through Gommo."},
+      engine: "Gommo · 7 nhân vật",
+      preview_image: "https://picsum.photos/400/307?grayscale",
+      toolType: 'generation',
+      defaultPrompt: "A high quality 3D render of exactly 7 game characters in one balanced group composition: ",
+      category: 'generation',
+      supportsStyleReference: true
+    },
+    {
+      id: "group_8_gen",
+      name: {vi: "Team 8 Người", en: "Group of 8"},
+      description: {vi: "Tạo ảnh nhóm 8 nhân vật qua Gommo, không sử dụng ảnh mẫu bố cục.", en: "Generate eight referenced characters through Gommo without a sample image."},
+      engine: "Gommo · 8 nhân vật",
+      preview_image: "https://picsum.photos/400/309?grayscale",
+      toolType: 'generation',
+      defaultPrompt: "A high quality 3D render of exactly 8 game characters in one balanced group composition without a sample scene image: ",
+      category: 'generation',
+      supportsStyleReference: false
+    },
+    {
       id: "ai_image_tool",
       name: {vi: "Tạo Ảnh AI", en: "AI Image Creator"},
       description: {

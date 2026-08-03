@@ -18,11 +18,27 @@ export type GommoModel = {
   price?: number;
   rate_type?: string;
   prices?: GommoModelPrice[];
-  ratios?: Array<{ name?: string; type?: string }>;
-  resolutions?: Array<{ name?: string; type?: string }>;
-  durations?: Array<{ name?: string; type?: string | number }>;
-  mode?: Array<{ name?: string; type?: string; price?: number }>;
-  modes?: Array<{ name?: string; type?: string; price?: number }>;
+  ratios?: GommoModelOption[];
+  resolutions?: GommoModelOption[];
+  durations?: GommoModelOption[];
+  mode?: GommoModelOption[];
+  modes?: GommoModelOption[];
+  maxSubject?: number;
+  withSubject?: boolean;
+  withReference?: boolean;
+  startImage?: boolean;
+  startImageAndEnd?: boolean;
+};
+
+export type GommoModelOption = {
+  name?: string;
+  type?: string | number;
+  price?: number;
+  description?: string;
+  group?: string;
+  group_subtitle?: string;
+  status?: string;
+  status_message?: string;
 };
 
 export type GommoCatalogMapping = {
@@ -38,7 +54,10 @@ type GommoSubmitResult = {
   mappedModelId: string;
 };
 
-const GOMMO_API_BASE = String(process.env.GOMMO_API_BASE || 'https://api.gommo.net').replace(/\/+$/, '');
+// Gommo's current public gateway (documented in the API Playground) uses
+// Bearer auth, live /ai/models discovery and the asynchronous /ai/jobs routes.
+// GOMMO_API_BASE remains overridable for staging/white-label gateways.
+const GOMMO_API_BASE = String(process.env.GOMMO_API_BASE || 'https://v2.api.gommo.net').replace(/\/+$/, '');
 const GOMMO_ACCESS_TOKEN = String(process.env.GOMMO_ACCESS_TOKEN || process.env.GOMMO_API_TOKEN || '').trim();
 const GOMMO_DOMAIN = String(process.env.GOMMO_DOMAIN || 'vmedia.ai').trim();
 const GOMMO_PROJECT_ID = String(process.env.GOMMO_PROJECT_ID || 'default').trim();
@@ -67,7 +86,26 @@ const modelCache = new Map<GommoProviderKind, { fetchedAt: number; models: Gommo
 const normalize = (value: unknown) => String(value || '').trim().toLowerCase();
 const normalizeDuration = (value: unknown) => normalize(value).replace(/s$/, '');
 const normalizeResolution = (value: unknown) => normalize(value);
-const normalizeRatio = (value: unknown) => String(value || '').trim().replace(/:/g, '_');
+const canonicalRatio = (value: unknown) => normalize(value).replace(/[:_x]/g, '');
+
+const getOptionType = (option: GommoModelOption) => String(option.type ?? option.name ?? '').trim();
+const getAvailableOptions = (options?: GommoModelOption[]) =>
+  (options || []).filter((option) => {
+    const status = normalize(option.status || 'on');
+    return getOptionType(option) && !['maintenance', 'off', 'disabled', 'inactive', 'unavailable'].includes(status);
+  });
+
+const matchOption = (
+  options: GommoModelOption[] | undefined,
+  requested: unknown,
+  canonicalize: (value: unknown) => string = normalize,
+) => {
+  const available = getAvailableOptions(options);
+  const requestedKey = canonicalize(requested);
+  return requestedKey
+    ? available.find((option) => canonicalize(getOptionType(option)) === requestedKey)
+    : available[0];
+};
 
 export const isGommoConfigured = () => Boolean(GOMMO_ACCESS_TOKEN && GOMMO_DOMAIN);
 
@@ -88,7 +126,8 @@ const parseGommoError = (data: any, fallback: string) => {
 
 const postForm = async (path: string, values: Record<string, unknown>, timeoutMs = GOMMO_TIMEOUT_MS) => {
   const form = new URLSearchParams();
-  const payload = { ...getCredentials(), ...values };
+  const credentials = getCredentials();
+  const payload = { domain: credentials.domain, ...values };
 
   for (const [key, value] of Object.entries(payload)) {
     if (value === undefined || value === null || value === '') continue;
@@ -97,13 +136,21 @@ const postForm = async (path: string, values: Record<string, unknown>, timeoutMs
 
   const response = await fetch(`${GOMMO_API_BASE}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    headers: {
+      Authorization: `Bearer ${credentials.access_token}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
     body: form.toString(),
     signal: AbortSignal.timeout(timeoutMs),
   });
   const data = await response.json().catch(() => ({}));
 
-  if (!response.ok || data?.error === 1 || (data?.error && !data?.success && !data?.imageInfo && !data?.videoInfo)) {
+  if (
+    !response.ok ||
+    data?.success === false ||
+    data?.error === 1 ||
+    (data?.error && !data?.success && !data?.imageInfo && !data?.videoInfo)
+  ) {
     throw new Error(`GOMMO_ERROR: ${parseGommoError(data, `${response.status} ${response.statusText}`)}`);
   }
 
@@ -116,7 +163,16 @@ export const getGommoModels = async (kind: GommoProviderKind, forceRefresh = fal
     return cached.models;
   }
 
-  const data = await postForm('/ai/models', { type: kind });
+  const credentials = getCredentials();
+  const response = await fetch(`${GOMMO_API_BASE}/ai/models?type=${encodeURIComponent(kind)}`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${credentials.access_token}` },
+    signal: AbortSignal.timeout(GOMMO_TIMEOUT_MS),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data?.success === false) {
+    throw new Error(`GOMMO_ERROR: ${parseGommoError(data, `${response.status} ${response.statusText}`)}`);
+  }
   const models = Array.isArray(data?.data)
     ? data.data.filter((entry: any) => entry && typeof entry === 'object' && String(entry.model || '').trim()) as GommoModel[]
     : [];
@@ -139,11 +195,12 @@ export const isGommoModelAvailable = (model: GommoModel) => {
 };
 
 const selectMode = (modelId: string, payload: Record<string, unknown>, model: GommoModel) => {
+  const explicitMode = normalize(payload.provider_mode || payload.mode);
   const server = normalize(payload.server_id);
   const speed = normalize(payload.speed);
   const quality = normalize(payload.quality);
   const audio = payload.audio === true;
-  const requested = (() => {
+  const requested = explicitMode || (() => {
     switch (normalize(modelId)) {
       case 'seedance-2.0-fast': return 'fast';
       case 'seedance-2.0': return 'professional';
@@ -162,9 +219,80 @@ const selectMode = (modelId: string, payload: Record<string, unknown>, model: Go
     }
   })();
 
-  const modes = [...(model.modes || []), ...(model.mode || [])].map((entry) => normalize(entry.type)).filter(Boolean);
+  const modes = getAvailableOptions([...(model.modes || []), ...(model.mode || [])])
+    .map((entry) => normalize(getOptionType(entry)))
+    .filter(Boolean);
   if (requested && modes.includes(requested)) return requested;
   return modes[0] || requested || undefined;
+};
+
+export type NormalizedGommoPayload = {
+  mapping: GommoCatalogMapping;
+  model: GommoModel;
+  payload: Record<string, unknown>;
+  mode?: string;
+  providerCost: number | null;
+};
+
+export const normalizeAndValidateGommoPayload = async (
+  queueKind: QueueKind,
+  payload: Record<string, unknown>,
+): Promise<NormalizedGommoPayload> => {
+  const mapping = getMapping(payload.model || payload.modelId, queueKind);
+  if (!mapping) {
+    throw new Error(`GOMMO_UNSUPPORTED_MODEL: ${String(payload.model || payload.modelId || 'unknown')}`);
+  }
+
+  const models = await getGommoModels(mapping.kind as GommoProviderKind);
+  const model = models.find((entry) => normalize(entry.model) === normalize(mapping.gommoModelId));
+  if (!model || !isGommoModelAvailable(model)) {
+    throw new Error(`GOMMO_MODEL_UNAVAILABLE: ${mapping.gommoModelId}`);
+  }
+
+  const resolutionOption = matchOption(model.resolutions, payload.resolution);
+  const ratioOption = matchOption(model.ratios, payload.aspect_ratio || payload.aspectRatio, canonicalRatio);
+  const durationOption = matchOption(model.durations, payload.duration, normalizeDuration);
+  const mode = selectMode(mapping.auditionModelId, payload, model);
+  const availableModes = getAvailableOptions([...(model.modes || []), ...(model.mode || [])]);
+  const modeOption = matchOption(availableModes, mode);
+
+  const requestedResolution = normalizeResolution(payload.resolution);
+  if (requestedResolution && model.resolutions?.length && !resolutionOption) {
+    throw new Error(`GOMMO_INVALID_RESOLUTION: ${requestedResolution}`);
+  }
+  const requestedRatio = canonicalRatio(payload.aspect_ratio || payload.aspectRatio);
+  if (requestedRatio && model.ratios?.length && !ratioOption) {
+    throw new Error(`GOMMO_INVALID_RATIO: ${String(payload.aspect_ratio || payload.aspectRatio)}`);
+  }
+  const requestedDuration = normalizeDuration(payload.duration);
+  if (requestedDuration && model.durations?.length && !durationOption) {
+    throw new Error(`GOMMO_INVALID_DURATION: ${requestedDuration}`);
+  }
+  const requestedMode = normalize(payload.provider_mode || payload.mode);
+  if (
+    requestedMode &&
+    availableModes.length &&
+    !availableModes.some((option) => normalize(getOptionType(option)) === requestedMode)
+  ) {
+    throw new Error(`GOMMO_INVALID_MODE: ${requestedMode}`);
+  }
+
+  const normalizedPayload: Record<string, unknown> = {
+    ...payload,
+    model: mapping.auditionModelId,
+  };
+  if (resolutionOption) normalizedPayload.resolution = getOptionType(resolutionOption).toLowerCase();
+  if (ratioOption) normalizedPayload.aspect_ratio = getOptionType(ratioOption);
+  if (durationOption) normalizedPayload.duration = normalizeDuration(getOptionType(durationOption));
+  if (modeOption) normalizedPayload.provider_mode = getOptionType(modeOption).toLowerCase();
+
+  return {
+    mapping,
+    model,
+    payload: normalizedPayload,
+    mode: modeOption ? getOptionType(modeOption).toLowerCase() : mode,
+    providerCost: selectProviderPrice(model, normalizedPayload, modeOption ? getOptionType(modeOption) : mode),
+  };
 };
 
 const selectProviderPrice = (model: GommoModel, payload: Record<string, unknown>, mode?: string) => {
@@ -187,142 +315,115 @@ const getSources = (payload: Record<string, unknown>) => {
   return values.map((value) => String(value || '').trim()).filter(Boolean);
 };
 
-const readSourceImage = async (source: string) => {
-  if (/^https?:\/\//i.test(source)) {
-    const response = await fetch(source, { signal: AbortSignal.timeout(45_000) });
-    if (!response.ok) {
-      throw new Error(`GOMMO_ERROR: Cannot read reference image (${response.status})`);
-    }
-    const contentType = String(response.headers.get('content-type') || 'image/jpeg').split(';', 1)[0];
-    return { bytes: Buffer.from(await response.arrayBuffer()), contentType };
-  }
+const getIndexedUrlFields = (field: 'images' | 'subjects' | 'references', sources: string[]) =>
+  Object.fromEntries(sources.map((source, index) => [`${field}[${index}][url]`, source]));
 
-  const dataUrlMatch = source.match(/^data:([^;,]+);base64,(.+)$/is);
-  const base64 = dataUrlMatch ? dataUrlMatch[2] : source;
-  if (!/^[a-z0-9+/=\s]+$/i.test(base64)) {
-    throw new Error('GOMMO_ERROR: Reference image must be an HTTP URL, data URL, or base64 value');
-  }
-  return {
-    bytes: Buffer.from(base64.replace(/\s+/g, ''), 'base64'),
-    contentType: dataUrlMatch?.[1] || 'image/jpeg',
-  };
+const getImageSourceFields = (model: GommoModel, sources: string[]) => {
+  const providerLimit = Number(model.maxSubject);
+  const limit = Number.isFinite(providerLimit) && providerLimit > 0 ? Math.floor(providerLimit) : 8;
+  const limitedSources = sources.slice(0, limit);
+  if (model.withSubject) return getIndexedUrlFields('subjects', limitedSources);
+  if (model.withReference) return getIndexedUrlFields('references', limitedSources);
+  return getIndexedUrlFields('images', model.startImageAndEnd ? limitedSources.slice(0, 2) : limitedSources.slice(0, 1));
 };
 
-const uploadSourceImage = async (source: string) => {
-  const { bytes, contentType } = await readSourceImage(source);
-  const extension = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg';
-  const data = await postForm('/ai/image-upload', {
-    data: bytes.toString('base64'),
-    project_id: GOMMO_PROJECT_ID,
-    file_name: `audition-reference.${extension}`,
-    size: String(bytes.byteLength),
-  }, 180_000);
-  const imageInfo = data?.imageInfo;
-  if (!imageInfo?.id_base || !imageInfo?.url) {
-    throw new Error('GOMMO_ERROR: Upload image response is missing id_base or url');
-  }
-  return { id_base: String(imageInfo.id_base), url: String(imageInfo.url) };
+const getGatewayJobData = (data: any) => data?.data && typeof data.data === 'object' ? data.data : data;
+
+const extractGommoGatewayJobId = (data: any) => {
+  const job = getGatewayJobData(data);
+  return String(job?.id_base || job?.job_id || data?.imageInfo?.id_base || data?.videoInfo?.id_base || '').trim();
 };
 
 export const canUseGommoForPayload = async (queueKind: QueueKind, payload: Record<string, unknown>) => {
   if (!isGommoConfigured()) return false;
-  const mapping = getMapping(payload.model, queueKind);
-  if (!mapping) return false;
-  const models = await getGommoModels(mapping.kind as GommoProviderKind);
-  return models.some((model) => normalize(model.model) === normalize(mapping.gommoModelId) && isGommoModelAvailable(model));
+  try {
+    await normalizeAndValidateGommoPayload(queueKind, payload);
+    return true;
+  } catch {
+    return false;
+  }
 };
 
 export const submitGommoJob = async (
   queueKind: QueueKind,
   payload: Record<string, unknown>,
 ): Promise<GommoSubmitResult> => {
-  const mapping = getMapping(payload.model, queueKind);
-  if (!mapping) {
-    throw new Error(`GOMMO_UNSUPPORTED_MODEL: ${String(payload.model || 'unknown')}`);
-  }
-
-  const models = await getGommoModels(mapping.kind as GommoProviderKind);
-  const model = models.find((entry) => normalize(entry.model) === normalize(mapping.gommoModelId));
-  if (!model || !isGommoModelAvailable(model)) {
-    throw new Error(`GOMMO_MODEL_UNAVAILABLE: ${mapping.gommoModelId}`);
-  }
-
-  const mode = selectMode(mapping.auditionModelId, payload, model);
-  const providerCost = selectProviderPrice(model, payload, mode);
+  const normalized = await normalizeAndValidateGommoPayload(queueKind, payload);
+  const { mapping, payload: providerPayload, mode, providerCost } = normalized;
   const common = {
-    model: mapping.gommoModelId,
-    prompt: String(payload.prompt || '').trim(),
+    prompt: String(providerPayload.prompt || '').trim(),
     project_id: GOMMO_PROJECT_ID,
   };
 
   if (queueKind === 'image_generate') {
-    const subjects = getSources(payload).map((source) => /^https?:\/\//i.test(source)
-      ? { id_base: '', url: source }
-      : { id_base: '', data: source.replace(/^data:[^;,]+;base64,/i, '') });
-    const data = await postForm('/ai/generateImage', {
+    const sources = getSources(providerPayload).filter((source) => /^https?:\/\//i.test(source));
+    const data = await postForm(`/ai/jobs/image/${encodeURIComponent(mapping.gommoModelId)}`, {
       ...common,
-      action_type: 'create',
-      editImage: 'false',
-      subjects: subjects.length ? subjects : undefined,
-      ratio: normalizeRatio(payload.aspect_ratio),
+      ...getImageSourceFields(normalized.model, sources),
+      ratio: providerPayload.aspect_ratio,
+      resolution: providerPayload.resolution,
+      mode,
     });
-    const jobId = String(data?.imageInfo?.id_base || '').trim();
-    if (!jobId) throw new Error('GOMMO_ERROR: Create Image did not return imageInfo.id_base');
+    const jobId = extractGommoGatewayJobId(data);
+    if (!jobId) throw new Error('GOMMO_ERROR: Create Image did not return data.id_base or data.job_id');
     return { jobId, providerCost, mappedModelId: mapping.gommoModelId };
   }
 
-  const imageSources = getSources(payload).slice(0, 2);
-  const images = await Promise.all(imageSources.map(uploadSourceImage));
-  const data = await postForm('/ai/create-video', {
+  const imageSources = getSources(providerPayload).filter((source) => /^https?:\/\//i.test(source)).slice(0, 2);
+  const data = await postForm(`/ai/jobs/video/${encodeURIComponent(mapping.gommoModelId)}`, {
     ...common,
-    privacy: 'PRIVATE',
-    translate_to_en: 'true',
-    ratio: String(payload.aspect_ratio || '').trim() || undefined,
-    resolution: normalizeResolution(payload.resolution) || undefined,
-    duration: normalizeDuration(payload.duration) || undefined,
+    ...getIndexedUrlFields('images', imageSources),
+    ratio: String(providerPayload.aspect_ratio || '').trim() || undefined,
+    resolution: normalizeResolution(providerPayload.resolution) || undefined,
+    duration: normalizeDuration(providerPayload.duration) || undefined,
     mode,
-    images: images.length ? images : undefined,
   });
-  const jobId = String(data?.videoInfo?.id_base || '').trim();
-  if (!jobId) throw new Error('GOMMO_ERROR: Create Video did not return videoInfo.id_base');
+  const jobId = extractGommoGatewayJobId(data);
+  if (!jobId) throw new Error('GOMMO_ERROR: Create Video did not return data.id_base or data.job_id');
   return { jobId, providerCost, mappedModelId: mapping.gommoModelId };
 };
 
 export const pollGommoJob = async (queueKind: QueueKind, providerJobId: string) => {
-  if (queueKind === 'image_generate') {
-    const data = await postForm('/ai/image', { id_base: providerJobId });
-    const status = normalize(data?.status);
-    if (status === 'success' && data?.url) {
-      return { ...data, status: 'completed', result: String(data.url), progress: 100 };
-    }
-    if (status === 'error' || status === 'failed') {
-      return { ...data, status: 'failed', error: parseGommoError(data, 'Gommo image generation failed') };
-    }
-    if (status === 'pending_active' || status === 'pending_processing' || status === 'pending') {
-      return { ...data, status: 'processing', progress: status.includes('processing') ? 75 : 60 };
-    }
-    return { ...data, status: 'failed', error: `Unexpected Gommo image status: ${status || 'empty'}` };
-  }
+  const media = queueKind === 'image_generate' ? 'image' : 'video';
+  const data = await postForm(`/ai/jobs/${encodeURIComponent(providerJobId)}?media=${media}`, {
+    project_id: GOMMO_PROJECT_ID,
+  });
+  const job = getGatewayJobData(data);
+  const rawStatus = normalize(job?.status || data?.raw?.imageInfo?.status || data?.raw?.videoInfo?.status);
+  const result = String(
+    job?.result_url ||
+    job?.url ||
+    job?.download_url ||
+    data?.raw?.imageInfo?.url ||
+    data?.raw?.videoInfo?.download_url ||
+    '',
+  ).trim();
+  const successStatuses = new Set([
+    'success', 'succeeded', 'done', 'completed', 'media_generation_status_successful',
+  ]);
+  const processingStatuses = new Set([
+    'processing', 'pending', 'queued', 'active', 'pending_active', 'pending_processing',
+    'media_generation_status_pending', 'media_generation_status_active', 'media_generation_status_processing',
+  ]);
+  const failedStatuses = new Set([
+    'failed', 'error', 'cancelled', 'canceled', 'rejected', 'media_generation_status_failed',
+  ]);
 
-  const data = await postForm('/ai/video', { videoId: providerJobId });
-  const status = normalize(data?.status);
-  if (status === 'media_generation_status_successful') {
-    if (!data?.download_url) {
-      return { ...data, status: 'processing', progress: 95 };
-    }
-    return { ...data, status: 'completed', result: String(data.download_url), progress: 100 };
+  if (result && !processingStatuses.has(rawStatus)) {
+    return { ...job, status: 'completed', result, progress: 100 };
   }
-  if (status === 'media_generation_status_failed') {
-    return { ...data, status: 'failed', error: parseGommoError(data, 'Gommo video generation failed') };
+  if (successStatuses.has(rawStatus)) {
+    return result
+      ? { ...job, status: 'completed', result, progress: 100 }
+      : { ...job, status: 'processing', progress: 95 };
   }
-  if (
-    status === 'media_generation_status_pending' ||
-    status === 'media_generation_status_active' ||
-    status === 'media_generation_status_processing'
-  ) {
-    return { ...data, status: 'processing', progress: status.includes('processing') ? 75 : 60 };
+  if (failedStatuses.has(rawStatus)) {
+    return { ...job, status: 'failed', error: parseGommoError(data, `Gommo ${media} generation failed`) };
   }
-  return { ...data, status: 'failed', error: `Unexpected Gommo video status: ${status || 'empty'}` };
+  if (processingStatuses.has(rawStatus)) {
+    return { ...job, status: 'processing', progress: rawStatus.includes('processing') ? 75 : 60 };
+  }
+  return { ...job, status: 'failed', error: `Unexpected Gommo ${media} status: ${rawStatus || 'empty'}` };
 };
 
 export const getGommoProviderCatalog = async (forceRefresh = false) => {
@@ -340,23 +441,50 @@ export const getGommoProviderCatalog = async (forceRefresh = false) => {
     getGommoModels('image', forceRefresh),
     getGommoModels('video', forceRefresh),
   ]);
-  const mappedIds = new Set(GOMMO_CATALOG_MAPPINGS.map((entry) => normalize(entry.gommoModelId)));
-  const models = [...imageModels, ...videoModels]
-    .filter((model) => mappedIds.has(normalize(model.model)))
-    .map((model) => ({
-      model: model.model,
-      name: model.name,
-      status: model.status || 'ON',
-      server: model.server || '',
-      price: Number.isFinite(Number(model.price)) ? Number(model.price) : null,
-      rateType: model.rate_type || 'per_unit',
-      prices: (model.prices || []).map((price) => ({
-        mode: price.mode || null,
-        resolution: price.resolution || null,
-        duration: price.duration === undefined ? null : String(price.duration),
-        price: Number(price.price),
-      })).filter((price) => Number.isFinite(price.price)),
-    }));
+  const modelByProviderId = new Map(
+    [...imageModels, ...videoModels].map((model) => [normalize(model.model), model]),
+  );
+  const models = GOMMO_CATALOG_MAPPINGS
+    .map((mapping) => ({ mapping, model: modelByProviderId.get(normalize(mapping.gommoModelId)) }))
+    .filter((entry): entry is { mapping: GommoCatalogMapping; model: GommoModel } => Boolean(entry.model))
+    .map(({ mapping, model }) => {
+      const serializeOptions = (options?: GommoModelOption[]) => getAvailableOptions(options).map((option) => ({
+        name: String(option.name || option.type || ''),
+        type: getOptionType(option),
+        description: option.description || '',
+        group: option.group || '',
+        groupSubtitle: option.group_subtitle || '',
+        status: option.status || 'on',
+        statusMessage: option.status_message || '',
+      }));
+      const modes = [...(model.modes || []), ...(model.mode || [])];
+      const uniqueModes = Array.from(new Map(modes.map((option) => [normalize(getOptionType(option)), option])).values());
+      return {
+        auditionModelId: mapping.auditionModelId,
+        kind: mapping.kind,
+        fallbackSupported: mapping.fallbackSupported,
+        model: model.model,
+        name: model.name,
+        status: model.status || 'ON',
+        server: model.server || '',
+        price: Number.isFinite(Number(model.price)) ? Number(model.price) : null,
+        rateType: model.rate_type || 'per_unit',
+        maxReferenceImages: Number.isFinite(Number(model.maxSubject)) && Number(model.maxSubject) > 0
+          ? Math.floor(Number(model.maxSubject))
+          : null,
+        referenceField: model.withSubject ? 'subjects' : model.withReference ? 'references' : 'images',
+        ratios: serializeOptions(model.ratios),
+        resolutions: serializeOptions(model.resolutions),
+        durations: serializeOptions(model.durations),
+        modes: serializeOptions(uniqueModes),
+        prices: (model.prices || []).map((price) => ({
+          mode: price.mode || null,
+          resolution: price.resolution || null,
+          duration: price.duration === undefined ? null : String(price.duration),
+          price: Number(price.price),
+        })).filter((price) => Number.isFinite(price.price)),
+      };
+    });
   const vndPerCredit = Number(process.env.GOMMO_VND_PER_CREDIT || '');
 
   return {

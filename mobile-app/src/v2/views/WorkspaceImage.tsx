@@ -21,7 +21,9 @@ import {
   getModelPricing,
   getTstServerAvailabilityConfig,
   getGenerationGuideImages,
+  getGenerationProviderConfig,
   type GenerationGuideImagesConfig,
+  type GenerationProviderConfig,
 } from '../../services/economyService';
 import { useConcurrency, CONCURRENCY_LIMITS } from '../../services/concurrencyService';
 import { enqueueServerJob } from '../../services/serverQueueService';
@@ -29,7 +31,7 @@ import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageSer
 import {
   fetchTstPricing, fetchTstModels,
   getCompatibleGenerationResolutions, getCompatibleGenerationServers, getCompatibleGenerationSpeeds,
-  getGenerationCostBreakdown, getGenerationModelId, getVertexEditToolCostBreakdown,
+  getGenerationCostBreakdown, getGenerationAspectRatios, getGenerationModelId, getVertexEditToolCostBreakdown,
   resolveGenerationSelection,
   applyServerAvailabilityToRuntimeModels, sanitizePricingEntriesWithRuntimeModels,
   uiSpeedToTst, uiServerToTst, tstServerToUi,
@@ -47,8 +49,19 @@ import {
   runCharacterAssistantAction,
   type CharacterAssistantToolId,
 } from '../../../../services/characterImageAssistService';
+import {
+  fetchProviderCatalog,
+  getAuditionProviderPricing,
+  getGommoPricingInput,
+  getGommoModelForAudition,
+  isGommoCatalogModelAvailable,
+  resolveProviderForModel,
+  type GommoProviderCatalog,
+} from '../../services/providerCatalog';
+import { getImageProviderRouteKey, isModelAllowedForFeature } from '../../../../shared/providerRouting';
+import { GENERATION_SECTION_TIPS } from '../../../../shared/generationSectionTips';
 
-type GenMode = 'single' | 'couple' | 'trio' | 'squad' | 'group5';
+type GenMode = 'single' | 'couple' | 'trio' | 'squad' | 'group5' | 'group6' | 'group7' | 'group8';
 type Stage = 'input' | 'submitting';
 
 const IMAGE_MODEL_OPTIONS: Array<{
@@ -117,6 +130,9 @@ const MODE_TO_FEATURE_ID: Record<GenMode, string> = {
   trio: 'group_3_gen',
   squad: 'group_4_gen',
   group5: 'group_5_gen',
+  group6: 'group_6_gen',
+  group7: 'group_7_gen',
+  group8: 'group_8_gen',
 };
 
 const MODE_META: Record<GenMode, { label: string; sampleCategoryId: number; sampleCategoryName: string }> = {
@@ -125,6 +141,9 @@ const MODE_META: Record<GenMode, { label: string; sampleCategoryId: number; samp
   trio: { label: 'Nhóm 3', sampleCategoryId: 4, sampleCategoryName: 'Ảnh nhóm 3' },
   squad: { label: 'Nhóm 4', sampleCategoryId: 5, sampleCategoryName: 'Ảnh nhóm 4' },
   group5: { label: 'Nhóm 5', sampleCategoryId: 6, sampleCategoryName: 'Ảnh nhóm 5' },
+  group6: { label: 'Nhóm 6', sampleCategoryId: 6, sampleCategoryName: 'Ảnh nhóm 6' },
+  group7: { label: 'Nhóm 7', sampleCategoryId: 6, sampleCategoryName: 'Ảnh nhóm 7' },
+  group8: { label: 'Nhóm 8', sampleCategoryId: 6, sampleCategoryName: 'Ảnh nhóm 8' },
 };
 
 const MODE_TO_CHARACTER_COUNT: Record<GenMode, number> = {
@@ -133,6 +152,9 @@ const MODE_TO_CHARACTER_COUNT: Record<GenMode, number> = {
   trio: 3,
   squad: 4,
   group5: 5,
+  group6: 6,
+  group7: 7,
+  group8: 8,
 };
 
 const FEATURE_ID_TO_MODE: Record<string, GenMode> = {
@@ -141,6 +163,9 @@ const FEATURE_ID_TO_MODE: Record<string, GenMode> = {
   group_3_gen: 'trio',
   group_4_gen: 'squad',
   group_5_gen: 'group5',
+  group_6_gen: 'group6',
+  group_7_gen: 'group7',
+  group_8_gen: 'group8',
 };
 
 const SAMPLES_PER_PAGE = 20;
@@ -193,17 +218,20 @@ export function WorkspaceImage() {
   const [prompt, setPrompt] = useState('');
   const [refImage, setRefImage] = useState<string | null>(null);
   const [aspectRatio, setAspectRatio] = useState('9:16');
-  const [resolution, setResolution] = useState<TstResolution>('1K');
+  const [resolution, setResolution] = useState('1K');
   const [speed, setSpeed] = useState<'Nhanh' | 'Tiết Kiệm'>('Nhanh');
   const [server, setServer] = useState('VIP 1');
   const [gptQuality, setGptQuality] = useState<'low' | 'medium' | 'high'>('low');
   const [aiModel, setAiModel] = useState<TstGenerationTier>('gpt');
+  const [providerMode, setProviderMode] = useState('');
 
   const [pricingEntries, setPricingEntries] = useState<TstPricingEntry[]>([]);
   const [auditionPricing, setAuditionPricing] = useState<ModelPricing[]>([]);
   const [runtimeModels, setRuntimeModels] = useState<TstRuntimeModel[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [gommoCatalog, setGommoCatalog] = useState<GommoProviderCatalog | null>(null);
+  const [providerConfig, setProviderConfig] = useState<GenerationProviderConfig | null>(null);
 
   const [cooldownRemaining, setCooldownRemaining] = useState(() => {
     const saved = localStorage.getItem('gen_cooldown_end');
@@ -258,43 +286,83 @@ export function WorkspaceImage() {
   const generationSpeedId = uiSpeedToTst(speed) || 'fast';
   const generationServerId = uiServerToTst(server) || 'fast';
   const generationTier = aiModel;
-  const availableResolutions = getCompatibleGenerationResolutions({
+  const selectedModelId = getGenerationModelId(aiModel);
+  const providerRouteKey = getImageProviderRouteKey(MODE_TO_CHARACTER_COUNT[activeMode]);
+  const selectedProvider = resolveProviderForModel(providerConfig, selectedModelId, providerRouteKey);
+  const isGommoSelected = selectedProvider === 'gommo';
+  const selectedGommoModel = getGommoModelForAudition(gommoCatalog, selectedModelId);
+  const tstAspectRatios = useMemo(
+    () => getGenerationAspectRatios(generationTier, runtimeModels),
+    [generationTier, runtimeModels],
+  );
+  const tstAvailableResolutions = getCompatibleGenerationResolutions({
     tier: generationTier, pricingEntries, serverId: generationServerId, speed: generationSpeedId,
     quality: aiModel === 'gpt' ? gptQuality : undefined,
   });
+  const availableResolutions = isGommoSelected
+    ? (selectedGommoModel?.resolutions || []).map((option) => option.type.toUpperCase())
+    : tstAvailableResolutions;
   const availableServers = getCompatibleGenerationServers({
-    tier: generationTier, pricingEntries, speed: generationSpeedId, resolution,
+    tier: generationTier, pricingEntries, speed: generationSpeedId, resolution: resolution as TstResolution,
     quality: aiModel === 'gpt' ? gptQuality : undefined,
   });
   const availableSpeeds = getCompatibleGenerationSpeeds({
     tier: generationTier,
     pricingEntries,
-    resolution,
+    resolution: resolution as TstResolution,
     quality: aiModel === 'gpt' ? gptQuality : undefined,
   });
-  const selectedCost = getGenerationCostBreakdown({
-    tier: generationTier, resolution, quality: aiModel === 'gpt' ? gptQuality : undefined, speed: generationSpeedId,
+  const tstSelectedCost = getGenerationCostBreakdown({
+    tier: generationTier, resolution: resolution as TstResolution, quality: aiModel === 'gpt' ? gptQuality : undefined, speed: generationSpeedId,
     serverId: generationServerId, pricingEntries, pricingOverrides,
   });
-  const activeFeature = APP_CONFIG.main_features.find((feature) => feature.id === MODE_TO_FEATURE_ID[activeMode]) ?? APP_CONFIG.main_features[0];
-  const availableSpeedLabels = availableSpeeds.map((speedId) => (speedId === 'slow' ? 'Tiết Kiệm' : 'Nhanh'));
-  const availableServerLabels = availableServers.map((serverId) => ({ id: serverId, label: tstServerToUi(serverId) || serverId.toUpperCase() }));
+  const gommoPricingInput = getGommoPricingInput(selectedModelId, {
+    resolution, quality: aiModel === 'gpt' ? gptQuality : undefined, speed: generationSpeedId, providerMode,
+  });
+  const gommoPricing = getAuditionProviderPricing(auditionPricing, selectedModelId, gommoPricingInput, { allowGenericFallback: true });
+  const selectedCost = isGommoSelected
+    ? { available: gommoPricing !== null && isGommoCatalogModelAvailable(selectedGommoModel), vcoin: gommoPricing?.vcoin || 0 }
+    : tstSelectedCost;
+  const activeFeature = APP_CONFIG.main_features.find((feature) => feature.id === MODE_TO_FEATURE_ID[activeMode])
+    ?? (MODE_TO_CHARACTER_COUNT[activeMode] >= 6 ? APP_CONFIG.main_features.find((feature) => feature.id === 'group_5_gen') : undefined)
+    ?? APP_CONFIG.main_features[0];
+  const availableSpeedLabels = isGommoSelected ? [] : availableSpeeds.map((speedId) => (speedId === 'slow' ? 'Tiết Kiệm' : 'Nhanh'));
+  const availableServerLabels = isGommoSelected ? [] : availableServers.map((serverId) => ({ id: serverId, label: tstServerToUi(serverId) || serverId.toUpperCase() }));
+  const gommoModes = isGommoSelected ? (selectedGommoModel?.modes || []) : [];
 
   const runtimeImageModelIds = new Set(
     runtimeModels.filter((m) => m.type === 'image').map((m) => m.model.trim().toLowerCase()),
   );
-  const isFlashAvailable = runtimeImageModelIds.has(getGenerationModelId('flash'))
-    && pricingEntries.some((e) => e.model.trim().toLowerCase() === getGenerationModelId('flash'));
-  const isProAvailable = runtimeImageModelIds.has(getGenerationModelId('pro'))
-    && pricingEntries.some((e) => e.model.trim().toLowerCase() === getGenerationModelId('pro'));
-  const isGptAvailable = runtimeImageModelIds.has(getGenerationModelId('gpt'))
-    && pricingEntries.some((e) => e.model.trim().toLowerCase() === getGenerationModelId('gpt'));
+  const isTierAvailable = (tier: TstGenerationTier) => {
+    const modelId = getGenerationModelId(tier);
+    if (!isModelAllowedForFeature(providerConfig, providerRouteKey, modelId)) return false;
+    return resolveProviderForModel(providerConfig, modelId, providerRouteKey) === 'gommo'
+      ? isGommoCatalogModelAvailable(getGommoModelForAudition(gommoCatalog, modelId))
+      : runtimeImageModelIds.has(modelId) && pricingEntries.some((entry) => entry.model.trim().toLowerCase() === modelId);
+  };
+  const isFlashAvailable = isTierAvailable('flash');
+  const isProAvailable = isTierAvailable('pro');
+  const isGptAvailable = isTierAvailable('gpt');
   const imageModelAvailability: Record<TstGenerationTier, boolean> = {
     flash: isFlashAvailable,
     pro: isProAvailable,
     gpt: isGptAvailable,
   };
-  const isCatalogReady = !catalogLoading && !catalogError && pricingEntries.length > 0 && runtimeModels.length > 0;
+  useEffect(() => {
+    if (!isModelAllowedForFeature(providerConfig, providerRouteKey, getGenerationModelId(aiModel))) {
+      const firstAllowed = IMAGE_MODEL_OPTIONS.find((model) =>
+        isModelAllowedForFeature(providerConfig, providerRouteKey, getGenerationModelId(model.tier)),
+      );
+      if (firstAllowed) setAiModel(firstAllowed.tier);
+    }
+    if (activeMode === 'group8') {
+      if (refImage) setRefImage(null);
+      setPrompt((current) => current.replace(SAMPLE_IMAGE_PROMPT_LOCK, '').trim());
+    }
+  }, [activeMode, aiModel, providerConfig, providerRouteKey, refImage]);
+  const isCatalogReady = !catalogLoading && (isGommoSelected
+    ? isGommoCatalogModelAvailable(selectedGommoModel) && selectedCost.available
+    : !catalogError && pricingEntries.length > 0 && runtimeModels.length > 0);
   const hasCharacterImagesReady = characters.every((char) => !!char.bodyImage);
   const isAnyCharacterAssistRunning = characters.some((char) => !!assistLoadingByCharId[char.id]);
   const isGenerateDisabled = cooldownRemaining > 0 || !isCatalogReady || !selectedCost.available
@@ -369,6 +437,9 @@ export function WorkspaceImage() {
     if (activeMode === 'trio') modeMultiplier = 3;
     if (activeMode === 'squad') modeMultiplier = 4;
     if (activeMode === 'group5') modeMultiplier = 5;
+    if (activeMode === 'group6') modeMultiplier = 6;
+    if (activeMode === 'group7') modeMultiplier = 7;
+    if (activeMode === 'group8') modeMultiplier = 8;
     return baseCost * modeMultiplier;
   };
 
@@ -376,17 +447,21 @@ export function WorkspaceImage() {
   useEffect(() => {
     const loadCatalog = async () => {
       try {
-        const [entries, models, pricingConfig, serverAvailabilityConfig] = await Promise.all([
-          fetchTstPricing(),
-          fetchTstModels(),
+        const [entries, models, pricingConfig, serverAvailabilityConfig, providerCatalog, routingConfig] = await Promise.all([
+          fetchTstPricing().catch(() => []),
+          fetchTstModels().catch(() => []),
           getModelPricing(),
-          getTstServerAvailabilityConfig(),
+          getTstServerAvailabilityConfig().catch(() => null),
+          fetchProviderCatalog(true),
+          getGenerationProviderConfig(),
         ]);
         const filteredModels = applyServerAvailabilityToRuntimeModels(models, serverAvailabilityConfig);
         setPricingEntries(sanitizePricingEntriesWithRuntimeModels(entries, filteredModels, serverAvailabilityConfig));
         setRuntimeModels(filteredModels);
         setAuditionPricing(pricingConfig || []);
-        setCatalogError(null);
+        setGommoCatalog(providerCatalog);
+        setProviderConfig(routingConfig);
+        setCatalogError(models.length > 0 ? null : 'TST đang bảo trì hoặc không sẵn sàng.');
       } catch (error) {
         console.warn('[WorkspaceImage] Failed to load TST catalog', error);
         setCatalogError('TST đang bảo trì hoặc không sẵn sàng.');
@@ -452,18 +527,31 @@ export function WorkspaceImage() {
 
   // --- Auto-adjust model availability ---
   useEffect(() => {
-    if (aiModel === 'flash' && !isFlashAvailable && isProAvailable) setAiModel('pro');
-    else if (aiModel === 'pro' && !isProAvailable && isFlashAvailable) setAiModel('flash');
-    else if (aiModel === 'gpt' && !isGptAvailable && isProAvailable) setAiModel('pro');
+    if (imageModelAvailability[aiModel]) return;
+    const next = IMAGE_MODEL_OPTIONS.find((model) => imageModelAvailability[model.tier]);
+    if (next) setAiModel(next.tier);
   }, [aiModel, isFlashAvailable, isGptAvailable, isProAvailable]);
 
   useEffect(() => {
+    if (isGommoSelected) {
+      const resolutions = (selectedGommoModel?.resolutions || []).map((option) => option.type.toUpperCase());
+      const ratios = (selectedGommoModel?.ratios || []).map((option) => option.type);
+      const modes = (selectedGommoModel?.modes || []).map((option) => option.type);
+      if (resolutions.length > 0 && !resolutions.includes(resolution)) setResolution(resolutions[0]);
+      if (ratios.length > 0 && !ratios.includes(aspectRatio)) setAspectRatio(ratios[0]);
+      if (modes.length > 0 && !modes.includes(providerMode)) setProviderMode(modes[0]);
+      return;
+    }
+    if (tstAspectRatios.length > 0 && !tstAspectRatios.includes(aspectRatio)) {
+      setAspectRatio(tstAspectRatios[0]);
+      return;
+    }
     const requestedSpeedId = uiSpeedToTst(speed) || 'fast';
     const requestedServerId = uiServerToTst(server) || 'fast';
     const nextSelection = resolveGenerationSelection({
       tier: aiModel,
       pricingEntries,
-      resolution,
+      resolution: resolution as TstResolution,
       quality: aiModel === 'gpt' ? gptQuality : undefined,
       speed: requestedSpeedId,
       serverId: requestedServerId,
@@ -484,7 +572,7 @@ export function WorkspaceImage() {
     if (nextSpeedLabel !== speed) {
       setSpeed(nextSpeedLabel);
     }
-  }, [aiModel, gptQuality, pricingEntries, resolution, server, speed]);
+  }, [aiModel, aspectRatio, gptQuality, isGommoSelected, pricingEntries, providerMode, resolution, selectedGommoModel, server, speed, tstAspectRatios]);
 
   // --- Rotating tips ---
   useEffect(() => {
@@ -581,6 +669,9 @@ export function WorkspaceImage() {
     if (mode === 'trio') count = 3;
     if (mode === 'squad') count = 4;
     if (mode === 'group5') count = 5;
+    if (mode === 'group6') count = 6;
+    if (mode === 'group7') count = 7;
+    if (mode === 'group8') count = 8;
 
     setCharacters((prev) => {
       const nextChars: CharacterInput[] = [];
@@ -710,7 +801,7 @@ export function WorkspaceImage() {
   const handleGenerate = async () => {
     if (stage === 'submitting') return;
     if (cooldownRemaining > 0) { notify(`Vui lòng đợi ${cooldownRemaining}s`, 'warning'); return; }
-    if (!isCatalogReady) { notify('TST đang bảo trì.', 'error'); return; }
+    if (!isCatalogReady) { notify(isGommoSelected ? 'Gommo đang bảo trì hoặc chưa có giá Vcoin.' : 'TST đang bảo trì.', 'error'); return; }
     if (!selectedCost.available) { notify('Cấu hình không khả dụng.', 'error'); return; }
 
     if (queueStats.myImageProcessing >= CONCURRENCY_LIMITS.user.imageProcessing
@@ -832,15 +923,15 @@ export function WorkspaceImage() {
             }));
           }),
         ];
-        const effectiveServerId = availableServers.includes(generationServerId) ? generationServerId : (availableServers[0] || generationServerId);
+        const effectiveServerId = isGommoSelected ? undefined : (availableServers.includes(generationServerId) ? generationServerId : (availableServers[0] || generationServerId));
         const compatibleSpeeds = getCompatibleGenerationSpeeds({
           tier: generationTier,
           pricingEntries,
-          serverId: effectiveServerId,
-          resolution,
+          serverId: effectiveServerId || generationServerId,
+          resolution: resolution as TstResolution,
           quality: aiModel === 'gpt' ? gptQuality : undefined,
         });
-        const effectiveSpeedId = compatibleSpeeds.includes(generationSpeedId) ? generationSpeedId : (compatibleSpeeds[0] || generationSpeedId);
+        const effectiveSpeedId = isGommoSelected ? undefined : (compatibleSpeeds.includes(generationSpeedId) ? generationSpeedId : (compatibleSpeeds[0] || generationSpeedId));
 
         const queuePayload: ImageGenerateRecipePayload = {
           recipeType: 'image_generate_recipe_v1',
@@ -852,9 +943,11 @@ export function WorkspaceImage() {
           characterCount: characters.length,
           resolution,
           aspectRatio,
-          quality: aiModel === 'gpt' ? gptQuality : undefined,
-          speed: effectiveSpeedId,
+          quality: isGommoSelected ? gommoPricingInput.quality : aiModel === 'gpt' ? gptQuality : undefined,
+          speed: isGommoSelected ? gommoPricingInput.speed : effectiveSpeedId,
           serverId: effectiveServerId,
+          providerMode: isGommoSelected ? providerMode : undefined,
+          pricingOptionId: isGommoSelected ? gommoPricing?.optionId : undefined,
           characterReferenceGroups: stagedCharacterGroups,
           characterImages: stagedCharacterImages,
           sampleImage: stagedSampleImage,
@@ -900,7 +993,9 @@ export function WorkspaceImage() {
 
   const costDisplay = isCatalogReady ? calculateCost() : '...';
 
-  const ratios = ['1:1', '3:4', '4:3', '9:16', '16:9'];
+  const ratios = isGommoSelected && selectedGommoModel?.ratios.length
+    ? selectedGommoModel.ratios.map((option) => option.type)
+    : tstAspectRatios;
 
   return (
     <div className="flex flex-col h-full bg-[#FAFAFA] dark:bg-[#09090B]">
@@ -917,12 +1012,12 @@ export function WorkspaceImage() {
         </div>
 
         {/* Mode Toggle */}
-        <div className="flex gap-2">
-          {(['single', 'couple', 'trio', 'squad', 'group5'] as GenMode[]).map((mode) => (
+        <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
+          {(Object.keys(MODE_META) as GenMode[]).map((mode) => (
             <button
               key={mode}
               onClick={() => handleModeChange(mode)}
-              className={`flex-1 py-2.5 rounded-2xl text-[11px] font-bold transition-all ${
+              className={`min-w-[82px] flex-1 py-2.5 rounded-2xl text-[11px] font-bold transition-all ${
                 activeMode === mode
                   ? 'bg-gray-900 text-white shadow-md'
                   : 'bg-white dark:bg-[#18181B] text-gray-500 dark:text-zinc-400 border border-gray-100 dark:border-zinc-800'
@@ -950,6 +1045,12 @@ export function WorkspaceImage() {
             <div className="text-[11px] font-bold uppercase tracking-wide">VD Ảnh Mẫu</div>
             <div className="mt-1 text-xs leading-relaxed opacity-80">Xem ảnh mẫu bố cục, góc máy và tư thế nên dùng.</div>
           </button>
+        </div>
+
+        <div role="note" className="rounded-2xl border border-cyan-200 bg-cyan-50/70 px-4 py-3 text-xs font-medium leading-relaxed text-cyan-900 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-100">
+          <span aria-hidden="true">💡</span>{' '}
+          <strong>{GENERATION_SECTION_TIPS.character.title}:</strong>{' '}
+          {GENERATION_SECTION_TIPS.character.text}
         </div>
 
         {/* Character Tabs */}
@@ -1069,7 +1170,7 @@ export function WorkspaceImage() {
 
         {/* Prompt & Ref Image */}
         <div data-tour-id="mobile.generation.prompt" className="relative group space-y-3">
-          <div className="v2-image-sample-card bg-white dark:bg-[#18181B] rounded-[24px] p-4 shadow-sm border border-gray-100 dark:border-zinc-800">
+          {activeMode !== 'group8' && <div className="v2-image-sample-card bg-white dark:bg-[#18181B] rounded-[24px] p-4 shadow-sm border border-gray-100 dark:border-zinc-800">
             <div className="v2-image-sample-card__heading">
               <span><ImagePlus className="w-5 h-5" /></span>
               <div>
@@ -1091,7 +1192,7 @@ export function WorkspaceImage() {
                 <small>JPG, PNG hoặc WEBP</small>
               </button>
             )}
-          </div>
+          </div>}
 
           <div className="relative bg-white dark:bg-[#18181B] rounded-[24px] p-4 shadow-[0_4px_20px_rgb(0,0,0,0.04)] ring-1 ring-gray-100 dark:ring-zinc-800 focus-within:ring-2 focus-within:ring-[var(--color-primary)]">
             <textarea
@@ -1118,6 +1219,18 @@ export function WorkspaceImage() {
         </div>
 
         {/* Aspect Ratio */}
+        <div className={`rounded-2xl border px-4 py-3 text-xs font-black ${
+          isGommoSelected ? 'border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-300' : 'border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300'
+        }`}>
+          Luồng đang dùng: {isGommoSelected ? `Gommo · ${selectedGommoModel?.name || selectedModelId}` : `TST · ${selectedModelId}`}
+        </div>
+
+        <div role="note" className="rounded-2xl border border-cyan-200 bg-cyan-50/70 px-4 py-3 text-xs font-medium leading-relaxed text-cyan-900 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-100">
+          <span aria-hidden="true">💡</span>{' '}
+          <strong>{GENERATION_SECTION_TIPS.settings.title}:</strong>{' '}
+          {GENERATION_SECTION_TIPS.settings.text}
+        </div>
+
         <div data-tour-id="mobile.generation.settings" className="space-y-2">
           <h3 className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider ml-1">Khung hình</h3>
           <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
@@ -1180,11 +1293,11 @@ export function WorkspaceImage() {
         {availableResolutions.length > 0 && (
           <div className="space-y-2">
             <h3 className="text-xs font-semibold text-gray-400 dark:text-zinc-500 tracking-wider ml-1">ĐỘ PHÂN GIẢI</h3>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {availableResolutions.map((res) => (
                 <button
                   key={res}
-                  onClick={() => setResolution(res as TstResolution)}
+                  onClick={() => setResolution(res)}
                   className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${
                     resolution === res ? 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 border border-indigo-200 dark:border-indigo-500/30 shadow-sm' : 'bg-white dark:bg-[#18181B] text-gray-500 dark:text-zinc-400 border border-gray-100 dark:border-zinc-800'
                   }`}
@@ -1196,7 +1309,7 @@ export function WorkspaceImage() {
           </div>
         )}
 
-        {aiModel === 'gpt' && (
+        {aiModel === 'gpt' && !isGommoSelected && (
           <div className="space-y-2">
             <h3 className="text-xs font-semibold text-gray-400 dark:text-zinc-500 tracking-wider ml-1">CHẤT LƯỢNG ẢNH GPT</h3>
             <div className="grid grid-cols-3 gap-2">
@@ -1215,7 +1328,27 @@ export function WorkspaceImage() {
           </div>
         )}
 
-        <div className="space-y-2">
+        {isGommoSelected && gommoModes.length > 0 && (
+          <div className="space-y-2">
+            <h3 className="text-xs font-semibold text-cyan-600 dark:text-cyan-400 tracking-wider ml-1">MÁY CHỦ / CHẾ ĐỘ GOMMO · REALTIME</h3>
+            <div className="grid grid-cols-2 gap-2">
+              {gommoModes.map((option) => (
+                <button
+                  key={option.type}
+                  onClick={() => setProviderMode(option.type)}
+                  className={`rounded-xl border px-3 py-2 text-left text-xs font-bold ${
+                    providerMode === option.type ? 'border-cyan-300 bg-cyan-50 text-cyan-700 dark:border-cyan-500/40 dark:bg-cyan-500/10 dark:text-cyan-300' : 'border-gray-100 bg-white text-gray-500 dark:border-zinc-800 dark:bg-[#18181B] dark:text-zinc-400'
+                  }`}
+                >
+                  <span className="block">{option.name || option.type}</span>
+                  {option.group && <span className="block text-[9px] opacity-70">{option.group}</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {availableSpeedLabels.length > 0 && <div className="space-y-2">
           <h3 className="text-xs font-semibold text-gray-400 dark:text-zinc-500 tracking-wider ml-1">TỐC ĐỘ XỬ LÝ</h3>
           <div className="flex gap-2">
             {availableSpeedLabels.map((spd) => (
@@ -1230,7 +1363,7 @@ export function WorkspaceImage() {
               </button>
             ))}
           </div>
-        </div>
+        </div>}
 
         {availableServerLabels.length > 0 && (
           <div className="space-y-2">
@@ -1267,6 +1400,11 @@ export function WorkspaceImage() {
                 <Gem className="w-3.5 h-3.5 text-[var(--color-accent)]" />
               </div>
             </div>
+          </div>
+          <div role="note" className="mt-4 rounded-2xl border border-cyan-200 bg-cyan-50/70 px-3 py-3 text-xs font-medium leading-relaxed text-cyan-900 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-100">
+            <span aria-hidden="true">💡</span>{' '}
+            <strong>{GENERATION_SECTION_TIPS.render.title}:</strong>{' '}
+            {GENERATION_SECTION_TIPS.render.text}
           </div>
           <div className="v2-image-flow-grid mt-4 grid grid-cols-2 gap-2 text-xs">
             <div className="rounded-2xl bg-gray-50 p-3 dark:bg-[#27272A]"><Cpu /><span><small>Model AI</small><strong>{aiModel === 'flash' ? 'Flash' : aiModel === 'pro' ? 'Pro' : 'GPT'}</strong></span></div>

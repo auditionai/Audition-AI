@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Bot, Crown, Gem, ImagePlus, Loader, Plus, Sparkles, X, Zap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../../components/NotificationSystem';
-import { getModelPricing, getTstServerAvailabilityConfig, getUserProfile } from '../../services/economyService';
+import { getGenerationProviderConfig, getModelPricing, getTstServerAvailabilityConfig, getUserProfile, type GenerationProviderConfig } from '../../services/economyService';
 import { useConcurrency, CONCURRENCY_LIMITS } from '../../services/concurrencyService';
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
@@ -13,6 +13,7 @@ import {
   getCompatibleGenerationServers,
   getCompatibleGenerationSpeeds,
   getGenerationCostBreakdown,
+  getGenerationAspectRatios,
   getGenerationModelId,
   resolveGenerationSelection,
   tstServerToUi,
@@ -23,6 +24,7 @@ import {
   type TstGenerationTier,
   type TstPricingEntry,
   type TstResolution,
+  type TstRuntimeModel,
   type AuditionPricingOverride,
 } from '../../services/tstCatalog';
 import { optimizePayload } from '../../../../utils/imageProcessor';
@@ -30,6 +32,8 @@ import { buildAuditionKoreaMmoStylePrompt, DEFAULT_IMAGE_NEGATIVE_PROMPT } from 
 import type { GeneratedImage } from '../../types';
 import type { ModelPricing } from '../../services/economyService';
 import type { PromptImageGenerateRecipePayload } from '../../../../shared/queueRecipes';
+import { isModelAllowedForFeature } from '../../../../shared/providerRouting';
+import { fetchProviderCatalog, getAuditionProviderPricing, getGommoPricingInput, getGommoModelForAudition, isGommoCatalogModelAvailable, resolveProviderForModel, type GommoProviderCatalog } from '../../services/providerCatalog';
 
 const DEFAULT_REFERENCE_IMAGE_LIMIT = 4;
 const GPT_REFERENCE_IMAGE_LIMIT = 5;
@@ -104,12 +108,16 @@ export function WorkspacePromptImage() {
   const [prompt, setPrompt] = useState('');
   const [aiModel, setAiModel] = useState<TstGenerationTier>('gpt');
   const [aspectRatio, setAspectRatio] = useState('9:16');
-  const [resolution, setResolution] = useState<TstResolution>('1K');
+  const [resolution, setResolution] = useState('1K');
   const [speed, setSpeed] = useState('Nhanh');
   const [server, setServer] = useState('VIP 1');
   const [gptQuality, setGptQuality] = useState<'low' | 'medium' | 'high'>('low');
+  const [providerMode, setProviderMode] = useState('');
   const [pricingEntries, setPricingEntries] = useState<TstPricingEntry[]>([]);
+  const [runtimeModels, setRuntimeModels] = useState<TstRuntimeModel[]>([]);
   const [pricingOverrides, setPricingOverrides] = useState<ModelPricing[]>([]);
+  const [gommoCatalog, setGommoCatalog] = useState<GommoProviderCatalog | null>(null);
+  const [providerConfig, setProviderConfig] = useState<GenerationProviderConfig | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { queueStats } = useConcurrency();
 
@@ -130,14 +138,20 @@ export function WorkspacePromptImage() {
       fetchTstModels().catch(() => []),
       getModelPricing().catch(() => []),
       getTstServerAvailabilityConfig().catch(() => null),
-    ]).then(([tstPricing, runtimeModels, adminPricing, serverAvailabilityConfig]) => {
+      fetchProviderCatalog(true).catch(() => null),
+      getGenerationProviderConfig().catch(() => null),
+    ]).then(([tstPricing, runtimeModels, adminPricing, serverAvailabilityConfig, providerCatalog, routingConfig]) => {
       if (!alive) return;
       const filteredModels = applyServerAvailabilityToRuntimeModels(runtimeModels, serverAvailabilityConfig);
+      setRuntimeModels(filteredModels);
       setPricingEntries(sanitizePricingEntriesWithRuntimeModels(tstPricing, filteredModels, serverAvailabilityConfig));
       setPricingOverrides(adminPricing);
+      setGommoCatalog(providerCatalog);
+      setProviderConfig(routingConfig);
     }).catch(() => {
       if (!alive) return;
       setPricingEntries([]);
+      setRuntimeModels([]);
       setPricingOverrides([]);
     });
     return () => {
@@ -147,12 +161,21 @@ export function WorkspacePromptImage() {
 
   const uploadedImages = referenceImages.filter((value): value is string => Boolean(value));
   const uploadedCount = uploadedImages.length;
-  const maxReferenceImages = aiModel === 'gpt' ? GPT_REFERENCE_IMAGE_LIMIT : DEFAULT_REFERENCE_IMAGE_LIMIT;
-  const modeCountForPrice = Math.max(1, Math.min(maxReferenceImages, uploadedCount));
   const generationSpeedId = speedLabelToTst(speed);
   const generationServerId = uiServerToTst(server) || 'fast';
+  const selectedModelId = getGenerationModelId(aiModel);
+  const isSelectedModelAllowed = isModelAllowedForFeature(providerConfig, 'image_prompt', selectedModelId);
+  const isGommoSelected = resolveProviderForModel(providerConfig, selectedModelId, 'image_prompt') === 'gommo';
+  const selectedGommoModel = getGommoModelForAudition(gommoCatalog, selectedModelId);
+  const tstReferenceImageLimit = aiModel === 'gpt' ? GPT_REFERENCE_IMAGE_LIMIT : DEFAULT_REFERENCE_IMAGE_LIMIT;
+  const maxReferenceImages = isGommoSelected && Number(selectedGommoModel?.maxReferenceImages) > 0
+    ? Number(selectedGommoModel?.maxReferenceImages)
+    : tstReferenceImageLimit;
+  const modeCountForPrice = Math.max(1, Math.min(maxReferenceImages, uploadedCount));
+  const tstAspectRatios = useMemo(() => getGenerationAspectRatios(aiModel, runtimeModels), [aiModel, runtimeModels]);
 
   const availableResolutions = useMemo(() => {
+    if (isGommoSelected) return (selectedGommoModel?.resolutions || []).map((option) => option.type.toUpperCase());
     const values = getCompatibleGenerationResolutions({
       tier: aiModel,
       pricingEntries,
@@ -161,35 +184,50 @@ export function WorkspacePromptImage() {
       quality: aiModel === 'gpt' ? gptQuality : undefined,
     });
     return values;
-  }, [aiModel, generationServerId, generationSpeedId, gptQuality, pricingEntries]);
+  }, [aiModel, generationServerId, generationSpeedId, gptQuality, isGommoSelected, pricingEntries, selectedGommoModel]);
 
   const availableServers = useMemo(() => {
+    if (isGommoSelected) return [];
     const values = getCompatibleGenerationServers({
       tier: aiModel,
       pricingEntries,
       speed: generationSpeedId,
-      resolution,
+      resolution: resolution as TstResolution,
       quality: aiModel === 'gpt' ? gptQuality : undefined,
     });
     return values;
-  }, [aiModel, generationSpeedId, gptQuality, pricingEntries, resolution]);
+  }, [aiModel, generationSpeedId, gptQuality, isGommoSelected, pricingEntries, resolution]);
 
   const availableSpeeds = useMemo(() => {
+    if (isGommoSelected) return [];
     const values = getCompatibleGenerationSpeeds({
       tier: aiModel,
       pricingEntries,
       serverId: generationServerId,
-      resolution,
+      resolution: resolution as TstResolution,
       quality: aiModel === 'gpt' ? gptQuality : undefined,
     });
     return values;
-  }, [aiModel, generationServerId, gptQuality, pricingEntries, resolution]);
+  }, [aiModel, generationServerId, gptQuality, isGommoSelected, pricingEntries, resolution]);
 
   useEffect(() => {
+    if (isGommoSelected) {
+      const resolutions = (selectedGommoModel?.resolutions || []).map((option) => option.type.toUpperCase());
+      const ratios = (selectedGommoModel?.ratios || []).map((option) => option.type);
+      const modes = (selectedGommoModel?.modes || []).map((option) => option.type);
+      if (resolutions.length && !resolutions.includes(resolution)) setResolution(resolutions[0]);
+      if (ratios.length && !ratios.includes(aspectRatio)) setAspectRatio(ratios[0]);
+      if (modes.length && !modes.includes(providerMode)) setProviderMode(modes[0]);
+      return;
+    }
+    if (tstAspectRatios.length > 0 && !tstAspectRatios.includes(aspectRatio)) {
+      setAspectRatio(tstAspectRatios[0]);
+      return;
+    }
     const nextSelection = resolveGenerationSelection({
       tier: aiModel,
       pricingEntries,
-      resolution,
+      resolution: resolution as TstResolution,
       quality: aiModel === 'gpt' ? gptQuality : undefined,
       speed: generationSpeedId,
       serverId: generationServerId,
@@ -210,34 +248,49 @@ export function WorkspacePromptImage() {
     if (nextSpeedLabel !== speed) {
       setSpeed(nextSpeedLabel);
     }
-  }, [aiModel, generationServerId, generationSpeedId, gptQuality, pricingEntries, resolution, server, speed]);
+  }, [aiModel, aspectRatio, generationServerId, generationSpeedId, gptQuality, isGommoSelected, pricingEntries, providerMode, resolution, selectedGommoModel, server, speed, tstAspectRatios]);
 
   useEffect(() => {
-    if (aiModel !== 'gpt') {
-      setReferenceImages((prev) => {
-        const next = prev.slice(0, DEFAULT_REFERENCE_IMAGE_LIMIT);
-        return next.length > 0 ? next : [null];
-      });
-    }
-  }, [aiModel]);
+    setReferenceImages((prev) => {
+      const next = prev.slice(0, maxReferenceImages);
+      return next.length > 0 ? next : [null];
+    });
+  }, [maxReferenceImages]);
 
-  const selectedCost = getGenerationCostBreakdown({
+  const tstSelectedCost = getGenerationCostBreakdown({
     tier: aiModel,
-    resolution,
+    resolution: resolution as TstResolution,
     quality: aiModel === 'gpt' ? gptQuality : undefined,
     speed: generationSpeedId,
     serverId: generationServerId,
     pricingEntries,
     pricingOverrides: pricingOverrideRows,
   });
+  const gommoPricingInput = getGommoPricingInput(selectedModelId, { resolution, quality: aiModel === 'gpt' ? gptQuality : undefined, speed: generationSpeedId, providerMode });
+  const gommoPricing = getAuditionProviderPricing(pricingOverrides, selectedModelId, gommoPricingInput, { allowGenericFallback: true });
+  const selectedCost = isGommoSelected
+    ? { available: gommoPricing !== null && isGommoCatalogModelAvailable(selectedGommoModel), vcoin: gommoPricing?.vcoin || 0 }
+    : tstSelectedCost;
   const totalCost = selectedCost.available ? selectedCost.vcoin * modeCountForPrice : 0;
-  const availableSpeedLabels = availableSpeeds.map((value) => speedIdToLabel(value));
-  const availableServerLabels = availableServers.map((value) => ({
+  const availableSpeedLabels = isGommoSelected ? [] : availableSpeeds.map((value) => speedIdToLabel(value));
+  const availableServerLabels = isGommoSelected ? [] : availableServers.map((value) => ({
     id: value,
     label: tstServerToUi(value),
   }));
+  const aspectRatioOptions = isGommoSelected && selectedGommoModel?.ratios.length
+    ? selectedGommoModel.ratios.map((option) => option.type)
+    : (tstAspectRatios.length ? tstAspectRatios : ASPECT_RATIOS);
+
+  useEffect(() => {
+    if (isSelectedModelAllowed) return;
+    const next = MODEL_TABS.find(({ tier }) =>
+      isModelAllowedForFeature(providerConfig, 'image_prompt', getGenerationModelId(tier)),
+    );
+    if (next) setAiModel(next.tier);
+  }, [isSelectedModelAllowed, providerConfig]);
+  const gommoModes = isGommoSelected ? (selectedGommoModel?.modes || []) : [];
   const costDisplay = selectedCost.available ? totalCost : '?';
-  const isGenerateDisabled = isSubmitting || !prompt.trim() || !selectedCost.available || totalCost <= 0;
+  const isGenerateDisabled = isSubmitting || !isSelectedModelAllowed || !prompt.trim() || !selectedCost.available || totalCost <= 0;
 
   const pickImage = (index: number) => {
     setActiveUploadIndex(index);
@@ -318,9 +371,11 @@ export function WorkspacePromptImage() {
         referenceImages: stagedImages,
         resolution,
         aspectRatio,
-        speed: generationSpeedId,
-        serverId: generationServerId,
-        quality: isGptPromptMode ? gptQuality : undefined,
+        speed: isGommoSelected ? gommoPricingInput.speed : generationSpeedId,
+        serverId: isGommoSelected ? undefined : generationServerId,
+        providerMode: isGommoSelected ? providerMode : undefined,
+        pricingOptionId: isGommoSelected ? gommoPricing?.optionId : undefined,
+        quality: isGommoSelected ? gommoPricingInput.quality : isGptPromptMode ? gptQuality : undefined,
         __billingUnits: modeCountForPrice,
       };
       const queuedImage: GeneratedImage = {
@@ -430,7 +485,7 @@ export function WorkspacePromptImage() {
         <div className="space-y-2">
           <h3 className="ml-1 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-zinc-500">KHUNG HÌNH</h3>
           <div className="flex gap-2 overflow-x-auto pb-1">
-            {ASPECT_RATIOS.map((ratio) => (
+            {aspectRatioOptions.map((ratio) => (
               <button
                 key={ratio}
                 type="button"
@@ -452,16 +507,18 @@ export function WorkspacePromptImage() {
           <div className="grid gap-2">
             {MODEL_TABS.map(({ tier, label, tag, title, description, icon: Icon, accent }) => {
               const selected = aiModel === tier;
+              const available = isModelAllowedForFeature(providerConfig, 'image_prompt', getGenerationModelId(tier));
               return (
                 <button
                   key={tier}
                   type="button"
-                  onClick={() => setAiModel(tier)}
+                  onClick={() => available && setAiModel(tier)}
+                  disabled={!available}
                   className={`relative overflow-hidden rounded-[18px] border p-3 text-left transition-all ${
                     selected
                       ? 'border-cyan-300 bg-cyan-50 shadow-sm dark:border-cyan-400/70 dark:bg-cyan-500/10'
                       : 'border-gray-100 bg-white text-gray-500 dark:border-zinc-800 dark:bg-[#18181B] dark:text-zinc-400'
-                  }`}
+                  } ${!available ? 'cursor-not-allowed opacity-40' : ''}`}
                 >
                   <div className={`absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r ${accent}`} />
                   <div className="flex items-start gap-3">
@@ -508,7 +565,7 @@ export function WorkspacePromptImage() {
           </div>
         )}
 
-        {aiModel === 'gpt' && (
+        {aiModel === 'gpt' && !isGommoSelected && (
           <div className="space-y-2">
             <h3 className="ml-1 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-zinc-500">CHẤT LƯỢNG ẢNH GPT</h3>
             <div className="grid grid-cols-3 gap-2">
@@ -528,6 +585,25 @@ export function WorkspacePromptImage() {
               ))}
             </div>
           </div>
+        )}
+
+        {isGommoSelected && gommoModes.length > 0 && (
+          <section className="space-y-2">
+            <h3 className="ml-1 text-xs font-semibold uppercase tracking-wider text-cyan-600 dark:text-cyan-400">MÁY CHỦ / CHẾ ĐỘ GOMMO · REALTIME</h3>
+            <div className="grid grid-cols-2 gap-2">
+              {gommoModes.map((option) => (
+                <button
+                  key={option.type}
+                  type="button"
+                  onClick={() => setProviderMode(option.type)}
+                  className={`rounded-xl border p-3 text-left text-xs font-bold ${providerMode === option.type ? 'border-cyan-300 bg-cyan-50 text-cyan-700 dark:border-cyan-500/40 dark:bg-cyan-500/10 dark:text-cyan-300' : 'border-gray-100 bg-white text-gray-500 dark:border-zinc-800 dark:bg-[#18181B] dark:text-zinc-400'}`}
+                >
+                  <span className="block">{option.name || option.type}</span>
+                  {option.group && <span className="block text-[9px] opacity-70">{option.group}</span>}
+                </button>
+              ))}
+            </div>
+          </section>
         )}
 
         {availableSpeedLabels.length > 0 && (

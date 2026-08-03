@@ -75,6 +75,13 @@ import {
     getGiftcodeAbuseCases,
     GiftcodeAbuseCase
 } from '../services/economyService';
+import {
+    DEFAULT_ALLOWED_MODELS_BY_FEATURE,
+    DEFAULT_PROVIDER_BY_FEATURE,
+    GENERATION_PROVIDER_ROUTE_OPTIONS,
+    getAllowedModelsForFeature,
+    type GenerationProviderRouteKey,
+} from '../shared/providerRouting';
 import { checkR2Connection, getUserImagesFromStorage, cleanupExpiredImages, cleanupR2Directly } from '../services/storageService';
 import { checkConnection, analyzeStyleImage } from '../services/geminiService';
 import { checkSupabaseConnection } from '../services/supabaseClient';
@@ -98,6 +105,8 @@ import QueueWorkspaceV2 from './admin-v2/QueueWorkspaceV2';
 import AIUsageAnalyticsV2 from './admin-v2/AIUsageAnalyticsV2';
 import {
     fetchProviderCatalog,
+    getAuditionProviderPricing,
+    getGommoPricingInput,
     getGommoPriceComparison,
     type GommoProviderCatalog,
 } from '../services/providerCatalog';
@@ -576,9 +585,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [gommoCatalogError, setGommoCatalogError] = useState('');
   const [generationProvider, setGenerationProvider] = useState<GenerationProviderMode>('tst');
   const [generationProviderByModel, setGenerationProviderByModel] = useState<Record<string, GenerationProviderMode>>({});
+  const [generationProviderByFeature, setGenerationProviderByFeature] = useState<Record<string, GenerationProviderMode>>({});
+  const [allowedModelsByFeature, setAllowedModelsByFeature] = useState<Record<string, string[]>>({});
   const [smartProviderFallbackEnabled, setSmartProviderFallbackEnabled] = useState(true);
   const [switchingGenerationProvider, setSwitchingGenerationProvider] = useState(false);
   const [pricingDrafts, setPricingDrafts] = useState<Record<string, string>>({});
+  const [pricingConfigFilter, setPricingConfigFilter] = useState<'all' | 'missing'>('all');
   const [savingAllPricing, setSavingAllPricing] = useState(false);
   const [serverAvailabilityConfig, setServerAvailabilityConfig] = useState<TstServerAvailabilityConfig>({ disabledByModel: {}, autoDisabledCombos: {} });
   const [editingStyle, setEditingStyle] = useState<StylePreset | null>(null);
@@ -764,6 +776,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               setGommoCatalog(providerCatalog);
               setGenerationProvider(providerConfig.provider);
               setGenerationProviderByModel(providerConfig.providerByModel || {});
+              setGenerationProviderByFeature(providerConfig.providerByFeature || {});
+              setAllowedModelsByFeature(providerConfig.allowedModelsByFeature || {});
               setSmartProviderFallbackEnabled(providerConfig.smartFallbackEnabled !== false);
               if (providerCatalog) setGommoCatalogError('');
           } catch (error) {
@@ -879,19 +893,113 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       }
   };
 
+  const gommoPricingRows = useMemo<TstPricingRow[]>(() => {
+      if (!gommoCatalog?.configured) return [];
+      const rows = gommoCatalog.models.flatMap((model) => {
+          if (!model.fallbackSupported) return [];
+          return model.prices.map((price) => {
+              const duration = price.duration ? String(price.duration).replace(/s$/i, '') : '';
+              const configKey = [price.resolution, duration ? `${duration}s` : '', price.mode]
+                  .filter(Boolean)
+                  .join('-')
+                  .toLowerCase() || 'default';
+              const providerCredits = Number(price.price || 0);
+              const convertedVcoin = gommoCatalog.vndPerCredit && providerCredits > 0
+                  ? Math.max(1, Math.ceil((providerCredits * gommoCatalog.vndPerCredit) / 1000))
+                  : 0;
+              return {
+                  type: model.kind === 'motion' ? 'motion-control' : model.kind,
+                  modelId: model.auditionModelId,
+                  modelName: model.name,
+                  server: 'gommo',
+                  resolution: price.resolution || undefined,
+                  duration: duration || undefined,
+                  speed: price.mode || undefined,
+                  credits: providerCredits,
+                  vcoin: convertedVcoin,
+                  configKey,
+                  billingUnit: 'flat' as const,
+              } satisfies TstPricingRow;
+          });
+      });
+      return Array.from(new Map(rows.map((row) => [`${row.modelId}::${row.configKey}`, row])).values());
+  }, [gommoCatalog]);
+
+  const allPricingRows = useMemo(() => {
+      const union = new Map<string, TstPricingRow>();
+      for (const row of [...pricingRows, ...gommoPricingRows]) {
+          const key = `${row.modelId}::${row.configKey}`;
+          if (!union.has(key) || row.server !== 'gommo') union.set(key, row);
+      }
+      return Array.from(union.values());
+  }, [gommoPricingRows, pricingRows]);
+
+  const getDirectAuditionPricing = (row: TstPricingRow) =>
+      modelPricing.find((item) => item.model_id === row.modelId && item.option_id === row.configKey);
+
+  const getInheritedAuditionPricing = (row: TstPricingRow) => {
+      if (row.server !== 'gommo') return null;
+      const match = getAuditionProviderPricing(
+          modelPricing,
+          row.modelId,
+          getGommoPricingInput(row.modelId, {
+              resolution: row.resolution,
+              duration: row.duration,
+              providerMode: row.speed,
+              audio: row.audio,
+          }),
+      );
+      if (!match || match.optionId === row.configKey) return null;
+      const source = modelPricing.find((item) => item.model_id === row.modelId && item.option_id === match.optionId);
+      return source ? { source, vcoin: match.vcoin } : null;
+  };
+
+  const getEffectiveAuditionPricing = (row: TstPricingRow) => {
+      const direct = getDirectAuditionPricing(row);
+      if (direct) return { source: direct, vcoin: direct.audition_price_vcoin, inherited: false };
+      const inherited = getInheritedAuditionPricing(row);
+      return inherited ? { ...inherited, inherited: true } : null;
+  };
+
+  const featureModelOptions = useMemo(() => {
+      const result = {} as Record<GenerationProviderRouteKey, Array<{ id: string; name: string }>>;
+      for (const route of GENERATION_PROVIDER_ROUTE_OPTIONS) {
+          const expectedType = route.key === 'video_generation'
+              ? 'video'
+              : route.key === 'motion_control'
+                  ? 'motion-control'
+                  : 'image';
+          const models = new Map<string, string>();
+          for (const row of allPricingRows) {
+              if (row.type !== expectedType) continue;
+              const id = row.modelId.trim().toLowerCase();
+              if (id && !models.has(id)) models.set(id, row.modelName || row.modelId);
+          }
+          result[route.key] = Array.from(models, ([id, name]) => ({ id, name }))
+              .sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+      }
+      return result;
+  }, [allPricingRows]);
+
   useEffect(() => {
-      if (pricingRows.length === 0) return;
+      if (allPricingRows.length === 0) return;
 
       setPricingDrafts((prev) => {
           const next = { ...prev };
-          for (const row of pricingRows) {
+          for (const row of allPricingRows) {
               const key = `${row.modelId}::${row.configKey}`;
-              const saved = modelPricing.find((item) => item.model_id === row.modelId && item.option_id === row.configKey);
-              next[key] = prev[key] ?? String(saved?.audition_price_vcoin ?? row.defaultAuditionVcoin ?? row.vcoin);
+              const effective = getEffectiveAuditionPricing(row);
+              next[key] = prev[key] !== undefined && prev[key] !== ''
+                  ? prev[key]
+                  : effective
+                      ? String(effective.vcoin)
+                      : row.defaultAuditionVcoin !== undefined
+                          ? String(row.defaultAuditionVcoin)
+                          : '';
           }
           return next;
       });
-  }, [modelPricing, pricingRows]);
+  }, [allPricingRows, modelPricing]);
 
   useEffect(() => {
       if (typeof window === 'undefined') return;
@@ -905,12 +1013,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const getPricingLookupKey = (modelId: string, configKey: string) => `${modelId}::${configKey}`;
 
   const getSavedAuditionPrice = (row: TstPricingRow) =>
-      modelPricing.find((item) => item.model_id === row.modelId && item.option_id === row.configKey);
+      getDirectAuditionPricing(row);
 
   const getDraftAuditionPrice = (row: TstPricingRow) => {
       const draftKey = getPricingLookupKey(row.modelId, row.configKey);
-      const savedPricing = getSavedAuditionPrice(row);
-      const fallbackValue = savedPricing?.audition_price_vcoin ?? row.defaultAuditionVcoin ?? row.vcoin;
+      const effectivePricing = getEffectiveAuditionPricing(row);
+      const fallbackValue = effectivePricing?.vcoin ?? row.defaultAuditionVcoin ?? row.vcoin;
       const rawDraft = pricingDrafts[draftKey];
       const parsedDraft = Number(rawDraft);
       return Number.isFinite(parsedDraft) && parsedDraft > 0 ? parsedDraft : fallbackValue;
@@ -920,8 +1028,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       const draftKey = getPricingLookupKey(row.modelId, row.configKey);
       const rawDraft = pricingDrafts[draftKey];
       if (rawDraft === undefined) return false;
-      const savedPricing = getSavedAuditionPrice(row);
-      const baseline = savedPricing?.audition_price_vcoin ?? row.defaultAuditionVcoin ?? row.vcoin;
+      const effectivePricing = getEffectiveAuditionPricing(row);
+      const baseline = effectivePricing?.vcoin ?? row.defaultAuditionVcoin ?? row.vcoin;
       const parsedDraft = Number(rawDraft);
 
       if (!Number.isFinite(parsedDraft) || parsedDraft <= 0) {
@@ -931,8 +1039,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       return parsedDraft !== baseline;
   };
 
-  const dirtyPricingRows = pricingRows.filter(isPricingRowDirty);
+  const dirtyPricingRows = allPricingRows.filter(isPricingRowDirty);
   const dirtyPricingCount = dirtyPricingRows.length;
+  const missingPricingCount = allPricingRows.filter((row) => !getEffectiveAuditionPricing(row)).length;
+  const filteredPricingRows = pricingConfigFilter === 'missing'
+      ? allPricingRows.filter((row) => !getEffectiveAuditionPricing(row))
+      : allPricingRows;
 
   useEffect(() => {
       if (typeof window === 'undefined' || dirtyPricingCount === 0) return;
@@ -1021,6 +1133,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       const result = await saveGenerationProviderConfig({
           provider,
           providerByModel: generationProviderByModel,
+          providerByFeature: generationProviderByFeature,
+          allowedModelsByFeature,
           smartFallbackEnabled: smartProviderFallbackEnabled,
       });
       setSwitchingGenerationProvider(false);
@@ -1065,6 +1179,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       const result = await saveGenerationProviderConfig({
           provider: generationProvider,
           providerByModel: nextProviderByModel,
+          providerByFeature: generationProviderByFeature,
+          allowedModelsByFeature,
           smartFallbackEnabled: smartProviderFallbackEnabled,
       });
       setSwitchingGenerationProvider(false);
@@ -1084,6 +1200,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       const result = await saveGenerationProviderConfig({
           provider: generationProvider,
           providerByModel: generationProviderByModel,
+          providerByFeature: generationProviderByFeature,
+          allowedModelsByFeature,
           smartFallbackEnabled: nextEnabled,
       });
       setSwitchingGenerationProvider(false);
@@ -1098,6 +1216,74 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               : 'Đã tắt backup thông minh; job sẽ chạy theo provider đã chọn.',
           'success',
       );
+  };
+
+  const handleSwitchFeatureGenerationProvider = async (
+      featureKey: GenerationProviderRouteKey,
+      provider: GenerationProviderMode | 'default',
+  ) => {
+      if (switchingGenerationProvider) return;
+      if (provider === 'gommo' && !gommoCatalog?.configured) {
+          showToast('Gommo chưa được cấu hình trên server.', 'error');
+          return;
+      }
+      if (featureKey === 'motion_control' && provider === 'gommo') {
+          showToast('Motion Control chưa có payload Gommo công khai nên chưa thể gán Gommo.', 'error');
+          return;
+      }
+      const nextProviderByFeature = { ...generationProviderByFeature };
+      if (provider === 'default') delete nextProviderByFeature[featureKey];
+      else nextProviderByFeature[featureKey] = provider;
+
+      setSwitchingGenerationProvider(true);
+      const result = await saveGenerationProviderConfig({
+          provider: generationProvider,
+          providerByModel: generationProviderByModel,
+          providerByFeature: nextProviderByFeature,
+          allowedModelsByFeature,
+          smartFallbackEnabled: smartProviderFallbackEnabled,
+      });
+      setSwitchingGenerationProvider(false);
+      if (!result.success) {
+          showToast(`Không thể lưu route chức năng: ${result.error}`, 'error');
+          return;
+      }
+      setGenerationProviderByFeature(nextProviderByFeature);
+      showToast('Đã cập nhật provider riêng cho chức năng.', 'success');
+  };
+
+  const handleChangeFeatureAllowedModels = async (
+      featureKey: GenerationProviderRouteKey,
+      nextValue: 'default' | 'all' | string[],
+  ) => {
+      if (switchingGenerationProvider) return;
+      const nextAllowedModelsByFeature = { ...allowedModelsByFeature };
+      if (nextValue === 'default') delete nextAllowedModelsByFeature[featureKey];
+      else if (nextValue === 'all') nextAllowedModelsByFeature[featureKey] = ['*'];
+      else if (nextValue.length > 0) {
+          nextAllowedModelsByFeature[featureKey] = Array.from(new Set(
+              nextValue.map((value) => value.trim().toLowerCase()).filter(Boolean),
+          ));
+      } else {
+          showToast('Mỗi chức năng bị giới hạn phải có ít nhất một model.', 'error');
+          return;
+      }
+
+      setSwitchingGenerationProvider(true);
+      const result = await saveGenerationProviderConfig({
+          provider: generationProvider,
+          providerByModel: generationProviderByModel,
+          providerByFeature: generationProviderByFeature,
+          allowedModelsByFeature: nextAllowedModelsByFeature,
+          smartFallbackEnabled: smartProviderFallbackEnabled,
+      });
+      setSwitchingGenerationProvider(false);
+      if (!result.success) {
+          showToast(`Không thể lưu model theo chức năng: ${result.error}`, 'error');
+          return;
+      }
+      setAllowedModelsByFeature(nextAllowedModelsByFeature);
+      showToast('Đã cập nhật danh sách model cho chức năng.', 'success');
   };
 
   const handleSaveAllPricing = async () => {
@@ -4057,6 +4243,116 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                    </div>
 
                    <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl">
+                       <div>
+                           <div className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">Provider theo từng chức năng</div>
+                           <p className="mt-1 text-xs leading-relaxed text-slate-700 dark:text-slate-300 font-semibold">
+                               Route chức năng có ưu tiên cao hơn route theo model. Nhờ vậy ảnh đơn, ảnh đôi, từng cỡ nhóm và video có thể chạy song song qua hai API.
+                           </p>
+                       </div>
+                       <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                           {GENERATION_PROVIDER_ROUTE_OPTIONS.map((route) => {
+                               const explicitProvider = generationProviderByFeature[route.key];
+                               const routeDefault = DEFAULT_PROVIDER_BY_FEATURE[route.key];
+                               const effectiveProvider = explicitProvider || routeDefault || generationProvider;
+                               const explicitModels = allowedModelsByFeature[route.key];
+                               const effectiveAllowedModels = getAllowedModelsForFeature(
+                                   { allowedModelsByFeature },
+                                   route.key,
+                               );
+                               const modelOptions = featureModelOptions[route.key] || [];
+                               const usesDefaultModels = !explicitModels;
+                               const allowsAllModels = explicitModels?.includes('*') || (!explicitModels && !DEFAULT_ALLOWED_MODELS_BY_FEATURE[route.key]);
+                               return (
+                                   <div key={route.key} className="rounded-2xl border border-white/10 neu-inset-sm p-4">
+                                       <div className="flex items-start justify-between gap-3">
+                                           <div>
+                                               <div className="text-sm font-bold text-slate-900 dark:text-white">{route.label}</div>
+                                               <div className="mt-1 text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">{route.description}</div>
+                                           </div>
+                                           <span className={`shrink-0 rounded-full px-2 py-1 text-[9px] font-black uppercase ${effectiveProvider === 'gommo' ? 'bg-violet-500/15 text-violet-300' : 'bg-cyan-500/15 text-cyan-300'}`}>
+                                               {effectiveProvider}
+                                           </span>
+                                       </div>
+                                       <div className="mt-3 grid grid-cols-3 gap-2">
+                                           {(['default', 'tst', 'gommo'] as const).map((provider) => {
+                                               const active = provider === 'default' ? !explicitProvider : explicitProvider === provider;
+                                               const disabled = switchingGenerationProvider
+                                                   || (provider === 'gommo' && (!gommoCatalog?.configured || route.key === 'motion_control'));
+                                               return (
+                                                   <button
+                                                       key={`${route.key}_${provider}`}
+                                                       type="button"
+                                                       disabled={disabled}
+                                                       onClick={() => handleSwitchFeatureGenerationProvider(route.key, provider)}
+                                                       className={`rounded-xl border px-2 py-2 text-[10px] font-black uppercase transition-all disabled:cursor-not-allowed disabled:opacity-40 ${active ? 'border-[#FF007F]/50 bg-[#FF007F]/15 text-[#FF007F]' : 'border-white/10 text-slate-600 dark:text-slate-300 hover:border-white/20'}`}
+                                                   >
+                                                       {provider === 'default' ? 'Kế thừa' : provider}
+                                                   </button>
+                                               );
+                                           })}
+                                       </div>
+                                       <div className="mt-4 border-t border-white/10 pt-3">
+                                           <div className="flex items-center justify-between gap-2">
+                                               <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">Model được phép</span>
+                                               <span className="text-[9px] font-bold text-slate-500">
+                                                   {effectiveAllowedModels ? `${effectiveAllowedModels.length} model` : 'Không giới hạn'}
+                                               </span>
+                                           </div>
+                                           <div className="mt-2 flex flex-wrap gap-1.5">
+                                               <button
+                                                   type="button"
+                                                   disabled={switchingGenerationProvider}
+                                                   onClick={() => handleChangeFeatureAllowedModels(route.key, 'default')}
+                                                   className={`rounded-lg border px-2 py-1.5 text-[9px] font-black uppercase transition-all disabled:opacity-40 ${usesDefaultModels ? 'border-cyan-400/40 bg-cyan-500/15 text-cyan-300' : 'border-white/10 text-slate-500'}`}
+                                               >
+                                                   Mặc định
+                                               </button>
+                                               <button
+                                                   type="button"
+                                                   disabled={switchingGenerationProvider}
+                                                   onClick={() => handleChangeFeatureAllowedModels(route.key, 'all')}
+                                                   className={`rounded-lg border px-2 py-1.5 text-[9px] font-black uppercase transition-all disabled:opacity-40 ${allowsAllModels && !usesDefaultModels ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-300' : 'border-white/10 text-slate-500'}`}
+                                               >
+                                                   Tất cả
+                                               </button>
+                                           </div>
+                                           <div className="mt-2 max-h-32 space-y-1 overflow-y-auto pr-1">
+                                               {modelOptions.map((model) => {
+                                                   const checked = effectiveAllowedModels?.includes(model.id) || false;
+                                                   return (
+                                                       <label key={`${route.key}_${model.id}`} className="flex cursor-pointer items-center gap-2 rounded-lg border border-white/5 px-2 py-1.5 hover:border-white/15">
+                                                           <input
+                                                               type="checkbox"
+                                                               checked={checked}
+                                                               disabled={switchingGenerationProvider}
+                                                               onChange={() => {
+                                                                   const current = effectiveAllowedModels || [];
+                                                                   const next = checked
+                                                                       ? current.filter((id) => id !== model.id)
+                                                                       : [...current, model.id];
+                                                                   handleChangeFeatureAllowedModels(route.key, next);
+                                                               }}
+                                                               className="h-3.5 w-3.5 accent-[#FF007F]"
+                                                           />
+                                                           <span className="min-w-0">
+                                                               <span className="block truncate text-[10px] font-bold text-slate-700 dark:text-slate-200">{model.name}</span>
+                                                               <span className="block truncate font-mono text-[8px] text-slate-500">{model.id}</span>
+                                                           </span>
+                                                       </label>
+                                                   );
+                                               })}
+                                               {modelOptions.length === 0 && (
+                                                   <div className="text-[10px] text-amber-500">Chưa có model live phù hợp với chức năng này.</div>
+                                               )}
+                                           </div>
+                                       </div>
+                                   </div>
+                               );
+                           })}
+                       </div>
+                   </div>
+
+                   <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl">
                        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                            <div>
                                <div className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">Provider mặc định toàn ứng dụng</div>
@@ -4116,12 +4412,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                       <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl p-4">
                           <div className="text-xs uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold font-bold">Cấu hình live</div>
-                          <div className="mt-2 text-3xl font-bold text-slate-900 dark:text-white">{pricingRows.length}</div>
+                          <div className="mt-2 text-3xl font-bold text-slate-900 dark:text-white">{allPricingRows.length}</div>
                           <div className="text-xs text-slate-700 dark:text-slate-300 font-semibold mt-1">Bao gồm image, video, motion control và 3 tool Vertex.</div>
                       </div>
                       <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl p-4">
                           <div className="text-xs uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold font-bold">Models</div>
-                          <div className="mt-2 text-3xl font-bold text-audi-cyan">{new Set(pricingRows.map(row => row.modelId)).size}</div>
+                          <div className="mt-2 text-3xl font-bold text-audi-cyan">{new Set(allPricingRows.map(row => row.modelId)).size}</div>
                           <div className="text-xs text-slate-700 dark:text-slate-300 font-semibold mt-1">Nguồn live lấy trực tiếp từ catalog runtime của TST.</div>
                       </div>
                        <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl p-4">
@@ -4353,6 +4649,22 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   </div>
 
                   <div className="neu-card p-5 rounded-3xl shadow-2xl border border-slate-300 dark:border-slate-800 space-y-4">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                          <div>
+                              <h3 className="text-sm font-black text-slate-900 dark:text-white">Cấu hình giá Vcoin</h3>
+                              <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                                  Giá AUDITION AI dùng chung cho hai provider. Cấu hình Gommo tương thích sẽ tự kế thừa giá hệ thống TST; chỉ còn {missingPricingCount} cấu hình chưa có giá.
+                              </p>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 rounded-2xl neu-inset-sm p-1.5">
+                              <button type="button" onClick={() => setPricingConfigFilter('all')} className={`rounded-xl px-4 py-2 text-xs font-black transition-all ${pricingConfigFilter === 'all' ? 'bg-[#FF007F] text-white' : 'text-slate-600 dark:text-slate-300'}`}>
+                                  Tất cả ({allPricingRows.length})
+                              </button>
+                              <button type="button" onClick={() => setPricingConfigFilter('missing')} className={`rounded-xl px-4 py-2 text-xs font-black transition-all ${pricingConfigFilter === 'missing' ? 'bg-amber-500 text-black' : 'text-amber-600 dark:text-amber-300'}`}>
+                                  Chưa có giá ({missingPricingCount})
+                              </button>
+                          </div>
+                      </div>
                       <div className="overflow-x-auto">
                           <table className="w-full text-left text-sm text-slate-300">
                               <thead className="text-xs text-slate-700 dark:text-slate-300 font-semibold uppercase neu-inset-sm border-b border-white/10">
@@ -4375,14 +4687,14 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                                  {pricingRows.length === 0 ? (
+                                  {filteredPricingRows.length === 0 ? (
                                       <tr>
                                            <td colSpan={15} className="px-4 py-8 text-center text-slate-700 dark:text-slate-400 font-semibold">
                                               Chưa tải được bảng giá live từ Trạm Sáng Tạo.
                                           </td>
                                       </tr>
                                   ) : (
-                                      pricingRows.map((row) => {
+                                      filteredPricingRows.map((row) => {
                                           const typeLabel = row.type === 'image'
                                               ? 'Ảnh'
                                               : row.type === 'video'
@@ -4391,10 +4703,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                       ? 'Motion'
                                                       : 'Edit';
                                           const draftKey = getPricingLookupKey(row.modelId, row.configKey);
-                                          const savedPricing = getSavedAuditionPrice(row);
+                                          const effectivePricing = getEffectiveAuditionPricing(row);
                                           const rowIsDirty = isPricingRowDirty(row);
                                            const auditionPrice = getDraftAuditionPrice(row);
                                            const grossProfit = Number.isFinite(auditionPrice) ? auditionPrice - row.vcoin : 0;
+                                           const providerCostKnown = row.server !== 'gommo' || row.vcoin > 0;
                                            const gommo = getGommoPriceComparison(row, gommoCatalog);
                                            const gommoCreditText = gommo?.minCredits === null || gommo?.minCredits === undefined
                                                ? '-'
@@ -4415,8 +4728,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                   </td>
                                                   <td className="px-4 py-3 text-white">
                                                       <div className="flex items-center gap-2">
-                                                          <span>{tstServerToUi(row.server) || '-'}</span>
-                                                          {!isServerEnabledForModel(serverAvailabilityConfig, row.modelId, row.server) && (
+                                                          <span>{row.server === 'gommo' ? 'Gommo' : tstServerToUi(row.server) || '-'}</span>
+                                                          {row.server !== 'gommo' && !isServerEnabledForModel(serverAvailabilityConfig, row.modelId, row.server) && (
                                                               <span className="px-2 py-0.5 rounded-full border border-red-500/30 bg-red-500/10 text-[10px] font-bold uppercase tracking-wider text-red-300">
                                                                   Khóa
                                                               </span>
@@ -4435,9 +4748,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                   </td>
                                                   <td className="px-4 py-3 text-white">{tstSpeedToUi(row.speed) || '-'}</td>
                                                   <td className="px-4 py-3 text-center text-white">{row.audio ? 'Có' : '-'}</td>
-                                                  <td className="px-4 py-3 text-right font-mono text-audi-cyan">{row.type === 'edit' ? '-' : row.credits}</td>
+                                                  <td className="px-4 py-3 text-right font-mono text-audi-cyan">{row.type === 'edit' || row.server === 'gommo' ? '-' : row.credits}</td>
                                                    <td className="px-4 py-3 text-right font-mono text-slate-200">
-                                                      {row.type === 'edit'
+                                                      {row.type === 'edit' || row.server === 'gommo'
                                                           ? '-'
                                                           : row.billingUnit === 'second'
                                                               ? `${row.vcoin} VC/s`
@@ -4472,7 +4785,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                           <input
                                                               type="number"
                                                               min="1"
-                                                              value={pricingDrafts[draftKey] ?? savedPricing?.audition_price_vcoin ?? row.defaultAuditionVcoin ?? row.vcoin}
+                                                              value={pricingDrafts[draftKey] ?? effectivePricing?.vcoin ?? row.defaultAuditionVcoin ?? ''}
                                                               onChange={(e) =>
                                                                   setPricingDrafts((prev) => ({
                                                                       ...prev,
@@ -4496,14 +4809,19 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                                Lưu
                                                           </button>
                                                       </div>
+                                                      {effectivePricing?.inherited && !rowIsDirty && (
+                                                          <div className="mt-1 text-right text-[10px] font-semibold text-cyan-600 dark:text-cyan-300">
+                                                              Kế thừa giá hệ thống từ {effectivePricing.source.option_id}
+                                                          </div>
+                                                      )}
                                                       {row.billingUnit === 'second' && (
                                                           <div className="mt-1 text-right text-[10px] text-slate-700 dark:text-slate-400 font-semibold">
-                                                              Ví dụ: 5s = {(Number(pricingDrafts[draftKey] ?? savedPricing?.audition_price_vcoin ?? row.defaultAuditionVcoin ?? row.vcoin) || 0) * 5} VC
+                                                              Ví dụ: 5s = {(Number(pricingDrafts[draftKey] ?? effectivePricing?.vcoin ?? row.defaultAuditionVcoin ?? row.vcoin) || 0) * 5} VC
                                                           </div>
                                                       )}
                                                   </td>
-                                                  <td className={`px-4 py-3 text-right font-mono font-bold ${grossProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                                      {grossProfit >= 0 ? '+' : ''}{grossProfit} {row.billingUnit === 'second' ? 'VC/s' : 'VC'}
+                                                  <td className={`px-4 py-3 text-right font-mono font-bold ${!providerCostKnown ? 'text-slate-500' : grossProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                                      {providerCostKnown ? `${grossProfit >= 0 ? '+' : ''}${grossProfit} ${row.billingUnit === 'second' ? 'VC/s' : 'VC'}` : '-'}
                                                   </td>
                                                   <td className="px-4 py-3">
                                                       <span className="px-2 py-1 bg-white/10 rounded text-[10px] font-mono break-all">{row.configKey}</span>

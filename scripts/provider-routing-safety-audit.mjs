@@ -116,6 +116,8 @@ assert(gommoSource.includes('/ai/jobs/image/${encodeURIComponent(mapping.gommoMo
 assert(gommoSource.includes('/ai/jobs/${encodeURIComponent(providerJobId)}?media=${media}'));
 assert(gommoSource.includes("model.withSubject ? 'subjects' : model.withReference ? 'references' : 'images'"));
 assert(gommoSource.includes('maxReferenceImages'));
+assert(gommoSource.includes('GOMMO_SERVER_DISABLED'));
+assert(gommoSource.includes("isProviderServerAllowedByConfig('gommo'"));
 
 const tstCatalogSource = await readFile(new URL('../services/tstCatalog.ts', import.meta.url), 'utf8');
 assert(tstCatalogSource.includes("String(entry.key || entry.config_key || '')"));
@@ -137,6 +139,7 @@ assert(queueSubmitSource.includes('Math.min(8, characterCount'));
 assert(queueSubmitSource.includes('__providerRouteKey'));
 assert(queueSubmitSource.includes('sampleImage: null'));
 assert(queueSubmitSource.includes('MODEL_NOT_ALLOWED_FOR_FEATURE'));
+assert(queueSubmitSource.includes('GOMMO_SERVER_DISABLED'));
 
 const recipeSource = await readFile(new URL('../netlify/functions/_queue-recipes.ts', import.meta.url), 'utf8');
 assert(recipeSource.includes('uploadReferencesToTst ? (isUserOnlyPrompt ? 5 : 4) : 8'));
@@ -184,6 +187,8 @@ assert(adminSource.includes('allowedModelsByFeature'));
 assert(adminSource.includes('Model được phép'));
 assert(adminSource.includes('getInheritedAuditionPricing'));
 assert(adminSource.includes('Kế thừa giá hệ thống từ'));
+assert(adminSource.includes('Provider, model và server theo từng chức năng'));
+assert(adminSource.includes('Server {effectiveProvider.toUpperCase()} realtime'));
 
 const migrationSource = await readFile(new URL('./supabase_fix_queue_provider_safety.sql', import.meta.url), 'utf8');
 assert(migrationSource.includes("raise exception 'ACCOUNT_LOCKED'"));

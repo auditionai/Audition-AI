@@ -5,6 +5,7 @@ import { triggerBackgroundQueueWorker } from './_queue-launcher';
 import { isDedicatedQueueWorkerMode } from './_queue-runtime-mode';
 import { validateQueuePayloadAgainstLiveCatalog } from './_tst-live-catalog';
 import { normalizeAndValidateGommoPayload } from './_gommo-provider';
+import { isProviderServerAllowedByConfig } from './_server-availability';
 import {
   DEFAULT_PROVIDER_BY_FEATURE,
   getAllowedModelsForFeature,
@@ -129,11 +130,18 @@ const getGenerationProvider = async (
     if (featureDefault) {
       return { provider: featureDefault, smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false, allowedModels };
     }
+    const selected = String(data?.value?.provider || '').trim().toLowerCase();
+    if (featureKey) {
+      return {
+        provider: selected === 'gommo' ? 'gommo' : selected === 'tst' ? 'tst' : fallback,
+        smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false,
+        allowedModels,
+      };
+    }
     const modelProvider = String(data?.value?.providerByModel?.[modelId] || '').trim().toLowerCase();
     if (modelProvider === 'gommo' || modelProvider === 'tst') {
       return { provider: modelProvider, smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false, allowedModels };
     }
-    const selected = String(data?.value?.provider || '').trim().toLowerCase();
     return {
       provider: selected === 'gommo' ? 'gommo' : selected === 'tst' ? 'tst' : fallback,
       smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false,
@@ -755,7 +763,17 @@ export const handler: Handler = async (event) => {
       const gommoValidationPayload = isQueueRecipePayload(body.queuePayload)
         ? getRecipeValidationPayload(body.queuePayload)
         : { ...body.queuePayload, model: modelId };
-      await normalizeAndValidateGommoPayload(body.queueKind, gommoValidationPayload);
+      const gommoValidation = await normalizeAndValidateGommoPayload(body.queueKind, gommoValidationPayload);
+      const gommoServerId = String(gommoValidation.model.server || gommoValidation.mapping.gommoModelId || '').trim();
+      if (!(await isProviderServerAllowedByConfig('gommo', modelId, gommoServerId))) {
+        return {
+          statusCode: 503,
+          headers,
+          body: JSON.stringify({
+            error: `GOMMO_SERVER_DISABLED: Server ${gommoServerId || '(unknown)'} của model ${modelId} đang bị khóa trong Admin.`,
+          }),
+        };
+      }
     }
     body.queuePayload = {
       ...body.queuePayload,

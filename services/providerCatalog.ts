@@ -78,6 +78,7 @@ export const resolveProviderForModel = (
     if (featureProvider) return featureProvider;
     const featureDefault = DEFAULT_PROVIDER_BY_FEATURE[normalizedFeatureKey as GenerationProviderRouteKey];
     if (featureDefault) return featureDefault;
+    return config?.provider || 'tst';
   }
   return config?.providerByModel?.[normalizedModelId] || config?.provider || 'tst';
 };

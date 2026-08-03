@@ -1011,6 +1011,7 @@ export const getTstServerAvailabilityConfig = async (options?: { force?: boolean
   const parsed = parseSettingValue<TstServerAvailabilityConfig>(data?.value, DEFAULT_TST_SERVER_AVAILABILITY_CONFIG);
   const value = {
     disabledByModel: parsed?.disabledByModel || {},
+    disabledByProviderModel: parsed?.disabledByProviderModel || {},
     autoDisabledCombos: parsed?.autoDisabledCombos || {},
     manualReopenedCombos: parsed?.manualReopenedCombos || {},
     updatedAt: parsed?.updatedAt,
@@ -1029,6 +1030,7 @@ export const saveTstServerAvailabilityConfig = async (
 
   const payload: TstServerAvailabilityConfig = {
     disabledByModel: config?.disabledByModel || {},
+    disabledByProviderModel: config?.disabledByProviderModel || {},
     autoDisabledCombos: config?.autoDisabledCombos || {},
     manualReopenedCombos: config?.manualReopenedCombos || {},
     updatedAt: new Date().toISOString(),

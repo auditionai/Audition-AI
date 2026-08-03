@@ -1,3 +1,5 @@
+import { isProviderServerAllowedByConfig } from './_server-availability';
+
 type QueueKind = 'image_generate' | 'video_generate' | 'motion_generate' | string;
 
 export type GommoProviderKind = 'image' | 'video';
@@ -350,6 +352,10 @@ export const submitGommoJob = async (
 ): Promise<GommoSubmitResult> => {
   const normalized = await normalizeAndValidateGommoPayload(queueKind, payload);
   const { mapping, payload: providerPayload, mode, providerCost } = normalized;
+  const gommoServerId = String(normalized.model.server || mapping.gommoModelId || '').trim();
+  if (!(await isProviderServerAllowedByConfig('gommo', mapping.auditionModelId, gommoServerId))) {
+    throw new Error(`GOMMO_SERVER_DISABLED: Server ${gommoServerId || '(unknown)'} của model ${mapping.auditionModelId} đang bị khóa trong Admin.`);
+  }
   const common = {
     prompt: String(providerPayload.prompt || '').trim(),
     project_id: GOMMO_PROJECT_ID,

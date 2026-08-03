@@ -14,6 +14,7 @@ type AutoDisabledServerCombo = {
 
 type ServerAvailabilityConfig = {
   disabledByModel: Record<string, string[]>;
+  disabledByProviderModel?: Partial<Record<'tst' | 'gommo', Record<string, string[]>>>;
   autoDisabledCombos?: Record<string, AutoDisabledServerCombo[]>;
   manualReopenedCombos?: Record<string, Array<{ serverId: string; speed: string; reopenedAt: string }>>;
   updatedAt?: string;
@@ -85,6 +86,21 @@ const normalizeConfig = (config: any, now = Date.now()): ServerAvailabilityConfi
       ),
     ]),
   ),
+  disabledByProviderModel: Object.fromEntries(
+    (['tst', 'gommo'] as const).map((provider) => [
+      provider,
+      Object.fromEntries(
+        Object.entries(config?.disabledByProviderModel?.[provider] || {}).map(([modelId, servers]) => [
+          normalize(modelId),
+          Array.from(new Set(
+            (Array.isArray(servers) ? servers : [])
+              .map((serverId) => normalize(String(serverId)))
+              .filter(Boolean),
+          )),
+        ]),
+      ),
+    ]),
+  ) as Record<'tst' | 'gommo', Record<string, string[]>>,
   autoDisabledCombos: Object.fromEntries(
     Object.entries(config?.autoDisabledCombos || {}).map(([modelId, combos]) => [
       normalize(modelId),
@@ -124,6 +140,7 @@ const saveServerAvailabilityConfig = async (config: ServerAvailabilityConfig) =>
   const admin = getServiceRoleClient();
   const payload = {
     disabledByModel: config.disabledByModel || {},
+    disabledByProviderModel: config.disabledByProviderModel || {},
     autoDisabledCombos: config.autoDisabledCombos || {},
     manualReopenedCombos: config.manualReopenedCombos || {},
     updatedAt: new Date().toISOString(),
@@ -208,6 +225,27 @@ export const isServerAllowedByConfig = async (
   return isServerAllowedBySnapshot(config, modelId, serverId, speed);
 };
 
+export const isProviderServerAllowedBySnapshot = (
+  config: ServerAvailabilityConfig,
+  provider: 'tst' | 'gommo',
+  modelId: string,
+  serverId?: string | null,
+  speed?: string | null,
+) => {
+  if (provider === 'tst' && !isServerAllowedBySnapshot(config, modelId, serverId, speed)) return false;
+  const normalizedModelId = normalize(modelId);
+  const normalizedServerId = normalize(serverId);
+  if (!normalizedServerId) return true;
+  return !(config.disabledByProviderModel?.[provider]?.[normalizedModelId] || []).includes(normalizedServerId);
+};
+
+export const isProviderServerAllowedByConfig = async (
+  provider: 'tst' | 'gommo',
+  modelId: string,
+  serverId?: string | null,
+  speed?: string | null,
+) => isProviderServerAllowedBySnapshot(await getServerAvailabilityConfig(), provider, modelId, serverId, speed);
+
 export const refreshAutoDisabledServerAvailability = async () => {
   const admin = getServiceRoleClient();
   const now = Date.now();
@@ -218,6 +256,7 @@ export const refreshAutoDisabledServerAvailability = async () => {
   const existingConfig = normalizeConfig(await getServerAvailabilityConfig(true), now);
   const nextConfig: ServerAvailabilityConfig = {
     disabledByModel: existingConfig.disabledByModel || {},
+    disabledByProviderModel: existingConfig.disabledByProviderModel || {},
     autoDisabledCombos: { ...(existingConfig.autoDisabledCombos || {}) },
     manualReopenedCombos: { ...(existingConfig.manualReopenedCombos || {}) },
     updatedAt: existingConfig.updatedAt,

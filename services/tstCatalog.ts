@@ -91,6 +91,7 @@ export interface AuditionPricingOverride {
 
 export interface TstServerAvailabilityConfig {
   disabledByModel: Record<string, string[]>;
+  disabledByProviderModel?: Partial<Record<'tst' | 'gommo', Record<string, string[]>>>;
   autoDisabledCombos?: Record<string, Array<{
     serverId: string;
     speed: string;
@@ -594,6 +595,18 @@ const normalizeServerAvailabilityConfig = (
     ]),
   );
 
+  const disabledByProviderModel = Object.fromEntries(
+    (['tst', 'gommo'] as const).map((provider) => [
+      provider,
+      Object.fromEntries(
+        Object.entries(config?.disabledByProviderModel?.[provider] || {}).map(([modelId, servers]) => [
+          normalizeModelId(modelId),
+          unique((Array.isArray(servers) ? servers : []).map((serverId) => normalizeServer(serverId))),
+        ]),
+      ),
+    ]),
+  ) as Record<'tst' | 'gommo', Record<string, string[]>>;
+
   const autoDisabledCombos = Object.fromEntries(
     Object.entries(config?.autoDisabledCombos || {}).map(([modelId, combos]) => [
       normalizeModelId(modelId),
@@ -626,6 +639,7 @@ const normalizeServerAvailabilityConfig = (
 
   return {
     disabledByModel,
+    disabledByProviderModel,
     autoDisabledCombos,
     manualReopenedCombos,
     updatedAt: config?.updatedAt,
@@ -673,6 +687,28 @@ export const isServerEnabledForModel = (
     (entry) => entry.serverId === normalizedServerId && entry.speed === normalizedSpeed,
   );
 };
+
+export const getDisabledProviderServersForModel = (
+  config: TstServerAvailabilityConfig | null | undefined,
+  provider: 'tst' | 'gommo',
+  modelId: string,
+) => {
+  const normalizedConfig = normalizeServerAvailabilityConfig(config);
+  const providerDisabled = normalizedConfig.disabledByProviderModel?.[provider]?.[normalizeModelId(modelId)] || [];
+  return provider === 'tst'
+    ? unique([...getDisabledServersForModel(normalizedConfig, modelId), ...providerDisabled])
+    : providerDisabled;
+};
+
+export const isProviderServerEnabledForModel = (
+  config: TstServerAvailabilityConfig | null | undefined,
+  provider: 'tst' | 'gommo',
+  modelId: string,
+  serverId?: string,
+  speed?: string,
+) => provider === 'tst'
+  ? isServerEnabledForModel(config, modelId, serverId, speed)
+  : !getDisabledProviderServersForModel(config, provider, modelId).includes(normalizeServer(serverId));
 
 export const applyServerAvailabilityToRuntimeModels = (
   runtimeModels: TstRuntimeModel[] = [],

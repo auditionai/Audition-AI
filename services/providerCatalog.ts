@@ -36,6 +36,7 @@ export type GommoCatalogOption = {
   groupSubtitle: string;
   status: string;
   statusMessage: string;
+  adminEnabled?: boolean;
 };
 
 export type GommoProviderCatalog = {
@@ -49,6 +50,12 @@ export type GommoProviderCatalog = {
     fallbackSupported: boolean;
   }>;
   models: GommoCatalogModel[];
+};
+
+export const isSelectableGommoImageResolution = (auditionModelId: string, resolution: string) => {
+  const modelId = String(auditionModelId || '').trim().toLowerCase();
+  const normalizedResolution = String(resolution || '').trim().toLowerCase().replace(/[-\s]+/g, '_');
+  return !(modelId === 'image-gpt-2' && normalizedResolution === '4k_upscale');
 };
 
 export type GommoPriceComparison = {
@@ -78,6 +85,7 @@ export const resolveProviderForModel = (
     if (featureProvider) return featureProvider;
     const featureDefault = DEFAULT_PROVIDER_BY_FEATURE[normalizedFeatureKey as GenerationProviderRouteKey];
     if (featureDefault) return featureDefault;
+    return config?.provider || 'tst';
   }
   return config?.providerByModel?.[normalizedModelId] || config?.provider || 'tst';
 };
@@ -191,13 +199,28 @@ export const getMinimumAuditionModelPrice = (pricing: ModelPricing[], modelId: s
   return values.length ? Math.ceil(Math.min(...values)) : null;
 };
 
-export const fetchProviderCatalog = async (forceRefresh = false): Promise<GommoProviderCatalog> => {
+export const fetchProviderCatalog = async (
+  forceRefresh = false,
+  includeAdminDisabledServers = false,
+): Promise<GommoProviderCatalog> => {
   const response = await fetch(forceRefresh ? '/api/provider-catalog?force=1' : '/api/provider-catalog');
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new Error(payload?.error || 'Failed to load provider catalog');
   }
-  return payload.gommo as GommoProviderCatalog;
+  const catalog = payload.gommo as GommoProviderCatalog;
+  if (includeAdminDisabledServers) return catalog;
+  return {
+    ...catalog,
+    models: catalog.models.map((model) => {
+      const modes = model.modes.filter((mode) => mode.adminEnabled !== false);
+      return {
+        ...model,
+        status: model.modes.length > 0 && modes.length === 0 ? 'disabled' : model.status,
+        modes,
+      };
+    }),
+  };
 };
 
 export const getGommoPriceComparison = (

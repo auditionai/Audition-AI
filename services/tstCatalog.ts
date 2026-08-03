@@ -91,6 +91,7 @@ export interface AuditionPricingOverride {
 
 export interface TstServerAvailabilityConfig {
   disabledByModel: Record<string, string[]>;
+  disabledByProviderModel?: Partial<Record<'tst' | 'gommo', Record<string, string[]>>>;
   autoDisabledCombos?: Record<string, Array<{
     serverId: string;
     speed: string;
@@ -113,6 +114,9 @@ export interface TstPricingRow {
   modelId: string;
   modelName: string;
   server: string;
+  providerServerId?: string;
+  providerServerLabel?: string;
+  providerModeLabel?: string;
   resolution?: string;
   quality?: string;
   duration?: string;
@@ -594,6 +598,18 @@ const normalizeServerAvailabilityConfig = (
     ]),
   );
 
+  const disabledByProviderModel = Object.fromEntries(
+    (['tst', 'gommo'] as const).map((provider) => [
+      provider,
+      Object.fromEntries(
+        Object.entries(config?.disabledByProviderModel?.[provider] || {}).map(([modelId, servers]) => [
+          normalizeModelId(modelId),
+          unique((Array.isArray(servers) ? servers : []).map((serverId) => normalizeServer(serverId))),
+        ]),
+      ),
+    ]),
+  ) as Record<'tst' | 'gommo', Record<string, string[]>>;
+
   const autoDisabledCombos = Object.fromEntries(
     Object.entries(config?.autoDisabledCombos || {}).map(([modelId, combos]) => [
       normalizeModelId(modelId),
@@ -626,6 +642,7 @@ const normalizeServerAvailabilityConfig = (
 
   return {
     disabledByModel,
+    disabledByProviderModel,
     autoDisabledCombos,
     manualReopenedCombos,
     updatedAt: config?.updatedAt,
@@ -673,6 +690,28 @@ export const isServerEnabledForModel = (
     (entry) => entry.serverId === normalizedServerId && entry.speed === normalizedSpeed,
   );
 };
+
+export const getDisabledProviderServersForModel = (
+  config: TstServerAvailabilityConfig | null | undefined,
+  provider: 'tst' | 'gommo',
+  modelId: string,
+) => {
+  const normalizedConfig = normalizeServerAvailabilityConfig(config);
+  const providerDisabled = normalizedConfig.disabledByProviderModel?.[provider]?.[normalizeModelId(modelId)] || [];
+  return provider === 'tst'
+    ? unique([...getDisabledServersForModel(normalizedConfig, modelId), ...providerDisabled])
+    : providerDisabled;
+};
+
+export const isProviderServerEnabledForModel = (
+  config: TstServerAvailabilityConfig | null | undefined,
+  provider: 'tst' | 'gommo',
+  modelId: string,
+  serverId?: string,
+  speed?: string,
+) => provider === 'tst'
+  ? isServerEnabledForModel(config, modelId, serverId, speed)
+  : !getDisabledProviderServersForModel(config, provider, modelId).includes(normalizeServer(serverId));
 
 export const applyServerAvailabilityToRuntimeModels = (
   runtimeModels: TstRuntimeModel[] = [],
@@ -1266,13 +1305,23 @@ export const getCompatibleGenerationResolutions = ({
   speed?: string;
   quality?: string;
 }) => {
-  const entries = getMatchingEntries({
+  let entries = getMatchingEntries({
     modelId: tierToModelId[tier],
     pricingEntries,
     serverId,
     speed,
     quality,
   });
+  if (entries.length === 0) {
+    entries = getMatchingEntries({
+      modelId: tierToModelId[tier],
+      pricingEntries,
+      quality,
+    });
+  }
+  if (entries.length === 0) {
+    entries = getPricingEntriesForModel(tierToModelId[tier], pricingEntries);
+  }
   if (entries.length === 0) {
     return [];
   }
@@ -1392,13 +1441,22 @@ export const getGenerationCostBreakdown = ({
       !entry.speed,
   ]);
 
-  if (exactEntry) {
-    const fallbackVcoin = creditsToVcoin(exactEntry.credits);
+  const compatibleEntry = exactEntry || pickExactEntry(modelEntries, [
+    (entry) =>
+      normalizeResolution(entry.resolution) === normalizedResolution &&
+      (!normalizedQuality || normalizeQuality(entry.quality) === normalizedQuality),
+    (entry) => normalizeResolution(entry.resolution) === normalizedResolution,
+    (entry) => !normalizedQuality || normalizeQuality(entry.quality) === normalizedQuality,
+    () => true,
+  ]);
+
+  if (compatibleEntry) {
+    const fallbackVcoin = creditsToVcoin(compatibleEntry.credits);
     return {
       available: true,
-      credits: exactEntry.credits,
-      vcoin: getAuditionPrice(modelId, exactEntry.config_key, fallbackVcoin, pricingOverrides),
-      configKey: exactEntry.config_key,
+      credits: compatibleEntry.credits,
+      vcoin: getAuditionPrice(modelId, compatibleEntry.config_key, fallbackVcoin, pricingOverrides),
+      configKey: compatibleEntry.config_key,
       modelId,
     };
   }
@@ -1875,7 +1933,6 @@ export const getPricingRows = async (forceRefresh = false): Promise<TstPricingRo
       billingUnit: perSecond ? 'second' : 'flat',
     };
   });
-
   return [...rows.filter((row): row is TstPricingRow => row !== null), ...getVertexEditPricingRows()]
     .sort((a, b) => {
       if (a.type !== b.type) return a.type.localeCompare(b.type);

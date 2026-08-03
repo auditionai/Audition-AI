@@ -93,6 +93,7 @@ import {
     tstServerToUi,
     tstSpeedToUi,
     isServerEnabledForModel,
+    isProviderServerEnabledForModel,
     type TstPricingRow,
     type TstServerAvailabilityConfig
 } from '../services/tstCatalog';
@@ -110,6 +111,7 @@ import {
     getGommoPriceComparison,
     type GommoProviderCatalog,
 } from '../services/providerCatalog';
+import { getGommoServerGroups } from '../shared/gommoServerRouting';
 
 interface AdminProps {
   lang: Language;
@@ -592,7 +594,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [pricingDrafts, setPricingDrafts] = useState<Record<string, string>>({});
   const [pricingConfigFilter, setPricingConfigFilter] = useState<'all' | 'missing'>('all');
   const [savingAllPricing, setSavingAllPricing] = useState(false);
-  const [serverAvailabilityConfig, setServerAvailabilityConfig] = useState<TstServerAvailabilityConfig>({ disabledByModel: {}, autoDisabledCombos: {} });
+  const [serverAvailabilityConfig, setServerAvailabilityConfig] = useState<TstServerAvailabilityConfig>({ disabledByModel: {}, disabledByProviderModel: {}, autoDisabledCombos: {} });
   const [editingStyle, setEditingStyle] = useState<StylePreset | null>(null);
   
   const [maintenanceMode, setMaintenanceMode] = useState({ isActive: false, message: "Hệ thống đang bảo trì, vui lòng quay lại sau." });
@@ -764,7 +766,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   getModelPricing(),
                   getPricingRows(true),
                   getTstServerAvailabilityConfig(),
-                  fetchProviderCatalog(true).catch((error) => {
+                  fetchProviderCatalog(true, true).catch((error) => {
                       setGommoCatalogError(error instanceof Error ? error.message : String(error));
                       return null;
                   }),
@@ -907,11 +909,21 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               const convertedVcoin = gommoCatalog.vndPerCredit && providerCredits > 0
                   ? Math.max(1, Math.ceil((providerCredits * gommoCatalog.vndPerCredit) / 1000))
                   : 0;
+              const gommoServerGroups = getGommoServerGroups(model);
+              const gommoMode = model.modes.find((mode) =>
+                  mode.type.trim().toLowerCase() === String(price.mode || '').trim().toLowerCase(),
+              );
+              const gommoServerGroup = gommoServerGroups.find((group) =>
+                  group.modeTypes.some((modeType) => modeType.trim().toLowerCase() === String(price.mode || '').trim().toLowerCase()),
+              ) || gommoServerGroups[0];
               return {
                   type: model.kind === 'motion' ? 'motion-control' : model.kind,
                   modelId: model.auditionModelId,
                   modelName: model.name,
                   server: 'gommo',
+                  providerServerId: gommoServerGroup?.id,
+                  providerServerLabel: gommoServerGroup?.label || model.server || 'Gommo Gateway',
+                  providerModeLabel: gommoMode?.name || price.mode || undefined,
                   resolution: price.resolution || undefined,
                   duration: duration || undefined,
                   speed: price.mode || undefined,
@@ -1146,53 +1158,6 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       showToast(`Đã đổi provider mặc định sang ${provider === 'gommo' ? 'Gommo' : 'TST'}; các route riêng theo model được giữ nguyên.`, 'success');
   };
 
-  const handleSwitchModelGenerationProvider = async (
-      modelId: string,
-      provider: GenerationProviderMode | 'default',
-  ) => {
-      const normalizedModelId = modelId.trim().toLowerCase();
-      if (!normalizedModelId || switchingGenerationProvider) return;
-      const gommoMapping = gommoCatalog?.mappings.find(
-          (entry) => entry.auditionModelId.trim().toLowerCase() === normalizedModelId,
-      );
-      const gommoModel = gommoMapping
-          ? gommoCatalog?.models.find((entry) => entry.model.trim().toLowerCase() === gommoMapping.gommoModelId.trim().toLowerCase())
-          : null;
-      const gommoAvailable = Boolean(
-          gommoCatalog?.configured &&
-          gommoMapping?.fallbackSupported &&
-          gommoModel &&
-          !['maintenance', 'off', 'disabled', 'inactive', 'unavailable'].includes(gommoModel.status.toLowerCase()),
-      );
-      if (provider === 'gommo' && !gommoAvailable) {
-          showToast(`Model ${modelId} chưa sẵn sàng trên Gommo.`, 'error');
-          return;
-      }
-
-      const nextProviderByModel = { ...generationProviderByModel };
-      if (provider === 'default') {
-          delete nextProviderByModel[normalizedModelId];
-      } else {
-          nextProviderByModel[normalizedModelId] = provider;
-      }
-      setSwitchingGenerationProvider(true);
-      const result = await saveGenerationProviderConfig({
-          provider: generationProvider,
-          providerByModel: nextProviderByModel,
-          providerByFeature: generationProviderByFeature,
-          allowedModelsByFeature,
-          smartFallbackEnabled: smartProviderFallbackEnabled,
-      });
-      setSwitchingGenerationProvider(false);
-      if (!result.success) {
-          showToast(`Không thể lưu route model: ${result.error}`, 'error');
-          return;
-      }
-      setGenerationProviderByModel(nextProviderByModel);
-      const resolvedProvider = provider === 'default' ? generationProvider : provider;
-      showToast(`${modelId} sẽ gửi job mới qua ${resolvedProvider === 'gommo' ? 'Gommo' : 'TST'}.`, 'success');
-  };
-
   const handleToggleSmartProviderFallback = async () => {
       if (switchingGenerationProvider) return;
       const nextEnabled = !smartProviderFallbackEnabled;
@@ -1342,6 +1307,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
       const nextConfig: TstServerAvailabilityConfig = {
           disabledByModel: nextDisabledByModel,
+          disabledByProviderModel: serverAvailabilityConfig.disabledByProviderModel || {},
           autoDisabledCombos: serverAvailabilityConfig.autoDisabledCombos || {},
           manualReopenedCombos: serverAvailabilityConfig.manualReopenedCombos || {},
           updatedAt: new Date().toISOString(),
@@ -1357,9 +1323,48 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       showToast('Đã cập nhật trạng thái server.', 'success');
   };
 
+  const handleToggleProviderServer = async (
+      provider: GenerationProviderMode,
+      modelId: string,
+      serverId: string,
+  ) => {
+      if (provider === 'tst') {
+          await handleTogglePricingServer(modelId, serverId);
+          return;
+      }
+
+      const normalizedModelId = modelId.trim().toLowerCase();
+      const normalizedServerId = serverId.trim().toLowerCase();
+      if (!normalizedModelId || !normalizedServerId) return;
+      const providerConfig = serverAvailabilityConfig.disabledByProviderModel || {};
+      const gommoDisabledByModel = { ...(providerConfig.gommo || {}) };
+      const disabledServers = new Set(gommoDisabledByModel[normalizedModelId] || []);
+      if (disabledServers.has(normalizedServerId)) disabledServers.delete(normalizedServerId);
+      else disabledServers.add(normalizedServerId);
+      if (disabledServers.size > 0) gommoDisabledByModel[normalizedModelId] = Array.from(disabledServers);
+      else delete gommoDisabledByModel[normalizedModelId];
+
+      const nextConfig: TstServerAvailabilityConfig = {
+          ...serverAvailabilityConfig,
+          disabledByProviderModel: {
+              ...providerConfig,
+              gommo: gommoDisabledByModel,
+          },
+          updatedAt: new Date().toISOString(),
+      };
+      const result = await saveTstServerAvailabilityConfig(nextConfig);
+      if (!result.success) {
+          showToast(`Lỗi lưu server Gommo: ${result.error}`, 'error');
+          return;
+      }
+      setServerAvailabilityConfig(nextConfig);
+      showToast('Đã cập nhật server Gommo; backend sẽ dùng cùng trạng thái này.', 'success');
+  };
+
   const handleEnableAllPricingServers = async () => {
       const nextConfig: TstServerAvailabilityConfig = {
           disabledByModel: {},
+          disabledByProviderModel: serverAvailabilityConfig.disabledByProviderModel || {},
           autoDisabledCombos: serverAvailabilityConfig.autoDisabledCombos || {},
           manualReopenedCombos: serverAvailabilityConfig.manualReopenedCombos || {},
           updatedAt: new Date().toISOString(),
@@ -1394,6 +1399,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
       const nextConfig: TstServerAvailabilityConfig = {
           disabledByModel: nextDisabledByModel,
+          disabledByProviderModel: serverAvailabilityConfig.disabledByProviderModel || {},
           autoDisabledCombos: serverAvailabilityConfig.autoDisabledCombos || {},
           manualReopenedCombos: serverAvailabilityConfig.manualReopenedCombos || {},
           updatedAt: new Date().toISOString(),
@@ -1412,6 +1418,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const handleRestorePricingServersFromLive = async () => {
       const nextConfig: TstServerAvailabilityConfig = {
           disabledByModel: {},
+          disabledByProviderModel: serverAvailabilityConfig.disabledByProviderModel || {},
           autoDisabledCombos: serverAvailabilityConfig.autoDisabledCombos || {},
           manualReopenedCombos: serverAvailabilityConfig.manualReopenedCombos || {},
           updatedAt: new Date().toISOString(),
@@ -1463,6 +1470,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
       const nextConfig: TstServerAvailabilityConfig = {
           disabledByModel: serverAvailabilityConfig.disabledByModel || {},
+          disabledByProviderModel: serverAvailabilityConfig.disabledByProviderModel || {},
           autoDisabledCombos: nextAutoDisabledCombos,
           manualReopenedCombos: {
               ...(serverAvailabilityConfig.manualReopenedCombos || {}),
@@ -4224,7 +4232,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                        clearTstCatalogCache();
                                        const [, providerCatalog] = await Promise.all([
                                            syncTSTPrices(),
-                                           fetchProviderCatalog(true),
+                                           fetchProviderCatalog(true, true),
                                        ]);
                                        setGommoCatalog(providerCatalog);
                                        setGommoCatalogError('');
@@ -4243,11 +4251,18 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                    </div>
 
                    <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl">
-                       <div>
-                           <div className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">Provider theo từng chức năng</div>
+                       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                           <div>
+                           <div className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">Provider, model và server theo từng chức năng</div>
                            <p className="mt-1 text-xs leading-relaxed text-slate-700 dark:text-slate-300 font-semibold">
-                               Route chức năng có ưu tiên cao hơn route theo model. Nhờ vậy ảnh đơn, ảnh đôi, từng cỡ nhóm và video có thể chạy song song qua hai API.
+                               Chọn API nào sẽ hiển thị model và server realtime của API đó. Trạng thái server được đồng bộ giữa giao diện và backend.
                            </p>
+                           </div>
+                           <div className="flex flex-wrap gap-2">
+                               <button onClick={handleEnableAllPricingServers} className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-[10px] font-bold text-emerald-300">Bật toàn bộ TST</button>
+                               <button onClick={handleFastOnlyPricingServers} className="rounded-xl border border-audi-cyan/30 bg-audi-cyan/10 px-3 py-2 text-[10px] font-bold text-audi-cyan">TST chỉ FAST</button>
+                               <button onClick={handleRestorePricingServersFromLive} className="rounded-xl border border-white/10 px-3 py-2 text-[10px] font-bold text-slate-300">Khôi phục TST live</button>
+                           </div>
                        </div>
                        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                            {GENERATION_PROVIDER_ROUTE_OPTIONS.map((route) => {
@@ -4262,6 +4277,16 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                const modelOptions = featureModelOptions[route.key] || [];
                                const usesDefaultModels = !explicitModels;
                                const allowsAllModels = explicitModels?.includes('*') || (!explicitModels && !DEFAULT_ALLOWED_MODELS_BY_FEATURE[route.key]);
+                               const providerModelOptions = modelOptions.filter((model) => effectiveProvider === 'tst'
+                                   ? pricingRows.some((row) => row.modelId.trim().toLowerCase() === model.id)
+                                   : gommoCatalog?.models.some((entry) =>
+                                       entry.auditionModelId.trim().toLowerCase() === model.id
+                                       && entry.fallbackSupported
+                                       && !['maintenance', 'off', 'disabled', 'inactive', 'unavailable'].includes(entry.status.toLowerCase()),
+                                   ));
+                               const visibleModelOptions = effectiveAllowedModels
+                                   ? providerModelOptions.filter((model) => effectiveAllowedModels.includes(model.id))
+                                   : providerModelOptions;
                                return (
                                    <div key={route.key} className="rounded-2xl border border-white/10 neu-inset-sm p-4">
                                        <div className="flex items-start justify-between gap-3">
@@ -4317,8 +4342,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                </button>
                                            </div>
                                            <div className="mt-2 max-h-32 space-y-1 overflow-y-auto pr-1">
-                                               {modelOptions.map((model) => {
-                                                   const checked = effectiveAllowedModels?.includes(model.id) || false;
+                                               {providerModelOptions.map((model) => {
+                                                   const checked = effectiveAllowedModels?.includes(model.id) ?? true;
                                                    return (
                                                        <label key={`${route.key}_${model.id}`} className="flex cursor-pointer items-center gap-2 rounded-lg border border-white/5 px-2 py-1.5 hover:border-white/15">
                                                            <input
@@ -4326,7 +4351,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                                checked={checked}
                                                                disabled={switchingGenerationProvider}
                                                                onChange={() => {
-                                                                   const current = effectiveAllowedModels || [];
+                                                                   const current = effectiveAllowedModels || providerModelOptions.map((entry) => entry.id);
                                                                    const next = checked
                                                                        ? current.filter((id) => id !== model.id)
                                                                        : [...current, model.id];
@@ -4341,8 +4366,62 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                        </label>
                                                    );
                                                })}
-                                               {modelOptions.length === 0 && (
+                                               {providerModelOptions.length === 0 && (
                                                    <div className="text-[10px] text-amber-500">Chưa có model live phù hợp với chức năng này.</div>
+                                               )}
+                                           </div>
+                                       </div>
+                                       <div className="mt-4 border-t border-white/10 pt-3">
+                                           <div className="flex items-center justify-between gap-2">
+                                               <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">Server {effectiveProvider.toUpperCase()} realtime</span>
+                                               <span className="text-[9px] font-bold text-slate-500">Dùng chung toàn hệ thống</span>
+                                           </div>
+                                           <div className="mt-2 max-h-36 space-y-2 overflow-y-auto pr-1">
+                                               {visibleModelOptions.map((model) => {
+                                                   const tstGroup = pricingServerGroups.find((group) => group.modelId.trim().toLowerCase() === model.id);
+                                                   const gommoModel = gommoCatalog?.models.find((entry) => entry.auditionModelId.trim().toLowerCase() === model.id);
+                                                   const serverOptions = effectiveProvider === 'tst'
+                                                       ? (tstGroup?.servers || []).map((serverId) => ({
+                                                           id: serverId,
+                                                           label: tstServerToUi(serverId),
+                                                           subtitle: '',
+                                                           modeTypes: [] as string[],
+                                                       }))
+                                                       : gommoModel
+                                                           ? getGommoServerGroups(gommoModel)
+                                                           : [];
+                                                   return (
+                                                       <div key={`${route.key}_${effectiveProvider}_${model.id}_servers`} className="rounded-xl border border-white/5 p-2">
+                                                           <div className="flex items-center justify-between gap-2">
+                                                               <span className="truncate text-[10px] font-bold text-slate-200">{model.name}</span>
+                                                               {effectiveProvider === 'gommo' && gommoModel && (
+                                                                   <span className="text-[8px] font-black uppercase text-violet-300">{gommoModel.status || 'ON'}</span>
+                                                               )}
+                                                           </div>
+                                                           <div className="mt-1.5 flex flex-wrap gap-1.5">
+                                                               {serverOptions.map((serverOption) => {
+                                                                   const enabled = isProviderServerEnabledForModel(serverAvailabilityConfig, effectiveProvider, model.id, serverOption.id);
+                                                                   return (
+                                                                       <button
+                                                                           key={`${route.key}_${effectiveProvider}_${model.id}_${serverOption.id}`}
+                                                                           type="button"
+                                                                           title={serverOption.subtitle || serverOption.modeTypes.join(', ')}
+                                                                           onClick={() => handleToggleProviderServer(effectiveProvider, model.id, serverOption.id)}
+                                                                           className={`rounded-lg border px-2 py-1.5 text-[9px] font-black uppercase ${enabled ? 'border-audi-cyan/35 bg-audi-cyan/10 text-audi-cyan' : 'border-red-500/30 bg-red-500/10 text-red-300'}`}
+                                                                       >
+                                                                           {serverOption.label} · {enabled ? 'Bật' : 'Khóa'}
+                                                                       </button>
+                                                                   );
+                                                               })}
+                                                               {serverOptions.length === 0 && (
+                                                                   <span className="text-[9px] text-amber-500">API chưa trả server khả dụng cho model này.</span>
+                                                               )}
+                                                           </div>
+                                                       </div>
+                                                   );
+                                               })}
+                                               {visibleModelOptions.length === 0 && (
+                                                   <div className="text-[10px] text-amber-500">Chưa có model được phép để hiển thị server.</div>
                                                )}
                                            </div>
                                        </div>
@@ -4443,125 +4522,6 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       <div className="font-black uppercase tracking-wider">Kling tính phí theo giây</div>
                       <div className="mt-1 text-xs leading-relaxed text-yellow-100/80">
                           Các model Kling Video và Kling/Motion Control dùng đơn vị <b>Vcoin/s</b>. Trong bảng bên dưới, ô AUDITION AI của các dòng này là giá mỗi giây, không phải giá trọn gói. Tổng phí người dùng trả = giá mỗi giây × số giây video.
-                      </div>
-                  </div>
-
-                  <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl p-4 md:p-5">
-                      <div className="flex items-center justify-between gap-3 mb-4">
-                          <div>
-                              <h3 className="text-sm md:text-base font-bold text-slate-900 dark:text-white">Điều khiển Server</h3>
-                              <p className="text-xs text-slate-700 dark:text-slate-300 font-semibold mt-1">
-                                  Bật hoặc khóa từng server theo từng model. UI và backend sẽ cùng chặn các server đang khóa.
-                              </p>
-                          </div>
-                          <div className="flex flex-wrap justify-end gap-2">
-                              <button
-                                  onClick={handleEnableAllPricingServers}
-                                  className="px-3 py-2 rounded-xl border border-emerald-400/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 text-xs font-bold transition-colors"
-                              >
-                                  {'B\u1eadt t\u1ea5t c\u1ea3 server'}
-                              </button>
-                              <button
-                                  onClick={handleFastOnlyPricingServers}
-                                  className="px-3 py-2 rounded-xl border border-audi-cyan/30 bg-audi-cyan/10 text-audi-cyan hover:bg-audi-cyan/20 text-xs font-bold transition-colors"
-                              >
-                                  {'Ch\u1ec9 d\u00f9ng FAST'}
-                              </button>
-                              <button
-                                  onClick={handleRestorePricingServersFromLive}
-                                  className="px-3 py-2 rounded-xl border border-white/10 neu-inset-sm text-slate-200 hover:bg-white/10 text-xs font-bold transition-colors"
-                              >
-                                  {'Kh\u00f4i ph\u1ee5c theo TST live'}
-                              </button>
-                          </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {pricingServerGroups.map((group) => {
-                              const normalizedModelId = group.modelId.trim().toLowerCase();
-                              const explicitProvider = generationProviderByModel[normalizedModelId];
-                              const effectiveProvider = explicitProvider || generationProvider;
-                              const gommoMapping = gommoCatalog?.mappings.find(
-                                  (entry) => entry.auditionModelId.trim().toLowerCase() === normalizedModelId,
-                              );
-                              const gommoModel = gommoMapping
-                                  ? gommoCatalog?.models.find(
-                                      (entry) => entry.model.trim().toLowerCase() === gommoMapping.gommoModelId.trim().toLowerCase(),
-                                  )
-                                  : null;
-                              const gommoAvailable = Boolean(
-                                  gommoCatalog?.configured &&
-                                  gommoMapping?.fallbackSupported &&
-                                  gommoModel &&
-                                  !['maintenance', 'off', 'disabled', 'inactive', 'unavailable'].includes(gommoModel.status.toLowerCase()),
-                              );
-                              return (
-                              <div key={group.modelId} className="rounded-2xl border border-white/10 neu-inset-sm p-4">
-                                  <div className="flex items-start justify-between gap-3">
-                                      <div>
-                                          <div className="text-sm font-bold text-slate-900 dark:text-white">{group.modelName}</div>
-                                          <div className="text-[10px] mt-1 font-mono text-slate-700 dark:text-slate-400 font-semibold">{group.modelId}</div>
-                                      </div>
-                                      <span className="px-2 py-1 rounded-full border border-white/10 neu-inset-sm text-[10px] font-bold uppercase tracking-wider text-slate-300">
-                                          {group.type === 'motion-control' ? 'Motion' : group.type}
-                                      </span>
-                                  </div>
-                                  <div className="mt-4">
-                                      <div className="flex items-center justify-between gap-2">
-                                          <div className="text-[10px] font-black uppercase tracking-wider text-slate-500">API tạo job mới</div>
-                                          <div className={`text-[10px] font-black uppercase ${effectiveProvider === 'gommo' ? 'text-violet-300' : 'text-audi-cyan'}`}>
-                                              Đang dùng {effectiveProvider === 'gommo' ? 'Gommo' : 'TST'}
-                                          </div>
-                                      </div>
-                                      <div className="mt-2 grid grid-cols-3 gap-2">
-                                          {(['default', 'tst', 'gommo'] as const).map((provider) => {
-                                              const active = provider === 'default' ? !explicitProvider : explicitProvider === provider;
-                                              const disabled = switchingGenerationProvider || (provider === 'gommo' && !gommoAvailable);
-                                              return (
-                                                  <button
-                                                      key={`${group.modelId}_provider_${provider}`}
-                                                      type="button"
-                                                      disabled={disabled}
-                                                      onClick={() => handleSwitchModelGenerationProvider(group.modelId, provider)}
-                                                      className={`rounded-xl border px-2 py-2 text-[10px] font-black uppercase tracking-wider transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
-                                                          active
-                                                              ? 'border-[#FF007F]/50 bg-[#FF007F]/15 text-[#FF007F]'
-                                                              : 'border-white/10 text-slate-400 hover:border-white/20 hover:text-white'
-                                                      }`}
-                                                  >
-                                                      {provider === 'default' ? `Mặc định (${generationProvider.toUpperCase()})` : provider.toUpperCase()}
-                                                  </button>
-                                              );
-                                          })}
-                                      </div>
-                                      {!gommoAvailable && (
-                                          <div className="mt-2 text-[10px] text-amber-500">Model này chưa hỗ trợ route production qua Gommo.</div>
-                                      )}
-                                  </div>
-                                  <div className="mt-4 flex flex-wrap gap-2">
-                                      {group.servers.map((serverId) => {
-                                          const enabled = isServerEnabledForModel(serverAvailabilityConfig, group.modelId, serverId);
-                                          return (
-                                              <button
-                                                  key={`${group.modelId}_${serverId}`}
-                                                  onClick={() => handleTogglePricingServer(group.modelId, serverId)}
-                                                  className={`px-3 py-2 rounded-xl border text-xs font-bold transition-colors ${
-                                                      enabled
-                                                          ? 'border-audi-cyan/40 bg-audi-cyan/15 text-audi-cyan hover:bg-audi-cyan hover:text-black'
-                                                          : 'border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20'
-                                                  }`}
-                                              >
-                                                  <span>{tstServerToUi(serverId)}</span>
-                                                  <span className="ml-2 text-[10px] uppercase tracking-wider opacity-80">
-                                                      {enabled ? 'Bật' : 'Khóa'}
-                                                  </span>
-                                              </button>
-                                          );
-                                      })}
-                                  </div>
-                              </div>
-                              );
-                          })}
                       </div>
                   </div>
 
@@ -4728,8 +4688,13 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                   </td>
                                                   <td className="px-4 py-3 text-white">
                                                       <div className="flex items-center gap-2">
-                                                          <span>{row.server === 'gommo' ? 'Gommo' : tstServerToUi(row.server) || '-'}</span>
-                                                          {row.server !== 'gommo' && !isServerEnabledForModel(serverAvailabilityConfig, row.modelId, row.server) && (
+                                                          <span>{row.server === 'gommo' ? row.providerServerLabel || 'Gommo Gateway' : tstServerToUi(row.server) || '-'}</span>
+                                                          {!isProviderServerEnabledForModel(
+                                                              serverAvailabilityConfig,
+                                                              row.server === 'gommo' ? 'gommo' : 'tst',
+                                                              row.modelId,
+                                                              row.server === 'gommo' ? row.providerServerId : row.server,
+                                                          ) && (
                                                               <span className="px-2 py-0.5 rounded-full border border-red-500/30 bg-red-500/10 text-[10px] font-bold uppercase tracking-wider text-red-300">
                                                                   Khóa
                                                               </span>
@@ -4746,7 +4711,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                           </div>
                                                       )}
                                                   </td>
-                                                  <td className="px-4 py-3 text-white">{tstSpeedToUi(row.speed) || '-'}</td>
+                                                  <td className="px-4 py-3 text-white">{row.server === 'gommo' ? row.providerModeLabel || row.speed || '-' : tstSpeedToUi(row.speed) || '-'}</td>
                                                   <td className="px-4 py-3 text-center text-white">{row.audio ? 'Có' : '-'}</td>
                                                   <td className="px-4 py-3 text-right font-mono text-audi-cyan">{row.type === 'edit' || row.server === 'gommo' ? '-' : row.credits}</td>
                                                    <td className="px-4 py-3 text-right font-mono text-slate-200">

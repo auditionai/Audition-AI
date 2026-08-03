@@ -38,6 +38,7 @@ import {
   getGommoPricingInput,
   getGommoModelForAudition,
   isGommoCatalogModelAvailable,
+  isSelectableGommoImageResolution,
   resolveProviderForModel,
   type GommoProviderCatalog,
 } from '../../services/providerCatalog';
@@ -193,7 +194,9 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
 
   const availableResolutions = useMemo(() => {
     if (isGommoSelected) {
-      return (selectedGommoModel?.resolutions || []).map((option) => option.type.toUpperCase());
+      return (selectedGommoModel?.resolutions || [])
+        .filter((option) => isSelectableGommoImageResolution(selectedModelId, option.type))
+        .map((option) => option.type.toUpperCase());
     }
     const values = getCompatibleGenerationResolutions({
       tier: aiModel,
@@ -231,7 +234,9 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
 
   useEffect(() => {
     if (isGommoSelected) {
-      const resolutions = (selectedGommoModel?.resolutions || []).map((option) => option.type.toUpperCase());
+      const resolutions = (selectedGommoModel?.resolutions || [])
+        .filter((option) => isSelectableGommoImageResolution(selectedModelId, option.type))
+        .map((option) => option.type.toUpperCase());
       const ratios = (selectedGommoModel?.ratios || []).map((option) => option.type);
       const modes = (selectedGommoModel?.modes || []).map((option) => option.type);
       if (resolutions.length > 0 && !resolutions.includes(resolution)) setResolution(resolutions[0]);
@@ -592,12 +597,6 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
                   );
                 })}
               </div>
-            </div>
-
-            <div className={`rounded-xl border px-3 py-2 text-[10px] font-black uppercase tracking-wide ${
-              isGommoSelected ? 'border-cyan-400/30 bg-cyan-400/10 text-cyan-300' : 'border-purple-400/30 bg-purple-400/10 text-purple-300'
-            }`}>
-              Luồng đang dùng: {isGommoSelected ? `Gommo · ${selectedGommoModel?.name || selectedModelId}` : `TST · ${selectedModelId}`}
             </div>
 
             <div className="space-y-3">

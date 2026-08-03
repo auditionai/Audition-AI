@@ -55,11 +55,13 @@ import {
   getGommoPricingInput,
   getGommoModelForAudition,
   isGommoCatalogModelAvailable,
+  isSelectableGommoImageResolution,
   resolveProviderForModel,
   type GommoProviderCatalog,
 } from '../../services/providerCatalog';
 import { getImageProviderRouteKey, isModelAllowedForFeature } from '../../../../shared/providerRouting';
 import { GENERATION_SECTION_TIPS } from '../../../../shared/generationSectionTips';
+import { getGommoModeForServerGroup, getGommoServerGroups, getPreferredGommoBasicMode } from '../../../../shared/gommoServerRouting';
 
 type GenMode = 'single' | 'couple' | 'trio' | 'squad' | 'group5' | 'group6' | 'group7' | 'group8';
 type Stage = 'input' | 'submitting';
@@ -135,15 +137,15 @@ const MODE_TO_FEATURE_ID: Record<GenMode, string> = {
   group8: 'group_8_gen',
 };
 
-const MODE_META: Record<GenMode, { label: string; sampleCategoryId: number; sampleCategoryName: string }> = {
-  single: { label: 'Đơn', sampleCategoryId: 2, sampleCategoryName: 'Ảnh nam nữ' },
-  couple: { label: 'Đôi', sampleCategoryId: 3, sampleCategoryName: 'Ảnh couple' },
-  trio: { label: 'Nhóm 3', sampleCategoryId: 4, sampleCategoryName: 'Ảnh nhóm 3' },
-  squad: { label: 'Nhóm 4', sampleCategoryId: 5, sampleCategoryName: 'Ảnh nhóm 4' },
-  group5: { label: 'Nhóm 5', sampleCategoryId: 6, sampleCategoryName: 'Ảnh nhóm 5' },
-  group6: { label: 'Nhóm 6', sampleCategoryId: 6, sampleCategoryName: 'Ảnh nhóm 6' },
-  group7: { label: 'Nhóm 7', sampleCategoryId: 6, sampleCategoryName: 'Ảnh nhóm 7' },
-  group8: { label: 'Nhóm 8', sampleCategoryId: 6, sampleCategoryName: 'Ảnh nhóm 8' },
+const MODE_META: Record<GenMode, { label: string; title: string; sampleCategoryId: number; sampleCategoryName: string }> = {
+  single: { label: 'Đơn', title: 'Tạo ảnh đơn', sampleCategoryId: 2, sampleCategoryName: 'Ảnh nam nữ' },
+  couple: { label: 'Đôi', title: 'Tạo ảnh đôi', sampleCategoryId: 3, sampleCategoryName: 'Ảnh couple' },
+  trio: { label: 'Nhóm 3', title: 'Tạo ảnh nhóm 3 người', sampleCategoryId: 4, sampleCategoryName: 'Ảnh nhóm 3' },
+  squad: { label: 'Nhóm 4', title: 'Tạo ảnh nhóm 4 người', sampleCategoryId: 5, sampleCategoryName: 'Ảnh nhóm 4' },
+  group5: { label: 'Nhóm 5', title: 'Tạo ảnh nhóm 5 người', sampleCategoryId: 6, sampleCategoryName: 'Ảnh nhóm 5' },
+  group6: { label: 'Nhóm 6', title: 'Tạo ảnh nhóm 6 người', sampleCategoryId: 6, sampleCategoryName: 'Ảnh nhóm 6' },
+  group7: { label: 'Nhóm 7', title: 'Tạo ảnh nhóm 7 người', sampleCategoryId: 6, sampleCategoryName: 'Ảnh nhóm 7' },
+  group8: { label: 'Nhóm 8', title: 'Tạo ảnh nhóm 8 người', sampleCategoryId: 6, sampleCategoryName: 'Ảnh nhóm 8' },
 };
 
 const MODE_TO_CHARACTER_COUNT: Record<GenMode, number> = {
@@ -299,9 +301,16 @@ export function WorkspaceImage() {
     tier: generationTier, pricingEntries, serverId: generationServerId, speed: generationSpeedId,
     quality: aiModel === 'gpt' ? gptQuality : undefined,
   });
+  const tstRuntimeResolutions = Array.from(new Set(
+    (runtimeModels.find((model) => model.model.trim().toLowerCase() === selectedModelId)?.capabilities?.resolutions || [])
+      .map((value) => String(value || '').trim().toUpperCase())
+      .filter(Boolean),
+  ));
   const availableResolutions = isGommoSelected
-    ? (selectedGommoModel?.resolutions || []).map((option) => option.type.toUpperCase())
-    : tstAvailableResolutions;
+    ? (selectedGommoModel?.resolutions || [])
+      .filter((option) => isSelectableGommoImageResolution(selectedModelId, option.type))
+      .map((option) => option.type.toUpperCase())
+    : tstAvailableResolutions.length > 0 ? tstAvailableResolutions : tstRuntimeResolutions;
   const availableServers = getCompatibleGenerationServers({
     tier: generationTier, pricingEntries, speed: generationSpeedId, resolution: resolution as TstResolution,
     quality: aiModel === 'gpt' ? gptQuality : undefined,
@@ -329,6 +338,13 @@ export function WorkspaceImage() {
   const availableSpeedLabels = isGommoSelected ? [] : availableSpeeds.map((speedId) => (speedId === 'slow' ? 'Tiết Kiệm' : 'Nhanh'));
   const availableServerLabels = isGommoSelected ? [] : availableServers.map((serverId) => ({ id: serverId, label: tstServerToUi(serverId) || serverId.toUpperCase() }));
   const gommoModes = isGommoSelected ? (selectedGommoModel?.modes || []) : [];
+  const gommoModeGroups = isGommoSelected && selectedGommoModel
+    ? getGommoServerGroups(selectedGommoModel)
+    : [];
+  const selectedGommoModeGroup = gommoModeGroups.find((group) => group.modeTypes.includes(providerMode)) || gommoModeGroups[0];
+  const selectedGommoQualityModes = selectedGommoModeGroup
+    ? gommoModes.filter((option) => selectedGommoModeGroup.modeTypes.includes(option.type))
+    : [];
 
   const runtimeImageModelIds = new Set(
     runtimeModels.filter((m) => m.type === 'image').map((m) => m.model.trim().toLowerCase()),
@@ -534,7 +550,9 @@ export function WorkspaceImage() {
 
   useEffect(() => {
     if (isGommoSelected) {
-      const resolutions = (selectedGommoModel?.resolutions || []).map((option) => option.type.toUpperCase());
+      const resolutions = (selectedGommoModel?.resolutions || [])
+        .filter((option) => isSelectableGommoImageResolution(selectedModelId, option.type))
+        .map((option) => option.type.toUpperCase());
       const ratios = (selectedGommoModel?.ratios || []).map((option) => option.type);
       const modes = (selectedGommoModel?.modes || []).map((option) => option.type);
       if (resolutions.length > 0 && !resolutions.includes(resolution)) setResolution(resolutions[0]);
@@ -573,6 +591,13 @@ export function WorkspaceImage() {
       setSpeed(nextSpeedLabel);
     }
   }, [aiModel, aspectRatio, gptQuality, isGommoSelected, pricingEntries, providerMode, resolution, selectedGommoModel, server, speed, tstAspectRatios]);
+
+  useEffect(() => {
+    if (!isGommoSelected || !['group6', 'group7', 'group8'].includes(activeMode)) return;
+    const modeTypes = (selectedGommoModel?.modes || []).map((option) => option.type);
+    const basicMode = getPreferredGommoBasicMode(modeTypes, gptQuality);
+    if (basicMode) setProviderMode(basicMode);
+  }, [activeMode, gptQuality, isGommoSelected, selectedGommoModel]);
 
   // --- Rotating tips ---
   useEffect(() => {
@@ -1004,28 +1029,11 @@ export function WorkspaceImage() {
         {/* Header */}
         <div className="text-center">
           <h2 className="text-lg font-semibold tracking-tight text-gray-900 dark:text-white flex items-center justify-center gap-2">
-            <Sparkles className="w-4 h-4 text-[var(--color-accent)]" /> Tạo ảnh AI
+            <Sparkles className="w-4 h-4 text-[var(--color-accent)]" /> {MODE_META[activeMode].title}
           </h2>
           <p className="text-xs text-gray-400 dark:text-zinc-500 mt-1">
             {catalogLoading ? 'Đang tải catalog...' : catalogError || `${aiModel === 'flash' ? 'Flash' : aiModel === 'pro' ? 'Pro' : 'GPT'} Engine • ${resolution}`}
           </p>
-        </div>
-
-        {/* Mode Toggle */}
-        <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
-          {(Object.keys(MODE_META) as GenMode[]).map((mode) => (
-            <button
-              key={mode}
-              onClick={() => handleModeChange(mode)}
-              className={`min-w-[82px] flex-1 py-2.5 rounded-2xl text-[11px] font-bold transition-all ${
-                activeMode === mode
-                  ? 'bg-gray-900 text-white shadow-md'
-                  : 'bg-white dark:bg-[#18181B] text-gray-500 dark:text-zinc-400 border border-gray-100 dark:border-zinc-800'
-              }`}
-            >
-              {MODE_META[mode].label}
-            </button>
-          ))}
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -1219,12 +1227,6 @@ export function WorkspaceImage() {
         </div>
 
         {/* Aspect Ratio */}
-        <div className={`rounded-2xl border px-4 py-3 text-xs font-black ${
-          isGommoSelected ? 'border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-300' : 'border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300'
-        }`}>
-          Luồng đang dùng: {isGommoSelected ? `Gommo · ${selectedGommoModel?.name || selectedModelId}` : `TST · ${selectedModelId}`}
-        </div>
-
         <div role="note" className="rounded-2xl border border-cyan-200 bg-cyan-50/70 px-4 py-3 text-xs font-medium leading-relaxed text-cyan-900 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-100">
           <span aria-hidden="true">💡</span>{' '}
           <strong>{GENERATION_SECTION_TIPS.settings.title}:</strong>{' '}
@@ -1233,12 +1235,12 @@ export function WorkspaceImage() {
 
         <div data-tour-id="mobile.generation.settings" className="space-y-2">
           <h3 className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider ml-1">Khung hình</h3>
-          <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
+          <div className="grid grid-cols-4 gap-2">
             {ratios.map((r) => (
               <button
                 key={r}
                 onClick={() => setAspectRatio(r)}
-                className={`flex-shrink-0 px-4 py-2 rounded-full text-xs font-medium transition-all ${
+                className={`min-w-0 px-2 py-2.5 rounded-2xl text-xs font-bold transition-all ${
                   aspectRatio === r ? 'bg-gray-900 text-white shadow-md' : 'bg-white dark:bg-[#18181B] text-gray-500 dark:text-zinc-400 border border-gray-100 dark:border-zinc-800'
                 }`}
               >
@@ -1295,15 +1297,15 @@ export function WorkspaceImage() {
             <h3 className="text-xs font-semibold text-gray-400 dark:text-zinc-500 tracking-wider ml-1">ĐỘ PHÂN GIẢI</h3>
             <div className="grid grid-cols-3 gap-2">
               {availableResolutions.map((res) => (
-                <button
-                  key={res}
-                  onClick={() => setResolution(res)}
-                  className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                    resolution === res ? 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 border border-indigo-200 dark:border-indigo-500/30 shadow-sm' : 'bg-white dark:bg-[#18181B] text-gray-500 dark:text-zinc-400 border border-gray-100 dark:border-zinc-800'
-                  }`}
-                >
-                  {res}
-                </button>
+                  <button
+                    key={res}
+                    onClick={() => setResolution(res)}
+                    className={`rounded-[18px] border p-3 text-center text-xs font-black transition-all ${
+                      resolution === res ? 'border-cyan-300 bg-cyan-50 text-cyan-700 shadow-sm dark:border-cyan-400/70 dark:bg-cyan-500/10 dark:text-cyan-300' : 'border-gray-100 bg-white text-gray-600 dark:border-zinc-800 dark:bg-[#18181B] dark:text-zinc-300'
+                    }`}
+                  >
+                    {res}
+                  </button>
               ))}
             </div>
           </div>
@@ -1329,21 +1331,46 @@ export function WorkspaceImage() {
         )}
 
         {isGommoSelected && gommoModes.length > 0 && (
-          <div className="space-y-2">
-            <h3 className="text-xs font-semibold text-cyan-600 dark:text-cyan-400 tracking-wider ml-1">MÁY CHỦ / CHẾ ĐỘ GOMMO · REALTIME</h3>
-            <div className="grid grid-cols-2 gap-2">
-              {gommoModes.map((option) => (
-                <button
-                  key={option.type}
-                  onClick={() => setProviderMode(option.type)}
-                  className={`rounded-xl border px-3 py-2 text-left text-xs font-bold ${
-                    providerMode === option.type ? 'border-cyan-300 bg-cyan-50 text-cyan-700 dark:border-cyan-500/40 dark:bg-cyan-500/10 dark:text-cyan-300' : 'border-gray-100 bg-white text-gray-500 dark:border-zinc-800 dark:bg-[#18181B] dark:text-zinc-400'
-                  }`}
-                >
-                  <span className="block">{option.name || option.type}</span>
-                  {option.group && <span className="block text-[9px] opacity-70">{option.group}</span>}
-                </button>
-              ))}
+          <div className="space-y-3">
+            <div className="space-y-3 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm dark:border-zinc-800 dark:bg-[#18181B]">
+              <div className="space-y-2">
+                <div className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500">Server Gommo</div>
+                <div className={`grid gap-2 ${gommoModeGroups.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                  {gommoModeGroups.map((group) => (
+                    <button
+                      key={group.id}
+                      onClick={() => {
+                        if (!selectedGommoModel) return;
+                        const nextMode = getGommoModeForServerGroup(selectedGommoModel, group.id, providerMode);
+                        if (nextMode) setProviderMode(nextMode);
+                      }}
+                      className={`rounded-xl border px-3 py-2.5 text-xs font-black uppercase transition-all ${
+                        selectedGommoModeGroup?.id === group.id ? 'border-cyan-300 bg-cyan-50 text-cyan-700 dark:border-cyan-500/40 dark:bg-cyan-500/10 dark:text-cyan-300' : 'border-gray-100 bg-gray-50 text-gray-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400'
+                      }`}
+                    >
+                      {group.label.replace(/\s*server\s*/i, '')}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {selectedGommoQualityModes.length > 0 && (
+                <div className="space-y-2 border-t border-gray-100 pt-3 dark:border-zinc-800">
+                  <div className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500">Chất lượng</div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {selectedGommoQualityModes.map((option) => (
+                      <button
+                        key={option.type}
+                        onClick={() => setProviderMode(option.type)}
+                        className={`rounded-xl border px-2 py-2.5 text-xs font-black uppercase transition-all ${
+                          providerMode === option.type ? 'border-pink-300 bg-pink-50 text-pink-700 dark:border-pink-500/40 dark:bg-pink-500/10 dark:text-pink-300' : 'border-gray-100 bg-gray-50 text-gray-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400'
+                        }`}
+                      >
+                        {option.name || option.type}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

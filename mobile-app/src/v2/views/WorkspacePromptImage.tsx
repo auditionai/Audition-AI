@@ -33,7 +33,7 @@ import type { GeneratedImage } from '../../types';
 import type { ModelPricing } from '../../services/economyService';
 import type { PromptImageGenerateRecipePayload } from '../../../../shared/queueRecipes';
 import { isModelAllowedForFeature } from '../../../../shared/providerRouting';
-import { fetchProviderCatalog, getAuditionProviderPricing, getGommoPricingInput, getGommoModelForAudition, isGommoCatalogModelAvailable, resolveProviderForModel, type GommoProviderCatalog } from '../../services/providerCatalog';
+import { fetchProviderCatalog, getAuditionProviderPricing, getGommoPricingInput, getGommoModelForAudition, isGommoCatalogModelAvailable, isSelectableGommoImageResolution, resolveProviderForModel, type GommoProviderCatalog } from '../../services/providerCatalog';
 
 const DEFAULT_REFERENCE_IMAGE_LIMIT = 4;
 const GPT_REFERENCE_IMAGE_LIMIT = 5;
@@ -175,7 +175,9 @@ export function WorkspacePromptImage() {
   const tstAspectRatios = useMemo(() => getGenerationAspectRatios(aiModel, runtimeModels), [aiModel, runtimeModels]);
 
   const availableResolutions = useMemo(() => {
-    if (isGommoSelected) return (selectedGommoModel?.resolutions || []).map((option) => option.type.toUpperCase());
+    if (isGommoSelected) return (selectedGommoModel?.resolutions || [])
+      .filter((option) => isSelectableGommoImageResolution(selectedModelId, option.type))
+      .map((option) => option.type.toUpperCase());
     const values = getCompatibleGenerationResolutions({
       tier: aiModel,
       pricingEntries,
@@ -212,7 +214,9 @@ export function WorkspacePromptImage() {
 
   useEffect(() => {
     if (isGommoSelected) {
-      const resolutions = (selectedGommoModel?.resolutions || []).map((option) => option.type.toUpperCase());
+      const resolutions = (selectedGommoModel?.resolutions || [])
+        .filter((option) => isSelectableGommoImageResolution(selectedModelId, option.type))
+        .map((option) => option.type.toUpperCase());
       const ratios = (selectedGommoModel?.ratios || []).map((option) => option.type);
       const modes = (selectedGommoModel?.modes || []).map((option) => option.type);
       if (resolutions.length && !resolutions.includes(resolution)) setResolution(resolutions[0]);
@@ -484,13 +488,13 @@ export function WorkspacePromptImage() {
       <div data-tour-id="mobile.image.settings" className="space-y-4">
         <div className="space-y-2">
           <h3 className="ml-1 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-zinc-500">KHUNG HÌNH</h3>
-          <div className="flex gap-2 overflow-x-auto pb-1">
+          <div className="grid grid-cols-4 gap-2">
             {aspectRatioOptions.map((ratio) => (
               <button
                 key={ratio}
                 type="button"
                 onClick={() => setAspectRatio(ratio)}
-                className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium transition-all ${
+                className={`min-w-0 rounded-2xl px-2 py-2.5 text-xs font-bold transition-all ${
                   aspectRatio === ratio
                     ? 'bg-gray-900 text-white shadow-md dark:bg-white dark:text-gray-950'
                     : 'border border-gray-100 bg-white text-gray-500 dark:border-zinc-800 dark:bg-[#18181B] dark:text-zinc-400'

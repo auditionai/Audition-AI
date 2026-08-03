@@ -4,9 +4,26 @@ import { readFile } from 'node:fs/promises';
 import { isGommoModelAvailable } from '../netlify/functions/_gommo-provider.ts';
 import { sortTstFallbackServers } from '../netlify/functions/_queue-worker.ts';
 import { buildLocalPricingOptionCandidates } from '../netlify/functions/queue-submit.ts';
-import { getAuditionProviderPricing, getGommoPricingInput, resolveProviderForModel } from '../services/providerCatalog.ts';
+import { getAuditionProviderPricing, getGommoPricingInput, isSelectableGommoImageResolution, resolveProviderForModel } from '../services/providerCatalog.ts';
 import { getAllowedModelsForFeature, inferGenerationProviderRouteKey, isModelAllowedForFeature } from '../shared/providerRouting.ts';
+import { getGommoModeForServerGroup, getGommoServerGroups, getGommoServerIdForMode, getPreferredGommoBasicMode } from '../shared/gommoServerRouting.ts';
 import { getVideoModelPresentation } from '../shared/videoModelPresentation.ts';
+
+const gommoGptServerModel = {
+  server: 'openai',
+  model: 'imagegen_2_0',
+  modes: [
+    { type: 'low', name: 'Low', group: 'Premium Server', groupSubtitle: 'Trực tiếp OpenAI' },
+    { type: 'low_basic', name: 'Low', group: 'Basic Server', groupSubtitle: 'Tối ưu chi phí' },
+  ],
+};
+assert.equal(getGommoServerIdForMode(gommoGptServerModel, 'low'), 'premium-server');
+assert.equal(getGommoServerIdForMode(gommoGptServerModel, 'low_basic'), 'basic-server');
+assert.deepEqual(getGommoServerGroups(gommoGptServerModel).map((group) => group.label), ['Premium Server', 'Basic Server']);
+assert.equal(getGommoModeForServerGroup(gommoGptServerModel, 'basic-server', 'low'), 'low_basic');
+assert.equal(getPreferredGommoBasicMode(['low', 'low_basic', 'medium_basic'], 'medium'), 'medium_basic');
+assert.equal(isSelectableGommoImageResolution('image-gpt-2', '4K_UPSCALE'), false);
+assert.equal(isSelectableGommoImageResolution('image-gpt-2', '4K'), true);
 
 const gptOptions = buildLocalPricingOptionCandidates({
   model: 'image-gpt-2',
@@ -116,6 +133,9 @@ assert(gommoSource.includes('/ai/jobs/image/${encodeURIComponent(mapping.gommoMo
 assert(gommoSource.includes('/ai/jobs/${encodeURIComponent(providerJobId)}?media=${media}'));
 assert(gommoSource.includes("model.withSubject ? 'subjects' : model.withReference ? 'references' : 'images'"));
 assert(gommoSource.includes('maxReferenceImages'));
+assert(gommoSource.includes('GOMMO_SERVER_DISABLED'));
+assert(gommoSource.includes("isProviderServerAllowedByConfig('gommo'"));
+assert(gommoSource.includes('getGommoServerIdForMode(normalized.model, mode)'));
 
 const tstCatalogSource = await readFile(new URL('../services/tstCatalog.ts', import.meta.url), 'utf8');
 assert(tstCatalogSource.includes("String(entry.key || entry.config_key || '')"));
@@ -137,6 +157,7 @@ assert(queueSubmitSource.includes('Math.min(8, characterCount'));
 assert(queueSubmitSource.includes('__providerRouteKey'));
 assert(queueSubmitSource.includes('sampleImage: null'));
 assert(queueSubmitSource.includes('MODEL_NOT_ALLOWED_FOR_FEATURE'));
+assert(queueSubmitSource.includes('GOMMO_SERVER_DISABLED'));
 
 const recipeSource = await readFile(new URL('../netlify/functions/_queue-recipes.ts', import.meta.url), 'utf8');
 assert(recipeSource.includes('uploadReferencesToTst ? (isUserOnlyPrompt ? 5 : 4) : 8'));
@@ -149,6 +170,11 @@ for (const filename of ['../views/features/GenerationTool.tsx', '../mobile-app/s
   assert(source.includes('GENERATION_SECTION_TIPS.character'));
   assert(source.includes('GENERATION_SECTION_TIPS.settings'));
   assert(source.includes('GENERATION_SECTION_TIPS.render'));
+  assert(source.includes("['group6', 'group7', 'group8'].includes(activeMode)"));
+  assert(source.includes('getPreferredGommoBasicMode'));
+  assert(source.includes('getGommoServerGroups'));
+  assert(source.includes('tstRuntimeResolutions'));
+  assert(!source.includes('Luồng đang dùng:'));
 }
 
 const generationTipsSource = await readFile(new URL('../shared/generationSectionTips.ts', import.meta.url), 'utf8');
@@ -184,6 +210,9 @@ assert(adminSource.includes('allowedModelsByFeature'));
 assert(adminSource.includes('Model được phép'));
 assert(adminSource.includes('getInheritedAuditionPricing'));
 assert(adminSource.includes('Kế thừa giá hệ thống từ'));
+assert(adminSource.includes('Provider, model và server theo từng chức năng'));
+assert(adminSource.includes('Server {effectiveProvider.toUpperCase()} realtime'));
+assert(adminSource.includes('providerServerLabel'));
 
 const migrationSource = await readFile(new URL('./supabase_fix_queue_provider_safety.sql', import.meta.url), 'utf8');
 assert(migrationSource.includes("raise exception 'ACCOUNT_LOCKED'"));

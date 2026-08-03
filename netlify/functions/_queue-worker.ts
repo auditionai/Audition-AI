@@ -219,9 +219,12 @@ const getGlobalGenerationProvider = async (modelId: string, featureKey?: string)
     if (featureProvider === 'gommo' || featureProvider === 'tst') return featureProvider;
     const featureDefault = normalizedFeatureKey ? DEFAULT_PROVIDER_BY_FEATURE[normalizedFeatureKey] : undefined;
     if (featureDefault) return featureDefault;
+    const selected = String(data?.value?.provider || '').trim().toLowerCase();
+    if (normalizedFeatureKey) {
+      return selected === 'gommo' ? 'gommo' : selected === 'tst' ? 'tst' : GENERATION_PROVIDER_DEFAULT;
+    }
     const modelProvider = String(data?.value?.providerByModel?.[modelId] || '').trim().toLowerCase();
     if (modelProvider === 'gommo' || modelProvider === 'tst') return modelProvider;
-    const selected = String(data?.value?.provider || '').trim().toLowerCase();
     return selected === 'gommo' ? 'gommo' : selected === 'tst' ? 'tst' : GENERATION_PROVIDER_DEFAULT;
   } catch (error) {
     console.warn('[queue-worker] Could not read generation provider mode; using deployment default.', error);

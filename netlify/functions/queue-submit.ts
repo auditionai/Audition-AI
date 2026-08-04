@@ -27,12 +27,12 @@ const headers = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-const SYSTEM_IMAGE_LIMIT = 4;
-const SYSTEM_VIDEO_LIMIT = 4;
 const SYSTEM_QUEUE_LIMIT = 10;
-const USER_IMAGE_LIMIT = 1;
-const USER_VIDEO_LIMIT = 1;
 const USER_QUEUE_LIMIT = 1;
+const PROVIDER_CONCURRENCY_LIMITS = {
+  tst: { systemImage: 4, systemVideo: 4, userImage: 1, userVideo: 1 },
+  gommo: { systemImage: 8, systemVideo: 8, userImage: 2, userVideo: 2 },
+} as const;
 const TST_QUEUE_KINDS = new Set(['image_generate', 'video_generate', 'motion_generate']);
 const TST_QUEUE_KIND_VALUES = Array.from(TST_QUEUE_KINDS);
 type GenerationProvider = 'tst' | 'gommo';
@@ -484,6 +484,8 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
   const queueKind = body.queueKind || (assetType === 'video' ? 'video_generate' : 'image_generate');
   const clientPlatform = normalizeQueueClientPlatform(body.clientPlatform) || 'unknown';
   const queuePayload = body.queuePayload ?? {};
+  const targetProvider: GenerationProvider = queuePayload.__targetProvider === 'gommo' ? 'gommo' : 'tst';
+  const providerLimits = PROVIDER_CONCURRENCY_LIMITS[targetProvider];
   const serverPrice = await resolveServerCostVcoin(admin, queueKind, queuePayload);
   const costVcoin = serverPrice.costVcoin;
   const normalizedToolMeta = getImageGenerateToolMetadata(queueKind, queuePayload, body.toolId, body.toolName);
@@ -544,6 +546,7 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
           .eq('user_id', userId)
           .eq('status', 'processing')
           .in('queue_kind', TST_QUEUE_KIND_VALUES)
+          .or(targetProvider === 'gommo' ? 'provider.eq.gommo' : 'provider.eq.tst,provider.is.null')
           .eq('asset_type', 'image'),
       ),
       countRows(
@@ -553,6 +556,7 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
           .eq('user_id', userId)
           .eq('status', 'processing')
           .in('queue_kind', TST_QUEUE_KIND_VALUES)
+          .or(targetProvider === 'gommo' ? 'provider.eq.gommo' : 'provider.eq.tst,provider.is.null')
           .eq('asset_type', 'video'),
       ),
       countRows(
@@ -561,7 +565,8 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
           .select('id', { count: 'exact', head: true })
           .eq('user_id', userId)
           .eq('status', 'queued')
-          .in('queue_kind', TST_QUEUE_KIND_VALUES),
+          .in('queue_kind', TST_QUEUE_KIND_VALUES)
+          .or(targetProvider === 'gommo' ? 'provider.eq.gommo' : 'provider.eq.tst,provider.is.null'),
       ),
       countRows(
         admin
@@ -569,6 +574,7 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
           .select('id', { count: 'exact', head: true })
           .eq('status', 'processing')
           .in('queue_kind', TST_QUEUE_KIND_VALUES)
+          .or(targetProvider === 'gommo' ? 'provider.eq.gommo' : 'provider.eq.tst,provider.is.null')
           .eq('asset_type', 'image'),
       ),
       countRows(
@@ -577,6 +583,7 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
           .select('id', { count: 'exact', head: true })
           .eq('status', 'processing')
           .in('queue_kind', TST_QUEUE_KIND_VALUES)
+          .or(targetProvider === 'gommo' ? 'provider.eq.gommo' : 'provider.eq.tst,provider.is.null')
           .eq('asset_type', 'video'),
       ),
       countRows(
@@ -584,14 +591,15 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
           .from('generated_images')
           .select('id', { count: 'exact', head: true })
           .eq('status', 'queued')
-          .in('queue_kind', TST_QUEUE_KIND_VALUES),
+          .in('queue_kind', TST_QUEUE_KIND_VALUES)
+          .or(targetProvider === 'gommo' ? 'provider.eq.gommo' : 'provider.eq.tst,provider.is.null'),
       ),
     ]);
 
   const canDispatchNow =
     assetType === 'image'
-      ? myImageProcessing < USER_IMAGE_LIMIT && systemImageProcessing < SYSTEM_IMAGE_LIMIT
-      : myVideoProcessing < USER_VIDEO_LIMIT && systemVideoProcessing < SYSTEM_VIDEO_LIMIT;
+      ? myImageProcessing < providerLimits.userImage && systemImageProcessing < providerLimits.systemImage
+      : myVideoProcessing < providerLimits.userVideo && systemVideoProcessing < providerLimits.systemVideo;
 
   if (!canDispatchNow && myQueued >= USER_QUEUE_LIMIT) {
     throw new Error('USER_QUEUE_LIMIT_REACHED');

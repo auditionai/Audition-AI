@@ -20,9 +20,22 @@ export interface QueueStats {
   systemImageProcessing: number;
   systemVideoProcessing: number;
   systemQueued: number;
+  tst: ProviderQueueStats;
+  gommo: ProviderQueueStats;
 }
 
-export const CONCURRENCY_LIMITS = {
+export type QueueProvider = 'tst' | 'gommo';
+
+export interface ProviderQueueStats {
+  myImageProcessing: number;
+  myVideoProcessing: number;
+  myQueued: number;
+  systemImageProcessing: number;
+  systemVideoProcessing: number;
+  systemQueued: number;
+}
+
+const TST_CONCURRENCY_LIMITS = {
   user: {
     imageProcessing: 1,
     videoProcessing: 1,
@@ -35,6 +48,42 @@ export const CONCURRENCY_LIMITS = {
   },
 } as const;
 
+const GOMMO_CONCURRENCY_LIMITS = {
+  user: {
+    imageProcessing: 2,
+    videoProcessing: 2,
+    queued: 1,
+  },
+  system: {
+    imageProcessing: 8,
+    videoProcessing: 8,
+    queued: 10,
+  },
+} as const;
+
+export const PROVIDER_CONCURRENCY_LIMITS = {
+  tst: TST_CONCURRENCY_LIMITS,
+  gommo: GOMMO_CONCURRENCY_LIMITS,
+} as const;
+
+// Backwards-compatible alias for older UI that has not selected a provider.
+export const CONCURRENCY_LIMITS = TST_CONCURRENCY_LIMITS;
+
+export const getProviderConcurrencyLimits = (provider: QueueProvider) =>
+  PROVIDER_CONCURRENCY_LIMITS[provider];
+
+export const getProviderQueueStats = (stats: QueueStats, provider: QueueProvider) =>
+  stats[provider];
+
+const EMPTY_PROVIDER_QUEUE_STATS: ProviderQueueStats = {
+  myImageProcessing: 0,
+  myVideoProcessing: 0,
+  myQueued: 0,
+  systemImageProcessing: 0,
+  systemVideoProcessing: 0,
+  systemQueued: 0,
+};
+
 const EMPTY_QUEUE_STATS: QueueStats = {
   myImageProcessing: 0,
   myVideoProcessing: 0,
@@ -42,6 +91,8 @@ const EMPTY_QUEUE_STATS: QueueStats = {
   systemImageProcessing: 0,
   systemVideoProcessing: 0,
   systemQueued: 0,
+  tst: { ...EMPTY_PROVIDER_QUEUE_STATS },
+  gommo: { ...EMPTY_PROVIDER_QUEUE_STATS },
 };
 
 const BUSY_QUEUE_POLL_MS = 20_000;
@@ -226,6 +277,35 @@ const fetchSharedQueueStats = async (force = false) => {
       }
 
       const row = Array.isArray(data) ? data[0] : data;
+      const hasProviderStats = row?.system_tst_image_processing !== undefined
+        || row?.system_gommo_image_processing !== undefined;
+      const tstStats: ProviderQueueStats = hasProviderStats
+        ? {
+            myImageProcessing: Number(row?.my_tst_image_processing || 0),
+            myVideoProcessing: Number(row?.my_tst_video_processing || 0),
+            myQueued: Number(row?.my_tst_queued || 0),
+            systemImageProcessing: Number(row?.system_tst_image_processing || 0),
+            systemVideoProcessing: Number(row?.system_tst_video_processing || 0),
+            systemQueued: Number(row?.system_tst_queued || 0),
+          }
+        : {
+            myImageProcessing: Number(row?.my_image_processing || 0),
+            myVideoProcessing: Number(row?.my_video_processing || 0),
+            myQueued: Number(row?.my_queued || 0),
+            systemImageProcessing: Number(row?.system_image_processing || 0),
+            systemVideoProcessing: Number(row?.system_video_processing || 0),
+            systemQueued: Number(row?.system_queued || 0),
+          };
+      const gommoStats: ProviderQueueStats = hasProviderStats
+        ? {
+            myImageProcessing: Number(row?.my_gommo_image_processing || 0),
+            myVideoProcessing: Number(row?.my_gommo_video_processing || 0),
+            myQueued: Number(row?.my_gommo_queued || 0),
+            systemImageProcessing: Number(row?.system_gommo_image_processing || 0),
+            systemVideoProcessing: Number(row?.system_gommo_video_processing || 0),
+            systemQueued: Number(row?.system_gommo_queued || 0),
+          }
+        : { ...EMPTY_PROVIDER_QUEUE_STATS };
       sharedQueueStats = {
         myImageProcessing: Number(row?.my_image_processing || 0),
         myVideoProcessing: Number(row?.my_video_processing || 0),
@@ -233,6 +313,8 @@ const fetchSharedQueueStats = async (force = false) => {
         systemImageProcessing: Number(row?.system_image_processing || 0),
         systemVideoProcessing: Number(row?.system_video_processing || 0),
         systemQueued: Number(row?.system_queued || 0),
+        tst: tstStats,
+        gommo: gommoStats,
       };
       notifyQueueStatsSubscribers();
       await refreshCurrentJobs();

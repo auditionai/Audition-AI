@@ -3,7 +3,7 @@ import { Language, Theme, ViewId, UserProfile, PromotionCampaign, Feature } from
 import { Icons } from './Icons';
 import { DailyCheckin } from './DailyCheckin';
 import { getUserProfile, getActivePromotion } from '../services/economyService';
-import { useConcurrency, CONCURRENCY_LIMITS } from '../services/concurrencyService';
+import { useConcurrency, PROVIDER_CONCURRENCY_LIMITS } from '../services/concurrencyService';
 import { DesktopAtmosphere } from './DesktopAtmosphere';
 
 interface LayoutProps {
@@ -231,15 +231,15 @@ export const Layout: React.FC<LayoutProps> = ({
                     </div>
                     <div className="space-y-1.5">
                       <div className="flex justify-between items-center">
-                        <span className="font-black text-slate-950 dark:text-slate-200">Đang xử lý</span>
+                        <span className="font-black text-slate-950 dark:text-slate-200">TST · Ảnh/Video/Chờ</span>
                         <span className="px-2 py-0.5 rounded-lg text-[10px] font-black font-mono bg-cyan-500/25 dark:bg-cyan-500/20 text-cyan-900 dark:text-cyan-400 border border-cyan-500/60">
-                          {queueStats.myImageProcessing + queueStats.myVideoProcessing}/{CONCURRENCY_LIMITS.user.imageProcessing}
+                          {queueStats.tst.myImageProcessing}/{PROVIDER_CONCURRENCY_LIMITS.tst.user.imageProcessing} · {queueStats.tst.myVideoProcessing}/{PROVIDER_CONCURRENCY_LIMITS.tst.user.videoProcessing} · {queueStats.tst.myQueued}/{PROVIDER_CONCURRENCY_LIMITS.tst.user.queued}
                         </span>
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className="font-black text-slate-950 dark:text-slate-200">Hàng chờ</span>
+                        <span className="font-black text-slate-950 dark:text-slate-200">Dự phòng · Ảnh/Video/Chờ</span>
                         <span className="px-2 py-0.5 rounded-lg text-[10px] font-black font-mono bg-amber-500/25 dark:bg-amber-500/20 text-amber-900 dark:text-amber-400 border border-amber-500/60">
-                          {queueStats.myQueued}/{CONCURRENCY_LIMITS.user.queued}
+                          {queueStats.gommo.myImageProcessing}/{PROVIDER_CONCURRENCY_LIMITS.gommo.user.imageProcessing} · {queueStats.gommo.myVideoProcessing}/{PROVIDER_CONCURRENCY_LIMITS.gommo.user.videoProcessing} · {queueStats.gommo.myQueued}/{PROVIDER_CONCURRENCY_LIMITS.gommo.user.queued}
                         </span>
                       </div>
                     </div>
@@ -254,21 +254,21 @@ export const Layout: React.FC<LayoutProps> = ({
                     </div>
                     <div className="space-y-1.5">
                       <div className="flex justify-between items-center">
-                        <span className="font-black text-slate-950 dark:text-slate-200">Ảnh</span>
+                        <span className="font-black text-slate-950 dark:text-slate-200">TST · Ảnh/Video</span>
                         <span className="px-2 py-0.5 rounded-lg text-[10px] font-black font-mono bg-slate-300 dark:bg-slate-800 text-slate-950 dark:text-slate-200 border border-slate-400 dark:border-transparent">
-                          {queueStats.systemImageProcessing}/{CONCURRENCY_LIMITS.system.imageProcessing}
+                          {queueStats.tst.systemImageProcessing}/{PROVIDER_CONCURRENCY_LIMITS.tst.system.imageProcessing} · {queueStats.tst.systemVideoProcessing}/{PROVIDER_CONCURRENCY_LIMITS.tst.system.videoProcessing}
                         </span>
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className="font-black text-slate-950 dark:text-slate-200">Video</span>
+                        <span className="font-black text-slate-950 dark:text-slate-200">Nguồn dự phòng · Ảnh/Video</span>
                         <span className="px-2 py-0.5 rounded-lg text-[10px] font-black font-mono bg-slate-300 dark:bg-slate-800 text-slate-950 dark:text-slate-200 border border-slate-400 dark:border-transparent">
-                          {queueStats.systemVideoProcessing}/{CONCURRENCY_LIMITS.system.videoProcessing}
+                          {queueStats.gommo.systemImageProcessing}/{PROVIDER_CONCURRENCY_LIMITS.gommo.system.imageProcessing} · {queueStats.gommo.systemVideoProcessing}/{PROVIDER_CONCURRENCY_LIMITS.gommo.system.videoProcessing}
                         </span>
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className="font-black text-slate-950 dark:text-slate-200">Hàng chờ chung</span>
+                        <span className="font-black text-slate-950 dark:text-slate-200">Hàng chờ TST / dự phòng</span>
                         <span className="px-2 py-0.5 rounded-lg text-[10px] font-black font-mono bg-orange-500/25 dark:bg-orange-500/20 text-orange-950 dark:text-orange-400 border border-orange-500/60">
-                          {queueStats.systemQueued}/{CONCURRENCY_LIMITS.system.queued}
+                          {queueStats.tst.systemQueued}/{PROVIDER_CONCURRENCY_LIMITS.tst.system.queued} · {queueStats.gommo.systemQueued}/{PROVIDER_CONCURRENCY_LIMITS.gommo.system.queued}
                         </span>
                       </div>
                     </div>
@@ -280,11 +280,11 @@ export const Layout: React.FC<LayoutProps> = ({
             <div 
               onClick={() => triggerPoll()}
               className="neu-inset-sm p-2 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:ring-2 hover:ring-[#FF007F] transition-all"
-              title={`Luồng xử lý: Của bạn ${queueStats.myImageProcessing + queueStats.myVideoProcessing}/${CONCURRENCY_LIMITS.user.imageProcessing} | Hệ thống ${queueStats.systemImageProcessing}/${CONCURRENCY_LIMITS.system.imageProcessing}`}
+              title={`Luồng xử lý: TST ${queueStats.tst.systemImageProcessing}/${PROVIDER_CONCURRENCY_LIMITS.tst.system.imageProcessing} | Dự phòng ${queueStats.gommo.systemImageProcessing}/${PROVIDER_CONCURRENCY_LIMITS.gommo.system.imageProcessing}`}
             >
               <Icons.Activity className="w-4 h-4 text-[#FF007F] dark:text-[#00F2FE] animate-pulse" />
               <span className="text-[9px] font-mono font-black text-[#FF007F] dark:text-cyan-400 mt-0.5">
-                {queueStats.myImageProcessing + queueStats.myVideoProcessing}/{CONCURRENCY_LIMITS.user.imageProcessing}
+                {queueStats.tst.myImageProcessing + queueStats.gommo.myImageProcessing}/{PROVIDER_CONCURRENCY_LIMITS.tst.user.imageProcessing + PROVIDER_CONCURRENCY_LIMITS.gommo.user.imageProcessing}
               </span>
             </div>
           )}

@@ -27,12 +27,22 @@ const getPayloadStage = (payload: unknown) =>
     ? String((payload as Record<string, unknown>).__stage)
     : '';
 
+const getRowProvider = (row: any): 'tst' | 'gommo' =>
+  String(row?.provider || row?.queue_payload?.__targetProvider || 'tst').trim().toLowerCase() === 'gommo'
+    ? 'gommo'
+    : 'tst';
+
+const PROVIDER_LIMITS = {
+  tst: { image: 4, video: 4, userImage: 1, userVideo: 1 },
+  gommo: { image: 8, video: 8, userImage: 2, userVideo: 2 },
+} as const;
+
 const buildDispatchDiagnostics = async (admin: ReturnType<typeof getServiceRoleClient>) => {
   const now = Date.now();
   const [{ data: activeRows, error: activeError }, { data: lockRows, error: lockError }] = await Promise.all([
     admin
       .from('generated_images')
-      .select('id, user_id, status, asset_type, queue_kind, queue_payload, created_at, updated_at, lease_expires_at')
+      .select('id, user_id, status, asset_type, queue_kind, queue_payload, provider, created_at, updated_at, lease_expires_at')
       .in('status', ['queued', 'processing'])
       .in('queue_kind', SYSTEM_QUEUE_KINDS)
       .order('created_at', { ascending: true })
@@ -49,26 +59,37 @@ const buildDispatchDiagnostics = async (admin: ReturnType<typeof getServiceRoleC
   const queueRows = ((activeRows || []) as any[]).filter((row) => isSystemQueueKind(row.queue_kind));
   const processingRows = queueRows.filter((row) => row.status === 'processing');
   const queuedRows = queueRows.filter((row) => row.status === 'queued');
-  const systemImageProcessing = processingRows.filter((row) => (row.asset_type || 'image') !== 'video').length;
-  const systemVideoProcessing = processingRows.filter((row) => row.asset_type === 'video').length;
-  const imageSlots = Math.max(0, 4 - systemImageProcessing);
-  const videoSlots = Math.max(0, 4 - systemVideoProcessing);
+  const capacityByProvider = Object.fromEntries((['tst', 'gommo'] as const).map((provider) => {
+    const rows = processingRows.filter((row) => getRowProvider(row) === provider);
+    const systemImageProcessing = rows.filter((row) => (row.asset_type || 'image') !== 'video').length;
+    const systemVideoProcessing = rows.filter((row) => row.asset_type === 'video').length;
+    return [provider, {
+      systemImageProcessing,
+      systemVideoProcessing,
+      imageSlots: Math.max(0, PROVIDER_LIMITS[provider].image - systemImageProcessing),
+      videoSlots: Math.max(0, PROVIDER_LIMITS[provider].video - systemVideoProcessing),
+    }];
+  })) as Record<'tst' | 'gommo', { systemImageProcessing: number; systemVideoProcessing: number; imageSlots: number; videoSlots: number }>;
 
   const userProcessing = new Map<string, { image: number; video: number }>();
   for (const row of processingRows) {
-    const current = userProcessing.get(row.user_id) || { image: 0, video: 0 };
+    const key = `${row.user_id}:${getRowProvider(row)}`;
+    const current = userProcessing.get(key) || { image: 0, video: 0 };
     if (row.asset_type === 'video') current.video += 1;
     else current.image += 1;
-    userProcessing.set(row.user_id, current);
+    userProcessing.set(key, current);
   }
 
   const eligible = queuedRows.filter((row) => {
     const leaseMs = toTimeMs(row.lease_expires_at);
-    const userCounts = userProcessing.get(row.user_id) || { image: 0, video: 0 };
+    const provider = getRowProvider(row);
+    const providerCapacity = capacityByProvider[provider];
+    const limits = PROVIDER_LIMITS[provider];
+    const userCounts = userProcessing.get(`${row.user_id}:${provider}`) || { image: 0, video: 0 };
     if (!row.queue_payload) return false;
     if (leaseMs > now) return false;
-    if (row.asset_type === 'video') return videoSlots > 0 && userCounts.video === 0;
-    return imageSlots > 0 && userCounts.image === 0;
+    if (row.asset_type === 'video') return providerCapacity.videoSlots > 0 && userCounts.video < limits.userVideo;
+    return providerCapacity.imageSlots > 0 && userCounts.image < limits.userImage;
   });
 
   const blockedQueued = queuedRows
@@ -76,21 +97,25 @@ const buildDispatchDiagnostics = async (admin: ReturnType<typeof getServiceRoleC
     .slice(0, 20)
     .map((row) => {
       const leaseMs = toTimeMs(row.lease_expires_at);
-      const userCounts = userProcessing.get(row.user_id) || { image: 0, video: 0 };
+      const provider = getRowProvider(row);
+      const providerCapacity = capacityByProvider[provider];
+      const limits = PROVIDER_LIMITS[provider];
+      const userCounts = userProcessing.get(`${row.user_id}:${provider}`) || { image: 0, video: 0 };
       const isVideo = row.asset_type === 'video';
       const reasons = [
         !row.queue_payload ? 'missing_payload' : '',
         leaseMs > now ? 'lease_active' : '',
-        isVideo && videoSlots <= 0 ? 'system_video_slots_full' : '',
-        !isVideo && imageSlots <= 0 ? 'system_image_slots_full' : '',
-        isVideo && userCounts.video > 0 ? 'user_video_processing_exists' : '',
-        !isVideo && userCounts.image > 0 ? 'user_image_processing_exists' : '',
+        isVideo && providerCapacity.videoSlots <= 0 ? `${provider}_video_slots_full` : '',
+        !isVideo && providerCapacity.imageSlots <= 0 ? `${provider}_image_slots_full` : '',
+        isVideo && userCounts.video >= limits.userVideo ? `${provider}_user_video_limit` : '',
+        !isVideo && userCounts.image >= limits.userImage ? `${provider}_user_image_limit` : '',
       ].filter(Boolean);
 
       return {
         id: row.id,
         userId: row.user_id,
         assetType: row.asset_type || 'image',
+        provider,
         queueKind: row.queue_kind,
         stage: getPayloadStage(row.queue_payload),
         updatedAt: row.updated_at,
@@ -102,10 +127,11 @@ const buildDispatchDiagnostics = async (admin: ReturnType<typeof getServiceRoleC
   return {
     generatedAt: new Date(now).toISOString(),
     capacity: {
-      systemImageProcessing,
-      systemVideoProcessing,
-      imageSlots,
-      videoSlots,
+      byProvider: capacityByProvider,
+      systemImageProcessing: capacityByProvider.tst.systemImageProcessing + capacityByProvider.gommo.systemImageProcessing,
+      systemVideoProcessing: capacityByProvider.tst.systemVideoProcessing + capacityByProvider.gommo.systemVideoProcessing,
+      imageSlots: capacityByProvider.tst.imageSlots + capacityByProvider.gommo.imageSlots,
+      videoSlots: capacityByProvider.tst.videoSlots + capacityByProvider.gommo.videoSlots,
     },
     counts: {
       queued: queuedRows.length,
@@ -126,6 +152,7 @@ const buildDispatchDiagnostics = async (admin: ReturnType<typeof getServiceRoleC
       id: row.id,
       userId: row.user_id,
       assetType: row.asset_type || 'image',
+      provider: getRowProvider(row),
       queueKind: row.queue_kind,
       stage: getPayloadStage(row.queue_payload),
       createdAt: row.created_at,

@@ -184,17 +184,49 @@ const getVideoFamilyIcon = (family: VideoModelFamily) => {
     return Icons.Palette;
 };
 
+const VIDEO_FAMILY_STYLES: Record<VideoModelFamily, { selected: string; icon: string; tag: string; model: string; modelIcon: string }> = {
+    grok: {
+        selected: 'neu-inset-sm border border-emerald-400/60 ring-2 ring-emerald-400/20 bg-gradient-to-br from-emerald-400/15 to-cyan-400/5',
+        icon: 'bg-gradient-to-br from-emerald-400 to-cyan-500 text-slate-950', tag: 'bg-emerald-400/15 text-emerald-500 dark:text-emerald-300',
+        model: 'neu-inset-sm ring-2 ring-emerald-400 bg-gradient-to-r from-emerald-400/10 via-transparent to-cyan-400/5', modelIcon: 'bg-gradient-to-br from-emerald-400 to-cyan-500 text-slate-950 shadow-lg shadow-emerald-400/20',
+    },
+    seedance: {
+        selected: 'neu-inset-sm border border-fuchsia-400/60 ring-2 ring-fuchsia-400/20 bg-gradient-to-br from-fuchsia-400/15 to-pink-500/5',
+        icon: 'bg-gradient-to-br from-fuchsia-400 to-pink-600 text-white', tag: 'bg-fuchsia-400/15 text-fuchsia-500 dark:text-fuchsia-300',
+        model: 'neu-inset-sm ring-2 ring-fuchsia-400 bg-gradient-to-r from-fuchsia-400/10 via-transparent to-pink-500/5', modelIcon: 'bg-gradient-to-br from-fuchsia-400 to-pink-600 text-white shadow-lg shadow-fuchsia-400/20',
+    },
+    kling: {
+        selected: 'neu-inset-sm border border-amber-400/60 ring-2 ring-amber-400/20 bg-gradient-to-br from-amber-400/15 to-orange-500/5',
+        icon: 'bg-gradient-to-br from-amber-300 to-orange-500 text-slate-950', tag: 'bg-amber-400/15 text-amber-600 dark:text-amber-300',
+        model: 'neu-inset-sm ring-2 ring-amber-400 bg-gradient-to-r from-amber-400/10 via-transparent to-orange-500/5', modelIcon: 'bg-gradient-to-br from-amber-300 to-orange-500 text-slate-950 shadow-lg shadow-amber-400/20',
+    },
+    veo: {
+        selected: 'neu-inset-sm border border-blue-400/60 ring-2 ring-blue-400/20 bg-gradient-to-br from-blue-400/15 to-indigo-500/5',
+        icon: 'bg-gradient-to-br from-blue-400 to-indigo-600 text-white', tag: 'bg-blue-400/15 text-blue-500 dark:text-blue-300',
+        model: 'neu-inset-sm ring-2 ring-blue-400 bg-gradient-to-r from-blue-400/10 via-transparent to-indigo-500/5', modelIcon: 'bg-gradient-to-br from-blue-400 to-indigo-600 text-white shadow-lg shadow-blue-400/20',
+    },
+    hailuo: {
+        selected: 'neu-inset-sm border border-violet-400/60 ring-2 ring-violet-400/20 bg-gradient-to-br from-violet-400/15 to-purple-600/5',
+        icon: 'bg-gradient-to-br from-violet-400 to-purple-600 text-white', tag: 'bg-violet-400/15 text-violet-500 dark:text-violet-300',
+        model: 'neu-inset-sm ring-2 ring-violet-400 bg-gradient-to-r from-violet-400/10 via-transparent to-purple-600/5', modelIcon: 'bg-gradient-to-br from-violet-400 to-purple-600 text-white shadow-lg shadow-violet-400/20',
+    },
+    wan: {
+        selected: 'neu-inset-sm border border-cyan-400/60 ring-2 ring-cyan-400/20 bg-gradient-to-br from-cyan-400/15 to-teal-500/5',
+        icon: 'bg-gradient-to-br from-cyan-400 to-teal-600 text-slate-950', tag: 'bg-cyan-400/15 text-cyan-600 dark:text-cyan-300',
+        model: 'neu-inset-sm ring-2 ring-cyan-400 bg-gradient-to-r from-cyan-400/10 via-transparent to-teal-500/5', modelIcon: 'bg-gradient-to-br from-cyan-400 to-teal-600 text-slate-950 shadow-lg shadow-cyan-400/20',
+    },
+    other: {
+        selected: 'neu-inset-sm border border-rose-400/60 ring-2 ring-rose-400/20 bg-gradient-to-br from-rose-400/15 to-red-500/5',
+        icon: 'bg-gradient-to-br from-rose-400 to-red-600 text-white', tag: 'bg-rose-400/15 text-rose-500 dark:text-rose-300',
+        model: 'neu-inset-sm ring-2 ring-rose-400 bg-gradient-to-r from-rose-400/10 via-transparent to-red-500/5', modelIcon: 'bg-gradient-to-br from-rose-400 to-red-600 text-white shadow-lg shadow-rose-400/20',
+    },
+};
+
 const getVideoFamilyTheme = (family: VideoModelFamily, selected: boolean) => {
     if (!selected) {
         return 'neu-button border border-transparent hover:border-slate-300/60 dark:hover:border-white/10';
     }
-    if (family === 'grok') {
-        return 'neu-inset-sm border border-emerald-400/60 ring-2 ring-emerald-400/20 bg-gradient-to-br from-emerald-400/15 to-cyan-400/5';
-    }
-    if (family === 'kling') {
-        return 'neu-inset-sm border border-amber-400/60 ring-2 ring-amber-400/20 bg-gradient-to-br from-amber-400/15 to-orange-500/5';
-    }
-    return 'neu-inset-sm border border-[#FF007F]/60 ring-2 ring-[#FF007F]/20 bg-gradient-to-br from-[#FF007F]/15 to-[#9D00FF]/5';
+    return VIDEO_FAMILY_STYLES[family].selected;
 };
 
 const SMART_TIPS = [
@@ -289,6 +321,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
   // Video AI State
   const [prompt, setPrompt] = useState('');
   const [keyframeImage, setKeyframeImage] = useState<string | null>(null);
+  const [endFrameImage, setEndFrameImage] = useState<string | null>(null);
   const [videoModel, setVideoModel] = useState('');
   const [aspectRatio, setAspectRatio] = useState('9:16');
   const [duration, setDuration] = useState('5s');
@@ -464,6 +497,12 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
         );
   const lastAutoSelectedVideoModelRef = useRef<string | null>(null);
   const selectedVideoSpec = getVideoModelSpecs(pricingEntries, runtimeModels).find((spec) => spec.modelId === videoModel);
+  const supportsVideoEndFrame = isGommoVideoSelected
+      ? Boolean(selectedGommoVideoModel?.supportsEndFrame)
+      : Boolean(selectedVideoSpec?.supportsEndFrame);
+  useEffect(() => {
+      if (!supportsVideoEndFrame) setEndFrameImage(null);
+  }, [supportsVideoEndFrame]);
   const gommoSupportsAudio = Boolean(selectedGommoVideoModel?.modes.some((mode) => mode.type.includes('audio')));
   const effectiveVideoAudio = activeMode === 'video_ai' && (isGommoVideoSelected ? gommoSupportsAudio : Boolean(selectedVideoSpec?.supportsAudio)) && sound;
   const defaultVideoServerId = videoModel.toLowerCase().startsWith('grok') ? 'default' : 'fast';
@@ -474,6 +513,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
           const capabilities = [
               catalogModel?.resolutions.length ? catalogModel.resolutions.map((item) => item.type.toUpperCase()).join('/') : '',
               catalogModel?.durations.length ? `${catalogModel.durations[0].type}–${catalogModel.durations[catalogModel.durations.length - 1]?.type}s` : '',
+              catalogModel?.supportsEndFrame ? 'Ảnh đầu + ảnh cuối' : '',
           ].filter(Boolean).join(' · ');
           return {
               description: catalogModel?.description || getVideoModelHint(model),
@@ -488,6 +528,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
           capabilities: [
               spec?.resolutions?.length ? spec.resolutions.map((item) => item.toUpperCase()).join('/') : '',
               spec?.durations?.length ? spec.durations.join('/') : '',
+              spec?.supportsEndFrame ? 'Ảnh đầu + ảnh cuối' : '',
           ].filter(Boolean).join(' · '),
       };
   };
@@ -780,7 +821,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
   }, [activeMode, aspectRatio, duration, isGommoSelected, modelOptions, providerMode, quality, selectedGommoModel, server, serverOptions, sound, speed, speedOptions]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploadTarget, setUploadTarget] = useState<'keyframe' | 'character' | 'motion' | null>(null);
+  const [uploadTarget, setUploadTarget] = useState<'keyframe' | 'endframe' | 'character' | 'motion' | null>(null);
 
   const getVideoDurationSeconds = async (file: File) => {
     const objectUrl = URL.createObjectURL(file);
@@ -833,13 +874,14 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
     reader.onload = (event) => {
       const result = event.target?.result as string;
       if (uploadTarget === 'keyframe') setKeyframeImage(result);
+      if (uploadTarget === 'endframe') setEndFrameImage(result);
       if (uploadTarget === 'character') setCharacterImage(result);
       setUploadTarget(null);
     };
     reader.readAsDataURL(file);
   };
 
-  const triggerUpload = (target: 'keyframe' | 'character' | 'motion') => {
+  const triggerUpload = (target: 'keyframe' | 'endframe' | 'character' | 'motion') => {
     setUploadTarget(target);
     if (fileInputRef.current) {
       fileInputRef.current.accept = target === 'motion' ? 'video/*' : 'image/*';
@@ -1064,6 +1106,10 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
             activeMode === 'video_ai' && keyframeImage
                 ? await tryStageInputToR2(keyframeImage, 'inputs/video-generate/keyframe')
                 : null;
+        const stagedEndFrameImage =
+            activeMode === 'video_ai' && supportsVideoEndFrame && endFrameImage
+                ? await tryStageInputToR2(endFrameImage, 'inputs/video-generate/end-frame')
+                : null;
         const stagedCharacterImage =
             activeMode === 'motion_control'
                 ? await tryStageInputToR2(characterImage!, 'inputs/motion-control')
@@ -1086,6 +1132,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                 providerMode: isGommoVideoSelected ? providerMode : undefined,
                 pricingOptionId: isGommoVideoSelected ? gommoVideoPricing?.optionId : undefined,
                 keyframeImage: stagedKeyframeImage,
+                endFrameImage: stagedEndFrameImage,
                 audio: isGommoVideoSelected ? gommoVideoPricingInput.audio : effectiveVideoAudio,
             }
             : {
@@ -1223,9 +1270,10 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {activeMode === 'video_ai' ? (
-                <div className="neu-inset-sm p-4 rounded-2xl space-y-3 col-span-2">
+                <>
+                <div className={`neu-inset-sm p-4 rounded-2xl space-y-3 ${supportsVideoEndFrame ? '' : 'col-span-2'}`}>
                   <div className="flex justify-between items-center">
-                      <span className="text-xs font-bold text-slate-800 dark:text-white font-accent">Ảnh Keyframe Đầu Tiên</span>
+                      <span className="text-xs font-bold text-slate-800 dark:text-white font-accent">Ảnh đầu</span>
                   </div>
                   <div onClick={() => triggerUpload('keyframe')} className="w-full h-56 neu-card rounded-2xl border-2 border-dashed border-[#00F2FE]/40 hover:border-[#00F2FE] cursor-pointer relative overflow-hidden flex flex-col items-center justify-center transition-all group/item">
                       {keyframeImage ? (
@@ -1238,11 +1286,35 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                       ) : (
                           <div className="flex flex-col items-center text-slate-400 group-hover/item:text-[#00F2FE] transition-colors p-2 text-center">
                               <Icons.Image className="w-8 h-8 mb-1 text-[#00F2FE]" />
-                              <span className="text-[10px] uppercase font-bold tracking-wider">Tải Ảnh Keyframe (Bắt buộc)</span>
+                              <span className="text-[10px] uppercase font-bold tracking-wider">Tải ảnh đầu (Bắt buộc)</span>
                           </div>
                       )}
                   </div>
                 </div>
+                {supportsVideoEndFrame && (
+                  <div className="neu-inset-sm p-4 rounded-2xl space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-slate-800 dark:text-white font-accent">Ảnh cuối</span>
+                      <span className="text-[9px] font-black uppercase tracking-wider text-violet-500">Tuỳ chọn</span>
+                    </div>
+                    <div onClick={() => triggerUpload('endframe')} className="w-full h-56 neu-card rounded-2xl border-2 border-dashed border-violet-400/40 hover:border-violet-400 cursor-pointer relative overflow-hidden flex flex-col items-center justify-center transition-all group/item">
+                      {endFrameImage ? (
+                        <>
+                          <img src={endFrameImage} className="w-full h-full object-contain" alt="Ảnh cuối" />
+                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover/item:opacity-100 transition-opacity">
+                            <span className="text-[10px] font-bold text-white neu-button px-3 py-1.5 rounded-xl">Đổi ảnh</span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex flex-col items-center text-slate-400 group-hover/item:text-violet-400 transition-colors p-2 text-center">
+                          <Icons.Image className="w-8 h-8 mb-1 text-violet-400" />
+                          <span className="text-[10px] uppercase font-bold tracking-wider">Tải ảnh cuối (Tuỳ chọn)</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+                </>
               ) : (
                 <>
                   <div className="neu-inset-sm p-4 rounded-2xl space-y-3">
@@ -1438,22 +1510,10 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                           }`}
                         >
                           <span className="flex items-start justify-between gap-2">
-                            <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${
-                              family === 'grok'
-                                ? 'bg-gradient-to-br from-emerald-400 to-cyan-500 text-slate-950'
-                                : family === 'kling'
-                                  ? 'bg-gradient-to-br from-amber-300 to-orange-500 text-slate-950'
-                                  : 'bg-gradient-to-br from-[#FF007F] to-[#9D00FF] text-white'
-                            }`}>
+                            <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${VIDEO_FAMILY_STYLES[family].icon}`}>
                               <FamilyIcon className="w-4 h-4" />
                             </span>
-                            <span className={`px-2 py-1 rounded-full text-[9px] font-black tracking-wide ${
-                              family === 'grok'
-                                ? 'bg-emerald-400/15 text-emerald-500 dark:text-emerald-300'
-                                : family === 'kling'
-                                  ? 'bg-amber-400/15 text-amber-600 dark:text-amber-300'
-                                  : 'bg-[#FF007F]/15 text-[#FF007F]'
-                            }`}>
+                            <span className={`px-2 py-1 rounded-full text-[9px] font-black tracking-wide ${VIDEO_FAMILY_STYLES[family].tag}`}>
                               #{meta.tag.replace(/\s+/g, '_')}
                             </span>
                           </span>
@@ -1465,7 +1525,10 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                   </div>
 
                   <div className="space-y-2">
-                    {getModelsByFamily(videoModelOptions, videoModelFamily).map((model) => (
+                    {getModelsByFamily(videoModelOptions, videoModelFamily).map((model) => {
+                      const modelFamily = getVideoModelFamily(model);
+                      const modelStyle = VIDEO_FAMILY_STYLES[modelFamily];
+                      return (
                       <button
                         key={model.id}
                         type="button"
@@ -1473,13 +1536,13 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                         aria-pressed={videoModel === model.id}
                         className={`w-full p-3.5 rounded-2xl text-left transition-all flex items-center gap-3 ${
                           videoModel === model.id
-                            ? 'neu-inset-sm ring-2 ring-[#FF007F] bg-gradient-to-r from-[#FF007F]/10 via-transparent to-[#00F2FE]/5'
+                            ? modelStyle.model
                             : 'neu-button hover:-translate-y-0.5'
                         }`}
                       >
                         <span className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
                           videoModel === model.id
-                            ? 'bg-gradient-to-br from-[#FF007F] to-[#9D00FF] text-white shadow-lg shadow-[#FF007F]/20'
+                            ? modelStyle.modelIcon
                             : 'neu-inset-sm text-slate-500 dark:text-slate-300'
                         }`}>
                           {React.createElement(getVideoFamilyIcon(getVideoModelFamily(model)), { className: 'w-5 h-5' })}
@@ -1516,7 +1579,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                           {videoModel === model.id && <span className="w-2 h-2 rounded-full bg-[#FF007F]" />}
                         </span>
                       </button>
-                    ))}
+                    );})}
                   </div>
                 </div>
               ) : (

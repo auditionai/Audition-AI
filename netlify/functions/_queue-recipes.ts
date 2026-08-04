@@ -739,6 +739,12 @@ const prepareProviderPayloadFromQueueRecipe = async (
           : await uploadImageToTst(payload.keyframeImage);
         providerPayload.img_url = keyframeUrl;
         providerPayload.image_url = keyframeUrl;
+        if (payload.endFrameImage) {
+          const endFrameUrl = !uploadReferencesToTst || isHttpUrl(payload.endFrameImage)
+            ? String(payload.endFrameImage).trim()
+            : await uploadImageToTst(payload.endFrameImage);
+          providerPayload.image_urls = [keyframeUrl, endFrameUrl];
+        }
         if (payload.modelId === 'kling-2.5-turbo') {
           providerPayload.mode = 'i2v';
         }

@@ -500,6 +500,7 @@ export interface VideoGenerateRecipePayload {
   providerMode?: string;
   pricingOptionId?: string;
   keyframeImage?: string | null;
+  endFrameImage?: string | null;
   audio?: boolean;
 }
 

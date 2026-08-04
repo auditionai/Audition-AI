@@ -95,6 +95,16 @@ const getVideoFamilyIcon = (family: VideoModelFamily) => {
   return Palette;
 };
 
+const VIDEO_FAMILY_STYLES: Record<VideoModelFamily, { active: string; badge: string; icon: string; model: string }> = {
+  grok: { active: 'border-emerald-300 bg-emerald-50 text-emerald-900 shadow-[0_8px_24px_rgba(52,211,153,0.18)] dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-white', badge: 'bg-gradient-to-r from-emerald-400 to-cyan-500', icon: 'bg-gradient-to-br from-emerald-400 to-cyan-500 text-slate-950', model: 'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-200 dark:border-emerald-500/30' },
+  seedance: { active: 'border-fuchsia-300 bg-fuchsia-50 text-fuchsia-900 shadow-[0_8px_24px_rgba(232,121,249,0.18)] dark:border-fuchsia-500/40 dark:bg-fuchsia-500/15 dark:text-white', badge: 'bg-gradient-to-r from-fuchsia-400 to-pink-600', icon: 'bg-gradient-to-br from-fuchsia-400 to-pink-600 text-white', model: 'bg-fuchsia-50 text-fuchsia-800 border-fuchsia-200 dark:bg-fuchsia-500/10 dark:text-fuchsia-200 dark:border-fuchsia-500/30' },
+  kling: { active: 'border-amber-300 bg-amber-50 text-amber-900 shadow-[0_8px_24px_rgba(251,191,36,0.18)] dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-white', badge: 'bg-gradient-to-r from-amber-300 to-orange-500', icon: 'bg-gradient-to-br from-amber-300 to-orange-500 text-slate-950', model: 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-500/10 dark:text-amber-200 dark:border-amber-500/30' },
+  veo: { active: 'border-blue-300 bg-blue-50 text-blue-900 shadow-[0_8px_24px_rgba(96,165,250,0.18)] dark:border-blue-500/40 dark:bg-blue-500/15 dark:text-white', badge: 'bg-gradient-to-r from-blue-400 to-indigo-600', icon: 'bg-gradient-to-br from-blue-400 to-indigo-600 text-white', model: 'bg-blue-50 text-blue-800 border-blue-200 dark:bg-blue-500/10 dark:text-blue-200 dark:border-blue-500/30' },
+  hailuo: { active: 'border-violet-300 bg-violet-50 text-violet-900 shadow-[0_8px_24px_rgba(167,139,250,0.18)] dark:border-violet-500/40 dark:bg-violet-500/15 dark:text-white', badge: 'bg-gradient-to-r from-violet-400 to-purple-600', icon: 'bg-gradient-to-br from-violet-400 to-purple-600 text-white', model: 'bg-violet-50 text-violet-800 border-violet-200 dark:bg-violet-500/10 dark:text-violet-200 dark:border-violet-500/30' },
+  wan: { active: 'border-cyan-300 bg-cyan-50 text-cyan-900 shadow-[0_8px_24px_rgba(34,211,238,0.18)] dark:border-cyan-500/40 dark:bg-cyan-500/15 dark:text-white', badge: 'bg-gradient-to-r from-cyan-400 to-teal-600', icon: 'bg-gradient-to-br from-cyan-400 to-teal-600 text-slate-950', model: 'bg-cyan-50 text-cyan-800 border-cyan-200 dark:bg-cyan-500/10 dark:text-cyan-200 dark:border-cyan-500/30' },
+  other: { active: 'border-rose-300 bg-rose-50 text-rose-900 shadow-[0_8px_24px_rgba(251,113,133,0.18)] dark:border-rose-500/40 dark:bg-rose-500/15 dark:text-white', badge: 'bg-gradient-to-r from-rose-400 to-red-600', icon: 'bg-gradient-to-br from-rose-400 to-red-600 text-white', model: 'bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-500/10 dark:text-rose-200 dark:border-rose-500/30' },
+};
+
 const getFamilyPriceLabel = (models: AIModelOption[]) => {
   if (models.length === 0) return 'Bảo trì';
   const prices = models.map((model) => model.price).filter((price) => Number.isFinite(price) && price > 0);
@@ -167,6 +177,7 @@ export function WorkspaceVideo() {
   // Video AI State
   const [prompt, setPrompt] = useState('');
   const [keyframeImage, setKeyframeImage] = useState<string | null>(null);
+  const [endFrameImage, setEndFrameImage] = useState<string | null>(null);
   const [videoModel, setVideoModel] = useState('');
   const [aspectRatio, setAspectRatio] = useState('16:9');
   const [duration, setDuration] = useState('5s');
@@ -217,7 +228,7 @@ export function WorkspaceVideo() {
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploadTarget, setUploadTarget] = useState<'keyframe' | 'character' | 'motion' | null>(null);
+  const [uploadTarget, setUploadTarget] = useState<'keyframe' | 'endframe' | 'character' | 'motion' | null>(null);
 
   useEffect(() => {
     const toolId = new URLSearchParams(location.search).get('tool');
@@ -335,6 +346,12 @@ export function WorkspaceVideo() {
   const selectedGommoVideoModel = getGommoModelForAudition(gommoCatalog, videoModel);
   const selectedGommoMotionModel = getGommoModelForAudition(gommoCatalog, motionModel);
   const selectedGommoModel = isGommoMotionSelected ? selectedGommoMotionModel : selectedGommoVideoModel;
+  const supportsVideoEndFrame = isGommoVideoSelected
+    ? Boolean(selectedGommoVideoModel?.supportsEndFrame)
+    : Boolean(selectedVideoSpec?.supportsEndFrame);
+  useEffect(() => {
+    if (!supportsVideoEndFrame) setEndFrameImage(null);
+  }, [supportsVideoEndFrame]);
   const gommoSupportsAudio = Boolean(selectedGommoVideoModel?.modes.some((mode) => mode.type.includes('audio')));
   const effectiveVideoAudio = activeMode === 'video_ai' && (isGommoVideoSelected ? gommoSupportsAudio : Boolean(selectedVideoSpec?.supportsAudio)) && sound;
   const defaultVideoServerId = videoModel.toLowerCase().startsWith('grok') ? 'default' : 'fast';
@@ -348,6 +365,7 @@ export function WorkspaceVideo() {
         capabilities: [
           catalogModel?.resolutions.length ? catalogModel.resolutions.map((item) => item.type.toUpperCase()).join('/') : '',
           catalogModel?.durations.length ? `${catalogModel.durations[0].type}–${catalogModel.durations[catalogModel.durations.length - 1]?.type}s` : '',
+          catalogModel?.supportsEndFrame ? 'Ảnh đầu + ảnh cuối' : '',
         ].filter(Boolean).join(' · '),
       };
     }
@@ -358,6 +376,7 @@ export function WorkspaceVideo() {
       capabilities: [
         ((spec?.resolutions as string[]) || []).map((item) => item.toUpperCase()).join('/'),
         ((spec?.durations as string[]) || []).join('/'),
+        spec?.supportsEndFrame ? 'Ảnh đầu + ảnh cuối' : '',
       ].filter(Boolean).join(' · '),
     };
   };
@@ -603,6 +622,7 @@ export function WorkspaceVideo() {
     reader.onload = (event) => {
       const result = event.target?.result as string;
       if (uploadTarget === 'keyframe') setKeyframeImage(result);
+      if (uploadTarget === 'endframe') setEndFrameImage(result);
       if (uploadTarget === 'character') setCharacterImage(result);
       setUploadTarget(null);
       e.target.value = '';
@@ -610,7 +630,7 @@ export function WorkspaceVideo() {
     reader.readAsDataURL(file);
   };
 
-  const triggerUpload = (target: 'keyframe' | 'character' | 'motion') => {
+  const triggerUpload = (target: 'keyframe' | 'endframe' | 'character' | 'motion') => {
     setUploadTarget(target);
     if (fileInputRef.current) {
       fileInputRef.current.accept = target === 'motion' ? 'video/*' : 'image/*';
@@ -742,11 +762,15 @@ export function WorkspaceVideo() {
           : (getMotionCompatibleSpeeds({ modelId: motionModel, pricingEntries, serverId: effectiveServerId, resolution: quality.toLowerCase() }).includes(requestedSpeedId) ? requestedSpeedId : (getMotionCompatibleSpeeds({ modelId: motionModel, pricingEntries, serverId: effectiveServerId, resolution: quality.toLowerCase() })[0] || requestedSpeedId));
 
         let stagedKeyframeImage = null;
+        let stagedEndFrameImage = null;
         let stagedCharacterImage = null;
         let stagedMotionVideoUrl = null;
 
         if (activeMode === 'video_ai' && keyframeImage) {
           stagedKeyframeImage = await uploadFileToR2(keyframeImage, 'inputs/video-generate/keyframe');
+        }
+        if (activeMode === 'video_ai' && supportsVideoEndFrame && endFrameImage) {
+          stagedEndFrameImage = await uploadFileToR2(endFrameImage, 'inputs/video-generate/end-frame');
         }
         if (activeMode === 'motion_control' && characterImage && motionVideoFile) {
           stagedCharacterImage = await uploadFileToR2(characterImage, 'inputs/motion-control');
@@ -757,7 +781,7 @@ export function WorkspaceVideo() {
           ? {
               recipeType: 'video_generate_recipe_v1', modelId: videoModel, prompt: queuedPrompt,
               duration: duration.toLowerCase(), resolution: isGommoVideoSelected ? gommoPricingInput.resolution : quality.toLowerCase(), aspectRatio,
-              speed: isGommoVideoSelected ? gommoPricingInput.speed : effectiveSpeedId, serverId: effectiveServerId, providerMode: isGommoVideoSelected ? providerMode : undefined, pricingOptionId: isGommoVideoSelected ? gommoPricing?.optionId : undefined, keyframeImage: stagedKeyframeImage, audio: isGommoVideoSelected ? gommoPricingInput.audio : effectiveVideoAudio,
+              speed: isGommoVideoSelected ? gommoPricingInput.speed : effectiveSpeedId, serverId: effectiveServerId, providerMode: isGommoVideoSelected ? providerMode : undefined, pricingOptionId: isGommoVideoSelected ? gommoPricing?.optionId : undefined, keyframeImage: stagedKeyframeImage, endFrameImage: stagedEndFrameImage, audio: isGommoVideoSelected ? gommoPricingInput.audio : effectiveVideoAudio,
             }
           : {
               recipeType: 'motion_generate_recipe_v1', modelId: motionModel, prompt: effectiveMotionPrompt,
@@ -911,7 +935,8 @@ export function WorkspaceVideo() {
           <div className="space-y-6">
             {/* Keyframe Upload */}
             <div data-tour-id="mobile.video.upload" className="space-y-2">
-              <h3 className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider ml-1">Ảnh Gốc (Bắt Buộc)</h3>
+              <h3 className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider ml-1">Ảnh đầu và ảnh cuối</h3>
+              <div className={`grid gap-3 ${supportsVideoEndFrame ? 'grid-cols-2' : 'grid-cols-1'}`}>
               <button
                 onClick={() => triggerUpload('keyframe')}
                 className="w-full aspect-video rounded-[20px] border-2 border-dashed border-gray-200 dark:border-zinc-700 bg-white dark:bg-[#18181B] flex flex-col items-center justify-center gap-2 overflow-hidden hover:border-purple-400 transition-colors relative"
@@ -927,10 +952,30 @@ export function WorkspaceVideo() {
                 ) : (
                   <>
                     <ImagePlus className="w-8 h-8 text-gray-300" />
-                    <span className="text-sm font-medium text-gray-400 dark:text-zinc-500">Tải ảnh gốc lên để AI tạo video</span>
+                    <span className="px-3 text-center text-sm font-medium text-gray-400 dark:text-zinc-500">Tải ảnh đầu (bắt buộc)</span>
                   </>
                 )}
               </button>
+              {supportsVideoEndFrame && (
+                <button
+                  onClick={() => triggerUpload('endframe')}
+                  className="w-full aspect-video rounded-[20px] border-2 border-dashed border-violet-200 dark:border-violet-500/30 bg-white dark:bg-[#18181B] flex flex-col items-center justify-center gap-2 overflow-hidden hover:border-violet-400 transition-colors relative"
+                >
+                  {endFrameImage ? (
+                    <>
+                      <img src={endFrameImage} alt="Ảnh cuối" className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/10 transition-colors" />
+                      <div className="absolute top-3 right-3 bg-black/50 text-white rounded-full p-2 backdrop-blur-md"><ImagePlus className="w-4 h-4" /></div>
+                    </>
+                  ) : (
+                    <>
+                      <ImagePlus className="w-8 h-8 text-violet-300" />
+                      <span className="px-3 text-center text-sm font-medium text-gray-400 dark:text-zinc-500">Tải ảnh cuối (tuỳ chọn)</span>
+                    </>
+                  )}
+                </button>
+              )}
+              </div>
             </div>
 
             <div role="note" className="rounded-2xl border border-cyan-200 bg-cyan-50/70 px-4 py-3 text-xs font-medium leading-relaxed text-cyan-900 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-100">
@@ -1000,18 +1045,18 @@ export function WorkspaceVideo() {
                         onClick={() => selectVideoFamily(family)}
                         className={`relative mt-3 rounded-[16px] border px-2 pb-2 pt-5 text-left transition-all ${
                           isActive
-                            ? 'scale-[1.02] border-purple-300 bg-purple-50 text-purple-800 shadow-[0_8px_24px_rgba(168,85,247,0.18)] dark:border-purple-500/40 dark:bg-purple-500/15 dark:text-white'
+                            ? `scale-[1.02] ${VIDEO_FAMILY_STYLES[family].active}`
                             : 'border-gray-100 bg-white text-gray-500 dark:border-zinc-800 dark:bg-[#18181B] dark:text-zinc-400'
                         } ${familyModels.length === 0 ? 'opacity-40' : ''}`}
                       >
                         <div className={`absolute -top-3 left-2 rounded-full border px-2 py-1 text-[8px] font-black tracking-wide ${
                           isActive
-                            ? 'animate-pulse border-white/30 bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white'
+                            ? `animate-pulse border-white/30 text-white ${VIDEO_FAMILY_STYLES[family].badge}`
                             : 'border-gray-100 bg-gray-50 text-gray-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300'
                         }`}>
                           #{meta.tag}
                         </div>
-                        <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-fuchsia-500 to-purple-600 text-white shadow-sm">
+                        <div className={`mb-2 flex h-8 w-8 items-center justify-center rounded-xl shadow-sm ${VIDEO_FAMILY_STYLES[family].icon}`}>
                           <FamilyIcon className="h-4 w-4" />
                         </div>
                         <div className="truncate text-[12px] font-black" title={familyLabel}>{familyLabel}</div>
@@ -1021,12 +1066,14 @@ export function WorkspaceVideo() {
                   })}
                 </div>
                 <div className="flex flex-col gap-2">
-                  {getModelsByFamily(videoModelOptions, videoModelFamily).map((m: AIModelOption) => (
+                  {getModelsByFamily(videoModelOptions, videoModelFamily).map((m: AIModelOption) => {
+                    const modelFamily = getVideoModelFamily(m);
+                    return (
                     <button
                       key={m.id}
                       onClick={() => selectVideoModel(m.id)}
                       className={`rounded-[14px] border p-3 text-left transition-all ${
-                        videoModel === m.id ? 'bg-purple-50 dark:bg-purple-500/10 text-purple-700 border-purple-200 dark:border-purple-500/30' : 'bg-white dark:bg-[#18181B] border-gray-100 dark:border-zinc-800 text-gray-500 dark:text-zinc-400'
+                        videoModel === m.id ? VIDEO_FAMILY_STYLES[modelFamily].model : 'bg-white dark:bg-[#18181B] border-gray-100 dark:border-zinc-800 text-gray-500 dark:text-zinc-400'
                       }`}
                     >
                       <div className="flex items-center justify-between gap-2">
@@ -1043,7 +1090,7 @@ export function WorkspaceVideo() {
                         )}
                       </div>
                     </button>
-                  ))}
+                  );})}
                 </div>
               </div>
 

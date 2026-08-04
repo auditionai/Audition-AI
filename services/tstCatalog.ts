@@ -58,6 +58,7 @@ export interface TstVideoModelSpec {
   aspectRatios: string[];
   speeds: string[];
   supportsAudio: boolean;
+  supportsEndFrame: boolean;
   minCredits: number;
   maxCredits: number;
 }
@@ -774,6 +775,7 @@ const getFallbackVideoSpec = (modelId: string, name?: string): TstVideoModelSpec
     aspectRatios: [],
     speeds: [],
     supportsAudio: false,
+    supportsEndFrame: false,
     minCredits: 0,
     maxCredits: 0,
   };
@@ -1532,6 +1534,13 @@ export const getVideoModelSpecs = (
       aspectRatios: getCapabilityAspectRatios(model),
       speeds,
       supportsAudio: Boolean(model.capabilities?.audio ?? fallback.supportsAudio),
+      supportsEndFrame: (() => {
+        const modelId = normalizeModelId(model.model);
+        const paramsText = JSON.stringify(model.params || {}).toLowerCase();
+        return modelId === 'veo3.1-omni'
+          || modelId === 'veo-omni'
+          || /end[_ -]?(image|frame)|last[_ -]?frame|start.{0,24}end/.test(paramsText);
+      })(),
       minCredits: credits.length > 0 ? Math.min(...credits) : fallback.minCredits,
       maxCredits: credits.length > 0 ? Math.max(...credits) : fallback.maxCredits,
     };

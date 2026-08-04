@@ -347,7 +347,7 @@ const selectProviderPrice = (model: GommoModel, payload: Record<string, unknown>
 };
 
 const getSources = (payload: Record<string, unknown>) => {
-  const raw = payload.img_url ?? payload.image_url;
+  const raw = payload.image_urls ?? payload.img_url ?? payload.image_url;
   const values = Array.isArray(raw) ? raw : raw ? [raw] : [];
   return values.map((value) => String(value || '').trim()).filter(Boolean);
 };
@@ -745,6 +745,8 @@ export const getGommoProviderCatalog = async (forceRefresh = false) => {
         maxReferenceImages: Number.isFinite(Number(model.maxSubject)) && Number(model.maxSubject) > 0
           ? Math.floor(Number(model.maxSubject))
           : null,
+        supportsStartImage: Boolean(model.startImage),
+        supportsEndFrame: Boolean(model.startImageAndEnd),
         referenceField: model.withSubject ? 'subjects' : 'images',
         ratios: serializeOptions(model.ratios),
         resolutions: serializeOptions(model.resolutions),

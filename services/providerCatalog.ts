@@ -21,6 +21,8 @@ export type GommoCatalogModel = {
   price: number | null;
   rateType: string;
   maxReferenceImages: number | null;
+  supportsStartImage: boolean;
+  supportsEndFrame: boolean;
   referenceField: 'subjects' | 'references' | 'images';
   prices: GommoCatalogPrice[];
   ratios: GommoCatalogOption[];

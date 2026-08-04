@@ -31,7 +31,7 @@ import {
 } from '../../services/tstCatalog';
 import type { ModelPricing } from '../../services/economyService';
 import type { GeneratedImage } from '../../types';
-import { fetchProviderCatalog, getAuditionProviderPricing, getGommoPricingInput, getMinimumAuditionModelPrice, getGommoModelForAudition, isGommoCatalogModelAvailable, resolveProviderForModel, type GommoProviderCatalog } from '../../services/providerCatalog';
+import { fetchProviderCatalog, getAuditionProviderPricing, getGommoPricingInput, getMinimumAuditionModelPrice, getGommoModelForAudition, isGommoCatalogModelAvailable, resolveProviderForModel, type GommoCatalogModel, type GommoProviderCatalog } from '../../services/providerCatalog';
 import { isModelAllowedForFeature } from '../../../../shared/providerRouting';
 import { VIDEO_GENERATION_TIPS } from '../../../../shared/videoGenerationTips';
 import { getVideoModelPresentation } from '../../../../shared/videoModelPresentation';
@@ -87,7 +87,7 @@ const getModelsByFamily = (models: AIModelOption[], family: VideoModelFamily) =>
 
 const getFamilyPriceLabel = (models: AIModelOption[]) => {
   if (models.length === 0) return 'Bảo trì';
-  const prices = models.map((model) => model.price).filter((price) => Number.isFinite(price));
+  const prices = models.map((model) => model.price).filter((price) => Number.isFinite(price) && price > 0);
   if (prices.length === 0) return 'Đang đồng bộ';
   return `Từ ${Math.min(...prices)} VC`;
 };
@@ -100,6 +100,38 @@ const getVideoModelHint = (model: AIModelOption) => {
   if (text.includes('kling')) return 'Ưu tiên chuyển động và độ mượt.';
   if (text.includes('fast')) return 'Xử lý nhanh hơn.';
   return 'Cân bằng chất lượng và chi phí.';
+};
+
+const getGommoModeDescription = (mode: string) => {
+  const value = mode.toLowerCase();
+  if (value.includes('relax')) return 'Chậm hơn, ưu tiên tiết kiệm chi phí.';
+  if (value.includes('lite')) return 'Nhẹ và tiết kiệm, phù hợp thử nhanh.';
+  if (value.includes('quality') || value.includes('professional')) return value.includes('audio')
+    ? 'Chất lượng cao và có âm thanh.'
+    : 'Ưu tiên chất lượng, chi tiết và độ ổn định.';
+  if (value.includes('fast')) return 'Xử lý nhanh, cân bằng chất lượng và chi phí.';
+  if (value.includes('standard')) return 'Cân bằng tốc độ, chất lượng và chi phí.';
+  return 'Chế độ xử lý do Gommo cung cấp.';
+};
+
+const getGommoModePriceLabel = (model: GommoCatalogModel | null | undefined, mode: string) => {
+  const prices = (model?.prices || [])
+    .filter((price) => String(price.mode || '').toLowerCase() === mode.toLowerCase())
+    .map((price) => Number(price.price))
+    .filter((price) => Number.isFinite(price) && price > 0);
+  if (!prices.length) return '';
+  const min = Math.min(...prices).toLocaleString('vi-VN');
+  const max = Math.max(...prices).toLocaleString('vi-VN');
+  return min === max ? min : `${min}–${max}`;
+};
+
+const getTstServerDescription = (serverId: string) => {
+  const value = serverId.toLowerCase();
+  if (value === 'cheap') return 'Tiết kiệm chi phí, có thể chờ lâu hơn.';
+  if (value === 'fast') return 'Xử lý nhanh cho nhu cầu thông thường.';
+  if (value === 'standard' || value === 'default') return 'Cân bằng tốc độ, chất lượng và chi phí.';
+  if (value.startsWith('vip')) return 'Server ưu tiên, ổn định hơn khi hệ thống đông.';
+  return 'Server realtime do TST cung cấp.';
 };
 
 const SMART_TIPS = [
@@ -295,6 +327,29 @@ export function WorkspaceVideo() {
   const gommoSupportsAudio = Boolean(selectedGommoVideoModel?.modes.some((mode) => mode.type.includes('audio')));
   const effectiveVideoAudio = activeMode === 'video_ai' && (isGommoVideoSelected ? gommoSupportsAudio : Boolean(selectedVideoSpec?.supportsAudio)) && sound;
   const defaultVideoServerId = videoModel.toLowerCase().startsWith('grok') ? 'default' : 'fast';
+  const getVideoModelRuntimeMeta = (model: AIModelOption) => {
+    const provider = resolveProviderForModel(providerConfig, model.id, 'video_generation');
+    if (provider === 'gommo') {
+      const catalogModel = getGommoModelForAudition(gommoCatalog, model.id);
+      return {
+        description: catalogModel?.description || getVideoModelHint(model),
+        server: `Gommo · ${catalogModel?.server || 'Realtime'}`,
+        capabilities: [
+          catalogModel?.resolutions.length ? catalogModel.resolutions.map((item) => item.type.toUpperCase()).join('/') : '',
+          catalogModel?.durations.length ? `${catalogModel.durations[0].type}–${catalogModel.durations[catalogModel.durations.length - 1]?.type}s` : '',
+        ].filter(Boolean).join(' · '),
+      };
+    }
+    const spec = getVideoModelSpecs(pricingEntries, runtimeModels).find((entry: any) => entry.modelId === model.id);
+    return {
+      description: getVideoModelHint(model),
+      server: `TST · ${((spec?.servers as string[]) || []).map((item) => item.toUpperCase()).join(' / ') || 'Realtime'}`,
+      capabilities: [
+        ((spec?.resolutions as string[]) || []).map((item) => item.toUpperCase()).join('/'),
+        ((spec?.durations as string[]) || []).join('/'),
+      ].filter(Boolean).join(' · '),
+    };
+  };
 
   const tstCostBreakdown = activeMode === 'motion_control'
     ? getMotionCostBreakdown({
@@ -394,7 +449,7 @@ export function WorkspaceVideo() {
     : getMotionCompatibleServers({
         modelId: motionModel, pricingEntries, resolution: quality.toLowerCase(), speed: uiSpeedToTst(speed) || 'fast'
       })
-  ).map((serverId: string) => ({ label: tstServerToUi(serverId) || serverId, value: tstServerToUi(serverId) || serverId }));
+  ).map((serverId: string) => ({ label: tstServerToUi(serverId) || serverId, value: tstServerToUi(serverId) || serverId, description: getTstServerDescription(serverId) }));
 
   const speedOptions = isGommoSelected ? [] : activeMode === 'video_ai'
     ? getVideoCompatibleSpeeds({
@@ -961,9 +1016,17 @@ export function WorkspaceVideo() {
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-xs font-black">{m.name}</span>
-                        <span className="text-[10px] font-black text-cyan-600 dark:text-cyan-300">Từ {m.price} VC</span>
+                        <span className={`text-[10px] font-black ${m.price > 0 ? 'text-cyan-600 dark:text-cyan-300' : 'text-rose-500'}`}>
+                          {m.price > 0 ? `Từ ${m.price} VC` : 'Chưa có giá'}
+                        </span>
                       </div>
-                      <div className="mt-1 text-[10px] text-gray-400 dark:text-zinc-500">{getVideoModelHint(m)}</div>
+                      <div className="mt-1 text-[10px] leading-relaxed text-gray-500 dark:text-zinc-400">{getVideoModelRuntimeMeta(m).description}</div>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        <span className="rounded-md bg-violet-500/10 px-2 py-0.5 text-[8px] font-black text-violet-600 dark:text-violet-300">{getVideoModelRuntimeMeta(m).server}</span>
+                        {getVideoModelRuntimeMeta(m).capabilities && (
+                          <span className="rounded-md bg-gray-500/10 px-2 py-0.5 text-[8px] font-black text-gray-500 dark:text-zinc-300">{getVideoModelRuntimeMeta(m).capabilities}</span>
+                        )}
+                      </div>
                     </button>
                   ))}
                 </div>
@@ -1005,7 +1068,7 @@ export function WorkspaceVideo() {
 
               {isGommoSelected && (selectedGommoModel?.modes || []).length > 0 && (
                 <div className="space-y-2">
-                  <h3 className="text-[10px] font-bold text-cyan-600 dark:text-cyan-400 uppercase tracking-wider ml-1">Máy chủ / chế độ Gommo</h3>
+                  <h3 className="text-[10px] font-bold text-cyan-600 dark:text-cyan-400 uppercase tracking-wider ml-1">Máy chủ / chế độ Gommo · giá API</h3>
                   <div className="flex flex-col gap-2">
                     {(selectedGommoModel?.modes || []).map((option) => (
                       <button
@@ -1013,8 +1076,15 @@ export function WorkspaceVideo() {
                         onClick={() => setProviderMode(option.type)}
                         className={`rounded-[12px] border p-2.5 text-left text-xs font-bold ${providerMode === option.type ? 'border-cyan-300 bg-cyan-50 text-cyan-700 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-300' : 'border-gray-100 bg-white text-gray-500 dark:border-zinc-800 dark:bg-[#18181B] dark:text-zinc-400'}`}
                       >
-                        <span className="block">{option.name || option.type}</span>
-                        {option.group && <span className="block text-[9px] opacity-70">{option.group}</span>}
+                        <span className="flex items-start justify-between gap-2">
+                          <span className="block">{option.name || option.type}</span>
+                          {getGommoModePriceLabel(selectedGommoModel, option.type) && (
+                            <span className="shrink-0 text-[9px] font-black text-amber-500">{getGommoModePriceLabel(selectedGommoModel, option.type)}</span>
+                          )}
+                        </span>
+                        <span className="mt-1 block text-[9px] font-medium leading-relaxed opacity-70">
+                          {[option.description || getGommoModeDescription(option.type), option.group || '', option.groupSubtitle || ''].filter(Boolean).join(' · ')}
+                        </span>
                       </button>
                     ))}
                   </div>
@@ -1049,7 +1119,8 @@ export function WorkspaceVideo() {
                         server === s.value ? 'bg-blue-50 dark:bg-blue-500/10 text-blue-700 border border-blue-200 dark:border-blue-500/30' : 'bg-white dark:bg-[#18181B] border border-gray-100 text-gray-500 dark:text-zinc-400'
                       }`}
                     >
-                      {s.label}
+                      <span className="block font-bold">{s.label}</span>
+                      {s.description && <span className="mt-1 block text-[9px] font-medium opacity-70">{s.description}</span>}
                     </button>
                   ))}
                 </div>
@@ -1213,7 +1284,8 @@ export function WorkspaceVideo() {
                         server === s.value ? 'bg-blue-50 dark:bg-blue-500/10 text-blue-700 border border-blue-200 dark:border-blue-500/30' : 'bg-white dark:bg-[#18181B] border border-gray-100 text-gray-500 dark:text-zinc-400'
                       }`}
                     >
-                      {s.label}
+                      <span className="block font-bold">{s.label}</span>
+                      {s.description && <span className="mt-1 block text-[9px] font-medium opacity-70">{s.description}</span>}
                     </button>
                   ))}
                 </div>

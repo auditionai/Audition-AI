@@ -42,6 +42,7 @@ import {
   getGommoModelForAudition,
   isGommoCatalogModelAvailable,
   resolveProviderForModel,
+  type GommoCatalogModel,
   type GommoProviderCatalog,
 } from '../../services/providerCatalog';
 import { isModelAllowedForFeature } from '../../shared/providerRouting';
@@ -115,7 +116,7 @@ const getModelsByFamily = (models: AIModelOption[], family: VideoModelFamily) =>
 
 const getFamilyPriceLabel = (models: AIModelOption[]) => {
     if (models.length === 0) return 'Không khả dụng';
-    const prices = models.map((model) => model.price).filter((price) => Number.isFinite(price));
+    const prices = models.map((model) => model.price).filter((price) => Number.isFinite(price) && price > 0);
     if (prices.length === 0) return 'Đang đồng bộ';
     return `Từ ${Math.min(...prices)} VC`;
 };
@@ -138,6 +139,39 @@ const getVideoModelTags = (model: AIModelOption) => {
     if (text.includes('kling')) return ['#BEST_MOTION', '#CINEMATIC'];
     if (text.includes('fast')) return ['#TỐC_ĐỘ', '#SEEDANCE'];
     return ['#HOT', '#CHẤT_LƯỢNG'];
+};
+
+const getGommoModeDescription = (mode: string) => {
+    const value = mode.toLowerCase();
+    if (value.includes('relax')) return 'Chậm hơn, ưu tiên tiết kiệm chi phí.';
+    if (value.includes('lite')) return 'Nhẹ và tiết kiệm, phù hợp thử nhanh.';
+    if (value.includes('quality') || value.includes('professional')) return value.includes('audio')
+      ? 'Chất lượng cao, đồng thời tạo âm thanh.'
+      : 'Ưu tiên chất lượng, chi tiết và độ ổn định.';
+    if (value.includes('fast')) return 'Xử lý nhanh, cân bằng chất lượng và chi phí.';
+    if (value.includes('standard')) return 'Cân bằng tốc độ, chất lượng và chi phí.';
+    if (value.includes('crazy')) return 'Chuyển động mạnh và sáng tạo hơn.';
+    return 'Chế độ xử lý do Gommo cung cấp cho model này.';
+};
+
+const getGommoModePriceLabel = (model: GommoCatalogModel | null | undefined, mode: string) => {
+    const prices = (model?.prices || [])
+      .filter((price) => String(price.mode || '').toLowerCase() === mode.toLowerCase())
+      .map((price) => Number(price.price))
+      .filter((price) => Number.isFinite(price) && price > 0);
+    if (!prices.length) return '';
+    const min = Math.min(...prices).toLocaleString('vi-VN');
+    const max = Math.max(...prices).toLocaleString('vi-VN');
+    return min === max ? min : `${min}–${max}`;
+};
+
+const getTstServerDescription = (serverId: string) => {
+    const value = serverId.toLowerCase();
+    if (value === 'cheap') return 'Tiết kiệm chi phí, thời gian chờ có thể lâu hơn.';
+    if (value === 'fast') return 'Xử lý nhanh, phù hợp nhu cầu sử dụng thông thường.';
+    if (value === 'standard' || value === 'default') return 'Cân bằng tốc độ, chất lượng và chi phí.';
+    if (value.startsWith('vip')) return 'Server ưu tiên, ổn định hơn khi hệ thống đông.';
+    return 'Server realtime do TST cung cấp.';
 };
 
 const getVideoFamilyIcon = (family: VideoModelFamily) => {
@@ -185,8 +219,13 @@ const OptionDropdown = ({ label, value, options, onChange, icon: Icon }: any) =>
                 }`}
                 aria-expanded={isOpen}
             >
-                <div className="flex items-center gap-2">
-                    {options.find((o: any) => o.value === value)?.label || value}
+                <div className="min-w-0 text-left">
+                    <span className="block truncate">{options.find((o: any) => o.value === value)?.label || value}</span>
+                    {options.find((o: any) => o.value === value)?.description && (
+                      <span className="block mt-0.5 truncate text-[9px] font-semibold text-slate-400">
+                        {options.find((o: any) => o.value === value)?.description}
+                      </span>
+                    )}
                 </div>
                 <Icons.ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
             </button>
@@ -199,11 +238,17 @@ const OptionDropdown = ({ label, value, options, onChange, icon: Icon }: any) =>
                                 type="button"
                                 key={opt.value}
                                 onClick={() => { onChange(opt.value); setIsOpen(false); }}
-                                className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold transition-colors hover:bg-slate-200/50 dark:hover:bg-white/5 ${
+                                className={`w-full text-left px-3 py-2.5 rounded-xl transition-colors hover:bg-slate-200/50 dark:hover:bg-white/5 ${
                                   value === opt.value ? 'text-[#FF007F] bg-[#FF007F]/10' : 'text-slate-700 dark:text-slate-300'
                                 }`}
                             >
-                                {opt.label}
+                                <span className="flex items-start justify-between gap-3">
+                                  <span className="min-w-0">
+                                    <span className="block text-xs font-black">{opt.label}</span>
+                                    {opt.description && <span className="block mt-1 text-[9px] font-semibold leading-relaxed opacity-70">{opt.description}</span>}
+                                  </span>
+                                  {opt.meta && <span className="shrink-0 text-[9px] font-black text-amber-500">{opt.meta}</span>}
+                                </span>
                             </button>
                         ))}
                     </div>
@@ -417,6 +462,30 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
   const gommoSupportsAudio = Boolean(selectedGommoVideoModel?.modes.some((mode) => mode.type.includes('audio')));
   const effectiveVideoAudio = activeMode === 'video_ai' && (isGommoVideoSelected ? gommoSupportsAudio : Boolean(selectedVideoSpec?.supportsAudio)) && sound;
   const defaultVideoServerId = videoModel.toLowerCase().startsWith('grok') ? 'default' : 'fast';
+  const getVideoModelRuntimeMeta = (model: AIModelOption) => {
+      const provider = resolveProviderForModel(providerConfig, model.id, 'video_generation');
+      if (provider === 'gommo') {
+          const catalogModel = getGommoModelForAudition(gommoCatalog, model.id);
+          const capabilities = [
+              catalogModel?.resolutions.length ? catalogModel.resolutions.map((item) => item.type.toUpperCase()).join('/') : '',
+              catalogModel?.durations.length ? `${catalogModel.durations[0].type}–${catalogModel.durations[catalogModel.durations.length - 1]?.type}s` : '',
+          ].filter(Boolean).join(' · ');
+          return {
+              description: catalogModel?.description || getVideoModelHint(model),
+              server: `Gommo · ${catalogModel?.server || 'Realtime'}`,
+              capabilities,
+          };
+      }
+      const spec = getVideoModelSpecs(pricingEntries, runtimeModels).find((entry) => entry.modelId === model.id);
+      return {
+          description: getVideoModelHint(model),
+          server: `TST · ${(spec?.servers || []).map((item) => item.toUpperCase()).join(' / ') || 'Realtime'}`,
+          capabilities: [
+              spec?.resolutions?.length ? spec.resolutions.map((item) => item.toUpperCase()).join('/') : '',
+              spec?.durations?.length ? spec.durations.join('/') : '',
+          ].filter(Boolean).join(' · '),
+      };
+  };
 
   useEffect(() => {
       const selected = videoModelOptions.find((model) => model.id === videoModel);
@@ -647,7 +716,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
           resolution: quality.toLowerCase(),
           speed: uiSpeedToTst(speed) || 'fast'
         })
-  ).map((serverId) => ({ label: tstServerToUi(serverId), value: tstServerToUi(serverId) }));
+  ).map((serverId) => ({ label: tstServerToUi(serverId), value: tstServerToUi(serverId), description: getTstServerDescription(serverId) }));
   const speedOptions = isGommoSelected ? [] : activeMode === 'video_ai'
       ? getVideoCompatibleSpeeds({
           modelId: videoModel,
@@ -1417,11 +1486,21 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                         <span className="flex-1 min-w-0">
                           <span className="flex flex-wrap items-center justify-between gap-2">
                             <span className="text-xs font-black font-accent text-slate-900 dark:text-white">{model.name}</span>
-                            <span className="px-2.5 py-1 rounded-full bg-amber-400/15 text-[9px] font-black text-amber-600 dark:text-amber-300">
-                              TỪ {model.price} VCOIN
+                            <span className={`px-2.5 py-1 rounded-full text-[9px] font-black ${model.price > 0 ? 'bg-amber-400/15 text-amber-600 dark:text-amber-300' : 'bg-rose-500/10 text-rose-500'}`}>
+                              {model.price > 0 ? `TỪ ${model.price} VCOIN` : 'CHƯA CÓ GIÁ'}
                             </span>
                           </span>
-                          <span className="block mt-1 text-[10px] font-semibold text-slate-600 dark:text-slate-400">{getVideoModelHint(model)}</span>
+                          <span className="block mt-1 text-[10px] font-semibold leading-relaxed text-slate-600 dark:text-slate-400">{getVideoModelRuntimeMeta(model).description}</span>
+                          <span className="flex flex-wrap gap-1.5 mt-2">
+                            <span className="px-2 py-0.5 rounded-md bg-violet-500/10 text-[8px] font-black text-violet-600 dark:text-violet-300">
+                              {getVideoModelRuntimeMeta(model).server}
+                            </span>
+                            {getVideoModelRuntimeMeta(model).capabilities && (
+                              <span className="px-2 py-0.5 rounded-md bg-slate-500/10 text-[8px] font-black text-slate-500 dark:text-slate-300">
+                                {getVideoModelRuntimeMeta(model).capabilities}
+                              </span>
+                            )}
+                          </span>
                           <span className="flex flex-wrap gap-1.5 mt-2">
                             {getVideoModelTags(model).map((tag) => (
                               <span key={tag} className="px-2 py-0.5 rounded-md border border-[#00A8C8]/20 bg-[#00F2FE]/5 text-[8px] font-black text-[#0089A3] dark:text-[#00F2FE]">
@@ -1481,11 +1560,14 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                 )}
                 {isGommoSelected && (selectedGommoModel?.modes || []).length > 0 && (
                   <OptionDropdown
-                    label="Máy chủ / chế độ Gommo"
+                    label="Máy chủ / chế độ Gommo · giá API"
                     value={providerMode}
                     options={(selectedGommoModel?.modes || []).map((option) => ({
-                      label: option.group ? `${option.name || option.type} · ${option.group}` : (option.name || option.type),
+                      label: option.name || option.type,
                       value: option.type,
+                      description: [option.description || getGommoModeDescription(option.type), option.group || '', option.groupSubtitle || '']
+                        .filter(Boolean).join(' · '),
+                      meta: getGommoModePriceLabel(selectedGommoModel, option.type),
                     }))}
                     onChange={setProviderMode}
                     icon={Icons.Database}

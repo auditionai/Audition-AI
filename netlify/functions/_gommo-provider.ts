@@ -20,6 +20,7 @@ export type GommoModel = {
   id_base?: string;
   model: string;
   name: string;
+  description?: string;
   status?: string;
   server?: string;
   price?: number;
@@ -736,6 +737,7 @@ export const getGommoProviderCatalog = async (forceRefresh = false) => {
         fallbackSupported: mapping.fallbackSupported,
         model: model.model,
         name: model.name,
+        description: model.description || '',
         status: model.status || 'ON',
         server: model.server || '',
         price: Number.isFinite(Number(model.price)) ? Number(model.price) : null,

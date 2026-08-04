@@ -15,6 +15,7 @@ export type GommoCatalogModel = {
   fallbackSupported: boolean;
   model: string;
   name: string;
+  description: string;
   status: string;
   server: string;
   price: number | null;

@@ -964,19 +964,41 @@ export const getModelPricing = async (options?: { force?: boolean }): Promise<Mo
   return value;
 };
 
+export const saveModelPricingBatch = async (pricings: ModelPricing[]): Promise<{success: boolean, saved?: number, error?: string}> => {
+  if (!supabase) return { success: false, error: 'No Database' };
+  if (!pricings.length) return { success: false, error: 'Không có cấu hình giá cần lưu.' };
+
+  try {
+    const authHeader = await getSessionAuthHeader();
+    const response = await fetch('/api/admin-model-pricing', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeader,
+      },
+      body: JSON.stringify({
+        rows: pricings.map((pricing) => ({
+          model_id: pricing.model_id,
+          option_id: pricing.option_id,
+          tst_price_credits: pricing.tst_price_credits,
+          audition_price_vcoin: pricing.audition_price_vcoin,
+        })),
+      }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result?.success) {
+      return { success: false, error: result?.error || `Không thể lưu bảng giá (HTTP ${response.status}).` };
+    }
+    invalidateModelPricingCache();
+    return { success: true, saved: Number(result.saved || pricings.length) };
+  } catch (error: any) {
+    return { success: false, error: error?.message || 'Không thể kết nối máy chủ lưu bảng giá.' };
+  }
+};
+
 export const saveModelPricing = async (pricing: ModelPricing): Promise<{success: boolean, error?: string}> => {
-  if (!supabase) return { success: false, error: "No Database" };
-  const { error } = await supabase.from('model_pricing').upsert({
-    id: pricing.id,
-    model_id: pricing.model_id,
-    option_id: pricing.option_id,
-    tst_price_credits: pricing.tst_price_credits,
-    audition_price_vcoin: pricing.audition_price_vcoin,
-    updated_at: new Date().toISOString()
-  }, { onConflict: 'model_id, option_id' });
-  if (error) return { success: false, error: error.message };
-  invalidateModelPricingCache();
-  return { success: true };
+  const result = await saveModelPricingBatch([pricing]);
+  return result.success ? { success: true } : { success: false, error: result.error };
 };
 
 export const getTstServerAvailabilityConfig = async (options?: { force?: boolean }): Promise<TstServerAvailabilityConfig> => {

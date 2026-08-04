@@ -62,6 +62,7 @@ import {
     AppTourStep,
     getModelPricing,
     saveModelPricing,
+    saveModelPricingBatch,
     syncTSTPrices,
     ModelPricing,
     getTstServerAvailabilityConfig,
@@ -1124,7 +1125,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       }
 
       if (options?.refreshAfterSave !== false) {
-          await refreshData();
+          try {
+              await refreshData();
+          } catch (refreshError) {
+              console.warn('Pricing saved but refreshing admin data failed', refreshError);
+          }
       }
 
       return { success: true };
@@ -1261,31 +1266,37 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           return;
       }
 
-      setSavingAllPricing(true);
-      let successCount = 0;
-      let failedCount = 0;
-
-      for (const row of dirtyPricingRows) {
+      const rowsToSave = dirtyPricingRows.map((row) => {
           const draftKey = getPricingLookupKey(row.modelId, row.configKey);
-          const nextValue = Number(pricingDrafts[draftKey]);
-          const result = await persistPricingRow(row, nextValue, { refreshAfterSave: false });
-
-          if (result.success) {
-              successCount += 1;
-          } else {
-              failedCount += 1;
-          }
+          const existing = getSavedAuditionPrice(row);
+          return {
+              id: existing?.id || crypto.randomUUID(),
+              model_id: row.modelId,
+              option_id: row.configKey,
+              tst_price_credits: row.credits,
+              audition_price_vcoin: Number(pricingDrafts[draftKey]),
+              updated_at: new Date().toISOString(),
+          } satisfies ModelPricing;
+      });
+      const invalidRow = rowsToSave.find((row) => !Number.isFinite(row.audition_price_vcoin) || row.audition_price_vcoin <= 0);
+      if (invalidRow) {
+          showToast(`Giá của ${invalidRow.model_id} không hợp lệ.`, 'error');
+          return;
       }
 
-      await refreshData();
-      setSavingAllPricing(false);
-
-      if (failedCount === 0) {
-          showToast(`Đã lưu ${successCount} cấu hình giá.`, 'success');
-      } else if (successCount > 0) {
-          showToast(`Đã lưu ${successCount}/${dirtyPricingRows.length} cấu hình giá.`, 'info');
-      } else {
-          showToast('Không lưu được thay đổi nào trong bảng giá.', 'error');
+      setSavingAllPricing(true);
+      try {
+          const result = await saveModelPricingBatch(rowsToSave);
+          if (!result.success) {
+              showToast(`Không thể lưu bảng giá: ${result.error}`, 'error');
+              return;
+          }
+          await refreshData();
+          showToast(`Đã lưu ${result.saved || rowsToSave.length} cấu hình giá.`, 'success');
+      } catch (error: any) {
+          showToast(`Không thể lưu bảng giá: ${error?.message || error}`, 'error');
+      } finally {
+          setSavingAllPricing(false);
       }
   };
 

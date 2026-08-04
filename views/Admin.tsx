@@ -4764,7 +4764,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                                }`}>
                                                                    {gommo.fallbackSupported ? gommo.status : 'Chỉ đối chiếu'}
                                                                </div>
-                                                               <div className="mt-1 max-w-[160px] text-[10px] text-slate-400" title={gommo.modelId}>{gommo.modelName}</div>
+                                                               <div className="mt-1 max-w-[180px] text-[10px] text-slate-400" title={`${gommo.modelId}${gommo.matchedMode ? ` · ${gommo.matchedMode}` : ''}`}>
+                                                                   {gommo.modelName}{gommo.matchedMode ? ` · ${gommo.matchedMode}` : ''}
+                                                               </div>
                                                            </div>
                                                        ) : <span className="text-slate-500">-</span>}
                                                    </td>

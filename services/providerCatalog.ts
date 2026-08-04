@@ -71,6 +71,7 @@ export type GommoPriceComparison = {
   maxCredits: number | null;
   minCostVcoin: number | null;
   maxCostVcoin: number | null;
+  matchedMode?: string | null;
 };
 
 const normalize = (value?: string | number | null) => String(value || '').trim().toLowerCase();
@@ -251,15 +252,27 @@ export const getGommoPriceComparison = (
 
   const resolution = normalize(row.resolution);
   const duration = normalizeDuration(row.duration);
-  let candidates = model.prices.filter((price) => {
+  const dimensionCandidates = model.prices.filter((price) => {
     if (resolution && price.resolution && normalize(price.resolution) !== resolution) return false;
     if (duration && price.duration && normalizeDuration(price.duration) !== duration) return false;
     return Number.isFinite(price.price);
   });
-  if (candidates.length === 0) {
-    candidates = model.prices.filter((price) => Number.isFinite(price.price));
-  }
-  const values = candidates.map((price) => Number(price.price));
+  const availableModes = Array.from(new Set(model.prices.map((price) => normalize(price.mode)).filter(Boolean)));
+  const requestedMode = normalize(row.speed);
+  const defaultMode = normalize(model.modes.find((mode) => mode.adminEnabled !== false)?.type)
+    || availableModes[0]
+    || '';
+  const matchedMode = availableModes.includes(requestedMode) ? requestedMode : defaultMode;
+  const exactCandidates = matchedMode
+    ? dimensionCandidates.filter((price) => normalize(price.mode) === matchedMode)
+    : dimensionCandidates;
+  const candidates = exactCandidates.length > 0 ? exactCandidates : dimensionCandidates;
+  const directProviderPrice = row.server === 'gommo' && Number.isFinite(Number(row.credits))
+    ? Number(row.credits)
+    : null;
+  const values = directProviderPrice !== null
+    ? [directProviderPrice]
+    : candidates.map((price) => Number(price.price));
   if (values.length === 0 && Number.isFinite(Number(model.price))) {
     values.push(Number(model.price));
   }
@@ -280,5 +293,6 @@ export const getGommoPriceComparison = (
     maxCredits,
     minCostVcoin: convertToVcoin(minCredits),
     maxCostVcoin: convertToVcoin(maxCredits),
+    matchedMode: row.server === 'gommo' ? requestedMode || matchedMode : matchedMode,
   };
 };

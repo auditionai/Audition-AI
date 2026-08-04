@@ -594,6 +594,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [switchingGenerationProvider, setSwitchingGenerationProvider] = useState(false);
   const [pricingDrafts, setPricingDrafts] = useState<Record<string, string>>({});
   const [pricingConfigFilter, setPricingConfigFilter] = useState<'all' | 'missing'>('all');
+  const [pricingProviderFilter, setPricingProviderFilter] = useState<'all' | 'tst' | 'gommo'>('all');
   const [savingAllPricing, setSavingAllPricing] = useState(false);
   const [serverAvailabilityConfig, setServerAvailabilityConfig] = useState<TstServerAvailabilityConfig>({ disabledByModel: {}, disabledByProviderModel: {}, autoDisabledCombos: {} });
   const [editingStyle, setEditingStyle] = useState<StylePreset | null>(null);
@@ -1055,9 +1056,15 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const dirtyPricingRows = allPricingRows.filter(isPricingRowDirty);
   const dirtyPricingCount = dirtyPricingRows.length;
   const missingPricingCount = allPricingRows.filter((row) => !getEffectiveAuditionPricing(row)).length;
+  const tstPricingCount = allPricingRows.filter((row) => row.server !== 'gommo').length;
+  const gommoPricingCount = allPricingRows.filter((row) => row.server === 'gommo').length;
+  const providerFilteredPricingRows = pricingProviderFilter === 'all'
+      ? allPricingRows
+      : allPricingRows.filter((row) => pricingProviderFilter === 'gommo' ? row.server === 'gommo' : row.server !== 'gommo');
+  const providerMissingPricingCount = providerFilteredPricingRows.filter((row) => !getEffectiveAuditionPricing(row)).length;
   const filteredPricingRows = pricingConfigFilter === 'missing'
-      ? allPricingRows.filter((row) => !getEffectiveAuditionPricing(row))
-      : allPricingRows;
+      ? providerFilteredPricingRows.filter((row) => !getEffectiveAuditionPricing(row))
+      : providerFilteredPricingRows;
 
   useEffect(() => {
       if (typeof window === 'undefined' || dirtyPricingCount === 0) return;
@@ -4608,13 +4615,26 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   Giá AUDITION AI dùng chung cho hai nguồn. Cấu hình tương thích của API 2 sẽ tự kế thừa giá hệ thống API 1; chỉ còn {missingPricingCount} cấu hình chưa có giá.
                               </p>
                           </div>
-                          <div className="grid grid-cols-2 gap-2 rounded-2xl neu-inset-sm p-1.5">
-                              <button type="button" onClick={() => setPricingConfigFilter('all')} className={`rounded-xl px-4 py-2 text-xs font-black transition-all ${pricingConfigFilter === 'all' ? 'bg-[#FF007F] text-white' : 'text-slate-600 dark:text-slate-300'}`}>
-                                  Tất cả ({allPricingRows.length})
-                              </button>
-                              <button type="button" onClick={() => setPricingConfigFilter('missing')} className={`rounded-xl px-4 py-2 text-xs font-black transition-all ${pricingConfigFilter === 'missing' ? 'bg-amber-500 text-black' : 'text-amber-600 dark:text-amber-300'}`}>
-                                  Chưa có giá ({missingPricingCount})
-                              </button>
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                              <div role="group" aria-label="Lọc theo nguồn API" className="grid grid-cols-3 gap-1 rounded-2xl neu-inset-sm p-1.5">
+                                  <button type="button" aria-pressed={pricingProviderFilter === 'all'} onClick={() => setPricingProviderFilter('all')} className={`rounded-xl px-3 py-2 text-xs font-black transition-all ${pricingProviderFilter === 'all' ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20' : 'text-slate-600 dark:text-slate-300'}`}>
+                                      Tất cả nguồn ({allPricingRows.length})
+                                  </button>
+                                  <button type="button" aria-pressed={pricingProviderFilter === 'tst'} onClick={() => setPricingProviderFilter('tst')} className={`rounded-xl px-3 py-2 text-xs font-black transition-all ${pricingProviderFilter === 'tst' ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/20' : 'text-sky-600 dark:text-sky-300'}`}>
+                                      TST ({tstPricingCount})
+                                  </button>
+                                  <button type="button" aria-pressed={pricingProviderFilter === 'gommo'} onClick={() => setPricingProviderFilter('gommo')} className={`rounded-xl px-3 py-2 text-xs font-black transition-all ${pricingProviderFilter === 'gommo' ? 'bg-violet-500 text-white shadow-lg shadow-violet-500/20' : 'text-violet-600 dark:text-violet-300'}`}>
+                                      Gommo ({gommoPricingCount})
+                                  </button>
+                              </div>
+                              <div role="group" aria-label="Lọc theo trạng thái giá" className="grid grid-cols-2 gap-1 rounded-2xl neu-inset-sm p-1.5">
+                                  <button type="button" aria-pressed={pricingConfigFilter === 'all'} onClick={() => setPricingConfigFilter('all')} className={`rounded-xl px-4 py-2 text-xs font-black transition-all ${pricingConfigFilter === 'all' ? 'bg-[#FF007F] text-white' : 'text-slate-600 dark:text-slate-300'}`}>
+                                      Tất cả ({providerFilteredPricingRows.length})
+                                  </button>
+                                  <button type="button" aria-pressed={pricingConfigFilter === 'missing'} onClick={() => setPricingConfigFilter('missing')} className={`rounded-xl px-4 py-2 text-xs font-black transition-all ${pricingConfigFilter === 'missing' ? 'bg-amber-500 text-black' : 'text-amber-600 dark:text-amber-300'}`}>
+                                      Chưa có giá ({providerMissingPricingCount})
+                                  </button>
+                              </div>
                           </div>
                       </div>
                       <div className="overflow-x-auto">
@@ -4642,7 +4662,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   {filteredPricingRows.length === 0 ? (
                                       <tr>
                                            <td colSpan={15} className="px-4 py-8 text-center text-slate-700 dark:text-slate-400 font-semibold">
-                                              Chưa tải được bảng giá live từ Trạm Sáng Tạo.
+                                              Không có cấu hình giá phù hợp với bộ lọc đang chọn.
                                           </td>
                                       </tr>
                                   ) : (

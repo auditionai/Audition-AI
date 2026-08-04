@@ -930,7 +930,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   credits: providerCredits,
                   vcoin: convertedVcoin,
                   configKey,
-                  billingUnit: 'flat' as const,
+                  billingUnit: model.rateType === 'per_second' ? 'second' as const : 'flat' as const,
               } satisfies TstPricingRow;
           });
       });
@@ -1190,10 +1190,6 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       if (switchingGenerationProvider) return;
       if (provider === 'gommo' && !gommoCatalog?.configured) {
           showToast('Gommo chưa được cấu hình trên server.', 'error');
-          return;
-      }
-      if (featureKey === 'motion_control' && provider === 'gommo') {
-          showToast('Motion Control chưa có payload Gommo công khai nên chưa thể gán Gommo.', 'error');
           return;
       }
       const nextProviderByFeature = { ...generationProviderByFeature };
@@ -4302,7 +4298,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                            {(['default', 'tst', 'gommo'] as const).map((provider) => {
                                                const active = provider === 'default' ? !explicitProvider : explicitProvider === provider;
                                                const disabled = switchingGenerationProvider
-                                                   || (provider === 'gommo' && (!gommoCatalog?.configured || route.key === 'motion_control'));
+                                                   || (provider === 'gommo' && !gommoCatalog?.configured);
                                                return (
                                                    <button
                                                        key={`${route.key}_${provider}`}
@@ -4438,11 +4434,6 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                <p className="mt-1 text-xs leading-relaxed text-slate-700 dark:text-slate-300 font-semibold">
                                    Áp dụng cho model chưa có route riêng. Bạn có thể chọn TST/Gommo cho từng model bên dưới; route Gommo đi thẳng Gommo, còn route TST có thể dùng chuỗi backup thông minh bên dưới.
                                </p>
-                               {generationProvider === 'gommo' && (
-                                   <p className="mt-2 text-xs font-bold text-amber-500">
-                                       Motion Control chưa chuyển qua Gommo vì API công khai chưa mô tả payload video chuyển động.
-                                   </p>
-                               )}
                            </div>
                            <div className="grid grid-cols-2 gap-2 rounded-2xl neu-inset-sm p-2 min-w-[280px]">
                                {(['tst', 'gommo'] as GenerationProviderMode[]).map((provider) => {

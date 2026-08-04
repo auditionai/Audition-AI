@@ -33,8 +33,16 @@ export type GommoModel = {
   maxSubject?: number;
   withSubject?: boolean;
   withReference?: boolean;
+  startText?: boolean;
   startImage?: boolean;
   startImageAndEnd?: boolean;
+  withMotion?: boolean;
+  configs?: {
+    motion?: {
+      enabled?: boolean;
+      limits?: { max_video_seconds?: number; max_video_size_mb?: number };
+    };
+  };
 };
 
 export type GommoModelOption = {
@@ -80,10 +88,8 @@ export const GOMMO_CATALOG_MAPPINGS: GommoCatalogMapping[] = [
   { auditionModelId: 'kling-2.6', gommoModelId: 'kling_video_2_6', kind: 'video', fallbackSupported: true },
   { auditionModelId: 'kling-o1-video', gommoModelId: 'kling_video_o1', kind: 'video', fallbackSupported: true },
   { auditionModelId: 'kling-3.0-video', gommoModelId: 'kling_video_3_0', kind: 'video', fallbackSupported: true },
-  // Gommo exposes equivalent motion models, but its public Create Video contract does
-  // not document the required motion-video input. Keep them visible for price/status
-  // comparison without dispatching production jobs through an undocumented payload.
-  { auditionModelId: 'motion-control-2.6', gommoModelId: 'kling_video_motion', kind: 'motion', fallbackSupported: false },
+  { auditionModelId: 'motion-control-2.6', gommoModelId: 'kling_video_motion', kind: 'motion', fallbackSupported: true },
+  // The live catalog currently reports configs.motion.enabled=false for Kling 3.0.
   { auditionModelId: 'motion-control-3.0', gommoModelId: 'kling_video_motion_3', kind: 'motion', fallbackSupported: false },
 ];
 
@@ -175,7 +181,7 @@ const postForm = async (path: string, values: Record<string, unknown>, timeoutMs
     !response.ok ||
     data?.success === false ||
     data?.error === 1 ||
-    (data?.error && !data?.success && !data?.imageInfo && !data?.videoInfo)
+    Boolean(data?.error)
   ) {
     throw new Error(`GOMMO_ERROR: ${parseGommoError(data, `${response.status} ${response.statusText}`)}`);
   }
@@ -203,6 +209,7 @@ const getMapping = (modelId: unknown, queueKind: QueueKind) => {
   if (!mapping || !mapping.fallbackSupported) return null;
   if (queueKind === 'image_generate' && mapping.kind !== 'image') return null;
   if (queueKind === 'video_generate' && mapping.kind !== 'video') return null;
+  if (queueKind === 'motion_generate' && mapping.kind !== 'motion') return null;
   return mapping;
 };
 
@@ -233,6 +240,9 @@ const selectMode = (modelId: string, payload: Record<string, unknown>, model: Go
       case 'kling-o1-video':
       case 'kling-3.0-video':
         return server.startsWith('vip') || speed === 'slow' ? 'professional' : 'standard';
+      case 'motion-control-2.6':
+      case 'motion-control-3.0':
+        return quality === '1080p' || normalize(payload.resolution) === '1080p' ? 'professional' : 'standard';
       default:
         return speed || quality;
     }
@@ -262,9 +272,9 @@ export const normalizeAndValidateGommoPayload = async (
     throw new Error(`GOMMO_UNSUPPORTED_MODEL: ${String(payload.model || payload.modelId || 'unknown')}`);
   }
 
-  const models = await getGommoModels(mapping.kind as GommoProviderKind);
+  const models = await getGommoModels(mapping.kind === 'motion' ? 'video' : mapping.kind);
   const model = models.find((entry) => normalize(entry.model) === normalize(mapping.gommoModelId));
-  if (!model || !isGommoModelAvailable(model)) {
+  if (!model || !isGommoModelAvailable(model) || (mapping.kind === 'motion' && model.configs?.motion?.enabled === false)) {
     throw new Error(`GOMMO_MODEL_UNAVAILABLE: ${mapping.gommoModelId}`);
   }
 
@@ -386,15 +396,93 @@ const uploadImageToGommo = async (sourceUrl: string, index: number): Promise<Gom
   return { id_base: idBase, url, data: '' };
 };
 
-const getImageSourceFields = (model: GommoModel, sources: GommoMediaReference[]) => {
+const downloadGommoMultipartMedia = async (
+  sourceUrl: string,
+  kind: 'image' | 'video',
+  maxBytes: number,
+) => {
+  if (!/^https?:\/\//i.test(sourceUrl)) throw new Error(`GOMMO_UPLOAD_ERROR: Missing ${kind} URL`);
+  const response = await fetch(sourceUrl, { signal: AbortSignal.timeout(GOMMO_TIMEOUT_MS) });
+  if (!response.ok) throw new Error(`GOMMO_UPLOAD_ERROR: Cannot download ${kind} (${response.status})`);
+  const contentType = String(response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+  if (contentType && !contentType.startsWith(`${kind}/`)) {
+    throw new Error(`GOMMO_UPLOAD_ERROR: Motion ${kind} has invalid content type (${contentType})`);
+  }
+  const allowedTypes = kind === 'image'
+    ? new Set(['image/jpeg', 'image/png', 'image/webp'])
+    : new Set(['video/mp4', 'video/webm']);
+  if (contentType && !allowedTypes.has(contentType)) {
+    throw new Error(`GOMMO_UPLOAD_ERROR: Motion ${kind} type ${contentType} is not supported by Gommo`);
+  }
+  const bytes = await response.arrayBuffer();
+  if (!bytes.byteLength || bytes.byteLength > maxBytes) {
+    throw new Error(`GOMMO_UPLOAD_ERROR: Motion ${kind} is empty or exceeds ${Math.floor(maxBytes / 1024 / 1024)} MB`);
+  }
+  const mimeType = contentType || (kind === 'image' ? 'image/jpeg' : 'video/mp4');
+  const extension = mimeType === 'image/png'
+    ? 'png'
+    : mimeType === 'image/webp'
+      ? 'webp'
+      : mimeType === 'video/webm'
+        ? 'webm'
+        : kind === 'image' ? 'jpg' : 'mp4';
+  return {
+    blob: new Blob([bytes], { type: mimeType }),
+    fileName: kind === 'image' ? `audition-character.${extension}` : `audition-motion.${extension}`,
+  };
+};
+
+const postMultipart = async (
+  path: string,
+  values: Record<string, unknown>,
+  files: Array<{ field: string; blob: Blob; fileName: string }>,
+) => {
+  const credentials = getCredentials();
+  const form = new FormData();
+  const payload = { access_token: credentials.access_token, domain: credentials.domain, ...values };
+  for (const [key, value] of Object.entries(payload)) {
+    if (value === undefined || value === null || value === '') continue;
+    form.set(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
+  }
+  for (const file of files) form.set(file.field, file.blob, file.fileName);
+  const response = await fetch(`${GOMMO_API_BASE}${path}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${credentials.access_token}` },
+    body: form,
+    signal: AbortSignal.timeout(Math.max(GOMMO_TIMEOUT_MS, 120_000)),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data?.success === false || data?.error === 1 || data?.error) {
+    throw new Error(`GOMMO_ERROR: ${parseGommoError(data, `${response.status} ${response.statusText}`)}`);
+  }
+  return data;
+};
+
+export const buildGommoImageReferenceFields = (model: GommoModel, sources: GommoMediaReference[]) => {
   const providerLimit = Number(model.maxSubject);
   const limit = Number.isFinite(providerLimit) && providerLimit > 0 ? Math.floor(providerLimit) : 8;
   const limitedSources = sources.slice(0, limit);
   if (!limitedSources.length) return {};
-  if (model.withSubject) return { subjects: limitedSources };
-  if (model.withReference) return { references: limitedSources };
+  // Gommo's current image client sends subjects as a JSON array of uploaded
+  // image URL strings. Passing the upload response objects themselves causes
+  // "Cấu trúc ảnh tham chiếu không hợp lệ" and no generation job is created.
+  if (model.withSubject) return { subjects: limitedSources.map((source) => source.url) };
   return {
-    images: model.startImageAndEnd ? limitedSources.slice(0, 2) : limitedSources.slice(0, 1),
+    images: (model.startImageAndEnd ? limitedSources.slice(0, 2) : limitedSources.slice(0, 1))
+      .map((source) => ({ url: source.url })),
+  };
+};
+
+export const buildGommoVideoReferenceFields = (model: GommoModel, sources: GommoMediaReference[]) => {
+  if (!model.startImage || !sources.length) return {};
+  const limit = model.startImageAndEnd ? 2 : 1;
+  // Match Vmedia's create-video client exactly. Upload responses contain more
+  // fields, but the generation endpoint accepts media references as url/id_base.
+  return {
+    images: sources.slice(0, limit).map((source) => ({
+      url: source.url,
+      ...(source.id_base ? { id_base: source.id_base } : {}),
+    })),
   };
 };
 
@@ -405,9 +493,24 @@ const getGatewayJobData = (data: any) => {
   return data;
 };
 
-const extractGommoGatewayJobId = (data: any) => {
-  const job = getGatewayJobData(data);
-  return String(job?.id_base || job?.job_id || data?.imageInfo?.id_base || data?.videoInfo?.id_base || '').trim();
+export const extractGommoCreateJobId = (data: any, media: 'image' | 'video') => {
+  // Create Image documents `success: true`; Create Video currently omits that
+  // flag and returns videoInfo directly, so keep their acceptance contracts separate.
+  if (media === 'image' && data?.success !== true) return '';
+  const job = media === 'image'
+    ? data?.imageInfo || data?.data?.imageInfo
+    : data?.videoInfo || data?.data?.videoInfo;
+  if (!job || typeof job !== 'object') return '';
+  const status = normalize(job.status);
+  const acceptedStatuses = media === 'image'
+    ? new Set(['pending', 'pending_active', 'pending_processing', 'processing', 'success'])
+    : new Set([
+        'pending', 'pending_active', 'pending_processing', 'processing', 'active', 'success',
+        'media_generation_status_pending', 'media_generation_status_active',
+        'media_generation_status_processing', 'media_generation_status_successful',
+      ]);
+  if (status && !acceptedStatuses.has(status)) return '';
+  return String(job.id_base || job.job_id || '').trim();
 };
 
 export const canUseGommoForPayload = async (queueKind: QueueKind, payload: Record<string, unknown>) => {
@@ -442,30 +545,68 @@ export const submitGommoJob = async (
       ...common,
       action_type: 'create',
       model: mapping.gommoModelId,
-      ...getImageSourceFields(normalized.model, uploadedSources),
+      ...buildGommoImageReferenceFields(normalized.model, uploadedSources),
       ratio: providerPayload.aspect_ratio,
       resolution: providerPayload.resolution,
       mode,
     });
-    const jobId = extractGommoGatewayJobId(data);
-    if (!jobId) throw new Error('GOMMO_ERROR: Create Image did not return data.id_base or data.job_id');
+    const jobId = extractGommoCreateJobId(data, 'image');
+    if (!jobId) throw new Error(`GOMMO_ERROR: Create Image was not accepted (${parseGommoError(data, 'missing imageInfo generation job')})`);
     return { jobId, providerCost, mappedModelId: mapping.gommoModelId };
   }
 
-  const imageSources = getSources(providerPayload).filter((source) => /^https?:\/\//i.test(source)).slice(0, 2);
+  if (queueKind === 'motion_generate') {
+    const characterImageUrl = String(providerPayload.character_image_url || '').trim();
+    const motionVideoUrl = String(providerPayload.motion_video_url || '').trim();
+    const maxVideoMb = Math.max(1, Number(normalized.model.configs?.motion?.limits?.max_video_size_mb || 50));
+    const [characterImage, motionVideo] = await Promise.all([
+      downloadGommoMultipartMedia(characterImageUrl, 'image', GOMMO_MAX_INPUT_IMAGE_BYTES),
+      downloadGommoMultipartMedia(motionVideoUrl, 'video', maxVideoMb * 1024 * 1024),
+    ]);
+    const data = await postMultipart('/ai/create-video', {
+      ...common,
+      model: mapping.gommoModelId,
+      privacy: 'PRIVATE',
+      mode,
+      background_source: String(providerPayload.background_source || 'input_image'),
+    }, [
+      { field: 'character_image', ...characterImage },
+      { field: 'motion_video', ...motionVideo },
+    ]);
+    const jobId = extractGommoCreateJobId(data, 'video');
+    if (!jobId) throw new Error('GOMMO_ERROR: Motion Control did not return videoInfo.id_base');
+    const billedSeconds = Math.max(1, Math.ceil(Number(providerPayload.duration) || 1));
+    return {
+      jobId,
+      providerCost: providerCost === null ? null : providerCost * billedSeconds,
+      mappedModelId: mapping.gommoModelId,
+    };
+  }
+
+  const imageSources = getSources(providerPayload)
+    .filter((source) => /^https?:\/\//i.test(source))
+    .slice(0, normalized.model.startImageAndEnd ? 2 : 1);
   const uploadedImages = await Promise.all(imageSources.map((source, index) => uploadImageToGommo(source, index)));
   const data = await postForm('/ai/create-video', {
     ...common,
     model: mapping.gommoModelId,
     privacy: 'PRIVATE',
     translate_to_en: 'false',
-    images: uploadedImages.length ? uploadedImages : undefined,
-    ratio: String(providerPayload.aspect_ratio || '').trim() || undefined,
-    resolution: normalizeResolution(providerPayload.resolution) || undefined,
-    duration: normalizeDuration(providerPayload.duration) || undefined,
-    mode,
+    ...buildGommoVideoReferenceFields(normalized.model, uploadedImages),
+    ratio: getAvailableOptions(normalized.model.ratios).length
+      ? String(providerPayload.aspect_ratio || '').trim() || undefined
+      : undefined,
+    resolution: getAvailableOptions(normalized.model.resolutions).length
+      ? normalizeResolution(providerPayload.resolution) || undefined
+      : undefined,
+    duration: getAvailableOptions(normalized.model.durations).length
+      ? normalizeDuration(providerPayload.duration) || undefined
+      : undefined,
+    mode: getAvailableOptions([...(normalized.model.modes || []), ...(normalized.model.mode || [])]).length
+      ? mode
+      : undefined,
   });
-  const jobId = extractGommoGatewayJobId(data);
+  const jobId = extractGommoCreateJobId(data, 'video');
   if (!jobId) throw new Error('GOMMO_ERROR: Create Video did not return data.id_base or data.job_id');
   return { jobId, providerCost, mappedModelId: mapping.gommoModelId };
 };
@@ -567,7 +708,7 @@ export const getGommoProviderCatalog = async (forceRefresh = false) => {
         maxReferenceImages: Number.isFinite(Number(model.maxSubject)) && Number(model.maxSubject) > 0
           ? Math.floor(Number(model.maxSubject))
           : null,
-        referenceField: model.withSubject ? 'subjects' : model.withReference ? 'references' : 'images',
+        referenceField: model.withSubject ? 'subjects' : 'images',
         ratios: serializeOptions(model.ratios),
         resolutions: serializeOptions(model.resolutions),
         durations: serializeOptions(model.durations),

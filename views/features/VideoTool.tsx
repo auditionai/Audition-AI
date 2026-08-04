@@ -327,6 +327,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
               const routedVideoModels = [...liveVideoModels, ...gommoVideoModels];
               const liveMotionModels = getMotionModelSpecs(livePricing, filteredModels)
                 .filter((spec) => isModelAllowedForFeature(routingConfig, 'motion_control', spec.modelId))
+                .filter((spec) => resolveProviderForModel(routingConfig, spec.modelId, 'motion_control') === 'tst')
                 .map((spec) => ({
                   id: spec.modelId,
                   name: spec.displayName,
@@ -338,6 +339,18 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                       pricingOverrides: overrideRows
                   }).vcoin
               }));
+              const gommoMotionModels = providerCatalog.models
+                .filter((model) => model.kind === 'motion'
+                  && model.fallbackSupported
+                  && isModelAllowedForFeature(routingConfig, 'motion_control', model.auditionModelId)
+                  && resolveProviderForModel(routingConfig, model.auditionModelId, 'motion_control') === 'gommo'
+                  && isGommoCatalogModelAvailable(model))
+                .map((model) => ({
+                  id: model.auditionModelId,
+                  name: model.name,
+                  price: getMinimumAuditionModelPrice(pricingConfig || [], model.auditionModelId) || 0,
+                }));
+              const routedMotionModels = [...liveMotionModels, ...gommoMotionModels];
 
               if (routedVideoModels.length > 0) {
                   setVideoModelOptions(routedVideoModels);
@@ -347,9 +360,9 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                       return next;
                   });
               }
-              if (liveMotionModels.length > 0) {
-                  setMotionModelOptions(liveMotionModels);
-                  setMotionModel((current) => liveMotionModels.some((model) => model.id === current) ? current : liveMotionModels[0].id);
+              if (routedMotionModels.length > 0) {
+                  setMotionModelOptions(routedMotionModels);
+                  setMotionModel((current) => routedMotionModels.some((model) => model.id === current) ? current : routedMotionModels[0].id);
               }
               setCatalogError(models.length > 0 ? null : (lang === 'vi' ? 'TST đang bảo trì hoặc không sẵn sàng.' : 'TST is unavailable.'));
           } catch (error) {
@@ -371,10 +384,15 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
   const selectedVideoProvider = resolveProviderForModel(providerConfig, videoModel, 'video_generation');
   const isGommoVideoSelected = activeMode === 'video_ai' && selectedVideoProvider === 'gommo';
   const selectedGommoVideoModel = getGommoModelForAudition(gommoCatalog, videoModel);
+  const selectedMotionProvider = resolveProviderForModel(providerConfig, motionModel, 'motion_control');
+  const isGommoMotionSelected = activeMode === 'motion_control' && selectedMotionProvider === 'gommo';
+  const selectedGommoMotionModel = getGommoModelForAudition(gommoCatalog, motionModel);
+  const isGommoSelected = isGommoVideoSelected || isGommoMotionSelected;
+  const selectedGommoModel = isGommoMotionSelected ? selectedGommoMotionModel : selectedGommoVideoModel;
   const isCatalogReady =
       !catalogLoading &&
-      (activeMode === 'video_ai' && isGommoVideoSelected
-        ? isGommoCatalogModelAvailable(selectedGommoVideoModel)
+      (isGommoSelected
+        ? isGommoCatalogModelAvailable(selectedGommoModel)
         : !catalogError && pricingEntries.length > 0 && runtimeModels.length > 0) &&
       (activeMode === 'video_ai' ? videoModelOptions.length > 0 : motionModelOptions.length > 0);
   const hasRequiredInputs = activeMode === 'video_ai'
@@ -426,13 +444,18 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
       providerMode,
   });
   const gommoVideoPricing = getAuditionProviderPricing(auditionPricing, videoModel, gommoVideoPricingInput, { allowGenericFallback: true });
-  const currentCostBreakdown = isGommoVideoSelected
+  const gommoMotionPricingInput = getGommoPricingInput(motionModel, { providerMode });
+  const gommoMotionPricing = getAuditionProviderPricing(auditionPricing, motionModel, gommoMotionPricingInput, { allowGenericFallback: true });
+  const selectedGommoPricing = isGommoMotionSelected ? gommoMotionPricing : gommoVideoPricing;
+  const currentCostBreakdown = isGommoSelected
       ? {
-          available: gommoVideoPricing !== null && isGommoCatalogModelAvailable(selectedGommoVideoModel),
-          vcoin: gommoVideoPricing?.vcoin || 0,
-          billingUnit: 'job' as const,
-          unitVcoin: null,
-          billedSeconds: null,
+          available: selectedGommoPricing !== null && isGommoCatalogModelAvailable(selectedGommoModel),
+          vcoin: isGommoMotionSelected
+            ? (selectedGommoPricing?.vcoin || 0) * Math.max(1, Math.ceil(motionVideoDurationSeconds || 1))
+            : selectedGommoPricing?.vcoin || 0,
+          billingUnit: isGommoMotionSelected ? 'second' as const : 'job' as const,
+          unitVcoin: isGommoMotionSelected ? selectedGommoPricing?.vcoin || 0 : null,
+          billedSeconds: isGommoMotionSelected ? Math.max(1, Math.ceil(motionVideoDurationSeconds || 1)) : null,
         }
       : tstCostBreakdown;
 
@@ -482,6 +505,15 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
 
   const getModelOptions = () => {
       if (activeMode === 'motion_control') {
+          if (isGommoMotionSelected) {
+              return {
+                  showAspectRatio: false,
+                  aspectRatios: [] as string[],
+                  qualities: [] as string[],
+                  durations: [] as string[],
+                  supportsAudio: false,
+              };
+          }
           const motionSpec = getMotionModelSpecs(pricingEntries, runtimeModels).find((spec) => spec.modelId === motionModel);
           return {
               showAspectRatio: false,
@@ -592,7 +624,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
   };
 
   const modelOptions = getModelOptions();
-  const serverOptions = isGommoVideoSelected ? [] : (activeMode === 'video_ai'
+  const serverOptions = isGommoSelected ? [] : (activeMode === 'video_ai'
       ? getVideoCompatibleServers({
           modelId: videoModel,
           pricingEntries,
@@ -608,7 +640,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
           speed: uiSpeedToTst(speed) || 'fast'
         })
   ).map((serverId) => ({ label: tstServerToUi(serverId), value: tstServerToUi(serverId) }));
-  const speedOptions = isGommoVideoSelected ? [] : activeMode === 'video_ai'
+  const speedOptions = isGommoSelected ? [] : activeMode === 'video_ai'
       ? getVideoCompatibleSpeeds({
           modelId: videoModel,
           pricingEntries,
@@ -659,11 +691,11 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
       if (activeMode === 'video_ai' && !modelOptions.supportsAudio && sound) {
           setSound(false);
       }
-      if (isGommoVideoSelected) {
-          const modes = (selectedGommoVideoModel?.modes || []).map((option) => option.type);
+      if (isGommoSelected) {
+          const modes = (selectedGommoModel?.modes || []).map((option) => option.type);
           if (modes.length > 0 && !modes.includes(providerMode)) setProviderMode(modes[0]);
       }
-  }, [activeMode, aspectRatio, duration, isGommoVideoSelected, modelOptions, providerMode, quality, selectedGommoVideoModel, server, serverOptions, sound, speed, speedOptions]);
+  }, [activeMode, aspectRatio, duration, isGommoSelected, modelOptions, providerMode, quality, selectedGommoModel, server, serverOptions, sound, speed, speedOptions]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadTarget, setUploadTarget] = useState<'keyframe' | 'character' | 'motion' | null>(null);
@@ -790,7 +822,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
 
   const handleGenerate = async () => {
     if (!isCatalogReady) {
-      notify(isGommoVideoSelected ? 'Gommo đang bảo trì hoặc model video không khả dụng.' : 'TST đang bảo trì hoặc không sẵn sàng.', 'error');
+      notify(isGommoSelected ? 'Gommo đang bảo trì hoặc model không khả dụng.' : 'TST đang bảo trì hoặc không sẵn sàng.', 'error');
       return;
     }
 
@@ -899,7 +931,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
       try {
         const requestedServerId = uiServerToTst(server) || (activeMode === 'video_ai' ? defaultVideoServerId : 'vip2');
         const requestedSpeedId = uiSpeedToTst(speed) || 'fast';
-        const effectiveServerId = isGommoVideoSelected
+        const effectiveServerId = isGommoSelected
             ? undefined
             : activeMode === 'video_ai'
             ? (() => {
@@ -922,7 +954,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                 });
                 return compatibleServers.includes(requestedServerId) ? requestedServerId : (compatibleServers[0] || requestedServerId);
             })();
-        const effectiveSpeedId = isGommoVideoSelected
+        const effectiveSpeedId = isGommoSelected
             ? undefined
             : activeMode === 'video_ai'
             ? (() => {
@@ -978,9 +1010,12 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                 recipeType: 'motion_generate_recipe_v1',
                 modelId: motionModel,
                 prompt: effectiveMotionPrompt,
-                resolution: quality.toLowerCase(),
-                speed: effectiveSpeedId || 'fast',
-                serverId: effectiveServerId,
+                resolution: isGommoMotionSelected ? (providerMode === 'professional' ? '1080p' : '720p') : quality.toLowerCase(),
+                speed: isGommoMotionSelected ? undefined : effectiveSpeedId || 'fast',
+                serverId: isGommoMotionSelected ? undefined : effectiveServerId,
+                providerMode: isGommoMotionSelected ? providerMode : undefined,
+                pricingOptionId: isGommoMotionSelected ? gommoMotionPricing?.optionId : undefined,
+                backgroundSource: 'input_image',
                 characterImage: stagedCharacterImage!,
                 motionVideoDataUrl: stagedMotionVideo!,
                 motionVideoDurationSeconds,
@@ -1289,7 +1324,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
               <div role="alert" className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs font-semibold text-amber-700 dark:text-amber-300">
                 {catalogLoading
                   ? 'Đang đồng bộ catalog realtime theo API đã cấu hình...'
-                  : isGommoVideoSelected
+                  : isGommoSelected
                     ? 'Gommo đang bảo trì, model đã tắt hoặc cấu hình này chưa có giá Vcoin.'
                     : (catalogError || 'TST đang bảo trì hoặc không sẵn sàng.')}
               </div>
@@ -1434,11 +1469,11 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                 {activeMode === 'video_ai' && modelOptions.durations.length > 0 && (
                   <OptionDropdown label="Thời lượng" value={duration} options={modelOptions.durations.map((value) => ({ label: value, value }))} onChange={setDuration} icon={Icons.Clock} />
                 )}
-                {isGommoVideoSelected && (selectedGommoVideoModel?.modes || []).length > 0 && (
+                {isGommoSelected && (selectedGommoModel?.modes || []).length > 0 && (
                   <OptionDropdown
                     label="Máy chủ / chế độ Gommo"
                     value={providerMode}
-                    options={(selectedGommoVideoModel?.modes || []).map((option) => ({
+                    options={(selectedGommoModel?.modes || []).map((option) => ({
                       label: option.group ? `${option.name || option.type} · ${option.group}` : (option.name || option.type),
                       value: option.type,
                     }))}

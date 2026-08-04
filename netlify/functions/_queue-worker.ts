@@ -1273,9 +1273,6 @@ const submitProviderJob = async (
 
   const plainPayload = stripInternalQueueMeta(providerPayload);
   if (targetProvider === 'gommo') {
-    if (queueKind === 'motion_generate') {
-      throw new Error('GOMMO_UNSUPPORTED_MODEL: Motion Control chưa được Gommo công bố payload chính thức.');
-    }
     if (!isGommoConfigured()) {
       throw new Error('GOMMO_NOT_CONFIGURED: Missing GOMMO_ACCESS_TOKEN or GOMMO_DOMAIN environment variable');
     }
@@ -3184,9 +3181,6 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
     }
 
     if (targetProvider === 'gommo' && isQueueRecipePayload(currentPayload)) {
-      if (currentPayload.recipeType === 'motion_generate_recipe_v1') {
-        throw new Error('GOMMO_UNSUPPORTED_MODEL: Motion Control chưa được Gommo công bố payload chính thức.');
-      }
       job.queue_payload = await persistQueueLog(
         job.id,
         job.queue_payload,

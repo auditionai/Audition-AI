@@ -164,15 +164,35 @@ const parseGommoError = (data: any, fallback: string) => {
   return typeof value === 'string' ? value : JSON.stringify(value);
 };
 
-const postForm = async (path: string, values: Record<string, unknown>, timeoutMs = GOMMO_TIMEOUT_MS) => {
+export const buildGommoFormBody = (values: Record<string, unknown>) => {
   const form = new URLSearchParams();
-  const credentials = getCredentials();
-  const payload = { access_token: credentials.access_token, domain: credentials.domain, ...values };
 
-  for (const [key, value] of Object.entries(payload)) {
+  for (const [key, value] of Object.entries(values)) {
     if (value === undefined || value === null || value === '') continue;
+
+    // Vmedia's production client sends media references as PHP-style form
+    // keys. A JSON-encoded `subjects` field can be accepted as a job request
+    // while still being silently ignored by the image generator.
+    if ((key === 'subjects' || key === 'images') && Array.isArray(value)) {
+      value.forEach((entry, index) => {
+        const url = typeof entry === 'string'
+          ? entry.trim()
+          : String((entry as Record<string, unknown> | null)?.url || '').trim();
+        if (url) form.append(`${key}[${index}][url]`, url);
+      });
+      continue;
+    }
+
     form.set(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
   }
+
+  return form;
+};
+
+const postForm = async (path: string, values: Record<string, unknown>, timeoutMs = GOMMO_TIMEOUT_MS) => {
+  const credentials = getCredentials();
+  const payload = { access_token: credentials.access_token, domain: credentials.domain, ...values };
+  const form = buildGommoFormBody(payload);
 
   const response = await fetch(`${GOMMO_API_BASE}${path}`, {
     method: 'POST',

@@ -88,7 +88,14 @@ export const GOMMO_CATALOG_MAPPINGS: GommoCatalogMapping[] = [
   { auditionModelId: 'kling-2.6', gommoModelId: 'kling_video_2_6', kind: 'video', fallbackSupported: true },
   { auditionModelId: 'kling-o1-video', gommoModelId: 'kling_video_o1', kind: 'video', fallbackSupported: true },
   { auditionModelId: 'kling-3.0-video', gommoModelId: 'kling_video_3_0', kind: 'video', fallbackSupported: true },
+  { auditionModelId: 'kling-2.5-video', gommoModelId: 'kling_video_2_5', kind: 'video', fallbackSupported: true },
+  { auditionModelId: 'veo-3.1', gommoModelId: 'veo_3_1', kind: 'video', fallbackSupported: true },
+  { auditionModelId: 'veo-omni', gommoModelId: 'veo_omni', kind: 'video', fallbackSupported: true },
+  { auditionModelId: 'hailuo-2.3', gommoModelId: 'hailuo_2_3', kind: 'video', fallbackSupported: true },
+  { auditionModelId: 'wan-2.5', gommoModelId: 'wan_2_5', kind: 'video', fallbackSupported: true },
+  { auditionModelId: 'happy-horse-1', gommoModelId: 'happy_horse_1', kind: 'video', fallbackSupported: true },
   { auditionModelId: 'motion-control-2.6', gommoModelId: 'kling_video_motion', kind: 'motion', fallbackSupported: true },
+  { auditionModelId: 'motion-control-wan-2.2', gommoModelId: 'wan_2_2', kind: 'motion', fallbackSupported: true },
   // The live catalog currently reports configs.motion.enabled=false for Kling 3.0.
   { auditionModelId: 'motion-control-3.0', gommoModelId: 'kling_video_motion_3', kind: 'motion', fallbackSupported: false },
 ];
@@ -558,6 +565,34 @@ export const submitGommoJob = async (
   if (queueKind === 'motion_generate') {
     const characterImageUrl = String(providerPayload.character_image_url || '').trim();
     const motionVideoUrl = String(providerPayload.motion_video_url || '').trim();
+    if (mapping.gommoModelId === 'wan_2_2') {
+      if (!/^https?:\/\//i.test(characterImageUrl) || !/^https?:\/\//i.test(motionVideoUrl)) {
+        throw new Error('GOMMO_UPLOAD_ERROR: Wan Animate requires a public character image and motion video URL');
+      }
+      const uploadedCharacter = await uploadImageToGommo(characterImageUrl, 0);
+      const data = await postForm('/ai/create-video', {
+        ...common,
+        model: mapping.gommoModelId,
+        privacy: 'PRIVATE',
+        ...buildGommoVideoReferenceFields(normalized.model, [uploadedCharacter]),
+        video_url: motionVideoUrl,
+        ratio: getAvailableOptions(normalized.model.ratios).length
+          ? String(providerPayload.aspect_ratio || '').trim() || undefined
+          : undefined,
+        resolution: getAvailableOptions(normalized.model.resolutions).length
+          ? normalizeResolution(providerPayload.resolution) || undefined
+          : undefined,
+        mode,
+      });
+      const jobId = extractGommoCreateJobId(data, 'video');
+      if (!jobId) throw new Error('GOMMO_ERROR: Wan Animate did not return videoInfo.id_base');
+      const billedSeconds = Math.max(1, Math.ceil(Number(providerPayload.duration) || 1));
+      return {
+        jobId,
+        providerCost: providerCost === null ? null : providerCost * billedSeconds,
+        mappedModelId: mapping.gommoModelId,
+      };
+    }
     const maxVideoMb = Math.max(1, Number(normalized.model.configs?.motion?.limits?.max_video_size_mb || 50));
     const [characterImage, motionVideo] = await Promise.all([
       downloadGommoMultipartMedia(characterImageUrl, 'image', GOMMO_MAX_INPUT_IMAGE_BYTES),

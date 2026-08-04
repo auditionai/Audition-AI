@@ -45,9 +45,9 @@ interface AIModelOption {
   price: number;
 }
 
-type VideoModelFamily = 'grok' | 'seedance' | 'kling';
+type VideoModelFamily = 'grok' | 'seedance' | 'kling' | 'veo' | 'hailuo' | 'wan' | 'other';
 
-const VIDEO_MODEL_FAMILY_ORDER: VideoModelFamily[] = ['grok', 'seedance', 'kling'];
+const VIDEO_MODEL_FAMILY_ORDER: VideoModelFamily[] = ['grok', 'seedance', 'kling', 'veo', 'hailuo', 'wan', 'other'];
 
 const VIDEO_MODEL_FAMILY_META: Record<VideoModelFamily, { label: string; tag: string; description: string }> = {
   grok: {
@@ -65,13 +65,21 @@ const VIDEO_MODEL_FAMILY_META: Record<VideoModelFamily, { label: string; tag: st
     tag: 'BEST',
     description: 'Hoàn thiện tốt hơn, chuyển động mượt hơn. Một số model tính phí theo giây.',
   },
+  veo: { label: 'VEO', tag: 'GOOGLE', description: 'Video Google với nhiều lựa chọn chất lượng.' },
+  hailuo: { label: 'Hailuo', tag: 'MOTION', description: 'Chuyển động tự nhiên và phong cách cinematic.' },
+  wan: { label: 'Wan', tag: 'VALUE', description: 'Cấu hình gọn, tốc độ và chi phí linh hoạt.' },
+  other: { label: 'Khác', tag: 'NEW', description: 'Các model tạo video mới từ Gommo.' },
 };
 
 const getVideoModelFamily = (model?: Pick<AIModelOption, 'id' | 'name'> | null): VideoModelFamily => {
   const text = `${model?.id || ''} ${model?.name || ''}`.toLowerCase();
   if (text.includes('grok')) return 'grok';
   if (text.includes('kling')) return 'kling';
-  return 'seedance';
+  if (text.includes('seedance')) return 'seedance';
+  if (text.includes('veo')) return 'veo';
+  if (text.includes('hailuo')) return 'hailuo';
+  if (text.includes('wan')) return 'wan';
+  return 'other';
 };
 
 const getModelsByFamily = (models: AIModelOption[], family: VideoModelFamily) =>
@@ -333,7 +341,7 @@ export function WorkspaceVideo() {
         return {
           showAspectRatio: false,
           aspectRatios: [] as string[],
-          qualities: [] as string[],
+          qualities: (selectedGommoMotionModel?.resolutions || []).map((option) => option.type.toUpperCase()),
           durations: [] as string[],
           supportsAudio: false,
         };
@@ -687,7 +695,9 @@ export function WorkspaceVideo() {
             }
           : {
               recipeType: 'motion_generate_recipe_v1', modelId: motionModel, prompt: effectiveMotionPrompt,
-              resolution: isGommoMotionSelected ? (providerMode === 'professional' ? '1080p' : '720p') : quality.toLowerCase(),
+              resolution: isGommoMotionSelected
+                ? (selectedGommoMotionModel?.resolutions.length ? quality.toLowerCase() : providerMode === 'professional' ? '1080p' : '720p')
+                : quality.toLowerCase(),
               speed: effectiveSpeedId, serverId: effectiveServerId,
               providerMode: isGommoMotionSelected ? providerMode : undefined,
               pricingOptionId: isGommoMotionSelected ? gommoMotionPricing?.optionId : undefined,

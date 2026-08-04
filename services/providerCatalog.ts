@@ -117,6 +117,7 @@ export const buildProviderPricingOptionCandidates = (input: {
   return Array.from(new Set([
     providerMode ? [resolution, durationWithSuffix || duration, providerMode].filter(Boolean).join('-') : '',
     providerMode ? [resolution, providerMode].filter(Boolean).join('-') : '',
+    providerMode ? [durationWithSuffix || duration, providerMode].filter(Boolean).join('-') : '',
     providerMode,
     quality ? [resolution, quality, speed].filter(Boolean).join('-') : '',
     [resolution, durationWithSuffix, input.audio ? 'audio' : '', speed].filter(Boolean).join('-'),

@@ -65,9 +65,9 @@ interface AIModelOption {
     badges?: { text: string; type: 'blue' | 'outline' | 'speed' | 'duration' | 'server' }[];
 }
 
-type VideoModelFamily = 'grok' | 'seedance' | 'kling';
+type VideoModelFamily = 'grok' | 'seedance' | 'kling' | 'veo' | 'hailuo' | 'wan' | 'other';
 
-const VIDEO_MODEL_FAMILY_ORDER: VideoModelFamily[] = ['grok', 'seedance', 'kling'];
+const VIDEO_MODEL_FAMILY_ORDER: VideoModelFamily[] = ['grok', 'seedance', 'kling', 'veo', 'hailuo', 'wan', 'other'];
 
 const VIDEO_MODEL_FAMILY_META: Record<VideoModelFamily, {
     label: string;
@@ -93,13 +93,21 @@ const VIDEO_MODEL_FAMILY_META: Record<VideoModelFamily, {
         description: 'Độ hoàn thiện và chuyển động tốt hơn. Một số model Kling tính phí theo giây video.',
         accent: 'from-audi-yellow/20 to-orange-500/10 border-audi-yellow/40 text-audi-yellow',
     },
+    veo: { label: 'VEO', tag: 'GOOGLE', description: 'Dòng video Google với nhiều lựa chọn chất lượng và độ phân giải.', accent: 'from-blue-400/20 to-cyan-500/10 border-blue-400/40 text-blue-200' },
+    hailuo: { label: 'Hailuo', tag: 'MOTION', description: 'Tối ưu chuyển động tự nhiên và các cảnh quay cinematic.', accent: 'from-violet-400/20 to-fuchsia-500/10 border-violet-400/40 text-violet-200' },
+    wan: { label: 'Wan', tag: 'VALUE', description: 'Tạo video nhanh với cấu hình gọn và chi phí linh hoạt.', accent: 'from-emerald-400/20 to-lime-500/10 border-emerald-400/40 text-emerald-200' },
+    other: { label: 'Khác', tag: 'NEW', description: 'Các model tạo video mới được đồng bộ trực tiếp từ Gommo.', accent: 'from-slate-400/20 to-slate-500/10 border-slate-400/40 text-slate-200' },
 };
 
 const getVideoModelFamily = (model?: Pick<AIModelOption, 'id' | 'name'> | null): VideoModelFamily => {
     const text = `${model?.id || ''} ${model?.name || ''}`.toLowerCase();
     if (text.includes('grok')) return 'grok';
     if (text.includes('kling')) return 'kling';
-    return 'seedance';
+    if (text.includes('seedance')) return 'seedance';
+    if (text.includes('veo')) return 'veo';
+    if (text.includes('hailuo')) return 'hailuo';
+    if (text.includes('wan')) return 'wan';
+    return 'other';
 };
 
 const getModelsByFamily = (models: AIModelOption[], family: VideoModelFamily) =>
@@ -509,7 +517,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
               return {
                   showAspectRatio: false,
                   aspectRatios: [] as string[],
-                  qualities: [] as string[],
+                  qualities: (selectedGommoMotionModel?.resolutions || []).map((option) => option.type.toUpperCase()),
                   durations: [] as string[],
                   supportsAudio: false,
               };
@@ -1010,7 +1018,9 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                 recipeType: 'motion_generate_recipe_v1',
                 modelId: motionModel,
                 prompt: effectiveMotionPrompt,
-                resolution: isGommoMotionSelected ? (providerMode === 'professional' ? '1080p' : '720p') : quality.toLowerCase(),
+                resolution: isGommoMotionSelected
+                  ? (selectedGommoMotionModel?.resolutions.length ? quality.toLowerCase() : providerMode === 'professional' ? '1080p' : '720p')
+                  : quality.toLowerCase(),
                 speed: isGommoMotionSelected ? undefined : effectiveSpeedId || 'fast',
                 serverId: isGommoMotionSelected ? undefined : effectiveServerId,
                 providerMode: isGommoMotionSelected ? providerMode : undefined,

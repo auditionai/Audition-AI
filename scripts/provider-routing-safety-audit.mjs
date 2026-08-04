@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { buildGommoImageReferenceFields, buildGommoVideoReferenceFields, extractGommoCreateJobId, isGommoModelAvailable } from '../netlify/functions/_gommo-provider.ts';
 import { sortTstFallbackServers } from '../netlify/functions/_queue-worker.ts';
 import { buildLocalPricingOptionCandidates } from '../netlify/functions/queue-submit.ts';
-import { getAuditionProviderPricing, getGommoPricingInput, isSelectableGommoImageResolution, resolveProviderForModel } from '../services/providerCatalog.ts';
+import { buildProviderPricingOptionCandidates, getAuditionProviderPricing, getGommoPricingInput, isSelectableGommoImageResolution, resolveProviderForModel } from '../services/providerCatalog.ts';
 import { getAllowedModelsForFeature, inferGenerationProviderRouteKey, isModelAllowedForFeature } from '../shared/providerRouting.ts';
 import { getGommoModeForServerGroup, getGommoServerGroups, getGommoServerIdForMode, getPreferredGommoBasicMode } from '../shared/gommoServerRouting.ts';
 import { getVideoModelPresentation } from '../shared/videoModelPresentation.ts';
@@ -56,6 +56,12 @@ const grokOptions = buildLocalPricingOptionCandidates({
   speed: 'standard',
 });
 assert(grokOptions.includes('720p-6-standard'));
+
+const klingGommoPricingOptions = buildProviderPricingOptionCandidates({
+  duration: '10s',
+  providerMode: 'professional',
+});
+assert(klingGommoPricingOptions.includes('10s-professional'));
 
 const gommoOptions = buildLocalPricingOptionCandidates({
   model: 'image-gpt-2',

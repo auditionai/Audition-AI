@@ -50,6 +50,7 @@ import {
 import {
   fetchProviderCatalog,
   getAuditionProviderPricing,
+  getGommoCatalogPricingOptionId,
   getGommoPricingInput,
   getGommoModelForAudition,
   isGommoCatalogModelAvailable,
@@ -383,7 +384,11 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       speed: generationSpeedId,
       providerMode,
   });
-  const gommoSelectedPricing = getAuditionProviderPricing(auditionPricing, selectedModelId, gommoPricingInput, { allowGenericFallback: true });
+  const gommoPricingOptionId = getGommoCatalogPricingOptionId(selectedGommoModel, { resolution, providerMode });
+  const gommoSelectedPricing = getAuditionProviderPricing(auditionPricing, selectedModelId, gommoPricingInput, {
+      allowGenericFallback: true,
+      preferredOptionId: gommoPricingOptionId,
+  });
   const selectedGenerationCost = isGommoSelected
       ? { available: gommoSelectedPricing !== null, vcoin: gommoSelectedPricing?.vcoin || 0 }
       : tstSelectedGenerationCost;
@@ -393,7 +398,10 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
               auditionPricing,
               selectedModelId,
               getGommoPricingInput(selectedModelId, { ...gommoPricingInput, resolution: value }),
-              { allowGenericFallback: true },
+              {
+                  allowGenericFallback: true,
+                  preferredOptionId: getGommoCatalogPricingOptionId(selectedGommoModel, { resolution: value, providerMode }),
+              },
           )))
           : availableResolutions,
   );

@@ -37,8 +37,9 @@ import {
 import {
   fetchProviderCatalog,
   getAuditionProviderPricing,
+  getGommoCatalogPricingOptionId,
   getGommoPricingInput,
-  getMinimumAuditionModelPrice,
+  getMinimumAuditionCatalogModelPrice,
   getGommoModelForAudition,
   isGommoCatalogModelAvailable,
   resolveProviderForModel,
@@ -414,7 +415,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                 .map((model) => ({
                   id: model.auditionModelId,
                   name: model.name,
-                  price: getMinimumAuditionModelPrice(pricingConfig || [], model.auditionModelId) || 0,
+                  price: getMinimumAuditionCatalogModelPrice(pricingConfig || [], model) || 0,
                 }));
               const routedVideoModels = [...liveVideoModels, ...gommoVideoModels];
               const liveMotionModels = getMotionModelSpecs(livePricing, filteredModels)
@@ -440,7 +441,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                 .map((model) => ({
                   id: model.auditionModelId,
                   name: model.name,
-                  price: getMinimumAuditionModelPrice(pricingConfig || [], model.auditionModelId) || 0,
+                  price: getMinimumAuditionCatalogModelPrice(pricingConfig || [], model) || 0,
                 }));
               const routedMotionModels = [...liveMotionModels, ...gommoMotionModels];
 
@@ -568,9 +569,24 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
       audio: effectiveVideoAudio,
       providerMode,
   });
-  const gommoVideoPricing = getAuditionProviderPricing(auditionPricing, videoModel, gommoVideoPricingInput, { allowGenericFallback: true });
-  const gommoMotionPricingInput = getGommoPricingInput(motionModel, { providerMode });
-  const gommoMotionPricing = getAuditionProviderPricing(auditionPricing, motionModel, gommoMotionPricingInput, { allowGenericFallback: true });
+  const gommoVideoPricingOptionId = getGommoCatalogPricingOptionId(selectedGommoVideoModel, {
+      resolution: quality,
+      duration,
+      providerMode,
+  });
+  const gommoVideoPricing = getAuditionProviderPricing(auditionPricing, videoModel, gommoVideoPricingInput, {
+      allowGenericFallback: true,
+      preferredOptionId: gommoVideoPricingOptionId,
+  });
+  const gommoMotionPricingInput = getGommoPricingInput(motionModel, { resolution: quality, providerMode });
+  const gommoMotionPricingOptionId = getGommoCatalogPricingOptionId(selectedGommoMotionModel, {
+      resolution: quality,
+      providerMode,
+  });
+  const gommoMotionPricing = getAuditionProviderPricing(auditionPricing, motionModel, gommoMotionPricingInput, {
+      allowGenericFallback: true,
+      preferredOptionId: gommoMotionPricingOptionId,
+  });
   const selectedGommoPricing = isGommoMotionSelected ? gommoMotionPricing : gommoVideoPricing;
   const currentCostBreakdown = isGommoSelected
       ? {

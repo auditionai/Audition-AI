@@ -106,6 +106,7 @@ import { GiftcodeAbuseWorkspaceV2, TransactionsWorkspaceV2, UsersWorkspaceV2 } f
 import QueueWorkspaceV2 from './admin-v2/QueueWorkspaceV2';
 import AIUsageAnalyticsV2 from './admin-v2/AIUsageAnalyticsV2';
 import {
+    buildGommoCatalogPricingOptionId,
     fetchProviderCatalog,
     getAuditionProviderPricing,
     getGommoPricingInput,
@@ -904,10 +905,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           if (!model.fallbackSupported) return [];
           return model.prices.map((price) => {
               const duration = price.duration ? String(price.duration).replace(/s$/i, '') : '';
-              const configKey = [price.resolution, duration ? `${duration}s` : '', price.mode]
-                  .filter(Boolean)
-                  .join('-')
-                  .toLowerCase() || 'default';
+              const configKey = buildGommoCatalogPricingOptionId(price);
               const providerCredits = Number(price.price || 0);
               const convertedVcoin = gommoCatalog.vndPerCredit && providerCredits > 0
                   ? Math.max(1, Math.ceil((providerCredits * gommoCatalog.vndPerCredit) / 1000))

@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { buildGommoImageReferenceFields, buildGommoVideoReferenceFields, extractGommoCreateJobId, isGommoModelAvailable } from '../netlify/functions/_gommo-provider.ts';
 import { sortTstFallbackServers } from '../netlify/functions/_queue-worker.ts';
 import { buildLocalPricingOptionCandidates } from '../netlify/functions/queue-submit.ts';
-import { buildProviderPricingOptionCandidates, getAuditionProviderPricing, getGommoPricingInput, isSelectableGommoImageResolution, resolveProviderForModel } from '../services/providerCatalog.ts';
+import { buildGommoCatalogPricingOptionId, buildProviderPricingOptionCandidates, getAuditionProviderPricing, getGommoCatalogPricingOptionId, getGommoPricingInput, isSelectableGommoImageResolution, resolveProviderForModel } from '../services/providerCatalog.ts';
 import { getAllowedModelsForFeature, inferGenerationProviderRouteKey, isModelAllowedForFeature } from '../shared/providerRouting.ts';
 import { getGommoModeForServerGroup, getGommoServerGroups, getGommoServerIdForMode, getPreferredGommoBasicMode } from '../shared/gommoServerRouting.ts';
 import { getVideoModelPresentation } from '../shared/videoModelPresentation.ts';
@@ -74,6 +74,30 @@ assert.deepEqual(
     { allowGenericFallback: true },
   ),
   { optionId: '720p-6s', vcoin: 17 },
+);
+assert.equal(buildGommoCatalogPricingOptionId({ resolution: null, duration: '10', mode: 'professional' }), '10s-professional');
+assert.equal(buildGommoCatalogPricingOptionId({ resolution: '720p', duration: null, mode: 'quality' }), '720p-quality');
+assert.equal(buildGommoCatalogPricingOptionId({ resolution: null, duration: null, mode: 'standard' }), 'standard');
+assert.equal(getGommoPricingInput('motion-control-3.0', { providerMode: 'standard' }).resolution, '720p');
+assert.equal(getGommoPricingInput('motion-control-3.0', { providerMode: 'professional' }).resolution, '1080p');
+assert.equal(
+  getGommoCatalogPricingOptionId({ prices: [
+    { resolution: '720p', duration: '6', mode: 'fast', price: 1 },
+    { resolution: '1080p', duration: '6', mode: 'fast', price: 2 },
+  ] }, { resolution: '1080P', duration: '6S', providerMode: 'fast' }),
+  '1080p-6s-fast',
+);
+assert.deepEqual(
+  getAuditionProviderPricing(
+    [
+      { model_id: 'kling-2.6', option_id: '720p-5s-standard', audition_price_vcoin: 99 },
+      { model_id: 'kling-2.6', option_id: '5s-standard', audition_price_vcoin: 12 },
+    ],
+    'kling-2.6',
+    getGommoPricingInput('kling-2.6', { duration: '5s', providerMode: 'standard' }),
+    { allowGenericFallback: true, preferredOptionId: '5s-standard' },
+  ),
+  { optionId: '5s-standard', vcoin: 12 },
 );
 
 const klingGommoPricingOptions = buildProviderPricingOptionCandidates({

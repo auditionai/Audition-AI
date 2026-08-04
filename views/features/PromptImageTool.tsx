@@ -35,6 +35,7 @@ import { isModelAllowedForFeature } from '../../shared/providerRouting';
 import {
   fetchProviderCatalog,
   getAuditionProviderPricing,
+  getGommoCatalogPricingOptionId,
   getGommoPricingInput,
   getGommoModelForAudition,
   isGommoCatalogModelAvailable,
@@ -305,7 +306,11 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
     speed: generationSpeedId,
     providerMode,
   });
-  const gommoPricing = getAuditionProviderPricing(pricingOverrides, selectedModelId, gommoPricingInput, { allowGenericFallback: true });
+  const gommoPricingOptionId = getGommoCatalogPricingOptionId(selectedGommoModel, { resolution, providerMode });
+  const gommoPricing = getAuditionProviderPricing(pricingOverrides, selectedModelId, gommoPricingInput, {
+    allowGenericFallback: true,
+    preferredOptionId: gommoPricingOptionId,
+  });
   const selectedCost = isGommoSelected
     ? { available: gommoPricing !== null && isGommoCatalogModelAvailable(selectedGommoModel), vcoin: gommoPricing?.vcoin || 0 }
     : tstSelectedCost;
@@ -321,7 +326,10 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
                 quality: aiModel === 'gpt' ? gptQuality : undefined,
                 speed: generationSpeedId,
                 providerMode,
-              }), { allowGenericFallback: true })?.vcoin || 0
+              }), {
+                allowGenericFallback: true,
+                preferredOptionId: getGommoCatalogPricingOptionId(selectedGommoModel, { resolution: item, providerMode }),
+              })?.vcoin || 0
             : getGenerationCostBreakdown({
             tier: aiModel,
             resolution: item as TstResolution,
@@ -333,7 +341,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
           }).vcoin) * modeCountForPrice,
         ]),
       ) as Record<string, number>,
-    [aiModel, availableResolutions, generationServerId, generationSpeedId, gptQuality, isGommoSelected, modeCountForPrice, pricingEntries, pricingOverrideRows, pricingOverrides, providerMode, selectedModelId],
+    [aiModel, availableResolutions, generationServerId, generationSpeedId, gptQuality, isGommoSelected, modeCountForPrice, pricingEntries, pricingOverrideRows, pricingOverrides, providerMode, selectedGommoModel, selectedModelId],
   );
   const availableSpeedLabels = isGommoSelected ? [] : availableSpeeds.map((speedId) => speedIdToLabel(speedId));
   const availableServerLabels = isGommoSelected ? [] : availableServers.map((serverId) => tstServerToUi(serverId));

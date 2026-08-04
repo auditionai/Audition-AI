@@ -42,6 +42,32 @@ export type GommoCatalogOption = {
   adminEnabled?: boolean;
 };
 
+export const buildGommoCatalogPricingOptionId = (price: Pick<GommoCatalogPrice, 'mode' | 'resolution' | 'duration'>) => {
+  const duration = normalizeDuration(price.duration);
+  return [normalize(price.resolution), duration ? `${duration}s` : '', normalize(price.mode)]
+    .filter(Boolean)
+    .join('-') || 'default';
+};
+
+export const getGommoCatalogPricingOptionId = (
+  model: GommoCatalogModel | null | undefined,
+  input: { resolution?: string; duration?: string; providerMode?: string },
+) => {
+  if (!model?.prices?.length) return null;
+  const resolution = normalize(input.resolution);
+  const duration = normalizeDuration(input.duration);
+  const providerMode = normalize(input.providerMode);
+  const match = model.prices.find((price) => {
+    const priceResolution = normalize(price.resolution);
+    const priceDuration = normalizeDuration(price.duration);
+    const priceMode = normalize(price.mode);
+    return (!priceResolution || priceResolution === resolution)
+      && (!priceDuration || priceDuration === duration)
+      && (!priceMode || priceMode === providerMode);
+  });
+  return match ? buildGommoCatalogPricingOptionId(match) : null;
+};
+
 export type GommoProviderCatalog = {
   configured: boolean;
   domain: string;
@@ -146,10 +172,13 @@ export const getAuditionProviderPrice = (
   pricing: ModelPricing[],
   modelId: string,
   input: Parameters<typeof buildProviderPricingOptionCandidates>[0],
-  options?: { allowGenericFallback?: boolean },
+  options?: { allowGenericFallback?: boolean; preferredOptionId?: string | null },
 ) => {
   const rows = pricing.filter((row) => normalize(row.model_id) === normalize(modelId));
-  const candidates = buildProviderPricingOptionCandidates(input).filter((candidate) =>
+  const candidates = Array.from(new Set([
+    normalize(options?.preferredOptionId),
+    ...buildProviderPricingOptionCandidates(input),
+  ].filter(Boolean))).filter((candidate) =>
     options?.allowGenericFallback === false
       ? !['default', normalize(input.speed), `default-${normalize(input.speed)}`].includes(candidate)
       : true,
@@ -164,10 +193,13 @@ export const getAuditionProviderPricing = (
   pricing: ModelPricing[],
   modelId: string,
   input: Parameters<typeof buildProviderPricingOptionCandidates>[0],
-  options?: { allowGenericFallback?: boolean },
+  options?: { allowGenericFallback?: boolean; preferredOptionId?: string | null },
 ) => {
   const rows = pricing.filter((row) => normalize(row.model_id) === normalize(modelId));
-  const candidates = buildProviderPricingOptionCandidates(input).filter((candidate) =>
+  const candidates = Array.from(new Set([
+    normalize(options?.preferredOptionId),
+    ...buildProviderPricingOptionCandidates(input),
+  ].filter(Boolean))).filter((candidate) =>
     options?.allowGenericFallback === false
       ? !['default', normalize(input.speed), `default-${normalize(input.speed)}`].includes(candidate)
       : true,
@@ -190,7 +222,9 @@ export const getGommoPricingInput = (
     : normalizedModelId === 'nano-banana-pro' && mode === 'relaxed'
       ? 'slow'
       : input.speed || 'fast';
-  const resolution = normalizedModelId.startsWith('kling-')
+  const resolution = normalizedModelId === 'motion-control-2.6' || normalizedModelId === 'motion-control-3.0'
+    ? mode === 'professional' ? '1080p' : mode === 'standard' ? '720p' : input.resolution
+    : normalizedModelId.startsWith('kling-')
     ? mode.startsWith('professional') ? '1080p' : '720p'
     : input.resolution;
   return {
@@ -205,6 +239,20 @@ export const getGommoPricingInput = (
 export const getMinimumAuditionModelPrice = (pricing: ModelPricing[], modelId: string) => {
   const values = pricing
     .filter((row) => normalize(row.model_id) === normalize(modelId))
+    .map((row) => Number(row.audition_price_vcoin))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  return values.length ? Math.ceil(Math.min(...values)) : null;
+};
+
+export const getMinimumAuditionCatalogModelPrice = (
+  pricing: ModelPricing[],
+  model: GommoCatalogModel | null | undefined,
+) => {
+  if (!model) return null;
+  const currentOptionIds = new Set(model.prices.map(buildGommoCatalogPricingOptionId));
+  const values = pricing
+    .filter((row) => normalize(row.model_id) === normalize(model.auditionModelId))
+    .filter((row) => currentOptionIds.has(normalize(row.option_id)))
     .map((row) => Number(row.audition_price_vcoin))
     .filter((value) => Number.isFinite(value) && value > 0);
   return values.length ? Math.ceil(Math.min(...values)) : null;

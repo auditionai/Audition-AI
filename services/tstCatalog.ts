@@ -58,6 +58,7 @@ export interface TstVideoModelSpec {
   aspectRatios: string[];
   speeds: string[];
   supportsAudio: boolean;
+  supportsEndFrame: boolean;
   minCredits: number;
   maxCredits: number;
 }
@@ -774,6 +775,7 @@ const getFallbackVideoSpec = (modelId: string, name?: string): TstVideoModelSpec
     aspectRatios: [],
     speeds: [],
     supportsAudio: false,
+    supportsEndFrame: false,
     minCredits: 0,
     maxCredits: 0,
   };
@@ -1151,7 +1153,7 @@ export const fetchTstPricing = async (forceRefresh = false): Promise<TstPricingE
 
   if (!pricingPromise) {
     const url = forceRefresh ? '/api/tst-models-pricing?force=1' : '/api/tst-models-pricing';
-    pricingPromise = fetchCatalogJsonWithRetry(url, 'Failed to load TST pricing')
+    pricingPromise = fetchCatalogJsonWithRetry(url, 'Failed to load provider pricing')
       .then(async (data) => {
         pricingCache = Array.isArray(data?.pricing) ? data.pricing.map(mapPricingEntry) : [];
         pricingCacheFetchedAt = Date.now();
@@ -1183,7 +1185,7 @@ export const fetchTstModels = async (forceRefresh = false): Promise<TstRuntimeMo
 
   if (!modelsPromise) {
     const url = forceRefresh ? '/api/tst-models?force=1' : '/api/tst-models';
-    modelsPromise = fetchCatalogJsonWithRetry(url, 'Failed to load TST models')
+    modelsPromise = fetchCatalogJsonWithRetry(url, 'Failed to load provider models')
       .then(async (data) => {
         modelsCache = Array.isArray(data?.models) ? data.models.map(mapRuntimeModel) : [];
         modelsCacheFetchedAt = Date.now();
@@ -1532,6 +1534,13 @@ export const getVideoModelSpecs = (
       aspectRatios: getCapabilityAspectRatios(model),
       speeds,
       supportsAudio: Boolean(model.capabilities?.audio ?? fallback.supportsAudio),
+      supportsEndFrame: (() => {
+        const modelId = normalizeModelId(model.model);
+        const paramsText = JSON.stringify(model.params || {}).toLowerCase();
+        return modelId === 'veo3.1-omni'
+          || modelId === 'veo-omni'
+          || /end[_ -]?(image|frame)|last[_ -]?frame|start.{0,24}end/.test(paramsText);
+      })(),
       minCredits: credits.length > 0 ? Math.min(...credits) : fallback.minCredits,
       maxCredits: credits.length > 0 ? Math.max(...credits) : fallback.maxCredits,
     };

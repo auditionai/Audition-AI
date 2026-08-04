@@ -500,6 +500,7 @@ export interface VideoGenerateRecipePayload {
   providerMode?: string;
   pricingOptionId?: string;
   keyframeImage?: string | null;
+  endFrameImage?: string | null;
   audio?: boolean;
 }
 
@@ -510,6 +511,9 @@ export interface MotionGenerateRecipePayload {
   resolution?: string;
   speed?: string;
   serverId?: string;
+  providerMode?: string;
+  pricingOptionId?: string;
+  backgroundSource?: 'input_image' | 'input_video';
   characterImage: string;
   motionVideoDataUrl: string;
   motionVideoDurationSeconds?: number | null;
@@ -1849,8 +1853,11 @@ export const getRecipeValidationPayload = (payload: QueueRecipePayload) => {
       return {
         model: payload.modelId,
         resolution: payload.resolution?.toLowerCase(),
+        duration: payload.motionVideoDurationSeconds,
         speed: payload.speed,
         server_id: payload.serverId,
+        provider_mode: payload.providerMode,
+        config_key: payload.pricingOptionId,
       };
     default:
       return {};

@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-import { isGommoModelAvailable } from '../netlify/functions/_gommo-provider.ts';
+import { buildGommoImageReferenceFields, buildGommoVideoReferenceFields, extractGommoCreateJobId, isGommoModelAvailable } from '../netlify/functions/_gommo-provider.ts';
 import { sortTstFallbackServers } from '../netlify/functions/_queue-worker.ts';
 import { buildLocalPricingOptionCandidates } from '../netlify/functions/queue-submit.ts';
-import { getAuditionProviderPricing, getGommoPricingInput, isSelectableGommoImageResolution, resolveProviderForModel } from '../services/providerCatalog.ts';
+import { buildGommoCatalogPricingOptionId, buildProviderPricingOptionCandidates, getAuditionProviderPricing, getGommoCatalogPricingOptionId, getGommoPricingInput, isSelectableGommoImageResolution, resolveProviderForModel } from '../services/providerCatalog.ts';
 import { getAllowedModelsForFeature, inferGenerationProviderRouteKey, isModelAllowedForFeature } from '../shared/providerRouting.ts';
 import { getGommoModeForServerGroup, getGommoServerGroups, getGommoServerIdForMode, getPreferredGommoBasicMode } from '../shared/gommoServerRouting.ts';
 import { getVideoModelPresentation } from '../shared/videoModelPresentation.ts';
@@ -55,7 +55,56 @@ const grokOptions = buildLocalPricingOptionCandidates({
   duration: '6s',
   speed: 'standard',
 });
+assert(grokOptions.includes('720p-6s'));
 assert(grokOptions.includes('720p-6-standard'));
+
+const grokAdminPricing = [
+  { model_id: 'grok-i2v', option_id: '720p-6s', audition_price_vcoin: 17 },
+  { model_id: 'grok-i2v', option_id: 'normal', audition_price_vcoin: 9 },
+];
+assert.deepEqual(
+  getAuditionProviderPricing(
+    grokAdminPricing,
+    'grok-i2v',
+    getGommoPricingInput('grok-i2v', {
+      resolution: '720P',
+      duration: '6S',
+      providerMode: 'normal',
+    }),
+    { allowGenericFallback: true },
+  ),
+  { optionId: '720p-6s', vcoin: 17 },
+);
+assert.equal(buildGommoCatalogPricingOptionId({ resolution: null, duration: '10', mode: 'professional' }), '10s-professional');
+assert.equal(buildGommoCatalogPricingOptionId({ resolution: '720p', duration: null, mode: 'quality' }), '720p-quality');
+assert.equal(buildGommoCatalogPricingOptionId({ resolution: null, duration: null, mode: 'standard' }), 'standard');
+assert.equal(getGommoPricingInput('motion-control-3.0', { providerMode: 'standard' }).resolution, '720p');
+assert.equal(getGommoPricingInput('motion-control-3.0', { providerMode: 'professional' }).resolution, '1080p');
+assert.equal(
+  getGommoCatalogPricingOptionId({ prices: [
+    { resolution: '720p', duration: '6', mode: 'fast', price: 1 },
+    { resolution: '1080p', duration: '6', mode: 'fast', price: 2 },
+  ] }, { resolution: '1080P', duration: '6S', providerMode: 'fast' }),
+  '1080p-6s-fast',
+);
+assert.deepEqual(
+  getAuditionProviderPricing(
+    [
+      { model_id: 'kling-2.6', option_id: '720p-5s-standard', audition_price_vcoin: 99 },
+      { model_id: 'kling-2.6', option_id: '5s-standard', audition_price_vcoin: 12 },
+    ],
+    'kling-2.6',
+    getGommoPricingInput('kling-2.6', { duration: '5s', providerMode: 'standard' }),
+    { allowGenericFallback: true, preferredOptionId: '5s-standard' },
+  ),
+  { optionId: '5s-standard', vcoin: 12 },
+);
+
+const klingGommoPricingOptions = buildProviderPricingOptionCandidates({
+  duration: '10s',
+  providerMode: 'professional',
+});
+assert(klingGommoPricingOptions.includes('10s-professional'));
 
 const gommoOptions = buildLocalPricingOptionCandidates({
   model: 'image-gpt-2',
@@ -102,6 +151,45 @@ assert.deepEqual(
 );
 assert.equal(isGommoModelAvailable({ model: 'test', name: 'Test', status: 'unavailable' }), false);
 assert.equal(isGommoModelAvailable({ model: 'test', name: 'Test', status: 'on' }), true);
+const uploadedGommoReferences = [
+  { id_base: 'upload-1', url: 'https://cdn.example.com/one.png', data: '' },
+  { id_base: 'upload-2', url: 'https://cdn.example.com/two.png', data: '' },
+];
+assert.deepEqual(
+  buildGommoImageReferenceFields({ model: 'imagegen_2_0', name: 'GPT Image 2', withSubject: true, maxSubject: 8 }, uploadedGommoReferences),
+  { subjects: ['https://cdn.example.com/one.png', 'https://cdn.example.com/two.png'] },
+);
+assert.deepEqual(
+  buildGommoImageReferenceFields({ model: 'other', name: 'Other', startImage: true }, uploadedGommoReferences),
+  { images: [{ url: 'https://cdn.example.com/one.png' }] },
+);
+assert.deepEqual(
+  buildGommoVideoReferenceFields({ model: 'kling_video_2_6', name: 'Kling 2.6', startImage: true }, uploadedGommoReferences),
+  { images: [{ url: 'https://cdn.example.com/one.png', id_base: 'upload-1' }] },
+);
+assert.deepEqual(
+  buildGommoVideoReferenceFields({ model: 'kling_video_o1', name: 'Kling O1', startImage: true, startImageAndEnd: true }, uploadedGommoReferences),
+  { images: [
+    { url: 'https://cdn.example.com/one.png', id_base: 'upload-1' },
+    { url: 'https://cdn.example.com/two.png', id_base: 'upload-2' },
+  ] },
+);
+assert.deepEqual(
+  buildGommoVideoReferenceFields({ model: 'text_video', name: 'Text Video', startImage: false }, uploadedGommoReferences),
+  {},
+);
+assert.equal(
+  extractGommoCreateJobId({ success: true, imageInfo: { id_base: 'image-job', status: 'PENDING_ACTIVE' } }, 'image'),
+  'image-job',
+);
+assert.equal(
+  extractGommoCreateJobId({ success: true, imageInfo: { id_base: 'failed-job', status: 'ERROR' } }, 'image'),
+  '',
+);
+assert.equal(
+  extractGommoCreateJobId({ videoInfo: { id_base: 'video-job', status: 'MEDIA_GENERATION_STATUS_PENDING' } }, 'video'),
+  'video-job',
+);
 assert.equal(inferGenerationProviderRouteKey({ queueKind: 'image_generate', queuePayload: { recipeType: 'image_generate_recipe_v1', characterCount: 8 } }), 'image_group_8');
 assert.equal(inferGenerationProviderRouteKey({ queueKind: 'video_generate', queuePayload: {} }), 'video_generation');
 assert.deepEqual(getAllowedModelsForFeature(null, 'image_group_8'), ['image-gpt-2']);
@@ -130,22 +218,37 @@ assert(!workerSource.includes('prepareProviderPayloadFromQueueRecipe(currentPayl
 const gommoSource = await readFile(new URL('../netlify/functions/_gommo-provider.ts', import.meta.url), 'utf8');
 assert(gommoSource.includes('resolution: providerPayload.resolution'));
 assert(gommoSource.includes('normalizeAndValidateGommoPayload'));
-assert(gommoSource.includes("'https://v2.api.gommo.net'"));
+assert(gommoSource.includes("'https://api.gommo.net'"));
 assert(gommoSource.includes('Authorization: `Bearer ${credentials.access_token}`'));
-assert(gommoSource.includes('/ai/jobs/image/${encodeURIComponent(mapping.gommoModelId)}'));
-assert(gommoSource.includes('/ai/jobs/${encodeURIComponent(providerJobId)}?media=${media}'));
-assert(gommoSource.includes("model.withSubject ? 'subjects' : model.withReference ? 'references' : 'images'"));
+assert(gommoSource.includes("postForm('/ai/image-upload'"));
+assert(gommoSource.includes("postForm('/ai/generateImage'"));
+assert(gommoSource.includes("postForm('/ai/create-video'"));
+assert(gommoSource.includes("postMultipart('/ai/create-video'"));
+assert(gommoSource.includes("{ field: 'character_image', ...characterImage }"));
+assert(gommoSource.includes("{ field: 'motion_video', ...motionVideo }"));
+assert(gommoSource.includes("auditionModelId: 'motion-control-2.6', gommoModelId: 'kling_video_motion', kind: 'motion', fallbackSupported: true"));
+assert(gommoSource.includes("auditionModelId: 'motion-control-3.0', gommoModelId: 'kling_video_motion_3', kind: 'motion', fallbackSupported: false"));
+assert(gommoSource.includes("media === 'image' ? '/ai/image' : '/ai/video'"));
+assert(gommoSource.includes("media === 'image' ? { id_base: providerJobId } : { videoId: providerJobId }"));
+assert(gommoSource.includes("model.withSubject ? 'subjects' : 'images'"));
 assert(gommoSource.includes('maxReferenceImages'));
 assert(gommoSource.includes('GOMMO_SERVER_DISABLED'));
 assert(gommoSource.includes("isProviderServerAllowedByConfig('gommo'"));
 assert(gommoSource.includes('getGommoServerIdForMode(normalized.model, mode)'));
 assert(gommoSource.includes("case 'image-gpt-2': return `${quality || 'low'}_basic`;"));
-assert(gommoSource.includes('subjects: getUrlObjects(limitedSources)'));
-assert(gommoSource.includes('references: getUrlObjects(limitedSources)'));
-assert(gommoSource.includes('images: imageSources.length ? getUrlObjects(imageSources) : undefined'));
+assert(gommoSource.includes('if (model.withSubject) return { subjects: limitedSources.map((source) => source.url) }'));
+assert(gommoSource.includes('.map((source) => ({ url: source.url }))'));
+assert(gommoSource.includes('const extractGommoCreateJobId'));
+assert(gommoSource.includes("if (media === 'image' && data?.success !== true) return"));
+assert(gommoSource.includes('Boolean(data?.error)'));
+assert(gommoSource.includes('...buildGommoVideoReferenceFields(normalized.model, uploadedImages)'));
+assert(gommoSource.includes('normalized.model.startImageAndEnd ? 2 : 1'));
+assert(gommoSource.includes("return { id_base: idBase, url, data: '' }"));
 assert(!gommoSource.includes('[${index}][url]'));
 assert(gommoSource.includes('data?.raw?.imageInfo?.message'));
 assert(gommoSource.includes('data?.raw?.videoInfo?.message'));
+assert(gommoSource.includes("if (data?.imageInfo && typeof data.imageInfo === 'object') return data.imageInfo"));
+assert(gommoSource.includes("if (data?.videoInfo && typeof data.videoInfo === 'object') return data.videoInfo"));
 
 const tstCatalogSource = await readFile(new URL('../services/tstCatalog.ts', import.meta.url), 'utf8');
 assert(tstCatalogSource.includes("String(entry.key || entry.config_key || '')"));
@@ -168,6 +271,8 @@ assert(queueSubmitSource.includes('__providerRouteKey'));
 assert(queueSubmitSource.includes('sampleImage: null'));
 assert(queueSubmitSource.includes('MODEL_NOT_ALLOWED_FOR_FEATURE'));
 assert(queueSubmitSource.includes('GOMMO_SERVER_DISABLED'));
+assert(queueSubmitSource.includes("queueKind === 'motion_generate'"));
+assert(queueSubmitSource.includes('motionVideoDurationSeconds'));
 
 const recipeSource = await readFile(new URL('../netlify/functions/_queue-recipes.ts', import.meta.url), 'utf8');
 assert(recipeSource.includes('uploadReferencesToTst ? (isUserOnlyPrompt ? 5 : 4) : 8'));
@@ -176,6 +281,8 @@ assert(recipeSource.includes('export const prepareGommoProviderPayloadFromQueueR
 assert(recipeSource.includes('prepareProviderPayloadFromQueueRecipe(payload, { uploadReferencesToTst: true })'));
 assert(recipeSource.includes('prepareProviderPayloadFromQueueRecipe(payload, { uploadReferencesToTst: false })'));
 assert(recipeSource.includes('GOMMO_UNSUPPORTED_RECIPE'));
+assert(recipeSource.includes("payload.recipeType === 'motion_generate_recipe_v1'"));
+assert(recipeSource.includes("background_source: payload.backgroundSource || 'input_image'"));
 assert(!gommoSource.includes('uploadImageToTst'));
 assert(!gommoSource.includes('TST_API'));
 
@@ -220,6 +327,9 @@ for (const filename of ['../views/features/VideoTool.tsx', '../mobile-app/src/v2
   assert(source.includes('activeSectionTips.upload'));
   assert(source.includes('activeSectionTips.settings'));
   assert(source.includes('activeSectionTips.render'));
+  assert(source.includes('isGommoMotionSelected'));
+  assert(source.includes('gommoMotionPricing'));
+  assert(source.includes("backgroundSource: isGommoMotionSelected ? 'input_image' : undefined") || source.includes("backgroundSource: 'input_image'"));
 }
 const desktopImageSource = await readFile(new URL('../views/features/GenerationTool.tsx', import.meta.url), 'utf8');
 const desktopVideoSource = await readFile(new URL('../views/features/VideoTool.tsx', import.meta.url), 'utf8');

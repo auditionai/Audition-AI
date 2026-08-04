@@ -34,7 +34,7 @@ export const About: React.FC<AboutProps> = ({ lang }) => {
             {lang === 'vi' ? 'Về chúng tôi' : 'About Us'}
           </h2>
           <p className="text-xs text-slate-500 leading-relaxed">
-            Audition AI Studio là nền tảng tạo và chỉnh sửa nội dung đa phương tiện 3D thế hệ mới, tích hợp công nghệ AI từ Google Gemini 3.0 & TST Video Engine để hỗ trợ cộng đồng sáng tạo hình ảnh, video chất lượng cao.
+            Audition AI Studio là nền tảng tạo và chỉnh sửa nội dung đa phương tiện 3D thế hệ mới, tích hợp nhiều công nghệ AI tiên tiến để hỗ trợ cộng đồng sáng tạo hình ảnh, video chất lượng cao.
           </p>
         </div>
 
@@ -50,7 +50,7 @@ export const About: React.FC<AboutProps> = ({ lang }) => {
             </li>
             <li className="flex items-center gap-3">
               <div className="w-8 h-8 neu-inset-sm rounded-xl flex items-center justify-center text-[#21D4FD] font-bold">2</div>
-              <span>TST Video Suite (Kling AI, Veo, Wan 2.1, Nano Banana Pro)</span>
+              <span>AI Video Suite (Kling AI, Veo, Wan 2.1, Nano Banana Pro)</span>
             </li>
           </ul>
         </div>

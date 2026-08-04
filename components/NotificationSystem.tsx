@@ -1,6 +1,7 @@
 
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { Icons } from './Icons';
+import { sanitizeProviderDisplayText } from '../shared/providerDisplay';
 
 type NotificationType = 'success' | 'error' | 'info' | 'warning';
 
@@ -44,7 +45,7 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
 
   const notify = useCallback((message: string, type: NotificationType = 'info') => {
     const id = Date.now();
-    setToasts((prev) => [...prev, { id, message, type }]);
+    setToasts((prev) => [...prev, { id, message: sanitizeProviderDisplayText(message), type }]);
     
     // Auto dismiss
     setTimeout(() => {
@@ -53,7 +54,12 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
   }, []);
 
   const confirm = useCallback((options: ConfirmOptions) => {
-    setConfirmModal({ ...options, isOpen: true });
+    setConfirmModal({
+      ...options,
+      title: sanitizeProviderDisplayText(options.title),
+      message: sanitizeProviderDisplayText(options.message),
+      isOpen: true,
+    });
   }, []);
 
   const closeConfirm = () => {

@@ -48,7 +48,7 @@ const buildSuggestedFailureMessage = (rawMessage: string, lower: string) => {
 
   if (isConnectionDrop) {
     return withRawDetail(
-      'Ket noi toi TST/provider bi dong giua chung. Goi y: thu lai sau vai phut; neu dang tao video bang Grok, hay thu Seedance hoac Kling vi day thuong la loi provider/upstream, khong phai loi anh hay prompt.',
+      'Ket noi toi dich vu AI bi dong giua chung. Goi y: thu lai sau vai phut; neu dang tao video bang Grok, hay thu Seedance hoac Kling vi day thuong la loi provider/upstream, khong phai loi anh hay prompt.',
       rawMessage,
     );
   }
@@ -62,7 +62,7 @@ const buildSuggestedFailureMessage = (rawMessage: string, lower: string) => {
 
   if (isTimeout) {
     return withRawDetail(
-      'TST/provider xu ly qua lau hoac gateway timeout. Goi y: thu lai sau, doi server/model, giam so anh tham chieu hoac rut gon prompt neu prompt qua dai.',
+      'Dich vu AI xu ly qua lau hoac gateway timeout. Goi y: thu lai sau, doi server/model, giam so anh tham chieu hoac rut gon prompt neu prompt qua dai.',
       rawMessage,
     );
   }
@@ -83,7 +83,7 @@ const buildSuggestedFailureMessage = (rawMessage: string, lower: string) => {
 
   if (isMediaError) {
     return withRawDetail(
-      'TST khong doc duoc media dau vao. Goi y: tai lai anh/video ro net, dung dinh dang JPG/PNG/MP4, tranh file qua nang; voi Motion Control nen dung video mau duoi 30 giay.',
+      'Dich vu AI khong doc duoc media dau vao. Goi y: tai lai anh/video ro net, dung dinh dang JPG/PNG/MP4, tranh file qua nang; voi Motion Control nen dung video mau duoi 30 giay.',
       rawMessage,
     );
   }
@@ -98,13 +98,13 @@ const buildSuggestedFailureMessage = (rawMessage: string, lower: string) => {
 
   if (isModerationOrInputRejected) {
     return withRawDetail(
-      'TST/provider tu choi input theo bo loc dau vao. Goi y: doi cach viet prompt, tranh tu khoa nhay cam, hoac thay anh/video dau vao roi tao lai.',
+      'Dich vu AI tu choi input theo bo loc dau vao. Goi y: doi cach viet prompt, tranh tu khoa nhay cam, hoac thay anh/video dau vao roi tao lai.',
       rawMessage,
     );
   }
 
   return withRawDetail(
-    'TST/provider bao loi khi tao ket qua. Goi y: thu lai sau, doi server/model, hoac kiem tra lai prompt va media dau vao neu loi lap lai.',
+    'Dich vu AI bao loi khi tao ket qua. Goi y: thu lai sau, doi server/model, hoac kiem tra lai prompt va media dau vao neu loi lap lai.',
     rawMessage,
   );
 };
@@ -169,7 +169,7 @@ export const classifyQueueError = (message?: string | null): QueueErrorInfo => {
     return {
       rawMessage,
       displayMessage: withRawDetail(
-        'Cau hinh TST ma app dang chon khong con hop le. Goi y: doi server/model khac hoac bao admin dong bo lai bang gia TST.',
+        'Cau hinh may chu ma app dang chon khong con hop le. Goi y: doi server/model khac hoac bao admin dong bo lai bang gia.',
         rawMessage,
       ),
       category: 'config',
@@ -208,7 +208,7 @@ export const classifyQueueError = (message?: string | null): QueueErrorInfo => {
     return {
       rawMessage,
       displayMessage: withRawDetail(
-        'Queue bi ket hoac chuan bi payload qua lau truoc khi gui sang TST. Day la loi pipeline noi bo, khong phai loi input.',
+        'Queue bi ket hoac chuan bi payload qua lau truoc khi gui sang dich vu AI. Day la loi pipeline noi bo, khong phai loi input.',
         rawMessage,
       ),
       category: 'queue',

@@ -160,7 +160,7 @@ const submitJob = async (endpoint: string, payload: Record<string, unknown>, onL
   const jobId = extractJobId(data);
 
   if (!jobId) {
-    throw new Error(`TST did not return job_id: ${JSON.stringify(data)}`);
+    throw new Error(`Provider did not return job_id: ${JSON.stringify(data)}`);
   }
 
   onLog(`Job created (${jobId})`);

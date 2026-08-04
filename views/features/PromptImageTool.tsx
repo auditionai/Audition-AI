@@ -35,6 +35,7 @@ import { isModelAllowedForFeature } from '../../shared/providerRouting';
 import {
   fetchProviderCatalog,
   getAuditionProviderPricing,
+  getGommoCatalogPricingOptionId,
   getGommoPricingInput,
   getGommoModelForAudition,
   isGommoCatalogModelAvailable,
@@ -305,7 +306,11 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
     speed: generationSpeedId,
     providerMode,
   });
-  const gommoPricing = getAuditionProviderPricing(pricingOverrides, selectedModelId, gommoPricingInput, { allowGenericFallback: true });
+  const gommoPricingOptionId = getGommoCatalogPricingOptionId(selectedGommoModel, { resolution, providerMode });
+  const gommoPricing = getAuditionProviderPricing(pricingOverrides, selectedModelId, gommoPricingInput, {
+    allowGenericFallback: true,
+    preferredOptionId: gommoPricingOptionId,
+  });
   const selectedCost = isGommoSelected
     ? { available: gommoPricing !== null && isGommoCatalogModelAvailable(selectedGommoModel), vcoin: gommoPricing?.vcoin || 0 }
     : tstSelectedCost;
@@ -321,7 +326,10 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
                 quality: aiModel === 'gpt' ? gptQuality : undefined,
                 speed: generationSpeedId,
                 providerMode,
-              }), { allowGenericFallback: true })?.vcoin || 0
+              }), {
+                allowGenericFallback: true,
+                preferredOptionId: getGommoCatalogPricingOptionId(selectedGommoModel, { resolution: item, providerMode }),
+              })?.vcoin || 0
             : getGenerationCostBreakdown({
             tier: aiModel,
             resolution: item as TstResolution,
@@ -333,7 +341,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
           }).vcoin) * modeCountForPrice,
         ]),
       ) as Record<string, number>,
-    [aiModel, availableResolutions, generationServerId, generationSpeedId, gptQuality, isGommoSelected, modeCountForPrice, pricingEntries, pricingOverrideRows, pricingOverrides, providerMode, selectedModelId],
+    [aiModel, availableResolutions, generationServerId, generationSpeedId, gptQuality, isGommoSelected, modeCountForPrice, pricingEntries, pricingOverrideRows, pricingOverrides, providerMode, selectedGommoModel, selectedModelId],
   );
   const availableSpeedLabels = isGommoSelected ? [] : availableSpeeds.map((speedId) => speedIdToLabel(speedId));
   const availableServerLabels = isGommoSelected ? [] : availableServers.map((serverId) => tstServerToUi(serverId));
@@ -404,7 +412,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
       return;
     }
     if (!selectedCost.available || totalCost <= 0) {
-      notify('Cấu hình giá cho model này chưa khả dụng. Vui lòng kiểm tra bảng giá admin/TST.', 'error');
+      notify('Cấu hình giá cho model này chưa khả dụng. Vui lòng kiểm tra bảng giá quản trị.', 'error');
       return;
     }
 
@@ -549,7 +557,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
               maxLength={MAX_PROMPT_CHARACTERS}
-              placeholder={`Nhập prompt tạo ảnh. Hệ thống chỉ gửi prompt này và ảnh tham chiếu sang ${isGommoSelected ? 'Gommo' : 'TST'}, không chèn prompt hệ thống Audition.`}
+              placeholder="Nhập prompt tạo ảnh. Hệ thống chỉ gửi prompt này và ảnh tham chiếu sang nguồn đã cấu hình, không chèn prompt hệ thống Audition."
               rows={12}
               className="block w-full min-h-[340px] max-h-[760px] rounded-xl border border-white/10 bg-black/40 p-4 text-sm leading-relaxed text-white outline-none focus:border-audi-pink resize-y overflow-auto placeholder:text-slate-500"
             />
@@ -667,7 +675,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
 
             {isGommoSelected && gommoModes.length > 0 && (
               <div className="space-y-3 animate-fade-in">
-                <label className="text-[10px] font-bold text-cyan-300 uppercase">Máy chủ / chế độ Gommo · realtime</label>
+                <label className="text-[10px] font-bold text-cyan-300 uppercase">Máy chủ / chế độ · realtime</label>
                 <div className="grid grid-cols-2 gap-2 bg-black/30 p-1.5 rounded-xl border border-cyan-400/10">
                   {gommoModes.map((option) => (
                     <button

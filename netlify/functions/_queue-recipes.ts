@@ -739,6 +739,12 @@ const prepareProviderPayloadFromQueueRecipe = async (
           : await uploadImageToTst(payload.keyframeImage);
         providerPayload.img_url = keyframeUrl;
         providerPayload.image_url = keyframeUrl;
+        if (payload.endFrameImage) {
+          const endFrameUrl = !uploadReferencesToTst || isHttpUrl(payload.endFrameImage)
+            ? String(payload.endFrameImage).trim()
+            : await uploadImageToTst(payload.endFrameImage);
+          providerPayload.image_urls = [keyframeUrl, endFrameUrl];
+        }
         if (payload.modelId === 'kling-2.5-turbo') {
           providerPayload.mode = 'i2v';
         }
@@ -790,6 +796,19 @@ export const prepareTstProviderPayloadFromQueueRecipe = (payload: QueueRecipePay
   prepareProviderPayloadFromQueueRecipe(payload, { uploadReferencesToTst: true });
 
 export const prepareGommoProviderPayloadFromQueueRecipe = (payload: QueueRecipePayload) => {
+  if (payload.recipeType === 'motion_generate_recipe_v1') {
+    return Promise.resolve({
+      model: payload.modelId,
+      prompt: String(payload.prompt || '').trim(),
+      resolution: payload.resolution?.toLowerCase(),
+      provider_mode: payload.providerMode,
+      config_key: payload.pricingOptionId,
+      duration: payload.motionVideoDurationSeconds,
+      background_source: payload.backgroundSource || 'input_image',
+      character_image_url: payload.characterImage,
+      motion_video_url: payload.motionVideoDataUrl,
+    });
+  }
   if (!['image_generate_recipe_v1', 'prompt_image_generate_recipe_v1', 'video_generate_recipe_v1'].includes(payload.recipeType)) {
     throw new Error(`GOMMO_UNSUPPORTED_RECIPE: ${payload.recipeType}`);
   }

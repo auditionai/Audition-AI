@@ -44,7 +44,7 @@ export const getGommoServerGroups = (model: GommoServerModelLike) => {
     const id = slugify(mode.group) || slugify(model.server) || slugify(model.model) || 'gommo-gateway';
     const existing = groups.get(id) || {
       id,
-      label: String(mode.group || model.server || 'Gommo Gateway').trim(),
+      label: String(mode.group || model.server || 'AI Gateway').trim(),
       subtitle: String(mode.groupSubtitle || mode.group_subtitle || '').trim(),
       modeTypes: [],
     };
@@ -56,7 +56,7 @@ export const getGommoServerGroups = (model: GommoServerModelLike) => {
     const id = slugify(model.server) || slugify(model.model) || 'gommo-gateway';
     groups.set(id, {
       id,
-      label: String(model.server || 'Gommo Gateway').trim(),
+      label: String(model.server || 'AI Gateway').trim(),
       subtitle: '',
       modeTypes: [],
     });

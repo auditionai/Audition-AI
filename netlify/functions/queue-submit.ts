@@ -179,9 +179,6 @@ const ensureProviderConfiguredForQueueKind = (queueKind: string | undefined, pro
   if (provider === 'gommo' && !hasGommo) {
     throw new Error('May chu Audition AI dang thieu GOMMO_ACCESS_TOKEN nen tam thoi khong the nhan job moi.');
   }
-  if (provider === 'gommo' && normalizedQueueKind === 'motion_generate') {
-    throw new Error('GOMMO_UNSUPPORTED_MODEL: Motion Control chưa được Gommo công bố payload chính thức.');
-  }
 };
 
 const normalizeJobId = (value: unknown) => {
@@ -373,14 +370,19 @@ export const buildLocalPricingOptionCandidates = (queuePayload: Record<string, u
   const candidates = [
     explicitConfigKey,
     providerMode ? [resolution, durationWithSuffix || duration, providerMode].filter(Boolean).join('-') : '',
-    providerMode ? [resolution, providerMode].filter(Boolean).join('-') : '',
-    providerMode,
     quality ? [resolution, quality, speed].filter(Boolean).join('-') : '',
     [resolution, durationWithSuffix, audio ? 'audio' : '', speed].filter(Boolean).join('-'),
     [resolution, duration, audio ? 'audio' : '', speed].filter(Boolean).join('-'),
     [resolution, durationWithSuffix, speed].filter(Boolean).join('-'),
     [resolution, duration, speed].filter(Boolean).join('-'),
+    // Grok and a few other Gommo video models price by resolution + duration;
+    // their UI mode (normal/fun/...) is not part of the provider price key.
+    resolution && durationWithSuffix ? `${resolution}-${durationWithSuffix}` : '',
+    resolution && duration ? `${resolution}-${duration}` : '',
+    providerMode ? [resolution, providerMode].filter(Boolean).join('-') : '',
+    providerMode ? [durationWithSuffix || duration, providerMode].filter(Boolean).join('-') : '',
     [resolution, speed].filter(Boolean).join('-'),
+    providerMode,
     resolution,
     speed,
     speed ? `default-${speed}` : '',
@@ -416,7 +418,14 @@ const resolveGommoCostFromAuditionPricing = async (
   }
 
   const baseVcoin = Math.ceil(Number(selected.audition_price_vcoin));
-  const multiplier = queueKind === 'image_generate' ? getImageBillingMultiplier(queuePayload) : 1;
+  const embeddedRecipe = queuePayload.__recipePayload && typeof queuePayload.__recipePayload === 'object'
+    ? queuePayload.__recipePayload as Record<string, unknown>
+    : queuePayload;
+  const multiplier = queueKind === 'image_generate'
+    ? getImageBillingMultiplier(queuePayload)
+    : queueKind === 'motion_generate'
+      ? Math.max(1, Math.ceil(Number(embeddedRecipe.motionVideoDurationSeconds || embeddedRecipe.duration || 1)))
+      : 1;
   return {
     costVcoin: Math.ceil(baseVcoin * multiplier),
     pricing: {

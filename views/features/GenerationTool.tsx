@@ -50,6 +50,7 @@ import {
 import {
   fetchProviderCatalog,
   getAuditionProviderPricing,
+  getGommoCatalogPricingOptionId,
   getGommoPricingInput,
   getGommoModelForAudition,
   isGommoCatalogModelAvailable,
@@ -383,7 +384,11 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       speed: generationSpeedId,
       providerMode,
   });
-  const gommoSelectedPricing = getAuditionProviderPricing(auditionPricing, selectedModelId, gommoPricingInput, { allowGenericFallback: true });
+  const gommoPricingOptionId = getGommoCatalogPricingOptionId(selectedGommoModel, { resolution, providerMode });
+  const gommoSelectedPricing = getAuditionProviderPricing(auditionPricing, selectedModelId, gommoPricingInput, {
+      allowGenericFallback: true,
+      preferredOptionId: gommoPricingOptionId,
+  });
   const selectedGenerationCost = isGommoSelected
       ? { available: gommoSelectedPricing !== null, vcoin: gommoSelectedPricing?.vcoin || 0 }
       : tstSelectedGenerationCost;
@@ -393,7 +398,10 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
               auditionPricing,
               selectedModelId,
               getGommoPricingInput(selectedModelId, { ...gommoPricingInput, resolution: value }),
-              { allowGenericFallback: true },
+              {
+                  allowGenericFallback: true,
+                  preferredOptionId: getGommoCatalogPricingOptionId(selectedGommoModel, { resolution: value, providerMode }),
+              },
           )))
           : availableResolutions,
   );
@@ -526,7 +534,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
               }
               setPricingEntries([]);
               setRuntimeModels([]);
-              setCatalogError(lang === 'vi' ? 'TST đang bảo trì hoặc không sẵn sàng.' : 'TST is unavailable.');
+              setCatalogError(lang === 'vi' ? 'Dịch vụ tạo ảnh đang bảo trì hoặc không sẵn sàng.' : 'The image service is unavailable.');
           } finally {
               setCatalogLoading(false);
           }
@@ -915,12 +923,12 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
     }
 
     if (!isCatalogReady) {
-        notify(isGommoSelected ? 'Catalog Gommo đang bảo trì hoặc chưa có cấu hình giá Vcoin.' : 'TST đang bảo trì hoặc không sẵn sàng.', 'error');
+        notify(isGommoSelected ? 'Nguồn tạo ảnh đang bảo trì hoặc chưa có cấu hình giá Vcoin.' : 'Dịch vụ tạo ảnh đang bảo trì hoặc không sẵn sàng.', 'error');
         return;
     }
 
     if (!selectedGenerationCost.available) {
-        notify(`Cấu hình đang chọn không còn khả dụng trên ${isGommoSelected ? 'Gommo' : 'TST'}.`, 'error');
+        notify('Cấu hình đang chọn không còn khả dụng trên máy chủ.', 'error');
         return;
     }
 
@@ -1171,9 +1179,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   };
 
   const ratios = !isGommoSelected
-      ? tstAspectRatios.map((ratio) => ({ id: ratio, label: ratio, desc: 'TST' }))
+      ? tstAspectRatios.map((ratio) => ({ id: ratio, label: ratio, desc: '' }))
       : isGommoSelected && selectedGommoModel?.ratios.length
-      ? selectedGommoModel.ratios.map((option) => ({ id: option.type, label: option.name || option.type, desc: 'Gommo' }))
+      ? selectedGommoModel.ratios.map((option) => ({ id: option.type, label: option.name || option.type, desc: '' }))
       : [
           { id: '1:1', label: '1:1', desc: 'Vuông' },
           { id: '9:16', label: '9:16', desc: 'Story' },
@@ -1748,8 +1756,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                         {catalogLoading
                             ? 'Đang đồng bộ catalog realtime theo API đã cấu hình...'
                             : isGommoSelected
-                                ? 'Gommo đang bảo trì, model đã tắt hoặc cấu hình này chưa có giá Vcoin.'
-                                : (catalogError || 'TST đang bảo trì hoặc chưa có cấu hình giá khả dụng.')}
+                                ? 'Nguồn tạo ảnh đang bảo trì, model đã tắt hoặc cấu hình này chưa có giá Vcoin.'
+                                : (catalogError || 'Dịch vụ tạo ảnh đang bảo trì hoặc chưa có cấu hình giá khả dụng.')}
                     </div>
                 )}
 
@@ -1864,7 +1872,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                         {isGommoSelected && gommoModes.length > 0 && (
                             <div className="space-y-3">
                                 <div className="space-y-1.5">
-                                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">Server Gommo</span>
+                                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">Máy chủ</span>
                                     <div className={`grid gap-2 ${gommoModeGroups.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                                         {gommoModeGroups.map((group) => (
                                             <button
@@ -1929,7 +1937,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                 </div>}
 
                                 {availableServerLabels.length > 0 && <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider">Server TST</label>
+                                    <label className="text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider">Máy chủ</label>
                                     <div className={`grid gap-2 ${availableServerLabels.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                                         {availableServerLabels.map((label) => (
                                             <button

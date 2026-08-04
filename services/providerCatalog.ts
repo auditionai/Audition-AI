@@ -15,11 +15,14 @@ export type GommoCatalogModel = {
   fallbackSupported: boolean;
   model: string;
   name: string;
+  description: string;
   status: string;
   server: string;
   price: number | null;
   rateType: string;
   maxReferenceImages: number | null;
+  supportsStartImage: boolean;
+  supportsEndFrame: boolean;
   referenceField: 'subjects' | 'references' | 'images';
   prices: GommoCatalogPrice[];
   ratios: GommoCatalogOption[];
@@ -37,6 +40,32 @@ export type GommoCatalogOption = {
   status: string;
   statusMessage: string;
   adminEnabled?: boolean;
+};
+
+export const buildGommoCatalogPricingOptionId = (price: Pick<GommoCatalogPrice, 'mode' | 'resolution' | 'duration'>) => {
+  const duration = normalizeDuration(price.duration);
+  return [normalize(price.resolution), duration ? `${duration}s` : '', normalize(price.mode)]
+    .filter(Boolean)
+    .join('-') || 'default';
+};
+
+export const getGommoCatalogPricingOptionId = (
+  model: GommoCatalogModel | null | undefined,
+  input: { resolution?: string; duration?: string; providerMode?: string },
+) => {
+  if (!model?.prices?.length) return null;
+  const resolution = normalize(input.resolution);
+  const duration = normalizeDuration(input.duration);
+  const providerMode = normalize(input.providerMode);
+  const match = model.prices.find((price) => {
+    const priceResolution = normalize(price.resolution);
+    const priceDuration = normalizeDuration(price.duration);
+    const priceMode = normalize(price.mode);
+    return (!priceResolution || priceResolution === resolution)
+      && (!priceDuration || priceDuration === duration)
+      && (!priceMode || priceMode === providerMode);
+  });
+  return match ? buildGommoCatalogPricingOptionId(match) : null;
 };
 
 export type GommoProviderCatalog = {
@@ -68,6 +97,7 @@ export type GommoPriceComparison = {
   maxCredits: number | null;
   minCostVcoin: number | null;
   maxCostVcoin: number | null;
+  matchedMode?: string | null;
 };
 
 const normalize = (value?: string | number | null) => String(value || '').trim().toLowerCase();
@@ -116,14 +146,21 @@ export const buildProviderPricingOptionCandidates = (input: {
   const providerMode = normalize(input.providerMode);
   return Array.from(new Set([
     providerMode ? [resolution, durationWithSuffix || duration, providerMode].filter(Boolean).join('-') : '',
-    providerMode ? [resolution, providerMode].filter(Boolean).join('-') : '',
-    providerMode,
     quality ? [resolution, quality, speed].filter(Boolean).join('-') : '',
     [resolution, durationWithSuffix, input.audio ? 'audio' : '', speed].filter(Boolean).join('-'),
     [resolution, duration, input.audio ? 'audio' : '', speed].filter(Boolean).join('-'),
     [resolution, durationWithSuffix, speed].filter(Boolean).join('-'),
     [resolution, duration, speed].filter(Boolean).join('-'),
+    // Several Gommo video catalogs (notably Grok) publish a price per
+    // resolution + duration while their selectable mode is metadata only.
+    // Keep these exact keys ahead of generic mode/default fallbacks so the
+    // storefront and the queue use the row edited in Admin.
+    resolution && durationWithSuffix ? `${resolution}-${durationWithSuffix}` : '',
+    resolution && duration ? `${resolution}-${duration}` : '',
+    providerMode ? [resolution, providerMode].filter(Boolean).join('-') : '',
+    providerMode ? [durationWithSuffix || duration, providerMode].filter(Boolean).join('-') : '',
     [resolution, speed].filter(Boolean).join('-'),
+    providerMode,
     resolution,
     speed,
     speed ? `default-${speed}` : '',
@@ -135,10 +172,13 @@ export const getAuditionProviderPrice = (
   pricing: ModelPricing[],
   modelId: string,
   input: Parameters<typeof buildProviderPricingOptionCandidates>[0],
-  options?: { allowGenericFallback?: boolean },
+  options?: { allowGenericFallback?: boolean; preferredOptionId?: string | null },
 ) => {
   const rows = pricing.filter((row) => normalize(row.model_id) === normalize(modelId));
-  const candidates = buildProviderPricingOptionCandidates(input).filter((candidate) =>
+  const candidates = Array.from(new Set([
+    normalize(options?.preferredOptionId),
+    ...buildProviderPricingOptionCandidates(input),
+  ].filter(Boolean))).filter((candidate) =>
     options?.allowGenericFallback === false
       ? !['default', normalize(input.speed), `default-${normalize(input.speed)}`].includes(candidate)
       : true,
@@ -153,10 +193,13 @@ export const getAuditionProviderPricing = (
   pricing: ModelPricing[],
   modelId: string,
   input: Parameters<typeof buildProviderPricingOptionCandidates>[0],
-  options?: { allowGenericFallback?: boolean },
+  options?: { allowGenericFallback?: boolean; preferredOptionId?: string | null },
 ) => {
   const rows = pricing.filter((row) => normalize(row.model_id) === normalize(modelId));
-  const candidates = buildProviderPricingOptionCandidates(input).filter((candidate) =>
+  const candidates = Array.from(new Set([
+    normalize(options?.preferredOptionId),
+    ...buildProviderPricingOptionCandidates(input),
+  ].filter(Boolean))).filter((candidate) =>
     options?.allowGenericFallback === false
       ? !['default', normalize(input.speed), `default-${normalize(input.speed)}`].includes(candidate)
       : true,
@@ -179,7 +222,9 @@ export const getGommoPricingInput = (
     : normalizedModelId === 'nano-banana-pro' && mode === 'relaxed'
       ? 'slow'
       : input.speed || 'fast';
-  const resolution = normalizedModelId.startsWith('kling-')
+  const resolution = normalizedModelId === 'motion-control-2.6' || normalizedModelId === 'motion-control-3.0'
+    ? mode === 'professional' ? '1080p' : mode === 'standard' ? '720p' : input.resolution
+    : normalizedModelId.startsWith('kling-')
     ? mode.startsWith('professional') ? '1080p' : '720p'
     : input.resolution;
   return {
@@ -194,6 +239,20 @@ export const getGommoPricingInput = (
 export const getMinimumAuditionModelPrice = (pricing: ModelPricing[], modelId: string) => {
   const values = pricing
     .filter((row) => normalize(row.model_id) === normalize(modelId))
+    .map((row) => Number(row.audition_price_vcoin))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  return values.length ? Math.ceil(Math.min(...values)) : null;
+};
+
+export const getMinimumAuditionCatalogModelPrice = (
+  pricing: ModelPricing[],
+  model: GommoCatalogModel | null | undefined,
+) => {
+  if (!model) return null;
+  const currentOptionIds = new Set(model.prices.map(buildGommoCatalogPricingOptionId));
+  const values = pricing
+    .filter((row) => normalize(row.model_id) === normalize(model.auditionModelId))
+    .filter((row) => currentOptionIds.has(normalize(row.option_id)))
     .map((row) => Number(row.audition_price_vcoin))
     .filter((value) => Number.isFinite(value) && value > 0);
   return values.length ? Math.ceil(Math.min(...values)) : null;
@@ -247,15 +306,27 @@ export const getGommoPriceComparison = (
 
   const resolution = normalize(row.resolution);
   const duration = normalizeDuration(row.duration);
-  let candidates = model.prices.filter((price) => {
+  const dimensionCandidates = model.prices.filter((price) => {
     if (resolution && price.resolution && normalize(price.resolution) !== resolution) return false;
     if (duration && price.duration && normalizeDuration(price.duration) !== duration) return false;
     return Number.isFinite(price.price);
   });
-  if (candidates.length === 0) {
-    candidates = model.prices.filter((price) => Number.isFinite(price.price));
-  }
-  const values = candidates.map((price) => Number(price.price));
+  const availableModes = Array.from(new Set(model.prices.map((price) => normalize(price.mode)).filter(Boolean)));
+  const requestedMode = normalize(row.speed);
+  const defaultMode = normalize(model.modes.find((mode) => mode.adminEnabled !== false)?.type)
+    || availableModes[0]
+    || '';
+  const matchedMode = availableModes.includes(requestedMode) ? requestedMode : defaultMode;
+  const exactCandidates = matchedMode
+    ? dimensionCandidates.filter((price) => normalize(price.mode) === matchedMode)
+    : dimensionCandidates;
+  const candidates = exactCandidates.length > 0 ? exactCandidates : dimensionCandidates;
+  const directProviderPrice = row.server === 'gommo' && Number.isFinite(Number(row.credits))
+    ? Number(row.credits)
+    : null;
+  const values = directProviderPrice !== null
+    ? [directProviderPrice]
+    : candidates.map((price) => Number(price.price));
   if (values.length === 0 && Number.isFinite(Number(model.price))) {
     values.push(Number(model.price));
   }
@@ -276,5 +347,6 @@ export const getGommoPriceComparison = (
     maxCredits,
     minCostVcoin: convertToVcoin(minCredits),
     maxCostVcoin: convertToVcoin(maxCredits),
+    matchedMode: row.server === 'gommo' ? requestedMode || matchedMode : matchedMode,
   };
 };

@@ -478,10 +478,10 @@ export function WorkspaceImage() {
         setAuditionPricing(pricingConfig || []);
         setGommoCatalog(providerCatalog);
         setProviderConfig(routingConfig);
-        setCatalogError(models.length > 0 ? null : 'TST đang bảo trì hoặc không sẵn sàng.');
+        setCatalogError(models.length > 0 ? null : 'Dịch vụ tạo ảnh đang bảo trì hoặc không sẵn sàng.');
       } catch (error) {
         console.warn('[WorkspaceImage] Failed to load TST catalog', error);
-        setCatalogError('TST đang bảo trì hoặc không sẵn sàng.');
+        setCatalogError('Dịch vụ tạo ảnh đang bảo trì hoặc không sẵn sàng.');
       } finally {
         setCatalogLoading(false);
       }
@@ -834,7 +834,7 @@ export function WorkspaceImage() {
   const handleGenerate = async () => {
     if (stage === 'submitting') return;
     if (cooldownRemaining > 0) { notify(`Vui lòng đợi ${cooldownRemaining}s`, 'warning'); return; }
-    if (!isCatalogReady) { notify(isGommoSelected ? 'Gommo đang bảo trì hoặc chưa có giá Vcoin.' : 'TST đang bảo trì.', 'error'); return; }
+    if (!isCatalogReady) { notify(isGommoSelected ? 'Nguồn tạo ảnh đang bảo trì hoặc chưa có giá Vcoin.' : 'Dịch vụ tạo ảnh đang bảo trì.', 'error'); return; }
     if (!selectedCost.available) { notify('Cấu hình không khả dụng.', 'error'); return; }
 
     if (queueStats.myImageProcessing >= CONCURRENCY_LIMITS.user.imageProcessing
@@ -1342,7 +1342,7 @@ export function WorkspaceImage() {
           <div className="space-y-3">
             <div className="space-y-3 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm dark:border-zinc-800 dark:bg-[#18181B]">
               <div className="space-y-2">
-                <div className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500">Server Gommo</div>
+                <div className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500">Máy chủ</div>
                 <div className={`grid gap-2 ${gommoModeGroups.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                   {gommoModeGroups.map((group) => (
                     <button

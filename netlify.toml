@@ -124,6 +124,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/admin-model-pricing"
+  to = "/.netlify/functions/admin-model-pricing"
+  status = 200
+
+[[redirects]]
   from = "/api/admin-queue-job-detail"
   to = "/.netlify/functions/admin-queue-job-detail"
   status = 200

@@ -43,7 +43,7 @@ const imageToolMeta: Record<string, HeroMeta> = {
   group_3_gen: { eyebrow: 'Trio Composition', title: 'Tạo ảnh nhóm 3', description: 'Sắp xếp đội hình ba nhân vật cân bằng, rõ mặt và đồng nhất bối cảnh.', Icon: Users, accent: 'cyan' },
   group_4_gen: { eyebrow: 'Squad Composition', title: 'Tạo ảnh nhóm 4', description: 'Dựng đội hình bốn nhân vật với bố cục lớp lang và cá tính riêng.', Icon: Images, accent: 'blue' },
   group_5_gen: { eyebrow: 'Five Star Crew', title: 'Tạo ảnh nhóm 5', description: 'Kết hợp năm nhân vật trong một khung hình rõ ràng và hài hòa.', Icon: Users, accent: 'pink' },
-  group_6_gen: { eyebrow: 'Extended Group Lab', title: 'Tạo ảnh nhóm 6', description: 'Tạo đội hình sáu nhân vật bằng luồng tham chiếu mở rộng của Gommo.', Icon: Images, accent: 'violet' },
+  group_6_gen: { eyebrow: 'Extended Group Lab', title: 'Tạo ảnh nhóm 6', description: 'Tạo đội hình sáu nhân vật bằng luồng tham chiếu mở rộng.', Icon: Images, accent: 'violet' },
   group_7_gen: { eyebrow: 'Extended Group Lab', title: 'Tạo ảnh nhóm 7', description: 'Điều phối bảy nhân vật, giữ nhận diện và bố cục nhất quán.', Icon: Users, accent: 'cyan' },
   group_8_gen: { eyebrow: 'Maximum Group Lab', title: 'Tạo ảnh nhóm 8', description: 'Dựng đội hình tám nhân vật bằng cấu hình GPT chuyên biệt, không dùng ảnh mẫu.', Icon: Images, accent: 'gold' },
 };

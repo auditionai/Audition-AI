@@ -1044,8 +1044,17 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       const rawDraft = pricingDrafts[draftKey];
       if (rawDraft === undefined) return false;
       const effectivePricing = getEffectiveAuditionPricing(row);
-      const baseline = effectivePricing?.vcoin ?? row.defaultAuditionVcoin ?? row.vcoin;
       const parsedDraft = Number(rawDraft);
+
+      // A positive draft for a configuration that does not exist in model_pricing
+      // must always be persisted. Comparing it with the provider/default cost made
+      // an equal value look "unchanged", leaving Save disabled while the row still
+      // appeared under "Chưa có giá".
+      if (!effectivePricing) {
+          return rawDraft !== '' && Number.isFinite(parsedDraft) && parsedDraft > 0;
+      }
+
+      const baseline = effectivePricing.vcoin;
 
       if (!Number.isFinite(parsedDraft) || parsedDraft <= 0) {
           return rawDraft !== '' && rawDraft !== String(baseline);

@@ -239,7 +239,7 @@ const SMART_TIPS = [
     { icon: Icons.ExternalLink, text: "👗 Mẹo: Truy cập AuMix3D.com để mix đồ và chụp ảnh nhân vật tách nền cực nét làm nguyên liệu cho AI!" }
 ];
 
-const OptionDropdown = ({ label, value, options, onChange, icon: Icon }: any) => {
+const OptionDropdown = ({ label, value, options, onChange, icon: Icon, placement = 'bottom' }: any) => {
     const [isOpen, setIsOpen] = useState(false);
     return (
         <div className={`space-y-2 relative ${isOpen ? 'z-50' : 'z-10'}`}>
@@ -268,7 +268,9 @@ const OptionDropdown = ({ label, value, options, onChange, icon: Icon }: any) =>
             {isOpen && (
                 <>
                     <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)}></div>
-                    <div className="absolute top-full left-0 right-0 mt-2 neu-card border border-slate-200/80 dark:border-slate-700 rounded-2xl shadow-2xl z-50 overflow-hidden p-1.5">
+                    <div className={`absolute left-0 right-0 neu-card border border-slate-200/80 dark:border-slate-700 rounded-2xl shadow-2xl z-50 max-h-64 overflow-y-auto p-1.5 ${
+                      placement === 'top' ? 'bottom-full mb-2' : 'top-full mt-2'
+                    }`}>
                         {options.map((opt: any) => (
                             <button
                                 type="button"
@@ -1614,13 +1616,13 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
 
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 pt-4 border-t border-slate-200/60 dark:border-slate-800">
                 {modelOptions.showAspectRatio && modelOptions.aspectRatios.length > 0 && (
-                  <OptionDropdown label="Tỉ lệ khung hình" value={aspectRatio} options={modelOptions.aspectRatios.map((value) => ({ label: value, value }))} onChange={setAspectRatio} icon={Icons.Monitor} />
+                  <OptionDropdown label="Tỉ lệ khung hình" value={aspectRatio} options={modelOptions.aspectRatios.map((value) => ({ label: value, value }))} onChange={setAspectRatio} icon={Icons.Monitor} placement="top" />
                 )}
                 {modelOptions.qualities.length > 0 && (
-                  <OptionDropdown label="Chất lượng" value={quality} options={modelOptions.qualities.map((value) => ({ label: value, value }))} onChange={setQuality} icon={Icons.Video} />
+                  <OptionDropdown label="Chất lượng" value={quality} options={modelOptions.qualities.map((value) => ({ label: value, value }))} onChange={setQuality} icon={Icons.Video} placement="top" />
                 )}
                 {activeMode === 'video_ai' && modelOptions.durations.length > 0 && (
-                  <OptionDropdown label="Thời lượng" value={duration} options={modelOptions.durations.map((value) => ({ label: value, value }))} onChange={setDuration} icon={Icons.Clock} />
+                  <OptionDropdown label="Thời lượng" value={duration} options={modelOptions.durations.map((value) => ({ label: value, value }))} onChange={setDuration} icon={Icons.Clock} placement="top" />
                 )}
                 {isGommoSelected && (selectedGommoModel?.modes || []).length > 0 && (
                   <OptionDropdown
@@ -1635,13 +1637,14 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                     }))}
                     onChange={setProviderMode}
                     icon={Icons.Database}
+                    placement="top"
                   />
                 )}
                 {speedOptions.length > 0 && (
-                  <OptionDropdown label="Tốc độ xử lý" value={speed} options={speedOptions} onChange={setSpeed} icon={Icons.Zap} />
+                  <OptionDropdown label="Tốc độ xử lý" value={speed} options={speedOptions} onChange={setSpeed} icon={Icons.Zap} placement="top" />
                 )}
                 {serverOptions.length > 0 && (
-                  <OptionDropdown label="Máy chủ" value={server} options={serverOptions} onChange={setServer} icon={Icons.Database} />
+                  <OptionDropdown label="Máy chủ" value={server} options={serverOptions} onChange={setServer} icon={Icons.Database} placement="top" />
                 )}
               </div>
 

@@ -370,14 +370,19 @@ export const buildLocalPricingOptionCandidates = (queuePayload: Record<string, u
   const candidates = [
     explicitConfigKey,
     providerMode ? [resolution, durationWithSuffix || duration, providerMode].filter(Boolean).join('-') : '',
-    providerMode ? [resolution, providerMode].filter(Boolean).join('-') : '',
-    providerMode,
     quality ? [resolution, quality, speed].filter(Boolean).join('-') : '',
     [resolution, durationWithSuffix, audio ? 'audio' : '', speed].filter(Boolean).join('-'),
     [resolution, duration, audio ? 'audio' : '', speed].filter(Boolean).join('-'),
     [resolution, durationWithSuffix, speed].filter(Boolean).join('-'),
     [resolution, duration, speed].filter(Boolean).join('-'),
+    // Grok and a few other Gommo video models price by resolution + duration;
+    // their UI mode (normal/fun/...) is not part of the provider price key.
+    resolution && durationWithSuffix ? `${resolution}-${durationWithSuffix}` : '',
+    resolution && duration ? `${resolution}-${duration}` : '',
+    providerMode ? [resolution, providerMode].filter(Boolean).join('-') : '',
+    providerMode ? [durationWithSuffix || duration, providerMode].filter(Boolean).join('-') : '',
     [resolution, speed].filter(Boolean).join('-'),
+    providerMode,
     resolution,
     speed,
     speed ? `default-${speed}` : '',

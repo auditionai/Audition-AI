@@ -120,15 +120,21 @@ export const buildProviderPricingOptionCandidates = (input: {
   const providerMode = normalize(input.providerMode);
   return Array.from(new Set([
     providerMode ? [resolution, durationWithSuffix || duration, providerMode].filter(Boolean).join('-') : '',
-    providerMode ? [resolution, providerMode].filter(Boolean).join('-') : '',
-    providerMode ? [durationWithSuffix || duration, providerMode].filter(Boolean).join('-') : '',
-    providerMode,
     quality ? [resolution, quality, speed].filter(Boolean).join('-') : '',
     [resolution, durationWithSuffix, input.audio ? 'audio' : '', speed].filter(Boolean).join('-'),
     [resolution, duration, input.audio ? 'audio' : '', speed].filter(Boolean).join('-'),
     [resolution, durationWithSuffix, speed].filter(Boolean).join('-'),
     [resolution, duration, speed].filter(Boolean).join('-'),
+    // Several Gommo video catalogs (notably Grok) publish a price per
+    // resolution + duration while their selectable mode is metadata only.
+    // Keep these exact keys ahead of generic mode/default fallbacks so the
+    // storefront and the queue use the row edited in Admin.
+    resolution && durationWithSuffix ? `${resolution}-${durationWithSuffix}` : '',
+    resolution && duration ? `${resolution}-${duration}` : '',
+    providerMode ? [resolution, providerMode].filter(Boolean).join('-') : '',
+    providerMode ? [durationWithSuffix || duration, providerMode].filter(Boolean).join('-') : '',
     [resolution, speed].filter(Boolean).join('-'),
+    providerMode,
     resolution,
     speed,
     speed ? `default-${speed}` : '',

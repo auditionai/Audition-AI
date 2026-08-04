@@ -587,6 +587,10 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
   const calculateCost = () => {
       return currentCostBreakdown.vcoin;
   };
+  const getDisplayedVideoModelPrice = (model: AIModelOption) =>
+      activeMode === 'video_ai' && model.id === videoModel
+        ? (currentCostBreakdown.available ? currentCostBreakdown.vcoin : 0)
+        : model.price;
   const perSecondCostLabel = currentCostBreakdown.billingUnit === 'second'
       ? `${currentCostBreakdown.unitVcoin || 0} Vcoin/s × ${currentCostBreakdown.billedSeconds || 0}s = ${currentCostBreakdown.vcoin || 0} Vcoin`
       : '';
@@ -1530,6 +1534,8 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                     {getModelsByFamily(videoModelOptions, videoModelFamily).map((model) => {
                       const modelFamily = getVideoModelFamily(model);
                       const modelStyle = VIDEO_FAMILY_STYLES[modelFamily];
+                      const displayedPrice = getDisplayedVideoModelPrice(model);
+                      const isSelectedModel = videoModel === model.id;
                       return (
                       <button
                         key={model.id}
@@ -1552,8 +1558,10 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                         <span className="flex-1 min-w-0">
                           <span className="flex flex-wrap items-center justify-between gap-2">
                             <span className="text-xs font-black font-accent text-slate-900 dark:text-white">{model.name}</span>
-                            <span className={`px-2.5 py-1 rounded-full text-[9px] font-black ${model.price > 0 ? 'bg-amber-400/15 text-amber-600 dark:text-amber-300' : 'bg-rose-500/10 text-rose-500'}`}>
-                              {model.price > 0 ? `TỪ ${model.price} VCOIN` : 'CHƯA CÓ GIÁ'}
+                            <span className={`px-2.5 py-1 rounded-full text-[9px] font-black ${displayedPrice > 0 ? 'bg-amber-400/15 text-amber-600 dark:text-amber-300' : 'bg-rose-500/10 text-rose-500'}`}>
+                              {displayedPrice > 0
+                                ? `${isSelectedModel ? 'CẤU HÌNH' : 'TỪ'} ${displayedPrice} VCOIN`
+                                : 'CHƯA CÓ GIÁ'}
                             </span>
                           </span>
                           <span className="block mt-1 text-[10px] font-semibold leading-relaxed text-slate-600 dark:text-slate-400">{getVideoModelRuntimeMeta(model).description}</span>

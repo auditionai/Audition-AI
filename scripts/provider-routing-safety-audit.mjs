@@ -55,7 +55,26 @@ const grokOptions = buildLocalPricingOptionCandidates({
   duration: '6s',
   speed: 'standard',
 });
+assert(grokOptions.includes('720p-6s'));
 assert(grokOptions.includes('720p-6-standard'));
+
+const grokAdminPricing = [
+  { model_id: 'grok-i2v', option_id: '720p-6s', audition_price_vcoin: 17 },
+  { model_id: 'grok-i2v', option_id: 'normal', audition_price_vcoin: 9 },
+];
+assert.deepEqual(
+  getAuditionProviderPricing(
+    grokAdminPricing,
+    'grok-i2v',
+    getGommoPricingInput('grok-i2v', {
+      resolution: '720P',
+      duration: '6S',
+      providerMode: 'normal',
+    }),
+    { allowGenericFallback: true },
+  ),
+  { optionId: '720p-6s', vcoin: 17 },
+);
 
 const klingGommoPricingOptions = buildProviderPricingOptionCandidates({
   duration: '10s',

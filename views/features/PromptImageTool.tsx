@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, Bot, ChevronDown, ChevronUp, Crown, Database, Image as ImageIcon, Info, Loader, MessageSquare, Plus, RefreshCw, Sparkles, Upload, Wand2, X, Zap } from 'lucide-react';
 import { useNotification } from '../../components/NotificationSystem';
 import { getGenerationProviderConfig, getModelPricing, getTstServerAvailabilityConfig, getUserProfile } from '../../services/economyService';
-import { useConcurrency, CONCURRENCY_LIMITS } from '../../services/concurrencyService';
+import { getProviderConcurrencyLimits, getProviderQueueStats, useConcurrency } from '../../services/concurrencyService';
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import {
@@ -186,6 +186,8 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
   const selectedModelId = getGenerationModelId(aiModel);
   const isSelectedModelAllowed = isModelAllowedForFeature(providerConfig, 'image_prompt', selectedModelId);
   const selectedProvider = resolveProviderForModel(providerConfig, selectedModelId, 'image_prompt');
+  const providerQueueStats = getProviderQueueStats(queueStats, selectedProvider);
+  const providerConcurrencyLimits = getProviderConcurrencyLimits(selectedProvider);
   const isGommoSelected = selectedProvider === 'gommo';
   const selectedGommoModel = getGommoModelForAudition(gommoCatalog, selectedModelId);
   const tstReferenceImageLimit = aiModel === 'gpt' ? GPT_REFERENCE_IMAGE_LIMIT : DEFAULT_REFERENCE_IMAGE_LIMIT;
@@ -407,7 +409,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
       notify(`Prompt không được vượt quá ${MAX_PROMPT_CHARACTERS.toLocaleString('vi-VN')} ký tự.`, 'error');
       return;
     }
-    if (queueStats.myImageProcessing >= CONCURRENCY_LIMITS.user.imageProcessing) {
+    if (providerQueueStats.myImageProcessing >= providerConcurrencyLimits.user.imageProcessing) {
       notify('Bạn đang có quá nhiều job ảnh đang chạy. Vui lòng chờ job hiện tại hoàn tất.', 'error');
       return;
     }
@@ -760,17 +762,17 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
                     <div>
                       <div className="font-bold text-audi-cyan mb-1">Luồng Của Bạn</div>
                       <div className="flex gap-1.5">
-                        <span>Ảnh <span className="text-white font-mono">{queueStats.myImageProcessing}/{CONCURRENCY_LIMITS.user.imageProcessing}</span></span>
-                        <span>- Video <span className="text-white font-mono">{queueStats.myVideoProcessing}/{CONCURRENCY_LIMITS.user.videoProcessing}</span></span>
-                        <span>- Hàng Chờ <span className="text-white font-mono">{queueStats.myQueued}/{CONCURRENCY_LIMITS.user.queued}</span></span>
+                        <span>Ảnh <span className="text-white font-mono">{providerQueueStats.myImageProcessing}/{providerConcurrencyLimits.user.imageProcessing}</span></span>
+                        <span>- Video <span className="text-white font-mono">{providerQueueStats.myVideoProcessing}/{providerConcurrencyLimits.user.videoProcessing}</span></span>
+                        <span>- Hàng Chờ <span className="text-white font-mono">{providerQueueStats.myQueued}/{providerConcurrencyLimits.user.queued}</span></span>
                       </div>
                     </div>
                     <div>
                       <div className="font-bold text-slate-300 mb-1">Luồng Hệ Thống</div>
                       <div className="flex gap-1.5">
-                        <span>Ảnh <span className="text-white font-mono">{queueStats.systemImageProcessing}/{CONCURRENCY_LIMITS.system.imageProcessing}</span></span>
-                        <span>- Video <span className="text-white font-mono">{queueStats.systemVideoProcessing}/{CONCURRENCY_LIMITS.system.videoProcessing}</span></span>
-                        <span>- Hàng Chờ <span className="text-white font-mono">{queueStats.systemQueued}/{CONCURRENCY_LIMITS.system.queued}</span></span>
+                        <span>Ảnh <span className="text-white font-mono">{providerQueueStats.systemImageProcessing}/{providerConcurrencyLimits.system.imageProcessing}</span></span>
+                        <span>- Video <span className="text-white font-mono">{providerQueueStats.systemVideoProcessing}/{providerConcurrencyLimits.system.videoProcessing}</span></span>
+                        <span>- Hàng Chờ <span className="text-white font-mono">{providerQueueStats.systemQueued}/{providerConcurrencyLimits.system.queued}</span></span>
                       </div>
                     </div>
                   </div>

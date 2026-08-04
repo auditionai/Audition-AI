@@ -3,7 +3,7 @@ import { Feature, Language, GeneratedImage, ViewId } from '../../types';
 import { Icons } from '../../components/Icons';
 import { useNotification } from '../../components/NotificationSystem';
 import { getUserProfile, getModelPricing, getTstServerAvailabilityConfig, getGenerationProviderConfig, type ModelPricing, type GenerationProviderConfig } from '../../services/economyService';
-import { CONCURRENCY_LIMITS, useConcurrency } from '../../services/concurrencyService';
+import { getProviderConcurrencyLimits, getProviderQueueStats, useConcurrency } from '../../services/concurrencyService';
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import { downloadAssetToBrowser } from '../../services/downloadService';
@@ -482,6 +482,9 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
   const isGommoMotionSelected = activeMode === 'motion_control' && selectedMotionProvider === 'gommo';
   const selectedGommoMotionModel = getGommoModelForAudition(gommoCatalog, motionModel);
   const isGommoSelected = isGommoVideoSelected || isGommoMotionSelected;
+  const activeQueueProvider = activeMode === 'motion_control' ? selectedMotionProvider : selectedVideoProvider;
+  const providerQueueStats = getProviderQueueStats(queueStats, activeQueueProvider);
+  const providerConcurrencyLimits = getProviderConcurrencyLimits(activeQueueProvider);
   const selectedGommoModel = isGommoMotionSelected ? selectedGommoMotionModel : selectedGommoVideoModel;
   const isCatalogReady =
       !catalogLoading &&
@@ -1009,12 +1012,14 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
       return;
     }
 
-    if (queueStats.myVideoProcessing >= CONCURRENCY_LIMITS.user.videoProcessing && queueStats.myQueued >= CONCURRENCY_LIMITS.user.queued) {
-      notify(lang === 'vi' ? 'Bạn đã đạt giới hạn 1 luồng video và 1 hàng chờ. Vui lòng đợi.' : 'You have reached the limit of 1 video processing slot and 1 queued job. Please wait.', 'warning');
+    if (providerQueueStats.myVideoProcessing >= providerConcurrencyLimits.user.videoProcessing && providerQueueStats.myQueued >= providerConcurrencyLimits.user.queued) {
+      notify(lang === 'vi'
+        ? `Bạn đã đạt giới hạn ${providerConcurrencyLimits.user.videoProcessing} luồng video và ${providerConcurrencyLimits.user.queued} hàng chờ của nguồn đang chọn. Vui lòng đợi.`
+        : `You have reached this provider's limit of ${providerConcurrencyLimits.user.videoProcessing} video slots and ${providerConcurrencyLimits.user.queued} queued job. Please wait.`, 'warning');
       return;
     }
 
-    if (queueStats.systemQueued >= CONCURRENCY_LIMITS.system.queued) {
+    if (providerQueueStats.systemQueued >= providerConcurrencyLimits.system.queued) {
       notify(lang === 'vi' ? 'Hệ thống đang quá tải (Hàng chờ đầy). Vui lòng thử lại sau ít phút.' : 'System is overloaded (Queue full). Please try again later.', 'error');
       return;
     }
@@ -1729,13 +1734,13 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                       Luồng video
                     </span>
                     <span className="text-[10px] font-mono text-slate-600 dark:text-slate-300">
-                      {queueStats.myVideoProcessing}/{CONCURRENCY_LIMITS.user.videoProcessing} · Chờ {queueStats.myQueued}/{CONCURRENCY_LIMITS.user.queued}
+                      {providerQueueStats.myVideoProcessing}/{providerConcurrencyLimits.user.videoProcessing} · Chờ {providerQueueStats.myQueued}/{providerConcurrencyLimits.user.queued}
                     </span>
                   </button>
                   {isConcurrencyExpanded && (
                     <div className="px-4 pb-3 pt-2 border-t border-slate-200/60 dark:border-slate-800 text-[10px] text-slate-600 dark:text-slate-300 space-y-2">
-                      <div className="flex justify-between"><span>Video hệ thống</span><span className="font-mono">{queueStats.systemVideoProcessing}/{CONCURRENCY_LIMITS.system.videoProcessing}</span></div>
-                      <div className="flex justify-between"><span>Hàng chờ hệ thống</span><span className="font-mono">{queueStats.systemQueued}/{CONCURRENCY_LIMITS.system.queued}</span></div>
+                      <div className="flex justify-between"><span>Video hệ thống</span><span className="font-mono">{providerQueueStats.systemVideoProcessing}/{providerConcurrencyLimits.system.videoProcessing}</span></div>
+                      <div className="flex justify-between"><span>Hàng chờ hệ thống</span><span className="font-mono">{providerQueueStats.systemQueued}/{providerConcurrencyLimits.system.queued}</span></div>
                     </div>
                   )}
                 </div>

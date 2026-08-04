@@ -260,6 +260,16 @@ assert(gommoSource.includes('data?.raw?.videoInfo?.message'));
 assert(gommoSource.includes("if (data?.imageInfo && typeof data.imageInfo === 'object') return data.imageInfo"));
 assert(gommoSource.includes("if (data?.videoInfo && typeof data.videoInfo === 'object') return data.videoInfo"));
 
+const providerCapacityMigration = await readFile(
+  new URL('../supabase/migrations/20260804183000_provider_specific_queue_capacity.sql', import.meta.url),
+  'utf8',
+);
+assert(providerCapacityMigration.includes("when n.provider_key = 'gommo' then 8 else 4"));
+assert(providerCapacityMigration.includes("when n.provider_key = 'gommo' then 2 else 1"));
+assert(providerCapacityMigration.includes("partition by e.user_id, e.provider_key"));
+assert(providerCapacityMigration.includes("partition by ru.provider_key"));
+assert(providerCapacityMigration.includes('system_gommo_image_processing integer'));
+
 const tstCatalogSource = await readFile(new URL('../services/tstCatalog.ts', import.meta.url), 'utf8');
 assert(tstCatalogSource.includes("String(entry.key || entry.config_key || '')"));
 assert(tstCatalogSource.includes("'image-gpt-2': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3']"));

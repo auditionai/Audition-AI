@@ -17,7 +17,7 @@ import {
 } from '../../services/economyService';
 import { useNotification } from '../../components/NotificationSystem';
 import { caulenhauClient } from '../../services/supabaseClient';
-import { CONCURRENCY_LIMITS, useConcurrency } from '../../services/concurrencyService';
+import { getProviderConcurrencyLimits, getProviderQueueStats, useConcurrency } from '../../services/concurrencyService';
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import { downloadAssetToBrowser } from '../../services/downloadService';
@@ -333,6 +333,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const generationTier = aiModel;
   const selectedModelId = getGenerationModelId(aiModel);
   const selectedProvider = resolveProviderForModel(providerConfig, selectedModelId, providerRouteKey);
+  const providerQueueStats = getProviderQueueStats(queueStats, selectedProvider);
+  const providerConcurrencyLimits = getProviderConcurrencyLimits(selectedProvider);
   const selectedGommoModel = getGommoModelForAudition(gommoCatalog, selectedModelId);
   const isGommoSelected = selectedProvider === 'gommo';
   const tstAspectRatios = useMemo(
@@ -933,12 +935,12 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
     }
 
     try {
-        if (queueStats.myImageProcessing >= CONCURRENCY_LIMITS.user.imageProcessing && queueStats.myQueued >= CONCURRENCY_LIMITS.user.queued) {
+        if (providerQueueStats.myImageProcessing >= providerConcurrencyLimits.user.imageProcessing && providerQueueStats.myQueued >= providerConcurrencyLimits.user.queued) {
             notify(lang === 'vi' ? 'Bạn đã đạt giới hạn 1 luồng tạo ảnh và 1 hàng chờ. Vui lòng đợi.' : 'You have reached the limit of 1 image processing slot and 1 queued job. Please wait.', 'warning');
             return;
         }
 
-        if (queueStats.systemQueued >= CONCURRENCY_LIMITS.system.queued) {
+        if (providerQueueStats.systemQueued >= providerConcurrencyLimits.system.queued) {
             notify(lang === 'vi' ? 'Hệ thống đang quá tải (Hàng chờ đầy). Vui lòng thử lại sau ít phút.' : 'System is overloaded (Queue full). Please try again later.', 'error');
             return;
         }
@@ -1997,18 +1999,18 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                 Luồng xử lý
                             </span>
                             <span className="text-[10px] font-mono text-slate-600 dark:text-slate-300">
-                                Ảnh {queueStats.myImageProcessing}/{CONCURRENCY_LIMITS.user.imageProcessing} · Chờ {queueStats.myQueued}/{CONCURRENCY_LIMITS.user.queued}
+                                Ảnh {providerQueueStats.myImageProcessing}/{providerConcurrencyLimits.user.imageProcessing} · Chờ {providerQueueStats.myQueued}/{providerConcurrencyLimits.user.queued}
                             </span>
                         </button>
                         {isConcurrencyExpanded && (
                             <div className="px-4 pb-3 pt-2 border-t border-slate-200/60 dark:border-slate-800 space-y-2 text-[10px] text-slate-600 dark:text-slate-300">
                                 <div className="flex justify-between">
                                     <span>Hệ thống xử lý ảnh</span>
-                                    <span className="font-mono">{queueStats.systemImageProcessing}/{CONCURRENCY_LIMITS.system.imageProcessing}</span>
+                                    <span className="font-mono">{providerQueueStats.systemImageProcessing}/{providerConcurrencyLimits.system.imageProcessing}</span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span>Hàng chờ hệ thống</span>
-                                    <span className="font-mono">{queueStats.systemQueued}/{CONCURRENCY_LIMITS.system.queued}</span>
+                                    <span className="font-mono">{providerQueueStats.systemQueued}/{providerConcurrencyLimits.system.queued}</span>
                                 </div>
                                 <button type="button" onClick={triggerPoll} className="neu-button w-full py-2 rounded-xl font-black text-[#FF007F]">
                                     Làm mới trạng thái

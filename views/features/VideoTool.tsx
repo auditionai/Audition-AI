@@ -176,8 +176,12 @@ const getTstServerDescription = (serverId: string) => {
 
 const getVideoFamilyIcon = (family: VideoModelFamily) => {
     if (family === 'grok') return Icons.Zap;
+    if (family === 'seedance') return Icons.Activity;
     if (family === 'kling') return Icons.Crown;
-    return Icons.Video;
+    if (family === 'veo') return Icons.Globe;
+    if (family === 'hailuo') return Icons.Sparkles;
+    if (family === 'wan') return Icons.Rocket;
+    return Icons.Palette;
 };
 
 const getVideoFamilyTheme = (family: VideoModelFamily, selected: boolean) => {
@@ -308,7 +312,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
   const [motionModelOptions, setMotionModelOptions] = useState<AIModelOption[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [resultVideo, setResultVideo] = useState<string | null>(null);
-  const [videoModelFamily, setVideoModelFamily] = useState<VideoModelFamily>('seedance');
+  const [videoModelFamily, setVideoModelFamily] = useState<VideoModelFamily>('grok');
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [gommoCatalog, setGommoCatalog] = useState<GommoProviderCatalog | null>(null);
@@ -408,8 +412,9 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
               if (routedVideoModels.length > 0) {
                   setVideoModelOptions(routedVideoModels);
                   setVideoModel((current) => {
-                      const next = routedVideoModels.some((model) => model.id === current) ? current : routedVideoModels[0].id;
-                      setVideoModelFamily(getVideoModelFamily(routedVideoModels.find((model) => model.id === next) || routedVideoModels[0]));
+                      const preferredModel = routedVideoModels.find((model) => getVideoModelFamily(model) === 'grok') || routedVideoModels[0];
+                      const next = routedVideoModels.some((model) => model.id === current) ? current : preferredModel.id;
+                      setVideoModelFamily(getVideoModelFamily(routedVideoModels.find((model) => model.id === next) || preferredModel));
                       return next;
                   });
               }
@@ -1418,6 +1423,9 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                       const familyModels = getModelsByFamily(videoModelOptions, family);
                       const FamilyIcon = getVideoFamilyIcon(family);
                       const selected = videoModelFamily === family;
+                      const familyLabel = family === 'other'
+                        ? (familyModels.find((model) => model.id === videoModel)?.name || familyModels[0]?.name || meta.label)
+                        : meta.label;
                       return (
                         <button
                           key={family}
@@ -1449,7 +1457,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                               #{meta.tag.replace(/\s+/g, '_')}
                             </span>
                           </span>
-                          <span className="block mt-2 text-sm font-black font-accent text-slate-900 dark:text-white">{meta.label}</span>
+                          <span className="block mt-2 truncate text-sm font-black font-accent text-slate-900 dark:text-white" title={familyLabel}>{familyLabel}</span>
                           <span className="block mt-0.5 text-[10px] font-bold text-slate-600 dark:text-slate-300">{getFamilyPriceLabel(familyModels)}</span>
                         </button>
                       );
@@ -1474,7 +1482,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                             ? 'bg-gradient-to-br from-[#FF007F] to-[#9D00FF] text-white shadow-lg shadow-[#FF007F]/20'
                             : 'neu-inset-sm text-slate-500 dark:text-slate-300'
                         }`}>
-                          <Icons.Video className="w-5 h-5" />
+                          {React.createElement(getVideoFamilyIcon(getVideoModelFamily(model)), { className: 'w-5 h-5' })}
                         </span>
                         <span className="flex-1 min-w-0">
                           <span className="flex flex-wrap items-center justify-between gap-2">

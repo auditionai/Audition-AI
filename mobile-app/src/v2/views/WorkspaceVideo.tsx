@@ -9,7 +9,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   Sparkles, ImagePlus, Gem,
   Film, User, Loader, AlertTriangle,
-  Video, Music, VolumeX 
+  Video, Music, VolumeX, Zap, Activity, Crown, Globe2, Rocket, Palette
 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -84,6 +84,16 @@ const getVideoModelFamily = (model?: Pick<AIModelOption, 'id' | 'name'> | null):
 
 const getModelsByFamily = (models: AIModelOption[], family: VideoModelFamily) =>
   models.filter((model) => getVideoModelFamily(model) === family);
+
+const getVideoFamilyIcon = (family: VideoModelFamily) => {
+  if (family === 'grok') return Zap;
+  if (family === 'seedance') return Activity;
+  if (family === 'kling') return Crown;
+  if (family === 'veo') return Globe2;
+  if (family === 'hailuo') return Sparkles;
+  if (family === 'wan') return Rocket;
+  return Palette;
+};
 
 const getFamilyPriceLabel = (models: AIModelOption[]) => {
   if (models.length === 0) return 'Bảo trì';
@@ -180,7 +190,7 @@ export function WorkspaceVideo() {
   const [runtimeModels, setRuntimeModels] = useState<TstRuntimeModel[]>([]);
   const [videoModelOptions, setVideoModelOptions] = useState<AIModelOption[]>([]);
   const [motionModelOptions, setMotionModelOptions] = useState<AIModelOption[]>([]);
-  const [videoModelFamily, setVideoModelFamily] = useState<VideoModelFamily>('seedance');
+  const [videoModelFamily, setVideoModelFamily] = useState<VideoModelFamily>('grok');
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [gommoCatalog, setGommoCatalog] = useState<GommoProviderCatalog | null>(null);
@@ -293,8 +303,9 @@ export function WorkspaceVideo() {
         if (routedVideoModels.length > 0) {
           setVideoModelOptions(routedVideoModels);
           setVideoModel((current) => {
-            const next = routedVideoModels.some((m: AIModelOption) => m.id === current) ? current : routedVideoModels[0].id;
-            setVideoModelFamily(getVideoModelFamily(routedVideoModels.find((m: AIModelOption) => m.id === next) || routedVideoModels[0]));
+            const preferredModel = routedVideoModels.find((model: AIModelOption) => getVideoModelFamily(model) === 'grok') || routedVideoModels[0];
+            const next = routedVideoModels.some((m: AIModelOption) => m.id === current) ? current : preferredModel.id;
+            setVideoModelFamily(getVideoModelFamily(routedVideoModels.find((m: AIModelOption) => m.id === next) || preferredModel));
             return next;
           });
         }
@@ -977,6 +988,10 @@ export function WorkspaceVideo() {
                     const meta = VIDEO_MODEL_FAMILY_META[family];
                     const familyModels = getModelsByFamily(videoModelOptions, family);
                     const isActive = videoModelFamily === family;
+                    const FamilyIcon = getVideoFamilyIcon(family);
+                    const familyLabel = family === 'other'
+                      ? (familyModels.find((model) => model.id === videoModel)?.name || familyModels[0]?.name || meta.label)
+                      : meta.label;
                     return (
                       <button
                         key={family}
@@ -996,7 +1011,10 @@ export function WorkspaceVideo() {
                         }`}>
                           #{meta.tag}
                         </div>
-                        <div className="text-[12px] font-black">{meta.label}</div>
+                        <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-fuchsia-500 to-purple-600 text-white shadow-sm">
+                          <FamilyIcon className="h-4 w-4" />
+                        </div>
+                        <div className="truncate text-[12px] font-black" title={familyLabel}>{familyLabel}</div>
                         <div className="mt-1 text-[9px] font-black text-cyan-600 dark:text-cyan-300">{getFamilyPriceLabel(familyModels)}</div>
                       </button>
                     );

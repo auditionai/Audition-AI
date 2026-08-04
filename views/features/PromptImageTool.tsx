@@ -404,7 +404,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
       return;
     }
     if (!selectedCost.available || totalCost <= 0) {
-      notify('Cấu hình giá cho model này chưa khả dụng. Vui lòng kiểm tra bảng giá admin/TST.', 'error');
+      notify('Cấu hình giá cho model này chưa khả dụng. Vui lòng kiểm tra bảng giá quản trị.', 'error');
       return;
     }
 
@@ -549,7 +549,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
               maxLength={MAX_PROMPT_CHARACTERS}
-              placeholder={`Nhập prompt tạo ảnh. Hệ thống chỉ gửi prompt này và ảnh tham chiếu sang ${isGommoSelected ? 'Gommo' : 'TST'}, không chèn prompt hệ thống Audition.`}
+              placeholder="Nhập prompt tạo ảnh. Hệ thống chỉ gửi prompt này và ảnh tham chiếu sang nguồn đã cấu hình, không chèn prompt hệ thống Audition."
               rows={12}
               className="block w-full min-h-[340px] max-h-[760px] rounded-xl border border-white/10 bg-black/40 p-4 text-sm leading-relaxed text-white outline-none focus:border-audi-pink resize-y overflow-auto placeholder:text-slate-500"
             />
@@ -667,7 +667,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
 
             {isGommoSelected && gommoModes.length > 0 && (
               <div className="space-y-3 animate-fade-in">
-                <label className="text-[10px] font-bold text-cyan-300 uppercase">Máy chủ / chế độ Gommo · realtime</label>
+                <label className="text-[10px] font-bold text-cyan-300 uppercase">Máy chủ / chế độ · realtime</label>
                 <div className="grid grid-cols-2 gap-2 bg-black/30 p-1.5 rounded-xl border border-cyan-400/10">
                   {gommoModes.map((option) => (
                     <button

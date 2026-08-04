@@ -8,6 +8,7 @@ import { downloadAssetToBrowser } from '../services/downloadService';
 import { Icons } from '../components/Icons';
 import { useNotification } from '../components/NotificationSystem';
 import { QUEUE_SUBMITTED_EVENT } from '../services/serverQueueService';
+import { sanitizeProviderDisplayText } from '../shared/providerDisplay';
 
 interface GalleryProps {
   lang: Language;
@@ -280,7 +281,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
           : (lang === 'vi' ? 'Đang tạo ảnh...' : 'Image is generating...');
 
   const getFailedAssetMessage = (img: GeneratedImage) =>
-      img.error?.trim() || (lang === 'vi'
+      sanitizeProviderDisplayText(img.error?.trim()) || (lang === 'vi'
           ? 'Tiến trình đã thất bại nhưng chưa có mô tả lỗi chi tiết.'
           : 'The generation failed without a detailed error message.');
 
@@ -578,8 +579,8 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                                     {isProcessing && getLatestQueueLog(img) && (
                                                         <div className="mt-1.5 flex items-start gap-1.5 text-[11px] text-audi-cyan/80 leading-relaxed max-w-[220px] md:max-w-[320px]">
                                                             <Icons.Activity className="w-3.5 h-3.5 mt-0.5 shrink-0 text-audi-cyan" />
-                                                            <span className="line-clamp-2" title={getLatestQueueLog(img)?.message}>
-                                                                {getLatestQueueLog(img)?.message}
+                                                            <span className="line-clamp-2" title={sanitizeProviderDisplayText(getLatestQueueLog(img)?.message)}>
+                                                                {sanitizeProviderDisplayText(getLatestQueueLog(img)?.message)}
                                                             </span>
                                                         </div>
                                                     )}
@@ -965,7 +966,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                             {getQueueStageDisplay(getLatestQueueLog(viewingImage)?.stage)}
                                         </div>
                                         <p className="mt-1.5 text-sm font-medium leading-relaxed text-slate-700 dark:text-slate-200">
-                                            {getLatestQueueLog(viewingImage)?.message}
+                                            {sanitizeProviderDisplayText(getLatestQueueLog(viewingImage)?.message)}
                                         </p>
                                     </section>
                                 )}
@@ -986,7 +987,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                             {lang === 'vi' ? 'Dữ liệu kỹ thuật của provider' : 'Provider technical data'}
                                         </summary>
                                         <div className="custom-scrollbar mt-3 max-h-52 overflow-y-auto whitespace-pre-wrap break-words rounded-xl bg-black/10 p-3 font-mono text-[10px] leading-relaxed text-slate-600 dark:bg-black/20 dark:text-slate-400">
-                                            {viewingImage.providerPrompt}
+                                            {sanitizeProviderDisplayText(viewingImage.providerPrompt)}
                                         </div>
                                     </details>
                                 )}
@@ -1086,7 +1087,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                         {formatDate(new Date(entry.at).getTime())}
                                     </div>
                                 </div>
-                                <div className="text-sm font-medium leading-relaxed text-slate-700 dark:text-slate-200">{entry.message}</div>
+                                <div className="text-sm font-medium leading-relaxed text-slate-700 dark:text-slate-200">{sanitizeProviderDisplayText(entry.message)}</div>
                             </article>
                         ))}
                     </div>

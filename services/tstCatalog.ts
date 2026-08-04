@@ -1151,7 +1151,7 @@ export const fetchTstPricing = async (forceRefresh = false): Promise<TstPricingE
 
   if (!pricingPromise) {
     const url = forceRefresh ? '/api/tst-models-pricing?force=1' : '/api/tst-models-pricing';
-    pricingPromise = fetchCatalogJsonWithRetry(url, 'Failed to load TST pricing')
+    pricingPromise = fetchCatalogJsonWithRetry(url, 'Failed to load provider pricing')
       .then(async (data) => {
         pricingCache = Array.isArray(data?.pricing) ? data.pricing.map(mapPricingEntry) : [];
         pricingCacheFetchedAt = Date.now();
@@ -1183,7 +1183,7 @@ export const fetchTstModels = async (forceRefresh = false): Promise<TstRuntimeMo
 
   if (!modelsPromise) {
     const url = forceRefresh ? '/api/tst-models?force=1' : '/api/tst-models';
-    modelsPromise = fetchCatalogJsonWithRetry(url, 'Failed to load TST models')
+    modelsPromise = fetchCatalogJsonWithRetry(url, 'Failed to load provider models')
       .then(async (data) => {
         modelsCache = Array.isArray(data?.models) ? data.models.map(mapRuntimeModel) : [];
         modelsCacheFetchedAt = Date.now();

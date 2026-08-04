@@ -58,7 +58,7 @@ const VIDEO_MODEL_FAMILY_META: Record<VideoModelFamily, { label: string; tag: st
   seedance: {
     label: 'Seedance',
     tag: 'HOT',
-    description: 'Đẹp gần Kling, giá hợp lý, có thể hỗ trợ 1080P tùy cấu hình TST.',
+    description: 'Đẹp gần Kling, giá hợp lý, có thể hỗ trợ 1080P tùy cấu hình máy chủ.',
   },
   kling: {
     label: 'Kling',
@@ -68,7 +68,7 @@ const VIDEO_MODEL_FAMILY_META: Record<VideoModelFamily, { label: string; tag: st
   veo: { label: 'VEO', tag: 'GOOGLE', description: 'Video Google với nhiều lựa chọn chất lượng.' },
   hailuo: { label: 'Hailuo', tag: 'MOTION', description: 'Chuyển động tự nhiên và phong cách cinematic.' },
   wan: { label: 'Wan', tag: 'VALUE', description: 'Cấu hình gọn, tốc độ và chi phí linh hoạt.' },
-  other: { label: 'Khác', tag: 'NEW', description: 'Các model tạo video mới từ Gommo.' },
+  other: { label: 'Khác', tag: 'NEW', description: 'Các model tạo video mới từ nhà cung cấp.' },
 };
 
 const getVideoModelFamily = (model?: Pick<AIModelOption, 'id' | 'name'> | null): VideoModelFamily => {
@@ -111,7 +111,7 @@ const getGommoModeDescription = (mode: string) => {
     : 'Ưu tiên chất lượng, chi tiết và độ ổn định.';
   if (value.includes('fast')) return 'Xử lý nhanh, cân bằng chất lượng và chi phí.';
   if (value.includes('standard')) return 'Cân bằng tốc độ, chất lượng và chi phí.';
-  return 'Chế độ xử lý do Gommo cung cấp.';
+  return 'Chế độ xử lý do nhà cung cấp hỗ trợ.';
 };
 
 const getGommoModePriceLabel = (model: GommoCatalogModel | null | undefined, mode: string) => {
@@ -131,7 +131,7 @@ const getTstServerDescription = (serverId: string) => {
   if (value === 'fast') return 'Xử lý nhanh cho nhu cầu thông thường.';
   if (value === 'standard' || value === 'default') return 'Cân bằng tốc độ, chất lượng và chi phí.';
   if (value.startsWith('vip')) return 'Server ưu tiên, ổn định hơn khi hệ thống đông.';
-  return 'Server realtime do TST cung cấp.';
+  return 'Máy chủ được đồng bộ theo thời gian thực.';
 };
 
 const SMART_TIPS = [
@@ -302,9 +302,9 @@ export function WorkspaceVideo() {
           setMotionModelOptions(routedMotionModels);
           setMotionModel((current) => routedMotionModels.some((m: AIModelOption) => m.id === current) ? current : routedMotionModels[0].id);
         }
-        setCatalogError(models.length > 0 ? null : 'TST đang bảo trì hoặc không sẵn sàng.');
+        setCatalogError(models.length > 0 ? null : 'Dịch vụ tạo video đang bảo trì hoặc không sẵn sàng.');
       } catch (error) {
-        setCatalogError('TST đang bảo trì hoặc không sẵn sàng.');
+        setCatalogError('Dịch vụ tạo video đang bảo trì hoặc không sẵn sàng.');
       } finally {
         setCatalogLoading(false);
       }
@@ -333,7 +333,7 @@ export function WorkspaceVideo() {
       const catalogModel = getGommoModelForAudition(gommoCatalog, model.id);
       return {
         description: catalogModel?.description || getVideoModelHint(model),
-        server: `Gommo · ${catalogModel?.server || 'Realtime'}`,
+        server: `Máy chủ · ${catalogModel?.server || 'Realtime'}`,
         capabilities: [
           catalogModel?.resolutions.length ? catalogModel.resolutions.map((item) => item.type.toUpperCase()).join('/') : '',
           catalogModel?.durations.length ? `${catalogModel.durations[0].type}–${catalogModel.durations[catalogModel.durations.length - 1]?.type}s` : '',
@@ -343,7 +343,7 @@ export function WorkspaceVideo() {
     const spec = getVideoModelSpecs(pricingEntries, runtimeModels).find((entry: any) => entry.modelId === model.id);
     return {
       description: getVideoModelHint(model),
-      server: `TST · ${((spec?.servers as string[]) || []).map((item) => item.toUpperCase()).join(' / ') || 'Realtime'}`,
+      server: `Máy chủ · ${((spec?.servers as string[]) || []).map((item) => item.toUpperCase()).join(' / ') || 'Realtime'}`,
       capabilities: [
         ((spec?.resolutions as string[]) || []).map((item) => item.toUpperCase()).join('/'),
         ((spec?.durations as string[]) || []).join('/'),
@@ -664,11 +664,11 @@ export function WorkspaceVideo() {
   const handleGenerate = async () => {
     if (stage === 'submitting') return;
     if (cooldownRemaining > 0) { notify(`Vui lòng đợi ${cooldownRemaining}s`, 'warning'); return; }
-    if (!isCatalogReady) { notify(isGommoSelected ? 'Gommo đang bảo trì hoặc chưa có giá Vcoin.' : 'TST đang bảo trì.', 'error'); return; }
+    if (!isCatalogReady) { notify(isGommoSelected ? 'Nguồn tạo video đang bảo trì hoặc chưa có giá Vcoin.' : 'Dịch vụ tạo video đang bảo trì.', 'error'); return; }
     if (!currentCostBreakdown.available) { notify('Cấu hình không khả dụng.', 'error'); return; }
 
     if (activeMode === 'video_ai' && !keyframeImage) {
-      notify(`Vui lòng tải ảnh keyframe trước khi gửi job tạo video sang ${isGommoVideoSelected ? 'Gommo' : 'TST'}.`, 'error');
+      notify('Vui lòng tải ảnh keyframe trước khi gửi job tạo video.', 'error');
       return;
     }
     if (activeMode === 'motion_control' && (!characterImage || !motionVideoFile)) {
@@ -1002,9 +1002,6 @@ export function WorkspaceVideo() {
                     );
                   })}
                 </div>
-                <div className="rounded-[18px] border border-cyan-100 bg-cyan-50/70 p-3 text-[11px] font-medium leading-relaxed text-cyan-800 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-100">
-                  {VIDEO_MODEL_FAMILY_META[videoModelFamily].description}
-                </div>
                 <div className="flex flex-col gap-2">
                   {getModelsByFamily(videoModelOptions, videoModelFamily).map((m: AIModelOption) => (
                     <button
@@ -1068,7 +1065,7 @@ export function WorkspaceVideo() {
 
               {isGommoSelected && (selectedGommoModel?.modes || []).length > 0 && (
                 <div className="space-y-2">
-                  <h3 className="text-[10px] font-bold text-cyan-600 dark:text-cyan-400 uppercase tracking-wider ml-1">Máy chủ / chế độ Gommo · giá API</h3>
+                  <h3 className="text-[10px] font-bold text-cyan-600 dark:text-cyan-400 uppercase tracking-wider ml-1">Máy chủ / chế độ · giá API</h3>
                   <div className="flex flex-col gap-2">
                     {(selectedGommoModel?.modes || []).map((option) => (
                       <button

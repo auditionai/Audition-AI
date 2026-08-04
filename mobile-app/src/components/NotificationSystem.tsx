@@ -6,6 +6,7 @@
 
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
 import { Check, X, Info, Flame, Trash2, Bell } from 'lucide-react';
+import { sanitizeProviderDisplayText } from '../../../shared/providerDisplay';
 
 type NotificationType = 'success' | 'error' | 'info' | 'warning';
 
@@ -46,14 +47,19 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
   const notify = useCallback((message: string, type: NotificationType = 'info') => {
     const id = Date.now();
-    setToasts((prev) => [...prev, { id, message, type }]);
+    setToasts((prev) => [...prev, { id, message: sanitizeProviderDisplayText(message), type }]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, 3000);
   }, []);
 
   const confirm = useCallback((options: ConfirmOptions) => {
-    setConfirmModal({ ...options, isOpen: true });
+    setConfirmModal({
+      ...options,
+      title: sanitizeProviderDisplayText(options.title),
+      message: sanitizeProviderDisplayText(options.message),
+      isOpen: true,
+    });
   }, []);
 
   const closeConfirm = () => setConfirmModal(null);

@@ -112,6 +112,7 @@ import {
     type GommoProviderCatalog,
 } from '../services/providerCatalog';
 import { getGommoServerGroups } from '../shared/gommoServerRouting';
+import { sanitizeProviderDisplayText } from '../shared/providerDisplay';
 
 interface AdminProps {
   lang: Language;
@@ -714,7 +715,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   // Helpers for Notifications
   const showToast = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
       const id = Date.now();
-      setToasts(prev => [...prev, { id, msg, type }]);
+      setToasts(prev => [...prev, { id, msg: sanitizeProviderDisplayText(msg), type }]);
       setTimeout(() => {
           setToasts(prev => prev.filter(t => t.id !== id));
       }, 4000);
@@ -723,7 +724,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const showConfirm = (msg: string, action: () => void) => {
       setConfirmDialog({
           show: true,
-          msg,
+          msg: sanitizeProviderDisplayText(msg),
           onConfirm: () => {
               action();
               setConfirmDialog(prev => ({ ...prev, show: false }));
@@ -922,7 +923,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   modelName: model.name,
                   server: 'gommo',
                   providerServerId: gommoServerGroup?.id,
-                  providerServerLabel: gommoServerGroup?.label || model.server || 'Gommo Gateway',
+                  providerServerLabel: gommoServerGroup?.label || model.server || 'AI Gateway',
                   providerModeLabel: gommoMode?.name || price.mode || undefined,
                   resolution: price.resolution || undefined,
                   duration: duration || undefined,
@@ -1138,7 +1139,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const handleSwitchGenerationProvider = async (provider: GenerationProviderMode) => {
       if (provider === generationProvider || switchingGenerationProvider) return;
       if (provider === 'gommo' && !gommoCatalog?.configured) {
-          showToast('Gommo chưa được cấu hình trên server nên chưa thể kích hoạt.', 'error');
+          showToast('API 2 chưa được cấu hình trên máy chủ nên chưa thể kích hoạt.', 'error');
           return;
       }
       setSwitchingGenerationProvider(true);
@@ -1155,7 +1156,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           return;
       }
       setGenerationProvider(provider);
-      showToast(`Đã đổi provider mặc định sang ${provider === 'gommo' ? 'Gommo' : 'TST'}; các route riêng theo model được giữ nguyên.`, 'success');
+      showToast(`Đã đổi nguồn mặc định sang ${provider === 'gommo' ? 'API 2' : 'API 1'}; các route riêng theo model được giữ nguyên.`, 'success');
   };
 
   const handleToggleSmartProviderFallback = async () => {
@@ -1177,7 +1178,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       setSmartProviderFallbackEnabled(nextEnabled);
       showToast(
           nextEnabled
-              ? 'Đã bật backup thông minh TST server → Gommo cho job ảnh.'
+              ? 'Đã bật backup thông minh giữa các máy chủ và nguồn dự phòng cho job ảnh.'
               : 'Đã tắt backup thông minh; job sẽ chạy theo provider đã chọn.',
           'success',
       );
@@ -1189,7 +1190,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   ) => {
       if (switchingGenerationProvider) return;
       if (provider === 'gommo' && !gommoCatalog?.configured) {
-          showToast('Gommo chưa được cấu hình trên server.', 'error');
+          showToast('API 2 chưa được cấu hình trên máy chủ.', 'error');
           return;
       }
       const nextProviderByFeature = { ...generationProviderByFeature };
@@ -1350,11 +1351,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       };
       const result = await saveTstServerAvailabilityConfig(nextConfig);
       if (!result.success) {
-          showToast(`Lỗi lưu server Gommo: ${result.error}`, 'error');
+          showToast(`Lỗi lưu máy chủ API 2: ${result.error}`, 'error');
           return;
       }
       setServerAvailabilityConfig(nextConfig);
-      showToast('Đã cập nhật server Gommo; backend sẽ dùng cùng trạng thái này.', 'success');
+      showToast('Đã cập nhật máy chủ API 2; backend sẽ dùng cùng trạng thái này.', 'success');
   };
 
   const handleEnableAllPricingServers = async () => {
@@ -1427,7 +1428,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       }
 
       setServerAvailabilityConfig(nextConfig);
-      showToast('\u0110\u00e3 kh\u00f4i ph\u1ee5c c\u1ea5u h\u00ecnh server theo TST live.', 'success');
+      showToast('\u0110\u00e3 kh\u00f4i ph\u1ee5c c\u1ea5u h\u00ecnh m\u00e1y ch\u1ee7 theo d\u1eef li\u1ec7u live.', 'success');
   };
 
   const activeAutoDisabledCombos = useMemo(() => {
@@ -2190,7 +2191,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   };
 
   const handleRescueFailedJobs = async () => {
-      showConfirm('Kéo lại kết quả đã tạo xong từ TST cho mọi job đã fail timeout trong 7 ngày gần đây? Hành động này chỉ cập nhật job có result trên TST, không dispatch lại job mới.', async () => {
+      showConfirm('Kéo lại kết quả đã tạo xong từ nhà cung cấp cho mọi job bị timeout trong 7 ngày gần đây? Hành động này chỉ cập nhật job đã có kết quả, không gửi lại job mới.', async () => {
           setRescuingFailedQueueJobs(true);
           try {
               const payload = await forceRescueFailedQueueJobs({
@@ -2199,12 +2200,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   limit: 50,
               });
               showToast(
-                  `Rescue TST xong. Kiểm tra=${payload.checked}, kéo lại=${payload.rescued}, đưa về processing=${payload.revived}, ứng viên=${payload.totalCandidates}.`,
+                  `Cứu job xong. Kiểm tra=${payload.checked}, kéo lại=${payload.rescued}, đưa về processing=${payload.revived}, ứng viên=${payload.totalCandidates}.`,
                   payload.rescued > 0 || payload.revived > 0 ? 'success' : 'info',
               );
               await loadQueueJobs({ silent: false });
           } catch (error: any) {
-              showToast(`Lỗi rescue job TST: ${error?.message || error}`, 'error');
+              showToast(`Lỗi cứu job: ${error?.message || error}`, 'error');
           } finally {
               setRescuingFailedQueueJobs(false);
           }
@@ -3801,7 +3802,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                               {loadingQueueJobs ? 'Đang tải...' : 'Làm mới'}
                           </button>
                           <button onClick={handleRescueFailedJobs} disabled={rescuingFailedQueueJobs} className="px-4 py-2 rounded-xl bg-violet-500 hover:bg-violet-600 text-slate-900 dark:text-white text-sm font-bold disabled:opacity-60">
-                              {rescuingFailedQueueJobs ? 'Đang cứu TST...' : 'Cứu job TST timeout'}
+                              {rescuingFailedQueueJobs ? 'Đang cứu job...' : 'Cứu job timeout'}
                           </button>
                           <button onClick={handleQueueReconcile} disabled={reconcilingQueue} className="px-4 py-2 rounded-xl bg-audi-pink hover:bg-pink-600 text-slate-900 dark:text-white text-sm font-bold disabled:opacity-60">
                               {reconcilingQueue ? 'Đang reconcile...' : 'Reconcile Queue'}
@@ -3818,7 +3819,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           { key: 'completed', value: queueSummary.completed, label: 'Completed', color: 'text-green-400' },
                           { key: 'overdue_polls', value: queueSummary.overduePolls, label: 'Poll quá hạn', color: 'text-red-300' },
                           { key: 'untouched_queued', value: queueSummary.untouchedQueued, label: 'Queued bị bỏ đói', color: 'text-orange-400' },
-                          { key: 'stalled_pre_dispatch', value: queueSummary.stalledPreDispatch, label: 'Kẹt trước TST', color: 'text-pink-400' },
+                          { key: 'stalled_pre_dispatch', value: queueSummary.stalledPreDispatch, label: 'Kẹt trước khi gửi', color: 'text-pink-400' },
                       ].map((item) => (
                           <button
                               key={item.label}
@@ -4233,7 +4234,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                        setGommoCatalog(providerCatalog);
                                        setGommoCatalogError('');
                                        await refreshData();
-                                       showToast('Đã làm mới giá TST và Gommo realtime.', 'success');
+                                       showToast('Đã làm mới giá của hai nguồn theo thời gian thực.', 'success');
                                     } catch (error) {
                                        showToast('Lỗi khi làm mới bảng giá provider.', 'error');
                                    }
@@ -4255,9 +4256,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                            </p>
                            </div>
                            <div className="flex flex-wrap gap-2">
-                               <button onClick={handleEnableAllPricingServers} className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-[10px] font-bold text-emerald-300">Bật toàn bộ TST</button>
-                               <button onClick={handleFastOnlyPricingServers} className="rounded-xl border border-audi-cyan/30 bg-audi-cyan/10 px-3 py-2 text-[10px] font-bold text-audi-cyan">TST chỉ FAST</button>
-                               <button onClick={handleRestorePricingServersFromLive} className="rounded-xl border border-white/10 px-3 py-2 text-[10px] font-bold text-slate-300">Khôi phục TST live</button>
+                               <button onClick={handleEnableAllPricingServers} className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-[10px] font-bold text-emerald-300">Bật toàn bộ máy chủ</button>
+                               <button onClick={handleFastOnlyPricingServers} className="rounded-xl border border-audi-cyan/30 bg-audi-cyan/10 px-3 py-2 text-[10px] font-bold text-audi-cyan">Chỉ dùng FAST</button>
+                               <button onClick={handleRestorePricingServersFromLive} className="rounded-xl border border-white/10 px-3 py-2 text-[10px] font-bold text-slate-300">Khôi phục dữ liệu live</button>
                            </div>
                        </div>
                        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -4291,7 +4292,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                <div className="mt-1 text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">{route.description}</div>
                                            </div>
                                            <span className={`shrink-0 rounded-full px-2 py-1 text-[9px] font-black uppercase ${effectiveProvider === 'gommo' ? 'bg-violet-500/15 text-violet-300' : 'bg-cyan-500/15 text-cyan-300'}`}>
-                                               {effectiveProvider}
+                                               {effectiveProvider === 'gommo' ? 'API 2' : 'API 1'}
                                            </span>
                                        </div>
                                        <div className="mt-3 grid grid-cols-3 gap-2">
@@ -4307,7 +4308,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                        onClick={() => handleSwitchFeatureGenerationProvider(route.key, provider)}
                                                        className={`rounded-xl border px-2 py-2 text-[10px] font-black uppercase transition-all disabled:cursor-not-allowed disabled:opacity-40 ${active ? 'border-[#FF007F]/50 bg-[#FF007F]/15 text-[#FF007F]' : 'border-white/10 text-slate-600 dark:text-slate-300 hover:border-white/20'}`}
                                                    >
-                                                       {provider === 'default' ? 'Kế thừa' : provider}
+                                                       {provider === 'default' ? 'Kế thừa' : provider === 'gommo' ? 'API 2' : 'API 1'}
                                                    </button>
                                                );
                                            })}
@@ -4432,7 +4433,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                            <div>
                                <div className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">Provider mặc định toàn ứng dụng</div>
                                <p className="mt-1 text-xs leading-relaxed text-slate-700 dark:text-slate-300 font-semibold">
-                                   Áp dụng cho model chưa có route riêng. Bạn có thể chọn TST/Gommo cho từng model bên dưới; route Gommo đi thẳng Gommo, còn route TST có thể dùng chuỗi backup thông minh bên dưới.
+                                   Áp dụng cho model chưa có route riêng. Bạn có thể chọn API 1 hoặc API 2 cho từng model; mỗi route chạy theo nguồn đã chọn và có thể dùng chuỗi backup thông minh bên dưới.
                                </p>
                            </div>
                            <div className="grid grid-cols-2 gap-2 rounded-2xl neu-inset-sm p-2 min-w-[280px]">
@@ -4447,7 +4448,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                            onClick={() => handleSwitchGenerationProvider(provider)}
                                            className={`rounded-xl px-4 py-3 text-xs font-black uppercase tracking-wider transition-all disabled:cursor-not-allowed disabled:opacity-50 ${active ? 'bg-[#FF007F] text-white shadow-lg' : 'text-slate-700 dark:text-slate-300 hover:text-[#FF007F]'}`}
                                        >
-                                           {provider === 'tst' ? 'TST' : 'Gommo'}
+                                           {provider === 'tst' ? 'API 1' : 'API 2'}
                                            {active && <span className="block mt-0.5 text-[9px] opacity-80">Đang hoạt động</span>}
                                        </button>
                                    );
@@ -4461,7 +4462,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                            <div>
                                <div className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">Backup thông minh cho job tạo ảnh</div>
                                <p className="mt-1 text-xs leading-relaxed text-slate-700 dark:text-slate-300 font-semibold">
-                                   Khi TST xác nhận job thất bại, hệ thống thử server TST khác đang bật của cùng model (ưu tiên FAST), rồi mới chuyển sang Gommo. Không chuyển nguồn khi chỉ timeout hoặc mất kết nối mơ hồ để tránh tạo ảnh trùng; Vcoin chỉ trừ một lần.
+                                   Khi nguồn chính xác nhận job thất bại, hệ thống thử máy chủ khác đang bật của cùng model (ưu tiên FAST), rồi mới chuyển sang nguồn dự phòng. Không chuyển nguồn khi chỉ timeout hoặc mất kết nối mơ hồ để tránh tạo ảnh trùng; Vcoin chỉ trừ một lần.
                                </p>
                            </div>
                            <button
@@ -4488,7 +4489,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl p-4">
                           <div className="text-xs uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold font-bold">Models</div>
                           <div className="mt-2 text-3xl font-bold text-audi-cyan">{new Set(allPricingRows.map(row => row.modelId)).size}</div>
-                          <div className="text-xs text-slate-700 dark:text-slate-300 font-semibold mt-1">Nguồn live lấy trực tiếp từ catalog runtime của TST.</div>
+                          <div className="text-xs text-slate-700 dark:text-slate-300 font-semibold mt-1">Nguồn live lấy trực tiếp từ catalog của API 1.</div>
                       </div>
                        <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl p-4">
                            <div className="text-xs uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold font-bold">Quy đổi gốc</div>
@@ -4497,14 +4498,14 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                            </div>
                        </div>
                        <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl p-4">
-                           <div className="text-xs uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold font-bold">Gommo dự phòng</div>
+                           <div className="text-xs uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold font-bold">API 2 dự phòng</div>
                            <div className={`mt-2 text-2xl font-bold ${gommoCatalog?.configured ? 'text-emerald-400' : 'text-amber-400'}`}>
                                {gommoCatalog?.configured ? `${gommoCatalog.models.length} model` : 'Chưa cấu hình'}
                            </div>
                            <div className="text-xs text-slate-700 dark:text-slate-300 font-semibold mt-1">
                                {gommoCatalogError || (gommoCatalog?.vndPerCredit
-                                   ? `Quy đổi ${gommoCatalog.vndPerCredit}đ / Gommo Credit.`
-                                   : 'Giá realtime giữ nguyên đơn vị Gommo Credit; chưa giả định tỷ giá.')}
+                                   ? `Quy đổi ${gommoCatalog.vndPerCredit}đ / Credit.`
+                                   : 'Giá realtime giữ nguyên đơn vị Credit; chưa giả định tỷ giá.')}
                            </div>
                        </div>
                   </div>
@@ -4604,7 +4605,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           <div>
                               <h3 className="text-sm font-black text-slate-900 dark:text-white">Cấu hình giá Vcoin</h3>
                               <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
-                                  Giá AUDITION AI dùng chung cho hai provider. Cấu hình Gommo tương thích sẽ tự kế thừa giá hệ thống TST; chỉ còn {missingPricingCount} cấu hình chưa có giá.
+                                  Giá AUDITION AI dùng chung cho hai nguồn. Cấu hình tương thích của API 2 sẽ tự kế thừa giá hệ thống API 1; chỉ còn {missingPricingCount} cấu hình chưa có giá.
                               </p>
                           </div>
                           <div className="grid grid-cols-2 gap-2 rounded-2xl neu-inset-sm p-1.5">
@@ -4628,10 +4629,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       <th className="px-4 py-3 font-bold">Thời lượng</th>
                                       <th className="px-4 py-3 font-bold">Tốc độ</th>
                                       <th className="px-4 py-3 font-bold text-center">Audio</th>
-                                       <th className="px-4 py-3 font-bold text-right">TST Credits</th>
-                                       <th className="px-4 py-3 font-bold text-right">TST Quy Đổi</th>
-                                       <th className="px-4 py-3 font-bold text-right">Gommo Realtime</th>
-                                       <th className="px-4 py-3 font-bold">Gommo Route</th>
+                                       <th className="px-4 py-3 font-bold text-right">API 1 Credits</th>
+                                       <th className="px-4 py-3 font-bold text-right">API 1 Quy Đổi</th>
+                                       <th className="px-4 py-3 font-bold text-right">API 2 Realtime</th>
+                                       <th className="px-4 py-3 font-bold">API 2 Route</th>
                                        <th className="px-4 py-3 font-bold text-right">AUDITION AI</th>
                                       <th className="px-4 py-3 font-bold text-right">Lãi Gộp</th>
                                       <th className="px-4 py-3 font-bold">Config Key</th>
@@ -4679,7 +4680,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                   </td>
                                                   <td className="px-4 py-3 text-white">
                                                       <div className="flex items-center gap-2">
-                                                          <span>{row.server === 'gommo' ? row.providerServerLabel || 'Gommo Gateway' : tstServerToUi(row.server) || '-'}</span>
+                                                          <span>{row.server === 'gommo' ? row.providerServerLabel || 'AI Gateway' : tstServerToUi(row.server) || '-'}</span>
                                                           {!isProviderServerEnabledForModel(
                                                               serverAvailabilityConfig,
                                                               row.server === 'gommo' ? 'gommo' : 'tst',

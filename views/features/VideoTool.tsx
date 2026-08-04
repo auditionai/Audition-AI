@@ -85,7 +85,7 @@ const VIDEO_MODEL_FAMILY_META: Record<VideoModelFamily, {
     seedance: {
         label: 'Seedance',
         tag: 'HOT',
-        description: 'Chất lượng đẹp gần Kling, giá hợp lý, có thể hỗ trợ 1080P tùy phiên bản và server TST.',
+        description: 'Chất lượng đẹp gần Kling, giá hợp lý, có thể hỗ trợ 1080P tùy phiên bản và máy chủ.',
         accent: 'from-cyan-400/20 to-blue-500/10 border-audi-cyan/40 text-audi-cyan',
     },
     kling: {
@@ -97,7 +97,7 @@ const VIDEO_MODEL_FAMILY_META: Record<VideoModelFamily, {
     veo: { label: 'VEO', tag: 'GOOGLE', description: 'Dòng video Google với nhiều lựa chọn chất lượng và độ phân giải.', accent: 'from-blue-400/20 to-cyan-500/10 border-blue-400/40 text-blue-200' },
     hailuo: { label: 'Hailuo', tag: 'MOTION', description: 'Tối ưu chuyển động tự nhiên và các cảnh quay cinematic.', accent: 'from-violet-400/20 to-fuchsia-500/10 border-violet-400/40 text-violet-200' },
     wan: { label: 'Wan', tag: 'VALUE', description: 'Tạo video nhanh với cấu hình gọn và chi phí linh hoạt.', accent: 'from-emerald-400/20 to-lime-500/10 border-emerald-400/40 text-emerald-200' },
-    other: { label: 'Khác', tag: 'NEW', description: 'Các model tạo video mới được đồng bộ trực tiếp từ Gommo.', accent: 'from-slate-400/20 to-slate-500/10 border-slate-400/40 text-slate-200' },
+    other: { label: 'Khác', tag: 'NEW', description: 'Các model tạo video mới được đồng bộ trực tiếp từ nhà cung cấp.', accent: 'from-slate-400/20 to-slate-500/10 border-slate-400/40 text-slate-200' },
 };
 
 const getVideoModelFamily = (model?: Pick<AIModelOption, 'id' | 'name'> | null): VideoModelFamily => {
@@ -151,7 +151,7 @@ const getGommoModeDescription = (mode: string) => {
     if (value.includes('fast')) return 'Xử lý nhanh, cân bằng chất lượng và chi phí.';
     if (value.includes('standard')) return 'Cân bằng tốc độ, chất lượng và chi phí.';
     if (value.includes('crazy')) return 'Chuyển động mạnh và sáng tạo hơn.';
-    return 'Chế độ xử lý do Gommo cung cấp cho model này.';
+    return 'Chế độ xử lý do nhà cung cấp hỗ trợ cho model này.';
 };
 
 const getGommoModePriceLabel = (model: GommoCatalogModel | null | undefined, mode: string) => {
@@ -171,7 +171,7 @@ const getTstServerDescription = (serverId: string) => {
     if (value === 'fast') return 'Xử lý nhanh, phù hợp nhu cầu sử dụng thông thường.';
     if (value === 'standard' || value === 'default') return 'Cân bằng tốc độ, chất lượng và chi phí.';
     if (value.startsWith('vip')) return 'Server ưu tiên, ổn định hơn khi hệ thống đông.';
-    return 'Server realtime do TST cung cấp.';
+    return 'Máy chủ được đồng bộ theo thời gian thực.';
 };
 
 const getVideoFamilyIcon = (family: VideoModelFamily) => {
@@ -417,14 +417,14 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                   setMotionModelOptions(routedMotionModels);
                   setMotionModel((current) => routedMotionModels.some((model) => model.id === current) ? current : routedMotionModels[0].id);
               }
-              setCatalogError(models.length > 0 ? null : (lang === 'vi' ? 'TST đang bảo trì hoặc không sẵn sàng.' : 'TST is unavailable.'));
+              setCatalogError(models.length > 0 ? null : (lang === 'vi' ? 'Dịch vụ tạo video đang bảo trì hoặc không sẵn sàng.' : 'The video service is unavailable.'));
           } catch (error) {
               console.warn('Failed to load live TST catalog for video tool', error);
               setPricingEntries([]);
               setRuntimeModels([]);
               setVideoModelOptions([]);
               setMotionModelOptions([]);
-              setCatalogError(lang === 'vi' ? 'TST đang bảo trì hoặc không sẵn sàng.' : 'TST is unavailable.');
+              setCatalogError(lang === 'vi' ? 'Dịch vụ tạo video đang bảo trì hoặc không sẵn sàng.' : 'The video service is unavailable.');
           } finally {
               setCatalogLoading(false);
           }
@@ -472,14 +472,14 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
           ].filter(Boolean).join(' · ');
           return {
               description: catalogModel?.description || getVideoModelHint(model),
-              server: `Gommo · ${catalogModel?.server || 'Realtime'}`,
+              server: `Máy chủ · ${catalogModel?.server || 'Realtime'}`,
               capabilities,
           };
       }
       const spec = getVideoModelSpecs(pricingEntries, runtimeModels).find((entry) => entry.modelId === model.id);
       return {
           description: getVideoModelHint(model),
-          server: `TST · ${(spec?.servers || []).map((item) => item.toUpperCase()).join(' / ') || 'Realtime'}`,
+          server: `Máy chủ · ${(spec?.servers || []).map((item) => item.toUpperCase()).join(' / ') || 'Realtime'}`,
           capabilities: [
               spec?.resolutions?.length ? spec.resolutions.map((item) => item.toUpperCase()).join('/') : '',
               spec?.durations?.length ? spec.durations.join('/') : '',
@@ -899,20 +899,20 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
 
   const handleGenerate = async () => {
     if (!isCatalogReady) {
-      notify(isGommoSelected ? 'Gommo đang bảo trì hoặc model không khả dụng.' : 'TST đang bảo trì hoặc không sẵn sàng.', 'error');
+      notify(isGommoSelected ? 'Nguồn tạo video đang bảo trì hoặc model không khả dụng.' : 'Dịch vụ tạo video đang bảo trì hoặc không sẵn sàng.', 'error');
       return;
     }
 
     if (!currentCostBreakdown.available) {
-      notify(lang === 'vi' ? 'Cấu hình đang chọn không còn khả dụng trên TST.' : 'Selected configuration is not available on TST.', 'error');
+      notify(lang === 'vi' ? 'Cấu hình đang chọn không còn khả dụng trên máy chủ.' : 'The selected configuration is no longer available.', 'error');
       return;
     }
 
     if (activeMode === 'video_ai' && !keyframeImage) {
       notify(
         lang === 'vi'
-          ? `Vui lòng tải ảnh keyframe trước khi gửi job tạo video sang ${isGommoVideoSelected ? 'Gommo' : 'TST'}.`
-          : 'Please upload a keyframe image before sending the video job to TST.',
+          ? 'Vui lòng tải ảnh keyframe trước khi gửi job tạo video.'
+          : 'Please upload a keyframe image before sending the video job.',
         'error'
       );
       return;
@@ -933,8 +933,8 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
     if (activeMode === 'motion_control' && motionVideoDurationSeconds !== null && (motionVideoDurationSeconds < 3 || motionVideoDurationSeconds > 30)) {
       notify(
         lang === 'vi'
-          ? 'Video chuyển động phải dài từ 3 đến 30 giây theo yêu cầu của TST.'
-          : 'Motion video must be between 3 and 30 seconds according to TST requirements.',
+          ? 'Video chuyển động phải dài từ 3 đến 30 giây theo yêu cầu của máy chủ.'
+          : 'Motion video must be between 3 and 30 seconds.',
         'error'
       );
       return;
@@ -1313,7 +1313,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                           Đạo diễn kịch bản AI
                         </div>
                         <p className="mt-1 text-[10px] leading-relaxed text-slate-600 dark:text-slate-400">
-                          Vertex AI phân tích keyframe và viết kịch bản chuyển động tối ưu cho model TST đã chọn.
+                Vertex AI phân tích keyframe và viết kịch bản chuyển động tối ưu cho model đã chọn.
                         </p>
                       </div>
                       <button
@@ -1404,8 +1404,8 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                 {catalogLoading
                   ? 'Đang đồng bộ catalog realtime theo API đã cấu hình...'
                   : isGommoSelected
-                    ? 'Gommo đang bảo trì, model đã tắt hoặc cấu hình này chưa có giá Vcoin.'
-                    : (catalogError || 'TST đang bảo trì hoặc không sẵn sàng.')}
+                    ? 'Nguồn tạo video đang bảo trì, model đã tắt hoặc cấu hình này chưa có giá Vcoin.'
+                    : (catalogError || 'Dịch vụ tạo video đang bảo trì hoặc không sẵn sàng.')}
               </div>
             )}
 
@@ -1454,13 +1454,6 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                         </button>
                       );
                     })}
-                  </div>
-
-                  <div className="neu-inset-sm rounded-2xl px-4 py-3 flex items-start gap-2.5">
-                    <Icons.Sparkles className="w-4 h-4 mt-0.5 shrink-0 text-[#00A8C8] dark:text-[#00F2FE]" />
-                    <p className="text-[10px] leading-relaxed font-semibold text-slate-600 dark:text-slate-300">
-                      {VIDEO_MODEL_FAMILY_META[videoModelFamily].description}
-                    </p>
                   </div>
 
                   <div className="space-y-2">
@@ -1560,7 +1553,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                 )}
                 {isGommoSelected && (selectedGommoModel?.modes || []).length > 0 && (
                   <OptionDropdown
-                    label="Máy chủ / chế độ Gommo · giá API"
+                    label="Máy chủ / chế độ · giá API"
                     value={providerMode}
                     options={(selectedGommoModel?.modes || []).map((option) => ({
                       label: option.name || option.type,
@@ -1577,7 +1570,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                   <OptionDropdown label="Tốc độ xử lý" value={speed} options={speedOptions} onChange={setSpeed} icon={Icons.Zap} />
                 )}
                 {serverOptions.length > 0 && (
-                  <OptionDropdown label="Server TST" value={server} options={serverOptions} onChange={setServer} icon={Icons.Database} />
+                  <OptionDropdown label="Máy chủ" value={server} options={serverOptions} onChange={setServer} icon={Icons.Database} />
                 )}
               </div>
 

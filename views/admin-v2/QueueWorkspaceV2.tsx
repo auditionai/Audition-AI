@@ -45,7 +45,7 @@ const summaryItems: Array<{ key: QueueFilter; label: string; field: keyof AdminQ
     { key: 'failed', label: 'Thất bại', field: 'failed', tone: 'danger' },
     { key: 'overdue_polls', label: 'Poll quá hạn', field: 'overduePolls', tone: 'danger' },
     { key: 'untouched_queued', label: 'Queued stale', field: 'untouchedQueued', tone: 'orange' },
-    { key: 'stalled_pre_dispatch', label: 'Kẹt trước TST', field: 'stalledPreDispatch', tone: 'pink' },
+    { key: 'stalled_pre_dispatch', label: 'Kẹt trước khi gửi', field: 'stalledPreDispatch', tone: 'pink' },
 ];
 
 const getStatusTone = (status?: string) => {
@@ -71,7 +71,7 @@ export default function QueueWorkspaceV2(props: Props) {
                 </div>
                 <div className="queue-v2__hero-actions">
                     <button onClick={props.onRefresh} disabled={props.loading}><Icons.RefreshCw className={props.loading ? 'animate-spin' : ''} />{props.loading ? 'Đang tải' : 'Làm mới'}</button>
-                    <button className="is-rescue" onClick={props.onRescue} disabled={props.rescuing}><Icons.Zap />{props.rescuing ? 'Đang cứu job' : 'Cứu TST timeout'}</button>
+                    <button className="is-rescue" onClick={props.onRescue} disabled={props.rescuing}><Icons.Zap />{props.rescuing ? 'Đang cứu job' : 'Cứu job timeout'}</button>
                     <button className="is-primary" onClick={props.onReconcile} disabled={props.reconciling}><Icons.Activity />{props.reconciling ? 'Đang reconcile' : 'Reconcile queue'}</button>
                 </div>
             </header>

@@ -231,11 +231,11 @@ export const Home: React.FC<HomeProps> = ({ lang, onSelectFeature, onNavigate, o
                           VIDEO LAB
                       </h2>
                       <p className="text-xs text-text-secondary mt-1">
-                          {lang === 'vi' ? 'Bộ công cụ tạo video AI theo hệ sinh thái TST' : 'AI video generation suite'}
+                          {lang === 'vi' ? 'Bộ công cụ tạo video AI đa mô hình' : 'AI video generation suite'}
                       </p>
                   </div>
               </div>
-              <div className="hidden md:block text-[10px] font-mono text-text-muted uppercase tracking-wider">TST Video Suite</div>
+              <div className="hidden md:block text-[10px] font-mono text-text-muted uppercase tracking-wider">AI Video Suite</div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

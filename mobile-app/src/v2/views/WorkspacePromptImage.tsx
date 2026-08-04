@@ -602,7 +602,7 @@ export function WorkspacePromptImage() {
 
         {isGommoSelected && gommoModes.length > 0 && (
           <section className="space-y-2">
-            <h3 className="ml-1 text-xs font-semibold uppercase tracking-wider text-cyan-600 dark:text-cyan-400">MÁY CHỦ / CHẾ ĐỘ GOMMO · REALTIME</h3>
+            <h3 className="ml-1 text-xs font-semibold uppercase tracking-wider text-cyan-600 dark:text-cyan-400">MÁY CHỦ / CHẾ ĐỘ · REALTIME</h3>
             <div className="grid grid-cols-2 gap-2">
               {gommoModes.map((option) => (
                 <button

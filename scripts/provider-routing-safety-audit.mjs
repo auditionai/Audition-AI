@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-import { buildGommoImageReferenceFields, buildGommoVideoReferenceFields, extractGommoCreateJobId, isGommoModelAvailable } from '../netlify/functions/_gommo-provider.ts';
+import { buildGommoFormBody, buildGommoImageReferenceFields, buildGommoVideoReferenceFields, extractGommoCreateJobId, isGommoModelAvailable } from '../netlify/functions/_gommo-provider.ts';
 import { sortTstFallbackServers } from '../netlify/functions/_queue-worker.ts';
 import { buildLocalPricingOptionCandidates } from '../netlify/functions/queue-submit.ts';
 import { buildGommoCatalogPricingOptionId, buildProviderPricingOptionCandidates, getAuditionProviderPricing, getGommoCatalogPricingOptionId, getGommoPricingInput, isSelectableGommoImageResolution, resolveProviderForModel } from '../services/providerCatalog.ts';
@@ -159,6 +159,16 @@ assert.deepEqual(
   buildGommoImageReferenceFields({ model: 'imagegen_2_0', name: 'GPT Image 2', withSubject: true, maxSubject: 8 }, uploadedGommoReferences),
   { subjects: ['https://cdn.example.com/one.png', 'https://cdn.example.com/two.png'] },
 );
+const gommoReferenceForm = buildGommoFormBody({
+  model: 'imagegen_2_0',
+  subjects: ['https://cdn.example.com/one.png', 'https://cdn.example.com/two.png'],
+  images: [{ url: 'https://cdn.example.com/start.png', id_base: 'upload-start' }],
+});
+assert.equal(gommoReferenceForm.get('subjects'), null);
+assert.equal(gommoReferenceForm.get('images'), null);
+assert.equal(gommoReferenceForm.get('subjects[0][url]'), 'https://cdn.example.com/one.png');
+assert.equal(gommoReferenceForm.get('subjects[1][url]'), 'https://cdn.example.com/two.png');
+assert.equal(gommoReferenceForm.get('images[0][url]'), 'https://cdn.example.com/start.png');
 assert.deepEqual(
   buildGommoImageReferenceFields({ model: 'other', name: 'Other', startImage: true }, uploadedGommoReferences),
   { images: [{ url: 'https://cdn.example.com/one.png' }] },
@@ -244,7 +254,7 @@ assert(gommoSource.includes('Boolean(data?.error)'));
 assert(gommoSource.includes('...buildGommoVideoReferenceFields(normalized.model, uploadedImages)'));
 assert(gommoSource.includes('normalized.model.startImageAndEnd ? 2 : 1'));
 assert(gommoSource.includes("return { id_base: idBase, url, data: '' }"));
-assert(!gommoSource.includes('[${index}][url]'));
+assert(gommoSource.includes('`${key}[${index}][url]`'));
 assert(gommoSource.includes('data?.raw?.imageInfo?.message'));
 assert(gommoSource.includes('data?.raw?.videoInfo?.message'));
 assert(gommoSource.includes("if (data?.imageInfo && typeof data.imageInfo === 'object') return data.imageInfo"));

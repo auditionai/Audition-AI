@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Handler } from '@netlify/functions';
 import type { ImageEditRecipePayload, QueueProgressLogEntry } from '../../shared/queueRecipes';
+import { SHARPEN_UPSCALE_CHARACTER_LOCK_PROMPT } from '../../shared/imageEditPrompts';
 import { DIRECT_IMAGE_EDIT_QUEUE_KIND, isDirectImageEditToolId } from '../../shared/queueKinds';
 import { triggerBackgroundFunction } from './_queue-launcher';
 import { createInternalRequestHeaders } from './_internal-request-auth';
@@ -235,7 +236,7 @@ export const handler: Handler = async (event) => {
     const prompt = String(body.prompt || '').trim();
     const engine = String(body.engine || 'Vertex AI').trim();
     const showInGenerationHistory = body.showInGenerationHistory === true;
-    const queuePayload = body.queuePayload;
+    let queuePayload = body.queuePayload;
 
     if (!isDirectImageEditToolId(toolId)) {
       throw new Error('Unsupported direct image edit tool');
@@ -243,6 +244,13 @@ export const handler: Handler = async (event) => {
 
     if (!queuePayload || queuePayload.recipeType !== 'image_edit_recipe_v1') {
       throw new Error('Missing direct image edit payload');
+    }
+
+    if (toolId === 'sharpen_upscale') {
+      queuePayload = {
+        ...queuePayload,
+        prompt: SHARPEN_UPSCALE_CHARACTER_LOCK_PROMPT,
+      };
     }
 
     const serverPrice = await getDirectEditServerCost(admin, toolId, queuePayload);

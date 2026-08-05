@@ -45,21 +45,51 @@ const QueueStatGroup: React.FC<QueueStatGroupProps> = ({
   queuedLimit,
 }) => {
   const stats = [
-    { label: 'Ảnh', value: imageValue, limit: imageLimit, style: 'border-cyan-500/35 bg-cyan-500/10' },
-    { label: 'Video', value: videoValue, limit: videoLimit, style: 'border-violet-500/35 bg-violet-500/10' },
-    { label: 'Đang chờ', value: queuedValue, limit: queuedLimit, style: 'border-amber-500/35 bg-amber-500/10' },
+    { label: 'Ảnh', value: imageValue, limit: imageLimit, tone: 'cyan', icon: Icons.Image },
+    { label: 'Video', value: videoValue, limit: videoLimit, tone: 'violet', icon: Icons.Video },
+    { label: 'Đang chờ', value: queuedValue, limit: queuedLimit, tone: 'amber', icon: Icons.Clock },
   ];
+  const totalActive = imageValue + videoValue + queuedValue;
+  const totalLimit = imageLimit + videoLimit + queuedLimit;
 
   return (
-    <div>
-      <div className="mb-1.5 text-[9px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-400">{title}</div>
-      <div className="grid grid-cols-3 gap-1.5">
-        {stats.map((stat) => (
-          <div key={stat.label} className={`rounded-xl border px-1 py-2 text-center ${stat.style}`}>
-            <div className="truncate text-[8px] font-black uppercase leading-none text-slate-600 dark:text-slate-400">{stat.label}</div>
-            <div className="mt-1 font-mono text-xs font-black text-slate-950 dark:text-white">{stat.value}/{stat.limit}</div>
-          </div>
-        ))}
+    <div className="queue-hud__cluster">
+      <div className="queue-hud__cluster-head">
+        <span>{title}</span>
+        <span className="queue-hud__cluster-total">{totalActive}<i>/</i>{totalLimit}</span>
+      </div>
+      <div className="queue-hud__lanes">
+        {stats.map((stat) => {
+          const Icon = stat.icon;
+          const percentage = stat.limit > 0 ? Math.min(100, Math.max(0, (stat.value / stat.limit) * 100)) : 0;
+          const remaining = Math.max(0, stat.limit - stat.value);
+          const stateLabel = stat.value <= 0
+            ? 'Sẵn sàng'
+            : stat.limit > 0 && stat.value >= stat.limit
+              ? 'Đã đầy'
+              : `Còn ${remaining} luồng`;
+
+          return (
+            <div
+              key={stat.label}
+              className={`queue-hud__lane queue-hud__lane--${stat.tone}`}
+              style={{ '--queue-load': `${percentage}%` } as React.CSSProperties}
+            >
+              <span className="queue-hud__lane-icon" aria-hidden="true"><Icon /></span>
+              <div className="queue-hud__lane-main">
+                <div className="queue-hud__lane-copy">
+                  <strong>{stat.label}</strong>
+                  <span>{stateLabel}</span>
+                </div>
+                <div className="queue-hud__track" aria-hidden="true">
+                  <span className="queue-hud__track-fill" />
+                  <i className="queue-hud__tracer" />
+                </div>
+              </div>
+              <div className="queue-hud__value"><strong>{stat.value}</strong><span>/{stat.limit}</span></div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -260,27 +290,35 @@ export const Layout: React.FC<LayoutProps> = ({
           
           {/* LUỒNG XỬ LÝ (Processing Queue Status Box) */}
           {!sidebarCollapsed ? (
-            <section className="neu-inset-sm space-y-2.5 rounded-2xl border border-slate-300 p-3 dark:border-slate-800" aria-label="Trạng thái luồng xử lý">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5 font-accent text-xs font-black uppercase tracking-wider text-[#FF007F] dark:text-[#00F2FE]">
-                  <Icons.Activity className="h-3.5 w-3.5 shrink-0 animate-pulse" />
-                  <span>Luồng xử lý</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Hoạt động
+            <section className="queue-hud" aria-label="Trạng thái luồng xử lý realtime">
+              <span className="queue-hud__grid" aria-hidden="true" />
+              <span className="queue-hud__scan" aria-hidden="true" />
+              <div className="queue-hud__header">
+                <div className="queue-hud__identity">
+                  <span className="queue-hud__core" aria-hidden="true">
+                    <Icons.Activity />
+                    <i />
                   </span>
-                  <button type="button" onClick={() => triggerPoll()} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-700 transition-colors hover:text-[#FF007F] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00F2FE] dark:text-slate-400" title="Cập nhật trạng thái" aria-label="Cập nhật trạng thái luồng xử lý">
-                    <Icons.RefreshCw className="h-3.5 w-3.5" />
+                  <div>
+                    <strong>Luồng xử lý</strong>
+                    <span>Realtime queue monitor</span>
+                  </div>
+                </div>
+                <div className="queue-hud__actions">
+                  <span className="queue-hud__live">
+                    <i /> Live
+                  </span>
+                  <button type="button" onClick={() => triggerPoll()} className="queue-hud__icon-button" title="Cập nhật trạng thái" aria-label="Cập nhật trạng thái luồng xử lý">
+                    <Icons.RefreshCw />
                   </button>
-                  <button type="button" onClick={() => setQueuePanelExpanded(!queuePanelExpanded)} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-700 transition-colors hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00F2FE] dark:text-slate-400 dark:hover:text-white" aria-label={queuePanelExpanded ? 'Thu gọn trạng thái luồng xử lý' : 'Mở rộng trạng thái luồng xử lý'} aria-expanded={queuePanelExpanded}>
-                    {queuePanelExpanded ? <Icons.ChevronUp className="h-3.5 w-3.5" /> : <Icons.ChevronDown className="h-3.5 w-3.5" />}
+                  <button type="button" onClick={() => setQueuePanelExpanded(!queuePanelExpanded)} className="queue-hud__icon-button" aria-label={queuePanelExpanded ? 'Thu gọn trạng thái luồng xử lý' : 'Mở rộng trạng thái luồng xử lý'} aria-expanded={queuePanelExpanded}>
+                    {queuePanelExpanded ? <Icons.ChevronUp /> : <Icons.ChevronDown />}
                   </button>
                 </div>
               </div>
 
               {queuePanelExpanded && (
-                <div className="space-y-2.5 animate-fade-in font-sans" aria-live="polite">
+                <div className="queue-hud__body animate-fade-in" aria-live="polite">
                   <QueueStatGroup
                     title="Phiên của bạn"
                     imageValue={visibleQueueStats.myImageProcessing}
@@ -290,24 +328,25 @@ export const Layout: React.FC<LayoutProps> = ({
                     queuedValue={visibleQueueStats.myQueued}
                     queuedLimit={visibleQueueLimits.user.queued}
                   />
-                  <div className="border-t border-slate-300 pt-2.5 dark:border-slate-800/80">
-                    <QueueStatGroup
-                      title="Sức chứa hệ thống"
-                      imageValue={visibleQueueStats.systemImageProcessing}
-                      imageLimit={visibleQueueLimits.system.imageProcessing}
-                      videoValue={visibleQueueStats.systemVideoProcessing}
-                      videoLimit={visibleQueueLimits.system.videoProcessing}
-                      queuedValue={visibleQueueStats.systemQueued}
-                      queuedLimit={visibleQueueLimits.system.queued}
-                    />
+                  <div className="queue-hud__bridge" aria-hidden="true">
+                    <span /><i /><i /><i />
                   </div>
+                  <QueueStatGroup
+                    title="Sức chứa hệ thống"
+                    imageValue={visibleQueueStats.systemImageProcessing}
+                    imageLimit={visibleQueueLimits.system.imageProcessing}
+                    videoValue={visibleQueueStats.systemVideoProcessing}
+                    videoLimit={visibleQueueLimits.system.videoProcessing}
+                    queuedValue={visibleQueueStats.systemQueued}
+                    queuedLimit={visibleQueueLimits.system.queued}
+                  />
                 </div>
               )}
             </section>
           ) : (
-            <button type="button" onClick={() => triggerPoll()} className="neu-inset-sm flex w-full flex-col items-center justify-center rounded-2xl p-2 transition-all hover:ring-2 hover:ring-[#FF007F] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00F2FE]" title={`Đang xử lý ${myProcessingCount}/${myProcessingLimit} tác vụ`} aria-label={`Cập nhật luồng xử lý, hiện có ${myProcessingCount} trên ${myProcessingLimit} tác vụ của bạn đang chạy`}>
-              <Icons.Activity className="h-4 w-4 animate-pulse text-[#FF007F] dark:text-[#00F2FE]" />
-              <span className="mt-0.5 font-mono text-[9px] font-black text-[#FF007F] dark:text-cyan-400">{myProcessingCount}/{myProcessingLimit}</span>
+            <button type="button" onClick={() => triggerPoll()} className="queue-hud-mini" title={`Đang xử lý ${myProcessingCount}/${myProcessingLimit} tác vụ`} aria-label={`Cập nhật luồng xử lý, hiện có ${myProcessingCount} trên ${myProcessingLimit} tác vụ của bạn đang chạy`}>
+              <span className="queue-hud-mini__radar"><Icons.Activity /></span>
+              <span>{myProcessingCount}/{myProcessingLimit}</span>
             </button>
           )}
 

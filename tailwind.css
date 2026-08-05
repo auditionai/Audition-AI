@@ -1283,3 +1283,205 @@
   }
 
 }
+
+/* Realtime queue HUD */
+.queue-hud {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding: 11px;
+  border: 1px solid color-mix(in srgb, #00f2fe 55%, transparent);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 8% 0%, rgba(0, 242, 254, 0.13), transparent 35%),
+    radial-gradient(circle at 100% 100%, rgba(116, 63, 255, 0.12), transparent 38%),
+    linear-gradient(145deg, rgba(6, 13, 24, 0.98), rgba(10, 11, 23, 0.96));
+  box-shadow: inset 0 0 24px rgba(0, 242, 254, 0.045), 0 12px 30px rgba(0, 0, 0, 0.28);
+  color: #f5fbff;
+}
+
+.queue-hud::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(115deg, transparent 15%, rgba(0, 242, 254, 0.09) 48%, transparent 63%);
+  transform: translateX(-115%);
+  animation: queue-hud-sweep 4.8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.queue-hud__grid {
+  position: absolute;
+  z-index: -2;
+  inset: 0;
+  opacity: 0.22;
+  background-image:
+    linear-gradient(rgba(0, 242, 254, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 242, 254, 0.08) 1px, transparent 1px);
+  background-size: 16px 16px;
+  mask-image: linear-gradient(to bottom, black, transparent 88%);
+}
+
+.queue-hud__scan {
+  position: absolute;
+  z-index: 0;
+  left: 10px;
+  right: 10px;
+  height: 1px;
+  top: 49px;
+  opacity: 0;
+  background: linear-gradient(90deg, transparent, rgba(0, 242, 254, 0.7), transparent);
+  box-shadow: 0 0 9px rgba(0, 242, 254, 0.65);
+  animation: queue-hud-scan 4s linear infinite;
+  pointer-events: none;
+}
+
+.queue-hud__header,
+.queue-hud__identity,
+.queue-hud__actions,
+.queue-hud__lane,
+.queue-hud__lane-copy,
+.queue-hud__cluster-head {
+  display: flex;
+  align-items: center;
+}
+
+.queue-hud__header { position: relative; z-index: 1; justify-content: space-between; gap: 6px; }
+.queue-hud__identity { min-width: 0; gap: 8px; }
+.queue-hud__identity > div { min-width: 0; }
+.queue-hud__identity strong {
+  display: block;
+  color: #ecfeff;
+  font: 900 11px/1.05 var(--font-accent, ui-sans-serif), sans-serif;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+.queue-hud__identity > div > span {
+  display: block;
+  margin-top: 3px;
+  color: #5f7890;
+  font: 700 7px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.queue-hud__core {
+  position: relative;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  place-items: center;
+  border: 1px solid rgba(0, 242, 254, 0.32);
+  border-radius: 10px;
+  background: rgba(0, 242, 254, 0.08);
+  color: #00f2fe;
+  box-shadow: inset 0 0 14px rgba(0, 242, 254, 0.08), 0 0 14px rgba(0, 242, 254, 0.08);
+}
+.queue-hud__core svg { width: 15px; height: 15px; filter: drop-shadow(0 0 4px rgba(0, 242, 254, 0.8)); }
+.queue-hud__core i {
+  position: absolute;
+  inset: -4px;
+  border: 1px dashed rgba(0, 242, 254, 0.3);
+  border-radius: 12px;
+  animation: queue-hud-orbit 7s linear infinite;
+}
+
+.queue-hud__actions { gap: 3px; }
+.queue-hud__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border: 1px solid rgba(52, 211, 153, 0.26);
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.08);
+  color: #6ee7b7;
+  font: 900 7px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.queue-hud__live i { width: 5px; height: 5px; border-radius: 50%; background: #34d399; box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.7); animation: queue-live-pulse 1.8s ease-out infinite; }
+.queue-hud__icon-button {
+  display: grid;
+  width: 27px;
+  height: 27px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: #71859a;
+  transition: border-color 180ms ease, background-color 180ms ease, color 180ms ease;
+}
+.queue-hud__icon-button svg { width: 13px; height: 13px; }
+.queue-hud__icon-button:hover { border-color: rgba(0, 242, 254, 0.3); background: rgba(0, 242, 254, 0.07); color: #00f2fe; }
+.queue-hud__icon-button:focus-visible { outline: 2px solid #00f2fe; outline-offset: 2px; }
+
+.queue-hud__body { position: relative; z-index: 1; margin-top: 11px; }
+.queue-hud__cluster { padding: 8px; border: 1px solid rgba(118, 148, 177, 0.13); border-radius: 13px; background: rgba(5, 10, 20, 0.55); box-shadow: inset 0 1px rgba(255, 255, 255, 0.025); }
+.queue-hud__cluster-head { justify-content: space-between; margin-bottom: 7px; color: #7990a7; font: 900 8px/1 ui-sans-serif, sans-serif; letter-spacing: 0.105em; text-transform: uppercase; }
+.queue-hud__cluster-total { color: #9fb6cc; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0; }
+.queue-hud__cluster-total i { padding: 0 1px; color: #41566b; font-style: normal; }
+.queue-hud__lanes { display: grid; gap: 5px; }
+.queue-hud__lane {
+  --queue-tone: #00f2fe;
+  min-width: 0;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid color-mix(in srgb, var(--queue-tone) 18%, transparent);
+  border-radius: 10px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--queue-tone) 7%, transparent), rgba(8, 13, 24, 0.62));
+}
+.queue-hud__lane--violet { --queue-tone: #a78bfa; }
+.queue-hud__lane--amber { --queue-tone: #fbbf24; }
+.queue-hud__lane-icon { display: grid; width: 22px; height: 22px; flex: 0 0 22px; place-items: center; border-radius: 7px; background: color-mix(in srgb, var(--queue-tone) 11%, transparent); color: var(--queue-tone); box-shadow: inset 0 0 10px color-mix(in srgb, var(--queue-tone) 7%, transparent); }
+.queue-hud__lane-icon svg { width: 11px; height: 11px; }
+.queue-hud__lane-main { min-width: 0; flex: 1; }
+.queue-hud__lane-copy { justify-content: space-between; gap: 4px; }
+.queue-hud__lane-copy strong { color: #dbeafe; font-size: 8px; font-weight: 850; line-height: 1; }
+.queue-hud__lane-copy span { overflow: hidden; color: #61778d; font: 700 6.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.queue-hud__track { position: relative; overflow: hidden; height: 3px; margin-top: 5px; border-radius: 99px; background: rgba(104, 128, 153, 0.14); }
+.queue-hud__track-fill { display: block; width: var(--queue-load); height: 100%; border-radius: inherit; background: linear-gradient(90deg, color-mix(in srgb, var(--queue-tone) 45%, transparent), var(--queue-tone)); box-shadow: 0 0 7px color-mix(in srgb, var(--queue-tone) 65%, transparent); transition: width 350ms ease-out; }
+.queue-hud__tracer { position: absolute; inset-block: 0; left: -25%; width: 24%; background: linear-gradient(90deg, transparent, rgba(255,255,255,.9), transparent); animation: queue-track-data 2.25s linear infinite; }
+.queue-hud__value { flex: 0 0 30px; text-align: right; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; line-height: 1; }
+.queue-hud__value strong { color: var(--queue-tone); font-size: 12px; text-shadow: 0 0 8px color-mix(in srgb, var(--queue-tone) 55%, transparent); }
+.queue-hud__value span { color: #61758a; font-size: 8px; font-weight: 800; }
+
+.queue-hud__bridge { position: relative; height: 13px; }
+.queue-hud__bridge > span { position: absolute; top: 6px; left: 12px; right: 12px; height: 1px; background: linear-gradient(90deg, transparent, rgba(0,242,254,.32), rgba(167,139,250,.32), transparent); }
+.queue-hud__bridge i { position: absolute; top: 4px; left: 12px; width: 4px; height: 4px; border-radius: 50%; background: #00f2fe; box-shadow: 0 0 7px #00f2fe; animation: queue-bridge-packet 2.4s linear infinite; }
+.queue-hud__bridge i:nth-of-type(2) { animation-delay: -.8s; }
+.queue-hud__bridge i:nth-of-type(3) { animation-delay: -1.6s; }
+
+.queue-hud-mini { display: grid; width: 100%; min-height: 54px; place-items: center; gap: 2px; border: 1px solid rgba(0,242,254,.32); border-radius: 16px; background: radial-gradient(circle, rgba(0,242,254,.11), rgba(8,13,24,.88)); color: #00f2fe; font: 900 8px/1 ui-monospace, monospace; }
+.queue-hud-mini:focus-visible { outline: 2px solid #00f2fe; outline-offset: 2px; }
+.queue-hud-mini__radar { position: relative; display: grid; width: 27px; height: 27px; place-items: center; border: 1px solid rgba(0,242,254,.3); border-radius: 50%; }
+.queue-hud-mini__radar::before { content: ""; position: absolute; inset: 2px; border-radius: 50%; background: conic-gradient(from 0deg, transparent, rgba(0,242,254,.65)); animation: queue-hud-orbit 2.2s linear infinite; }
+.queue-hud-mini__radar svg { position: relative; z-index: 1; width: 12px; height: 12px; }
+
+@keyframes queue-hud-sweep { 0%, 18% { transform: translateX(-115%); } 65%, 100% { transform: translateX(115%); } }
+@keyframes queue-hud-scan { 0% { opacity: 0; transform: translateY(0); } 12% { opacity: .8; } 82% { opacity: .28; } 100% { opacity: 0; transform: translateY(218px); } }
+@keyframes queue-hud-orbit { to { transform: rotate(360deg); } }
+@keyframes queue-live-pulse { 0% { box-shadow: 0 0 0 0 rgba(52,211,153,.65); } 70%, 100% { box-shadow: 0 0 0 5px rgba(52,211,153,0); } }
+@keyframes queue-track-data { to { transform: translateX(520%); } }
+@keyframes queue-bridge-packet { from { transform: translateX(0); } to { transform: translateX(150px); } }
+
+html:not(.dark) .queue-hud { border-color: rgba(0, 111, 139, 0.45); background: radial-gradient(circle at 8% 0%, rgba(0, 174, 202, 0.12), transparent 35%), linear-gradient(145deg, rgba(240,248,252,.98), rgba(225,236,244,.97)); color: #071827; box-shadow: inset 0 0 20px rgba(0,120,150,.05), 0 10px 24px rgba(31,57,76,.14); }
+html:not(.dark) .queue-hud__identity strong { color: #071827; }
+html:not(.dark) .queue-hud__cluster { border-color: rgba(36,76,105,.15); background: rgba(231,240,246,.72); }
+html:not(.dark) .queue-hud__lane { background: linear-gradient(90deg, color-mix(in srgb, var(--queue-tone) 10%, white), rgba(239,246,250,.72)); }
+html:not(.dark) .queue-hud__lane-copy strong { color: #183047; }
+html:not(.dark) .queue-hud__lane-copy span,
+html:not(.dark) .queue-hud__cluster-head { color: #526b80; }
+
+@media (prefers-reduced-motion: reduce) {
+  .queue-hud::before,
+  .queue-hud__scan,
+  .queue-hud__core i,
+  .queue-hud__live i,
+  .queue-hud__tracer,
+  .queue-hud__bridge i,
+  .queue-hud-mini__radar::before { animation: none !important; }
+}

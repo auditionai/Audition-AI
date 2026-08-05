@@ -2444,11 +2444,12 @@ const trySmartImageProviderFallback = async (
   runtimeState?: any,
 ) => {
   const payload = toQueuePayloadObject(runtimeState?.queue_payload || job.queue_payload);
+  const sourceProvider = getJobProvider(payload);
   if (
     job.queue_kind !== 'image_generate' ||
     payload.__smartProviderFallbackEnabled === false ||
-    getJobProvider(payload) !== 'tst' ||
-    String(payload.__targetProvider || 'tst').trim().toLowerCase() !== 'tst'
+    (sourceProvider !== 'tst' && sourceProvider !== 'gommo') ||
+    String(payload.__targetProvider || sourceProvider).trim().toLowerCase() !== sourceProvider
   ) {
     return false;
   }
@@ -2458,7 +2459,7 @@ const trySmartImageProviderFallback = async (
     ...(Array.isArray(payload.__tstFallbackTriedServers)
       ? payload.__tstFallbackTriedServers.map(normalizeFallbackServerId)
       : []),
-    identity.serverId,
+    ...(sourceProvider === 'tst' ? [identity.serverId] : []),
   ].filter(Boolean)));
   const nextTstServer = await getNextTstFallbackServer(payload, triedServers).catch((error) => {
     console.warn('[queue-worker] TST fallback catalog is unavailable; checking Gommo.', {
@@ -2467,7 +2468,7 @@ const trySmartImageProviderFallback = async (
     });
     return null;
   });
-  const canFallbackToGommo = !nextTstServer && isGommoConfigured() && await canUseGommoForPayload(
+  const canFallbackToGommo = sourceProvider === 'tst' && !nextTstServer && isGommoConfigured() && await canUseGommoForPayload(
     job.queue_kind,
     { ...payload, model: identity.modelId },
   ).catch(() => false);
@@ -2490,8 +2491,8 @@ const trySmartImageProviderFallback = async (
       ...history,
       {
         at: new Date().toISOString(),
-        fromProvider: 'tst',
-        fromServer: identity.serverId || null,
+        fromProvider: sourceProvider,
+        fromServer: sourceProvider === 'tst' ? identity.serverId || null : null,
         toProvider: targetProvider,
         toServer: nextTstServer || null,
         providerJobId: job.job_id || null,
@@ -2511,7 +2512,7 @@ const trySmartImageProviderFallback = async (
   delete nextPayload.__providerLostJobFinalConfirmationPending;
 
   const fallbackDescription = nextTstServer
-    ? `TST xác nhận job thất bại; tự động thử lại bằng server ${nextTstServer.toUpperCase()} của cùng model.`
+    ? `${sourceProvider === 'gommo' ? 'Gommo' : 'TST'} xác nhận job thất bại; tự động thử lại bằng API 1, server ${nextTstServer.toUpperCase()} của cùng model.`
     : 'Tất cả server TST khả dụng của model đã thất bại; tự động chuyển job sang Gommo.';
   const queuedPayload = withQueueLog(nextPayload, 'queued', fallbackDescription, 'warning');
   const admin = getServiceRoleClient();

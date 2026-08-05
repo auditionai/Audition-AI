@@ -31,6 +31,7 @@ type Props = {
     onRescue: () => void;
     onReconcile: () => void;
     onOpen: (id: string) => void;
+    onRetry: (job: AdminQueueJob) => void;
     stageLabel: (stage?: string) => string;
     statusLabel: (status?: string) => string;
     platformLabel: (platform?: string) => string;
@@ -125,7 +126,19 @@ export default function QueueWorkspaceV2(props: Props) {
                         const status = job.displayStatus || job.status;
                         const lastLog = job.lastLogMessage || job.queueLogs?.[job.queueLogs.length - 1]?.message || job.error || 'Chưa có log mới';
                         const progress = Math.max(0, Math.min(100, Number(job.progress || 0)));
-                        return <article className={`queue-v2__job ${job.isStuck ? 'is-stuck' : ''}`} key={job.id}>
+                        return <article
+                            className={`queue-v2__job ${job.isStuck ? 'is-stuck' : ''}`}
+                            key={job.id}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => props.onOpen(job.id)}
+                            onKeyDown={(event) => {
+                                if (event.key === 'Enter' || event.key === ' ') {
+                                    event.preventDefault();
+                                    props.onOpen(job.id);
+                                }
+                            }}
+                        >
                             <div className="queue-v2__job-main">
                                 <span className={`queue-v2__asset queue-v2__asset--${job.assetType === 'video' ? 'video' : 'image'}`}>{job.assetType === 'video' ? <Icons.Video /> : <Icons.Image />}</span>
                                 <div><h4>{job.userName || 'Unknown user'}</h4><p>{job.userEmail || job.userId}</p><code>#{job.id.slice(0, 12)}</code></div>
@@ -134,7 +147,24 @@ export default function QueueWorkspaceV2(props: Props) {
                             <div className="queue-v2__stage"><span>STAGE HIỆN TẠI</span><strong>{props.stageLabel(job.queueStage)}</strong><small>{props.timeAgo(job.updatedAt)}</small></div>
                             <div className="queue-v2__progress"><div><span>Tiến trình</span><strong>{progress}%</strong></div><i><b style={{ width: `${progress}%` }} /></i>{job.nextPollAt && <small>Poll {props.timeAgo(job.nextPollAt)}</small>}</div>
                             <div className="queue-v2__log"><span>{job.error ? 'LỖI GẦN NHẤT' : 'LOG GẦN NHẤT'}</span><p className={job.error ? 'is-error' : ''}>{lastLog}</p>{job.jobId && <code>Provider: {job.jobId}</code>}</div>
-                            <button className="queue-v2__detail" onClick={() => props.onOpen(job.id)} aria-label={`Xem chi tiết job ${job.id}`}><Icons.ChevronRight /></button>
+                            <div className="queue-v2__actions">
+                                {status === 'failed' && (
+                                    <button
+                                        className="queue-v2__retry"
+                                        onClick={(event) => { event.stopPropagation(); props.onRetry(job); }}
+                                        aria-label={`Chạy lại job ${job.id}`}
+                                    >
+                                        <Icons.RefreshCw /><span>Chạy lại</span>
+                                    </button>
+                                )}
+                                <button
+                                    className="queue-v2__detail"
+                                    onClick={(event) => { event.stopPropagation(); props.onOpen(job.id); }}
+                                    aria-label={`Xem chi tiết job ${job.id}`}
+                                >
+                                    <span>Xem chi tiết</span><Icons.ChevronRight />
+                                </button>
+                            </div>
                         </article>;
                     })}</div>
                 )}

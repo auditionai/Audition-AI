@@ -144,6 +144,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/admin-retry-queue-job"
+  to = "/.netlify/functions/admin-retry-queue-job"
+  status = 200
+
+[[redirects]]
   from = "/api/admin-user-history"
   to = "/.netlify/functions/admin-user-history"
   status = 200

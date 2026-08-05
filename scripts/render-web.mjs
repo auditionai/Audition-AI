@@ -10,6 +10,7 @@ import { handler as adminQueueJobsHandler } from '../netlify/functions/admin-que
 import { handler as adminQueueHealthReportHandler } from '../netlify/functions/admin-queue-health-report.ts';
 import { handler as adminGiftcodeActionHandler } from '../netlify/functions/admin-giftcode-action.ts';
 import { handler as adminStopQueueJobHandler } from '../netlify/functions/admin-stop-queue-job.ts';
+import { handler as adminRetryQueueJobHandler } from '../netlify/functions/admin-retry-queue-job.ts';
 import { handler as adminUserHistoryHandler } from '../netlify/functions/admin-user-history.ts';
 import { handler as adminR2CleanupHandler } from '../netlify/functions/admin-r2-cleanup.ts';
 import { handler as checkinRewardHandler } from '../netlify/functions/checkin-reward.ts';
@@ -81,6 +82,7 @@ const handlerConfigs = [
   { fnName: 'admin-queue-health-report', apiPath: '/api/admin-queue-health-report', handler: adminQueueHealthReportHandler },
   { fnName: 'admin-user-history', apiPath: '/api/admin-user-history', handler: adminUserHistoryHandler },
   { fnName: 'admin-stop-queue-job', apiPath: '/api/admin-stop-queue-job', handler: adminStopQueueJobHandler },
+  { fnName: 'admin-retry-queue-job', apiPath: '/api/admin-retry-queue-job', handler: adminRetryQueueJobHandler },
   { fnName: 'admin-r2-cleanup', apiPath: '/api/admin-r2-cleanup', handler: adminR2CleanupHandler },
   { fnName: 'force-rescue-failed-jobs', apiPath: '/api/force-rescue-failed-jobs', handler: forceRescueFailedJobsHandler },
   { fnName: 'ensure-user-profile', apiPath: '/api/ensure-user-profile', handler: ensureUserProfileHandler },

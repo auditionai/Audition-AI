@@ -274,10 +274,10 @@ const gommoTripleCapacityMigration = await readFile(
   new URL('../supabase/migrations/20260805090000_gommo_triple_queue_capacity.sql', import.meta.url),
   'utf8',
 );
-assert(gommoTripleCapacityMigration.includes("'then 8 else 4 end', 'then 12 else 4 end'"));
-assert(gommoTripleCapacityMigration.includes("'then 2 else 1 end', 'then 3 else 1 end'"));
-assert(gommoTripleCapacityMigration.includes("'v_system_image_limit := 8;', 'v_system_image_limit := 12;'"));
-assert(gommoTripleCapacityMigration.includes("'v_user_image_limit := 2;', 'v_user_image_limit := 3;'"));
+assert(gommoTripleCapacityMigration.includes("when n.provider_key = 'gommo' then 12 else 4"));
+assert(gommoTripleCapacityMigration.includes("when n.provider_key = 'gommo' then 3 else 1"));
+assert(gommoTripleCapacityMigration.includes('v_system_image_limit := 12;'));
+assert(gommoTripleCapacityMigration.includes('v_user_image_limit := 3;'));
 
 const tstCatalogSource = await readFile(new URL('../services/tstCatalog.ts', import.meta.url), 'utf8');
 assert(tstCatalogSource.includes("String(entry.key || entry.config_key || '')"));

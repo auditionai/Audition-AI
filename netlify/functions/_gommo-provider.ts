@@ -4,6 +4,7 @@ import {
   isProviderServerAllowedBySnapshot,
 } from './_server-availability';
 import { getGommoServerIdForMode } from '../../shared/gommoServerRouting';
+import { isResultUrlCompatibleWithAssetType } from '../../shared/providerResultUrl';
 
 type QueueKind = 'image_generate' | 'video_generate' | 'motion_generate' | string;
 
@@ -683,6 +684,7 @@ export const pollGommoJob = async (queueKind: QueueKind, providerJobId: string) 
     data?.raw?.videoInfo?.download_url ||
     '',
   ).trim();
+  const compatibleResult = isResultUrlCompatibleWithAssetType(result, media) ? result : '';
   const successStatuses = new Set([
     'success', 'succeeded', 'done', 'completed', 'media_generation_status_successful',
   ]);
@@ -694,12 +696,12 @@ export const pollGommoJob = async (queueKind: QueueKind, providerJobId: string) 
     'failed', 'error', 'cancelled', 'canceled', 'rejected', 'media_generation_status_failed',
   ]);
 
-  if (result && !processingStatuses.has(rawStatus)) {
-    return { ...job, status: 'completed', result, progress: 100 };
+  if (compatibleResult && !processingStatuses.has(rawStatus)) {
+    return { ...job, status: 'completed', result: compatibleResult, progress: 100 };
   }
   if (successStatuses.has(rawStatus)) {
-    return result
-      ? { ...job, status: 'completed', result, progress: 100 }
+    return compatibleResult
+      ? { ...job, status: 'completed', result: compatibleResult, progress: 100 }
       : { ...job, status: 'processing', progress: 95 };
   }
   if (failedStatuses.has(rawStatus)) {

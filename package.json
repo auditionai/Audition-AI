@@ -15,10 +15,11 @@
     "render:queue-watchdog": "tsx ./scripts/render-queue-watchdog.mjs",
     "queue:hardening-audit": "tsx ./scripts/queue-hardening-audit.mjs",
     "test:provider-routing": "tsx ./scripts/provider-routing-safety-audit.mjs",
+    "test:provider-result-url": "tsx ./scripts/provider-result-url-audit.mjs",
     "render:web": "tsx ./scripts/render-web.mjs",
     "r2:cleanup": "node ./scripts/r2-cleanup-only.mjs",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "check": "npm run lint && npm run build && npm run typecheck:functions && npm run test:provider-routing",
+    "check": "npm run lint && npm run build && npm run typecheck:functions && npm run test:provider-routing && npm run test:provider-result-url",
     "preview": "vite preview"
   },
   "dependencies": {

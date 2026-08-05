@@ -2,6 +2,7 @@ import type { Handler } from '@netlify/functions';
 import { getAuthenticatedRequestErrorStatus, getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 import { triggerBackgroundQueueWorker } from './_queue-launcher';
 import { clearFailedRescueMeta, hasFailedRescueFinalized, hasManualStopFlag } from '../../shared/queueRescueState';
+import { extractProviderResultUrl, isResultUrlCompatibleWithAssetType } from '../../shared/providerResultUrl';
 
 const headers = {
   'Content-Type': 'application/json',
@@ -127,18 +128,6 @@ const withQueueLog = (
   };
 };
 
-const extractResultUrl = (data: any): string | null => {
-  if (typeof data?.result === 'string' && data.result.trim()) return data.result.trim();
-  if (Array.isArray(data?.result) && typeof data.result[0] === 'string' && data.result[0].trim()) return data.result[0].trim();
-  if (typeof data?.output === 'string' && data.output.trim()) return data.output.trim();
-  if (Array.isArray(data?.output) && typeof data.output[0] === 'string' && data.output[0].trim()) return data.output[0].trim();
-  if (typeof data?.data?.result === 'string' && data.data.result.trim()) return data.data.result.trim();
-  if (Array.isArray(data?.data?.result) && typeof data.data.result[0] === 'string' && data.data.result[0].trim()) return data.data.result[0].trim();
-  if (typeof data?.data?.output === 'string' && data.data.output.trim()) return data.data.output.trim();
-  if (Array.isArray(data?.data?.output) && typeof data.data.output[0] === 'string' && data.data.output[0].trim()) return data.data.output[0].trim();
-  return null;
-};
-
 const pollProviderJob = async (providerJobId: string) => {
   if (!TST_API_KEY) {
     throw new Error('Missing TST_API_KEY environment variable');
@@ -160,6 +149,10 @@ const pollProviderJob = async (providerJobId: string) => {
 };
 
 const rescueCompletedJob = async (job: RescueJobRow, resultUrl: string, providerStatus: string, providerMessage: string) => {
+  if (!isResultUrlCompatibleWithAssetType(resultUrl, job.asset_type)) {
+    throw new Error(`Provider returned a ${job.asset_type === 'video' ? 'non-video' : 'non-image'} result URL.`);
+  }
+
   const admin = getServiceRoleClient();
   const nextPayload = clearFailedRescueMeta(
     withQueueLog(
@@ -316,7 +309,7 @@ export const handler: Handler = async (event) => {
         const providerData = await pollProviderJob(providerJobId);
         const providerStatus = String(providerData?.status || '').toLowerCase();
         const providerMessage = String(providerData?.error || providerData?.message || '').trim();
-        const resultUrl = extractResultUrl(providerData);
+        const resultUrl = extractProviderResultUrl(providerData, job.asset_type);
 
         if (resultUrl) {
           await rescueCompletedJob(job, resultUrl, providerStatus, providerMessage);

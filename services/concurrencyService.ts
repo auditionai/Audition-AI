@@ -50,13 +50,13 @@ const TST_CONCURRENCY_LIMITS = {
 
 const GOMMO_CONCURRENCY_LIMITS = {
   user: {
-    imageProcessing: 2,
-    videoProcessing: 2,
+    imageProcessing: 3,
+    videoProcessing: 3,
     queued: 1,
   },
   system: {
-    imageProcessing: 8,
-    videoProcessing: 8,
+    imageProcessing: 12,
+    videoProcessing: 12,
     queued: 10,
   },
 } as const;
@@ -75,12 +75,27 @@ export const getProviderConcurrencyLimits = (provider: QueueProvider) =>
 export const getProviderQueueStats = (stats: QueueStats, provider: QueueProvider) =>
   stats[provider];
 
-let activeQueueProvider: QueueProvider = 'tst';
+const ACTIVE_QUEUE_PROVIDER_STORAGE_KEY = 'audition_active_queue_provider';
+const getInitialActiveQueueProvider = (): QueueProvider => {
+  if (typeof window === 'undefined') return 'tst';
+  try {
+    return window.localStorage.getItem(ACTIVE_QUEUE_PROVIDER_STORAGE_KEY) === 'gommo' ? 'gommo' : 'tst';
+  } catch {
+    return 'tst';
+  }
+};
+
+let activeQueueProvider: QueueProvider = getInitialActiveQueueProvider();
 const activeQueueProviderSubscribers = new Set<(provider: QueueProvider) => void>();
 
 export const setActiveQueueProvider = (provider: QueueProvider) => {
   if (activeQueueProvider === provider) return;
   activeQueueProvider = provider;
+  try {
+    window.localStorage.setItem(ACTIVE_QUEUE_PROVIDER_STORAGE_KEY, provider);
+  } catch {
+    // The in-memory provider remains authoritative when storage is unavailable.
+  }
   activeQueueProviderSubscribers.forEach((subscriber) => subscriber(provider));
 };
 

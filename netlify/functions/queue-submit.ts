@@ -31,7 +31,7 @@ const SYSTEM_QUEUE_LIMIT = 10;
 const USER_QUEUE_LIMIT = 1;
 const PROVIDER_CONCURRENCY_LIMITS = {
   tst: { systemImage: 4, systemVideo: 4, userImage: 1, userVideo: 1 },
-  gommo: { systemImage: 8, systemVideo: 8, userImage: 2, userVideo: 2 },
+  gommo: { systemImage: 12, systemVideo: 12, userImage: 3, userVideo: 3 },
 } as const;
 const TST_QUEUE_KINDS = new Set(['image_generate', 'video_generate', 'motion_generate']);
 const TST_QUEUE_KIND_VALUES = Array.from(TST_QUEUE_KINDS);

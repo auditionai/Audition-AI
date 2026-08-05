@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Language, Theme, ViewId, UserProfile, PromotionCampaign, Feature } from '../types';
 import { Icons } from './Icons';
 import { DailyCheckin } from './DailyCheckin';
-import { getUserProfile, getActivePromotion } from '../services/economyService';
+import { getUserProfile, getActivePromotion, getGenerationProviderConfig } from '../services/economyService';
 import {
   getProviderConcurrencyLimits,
   getProviderQueueStats,
+  setActiveQueueProvider,
   useActiveQueueProvider,
   useConcurrency,
 } from '../services/concurrencyService';
@@ -96,6 +97,17 @@ export const Layout: React.FC<LayoutProps> = ({
       window.removeEventListener('balance_updated', handleBalanceUpdated);
     };
   }, []);
+
+  useEffect(() => {
+    if (currentView === 'tool_workspace') return;
+    let cancelled = false;
+    void getGenerationProviderConfig().then((config) => {
+      if (!cancelled) setActiveQueueProvider(config.provider);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentView]);
 
   useEffect(() => {
     if (theme === 'dark') {

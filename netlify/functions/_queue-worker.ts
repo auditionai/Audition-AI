@@ -50,6 +50,10 @@ import {
   submitGommoJob,
 } from './_gommo-provider';
 import { DEFAULT_PROVIDER_BY_FEATURE, type GenerationProviderRouteKey } from '../../shared/providerRouting';
+import {
+  extractProviderResultUrl,
+  isResultUrlCompatibleWithAssetType,
+} from '../../shared/providerResultUrl';
 
 type QueueJobRow = {
   id: string;
@@ -742,78 +746,6 @@ const getInitialProcessingPollDelaySeconds = (job: Pick<QueueJobRow, 'queue_kind
     ? INITIAL_VIDEO_POLL_DELAY_SECONDS
     : INITIAL_POLL_DELAY_SECONDS
 );
-
-const normalizeResultUrl = (value: unknown): string | null => {
-  if (typeof value !== 'string') {
-    return null;
-  }
-
-  const normalized = value.trim();
-  if (!normalized || !/^https?:\/\//i.test(normalized)) {
-    return null;
-  }
-
-  return normalized;
-};
-
-const extractResultUrlFromValue = (value: unknown): string | null => {
-  const direct = normalizeResultUrl(value);
-  if (direct) {
-    return direct;
-  }
-
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const nested = extractResultUrlFromValue(item);
-      if (nested) {
-        return nested;
-      }
-    }
-    return null;
-  }
-
-  if (!value || typeof value !== 'object') {
-    return null;
-  }
-
-  const objectValue = value as Record<string, unknown>;
-  const preferredKeys = [
-    'result',
-    'output',
-    'result_url',
-    'resultUrl',
-    'output_url',
-    'outputUrl',
-    'image_url',
-    'imageUrl',
-    'file_url',
-    'fileUrl',
-    'cdn_url',
-    'cdnUrl',
-    'url',
-  ];
-
-  for (const key of preferredKeys) {
-    const nested = extractResultUrlFromValue(objectValue[key]);
-    if (nested) {
-      return nested;
-    }
-  }
-
-  const collectionKeys = ['results', 'outputs', 'images', 'files', 'artifacts', 'items', 'data'];
-  for (const key of collectionKeys) {
-    const nested = extractResultUrlFromValue(objectValue[key]);
-    if (nested) {
-      return nested;
-    }
-  }
-
-  return null;
-};
-
-const extractResultUrl = (data: any): string | null => {
-  return extractResultUrlFromValue(data);
-};
 
 const getRetryDelaySeconds = (attemptCount: number) => {
   if (attemptCount <= 0) return POLL_INTERVAL_SECONDS;
@@ -2170,6 +2102,10 @@ const completePolledJobWithResultUrl = async (
     completionLevel?: QueueProgressLogEntry['level'];
   },
 ) => {
+  if (!isResultUrlCompatibleWithAssetType(resultUrl, job.asset_type)) {
+    throw new Error(`Provider returned a ${job.asset_type === 'video' ? 'non-video' : 'non-image'} result URL.`);
+  }
+
   if (await isJobManuallyStopped(job.id)) {
     await releaseLease(job.id);
     return 'failed' as const;
@@ -2358,7 +2294,7 @@ const rescueFailedJobsWithProviderResults = async () => {
     try {
       const providerData = await pollProviderJob(String(job.job_id || ''), job.queue_kind, job.queue_payload);
       const providerStatus = String(providerData?.status || '').toLowerCase();
-      const resultUrl = extractResultUrl(providerData);
+      const resultUrl = extractProviderResultUrl(providerData, job.asset_type);
 
       if (resultUrl) {
         const state = await completePolledJobWithResultUrl(job, resultUrl, {
@@ -2633,7 +2569,7 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
   const processingAgeMs = Date.now() - new Date(startedAt).getTime();
 
   if (providerStatus === 'completed') {
-    const resultUrl = extractResultUrl(providerData);
+    const resultUrl = extractProviderResultUrl(providerData, job.asset_type);
     if (!resultUrl) {
       throw new Error(`Job completed but no result URL returned: ${JSON.stringify(providerData)}`);
     }
@@ -2642,7 +2578,7 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
 
   if (providerStatus === 'failed' || providerStatus === 'error' || providerStatus === 'cancelled' || providerStatus === 'canceled') {
     const failureMessage = providerData?.error || providerData?.message || 'Provider job failed';
-    const resultUrl = extractResultUrl(providerData);
+    const resultUrl = extractProviderResultUrl(providerData, job.asset_type);
     if (resultUrl) {
       return completePolledJobWithResultUrl(job, resultUrl, {
         completionMessage: `Provider báo "${failureMessage}" nhưng vẫn trả về kết quả hợp lệ. Đã lưu kết quả thay vì đánh thất bại.`,

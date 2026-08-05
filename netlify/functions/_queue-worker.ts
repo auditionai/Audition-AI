@@ -1617,6 +1617,7 @@ const markSubmittingPreparedPayloadWithOwnership = async (
   jobId: string,
   payload: Record<string, unknown> | null | undefined,
   dispatchAttemptId: string,
+  targetProvider: GenerationProvider,
 ) => {
   const nextPayload = withQueueLog(
     {
@@ -1626,7 +1627,7 @@ const markSubmittingPreparedPayloadWithOwnership = async (
       __dispatchAttemptId: dispatchAttemptId,
     },
     'dispatching',
-    'Đang gửi yêu cầu tới provider TST.',
+    `Đang gửi yêu cầu tới ${targetProvider === 'gommo' ? 'API 2 · Gommo' : 'API 1 · TST'}.`,
   );
   await updateGeneratedImageRecord(jobId, {
     status: 'processing',
@@ -3294,7 +3295,12 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
     }
 
     dispatchAttemptId = randomUUID();
-    job.queue_payload = await markSubmittingPreparedPayloadWithOwnership(job.id, job.queue_payload, dispatchAttemptId);
+    job.queue_payload = await markSubmittingPreparedPayloadWithOwnership(
+      job.id,
+      job.queue_payload,
+      dispatchAttemptId,
+      targetProvider,
+    );
     if (!(await confirmDispatchAttemptOwnership(job.id, dispatchAttemptId))) {
       await releaseLease(job.id);
       return {};

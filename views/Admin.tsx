@@ -1891,6 +1891,26 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       return order[left.key] - order[right.key];
   });
   const selectedQueueStatus = selectedQueueJobDetail?.job.displayStatus || selectedQueueJobDetail?.job.status;
+  const selectedQueueFallbackHistory = Array.isArray(selectedQueueJobDetail?.queuePayloadPreview?.__providerFallbackHistory)
+      ? selectedQueueJobDetail.queuePayloadPreview.__providerFallbackHistory.filter(
+          (entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === 'object' && !Array.isArray(entry),
+      )
+      : [];
+  const selectedQueueProviderLabel = (provider: unknown) =>
+      String(provider || '').toLowerCase() === 'gommo'
+          ? 'API 2 · Gommo'
+          : String(provider || '').toLowerCase() === 'tst'
+              ? 'API 1 · TST'
+              : '-';
+  const selectedQueueInitialProvider = selectedQueueFallbackHistory[0]?.fromProvider
+      || selectedQueueJobDetail?.queuePayloadPreview?.__targetProvider
+      || selectedQueueJobDetail?.job.provider;
+  const selectedQueueProviderFlow = selectedQueueFallbackHistory.length > 0
+      ? [
+          selectedQueueProviderLabel(selectedQueueInitialProvider),
+          ...selectedQueueFallbackHistory.map((entry) => selectedQueueProviderLabel(entry.toProvider)),
+      ].filter((value, index, values) => value !== '-' && value !== values[index - 1]).join(' → ')
+      : selectedQueueProviderLabel(selectedQueueJobDetail?.job.provider || selectedQueueInitialProvider);
   const getQueueStageLabel = (stage?: string) => {
       switch (stage) {
           case 'queued': return 'Đã vào hàng đợi';
@@ -6182,6 +6202,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                   { label: 'Thiết bị', value: getQueuePlatformLabel(selectedQueueJobDetail.job.clientPlatform) },
                                                   { label: 'Asset', value: selectedQueueJobDetail.job.assetType },
                                                   { label: 'Queue Kind', value: selectedQueueJobDetail.job.queueKind || '-' },
+                                                  { label: 'Luồng provider', value: selectedQueueProviderFlow || '-' },
+                                                  { label: 'Provider hiện tại', value: selectedQueueProviderLabel(selectedQueueJobDetail.job.provider) },
                                                   { label: 'Provider Job', value: selectedQueueJobDetail.job.jobId || '-' },
                                                   { label: 'Error Type', value: getQueueErrorCategoryLabel(selectedQueueJobDetail.job.errorCategory) },
                                                   { label: 'Cập nhật', value: getTimeAgo(selectedQueueJobDetail.job.updatedAt) },

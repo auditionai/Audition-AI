@@ -94,6 +94,7 @@ const toAdminJob = (row: any, profile?: { email?: string; displayName?: string }
     status: (row.status || 'queued') as AdminQueueJob['status'],
     displayStatus,
     assetType: (row.asset_type || 'image') as AdminQueueJob['assetType'],
+    provider: row.provider === 'gommo' ? 'gommo' : row.provider === 'tst' ? 'tst' : undefined,
     queueKind: row.queue_kind || undefined,
     toolName: row.tool_name || undefined,
     prompt: row.prompt || undefined,
@@ -616,7 +617,7 @@ export const handler: Handler = async (event) => {
 
     const { data: row, error } = await admin
       .from('generated_images')
-      .select('id, user_id, prompt, tool_name, queue_kind, asset_type, status, job_id, progress, queue_payload, error_message, created_at, updated_at, next_poll_at, processing_started_at, lease_expires_at, image_url')
+      .select('id, user_id, prompt, tool_name, queue_kind, asset_type, provider, status, job_id, progress, queue_payload, error_message, created_at, updated_at, next_poll_at, processing_started_at, lease_expires_at, image_url')
       .eq('id', jobId)
       .maybeSingle();
 

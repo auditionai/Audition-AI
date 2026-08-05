@@ -72,24 +72,68 @@ const QueueStatGroup: React.FC<QueueStatGroupProps> = ({
           return (
             <div
               key={stat.label}
-              className={`queue-hud__lane queue-hud__lane--${stat.tone}`}
+              className={`queue-hud__tile queue-hud__tile--${stat.tone}`}
               style={{ '--queue-load': `${percentage}%` } as React.CSSProperties}
             >
-              <span className="queue-hud__lane-icon" aria-hidden="true"><Icon /></span>
-              <div className="queue-hud__lane-main">
-                <div className="queue-hud__lane-copy">
-                  <strong>{stat.label}</strong>
-                  <span>{stateLabel}</span>
-                </div>
-                <div className="queue-hud__track" aria-hidden="true">
-                  <span className="queue-hud__track-fill" />
-                  <i className="queue-hud__tracer" />
-                </div>
+              <div className="queue-hud__tile-label">
+                <span aria-hidden="true"><Icon /></span>
+                <strong>{stat.label}</strong>
               </div>
               <div className="queue-hud__value"><strong>{stat.value}</strong><span>/{stat.limit}</span></div>
+              <span className="queue-hud__tile-state">{stateLabel}</span>
+              <div className="queue-hud__track" aria-hidden="true">
+                <span className="queue-hud__track-fill" />
+                <i className="queue-hud__tracer" />
+              </div>
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+};
+
+const QueueCompactSummary: React.FC<{
+  imageValue: number;
+  imageLimit: number;
+  videoValue: number;
+  videoLimit: number;
+  queuedValue: number;
+  queuedLimit: number;
+  systemActive: number;
+  systemLimit: number;
+}> = ({
+  imageValue,
+  imageLimit,
+  videoValue,
+  videoLimit,
+  queuedValue,
+  queuedLimit,
+  systemActive,
+  systemLimit,
+}) => {
+  const stats = [
+    { label: 'Ảnh', value: imageValue, limit: imageLimit, tone: 'cyan', icon: Icons.Image },
+    { label: 'Video', value: videoValue, limit: videoLimit, tone: 'violet', icon: Icons.Video },
+    { label: 'Chờ', value: queuedValue, limit: queuedLimit, tone: 'amber', icon: Icons.Clock },
+  ];
+
+  return (
+    <div className="queue-hud__compact animate-fade-in" aria-live="polite">
+      <div className="queue-hud__compact-grid">
+        {stats.map((stat) => {
+          const Icon = stat.icon;
+          return (
+            <div key={stat.label} className={`queue-hud__quick queue-hud__quick--${stat.tone}`}>
+              <div><Icon aria-hidden="true" /><span>{stat.label}</span></div>
+              <strong>{stat.value}<i>/{stat.limit}</i></strong>
+            </div>
+          );
+        })}
+      </div>
+      <div className="queue-hud__compact-system">
+        <span><i /> Sức chứa hệ thống</span>
+        <strong>{systemActive}/{systemLimit}</strong>
       </div>
     </div>
   );
@@ -103,7 +147,7 @@ export const Layout: React.FC<LayoutProps> = ({
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [queuePanelExpanded, setQueuePanelExpanded] = useState(true);
+  const [queuePanelExpanded, setQueuePanelExpanded] = useState(false);
 
   const { queueStats, triggerPoll } = useConcurrency();
   const activeQueueProvider = useActiveQueueProvider();
@@ -301,13 +345,10 @@ export const Layout: React.FC<LayoutProps> = ({
                   </span>
                   <div>
                     <strong>Luồng xử lý</strong>
-                    <span>Realtime queue monitor</span>
+                    <span><i /> Đồng bộ realtime</span>
                   </div>
                 </div>
                 <div className="queue-hud__actions">
-                  <span className="queue-hud__live">
-                    <i /> Live
-                  </span>
                   <button type="button" onClick={() => triggerPoll()} className="queue-hud__icon-button" title="Cập nhật trạng thái" aria-label="Cập nhật trạng thái luồng xử lý">
                     <Icons.RefreshCw />
                   </button>
@@ -341,6 +382,18 @@ export const Layout: React.FC<LayoutProps> = ({
                     queuedLimit={visibleQueueLimits.system.queued}
                   />
                 </div>
+              )}
+              {!queuePanelExpanded && (
+                <QueueCompactSummary
+                  imageValue={visibleQueueStats.myImageProcessing}
+                  imageLimit={visibleQueueLimits.user.imageProcessing}
+                  videoValue={visibleQueueStats.myVideoProcessing}
+                  videoLimit={visibleQueueLimits.user.videoProcessing}
+                  queuedValue={visibleQueueStats.myQueued}
+                  queuedLimit={visibleQueueLimits.user.queued}
+                  systemActive={visibleQueueStats.systemImageProcessing + visibleQueueStats.systemVideoProcessing + visibleQueueStats.systemQueued}
+                  systemLimit={visibleQueueLimits.system.imageProcessing + visibleQueueLimits.system.videoProcessing + visibleQueueLimits.system.queued}
+                />
               )}
             </section>
           ) : (

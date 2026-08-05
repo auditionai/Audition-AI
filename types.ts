@@ -104,6 +104,7 @@ export interface AdminQueueJob {
   status: 'queued' | 'processing' | 'completed' | 'failed';
   displayStatus?: 'queued' | 'processing' | 'completed' | 'failed' | 'rescuing';
   assetType: 'image' | 'video';
+  provider?: 'tst' | 'gommo';
   queueKind?: string;
   toolName?: string;
   prompt?: string;

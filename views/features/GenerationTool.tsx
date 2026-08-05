@@ -17,7 +17,7 @@ import {
 } from '../../services/economyService';
 import { useNotification } from '../../components/NotificationSystem';
 import { caulenhauClient } from '../../services/supabaseClient';
-import { getProviderConcurrencyLimits, getProviderQueueStats, setActiveQueueProvider, useConcurrency } from '../../services/concurrencyService';
+import { formatConcurrencyLimit, getProviderConcurrencyLimits, getProviderQueueStats, setActiveQueueProvider, useConcurrency } from '../../services/concurrencyService';
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import { downloadAssetToBrowser } from '../../services/downloadService';
@@ -937,12 +937,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
     try {
         if (providerQueueStats.myImageProcessing >= providerConcurrencyLimits.user.imageProcessing && providerQueueStats.myQueued >= providerConcurrencyLimits.user.queued) {
-            notify(lang === 'vi' ? 'Bạn đã đạt giới hạn 1 luồng tạo ảnh và 1 hàng chờ. Vui lòng đợi.' : 'You have reached the limit of 1 image processing slot and 1 queued job. Please wait.', 'warning');
-            return;
-        }
-
-        if (providerQueueStats.systemQueued >= providerConcurrencyLimits.system.queued) {
-            notify(lang === 'vi' ? 'Hệ thống đang quá tải (Hàng chờ đầy). Vui lòng thử lại sau ít phút.' : 'System is overloaded (Queue full). Please try again later.', 'error');
+            notify(lang === 'vi'
+                ? `Bạn đã đạt giới hạn ${providerConcurrencyLimits.user.imageProcessing} luồng ảnh và ${providerConcurrencyLimits.user.queued} hàng chờ. Vui lòng đợi.`
+                : `You have reached the limit of ${providerConcurrencyLimits.user.imageProcessing} image slots and ${providerConcurrencyLimits.user.queued} queued jobs. Please wait.`, 'warning');
             return;
         }
     } catch (error) {
@@ -2007,11 +2004,11 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                             <div className="px-4 pb-3 pt-2 border-t border-slate-200/60 dark:border-slate-800 space-y-2 text-[10px] text-slate-600 dark:text-slate-300">
                                 <div className="flex justify-between">
                                     <span>Hệ thống xử lý ảnh</span>
-                                    <span className="font-mono">{providerQueueStats.systemImageProcessing}/{providerConcurrencyLimits.system.imageProcessing}</span>
+                                    <span className="font-mono">{providerQueueStats.systemImageProcessing}/{formatConcurrencyLimit(providerConcurrencyLimits.system.imageProcessing)}</span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span>Hàng chờ hệ thống</span>
-                                    <span className="font-mono">{providerQueueStats.systemQueued}/{providerConcurrencyLimits.system.queued}</span>
+                                    <span className="font-mono">{providerQueueStats.systemQueued}/{formatConcurrencyLimit(providerConcurrencyLimits.system.queued)}</span>
                                 </div>
                                 <button type="button" onClick={triggerPoll} className="neu-button w-full py-2 rounded-xl font-black text-[#FF007F]">
                                     Làm mới trạng thái

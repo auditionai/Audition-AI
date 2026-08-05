@@ -3,7 +3,7 @@ import { Feature, Language, GeneratedImage, ViewId } from '../../types';
 import { Icons } from '../../components/Icons';
 import { useNotification } from '../../components/NotificationSystem';
 import { getUserProfile, getModelPricing, getTstServerAvailabilityConfig, getGenerationProviderConfig, type ModelPricing, type GenerationProviderConfig } from '../../services/economyService';
-import { getProviderConcurrencyLimits, getProviderQueueStats, setActiveQueueProvider, useConcurrency } from '../../services/concurrencyService';
+import { formatConcurrencyLimit, getProviderConcurrencyLimits, getProviderQueueStats, setActiveQueueProvider, useConcurrency } from '../../services/concurrencyService';
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import { downloadAssetToBrowser } from '../../services/downloadService';
@@ -1020,11 +1020,6 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
       return;
     }
 
-    if (providerQueueStats.systemQueued >= providerConcurrencyLimits.system.queued) {
-      notify(lang === 'vi' ? 'Hệ thống đang quá tải (Hàng chờ đầy). Vui lòng thử lại sau ít phút.' : 'System is overloaded (Queue full). Please try again later.', 'error');
-      return;
-    }
-
     const cost = calculateCost();
     let user;
     try {
@@ -1740,8 +1735,8 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                   </button>
                   {isConcurrencyExpanded && (
                     <div className="px-4 pb-3 pt-2 border-t border-slate-200/60 dark:border-slate-800 text-[10px] text-slate-600 dark:text-slate-300 space-y-2">
-                      <div className="flex justify-between"><span>Video hệ thống</span><span className="font-mono">{providerQueueStats.systemVideoProcessing}/{providerConcurrencyLimits.system.videoProcessing}</span></div>
-                      <div className="flex justify-between"><span>Hàng chờ hệ thống</span><span className="font-mono">{providerQueueStats.systemQueued}/{providerConcurrencyLimits.system.queued}</span></div>
+                      <div className="flex justify-between"><span>Video hệ thống</span><span className="font-mono">{providerQueueStats.systemVideoProcessing}/{formatConcurrencyLimit(providerConcurrencyLimits.system.videoProcessing)}</span></div>
+                      <div className="flex justify-between"><span>Hàng chờ hệ thống</span><span className="font-mono">{providerQueueStats.systemQueued}/{formatConcurrencyLimit(providerConcurrencyLimits.system.queued)}</span></div>
                     </div>
                   )}
                 </div>

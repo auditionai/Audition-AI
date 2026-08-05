@@ -37,14 +37,14 @@ export interface ProviderQueueStats {
 
 const TST_CONCURRENCY_LIMITS = {
   user: {
-    imageProcessing: 1,
-    videoProcessing: 1,
-    queued: 1,
+    imageProcessing: 3,
+    videoProcessing: 3,
+    queued: 3,
   },
   system: {
-    imageProcessing: 4,
-    videoProcessing: 4,
-    queued: 10,
+    imageProcessing: Number.POSITIVE_INFINITY,
+    videoProcessing: Number.POSITIVE_INFINITY,
+    queued: Number.POSITIVE_INFINITY,
   },
 } as const;
 
@@ -52,12 +52,12 @@ const GOMMO_CONCURRENCY_LIMITS = {
   user: {
     imageProcessing: 3,
     videoProcessing: 3,
-    queued: 1,
+    queued: 3,
   },
   system: {
-    imageProcessing: 12,
-    videoProcessing: 12,
-    queued: 10,
+    imageProcessing: Number.POSITIVE_INFINITY,
+    videoProcessing: Number.POSITIVE_INFINITY,
+    queued: Number.POSITIVE_INFINITY,
   },
 } as const;
 
@@ -71,6 +71,9 @@ export const CONCURRENCY_LIMITS = TST_CONCURRENCY_LIMITS;
 
 export const getProviderConcurrencyLimits = (provider: QueueProvider) =>
   PROVIDER_CONCURRENCY_LIMITS[provider];
+
+export const formatConcurrencyLimit = (limit: number) =>
+  Number.isFinite(limit) ? String(limit) : '∞';
 
 export const getProviderQueueStats = (stats: QueueStats, provider: QueueProvider) =>
   stats[provider];

@@ -350,8 +350,11 @@ export function WorkspacePromptImage() {
       notify(`Prompt không được vượt quá ${MAX_PROMPT_CHARACTERS.toLocaleString('vi-VN')} ký tự.`, 'error');
       return;
     }
-    if (queueStats.myImageProcessing >= CONCURRENCY_LIMITS.user.imageProcessing) {
-      notify('Bạn đang có quá nhiều job ảnh đang chạy.', 'error');
+    if (
+      queueStats.myImageProcessing >= CONCURRENCY_LIMITS.user.imageProcessing
+      && queueStats.myQueued >= CONCURRENCY_LIMITS.user.queued
+    ) {
+      notify('Bạn đã đạt giới hạn 3 luồng ảnh và 3 hàng chờ.', 'error');
       return;
     }
     if (!selectedCost.available || totalCost <= 0) {

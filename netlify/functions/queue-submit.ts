@@ -27,11 +27,10 @@ const headers = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-const SYSTEM_QUEUE_LIMIT = 10;
-const USER_QUEUE_LIMIT = 1;
+const USER_QUEUE_LIMIT = 3;
 const PROVIDER_CONCURRENCY_LIMITS = {
-  tst: { systemImage: 4, systemVideo: 4, userImage: 1, userVideo: 1 },
-  gommo: { systemImage: 12, systemVideo: 12, userImage: 3, userVideo: 3 },
+  tst: { userImage: 3, userVideo: 3 },
+  gommo: { userImage: 3, userVideo: 3 },
 } as const;
 const TST_QUEUE_KINDS = new Set(['image_generate', 'video_generate', 'motion_generate']);
 const TST_QUEUE_KIND_VALUES = Array.from(TST_QUEUE_KINDS);
@@ -537,7 +536,7 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
     throw new Error('INSUFFICIENT_VCOIN');
   }
 
-  const [myImageProcessing, myVideoProcessing, myQueued, systemImageProcessing, systemVideoProcessing, systemQueued] =
+  const [myImageProcessing, myVideoProcessing, myQueued, systemQueued] =
     await Promise.all([
       countRows(
         admin
@@ -572,24 +571,6 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
         admin
           .from('generated_images')
           .select('id', { count: 'exact', head: true })
-          .eq('status', 'processing')
-          .in('queue_kind', TST_QUEUE_KIND_VALUES)
-          .or(targetProvider === 'gommo' ? 'provider.eq.gommo' : 'provider.eq.tst,provider.is.null')
-          .eq('asset_type', 'image'),
-      ),
-      countRows(
-        admin
-          .from('generated_images')
-          .select('id', { count: 'exact', head: true })
-          .eq('status', 'processing')
-          .in('queue_kind', TST_QUEUE_KIND_VALUES)
-          .or(targetProvider === 'gommo' ? 'provider.eq.gommo' : 'provider.eq.tst,provider.is.null')
-          .eq('asset_type', 'video'),
-      ),
-      countRows(
-        admin
-          .from('generated_images')
-          .select('id', { count: 'exact', head: true })
           .eq('status', 'queued')
           .in('queue_kind', TST_QUEUE_KIND_VALUES)
           .or(targetProvider === 'gommo' ? 'provider.eq.gommo' : 'provider.eq.tst,provider.is.null'),
@@ -598,15 +579,11 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
 
   const canDispatchNow =
     assetType === 'image'
-      ? myImageProcessing < providerLimits.userImage && systemImageProcessing < providerLimits.systemImage
-      : myVideoProcessing < providerLimits.userVideo && systemVideoProcessing < providerLimits.systemVideo;
+      ? myImageProcessing < providerLimits.userImage
+      : myVideoProcessing < providerLimits.userVideo;
 
-  if (!canDispatchNow && myQueued >= USER_QUEUE_LIMIT) {
+  if (myQueued >= USER_QUEUE_LIMIT) {
     throw new Error('USER_QUEUE_LIMIT_REACHED');
-  }
-
-  if (!canDispatchNow && systemQueued >= SYSTEM_QUEUE_LIMIT) {
-    throw new Error('SYSTEM_QUEUE_FULL');
   }
 
   if (costVcoin > 0) {

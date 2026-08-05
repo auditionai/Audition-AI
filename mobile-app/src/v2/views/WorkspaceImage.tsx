@@ -842,11 +842,6 @@ export function WorkspaceImage() {
       notify('Bạn đã đạt giới hạn tạo ảnh. Vui lòng đợi job hiện tại hoàn thành.', 'warning');
       return;
     }
-    if (queueStats.systemQueued >= CONCURRENCY_LIMITS.system.queued) {
-      notify('Hệ thống đang quá tải. Thử lại sau.', 'error');
-      return;
-    }
-
     if (!prompt.trim()) { notify('Vui lòng nhập mô tả.', 'warning'); return; }
 
     const expectedCharacterCount = MODE_TO_CHARACTER_COUNT[activeMode];

@@ -719,11 +719,6 @@ export function WorkspaceVideo() {
       notify('Bạn đã đạt giới hạn luồng video. Xin đợi.', 'warning');
       return;
     }
-    if (queueStats.systemQueued >= CONCURRENCY_LIMITS.system.queued) {
-      notify('Hệ thống đang quá tải. Thử lại sau.', 'error');
-      return;
-    }
-
     const cost = calculateCost();
     const profile = await getUserProfile({ force: true });
     if ((profile.vcoin_balance || 0) < cost) {

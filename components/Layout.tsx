@@ -44,6 +44,7 @@ const QueueStatGroup: React.FC<QueueStatGroupProps> = ({
   queuedValue,
   queuedLimit,
 }) => {
+  const formatLimit = (limit: number) => Number.isFinite(limit) ? String(limit) : '∞';
   const stats = [
     { label: 'Ảnh', value: imageValue, limit: imageLimit, tone: 'cyan', icon: Icons.Image },
     { label: 'Video', value: videoValue, limit: videoLimit, tone: 'violet', icon: Icons.Video },
@@ -56,14 +57,21 @@ const QueueStatGroup: React.FC<QueueStatGroupProps> = ({
     <div className="queue-hud__cluster">
       <div className="queue-hud__cluster-head">
         <span>{title}</span>
-        <span className="queue-hud__cluster-total">{totalActive}<i>/</i>{totalLimit}</span>
+        <span className="queue-hud__cluster-total">{totalActive}<i>/</i>{formatLimit(totalLimit)}</span>
       </div>
       <div className="queue-hud__lanes">
         {stats.map((stat) => {
           const Icon = stat.icon;
-          const percentage = stat.limit > 0 ? Math.min(100, Math.max(0, (stat.value / stat.limit) * 100)) : 0;
+          const isUnlimited = !Number.isFinite(stat.limit);
+          const percentage = isUnlimited
+            ? (stat.value > 0 ? Math.min(100, Math.max(18, stat.value * 8)) : 0)
+            : stat.limit > 0
+              ? Math.min(100, Math.max(0, (stat.value / stat.limit) * 100))
+              : 0;
           const remaining = Math.max(0, stat.limit - stat.value);
-          const stateLabel = stat.value <= 0
+          const stateLabel = isUnlimited
+            ? (stat.value > 0 ? `${stat.value} đang chạy` : 'Sẵn sàng')
+            : stat.value <= 0
             ? 'Sẵn sàng'
             : stat.limit > 0 && stat.value >= stat.limit
               ? 'Đã đầy'
@@ -79,7 +87,7 @@ const QueueStatGroup: React.FC<QueueStatGroupProps> = ({
                 <span aria-hidden="true"><Icon /></span>
                 <strong>{stat.label}</strong>
               </div>
-              <div className="queue-hud__value"><strong>{stat.value}</strong><span>/{stat.limit}</span></div>
+              <div className="queue-hud__value"><strong>{stat.value}</strong><span>/{formatLimit(stat.limit)}</span></div>
               <span className="queue-hud__tile-state">{stateLabel}</span>
               <div className="queue-hud__track" aria-hidden="true">
                 <span className="queue-hud__track-fill" />
@@ -112,6 +120,7 @@ const QueueCompactSummary: React.FC<{
   systemActive,
   systemLimit,
 }) => {
+  const formatLimit = (limit: number) => Number.isFinite(limit) ? String(limit) : '∞';
   const stats = [
     { label: 'Ảnh', value: imageValue, limit: imageLimit, tone: 'cyan', icon: Icons.Image },
     { label: 'Video', value: videoValue, limit: videoLimit, tone: 'violet', icon: Icons.Video },
@@ -126,14 +135,14 @@ const QueueCompactSummary: React.FC<{
           return (
             <div key={stat.label} className={`queue-hud__quick queue-hud__quick--${stat.tone}`}>
               <div><Icon aria-hidden="true" /><span>{stat.label}</span></div>
-              <strong>{stat.value}<i>/{stat.limit}</i></strong>
+              <strong>{stat.value}<i>/{formatLimit(stat.limit)}</i></strong>
             </div>
           );
         })}
       </div>
       <div className="queue-hud__compact-system">
         <span><i /> Sức chứa hệ thống</span>
-        <strong>{systemActive}/{systemLimit}</strong>
+        <strong>{systemActive}/{formatLimit(systemLimit)}</strong>
       </div>
     </div>
   );

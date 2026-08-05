@@ -188,11 +188,6 @@ export function WorkspaceEdit() {
       notify('Bạn đã đạt giới hạn luồng xử lý đồng thời. Vui lòng đợi.', 'warning');
       return;
     }
-    if (queueStats.systemQueued >= CONCURRENCY_LIMITS.system.queued) {
-      notify('Hệ thống đang quá tải. Vui lòng thử lại sau ít phút.', 'error');
-      return;
-    }
-
     const user = await getUserProfile({ force: true });
     if ((user.vcoin_balance || 0) < selectedCost.vcoin) {
       notify(`Bạn cần có ít nhất ${selectedCost.vcoin} Vcoin để thực hiện.`, 'error');

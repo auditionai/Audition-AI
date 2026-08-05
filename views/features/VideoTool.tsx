@@ -3,7 +3,7 @@ import { Feature, Language, GeneratedImage, ViewId } from '../../types';
 import { Icons } from '../../components/Icons';
 import { useNotification } from '../../components/NotificationSystem';
 import { getUserProfile, getModelPricing, getTstServerAvailabilityConfig, getGenerationProviderConfig, type ModelPricing, type GenerationProviderConfig } from '../../services/economyService';
-import { getProviderConcurrencyLimits, getProviderQueueStats, useConcurrency } from '../../services/concurrencyService';
+import { getProviderConcurrencyLimits, getProviderQueueStats, setActiveQueueProvider, useConcurrency } from '../../services/concurrencyService';
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import { downloadAssetToBrowser } from '../../services/downloadService';
@@ -483,6 +483,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
   const selectedGommoMotionModel = getGommoModelForAudition(gommoCatalog, motionModel);
   const isGommoSelected = isGommoVideoSelected || isGommoMotionSelected;
   const activeQueueProvider = activeMode === 'motion_control' ? selectedMotionProvider : selectedVideoProvider;
+  useEffect(() => setActiveQueueProvider(activeQueueProvider), [activeQueueProvider]);
   const providerQueueStats = getProviderQueueStats(queueStats, activeQueueProvider);
   const providerConcurrencyLimits = getProviderConcurrencyLimits(activeQueueProvider);
   const selectedGommoModel = isGommoMotionSelected ? selectedGommoMotionModel : selectedGommoVideoModel;

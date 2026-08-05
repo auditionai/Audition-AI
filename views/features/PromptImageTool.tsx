@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, Bot, ChevronDown, ChevronUp, Crown, Database, Image as ImageIcon, Info, Loader, MessageSquare, Plus, RefreshCw, Sparkles, Upload, Wand2, X, Zap } from 'lucide-react';
 import { useNotification } from '../../components/NotificationSystem';
 import { getGenerationProviderConfig, getModelPricing, getTstServerAvailabilityConfig, getUserProfile } from '../../services/economyService';
-import { getProviderConcurrencyLimits, getProviderQueueStats, useConcurrency } from '../../services/concurrencyService';
+import { getProviderConcurrencyLimits, getProviderQueueStats, setActiveQueueProvider, useConcurrency } from '../../services/concurrencyService';
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import {
@@ -186,6 +186,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
   const selectedModelId = getGenerationModelId(aiModel);
   const isSelectedModelAllowed = isModelAllowedForFeature(providerConfig, 'image_prompt', selectedModelId);
   const selectedProvider = resolveProviderForModel(providerConfig, selectedModelId, 'image_prompt');
+  useEffect(() => setActiveQueueProvider(selectedProvider), [selectedProvider]);
   const providerQueueStats = getProviderQueueStats(queueStats, selectedProvider);
   const providerConcurrencyLimits = getProviderConcurrencyLimits(selectedProvider);
   const isGommoSelected = selectedProvider === 'gommo';

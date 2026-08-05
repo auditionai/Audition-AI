@@ -75,6 +75,29 @@ export const getProviderConcurrencyLimits = (provider: QueueProvider) =>
 export const getProviderQueueStats = (stats: QueueStats, provider: QueueProvider) =>
   stats[provider];
 
+let activeQueueProvider: QueueProvider = 'tst';
+const activeQueueProviderSubscribers = new Set<(provider: QueueProvider) => void>();
+
+export const setActiveQueueProvider = (provider: QueueProvider) => {
+  if (activeQueueProvider === provider) return;
+  activeQueueProvider = provider;
+  activeQueueProviderSubscribers.forEach((subscriber) => subscriber(provider));
+};
+
+export const useActiveQueueProvider = () => {
+  const [provider, setProvider] = useState<QueueProvider>(activeQueueProvider);
+
+  useEffect(() => {
+    activeQueueProviderSubscribers.add(setProvider);
+    setProvider(activeQueueProvider);
+    return () => {
+      activeQueueProviderSubscribers.delete(setProvider);
+    };
+  }, []);
+
+  return provider;
+};
+
 const EMPTY_PROVIDER_QUEUE_STATS: ProviderQueueStats = {
   myImageProcessing: 0,
   myVideoProcessing: 0,

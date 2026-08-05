@@ -17,7 +17,7 @@ import {
 } from '../../services/economyService';
 import { useNotification } from '../../components/NotificationSystem';
 import { caulenhauClient } from '../../services/supabaseClient';
-import { getProviderConcurrencyLimits, getProviderQueueStats, useConcurrency } from '../../services/concurrencyService';
+import { getProviderConcurrencyLimits, getProviderQueueStats, setActiveQueueProvider, useConcurrency } from '../../services/concurrencyService';
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import { downloadAssetToBrowser } from '../../services/downloadService';
@@ -333,6 +333,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const generationTier = aiModel;
   const selectedModelId = getGenerationModelId(aiModel);
   const selectedProvider = resolveProviderForModel(providerConfig, selectedModelId, providerRouteKey);
+  useEffect(() => setActiveQueueProvider(selectedProvider), [selectedProvider]);
   const providerQueueStats = getProviderQueueStats(queueStats, selectedProvider);
   const providerConcurrencyLimits = getProviderConcurrencyLimits(selectedProvider);
   const selectedGommoModel = getGommoModelForAudition(gommoCatalog, selectedModelId);

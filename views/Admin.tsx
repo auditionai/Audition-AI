@@ -38,6 +38,7 @@ import {
     getAdminQueueJobs,
     getAdminQueueJobDetail,
     stopAdminQueueJob,
+    retryAdminQueueJob,
     getGiftcodeUsages,
     getMaintenanceMode,
     saveMaintenanceMode,
@@ -655,6 +656,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [selectedQueueJobDetail, setSelectedQueueJobDetail] = useState<AdminQueueJobDetail | null>(null);
   const [loadingQueueJobDetail, setLoadingQueueJobDetail] = useState(false);
   const [stoppingQueueJob, setStoppingQueueJob] = useState(false);
+  const [queueJobPendingRetry, setQueueJobPendingRetry] = useState<AdminQueueJob | null>(null);
+  const [retryingQueueJobProvider, setRetryingQueueJobProvider] = useState<'tst' | 'gommo' | null>(null);
   const [queuePromptExpanded, setQueuePromptExpanded] = useState(false);
   const [reopeningAutoDisabledKey, setReopeningAutoDisabledKey] = useState<string | null>(null);
 
@@ -2271,6 +2274,26 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       });
   };
 
+  const handleRetryQueueJob = async (provider: 'tst' | 'gommo') => {
+      if (!queueJobPendingRetry || retryingQueueJobProvider) return;
+      setRetryingQueueJobProvider(provider);
+      try {
+          const result = await retryAdminQueueJob(queueJobPendingRetry.id, provider);
+          setQueueJobPendingRetry(null);
+          showToast(
+              result.reused
+                  ? `Job chạy lại #${result.retryJobId.slice(0, 12)} đang tồn tại, không trừ phí lần hai.`
+                  : `Đã tạo job #${result.retryJobId.slice(0, 12)} bằng ${provider === 'tst' ? 'API 1' : 'API 2'} (${result.costVcoin} Vcoin).`,
+          );
+          await loadQueueJobs({ silent: false });
+          await handleOpenQueueJobDetail(result.retryJobId);
+      } catch (error: any) {
+          showToast(`Không thể chạy lại job: ${error?.message || error}`, 'error');
+      } finally {
+          setRetryingQueueJobProvider(null);
+      }
+  };
+
   const handleSaveUser = async () => {
       if (editingUser) {
           const nextBalance = Number(editingUser.vcoin_balance || 0);
@@ -3148,6 +3171,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   onRescue={handleRescueFailedJobs}
                   onReconcile={handleQueueReconcile}
                   onOpen={handleOpenQueueJobDetail}
+                  onRetry={setQueueJobPendingRetry}
                   stageLabel={getQueueStageLabel}
                   statusLabel={getQueueStatusLabel}
                   platformLabel={getQueuePlatformLabel}
@@ -5951,16 +5975,72 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           </div>
       )}
 
+      {queueJobPendingRetry && (
+          <AdminModalPortal>
+              <div className="fixed inset-0 z-[2200] bg-black/75 backdrop-blur-sm flex items-end sm:items-center justify-center p-2 sm:p-4 animate-fade-in">
+                  <div className="bg-[#12121a] w-full max-w-lg rounded-2xl border border-white/20 shadow-2xl overflow-hidden">
+                      <div className="flex items-start justify-between gap-4 px-4 sm:px-6 py-4 border-b border-white/10">
+                          <div className="min-w-0">
+                              <h3 className="text-lg font-bold text-white">Chạy lại job thất bại</h3>
+                              <p className="mt-1 text-xs text-slate-400 font-mono break-all">{queueJobPendingRetry.id}</p>
+                          </div>
+                          <button
+                              onClick={() => setQueueJobPendingRetry(null)}
+                              disabled={Boolean(retryingQueueJobProvider)}
+                              className="p-2 rounded-lg neu-inset-sm hover:bg-white/10 text-white disabled:opacity-50"
+                              aria-label="Đóng"
+                          >
+                              <Icons.X className="w-5 h-5" />
+                          </button>
+                      </div>
+                      <div className="p-4 sm:p-6">
+                          <p className="text-sm leading-relaxed text-slate-300">
+                              Chọn provider cho lần chạy mới. Hệ thống tạo một job liên kết với job cũ và áp dụng lại đúng mức phí gốc. Nếu lần chạy mới thất bại, Vcoin sẽ tự động được hoàn.
+                          </p>
+                          <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <button
+                                  onClick={() => handleRetryQueueJob('tst')}
+                                  disabled={Boolean(retryingQueueJobProvider)}
+                                  className="rounded-xl border border-cyan-400/30 bg-cyan-400/10 hover:bg-cyan-400/20 p-4 text-left disabled:opacity-50"
+                              >
+                                  <span className="block text-sm font-black text-cyan-300">API 1 · TST</span>
+                                  <span className="block mt-1 text-xs text-slate-400">Dùng tuyến API 1 hiện tại</span>
+                                  {retryingQueueJobProvider === 'tst' && <span className="block mt-2 text-xs text-cyan-200">Đang tạo job...</span>}
+                              </button>
+                              <button
+                                  onClick={() => handleRetryQueueJob('gommo')}
+                                  disabled={Boolean(retryingQueueJobProvider)}
+                                  className="rounded-xl border border-fuchsia-400/30 bg-fuchsia-400/10 hover:bg-fuchsia-400/20 p-4 text-left disabled:opacity-50"
+                              >
+                                  <span className="block text-sm font-black text-fuchsia-300">API 2 · Gommo</span>
+                                  <span className="block mt-1 text-xs text-slate-400">Chạy trực tiếp lại qua API 2</span>
+                                  {retryingQueueJobProvider === 'gommo' && <span className="block mt-2 text-xs text-fuchsia-200">Đang tạo job...</span>}
+                              </button>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+          </AdminModalPortal>
+      )}
+
       {selectedQueueJobId && (
           <AdminModalPortal>
-          <div className="fixed inset-0 z-[2100] bg-black/70 backdrop-blur-sm flex justify-center items-center p-4 md:p-6 animate-fade-in">
-              <div className="bg-[#12121a] w-full max-w-6xl rounded-2xl border border-white/20 shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
-                  <div className="flex items-center justify-between gap-4 px-6 py-4 border-b border-white/10">
-                      <div>
+          <div className="fixed inset-0 z-[2100] bg-black/70 backdrop-blur-sm flex justify-center items-start sm:items-center p-2 sm:p-4 md:p-6 animate-fade-in">
+              <div className="bg-[#12121a] w-full max-w-6xl rounded-2xl border border-white/20 shadow-2xl max-h-[calc(100dvh-1rem)] sm:max-h-[90vh] overflow-hidden flex flex-col">
+                  <div className="flex items-start sm:items-center justify-between gap-3 px-4 sm:px-6 py-3 sm:py-4 border-b border-white/10">
+                      <div className="min-w-0">
                           <h3 className="text-xl font-bold text-slate-900 dark:text-white">Chi tiết Queue Job</h3>
-                          <p className="text-xs text-slate-700 dark:text-slate-300 font-semibold font-mono mt-1">{selectedQueueJobId}</p>
+                          <p className="text-xs text-slate-700 dark:text-slate-300 font-semibold font-mono mt-1 break-all">{selectedQueueJobId}</p>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
+                          {selectedQueueJobDetail && selectedQueueStatus === 'failed' && (
+                              <button
+                                  onClick={() => setQueueJobPendingRetry(selectedQueueJobDetail.job)}
+                                  className="px-3 py-2 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-200 text-xs sm:text-sm font-bold"
+                              >
+                                  Chạy lại
+                              </button>
+                          )}
                           {selectedQueueJobDetail && ['queued', 'processing', 'rescuing'].includes(selectedQueueJobDetail.job.displayStatus || selectedQueueJobDetail.job.status) && (
                               <button
                                   onClick={() => handleStopQueueJob(selectedQueueJobDetail.job.id)}
@@ -5976,7 +6056,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       </div>
                   </div>
 
-                  <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
+                  <div className="flex-1 overflow-y-auto custom-scrollbar p-3 sm:p-6">
                       {loadingQueueJobDetail ? (
                           <div className="py-20 text-center text-slate-700 dark:text-slate-300 font-semibold">Đang tải chi tiết job...</div>
                       ) : !selectedQueueJobDetail ? (

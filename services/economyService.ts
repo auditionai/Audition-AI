@@ -2705,6 +2705,41 @@ export const stopAdminQueueJob = async (jobId: string) => {
     return payload as { success: boolean; refunded?: boolean; jobId?: string; providerJobId?: string | null; providerCancelRequested?: boolean };
 };
 
+export type AdminQueueRetryProvider = 'tst' | 'gommo';
+
+export type AdminQueueRetryResult = {
+    success: boolean;
+    reused: boolean;
+    sourceJobId: string;
+    retryJobId: string;
+    status: string;
+    queuePosition?: number;
+    provider: AdminQueueRetryProvider;
+    costVcoin: number;
+};
+
+export const retryAdminQueueJob = async (
+    jobId: string,
+    provider: AdminQueueRetryProvider,
+): Promise<AdminQueueRetryResult> => {
+    const authHeader = await getSessionAuthHeader();
+    const response = await fetch('/api/admin-retry-queue-job', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...authHeader,
+        },
+        body: JSON.stringify({ jobId, provider }),
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        throw new Error(payload?.error || 'Không thể chạy lại queue job');
+    }
+
+    return payload as AdminQueueRetryResult;
+};
+
 export type AdminR2CleanupResult = {
     success: boolean;
     dryRun: boolean;

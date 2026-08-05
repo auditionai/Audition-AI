@@ -2,8 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { Language, Theme, ViewId, UserProfile, PromotionCampaign, Feature } from '../types';
 import { Icons } from './Icons';
 import { DailyCheckin } from './DailyCheckin';
-import { getUserProfile, getActivePromotion } from '../services/economyService';
-import { useConcurrency, PROVIDER_CONCURRENCY_LIMITS } from '../services/concurrencyService';
+import { getUserProfile, getActivePromotion, getGenerationProviderConfig } from '../services/economyService';
+import {
+  getProviderConcurrencyLimits,
+  getProviderQueueStats,
+  setActiveQueueProvider,
+  useActiveQueueProvider,
+  useConcurrency,
+} from '../services/concurrencyService';
 import { DesktopAtmosphere } from './DesktopAtmosphere';
 
 interface LayoutProps {
@@ -19,6 +25,129 @@ interface LayoutProps {
   onLogout?: () => void | Promise<void>;
 }
 
+interface QueueStatGroupProps {
+  title: string;
+  imageValue: number;
+  imageLimit: number;
+  videoValue: number;
+  videoLimit: number;
+  queuedValue: number;
+  queuedLimit: number;
+}
+
+const QueueStatGroup: React.FC<QueueStatGroupProps> = ({
+  title,
+  imageValue,
+  imageLimit,
+  videoValue,
+  videoLimit,
+  queuedValue,
+  queuedLimit,
+}) => {
+  const formatLimit = (limit: number) => Number.isFinite(limit) ? String(limit) : '∞';
+  const stats = [
+    { label: 'Ảnh', value: imageValue, limit: imageLimit, tone: 'cyan', icon: Icons.Image },
+    { label: 'Video', value: videoValue, limit: videoLimit, tone: 'violet', icon: Icons.Video },
+    { label: 'Đang chờ', value: queuedValue, limit: queuedLimit, tone: 'amber', icon: Icons.Clock },
+  ];
+  const totalActive = imageValue + videoValue + queuedValue;
+  const totalLimit = imageLimit + videoLimit + queuedLimit;
+
+  return (
+    <div className="queue-hud__cluster">
+      <div className="queue-hud__cluster-head">
+        <span>{title}</span>
+        <span className="queue-hud__cluster-total">{totalActive}<i>/</i>{formatLimit(totalLimit)}</span>
+      </div>
+      <div className="queue-hud__lanes">
+        {stats.map((stat) => {
+          const Icon = stat.icon;
+          const isUnlimited = !Number.isFinite(stat.limit);
+          const percentage = isUnlimited
+            ? (stat.value > 0 ? Math.min(100, Math.max(18, stat.value * 8)) : 0)
+            : stat.limit > 0
+              ? Math.min(100, Math.max(0, (stat.value / stat.limit) * 100))
+              : 0;
+          const remaining = Math.max(0, stat.limit - stat.value);
+          const stateLabel = isUnlimited
+            ? (stat.value > 0 ? `${stat.value} đang chạy` : 'Sẵn sàng')
+            : stat.value <= 0
+            ? 'Sẵn sàng'
+            : stat.limit > 0 && stat.value >= stat.limit
+              ? 'Đã đầy'
+              : `Còn ${remaining} luồng`;
+
+          return (
+            <div
+              key={stat.label}
+              className={`queue-hud__tile queue-hud__tile--${stat.tone}`}
+              style={{ '--queue-load': `${percentage}%` } as React.CSSProperties}
+            >
+              <div className="queue-hud__tile-label">
+                <span aria-hidden="true"><Icon /></span>
+                <strong>{stat.label}</strong>
+              </div>
+              <div className="queue-hud__value"><strong>{stat.value}</strong><span>/{formatLimit(stat.limit)}</span></div>
+              <span className="queue-hud__tile-state">{stateLabel}</span>
+              <div className="queue-hud__track" aria-hidden="true">
+                <span className="queue-hud__track-fill" />
+                <i className="queue-hud__tracer" />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+const QueueCompactSummary: React.FC<{
+  imageValue: number;
+  imageLimit: number;
+  videoValue: number;
+  videoLimit: number;
+  queuedValue: number;
+  queuedLimit: number;
+  systemActive: number;
+  systemLimit: number;
+}> = ({
+  imageValue,
+  imageLimit,
+  videoValue,
+  videoLimit,
+  queuedValue,
+  queuedLimit,
+  systemActive,
+  systemLimit,
+}) => {
+  const formatLimit = (limit: number) => Number.isFinite(limit) ? String(limit) : '∞';
+  const stats = [
+    { label: 'Ảnh', value: imageValue, limit: imageLimit, tone: 'cyan', icon: Icons.Image },
+    { label: 'Video', value: videoValue, limit: videoLimit, tone: 'violet', icon: Icons.Video },
+    { label: 'Chờ', value: queuedValue, limit: queuedLimit, tone: 'amber', icon: Icons.Clock },
+  ];
+
+  return (
+    <div className="queue-hud__compact animate-fade-in" aria-live="polite">
+      <div className="queue-hud__compact-grid">
+        {stats.map((stat) => {
+          const Icon = stat.icon;
+          return (
+            <div key={stat.label} className={`queue-hud__quick queue-hud__quick--${stat.tone}`}>
+              <div><Icon aria-hidden="true" /><span>{stat.label}</span></div>
+              <strong>{stat.value}<i>/{formatLimit(stat.limit)}</i></strong>
+            </div>
+          );
+        })}
+      </div>
+      <div className="queue-hud__compact-system">
+        <span><i /> Sức chứa hệ thống</span>
+        <strong>{systemActive}/{formatLimit(systemLimit)}</strong>
+      </div>
+    </div>
+  );
+};
+
 export const Layout: React.FC<LayoutProps> = ({
   children, currentView, selectedFeature, onNavigate, lang, theme, setTheme, showCheckin, setShowCheckin, onLogout
 }) => {
@@ -27,9 +156,14 @@ export const Layout: React.FC<LayoutProps> = ({
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [queuePanelExpanded, setQueuePanelExpanded] = useState(true);
+  const [queuePanelExpanded, setQueuePanelExpanded] = useState(false);
 
   const { queueStats, triggerPoll } = useConcurrency();
+  const activeQueueProvider = useActiveQueueProvider();
+  const visibleQueueStats = getProviderQueueStats(queueStats, activeQueueProvider);
+  const visibleQueueLimits = getProviderConcurrencyLimits(activeQueueProvider);
+  const myProcessingCount = visibleQueueStats.myImageProcessing + visibleQueueStats.myVideoProcessing;
+  const myProcessingLimit = visibleQueueLimits.user.imageProcessing + visibleQueueLimits.user.videoProcessing;
   const showMarquee = Boolean(promoConfig?.isActive && promoConfig.marqueeText?.trim());
 
   useEffect(() => {
@@ -46,6 +180,17 @@ export const Layout: React.FC<LayoutProps> = ({
       window.removeEventListener('balance_updated', handleBalanceUpdated);
     };
   }, []);
+
+  useEffect(() => {
+    if (currentView === 'tool_workspace') return;
+    let cancelled = false;
+    void getGenerationProviderConfig().then((config) => {
+      if (!cancelled) setActiveQueueProvider(config.provider);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentView]);
 
   useEffect(() => {
     if (theme === 'dark') {
@@ -198,95 +343,73 @@ export const Layout: React.FC<LayoutProps> = ({
           
           {/* LUỒNG XỬ LÝ (Processing Queue Status Box) */}
           {!sidebarCollapsed ? (
-            <div className="neu-inset-sm p-3 rounded-2xl border border-slate-300 dark:border-slate-800 space-y-2">
-              {/* Header Title & Controls */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5 text-xs font-black text-[#FF007F] dark:text-[#00F2FE] font-accent uppercase tracking-wider">
-                  <Icons.Activity className="w-3.5 h-3.5 text-[#FF007F] dark:text-[#00F2FE] animate-pulse shrink-0" />
-                  <span>Luồng xử lý</span>
+            <section className="queue-hud" aria-label="Trạng thái luồng xử lý realtime">
+              <span className="queue-hud__grid" aria-hidden="true" />
+              <span className="queue-hud__scan" aria-hidden="true" />
+              <div className="queue-hud__header">
+                <div className="queue-hud__identity">
+                  <span className="queue-hud__core" aria-hidden="true">
+                    <Icons.Activity />
+                    <i />
+                  </span>
+                  <div>
+                    <strong>Luồng xử lý</strong>
+                    <span><i /> Đồng bộ realtime</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => triggerPoll()}
-                    className="p-1 rounded-lg text-slate-700 dark:text-slate-400 hover:text-[#FF007F] transition-colors"
-                    title="Làm mới luồng"
-                  >
-                    <Icons.RefreshCw className="w-3.5 h-3.5" />
+                <div className="queue-hud__actions">
+                  <button type="button" onClick={() => triggerPoll()} className="queue-hud__icon-button" title="Cập nhật trạng thái" aria-label="Cập nhật trạng thái luồng xử lý">
+                    <Icons.RefreshCw />
                   </button>
-                  <button
-                    onClick={() => setQueuePanelExpanded(!queuePanelExpanded)}
-                    className="p-1 rounded-lg text-slate-700 dark:text-slate-400 hover:text-slate-950 dark:hover:text-white transition-colors"
-                  >
-                    {queuePanelExpanded ? <Icons.ChevronUp className="w-3.5 h-3.5" /> : <Icons.ChevronDown className="w-3.5 h-3.5" />}
+                  <button type="button" onClick={() => setQueuePanelExpanded(!queuePanelExpanded)} className="queue-hud__icon-button" aria-label={queuePanelExpanded ? 'Thu gọn trạng thái luồng xử lý' : 'Mở rộng trạng thái luồng xử lý'} aria-expanded={queuePanelExpanded}>
+                    {queuePanelExpanded ? <Icons.ChevronUp /> : <Icons.ChevronDown />}
                   </button>
                 </div>
               </div>
 
               {queuePanelExpanded && (
-                <div className="space-y-2 pt-1 text-[11px] animate-fade-in font-sans">
-                  {/* CỦA BẠN */}
-                  <div>
-                    <div className="text-[9px] font-black uppercase text-slate-800 dark:text-slate-400 tracking-wider mb-1 font-accent">
-                      CỦA BẠN
-                    </div>
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between items-center">
-                        <span className="font-black text-slate-950 dark:text-slate-200">TST · Ảnh/Video/Chờ</span>
-                        <span className="px-2 py-0.5 rounded-lg text-[10px] font-black font-mono bg-cyan-500/25 dark:bg-cyan-500/20 text-cyan-900 dark:text-cyan-400 border border-cyan-500/60">
-                          {queueStats.tst.myImageProcessing}/{PROVIDER_CONCURRENCY_LIMITS.tst.user.imageProcessing} · {queueStats.tst.myVideoProcessing}/{PROVIDER_CONCURRENCY_LIMITS.tst.user.videoProcessing} · {queueStats.tst.myQueued}/{PROVIDER_CONCURRENCY_LIMITS.tst.user.queued}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="font-black text-slate-950 dark:text-slate-200">Dự phòng · Ảnh/Video/Chờ</span>
-                        <span className="px-2 py-0.5 rounded-lg text-[10px] font-black font-mono bg-amber-500/25 dark:bg-amber-500/20 text-amber-900 dark:text-amber-400 border border-amber-500/60">
-                          {queueStats.gommo.myImageProcessing}/{PROVIDER_CONCURRENCY_LIMITS.gommo.user.imageProcessing} · {queueStats.gommo.myVideoProcessing}/{PROVIDER_CONCURRENCY_LIMITS.gommo.user.videoProcessing} · {queueStats.gommo.myQueued}/{PROVIDER_CONCURRENCY_LIMITS.gommo.user.queued}
-                        </span>
-                      </div>
-                    </div>
+                <div className="queue-hud__body animate-fade-in" aria-live="polite">
+                  <QueueStatGroup
+                    title="Phiên của bạn"
+                    imageValue={visibleQueueStats.myImageProcessing}
+                    imageLimit={visibleQueueLimits.user.imageProcessing}
+                    videoValue={visibleQueueStats.myVideoProcessing}
+                    videoLimit={visibleQueueLimits.user.videoProcessing}
+                    queuedValue={visibleQueueStats.myQueued}
+                    queuedLimit={visibleQueueLimits.user.queued}
+                  />
+                  <div className="queue-hud__bridge" aria-hidden="true">
+                    <span /><i /><i /><i />
                   </div>
-
-                  <div className="border-t border-slate-300 dark:border-slate-800/80 my-1.5"></div>
-
-                  {/* HỆ THỐNG */}
-                  <div>
-                    <div className="text-[9px] font-black uppercase text-slate-800 dark:text-slate-400 tracking-wider mb-1 font-accent">
-                      HỆ THỐNG
-                    </div>
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between items-center">
-                        <span className="font-black text-slate-950 dark:text-slate-200">TST · Ảnh/Video</span>
-                        <span className="px-2 py-0.5 rounded-lg text-[10px] font-black font-mono bg-slate-300 dark:bg-slate-800 text-slate-950 dark:text-slate-200 border border-slate-400 dark:border-transparent">
-                          {queueStats.tst.systemImageProcessing}/{PROVIDER_CONCURRENCY_LIMITS.tst.system.imageProcessing} · {queueStats.tst.systemVideoProcessing}/{PROVIDER_CONCURRENCY_LIMITS.tst.system.videoProcessing}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="font-black text-slate-950 dark:text-slate-200">Nguồn dự phòng · Ảnh/Video</span>
-                        <span className="px-2 py-0.5 rounded-lg text-[10px] font-black font-mono bg-slate-300 dark:bg-slate-800 text-slate-950 dark:text-slate-200 border border-slate-400 dark:border-transparent">
-                          {queueStats.gommo.systemImageProcessing}/{PROVIDER_CONCURRENCY_LIMITS.gommo.system.imageProcessing} · {queueStats.gommo.systemVideoProcessing}/{PROVIDER_CONCURRENCY_LIMITS.gommo.system.videoProcessing}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="font-black text-slate-950 dark:text-slate-200">Hàng chờ TST / dự phòng</span>
-                        <span className="px-2 py-0.5 rounded-lg text-[10px] font-black font-mono bg-orange-500/25 dark:bg-orange-500/20 text-orange-950 dark:text-orange-400 border border-orange-500/60">
-                          {queueStats.tst.systemQueued}/{PROVIDER_CONCURRENCY_LIMITS.tst.system.queued} · {queueStats.gommo.systemQueued}/{PROVIDER_CONCURRENCY_LIMITS.gommo.system.queued}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+                  <QueueStatGroup
+                    title="Sức chứa hệ thống"
+                    imageValue={visibleQueueStats.systemImageProcessing}
+                    imageLimit={visibleQueueLimits.system.imageProcessing}
+                    videoValue={visibleQueueStats.systemVideoProcessing}
+                    videoLimit={visibleQueueLimits.system.videoProcessing}
+                    queuedValue={visibleQueueStats.systemQueued}
+                    queuedLimit={visibleQueueLimits.system.queued}
+                  />
                 </div>
               )}
-            </div>
+              {!queuePanelExpanded && (
+                <QueueCompactSummary
+                  imageValue={visibleQueueStats.myImageProcessing}
+                  imageLimit={visibleQueueLimits.user.imageProcessing}
+                  videoValue={visibleQueueStats.myVideoProcessing}
+                  videoLimit={visibleQueueLimits.user.videoProcessing}
+                  queuedValue={visibleQueueStats.myQueued}
+                  queuedLimit={visibleQueueLimits.user.queued}
+                  systemActive={visibleQueueStats.systemImageProcessing + visibleQueueStats.systemVideoProcessing + visibleQueueStats.systemQueued}
+                  systemLimit={visibleQueueLimits.system.imageProcessing + visibleQueueLimits.system.videoProcessing + visibleQueueLimits.system.queued}
+                />
+              )}
+            </section>
           ) : (
-            <div 
-              onClick={() => triggerPoll()}
-              className="neu-inset-sm p-2 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:ring-2 hover:ring-[#FF007F] transition-all"
-              title={`Luồng xử lý: TST ${queueStats.tst.systemImageProcessing}/${PROVIDER_CONCURRENCY_LIMITS.tst.system.imageProcessing} | Dự phòng ${queueStats.gommo.systemImageProcessing}/${PROVIDER_CONCURRENCY_LIMITS.gommo.system.imageProcessing}`}
-            >
-              <Icons.Activity className="w-4 h-4 text-[#FF007F] dark:text-[#00F2FE] animate-pulse" />
-              <span className="text-[9px] font-mono font-black text-[#FF007F] dark:text-cyan-400 mt-0.5">
-                {queueStats.tst.myImageProcessing + queueStats.gommo.myImageProcessing}/{PROVIDER_CONCURRENCY_LIMITS.tst.user.imageProcessing + PROVIDER_CONCURRENCY_LIMITS.gommo.user.imageProcessing}
-              </span>
-            </div>
+            <button type="button" onClick={() => triggerPoll()} className="queue-hud-mini" title={`Đang xử lý ${myProcessingCount}/${myProcessingLimit} tác vụ`} aria-label={`Cập nhật luồng xử lý, hiện có ${myProcessingCount} trên ${myProcessingLimit} tác vụ của bạn đang chạy`}>
+              <span className="queue-hud-mini__radar"><Icons.Activity /></span>
+              <span>{myProcessingCount}/{myProcessingLimit}</span>
+            </button>
           )}
 
           {/* Vcoin Balance Display Badge */}

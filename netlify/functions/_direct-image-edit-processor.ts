@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import type { ImageEditRecipePayload, QueueProcessingStage, QueueProgressLogEntry } from '../../shared/queueRecipes';
+import { SHARPEN_UPSCALE_CHARACTER_LOCK_PROMPT } from '../../shared/imageEditPrompts';
 import { DIRECT_IMAGE_EDIT_QUEUE_KIND } from '../../shared/queueKinds';
 import { getServiceRoleClient } from './_supabase';
 import { runVertexImageEdit } from './_vertex-image-edit';
@@ -15,6 +16,7 @@ type DirectEditJobRow = {
   queue_kind: string | null;
   queue_payload: ImageEditRecipePayload | null;
   cost_vcoin: number | null;
+  tool_id: string | null;
   tool_name: string | null;
   image_url: string | null;
   error_message: string | null;
@@ -127,7 +129,7 @@ const loadDirectEditJob = async (jobId: string): Promise<DirectEditJobRow | null
   const { data, error } = await admin
     .from('generated_images')
     .select(
-      'id, user_id, status, queue_kind, queue_payload, cost_vcoin, tool_name, image_url, error_message, processing_started_at, updated_at, lease_token, lease_expires_at, attempt_count',
+      'id, user_id, status, queue_kind, queue_payload, cost_vcoin, tool_id, tool_name, image_url, error_message, processing_started_at, updated_at, lease_token, lease_expires_at, attempt_count',
     )
     .eq('id', jobId)
     .maybeSingle();
@@ -266,6 +268,13 @@ export const processDirectImageEditJob = async (jobId: string) => {
   }
 
   let runtimePayload = claim.payload;
+
+  if (job.tool_id === 'sharpen_upscale') {
+    runtimePayload = {
+      ...runtimePayload,
+      prompt: SHARPEN_UPSCALE_CHARACTER_LOCK_PROMPT,
+    };
+  }
 
   try {
     runtimePayload = appendQueueLog(runtimePayload, 'dispatching', 'Dang goi Vertex AI de xu ly anh.');

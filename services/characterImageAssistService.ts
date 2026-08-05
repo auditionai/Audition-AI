@@ -1,6 +1,7 @@
 import { uploadFileToR2 } from './storageService';
 import { runDirectImageEdit } from './directImageEditService';
 import type { ImageEditRecipePayload } from '../shared/queueRecipes';
+import { SHARPEN_UPSCALE_CHARACTER_LOCK_PROMPT } from '../shared/imageEditPrompts';
 import { calculateAspectRatioString, loadImageWithTimeout } from '../utils/imageProcessor';
 
 export type CharacterAssistantToolId = 'remove_bg_pro' | 'sharpen_upscale';
@@ -38,16 +39,7 @@ export const buildEnhancedVertexEditInstruction = (
   resolution: AssistantResolution = CHARACTER_ASSISTANT_RESOLUTION,
 ) => {
   if (toolId === 'sharpen_upscale') {
-    return [
-      `Upscale this image to ${resolution}.`,
-      'CRITICAL GOAL: recover real detail from a blurry, noisy, compressed, or phone-captured character image while keeping the exact same subject identity.',
-      'Preserve the exact face, hairstyle, skin tone, body proportions, outfit, shoes, accessories, tattoos, and stylized game-avatar topology.',
-      'Restore edge definition, facial readability, clothing texture separation, accessory clarity, and silhouette precision.',
-      'Reduce blur, softness, moire, JPEG artifacts, screen-door noise, sensor noise, and washed-out detail.',
-      'Keep the same composition, camera crop, pose, body shape, colors, and background structure unless the source already has a pure black cutout background.',
-      'Do NOT redesign, repaint, beautify, re-style, replace the face, alter the outfit, humanize the avatar, photorealize the image, add missing items, or invent new details.',
-      'Output a clean, sharp, high-fidelity restoration suitable for identity-accurate downstream AI generation.',
-    ].join(' ');
+    return SHARPEN_UPSCALE_CHARACTER_LOCK_PROMPT;
   }
 
   return [

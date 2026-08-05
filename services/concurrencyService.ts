@@ -37,27 +37,27 @@ export interface ProviderQueueStats {
 
 const TST_CONCURRENCY_LIMITS = {
   user: {
-    imageProcessing: 1,
-    videoProcessing: 1,
-    queued: 1,
+    imageProcessing: 3,
+    videoProcessing: 3,
+    queued: 3,
   },
   system: {
-    imageProcessing: 4,
-    videoProcessing: 4,
-    queued: 10,
+    imageProcessing: Number.POSITIVE_INFINITY,
+    videoProcessing: Number.POSITIVE_INFINITY,
+    queued: Number.POSITIVE_INFINITY,
   },
 } as const;
 
 const GOMMO_CONCURRENCY_LIMITS = {
   user: {
-    imageProcessing: 2,
-    videoProcessing: 2,
-    queued: 1,
+    imageProcessing: 3,
+    videoProcessing: 3,
+    queued: 3,
   },
   system: {
-    imageProcessing: 8,
-    videoProcessing: 8,
-    queued: 10,
+    imageProcessing: Number.POSITIVE_INFINITY,
+    videoProcessing: Number.POSITIVE_INFINITY,
+    queued: Number.POSITIVE_INFINITY,
   },
 } as const;
 
@@ -72,8 +72,49 @@ export const CONCURRENCY_LIMITS = TST_CONCURRENCY_LIMITS;
 export const getProviderConcurrencyLimits = (provider: QueueProvider) =>
   PROVIDER_CONCURRENCY_LIMITS[provider];
 
+export const formatConcurrencyLimit = (limit: number) =>
+  Number.isFinite(limit) ? String(limit) : '∞';
+
 export const getProviderQueueStats = (stats: QueueStats, provider: QueueProvider) =>
   stats[provider];
+
+const ACTIVE_QUEUE_PROVIDER_STORAGE_KEY = 'audition_active_queue_provider';
+const getInitialActiveQueueProvider = (): QueueProvider => {
+  if (typeof window === 'undefined') return 'tst';
+  try {
+    return window.localStorage.getItem(ACTIVE_QUEUE_PROVIDER_STORAGE_KEY) === 'gommo' ? 'gommo' : 'tst';
+  } catch {
+    return 'tst';
+  }
+};
+
+let activeQueueProvider: QueueProvider = getInitialActiveQueueProvider();
+const activeQueueProviderSubscribers = new Set<(provider: QueueProvider) => void>();
+
+export const setActiveQueueProvider = (provider: QueueProvider) => {
+  if (activeQueueProvider === provider) return;
+  activeQueueProvider = provider;
+  try {
+    window.localStorage.setItem(ACTIVE_QUEUE_PROVIDER_STORAGE_KEY, provider);
+  } catch {
+    // The in-memory provider remains authoritative when storage is unavailable.
+  }
+  activeQueueProviderSubscribers.forEach((subscriber) => subscriber(provider));
+};
+
+export const useActiveQueueProvider = () => {
+  const [provider, setProvider] = useState<QueueProvider>(activeQueueProvider);
+
+  useEffect(() => {
+    activeQueueProviderSubscribers.add(setProvider);
+    setProvider(activeQueueProvider);
+    return () => {
+      activeQueueProviderSubscribers.delete(setProvider);
+    };
+  }, []);
+
+  return provider;
+};
 
 const EMPTY_PROVIDER_QUEUE_STATS: ProviderQueueStats = {
   myImageProcessing: 0,

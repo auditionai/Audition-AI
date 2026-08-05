@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, Bot, ChevronDown, ChevronUp, Crown, Database, Image as ImageIcon, Info, Loader, MessageSquare, Plus, RefreshCw, Sparkles, Upload, Wand2, X, Zap } from 'lucide-react';
 import { useNotification } from '../../components/NotificationSystem';
 import { getGenerationProviderConfig, getModelPricing, getTstServerAvailabilityConfig, getUserProfile } from '../../services/economyService';
-import { getProviderConcurrencyLimits, getProviderQueueStats, useConcurrency } from '../../services/concurrencyService';
+import { formatConcurrencyLimit, getProviderConcurrencyLimits, getProviderQueueStats, setActiveQueueProvider, useConcurrency } from '../../services/concurrencyService';
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import {
@@ -186,6 +186,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
   const selectedModelId = getGenerationModelId(aiModel);
   const isSelectedModelAllowed = isModelAllowedForFeature(providerConfig, 'image_prompt', selectedModelId);
   const selectedProvider = resolveProviderForModel(providerConfig, selectedModelId, 'image_prompt');
+  useEffect(() => setActiveQueueProvider(selectedProvider), [selectedProvider]);
   const providerQueueStats = getProviderQueueStats(queueStats, selectedProvider);
   const providerConcurrencyLimits = getProviderConcurrencyLimits(selectedProvider);
   const isGommoSelected = selectedProvider === 'gommo';
@@ -409,8 +410,11 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
       notify(`Prompt không được vượt quá ${MAX_PROMPT_CHARACTERS.toLocaleString('vi-VN')} ký tự.`, 'error');
       return;
     }
-    if (providerQueueStats.myImageProcessing >= providerConcurrencyLimits.user.imageProcessing) {
-      notify('Bạn đang có quá nhiều job ảnh đang chạy. Vui lòng chờ job hiện tại hoàn tất.', 'error');
+    if (
+      providerQueueStats.myImageProcessing >= providerConcurrencyLimits.user.imageProcessing
+      && providerQueueStats.myQueued >= providerConcurrencyLimits.user.queued
+    ) {
+      notify(`Bạn đã đạt giới hạn ${providerConcurrencyLimits.user.imageProcessing} luồng ảnh và ${providerConcurrencyLimits.user.queued} hàng chờ. Vui lòng đợi.`, 'error');
       return;
     }
     if (!selectedCost.available || totalCost <= 0) {
@@ -770,9 +774,9 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
                     <div>
                       <div className="font-bold text-slate-300 mb-1">Luồng Hệ Thống</div>
                       <div className="flex gap-1.5">
-                        <span>Ảnh <span className="text-white font-mono">{providerQueueStats.systemImageProcessing}/{providerConcurrencyLimits.system.imageProcessing}</span></span>
-                        <span>- Video <span className="text-white font-mono">{providerQueueStats.systemVideoProcessing}/{providerConcurrencyLimits.system.videoProcessing}</span></span>
-                        <span>- Hàng Chờ <span className="text-white font-mono">{providerQueueStats.systemQueued}/{providerConcurrencyLimits.system.queued}</span></span>
+                        <span>Ảnh <span className="text-white font-mono">{providerQueueStats.systemImageProcessing}/{formatConcurrencyLimit(providerConcurrencyLimits.system.imageProcessing)}</span></span>
+                        <span>- Video <span className="text-white font-mono">{providerQueueStats.systemVideoProcessing}/{formatConcurrencyLimit(providerConcurrencyLimits.system.videoProcessing)}</span></span>
+                        <span>- Hàng Chờ <span className="text-white font-mono">{providerQueueStats.systemQueued}/{formatConcurrencyLimit(providerConcurrencyLimits.system.queued)}</span></span>
                       </div>
                     </div>
                   </div>

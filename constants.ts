@@ -1,4 +1,5 @@
 import { AppConfig } from './types';
+import { SHARPEN_UPSCALE_CHARACTER_LOCK_PROMPT } from './shared/imageEditPrompts';
 
 export const APP_CONFIG: AppConfig = {
   app: {
@@ -210,7 +211,7 @@ export const APP_CONFIG: AppConfig = {
       engine: "Giá 3 Vcoin / lần",
       preview_image: "https://picsum.photos/400/306?grayscale",
       toolType: 'editing',
-      defaultPrompt: "Upscale this image to high resolution 4K, sharpen details, improve clarity, de-noise, maintain original content and colors. Make it look professional.",
+      defaultPrompt: SHARPEN_UPSCALE_CHARACTER_LOCK_PROMPT,
       category: 'editing'
     }
   ]

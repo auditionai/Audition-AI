@@ -34,7 +34,7 @@ const getRowProvider = (row: any): 'tst' | 'gommo' =>
 
 const PROVIDER_LIMITS = {
   tst: { image: 4, video: 4, userImage: 1, userVideo: 1 },
-  gommo: { image: 8, video: 8, userImage: 2, userVideo: 2 },
+  gommo: { image: 12, video: 12, userImage: 3, userVideo: 3 },
 } as const;
 
 const buildDispatchDiagnostics = async (admin: ReturnType<typeof getServiceRoleClient>) => {

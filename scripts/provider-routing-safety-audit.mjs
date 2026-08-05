@@ -270,6 +270,24 @@ assert(providerCapacityMigration.includes("partition by e.user_id, e.provider_ke
 assert(providerCapacityMigration.includes("partition by ru.provider_key"));
 assert(providerCapacityMigration.includes('system_gommo_image_processing integer'));
 
+const gommoTripleCapacityMigration = await readFile(
+  new URL('../supabase/migrations/20260805090000_gommo_triple_queue_capacity.sql', import.meta.url),
+  'utf8',
+);
+assert(gommoTripleCapacityMigration.includes("when n.provider_key = 'gommo' then 12 else 4"));
+assert(gommoTripleCapacityMigration.includes("when n.provider_key = 'gommo' then 3 else 1"));
+assert(gommoTripleCapacityMigration.includes('v_system_image_limit := 12;'));
+assert(gommoTripleCapacityMigration.includes('v_user_image_limit := 3;'));
+
+const unlimitedSystemCapacityMigration = await readFile(
+  new URL('../supabase/migrations/20260805120000_user_three_unlimited_system_capacity.sql', import.meta.url),
+  'utf8',
+);
+assert(unlimitedSystemCapacityMigration.includes('v_user_queue_limit constant integer := 3;'));
+assert(unlimitedSystemCapacityMigration.includes('3 - coalesce(up.active_count, 0) as user_slots'));
+assert(!unlimitedSystemCapacityMigration.includes("raise exception 'SYSTEM_QUEUE_FULL'"));
+assert(!unlimitedSystemCapacityMigration.includes('system_slots'));
+
 const tstCatalogSource = await readFile(new URL('../services/tstCatalog.ts', import.meta.url), 'utf8');
 assert(tstCatalogSource.includes("String(entry.key || entry.config_key || '')"));
 assert(tstCatalogSource.includes("'image-gpt-2': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3']"));

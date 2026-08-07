@@ -72,6 +72,22 @@ const getPromptMeta = (payload) => {
   };
 };
 
+const getProviderLabel = (payload) => {
+  const job = payload?.job || {};
+  const config = job?.config || {};
+  const raw = job?.queuePayload && typeof job.queuePayload === 'object' ? job.queuePayload : {};
+  const provider = config?.provider || raw.__targetProvider || raw.__provider || job?.provider;
+  return String(provider || job?.engine || 'N/A').trim().toUpperCase();
+};
+
+const getDurationMinutes = (payload) => {
+  const job = payload?.job || {};
+  const start = new Date(job?.createdAt || '').getTime();
+  const end = new Date(job?.finishedAt || '').getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return 'N/A';
+  return `${Math.max(0, (end - start) / 60000).toFixed(1)} phút`;
+};
+
 const getEventLabel = (eventType) => {
   switch (String(eventType || '').toLowerCase()) {
     case 'completed':
@@ -153,6 +169,8 @@ const buildSummaryLines = (payload) => {
   const lines = [
     buildHeader(payload?.app || 'App', payload?.eventType || 'queued'),
     '',
+    `API: <b>${escapeHtml(getProviderLabel(payload))}</b>`,
+    `Thời gian tạo: ${escapeHtml(getDurationMinutes(payload))}`,
     `• Công cụ: <b>${escapeHtml(displayValue(job?.toolName || job?.queueKind))}</b>`,
     `• Người dùng: ${escapeHtml(displayValue(job?.displayName, 'Unknown'))} | ${escapeHtml(displayValue(job?.costVcoin ?? 0, '0'))} VC`,
     `• Model: ${escapeHtml(displayValue(config?.modelId || job?.engine))}`,
@@ -251,7 +269,7 @@ const collectCandidateMedia = (payload) => {
     });
   }
 
-  const maxInputPreviews = payload?.eventType === 'completed' ? 2 : 3;
+  const maxInputPreviews = payload?.eventType === 'completed' ? 0 : 3;
   for (const entry of inputMedia.slice(0, maxInputPreviews)) {
     candidates.push({
       url: entry.url,
@@ -407,27 +425,8 @@ async function sendSingleJobMessage(env, payload) {
   const shownUrls = eligibleMedia.map((item) => item.url);
   const extraLinks = buildMediaLinks(payload, shownUrls);
 
-  if (eligibleMedia.length >= 2) {
-    const mediaItems = eligibleMedia.slice(0, 4).map((item, index) => ({
-      type: item.type,
-      media: item.url,
-      ...(index === 0 ? { caption: buildMediaCaption(payload), parse_mode: 'HTML' } : {}),
-    }));
-
-    await sendMediaGroup(env, mediaItems);
-
-    if (extraLinks.length > 0) {
-      await sendText(env, buildTextMessage(payload, extraLinks));
-    }
-    return;
-  }
-
   if (eligibleMedia.length === 1) {
-    await sendMedia(env, eligibleMedia[0], buildMediaCaption(payload));
-
-    if (extraLinks.length > 0) {
-      await sendText(env, buildTextMessage(payload, extraLinks));
-    }
+    await sendMedia(env, eligibleMedia[0], buildTextMessage(payload, extraLinks));
     return;
   }
 

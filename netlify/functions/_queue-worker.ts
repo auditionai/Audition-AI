@@ -3066,21 +3066,6 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
       );
 
       job.queue_payload = await markCompletedWithAssetUrl(job, resultUrl);
-      fireTelegramJobNotification('completed', {
-        id: job.id,
-        userId: job.user_id,
-        providerJobId: job.job_id || null,
-        prompt: job.prompt,
-        assetType: job.asset_type,
-        toolId: job.tool_id,
-        toolName: job.tool_name,
-        engine: job.model_used,
-        queueKind: job.queue_kind,
-        costVcoin: job.cost_vcoin,
-        resultUrl,
-        finishedAt: new Date().toISOString(),
-        queuePayload: job.queue_payload,
-      });
       logQueueWorkerEvent('Completed inline image edit job.', getQueueWorkerLogJob(job));
       return { completed: 1 };
     }

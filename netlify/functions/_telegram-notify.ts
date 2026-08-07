@@ -38,6 +38,7 @@ type OperationalAlertOptions = {
 
 const OPERATIONAL_ALERT_STATE_KEY = 'telegram_operational_alert_state';
 const OPERATIONAL_ALERT_DEFAULT_COOLDOWN_MS = 30 * 60 * 1000;
+const inFlightJobNotifications = new Map<string, Promise<void>>();
 
 const toPayloadObject = (payload: unknown): Record<string, unknown> =>
   payload && typeof payload === 'object' ? { ...(payload as Record<string, unknown>) } : {};
@@ -462,7 +463,12 @@ export const fireTelegramJobNotification = (
     return;
   }
 
-  void sendTelegramJobNotification(eventType, record);
+  const key = `${record.id}:${eventType}`;
+  if (inFlightJobNotifications.has(key)) return;
+  const task = sendTelegramJobNotification(eventType, record)
+    .catch(() => undefined)
+    .finally(() => inFlightJobNotifications.delete(key));
+  inFlightJobNotifications.set(key, task);
 };
 
 export const sendTelegramOperationalAlert = async (

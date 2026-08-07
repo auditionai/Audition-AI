@@ -269,7 +269,9 @@ const collectCandidateMedia = (payload) => {
     });
   }
 
-  const maxInputPreviews = payload?.eventType === 'completed' ? 0 : 3;
+  // Input media is always represented as links in the caption/text. Only the
+  // provider output is eligible for Telegram media delivery.
+  const maxInputPreviews = 0;
   for (const entry of inputMedia.slice(0, maxInputPreviews)) {
     candidates.push({
       url: entry.url,

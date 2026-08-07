@@ -9,6 +9,7 @@ type JobNotificationRecord = {
   id: string;
   userId: string;
   providerJobId?: string | null;
+  provider?: string | null;
   prompt?: string | null;
   assetType?: string | null;
   toolId?: string | null;
@@ -172,6 +173,15 @@ const getConfigSummary = (payload: QueuePayloadObject, toolId?: string | null) =
     audio: typeof source.audio === 'boolean' ? source.audio : (typeof raw.audio === 'boolean' ? raw.audio : null),
     characterCount: Number.isFinite(Number(source.characterCount)) ? Number(source.characterCount) : null,
   };
+};
+
+const getProviderFromPayload = (payload: QueuePayloadObject) => {
+  const raw = toPayloadObject(payload);
+  const recipe = getEmbeddedRecipePayload(payload);
+  const source = Object.keys(recipe).length > 0 ? recipe : raw;
+  return String(
+    raw.__targetProvider || raw.__provider || source.provider || raw.provider || '',
+  ).trim().toLowerCase() || null;
 };
 
 const getDisplayToolName = (
@@ -427,6 +437,7 @@ export const sendTelegramJobNotification = async (
       job: {
         id: record.id,
         providerJobId: record.providerJobId || null,
+        provider: record.provider || getProviderFromPayload(record.queuePayload),
         userId: record.userId,
         displayName: userProfile?.display_name || null,
         email: userProfile?.email || null,

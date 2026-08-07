@@ -52,6 +52,7 @@ dist-ssr
 /coverage/
 /playwright-report/
 /test-results/
+*.cpuprofile
 
 # Machine-specific workspace files
 *.code-workspace

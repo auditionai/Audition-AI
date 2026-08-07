@@ -1,0 +1,13 @@
+{
+  "name": "Audition AI Studio",
+  "short_name": "Audition AI",
+  "description": "Tạo ảnh nhân vật 3D, chỉnh sửa ảnh và video AI dành cho cộng đồng Audition.",
+  "lang": "vi-VN",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b0d14",
+  "theme_color": "#0b0d14",
+  "icons": [
+    { "src": "/assets/audition-characters/auth-login-dark.webp", "sizes": "512x512", "type": "image/webp", "purpose": "any maskable" }
+  ]
+}

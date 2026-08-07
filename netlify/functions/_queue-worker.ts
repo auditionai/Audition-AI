@@ -69,6 +69,8 @@ type QueueJobRow = {
   job_id?: string | null;
   error_message?: string | null;
   image_url?: string | null;
+  created_at?: string | null;
+  processing_started_at?: string | null;
 };
 
 type QueueWorkerSummary = {
@@ -177,6 +179,7 @@ const MAX_GROUP4_IMAGE_PROCESSING_AGE_MS = 60 * 60 * 1000;
 const FAILED_RESULT_RESCUE_SCAN_LIMIT = 10;
 const FAILED_RESULT_RESCUE_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000;
 const FAILED_RESULT_RESCUE_MAX_ATTEMPTS = 8;
+const PROVIDER_PROCESSING_TIMEOUT_FLAG = '__providerProcessingTimedOut';
 const PROVIDER_LOST_JOB_CONFIRMATION_POLLS = 3;
 const PROVIDER_LOST_JOB_CONFIRMATION_INTERVAL_SECONDS = 60;
 const SINGLE_AND_COUPLE_PREPARE_TIMEOUT_MS = 10 * 60 * 1000;
@@ -457,6 +460,14 @@ const getStoredImageGenerateRecipePayload = (
 
 const getFailedRescueAttemptCount = (payload?: Record<string, unknown> | ImageGenerateRecipePayload | null) =>
   Math.max(0, Number(toQueuePayloadObject(payload).__failedRescueAttemptCount || 0));
+
+const hasProviderProcessingTimedOut = (payload?: Record<string, unknown> | ImageGenerateRecipePayload | null) =>
+  toQueuePayloadObject(payload)[PROVIDER_PROCESSING_TIMEOUT_FLAG] === true;
+
+const markProviderProcessingTimedOut = (payload?: Record<string, unknown> | ImageGenerateRecipePayload | null) => ({
+  ...toQueuePayloadObject(payload),
+  [PROVIDER_PROCESSING_TIMEOUT_FLAG]: true,
+});
 
 const getFailedRescueNextAt = (payload?: Record<string, unknown> | ImageGenerateRecipePayload | null) => {
   const raw = toQueuePayloadObject(payload).__nextFailedRescueAt;
@@ -1398,6 +1409,7 @@ const markFailedRespectingRefundPolicy = async (
   job: QueueJobRow,
   errorMessage: string,
   payloadOverride?: Record<string, unknown> | ImageGenerateRecipePayload | null,
+  options?: { providerProcessingTimedOut?: boolean },
 ) => {
   const latestRuntimeState = await getJobRuntimeState(job.id).catch(() => null);
   const latestPayload =
@@ -1406,9 +1418,13 @@ const markFailedRespectingRefundPolicy = async (
       ? latestRuntimeState.queue_payload as Record<string, unknown>
       : job.queue_payload);
 
+  const terminalPayload = options?.providerProcessingTimedOut
+    ? markProviderProcessingTimedOut(latestPayload)
+    : latestPayload;
+
   return markFailed(job, errorMessage, {
     refund: shouldRefundFailure(job, latestPayload),
-    payloadOverride: latestPayload,
+    payloadOverride: terminalPayload,
   });
 };
 
@@ -2251,8 +2267,9 @@ const reviveFailedJobToProcessing = async (
     error_message: null,
     queue_payload: nextPayload,
     finished_at: null,
-    processing_started_at: resumedAt,
-    attempt_count: 0,
+    // Preserve the original deadline. Resetting this timestamp turns a timed-out
+    // provider job into an unbounded fail -> rescue -> processing loop.
+    processing_started_at: job.processing_started_at || job.created_at || resumedAt,
     next_poll_at: new Date(Date.now() + getQueuePollIntervalSeconds(job) * 1000).toISOString(),
     lease_token: null,
     lease_expires_at: null,
@@ -2308,6 +2325,14 @@ const rescueFailedJobsWithProviderResults = async () => {
         if (state === 'completed') {
           rescued += 1;
         }
+        continue;
+      }
+
+      if (hasProviderProcessingTimedOut(job.queue_payload)) {
+        await finalizeFailedRescue(
+          job,
+          'Provider van dang xu ly sau thoi han toi da; khong khoi phuc job de tranh vong lap vo han.',
+        );
         continue;
       }
 
@@ -2612,7 +2637,12 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
 
   if (processingAgeMs >= getProviderProcessingTimeoutMs(job, job.queue_payload)) {
     await cancelProviderJobBestEffort(job.job_id, job.queue_payload);
-    await markFailedRespectingRefundPolicy(job, getProcessingTimeoutUserMessage(job, job.queue_payload));
+    await markFailedRespectingRefundPolicy(
+      job,
+      getProcessingTimeoutUserMessage(job, job.queue_payload),
+      undefined,
+      { providerProcessingTimedOut: true },
+    );
     return 'failed';
   }
 
@@ -2668,7 +2698,12 @@ const handlePollFailure = async (job: QueueJobRow, errorMessage: string) => {
     if (processingAgeMs >= getProviderProcessingTimeoutMs(job, job.queue_payload)) {
       await cancelProviderJobBestEffort(job.job_id, job.queue_payload);
     }
-    await markFailedRespectingRefundPolicy(job, finalMessage);
+    await markFailedRespectingRefundPolicy(
+      job,
+      finalMessage,
+      undefined,
+      { providerProcessingTimedOut: processingAgeMs >= getProviderProcessingTimeoutMs(job, job.queue_payload) },
+    );
     return 'failed';
   }
 

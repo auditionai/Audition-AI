@@ -69,6 +69,8 @@ type QueueJobRow = {
   job_id?: string | null;
   error_message?: string | null;
   image_url?: string | null;
+  created_at?: string | null;
+  processing_started_at?: string | null;
 };
 
 type QueueWorkerSummary = {
@@ -84,14 +86,6 @@ export type QueueWorkerLane = 'all' | 'dispatch' | 'poll';
 
 export type QueueWorkerOptions = {
   lane?: QueueWorkerLane;
-};
-
-type QueueBacklogSnapshot = {
-  queuedImages: number;
-  queuedVideos: number;
-  processingImages: number;
-  processingVideos: number;
-  duePollCount: number;
 };
 
 type PreparedQueueDispatchResult =
@@ -158,12 +152,18 @@ const parsePositiveIntEnv = (name: string, fallback: number, minimum = 1) => {
 };
 
 const activeWorkerRuns = new Map<QueueWorkerLane, Promise<QueueWorkerSummary>>();
+let lastStalePollingRecoveryAt = 0;
+let lastStalePreparingRecoveryAt = 0;
+let lastFailedRescueScanAt = 0;
+const MAINTENANCE_SCAN_INTERVAL_MS = 60_000;
 
 const TST_API_KEY = process.env.TST_API_KEY || '';
 const TST_API_BASE = 'https://api.tramsangtao.com/v1';
 const GENERATION_PROVIDER_DEFAULT: GenerationProvider =
   String(process.env.GENERATION_PROVIDER_DEFAULT || 'tst').trim().toLowerCase() === 'gommo' ? 'gommo' : 'tst';
-const POLL_INTERVAL_SECONDS = parsePositiveIntEnv('QUEUE_POLL_INTERVAL_SECONDS', 5);
+// Providers are asynchronous; polling every 5s creates queue traffic without
+// improving completion latency. Keep a bounded, configurable cadence.
+const POLL_INTERVAL_SECONDS = parsePositiveIntEnv('QUEUE_POLL_INTERVAL_SECONDS', 15, 10);
 const VIDEO_POLL_INTERVAL_SECONDS = parsePositiveIntEnv('QUEUE_VIDEO_POLL_INTERVAL_SECONDS', 60);
 const PROVIDER_FAILURE_GRACE_SECONDS = parsePositiveIntEnv('QUEUE_PROVIDER_FAILURE_GRACE_SECONDS', 90, 5);
 const MAX_DISPATCH_RETRIES = 6;
@@ -177,6 +177,7 @@ const MAX_GROUP4_IMAGE_PROCESSING_AGE_MS = 60 * 60 * 1000;
 const FAILED_RESULT_RESCUE_SCAN_LIMIT = 10;
 const FAILED_RESULT_RESCUE_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000;
 const FAILED_RESULT_RESCUE_MAX_ATTEMPTS = 8;
+const PROVIDER_PROCESSING_TIMEOUT_FLAG = '__providerProcessingTimedOut';
 const PROVIDER_LOST_JOB_CONFIRMATION_POLLS = 3;
 const PROVIDER_LOST_JOB_CONFIRMATION_INTERVAL_SECONDS = 60;
 const SINGLE_AND_COUPLE_PREPARE_TIMEOUT_MS = 10 * 60 * 1000;
@@ -457,6 +458,14 @@ const getStoredImageGenerateRecipePayload = (
 
 const getFailedRescueAttemptCount = (payload?: Record<string, unknown> | ImageGenerateRecipePayload | null) =>
   Math.max(0, Number(toQueuePayloadObject(payload).__failedRescueAttemptCount || 0));
+
+const hasProviderProcessingTimedOut = (payload?: Record<string, unknown> | ImageGenerateRecipePayload | null) =>
+  toQueuePayloadObject(payload)[PROVIDER_PROCESSING_TIMEOUT_FLAG] === true;
+
+const markProviderProcessingTimedOut = (payload?: Record<string, unknown> | ImageGenerateRecipePayload | null) => ({
+  ...toQueuePayloadObject(payload),
+  [PROVIDER_PROCESSING_TIMEOUT_FLAG]: true,
+});
 
 const getFailedRescueNextAt = (payload?: Record<string, unknown> | ImageGenerateRecipePayload | null) => {
   const raw = toQueuePayloadObject(payload).__nextFailedRescueAt;
@@ -820,59 +829,6 @@ const runWithConcurrency = async <T, R>(
 
   await Promise.all(runners);
   return results;
-};
-
-const getQueueBacklogSnapshot = async (): Promise<QueueBacklogSnapshot> => {
-  const admin = getServiceRoleClient();
-  const nowIso = new Date().toISOString();
-
-  const [{ data: queuedRows, error: queuedError }, { data: processingRows, error: processingError }, { data: duePollRows, error: duePollError }] =
-    await Promise.all([
-      admin
-        .from('generated_images')
-        .select('asset_type')
-        .eq('status', 'queued')
-        .in('queue_kind', SYSTEM_QUEUE_KINDS)
-        .limit(200),
-      admin
-        .from('generated_images')
-        .select('asset_type')
-        .eq('status', 'processing')
-        .in('queue_kind', SYSTEM_QUEUE_KINDS)
-        .limit(200),
-      admin
-        .from('generated_images')
-        .select('id')
-        .eq('status', 'processing')
-        .in('queue_kind', SYSTEM_QUEUE_KINDS)
-        .not('job_id', 'is', null)
-        .or(`next_poll_at.is.null,next_poll_at.lte.${nowIso}`)
-        .limit(200),
-    ]);
-
-  if (queuedError) {
-    throw queuedError;
-  }
-  if (processingError) {
-    throw processingError;
-  }
-  if (duePollError) {
-    throw duePollError;
-  }
-
-  const queuedImages = (queuedRows || []).filter((row: any) => (row?.asset_type || 'image') !== 'video').length;
-  const queuedVideos = (queuedRows || []).filter((row: any) => row?.asset_type === 'video').length;
-  const processingImages = (processingRows || []).filter((row: any) => (row?.asset_type || 'image') !== 'video').length;
-  const processingVideos = (processingRows || []).filter((row: any) => row?.asset_type === 'video').length;
-  const duePollCount = Array.isArray(duePollRows) ? duePollRows.length : 0;
-
-  return {
-    queuedImages,
-    queuedVideos,
-    processingImages,
-    processingVideos,
-    duePollCount,
-  };
 };
 
 const updateGeneratedImageRecord = async (jobId: string, updates: Record<string, unknown>) => {
@@ -1398,6 +1354,7 @@ const markFailedRespectingRefundPolicy = async (
   job: QueueJobRow,
   errorMessage: string,
   payloadOverride?: Record<string, unknown> | ImageGenerateRecipePayload | null,
+  options?: { providerProcessingTimedOut?: boolean },
 ) => {
   const latestRuntimeState = await getJobRuntimeState(job.id).catch(() => null);
   const latestPayload =
@@ -1406,9 +1363,13 @@ const markFailedRespectingRefundPolicy = async (
       ? latestRuntimeState.queue_payload as Record<string, unknown>
       : job.queue_payload);
 
+  const terminalPayload = options?.providerProcessingTimedOut
+    ? markProviderProcessingTimedOut(latestPayload)
+    : latestPayload;
+
   return markFailed(job, errorMessage, {
     refund: shouldRefundFailure(job, latestPayload),
-    payloadOverride: latestPayload,
+    payloadOverride: terminalPayload,
   });
 };
 
@@ -2251,8 +2212,9 @@ const reviveFailedJobToProcessing = async (
     error_message: null,
     queue_payload: nextPayload,
     finished_at: null,
-    processing_started_at: resumedAt,
-    attempt_count: 0,
+    // Preserve the original deadline. Resetting this timestamp turns a timed-out
+    // provider job into an unbounded fail -> rescue -> processing loop.
+    processing_started_at: job.processing_started_at || job.created_at || resumedAt,
     next_poll_at: new Date(Date.now() + getQueuePollIntervalSeconds(job) * 1000).toISOString(),
     lease_token: null,
     lease_expires_at: null,
@@ -2308,6 +2270,14 @@ const rescueFailedJobsWithProviderResults = async () => {
         if (state === 'completed') {
           rescued += 1;
         }
+        continue;
+      }
+
+      if (hasProviderProcessingTimedOut(job.queue_payload)) {
+        await finalizeFailedRescue(
+          job,
+          'Provider van dang xu ly sau thoi han toi da; khong khoi phuc job de tranh vong lap vo han.',
+        );
         continue;
       }
 
@@ -2612,7 +2582,12 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
 
   if (processingAgeMs >= getProviderProcessingTimeoutMs(job, job.queue_payload)) {
     await cancelProviderJobBestEffort(job.job_id, job.queue_payload);
-    await markFailedRespectingRefundPolicy(job, getProcessingTimeoutUserMessage(job, job.queue_payload));
+    await markFailedRespectingRefundPolicy(
+      job,
+      getProcessingTimeoutUserMessage(job, job.queue_payload),
+      undefined,
+      { providerProcessingTimedOut: true },
+    );
     return 'failed';
   }
 
@@ -2668,7 +2643,12 @@ const handlePollFailure = async (job: QueueJobRow, errorMessage: string) => {
     if (processingAgeMs >= getProviderProcessingTimeoutMs(job, job.queue_payload)) {
       await cancelProviderJobBestEffort(job.job_id, job.queue_payload);
     }
-    await markFailedRespectingRefundPolicy(job, finalMessage);
+    await markFailedRespectingRefundPolicy(
+      job,
+      finalMessage,
+      undefined,
+      { providerProcessingTimedOut: processingAgeMs >= getProviderProcessingTimeoutMs(job, job.queue_payload) },
+    );
     return 'failed';
   }
 
@@ -3427,17 +3407,12 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
   const shouldRunDispatchLane = lane !== 'poll';
   const admin = getServiceRoleClient();
   const workerStartedAt = Date.now();
-  const backlog = await getQueueBacklogSnapshot();
-  const dynamicPollClaimLimit = Math.max(POLL_CLAIM_LIMIT, Math.min(16, backlog.duePollCount + 2));
-  const dynamicDispatchClaimLimit = Math.max(
-    DISPATCH_CLAIM_LIMIT,
-    Math.min(8, backlog.queuedImages + backlog.queuedVideos + 2),
-  );
-  const dynamicPollConcurrencyLimit = Math.max(POLL_CONCURRENCY_LIMIT, Math.min(8, dynamicPollClaimLimit));
-  const dynamicDispatchConcurrencyLimit = Math.max(
-    DISPATCH_CONCURRENCY_LIMIT,
-    Math.min(4, dynamicDispatchClaimLimit),
-  );
+  // Claim RPCs already select only due jobs and enforce leases atomically. A
+  // separate three-query backlog snapshot on every tick caused most API traffic.
+  const dynamicPollClaimLimit = POLL_CLAIM_LIMIT;
+  const dynamicDispatchClaimLimit = DISPATCH_CLAIM_LIMIT;
+  const dynamicPollConcurrencyLimit = POLL_CONCURRENCY_LIMIT;
+  const dynamicDispatchConcurrencyLimit = DISPATCH_CONCURRENCY_LIMIT;
   const summary: QueueWorkerSummary = {
     claimedForDispatch: 0,
     submitted: 0,
@@ -3448,18 +3423,26 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
   };
 
   if (shouldRunPollLane) {
-    try {
-      summary.requeued += await recoverStaleProviderPollingJobs();
-    } catch (error) {
-      console.error('[queue-worker] Stale provider polling recovery failed; continuing with poll claims:', error);
+    const now = Date.now();
+    if (now - lastStalePollingRecoveryAt >= MAINTENANCE_SCAN_INTERVAL_MS) {
+      lastStalePollingRecoveryAt = now;
+      try {
+        summary.requeued += await recoverStaleProviderPollingJobs();
+      } catch (error) {
+        console.error('[queue-worker] Stale provider polling recovery failed; continuing with poll claims:', error);
+      }
     }
   }
 
   if (shouldRunDispatchLane) {
-    try {
-      summary.requeued += await recoverStalePreparingJobs();
-    } catch (error) {
-      console.error('[queue-worker] Stale pre-dispatch recovery failed; continuing with dispatch claims:', error);
+    const now = Date.now();
+    if (now - lastStalePreparingRecoveryAt >= MAINTENANCE_SCAN_INTERVAL_MS) {
+      lastStalePreparingRecoveryAt = now;
+      try {
+        summary.requeued += await recoverStalePreparingJobs();
+      } catch (error) {
+        console.error('[queue-worker] Stale pre-dispatch recovery failed; continuing with dispatch claims:', error);
+      }
     }
   }
 
@@ -3516,7 +3499,12 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
     }
   }
 
-  if (shouldRunPollLane && hasWorkerTickBudgetRemaining(workerStartedAt)) {
+  if (
+    shouldRunPollLane &&
+    hasWorkerTickBudgetRemaining(workerStartedAt) &&
+    Date.now() - lastFailedRescueScanAt >= MAINTENANCE_SCAN_INTERVAL_MS
+  ) {
+    lastFailedRescueScanAt = Date.now();
     summary.completed += await rescueFailedJobsWithProviderResults();
   }
 

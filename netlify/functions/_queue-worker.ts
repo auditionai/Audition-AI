@@ -88,14 +88,6 @@ export type QueueWorkerOptions = {
   lane?: QueueWorkerLane;
 };
 
-type QueueBacklogSnapshot = {
-  queuedImages: number;
-  queuedVideos: number;
-  processingImages: number;
-  processingVideos: number;
-  duePollCount: number;
-};
-
 type PreparedQueueDispatchResult =
   | {
       type: 'requeue';
@@ -160,12 +152,18 @@ const parsePositiveIntEnv = (name: string, fallback: number, minimum = 1) => {
 };
 
 const activeWorkerRuns = new Map<QueueWorkerLane, Promise<QueueWorkerSummary>>();
+let lastStalePollingRecoveryAt = 0;
+let lastStalePreparingRecoveryAt = 0;
+let lastFailedRescueScanAt = 0;
+const MAINTENANCE_SCAN_INTERVAL_MS = 60_000;
 
 const TST_API_KEY = process.env.TST_API_KEY || '';
 const TST_API_BASE = 'https://api.tramsangtao.com/v1';
 const GENERATION_PROVIDER_DEFAULT: GenerationProvider =
   String(process.env.GENERATION_PROVIDER_DEFAULT || 'tst').trim().toLowerCase() === 'gommo' ? 'gommo' : 'tst';
-const POLL_INTERVAL_SECONDS = parsePositiveIntEnv('QUEUE_POLL_INTERVAL_SECONDS', 5);
+// Providers are asynchronous; polling every 5s creates queue traffic without
+// improving completion latency. Keep a bounded, configurable cadence.
+const POLL_INTERVAL_SECONDS = parsePositiveIntEnv('QUEUE_POLL_INTERVAL_SECONDS', 15, 10);
 const VIDEO_POLL_INTERVAL_SECONDS = parsePositiveIntEnv('QUEUE_VIDEO_POLL_INTERVAL_SECONDS', 60);
 const PROVIDER_FAILURE_GRACE_SECONDS = parsePositiveIntEnv('QUEUE_PROVIDER_FAILURE_GRACE_SECONDS', 90, 5);
 const MAX_DISPATCH_RETRIES = 6;
@@ -831,59 +829,6 @@ const runWithConcurrency = async <T, R>(
 
   await Promise.all(runners);
   return results;
-};
-
-const getQueueBacklogSnapshot = async (): Promise<QueueBacklogSnapshot> => {
-  const admin = getServiceRoleClient();
-  const nowIso = new Date().toISOString();
-
-  const [{ data: queuedRows, error: queuedError }, { data: processingRows, error: processingError }, { data: duePollRows, error: duePollError }] =
-    await Promise.all([
-      admin
-        .from('generated_images')
-        .select('asset_type')
-        .eq('status', 'queued')
-        .in('queue_kind', SYSTEM_QUEUE_KINDS)
-        .limit(200),
-      admin
-        .from('generated_images')
-        .select('asset_type')
-        .eq('status', 'processing')
-        .in('queue_kind', SYSTEM_QUEUE_KINDS)
-        .limit(200),
-      admin
-        .from('generated_images')
-        .select('id')
-        .eq('status', 'processing')
-        .in('queue_kind', SYSTEM_QUEUE_KINDS)
-        .not('job_id', 'is', null)
-        .or(`next_poll_at.is.null,next_poll_at.lte.${nowIso}`)
-        .limit(200),
-    ]);
-
-  if (queuedError) {
-    throw queuedError;
-  }
-  if (processingError) {
-    throw processingError;
-  }
-  if (duePollError) {
-    throw duePollError;
-  }
-
-  const queuedImages = (queuedRows || []).filter((row: any) => (row?.asset_type || 'image') !== 'video').length;
-  const queuedVideos = (queuedRows || []).filter((row: any) => row?.asset_type === 'video').length;
-  const processingImages = (processingRows || []).filter((row: any) => (row?.asset_type || 'image') !== 'video').length;
-  const processingVideos = (processingRows || []).filter((row: any) => row?.asset_type === 'video').length;
-  const duePollCount = Array.isArray(duePollRows) ? duePollRows.length : 0;
-
-  return {
-    queuedImages,
-    queuedVideos,
-    processingImages,
-    processingVideos,
-    duePollCount,
-  };
 };
 
 const updateGeneratedImageRecord = async (jobId: string, updates: Record<string, unknown>) => {
@@ -3462,17 +3407,12 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
   const shouldRunDispatchLane = lane !== 'poll';
   const admin = getServiceRoleClient();
   const workerStartedAt = Date.now();
-  const backlog = await getQueueBacklogSnapshot();
-  const dynamicPollClaimLimit = Math.max(POLL_CLAIM_LIMIT, Math.min(16, backlog.duePollCount + 2));
-  const dynamicDispatchClaimLimit = Math.max(
-    DISPATCH_CLAIM_LIMIT,
-    Math.min(8, backlog.queuedImages + backlog.queuedVideos + 2),
-  );
-  const dynamicPollConcurrencyLimit = Math.max(POLL_CONCURRENCY_LIMIT, Math.min(8, dynamicPollClaimLimit));
-  const dynamicDispatchConcurrencyLimit = Math.max(
-    DISPATCH_CONCURRENCY_LIMIT,
-    Math.min(4, dynamicDispatchClaimLimit),
-  );
+  // Claim RPCs already select only due jobs and enforce leases atomically. A
+  // separate three-query backlog snapshot on every tick caused most API traffic.
+  const dynamicPollClaimLimit = POLL_CLAIM_LIMIT;
+  const dynamicDispatchClaimLimit = DISPATCH_CLAIM_LIMIT;
+  const dynamicPollConcurrencyLimit = POLL_CONCURRENCY_LIMIT;
+  const dynamicDispatchConcurrencyLimit = DISPATCH_CONCURRENCY_LIMIT;
   const summary: QueueWorkerSummary = {
     claimedForDispatch: 0,
     submitted: 0,
@@ -3483,18 +3423,26 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
   };
 
   if (shouldRunPollLane) {
-    try {
-      summary.requeued += await recoverStaleProviderPollingJobs();
-    } catch (error) {
-      console.error('[queue-worker] Stale provider polling recovery failed; continuing with poll claims:', error);
+    const now = Date.now();
+    if (now - lastStalePollingRecoveryAt >= MAINTENANCE_SCAN_INTERVAL_MS) {
+      lastStalePollingRecoveryAt = now;
+      try {
+        summary.requeued += await recoverStaleProviderPollingJobs();
+      } catch (error) {
+        console.error('[queue-worker] Stale provider polling recovery failed; continuing with poll claims:', error);
+      }
     }
   }
 
   if (shouldRunDispatchLane) {
-    try {
-      summary.requeued += await recoverStalePreparingJobs();
-    } catch (error) {
-      console.error('[queue-worker] Stale pre-dispatch recovery failed; continuing with dispatch claims:', error);
+    const now = Date.now();
+    if (now - lastStalePreparingRecoveryAt >= MAINTENANCE_SCAN_INTERVAL_MS) {
+      lastStalePreparingRecoveryAt = now;
+      try {
+        summary.requeued += await recoverStalePreparingJobs();
+      } catch (error) {
+        console.error('[queue-worker] Stale pre-dispatch recovery failed; continuing with dispatch claims:', error);
+      }
     }
   }
 
@@ -3551,7 +3499,12 @@ const runQueueWorkerInternal = async (options: QueueWorkerOptions = {}): Promise
     }
   }
 
-  if (shouldRunPollLane && hasWorkerTickBudgetRemaining(workerStartedAt)) {
+  if (
+    shouldRunPollLane &&
+    hasWorkerTickBudgetRemaining(workerStartedAt) &&
+    Date.now() - lastFailedRescueScanAt >= MAINTENANCE_SCAN_INTERVAL_MS
+  ) {
+    lastFailedRescueScanAt = Date.now();
     summary.completed += await rescueFailedJobsWithProviderResults();
   }
 

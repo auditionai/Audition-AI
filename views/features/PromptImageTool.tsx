@@ -40,6 +40,8 @@ import {
   getGommoModelForAudition,
   isGommoCatalogModelAvailable,
   isSelectableGommoImageResolution,
+  GPTI2_SERVER_ID,
+  GPTI2_SERVER_LABEL,
   resolveProviderForModel,
   type GommoProviderCatalog,
 } from '../../services/providerCatalog';
@@ -57,6 +59,8 @@ type PromptImageSlot = string | null;
 const DEFAULT_REFERENCE_IMAGE_LIMIT = 4;
 const GPT_REFERENCE_IMAGE_LIMIT = 5;
 const MAX_PROMPT_CHARACTERS = 10_000;
+const GPTI2_IMAGE_RESOLUTIONS = ['1K', '2K', '4K'];
+const GPTI2_NANO_RESOLUTIONS = ['1K', '2K', '4K'];
 const ASPECT_RATIOS = ['1:1', '9:16', '16:9', '3:4', '4:3', '2:3', '3:2'];
 const MODEL_TABS: Array<{
   tier: TstGenerationTier;
@@ -182,14 +186,15 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
   const uploadedImages = referenceImages.filter((value): value is string => Boolean(value));
   const uploadedCount = uploadedImages.length;
   const generationSpeedId = speedLabelToTst(speed);
-  const generationServerId = uiServerToTst(server) || 'fast';
   const selectedModelId = getGenerationModelId(aiModel);
   const isSelectedModelAllowed = isModelAllowedForFeature(providerConfig, 'image_prompt', selectedModelId);
   const selectedProvider = resolveProviderForModel(providerConfig, selectedModelId, 'image_prompt');
+  const generationServerId = selectedProvider === 'gpti2' ? GPTI2_SERVER_ID : uiServerToTst(server) || 'fast';
   useEffect(() => setActiveQueueProvider(selectedProvider), [selectedProvider]);
   const providerQueueStats = getProviderQueueStats(queueStats, selectedProvider);
   const providerConcurrencyLimits = getProviderConcurrencyLimits(selectedProvider);
   const isGommoSelected = selectedProvider === 'gommo';
+  const pricingServerId = selectedProvider === 'gpti2' ? undefined : generationServerId;
   const selectedGommoModel = getGommoModelForAudition(gommoCatalog, selectedModelId);
   const tstReferenceImageLimit = aiModel === 'gpt' ? GPT_REFERENCE_IMAGE_LIMIT : DEFAULT_REFERENCE_IMAGE_LIMIT;
   const maxReferenceImages = isGommoSelected && Number(selectedGommoModel?.maxReferenceImages) > 0
@@ -204,6 +209,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
         .filter((option) => isSelectableGommoImageResolution(selectedModelId, option.type))
         .map((option) => option.type.toUpperCase());
     }
+    if (selectedProvider === 'gpti2') return selectedModelId === 'image-gpt-2' || selectedModelId === 'gpt-image-2' ? GPTI2_IMAGE_RESOLUTIONS : GPTI2_NANO_RESOLUTIONS;
     const values = getCompatibleGenerationResolutions({
       tier: aiModel,
       pricingEntries,
@@ -212,10 +218,11 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
       quality: aiModel === 'gpt' ? gptQuality : undefined,
     });
     return values;
-  }, [aiModel, generationServerId, generationSpeedId, gptQuality, isGommoSelected, pricingEntries, selectedGommoModel]);
+  }, [aiModel, generationServerId, generationSpeedId, gptQuality, isGommoSelected, pricingEntries, selectedGommoModel, selectedModelId, selectedProvider]);
 
   const availableServers = useMemo(() => {
     if (isGommoSelected) return [];
+    if (selectedProvider === 'gpti2') return [GPTI2_SERVER_ID];
     const values = getCompatibleGenerationServers({
       tier: aiModel,
       pricingEntries,
@@ -224,7 +231,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
       quality: aiModel === 'gpt' ? gptQuality : undefined,
     });
     return values;
-  }, [aiModel, generationSpeedId, gptQuality, isGommoSelected, pricingEntries, resolution]);
+  }, [aiModel, generationSpeedId, gptQuality, isGommoSelected, pricingEntries, resolution, selectedProvider]);
 
   const availableSpeeds = useMemo(() => {
     if (isGommoSelected) return [];
@@ -257,6 +264,12 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
       return;
     }
     gommoDefaultSelectionKeyRef.current = '';
+    if (selectedProvider === 'gpti2') {
+      if (server !== GPTI2_SERVER_LABEL) setServer(GPTI2_SERVER_LABEL);
+      const gpti2Resolutions = selectedModelId === 'image-gpt-2' || selectedModelId === 'gpt-image-2' ? GPTI2_IMAGE_RESOLUTIONS : GPTI2_NANO_RESOLUTIONS;
+      if (!gpti2Resolutions.includes(resolution)) setResolution(gpti2Resolutions[0]);
+      return;
+    }
     if (tstAspectRatios.length > 0 && !tstAspectRatios.includes(aspectRatio)) {
       setAspectRatio(tstAspectRatios[0]);
       return;
@@ -285,7 +298,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
     if (nextSpeedLabel !== speed) {
       setSpeed(nextSpeedLabel);
     }
-  }, [aiModel, aspectRatio, generationServerId, generationSpeedId, gptQuality, isGommoSelected, pricingEntries, providerMode, resolution, selectedGommoModel, server, speed, tstAspectRatios]);
+  }, [aiModel, aspectRatio, generationServerId, generationSpeedId, gptQuality, isGommoSelected, pricingEntries, providerMode, resolution, selectedGommoModel, selectedProvider, server, speed, tstAspectRatios]);
 
   useEffect(() => {
     setReferenceImages((prev) => {
@@ -299,7 +312,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
     resolution: resolution as TstResolution,
     quality: aiModel === 'gpt' ? gptQuality : undefined,
     speed: generationSpeedId,
-    serverId: generationServerId,
+    serverId: pricingServerId || '',
     pricingEntries,
     pricingOverrides: pricingOverrideRows,
   });
@@ -338,7 +351,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
             resolution: item as TstResolution,
             quality: aiModel === 'gpt' ? gptQuality : undefined,
             speed: generationSpeedId,
-            serverId: generationServerId,
+            serverId: pricingServerId || '',
             pricingEntries,
             pricingOverrides: pricingOverrideRows,
           }).vcoin) * modeCountForPrice,
@@ -346,8 +359,8 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
       ) as Record<string, number>,
     [aiModel, availableResolutions, generationServerId, generationSpeedId, gptQuality, isGommoSelected, modeCountForPrice, pricingEntries, pricingOverrideRows, pricingOverrides, providerMode, selectedGommoModel, selectedModelId],
   );
-  const availableSpeedLabels = isGommoSelected ? [] : availableSpeeds.map((speedId) => speedIdToLabel(speedId));
-  const availableServerLabels = isGommoSelected ? [] : availableServers.map((serverId) => tstServerToUi(serverId));
+  const availableSpeedLabels = isGommoSelected || selectedProvider === 'gpti2' ? [] : availableSpeeds.map((speedId) => speedIdToLabel(speedId));
+  const availableServerLabels = isGommoSelected ? [] : selectedProvider === 'gpti2' ? [GPTI2_SERVER_LABEL] : availableServers.map((serverId) => tstServerToUi(serverId));
   const gommoModes = isGommoSelected ? (selectedGommoModel?.modes || []) : [];
   const aspectRatioOptions = isGommoSelected && selectedGommoModel?.ratios.length
     ? selectedGommoModel.ratios.map((option) => option.type)

@@ -112,6 +112,8 @@ import {
     getAuditionProviderPricing,
     getGommoPricingInput,
     getGommoPriceComparison,
+    GPTI2_SERVER_ID,
+    GPTI2_SERVER_LABEL,
     type GommoProviderCatalog,
 } from '../services/providerCatalog';
 import { getGommoServerGroups } from '../shared/gommoServerRouting';
@@ -4496,7 +4498,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                {visibleModelOptions.map((model) => {
                                                    const tstGroup = pricingServerGroups.find((group) => group.modelId.trim().toLowerCase() === model.id);
                                                    const gommoModel = gommoCatalog?.models.find((entry) => entry.auditionModelId.trim().toLowerCase() === model.id);
-                                                   const serverOptions = effectiveProvider === 'tst'
+                                                   const serverOptions = effectiveProvider === 'gpti2'
+                                                       ? [{ id: GPTI2_SERVER_ID, label: GPTI2_SERVER_LABEL, subtitle: 'Server mặc định của API GPTi2', modeTypes: [] as string[] }]
+                                                       : effectiveProvider === 'tst'
                                                        ? (tstGroup?.servers || []).map((serverId) => ({
                                                            id: serverId,
                                                            label: tstServerToUi(serverId),
@@ -4522,7 +4526,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                                            key={`${route.key}_${effectiveProvider}_${model.id}_${serverOption.id}`}
                                                                            type="button"
                                                                            title={serverOption.subtitle || serverOption.modeTypes.join(', ')}
-                                                                           onClick={() => handleToggleProviderServer(effectiveProvider, model.id, serverOption.id)}
+                                                                           onClick={() => { if (effectiveProvider !== 'gpti2') handleToggleProviderServer(effectiveProvider, model.id, serverOption.id); }}
                                                                            className={`rounded-lg border px-2 py-1.5 text-[9px] font-black uppercase ${enabled ? 'border-audi-cyan/35 bg-audi-cyan/10 text-audi-cyan' : 'border-red-500/30 bg-red-500/10 text-red-300'}`}
                                                                        >
                                                                            {serverOption.label} · {enabled ? 'Bật' : 'Khóa'}

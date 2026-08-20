@@ -41,7 +41,7 @@ export const DEFAULT_ALLOWED_MODELS_BY_FEATURE: Partial<Record<GenerationProvide
   image_group_8: ['image-gpt-2'],
 };
 
-export const GPTI2_IMAGE_MODELS = ['gpt-image-2', 'nano-banana-2', 'nano-banana-pro'];
+export const GPTI2_IMAGE_MODELS = ['image-gpt-2', 'gpt-image-2', 'nano-banana-2', 'nano-banana-pro'];
 
 const normalize = (value: unknown) => String(value || '').trim().toLowerCase();
 

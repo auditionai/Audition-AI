@@ -81,6 +81,9 @@ export type GommoProviderCatalog = {
   models: GommoCatalogModel[];
 };
 
+export const GPTI2_SERVER_ID = 'gpti2';
+export const GPTI2_SERVER_LABEL = 'AUDITION AI';
+
 export const isSelectableGommoImageResolution = (auditionModelId: string, resolution: string) => {
   const modelId = String(auditionModelId || '').trim().toLowerCase();
   const normalizedResolution = String(resolution || '').trim().toLowerCase().replace(/[-\s]+/g, '_');
@@ -111,6 +114,13 @@ export const resolveProviderForModel = (
   const normalizedModelId = normalize(modelId);
   const normalizedFeatureKey = normalize(featureKey);
   if (normalizedFeatureKey) {
+    const priority = config?.providerPriorityByFeature?.[normalizedFeatureKey];
+    if (Array.isArray(priority) && priority.length > 0) {
+      const first = priority.find((provider) => provider === 'gpti2' || provider === 'tst' || provider === 'gommo');
+      if (first) return normalizedFeatureKey === 'video_generation' || normalizedFeatureKey === 'motion_control'
+        ? (first === 'gpti2' ? 'tst' : first)
+        : first;
+    }
     const featureProvider = config?.providerByFeature?.[normalizedFeatureKey];
     if (featureProvider) return featureProvider;
     const featureDefault = DEFAULT_PROVIDER_BY_FEATURE[normalizedFeatureKey as GenerationProviderRouteKey];

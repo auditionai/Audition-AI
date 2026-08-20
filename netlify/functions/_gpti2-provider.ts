@@ -1,6 +1,7 @@
 
 const GPTI2_BASE = 'https://gpti2.store/v1';
 const GPTI2_TIMEOUT_MS = 45_000;
+const MODEL_ALIASES: Record<string, string> = { 'image-gpt-2': 'gpt-image-2' };
 const ALLOWED_MODELS = new Set(['gpt-image-2', 'nano-banana-2', 'nano-banana-pro']);
 
 const key = () => String(process.env.GPTI2_API_KEY || '').trim();
@@ -27,7 +28,8 @@ const recipe = (payload: Record<string, unknown>) =>
     ? payload.__recipePayload as Record<string, unknown>
     : payload;
 const modelOf = (payload: Record<string, unknown>) => {
-  const model = normalize(payload.model || payload.modelId || recipe(payload).model || recipe(payload).modelId);
+  const requestedModel = normalize(payload.model || payload.modelId || recipe(payload).model || recipe(payload).modelId);
+  const model = MODEL_ALIASES[requestedModel] || requestedModel;
   if (!ALLOWED_MODELS.has(model)) throw new Error(`GPTI2_MODEL_UNSUPPORTED: ${model || '(empty)'}`);
   return model;
 };
@@ -37,7 +39,10 @@ const sourcesOf = (payload: Record<string, unknown>) => {
   const values = r.imageUrls || r.inputUrls || r.image_urls || payload.image_urls || payload.img_url || payload.image_url;
   return (Array.isArray(values) ? values : values ? [values] : []).map((v) => String(v || '').trim()).filter((v) => /^https?:\/\//i.test(v));
 };
-const sizeOf = (payload: Record<string, unknown>) => String(payload.size || payload.resolution || recipe(payload).size || '1024x1024');
+const sizeOf = (payload: Record<string, unknown>) => {
+  const value = String(payload.size || payload.resolution || recipe(payload).size || '1K').trim().toUpperCase();
+  return value === '1K' ? '1024x1024' : value === '2K' ? '1536x1024' : value === '4K' ? '2048x2048' : value;
+};
 const qualityOf = (payload: Record<string, unknown>) => String(payload.quality || payload.speed || recipe(payload).quality || 'low');
 const ratioOf = (payload: Record<string, unknown>) => String(payload.aspect_ratio || payload.aspectRatio || recipe(payload).aspect_ratio || '1:1');
 
@@ -48,7 +53,7 @@ const dataUrl = (value: unknown) => {
 const extractUrl = (data: any) => dataUrl(data?.data?.[0]?.b64_json || data?.data?.[0]?.url || data?.url);
 
 export const isGpti2Configured = () => Boolean(key());
-export const isGpti2Model = (modelId: unknown) => ALLOWED_MODELS.has(normalize(modelId));
+export const isGpti2Model = (modelId: unknown) => ALLOWED_MODELS.has(MODEL_ALIASES[normalize(modelId)] || normalize(modelId));
 
 export const submitGpti2Job = async (queueKind: string, payload: Record<string, unknown>) => {
   const model = modelOf(payload);

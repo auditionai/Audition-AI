@@ -68,6 +68,7 @@ import { getGommoModeForServerGroup, getGommoServerGroups, getPreferredGommoBasi
 type GenMode = 'single' | 'couple' | 'trio' | 'squad' | 'group5' | 'group6' | 'group7' | 'group8';
 type Stage = 'input' | 'submitting';
 const GPTI2_RESOLUTIONS = ['1K', '2K', '4K'];
+const GPTI2_ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'];
 
 const IMAGE_MODEL_OPTIONS: Array<{
   tier: TstGenerationTier;
@@ -146,9 +147,9 @@ const MODE_META: Record<GenMode, { label: string; title: string; sampleCategoryI
   trio: { label: 'Nhóm 3', title: 'Tạo ảnh nhóm 3 người', sampleCategoryId: 4, sampleCategoryName: 'Ảnh nhóm 3' },
   squad: { label: 'Nhóm 4', title: 'Tạo ảnh nhóm 4 người', sampleCategoryId: 5, sampleCategoryName: 'Ảnh nhóm 4' },
   group5: { label: 'Nhóm 5', title: 'Tạo ảnh nhóm 5 người', sampleCategoryId: 6, sampleCategoryName: 'Ảnh nhóm 5' },
-  group6: { label: 'Nhóm 6', title: 'Tạo ảnh nhóm 6 người', sampleCategoryId: 6, sampleCategoryName: 'Ảnh nhóm 6' },
-  group7: { label: 'Nhóm 7', title: 'Tạo ảnh nhóm 7 người', sampleCategoryId: 6, sampleCategoryName: 'Ảnh nhóm 7' },
-  group8: { label: 'Nhóm 8', title: 'Tạo ảnh nhóm 8 người', sampleCategoryId: 6, sampleCategoryName: 'Ảnh nhóm 8' },
+  group6: { label: 'Nhóm 6', title: 'Tạo ảnh nhóm 6 người', sampleCategoryId: 7, sampleCategoryName: 'Ảnh nhóm 6' },
+  group7: { label: 'Nhóm 7', title: 'Tạo ảnh nhóm 7 người', sampleCategoryId: 8, sampleCategoryName: 'Ảnh nhóm 7' },
+  group8: { label: 'Nhóm 8', title: 'Tạo ảnh nhóm 8 người', sampleCategoryId: 9, sampleCategoryName: 'Ảnh nhóm 8' },
 };
 
 const MODE_TO_CHARACTER_COUNT: Record<GenMode, number> = {
@@ -578,6 +579,7 @@ export function WorkspaceImage() {
     if (isGpti2Selected) {
       if (server !== GPTI2_SERVER_LABEL) setServer(GPTI2_SERVER_LABEL);
       if (!GPTI2_RESOLUTIONS.includes(resolution)) setResolution(GPTI2_RESOLUTIONS[0]);
+      if (!GPTI2_ASPECT_RATIOS.includes(aspectRatio)) setAspectRatio(GPTI2_ASPECT_RATIOS[0]);
       return;
     }
     if (tstAspectRatios.length > 0 && !tstAspectRatios.includes(aspectRatio)) {
@@ -1037,7 +1039,7 @@ export function WorkspaceImage() {
 
   const ratios = isGommoSelected && selectedGommoModel?.ratios.length
     ? selectedGommoModel.ratios.map((option) => option.type)
-    : tstAspectRatios;
+    : isGpti2Selected ? GPTI2_ASPECT_RATIOS : tstAspectRatios;
 
   return (
     <div className="flex flex-col h-full bg-[#FAFAFA] dark:bg-[#09090B]">

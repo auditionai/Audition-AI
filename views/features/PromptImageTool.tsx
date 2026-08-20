@@ -61,6 +61,7 @@ const GPT_REFERENCE_IMAGE_LIMIT = 5;
 const MAX_PROMPT_CHARACTERS = 10_000;
 const GPTI2_IMAGE_RESOLUTIONS = ['1K', '2K', '4K'];
 const GPTI2_NANO_RESOLUTIONS = ['1K', '2K', '4K'];
+const GPTI2_ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'];
 const ASPECT_RATIOS = ['1:1', '9:16', '16:9', '3:4', '4:3', '2:3', '3:2'];
 const MODEL_TABS: Array<{
   tier: TstGenerationTier;
@@ -268,6 +269,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
       if (server !== GPTI2_SERVER_LABEL) setServer(GPTI2_SERVER_LABEL);
       const gpti2Resolutions = selectedModelId === 'image-gpt-2' || selectedModelId === 'gpt-image-2' ? GPTI2_IMAGE_RESOLUTIONS : GPTI2_NANO_RESOLUTIONS;
       if (!gpti2Resolutions.includes(resolution)) setResolution(gpti2Resolutions[0]);
+      if (!GPTI2_ASPECT_RATIOS.includes(aspectRatio)) setAspectRatio(GPTI2_ASPECT_RATIOS[0]);
       return;
     }
     if (tstAspectRatios.length > 0 && !tstAspectRatios.includes(aspectRatio)) {
@@ -364,7 +366,9 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
   const gommoModes = isGommoSelected ? (selectedGommoModel?.modes || []) : [];
   const aspectRatioOptions = isGommoSelected && selectedGommoModel?.ratios.length
     ? selectedGommoModel.ratios.map((option) => option.type)
-    : (tstAspectRatios.length ? tstAspectRatios : ASPECT_RATIOS);
+    : selectedProvider === 'gpti2'
+      ? GPTI2_ASPECT_RATIOS
+      : (tstAspectRatios.length ? tstAspectRatios : ASPECT_RATIOS);
 
   useEffect(() => {
     if (isSelectedModelAllowed) return;

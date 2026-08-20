@@ -77,6 +77,7 @@ type Stage = 'input' | 'processing' | 'result';
 type Resolution = string;
 const GPTI2_IMAGE_RESOLUTIONS = ['1K', '2K', '4K'];
 const GPTI2_NANO_RESOLUTIONS = ['1K', '2K', '4K'];
+const GPTI2_ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'];
 
 const IMAGE_MODEL_OPTIONS: Array<{
   tier: TstGenerationTier;
@@ -348,6 +349,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       () => getGenerationAspectRatios(generationTier, runtimeModels),
       [generationTier, runtimeModels],
   );
+  const availableAspectRatios = isGpti2Selected ? GPTI2_ASPECT_RATIOS : tstAspectRatios;
   const tstAvailableResolutions = getCompatibleGenerationResolutions({
       tier: generationTier,
       pricingEntries,
@@ -704,6 +706,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           if (server !== GPTI2_SERVER_LABEL) setServer(GPTI2_SERVER_LABEL);
           const gpti2Resolutions = selectedModelId === 'image-gpt-2' || selectedModelId === 'gpt-image-2' ? GPTI2_IMAGE_RESOLUTIONS : GPTI2_NANO_RESOLUTIONS;
           if (!gpti2Resolutions.includes(resolution)) setResolution(gpti2Resolutions[0]);
+          if (!GPTI2_ASPECT_RATIOS.includes(aspectRatio)) setAspectRatio(GPTI2_ASPECT_RATIOS[0]);
           return;
       }
       if (tstAspectRatios.length > 0 && !tstAspectRatios.includes(aspectRatio)) {
@@ -800,13 +803,13 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
               targetCategoryId = 6;
               catName = "Ảnh Nhóm 5";
           } else if (activeMode === 'group6') {
-              targetCategoryId = 6;
+              targetCategoryId = 7;
               catName = "Ảnh Nhóm 6";
           } else if (activeMode === 'group7') {
-              targetCategoryId = 6;
+              targetCategoryId = 8;
               catName = "Ảnh Nhóm 7";
           } else if (activeMode === 'group8') {
-              targetCategoryId = 6;
+              targetCategoryId = 9;
               catName = "Ảnh Nhóm 8";
           }
           setCurrentCategoryName(catName);
@@ -1202,7 +1205,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   };
 
   const ratios = !isGommoSelected
-      ? tstAspectRatios.map((ratio) => ({ id: ratio, label: ratio, desc: '' }))
+      ? availableAspectRatios.map((ratio) => ({ id: ratio, label: ratio, desc: '' }))
       : isGommoSelected && selectedGommoModel?.ratios.length
       ? selectedGommoModel.ratios.map((option) => ({ id: option.type, label: option.name || option.type, desc: '' }))
       : [

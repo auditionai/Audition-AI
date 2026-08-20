@@ -33,13 +33,15 @@ import type { GeneratedImage } from '../../types';
 import type { ModelPricing } from '../../services/economyService';
 import type { PromptImageGenerateRecipePayload } from '../../../../shared/queueRecipes';
 import { isModelAllowedForFeature } from '../../../../shared/providerRouting';
-import { fetchProviderCatalog, getAuditionProviderPricing, getGommoPricingInput, getGommoModelForAudition, isGommoCatalogModelAvailable, isSelectableGommoImageResolution, resolveProviderForModel, type GommoProviderCatalog } from '../../services/providerCatalog';
+import { fetchProviderCatalog, getAuditionProviderPricing, getGommoPricingInput, getGommoModelForAudition, isGommoCatalogModelAvailable, isSelectableGommoImageResolution, resolveProviderForModel, GPTI2_SERVER_ID, GPTI2_SERVER_LABEL, type GommoProviderCatalog } from '../../services/providerCatalog';
 import { getPreferredGommoBasicMode } from '../../../../shared/gommoServerRouting';
 
 const DEFAULT_REFERENCE_IMAGE_LIMIT = 4;
 const GPT_REFERENCE_IMAGE_LIMIT = 5;
 const MAX_PROMPT_CHARACTERS = 10_000;
 const ASPECT_RATIOS = ['1:1', '9:16', '16:9', '3:4', '4:3', '2:3', '3:2'];
+const GPTI2_ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'];
+const GPTI2_RESOLUTIONS = ['1K', '2K', '4K'];
 const MODEL_TABS: Array<{
   tier: TstGenerationTier;
   label: string;
@@ -164,10 +166,12 @@ export function WorkspacePromptImage() {
   const uploadedImages = referenceImages.filter((value): value is string => Boolean(value));
   const uploadedCount = uploadedImages.length;
   const generationSpeedId = speedLabelToTst(speed);
-  const generationServerId = uiServerToTst(server) || 'fast';
   const selectedModelId = getGenerationModelId(aiModel);
+  const selectedProvider = resolveProviderForModel(providerConfig, selectedModelId, 'image_prompt');
+  const generationServerId = selectedProvider === 'gpti2' ? GPTI2_SERVER_ID : uiServerToTst(server) || 'fast';
   const isSelectedModelAllowed = isModelAllowedForFeature(providerConfig, 'image_prompt', selectedModelId);
-  const isGommoSelected = resolveProviderForModel(providerConfig, selectedModelId, 'image_prompt') === 'gommo';
+  const isGommoSelected = selectedProvider === 'gommo';
+  const isGpti2Selected = selectedProvider === 'gpti2';
   const selectedGommoModel = getGommoModelForAudition(gommoCatalog, selectedModelId);
   const tstReferenceImageLimit = aiModel === 'gpt' ? GPT_REFERENCE_IMAGE_LIMIT : DEFAULT_REFERENCE_IMAGE_LIMIT;
   const maxReferenceImages = isGommoSelected && Number(selectedGommoModel?.maxReferenceImages) > 0
@@ -187,11 +191,12 @@ export function WorkspacePromptImage() {
       speed: generationSpeedId,
       quality: aiModel === 'gpt' ? gptQuality : undefined,
     });
-    return values;
-  }, [aiModel, generationServerId, generationSpeedId, gptQuality, isGommoSelected, pricingEntries, selectedGommoModel]);
+    return isGpti2Selected ? GPTI2_RESOLUTIONS : values;
+  }, [aiModel, generationServerId, generationSpeedId, gptQuality, isGommoSelected, isGpti2Selected, pricingEntries, selectedGommoModel]);
 
   const availableServers = useMemo(() => {
     if (isGommoSelected) return [];
+    if (isGpti2Selected) return [GPTI2_SERVER_ID];
     const values = getCompatibleGenerationServers({
       tier: aiModel,
       pricingEntries,
@@ -200,7 +205,7 @@ export function WorkspacePromptImage() {
       quality: aiModel === 'gpt' ? gptQuality : undefined,
     });
     return values;
-  }, [aiModel, generationSpeedId, gptQuality, isGommoSelected, pricingEntries, resolution]);
+  }, [aiModel, generationSpeedId, gptQuality, isGommoSelected, isGpti2Selected, pricingEntries, resolution]);
 
   const availableSpeeds = useMemo(() => {
     if (isGommoSelected) return [];
@@ -233,6 +238,11 @@ export function WorkspacePromptImage() {
       return;
     }
     gommoDefaultSelectionKeyRef.current = '';
+    if (isGpti2Selected) {
+      if (server !== GPTI2_SERVER_LABEL) setServer(GPTI2_SERVER_LABEL);
+      if (!GPTI2_ASPECT_RATIOS.includes(aspectRatio)) setAspectRatio(GPTI2_ASPECT_RATIOS[0]);
+      return;
+    }
     if (tstAspectRatios.length > 0 && !tstAspectRatios.includes(aspectRatio)) {
       setAspectRatio(tstAspectRatios[0]);
       return;
@@ -261,7 +271,7 @@ export function WorkspacePromptImage() {
     if (nextSpeedLabel !== speed) {
       setSpeed(nextSpeedLabel);
     }
-  }, [aiModel, aspectRatio, generationServerId, generationSpeedId, gptQuality, isGommoSelected, pricingEntries, providerMode, resolution, selectedGommoModel, server, speed, tstAspectRatios]);
+  }, [aiModel, aspectRatio, generationServerId, generationSpeedId, gptQuality, isGommoSelected, isGpti2Selected, pricingEntries, providerMode, resolution, selectedGommoModel, server, speed, tstAspectRatios]);
 
   useEffect(() => {
     setReferenceImages((prev) => {
@@ -285,14 +295,14 @@ export function WorkspacePromptImage() {
     ? { available: gommoPricing !== null && isGommoCatalogModelAvailable(selectedGommoModel), vcoin: gommoPricing?.vcoin || 0 }
     : tstSelectedCost;
   const totalCost = selectedCost.available ? selectedCost.vcoin * modeCountForPrice : 0;
-  const availableSpeedLabels = isGommoSelected ? [] : availableSpeeds.map((value) => speedIdToLabel(value));
-  const availableServerLabels = isGommoSelected ? [] : availableServers.map((value) => ({
+  const availableSpeedLabels = isGommoSelected || isGpti2Selected ? [] : availableSpeeds.map((value) => speedIdToLabel(value));
+  const availableServerLabels = isGommoSelected ? [] : isGpti2Selected ? [{ id: GPTI2_SERVER_ID, label: GPTI2_SERVER_LABEL }] : availableServers.map((value) => ({
     id: value,
     label: tstServerToUi(value),
   }));
   const aspectRatioOptions = isGommoSelected && selectedGommoModel?.ratios.length
     ? selectedGommoModel.ratios.map((option) => option.type)
-    : (tstAspectRatios.length ? tstAspectRatios : ASPECT_RATIOS);
+    : isGpti2Selected ? GPTI2_ASPECT_RATIOS : (tstAspectRatios.length ? tstAspectRatios : ASPECT_RATIOS);
 
   useEffect(() => {
     if (isSelectedModelAllowed) return;

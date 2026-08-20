@@ -19,8 +19,6 @@ import {
   trackPromptLibrarySampleUse,
 } from '../../../../shared/caulenhauSamples';
 
-const formatCount = (value = 0) => value >= 1000 ? `${(value / 1000).toFixed(1)}K` : String(value);
-
 export function PromptLibraryV2() {
   const navigate = useNavigate();
   const { notify } = useNotification();
@@ -158,7 +156,6 @@ export function PromptLibraryV2() {
           <span className="v2-hot-featured__copy">
             <small><Flame size={13} /> Mẫu nổi bật hôm nay</small>
             <strong>{featured.category}</strong>
-            <em>{formatCount(featured.total_use_count)} lượt sử dụng</em>
             <b>Dùng mẫu <ArrowRight size={17} /></b>
           </span>
         </button>
@@ -179,7 +176,6 @@ export function PromptLibraryV2() {
             </span>
             <span className="v2-hot-card__copy">
               <strong>{sample.category}</strong>
-              <small>{formatCount(sample.total_use_count)} lượt dùng</small>
               <WandSparkles size={17} />
             </span>
           </button>

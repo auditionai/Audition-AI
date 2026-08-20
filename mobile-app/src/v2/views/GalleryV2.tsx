@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ArrowDownToLine,
+  AlertTriangle,
   CheckCircle2,
   Clock3,
   Gem,
@@ -20,6 +21,7 @@ import { QUEUE_SUBMITTED_EVENT } from '../../services/serverQueueService';
 import {
   checkR2Connection,
   deleteImageFromStorage,
+  getHistoryRetentionDays,
   getAllImagesFromStorage,
   invalidateGalleryCache,
   publishImageToShowcase,
@@ -45,6 +47,7 @@ export function GalleryV2() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<GeneratedImage | null>(null);
+  const retentionDays = getHistoryRetentionDays();
 
   const loadItems = useCallback(async () => {
     setLoading(true);
@@ -126,6 +129,14 @@ export function GalleryV2() {
         <div className="v2-history-orbit" aria-hidden="true">
           <span><strong>{stats.total}</strong><small>Tổng</small></span>
           <i />
+        </div>
+      </section>
+
+      <section className="v2-history-retention" role="note">
+        <AlertTriangle size={19} aria-hidden="true" />
+        <div>
+          <strong>Lưu ý: lịch sử tạo được lưu trong {retentionDays} ngày</strong>
+          <p>Ảnh và video chưa publish sẽ tự động bị xóa sau {retentionDays} ngày. Hãy tải tác phẩm về máy để lưu lâu dài. Giao dịch Vcoin không bị xóa.</p>
         </div>
       </section>
 

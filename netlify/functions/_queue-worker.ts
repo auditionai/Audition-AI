@@ -1603,7 +1603,7 @@ const markSubmittingPreparedPayloadWithOwnership = async (
       __dispatchAttemptId: dispatchAttemptId,
     },
     'dispatching',
-    `Đang gửi yêu cầu tới ${targetProvider === 'gommo' ? 'API 2 · Gommo' : 'API 1 · TST'}.`,
+    `Đang gửi yêu cầu tới ${targetProvider === 'gpti2' ? 'API 1 · GPTi2' : targetProvider === 'tst' ? 'API 2 · TST' : 'API 3 · Gommo'}.`,
   );
   await updateGeneratedImageRecord(jobId, {
     status: 'processing',
@@ -2367,7 +2367,9 @@ const getFallbackPayloadIdentity = (payload: Record<string, unknown>) => {
     ? payload.__recipePayload as Record<string, unknown>
     : {};
   return {
-    modelId: String(payload.model || payload.modelId || recipe.model || recipe.modelId || '').trim().toLowerCase(),
+    // Provider preparation may replace `model` with a Gommo provider id. The
+    // embedded Audition recipe is the canonical id needed by TST fallback.
+    modelId: String(recipe.modelId || recipe.model || payload.modelId || payload.model || '').trim().toLowerCase(),
     serverId: normalizeFallbackServerId(payload.server_id || payload.serverId || recipe.serverId),
     speed: String(payload.speed || recipe.speed || '').trim().toLowerCase(),
   };
@@ -2437,7 +2439,7 @@ const trySmartImageProviderFallback = async (
   const payload = toQueuePayloadObject(runtimeState?.queue_payload || job.queue_payload);
   const sourceProvider = getJobProvider(payload);
   if (
-    job.queue_kind !== 'image_generate' ||
+    !['image_generate', 'video_generate', 'motion_generate'].includes(String(job.queue_kind || '').trim().toLowerCase()) ||
     payload.__smartProviderFallbackEnabled === false ||
     (sourceProvider !== 'tst' && sourceProvider !== 'gommo' && sourceProvider !== 'gpti2') ||
     String(payload.__targetProvider || sourceProvider).trim().toLowerCase() !== sourceProvider
@@ -2452,15 +2454,16 @@ const trySmartImageProviderFallback = async (
       : []),
     ...(sourceProvider === 'tst' ? [identity.serverId] : []),
   ].filter(Boolean)));
-  const nextTstServer = await getNextTstFallbackServer(payload, triedServers).catch((error) => {
+  const nextTstServer = job.queue_kind === 'image_generate' ? await getNextTstFallbackServer(payload, triedServers).catch((error) => {
     console.warn('[queue-worker] TST fallback catalog is unavailable; checking Gommo.', {
       modelId: identity.modelId,
       error: error instanceof Error ? error.message : String(error),
     });
     return null;
-  });
+  }) : null;
   const priority = Array.isArray(payload.__providerPriority)
-    ? payload.__providerPriority.filter((provider): provider is GenerationProvider => provider === 'tst' || provider === 'gommo' || provider === 'gpti2')
+    ? payload.__providerPriority.filter((provider): provider is GenerationProvider =>
+      provider === 'tst' || provider === 'gommo' || (provider === 'gpti2' && job.queue_kind === 'image_generate'))
     : [];
   const historyProviders = new Set((Array.isArray(payload.__providerFallbackHistory) ? payload.__providerFallbackHistory : [])
     .flatMap((entry: any) => [entry?.fromProvider, entry?.toProvider]).filter(Boolean));
@@ -2477,7 +2480,16 @@ const trySmartImageProviderFallback = async (
 
   const targetProvider: GenerationProvider = providerOrderedTstServer ? 'tst' : (nextConfiguredProvider || 'gommo');
   if (targetProvider === 'gpti2' && !isGpti2Configured()) return false;
-  const fallbackPayload = providerOrderedTstServer ? withFallbackServer(payload, providerOrderedTstServer) : { ...payload };
+  const fallbackPayload = providerOrderedTstServer
+    ? withFallbackServer(payload, providerOrderedTstServer)
+    : targetProvider === 'tst'
+      ? {
+          ...payload,
+          ...(payload.__recipePayload && typeof payload.__recipePayload === 'object' ? payload.__recipePayload : {}),
+          model: identity.modelId,
+          modelId: identity.modelId,
+        }
+      : { ...payload };
   const history = Array.isArray(payload.__providerFallbackHistory)
     ? payload.__providerFallbackHistory.filter((entry) => entry && typeof entry === 'object')
     : [];

@@ -128,21 +128,31 @@ const getGenerationProvider = async (
     if (error) throw error;
     const allowedModels = getAllowedModelsForFeature(data?.value, featureKey);
     const configuredPriority = (featureKey && data?.value?.providerPriorityByFeature?.[featureKey]) || data?.value?.providerPriorityByModel?.[modelId];
-    const priority = Array.isArray(configuredPriority) ? configuredPriority.filter((provider: unknown): provider is GenerationProvider => provider === 'tst' || provider === 'gommo' || provider === 'gpti2') : [];
+    let priority = Array.isArray(configuredPriority) ? configuredPriority.filter((provider: unknown): provider is GenerationProvider => provider === 'tst' || provider === 'gommo' || provider === 'gpti2') : [];
+    if (featureKey === 'video_generation' || featureKey === 'motion_control') {
+      priority = priority.filter((provider) => provider === 'tst' || provider === 'gommo');
+    }
     const featureProvider = String(featureKey ? data?.value?.providerByFeature?.[featureKey] || '' : '').trim().toLowerCase();
-    if (featureProvider === 'gommo' || featureProvider === 'tst' || featureProvider === 'gpti2') {
-      return { provider: featureProvider, smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false, allowedModels, priority: priority.length ? priority : defaultPriority(featureProvider) };
+    if (!priority.length && (featureProvider === 'gommo' || featureProvider === 'tst' || featureProvider === 'gpti2')) {
+      priority = defaultPriority(featureProvider);
+      if (featureKey === 'video_generation' || featureKey === 'motion_control') {
+        priority = priority.filter((provider) => provider === 'tst' || provider === 'gommo');
+      }
+    }
+    if (priority.length) {
+      return { provider: priority[0], smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false, allowedModels, priority };
     }
     const featureDefault = featureKey ? DEFAULT_PROVIDER_BY_FEATURE[featureKey] : undefined;
     if (featureDefault) {
-      return { provider: featureDefault, smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false, allowedModels, priority: priority.length ? priority : defaultPriority(featureDefault) };
+      const featurePriority = defaultPriority(featureDefault).filter((provider) => featureKey === 'video_generation' || featureKey === 'motion_control' ? provider !== 'gpti2' : true);
+      return { provider: featurePriority[0], smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false, allowedModels, priority: featurePriority };
     }
     const selected = String(data?.value?.provider || '').trim().toLowerCase();
     if (featureKey) {
       return {
-        provider: selected === 'gommo' ? 'gommo' : selected === 'gpti2' ? 'gpti2' : selected === 'tst' ? 'tst' : fallback,
+        provider: (selected === 'gommo' || selected === 'tst') && (featureKey === 'video_generation' || featureKey === 'motion_control') ? selected : selected === 'gommo' ? 'gommo' : selected === 'gpti2' ? 'gpti2' : selected === 'tst' ? 'tst' : fallback,
         smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false,
-        allowedModels, priority: priority.length ? priority : defaultPriority(fallback),
+        allowedModels, priority: (featureKey === 'video_generation' || featureKey === 'motion_control') ? ['tst', 'gommo'] : defaultPriority(fallback),
       };
     }
     const modelProvider = String(data?.value?.providerByModel?.[modelId] || '').trim().toLowerCase();
@@ -174,6 +184,10 @@ const ensureProviderConfiguredForQueueKind = (queueKind: string | undefined, pro
     return;
   }
 
+  if (provider === 'gpti2') {
+    throw new Error('GPTi2 chỉ hỗ trợ tạo ảnh; video và Motion Control chỉ dùng API 2 (TST) hoặc API 3 (Gommo).');
+  }
+
   const hasTst = Boolean(String(process.env.TST_API_KEY || '').trim());
   const hasGommo = Boolean(
     String(process.env.GOMMO_ACCESS_TOKEN || process.env.GOMMO_API_TOKEN || '').trim() &&
@@ -185,7 +199,6 @@ const ensureProviderConfiguredForQueueKind = (queueKind: string | undefined, pro
   if (provider === 'gommo' && !hasGommo) {
     throw new Error('May chu Audition AI dang thieu GOMMO_ACCESS_TOKEN nen tam thoi khong the nhan job moi.');
   }
-  if (provider === 'gpti2' && !String(process.env.GPTI2_API_KEY || '').trim()) throw new Error('May chu Audition AI dang thieu GPTI2_API_KEY nen tam thoi khong the nhan job moi.');
 };
 
 const normalizeJobId = (value: unknown) => {
@@ -748,7 +761,7 @@ export const handler: Handler = async (event) => {
     });
     const routingConfig = await getGenerationProvider(admin, modelId, providerRouteKey);
     if (routingConfig.allowedModels && !routingConfig.allowedModels.includes(modelId)
-      && !(routingConfig.provider === 'gpti2' && ['gpt-image-2', 'nano-banana-2', 'nano-banana-pro'].includes(modelId))) {
+      && !(providerRouteKey !== 'video_generation' && providerRouteKey !== 'motion_control' && routingConfig.provider === 'gpti2' && ['gpt-image-2', 'nano-banana-2', 'nano-banana-pro'].includes(modelId))) {
       return {
         statusCode: 400,
         headers,

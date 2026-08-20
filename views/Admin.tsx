@@ -592,6 +592,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [generationProvider, setGenerationProvider] = useState<GenerationProviderMode>('tst');
   const [generationProviderByModel, setGenerationProviderByModel] = useState<Record<string, GenerationProviderMode>>({});
   const [generationProviderByFeature, setGenerationProviderByFeature] = useState<Record<string, GenerationProviderMode>>({});
+  const [providerPriorityByFeature, setProviderPriorityByFeature] = useState<Record<string, GenerationProviderMode[]>>({});
   const [allowedModelsByFeature, setAllowedModelsByFeature] = useState<Record<string, string[]>>({});
   const [smartProviderFallbackEnabled, setSmartProviderFallbackEnabled] = useState(true);
   const [switchingGenerationProvider, setSwitchingGenerationProvider] = useState(false);
@@ -786,6 +787,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               setGenerationProvider(providerConfig.provider);
               setGenerationProviderByModel(providerConfig.providerByModel || {});
               setGenerationProviderByFeature(providerConfig.providerByFeature || {});
+              setProviderPriorityByFeature(providerConfig.providerPriorityByFeature || {});
               setAllowedModelsByFeature(providerConfig.allowedModelsByFeature || {});
               setSmartProviderFallbackEnabled(providerConfig.smartFallbackEnabled !== false);
               if (providerCatalog) setGommoCatalogError('');
@@ -1174,6 +1176,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           provider,
           providerByModel: generationProviderByModel,
           providerByFeature: generationProviderByFeature,
+          providerPriorityByFeature,
           allowedModelsByFeature,
           smartFallbackEnabled: smartProviderFallbackEnabled,
       });
@@ -1194,6 +1197,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           provider: generationProvider,
           providerByModel: generationProviderByModel,
           providerByFeature: generationProviderByFeature,
+          providerPriorityByFeature,
           allowedModelsByFeature,
           smartFallbackEnabled: nextEnabled,
       });
@@ -1229,6 +1233,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           provider: generationProvider,
           providerByModel: generationProviderByModel,
           providerByFeature: nextProviderByFeature,
+          providerPriorityByFeature,
           allowedModelsByFeature,
           smartFallbackEnabled: smartProviderFallbackEnabled,
       });
@@ -1239,6 +1244,39 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       }
       setGenerationProviderByFeature(nextProviderByFeature);
       showToast('Đã cập nhật provider riêng cho chức năng.', 'success');
+  };
+
+  const handleMoveFeatureProvider = async (
+      featureKey: GenerationProviderRouteKey,
+      provider: GenerationProviderMode,
+      direction: -1 | 1,
+  ) => {
+      if (switchingGenerationProvider) return;
+      const isVideoRoute = featureKey === 'video_generation' || featureKey === 'motion_control';
+      const allowedProviders: GenerationProviderMode[] = isVideoRoute ? ['tst', 'gommo'] : ['gpti2', 'tst', 'gommo'];
+      const current = (providerPriorityByFeature[featureKey] || allowedProviders).filter((entry, index, list) => allowedProviders.includes(entry) && list.indexOf(entry) === index);
+      for (const entry of allowedProviders) if (!current.includes(entry)) current.push(entry);
+      const index = current.indexOf(provider);
+      const nextIndex = index + direction;
+      if (index < 0 || nextIndex < 0 || nextIndex >= current.length) return;
+      [current[index], current[nextIndex]] = [current[nextIndex], current[index]];
+      const nextPriorities = { ...providerPriorityByFeature, [featureKey]: current };
+      setSwitchingGenerationProvider(true);
+      const result = await saveGenerationProviderConfig({
+          provider: current[0],
+          providerByModel: generationProviderByModel,
+          providerByFeature: generationProviderByFeature,
+          providerPriorityByFeature: nextPriorities,
+          allowedModelsByFeature,
+          smartFallbackEnabled: smartProviderFallbackEnabled,
+      });
+      setSwitchingGenerationProvider(false);
+      if (!result.success) {
+          showToast(`Không thể lưu thứ tự provider: ${result.error}`, 'error');
+          return;
+      }
+      setProviderPriorityByFeature(nextPriorities);
+      showToast('Đã cập nhật thứ tự ưu tiên cho chức năng.', 'success');
   };
 
   const handleChangeFeatureAllowedModels = async (
@@ -1263,6 +1301,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           provider: generationProvider,
           providerByModel: generationProviderByModel,
           providerByFeature: generationProviderByFeature,
+          providerPriorityByFeature,
           allowedModelsByFeature: nextAllowedModelsByFeature,
           smartFallbackEnabled: smartProviderFallbackEnabled,
       });
@@ -1903,9 +1942,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       : [];
   const selectedQueueProviderLabel = (provider: unknown) =>
       String(provider || '').toLowerCase() === 'gommo'
-          ? 'API 2 · Gommo'
+          ? 'API 3 · Gommo'
           : String(provider || '').toLowerCase() === 'tst'
-              ? 'API 1 · TST'
+              ? 'API 2 · TST'
+              : String(provider || '').toLowerCase() === 'gpti2'
+                  ? 'API 1 · GPTi2'
               : '-';
   const selectedQueueInitialProvider = selectedQueueFallbackHistory[0]?.fromProvider
       || selectedQueueJobDetail?.queuePayloadPreview?.__targetProvider
@@ -4337,9 +4378,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                        </div>
                        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                            {GENERATION_PROVIDER_ROUTE_OPTIONS.map((route) => {
-                               const explicitProvider = generationProviderByFeature[route.key];
-                               const routeDefault = DEFAULT_PROVIDER_BY_FEATURE[route.key];
-                               const effectiveProvider = explicitProvider || routeDefault || generationProvider;
+                                const isVideoRoute = route.key === 'video_generation' || route.key === 'motion_control';
+                                const providerOptions: GenerationProviderMode[] = isVideoRoute ? ['tst', 'gommo'] : ['gpti2', 'tst', 'gommo'];
+                                const configuredPriority = providerPriorityByFeature[route.key] || [];
+                                 const featurePriority = [...configuredPriority.filter((provider) => providerOptions.includes(provider)), ...providerOptions.filter((provider) => !configuredPriority.includes(provider))];
+                                const effectiveProvider = featurePriority[0];
                                const explicitModels = allowedModelsByFeature[route.key];
                                const effectiveAllowedModels = getAllowedModelsForFeature(
                                    { allowedModelsByFeature },
@@ -4371,24 +4414,24 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                {effectiveProvider === 'gpti2' ? 'API 1 · GPTi2' : effectiveProvider === 'tst' ? 'API 2 · TST' : 'API 3 · Gommo'}
                                            </span>
                                        </div>
-                                       <div className="mt-3 grid grid-cols-4 gap-2">
-                                           {(['default', 'tst', 'gpti2', 'gommo'] as const).map((provider) => {
-                                               const active = provider === 'default' ? !explicitProvider : explicitProvider === provider;
-                                               const disabled = switchingGenerationProvider
-                                                   || (provider === 'gommo' && !gommoCatalog?.configured);
-                                               return (
-                                                   <button
-                                                       key={`${route.key}_${provider}`}
-                                                       type="button"
-                                                       disabled={disabled}
-                                                       onClick={() => handleSwitchFeatureGenerationProvider(route.key, provider)}
-                                                       className={`rounded-xl border px-2 py-2 text-[10px] font-black uppercase transition-all disabled:cursor-not-allowed disabled:opacity-40 ${active ? 'border-[#FF007F]/50 bg-[#FF007F]/15 text-[#FF007F]' : 'border-white/10 text-slate-600 dark:text-slate-300 hover:border-white/20'}`}
-                                                   >
-                                                       {provider === 'default' ? 'Kế thừa' : provider === 'gpti2' ? 'API 1 · GPTi2' : provider === 'tst' ? 'API 2 · TST' : 'API 3 · Gommo'}
-                                                   </button>
-                                               );
-                                           })}
-                                       </div>
+                                        <div className="mt-3 rounded-xl border border-white/10 p-2">
+                                            <div className="mb-2 text-[9px] font-black uppercase tracking-wider text-slate-500">Thứ tự ưu tiên (1 chạy trước)</div>
+                                            <div className="space-y-1.5">
+                                                {featurePriority.map((provider, index) => {
+                                                    const disabled = switchingGenerationProvider || (provider === 'gommo' && !gommoCatalog?.configured);
+                                                    const label = provider === 'gpti2' ? 'API 1 · GPTi2' : provider === 'tst' ? 'API 2 · TST' : 'API 3 · Gommo';
+                                                    return (
+                                                        <div key={`${route.key}_${provider}`} className={`flex items-center justify-between gap-2 rounded-lg border px-2 py-1.5 ${index === 0 ? 'border-[#FF007F]/40 bg-[#FF007F]/10' : 'border-white/5'}`}>
+                                                            <span className="text-[10px] font-black text-slate-800 dark:text-slate-200">{index + 1}. {label}</span>
+                                                            <span className="flex gap-1">
+                                                                <button type="button" title="Đưa lên" disabled={disabled || index === 0} onClick={() => handleMoveFeatureProvider(route.key, provider, -1)} className="rounded border border-white/10 px-2 py-1 text-[10px] disabled:opacity-30">↑</button>
+                                                                <button type="button" title="Đưa xuống" disabled={disabled || index === featurePriority.length - 1} onClick={() => handleMoveFeatureProvider(route.key, provider, 1)} className="rounded border border-white/10 px-2 py-1 text-[10px] disabled:opacity-30">↓</button>
+                                                            </span>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
                                        <div className="mt-4 border-t border-white/10 pt-3">
                                            <div className="flex items-center justify-between gap-2">
                                                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">Model được phép</span>
@@ -4501,35 +4544,6 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                    </div>
                                );
                            })}
-                       </div>
-                   </div>
-
-                   <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl">
-                       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                           <div>
-                               <div className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">Provider mặc định toàn ứng dụng</div>
-                               <p className="mt-1 text-xs leading-relaxed text-slate-700 dark:text-slate-300 font-semibold">
-                                   Áp dụng cho model chưa có route riêng. Bạn có thể chọn API 1 hoặc API 2 cho từng model; mỗi route chạy theo nguồn đã chọn và có thể dùng chuỗi backup thông minh bên dưới.
-                               </p>
-                           </div>
-                           <div className="grid grid-cols-3 gap-2 rounded-2xl neu-inset-sm p-2 min-w-[420px]">
-                               {(['gpti2', 'tst', 'gommo'] as GenerationProviderMode[]).map((provider) => {
-                                   const active = generationProvider === provider;
-                                   const disabled = switchingGenerationProvider || (provider === 'gommo' && !gommoCatalog?.configured);
-                                   return (
-                                       <button
-                                           key={provider}
-                                           type="button"
-                                           disabled={disabled}
-                                           onClick={() => handleSwitchGenerationProvider(provider)}
-                                           className={`rounded-xl px-4 py-3 text-xs font-black uppercase tracking-wider transition-all disabled:cursor-not-allowed disabled:opacity-50 ${active ? 'bg-[#FF007F] text-white shadow-lg' : 'text-slate-700 dark:text-slate-300 hover:text-[#FF007F]'}`}
-                                       >
-                                           {provider === 'gpti2' ? 'API 1 · GPTi2' : provider === 'tst' ? 'API 2 · TST' : 'API 3 · Gommo'}
-                                           {active && <span className="block mt-0.5 text-[9px] opacity-80">Đang hoạt động</span>}
-                                       </button>
-                                   );
-                               })}
-                           </div>
                        </div>
                    </div>
 
@@ -6028,16 +6042,16 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                               <button
                                   onClick={() => handleRetryQueueJob('tst')}
                                   disabled={Boolean(retryingQueueJobProvider)}
-                                  className="rounded-xl border border-cyan-400/30 bg-cyan-400/10 hover:bg-cyan-400/20 p-4 text-left disabled:opacity-50"
+                                  className="order-2 rounded-xl border border-cyan-400/30 bg-cyan-400/10 hover:bg-cyan-400/20 p-4 text-left disabled:opacity-50"
                               >
-                                  <span className="block text-sm font-black text-cyan-300">API 1 · TST</span>
-                                  <span className="block mt-1 text-xs text-slate-400">Dùng tuyến API 1 hiện tại</span>
+                                  <span className="block text-sm font-black text-cyan-300">API 2 · TST</span>
+                                  <span className="block mt-1 text-xs text-slate-400">Dùng tuyến API 2 hiện tại</span>
                                   {retryingQueueJobProvider === 'tst' && <span className="block mt-2 text-xs text-cyan-200">Đang tạo job...</span>}
                               </button>
                               <button
                                   onClick={() => handleRetryQueueJob('gpti2')}
                                   disabled={Boolean(retryingQueueJobProvider)}
-                                  className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 hover:bg-emerald-400/20 p-4 text-left disabled:opacity-50"
+                                  className="order-1 rounded-xl border border-emerald-400/30 bg-emerald-400/10 hover:bg-emerald-400/20 p-4 text-left disabled:opacity-50"
                               >
                                   <span className="block text-sm font-black text-emerald-300">API 1 · GPTi2</span>
                                   <span className="block mt-1 text-xs text-slate-400">Chạy lại job ảnh qua GPTi2</span>
@@ -6046,10 +6060,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                               <button
                                   onClick={() => handleRetryQueueJob('gommo')}
                                   disabled={Boolean(retryingQueueJobProvider)}
-                                  className="rounded-xl border border-fuchsia-400/30 bg-fuchsia-400/10 hover:bg-fuchsia-400/20 p-4 text-left disabled:opacity-50"
+                                  className="order-3 rounded-xl border border-fuchsia-400/30 bg-fuchsia-400/10 hover:bg-fuchsia-400/20 p-4 text-left disabled:opacity-50"
                               >
-                                  <span className="block text-sm font-black text-fuchsia-300">API 2 · Gommo</span>
-                                  <span className="block mt-1 text-xs text-slate-400">Chạy trực tiếp lại qua API 2</span>
+                                  <span className="block text-sm font-black text-fuchsia-300">API 3 · Gommo</span>
+                                  <span className="block mt-1 text-xs text-slate-400">Chạy trực tiếp lại qua API 3</span>
                                   {retryingQueueJobProvider === 'gommo' && <span className="block mt-2 text-xs text-fuchsia-200">Đang tạo job...</span>}
                               </button>
                           </div>

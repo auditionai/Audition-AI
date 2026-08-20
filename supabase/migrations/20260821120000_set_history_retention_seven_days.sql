@@ -1,7 +1,8 @@
 begin;
 
--- Keep disposable operational history for seven days. Published assets,
--- balances, payments, and the VCoin ledger remain untouched.
+-- Keep private generated-image history for seven days. Published assets,
+-- balances, payments, check-in history, app-visit analytics, and the VCoin
+-- ledger remain untouched.
 create or replace function public.cleanup_expired_operational_history(
   p_limit integer default 100,
   p_retention_days integer default 7
@@ -37,32 +38,6 @@ begin
   using candidates
   where gi.id = candidates.id;
   get diagnostics v_generated = row_count;
-
-  with candidates as (
-    select dci.id
-    from public.daily_check_ins dci
-    where dci.check_in_date < current_date - v_retention_days
-    order by dci.check_in_date
-    limit v_limit
-    for update skip locked
-  )
-  delete from public.daily_check_ins dci
-  using candidates
-  where dci.id = candidates.id;
-  get diagnostics v_check_ins = row_count;
-
-  with candidates as (
-    select av.id
-    from public.app_visits av
-    where av.created_at < now() - make_interval(days => v_retention_days)
-    order by av.created_at
-    limit v_limit
-    for update skip locked
-  )
-  delete from public.app_visits av
-  using candidates
-  where av.id = candidates.id;
-  get diagnostics v_visits = row_count;
 
   return query select v_generated, v_check_ins, v_visits;
 end;

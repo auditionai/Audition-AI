@@ -4383,7 +4383,14 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                 const isVideoRoute = route.key === 'video_generation' || route.key === 'motion_control';
                                 const providerOptions: GenerationProviderMode[] = isVideoRoute ? ['tst', 'gommo'] : ['gpti2', 'tst', 'gommo'];
                                 const configuredPriority = providerPriorityByFeature[route.key] || [];
-                                 const featurePriority = [...configuredPriority.filter((provider) => providerOptions.includes(provider)), ...providerOptions.filter((provider) => !configuredPriority.includes(provider))];
+                                const defaultProvider = isVideoRoute
+                                    ? 'tst'
+                                    : (generationProviderByFeature[route.key] || DEFAULT_PROVIDER_BY_FEATURE[route.key] || generationProvider);
+                                const featurePriority = [
+                                    ...configuredPriority.filter((provider) => providerOptions.includes(provider)),
+                                    ...(configuredPriority.length === 0 && providerOptions.includes(defaultProvider) ? [defaultProvider] : []),
+                                    ...providerOptions.filter((provider) => !configuredPriority.includes(provider) && provider !== defaultProvider),
+                                ];
                                 const effectiveProvider = featurePriority[0];
                                const explicitModels = allowedModelsByFeature[route.key];
                                const effectiveAllowedModels = getAllowedModelsForFeature(

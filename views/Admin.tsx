@@ -1166,7 +1166,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const handleSwitchGenerationProvider = async (provider: GenerationProviderMode) => {
       if (provider === generationProvider || switchingGenerationProvider) return;
       if (provider === 'gommo' && !gommoCatalog?.configured) {
-          showToast('API 2 chưa được cấu hình trên máy chủ nên chưa thể kích hoạt.', 'error');
+          showToast('API 3 (Gommo) chưa được cấu hình trên máy chủ nên chưa thể kích hoạt.', 'error');
           return;
       }
       setSwitchingGenerationProvider(true);
@@ -1183,7 +1183,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           return;
       }
       setGenerationProvider(provider);
-      showToast(`Đã đổi nguồn mặc định sang ${provider === 'gommo' ? 'API 2' : 'API 1'}; các route riêng theo model được giữ nguyên.`, 'success');
+      showToast(`Đã đổi nguồn mặc định sang ${provider === 'gpti2' ? 'API 1 · GPTi2' : provider === 'tst' ? 'API 2 · TST' : 'API 3 · Gommo'}; các route riêng theo model được giữ nguyên.`, 'success');
   };
 
   const handleToggleSmartProviderFallback = async () => {
@@ -1217,7 +1217,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   ) => {
       if (switchingGenerationProvider) return;
       if (provider === 'gommo' && !gommoCatalog?.configured) {
-          showToast('API 2 chưa được cấu hình trên máy chủ.', 'error');
+          showToast('API 3 (Gommo) chưa được cấu hình trên máy chủ.', 'error');
           return;
       }
       const nextProviderByFeature = { ...generationProviderByFeature };
@@ -4368,10 +4368,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                <div className="mt-1 text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">{route.description}</div>
                                            </div>
                                            <span className={`shrink-0 rounded-full px-2 py-1 text-[9px] font-black uppercase ${effectiveProvider === 'gommo' ? 'bg-violet-500/15 text-violet-300' : 'bg-cyan-500/15 text-cyan-300'}`}>
-                                               {effectiveProvider === 'gommo' ? 'API 2' : 'API 1'}
+                                               {effectiveProvider === 'gpti2' ? 'API 1 · GPTi2' : effectiveProvider === 'tst' ? 'API 2 · TST' : 'API 3 · Gommo'}
                                            </span>
                                        </div>
-                                       <div className="mt-3 grid grid-cols-3 gap-2">
+                                       <div className="mt-3 grid grid-cols-4 gap-2">
                                            {(['default', 'tst', 'gpti2', 'gommo'] as const).map((provider) => {
                                                const active = provider === 'default' ? !explicitProvider : explicitProvider === provider;
                                                const disabled = switchingGenerationProvider
@@ -4384,7 +4384,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                        onClick={() => handleSwitchFeatureGenerationProvider(route.key, provider)}
                                                        className={`rounded-xl border px-2 py-2 text-[10px] font-black uppercase transition-all disabled:cursor-not-allowed disabled:opacity-40 ${active ? 'border-[#FF007F]/50 bg-[#FF007F]/15 text-[#FF007F]' : 'border-white/10 text-slate-600 dark:text-slate-300 hover:border-white/20'}`}
                                                    >
-                                                       {provider === 'default' ? 'Kế thừa' : provider === 'gommo' ? 'API 2' : 'API 1'}
+                                                       {provider === 'default' ? 'Kế thừa' : provider === 'gpti2' ? 'API 1 · GPTi2' : provider === 'tst' ? 'API 2 · TST' : 'API 3 · Gommo'}
                                                    </button>
                                                );
                                            })}
@@ -4512,8 +4512,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                    Áp dụng cho model chưa có route riêng. Bạn có thể chọn API 1 hoặc API 2 cho từng model; mỗi route chạy theo nguồn đã chọn và có thể dùng chuỗi backup thông minh bên dưới.
                                </p>
                            </div>
-                           <div className="grid grid-cols-2 gap-2 rounded-2xl neu-inset-sm p-2 min-w-[280px]">
-                               {(['tst', 'gommo'] as GenerationProviderMode[]).map((provider) => {
+                           <div className="grid grid-cols-3 gap-2 rounded-2xl neu-inset-sm p-2 min-w-[420px]">
+                               {(['gpti2', 'tst', 'gommo'] as GenerationProviderMode[]).map((provider) => {
                                    const active = generationProvider === provider;
                                    const disabled = switchingGenerationProvider || (provider === 'gommo' && !gommoCatalog?.configured);
                                    return (
@@ -4524,7 +4524,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                            onClick={() => handleSwitchGenerationProvider(provider)}
                                            className={`rounded-xl px-4 py-3 text-xs font-black uppercase tracking-wider transition-all disabled:cursor-not-allowed disabled:opacity-50 ${active ? 'bg-[#FF007F] text-white shadow-lg' : 'text-slate-700 dark:text-slate-300 hover:text-[#FF007F]'}`}
                                        >
-                                           {provider === 'tst' ? 'API 1' : 'API 2'}
+                                           {provider === 'gpti2' ? 'API 1 · GPTi2' : provider === 'tst' ? 'API 2 · TST' : 'API 3 · Gommo'}
                                            {active && <span className="block mt-0.5 text-[9px] opacity-80">Đang hoạt động</span>}
                                        </button>
                                    );

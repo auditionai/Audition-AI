@@ -467,7 +467,7 @@ const resolveServerCostVcoin = async (
   targetProvider?: GenerationProvider,
 ) => {
   const resolvedProvider = targetProvider || (queuePayload.__targetProvider === 'gommo' ? 'gommo' : 'tst');
-  if (resolvedProvider === 'gommo') {
+  if (resolvedProvider === 'gommo' || resolvedProvider === 'gpti2') {
     return resolveGommoCostFromAuditionPricing(admin, queueKind, queuePayload);
   }
   const validation = await validateQueuePayloadAgainstLiveCatalog(queueKind, queuePayload, {

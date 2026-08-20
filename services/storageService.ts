@@ -12,9 +12,9 @@ import { DeleteObjectsCommand, ListObjectsV2Command, type S3Client } from '@aws-
 const DB_NAME = 'DMP_AI_Studio_DB';
 const STORE_NAME = 'images';
 const TABLE_NAME = 'generated_images';
-const HISTORY_RETENTION_DAYS = 30;
+const HISTORY_RETENTION_DAYS = 7;
 const HISTORY_RETENTION_MS = HISTORY_RETENTION_DAYS * 24 * 60 * 60 * 1000;
-const GALLERY_HISTORY_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000;
+const GALLERY_HISTORY_LOOKBACK_MS = HISTORY_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 const ACTIVE_GALLERY_CLIENT_CACHE_TTL_MS = 8_000;
 const IDLE_GALLERY_CLIENT_CACHE_TTL_MS = 120_000;
 const GALLERY_API_TIMEOUT_MS = 12_000;

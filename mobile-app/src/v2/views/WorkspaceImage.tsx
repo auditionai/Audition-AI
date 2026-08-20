@@ -56,6 +56,8 @@ import {
   getGommoModelForAudition,
   isGommoCatalogModelAvailable,
   isSelectableGommoImageResolution,
+  GPTI2_SERVER_ID,
+  GPTI2_SERVER_LABEL,
   resolveProviderForModel,
   type GommoProviderCatalog,
 } from '../../services/providerCatalog';
@@ -65,6 +67,7 @@ import { getGommoModeForServerGroup, getGommoServerGroups, getPreferredGommoBasi
 
 type GenMode = 'single' | 'couple' | 'trio' | 'squad' | 'group5' | 'group6' | 'group7' | 'group8';
 type Stage = 'input' | 'submitting';
+const GPTI2_RESOLUTIONS = ['1K', '2K', '4K'];
 
 const IMAGE_MODEL_OPTIONS: Array<{
   tier: TstGenerationTier;
@@ -287,12 +290,13 @@ export function WorkspaceImage() {
   }));
 
   const generationSpeedId = uiSpeedToTst(speed) || 'fast';
-  const generationServerId = uiServerToTst(server) || 'fast';
   const generationTier = aiModel;
   const selectedModelId = getGenerationModelId(aiModel);
   const providerRouteKey = getImageProviderRouteKey(MODE_TO_CHARACTER_COUNT[activeMode]);
   const selectedProvider = resolveProviderForModel(providerConfig, selectedModelId, providerRouteKey);
+  const generationServerId = selectedProvider === 'gpti2' ? GPTI2_SERVER_ID : uiServerToTst(server) || 'fast';
   const isGommoSelected = selectedProvider === 'gommo';
+  const isGpti2Selected = selectedProvider === 'gpti2';
   const selectedGommoModel = getGommoModelForAudition(gommoCatalog, selectedModelId);
   const tstAspectRatios = useMemo(
     () => getGenerationAspectRatios(generationTier, runtimeModels),
@@ -311,8 +315,8 @@ export function WorkspaceImage() {
     ? (selectedGommoModel?.resolutions || [])
       .filter((option) => isSelectableGommoImageResolution(selectedModelId, option.type))
       .map((option) => option.type.toUpperCase())
-    : tstAvailableResolutions.length > 0 ? tstAvailableResolutions : tstRuntimeResolutions;
-  const availableServers = getCompatibleGenerationServers({
+    : isGpti2Selected ? GPTI2_RESOLUTIONS : tstAvailableResolutions.length > 0 ? tstAvailableResolutions : tstRuntimeResolutions;
+  const availableServers = isGpti2Selected ? [GPTI2_SERVER_ID] : getCompatibleGenerationServers({
     tier: generationTier, pricingEntries, speed: generationSpeedId, resolution: resolution as TstResolution,
     quality: aiModel === 'gpt' ? gptQuality : undefined,
   });
@@ -324,7 +328,7 @@ export function WorkspaceImage() {
   });
   const tstSelectedCost = getGenerationCostBreakdown({
     tier: generationTier, resolution: resolution as TstResolution, quality: aiModel === 'gpt' ? gptQuality : undefined, speed: generationSpeedId,
-    serverId: generationServerId, pricingEntries, pricingOverrides,
+    serverId: isGpti2Selected ? '' : generationServerId, pricingEntries, pricingOverrides,
   });
   const gommoPricingInput = getGommoPricingInput(selectedModelId, {
     resolution, quality: aiModel === 'gpt' ? gptQuality : undefined, speed: generationSpeedId, providerMode,
@@ -336,8 +340,8 @@ export function WorkspaceImage() {
   const activeFeature = APP_CONFIG.main_features.find((feature) => feature.id === MODE_TO_FEATURE_ID[activeMode])
     ?? (MODE_TO_CHARACTER_COUNT[activeMode] >= 6 ? APP_CONFIG.main_features.find((feature) => feature.id === 'group_5_gen') : undefined)
     ?? APP_CONFIG.main_features[0];
-  const availableSpeedLabels = isGommoSelected ? [] : availableSpeeds.map((speedId) => (speedId === 'slow' ? 'Tiết Kiệm' : 'Nhanh'));
-  const availableServerLabels = isGommoSelected ? [] : availableServers.map((serverId) => ({ id: serverId, label: tstServerToUi(serverId) || serverId.toUpperCase() }));
+  const availableSpeedLabels = isGommoSelected || isGpti2Selected ? [] : availableSpeeds.map((speedId) => (speedId === 'slow' ? 'Tiết Kiệm' : 'Nhanh'));
+  const availableServerLabels = isGommoSelected ? [] : isGpti2Selected ? [{ id: GPTI2_SERVER_ID, label: GPTI2_SERVER_LABEL }] : availableServers.map((serverId) => ({ id: serverId, label: tstServerToUi(serverId) || serverId.toUpperCase() }));
   const gommoModes = isGommoSelected ? (selectedGommoModel?.modes || []) : [];
   const gommoModeGroups = isGommoSelected && selectedGommoModel
     ? getGommoServerGroups(selectedGommoModel)
@@ -353,6 +357,7 @@ export function WorkspaceImage() {
   const isTierAvailable = (tier: TstGenerationTier) => {
     const modelId = getGenerationModelId(tier);
     if (!isModelAllowedForFeature(providerConfig, providerRouteKey, modelId)) return false;
+    if (resolveProviderForModel(providerConfig, modelId, providerRouteKey) === 'gpti2') return ['image-gpt-2', 'nano-banana-2', 'nano-banana-pro'].includes(modelId);
     return resolveProviderForModel(providerConfig, modelId, providerRouteKey) === 'gommo'
       ? isGommoCatalogModelAvailable(getGommoModelForAudition(gommoCatalog, modelId))
       : runtimeImageModelIds.has(modelId) && pricingEntries.some((entry) => entry.model.trim().toLowerCase() === modelId);
@@ -379,6 +384,8 @@ export function WorkspaceImage() {
   }, [activeMode, aiModel, providerConfig, providerRouteKey, refImage]);
   const isCatalogReady = !catalogLoading && (isGommoSelected
     ? isGommoCatalogModelAvailable(selectedGommoModel) && selectedCost.available
+    : isGpti2Selected
+      ? selectedCost.available
     : !catalogError && pricingEntries.length > 0 && runtimeModels.length > 0);
   const hasCharacterImagesReady = characters.every((char) => !!char.bodyImage);
   const isAnyCharacterAssistRunning = characters.some((char) => !!assistLoadingByCharId[char.id]);
@@ -568,6 +575,11 @@ export function WorkspaceImage() {
       return;
     }
     gommoDefaultSelectionKeyRef.current = '';
+    if (isGpti2Selected) {
+      if (server !== GPTI2_SERVER_LABEL) setServer(GPTI2_SERVER_LABEL);
+      if (!GPTI2_RESOLUTIONS.includes(resolution)) setResolution(GPTI2_RESOLUTIONS[0]);
+      return;
+    }
     if (tstAspectRatios.length > 0 && !tstAspectRatios.includes(aspectRatio)) {
       setAspectRatio(tstAspectRatios[0]);
       return;
@@ -598,7 +610,7 @@ export function WorkspaceImage() {
     if (nextSpeedLabel !== speed) {
       setSpeed(nextSpeedLabel);
     }
-  }, [aiModel, aspectRatio, gptQuality, isGommoSelected, pricingEntries, providerMode, resolution, selectedGommoModel, server, speed, tstAspectRatios]);
+  }, [aiModel, aspectRatio, gptQuality, isGommoSelected, isGpti2Selected, pricingEntries, providerMode, resolution, selectedGommoModel, server, speed, tstAspectRatios]);
 
   useEffect(() => {
     if (!isGommoSelected || !['group6', 'group7', 'group8'].includes(activeMode)) return;
@@ -951,7 +963,9 @@ export function WorkspaceImage() {
             }));
           }),
         ];
-        const effectiveServerId = isGommoSelected ? undefined : (availableServers.includes(generationServerId) ? generationServerId : (availableServers[0] || generationServerId));
+        const effectiveServerId = isGpti2Selected
+          ? GPTI2_SERVER_ID
+          : isGommoSelected ? undefined : (availableServers.includes(generationServerId) ? generationServerId : (availableServers[0] || generationServerId));
         const compatibleSpeeds = getCompatibleGenerationSpeeds({
           tier: generationTier,
           pricingEntries,

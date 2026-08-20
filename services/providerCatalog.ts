@@ -122,7 +122,11 @@ export const resolveProviderForModel = (
         : first;
     }
     const featureProvider = config?.providerByFeature?.[normalizedFeatureKey];
-    if (featureProvider) return featureProvider;
+    if (featureProvider) {
+      return normalizedFeatureKey === 'video_generation' || normalizedFeatureKey === 'motion_control'
+        ? (featureProvider === 'gpti2' ? 'tst' : featureProvider)
+        : featureProvider;
+    }
     const featureDefault = DEFAULT_PROVIDER_BY_FEATURE[normalizedFeatureKey as GenerationProviderRouteKey];
     if (featureDefault) return featureDefault;
     return config?.provider || 'tst';

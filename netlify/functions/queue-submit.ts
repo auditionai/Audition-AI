@@ -771,7 +771,11 @@ export const handler: Handler = async (event) => {
         }),
       };
     }
-    const targetProvider = routingConfig.provider;
+    const normalizedQueueKind = String(body.queueKind || '').trim().toLowerCase();
+    const isVideoOrMotionQueue = body.assetType === 'video' || normalizedQueueKind === 'video_generate' || normalizedQueueKind === 'motion_generate';
+    const targetProvider: GenerationProvider = isVideoOrMotionQueue && routingConfig.provider === 'gpti2'
+      ? routingConfig.priority.find((provider) => provider === 'tst' || provider === 'gommo') || 'tst'
+      : routingConfig.provider;
     ensureProviderConfiguredForQueueKind(body.queueKind, targetProvider);
     if (
       TST_QUEUE_KINDS.has(String(body.queueKind || '').trim().toLowerCase()) &&

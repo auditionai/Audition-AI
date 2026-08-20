@@ -657,7 +657,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [loadingQueueJobDetail, setLoadingQueueJobDetail] = useState(false);
   const [stoppingQueueJob, setStoppingQueueJob] = useState(false);
   const [queueJobPendingRetry, setQueueJobPendingRetry] = useState<AdminQueueJob | null>(null);
-  const [retryingQueueJobProvider, setRetryingQueueJobProvider] = useState<'tst' | 'gommo' | null>(null);
+  const [retryingQueueJobProvider, setRetryingQueueJobProvider] = useState<'tst' | 'gommo' | 'gpti2' | null>(null);
   const [queuePromptExpanded, setQueuePromptExpanded] = useState(false);
   const [reopeningAutoDisabledKey, setReopeningAutoDisabledKey] = useState<string | null>(null);
 
@@ -990,6 +990,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               if (row.type !== expectedType) continue;
               const id = row.modelId.trim().toLowerCase();
               if (id && !models.has(id)) models.set(id, row.modelName || row.modelId);
+          }
+          if (expectedType === 'image') {
+              models.set('gpt-image-2', 'GPTi2 · GPT Image 2');
+              models.set('nano-banana-2', 'GPTi2 · Nano Banana 2');
+              models.set('nano-banana-pro', 'GPTi2 · Nano Banana Pro');
           }
           result[route.key] = Array.from(models, ([id, name]) => ({ id, name }))
               .sort((a, b) => a.name.localeCompare(b.name, 'vi'));
@@ -2294,7 +2299,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       });
   };
 
-  const handleRetryQueueJob = async (provider: 'tst' | 'gommo') => {
+  const handleRetryQueueJob = async (provider: 'tst' | 'gommo' | 'gpti2') => {
       if (!queueJobPendingRetry || retryingQueueJobProvider) return;
       setRetryingQueueJobProvider(provider);
       try {
@@ -4343,7 +4348,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                const modelOptions = featureModelOptions[route.key] || [];
                                const usesDefaultModels = !explicitModels;
                                const allowsAllModels = explicitModels?.includes('*') || (!explicitModels && !DEFAULT_ALLOWED_MODELS_BY_FEATURE[route.key]);
-                               const providerModelOptions = modelOptions.filter((model) => effectiveProvider === 'tst'
+                               const providerModelOptions = modelOptions.filter((model) => effectiveProvider === 'gpti2'
+                                   ? ['gpt-image-2', 'nano-banana-2', 'nano-banana-pro'].includes(model.id)
+                                   : effectiveProvider === 'tst'
                                    ? pricingRows.some((row) => row.modelId.trim().toLowerCase() === model.id)
                                    : gommoCatalog?.models.some((entry) =>
                                        entry.auditionModelId.trim().toLowerCase() === model.id
@@ -4365,7 +4372,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                            </span>
                                        </div>
                                        <div className="mt-3 grid grid-cols-3 gap-2">
-                                           {(['default', 'tst', 'gommo'] as const).map((provider) => {
+                                           {(['default', 'tst', 'gpti2', 'gommo'] as const).map((provider) => {
                                                const active = provider === 'default' ? !explicitProvider : explicitProvider === provider;
                                                const disabled = switchingGenerationProvider
                                                    || (provider === 'gommo' && !gommoCatalog?.configured);
@@ -4466,7 +4473,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                            </div>
                                                            <div className="mt-1.5 flex flex-wrap gap-1.5">
                                                                {serverOptions.map((serverOption) => {
-                                                                   const enabled = isProviderServerEnabledForModel(serverAvailabilityConfig, effectiveProvider, model.id, serverOption.id);
+                                                                   const enabled = effectiveProvider === 'gpti2' ? true : isProviderServerEnabledForModel(serverAvailabilityConfig, effectiveProvider, model.id, serverOption.id);
                                                                    return (
                                                                        <button
                                                                            key={`${route.key}_${effectiveProvider}_${model.id}_${serverOption.id}`}
@@ -6026,6 +6033,15 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   <span className="block text-sm font-black text-cyan-300">API 1 · TST</span>
                                   <span className="block mt-1 text-xs text-slate-400">Dùng tuyến API 1 hiện tại</span>
                                   {retryingQueueJobProvider === 'tst' && <span className="block mt-2 text-xs text-cyan-200">Đang tạo job...</span>}
+                              </button>
+                              <button
+                                  onClick={() => handleRetryQueueJob('gpti2')}
+                                  disabled={Boolean(retryingQueueJobProvider)}
+                                  className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 hover:bg-emerald-400/20 p-4 text-left disabled:opacity-50"
+                              >
+                                  <span className="block text-sm font-black text-emerald-300">API 1 · GPTi2</span>
+                                  <span className="block mt-1 text-xs text-slate-400">Chạy lại job ảnh qua GPTi2</span>
+                                  {retryingQueueJobProvider === 'gpti2' && <span className="block mt-2 text-xs text-emerald-200">Đang chạy lại...</span>}
                               </button>
                               <button
                                   onClick={() => handleRetryQueueJob('gommo')}

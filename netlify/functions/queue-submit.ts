@@ -31,10 +31,11 @@ const USER_QUEUE_LIMIT = 3;
 const PROVIDER_CONCURRENCY_LIMITS = {
   tst: { userImage: 3, userVideo: 3 },
   gommo: { userImage: 3, userVideo: 3 },
+  gpti2: { userImage: 3, userVideo: 0 },
 } as const;
 const TST_QUEUE_KINDS = new Set(['image_generate', 'video_generate', 'motion_generate']);
 const TST_QUEUE_KIND_VALUES = Array.from(TST_QUEUE_KINDS);
-type GenerationProvider = 'tst' | 'gommo';
+type GenerationProvider = 'tst' | 'gommo' | 'gpti2';
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PHONE_USER_AGENT_PATTERN = /iphone|ipod|android.+mobile|windows phone|blackberry|opera mini|mobile safari/i;
@@ -110,10 +111,14 @@ const getGenerationProvider = async (
   admin: ReturnType<typeof getServiceRoleClient>,
   modelId: string,
   featureKey?: GenerationProviderRouteKey | null,
-): Promise<{ provider: GenerationProvider; smartFallbackEnabled: boolean; allowedModels: string[] | null }> => {
+): Promise<{ provider: GenerationProvider; smartFallbackEnabled: boolean; allowedModels: string[] | null; priority: GenerationProvider[] }> => {
   const fallback = String(process.env.GENERATION_PROVIDER_DEFAULT || 'tst').trim().toLowerCase() === 'gommo'
     ? 'gommo'
     : 'tst';
+  const defaultPriority = (provider: GenerationProvider): GenerationProvider[] =>
+    featureKey === 'video_generation' || featureKey === 'motion_control'
+      ? provider === 'tst' ? ['tst', 'gommo'] : [provider, 'tst']
+      : provider === 'gpti2' ? ['gpti2', 'tst', 'gommo'] : provider === 'tst' ? ['tst', 'gommo'] : ['gommo', 'tst'];
   try {
     const { data, error } = await admin
       .from('system_settings')
@@ -122,34 +127,36 @@ const getGenerationProvider = async (
       .maybeSingle();
     if (error) throw error;
     const allowedModels = getAllowedModelsForFeature(data?.value, featureKey);
+    const configuredPriority = (featureKey && data?.value?.providerPriorityByFeature?.[featureKey]) || data?.value?.providerPriorityByModel?.[modelId];
+    const priority = Array.isArray(configuredPriority) ? configuredPriority.filter((provider: unknown): provider is GenerationProvider => provider === 'tst' || provider === 'gommo' || provider === 'gpti2') : [];
     const featureProvider = String(featureKey ? data?.value?.providerByFeature?.[featureKey] || '' : '').trim().toLowerCase();
-    if (featureProvider === 'gommo' || featureProvider === 'tst') {
-      return { provider: featureProvider, smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false, allowedModels };
+    if (featureProvider === 'gommo' || featureProvider === 'tst' || featureProvider === 'gpti2') {
+      return { provider: featureProvider, smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false, allowedModels, priority: priority.length ? priority : defaultPriority(featureProvider) };
     }
     const featureDefault = featureKey ? DEFAULT_PROVIDER_BY_FEATURE[featureKey] : undefined;
     if (featureDefault) {
-      return { provider: featureDefault, smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false, allowedModels };
+      return { provider: featureDefault, smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false, allowedModels, priority: priority.length ? priority : defaultPriority(featureDefault) };
     }
     const selected = String(data?.value?.provider || '').trim().toLowerCase();
     if (featureKey) {
       return {
-        provider: selected === 'gommo' ? 'gommo' : selected === 'tst' ? 'tst' : fallback,
+        provider: selected === 'gommo' ? 'gommo' : selected === 'gpti2' ? 'gpti2' : selected === 'tst' ? 'tst' : fallback,
         smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false,
-        allowedModels,
+        allowedModels, priority: priority.length ? priority : defaultPriority(fallback),
       };
     }
     const modelProvider = String(data?.value?.providerByModel?.[modelId] || '').trim().toLowerCase();
-    if (modelProvider === 'gommo' || modelProvider === 'tst') {
-      return { provider: modelProvider, smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false, allowedModels };
+    if (modelProvider === 'gommo' || modelProvider === 'tst' || modelProvider === 'gpti2') {
+      return { provider: modelProvider, smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false, allowedModels, priority: priority.length ? priority : defaultPriority(modelProvider) };
     }
     return {
-      provider: selected === 'gommo' ? 'gommo' : selected === 'tst' ? 'tst' : fallback,
+      provider: selected === 'gommo' ? 'gommo' : selected === 'gpti2' ? 'gpti2' : selected === 'tst' ? 'tst' : fallback,
       smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false,
-      allowedModels,
+      allowedModels, priority: priority.length ? priority : defaultPriority(fallback),
     };
   } catch (error) {
     console.warn('[queue-submit] Could not read generation provider mode; using deployment default.', error);
-    return { provider: fallback, smartFallbackEnabled: true, allowedModels: getAllowedModelsForFeature(null, featureKey) };
+    return { provider: fallback, smartFallbackEnabled: true, allowedModels: getAllowedModelsForFeature(null, featureKey), priority: defaultPriority(fallback) };
   }
 };
 
@@ -178,6 +185,7 @@ const ensureProviderConfiguredForQueueKind = (queueKind: string | undefined, pro
   if (provider === 'gommo' && !hasGommo) {
     throw new Error('May chu Audition AI dang thieu GOMMO_ACCESS_TOKEN nen tam thoi khong the nhan job moi.');
   }
+  if (provider === 'gpti2' && !String(process.env.GPTI2_API_KEY || '').trim()) throw new Error('May chu Audition AI dang thieu GPTI2_API_KEY nen tam thoi khong the nhan job moi.');
 };
 
 const normalizeJobId = (value: unknown) => {
@@ -739,7 +747,8 @@ export const handler: Handler = async (event) => {
       queuePayload: body.queuePayload,
     });
     const routingConfig = await getGenerationProvider(admin, modelId, providerRouteKey);
-    if (routingConfig.allowedModels && !routingConfig.allowedModels.includes(modelId)) {
+    if (routingConfig.allowedModels && !routingConfig.allowedModels.includes(modelId)
+      && !(routingConfig.provider === 'gpti2' && ['gpt-image-2', 'nano-banana-2', 'nano-banana-pro'].includes(modelId))) {
       return {
         statusCode: 400,
         headers,
@@ -775,6 +784,7 @@ export const handler: Handler = async (event) => {
       __targetProvider: targetProvider,
       __providerRouteKey: providerRouteKey,
       __smartProviderFallbackEnabled: routingConfig.smartFallbackEnabled,
+      __providerPriority: routingConfig.priority,
     };
 
     let row: any;

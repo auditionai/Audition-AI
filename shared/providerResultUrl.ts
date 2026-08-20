@@ -30,6 +30,7 @@ export const isResultUrlCompatibleWithAssetType = (
   assetType: GeneratedAssetType,
   fieldHint?: GeneratedAssetType | null,
 ): value is string => {
+  if (assetType === 'image' && typeof value === 'string' && /^data:image\//i.test(value.trim())) return true;
   const normalized = normalizeHttpUrl(value);
   if (!normalized) return false;
   if (fieldHint && fieldHint !== assetType) return false;

@@ -135,7 +135,7 @@ export type FeatureMaintenanceConfig = {
     updatedAt?: string;
 };
 
-export type GenerationProviderMode = 'tst' | 'gommo';
+export type GenerationProviderMode = 'tst' | 'gommo' | 'gpti2';
 
 export type GenerationProviderConfig = {
     provider: GenerationProviderMode;
@@ -143,6 +143,8 @@ export type GenerationProviderConfig = {
     providerByFeature: Record<string, GenerationProviderMode>;
     allowedModelsByFeature: Record<string, string[]>;
     smartFallbackEnabled: boolean;
+    providerPriorityByFeature?: Record<string, GenerationProviderMode[]>;
+    providerPriorityByModel?: Record<string, GenerationProviderMode[]>;
     updatedAt?: string;
 };
 
@@ -2705,7 +2707,7 @@ export const stopAdminQueueJob = async (jobId: string) => {
     return payload as { success: boolean; refunded?: boolean; jobId?: string; providerJobId?: string | null; providerCancelRequested?: boolean };
 };
 
-export type AdminQueueRetryProvider = 'tst' | 'gommo';
+export type AdminQueueRetryProvider = 'tst' | 'gommo' | 'gpti2';
 
 export type AdminQueueRetryResult = {
     success: boolean;
@@ -3003,7 +3005,7 @@ export const getGenerationProviderConfig = async (): Promise<GenerationProviderC
             Object.entries(data?.value?.providerByModel || {})
                 .map(([modelId, provider]) => [
                     String(modelId || '').trim().toLowerCase(),
-                    provider === 'gommo' ? 'gommo' : provider === 'tst' ? 'tst' : null,
+                    provider === 'gommo' ? 'gommo' : provider === 'gpti2' ? 'gpti2' : provider === 'tst' ? 'tst' : null,
                 ])
                 .filter(([modelId, provider]) => Boolean(modelId && provider)),
         ) as Record<string, GenerationProviderMode>;
@@ -3011,7 +3013,7 @@ export const getGenerationProviderConfig = async (): Promise<GenerationProviderC
             Object.entries(data?.value?.providerByFeature || {})
                 .map(([featureKey, provider]) => [
                     String(featureKey || '').trim().toLowerCase(),
-                    provider === 'gommo' ? 'gommo' : provider === 'tst' ? 'tst' : null,
+                    provider === 'gommo' ? 'gommo' : provider === 'gpti2' ? 'gpti2' : provider === 'tst' ? 'tst' : null,
                 ])
                 .filter(([featureKey, provider]) => Boolean(featureKey && provider)),
         ) as Record<string, GenerationProviderMode>;
@@ -3027,12 +3029,17 @@ export const getGenerationProviderConfig = async (): Promise<GenerationProviderC
                 ])
                 .filter(([featureKey, modelIds]) => Boolean(featureKey && (modelIds as string[]).length)),
         ) as Record<string, string[]>;
+        const normalizePriority = (value: unknown) => Array.from(new Set((Array.isArray(value) ? value : []).map((provider) => provider === 'gommo' || provider === 'gpti2' || provider === 'tst' ? provider : null).filter(Boolean))) as GenerationProviderMode[];
+        const providerPriorityByFeature = Object.fromEntries(Object.entries(data?.value?.providerPriorityByFeature || {}).map(([key, value]) => [String(key).trim().toLowerCase(), normalizePriority(value)]).filter(([, value]) => (value as GenerationProviderMode[]).length)) as Record<string, GenerationProviderMode[]>;
+        const providerPriorityByModel = Object.fromEntries(Object.entries(data?.value?.providerPriorityByModel || {}).map(([key, value]) => [String(key).trim().toLowerCase(), normalizePriority(value)]).filter(([, value]) => (value as GenerationProviderMode[]).length)) as Record<string, GenerationProviderMode[]>;
         return {
-            provider: data?.value?.provider === 'gommo' ? 'gommo' : 'tst',
+            provider: data?.value?.provider === 'gommo' ? 'gommo' : data?.value?.provider === 'gpti2' ? 'gpti2' : 'tst',
             providerByModel,
             providerByFeature,
             allowedModelsByFeature,
             smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false,
+            providerPriorityByFeature,
+            providerPriorityByModel,
             updatedAt: typeof data?.value?.updatedAt === 'string' ? data.value.updatedAt : undefined,
         };
     } catch (e) {
@@ -3053,7 +3060,7 @@ export const saveGenerationProviderConfig = async (
             Object.entries(input.providerByModel || {})
                 .map(([modelId, provider]) => [
                     String(modelId || '').trim().toLowerCase(),
-                    provider === 'gommo' ? 'gommo' : provider === 'tst' ? 'tst' : null,
+                    provider === 'gommo' ? 'gommo' : provider === 'gpti2' ? 'gpti2' : provider === 'tst' ? 'tst' : null,
                 ])
                 .filter(([modelId, provider]) => Boolean(modelId && provider)),
         ) as Record<string, GenerationProviderMode>;
@@ -3061,7 +3068,7 @@ export const saveGenerationProviderConfig = async (
             Object.entries(input.providerByFeature || {})
                 .map(([featureKey, provider]) => [
                     String(featureKey || '').trim().toLowerCase(),
-                    provider === 'gommo' ? 'gommo' : provider === 'tst' ? 'tst' : null,
+                    provider === 'gommo' ? 'gommo' : provider === 'gpti2' ? 'gpti2' : provider === 'tst' ? 'tst' : null,
                 ])
                 .filter(([featureKey, provider]) => Boolean(featureKey && provider)),
         ) as Record<string, GenerationProviderMode>;
@@ -3078,11 +3085,13 @@ export const saveGenerationProviderConfig = async (
                 .filter(([featureKey, modelIds]) => Boolean(featureKey && (modelIds as string[]).length)),
         ) as Record<string, string[]>;
         const payload: GenerationProviderConfig = {
-            provider: input.provider === 'gommo' ? 'gommo' : 'tst',
+            provider: input.provider === 'gommo' ? 'gommo' : input.provider === 'gpti2' ? 'gpti2' : 'tst',
             providerByModel,
             providerByFeature,
             allowedModelsByFeature,
             smartFallbackEnabled: input.smartFallbackEnabled !== false,
+            providerPriorityByFeature: input.providerPriorityByFeature || {},
+            providerPriorityByModel: input.providerPriorityByModel || {},
             updatedAt: new Date().toISOString(),
         };
         const { error } = await supabase.from('system_settings').upsert(

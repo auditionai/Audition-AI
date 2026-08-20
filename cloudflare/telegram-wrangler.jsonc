@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json.schemastore.org/wrangler.json",
+  "name": "auditionai-telegram-notify",
+  "main": "./telegram-notify-worker.js",
+  "compatibility_date": "2026-08-20",
+  "account_id": "18667aed6214a7253092d9cf2686cd8e",
+  "workers_dev": true
+}

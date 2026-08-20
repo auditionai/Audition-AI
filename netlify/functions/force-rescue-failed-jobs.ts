@@ -3,6 +3,7 @@ import { getAuthenticatedRequestErrorStatus, getServiceRoleClient, requireAuthen
 import { triggerBackgroundQueueWorker } from './_queue-launcher';
 import { clearFailedRescueMeta, hasFailedRescueFinalized, hasManualStopFlag } from '../../shared/queueRescueState';
 import { extractProviderResultUrl, isResultUrlCompatibleWithAssetType } from '../../shared/providerResultUrl';
+import { persistProviderResultToR2 } from './_r2-result-storage';
 
 const headers = {
   'Content-Type': 'application/json',
@@ -153,6 +154,8 @@ const rescueCompletedJob = async (job: RescueJobRow, resultUrl: string, provider
     throw new Error(`Provider returned a ${job.asset_type === 'video' ? 'non-video' : 'non-image'} result URL.`);
   }
 
+  const r2ResultUrl = await persistProviderResultToR2(resultUrl, job.user_id, job.id, job.asset_type);
+
   const admin = getServiceRoleClient();
   const nextPayload = clearFailedRescueMeta(
     withQueueLog(
@@ -168,7 +171,7 @@ const rescueCompletedJob = async (job: RescueJobRow, resultUrl: string, provider
     .from('generated_images')
     .update({
       status: 'completed',
-      image_url: resultUrl,
+      image_url: r2ResultUrl,
       error_message: null,
       progress: 100,
       finished_at: new Date().toISOString(),

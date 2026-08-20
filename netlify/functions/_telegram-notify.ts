@@ -173,6 +173,14 @@ const getConfigSummary = (payload: QueuePayloadObject, toolId?: string | null) =
   };
 };
 
+const getNotificationApi = (payload: QueuePayloadObject) => {
+  const raw = toPayloadObject(payload);
+  const recipe = getEmbeddedRecipePayload(payload);
+  const source = Object.keys(recipe).length > 0 ? recipe : raw;
+  const value = source.api || source.provider || source.__targetProvider || raw.api || raw.provider || raw.__targetProvider;
+  return String(value || '').trim().toUpperCase() || null;
+};
+
 const getDisplayToolName = (
   toolName: string | null | undefined,
   queueKind: string | null | undefined,
@@ -435,6 +443,7 @@ export const sendTelegramJobNotification = async (
         toolName: displayToolName,
         engine: record.engine || null,
         queueKind: record.queueKind || null,
+        api: getNotificationApi(record.queuePayload),
         costVcoin: Number(record.costVcoin || 0),
         status: eventType,
         createdAt: record.createdAt || new Date().toISOString(),

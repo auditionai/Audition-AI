@@ -43,12 +43,14 @@ import { repairVietnameseMojibake } from '../../shared/queueLogText';
 import { clearFailedRescueMeta, hasFailedRescueFinalized, hasManualStopFlag } from '../../shared/queueRescueState';
 import { SYSTEM_QUEUE_KINDS } from '../../shared/queueKinds';
 import { compactTerminalQueuePayload } from './_queue-payload-retention';
+import { persistProviderResultToR2 } from './_r2-result-storage';
 import {
   canUseGommoForPayload,
   isGommoConfigured,
   pollGommoJob,
   submitGommoJob,
 } from './_gommo-provider';
+import { isGpti2Configured, isGpti2Model, pollGpti2Job, submitGpti2Job } from './_gpti2-provider';
 import { DEFAULT_PROVIDER_BY_FEATURE, type GenerationProviderRouteKey } from '../../shared/providerRouting';
 import {
   extractProviderResultUrl,
@@ -98,13 +100,15 @@ type PreparedQueueDispatchResult =
       storedPayload: Record<string, unknown>;
     };
 
-type GenerationProvider = 'tst' | 'gommo';
+type GenerationProvider = 'tst' | 'gommo' | 'gpti2';
 
 type ProviderSubmission = {
   jobId: string;
   provider: GenerationProvider;
   providerCost?: number | null;
   mappedModelId?: string | null;
+  providerStartedAt?: string | null;
+  inlineResult?: string | null;
 };
 
 const getNormalizedProviderJobId = (job: Pick<QueueJobRow, 'job_id'>) => {
@@ -168,12 +172,12 @@ const VIDEO_POLL_INTERVAL_SECONDS = parsePositiveIntEnv('QUEUE_VIDEO_POLL_INTERV
 const PROVIDER_FAILURE_GRACE_SECONDS = parsePositiveIntEnv('QUEUE_PROVIDER_FAILURE_GRACE_SECONDS', 90, 5);
 const MAX_DISPATCH_RETRIES = 6;
 const MAX_POLL_FAILURES = 8;
-const MAX_PROCESSING_AGE_MS = 60 * 60 * 1000;
+const MAX_PROCESSING_AGE_MS = 30 * 60 * 1000;
 const MAX_VIDEO_PROCESSING_AGE_MS = Number.POSITIVE_INFINITY;
-const MAX_SINGLE_IMAGE_PROCESSING_AGE_MS = 60 * 60 * 1000;
-const MAX_COUPLE_IMAGE_PROCESSING_AGE_MS = 60 * 60 * 1000;
-const MAX_GROUP3_IMAGE_PROCESSING_AGE_MS = 60 * 60 * 1000;
-const MAX_GROUP4_IMAGE_PROCESSING_AGE_MS = 60 * 60 * 1000;
+const MAX_SINGLE_IMAGE_PROCESSING_AGE_MS = 30 * 60 * 1000;
+const MAX_COUPLE_IMAGE_PROCESSING_AGE_MS = 30 * 60 * 1000;
+const MAX_GROUP3_IMAGE_PROCESSING_AGE_MS = 30 * 60 * 1000;
+const MAX_GROUP4_IMAGE_PROCESSING_AGE_MS = 30 * 60 * 1000;
 const FAILED_RESULT_RESCUE_SCAN_LIMIT = 10;
 const FAILED_RESULT_RESCUE_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000;
 const FAILED_RESULT_RESCUE_MAX_ATTEMPTS = 8;
@@ -222,16 +226,16 @@ const getGlobalGenerationProvider = async (modelId: string, featureKey?: string)
     if (error) throw error;
     const normalizedFeatureKey = String(featureKey || '').trim().toLowerCase() as GenerationProviderRouteKey;
     const featureProvider = String(normalizedFeatureKey ? data?.value?.providerByFeature?.[normalizedFeatureKey] || '' : '').trim().toLowerCase();
-    if (featureProvider === 'gommo' || featureProvider === 'tst') return featureProvider;
+    if (featureProvider === 'gommo' || featureProvider === 'tst' || featureProvider === 'gpti2') return featureProvider as GenerationProvider;
     const featureDefault = normalizedFeatureKey ? DEFAULT_PROVIDER_BY_FEATURE[normalizedFeatureKey] : undefined;
     if (featureDefault) return featureDefault;
     const selected = String(data?.value?.provider || '').trim().toLowerCase();
     if (normalizedFeatureKey) {
-      return selected === 'gommo' ? 'gommo' : selected === 'tst' ? 'tst' : GENERATION_PROVIDER_DEFAULT;
+      return selected === 'gommo' ? 'gommo' : selected === 'gpti2' ? 'gpti2' : selected === 'tst' ? 'tst' : GENERATION_PROVIDER_DEFAULT;
     }
     const modelProvider = String(data?.value?.providerByModel?.[modelId] || '').trim().toLowerCase();
-    if (modelProvider === 'gommo' || modelProvider === 'tst') return modelProvider;
-    return selected === 'gommo' ? 'gommo' : selected === 'tst' ? 'tst' : GENERATION_PROVIDER_DEFAULT;
+    if (modelProvider === 'gommo' || modelProvider === 'tst' || modelProvider === 'gpti2') return modelProvider as GenerationProvider;
+    return selected === 'gommo' ? 'gommo' : selected === 'gpti2' ? 'gpti2' : selected === 'tst' ? 'tst' : GENERATION_PROVIDER_DEFAULT;
   } catch (error) {
     console.warn('[queue-worker] Could not read generation provider mode; using deployment default.', error);
     return GENERATION_PROVIDER_DEFAULT;
@@ -240,7 +244,7 @@ const getGlobalGenerationProvider = async (modelId: string, featureKey?: string)
 
 const resolveDispatchProvider = async (payload: Record<string, unknown>): Promise<GenerationProvider> => {
   const stored = String(payload.__targetProvider || '').trim().toLowerCase();
-  if (stored === 'tst' || stored === 'gommo') return stored;
+  if (stored === 'tst' || stored === 'gommo' || stored === 'gpti2') return stored;
   return getGlobalGenerationProvider(
     getQueuePayloadModelId(payload),
     String(payload.__providerRouteKey || ''),
@@ -696,7 +700,10 @@ const hasTstBeenTouched = (
 
 const getJobProvider = (
   payload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
-): GenerationProvider => toQueuePayloadObject(payload).__provider === 'gommo' ? 'gommo' : 'tst';
+): GenerationProvider => {
+  const provider = String(toQueuePayloadObject(payload).__provider || '').trim().toLowerCase();
+  return provider === 'gommo' || provider === 'gpti2' ? provider : 'tst';
+};
 
 const hasDispatchConfirmationPending = (
   payload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
@@ -1160,6 +1167,12 @@ const submitProviderJob = async (
   }
 
   const plainPayload = stripInternalQueueMeta(providerPayload);
+  if (targetProvider === 'gpti2') {
+    if (!isGpti2Configured()) throw new Error('GPTI2_NOT_CONFIGURED: Missing GPTI2_API_KEY environment variable');
+    if (!isGpti2Model(getQueuePayloadModelId(plainPayload))) throw new Error(`GPTI2_MODEL_UNSUPPORTED: ${getQueuePayloadModelId(plainPayload) || '(empty)'}`);
+    const gpti2 = await submitGpti2Job(queueKind, plainPayload);
+    return { ...gpti2 };
+  }
   if (targetProvider === 'gommo') {
     if (!isGommoConfigured()) {
       throw new Error('GOMMO_NOT_CONFIGURED: Missing GOMMO_ACCESS_TOKEN or GOMMO_DOMAIN environment variable');
@@ -1237,6 +1250,7 @@ const pollProviderJob = async (
   queueKind: string,
   payload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
 ) => {
+  if (getJobProvider(payload) === 'gpti2') return pollGpti2Job(providerJobId, String(toQueuePayloadObject(payload).__gpti2InlineResult || '') || undefined);
   if (getJobProvider(payload) === 'gommo') {
     return pollGommoJob(queueKind, providerJobId);
   }
@@ -1263,6 +1277,7 @@ const cancelProviderJobBestEffort = async (
   providerJobId?: string | null,
   payload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
 ) => {
+  if (getJobProvider(payload) === 'gpti2') return false;
   const normalizedJobId = String(providerJobId || '').trim();
   if (getJobProvider(payload) === 'gommo') {
     return false;
@@ -1695,6 +1710,8 @@ const withProviderSubmission = (
   __provider: submission.provider,
   __providerCost: submission.providerCost ?? undefined,
   __providerModel: submission.mappedModelId ?? undefined,
+  __providerStartedAt: submission.providerStartedAt || new Date().toISOString(),
+  __gpti2InlineResult: submission.inlineResult || undefined,
 });
 
 const markSubmittedWithOwnership = async (
@@ -1702,7 +1719,7 @@ const markSubmittedWithOwnership = async (
   submission: ProviderSubmission,
   dispatchAttemptId: string,
 ) => {
-  const providerLabel = submission.provider === 'gommo' ? 'Gommo' : 'TST';
+  const providerLabel = submission.provider === 'gommo' ? 'Gommo' : submission.provider === 'gpti2' ? 'GPTi2' : 'TST';
   const nextPayload = withQueueLog(
     {
       ...withProviderSubmission(job.queue_payload, submission),
@@ -1724,7 +1741,7 @@ const markSubmittedWithOwnership = async (
       queue_payload: nextPayload,
       progress: 60,
       error_message: null,
-      processing_started_at: new Date().toISOString(),
+      processing_started_at: submission.providerStartedAt || new Date().toISOString(),
       next_poll_at: new Date(Date.now() + getInitialProcessingPollDelaySeconds(job) * 1000).toISOString(),
       lease_token: null,
       lease_expires_at: null,
@@ -2034,13 +2051,14 @@ const prepareImageRecipeInStages = async (
 };
 
 const markCompletedWithAssetUrl = async (job: QueueJobRow, assetUrl: string) => {
+  const r2ResultUrl = await persistProviderResultToR2(assetUrl, job.user_id, job.id, job.asset_type);
   const admin = getServiceRoleClient();
   const nextPayload = withQueueLog(job.queue_payload, 'completed', 'Đã hoàn thành và nhận kết quả.', 'success');
   await admin
     .from('generated_images')
     .update({
       status: 'completed',
-      image_url: assetUrl,
+      image_url: r2ResultUrl,
       queue_payload: compactTerminalQueuePayload(nextPayload),
       progress: 100,
       error_message: null,
@@ -2053,7 +2071,7 @@ const markCompletedWithAssetUrl = async (job: QueueJobRow, assetUrl: string) => 
     })
     .eq('id', job.id);
 
-  return nextPayload;
+  return { nextPayload, r2ResultUrl };
 };
 
 const completePolledJobWithResultUrl = async (
@@ -2067,6 +2085,8 @@ const completePolledJobWithResultUrl = async (
   if (!isResultUrlCompatibleWithAssetType(resultUrl, job.asset_type)) {
     throw new Error(`Provider returned a ${job.asset_type === 'video' ? 'non-video' : 'non-image'} result URL.`);
   }
+
+  const r2ResultUrl = await persistProviderResultToR2(resultUrl, job.user_id, job.id, job.asset_type);
 
   if (await isJobManuallyStopped(job.id)) {
     await releaseLease(job.id);
@@ -2099,7 +2119,7 @@ const completePolledJobWithResultUrl = async (
     .from('generated_images')
     .update({
       status: 'completed',
-      image_url: resultUrl,
+      image_url: r2ResultUrl,
       queue_payload: compactTerminalQueuePayload(terminalPayload),
       progress: 100,
       error_message: null,
@@ -2114,7 +2134,7 @@ const completePolledJobWithResultUrl = async (
 
   logQueueWorkerEvent('Persisted provider result URL to generated job.', {
     ...getQueueWorkerLogJob(job),
-    resultUrl,
+    resultUrl: r2ResultUrl,
   });
 
   fireTelegramJobNotification('completed', {
@@ -2128,7 +2148,7 @@ const completePolledJobWithResultUrl = async (
     engine: job.model_used,
     queueKind: job.queue_kind,
     costVcoin: job.cost_vcoin,
-    resultUrl,
+    resultUrl: r2ResultUrl,
     finishedAt: new Date().toISOString(),
     queuePayload: terminalPayload,
   });
@@ -2419,7 +2439,7 @@ const trySmartImageProviderFallback = async (
   if (
     job.queue_kind !== 'image_generate' ||
     payload.__smartProviderFallbackEnabled === false ||
-    (sourceProvider !== 'tst' && sourceProvider !== 'gommo') ||
+    (sourceProvider !== 'tst' && sourceProvider !== 'gommo' && sourceProvider !== 'gpti2') ||
     String(payload.__targetProvider || sourceProvider).trim().toLowerCase() !== sourceProvider
   ) {
     return false;
@@ -2439,17 +2459,25 @@ const trySmartImageProviderFallback = async (
     });
     return null;
   });
-  const canFallbackToGommo = sourceProvider === 'tst' && !nextTstServer && isGommoConfigured() && await canUseGommoForPayload(
+  const priority = Array.isArray(payload.__providerPriority)
+    ? payload.__providerPriority.filter((provider): provider is GenerationProvider => provider === 'tst' || provider === 'gommo' || provider === 'gpti2')
+    : [];
+  const historyProviders = new Set((Array.isArray(payload.__providerFallbackHistory) ? payload.__providerFallbackHistory : [])
+    .flatMap((entry: any) => [entry?.fromProvider, entry?.toProvider]).filter(Boolean));
+  const nextConfiguredProvider = priority.find((provider) => provider !== sourceProvider && !historyProviders.has(provider));
+  const providerOrderedTstServer = priority.length > 0 && nextConfiguredProvider !== 'tst' ? null : nextTstServer;
+  const canFallbackToGommo = sourceProvider !== 'gommo' && !providerOrderedTstServer && (!nextConfiguredProvider || nextConfiguredProvider === 'gommo') && isGommoConfigured() && await canUseGommoForPayload(
     job.queue_kind,
     { ...payload, model: identity.modelId },
   ).catch(() => false);
 
-  if (!nextTstServer && !canFallbackToGommo) {
+  if (!providerOrderedTstServer && !canFallbackToGommo && !nextConfiguredProvider) {
     return false;
   }
 
-  const targetProvider: GenerationProvider = nextTstServer ? 'tst' : 'gommo';
-  const fallbackPayload = nextTstServer ? withFallbackServer(payload, nextTstServer) : { ...payload };
+  const targetProvider: GenerationProvider = providerOrderedTstServer ? 'tst' : (nextConfiguredProvider || 'gommo');
+  if (targetProvider === 'gpti2' && !isGpti2Configured()) return false;
+  const fallbackPayload = providerOrderedTstServer ? withFallbackServer(payload, providerOrderedTstServer) : { ...payload };
   const history = Array.isArray(payload.__providerFallbackHistory)
     ? payload.__providerFallbackHistory.filter((entry) => entry && typeof entry === 'object')
     : [];
@@ -2465,7 +2493,7 @@ const trySmartImageProviderFallback = async (
         fromProvider: sourceProvider,
         fromServer: sourceProvider === 'tst' ? identity.serverId || null : null,
         toProvider: targetProvider,
-        toServer: nextTstServer || null,
+        toServer: providerOrderedTstServer || null,
         providerJobId: job.job_id || null,
         reason: String(failureMessage || 'TST provider job failed').slice(0, 1_000),
       },
@@ -2582,6 +2610,7 @@ const markPolledState = async (job: QueueJobRow, providerData: any) => {
 
   if (processingAgeMs >= getProviderProcessingTimeoutMs(job, job.queue_payload)) {
     await cancelProviderJobBestEffort(job.job_id, job.queue_payload);
+    if (await trySmartImageProviderFallback(job, 'Provider processing exceeded 30 minute limit.', currentState)) return 'requeued';
     await markFailedRespectingRefundPolicy(
       job,
       getProcessingTimeoutUserMessage(job, job.queue_payload),
@@ -2634,6 +2663,8 @@ const handlePollFailure = async (job: QueueJobRow, errorMessage: string) => {
     nextAttemptCount >= MAX_POLL_FAILURES ||
     processingAgeMs >= getProviderProcessingTimeoutMs(job, job.queue_payload)
   ) {
+    if (processingAgeMs >= getProviderProcessingTimeoutMs(job, job.queue_payload)
+      && await trySmartImageProviderFallback(job, errorMessage, state)) return 'requeued';
     const finalMessage =
       isTerminalPollFailure
         ? errorMessage
@@ -3040,7 +3071,8 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
       job.queue_payload = await markPreparing(job);
     }
 
-    if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'image_edit_recipe_v1') {
+    if (isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'image_edit_recipe_v1'
+      && String(currentPayload.__targetProvider || '').trim().toLowerCase() !== 'gpti2') {
       const editPayload = (job.queue_payload || currentPayload) as unknown as ImageEditRecipePayload;
       await updatePreProviderStage(job.id, 20);
       job.queue_payload = await persistQueueLog(
@@ -3065,7 +3097,8 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
         'Queue preparation timed out before image edit dispatch.',
       );
 
-      job.queue_payload = await markCompletedWithAssetUrl(job, resultUrl);
+      const inlineCompletion = await markCompletedWithAssetUrl(job, resultUrl);
+      job.queue_payload = inlineCompletion.nextPayload;
       fireTelegramJobNotification('completed', {
         id: job.id,
         userId: job.user_id,
@@ -3077,7 +3110,7 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
         engine: job.model_used,
         queueKind: job.queue_kind,
         costVcoin: job.cost_vcoin,
-        resultUrl,
+        resultUrl: inlineCompletion.r2ResultUrl,
         finishedAt: new Date().toISOString(),
         queuePayload: job.queue_payload,
       });

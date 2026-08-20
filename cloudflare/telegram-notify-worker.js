@@ -53,7 +53,7 @@ const formatIso = (value) => {
   if (!value) return 'N/A';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return displayValue(value);
-  return date.toISOString().replace('T', ' ').replace('.000Z', ' UTC');
+  return date.toISOString().replace('T', ' ');
 };
 
 const formatBytes = (bytes) => {
@@ -150,9 +150,12 @@ const buildSummaryLines = (payload) => {
   const job = payload?.job || {};
   const config = job?.config || {};
   const promptMeta = getPromptMeta(payload);
+  const apiName = displayValue(job?.api || job?.provider || job?.server || 'N/A');
   const lines = [
     buildHeader(payload?.app || 'App', payload?.eventType || 'queued'),
     '',
+    `API: <b>${escapeHtml(apiName)}</b>`,
+    `Thời gian tạo: ${escapeHtml(formatIso(job?.createdAt))}`,
     `• Công cụ: <b>${escapeHtml(displayValue(job?.toolName || job?.queueKind))}</b>`,
     `• Người dùng: ${escapeHtml(displayValue(job?.displayName, 'Unknown'))} | ${escapeHtml(displayValue(job?.costVcoin ?? 0, '0'))} VC`,
     `• Model: ${escapeHtml(displayValue(config?.modelId || job?.engine))}`,
@@ -212,35 +215,15 @@ const buildAlertMessage = (payload) => {
   return lines.join('\n');
 };
 
-const buildMediaCaption = (payload) =>
+const buildMediaCaption = (payload, extraLines = []) =>
   truncate(
-    [
-      buildHeader(payload?.app || 'App', payload?.eventType || 'queued').replace(/<\/?b>/g, ''),
-      `${getEventLabel(payload?.eventType)} | ${displayValue(payload?.job?.toolName || payload?.job?.queueKind)}`,
-      `${displayValue(payload?.job?.displayName, 'Unknown')} | ${displayValue(payload?.job?.costVcoin ?? 0, '0')} VC`,
-      `Model: ${displayValue(payload?.job?.config?.modelId || payload?.job?.engine)}`,
-      `App Job: ${getShortId(payload?.job?.id)}`,
-      ...(payload?.job?.providerJobId ? [`Provider: ${getShortId(payload?.job?.providerJobId)}`] : []),
-    ].join('\n'),
-    900,
+    [...buildSummaryLines(payload), ...(extraLines.length > 0 ? ['', ...extraLines] : [])].join('\n'),
+    1020,
   );
-
-const rolePriority = {
-  source: 0,
-  character: 1,
-  sample: 2,
-  keyframe: 3,
-  motion: 4,
-  reference: 5,
-  style: 9,
-};
 
 const collectCandidateMedia = (payload) => {
   const candidates = [];
   const outputUrl = isHttpUrl(payload?.media?.outputUrl) ? payload.media.outputUrl.trim() : null;
-  const inputMedia = normalizeInputMediaEntries(payload)
-    .filter((entry) => entry.userProvided !== false && entry.role !== 'style')
-    .sort((a, b) => (rolePriority[a.role] ?? 50) - (rolePriority[b.role] ?? 50));
 
   if (payload?.eventType === 'completed' && outputUrl) {
     candidates.push({
@@ -248,16 +231,6 @@ const collectCandidateMedia = (payload) => {
       role: 'output',
       kind: isVideoUrl(outputUrl) ? 'video' : 'image',
       primary: true,
-    });
-  }
-
-  const maxInputPreviews = payload?.eventType === 'completed' ? 2 : 3;
-  for (const entry of inputMedia.slice(0, maxInputPreviews)) {
-    candidates.push({
-      url: entry.url,
-      role: entry.role,
-      kind: entry.kind,
-      primary: false,
     });
   }
 
@@ -411,23 +384,16 @@ async function sendSingleJobMessage(env, payload) {
     const mediaItems = eligibleMedia.slice(0, 4).map((item, index) => ({
       type: item.type,
       media: item.url,
-      ...(index === 0 ? { caption: buildMediaCaption(payload), parse_mode: 'HTML' } : {}),
+      ...(index === 0 ? { caption: buildMediaCaption(payload, extraLinks), parse_mode: 'HTML' } : {}),
     }));
 
     await sendMediaGroup(env, mediaItems);
 
-    if (extraLinks.length > 0) {
-      await sendText(env, buildTextMessage(payload, extraLinks));
-    }
     return;
   }
 
   if (eligibleMedia.length === 1) {
-    await sendMedia(env, eligibleMedia[0], buildMediaCaption(payload));
-
-    if (extraLinks.length > 0) {
-      await sendText(env, buildTextMessage(payload, extraLinks));
-    }
+    await sendMedia(env, eligibleMedia[0], buildMediaCaption(payload, extraLinks));
     return;
   }
 

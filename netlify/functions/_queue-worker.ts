@@ -207,6 +207,7 @@ const STALE_RECOVERY_MIN_AGE_MS = 45_000;
 const STALE_PROVIDER_POLL_RECOVERY_MIN_AGE_MS = 45_000;
 const AMBIGUOUS_DISPATCH_DUPLICATE_PROTECTION_MESSAGE =
   'Khong nhan duoc xac nhan provider job goc sau loi mang/timeout. Job da dung de tranh tao them provider moi.';
+const VIDEO_OR_MOTION_QUEUE_KINDS = new Set(['video_generate', 'motion_generate']);
 
 const getQueuePayloadModelId = (payload: Record<string, unknown>) => {
   const recipe = payload.__recipePayload && typeof payload.__recipePayload === 'object'
@@ -226,7 +227,11 @@ const getGlobalGenerationProvider = async (modelId: string, featureKey?: string)
     if (error) throw error;
     const normalizedFeatureKey = String(featureKey || '').trim().toLowerCase() as GenerationProviderRouteKey;
     const featureProvider = String(normalizedFeatureKey ? data?.value?.providerByFeature?.[normalizedFeatureKey] || '' : '').trim().toLowerCase();
-    if (featureProvider === 'gommo' || featureProvider === 'tst' || featureProvider === 'gpti2') return featureProvider as GenerationProvider;
+    if (featureProvider === 'gommo' || featureProvider === 'tst' || featureProvider === 'gpti2') {
+      return normalizedFeatureKey === 'video_generation' || normalizedFeatureKey === 'motion_control'
+        ? (featureProvider === 'gpti2' ? 'tst' : featureProvider)
+        : featureProvider as GenerationProvider;
+    }
     const featureDefault = normalizedFeatureKey ? DEFAULT_PROVIDER_BY_FEATURE[normalizedFeatureKey] : undefined;
     if (featureDefault) return featureDefault;
     const selected = String(data?.value?.provider || '').trim().toLowerCase();
@@ -244,6 +249,8 @@ const getGlobalGenerationProvider = async (modelId: string, featureKey?: string)
 
 const resolveDispatchProvider = async (payload: Record<string, unknown>): Promise<GenerationProvider> => {
   const stored = String(payload.__targetProvider || '').trim().toLowerCase();
+  const queueKind = String(payload.queueKind || '').trim().toLowerCase();
+  if (stored === 'gpti2' && VIDEO_OR_MOTION_QUEUE_KINDS.has(queueKind)) return 'tst';
   if (stored === 'tst' || stored === 'gommo' || stored === 'gpti2') return stored;
   return getGlobalGenerationProvider(
     getQueuePayloadModelId(payload),

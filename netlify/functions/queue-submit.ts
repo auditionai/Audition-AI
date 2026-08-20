@@ -34,6 +34,7 @@ const PROVIDER_CONCURRENCY_LIMITS = {
   gpti2: { userImage: 3, userVideo: 0 },
 } as const;
 const TST_QUEUE_KINDS = new Set(['image_generate', 'video_generate', 'motion_generate']);
+const VIDEO_OR_MOTION_QUEUE_KINDS = new Set(['video_generate', 'motion_generate']);
 const TST_QUEUE_KIND_VALUES = Array.from(TST_QUEUE_KINDS);
 type GenerationProvider = 'tst' | 'gommo' | 'gpti2';
 const UUID_PATTERN =
@@ -180,7 +181,7 @@ const getQueueModelId = (queuePayload?: Record<string, unknown> | null) => {
 
 const ensureProviderConfiguredForQueueKind = (queueKind: string | undefined, provider: GenerationProvider) => {
   const normalizedQueueKind = String(queueKind || '').trim().toLowerCase();
-  if (!TST_QUEUE_KINDS.has(normalizedQueueKind)) {
+  if (!VIDEO_OR_MOTION_QUEUE_KINDS.has(normalizedQueueKind)) {
     return;
   }
 

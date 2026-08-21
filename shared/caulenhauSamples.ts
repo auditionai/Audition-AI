@@ -5,7 +5,7 @@ const PROMPT_LIBRARY_CACHE_PREFIX = 'auditionai:caulenhau-samples:v2';
 const PROMPT_LIBRARY_CACHE_TTL_MS = 5 * 60 * 1000;
 const PROMPT_LIBRARY_NEW_WINDOW_MS = 48 * 60 * 60 * 1000;
 
-export type CaulenhauSampleCategoryId = 'all' | 'single' | 'couple' | 'group3' | 'group4' | 'group5';
+export type CaulenhauSampleCategoryId = 'all' | 'single' | 'couple' | 'group3' | 'group4' | 'group5' | 'group6' | 'group7' | 'group8';
 export type PromptLibrarySortMode = 'newest' | 'popular';
 
 export interface CaulenhauSampleCategory {
@@ -78,6 +78,27 @@ export const CAULENHAU_SAMPLE_CATEGORIES: CaulenhauSampleCategory[] = [
     description: 'Lấy từ chuyên mục Ảnh Nhóm 5 trên CauLenhAu.',
     categoryId: 6,
   },
+  {
+    id: 'group6',
+    label: 'Nhóm 6',
+    shortLabel: 'Nhóm 6',
+    description: 'Lấy từ chuyên mục Ảnh Nhóm 6 trên CauLenhAu.',
+    categoryId: 7,
+  },
+  {
+    id: 'group7',
+    label: 'Nhóm 7',
+    shortLabel: 'Nhóm 7',
+    description: 'Lấy từ chuyên mục Ảnh Nhóm 7 trên CauLenhAu.',
+    categoryId: 8,
+  },
+  {
+    id: 'group8',
+    label: 'Nhóm 8',
+    shortLabel: 'Nhóm 8',
+    description: 'Lấy từ chuyên mục Ảnh Nhóm 8 trên CauLenhAu.',
+    categoryId: 9,
+  },
 ];
 
 const CAULENHAU_VISIBLE_CATEGORY_IDS = CAULENHAU_SAMPLE_CATEGORIES
@@ -90,6 +111,9 @@ const PROMPT_LIBRARY_FEATURE_BY_CATEGORY_ID: Record<number, string> = {
   4: 'group_3_gen',
   5: 'group_4_gen',
   6: 'group_5_gen',
+  7: 'group_6_gen',
+  8: 'group_7_gen',
+  9: 'group_8_gen',
 };
 
 export const getPromptLibraryFeatureId = (sample: CaulenhauSamplePrompt) => (

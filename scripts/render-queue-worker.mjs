@@ -274,7 +274,7 @@ const runOperationalMaintenanceIfDue = async () => {
 
   for (const { name, args } of [
     { name: 'compact_terminal_generated_image_payloads', args: { p_limit: 1, p_failed_min_age_days: 7 } },
-    { name: 'cleanup_expired_operational_history', args: { p_limit: 20, p_retention_days: 30 } },
+    { name: 'cleanup_expired_operational_history', args: { p_limit: 20, p_retention_days: 7 } },
   ]) {
     const { data, error } = await admin.rpc(name, args);
     if (error) {

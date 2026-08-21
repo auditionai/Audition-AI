@@ -35,17 +35,18 @@ export const handler = async (event, context) => {
   }
   
   try {
-    // 1. Calculate Date Threshold (30 days ago)
+    const RETENTION_DAYS = 7;
+    // 1. Calculate Date Threshold
     const retentionThreshold = new Date();
-    retentionThreshold.setDate(retentionThreshold.getDate() - 30);
+    retentionThreshold.setDate(retentionThreshold.getDate() - RETENTION_DAYS);
     const isoDate = retentionThreshold.toISOString();
     const now = Date.now();
-    const retentionMs = 30 * 24 * 60 * 60 * 1000;
+    const retentionMs = RETENTION_DAYS * 24 * 60 * 60 * 1000;
 
     let deletedCount = 0;
     const errors = [];
 
-    // 2. Query assets to delete: Older than 30 days AND NOT public (shared)
+    // 2. Query assets to delete: Older than the retention window AND NOT public (shared)
     const { data: imagesToDelete, error } = await supabase
       .from('generated_images')
       .select('id, user_id, is_public, image_url')

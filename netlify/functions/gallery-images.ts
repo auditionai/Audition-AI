@@ -11,7 +11,7 @@ const headers = {
 
 const GALLERY_PAGE_LIMIT = 100;
 const LEDGER_RECOVERY_LIMIT = 24;
-const GALLERY_HISTORY_LOOKBACK_DAYS = 30;
+const GALLERY_HISTORY_LOOKBACK_DAYS = 7;
 const ACTIVE_GALLERY_CACHE_TTL_MS = 10_000;
 const IDLE_GALLERY_CACHE_TTL_MS = 30_000;
 
@@ -137,7 +137,12 @@ export const handler: Handler = async (event) => {
       throw error;
     }
 
+    const gallerySinceMs = Date.now() - GALLERY_HISTORY_LOOKBACK_DAYS * 24 * 60 * 60 * 1000;
     const rows = (data || []).filter((row: any) => {
+      const createdAt = Date.parse(String(row?.created_at || ''));
+      if (!Number.isFinite(createdAt) || createdAt < gallerySinceMs) {
+        return false;
+      }
       if (!isDirectImageEditQueueKind(row?.queue_kind)) {
         return true;
       }

@@ -55,6 +55,8 @@ import {
   getGommoModelForAudition,
   isGommoCatalogModelAvailable,
   isSelectableGommoImageResolution,
+  GPTI2_SERVER_ID,
+  GPTI2_SERVER_LABEL,
   resolveProviderForModel,
   type GommoProviderCatalog,
 } from '../../services/providerCatalog';
@@ -73,6 +75,9 @@ interface GenerationToolProps {
 type GenMode = 'single' | 'couple' | 'group3' | 'group4' | 'group5' | 'group6' | 'group7' | 'group8';
 type Stage = 'input' | 'processing' | 'result';
 type Resolution = string;
+const GPTI2_IMAGE_RESOLUTIONS = ['1K', '2K', '4K'];
+const GPTI2_NANO_RESOLUTIONS = ['1K', '2K', '4K'];
+const GPTI2_ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'];
 
 const IMAGE_MODEL_OPTIONS: Array<{
   tier: TstGenerationTier;
@@ -329,23 +334,26 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   }));
 
   const generationSpeedId = uiSpeedToTst(speed) || 'fast';
-  const generationServerId = uiServerToTst(server) || 'fast';
   const generationTier = aiModel;
   const selectedModelId = getGenerationModelId(aiModel);
   const selectedProvider = resolveProviderForModel(providerConfig, selectedModelId, providerRouteKey);
+  const generationServerId = selectedProvider === 'gpti2' ? GPTI2_SERVER_ID : uiServerToTst(server) || 'fast';
   useEffect(() => setActiveQueueProvider(selectedProvider), [selectedProvider]);
   const providerQueueStats = getProviderQueueStats(queueStats, selectedProvider);
   const providerConcurrencyLimits = getProviderConcurrencyLimits(selectedProvider);
   const selectedGommoModel = getGommoModelForAudition(gommoCatalog, selectedModelId);
   const isGommoSelected = selectedProvider === 'gommo';
+  const isGpti2Selected = selectedProvider === 'gpti2';
+  const pricingServerId = isGpti2Selected ? undefined : generationServerId;
   const tstAspectRatios = useMemo(
       () => getGenerationAspectRatios(generationTier, runtimeModels),
       [generationTier, runtimeModels],
   );
+  const availableAspectRatios = isGpti2Selected ? GPTI2_ASPECT_RATIOS : tstAspectRatios;
   const tstAvailableResolutions = getCompatibleGenerationResolutions({
       tier: generationTier,
       pricingEntries,
-      serverId: generationServerId,
+      serverId: pricingServerId || '',
       speed: generationSpeedId,
       quality: aiModel === 'gpt' ? gptQuality : undefined,
   });
@@ -358,26 +366,30 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       ? (selectedGommoModel?.resolutions || [])
           .filter((option) => isSelectableGommoImageResolution(selectedModelId, option.type))
           .map((option) => option.type.toUpperCase())
-      : tstAvailableResolutions.length > 0 ? tstAvailableResolutions : tstRuntimeResolutions;
+      : isGpti2Selected
+          ? (selectedModelId === 'image-gpt-2' || selectedModelId === 'gpt-image-2' ? GPTI2_IMAGE_RESOLUTIONS : GPTI2_NANO_RESOLUTIONS)
+          : tstAvailableResolutions.length > 0 ? tstAvailableResolutions : tstRuntimeResolutions;
   const availableSpeeds = getCompatibleGenerationSpeeds({
       tier: generationTier,
       pricingEntries,
       resolution: resolution as TstResolution,
       quality: aiModel === 'gpt' ? gptQuality : undefined,
   });
-  const availableServers = getCompatibleGenerationServers({
-      tier: generationTier,
-      pricingEntries,
-      speed: generationSpeedId,
-      resolution: resolution as TstResolution,
-      quality: aiModel === 'gpt' ? gptQuality : undefined,
-  });
+  const availableServers = selectedProvider === 'gpti2'
+      ? [GPTI2_SERVER_ID]
+      : getCompatibleGenerationServers({
+          tier: generationTier,
+          pricingEntries,
+          speed: generationSpeedId,
+          resolution: resolution as TstResolution,
+          quality: aiModel === 'gpt' ? gptQuality : undefined,
+      });
   const tstSelectedGenerationCost = getGenerationCostBreakdown({
       tier: generationTier,
       resolution: resolution as TstResolution,
       quality: aiModel === 'gpt' ? gptQuality : undefined,
       speed: generationSpeedId,
-      serverId: generationServerId,
+       serverId: pricingServerId || '',
       pricingEntries,
       pricingOverrides
   });
@@ -411,14 +423,14 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const flashResolutionCosts = getResolutionCostMap({
       tier: 'flash',
       speed: generationSpeedId,
-      serverId: generationServerId,
+      serverId: pricingServerId,
       pricingEntries,
       pricingOverrides
   });
   const proResolutionCosts = getResolutionCostMap({
       tier: 'pro',
       speed: generationSpeedId,
-      serverId: generationServerId,
+      serverId: pricingServerId,
       pricingEntries,
       pricingOverrides
   });
@@ -426,7 +438,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       tier: 'gpt',
       quality: gptQuality,
       speed: generationSpeedId,
-      serverId: generationServerId,
+      serverId: pricingServerId,
       pricingEntries,
       pricingOverrides
   });
@@ -452,6 +464,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       if (resolveProviderForModel(providerConfig, modelId, providerRouteKey) === 'gommo') {
           return isGommoCatalogModelAvailable(getGommoModelForAudition(gommoCatalog, modelId));
       }
+      if (resolveProviderForModel(providerConfig, modelId, providerRouteKey) === 'gpti2') {
+          return ['image-gpt-2', 'nano-banana-2', 'nano-banana-pro'].includes(modelId);
+      }
       return runtimeImageModelIds.has(modelId) && pricingEntries.some((entry) => entry.model.trim().toLowerCase() === modelId);
   };
   const isFlashAvailable = isTierAvailable('flash');
@@ -465,6 +480,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const isCatalogReady = !catalogLoading && (
       isGommoSelected
           ? isGommoCatalogModelAvailable(selectedGommoModel) && selectedGenerationCost.available
+          : isGpti2Selected
+              ? selectedGenerationCost.available
           : !catalogError && pricingEntries.length > 0 && runtimeModels.length > 0
   );
   const hasCharacterImagesReady = characters.every((char) => !!char.bodyImage);
@@ -475,8 +492,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       !prompt.trim() ||
       !hasCharacterImagesReady ||
       (aiModel === 'flash' ? !isFlashAvailable : aiModel === 'pro' ? !isProAvailable : !isGptAvailable);
-  const availableSpeedLabels = isGommoSelected ? [] : availableSpeeds.map((speedId) => speedId === 'slow' ? 'Tiết Kiệm' : 'Nhanh');
-  const availableServerLabels = isGommoSelected ? [] : availableServers.map((serverId) => tstServerToUi(serverId));
+  const availableSpeedLabels = isGommoSelected || isGpti2Selected ? [] : availableSpeeds.map((speedId) => speedId === 'slow' ? 'Tiết Kiệm' : 'Nhanh');
+  const availableServerLabels = isGommoSelected ? [] : selectedProvider === 'gpti2' ? [GPTI2_SERVER_LABEL] : availableServers.map((serverId) => tstServerToUi(serverId));
   const gommoModes = isGommoSelected ? (selectedGommoModel?.modes || []) : [];
   const gommoModeGroups = isGommoSelected && selectedGommoModel
       ? getGommoServerGroups(selectedGommoModel)
@@ -685,12 +702,19 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           return;
       }
       gommoDefaultSelectionKeyRef.current = '';
+      if ((selectedProvider as string) === 'gpti2') {
+          if (server !== GPTI2_SERVER_LABEL) setServer(GPTI2_SERVER_LABEL);
+          const gpti2Resolutions = selectedModelId === 'image-gpt-2' || selectedModelId === 'gpt-image-2' ? GPTI2_IMAGE_RESOLUTIONS : GPTI2_NANO_RESOLUTIONS;
+          if (!gpti2Resolutions.includes(resolution)) setResolution(gpti2Resolutions[0]);
+          if (!GPTI2_ASPECT_RATIOS.includes(aspectRatio)) setAspectRatio(GPTI2_ASPECT_RATIOS[0]);
+          return;
+      }
       if (tstAspectRatios.length > 0 && !tstAspectRatios.includes(aspectRatio)) {
           setAspectRatio(tstAspectRatios[0]);
           return;
       }
       const requestedSpeedId = uiSpeedToTst(speed) || 'fast';
-      const requestedServerId = uiServerToTst(server) || 'fast';
+      const requestedServerId = selectedProvider === 'gpti2' ? GPTI2_SERVER_ID : uiServerToTst(server) || 'fast';
       const nextSelection = resolveGenerationSelection({
           tier: aiModel,
           pricingEntries,
@@ -715,7 +739,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       if (nextSpeedLabel !== speed) {
           setSpeed(nextSpeedLabel);
       }
-  }, [aiModel, aspectRatio, gptQuality, isGommoSelected, pricingEntries, providerMode, resolution, selectedGommoModel, server, speed, tstAspectRatios]);
+  }, [aiModel, aspectRatio, gptQuality, isGommoSelected, pricingEntries, providerMode, resolution, selectedGommoModel, selectedProvider, server, speed, tstAspectRatios]);
 
   useEffect(() => {
       if (!isGommoSelected || !['group6', 'group7', 'group8'].includes(activeMode)) return;
@@ -779,13 +803,13 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
               targetCategoryId = 6;
               catName = "Ảnh Nhóm 5";
           } else if (activeMode === 'group6') {
-              targetCategoryId = 6;
+              targetCategoryId = 7;
               catName = "Ảnh Nhóm 6";
           } else if (activeMode === 'group7') {
-              targetCategoryId = 6;
+              targetCategoryId = 8;
               catName = "Ảnh Nhóm 7";
           } else if (activeMode === 'group8') {
-              targetCategoryId = 6;
+              targetCategoryId = 9;
               catName = "Ảnh Nhóm 8";
           }
           setCurrentCategoryName(catName);
@@ -1004,7 +1028,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
     const styleDirectivePrompt = buildAuditionKoreaMmoStylePrompt(styleMetadata?.trigger_prompt || styleMetadata?.name || null);
     const basePrompt = `${activeFeature.defaultPrompt || ''}${prompt}`.trim();
     const requestedSpeedId = uiSpeedToTst(speed) || 'fast';
-    const requestedServerId = uiServerToTst(server) || 'fast';
+    const requestedServerId = isGpti2Selected ? GPTI2_SERVER_ID : uiServerToTst(server) || 'fast';
     const compatibleServers = getCompatibleGenerationServers({
         tier: aiModel,
         pricingEntries,
@@ -1012,7 +1036,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
         resolution: resolution as TstResolution,
         quality: aiModel === 'gpt' ? gptQuality : undefined,
     });
-    const effectiveServerId = isGommoSelected
+    const effectiveServerId = isGpti2Selected
+        ? GPTI2_SERVER_ID
+        : isGommoSelected
         ? undefined
         : compatibleServers.includes(requestedServerId)
             ? requestedServerId
@@ -1179,7 +1205,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   };
 
   const ratios = !isGommoSelected
-      ? tstAspectRatios.map((ratio) => ({ id: ratio, label: ratio, desc: '' }))
+      ? availableAspectRatios.map((ratio) => ({ id: ratio, label: ratio, desc: '' }))
       : isGommoSelected && selectedGommoModel?.ratios.length
       ? selectedGommoModel.ratios.map((option) => ({ id: option.type, label: option.name || option.type, desc: '' }))
       : [

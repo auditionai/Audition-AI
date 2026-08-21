@@ -22,9 +22,10 @@ export interface QueueStats {
   systemQueued: number;
   tst: ProviderQueueStats;
   gommo: ProviderQueueStats;
+  gpti2: ProviderQueueStats;
 }
 
-export type QueueProvider = 'tst' | 'gommo';
+export type QueueProvider = 'tst' | 'gommo' | 'gpti2';
 
 export interface ProviderQueueStats {
   myImageProcessing: number;
@@ -64,6 +65,7 @@ const GOMMO_CONCURRENCY_LIMITS = {
 export const PROVIDER_CONCURRENCY_LIMITS = {
   tst: TST_CONCURRENCY_LIMITS,
   gommo: GOMMO_CONCURRENCY_LIMITS,
+  gpti2: GOMMO_CONCURRENCY_LIMITS,
 } as const;
 
 // Backwards-compatible alias for older UI that has not selected a provider.
@@ -134,6 +136,7 @@ const EMPTY_QUEUE_STATS: QueueStats = {
   systemQueued: 0,
   tst: { ...EMPTY_PROVIDER_QUEUE_STATS },
   gommo: { ...EMPTY_PROVIDER_QUEUE_STATS },
+  gpti2: { ...EMPTY_PROVIDER_QUEUE_STATS },
 };
 
 const BUSY_QUEUE_POLL_MS = 20_000;
@@ -355,7 +358,8 @@ const fetchSharedQueueStats = async (force = false) => {
         systemVideoProcessing: Number(row?.system_video_processing || 0),
         systemQueued: Number(row?.system_queued || 0),
         tst: tstStats,
-        gommo: gommoStats,
+  gommo: gommoStats,
+        gpti2: gommoStats,
       };
       notifyQueueStatsSubscribers();
       await refreshCurrentJobs();

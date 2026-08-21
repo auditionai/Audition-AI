@@ -1482,14 +1482,14 @@ export const getResolutionCostMap = ({
   tier: TstGenerationTier;
   quality?: string;
   speed: string;
-  serverId: string;
+  serverId?: string;
   pricingEntries?: TstPricingEntry[];
   pricingOverrides?: AuditionPricingOverride[];
 }) =>
   Object.fromEntries(
     (['1K', '2K', '4K'] as TstResolution[]).map((resolution) => [
       resolution,
-      getGenerationCostBreakdown({ tier, resolution, quality, speed, serverId, pricingEntries, pricingOverrides }),
+      getGenerationCostBreakdown({ tier, resolution, quality, speed, serverId: serverId || '', pricingEntries, pricingOverrides }),
     ]),
   ) as Record<TstResolution, TstGenerationCostBreakdown>;
 
@@ -1842,7 +1842,7 @@ export const getMotionCostBreakdown = ({
   pricingOverrides = [],
 }: {
   modelId: string;
-  serverId: string;
+  serverId?: string;
   resolution: string;
   speed?: string;
   durationSeconds?: number | null;

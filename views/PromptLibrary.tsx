@@ -94,12 +94,6 @@ const sortSamplesForMode = (items: CaulenhauSamplePrompt[], sortMode: PromptLibr
   return [...items].sort((a, b) => (b.total_use_count || 0) - (a.total_use_count || 0));
 };
 
-const formatUseCount = (value = 0) => {
-  if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
-  if (value >= 1000) return `${(value / 1000).toFixed(1)}K`;
-  return String(value);
-};
-
 export const PromptLibrary: React.FC<PromptLibraryProps> = ({ onUsePrompt }) => {
   const { notify } = useNotification();
   const [activeCategoryId, setActiveCategoryId] = useState<CaulenhauSampleCategoryId>('all');
@@ -362,7 +356,6 @@ export const PromptLibrary: React.FC<PromptLibraryProps> = ({ onUsePrompt }) => 
         <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
           {samples.map((sample) => {
             const tags = getPromptLibraryTags(sample);
-            const useCount = sample.total_use_count || 0;
             return (
               <article 
                 key={sample.id} 
@@ -393,9 +386,6 @@ export const PromptLibrary: React.FC<PromptLibraryProps> = ({ onUsePrompt }) => 
                 </div>
 
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between text-[10px] font-bold text-slate-400">
-                    <span>{useCount > 0 ? `${formatUseCount(useCount)} lượt dùng` : 'Mới'}</span>
-                  </div>
                   <button
                     onClick={() => void handleUsePrompt(sample)}
                     className="w-full neu-button-primary py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-md"

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json.schemastore.org/wrangler.json",
+  "name": "audition-ai-r2-ingest",
+  "main": "./r2-ingest-worker.js",
+  "compatibility_date": "2026-08-20",
+  "account_id": "78f7350b1a80ef8bf2c8c2f25547f189",
+  "r2_buckets": [
+    {
+      "binding": "ASSETS",
+      "bucket_name": "audition-ai-images"
+    }
+  ],
+  "vars": {
+    "PUBLIC_URL": "https://pub-edbe379bb8ae48e3b618166c1ec678ca.r2.dev",
+    "TELEGRAM_NOTIFY_WEBHOOK_URL": "https://auditionai-telegram-notify.cuongnguyen28041997.workers.dev/"
+  },
+  "triggers": {
+    "crons": ["0 17 * * SUN"]
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}

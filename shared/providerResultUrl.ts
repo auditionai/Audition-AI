@@ -30,6 +30,7 @@ export const isResultUrlCompatibleWithAssetType = (
   assetType: GeneratedAssetType,
   fieldHint?: GeneratedAssetType | null,
 ): value is string => {
+  if (assetType === 'image' && typeof value === 'string' && /^data:image\//i.test(value.trim())) return true;
   const normalized = normalizeHttpUrl(value);
   if (!normalized) return false;
   if (fieldHint && fieldHint !== assetType) return false;
@@ -50,9 +51,11 @@ const extractFromValue = (
   assetType: GeneratedAssetType,
   fieldHint: GeneratedAssetType | null = null,
 ): string | null => {
-  const direct = normalizeHttpUrl(value);
-  if (direct) {
-    return isResultUrlCompatibleWithAssetType(direct, assetType, fieldHint) ? direct : null;
+  if (typeof value === 'string') {
+    const direct = value.trim();
+    if (isResultUrlCompatibleWithAssetType(direct, assetType, fieldHint)) {
+      return direct;
+    }
   }
   if (Array.isArray(value)) {
     for (const item of value) {

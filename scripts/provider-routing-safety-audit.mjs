@@ -311,6 +311,9 @@ assert(queueSubmitSource.includes('MODEL_NOT_ALLOWED_FOR_FEATURE'));
 assert(queueSubmitSource.includes('GOMMO_SERVER_DISABLED'));
 assert(queueSubmitSource.includes("queueKind === 'motion_generate'"));
 assert(queueSubmitSource.includes('motionVideoDurationSeconds'));
+assert(queueSubmitSource.includes("requestedProvider === 'gommo' || requestedProvider === 'gpti2'"));
+assert(queueSubmitSource.includes('provider: targetProvider'));
+assert(queueSubmitSource.includes("if (targetProvider === 'gpti2')"));
 
 const recipeSource = await readFile(new URL('../netlify/functions/_queue-recipes.ts', import.meta.url), 'utf8');
 assert(recipeSource.includes('uploadReferencesToTst ? (isUserOnlyPrompt ? 5 : 4) : 8'));
@@ -323,6 +326,19 @@ assert(recipeSource.includes("payload.recipeType === 'motion_generate_recipe_v1'
 assert(recipeSource.includes("background_source: payload.backgroundSource || 'input_image'"));
 assert(!gommoSource.includes('uploadImageToTst'));
 assert(!gommoSource.includes('TST_API'));
+
+const queueWorkerSource = await readFile(new URL('../netlify/functions/_queue-worker.ts', import.meta.url), 'utf8');
+assert(queueWorkerSource.includes("targetProvider === 'tst' || targetProvider === 'gpti2'"));
+assert(queueWorkerSource.includes("String(toQueuePayloadObject(recipePayload).__targetProvider || '').trim().toLowerCase() === 'gpti2'"));
+assert(queueWorkerSource.includes("targetProvider === 'tst' || targetProvider === 'gommo' || targetProvider === 'gpti2'"));
+
+const gpti2ProviderSource = await readFile(new URL('../netlify/functions/_gpti2-provider.ts', import.meta.url), 'utf8');
+assert(gpti2ProviderSource.includes('const GPTI2_TIMEOUT_MS = 295_000;'));
+assert(gpti2ProviderSource.includes("form.append('image[]'"));
+assert(gpti2ProviderSource.includes("request('/images/edits'"));
+assert(gpti2ProviderSource.includes("'9:16': '720x1280'"));
+assert(gpti2ProviderSource.includes("'21:9': '1280x544'"));
+assert(gpti2ProviderSource.includes("raw.startsWith('data:') || /^https?:\\/\\//i.test(raw)"));
 
 for (const filename of ['../views/features/GenerationTool.tsx', '../mobile-app/src/v2/views/WorkspaceImage.tsx']) {
   const source = await readFile(new URL(filename, import.meta.url), 'utf8');

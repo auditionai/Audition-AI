@@ -31,10 +31,12 @@ const USER_QUEUE_LIMIT = 3;
 const PROVIDER_CONCURRENCY_LIMITS = {
   tst: { userImage: 3, userVideo: 3 },
   gommo: { userImage: 3, userVideo: 3 },
+  gpti2: { userImage: 3, userVideo: 0 },
 } as const;
 const TST_QUEUE_KINDS = new Set(['image_generate', 'video_generate', 'motion_generate']);
+const VIDEO_OR_MOTION_QUEUE_KINDS = new Set(['video_generate', 'motion_generate']);
 const TST_QUEUE_KIND_VALUES = Array.from(TST_QUEUE_KINDS);
-type GenerationProvider = 'tst' | 'gommo';
+type GenerationProvider = 'tst' | 'gommo' | 'gpti2';
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PHONE_USER_AGENT_PATTERN = /iphone|ipod|android.+mobile|windows phone|blackberry|opera mini|mobile safari/i;
@@ -110,10 +112,14 @@ const getGenerationProvider = async (
   admin: ReturnType<typeof getServiceRoleClient>,
   modelId: string,
   featureKey?: GenerationProviderRouteKey | null,
-): Promise<{ provider: GenerationProvider; smartFallbackEnabled: boolean; allowedModels: string[] | null }> => {
+): Promise<{ provider: GenerationProvider; smartFallbackEnabled: boolean; allowedModels: string[] | null; priority: GenerationProvider[] }> => {
   const fallback = String(process.env.GENERATION_PROVIDER_DEFAULT || 'tst').trim().toLowerCase() === 'gommo'
     ? 'gommo'
     : 'tst';
+  const defaultPriority = (provider: GenerationProvider): GenerationProvider[] =>
+    featureKey === 'video_generation' || featureKey === 'motion_control'
+      ? provider === 'tst' ? ['tst', 'gommo'] : [provider, 'tst']
+      : provider === 'gpti2' ? ['gpti2', 'tst', 'gommo'] : provider === 'tst' ? ['tst', 'gommo'] : ['gommo', 'tst'];
   try {
     const { data, error } = await admin
       .from('system_settings')
@@ -122,34 +128,46 @@ const getGenerationProvider = async (
       .maybeSingle();
     if (error) throw error;
     const allowedModels = getAllowedModelsForFeature(data?.value, featureKey);
+    const configuredPriority = (featureKey && data?.value?.providerPriorityByFeature?.[featureKey]) || data?.value?.providerPriorityByModel?.[modelId];
+    let priority = Array.isArray(configuredPriority) ? configuredPriority.filter((provider: unknown): provider is GenerationProvider => provider === 'tst' || provider === 'gommo' || provider === 'gpti2') : [];
+    if (featureKey === 'video_generation' || featureKey === 'motion_control') {
+      priority = priority.filter((provider) => provider === 'tst' || provider === 'gommo');
+    }
     const featureProvider = String(featureKey ? data?.value?.providerByFeature?.[featureKey] || '' : '').trim().toLowerCase();
-    if (featureProvider === 'gommo' || featureProvider === 'tst') {
-      return { provider: featureProvider, smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false, allowedModels };
+    if (!priority.length && (featureProvider === 'gommo' || featureProvider === 'tst' || featureProvider === 'gpti2')) {
+      priority = defaultPriority(featureProvider);
+      if (featureKey === 'video_generation' || featureKey === 'motion_control') {
+        priority = priority.filter((provider) => provider === 'tst' || provider === 'gommo');
+      }
+    }
+    if (priority.length) {
+      return { provider: priority[0], smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false, allowedModels, priority };
     }
     const featureDefault = featureKey ? DEFAULT_PROVIDER_BY_FEATURE[featureKey] : undefined;
     if (featureDefault) {
-      return { provider: featureDefault, smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false, allowedModels };
+      const featurePriority = defaultPriority(featureDefault).filter((provider) => featureKey === 'video_generation' || featureKey === 'motion_control' ? provider !== 'gpti2' : true);
+      return { provider: featurePriority[0], smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false, allowedModels, priority: featurePriority };
     }
     const selected = String(data?.value?.provider || '').trim().toLowerCase();
     if (featureKey) {
       return {
-        provider: selected === 'gommo' ? 'gommo' : selected === 'tst' ? 'tst' : fallback,
+        provider: (selected === 'gommo' || selected === 'tst') && (featureKey === 'video_generation' || featureKey === 'motion_control') ? selected : selected === 'gommo' ? 'gommo' : selected === 'gpti2' ? 'gpti2' : selected === 'tst' ? 'tst' : fallback,
         smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false,
-        allowedModels,
+        allowedModels, priority: (featureKey === 'video_generation' || featureKey === 'motion_control') ? ['tst', 'gommo'] : defaultPriority(fallback),
       };
     }
     const modelProvider = String(data?.value?.providerByModel?.[modelId] || '').trim().toLowerCase();
-    if (modelProvider === 'gommo' || modelProvider === 'tst') {
-      return { provider: modelProvider, smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false, allowedModels };
+    if (modelProvider === 'gommo' || modelProvider === 'tst' || modelProvider === 'gpti2') {
+      return { provider: modelProvider, smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false, allowedModels, priority: priority.length ? priority : defaultPriority(modelProvider) };
     }
     return {
-      provider: selected === 'gommo' ? 'gommo' : selected === 'tst' ? 'tst' : fallback,
+      provider: selected === 'gommo' ? 'gommo' : selected === 'gpti2' ? 'gpti2' : selected === 'tst' ? 'tst' : fallback,
       smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false,
-      allowedModels,
+      allowedModels, priority: priority.length ? priority : defaultPriority(fallback),
     };
   } catch (error) {
     console.warn('[queue-submit] Could not read generation provider mode; using deployment default.', error);
-    return { provider: fallback, smartFallbackEnabled: true, allowedModels: getAllowedModelsForFeature(null, featureKey) };
+    return { provider: fallback, smartFallbackEnabled: true, allowedModels: getAllowedModelsForFeature(null, featureKey), priority: defaultPriority(fallback) };
   }
 };
 
@@ -163,8 +181,12 @@ const getQueueModelId = (queuePayload?: Record<string, unknown> | null) => {
 
 const ensureProviderConfiguredForQueueKind = (queueKind: string | undefined, provider: GenerationProvider) => {
   const normalizedQueueKind = String(queueKind || '').trim().toLowerCase();
-  if (!TST_QUEUE_KINDS.has(normalizedQueueKind)) {
+  if (!VIDEO_OR_MOTION_QUEUE_KINDS.has(normalizedQueueKind)) {
     return;
+  }
+
+  if (provider === 'gpti2') {
+    throw new Error('GPTi2 chỉ hỗ trợ tạo ảnh; video và Motion Control chỉ dùng API 2 (TST) hoặc API 3 (Gommo).');
   }
 
   const hasTst = Boolean(String(process.env.TST_API_KEY || '').trim());
@@ -444,8 +466,11 @@ const resolveServerCostVcoin = async (
   queuePayload: Record<string, unknown>,
   targetProvider?: GenerationProvider,
 ) => {
-  const resolvedProvider = targetProvider || (queuePayload.__targetProvider === 'gommo' ? 'gommo' : 'tst');
-  if (resolvedProvider === 'gommo') {
+  const storedProvider = String(queuePayload.__targetProvider || '').trim().toLowerCase();
+  const resolvedProvider = targetProvider || (
+    storedProvider === 'gommo' || storedProvider === 'gpti2' ? storedProvider : 'tst'
+  );
+  if (resolvedProvider === 'gommo' || resolvedProvider === 'gpti2') {
     return resolveGommoCostFromAuditionPricing(admin, queueKind, queuePayload);
   }
   const validation = await validateQueuePayloadAgainstLiveCatalog(queueKind, queuePayload, {
@@ -483,7 +508,10 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
   const queueKind = body.queueKind || (assetType === 'video' ? 'video_generate' : 'image_generate');
   const clientPlatform = normalizeQueueClientPlatform(body.clientPlatform) || 'unknown';
   const queuePayload = body.queuePayload ?? {};
-  const targetProvider: GenerationProvider = queuePayload.__targetProvider === 'gommo' ? 'gommo' : 'tst';
+  const requestedProvider = String(queuePayload.__targetProvider || '').trim().toLowerCase();
+  const targetProvider: GenerationProvider = requestedProvider === 'gommo' || requestedProvider === 'gpti2'
+    ? requestedProvider
+    : 'tst';
   const providerLimits = PROVIDER_CONCURRENCY_LIMITS[targetProvider];
   const serverPrice = await resolveServerCostVcoin(admin, queueKind, queuePayload);
   const costVcoin = serverPrice.costVcoin;
@@ -545,7 +573,7 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
           .eq('user_id', userId)
           .eq('status', 'processing')
           .in('queue_kind', TST_QUEUE_KIND_VALUES)
-          .or(targetProvider === 'gommo' ? 'provider.eq.gommo' : 'provider.eq.tst,provider.is.null')
+          .eq('provider', targetProvider)
           .eq('asset_type', 'image'),
       ),
       countRows(
@@ -555,7 +583,7 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
           .eq('user_id', userId)
           .eq('status', 'processing')
           .in('queue_kind', TST_QUEUE_KIND_VALUES)
-          .or(targetProvider === 'gommo' ? 'provider.eq.gommo' : 'provider.eq.tst,provider.is.null')
+          .eq('provider', targetProvider)
           .eq('asset_type', 'video'),
       ),
       countRows(
@@ -565,7 +593,7 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
           .eq('user_id', userId)
           .eq('status', 'queued')
           .in('queue_kind', TST_QUEUE_KIND_VALUES)
-          .or(targetProvider === 'gommo' ? 'provider.eq.gommo' : 'provider.eq.tst,provider.is.null'),
+          .eq('provider', targetProvider),
       ),
       countRows(
         admin
@@ -573,7 +601,7 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
           .select('id', { count: 'exact', head: true })
           .eq('status', 'queued')
           .in('queue_kind', TST_QUEUE_KIND_VALUES)
-          .or(targetProvider === 'gommo' ? 'provider.eq.gommo' : 'provider.eq.tst,provider.is.null'),
+          .eq('provider', targetProvider),
       ),
     ]);
 
@@ -634,7 +662,7 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
     updated_at: now,
     queue_kind: queueKind,
     queue_payload: queuePayloadWithLogs,
-    provider: queuePayload.__targetProvider === 'gommo' ? 'gommo' : 'tst',
+    provider: targetProvider,
     job_id: null,
     lease_token: null,
     lease_expires_at: null,
@@ -739,7 +767,8 @@ export const handler: Handler = async (event) => {
       queuePayload: body.queuePayload,
     });
     const routingConfig = await getGenerationProvider(admin, modelId, providerRouteKey);
-    if (routingConfig.allowedModels && !routingConfig.allowedModels.includes(modelId)) {
+    if (routingConfig.allowedModels && !routingConfig.allowedModels.includes(modelId)
+      && !(providerRouteKey !== 'video_generation' && providerRouteKey !== 'motion_control' && routingConfig.provider === 'gpti2' && ['gpt-image-2', 'nano-banana-2', 'nano-banana-pro'].includes(modelId))) {
       return {
         statusCode: 400,
         headers,
@@ -749,7 +778,11 @@ export const handler: Handler = async (event) => {
         }),
       };
     }
-    const targetProvider = routingConfig.provider;
+    const normalizedQueueKind = String(body.queueKind || '').trim().toLowerCase();
+    const isVideoOrMotionQueue = body.assetType === 'video' || normalizedQueueKind === 'video_generate' || normalizedQueueKind === 'motion_generate';
+    const targetProvider: GenerationProvider = isVideoOrMotionQueue && routingConfig.provider === 'gpti2'
+      ? routingConfig.priority.find((provider) => provider === 'tst' || provider === 'gommo') || 'tst'
+      : routingConfig.provider;
     ensureProviderConfiguredForQueueKind(body.queueKind, targetProvider);
     if (
       TST_QUEUE_KINDS.has(String(body.queueKind || '').trim().toLowerCase()) &&
@@ -775,6 +808,7 @@ export const handler: Handler = async (event) => {
       __targetProvider: targetProvider,
       __providerRouteKey: providerRouteKey,
       __smartProviderFallbackEnabled: routingConfig.smartFallbackEnabled,
+      __providerPriority: routingConfig.priority,
     };
 
     let row: any;
@@ -790,20 +824,26 @@ export const handler: Handler = async (event) => {
       queuePayload: queuePayloadWithLogs,
     };
 
-    const rpcResult = await admin.rpc('server_enqueue_generated_job', {
-      p_id: normalizeJobId(body.id),
-      p_user_id: user.id,
-      p_prompt: body.prompt || '',
-      p_tool_id: normalizedToolMeta.toolId,
-      p_tool_name: normalizedToolMeta.toolName,
-      p_engine: body.engine || normalizedToolMeta.toolName || body.queueKind,
-      p_asset_type: asQueueAssetType(body.assetType),
-      p_cost_vcoin: serverPrice.costVcoin,
-      p_queue_kind: body.queueKind,
-      p_queue_payload: queuePayloadWithLogs,
-    });
+    // The deployed queue RPC predates GPTi2 and coerces every non-Gommo job
+    // to TST. Use the server-side direct path until the database migration is
+    // installed, otherwise a valid GPTi2 job is dispatched to the wrong API.
+    if (targetProvider === 'gpti2') {
+      row = await enqueueDirectly(user.id, normalizedBody);
+    } else {
+      const rpcResult = await admin.rpc('server_enqueue_generated_job', {
+        p_id: normalizeJobId(body.id),
+        p_user_id: user.id,
+        p_prompt: body.prompt || '',
+        p_tool_id: normalizedToolMeta.toolId,
+        p_tool_name: normalizedToolMeta.toolName,
+        p_engine: body.engine || normalizedToolMeta.toolName || body.queueKind,
+        p_asset_type: asQueueAssetType(body.assetType),
+        p_cost_vcoin: serverPrice.costVcoin,
+        p_queue_kind: body.queueKind,
+        p_queue_payload: queuePayloadWithLogs,
+      });
 
-    if (rpcResult.error) {
+      if (rpcResult.error) {
       const message = rpcResult.error.message || 'Failed to enqueue job';
       const shouldFallback =
         rpcResult.error.code === 'PGRST202' ||
@@ -821,8 +861,9 @@ export const handler: Handler = async (event) => {
 
       console.warn('[queue-submit] Falling back to direct enqueue because RPC is unavailable:', message);
       row = await enqueueDirectly(user.id, normalizedBody);
-    } else {
-      row = Array.isArray(rpcResult.data) ? rpcResult.data[0] : rpcResult.data;
+      } else {
+        row = Array.isArray(rpcResult.data) ? rpcResult.data[0] : rpcResult.data;
+      }
     }
 
     await runSafeWorkerTick(event.rawUrl);

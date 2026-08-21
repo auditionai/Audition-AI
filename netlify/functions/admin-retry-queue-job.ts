@@ -1,5 +1,4 @@
 import type { Handler } from '@netlify/functions';
-import { randomUUID } from 'node:crypto';
 import { isSystemQueueKind } from '../../shared/queueKinds';
 import { getAuthenticatedRequestErrorStatus, getServiceRoleClient, requireAdminUser } from './_supabase';
 import { triggerBackgroundQueueWorker } from './_queue-launcher';
@@ -11,7 +10,7 @@ const headers = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-export type AdminRetryProvider = 'tst' | 'gommo';
+export type AdminRetryProvider = 'tst' | 'gommo' | 'gpti2';
 
 const toPayload = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' && !Array.isArray(value)
@@ -28,6 +27,7 @@ const assertProviderConfigured = (provider: AdminRetryProvider) => {
   ) {
     throw new Error('API 2 chưa được cấu hình GOMMO_ACCESS_TOKEN.');
   }
+  if (provider === 'gpti2' && !String(process.env.GPTI2_API_KEY || '').trim()) throw new Error('API GPTi2 chua duoc cau hinh GPTI2_API_KEY.');
 };
 
 const buildRetryPayload = (
@@ -120,7 +120,7 @@ export const retryFailedQueueJob = async (params: {
     };
   }
 
-  const retryJobId = randomUUID();
+  const retryJobId = jobId;
   const retryPayload = buildRetryPayload(
     source.queue_payload,
     jobId,
@@ -128,6 +128,17 @@ export const retryFailedQueueJob = async (params: {
     provider,
     params.requestedBy,
   );
+  const retryNow = new Date().toISOString();
+  const { error: resetError } = await admin.from('generated_images').update({
+    status: 'queued', job_id: null, image_url: null, progress: 5, error_message: null,
+    attempt_count: 0, processing_started_at: null, finished_at: null, next_poll_at: retryNow,
+    lease_token: null, lease_expires_at: null, queue_payload: retryPayload, updated_at: retryNow,
+  }).eq('id', jobId);
+  if (resetError) throw resetError;
+  try { await triggerBackgroundQueueWorker(params.rawUrl); } catch (workerError) { console.warn('[admin-retry-queue-job] worker launch failed:', workerError); }
+  return { success: true, reused: false, sourceJobId: jobId, retryJobId: jobId, status: 'queued', queuePosition: 0, provider, costVcoin: Number(source.cost_vcoin || 0) };
+
+  /* Legacy child-job implementation retained below only for historical reference. */
   const costVcoin = Math.max(0, Math.floor(Number(source.cost_vcoin || 0)));
   const { data: enqueueData, error: enqueueError } = await admin.rpc('server_enqueue_generated_job', {
     p_id: retryJobId,
@@ -145,7 +156,7 @@ export const retryFailedQueueJob = async (params: {
   if (enqueueError) throw enqueueError;
 
   const sourcePayload = toPayload(source.queue_payload);
-  const sourceLogs = Array.isArray(sourcePayload.__logs) ? sourcePayload.__logs : [];
+  const sourceLogs: any[] = Array.isArray(sourcePayload.__logs) ? sourcePayload.__logs as any[] : [];
   const now = new Date().toISOString();
   await admin
     .from('generated_images')
@@ -207,7 +218,7 @@ export const handler: Handler = async (event) => {
     const jobId = String(body?.jobId || '').trim();
     const provider = String(body?.provider || '').trim().toLowerCase();
     if (!jobId) return { statusCode: 400, headers, body: JSON.stringify({ error: 'Thiếu jobId.' }) };
-    if (provider !== 'tst' && provider !== 'gommo') {
+    if (provider !== 'tst' && provider !== 'gommo' && provider !== 'gpti2') {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Provider phải là API 1 hoặc API 2.' }) };
     }
 

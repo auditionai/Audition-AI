@@ -45,6 +45,8 @@ services:
         sync: false
       - key: TST_API_KEY
         sync: false
+      - key: GPTI2_API_KEY
+        sync: false
       - key: GOMMO_ACCESS_TOKEN
         sync: false
       - key: GOMMO_DOMAIN
@@ -99,6 +101,8 @@ services:
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
       - key: TST_API_KEY
+        sync: false
+      - key: GPTI2_API_KEY
         sync: false
       - key: GOMMO_ACCESS_TOKEN
         sync: false

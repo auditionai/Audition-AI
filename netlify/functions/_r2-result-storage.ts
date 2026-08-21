@@ -11,6 +11,22 @@ const R2_BUCKET_NAME = getEnv('R2_BUCKET_NAME', 'VITE_R2_BUCKET_NAME');
 const R2_PUBLIC_URL = getEnv('R2_PUBLIC_URL', 'VITE_R2_PUBLIC_URL').replace(/\/+$/, '');
 const R2_UPLOAD_TIMEOUT_MS = 55_000;
 
+const assertDirectR2StorageConfigured = () => {
+  const missing = [
+    ['R2_ENDPOINT', R2_ENDPOINT],
+    ['R2_ACCESS_KEY_ID', R2_ACCESS_KEY_ID],
+    ['R2_SECRET_ACCESS_KEY', R2_SECRET_ACCESS_KEY],
+    ['R2_BUCKET_NAME', R2_BUCKET_NAME],
+    ['R2_PUBLIC_URL', R2_PUBLIC_URL],
+  ]
+    .filter(([, value]) => !value)
+    .map(([name]) => name);
+
+  if (missing.length > 0) {
+    throw new Error(`R2 result storage is not configured: ${missing.join(', ')}.`);
+  }
+};
+
 const extensionForMime = (contentType: string, assetType: 'image' | 'video') => {
   const mime = contentType.split(';', 1)[0].trim().toLowerCase();
   if (mime.includes('jpeg')) return 'jpg';
@@ -53,9 +69,7 @@ const ingestInlineImageWithWorker = async (inlineData: string, key: string) => {
 };
 
 const ingestDirectly = async (sourceUrl: string, key: string, assetType: 'image' | 'video') => {
-  if (!R2_ENDPOINT || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_BUCKET_NAME || !R2_PUBLIC_URL) {
-    throw new Error('R2 result storage is not configured.');
-  }
+  assertDirectR2StorageConfigured();
   const sourceResponse = await fetch(sourceUrl, { signal: AbortSignal.timeout(55_000) });
   if (!sourceResponse.ok || !sourceResponse.body) {
     throw new Error(`Provider result download failed (${sourceResponse.status}).`);
@@ -87,9 +101,7 @@ export const persistProviderResultToR2 = async (
     const key = `users/${encodeURIComponent(userId)}/generated/${encodeURIComponent(jobId)}.png`;
     const workerResult = await ingestInlineImageWithWorker(sourceUrl, key);
     if (workerResult) return workerResult;
-    if (!R2_ENDPOINT || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_BUCKET_NAME || !R2_PUBLIC_URL) {
-      throw new Error('R2 result storage is not configured.');
-    }
+    assertDirectR2StorageConfigured();
     const client = new S3Client({ region: 'auto', endpoint: R2_ENDPOINT, credentials: { accessKeyId: R2_ACCESS_KEY_ID, secretAccessKey: R2_SECRET_ACCESS_KEY } });
     await client.send(
       new PutObjectCommand({ Bucket: R2_BUCKET_NAME, Key: key, Body: Buffer.from(match[2], 'base64'), ContentType: match[1] }),

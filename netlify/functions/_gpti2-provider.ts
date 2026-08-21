@@ -66,7 +66,12 @@ const sizeOf = (payload: Record<string, unknown>) => {
 
 const dataUrl = (value: unknown) => {
   const raw = String(value || '').trim();
-  return raw ? (raw.startsWith('data:') ? raw : `data:image/png;base64,${raw}`) : '';
+  if (!raw) return '';
+  // GPTi2 returns either b64_json or a temporary HTTPS result URL. Only the
+  // former may be wrapped as a data URL; corrupting the latter prevents R2
+  // from downloading and publishing an otherwise successful provider result.
+  if (raw.startsWith('data:') || /^https?:\/\//i.test(raw)) return raw;
+  return `data:image/png;base64,${raw}`;
 };
 const extractUrl = (data: any) => dataUrl(data?.data?.[0]?.b64_json || data?.data?.[0]?.url || data?.url);
 

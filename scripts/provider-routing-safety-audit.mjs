@@ -338,6 +338,7 @@ assert(gpti2ProviderSource.includes("form.append('image[]'"));
 assert(gpti2ProviderSource.includes("request('/images/edits'"));
 assert(gpti2ProviderSource.includes("'9:16': '720x1280'"));
 assert(gpti2ProviderSource.includes("'21:9': '1280x544'"));
+assert(gpti2ProviderSource.includes("raw.startsWith('data:') || /^https?:\\/\\//i.test(raw)"));
 
 for (const filename of ['../views/features/GenerationTool.tsx', '../mobile-app/src/v2/views/WorkspaceImage.tsx']) {
   const source = await readFile(new URL(filename, import.meta.url), 'utf8');

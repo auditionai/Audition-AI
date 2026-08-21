@@ -324,6 +324,9 @@ const isAmbiguousDispatchError = (message: string) => {
   );
 };
 
+const isGpti2ProviderError = (message: string) =>
+  /^GPTI2_ERROR:/i.test(String(message || '').trim());
+
 const parseErrorMessage = async (response: Response) => {
   try {
     const data = await response.json();
@@ -3100,6 +3103,7 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
   let providerPayloadForSubmit: Record<string, unknown> | null = null;
   let providerDispatchStarted = false;
   let dispatchAttemptId: string | null = null;
+  let targetProvider: GenerationProvider | null = null;
 
   try {
     if (await shouldSkipDispatch(job)) {
@@ -3164,7 +3168,7 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
       return { completed: 1 };
     }
 
-    const targetProvider = await resolveDispatchProvider(currentPayload);
+    targetProvider = await resolveDispatchProvider(currentPayload);
     job.queue_payload = {
       ...(job.queue_payload || currentPayload),
       __targetProvider: targetProvider,
@@ -3410,6 +3414,15 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
     if (providerDispatchStarted && isAmbiguousDispatchError(message)) {
       await markDispatchAwaitingProviderConfirmation(job, message, providerPayloadForSubmit || job.queue_payload);
       return {};
+    }
+    // A deterministic GPTi2 rejection (for example an invalid reference
+    // image or provider 5xx response) means no provider job was accepted.
+    // Switch to the configured TST fallback before the generic retry path,
+    // which treats __tstTouched as a committed dispatch and refunds/fails it.
+    if (providerDispatchStarted && targetProvider === 'gpti2' && isGpti2ProviderError(message)) {
+      if (await trySmartImageProviderFallback(job, message, await getJobRuntimeState(job.id))) {
+        return { requeued: 1 };
+      }
     }
     if (message.startsWith('INVALID_TST_CONFIG:')) {
       await markFailedRespectingRefundPolicy(job, message.replace('INVALID_TST_CONFIG:', '').trim());

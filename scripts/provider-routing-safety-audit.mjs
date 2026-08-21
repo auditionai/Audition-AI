@@ -331,6 +331,7 @@ const queueWorkerSource = await readFile(new URL('../netlify/functions/_queue-wo
 assert(queueWorkerSource.includes("targetProvider === 'tst' || targetProvider === 'gpti2'"));
 assert(queueWorkerSource.includes("String(toQueuePayloadObject(recipePayload).__targetProvider || '').trim().toLowerCase() === 'gpti2'"));
 assert(queueWorkerSource.includes("targetProvider === 'tst' || targetProvider === 'gommo' || targetProvider === 'gpti2'"));
+assert(queueWorkerSource.includes("targetProvider === 'gpti2' && isGpti2ProviderError(message)"));
 
 const gpti2ProviderSource = await readFile(new URL('../netlify/functions/_gpti2-provider.ts', import.meta.url), 'utf8');
 assert(gpti2ProviderSource.includes('const GPTI2_TIMEOUT_MS = 295_000;'));

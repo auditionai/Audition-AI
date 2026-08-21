@@ -9,6 +9,7 @@ const MODEL_ALIASES: Record<string, string> = { 'image-gpt-2': 'gpt-image-2' };
 const ALLOWED_MODELS = new Set(['gpt-image-2', 'nano-banana-2', 'nano-banana-pro']);
 const NANO_ASPECT_RATIOS = new Set(['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3']);
 const MAX_NANO_REFERENCE_IMAGES = 8;
+const NANO_OUTPUT_RESOLUTION = '2K';
 
 const key = () => String(process.env.GPTI2_API_KEY || '').trim();
 const normalize = (value: unknown) => String(value || '').trim().toLowerCase();
@@ -107,6 +108,13 @@ const normalizeReferenceImage = async (source: string, index: number) => {
   }
 };
 
+const buildNanoRequest = (prompt: string, model: string, aspectRatio: string) => ({
+  request: { prompt, model, aspect_ratio: aspectRatio },
+  // Nano Banana always renders at 2K. The UI resolution stays selectable for
+  // consistency, but must never be forwarded as size/resolution/quality.
+  outputResolution: NANO_OUTPUT_RESOLUTION,
+});
+
 export const isGpti2Configured = () => Boolean(key());
 export const isGpti2Model = (modelId: unknown) => ALLOWED_MODELS.has(MODEL_ALIASES[normalize(modelId)] || normalize(modelId));
 
@@ -123,16 +131,17 @@ export const submitGpti2Job = async (queueKind: string, payload: Record<string, 
     if (sources.length > MAX_NANO_REFERENCE_IMAGES) {
       throw new Error(`GPTI2_NANO_TOO_MANY_REFERENCES: maximum is ${MAX_NANO_REFERENCE_IMAGES}`);
     }
+    const nanoRequest = buildNanoRequest(prompt, model, aspectRatio);
     let init: RequestInit;
     if (sources.length) {
-      const form = new FormData(); form.set('prompt', prompt); form.set('model', model); form.set('aspect_ratio', aspectRatio);
+      const form = new FormData(); form.set('prompt', nanoRequest.request.prompt); form.set('model', nanoRequest.request.model); form.set('aspect_ratio', nanoRequest.request.aspect_ratio);
       for (const [index, source] of sources.entries()) {
         const normalized = await normalizeReferenceImage(source, index);
         form.append('image', normalized.blob, normalized.filename);
       }
       init = { method: 'POST', body: form };
     } else {
-      init = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, model, aspect_ratio: aspectRatio }) };
+      init = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(nanoRequest.request) };
     }
     const data = await request(sources.length ? '/images/nano/edits' : '/images/nano/generations', init);
     const id = String(data?.id || '').trim();

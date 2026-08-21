@@ -100,6 +100,13 @@ const allowedSource = (value) => {
   }
 };
 
+const decodeInlineImage = (value) => {
+  const match = String(value || '').match(/^data:(image\/(?:png|jpeg|webp));base64,([a-z0-9+/=\s]+)$/i);
+  if (!match) return null;
+  const bytes = Uint8Array.from(atob(match[2].replace(/\s/g, '')), (character) => character.charCodeAt(0));
+  return bytes.byteLength <= 20 * 1024 * 1024 ? { bytes, contentType: match[1].toLowerCase() } : null;
+};
+
 export default {
   async fetch(request, env) {
     if (request.method !== 'POST') return json({ error: 'Method Not Allowed' }, 405);
@@ -107,10 +114,18 @@ export default {
     let body;
     try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
     const sourceUrl = String(body?.sourceUrl || '').trim();
+    const inlineImage = decodeInlineImage(body?.inlineData);
     const key = String(body?.key || '').replace(/^\/+/, '');
     const assetType = body?.assetType === 'video' ? 'video' : 'image';
-    if (!allowedSource(sourceUrl) || !/^users\/[^/]+\/generated\/[^/]+\.(png|jpg|webp|mp4|mov|webm)$/i.test(key)) {
+    const validKey = /^users\/[^/]+\/generated\/[^/]+\.(png|jpg|webp|mp4|mov|webm)$/i.test(key);
+    if ((!allowedSource(sourceUrl) && !(assetType === 'image' && inlineImage)) || !validKey) {
       return json({ error: 'Invalid source or key' }, 400);
+    }
+    if (inlineImage) {
+      const extension = extensionForMime(inlineImage.contentType, assetType);
+      const finalKey = key.replace(/\.(png|jpg|webp|mp4|mov|webm)$/i, `.${extension}`);
+      await env.ASSETS.put(finalKey, inlineImage.bytes, { httpMetadata: { contentType: inlineImage.contentType } });
+      return json({ publicUrl: `${env.PUBLIC_URL.replace(/\/+$/, '')}/${finalKey}`, key: finalKey });
     }
     const source = await fetch(sourceUrl);
     if (!source.ok || !source.body) return json({ error: `Provider returned ${source.status}` }, 502);

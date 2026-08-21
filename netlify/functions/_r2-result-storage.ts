@@ -39,6 +39,19 @@ const ingestWithWorker = async (sourceUrl: string, key: string, assetType: 'imag
   return normalizePublicUrl(payload.publicUrl);
 };
 
+const ingestInlineImageWithWorker = async (inlineData: string, key: string) => {
+  if (!R2_INGEST_WORKER_URL || !R2_INGEST_WORKER_SECRET) return null;
+  const response = await fetch(R2_INGEST_WORKER_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${R2_INGEST_WORKER_SECRET}` },
+    body: JSON.stringify({ inlineData, key, assetType: 'image' }),
+    signal: AbortSignal.timeout(R2_UPLOAD_TIMEOUT_MS),
+  });
+  if (!response.ok) throw new Error(`R2 ingest Worker failed (${response.status}).`);
+  const payload = await response.json() as { publicUrl?: string };
+  return normalizePublicUrl(payload.publicUrl);
+};
+
 const ingestDirectly = async (sourceUrl: string, key: string, assetType: 'image' | 'video') => {
   if (!R2_ENDPOINT || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_BUCKET_NAME || !R2_PUBLIC_URL) {
     throw new Error('R2 result storage is not configured.');
@@ -71,10 +84,12 @@ export const persistProviderResultToR2 = async (
   if (/^data:image\//i.test(String(sourceUrl || '').trim())) {
     const match = String(sourceUrl).match(/^data:([^;]+);base64,(.+)$/s);
     if (!match) throw new Error('Invalid inline image result.');
+    const key = `users/${encodeURIComponent(userId)}/generated/${encodeURIComponent(jobId)}.png`;
+    const workerResult = await ingestInlineImageWithWorker(sourceUrl, key);
+    if (workerResult) return workerResult;
     if (!R2_ENDPOINT || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_BUCKET_NAME || !R2_PUBLIC_URL) {
       throw new Error('R2 result storage is not configured.');
     }
-    const key = `users/${encodeURIComponent(userId)}/generated/${encodeURIComponent(jobId)}.png`;
     const client = new S3Client({ region: 'auto', endpoint: R2_ENDPOINT, credentials: { accessKeyId: R2_ACCESS_KEY_ID, secretAccessKey: R2_SECRET_ACCESS_KEY } });
     await client.send(
       new PutObjectCommand({ Bucket: R2_BUCKET_NAME, Key: key, Body: Buffer.from(match[2], 'base64'), ContentType: match[1] }),

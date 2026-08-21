@@ -41,12 +41,28 @@ const sourcesOf = (payload: Record<string, unknown>) => {
   const values = r.imageUrls || r.inputUrls || r.image_urls || payload.image_urls || payload.img_url || payload.image_url;
   return (Array.isArray(values) ? values : values ? [values] : []).map((v) => String(v || '').trim()).filter((v) => /^https?:\/\//i.test(v));
 };
+const qualityOf = (payload: Record<string, unknown>) => String(payload.quality || payload.speed || recipe(payload).quality || 'low');
+const ratioOf = (payload: Record<string, unknown>) => String(
+  payload.aspect_ratio || payload.aspectRatio || recipe(payload).aspect_ratio || recipe(payload).aspectRatio || '1:1',
+);
+const SIZE_BY_RESOLUTION_AND_RATIO: Record<string, Record<string, string>> = {
+  '1K': {
+    '1:1': '1024x1024', '16:9': '1280x720', '9:16': '720x1280', '4:3': '1024x768',
+    '3:4': '768x1024', '3:2': '1536x1024', '2:3': '1024x1536', '21:9': '1280x544',
+  },
+  '2K': {
+    '1:1': '1536x1536', '16:9': '2560x1440', '9:16': '1440x2560', '4:3': '2048x1536',
+    '3:4': '1536x2048', '3:2': '2400x1600', '2:3': '1600x2400', '21:9': '2560x1088',
+  },
+  '4K': {
+    '1:1': '2048x2048', '16:9': '3840x2160', '9:16': '2160x3840', '4:3': '3200x2400',
+    '3:4': '2400x3200', '3:2': '3360x2240', '2:3': '2240x3360', '21:9': '3840x1632',
+  },
+};
 const sizeOf = (payload: Record<string, unknown>) => {
   const value = String(payload.size || payload.resolution || recipe(payload).size || '1K').trim().toUpperCase();
-  return value === '1K' ? '1024x1024' : value === '2K' ? '1536x1024' : value === '4K' ? '2048x2048' : value;
+  return SIZE_BY_RESOLUTION_AND_RATIO[value]?.[ratioOf(payload)] || value;
 };
-const qualityOf = (payload: Record<string, unknown>) => String(payload.quality || payload.speed || recipe(payload).quality || 'low');
-const ratioOf = (payload: Record<string, unknown>) => String(payload.aspect_ratio || payload.aspectRatio || recipe(payload).aspect_ratio || '1:1');
 
 const dataUrl = (value: unknown) => {
   const raw = String(value || '').trim();

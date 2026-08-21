@@ -336,6 +336,8 @@ const gpti2ProviderSource = await readFile(new URL('../netlify/functions/_gpti2-
 assert(gpti2ProviderSource.includes('const GPTI2_TIMEOUT_MS = 295_000;'));
 assert(gpti2ProviderSource.includes("form.append('image[]'"));
 assert(gpti2ProviderSource.includes("request('/images/edits'"));
+assert(gpti2ProviderSource.includes("'9:16': '720x1280'"));
+assert(gpti2ProviderSource.includes("'21:9': '1280x544'"));
 
 for (const filename of ['../views/features/GenerationTool.tsx', '../mobile-app/src/v2/views/WorkspaceImage.tsx']) {
   const source = await readFile(new URL(filename, import.meta.url), 'utf8');

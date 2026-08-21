@@ -1,8 +1,8 @@
 
 const GPTI2_BASE = 'https://gpti2.store/v1';
-// Image edits are synchronous at GPTi2 and can exceed the former 45-second
-// client timeout while the provider is still rendering a valid result.
-const GPTI2_TIMEOUT_MS = 90_000;
+// Match the TST generation timeout. GPTi2 image edits are synchronous and
+// must have the same window to finish rendering a valid result.
+const GPTI2_TIMEOUT_MS = 295_000;
 const MODEL_ALIASES: Record<string, string> = { 'image-gpt-2': 'gpt-image-2' };
 const ALLOWED_MODELS = new Set(['gpt-image-2', 'nano-banana-2', 'nano-banana-pro']);
 

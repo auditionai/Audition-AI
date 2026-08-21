@@ -9,6 +9,7 @@ const R2_ACCESS_KEY_ID = getEnv('R2_ACCESS_KEY_ID', 'VITE_R2_ACCESS_KEY_ID');
 const R2_SECRET_ACCESS_KEY = getEnv('R2_SECRET_ACCESS_KEY', 'VITE_R2_SECRET_ACCESS_KEY');
 const R2_BUCKET_NAME = getEnv('R2_BUCKET_NAME', 'VITE_R2_BUCKET_NAME');
 const R2_PUBLIC_URL = getEnv('R2_PUBLIC_URL', 'VITE_R2_PUBLIC_URL').replace(/\/+$/, '');
+const R2_UPLOAD_TIMEOUT_MS = 55_000;
 
 const extensionForMime = (contentType: string, assetType: 'image' | 'video') => {
   const mime = contentType.split(';', 1)[0].trim().toLowerCase();
@@ -57,7 +58,7 @@ const ingestDirectly = async (sourceUrl: string, key: string, assetType: 'image'
     Key: key,
     Body: sourceResponse.body as unknown as ReadableStream,
     ContentType: contentType,
-  }));
+  }), { abortSignal: AbortSignal.timeout(R2_UPLOAD_TIMEOUT_MS) });
   return `${R2_PUBLIC_URL}/${key}`;
 };
 
@@ -75,7 +76,10 @@ export const persistProviderResultToR2 = async (
     }
     const key = `users/${encodeURIComponent(userId)}/generated/${encodeURIComponent(jobId)}.png`;
     const client = new S3Client({ region: 'auto', endpoint: R2_ENDPOINT, credentials: { accessKeyId: R2_ACCESS_KEY_ID, secretAccessKey: R2_SECRET_ACCESS_KEY } });
-    await client.send(new PutObjectCommand({ Bucket: R2_BUCKET_NAME, Key: key, Body: Buffer.from(match[2], 'base64'), ContentType: match[1] }));
+    await client.send(
+      new PutObjectCommand({ Bucket: R2_BUCKET_NAME, Key: key, Body: Buffer.from(match[2], 'base64'), ContentType: match[1] }),
+      { abortSignal: AbortSignal.timeout(R2_UPLOAD_TIMEOUT_MS) },
+    );
     return `${R2_PUBLIC_URL}/${key}`;
   }
   const cleanUser = encodeURIComponent(userId);

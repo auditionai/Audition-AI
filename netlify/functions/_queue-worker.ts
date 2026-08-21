@@ -202,6 +202,7 @@ const DISPATCH_LEASE_SECONDS = parsePositiveIntEnv('QUEUE_DISPATCH_LEASE_SECONDS
 const DISPATCH_CLAIM_LEASE_SECONDS = parsePositiveIntEnv('QUEUE_DISPATCH_CLAIM_LEASE_SECONDS', 60, 30);
 const PROVIDER_DISPATCH_TIMEOUT_MS = parsePositiveIntEnv('QUEUE_PROVIDER_DISPATCH_TIMEOUT_MS', 45_000, 5_000);
 const LIVE_CATALOG_VALIDATION_TIMEOUT_MS = parsePositiveIntEnv('QUEUE_LIVE_CATALOG_VALIDATION_TIMEOUT_MS', 45_000, 5_000);
+const PROVIDER_RESULT_STORAGE_TIMEOUT_MS = parsePositiveIntEnv('QUEUE_PROVIDER_RESULT_STORAGE_TIMEOUT_MS', 75_000, 10_000);
 const STALE_RECOVERY_SCAN_LIMIT = 50;
 const STALE_RECOVERY_MIN_AGE_MS = 45_000;
 const STALE_PROVIDER_POLL_RECOVERY_MIN_AGE_MS = 45_000;
@@ -2110,7 +2111,15 @@ const completePolledJobWithResultUrl = async (
     throw new Error(`Provider returned a ${job.asset_type === 'video' ? 'non-video' : 'non-image'} result URL.`);
   }
 
-  const r2ResultUrl = await persistProviderResultToR2(resultUrl, job.user_id, job.id, job.asset_type);
+  const r2ResultUrl = await withTimeout(
+    withLeaseHeartbeat(
+      job.id,
+      persistProviderResultToR2(resultUrl, job.user_id, job.id, job.asset_type),
+      DISPATCH_LEASE_SECONDS,
+    ),
+    PROVIDER_RESULT_STORAGE_TIMEOUT_MS,
+    'Timed out while saving the provider result to R2.',
+  );
 
   if (await isJobManuallyStopped(job.id)) {
     await releaseLease(job.id);

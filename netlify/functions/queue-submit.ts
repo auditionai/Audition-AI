@@ -31,7 +31,7 @@ const USER_QUEUE_LIMIT = 3;
 const PROVIDER_CONCURRENCY_LIMITS = {
   tst: { userImage: 3, userVideo: 3 },
   gommo: { userImage: 3, userVideo: 3 },
-  gpti2: { userImage: 3, userVideo: 0 },
+  gpti2: { userImage: Number.POSITIVE_INFINITY, userVideo: 0 },
 } as const;
 const TST_QUEUE_KINDS = new Set(['image_generate', 'video_generate', 'motion_generate']);
 const VIDEO_OR_MOTION_QUEUE_KINDS = new Set(['video_generate', 'motion_generate']);
@@ -564,7 +564,7 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
     throw new Error('INSUFFICIENT_VCOIN');
   }
 
-  const [myImageProcessing, myVideoProcessing, myQueued, systemQueued] =
+  const [myImageProcessing, myVideoProcessing, myQueued, systemQueued, systemImageProcessing] =
     await Promise.all([
       countRows(
         admin
@@ -603,11 +603,20 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
           .in('queue_kind', TST_QUEUE_KIND_VALUES)
           .eq('provider', targetProvider),
       ),
+      countRows(
+        admin
+          .from('generated_images')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'processing')
+          .in('queue_kind', TST_QUEUE_KIND_VALUES)
+          .eq('provider', targetProvider)
+          .eq('asset_type', 'image'),
+      ),
     ]);
 
   const canDispatchNow =
     assetType === 'image'
-      ? myImageProcessing < providerLimits.userImage
+      ? myImageProcessing < providerLimits.userImage && (targetProvider !== 'gpti2' || systemImageProcessing < 20)
       : myVideoProcessing < providerLimits.userVideo;
 
   if (myQueued >= USER_QUEUE_LIMIT) {

@@ -62,10 +62,23 @@ const GOMMO_CONCURRENCY_LIMITS = {
   },
 } as const;
 
+const GPTI2_CONCURRENCY_LIMITS = {
+  user: {
+    imageProcessing: Number.POSITIVE_INFINITY,
+    videoProcessing: 0,
+    queued: 3,
+  },
+  system: {
+    imageProcessing: 20,
+    videoProcessing: 0,
+    queued: Number.POSITIVE_INFINITY,
+  },
+} as const;
+
 export const PROVIDER_CONCURRENCY_LIMITS = {
   tst: TST_CONCURRENCY_LIMITS,
   gommo: GOMMO_CONCURRENCY_LIMITS,
-  gpti2: GOMMO_CONCURRENCY_LIMITS,
+  gpti2: GPTI2_CONCURRENCY_LIMITS,
 } as const;
 
 // Backwards-compatible alias for older UI that has not selected a provider.
@@ -322,7 +335,8 @@ const fetchSharedQueueStats = async (force = false) => {
 
       const row = Array.isArray(data) ? data[0] : data;
       const hasProviderStats = row?.system_tst_image_processing !== undefined
-        || row?.system_gommo_image_processing !== undefined;
+        || row?.system_gommo_image_processing !== undefined
+        || row?.system_gpti2_image_processing !== undefined;
       const tstStats: ProviderQueueStats = hasProviderStats
         ? {
             myImageProcessing: Number(row?.my_tst_image_processing || 0),
@@ -350,6 +364,16 @@ const fetchSharedQueueStats = async (force = false) => {
             systemQueued: Number(row?.system_gommo_queued || 0),
           }
         : { ...EMPTY_PROVIDER_QUEUE_STATS };
+      const gpti2Stats: ProviderQueueStats = hasProviderStats
+        ? {
+            myImageProcessing: Number(row?.my_gpti2_image_processing || 0),
+            myVideoProcessing: Number(row?.my_gpti2_video_processing || 0),
+            myQueued: Number(row?.my_gpti2_queued || 0),
+            systemImageProcessing: Number(row?.system_gpti2_image_processing || 0),
+            systemVideoProcessing: Number(row?.system_gpti2_video_processing || 0),
+            systemQueued: Number(row?.system_gpti2_queued || 0),
+          }
+        : { ...EMPTY_PROVIDER_QUEUE_STATS };
       sharedQueueStats = {
         myImageProcessing: Number(row?.my_image_processing || 0),
         myVideoProcessing: Number(row?.my_video_processing || 0),
@@ -359,7 +383,7 @@ const fetchSharedQueueStats = async (force = false) => {
         systemQueued: Number(row?.system_queued || 0),
         tst: tstStats,
   gommo: gommoStats,
-        gpti2: gommoStats,
+        gpti2: gpti2Stats,
       };
       notifyQueueStatsSubscribers();
       await refreshCurrentJobs();

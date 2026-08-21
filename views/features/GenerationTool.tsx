@@ -78,6 +78,7 @@ type Resolution = string;
 const GPTI2_IMAGE_RESOLUTIONS = ['1K', '2K', '4K'];
 const GPTI2_NANO_RESOLUTIONS = ['1K', '2K', '4K'];
 const GPTI2_ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'];
+const GPTI2_NANO_ASPECT_RATIOS = GPTI2_ASPECT_RATIOS.filter((ratio) => ratio !== '21:9');
 
 const IMAGE_MODEL_OPTIONS: Array<{
   tier: TstGenerationTier;
@@ -349,7 +350,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       () => getGenerationAspectRatios(generationTier, runtimeModels),
       [generationTier, runtimeModels],
   );
-  const availableAspectRatios = isGpti2Selected ? GPTI2_ASPECT_RATIOS : tstAspectRatios;
+  const availableAspectRatios = isGpti2Selected
+    ? (selectedModelId.startsWith('nano-banana') ? GPTI2_NANO_ASPECT_RATIOS : GPTI2_ASPECT_RATIOS)
+    : tstAspectRatios;
   const tstAvailableResolutions = getCompatibleGenerationResolutions({
       tier: generationTier,
       pricingEntries,
@@ -706,7 +709,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           if (server !== GPTI2_SERVER_LABEL) setServer(GPTI2_SERVER_LABEL);
           const gpti2Resolutions = selectedModelId === 'image-gpt-2' || selectedModelId === 'gpt-image-2' ? GPTI2_IMAGE_RESOLUTIONS : GPTI2_NANO_RESOLUTIONS;
           if (!gpti2Resolutions.includes(resolution)) setResolution(gpti2Resolutions[0]);
-          if (!GPTI2_ASPECT_RATIOS.includes(aspectRatio)) setAspectRatio(GPTI2_ASPECT_RATIOS[0]);
+          const gpti2Ratios = selectedModelId.startsWith('nano-banana') ? GPTI2_NANO_ASPECT_RATIOS : GPTI2_ASPECT_RATIOS;
+          if (!gpti2Ratios.includes(aspectRatio)) setAspectRatio(gpti2Ratios[0]);
           return;
       }
       if (tstAspectRatios.length > 0 && !tstAspectRatios.includes(aspectRatio)) {

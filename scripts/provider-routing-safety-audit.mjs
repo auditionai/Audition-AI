@@ -343,6 +343,8 @@ assert(gpti2ProviderSource.includes("raw.startsWith('data:') || /^https?:\\/\\//
 assert(gpti2ProviderSource.includes('normalizeReferenceImage'));
 assert(gpti2ProviderSource.includes('.rotate()'));
 assert(gpti2ProviderSource.includes('mozjpeg: true'));
+assert(gpti2ProviderSource.includes('GPTI2_NANO_ASPECT_RATIO_UNSUPPORTED'));
+assert(gpti2ProviderSource.includes('GPTI2_NANO_TOO_MANY_REFERENCES'));
 
 for (const filename of ['../views/features/GenerationTool.tsx', '../mobile-app/src/v2/views/WorkspaceImage.tsx']) {
   const source = await readFile(new URL(filename, import.meta.url), 'utf8');

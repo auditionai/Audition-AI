@@ -51,9 +51,11 @@ const extractFromValue = (
   assetType: GeneratedAssetType,
   fieldHint: GeneratedAssetType | null = null,
 ): string | null => {
-  const direct = normalizeHttpUrl(value);
-  if (direct) {
-    return isResultUrlCompatibleWithAssetType(direct, assetType, fieldHint) ? direct : null;
+  if (typeof value === 'string') {
+    const direct = value.trim();
+    if (isResultUrlCompatibleWithAssetType(direct, assetType, fieldHint)) {
+      return direct;
+    }
   }
   if (Array.isArray(value)) {
     for (const item of value) {

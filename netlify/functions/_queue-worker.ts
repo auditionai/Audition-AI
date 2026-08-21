@@ -251,6 +251,12 @@ const resolveDispatchProvider = async (payload: Record<string, unknown>): Promis
   const stored = String(payload.__targetProvider || '').trim().toLowerCase();
   const queueKind = String(payload.queueKind || '').trim().toLowerCase();
   if (stored === 'gpti2' && VIDEO_OR_MOTION_QUEUE_KINDS.has(queueKind)) return 'tst';
+  // GPTi2-only models cannot be submitted to TST/Gommo. This also repairs
+  // legacy queued rows whose provider metadata was written before GPTi2
+  // routing was persisted.
+  if (!VIDEO_OR_MOTION_QUEUE_KINDS.has(queueKind) && isGpti2Model(getQueuePayloadModelId(payload))) {
+    return 'gpti2';
+  }
   if (stored === 'tst' || stored === 'gommo' || stored === 'gpti2') return stored;
   return getGlobalGenerationProvider(
     getQueuePayloadModelId(payload),
@@ -708,7 +714,8 @@ const hasTstBeenTouched = (
 const getJobProvider = (
   payload?: Record<string, unknown> | ImageGenerateRecipePayload | null,
 ): GenerationProvider => {
-  const provider = String(toQueuePayloadObject(payload).__provider || '').trim().toLowerCase();
+  const payloadObject = toQueuePayloadObject(payload);
+  const provider = String(payloadObject.__targetProvider || payloadObject.__provider || '').trim().toLowerCase();
   return provider === 'gommo' || provider === 'gpti2' ? provider : 'tst';
 };
 
@@ -2050,8 +2057,18 @@ const prepareImageRecipeInStages = async (
     promptPreparation.providerPrompt,
   );
 
-  const validationResult = await validateQueuePayloadForDispatch(job, stripInternalQueueMeta(providerPayload));
-  const validatedProviderPayload = applyLivePricingConfigToPayload(job.queue_kind, providerPayload, validationResult);
+  // GPTi2 has its own model/pricing catalog and must never be validated against
+  // the TST live catalog (which rejects `server_id: gpti2`). This staged recipe
+  // is normally TST-only, but keep the guard here for retries/legacy payloads.
+  const isGpti2Job = getJobProvider(recipePayload) === 'gpti2'
+    || String(toQueuePayloadObject(providerPayload).__targetProvider || '').trim().toLowerCase() === 'gpti2';
+  const validatedProviderPayload = isGpti2Job
+    ? providerPayload
+    : applyLivePricingConfigToPayload(
+        job.queue_kind,
+        providerPayload,
+        await validateQueuePayloadForDispatch(job, stripInternalQueueMeta(providerPayload)),
+      );
   const storedPayload = await persistRecipePreparedForImmediateDispatch(job.id, validatedProviderPayload, promptPreparation.optimizedPayload);
 
   return { type: 'prepared', providerPayload: validatedProviderPayload, storedPayload };

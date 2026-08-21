@@ -333,6 +333,7 @@ assert(queueWorkerSource.includes("String(toQueuePayloadObject(recipePayload).__
 assert(queueWorkerSource.includes("targetProvider === 'tst' || targetProvider === 'gommo' || targetProvider === 'gpti2'"));
 
 const gpti2ProviderSource = await readFile(new URL('../netlify/functions/_gpti2-provider.ts', import.meta.url), 'utf8');
+assert(gpti2ProviderSource.includes('const GPTI2_TIMEOUT_MS = 90_000;'));
 assert(gpti2ProviderSource.includes("form.append('image[]'"));
 assert(gpti2ProviderSource.includes("request('/images/edits'"));
 

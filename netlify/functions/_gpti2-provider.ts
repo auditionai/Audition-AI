@@ -1,4 +1,6 @@
 
+import sharp from 'sharp';
+
 const GPTI2_BASE = 'https://gpti2.store/v1';
 // Match the TST generation timeout. GPTi2 image edits are synchronous and
 // must have the same window to finish rendering a valid result.
@@ -75,6 +77,34 @@ const dataUrl = (value: unknown) => {
 };
 const extractUrl = (data: any) => dataUrl(data?.data?.[0]?.b64_json || data?.data?.[0]?.url || data?.url);
 
+const normalizeReferenceImage = async (source: string, index: number) => {
+  const response = await fetch(source, { signal: AbortSignal.timeout(GPTI2_TIMEOUT_MS) });
+  if (!response.ok) throw new Error(`GPTI2_ERROR: Cannot download reference image ${index + 1}`);
+
+  const input = Buffer.from(await response.arrayBuffer());
+  try {
+    const image = sharp(input, { failOn: 'error' });
+    const metadata = await image.metadata();
+    if (!metadata.width || !metadata.height) throw new Error('missing dimensions');
+
+    const normalized = image
+      .rotate()
+      .resize({ width: 2048, height: 2048, fit: 'inside', withoutEnlargement: true });
+    if (metadata.hasAlpha) {
+      return {
+        blob: new Blob([await normalized.png({ compressionLevel: 9 }).toBuffer()], { type: 'image/png' }),
+        filename: `reference-${index + 1}.png`,
+      };
+    }
+    return {
+      blob: new Blob([await normalized.jpeg({ quality: 90, mozjpeg: true }).toBuffer()], { type: 'image/jpeg' }),
+      filename: `reference-${index + 1}.jpg`,
+    };
+  } catch {
+    throw new Error(`GPTI2_ERROR: Reference image #${index + 1} could not be decoded or normalized.`);
+  }
+};
+
 export const isGpti2Configured = () => Boolean(key());
 export const isGpti2Model = (modelId: unknown) => ALLOWED_MODELS.has(MODEL_ALIASES[normalize(modelId)] || normalize(modelId));
 
@@ -88,9 +118,8 @@ export const submitGpti2Job = async (queueKind: string, payload: Record<string, 
     if (sources.length) {
       const form = new FormData(); form.set('prompt', prompt); form.set('model', model); form.set('aspect_ratio', ratioOf(payload));
       for (const [index, source] of sources.entries()) {
-        const response = await fetch(source, { signal: AbortSignal.timeout(GPTI2_TIMEOUT_MS) });
-        if (!response.ok) throw new Error(`GPTI2_ERROR: Cannot download reference image ${index + 1}`);
-        form.append('image', new Blob([await response.arrayBuffer()], { type: response.headers.get('content-type') || 'image/png' }), `reference-${index + 1}.png`);
+        const normalized = await normalizeReferenceImage(source, index);
+        form.append('image', normalized.blob, normalized.filename);
       }
       init = { method: 'POST', body: form };
     } else {
@@ -105,9 +134,8 @@ export const submitGpti2Job = async (queueKind: string, payload: Record<string, 
     const form = new FormData();
     form.set('prompt', prompt); form.set('model', model); form.set('size', sizeOf(payload)); form.set('quality', qualityOf(payload));
     for (const [index, source] of sources.entries()) {
-      const response = await fetch(source, { signal: AbortSignal.timeout(GPTI2_TIMEOUT_MS) });
-      if (!response.ok) throw new Error(`GPTI2_ERROR: Cannot download reference image ${index + 1}`);
-      form.append('image[]', new Blob([await response.arrayBuffer()], { type: response.headers.get('content-type') || 'image/png' }), `reference-${index + 1}.png`);
+      const normalized = await normalizeReferenceImage(source, index);
+      form.append('image[]', normalized.blob, normalized.filename);
     }
     const data = await request('/images/edits', { method: 'POST', body: form });
     const result = extractUrl(data);

@@ -649,7 +649,7 @@ const withQueueMeta = (
   }
 
   const previousProvider = toQueuePayloadObject(previousPayload).__provider;
-  if (previousProvider === 'tst' || previousProvider === 'gommo') {
+  if (previousProvider === 'tst' || previousProvider === 'gommo' || previousProvider === 'gpti2') {
     nextPayload.__provider = previousProvider;
   }
 
@@ -665,7 +665,7 @@ const withQueueMeta = (
 
   const targetProvider =
     toQueuePayloadObject(previousPayload).__targetProvider ?? toQueuePayloadObject(providerPayload).__targetProvider;
-  if (targetProvider === 'tst' || targetProvider === 'gommo') {
+  if (targetProvider === 'tst' || targetProvider === 'gommo' || targetProvider === 'gpti2') {
     nextPayload.__targetProvider = targetProvider;
   }
 

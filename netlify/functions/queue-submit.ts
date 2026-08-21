@@ -466,7 +466,10 @@ const resolveServerCostVcoin = async (
   queuePayload: Record<string, unknown>,
   targetProvider?: GenerationProvider,
 ) => {
-  const resolvedProvider = targetProvider || (queuePayload.__targetProvider === 'gommo' ? 'gommo' : 'tst');
+  const storedProvider = String(queuePayload.__targetProvider || '').trim().toLowerCase();
+  const resolvedProvider = targetProvider || (
+    storedProvider === 'gommo' || storedProvider === 'gpti2' ? storedProvider : 'tst'
+  );
   if (resolvedProvider === 'gommo' || resolvedProvider === 'gpti2') {
     return resolveGommoCostFromAuditionPricing(admin, queueKind, queuePayload);
   }
@@ -505,7 +508,10 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
   const queueKind = body.queueKind || (assetType === 'video' ? 'video_generate' : 'image_generate');
   const clientPlatform = normalizeQueueClientPlatform(body.clientPlatform) || 'unknown';
   const queuePayload = body.queuePayload ?? {};
-  const targetProvider: GenerationProvider = queuePayload.__targetProvider === 'gommo' ? 'gommo' : 'tst';
+  const requestedProvider = String(queuePayload.__targetProvider || '').trim().toLowerCase();
+  const targetProvider: GenerationProvider = requestedProvider === 'gommo' || requestedProvider === 'gpti2'
+    ? requestedProvider
+    : 'tst';
   const providerLimits = PROVIDER_CONCURRENCY_LIMITS[targetProvider];
   const serverPrice = await resolveServerCostVcoin(admin, queueKind, queuePayload);
   const costVcoin = serverPrice.costVcoin;
@@ -567,7 +573,7 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
           .eq('user_id', userId)
           .eq('status', 'processing')
           .in('queue_kind', TST_QUEUE_KIND_VALUES)
-          .or(targetProvider === 'gommo' ? 'provider.eq.gommo' : 'provider.eq.tst,provider.is.null')
+          .eq('provider', targetProvider)
           .eq('asset_type', 'image'),
       ),
       countRows(
@@ -577,7 +583,7 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
           .eq('user_id', userId)
           .eq('status', 'processing')
           .in('queue_kind', TST_QUEUE_KIND_VALUES)
-          .or(targetProvider === 'gommo' ? 'provider.eq.gommo' : 'provider.eq.tst,provider.is.null')
+          .eq('provider', targetProvider)
           .eq('asset_type', 'video'),
       ),
       countRows(
@@ -587,7 +593,7 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
           .eq('user_id', userId)
           .eq('status', 'queued')
           .in('queue_kind', TST_QUEUE_KIND_VALUES)
-          .or(targetProvider === 'gommo' ? 'provider.eq.gommo' : 'provider.eq.tst,provider.is.null'),
+          .eq('provider', targetProvider),
       ),
       countRows(
         admin
@@ -595,7 +601,7 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
           .select('id', { count: 'exact', head: true })
           .eq('status', 'queued')
           .in('queue_kind', TST_QUEUE_KIND_VALUES)
-          .or(targetProvider === 'gommo' ? 'provider.eq.gommo' : 'provider.eq.tst,provider.is.null'),
+          .eq('provider', targetProvider),
       ),
     ]);
 
@@ -656,7 +662,7 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
     updated_at: now,
     queue_kind: queueKind,
     queue_payload: queuePayloadWithLogs,
-    provider: queuePayload.__targetProvider === 'gommo' ? 'gommo' : 'tst',
+    provider: targetProvider,
     job_id: null,
     lease_token: null,
     lease_expires_at: null,
@@ -818,20 +824,26 @@ export const handler: Handler = async (event) => {
       queuePayload: queuePayloadWithLogs,
     };
 
-    const rpcResult = await admin.rpc('server_enqueue_generated_job', {
-      p_id: normalizeJobId(body.id),
-      p_user_id: user.id,
-      p_prompt: body.prompt || '',
-      p_tool_id: normalizedToolMeta.toolId,
-      p_tool_name: normalizedToolMeta.toolName,
-      p_engine: body.engine || normalizedToolMeta.toolName || body.queueKind,
-      p_asset_type: asQueueAssetType(body.assetType),
-      p_cost_vcoin: serverPrice.costVcoin,
-      p_queue_kind: body.queueKind,
-      p_queue_payload: queuePayloadWithLogs,
-    });
+    // The deployed queue RPC predates GPTi2 and coerces every non-Gommo job
+    // to TST. Use the server-side direct path until the database migration is
+    // installed, otherwise a valid GPTi2 job is dispatched to the wrong API.
+    if (targetProvider === 'gpti2') {
+      row = await enqueueDirectly(user.id, normalizedBody);
+    } else {
+      const rpcResult = await admin.rpc('server_enqueue_generated_job', {
+        p_id: normalizeJobId(body.id),
+        p_user_id: user.id,
+        p_prompt: body.prompt || '',
+        p_tool_id: normalizedToolMeta.toolId,
+        p_tool_name: normalizedToolMeta.toolName,
+        p_engine: body.engine || normalizedToolMeta.toolName || body.queueKind,
+        p_asset_type: asQueueAssetType(body.assetType),
+        p_cost_vcoin: serverPrice.costVcoin,
+        p_queue_kind: body.queueKind,
+        p_queue_payload: queuePayloadWithLogs,
+      });
 
-    if (rpcResult.error) {
+      if (rpcResult.error) {
       const message = rpcResult.error.message || 'Failed to enqueue job';
       const shouldFallback =
         rpcResult.error.code === 'PGRST202' ||
@@ -849,8 +861,9 @@ export const handler: Handler = async (event) => {
 
       console.warn('[queue-submit] Falling back to direct enqueue because RPC is unavailable:', message);
       row = await enqueueDirectly(user.id, normalizedBody);
-    } else {
-      row = Array.isArray(rpcResult.data) ? rpcResult.data[0] : rpcResult.data;
+      } else {
+        row = Array.isArray(rpcResult.data) ? rpcResult.data[0] : rpcResult.data;
+      }
     }
 
     await runSafeWorkerTick(event.rawUrl);

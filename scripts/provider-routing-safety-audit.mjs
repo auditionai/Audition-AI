@@ -324,6 +324,14 @@ assert(recipeSource.includes("background_source: payload.backgroundSource || 'in
 assert(!gommoSource.includes('uploadImageToTst'));
 assert(!gommoSource.includes('TST_API'));
 
+const queueWorkerSource = await readFile(new URL('../netlify/functions/_queue-worker.ts', import.meta.url), 'utf8');
+assert(queueWorkerSource.includes("targetProvider === 'tst' || targetProvider === 'gpti2'"));
+assert(queueWorkerSource.includes("String(toQueuePayloadObject(recipePayload).__targetProvider || '').trim().toLowerCase() === 'gpti2'"));
+
+const gpti2ProviderSource = await readFile(new URL('../netlify/functions/_gpti2-provider.ts', import.meta.url), 'utf8');
+assert(gpti2ProviderSource.includes("form.append('image[]'"));
+assert(gpti2ProviderSource.includes("request('/images/edits'"));
+
 for (const filename of ['../views/features/GenerationTool.tsx', '../mobile-app/src/v2/views/WorkspaceImage.tsx']) {
   const source = await readFile(new URL(filename, import.meta.url), 'utf8');
   assert(source.includes('group8'));

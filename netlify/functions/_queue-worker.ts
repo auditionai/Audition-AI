@@ -2062,6 +2062,7 @@ const prepareImageRecipeInStages = async (
   // the TST live catalog (which rejects `server_id: gpti2`). This staged recipe
   // is normally TST-only, but keep the guard here for retries/legacy payloads.
   const isGpti2Job = getJobProvider(recipePayload) === 'gpti2'
+    || String(toQueuePayloadObject(recipePayload).__targetProvider || '').trim().toLowerCase() === 'gpti2'
     || String(toQueuePayloadObject(providerPayload).__targetProvider || '').trim().toLowerCase() === 'gpti2';
   const validatedProviderPayload = isGpti2Job
     ? providerPayload
@@ -3195,7 +3196,11 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
       job.queue_payload = await persistPreparedPayload(job.id, submitPayload, job.queue_payload);
     }
 
-    if (targetProvider === 'tst' && isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'image_generate_recipe_v1') {
+    if (
+      (targetProvider === 'tst' || targetProvider === 'gpti2') &&
+      isQueueRecipePayload(currentPayload) &&
+      currentPayload.recipeType === 'image_generate_recipe_v1'
+    ) {
       await updatePreProviderStage(job.id, 20);
       const stagedResult = await withTimeout(
         withLeaseHeartbeat(

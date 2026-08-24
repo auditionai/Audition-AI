@@ -600,7 +600,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [switchingGenerationProvider, setSwitchingGenerationProvider] = useState(false);
   const [pricingDrafts, setPricingDrafts] = useState<Record<string, string>>({});
   const [pricingConfigFilter, setPricingConfigFilter] = useState<'all' | 'missing'>('all');
-  const [pricingProviderFilter, setPricingProviderFilter] = useState<'all' | 'tst' | 'gommo'>('all');
+  const [pricingProviderFilter, setPricingProviderFilter] = useState<'all' | 'tst' | 'gpti2'>('all');
   const [savingAllPricing, setSavingAllPricing] = useState(false);
   const [serverAvailabilityConfig, setServerAvailabilityConfig] = useState<TstServerAvailabilityConfig>({ disabledByModel: {}, disabledByProviderModel: {}, autoDisabledCombos: {} });
   const [editingStyle, setEditingStyle] = useState<StylePreset | null>(null);
@@ -1044,11 +1044,13 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const dirtyPricingRows = allPricingRows.filter(isPricingRowDirty);
   const dirtyPricingCount = dirtyPricingRows.length;
   const missingPricingCount = allPricingRows.filter((row) => !getEffectiveAuditionPricing(row)).length;
-  const tstPricingCount = allPricingRows.filter((row) => row.server !== 'gommo').length;
-  const gommoPricingCount = allPricingRows.filter((row) => row.server === 'gommo').length;
+  const isGpti2PricingRow = (row: TstPricingRow) =>
+      ['image-gpt-2', 'gpt-image-2', 'nano-banana-2', 'nano-banana-pro'].includes(row.modelId.trim().toLowerCase());
+  const gpti2PricingCount = allPricingRows.filter(isGpti2PricingRow).length;
+  const tstPricingCount = allPricingRows.filter((row) => !isGpti2PricingRow(row)).length;
   const providerFilteredPricingRows = pricingProviderFilter === 'all'
       ? allPricingRows
-      : allPricingRows.filter((row) => pricingProviderFilter === 'gommo' ? row.server === 'gommo' : row.server !== 'gommo');
+      : allPricingRows.filter((row) => pricingProviderFilter === 'gpti2' ? isGpti2PricingRow(row) : !isGpti2PricingRow(row));
   const providerMissingPricingCount = providerFilteredPricingRows.filter((row) => !getEffectiveAuditionPricing(row)).length;
   const filteredPricingRows = pricingConfigFilter === 'missing'
       ? providerFilteredPricingRows.filter((row) => !getEffectiveAuditionPricing(row))
@@ -4685,8 +4687,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   <button type="button" aria-pressed={pricingProviderFilter === 'tst'} onClick={() => setPricingProviderFilter('tst')} className={`rounded-xl px-3 py-2 text-xs font-black transition-all ${pricingProviderFilter === 'tst' ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/20' : 'text-sky-600 dark:text-sky-300'}`}>
                                       TST ({tstPricingCount})
                                   </button>
-                                  <button type="button" aria-pressed={pricingProviderFilter === 'gommo'} onClick={() => setPricingProviderFilter('gommo')} className={`rounded-xl px-3 py-2 text-xs font-black transition-all ${pricingProviderFilter === 'gommo' ? 'bg-violet-500 text-white shadow-lg shadow-violet-500/20' : 'text-violet-600 dark:text-violet-300'}`}>
-                                      Gommo ({gommoPricingCount})
+                                  <button type="button" aria-pressed={pricingProviderFilter === 'gpti2'} onClick={() => setPricingProviderFilter('gpti2')} className={`rounded-xl px-3 py-2 text-xs font-black transition-all ${pricingProviderFilter === 'gpti2' ? 'bg-violet-500 text-white shadow-lg shadow-violet-500/20' : 'text-violet-600 dark:text-violet-300'}`}>
+                                      GPTi2 ({gpti2PricingCount})
                                   </button>
                               </div>
                               <div role="group" aria-label="Lọc theo trạng thái giá" className="grid grid-cols-2 gap-1 rounded-2xl neu-inset-sm p-1.5">

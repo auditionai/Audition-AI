@@ -40,7 +40,7 @@ type GenerationProvider = 'tst' | 'gommo' | 'gpti2';
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PHONE_USER_AGENT_PATTERN = /iphone|ipod|android.+mobile|windows phone|blackberry|opera mini|mobile safari/i;
-const VND_PER_CREDIT = 40;
+const VND_PER_CREDIT = 45;
 const VND_PER_VCOIN = 1000;
 
 type QueueClientPlatform = 'mobile' | 'desktop' | 'unknown';

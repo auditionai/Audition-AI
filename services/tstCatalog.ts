@@ -143,7 +143,7 @@ type ParsedMarkdownModel = {
   maxCredits: number;
 };
 
-const VND_PER_CREDIT = 40;
+const VND_PER_CREDIT = 45;
 const VND_PER_VCOIN = 1000;
 export const TST_CATALOG_CACHE_TTL_MS = 5 * 60_000;
 const TST_CATALOG_FETCH_TIMEOUT_MS = 15_000;
@@ -1703,7 +1703,11 @@ export const getVideoCostBreakdown = ({
   const normalizedSpeed = normalizeSpeed(speed);
   const normalizedServer = normalizeServer(serverId);
   const normalizedDuration = normalizeDuration(duration);
-  const perSecondModel = isPerSecondVideoBillingModel(modelId);
+  const perSecondModel = isPerSecondVideoBillingModel(modelId)
+    || modelEntries.some((entry) => normalizeSpeed(entry.speed) === 'per-second');
+  const matchesVideoSpeed = (entry: TstPricingEntry) =>
+    normalizeSpeed(entry.speed) === normalizedSpeed
+    || (perSecondModel && normalizeSpeed(entry.speed) === 'per-second');
   const matchesVideoResolution = (entry: TstPricingEntry) =>
     matchesVideoResolutionForModel(modelId, entry.resolution, normalizedResolution);
   const matchesVideoDuration = (entry: TstPricingEntry) =>
@@ -1714,7 +1718,7 @@ export const getVideoCostBreakdown = ({
       serversMatchForModel(modelId, entry.server, normalizedServer) &&
       matchesVideoResolution(entry) &&
       matchesVideoDuration(entry) &&
-      normalizeSpeed(entry.speed) === normalizedSpeed &&
+      matchesVideoSpeed(entry) &&
       matchesAudioSelection(entry.audio, audio),
     (entry) =>
       serversMatchForModel(modelId, entry.server, normalizedServer) &&
@@ -1726,7 +1730,7 @@ export const getVideoCostBreakdown = ({
     (entry) =>
       matchesVideoResolution(entry) &&
       matchesVideoDuration(entry) &&
-      normalizeSpeed(entry.speed) === normalizedSpeed &&
+      matchesVideoSpeed(entry) &&
       matchesAudioSelection(entry.audio, audio),
     (entry) =>
       matchesVideoResolution(entry) &&
@@ -1923,7 +1927,8 @@ export const getPricingRows = async (forceRefresh = false): Promise<TstPricingRo
     }
 
     const type = (model.type === 'motion-control' ? 'motion-control' : model.type) as TstMediaType | undefined;
-    const perSecond = isPerSecondBillingModel(entry.model, type);
+    const perSecond = isPerSecondBillingModel(entry.model, type)
+      || normalizeSpeed(entry.speed) === 'per-second';
     const defaultVcoin = creditsToVcoin(entry.credits);
     const durationSeconds = Math.max(1, parseDurationSeconds(entry.duration) || 1);
     return {

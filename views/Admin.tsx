@@ -4711,10 +4711,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       <th className="px-4 py-3 font-bold">Thời lượng</th>
                                       <th className="px-4 py-3 font-bold">Tốc độ</th>
                                       <th className="px-4 py-3 font-bold text-center">Audio</th>
-                                       <th className="px-4 py-3 font-bold text-right">API 1 Credits</th>
-                                       <th className="px-4 py-3 font-bold text-right">API 1 Quy Đổi</th>
-                                       <th className="px-4 py-3 font-bold text-right">API 2 Realtime</th>
-                                       <th className="px-4 py-3 font-bold">API 2 Route</th>
+                                       <th className="px-4 py-3 font-bold text-right">TST Credits</th>
+                                       <th className="px-4 py-3 font-bold text-right">TST VNĐ (45đ/Credit)</th>
                                        <th className="px-4 py-3 font-bold text-right">AUDITION AI</th>
                                       <th className="px-4 py-3 font-bold text-right">Lãi Gộp</th>
                                       <th className="px-4 py-3 font-bold">Config Key</th>
@@ -4743,11 +4741,6 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                            const grossProfit = Number.isFinite(auditionPrice) ? auditionPrice - row.vcoin : 0;
                                            const providerCostKnown = row.server !== 'gommo' || row.vcoin > 0;
                                            const gommo = getGommoPriceComparison(row, gommoCatalog);
-                                           const gommoCreditText = gommo?.minCredits === null || gommo?.minCredits === undefined
-                                               ? '-'
-                                               : gommo.minCredits === gommo.maxCredits
-                                                   ? `${gommo.minCredits} GCr`
-                                                   : `${gommo.minCredits}–${gommo.maxCredits} GCr`;
 
                                           return (
                                               <tr key={`${row.modelId}_${row.configKey}`} className="hover:neu-inset-sm transition-colors">
@@ -4787,39 +4780,13 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                   </td>
                                                   <td className="px-4 py-3 text-white">{row.server === 'gommo' ? row.providerModeLabel || row.speed || '-' : tstSpeedToUi(row.speed) || '-'}</td>
                                                   <td className="px-4 py-3 text-center text-white">{row.audio ? 'Có' : '-'}</td>
-                                                  <td className="px-4 py-3 text-right font-mono text-audi-cyan">{row.type === 'edit' || row.server === 'gommo' ? '-' : row.credits}</td>
+                                                   <td className="px-4 py-3 text-right font-mono text-audi-cyan">{row.type === 'edit' ? '-' : row.credits}</td>
                                                    <td className="px-4 py-3 text-right font-mono text-slate-200">
                                                       {row.type === 'edit' || row.server === 'gommo'
                                                           ? '-'
                                                           : row.billingUnit === 'second'
-                                                              ? `${row.vcoin} VC/s`
-                                                           : `${row.vcoin} VC`}
-                                                   </td>
-                                                   <td className="px-4 py-3 text-right font-mono text-violet-300">
-                                                       <div>{gommoCreditText}</div>
-                                                       {gommo?.minCostVcoin !== null && gommo?.minCostVcoin !== undefined && (
-                                                           <div className="mt-1 text-[10px] text-slate-400">
-                                                               ≈ {gommo.minCostVcoin === gommo.maxCostVcoin
-                                                                   ? gommo.minCostVcoin
-                                                                   : `${gommo.minCostVcoin}–${gommo.maxCostVcoin}`} VC vốn
-                                                           </div>
-                                                       )}
-                                                   </td>
-                                                   <td className="px-4 py-3">
-                                                       {gommo ? (
-                                                           <div>
-                                                               <div className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${
-                                                                   gommo.fallbackSupported && !['maintenance', 'off', 'unavailable'].includes(gommo.status.toLowerCase())
-                                                                       ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
-                                                                       : 'border-amber-500/30 bg-amber-500/10 text-amber-300'
-                                                               }`}>
-                                                                   {gommo.fallbackSupported ? gommo.status : 'Chỉ đối chiếu'}
-                                                               </div>
-                                                               <div className="mt-1 max-w-[180px] text-[10px] text-slate-400" title={`${gommo.modelId}${gommo.matchedMode ? ` · ${gommo.matchedMode}` : ''}`}>
-                                                                   {gommo.modelName}{gommo.matchedMode ? ` · ${gommo.matchedMode}` : ''}
-                                                               </div>
-                                                           </div>
-                                                       ) : <span className="text-slate-500">-</span>}
+                                                              ? `${row.credits * 45} đ/s`
+                                                           : `${row.credits * 45} đ`}
                                                    </td>
                                                    <td className="px-4 py-3">
                                                       <div className="flex items-center justify-end gap-2">

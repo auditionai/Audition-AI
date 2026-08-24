@@ -907,42 +907,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   };
 
   const gommoPricingRows = useMemo<TstPricingRow[]>(() => {
-      if (!gommoCatalog?.configured) return [];
-      const rows = gommoCatalog.models.flatMap((model) => {
-          if (!model.fallbackSupported) return [];
-          return model.prices.map((price) => {
-              const duration = price.duration ? String(price.duration).replace(/s$/i, '') : '';
-              const configKey = buildGommoCatalogPricingOptionId(price);
-              const providerCredits = Number(price.price || 0);
-              const convertedVcoin = gommoCatalog.vndPerCredit && providerCredits > 0
-                  ? Math.max(1, Math.ceil((providerCredits * gommoCatalog.vndPerCredit) / 1000))
-                  : 0;
-              const gommoServerGroups = getGommoServerGroups(model);
-              const gommoMode = model.modes.find((mode) =>
-                  mode.type.trim().toLowerCase() === String(price.mode || '').trim().toLowerCase(),
-              );
-              const gommoServerGroup = gommoServerGroups.find((group) =>
-                  group.modeTypes.some((modeType) => modeType.trim().toLowerCase() === String(price.mode || '').trim().toLowerCase()),
-              ) || gommoServerGroups[0];
-              return {
-                  type: model.kind === 'motion' ? 'motion-control' : model.kind,
-                  modelId: model.auditionModelId,
-                  modelName: model.name,
-                  server: 'gommo',
-                  providerServerId: gommoServerGroup?.id,
-                  providerServerLabel: gommoServerGroup?.label || model.server || 'AI Gateway',
-                  providerModeLabel: gommoMode?.name || price.mode || undefined,
-                  resolution: price.resolution || undefined,
-                  duration: duration || undefined,
-                  speed: price.mode || undefined,
-                  credits: providerCredits,
-                  vcoin: convertedVcoin,
-                  configKey,
-                  billingUnit: model.rateType === 'per_second' ? 'second' as const : 'flat' as const,
-              } satisfies TstPricingRow;
-          });
-      });
-      return Array.from(new Map(rows.map((row) => [`${row.modelId}::${row.configKey}`, row])).values());
+      // Gommo video/motion models are no longer part of the application. Keep
+      // the legacy provider catalog for migration/comparison only, never for
+      // the editable Admin pricing table.
+      return [];
   }, [gommoCatalog]);
 
   const allPricingRows = useMemo(() => {
@@ -4381,7 +4349,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                            {GENERATION_PROVIDER_ROUTE_OPTIONS.map((route) => {
                                 const isVideoRoute = route.key === 'video_generation' || route.key === 'motion_control';
-                                const providerOptions: GenerationProviderMode[] = isVideoRoute ? ['tst', 'gommo'] : ['gpti2', 'tst', 'gommo'];
+                                const providerOptions: GenerationProviderMode[] = isVideoRoute ? ['tst'] : ['gpti2', 'tst', 'gommo'];
                                 const configuredPriority = providerPriorityByFeature[route.key] || [];
                                 const defaultProvider = isVideoRoute
                                     ? 'tst'

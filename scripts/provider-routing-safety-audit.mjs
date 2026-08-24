@@ -289,6 +289,8 @@ assert(!unlimitedSystemCapacityMigration.includes("raise exception 'SYSTEM_QUEUE
 assert(!unlimitedSystemCapacityMigration.includes('system_slots'));
 
 const tstCatalogSource = await readFile(new URL('../services/tstCatalog.ts', import.meta.url), 'utf8');
+assert(tstCatalogSource.includes("const PER_SECOND_VIDEO_DURATION_OPTIONS = ['5s', '10s', '15s'];"));
+assert(tstCatalogSource.includes('entries.some((entry) => normalizeSpeed(entry.speed) === \'per-second\')'));
 assert(tstCatalogSource.includes("String(entry.key || entry.config_key || '')"));
 assert(tstCatalogSource.includes("'image-gpt-2': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3']"));
 

@@ -892,6 +892,8 @@ const filterDurationsForModel = (modelId: string, durations: string[]) =>
     ? durations.filter((duration) => GROK_VIDEO_DURATIONS.includes(normalizeDuration(duration)))
     : durations;
 
+const PER_SECOND_VIDEO_DURATION_OPTIONS = ['5s', '10s', '15s'];
+
 const serversMatchForModel = (modelId: string, entryServer?: string, requestedServer?: string | null) => {
   const normalizedRequested = requestedServer ? normalizeServer(requestedServer) : '';
   if (!normalizedRequested) return true;
@@ -1526,6 +1528,8 @@ export const getVideoModelSpecs = (
       unique(((model.capabilities?.resolutions || []) as string[]).map((value) => normalizeCatalogResolution(value)).filter(Boolean)),
       RESOLUTION_ORDER,
     );
+    const perSecondModel = isPerSecondVideoBillingModel(model.model)
+      || entries.some((entry) => normalizeSpeed(entry.speed) === 'per-second');
     const durations = filterDurationsForModel(model.model, getUniqueDurations(entries));
     const capabilityDurations = sortByOrder(
       filterDurationsForModel(
@@ -1546,7 +1550,13 @@ export const getVideoModelSpecs = (
       displayName: model.name || fallback.displayName,
       servers,
       resolutions: resolutions.length > 0 ? resolutions : (capabilityResolutions.length > 0 ? capabilityResolutions : fallback.resolutions),
-      durations: durations.length > 0 ? durations : (capabilityDurations.length > 0 ? capabilityDurations : fallback.durations),
+      durations: durations.length > 0
+        ? durations
+        : capabilityDurations.length > 0
+          ? capabilityDurations
+          : perSecondModel
+            ? PER_SECOND_VIDEO_DURATION_OPTIONS
+            : fallback.durations,
       aspectRatios: getCapabilityAspectRatios(model),
       speeds,
       supportsAudio: Boolean(model.capabilities?.audio ?? fallback.supportsAudio),

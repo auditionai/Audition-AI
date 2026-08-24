@@ -279,14 +279,7 @@ export function WorkspaceVideo() {
             pricingOverrides: overrideRows
           }).vcoin
         }));
-        const gommoVideoModels = providerCatalog.models
-          .filter((model) => model.kind === 'video' && isModelAllowedForFeature(routingConfig, 'video_generation', model.auditionModelId) && resolveProviderForModel(routingConfig, model.auditionModelId, 'video_generation') === 'gommo' && isGommoCatalogModelAvailable(model))
-          .map((model) => ({
-            id: model.auditionModelId,
-            name: model.name,
-            price: getMinimumAuditionModelPrice(pricingConfig || [], model.auditionModelId) || 0,
-          }));
-        const routedVideoModels = [...liveVideoModels, ...gommoVideoModels];
+        const routedVideoModels = liveVideoModels;
 
         const liveMotionModels = getMotionModelSpecs(livePricing, filteredModels)
           .filter((spec: any) => isModelAllowedForFeature(routingConfig, 'motion_control', spec.modelId))
@@ -302,14 +295,7 @@ export function WorkspaceVideo() {
             pricingOverrides: overrideRows
           }).vcoin
         }));
-        const gommoMotionModels = providerCatalog.models
-          .filter((model) => model.kind === 'motion' && model.fallbackSupported && isModelAllowedForFeature(routingConfig, 'motion_control', model.auditionModelId) && resolveProviderForModel(routingConfig, model.auditionModelId, 'motion_control') === 'gommo' && isGommoCatalogModelAvailable(model))
-          .map((model) => ({
-            id: model.auditionModelId,
-            name: model.name,
-            price: getMinimumAuditionModelPrice(pricingConfig || [], model.auditionModelId) || 0,
-          }));
-        const routedMotionModels = [...liveMotionModels, ...gommoMotionModels];
+        const routedMotionModels = liveMotionModels;
 
         if (routedVideoModels.length > 0) {
           setVideoModelOptions(routedVideoModels);

@@ -210,6 +210,14 @@ const AMBIGUOUS_DISPATCH_DUPLICATE_PROTECTION_MESSAGE =
   'Khong nhan duoc xac nhan provider job goc sau loi mang/timeout. Job da dung de tranh tao them provider moi.';
 const VIDEO_OR_MOTION_QUEUE_KINDS = new Set(['video_generate', 'motion_generate']);
 
+const persistResultForJob = async (assetUrl: string, job: QueueJobRow) => {
+  // Provider CDN URLs are the canonical delivery URL for video and motion.
+  // R2's S3 signer cannot hash a flowing provider stream reliably, and these
+  // assets are intentionally not copied into R2.
+  if (VIDEO_OR_MOTION_QUEUE_KINDS.has(job.queue_kind)) return assetUrl;
+  return persistProviderResultToR2(assetUrl, job.user_id, job.id, job.asset_type);
+};
+
 const getQueuePayloadModelId = (payload: Record<string, unknown>) => {
   const recipe = payload.__recipePayload && typeof payload.__recipePayload === 'object'
     ? payload.__recipePayload as Record<string, unknown>
@@ -2080,7 +2088,7 @@ const prepareImageRecipeInStages = async (
 };
 
 const markCompletedWithAssetUrl = async (job: QueueJobRow, assetUrl: string) => {
-  const r2ResultUrl = await persistProviderResultToR2(assetUrl, job.user_id, job.id, job.asset_type);
+  const r2ResultUrl = await persistResultForJob(assetUrl, job);
   const admin = getServiceRoleClient();
   const nextPayload = withQueueLog(job.queue_payload, 'completed', 'Đã hoàn thành và nhận kết quả.', 'success');
   await admin
@@ -2118,7 +2126,7 @@ const completePolledJobWithResultUrl = async (
   const r2ResultUrl = await withTimeout(
     withLeaseHeartbeat(
       job.id,
-      persistProviderResultToR2(resultUrl, job.user_id, job.id, job.asset_type),
+      persistResultForJob(resultUrl, job),
       DISPATCH_LEASE_SECONDS,
     ),
     PROVIDER_RESULT_STORAGE_TIMEOUT_MS,

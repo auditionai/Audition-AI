@@ -410,14 +410,8 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                       pricingOverrides: overrideRows
                   }).vcoin
               }));
-              const gommoVideoModels = providerCatalog.models
-                .filter((model) => model.kind === 'video' && isModelAllowedForFeature(routingConfig, 'video_generation', model.auditionModelId) && resolveProviderForModel(routingConfig, model.auditionModelId, 'video_generation') === 'gommo' && isGommoCatalogModelAvailable(model))
-                .map((model) => ({
-                  id: model.auditionModelId,
-                  name: model.name,
-                  price: getMinimumAuditionCatalogModelPrice(pricingConfig || [], model) || 0,
-                }));
-              const routedVideoModels = [...liveVideoModels, ...gommoVideoModels];
+              // Video models are shown only when present in the live TST catalog.
+              const routedVideoModels = liveVideoModels;
               const liveMotionModels = getMotionModelSpecs(livePricing, filteredModels)
                 .filter((spec) => isModelAllowedForFeature(routingConfig, 'motion_control', spec.modelId))
                 .filter((spec) => resolveProviderForModel(routingConfig, spec.modelId, 'motion_control') === 'tst')
@@ -432,18 +426,8 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                       pricingOverrides: overrideRows
                   }).vcoin
               }));
-              const gommoMotionModels = providerCatalog.models
-                .filter((model) => model.kind === 'motion'
-                  && model.fallbackSupported
-                  && isModelAllowedForFeature(routingConfig, 'motion_control', model.auditionModelId)
-                  && resolveProviderForModel(routingConfig, model.auditionModelId, 'motion_control') === 'gommo'
-                  && isGommoCatalogModelAvailable(model))
-                .map((model) => ({
-                  id: model.auditionModelId,
-                  name: model.name,
-                  price: getMinimumAuditionCatalogModelPrice(pricingConfig || [], model) || 0,
-                }));
-              const routedMotionModels = [...liveMotionModels, ...gommoMotionModels];
+              // Motion models are shown only when present in the live TST catalog.
+              const routedMotionModels = liveMotionModels;
 
               if (routedVideoModels.length > 0) {
                   setVideoModelOptions(routedVideoModels);

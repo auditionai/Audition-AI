@@ -1223,7 +1223,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   ) => {
       if (switchingGenerationProvider) return;
       const isVideoRoute = featureKey === 'video_generation' || featureKey === 'motion_control';
-      const allowedProviders: GenerationProviderMode[] = isVideoRoute ? ['tst', 'gommo'] : ['gpti2', 'tst', 'gommo'];
+      const allowedProviders: GenerationProviderMode[] = isVideoRoute ? ['tst'] : ['gpti2', 'tst', 'gommo'];
       const current = (providerPriorityByFeature[featureKey] || allowedProviders).filter((entry, index, list) => allowedProviders.includes(entry) && list.indexOf(entry) === index);
       for (const entry of allowedProviders) if (!current.includes(entry)) current.push(entry);
       const index = current.indexOf(provider);

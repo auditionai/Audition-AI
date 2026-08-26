@@ -75,6 +75,14 @@ const ingestDirectly = async (sourceUrl: string, key: string, assetType: 'image'
     throw new Error(`Provider result download failed (${sourceResponse.status}).`);
   }
   const contentType = sourceResponse.headers.get('content-type') || (assetType === 'video' ? 'video/mp4' : 'image/png');
+  // Do not pass the provider's Web ReadableStream directly to the AWS SDK.
+  // Its flexible checksum middleware may try to hash a flowing stream and
+  // fail with "Unable to calculate hash for flowing readable stream". Buffer
+  // the completed provider response so checksum calculation is deterministic.
+  const sourceBuffer = Buffer.from(await sourceResponse.arrayBuffer());
+  if (sourceBuffer.length === 0) {
+    throw new Error('Provider result download returned an empty body.');
+  }
   const client = new S3Client({
     region: 'auto',
     endpoint: R2_ENDPOINT,
@@ -83,7 +91,7 @@ const ingestDirectly = async (sourceUrl: string, key: string, assetType: 'image'
   await client.send(new PutObjectCommand({
     Bucket: R2_BUCKET_NAME,
     Key: key,
-    Body: sourceResponse.body as unknown as ReadableStream,
+    Body: sourceBuffer,
     ContentType: contentType,
   }), { abortSignal: AbortSignal.timeout(R2_UPLOAD_TIMEOUT_MS) });
   return `${R2_PUBLIC_URL}/${key}`;

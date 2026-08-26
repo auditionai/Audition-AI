@@ -334,6 +334,9 @@ assert(queueWorkerSource.includes("targetProvider === 'tst' || targetProvider ==
 assert(queueWorkerSource.includes("String(toQueuePayloadObject(recipePayload).__targetProvider || '').trim().toLowerCase() === 'gpti2'"));
 assert(queueWorkerSource.includes("targetProvider === 'tst' || targetProvider === 'gommo' || targetProvider === 'gpti2'"));
 assert(queueWorkerSource.includes("targetProvider === 'gpti2' && isGpti2ProviderError(message)"));
+assert(queueWorkerSource.includes('payload.__tstFallbackValidated === true'));
+assert(queueWorkerSource.includes("updateQuery.is('job_id', null)"));
+assert(queueWorkerSource.includes('runtimeState?.provider'));
 assert(queueWorkerSource.includes('const persistResultForJob'));
 assert(queueWorkerSource.includes('VIDEO_OR_MOTION_QUEUE_KINDS.has(job.queue_kind)'));
 

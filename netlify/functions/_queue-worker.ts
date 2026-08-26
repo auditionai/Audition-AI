@@ -260,6 +260,9 @@ const resolveDispatchProvider = async (payload: Record<string, unknown>): Promis
   const stored = String(payload.__targetProvider || '').trim().toLowerCase();
   const queueKind = String(payload.queueKind || '').trim().toLowerCase();
   if (stored === 'gpti2' && VIDEO_OR_MOTION_QUEUE_KINDS.has(queueKind)) return 'tst';
+  // A fallback reaches TST only after its live catalog validates a compatible
+  // server, so retain that explicit dispatch decision on the next claim.
+  if (stored === 'tst' && payload.__tstFallbackValidated === true) return 'tst';
   // GPTi2-only models cannot be submitted to TST/Gommo. This also repairs
   // legacy queued rows whose provider metadata was written before GPTi2
   // routing was persisted.
@@ -1128,7 +1131,7 @@ const getJobRuntimeState = async (jobId: string) => {
   const admin = getServiceRoleClient();
   const { data, error } = await admin
     .from('generated_images')
-    .select('id, status, attempt_count, processing_started_at, created_at, job_id, queue_payload')
+    .select('id, status, provider, attempt_count, processing_started_at, created_at, job_id, queue_payload')
     .eq('id', jobId)
     .maybeSingle();
 
@@ -2482,12 +2485,15 @@ const trySmartImageProviderFallback = async (
   runtimeState?: any,
 ) => {
   const payload = toQueuePayloadObject(runtimeState?.queue_payload || job.queue_payload);
-  const sourceProvider = getJobProvider(payload);
+  const runtimeProvider = String(runtimeState?.provider || '').trim().toLowerCase();
+  const sourceProvider: GenerationProvider = runtimeProvider === 'gpti2' || runtimeProvider === 'gommo' || runtimeProvider === 'tst'
+    ? runtimeProvider
+    : getJobProvider(payload);
   if (
     !['image_generate', 'video_generate', 'motion_generate'].includes(String(job.queue_kind || '').trim().toLowerCase()) ||
     payload.__smartProviderFallbackEnabled === false ||
     (sourceProvider !== 'tst' && sourceProvider !== 'gommo' && sourceProvider !== 'gpti2') ||
-    String(payload.__targetProvider || sourceProvider).trim().toLowerCase() !== sourceProvider
+    (payload.__targetProvider && String(payload.__targetProvider).trim().toLowerCase() !== sourceProvider)
   ) {
     return false;
   }
@@ -2514,33 +2520,27 @@ const trySmartImageProviderFallback = async (
     .flatMap((entry: any) => [entry?.fromProvider, entry?.toProvider]).filter(Boolean));
   const nextConfiguredProvider = priority.find((provider) => provider !== sourceProvider && !historyProviders.has(provider));
   const providerOrderedTstServer = priority.length > 0 && nextConfiguredProvider !== 'tst' ? null : nextTstServer;
-  const canFallbackToGommo = sourceProvider !== 'gommo' && !providerOrderedTstServer && (!nextConfiguredProvider || nextConfiguredProvider === 'gommo') && isGommoConfigured() && await canUseGommoForPayload(
+  const configuredTstUnavailable = nextConfiguredProvider === 'tst' && !providerOrderedTstServer;
+  const canFallbackToGommo = sourceProvider !== 'gommo' && !providerOrderedTstServer && (!nextConfiguredProvider || nextConfiguredProvider === 'gommo' || configuredTstUnavailable) && isGommoConfigured() && await canUseGommoForPayload(
     job.queue_kind,
     { ...payload, model: identity.modelId },
   ).catch(() => false);
 
-  if (!providerOrderedTstServer && !canFallbackToGommo && !nextConfiguredProvider) {
+  if (!providerOrderedTstServer && !canFallbackToGommo) {
     return false;
   }
 
-  const targetProvider: GenerationProvider = providerOrderedTstServer ? 'tst' : (nextConfiguredProvider || 'gommo');
-  if (targetProvider === 'gpti2' && !isGpti2Configured()) return false;
+  const targetProvider: GenerationProvider = providerOrderedTstServer ? 'tst' : 'gommo';
   const fallbackPayload = providerOrderedTstServer
     ? withFallbackServer(payload, providerOrderedTstServer)
-    : targetProvider === 'tst'
-      ? {
-          ...payload,
-          ...(payload.__recipePayload && typeof payload.__recipePayload === 'object' ? payload.__recipePayload : {}),
-          model: identity.modelId,
-          modelId: identity.modelId,
-        }
-      : { ...payload };
+    : { ...payload };
   const history = Array.isArray(payload.__providerFallbackHistory)
     ? payload.__providerFallbackHistory.filter((entry) => entry && typeof entry === 'object')
     : [];
   const nextPayload: Record<string, unknown> = {
     ...fallbackPayload,
     __targetProvider: targetProvider,
+    __tstFallbackValidated: targetProvider === 'tst',
     __smartProviderFallbackEnabled: true,
     __tstFallbackTriedServers: triedServers,
     __providerFallbackHistory: [
@@ -2572,7 +2572,7 @@ const trySmartImageProviderFallback = async (
     : 'Tất cả server TST khả dụng của model đã thất bại; tự động chuyển job sang Gommo.';
   const queuedPayload = withQueueLog(nextPayload, 'queued', fallbackDescription, 'warning');
   const admin = getServiceRoleClient();
-  const { data, error } = await admin
+  let updateQuery = admin
     .from('generated_images')
     .update({
       status: 'queued',
@@ -2590,10 +2590,11 @@ const trySmartImageProviderFallback = async (
       updated_at: new Date().toISOString(),
     })
     .eq('id', job.id)
-    .eq('status', 'processing')
-    .eq('job_id', String(job.job_id || ''))
-    .select('id')
-    .maybeSingle();
+    .eq('status', 'processing');
+  updateQuery = job.job_id
+    ? updateQuery.eq('job_id', String(job.job_id))
+    : updateQuery.is('job_id', null);
+  const { data, error } = await updateQuery.select('id').maybeSingle();
   if (error) throw error;
   if (!data?.id) {
     logQueueWorkerEvent('Skipped smart fallback because job state changed.', getQueueWorkerLogJob(job));
@@ -3419,18 +3420,18 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
       });
       return {};
     }
-    if (providerDispatchStarted && isAmbiguousDispatchError(message)) {
-      await markDispatchAwaitingProviderConfirmation(job, message, providerPayloadForSubmit || job.queue_payload);
-      return {};
-    }
     // A deterministic GPTi2 rejection (for example an invalid reference
-    // image or provider 5xx response) means no provider job was accepted.
+    // image or synchronous-endpoint limit) means no provider job was accepted.
     // Switch to the configured TST fallback before the generic retry path,
     // which treats __tstTouched as a committed dispatch and refunds/fails it.
     if (providerDispatchStarted && targetProvider === 'gpti2' && isGpti2ProviderError(message)) {
       if (await trySmartImageProviderFallback(job, message, await getJobRuntimeState(job.id))) {
         return { requeued: 1 };
       }
+    }
+    if (providerDispatchStarted && isAmbiguousDispatchError(message)) {
+      await markDispatchAwaitingProviderConfirmation(job, message, providerPayloadForSubmit || job.queue_payload);
+      return {};
     }
     if (message.startsWith('INVALID_TST_CONFIG:')) {
       await markFailedRespectingRefundPolicy(job, message.replace('INVALID_TST_CONFIG:', '').trim());

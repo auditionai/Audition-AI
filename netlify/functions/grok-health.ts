@@ -1,5 +1,5 @@
 import type { Handler } from '@netlify/functions';
-import { GROK_MODEL, createGrokClient, getGrokApiKey, isGrokApiKey } from './_grok';
+import { createGrokClient, getGrokApiKey, isGrokApiKey } from './_grok';
 import { requireAdminUser } from './_supabase';
 
 export const handler: Handler = async (event) => {
@@ -9,12 +9,9 @@ export const handler: Handler = async (event) => {
     const suppliedKey = String(JSON.parse(event.body || '{}')?.key || '').trim();
     if (suppliedKey && !isGrokApiKey(suppliedKey)) throw new Error('A valid OpenAI-compatible API key is required.');
     const apiKey = suppliedKey || await getGrokApiKey();
-    await createGrokClient(apiKey).chat.completions.create({
-      model: GROK_MODEL,
-      messages: [{ role: 'user', content: 'Reply with OK.' }],
-      max_tokens: 4,
-      temperature: 0,
-    }, { timeout: 15_000 });
+    // Listing models validates the same gateway and bearer key without waiting for
+    // a Grok inference request, which can exceed the admin health-check budget.
+    await createGrokClient(apiKey).models.list({ timeout: 15_000 });
     return { statusCode: 200, body: JSON.stringify({ success: true }) };
   } catch (error) {
     return { statusCode: 400, body: JSON.stringify({ success: false, error: error instanceof Error ? error.message : String(error) }) };

@@ -359,6 +359,8 @@ const grokProviderSource = await readFile(new URL('../netlify/functions/_grok.ts
 assert(grokProviderSource.includes("|| 'grok-4.5'"));
 assert(grokProviderSource.includes("https://sub.digishop.work/v1"));
 assert(grokProviderSource.includes('client.chat.completions.create'));
+const grokHealthSource = await readFile(new URL('../netlify/functions/grok-health.ts', import.meta.url), 'utf8');
+assert(grokHealthSource.includes('models.list'));
 
 for (const filename of ['../views/features/GenerationTool.tsx', '../mobile-app/src/v2/views/WorkspaceImage.tsx']) {
   const source = await readFile(new URL(filename, import.meta.url), 'utf8');

@@ -17,7 +17,7 @@ import {
   TST_PROMPT_MAX_CHARACTERS,
   uploadImageToTst,
 } from './_queue-recipes';
-import { runVertexImageEdit } from './_vertex-image-edit';
+import { runNanoBananaImageEdit } from './_nano-banana-image-edit';
 import {
   buildImageProviderPrompt,
   getImageCharacterReferenceGroups,
@@ -49,7 +49,7 @@ import {
   isGommoConfigured,
   pollGommoJob,
   submitGommoJob,
-} from './_gommo-provider';
+} from './_disabled-provider';
 import { isGpti2Configured, isGpti2Model, pollGpti2Job, submitGpti2Job } from './_gpti2-provider';
 import { DEFAULT_PROVIDER_BY_FEATURE, type GenerationProviderRouteKey } from '../../shared/providerRouting';
 import {
@@ -236,7 +236,8 @@ const getGlobalGenerationProvider = async (modelId: string, featureKey?: string)
     if (error) throw error;
     const normalizedFeatureKey = String(featureKey || '').trim().toLowerCase() as GenerationProviderRouteKey;
     const featureProvider = String(normalizedFeatureKey ? data?.value?.providerByFeature?.[normalizedFeatureKey] || '' : '').trim().toLowerCase();
-    if (featureProvider === 'gommo' || featureProvider === 'tst' || featureProvider === 'gpti2') {
+    if (featureProvider === 'gommo') return 'tst';
+    if (featureProvider === 'tst' || featureProvider === 'gpti2') {
       return normalizedFeatureKey === 'video_generation' || normalizedFeatureKey === 'motion_control'
         ? (featureProvider === 'gpti2' ? 'tst' : featureProvider)
         : featureProvider as GenerationProvider;
@@ -245,11 +246,12 @@ const getGlobalGenerationProvider = async (modelId: string, featureKey?: string)
     if (featureDefault) return featureDefault;
     const selected = String(data?.value?.provider || '').trim().toLowerCase();
     if (normalizedFeatureKey) {
-      return selected === 'gommo' ? 'gommo' : selected === 'gpti2' ? 'gpti2' : selected === 'tst' ? 'tst' : GENERATION_PROVIDER_DEFAULT;
+      return selected === 'gpti2' ? 'gpti2' : 'tst';
     }
     const modelProvider = String(data?.value?.providerByModel?.[modelId] || '').trim().toLowerCase();
-    if (modelProvider === 'gommo' || modelProvider === 'tst' || modelProvider === 'gpti2') return modelProvider as GenerationProvider;
-    return selected === 'gommo' ? 'gommo' : selected === 'gpti2' ? 'gpti2' : selected === 'tst' ? 'tst' : GENERATION_PROVIDER_DEFAULT;
+    if (modelProvider === 'gommo') return 'tst';
+    if (modelProvider === 'tst' || modelProvider === 'gpti2') return modelProvider as GenerationProvider;
+    return selected === 'gpti2' ? 'gpti2' : 'tst';
   } catch (error) {
     console.warn('[queue-worker] Could not read generation provider mode; using deployment default.', error);
     return GENERATION_PROVIDER_DEFAULT;
@@ -269,7 +271,8 @@ const resolveDispatchProvider = async (payload: Record<string, unknown>): Promis
   if (!VIDEO_OR_MOTION_QUEUE_KINDS.has(queueKind) && isGpti2Model(getQueuePayloadModelId(payload))) {
     return 'gpti2';
   }
-  if (stored === 'tst' || stored === 'gommo' || stored === 'gpti2') return stored;
+  if (stored === 'gommo') return 'tst';
+  if (stored === 'tst' || stored === 'gpti2') return stored;
   return getGlobalGenerationProvider(
     getQueuePayloadModelId(payload),
     String(payload.__providerRouteKey || ''),
@@ -1204,7 +1207,7 @@ const submitProviderJob = async (
   }
   if (targetProvider === 'gommo') {
     if (!isGommoConfigured()) {
-      throw new Error('GOMMO_NOT_CONFIGURED: Missing GOMMO_ACCESS_TOKEN or GOMMO_DOMAIN environment variable');
+      throw new Error('RETIRED_PROVIDER: Gommo has been removed; route this job through TST.');
     }
     const gommo = await submitGommoJob(queueKind, plainPayload);
     return {
@@ -3143,7 +3146,7 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
       const resultUrl = await withTimeout(
         withLeaseHeartbeat(
           job.id,
-          runVertexImageEdit({
+          runNanoBananaImageEdit({
             sourceImage: editPayload.sourceImage,
             instruction: editPayload.prompt,
             modelId: editPayload.modelId,

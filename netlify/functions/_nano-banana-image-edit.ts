@@ -139,7 +139,7 @@ const buildMissingImageError = (data: any, modelName: string) => {
     : `Vertex AI did not return an edited image (${modelName}).`;
 };
 
-export const runVertexImageEdit = async ({
+export const runNanoBananaImageEdit = async ({
   sourceImage,
   instruction,
   modelId,

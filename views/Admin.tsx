@@ -4557,7 +4557,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl p-4">
                           <div className="text-xs uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold font-bold">Cấu hình live</div>
                           <div className="mt-2 text-3xl font-bold text-slate-900 dark:text-white">{allPricingRows.length}</div>
-                          <div className="text-xs text-slate-700 dark:text-slate-300 font-semibold mt-1">Bao gồm image, video, motion control và 3 tool Vertex.</div>
+                          <div className="text-xs text-slate-700 dark:text-slate-300 font-semibold mt-1">Bao gồm image, video, motion control, Grok và 3 tool Nano Banana 2.</div>
                       </div>
                       <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl p-4">
                           <div className="text-xs uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold font-bold">Models</div>

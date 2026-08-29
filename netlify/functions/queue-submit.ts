@@ -4,7 +4,7 @@ import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 import { triggerBackgroundQueueWorker } from './_queue-launcher';
 import { isDedicatedQueueWorkerMode } from './_queue-runtime-mode';
 import { validateQueuePayloadAgainstLiveCatalog } from './_tst-live-catalog';
-import { normalizeAndValidateGommoPayload } from './_gommo-provider';
+import { normalizeAndValidateGommoPayload } from './_disabled-provider';
 import { isProviderServerAllowedByConfig } from './_server-availability';
 import { getGommoServerIdForMode } from '../../shared/gommoServerRouting';
 import {
@@ -190,15 +190,12 @@ const ensureProviderConfiguredForQueueKind = (queueKind: string | undefined, pro
   }
 
   const hasTst = Boolean(String(process.env.TST_API_KEY || '').trim());
-  const hasGommo = Boolean(
-    String(process.env.GOMMO_ACCESS_TOKEN || process.env.GOMMO_API_TOKEN || '').trim() &&
-    String(process.env.GOMMO_DOMAIN || 'vmedia.ai').trim(),
-  );
+  const hasGommo = false;
   if (provider === 'tst' && !hasTst) {
     throw new Error('May chu Audition AI dang thieu TST_API_KEY nen tam thoi khong the nhan job moi.');
   }
   if (provider === 'gommo' && !hasGommo) {
-    throw new Error('May chu Audition AI dang thieu GOMMO_ACCESS_TOKEN nen tam thoi khong the nhan job moi.');
+    throw new Error('Gommo da duoc ngung su dung. Vui long chon TST hoac GPTi2.');
   }
 };
 

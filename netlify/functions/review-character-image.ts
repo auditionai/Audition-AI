@@ -1,6 +1,6 @@
 import type { Handler } from '@netlify/functions';
 import { requireAuthenticatedUser } from './_supabase';
-import { reviewCharacterImage } from './_vertex-character-image-review';
+import { reviewCharacterImage } from './_grok-character-image-review';
 
 const headers = {
   'Content-Type': 'application/json',

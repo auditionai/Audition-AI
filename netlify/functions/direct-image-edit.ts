@@ -234,7 +234,7 @@ export const handler: Handler = async (event) => {
     const toolId = String(body.toolId || '').trim();
     const toolName = String(body.toolName || toolId || 'Image Edit').trim();
     const prompt = String(body.prompt || '').trim();
-    const engine = String(body.engine || 'Vertex AI').trim();
+    const engine = String(body.engine || 'Nano Banana 2').trim();
     const showInGenerationHistory = body.showInGenerationHistory === true;
     let queuePayload = body.queuePayload;
 
@@ -370,7 +370,7 @@ export const handler: Handler = async (event) => {
       updated_at: createdAt,
       queue_kind: DIRECT_IMAGE_EDIT_QUEUE_KIND,
       queue_payload: runtimePayload,
-      provider: 'vertex_direct',
+      provider: 'gpti2',
       job_id: null,
       lease_token: null,
       lease_expires_at: null,

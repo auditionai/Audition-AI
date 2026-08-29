@@ -8,10 +8,9 @@ import {
   type SampleVisionAnalysis,
   type StyleVisionAnalysis,
 } from '../../shared/queueRecipes';
-import { runWithVertexCredentialFailover } from './_vertex-credentials';
-import { buildVertexGenerateContentUrl, VERTEX_TEXT_PRO_MODEL } from './_vertex-models';
+import { GROK_MODEL, grokJson } from './_grok';
 
-const VERTEX_MODEL = VERTEX_TEXT_PRO_MODEL;
+const VERTEX_MODEL = GROK_MODEL;
 
 type VertexDiagnosticCallback = (entry: QueueVertexDiagnosticEntry) => Promise<void> | void;
 type VisionAnalysisMode = 'default' | 'pro_structured';
@@ -93,46 +92,18 @@ const generateVisionJson = async <T>(
   mode: VisionAnalysisMode,
   onDiagnostic?: VertexDiagnosticCallback,
 ): Promise<T> => {
-  return runWithVertexCredentialFailover({
-    taskName,
-    operation: async ({ projectId, accessToken, credentialName }) => {
-      const response = await fetch(
-        buildVertexGenerateContentUrl(projectId, VERTEX_MODEL),
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: outputSchemaPrompt }, ...parts] }],
-            generationConfig: {
-              temperature: 0.0,
-              topP: 0.1,
-              maxOutputTokens: mode === 'pro_structured' ? 1024 : 2048,
-              responseMimeType: 'application/json',
-            },
-          }),
-          signal: AbortSignal.timeout(180000),
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error(await parseErrorMessage(response));
-      }
-
-      const data = await response.json();
-      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-
-      if (!text) {
-        throw new Error('Vertex AI did not return a vision analysis result.');
-      }
-
-      const parsed = JSON.parse(extractJsonPayload(text)) as T;
-      await emitDiagnostic(onDiagnostic, 'success', `${taskName} succeeded via ${credentialName || projectId}.`);
-      return parsed;
-    },
-  });
+  const instruction = parts
+    .filter((part) => typeof part?.text === 'string')
+    .map((part) => part.text)
+    .concat(outputSchemaPrompt)
+    .join('\n\n');
+  const images = parts
+    .map((part) => part?.inlineData || part?.inline_data)
+    .filter((part) => typeof part?.data === 'string')
+    .map((part) => ({ mimeType: String(part.mimeType || part.mime_type || 'image/jpeg'), data: part.data }));
+  const parsed = await grokJson<T>(instruction, images, mode === 'pro_structured' ? 1024 : 2048);
+  await emitDiagnostic(onDiagnostic, 'success', `${taskName} succeeded via Grok.`);
+  return parsed;
 };
 
 const buildCharacterVisionPrompt = (characterIndex: number) => [

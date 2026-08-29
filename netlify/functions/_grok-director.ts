@@ -5,11 +5,10 @@ import {
   type ImageGenerateRecipePayload,
   type QueueVertexDiagnosticEntry,
 } from '../../shared/queueRecipes';
-import { runWithVertexCredentialFailover } from './_vertex-credentials';
-import { buildVertexGenerateContentUrl, VERTEX_TEXT_PRO_MODEL } from './_vertex-models';
-import { grokJson } from './_grok';
+import { runWithVertexCredentialFailover } from './_grok-credentials';
+import { GROK_MODEL, grokJson, grokText } from './_grok';
 
-const VERTEX_MODEL = VERTEX_TEXT_PRO_MODEL;
+const VERTEX_MODEL = GROK_MODEL;
 const normalizePromptWhitespace = (value: string) => value.replace(/\s+/g, ' ').trim();
 type VertexDiagnosticTask = QueueVertexDiagnosticEntry['task'];
 type VertexDiagnosticCallback = (entry: QueueVertexDiagnosticEntry) => Promise<void> | void;
@@ -358,41 +357,6 @@ const requestVertexPromptSynthesis = async (
     safetyRatings: [],
   };
 
-  /* Vertex implementation retained below only as reference during rollout. */
-  const response = await fetch(
-    buildVertexGenerateContentUrl(projectId, VERTEX_MODEL),
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts }],
-        generationConfig: {
-          temperature: 0.0,
-          topP: 0.1,
-          maxOutputTokens: outputTokenLimit,
-          responseMimeType: 'application/json',
-          responseSchema: IMAGE_PROMPT_JSON_SCHEMA,
-        },
-      }),
-      signal: AbortSignal.timeout(180000),
-    },
-  );
-
-  if (!response.ok) {
-    throw new Error(await parseErrorMessage(response));
-  }
-
-  const data = await response.json();
-  return {
-    data,
-    text: extractCandidateText(data),
-    finishReasons: collectFinishReasons(data),
-    promptFeedback: extractPromptFeedback(data),
-    safetyRatings: collectSafetyRatings(data),
-  };
 };
 
 export const synthesizeStrictImagePrompt = async (
@@ -594,72 +558,13 @@ export const rewriteUserPromptToFitLimit = async (
     normalizedPrompt,
   ].join('\n');
 
-  return runWithVertexCredentialFailover({
-    taskName: 'image prompt compression',
-    onAttemptFailure: async ({ credentialName, projectId, error, retryable }) => {
-      if (!retryable) {
-        return;
-      }
-      await emitVertexDiagnostic(onDiagnostic, 'image_prompt_compression', {
-        status: 'error',
-        message: error.message,
-        credentialName: credentialName || undefined,
-        projectId,
-      });
-    },
-    operation: async ({ projectId, accessToken, credentialName }) => {
-      const response = await fetch(
-        buildVertexGenerateContentUrl(projectId, VERTEX_MODEL),
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: instruction }] }],
-            generationConfig: {
-              temperature: 0.1,
-              topP: 0.8,
-              maxOutputTokens: 1024,
-            },
-          }),
-          signal: AbortSignal.timeout(120000),
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error(await parseErrorMessage(response));
-      }
-
-      const data = await response.json();
-      const text = normalizePromptWhitespace(String(data?.candidates?.[0]?.content?.parts?.[0]?.text || ''));
-      if (!text) {
-        const message = 'Vertex AI did not return a compressed user prompt.';
-        await emitVertexDiagnostic(onDiagnostic, 'image_prompt_compression', {
-          status: 'error',
-          message,
-          credentialName: credentialName || undefined,
-          projectId,
-          finishReasons: collectFinishReasons(data),
-          promptFeedback: extractPromptFeedback(data),
-          safetyRatings: collectSafetyRatings(data),
-        });
-        throw new Error(message);
-      }
-
-      await emitVertexDiagnostic(onDiagnostic, 'image_prompt_compression', {
-        status: 'success',
-        message: `Vertex AI compressed the ${pipelineLabel} prompt successfully.`,
-        credentialName: credentialName || undefined,
-        projectId,
-        finishReasons: collectFinishReasons(data),
-        promptFeedback: extractPromptFeedback(data),
-        safetyRatings: collectSafetyRatings(data),
-      });
-      return text;
-    },
+  const text = normalizePromptWhitespace(await grokText(instruction, [], 1024));
+  if (!text) throw new Error('Grok did not return a compressed user prompt.');
+  await emitVertexDiagnostic(onDiagnostic, 'image_prompt_compression', {
+    status: 'success',
+    message: `Grok compressed the ${pipelineLabel} prompt successfully.`,
   });
+  return text;
 };
 
 export const rewriteUserImagePromptToFitLimit = async (

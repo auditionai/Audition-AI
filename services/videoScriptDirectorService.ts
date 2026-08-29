@@ -106,13 +106,18 @@ export const generateVideoScriptWithGrok = async ({
   if (!submitResponse.ok || !submitPayload?.jobId) throw new Error(getPayloadError(submitPayload, submitResponse));
 
   const deadline = Date.now() + 10 * 60_000;
+  let pollDelayMs = 2_000;
   while (Date.now() < deadline) {
-    await new Promise((resolve) => window.setTimeout(resolve, 2_000));
+    // Back off while Grok works; a hidden tab should not keep hammering
+    // Supabase/Netlify and will catch up as soon as it becomes visible again.
+    const hiddenMultiplier = typeof document !== 'undefined' && document.hidden ? 3 : 1;
+    await new Promise((resolve) => window.setTimeout(resolve, pollDelayMs * hiddenMultiplier));
     const statusResponse = await fetch(`/api/video-script-status?id=${encodeURIComponent(submitPayload.jobId)}`, { headers: authHeader, signal: AbortSignal.timeout(20_000) });
     const statusPayload = await parseResponsePayload(statusResponse);
     if (!statusResponse.ok) throw new Error(getPayloadError(statusPayload, statusResponse));
     if (statusPayload.status === 'completed' && typeof statusPayload.script === 'string' && statusPayload.script.trim()) return statusPayload.script.trim();
     if (statusPayload.status === 'failed') throw new Error(String(statusPayload.error || 'Grok khong tao duoc kich ban video.'));
+    pollDelayMs = Math.min(20_000, Math.round(pollDelayMs * 1.7));
   }
   throw new Error('Grok dang xu ly lau hon du kien. Vui long mo Lai lich su sau it phut de kiem tra ket qua.');
 };

@@ -1617,9 +1617,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       if (!apiKey.trim()) return;
       
       setKeyStatus('checking');
-      const check = apiKey.trim().startsWith('xai-')
-          ? { success: true, message: 'Grok API key format accepted.' }
-          : { success: false, message: 'Grok API key must start with xai-.' };
+      const check = await checkConnection(apiKey.trim());
       
       // Allow saving if valid OR if user confirms to bypass
       let shouldSave = check.success;
@@ -1630,6 +1628,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           }
       }
 
+      // A key must pass a real xAI request before it is persisted.
+      shouldSave = check.success;
       if (shouldSave) {
           const result = await saveSystemApiKey(apiKey, apiKeyTier);
           if (result.success) {

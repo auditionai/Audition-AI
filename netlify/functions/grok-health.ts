@@ -1,5 +1,5 @@
 import type { Handler } from '@netlify/functions';
-import { GROK_MODEL, getGrokApiKey } from './_grok';
+import { GROK_MODEL, getGrokApiKey, isGrokApiKey } from './_grok';
 import { requireAdminUser } from './_supabase';
 
 export const handler: Handler = async (event) => {
@@ -7,6 +7,7 @@ export const handler: Handler = async (event) => {
   try {
     await requireAdminUser(event);
     const suppliedKey = String(JSON.parse(event.body || '{}')?.key || '').trim();
+    if (suppliedKey && !isGrokApiKey(suppliedKey)) throw new Error('Grok API key must begin with xai- and be complete.');
     const apiKey = suppliedKey || await getGrokApiKey();
     const response = await fetch('https://api.x.ai/v1/chat/completions', {
       method: 'POST',

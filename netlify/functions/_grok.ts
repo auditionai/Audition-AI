@@ -2,6 +2,7 @@ import { getServiceRoleClient } from './_supabase';
 
 const GROK_API_URL = 'https://api.x.ai/v1/chat/completions';
 export const GROK_MODEL = process.env.GROK_MODEL?.trim() || 'grok-4.5';
+export const isGrokApiKey = (value: unknown) => /^xai-[A-Za-z0-9_-]{20,}$/.test(String(value || '').trim());
 
 const extractJson = (value: string) => {
   const trimmed = value.trim();
@@ -14,20 +15,22 @@ const extractJson = (value: string) => {
 
 export const getGrokApiKey = async () => {
   const environmentKey = String(process.env.GROK_API_KEY || '').trim();
-  if (environmentKey) return environmentKey;
+  if (environmentKey) {
+    if (!isGrokApiKey(environmentKey)) throw new Error('GROK_NOT_CONFIGURED: GROK_API_KEY must be a valid xAI key beginning with xai-.');
+    return environmentKey;
+  }
 
   const { data, error } = await getServiceRoleClient()
     .from('api_keys')
-    .select('id, key_value')
+    .select('id, key_value, last_used_at')
     .eq('status', 'active')
     .ilike('name', '[GROK]%')
-    .order('last_used_at', { ascending: true, nullsFirst: true })
-    .limit(1)
-    .maybeSingle();
+    .order('last_used_at', { ascending: true, nullsFirst: true });
   if (error) throw error;
-  const key = String(data?.key_value || '').trim();
-  if (!key) throw new Error('GROK_NOT_CONFIGURED: Add a Grok API key in Admin Settings or set GROK_API_KEY.');
-  if (data?.id) void getServiceRoleClient().from('api_keys').update({ last_used_at: new Date().toISOString() }).eq('id', data.id);
+  const row = (data || []).find((candidate) => isGrokApiKey(candidate.key_value));
+  const key = String(row?.key_value || '').trim();
+  if (!key) throw new Error('GROK_NOT_CONFIGURED: Add a valid xAI API key beginning with xai- in Admin Settings or set GROK_API_KEY.');
+  if (row?.id) void getServiceRoleClient().from('api_keys').update({ last_used_at: new Date().toISOString() }).eq('id', row.id);
   return key;
 };
 

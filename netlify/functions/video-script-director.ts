@@ -1,60 +1,32 @@
 import type { Handler } from '@netlify/functions';
-import { grokText } from './_grok';
+import { grokText, type GrokImageInput } from './_grok';
 import { getAuthenticatedRequestErrorStatus, requireAuthenticatedUser } from './_supabase';
 
 const VIDEO_SCRIPT_DEADLINE_ERROR = 'VIDEO_SCRIPT_GROK_DEADLINE';
 // The Cloudflare proxy in front of the site cuts synchronous requests at about
 // 45 seconds. Keep this below that limit and constrain output for fast scripts.
-const VIDEO_SCRIPT_GROK_TIMEOUT_MS = 35_000;
-const VIDEO_SCRIPT_MAX_TOKENS = 900;
+const VIDEO_SCRIPT_GROK_TIMEOUT_MS = 32_000;
+const VIDEO_SCRIPT_MAX_TOKENS = 650;
 
 const jsonHeaders = {
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': '*',
 };
 
-const parseErrorMessage = async (response: Response) => {
-  const text = await response.text().catch(() => '');
-  if (!text) return `${response.status} ${response.statusText}`;
-
-  try {
-    const data = JSON.parse(text);
-    return data?.error?.message || data?.error || data?.detail || data?.message || text.slice(0, 700);
-  } catch {
-    return text.slice(0, 700);
-  }
-};
-
-const toInlineImagePart = async (source: string) => {
+const toGrokImageInput = (source: string): GrokImageInput => {
   if (!source) throw new Error('Missing reference image.');
-
-  let mimeType = 'image/jpeg';
-  let base64Data = source;
-
+  // R2 URLs are public inputs. Passing the URL directly avoids downloading and
+  // base64-encoding the image inside this synchronous Netlify function.
   if (source.startsWith('http')) {
-    const response = await fetch(source, { signal: AbortSignal.timeout(60000) });
-    if (!response.ok) {
-      throw new Error(`Failed to fetch reference image: ${await parseErrorMessage(response)}`);
-    }
-    const arrayBuffer = await response.arrayBuffer();
-    mimeType = response.headers.get('content-type') || mimeType;
-    base64Data = Buffer.from(arrayBuffer).toString('base64');
-  } else if (source.startsWith('data:')) {
-    const [header, body] = source.split(',', 2);
-    base64Data = body || '';
-    mimeType = header.match(/^data:(.*?);base64$/)?.[1] || mimeType;
-  } else {
-    base64Data = source.replace(/^data:[^;]+;base64,/, '');
+    return { url: source };
   }
-
-  if (!base64Data.trim()) throw new Error('Reference image data is empty.');
-
-  return {
-    inlineData: {
-      data: base64Data,
-      mimeType,
-    },
-  };
+  if (!source.startsWith('data:')) {
+    return { mimeType: 'image/jpeg', data: source };
+  }
+  const [header, data = ''] = source.split(',', 2);
+  const mimeType = header.match(/^data:(.*?);base64$/)?.[1] || 'image/jpeg';
+  if (!data.trim()) throw new Error('Reference image data is empty.');
+  return { mimeType, data: source.startsWith('data:') ? data : source.replace(/^data:[^;]+;base64,/, '') };
 };
 
 const clampDurationSeconds = (value: unknown) => {
@@ -228,12 +200,12 @@ export const handler: Handler = async (event) => {
         ? body.scriptOptions as Record<string, unknown>
         : {};
 
-    const imagePart = await toInlineImagePart(imageSource);
+    const imagePart = toGrokImageInput(imageSource);
     let script: string;
     try {
       script = sanitizeDirectorScript(await grokText(
         buildDirectorInstruction(durationSeconds, userPrompt, scriptOptions),
-        [{ mimeType: imagePart.inlineData.mimeType, data: imagePart.inlineData.data }],
+        [imagePart],
         VIDEO_SCRIPT_MAX_TOKENS,
         { timeoutMs: VIDEO_SCRIPT_GROK_TIMEOUT_MS },
       ));

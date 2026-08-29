@@ -15,6 +15,11 @@ const parseBoundedTimeout = (value: string | undefined, fallback: number) => {
 // Queue workers can wait longer than browser-facing functions. Keep a finite
 // ceiling so an unavailable upstream cannot occupy a worker indefinitely.
 export const GROK_BACKGROUND_TIMEOUT_MS = parseBoundedTimeout(process.env.GROK_BACKGROUND_TIMEOUT_MS, 300_000);
+export type GrokImageInput = {
+  mimeType?: string;
+  data?: string;
+  url?: string;
+};
 // The gateway issues its own OpenAI-compatible keys, so xAI's `xai-` prefix is not required.
 export const isGrokApiKey = (value: unknown) => {
   const key = String(value || '').trim();
@@ -60,7 +65,7 @@ export const getGrokApiKey = async () => {
 
 export const grokJson = async <T>(
   instruction: string,
-  images: Array<{ mimeType: string; data: string }> = [],
+  images: GrokImageInput[] = [],
   maxTokens = 2048,
   options: { timeoutMs?: number } = {},
 ): Promise<T> => {
@@ -68,7 +73,8 @@ export const grokJson = async <T>(
   const client = createGrokClient(apiKey);
   const content: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [{ type: 'text', text: instruction }];
   for (const image of images) {
-    content.push({ type: 'image_url', image_url: { url: `data:${image.mimeType};base64,${image.data}` } });
+    const url = String(image.url || '').trim() || `data:${image.mimeType || 'image/jpeg'};base64,${image.data || ''}`;
+    content.push({ type: 'image_url', image_url: { url } });
   }
   const response = await client.chat.completions.create({
     model: GROK_MODEL,
@@ -84,14 +90,17 @@ export const grokJson = async <T>(
 
 export const grokText = async (
   instruction: string,
-  images: Array<{ mimeType: string; data: string }> = [],
+  images: GrokImageInput[] = [],
   maxTokens = 4096,
   options: { timeoutMs?: number } = {},
 ) => {
   const apiKey = await getGrokApiKey();
   const client = createGrokClient(apiKey);
   const content: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [{ type: 'text', text: instruction }];
-  for (const image of images) content.push({ type: 'image_url', image_url: { url: `data:${image.mimeType};base64,${image.data}` } });
+  for (const image of images) {
+    const url = String(image.url || '').trim() || `data:${image.mimeType || 'image/jpeg'};base64,${image.data || ''}`;
+    content.push({ type: 'image_url', image_url: { url } });
+  }
   const response = await client.chat.completions.create({
     model: GROK_MODEL,
     messages: [{ role: 'user', content }],

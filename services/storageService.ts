@@ -557,14 +557,14 @@ export const uploadFileToR2 = async (file: File | Blob | string, folder: string 
         }
 
         const authHeader = await getSessionAuthHeader();
-        const prepareResponse = await fetch('/api/storage-upload-url', {
+        const prepareResponse = await fetchWithTimeout('/api/storage-upload-url', {
             method: 'POST',
             headers: {
                 ...authHeader,
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({ folder, contentType }),
-        });
+        }, 15_000);
         const preparePayload = await prepareResponse.json().catch(() => ({}));
         if (!prepareResponse.ok || !preparePayload?.publicUrl) {
             throw new Error(preparePayload?.error || 'Không thể chuẩn bị vùng tải tệp.');
@@ -586,11 +586,18 @@ export const uploadFileToR2 = async (file: File | Blob | string, folder: string 
         if (!preparePayload.uploadUrl) {
             throw new Error('URL tải tệp R2 không hợp lệ.');
         }
-        const uploadResponse = await fetch(preparePayload.uploadUrl, {
+        let uploadResponse = await fetchWithTimeout(preparePayload.uploadUrl, {
             method: 'PUT',
             headers: { 'Content-Type': contentType },
             body: blob,
-        });
+        }, 25_000);
+        if (!uploadResponse.ok && uploadResponse.status >= 500) {
+            uploadResponse = await fetchWithTimeout(preparePayload.uploadUrl, {
+                method: 'PUT',
+                headers: { 'Content-Type': contentType },
+                body: blob,
+            }, 25_000);
+        }
         if (!uploadResponse.ok) {
             throw new Error(`Tải tệp thất bại (${uploadResponse.status}).`);
         }

@@ -6,6 +6,7 @@ const VIDEO_SCRIPT_DEADLINE_ERROR = 'VIDEO_SCRIPT_GROK_DEADLINE';
 // The Cloudflare proxy in front of the site cuts synchronous requests at about
 // 45 seconds. Keep this below that limit and constrain output for fast scripts.
 const VIDEO_SCRIPT_GROK_TIMEOUT_MS = 32_000;
+const VIDEO_SCRIPT_TOTAL_TIMEOUT_MS = 25_000;
 const VIDEO_SCRIPT_MAX_TOKENS = 650;
 
 const jsonHeaders = {
@@ -27,6 +28,19 @@ const toGrokImageInput = (source: string): GrokImageInput => {
   const mimeType = header.match(/^data:(.*?);base64$/)?.[1] || 'image/jpeg';
   if (!data.trim()) throw new Error('Reference image data is empty.');
   return { mimeType, data: source.startsWith('data:') ? data : source.replace(/^data:[^;]+;base64,/, '') };
+};
+
+const runVideoScriptWithDeadline = async <T>(operation: (signal: AbortSignal) => Promise<T>): Promise<T> => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), VIDEO_SCRIPT_TOTAL_TIMEOUT_MS);
+  try {
+    return await operation(controller.signal);
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error(VIDEO_SCRIPT_DEADLINE_ERROR);
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 };
 
 const clampDurationSeconds = (value: unknown) => {
@@ -203,12 +217,12 @@ export const handler: Handler = async (event) => {
     const imagePart = toGrokImageInput(imageSource);
     let script: string;
     try {
-      script = sanitizeDirectorScript(await grokText(
+      script = sanitizeDirectorScript(await runVideoScriptWithDeadline((signal) => grokText(
         buildDirectorInstruction(durationSeconds, userPrompt, scriptOptions),
         [imagePart],
         VIDEO_SCRIPT_MAX_TOKENS,
-        { timeoutMs: VIDEO_SCRIPT_GROK_TIMEOUT_MS },
-      ));
+        { timeoutMs: VIDEO_SCRIPT_GROK_TIMEOUT_MS, signal },
+      )));
     } catch (error: any) {
       if (error?.name === 'TimeoutError' || error?.name === 'AbortError') throw new Error(VIDEO_SCRIPT_DEADLINE_ERROR);
       throw error;

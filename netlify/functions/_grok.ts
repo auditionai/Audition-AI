@@ -20,6 +20,10 @@ export type GrokImageInput = {
   data?: string;
   url?: string;
 };
+type GrokRequestOptions = {
+  timeoutMs?: number;
+  signal?: AbortSignal;
+};
 // The gateway issues its own OpenAI-compatible keys, so xAI's `xai-` prefix is not required.
 export const isGrokApiKey = (value: unknown) => {
   const key = String(value || '').trim();
@@ -67,7 +71,7 @@ export const grokJson = async <T>(
   instruction: string,
   images: GrokImageInput[] = [],
   maxTokens = 2048,
-  options: { timeoutMs?: number } = {},
+  options: GrokRequestOptions = {},
 ): Promise<T> => {
   const apiKey = await getGrokApiKey();
   const client = createGrokClient(apiKey);
@@ -82,7 +86,7 @@ export const grokJson = async <T>(
     temperature: 0,
     max_tokens: maxTokens,
     response_format: { type: 'json_object' },
-  }, options.timeoutMs ? { timeout: options.timeoutMs } : undefined);
+  }, options.timeoutMs || options.signal ? { timeout: options.timeoutMs, signal: options.signal } : undefined);
   const text = String(response.choices[0]?.message?.content || '').trim();
   if (!text) throw new Error('Grok returned an empty response.');
   return JSON.parse(extractJson(text)) as T;
@@ -92,7 +96,7 @@ export const grokText = async (
   instruction: string,
   images: GrokImageInput[] = [],
   maxTokens = 4096,
-  options: { timeoutMs?: number } = {},
+  options: GrokRequestOptions = {},
 ) => {
   const apiKey = await getGrokApiKey();
   const client = createGrokClient(apiKey);
@@ -106,7 +110,7 @@ export const grokText = async (
     messages: [{ role: 'user', content }],
     temperature: 0.2,
     max_tokens: maxTokens,
-  }, options.timeoutMs ? { timeout: options.timeoutMs } : undefined);
+  }, options.timeoutMs || options.signal ? { timeout: options.timeoutMs, signal: options.signal } : undefined);
   const text = String(response.choices[0]?.message?.content || '').trim();
   if (!text) throw new Error('Grok returned an empty response.');
   return text;

@@ -99,6 +99,16 @@
   status = 200
 
 [[redirects]]
+  from = "/api/video-script-submit"
+  to = "/.netlify/functions/video-script-submit"
+  status = 200
+
+[[redirects]]
+  from = "/api/video-script-status"
+  to = "/.netlify/functions/video-script-status"
+  status = 200
+
+[[redirects]]
   from = "/api/queue-enqueue"
   to = "/.netlify/functions/queue-enqueue"
   status = 200

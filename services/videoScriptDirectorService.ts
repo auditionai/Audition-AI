@@ -96,41 +96,30 @@ export const generateVideoScriptWithGrok = async ({
     throw new Error('Anh tham chieu qua lon nen khong the gui len Grok de tao kich ban. Vui long dung anh nho hon hoac anh da nen.');
   }
 
-  const endpoints = ['/api/video-script-director', '/.netlify/functions/video-script-director'];
-  let response: Response | null = null;
-  let payload: any = {};
+  const submitResponse = await fetch('/api/video-script-submit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeader },
+    body: requestBody,
+    signal: AbortSignal.timeout(20_000),
+  });
+  const submitPayload = await parseResponsePayload(submitResponse);
+  if (!submitResponse.ok || !submitPayload?.jobId) throw new Error(getPayloadError(submitPayload, submitResponse));
 
-  for (const endpoint of endpoints) {
-    response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeader },
-      body: requestBody,
-      signal: AbortSignal.timeout(75_000),
-    });
-
-    payload = await parseResponsePayload(response);
-
-    if (response.status === 404 && endpoint !== endpoints[endpoints.length - 1]) {
-      continue;
-    }
-
-    break;
+  const deadline = Date.now() + 10 * 60_000;
+  let pollDelayMs = 2_000;
+  while (Date.now() < deadline) {
+    // Back off while Grok works; a hidden tab should not keep hammering
+    // Supabase/Netlify and will catch up as soon as it becomes visible again.
+    const hiddenMultiplier = typeof document !== 'undefined' && document.hidden ? 3 : 1;
+    await new Promise((resolve) => window.setTimeout(resolve, pollDelayMs * hiddenMultiplier));
+    const statusResponse = await fetch(`/api/video-script-status?id=${encodeURIComponent(submitPayload.jobId)}`, { headers: authHeader, signal: AbortSignal.timeout(20_000) });
+    const statusPayload = await parseResponsePayload(statusResponse);
+    if (!statusResponse.ok) throw new Error(getPayloadError(statusPayload, statusResponse));
+    if (statusPayload.status === 'completed' && typeof statusPayload.script === 'string' && statusPayload.script.trim()) return statusPayload.script.trim();
+    if (statusPayload.status === 'failed') throw new Error(String(statusPayload.error || 'Grok khong tao duoc kich ban video.'));
+    pollDelayMs = Math.min(20_000, Math.round(pollDelayMs * 1.7));
   }
-
-  if (!response) {
-    throw new Error('Khong the ket noi den video-script-director.');
-  }
-
-  if (!response.ok) {
-    throw new Error(getPayloadError(payload, response));
-  }
-
-  const script = typeof payload?.script === 'string' ? payload.script.trim() : '';
-  if (!script) {
-    throw new Error('Grok khong tra ve kich ban video.');
-  }
-
-  return script;
+  throw new Error('Grok dang xu ly lau hon du kien. Vui long mo Lai lich su sau it phut de kiem tra ket qua.');
 };
 
 /** @deprecated Use generateVideoScriptWithGrok. */

@@ -5,9 +5,9 @@ import { getAuthenticatedRequestErrorStatus, requireAuthenticatedUser } from './
 const VIDEO_SCRIPT_DEADLINE_ERROR = 'VIDEO_SCRIPT_GROK_DEADLINE';
 // The Cloudflare proxy in front of the site cuts synchronous requests at about
 // 45 seconds. Keep this below that limit and constrain output for fast scripts.
-const VIDEO_SCRIPT_GROK_TIMEOUT_MS = 32_000;
-const VIDEO_SCRIPT_TOTAL_TIMEOUT_MS = 25_000;
-const VIDEO_SCRIPT_MAX_TOKENS = 650;
+const VIDEO_SCRIPT_GROK_TIMEOUT_MS = 290_000;
+const VIDEO_SCRIPT_TOTAL_TIMEOUT_MS = 295_000;
+const VIDEO_SCRIPT_MAX_TOKENS = 2600;
 
 const jsonHeaders = {
   'Content-Type': 'application/json',
@@ -32,14 +32,22 @@ const toGrokImageInput = (source: string): GrokImageInput => {
 
 const runVideoScriptWithDeadline = async <T>(operation: (signal: AbortSignal) => Promise<T>): Promise<T> => {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), VIDEO_SCRIPT_TOTAL_TIMEOUT_MS);
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      controller.abort();
+      reject(new Error(VIDEO_SCRIPT_DEADLINE_ERROR));
+    }, VIDEO_SCRIPT_TOTAL_TIMEOUT_MS);
+  });
   try {
-    return await operation(controller.signal);
+    // Do not wait for a gateway socket that ignores abort. The handler must be
+    // free to return before Cloudflare's origin deadline.
+    return await Promise.race([operation(controller.signal), deadline]);
   } catch (error) {
     if (controller.signal.aborted) throw new Error(VIDEO_SCRIPT_DEADLINE_ERROR);
     throw error;
   } finally {
-    clearTimeout(timeoutId);
+    if (timeoutId) clearTimeout(timeoutId);
   }
 };
 
@@ -120,6 +128,7 @@ const buildDirectorInstruction = (
   const voiceDialogue = Boolean(scriptOptions.voiceDialogue);
   const trendEdit = Boolean(scriptOptions.trendEdit);
   const textOverlay = Boolean(scriptOptions.textOverlay);
+
   const shotCountRule = trendEdit
     ? '- For 5s video: create exactly 5 compact shots. For 8-10s: create 6-8 shots. For 15s or longer: create 8-12 shots.'
     : '- Use a natural number of shots for the image and idea: 2-4 shots for 5s, 3-5 shots for 8-10s, 4-7 shots for 15s or longer. Do not over-cut simple scenes.';
@@ -186,6 +195,30 @@ const buildDirectorInstruction = (
   ].filter(Boolean).join('\n');
 };
 
+export type VideoScriptRequestBody = {
+  imageSource?: string;
+  durationSeconds?: number | string;
+  userPrompt?: string;
+  scriptOptions?: Record<string, unknown>;
+};
+
+export const generateVideoScriptForRequest = async (body: VideoScriptRequestBody) => {
+  const imageSource = String(body.imageSource || '').trim();
+  const durationSeconds = clampDurationSeconds(body.durationSeconds);
+  const userPrompt = String(body.userPrompt || '').trim();
+  const scriptOptions = body.scriptOptions && typeof body.scriptOptions === 'object' ? body.scriptOptions : {};
+  const imagePart = toGrokImageInput(imageSource);
+  const script = sanitizeDirectorScript(await grokText(
+    buildDirectorInstruction(durationSeconds, userPrompt, scriptOptions),
+    [imagePart],
+    VIDEO_SCRIPT_MAX_TOKENS,
+    { timeoutMs: VIDEO_SCRIPT_GROK_TIMEOUT_MS },
+  ));
+  if (!script) throw new Error('Grok did not return a video script.');
+  validateDirectorScript(script);
+  return script.slice(0, 10000);
+};
+
 export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return {
@@ -205,31 +238,7 @@ export const handler: Handler = async (event) => {
 
   try {
     await requireAuthenticatedUser(event);
-    const body = JSON.parse(event.body || '{}');
-    const imageSource = String(body.imageSource || '').trim();
-    const durationSeconds = clampDurationSeconds(body.durationSeconds);
-    const userPrompt = String(body.userPrompt || '').trim();
-    const scriptOptions =
-      body.scriptOptions && typeof body.scriptOptions === 'object'
-        ? body.scriptOptions as Record<string, unknown>
-        : {};
-
-    const imagePart = toGrokImageInput(imageSource);
-    let script: string;
-    try {
-      script = sanitizeDirectorScript(await runVideoScriptWithDeadline((signal) => grokText(
-        buildDirectorInstruction(durationSeconds, userPrompt, scriptOptions),
-        [imagePart],
-        VIDEO_SCRIPT_MAX_TOKENS,
-        { timeoutMs: VIDEO_SCRIPT_GROK_TIMEOUT_MS, signal },
-      )));
-    } catch (error: any) {
-      if (error?.name === 'TimeoutError' || error?.name === 'AbortError') throw new Error(VIDEO_SCRIPT_DEADLINE_ERROR);
-      throw error;
-    }
-    if (!script) throw new Error('Grok did not return a video script.');
-    validateDirectorScript(script);
-    script = script.slice(0, 10000);
+    const script = await runVideoScriptWithDeadline(() => generateVideoScriptForRequest(JSON.parse(event.body || '{}')));
 
     return {
       statusCode: 200,

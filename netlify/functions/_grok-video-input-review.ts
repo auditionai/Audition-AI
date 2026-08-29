@@ -1,4 +1,4 @@
-import { grokJson } from './_grok';
+import { GROK_BACKGROUND_TIMEOUT_MS, grokJson } from './_grok';
 
 
 export type VideoInputReviewIssue =
@@ -175,7 +175,7 @@ const reviewImageInput = async (
     buildReviewInstruction(mode),
     [{ mimeType: imagePart.inlineData.mimeType, data: imagePart.inlineData.data }],
     1024,
-    { timeoutMs: 30_000 },
+    { timeoutMs: GROK_BACKGROUND_TIMEOUT_MS },
   );
   return normalizeReviewResult(result);
 };

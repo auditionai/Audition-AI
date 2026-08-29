@@ -823,7 +823,7 @@ export function WorkspaceImage() {
       });
 
       if (!result.imageUrl) {
-        throw new Error('Vertex AI không trả về ảnh kết quả.');
+        throw new Error('Grok AI không trả về ảnh kết quả.');
       }
 
       const refreshedUrl = result.imageUrl.includes('?')
@@ -1163,7 +1163,7 @@ export function WorkspaceImage() {
                       <span>{activeAssist === 'remove_bg_pro' ? 'Đang Tách...' : 'Tách Nền'}</span>
                     </div>
                     <div className="mt-1 text-[11px] opacity-80">
-                      {activeAssist === 'remove_bg_pro' ? 'Vertex AI đang xử lý' : `${CHARACTER_ASSISTANT_RESOLUTION} • ${removeBgCost.vcoin} Vcoin`}
+                      {activeAssist === 'remove_bg_pro' ? 'Grok AI đang xử lý' : `${CHARACTER_ASSISTANT_RESOLUTION} • ${removeBgCost.vcoin} Vcoin`}
                     </div>
                   </button>
                   <button
@@ -1182,7 +1182,7 @@ export function WorkspaceImage() {
                       <span>{activeAssist === 'sharpen_upscale' ? 'Đang Nét...' : 'Làm Nét'}</span>
                     </div>
                     <div className="mt-1 text-[11px] opacity-80">
-                      {activeAssist === 'sharpen_upscale' ? 'Vertex AI đang xử lý' : `${CHARACTER_ASSISTANT_RESOLUTION} • ${sharpenCost.vcoin} Vcoin`}
+                      {activeAssist === 'sharpen_upscale' ? 'Grok AI đang xử lý' : `${CHARACTER_ASSISTANT_RESOLUTION} • ${sharpenCost.vcoin} Vcoin`}
                     </div>
                   </button>
                 </div>

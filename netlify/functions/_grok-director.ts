@@ -6,7 +6,7 @@ import {
   type QueueVertexDiagnosticEntry,
 } from '../../shared/queueRecipes';
 import { runWithVertexCredentialFailover } from './_grok-credentials';
-import { GROK_MODEL, grokJson, grokText } from './_grok';
+import { GROK_BACKGROUND_TIMEOUT_MS, GROK_MODEL, grokJson, grokText } from './_grok';
 
 const VERTEX_MODEL = GROK_MODEL;
 const normalizePromptWhitespace = (value: string) => value.replace(/\s+/g, ' ').trim();
@@ -67,7 +67,7 @@ const collectSafetyRatings = (data: any) =>
 const extractJsonPayload = (value: string) => {
   const trimmed = value.trim();
   if (!trimmed) {
-    throw new Error('Vertex AI returned an empty prompt synthesis payload.');
+    throw new Error('Grok AI returned an empty prompt synthesis payload.');
   }
 
   if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
@@ -85,13 +85,13 @@ const extractJsonPayload = (value: string) => {
     return trimmed.slice(firstBrace, lastBrace + 1);
   }
 
-  throw new Error('Vertex AI did not return a valid JSON object for prompt synthesis.');
+  throw new Error('Grok AI did not return a valid JSON object for prompt synthesis.');
 };
 
 const normalizePromptJsonPayload = (value: string) => {
   const parsed = JSON.parse(extractJsonPayload(value));
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('Vertex AI prompt synthesis JSON must be an object.');
+    throw new Error('Grok AI prompt synthesis JSON must be an object.');
   }
 
   return JSON.stringify(parsed);
@@ -132,7 +132,7 @@ const extractPromptFeedback = (data: any) => {
 };
 
 const parseErrorMessage = async (response: Response) => {
-  const fallback = `Vertex AI request failed with ${response.status} ${response.statusText}`.trim();
+  const fallback = `Grok AI request failed with ${response.status} ${response.statusText}`.trim();
 
   try {
     const raw = await response.text();
@@ -166,8 +166,8 @@ const summarizeVertexPromptSynthesisFailure = (data: any) => {
   ].filter(Boolean);
 
   return details.length > 0
-    ? `Vertex AI returned no prompt text for image prompt synthesis. ${details.join(' | ')}`
-    : 'Vertex AI returned no prompt text for image prompt synthesis.';
+    ? `Grok AI returned no prompt text for image prompt synthesis. ${details.join(' | ')}`
+    : 'Grok AI returned no prompt text for image prompt synthesis.';
 };
 
 const emitVertexDiagnostic = async (
@@ -347,7 +347,7 @@ const requestVertexPromptSynthesis = async (
     .map((part: any) => part?.inlineData || part?.inline_data)
     .filter((part: any) => typeof part?.data === 'string')
     .map((part: any) => ({ mimeType: String(part.mimeType || part.mime_type || 'image/jpeg'), data: part.data }));
-  const grokResult = await grokJson<Record<string, unknown>>(`${text}\n\nReturn only the requested JSON object.`, images, outputTokenLimit);
+  const grokResult = await grokJson<Record<string, unknown>>(`${text}\n\nReturn only the requested JSON object.`, images, outputTokenLimit, { timeoutMs: GROK_BACKGROUND_TIMEOUT_MS });
   const grokText = JSON.stringify(grokResult);
   return {
     data: { candidates: [{ content: { parts: [{ text: grokText }] } }] },
@@ -404,7 +404,7 @@ export const synthesizeStrictImagePrompt = async (
           const normalized = tryNormalize(primaryAttempt.text);
           await emitVertexDiagnostic(options?.onDiagnostic, 'image_prompt_synthesis', {
             status: 'success',
-            message: 'Vertex AI synthesized the English JSON prompt successfully.',
+            message: 'Grok AI synthesized the English JSON prompt successfully.',
             credentialName: credentialName || undefined,
             projectId,
             finishReasons: primaryAttempt.finishReasons,
@@ -558,7 +558,7 @@ export const rewriteUserPromptToFitLimit = async (
     normalizedPrompt,
   ].join('\n');
 
-  const text = normalizePromptWhitespace(await grokText(instruction, [], 1024));
+  const text = normalizePromptWhitespace(await grokText(instruction, [], 1024, { timeoutMs: GROK_BACKGROUND_TIMEOUT_MS }));
   if (!text) throw new Error('Grok did not return a compressed user prompt.');
   await emitVertexDiagnostic(onDiagnostic, 'image_prompt_compression', {
     status: 'success',

@@ -135,8 +135,8 @@ const buildMissingImageError = (data: any, modelName: string) => {
   ].filter(Boolean);
 
   return details.length > 0
-    ? `Vertex AI did not return an edited image (${modelName}); ${details.join(' | ')}`
-    : `Vertex AI did not return an edited image (${modelName}).`;
+    ? `Grok AI did not return an edited image (${modelName}); ${details.join(' | ')}`
+    : `Grok AI did not return an edited image (${modelName}).`;
 };
 
 export const runNanoBananaImageEdit = async ({

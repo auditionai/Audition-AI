@@ -6,6 +6,15 @@ export const OPENAI_COMPATIBLE_BASE_URL = (process.env.OPENAI_COMPATIBLE_BASE_UR
   .trim()
   .replace(/\/+$/, '');
 export const GROK_MODEL = process.env.GROK_MODEL?.trim() || 'grok-4.5';
+export const GROK_DEFAULT_TIMEOUT_MS = Number(process.env.GROK_REQUEST_TIMEOUT_MS || 120_000);
+const parseBoundedTimeout = (value: string | undefined, fallback: number) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(600_000, Math.max(30_000, Math.round(parsed)));
+};
+// Queue workers can wait longer than browser-facing functions. Keep a finite
+// ceiling so an unavailable upstream cannot occupy a worker indefinitely.
+export const GROK_BACKGROUND_TIMEOUT_MS = parseBoundedTimeout(process.env.GROK_BACKGROUND_TIMEOUT_MS, 300_000);
 // The gateway issues its own OpenAI-compatible keys, so xAI's `xai-` prefix is not required.
 export const isGrokApiKey = (value: unknown) => {
   const key = String(value || '').trim();
@@ -15,7 +24,7 @@ export const isGrokApiKey = (value: unknown) => {
 export const createGrokClient = (apiKey: string) => new OpenAI({
   apiKey,
   baseURL: OPENAI_COMPATIBLE_BASE_URL,
-  timeout: 180_000,
+  timeout: Number.isFinite(GROK_DEFAULT_TIMEOUT_MS) && GROK_DEFAULT_TIMEOUT_MS > 0 ? GROK_DEFAULT_TIMEOUT_MS : 120_000,
   maxRetries: 0,
 });
 
@@ -49,7 +58,12 @@ export const getGrokApiKey = async () => {
   return key;
 };
 
-export const grokJson = async <T>(instruction: string, images: Array<{ mimeType: string; data: string }> = [], maxTokens = 2048): Promise<T> => {
+export const grokJson = async <T>(
+  instruction: string,
+  images: Array<{ mimeType: string; data: string }> = [],
+  maxTokens = 2048,
+  options: { timeoutMs?: number } = {},
+): Promise<T> => {
   const apiKey = await getGrokApiKey();
   const client = createGrokClient(apiKey);
   const content: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [{ type: 'text', text: instruction }];
@@ -62,13 +76,18 @@ export const grokJson = async <T>(instruction: string, images: Array<{ mimeType:
     temperature: 0,
     max_tokens: maxTokens,
     response_format: { type: 'json_object' },
-  });
+  }, options.timeoutMs ? { timeout: options.timeoutMs } : undefined);
   const text = String(response.choices[0]?.message?.content || '').trim();
   if (!text) throw new Error('Grok returned an empty response.');
   return JSON.parse(extractJson(text)) as T;
 };
 
-export const grokText = async (instruction: string, images: Array<{ mimeType: string; data: string }> = [], maxTokens = 4096) => {
+export const grokText = async (
+  instruction: string,
+  images: Array<{ mimeType: string; data: string }> = [],
+  maxTokens = 4096,
+  options: { timeoutMs?: number } = {},
+) => {
   const apiKey = await getGrokApiKey();
   const client = createGrokClient(apiKey);
   const content: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [{ type: 'text', text: instruction }];
@@ -78,7 +97,7 @@ export const grokText = async (instruction: string, images: Array<{ mimeType: st
     messages: [{ role: 'user', content }],
     temperature: 0.2,
     max_tokens: maxTokens,
-  });
+  }, options.timeoutMs ? { timeout: options.timeoutMs } : undefined);
   const text = String(response.choices[0]?.message?.content || '').trim();
   if (!text) throw new Error('Grok returned an empty response.');
   return text;

@@ -8,7 +8,7 @@ import {
   type SampleVisionAnalysis,
   type StyleVisionAnalysis,
 } from '../../shared/queueRecipes';
-import { GROK_MODEL, grokJson } from './_grok';
+import { GROK_BACKGROUND_TIMEOUT_MS, GROK_MODEL, grokJson } from './_grok';
 
 const VERTEX_MODEL = GROK_MODEL;
 
@@ -101,7 +101,7 @@ const generateVisionJson = async <T>(
     .map((part) => part?.inlineData || part?.inline_data)
     .filter((part) => typeof part?.data === 'string')
     .map((part) => ({ mimeType: String(part.mimeType || part.mime_type || 'image/jpeg'), data: part.data }));
-  const parsed = await grokJson<T>(instruction, images, mode === 'pro_structured' ? 1024 : 2048);
+  const parsed = await grokJson<T>(instruction, images, mode === 'pro_structured' ? 1024 : 2048, { timeoutMs: GROK_BACKGROUND_TIMEOUT_MS });
   await emitDiagnostic(onDiagnostic, 'success', `${taskName} succeeded via Grok.`);
   return parsed;
 };

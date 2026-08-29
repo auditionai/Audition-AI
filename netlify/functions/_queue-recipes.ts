@@ -350,7 +350,7 @@ export const synthesizeImageGeneratePrompt = async (
         task: 'image_prompt_synthesis',
         status: 'warning',
         model: GROK_MODEL,
-        message: `Skipped Vertex prompt synthesis and used the local JSON prompt builder. Reasons: ${bypassDecision.reasons.join(', ')}`,
+        message: `Skipped Grok AI prompt synthesis and used the local JSON prompt builder. Reasons: ${bypassDecision.reasons.join(', ')}`,
       });
     }
     return buildFallbackSynthesizedPrompt(payload);
@@ -371,13 +371,13 @@ export const synthesizeImageGeneratePrompt = async (
         task: 'image_prompt_synthesis',
         status: 'warning',
         model: GROK_MODEL,
-        message: `Vertex prompt synthesis fell back to the local JSON prompt builder. Original error: ${
+        message: `Grok AI prompt synthesis fell back to the local JSON prompt builder. Original error: ${
           error instanceof Error ? error.message : String(error || 'Unknown error')
         }`,
       });
     }
 
-    console.warn('[queue-recipes] Vertex prompt synthesis unavailable, falling back to base prompt:', error);
+    console.warn('[queue-recipes] Grok AI prompt synthesis unavailable, falling back to base prompt:', error);
     return buildFallbackSynthesizedPrompt(payload);
   }
 };
@@ -491,7 +491,7 @@ const synthesizeImageGeneratePromptWithLastResortFallback = async (
         task: 'image_prompt_synthesis',
         status: 'warning',
         model: GROK_MODEL,
-        message: `Vertex prompt synthesis hit the last-resort local JSON fallback. Original error: ${
+        message: `Grok AI prompt synthesis hit the last-resort local JSON fallback. Original error: ${
           error instanceof Error ? error.message : String(error || 'Unknown error')
         }`,
       });
@@ -532,7 +532,7 @@ export const prepareImageGeneratePromptWithinLimit = async (
           task: 'image_reference_analysis',
           status: 'warning',
           model: GROK_MODEL,
-          message: `Vertex vision analysis fell back to rule-based prompting only. Original error: ${
+          message: `Grok AI vision analysis fell back to rule-based prompting only. Original error: ${
             error instanceof Error ? error.message : String(error || 'Unknown error')
           }`,
         });

@@ -3,6 +3,10 @@ import { grokText } from './_grok';
 import { getAuthenticatedRequestErrorStatus, requireAuthenticatedUser } from './_supabase';
 
 const VIDEO_SCRIPT_DEADLINE_ERROR = 'VIDEO_SCRIPT_GROK_DEADLINE';
+// The Cloudflare proxy in front of the site cuts synchronous requests at about
+// 45 seconds. Keep this below that limit and constrain output for fast scripts.
+const VIDEO_SCRIPT_GROK_TIMEOUT_MS = 35_000;
+const VIDEO_SCRIPT_MAX_TOKENS = 900;
 
 const jsonHeaders = {
   'Content-Type': 'application/json',
@@ -230,7 +234,8 @@ export const handler: Handler = async (event) => {
       script = sanitizeDirectorScript(await grokText(
         buildDirectorInstruction(durationSeconds, userPrompt, scriptOptions),
         [{ mimeType: imagePart.inlineData.mimeType, data: imagePart.inlineData.data }],
-        2600,
+        VIDEO_SCRIPT_MAX_TOKENS,
+        { timeoutMs: VIDEO_SCRIPT_GROK_TIMEOUT_MS },
       ));
     } catch (error: any) {
       if (error?.name === 'TimeoutError' || error?.name === 'AbortError') throw new Error(VIDEO_SCRIPT_DEADLINE_ERROR);

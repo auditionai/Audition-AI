@@ -144,6 +144,7 @@ export const runCharacterImageReview = async (image: string): Promise<CharacterI
       ...authHeader,
     },
     body: JSON.stringify({ image }),
+    signal: AbortSignal.timeout(45_000),
   });
 
   const payload = await response.json().catch(() => ({}));

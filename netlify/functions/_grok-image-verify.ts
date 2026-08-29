@@ -3,7 +3,7 @@ import {
   getImageCharacterReferenceGroups,
   type ImageGenerateRecipePayload,
 } from '../../shared/queueRecipes';
-import { grokJson } from './_grok';
+import { GROK_BACKGROUND_TIMEOUT_MS, grokJson } from './_grok';
 
 
 export type ImageOutputSlotStatus = 'matched' | 'missing' | 'duplicated' | 'substituted' | 'uncertain';
@@ -444,7 +444,7 @@ export const verifyGeneratedImageOutput = async (
     .filter((part: any) => typeof part?.data === 'string')
     .map((part: any) => ({ mimeType: String(part.mimeType || part.mime_type || 'image/jpeg'), data: part.data }));
   const normalized = normalizeVerificationResult(
-        await grokJson<Record<string, unknown>>(instruction, images, 4096),
+        await grokJson<Record<string, unknown>>(instruction, images, 4096, { timeoutMs: GROK_BACKGROUND_TIMEOUT_MS }),
         Boolean(payload.sampleImage),
       );
       if (!normalized.pass && shouldAcceptLayeredSingleSubjectVerificationResult(payload, normalized)) {

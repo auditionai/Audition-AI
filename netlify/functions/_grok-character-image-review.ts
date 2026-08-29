@@ -109,7 +109,9 @@ const loadImageSource = async (source: string): Promise<LoadedImageSource> => {
   let buffer: Buffer;
 
   if (source.startsWith('http')) {
-    const response = await fetch(source, { signal: AbortSignal.timeout(60000) });
+    // This is used by a synchronous user-facing endpoint, so reserve time for
+    // the Grok request instead of allowing remote image download to exhaust it.
+    const response = await fetch(source, { signal: AbortSignal.timeout(15_000) });
     if (!response.ok) {
       throw new Error(`Failed to fetch review image: ${await parseErrorMessage(response)}`);
     }
@@ -328,6 +330,7 @@ export const reviewCharacterImage = async (
     String(promptPart.text || ''),
     [{ mimeType: imagePart.inlineData.mimeType, data: imagePart.inlineData.data }],
     1024,
+    { timeoutMs: 30_000 },
   );
   return normalizeReviewResult(result, pixelMetrics);
 };

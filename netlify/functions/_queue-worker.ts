@@ -601,10 +601,10 @@ const withQueueLog = (
 const formatVertexDiagnosticLogMessage = (entry: QueueVertexDiagnosticEntry) => {
   const taskLabel =
     entry.task === 'image_reference_analysis'
-      ? 'Vertex reference analysis'
+      ? 'Grok AI reference analysis'
       : entry.task === 'image_prompt_compression'
-        ? 'Vertex prompt compression'
-        : 'Vertex prompt synthesis';
+        ? 'Grok AI prompt compression'
+        : 'Grok AI prompt synthesis';
   const location = [entry.credentialName, entry.projectId].filter(Boolean).join(' / ');
   const details = [
     location ? `key=${location}` : '',
@@ -1587,7 +1587,7 @@ const prepareVideoInputsForDirectTstDispatch = async (
     }
 
     return {
-      successMessage: 'Đã bỏ kiểm duyệt Vertex. Đang dựng payload video và gửi trực tiếp sang TST.',
+      successMessage: 'Đã bỏ kiểm duyệt Grok AI. Đang dựng payload video và gửi trực tiếp sang TST.',
     };
   }
 
@@ -1600,7 +1600,7 @@ const prepareVideoInputsForDirectTstDispatch = async (
   }
 
   return {
-    successMessage: 'Đã bỏ kiểm duyệt Vertex. Đang dựng payload Motion Control và gửi trực tiếp sang TST.',
+    successMessage: 'Đã bỏ kiểm duyệt Grok AI. Đang dựng payload Motion Control và gửi trực tiếp sang TST.',
   };
 };
 
@@ -3285,8 +3285,8 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
       await updatePreProviderStage(job.id, 20);
       const reviewStartMessage =
         currentPayload.recipeType === 'video_generate_recipe_v1'
-          ? 'Đang dựng payload video. Bỏ kiểm duyệt Vertex và gửi dữ liệu trực tiếp lên TST.'
-          : 'Đang dựng payload Motion Control. Bỏ kiểm duyệt Vertex và gửi dữ liệu trực tiếp lên TST.';
+          ? 'Đang dựng payload video. Bỏ kiểm duyệt Grok AI và gửi dữ liệu trực tiếp lên TST.'
+          : 'Đang dựng payload Motion Control. Bỏ kiểm duyệt Grok AI và gửi dữ liệu trực tiếp lên TST.';
       job.queue_payload = await persistQueueLog(
         job.id,
         job.queue_payload || currentPayload,

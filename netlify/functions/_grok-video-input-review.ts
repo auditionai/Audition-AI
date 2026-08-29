@@ -175,6 +175,7 @@ const reviewImageInput = async (
     buildReviewInstruction(mode),
     [{ mimeType: imagePart.inlineData.mimeType, data: imagePart.inlineData.data }],
     1024,
+    { timeoutMs: 30_000 },
   );
   return normalizeReviewResult(result);
 };

@@ -7,6 +7,7 @@ const callGrok = async (path: string, body: Record<string, unknown>) => {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(await getSupabaseAuthHeader()) },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(path === 'grok-health' ? 20_000 : 45_000),
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(String(data?.error || `Grok request failed (${response.status})`));

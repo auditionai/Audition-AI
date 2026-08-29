@@ -32,14 +32,22 @@ const toGrokImageInput = (source: string): GrokImageInput => {
 
 const runVideoScriptWithDeadline = async <T>(operation: (signal: AbortSignal) => Promise<T>): Promise<T> => {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), VIDEO_SCRIPT_TOTAL_TIMEOUT_MS);
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      controller.abort();
+      reject(new Error(VIDEO_SCRIPT_DEADLINE_ERROR));
+    }, VIDEO_SCRIPT_TOTAL_TIMEOUT_MS);
+  });
   try {
-    return await operation(controller.signal);
+    // Do not wait for a gateway socket that ignores abort. The handler must be
+    // free to return before Cloudflare's origin deadline.
+    return await Promise.race([operation(controller.signal), deadline]);
   } catch (error) {
     if (controller.signal.aborted) throw new Error(VIDEO_SCRIPT_DEADLINE_ERROR);
     throw error;
   } finally {
-    clearTimeout(timeoutId);
+    if (timeoutId) clearTimeout(timeoutId);
   }
 };
 

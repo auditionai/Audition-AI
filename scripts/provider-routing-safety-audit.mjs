@@ -366,6 +366,7 @@ assert(videoScriptDirectorSource.includes('VIDEO_SCRIPT_MAX_TOKENS = 650'));
 assert(videoScriptDirectorSource.includes('VIDEO_SCRIPT_TOTAL_TIMEOUT_MS = 25_000'));
 assert(videoScriptDirectorSource.includes('timeoutMs: VIDEO_SCRIPT_GROK_TIMEOUT_MS'));
 assert(videoScriptDirectorSource.includes('return { url: source }'));
+assert(videoScriptDirectorSource.includes('Promise.race([operation(controller.signal), deadline])'));
 const grokVisionSource = await readFile(new URL('../netlify/functions/_grok-image-vision.ts', import.meta.url), 'utf8');
 assert(grokVisionSource.includes('timeoutMs: GROK_BACKGROUND_TIMEOUT_MS'));
 const grokImageVerifySource = await readFile(new URL('../netlify/functions/_grok-image-verify.ts', import.meta.url), 'utf8');

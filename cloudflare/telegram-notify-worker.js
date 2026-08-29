@@ -72,6 +72,22 @@ const getPromptMeta = (payload) => {
   };
 };
 
+const getProviderLabel = (payload) => {
+  const job = payload?.job || {};
+  const config = job?.config || {};
+  const raw = job?.queuePayload && typeof job.queuePayload === 'object' ? job.queuePayload : {};
+  const provider = config?.provider || raw.__targetProvider || raw.__provider || job?.provider;
+  return String(provider || job?.engine || 'N/A').trim().toUpperCase();
+};
+
+const getDurationMinutes = (payload) => {
+  const job = payload?.job || {};
+  const start = new Date(job?.createdAt || '').getTime();
+  const end = new Date(job?.finishedAt || '').getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return 'N/A';
+  return `${Math.max(0, (end - start) / 60000).toFixed(1)} phút`;
+};
+
 const getEventLabel = (eventType) => {
   switch (String(eventType || '').toLowerCase()) {
     case 'completed':
@@ -154,8 +170,8 @@ const buildSummaryLines = (payload) => {
   const lines = [
     buildHeader(payload?.app || 'App', payload?.eventType || 'queued'),
     '',
-    `API: <b>${escapeHtml(apiName)}</b>`,
-    `Thời gian tạo: ${escapeHtml(formatIso(job?.createdAt))}`,
+    `API: <b>${escapeHtml(getProviderLabel(payload))}</b>`,
+    `Thời gian tạo: ${escapeHtml(getDurationMinutes(payload))}`,
     `• Công cụ: <b>${escapeHtml(displayValue(job?.toolName || job?.queueKind))}</b>`,
     `• Người dùng: ${escapeHtml(displayValue(job?.displayName, 'Unknown'))} | ${escapeHtml(displayValue(job?.costVcoin ?? 0, '0'))} VC`,
     `• Model: ${escapeHtml(displayValue(config?.modelId || job?.engine))}`,

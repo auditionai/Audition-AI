@@ -143,7 +143,7 @@ type ParsedMarkdownModel = {
   maxCredits: number;
 };
 
-const VND_PER_CREDIT = 40;
+const VND_PER_CREDIT = 45;
 const VND_PER_VCOIN = 1000;
 export const TST_CATALOG_CACHE_TTL_MS = 5 * 60_000;
 const TST_CATALOG_FETCH_TIMEOUT_MS = 15_000;
@@ -366,9 +366,17 @@ export const ADMIN_MANAGED_MODEL_LABELS = [
   'Kling 2.5 Turbo',
   'Kling 2.6',
   'Kling 3.0',
+  'Kling 3.0 Omni',
+  'Happy Horse 1.0',
   'Kling O1 Video',
   'Seedance 2.0',
   'Seedance 2.0 Fast',
+  'Seedance 2.0 Mini',
+  'Seedance 2.5',
+  'Veo 3.1 Fast',
+  'Veo 3.1 Lite',
+  'Veo 3.1 Omni',
+  'Veo 3.1 Quality',
   'Grok Video',
   'Motion Control 2.6',
   'Motion Control 3.0',
@@ -384,9 +392,17 @@ const ADMIN_MANAGED_MODEL_IDS = [
   'kling-2.5-turbo',
   'kling-2.6',
   'kling-3.0-video',
+  'kling-3.0-omni',
+  'happyhorse-1.0',
   'kling-o1-video',
   'seedance-2.0',
   'seedance-2.0-fast',
+  'seedance-2.0-mini',
+  'seedance-2.5',
+  'veo3.1-fast',
+  'veo3.1-lite',
+  'veo3.1-omni',
+  'veo3.1-quality',
   'grok-i2v',
   'motion-control-2.6',
   'motion-control-3.0',
@@ -875,6 +891,8 @@ const filterDurationsForModel = (modelId: string, durations: string[]) =>
   isGrokVideoModel(modelId)
     ? durations.filter((duration) => GROK_VIDEO_DURATIONS.includes(normalizeDuration(duration)))
     : durations;
+
+const PER_SECOND_VIDEO_DURATION_OPTIONS = ['5s', '10s', '15s'];
 
 const serversMatchForModel = (modelId: string, entryServer?: string, requestedServer?: string | null) => {
   const normalizedRequested = requestedServer ? normalizeServer(requestedServer) : '';
@@ -1510,6 +1528,8 @@ export const getVideoModelSpecs = (
       unique(((model.capabilities?.resolutions || []) as string[]).map((value) => normalizeCatalogResolution(value)).filter(Boolean)),
       RESOLUTION_ORDER,
     );
+    const perSecondModel = isPerSecondVideoBillingModel(model.model)
+      || entries.some((entry) => normalizeSpeed(entry.speed) === 'per-second');
     const durations = filterDurationsForModel(model.model, getUniqueDurations(entries));
     const capabilityDurations = sortByOrder(
       filterDurationsForModel(
@@ -1530,7 +1550,13 @@ export const getVideoModelSpecs = (
       displayName: model.name || fallback.displayName,
       servers,
       resolutions: resolutions.length > 0 ? resolutions : (capabilityResolutions.length > 0 ? capabilityResolutions : fallback.resolutions),
-      durations: durations.length > 0 ? durations : (capabilityDurations.length > 0 ? capabilityDurations : fallback.durations),
+      durations: durations.length > 0
+        ? durations
+        : capabilityDurations.length > 0
+          ? capabilityDurations
+          : perSecondModel
+            ? PER_SECOND_VIDEO_DURATION_OPTIONS
+            : fallback.durations,
       aspectRatios: getCapabilityAspectRatios(model),
       speeds,
       supportsAudio: Boolean(model.capabilities?.audio ?? fallback.supportsAudio),
@@ -1703,7 +1729,11 @@ export const getVideoCostBreakdown = ({
   const normalizedSpeed = normalizeSpeed(speed);
   const normalizedServer = normalizeServer(serverId);
   const normalizedDuration = normalizeDuration(duration);
-  const perSecondModel = isPerSecondVideoBillingModel(modelId);
+  const perSecondModel = isPerSecondVideoBillingModel(modelId)
+    || modelEntries.some((entry) => normalizeSpeed(entry.speed) === 'per-second');
+  const matchesVideoSpeed = (entry: TstPricingEntry) =>
+    normalizeSpeed(entry.speed) === normalizedSpeed
+    || (perSecondModel && normalizeSpeed(entry.speed) === 'per-second');
   const matchesVideoResolution = (entry: TstPricingEntry) =>
     matchesVideoResolutionForModel(modelId, entry.resolution, normalizedResolution);
   const matchesVideoDuration = (entry: TstPricingEntry) =>
@@ -1714,7 +1744,7 @@ export const getVideoCostBreakdown = ({
       serversMatchForModel(modelId, entry.server, normalizedServer) &&
       matchesVideoResolution(entry) &&
       matchesVideoDuration(entry) &&
-      normalizeSpeed(entry.speed) === normalizedSpeed &&
+      matchesVideoSpeed(entry) &&
       matchesAudioSelection(entry.audio, audio),
     (entry) =>
       serversMatchForModel(modelId, entry.server, normalizedServer) &&
@@ -1726,7 +1756,7 @@ export const getVideoCostBreakdown = ({
     (entry) =>
       matchesVideoResolution(entry) &&
       matchesVideoDuration(entry) &&
-      normalizeSpeed(entry.speed) === normalizedSpeed &&
+      matchesVideoSpeed(entry) &&
       matchesAudioSelection(entry.audio, audio),
     (entry) =>
       matchesVideoResolution(entry) &&
@@ -1923,7 +1953,8 @@ export const getPricingRows = async (forceRefresh = false): Promise<TstPricingRo
     }
 
     const type = (model.type === 'motion-control' ? 'motion-control' : model.type) as TstMediaType | undefined;
-    const perSecond = isPerSecondBillingModel(entry.model, type);
+    const perSecond = isPerSecondBillingModel(entry.model, type)
+      || normalizeSpeed(entry.speed) === 'per-second';
     const defaultVcoin = creditsToVcoin(entry.credits);
     const durationSeconds = Math.max(1, parseDurationSeconds(entry.duration) || 1);
     return {

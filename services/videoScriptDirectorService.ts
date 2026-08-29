@@ -72,7 +72,7 @@ const getPayloadError = (payload: any, response: Response) =>
   payload?.raw ||
   `Khong the goi video-script-director (${response.status} ${response.statusText || ''}).`;
 
-export const generateVideoScriptWithVertex = async ({
+export const generateVideoScriptWithGrok = async ({
   imageSource,
   durationSeconds,
   userPrompt,
@@ -93,7 +93,7 @@ export const generateVideoScriptWithVertex = async ({
   });
 
   if (requestBody.length > MAX_DIRECTOR_REQUEST_CHARS) {
-    throw new Error('Anh tham chieu qua lon nen khong the gui len Vertex AI de tao kich ban. Vui long dung anh nho hon hoac anh da nen.');
+    throw new Error('Anh tham chieu qua lon nen khong the gui len Grok de tao kich ban. Vui long dung anh nho hon hoac anh da nen.');
   }
 
   const endpoints = ['/api/video-script-director', '/.netlify/functions/video-script-director'];
@@ -127,8 +127,11 @@ export const generateVideoScriptWithVertex = async ({
 
   const script = typeof payload?.script === 'string' ? payload.script.trim() : '';
   if (!script) {
-    throw new Error('Vertex AI khong tra ve kich ban video.');
+    throw new Error('Grok khong tra ve kich ban video.');
   }
 
   return script;
 };
+
+/** @deprecated Use generateVideoScriptWithGrok. */
+export const generateVideoScriptWithVertex = generateVideoScriptWithGrok;

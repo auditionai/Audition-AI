@@ -1,10 +1,15 @@
 
+import sharp from 'sharp';
+
 const GPTI2_BASE = 'https://gpti2.store/v1';
 // Match the TST generation timeout. GPTi2 image edits are synchronous and
 // must have the same window to finish rendering a valid result.
 const GPTI2_TIMEOUT_MS = 295_000;
 const MODEL_ALIASES: Record<string, string> = { 'image-gpt-2': 'gpt-image-2' };
 const ALLOWED_MODELS = new Set(['gpt-image-2', 'nano-banana-2', 'nano-banana-pro']);
+const NANO_ASPECT_RATIOS = new Set(['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3']);
+const MAX_NANO_REFERENCE_IMAGES = 8;
+const NANO_OUTPUT_RESOLUTION = '2K';
 
 const key = () => String(process.env.GPTI2_API_KEY || '').trim();
 const normalize = (value: unknown) => String(value || '').trim().toLowerCase();
@@ -75,6 +80,41 @@ const dataUrl = (value: unknown) => {
 };
 const extractUrl = (data: any) => dataUrl(data?.data?.[0]?.b64_json || data?.data?.[0]?.url || data?.url);
 
+const normalizeReferenceImage = async (source: string, index: number) => {
+  const response = await fetch(source, { signal: AbortSignal.timeout(GPTI2_TIMEOUT_MS) });
+  if (!response.ok) throw new Error(`GPTI2_ERROR: Cannot download reference image ${index + 1}`);
+
+  const input = Buffer.from(await response.arrayBuffer());
+  try {
+    const image = sharp(input, { failOn: 'error' });
+    const metadata = await image.metadata();
+    if (!metadata.width || !metadata.height) throw new Error('missing dimensions');
+
+    const normalized = image
+      .rotate()
+      .resize({ width: 2048, height: 2048, fit: 'inside', withoutEnlargement: true });
+    if (metadata.hasAlpha) {
+      return {
+        blob: new Blob([await normalized.png({ compressionLevel: 9 }).toBuffer()], { type: 'image/png' }),
+        filename: `reference-${index + 1}.png`,
+      };
+    }
+    return {
+      blob: new Blob([await normalized.jpeg({ quality: 90, mozjpeg: true }).toBuffer()], { type: 'image/jpeg' }),
+      filename: `reference-${index + 1}.jpg`,
+    };
+  } catch {
+    throw new Error(`GPTI2_ERROR: Reference image #${index + 1} could not be decoded or normalized.`);
+  }
+};
+
+const buildNanoRequest = (prompt: string, model: string, aspectRatio: string) => ({
+  request: { prompt, model, aspect_ratio: aspectRatio },
+  // Nano Banana always renders at 2K. The UI resolution stays selectable for
+  // consistency, but must never be forwarded as size/resolution/quality.
+  outputResolution: NANO_OUTPUT_RESOLUTION,
+});
+
 export const isGpti2Configured = () => Boolean(key());
 export const isGpti2Model = (modelId: unknown) => ALLOWED_MODELS.has(MODEL_ALIASES[normalize(modelId)] || normalize(modelId));
 
@@ -84,17 +124,24 @@ export const submitGpti2Job = async (queueKind: string, payload: Record<string, 
   if (!prompt) throw new Error('GPTI2_ERROR: prompt is required');
   const sources = sourcesOf(payload);
   if (model.startsWith('nano-banana')) {
+    const aspectRatio = ratioOf(payload);
+    if (!NANO_ASPECT_RATIOS.has(aspectRatio)) {
+      throw new Error(`GPTI2_NANO_ASPECT_RATIO_UNSUPPORTED: ${aspectRatio}`);
+    }
+    if (sources.length > MAX_NANO_REFERENCE_IMAGES) {
+      throw new Error(`GPTI2_NANO_TOO_MANY_REFERENCES: maximum is ${MAX_NANO_REFERENCE_IMAGES}`);
+    }
+    const nanoRequest = buildNanoRequest(prompt, model, aspectRatio);
     let init: RequestInit;
     if (sources.length) {
-      const form = new FormData(); form.set('prompt', prompt); form.set('model', model); form.set('aspect_ratio', ratioOf(payload));
+      const form = new FormData(); form.set('prompt', nanoRequest.request.prompt); form.set('model', nanoRequest.request.model); form.set('aspect_ratio', nanoRequest.request.aspect_ratio);
       for (const [index, source] of sources.entries()) {
-        const response = await fetch(source, { signal: AbortSignal.timeout(GPTI2_TIMEOUT_MS) });
-        if (!response.ok) throw new Error(`GPTI2_ERROR: Cannot download reference image ${index + 1}`);
-        form.append('image', new Blob([await response.arrayBuffer()], { type: response.headers.get('content-type') || 'image/png' }), `reference-${index + 1}.png`);
+        const normalized = await normalizeReferenceImage(source, index);
+        form.append('image', normalized.blob, normalized.filename);
       }
       init = { method: 'POST', body: form };
     } else {
-      init = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, model, aspect_ratio: ratioOf(payload) }) };
+      init = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(nanoRequest.request) };
     }
     const data = await request(sources.length ? '/images/nano/edits' : '/images/nano/generations', init);
     const id = String(data?.id || '').trim();
@@ -105,9 +152,8 @@ export const submitGpti2Job = async (queueKind: string, payload: Record<string, 
     const form = new FormData();
     form.set('prompt', prompt); form.set('model', model); form.set('size', sizeOf(payload)); form.set('quality', qualityOf(payload));
     for (const [index, source] of sources.entries()) {
-      const response = await fetch(source, { signal: AbortSignal.timeout(GPTI2_TIMEOUT_MS) });
-      if (!response.ok) throw new Error(`GPTI2_ERROR: Cannot download reference image ${index + 1}`);
-      form.append('image[]', new Blob([await response.arrayBuffer()], { type: response.headers.get('content-type') || 'image/png' }), `reference-${index + 1}.png`);
+      const normalized = await normalizeReferenceImage(source, index);
+      form.append('image[]', normalized.blob, normalized.filename);
     }
     const data = await request('/images/edits', { method: 'POST', body: form });
     const result = extractUrl(data);
@@ -134,3 +180,28 @@ export const pollGpti2Job = async (jobId: string, inlineResult?: string) => {
 };
 
 export const cancelGpti2Job = async () => false;
+
+// Direct editor jobs share the GPTi2 queue provider but need a completed asset
+// in the same server invocation. Nano Banana 2 is the sole editor model.
+export const runGpti2ImageEdit = async (params: {
+  sourceImage: string;
+  instruction: string;
+  aspectRatio?: string;
+}) => {
+  if (!/^https?:\/\//i.test(params.sourceImage)) {
+    throw new Error('GPTI2_ERROR: Direct image editing requires an uploaded HTTPS source image.');
+  }
+  const submission = await submitGpti2Job('image_generate', {
+    model: 'nano-banana-2',
+    prompt: params.instruction,
+    image_urls: [params.sourceImage],
+    aspect_ratio: params.aspectRatio || '1:1',
+  });
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const state = await pollGpti2Job(submission.jobId, submission.inlineResult);
+    if (state.status === 'completed' && state.result) return state.result;
+    if (state.status === 'failed') throw new Error(`GPTI2_ERROR: ${state.error || 'Nano Banana 2 edit failed'}`);
+    await new Promise((resolve) => setTimeout(resolve, 5_000));
+  }
+  throw new Error('GPTI2_ERROR: Nano Banana 2 edit timed out.');
+};

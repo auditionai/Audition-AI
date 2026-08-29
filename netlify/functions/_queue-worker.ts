@@ -17,7 +17,7 @@ import {
   TST_PROMPT_MAX_CHARACTERS,
   uploadImageToTst,
 } from './_queue-recipes';
-import { runVertexImageEdit } from './_vertex-image-edit';
+import { runNanoBananaImageEdit } from './_nano-banana-image-edit';
 import {
   buildImageProviderPrompt,
   getImageCharacterReferenceGroups,
@@ -49,7 +49,7 @@ import {
   isGommoConfigured,
   pollGommoJob,
   submitGommoJob,
-} from './_gommo-provider';
+} from './_disabled-provider';
 import { isGpti2Configured, isGpti2Model, pollGpti2Job, submitGpti2Job } from './_gpti2-provider';
 import { DEFAULT_PROVIDER_BY_FEATURE, type GenerationProviderRouteKey } from '../../shared/providerRouting';
 import {
@@ -210,6 +210,14 @@ const AMBIGUOUS_DISPATCH_DUPLICATE_PROTECTION_MESSAGE =
   'Khong nhan duoc xac nhan provider job goc sau loi mang/timeout. Job da dung de tranh tao them provider moi.';
 const VIDEO_OR_MOTION_QUEUE_KINDS = new Set(['video_generate', 'motion_generate']);
 
+const persistResultForJob = async (assetUrl: string, job: QueueJobRow) => {
+  // Provider CDN URLs are the canonical delivery URL for video and motion.
+  // R2's S3 signer cannot hash a flowing provider stream reliably, and these
+  // assets are intentionally not copied into R2.
+  if (VIDEO_OR_MOTION_QUEUE_KINDS.has(job.queue_kind)) return assetUrl;
+  return persistProviderResultToR2(assetUrl, job.user_id, job.id, job.asset_type);
+};
+
 const getQueuePayloadModelId = (payload: Record<string, unknown>) => {
   const recipe = payload.__recipePayload && typeof payload.__recipePayload === 'object'
     ? payload.__recipePayload as Record<string, unknown>
@@ -228,7 +236,8 @@ const getGlobalGenerationProvider = async (modelId: string, featureKey?: string)
     if (error) throw error;
     const normalizedFeatureKey = String(featureKey || '').trim().toLowerCase() as GenerationProviderRouteKey;
     const featureProvider = String(normalizedFeatureKey ? data?.value?.providerByFeature?.[normalizedFeatureKey] || '' : '').trim().toLowerCase();
-    if (featureProvider === 'gommo' || featureProvider === 'tst' || featureProvider === 'gpti2') {
+    if (featureProvider === 'gommo') return 'tst';
+    if (featureProvider === 'tst' || featureProvider === 'gpti2') {
       return normalizedFeatureKey === 'video_generation' || normalizedFeatureKey === 'motion_control'
         ? (featureProvider === 'gpti2' ? 'tst' : featureProvider)
         : featureProvider as GenerationProvider;
@@ -237,11 +246,12 @@ const getGlobalGenerationProvider = async (modelId: string, featureKey?: string)
     if (featureDefault) return featureDefault;
     const selected = String(data?.value?.provider || '').trim().toLowerCase();
     if (normalizedFeatureKey) {
-      return selected === 'gommo' ? 'gommo' : selected === 'gpti2' ? 'gpti2' : selected === 'tst' ? 'tst' : GENERATION_PROVIDER_DEFAULT;
+      return selected === 'gpti2' ? 'gpti2' : 'tst';
     }
     const modelProvider = String(data?.value?.providerByModel?.[modelId] || '').trim().toLowerCase();
-    if (modelProvider === 'gommo' || modelProvider === 'tst' || modelProvider === 'gpti2') return modelProvider as GenerationProvider;
-    return selected === 'gommo' ? 'gommo' : selected === 'gpti2' ? 'gpti2' : selected === 'tst' ? 'tst' : GENERATION_PROVIDER_DEFAULT;
+    if (modelProvider === 'gommo') return 'tst';
+    if (modelProvider === 'tst' || modelProvider === 'gpti2') return modelProvider as GenerationProvider;
+    return selected === 'gpti2' ? 'gpti2' : 'tst';
   } catch (error) {
     console.warn('[queue-worker] Could not read generation provider mode; using deployment default.', error);
     return GENERATION_PROVIDER_DEFAULT;
@@ -252,13 +262,17 @@ const resolveDispatchProvider = async (payload: Record<string, unknown>): Promis
   const stored = String(payload.__targetProvider || '').trim().toLowerCase();
   const queueKind = String(payload.queueKind || '').trim().toLowerCase();
   if (stored === 'gpti2' && VIDEO_OR_MOTION_QUEUE_KINDS.has(queueKind)) return 'tst';
+  // A fallback reaches TST only after its live catalog validates a compatible
+  // server, so retain that explicit dispatch decision on the next claim.
+  if (stored === 'tst' && payload.__tstFallbackValidated === true) return 'tst';
   // GPTi2-only models cannot be submitted to TST/Gommo. This also repairs
   // legacy queued rows whose provider metadata was written before GPTi2
   // routing was persisted.
   if (!VIDEO_OR_MOTION_QUEUE_KINDS.has(queueKind) && isGpti2Model(getQueuePayloadModelId(payload))) {
     return 'gpti2';
   }
-  if (stored === 'tst' || stored === 'gommo' || stored === 'gpti2') return stored;
+  if (stored === 'gommo') return 'tst';
+  if (stored === 'tst' || stored === 'gpti2') return stored;
   return getGlobalGenerationProvider(
     getQueuePayloadModelId(payload),
     String(payload.__providerRouteKey || ''),
@@ -323,6 +337,9 @@ const isAmbiguousDispatchError = (message: string) => {
     normalized.includes('gateway timeout')
   );
 };
+
+const isGpti2ProviderError = (message: string) =>
+  /^GPTI2_ERROR:/i.test(String(message || '').trim());
 
 const parseErrorMessage = async (response: Response) => {
   try {
@@ -584,10 +601,10 @@ const withQueueLog = (
 const formatVertexDiagnosticLogMessage = (entry: QueueVertexDiagnosticEntry) => {
   const taskLabel =
     entry.task === 'image_reference_analysis'
-      ? 'Vertex reference analysis'
+      ? 'Grok AI reference analysis'
       : entry.task === 'image_prompt_compression'
-        ? 'Vertex prompt compression'
-        : 'Vertex prompt synthesis';
+        ? 'Grok AI prompt compression'
+        : 'Grok AI prompt synthesis';
   const location = [entry.credentialName, entry.projectId].filter(Boolean).join(' / ');
   const details = [
     location ? `key=${location}` : '',
@@ -1117,7 +1134,7 @@ const getJobRuntimeState = async (jobId: string) => {
   const admin = getServiceRoleClient();
   const { data, error } = await admin
     .from('generated_images')
-    .select('id, status, attempt_count, processing_started_at, created_at, job_id, queue_payload')
+    .select('id, status, provider, attempt_count, processing_started_at, created_at, job_id, queue_payload')
     .eq('id', jobId)
     .maybeSingle();
 
@@ -1190,7 +1207,7 @@ const submitProviderJob = async (
   }
   if (targetProvider === 'gommo') {
     if (!isGommoConfigured()) {
-      throw new Error('GOMMO_NOT_CONFIGURED: Missing GOMMO_ACCESS_TOKEN or GOMMO_DOMAIN environment variable');
+      throw new Error('RETIRED_PROVIDER: Gommo has been removed; route this job through TST.');
     }
     const gommo = await submitGommoJob(queueKind, plainPayload);
     return {
@@ -1570,7 +1587,7 @@ const prepareVideoInputsForDirectTstDispatch = async (
     }
 
     return {
-      successMessage: 'Đã bỏ kiểm duyệt Vertex. Đang dựng payload video và gửi trực tiếp sang TST.',
+      successMessage: 'Đã bỏ kiểm duyệt Grok AI. Đang dựng payload video và gửi trực tiếp sang TST.',
     };
   }
 
@@ -1583,7 +1600,7 @@ const prepareVideoInputsForDirectTstDispatch = async (
   }
 
   return {
-    successMessage: 'Đã bỏ kiểm duyệt Vertex. Đang dựng payload Motion Control và gửi trực tiếp sang TST.',
+    successMessage: 'Đã bỏ kiểm duyệt Grok AI. Đang dựng payload Motion Control và gửi trực tiếp sang TST.',
   };
 };
 
@@ -2077,7 +2094,7 @@ const prepareImageRecipeInStages = async (
 };
 
 const markCompletedWithAssetUrl = async (job: QueueJobRow, assetUrl: string) => {
-  const r2ResultUrl = await persistProviderResultToR2(assetUrl, job.user_id, job.id, job.asset_type);
+  const r2ResultUrl = await persistResultForJob(assetUrl, job);
   const admin = getServiceRoleClient();
   const nextPayload = withQueueLog(job.queue_payload, 'completed', 'Đã hoàn thành và nhận kết quả.', 'success');
   await admin
@@ -2115,7 +2132,7 @@ const completePolledJobWithResultUrl = async (
   const r2ResultUrl = await withTimeout(
     withLeaseHeartbeat(
       job.id,
-      persistProviderResultToR2(resultUrl, job.user_id, job.id, job.asset_type),
+      persistResultForJob(resultUrl, job),
       DISPATCH_LEASE_SECONDS,
     ),
     PROVIDER_RESULT_STORAGE_TIMEOUT_MS,
@@ -2471,12 +2488,15 @@ const trySmartImageProviderFallback = async (
   runtimeState?: any,
 ) => {
   const payload = toQueuePayloadObject(runtimeState?.queue_payload || job.queue_payload);
-  const sourceProvider = getJobProvider(payload);
+  const runtimeProvider = String(runtimeState?.provider || '').trim().toLowerCase();
+  const sourceProvider: GenerationProvider = runtimeProvider === 'gpti2' || runtimeProvider === 'gommo' || runtimeProvider === 'tst'
+    ? runtimeProvider
+    : getJobProvider(payload);
   if (
     !['image_generate', 'video_generate', 'motion_generate'].includes(String(job.queue_kind || '').trim().toLowerCase()) ||
     payload.__smartProviderFallbackEnabled === false ||
     (sourceProvider !== 'tst' && sourceProvider !== 'gommo' && sourceProvider !== 'gpti2') ||
-    String(payload.__targetProvider || sourceProvider).trim().toLowerCase() !== sourceProvider
+    (payload.__targetProvider && String(payload.__targetProvider).trim().toLowerCase() !== sourceProvider)
   ) {
     return false;
   }
@@ -2503,33 +2523,27 @@ const trySmartImageProviderFallback = async (
     .flatMap((entry: any) => [entry?.fromProvider, entry?.toProvider]).filter(Boolean));
   const nextConfiguredProvider = priority.find((provider) => provider !== sourceProvider && !historyProviders.has(provider));
   const providerOrderedTstServer = priority.length > 0 && nextConfiguredProvider !== 'tst' ? null : nextTstServer;
-  const canFallbackToGommo = sourceProvider !== 'gommo' && !providerOrderedTstServer && (!nextConfiguredProvider || nextConfiguredProvider === 'gommo') && isGommoConfigured() && await canUseGommoForPayload(
+  const configuredTstUnavailable = nextConfiguredProvider === 'tst' && !providerOrderedTstServer;
+  const canFallbackToGommo = sourceProvider !== 'gommo' && !providerOrderedTstServer && (!nextConfiguredProvider || nextConfiguredProvider === 'gommo' || configuredTstUnavailable) && isGommoConfigured() && await canUseGommoForPayload(
     job.queue_kind,
     { ...payload, model: identity.modelId },
   ).catch(() => false);
 
-  if (!providerOrderedTstServer && !canFallbackToGommo && !nextConfiguredProvider) {
+  if (!providerOrderedTstServer && !canFallbackToGommo) {
     return false;
   }
 
-  const targetProvider: GenerationProvider = providerOrderedTstServer ? 'tst' : (nextConfiguredProvider || 'gommo');
-  if (targetProvider === 'gpti2' && !isGpti2Configured()) return false;
+  const targetProvider: GenerationProvider = providerOrderedTstServer ? 'tst' : 'gommo';
   const fallbackPayload = providerOrderedTstServer
     ? withFallbackServer(payload, providerOrderedTstServer)
-    : targetProvider === 'tst'
-      ? {
-          ...payload,
-          ...(payload.__recipePayload && typeof payload.__recipePayload === 'object' ? payload.__recipePayload : {}),
-          model: identity.modelId,
-          modelId: identity.modelId,
-        }
-      : { ...payload };
+    : { ...payload };
   const history = Array.isArray(payload.__providerFallbackHistory)
     ? payload.__providerFallbackHistory.filter((entry) => entry && typeof entry === 'object')
     : [];
   const nextPayload: Record<string, unknown> = {
     ...fallbackPayload,
     __targetProvider: targetProvider,
+    __tstFallbackValidated: targetProvider === 'tst',
     __smartProviderFallbackEnabled: true,
     __tstFallbackTriedServers: triedServers,
     __providerFallbackHistory: [
@@ -2561,7 +2575,7 @@ const trySmartImageProviderFallback = async (
     : 'Tất cả server TST khả dụng của model đã thất bại; tự động chuyển job sang Gommo.';
   const queuedPayload = withQueueLog(nextPayload, 'queued', fallbackDescription, 'warning');
   const admin = getServiceRoleClient();
-  const { data, error } = await admin
+  let updateQuery = admin
     .from('generated_images')
     .update({
       status: 'queued',
@@ -2579,10 +2593,11 @@ const trySmartImageProviderFallback = async (
       updated_at: new Date().toISOString(),
     })
     .eq('id', job.id)
-    .eq('status', 'processing')
-    .eq('job_id', String(job.job_id || ''))
-    .select('id')
-    .maybeSingle();
+    .eq('status', 'processing');
+  updateQuery = job.job_id
+    ? updateQuery.eq('job_id', String(job.job_id))
+    : updateQuery.is('job_id', null);
+  const { data, error } = await updateQuery.select('id').maybeSingle();
   if (error) throw error;
   if (!data?.id) {
     logQueueWorkerEvent('Skipped smart fallback because job state changed.', getQueueWorkerLogJob(job));
@@ -3100,6 +3115,7 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
   let providerPayloadForSubmit: Record<string, unknown> | null = null;
   let providerDispatchStarted = false;
   let dispatchAttemptId: string | null = null;
+  let targetProvider: GenerationProvider | null = null;
 
   try {
     if (await shouldSkipDispatch(job)) {
@@ -3130,7 +3146,7 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
       const resultUrl = await withTimeout(
         withLeaseHeartbeat(
           job.id,
-          runVertexImageEdit({
+          runNanoBananaImageEdit({
             sourceImage: editPayload.sourceImage,
             instruction: editPayload.prompt,
             modelId: editPayload.modelId,
@@ -3164,7 +3180,7 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
       return { completed: 1 };
     }
 
-    const targetProvider = await resolveDispatchProvider(currentPayload);
+    targetProvider = await resolveDispatchProvider(currentPayload);
     job.queue_payload = {
       ...(job.queue_payload || currentPayload),
       __targetProvider: targetProvider,
@@ -3269,8 +3285,8 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
       await updatePreProviderStage(job.id, 20);
       const reviewStartMessage =
         currentPayload.recipeType === 'video_generate_recipe_v1'
-          ? 'Đang dựng payload video. Bỏ kiểm duyệt Vertex và gửi dữ liệu trực tiếp lên TST.'
-          : 'Đang dựng payload Motion Control. Bỏ kiểm duyệt Vertex và gửi dữ liệu trực tiếp lên TST.';
+          ? 'Đang dựng payload video. Bỏ kiểm duyệt Grok AI và gửi dữ liệu trực tiếp lên TST.'
+          : 'Đang dựng payload Motion Control. Bỏ kiểm duyệt Grok AI và gửi dữ liệu trực tiếp lên TST.';
       job.queue_payload = await persistQueueLog(
         job.id,
         job.queue_payload || currentPayload,
@@ -3406,6 +3422,15 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
         reason: message,
       });
       return {};
+    }
+    // A deterministic GPTi2 rejection (for example an invalid reference
+    // image or synchronous-endpoint limit) means no provider job was accepted.
+    // Switch to the configured TST fallback before the generic retry path,
+    // which treats __tstTouched as a committed dispatch and refunds/fails it.
+    if (providerDispatchStarted && targetProvider === 'gpti2' && isGpti2ProviderError(message)) {
+      if (await trySmartImageProviderFallback(job, message, await getJobRuntimeState(job.id))) {
+        return { requeued: 1 };
+      }
     }
     if (providerDispatchStarted && isAmbiguousDispatchError(message)) {
       await markDispatchAwaitingProviderConfirmation(job, message, providerPayloadForSubmit || job.queue_payload);

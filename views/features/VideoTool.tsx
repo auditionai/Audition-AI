@@ -410,6 +410,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                       pricingOverrides: overrideRows
                   }).vcoin
               }));
+              // Video models are shown only when present in the live TST catalog.
               const routedVideoModels = liveVideoModels;
               const liveMotionModels = getMotionModelSpecs(livePricing, filteredModels)
                 .filter((spec) => isModelAllowedForFeature(routingConfig, 'motion_control', spec.modelId))
@@ -425,6 +426,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                       pricingOverrides: overrideRows
                   }).vcoin
               }));
+              // Motion models are shown only when present in the live TST catalog.
               const routedMotionModels = liveMotionModels;
 
               if (routedVideoModels.length > 0) {
@@ -946,7 +948,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
         target_model: scriptTargetModel || videoModel,
         error_message: error instanceof Error ? error.message.slice(0, 120) : 'unknown',
       });
-      notify(error instanceof Error ? error.message : 'Không thể tạo kịch bản video bằng Vertex AI.', 'error');
+      notify(error instanceof Error ? error.message : 'Không thể tạo kịch bản video bằng Grok AI.', 'error');
     } finally {
       setIsGeneratingScript(false);
     }
@@ -1395,7 +1397,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                           Đạo diễn kịch bản AI
                         </div>
                         <p className="mt-1 text-[10px] leading-relaxed text-slate-600 dark:text-slate-400">
-                Vertex AI phân tích keyframe và viết kịch bản chuyển động tối ưu cho model đã chọn.
+                Grok AI phân tích keyframe và viết kịch bản chuyển động tối ưu cho model đã chọn.
                         </p>
                       </div>
                       <button

@@ -1,0 +1,8 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "auditionai-telegram-notify",
+  "main": "cloudflare/telegram-notify-worker.js",
+  "compatibility_date": "2026-08-07",
+  "workers_dev": true,
+  "preview_urls": false
+}

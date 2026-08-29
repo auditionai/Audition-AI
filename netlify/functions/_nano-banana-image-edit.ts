@@ -1,9 +1,4 @@
-import { runWithVertexCredentialFailover } from './_vertex-credentials';
-import {
-  buildVertexGenerateContentUrl,
-  VERTEX_IMAGE_FLASH_MODEL,
-  VERTEX_IMAGE_PRO_MODEL,
-} from './_vertex-models';
+import { runGpti2ImageEdit } from './_gpti2-provider';
 
 const parseErrorMessage = async (response: Response) => {
   try {
@@ -140,11 +135,11 @@ const buildMissingImageError = (data: any, modelName: string) => {
   ].filter(Boolean);
 
   return details.length > 0
-    ? `Vertex AI did not return an edited image (${modelName}); ${details.join(' | ')}`
-    : `Vertex AI did not return an edited image (${modelName}).`;
+    ? `Grok AI did not return an edited image (${modelName}); ${details.join(' | ')}`
+    : `Grok AI did not return an edited image (${modelName}).`;
 };
 
-export const runVertexImageEdit = async ({
+export const runNanoBananaImageEdit = async ({
   sourceImage,
   instruction,
   modelId,
@@ -152,59 +147,6 @@ export const runVertexImageEdit = async ({
   resolution,
   aspectRatio,
 }: RunVertexImageEditParams): Promise<string> => {
-  const preferPro = modelId.toLowerCase().includes('pro');
-  const modelName = preferPro ? VERTEX_IMAGE_PRO_MODEL : VERTEX_IMAGE_FLASH_MODEL;
-  const imageSize = normalizeImageSize(resolution);
   const normalizedAspectRatio = normalizeAspectRatio(aspectRatio);
-  const imageConfig = {
-    ...(normalizedAspectRatio ? { aspectRatio: normalizedAspectRatio } : {}),
-    ...(imageSize ? { imageSize } : {}),
-  };
-
-  return runWithVertexCredentialFailover({
-    taskName: `image editing (${modelName})`,
-    operation: async ({ projectId, accessToken }) => {
-      const response = await fetch(
-        buildVertexGenerateContentUrl(projectId, modelName),
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            contents: [
-              {
-                role: 'user',
-                parts: [
-                  await toInlineImagePart(sourceImage, mimeType),
-                  { text: instruction },
-                ],
-              },
-            ],
-            generationConfig: {
-              temperature: 0.2,
-              topP: 0.8,
-              maxOutputTokens: 8192,
-              responseModalities: ['TEXT', 'IMAGE'],
-              ...(Object.keys(imageConfig).length > 0 ? { imageConfig } : {}),
-            },
-          }),
-          signal: AbortSignal.timeout(120000),
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error(await parseErrorMessage(response));
-      }
-
-      const data = await response.json();
-      const inlineImage = extractInlineImageFromResponse(data);
-      if (!inlineImage?.data) {
-        throw new Error(buildMissingImageError(data, modelName));
-      }
-
-      return `data:${inlineImage.mimeType || 'image/png'};base64,${inlineImage.data}`;
-    },
-  });
+  return runGpti2ImageEdit({ sourceImage, instruction, aspectRatio: normalizedAspectRatio });
 };

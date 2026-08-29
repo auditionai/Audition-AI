@@ -5,10 +5,10 @@ import {
   type ImageGenerateRecipePayload,
   type QueueVertexDiagnosticEntry,
 } from '../../shared/queueRecipes';
-import { runWithVertexCredentialFailover } from './_vertex-credentials';
-import { buildVertexGenerateContentUrl, VERTEX_TEXT_PRO_MODEL } from './_vertex-models';
+import { runWithVertexCredentialFailover } from './_grok-credentials';
+import { GROK_BACKGROUND_TIMEOUT_MS, GROK_MODEL, grokJson, grokText } from './_grok';
 
-const VERTEX_MODEL = VERTEX_TEXT_PRO_MODEL;
+const VERTEX_MODEL = GROK_MODEL;
 const normalizePromptWhitespace = (value: string) => value.replace(/\s+/g, ' ').trim();
 type VertexDiagnosticTask = QueueVertexDiagnosticEntry['task'];
 type VertexDiagnosticCallback = (entry: QueueVertexDiagnosticEntry) => Promise<void> | void;
@@ -67,7 +67,7 @@ const collectSafetyRatings = (data: any) =>
 const extractJsonPayload = (value: string) => {
   const trimmed = value.trim();
   if (!trimmed) {
-    throw new Error('Vertex AI returned an empty prompt synthesis payload.');
+    throw new Error('Grok AI returned an empty prompt synthesis payload.');
   }
 
   if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
@@ -85,13 +85,13 @@ const extractJsonPayload = (value: string) => {
     return trimmed.slice(firstBrace, lastBrace + 1);
   }
 
-  throw new Error('Vertex AI did not return a valid JSON object for prompt synthesis.');
+  throw new Error('Grok AI did not return a valid JSON object for prompt synthesis.');
 };
 
 const normalizePromptJsonPayload = (value: string) => {
   const parsed = JSON.parse(extractJsonPayload(value));
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('Vertex AI prompt synthesis JSON must be an object.');
+    throw new Error('Grok AI prompt synthesis JSON must be an object.');
   }
 
   return JSON.stringify(parsed);
@@ -132,7 +132,7 @@ const extractPromptFeedback = (data: any) => {
 };
 
 const parseErrorMessage = async (response: Response) => {
-  const fallback = `Vertex AI request failed with ${response.status} ${response.statusText}`.trim();
+  const fallback = `Grok AI request failed with ${response.status} ${response.statusText}`.trim();
 
   try {
     const raw = await response.text();
@@ -166,8 +166,8 @@ const summarizeVertexPromptSynthesisFailure = (data: any) => {
   ].filter(Boolean);
 
   return details.length > 0
-    ? `Vertex AI returned no prompt text for image prompt synthesis. ${details.join(' | ')}`
-    : 'Vertex AI returned no prompt text for image prompt synthesis.';
+    ? `Grok AI returned no prompt text for image prompt synthesis. ${details.join(' | ')}`
+    : 'Grok AI returned no prompt text for image prompt synthesis.';
 };
 
 const emitVertexDiagnostic = async (
@@ -342,40 +342,21 @@ const requestVertexPromptSynthesis = async (
   parts: Array<Record<string, unknown>>,
   outputTokenLimit: number,
 ) => {
-  const response = await fetch(
-    buildVertexGenerateContentUrl(projectId, VERTEX_MODEL),
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts }],
-        generationConfig: {
-          temperature: 0.0,
-          topP: 0.1,
-          maxOutputTokens: outputTokenLimit,
-          responseMimeType: 'application/json',
-          responseSchema: IMAGE_PROMPT_JSON_SCHEMA,
-        },
-      }),
-      signal: AbortSignal.timeout(180000),
-    },
-  );
-
-  if (!response.ok) {
-    throw new Error(await parseErrorMessage(response));
-  }
-
-  const data = await response.json();
+  const text = parts.map((part) => typeof part.text === 'string' ? part.text : '').filter(Boolean).join('\n');
+  const images = parts
+    .map((part: any) => part?.inlineData || part?.inline_data)
+    .filter((part: any) => typeof part?.data === 'string')
+    .map((part: any) => ({ mimeType: String(part.mimeType || part.mime_type || 'image/jpeg'), data: part.data }));
+  const grokResult = await grokJson<Record<string, unknown>>(`${text}\n\nReturn only the requested JSON object.`, images, outputTokenLimit, { timeoutMs: GROK_BACKGROUND_TIMEOUT_MS });
+  const grokText = JSON.stringify(grokResult);
   return {
-    data,
-    text: extractCandidateText(data),
-    finishReasons: collectFinishReasons(data),
-    promptFeedback: extractPromptFeedback(data),
-    safetyRatings: collectSafetyRatings(data),
+    data: { candidates: [{ content: { parts: [{ text: grokText }] } }] },
+    text: grokText,
+    finishReasons: [],
+    promptFeedback: null,
+    safetyRatings: [],
   };
+
 };
 
 export const synthesizeStrictImagePrompt = async (
@@ -423,7 +404,7 @@ export const synthesizeStrictImagePrompt = async (
           const normalized = tryNormalize(primaryAttempt.text);
           await emitVertexDiagnostic(options?.onDiagnostic, 'image_prompt_synthesis', {
             status: 'success',
-            message: 'Vertex AI synthesized the English JSON prompt successfully.',
+            message: 'Grok AI synthesized the English JSON prompt successfully.',
             credentialName: credentialName || undefined,
             projectId,
             finishReasons: primaryAttempt.finishReasons,
@@ -577,72 +558,13 @@ export const rewriteUserPromptToFitLimit = async (
     normalizedPrompt,
   ].join('\n');
 
-  return runWithVertexCredentialFailover({
-    taskName: 'image prompt compression',
-    onAttemptFailure: async ({ credentialName, projectId, error, retryable }) => {
-      if (!retryable) {
-        return;
-      }
-      await emitVertexDiagnostic(onDiagnostic, 'image_prompt_compression', {
-        status: 'error',
-        message: error.message,
-        credentialName: credentialName || undefined,
-        projectId,
-      });
-    },
-    operation: async ({ projectId, accessToken, credentialName }) => {
-      const response = await fetch(
-        buildVertexGenerateContentUrl(projectId, VERTEX_MODEL),
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: instruction }] }],
-            generationConfig: {
-              temperature: 0.1,
-              topP: 0.8,
-              maxOutputTokens: 1024,
-            },
-          }),
-          signal: AbortSignal.timeout(120000),
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error(await parseErrorMessage(response));
-      }
-
-      const data = await response.json();
-      const text = normalizePromptWhitespace(String(data?.candidates?.[0]?.content?.parts?.[0]?.text || ''));
-      if (!text) {
-        const message = 'Vertex AI did not return a compressed user prompt.';
-        await emitVertexDiagnostic(onDiagnostic, 'image_prompt_compression', {
-          status: 'error',
-          message,
-          credentialName: credentialName || undefined,
-          projectId,
-          finishReasons: collectFinishReasons(data),
-          promptFeedback: extractPromptFeedback(data),
-          safetyRatings: collectSafetyRatings(data),
-        });
-        throw new Error(message);
-      }
-
-      await emitVertexDiagnostic(onDiagnostic, 'image_prompt_compression', {
-        status: 'success',
-        message: `Vertex AI compressed the ${pipelineLabel} prompt successfully.`,
-        credentialName: credentialName || undefined,
-        projectId,
-        finishReasons: collectFinishReasons(data),
-        promptFeedback: extractPromptFeedback(data),
-        safetyRatings: collectSafetyRatings(data),
-      });
-      return text;
-    },
+  const text = normalizePromptWhitespace(await grokText(instruction, [], 1024, { timeoutMs: GROK_BACKGROUND_TIMEOUT_MS }));
+  if (!text) throw new Error('Grok did not return a compressed user prompt.');
+  await emitVertexDiagnostic(onDiagnostic, 'image_prompt_compression', {
+    status: 'success',
+    message: `Grok compressed the ${pipelineLabel} prompt successfully.`,
   });
+  return text;
 };
 
 export const rewriteUserImagePromptToFitLimit = async (

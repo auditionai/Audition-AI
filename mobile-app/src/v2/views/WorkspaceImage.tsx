@@ -69,6 +69,7 @@ type GenMode = 'single' | 'couple' | 'trio' | 'squad' | 'group5' | 'group6' | 'g
 type Stage = 'input' | 'submitting';
 const GPTI2_RESOLUTIONS = ['1K', '2K', '4K'];
 const GPTI2_ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'];
+const GPTI2_NANO_ASPECT_RATIOS = GPTI2_ASPECT_RATIOS.filter((ratio) => ratio !== '21:9');
 
 const IMAGE_MODEL_OPTIONS: Array<{
   tier: TstGenerationTier;
@@ -579,7 +580,8 @@ export function WorkspaceImage() {
     if (isGpti2Selected) {
       if (server !== GPTI2_SERVER_LABEL) setServer(GPTI2_SERVER_LABEL);
       if (!GPTI2_RESOLUTIONS.includes(resolution)) setResolution(GPTI2_RESOLUTIONS[0]);
-      if (!GPTI2_ASPECT_RATIOS.includes(aspectRatio)) setAspectRatio(GPTI2_ASPECT_RATIOS[0]);
+      const gpti2Ratios = selectedModelId.startsWith('nano-banana') ? GPTI2_NANO_ASPECT_RATIOS : GPTI2_ASPECT_RATIOS;
+      if (!gpti2Ratios.includes(aspectRatio)) setAspectRatio(gpti2Ratios[0]);
       return;
     }
     if (tstAspectRatios.length > 0 && !tstAspectRatios.includes(aspectRatio)) {
@@ -821,7 +823,7 @@ export function WorkspaceImage() {
       });
 
       if (!result.imageUrl) {
-        throw new Error('Vertex AI không trả về ảnh kết quả.');
+        throw new Error('Grok AI không trả về ảnh kết quả.');
       }
 
       const refreshedUrl = result.imageUrl.includes('?')
@@ -1039,7 +1041,7 @@ export function WorkspaceImage() {
 
   const ratios = isGommoSelected && selectedGommoModel?.ratios.length
     ? selectedGommoModel.ratios.map((option) => option.type)
-    : isGpti2Selected ? GPTI2_ASPECT_RATIOS : tstAspectRatios;
+    : isGpti2Selected ? (selectedModelId.startsWith('nano-banana') ? GPTI2_NANO_ASPECT_RATIOS : GPTI2_ASPECT_RATIOS) : tstAspectRatios;
 
   return (
     <div className="flex flex-col h-full bg-[#FAFAFA] dark:bg-[#09090B]">
@@ -1161,7 +1163,7 @@ export function WorkspaceImage() {
                       <span>{activeAssist === 'remove_bg_pro' ? 'Đang Tách...' : 'Tách Nền'}</span>
                     </div>
                     <div className="mt-1 text-[11px] opacity-80">
-                      {activeAssist === 'remove_bg_pro' ? 'Vertex AI đang xử lý' : `${CHARACTER_ASSISTANT_RESOLUTION} • ${removeBgCost.vcoin} Vcoin`}
+                      {activeAssist === 'remove_bg_pro' ? 'Grok AI đang xử lý' : `${CHARACTER_ASSISTANT_RESOLUTION} • ${removeBgCost.vcoin} Vcoin`}
                     </div>
                   </button>
                   <button
@@ -1180,7 +1182,7 @@ export function WorkspaceImage() {
                       <span>{activeAssist === 'sharpen_upscale' ? 'Đang Nét...' : 'Làm Nét'}</span>
                     </div>
                     <div className="mt-1 text-[11px] opacity-80">
-                      {activeAssist === 'sharpen_upscale' ? 'Vertex AI đang xử lý' : `${CHARACTER_ASSISTANT_RESOLUTION} • ${sharpenCost.vcoin} Vcoin`}
+                      {activeAssist === 'sharpen_upscale' ? 'Grok AI đang xử lý' : `${CHARACTER_ASSISTANT_RESOLUTION} • ${sharpenCost.vcoin} Vcoin`}
                     </div>
                   </button>
                 </div>

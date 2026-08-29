@@ -1,7 +1,5 @@
-import { runWithVertexCredentialFailover } from './_vertex-credentials';
-import { buildVertexGenerateContentUrl, VERTEX_TEXT_PRO_MODEL } from './_vertex-models';
+import { grokJson } from './_grok';
 
-const VERTEX_MODEL = VERTEX_TEXT_PRO_MODEL;
 
 export type VideoInputReviewIssue =
   | 'no_character'
@@ -173,46 +171,13 @@ const reviewImageInput = async (
   mode: VideoInputReviewMode,
 ): Promise<VideoInputReviewResult> => {
   const imagePart = await toInlineImagePart(imageSource);
-  const promptPart = { text: buildReviewInstruction(mode) };
-
-  return runWithVertexCredentialFailover({
-    taskName: mode === 'motion_character' ? 'motion control input review' : 'video keyframe input review',
-    operation: async ({ projectId, accessToken }) => {
-      const response = await fetch(
-        buildVertexGenerateContentUrl(projectId, VERTEX_MODEL),
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            contents: [{ role: 'user', parts: [imagePart, promptPart] }],
-            generationConfig: {
-              temperature: 0.0,
-              topP: 0.1,
-              maxOutputTokens: 1024,
-              responseMimeType: 'application/json',
-            },
-          }),
-          signal: AbortSignal.timeout(180000),
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error(await parseErrorMessage(response));
-      }
-
-      const data = await response.json();
-      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-
-      if (!text) {
-        throw new Error('Vertex AI did not return an input review result.');
-      }
-
-      return normalizeReviewResult(JSON.parse(extractJsonPayload(text)));
-    },
-  });
+  const result = await grokJson<Record<string, unknown>>(
+    buildReviewInstruction(mode),
+    [{ mimeType: imagePart.inlineData.mimeType, data: imagePart.inlineData.data }],
+    1024,
+    { timeoutMs: 30_000 },
+  );
+  return normalizeReviewResult(result);
 };
 
 const readBoxType = (view: DataView, offset: number) =>

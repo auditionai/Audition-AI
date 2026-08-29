@@ -600,7 +600,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [switchingGenerationProvider, setSwitchingGenerationProvider] = useState(false);
   const [pricingDrafts, setPricingDrafts] = useState<Record<string, string>>({});
   const [pricingConfigFilter, setPricingConfigFilter] = useState<'all' | 'missing'>('all');
-  const [pricingProviderFilter, setPricingProviderFilter] = useState<'all' | 'tst' | 'gommo'>('all');
+  const [pricingProviderFilter, setPricingProviderFilter] = useState<'all' | 'tst' | 'gpti2'>('all');
   const [savingAllPricing, setSavingAllPricing] = useState(false);
   const [serverAvailabilityConfig, setServerAvailabilityConfig] = useState<TstServerAvailabilityConfig>({ disabledByModel: {}, disabledByProviderModel: {}, autoDisabledCombos: {} });
   const [editingStyle, setEditingStyle] = useState<StylePreset | null>(null);
@@ -624,7 +624,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
   // API Key States
   const [apiKey, setApiKey] = useState('');
-  const [apiKeyTier, setApiKeyTier] = useState<'flash' | 'pro'>('flash');
+  const [apiKeyTier] = useState<'grok'>('grok');
   const [showKey, setShowKey] = useState(false);
   const [keyStatus, setKeyStatus] = useState<'valid' | 'invalid' | 'unknown' | 'checking'>('unknown');
   const [dbKeys, setDbKeys] = useState<any[]>([]); 
@@ -1044,11 +1044,13 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const dirtyPricingRows = allPricingRows.filter(isPricingRowDirty);
   const dirtyPricingCount = dirtyPricingRows.length;
   const missingPricingCount = allPricingRows.filter((row) => !getEffectiveAuditionPricing(row)).length;
-  const tstPricingCount = allPricingRows.filter((row) => row.server !== 'gommo').length;
-  const gommoPricingCount = allPricingRows.filter((row) => row.server === 'gommo').length;
+  const isGpti2PricingRow = (row: TstPricingRow) =>
+      ['image-gpt-2', 'gpt-image-2', 'nano-banana-2', 'nano-banana-pro'].includes(row.modelId.trim().toLowerCase());
+  const gpti2PricingCount = allPricingRows.filter(isGpti2PricingRow).length;
+  const tstPricingCount = allPricingRows.filter((row) => !isGpti2PricingRow(row)).length;
   const providerFilteredPricingRows = pricingProviderFilter === 'all'
       ? allPricingRows
-      : allPricingRows.filter((row) => pricingProviderFilter === 'gommo' ? row.server === 'gommo' : row.server !== 'gommo');
+      : allPricingRows.filter((row) => pricingProviderFilter === 'gpti2' ? isGpti2PricingRow(row) : !isGpti2PricingRow(row));
   const providerMissingPricingCount = providerFilteredPricingRows.filter((row) => !getEffectiveAuditionPricing(row)).length;
   const filteredPricingRows = pricingConfigFilter === 'missing'
       ? providerFilteredPricingRows.filter((row) => !getEffectiveAuditionPricing(row))
@@ -1223,7 +1225,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   ) => {
       if (switchingGenerationProvider) return;
       const isVideoRoute = featureKey === 'video_generation' || featureKey === 'motion_control';
-      const allowedProviders: GenerationProviderMode[] = isVideoRoute ? ['tst', 'gommo'] : ['gpti2', 'tst', 'gommo'];
+      const allowedProviders: GenerationProviderMode[] = isVideoRoute ? ['tst'] : ['gpti2', 'tst', 'gommo'];
       const current = (providerPriorityByFeature[featureKey] || allowedProviders).filter((entry, index, list) => allowedProviders.includes(entry) && list.indexOf(entry) === index);
       for (const entry of allowedProviders) if (!current.includes(entry)) current.push(entry);
       const index = current.indexOf(provider);
@@ -1560,7 +1562,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       const [geminiCheck, sbCheck, r2Ok] = await Promise.all([
           withHealthTimeout(
               checkConnection(keyToUse).catch((error) => {
-                  console.warn('[Admin] Gemini health check failed', error);
+                  console.warn('[Admin] Grok health check failed', error);
                   return { success: false, message: error?.message || 'Connection failed' };
               }),
               { success: false, message: 'Health check timed out' },
@@ -1615,7 +1617,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       if (!apiKey.trim()) return;
       
       setKeyStatus('checking');
-      const check = await checkConnection(apiKey);
+      const check = await checkConnection(apiKey.trim());
       
       // Allow saving if valid OR if user confirms to bypass
       let shouldSave = check.success;
@@ -1626,6 +1628,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           }
       }
 
+      // A key must pass a real OpenAI-compatible gateway request before it is persisted.
+      shouldSave = check.success;
       if (shouldSave) {
           const result = await saveSystemApiKey(apiKey, apiKeyTier);
           if (result.success) {
@@ -2929,7 +2933,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
           <div className="admin-command-health" aria-label="Tình trạng dịch vụ">
               {[
-                  { label: 'Gemini AI', value: health.gemini, icon: Icons.Sparkles },
+                  { label: 'Grok AI', value: health.gemini, icon: Icons.Sparkles },
                   { label: 'Supabase', value: health.supabase, icon: Icons.Database },
                   {
                       label: health.storage.type === 'R2'
@@ -3026,9 +3030,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               <div className="flex items-center gap-3 neu-inset-sm px-4 py-2 rounded-2xl">
                   <span className="text-[10px] font-bold text-slate-700 dark:text-slate-400 font-semibold dark:text-slate-700 dark:text-slate-300 font-semibold uppercase tracking-wider">Hệ thống:</span>
                   <div className="flex items-center gap-2 text-[10px] font-bold">
-                      <div className="flex items-center gap-1.5" title="Gemini AI Engine">
+                      <div className="flex items-center gap-1.5" title="Grok AI Engine">
                           <span className={`w-2.5 h-2.5 rounded-full ${health.gemini.status === 'connected' ? 'bg-emerald-500 shadow-[0_0_8px_#10B981]' : 'bg-red-500'}`} />
-                          <span className="text-slate-700 dark:text-slate-300">Gemini</span>
+                          <span className="text-slate-700 dark:text-slate-300">Grok</span>
                       </div>
                       <span className="text-slate-700 dark:text-slate-300 font-semibold dark:text-slate-600">•</span>
                       <div className="flex items-center gap-1.5" title="Supabase Database">
@@ -4553,7 +4557,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl p-4">
                           <div className="text-xs uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold font-bold">Cấu hình live</div>
                           <div className="mt-2 text-3xl font-bold text-slate-900 dark:text-white">{allPricingRows.length}</div>
-                          <div className="text-xs text-slate-700 dark:text-slate-300 font-semibold mt-1">Bao gồm image, video, motion control và 3 tool Vertex.</div>
+                          <div className="text-xs text-slate-700 dark:text-slate-300 font-semibold mt-1">Bao gồm image, video, motion control, Grok và 3 tool Nano Banana 2.</div>
                       </div>
                       <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl p-4">
                           <div className="text-xs uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold font-bold">Models</div>
@@ -4685,8 +4689,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   <button type="button" aria-pressed={pricingProviderFilter === 'tst'} onClick={() => setPricingProviderFilter('tst')} className={`rounded-xl px-3 py-2 text-xs font-black transition-all ${pricingProviderFilter === 'tst' ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/20' : 'text-sky-600 dark:text-sky-300'}`}>
                                       TST ({tstPricingCount})
                                   </button>
-                                  <button type="button" aria-pressed={pricingProviderFilter === 'gommo'} onClick={() => setPricingProviderFilter('gommo')} className={`rounded-xl px-3 py-2 text-xs font-black transition-all ${pricingProviderFilter === 'gommo' ? 'bg-violet-500 text-white shadow-lg shadow-violet-500/20' : 'text-violet-600 dark:text-violet-300'}`}>
-                                      Gommo ({gommoPricingCount})
+                                  <button type="button" aria-pressed={pricingProviderFilter === 'gpti2'} onClick={() => setPricingProviderFilter('gpti2')} className={`rounded-xl px-3 py-2 text-xs font-black transition-all ${pricingProviderFilter === 'gpti2' ? 'bg-violet-500 text-white shadow-lg shadow-violet-500/20' : 'text-violet-600 dark:text-violet-300'}`}>
+                                      GPTi2 ({gpti2PricingCount})
                                   </button>
                               </div>
                               <div role="group" aria-label="Lọc theo trạng thái giá" className="grid grid-cols-2 gap-1 rounded-2xl neu-inset-sm p-1.5">
@@ -4711,10 +4715,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       <th className="px-4 py-3 font-bold">Thời lượng</th>
                                       <th className="px-4 py-3 font-bold">Tốc độ</th>
                                       <th className="px-4 py-3 font-bold text-center">Audio</th>
-                                       <th className="px-4 py-3 font-bold text-right">API 1 Credits</th>
-                                       <th className="px-4 py-3 font-bold text-right">API 1 Quy Đổi</th>
-                                       <th className="px-4 py-3 font-bold text-right">API 2 Realtime</th>
-                                       <th className="px-4 py-3 font-bold">API 2 Route</th>
+                                       <th className="px-4 py-3 font-bold text-right">TST Credits</th>
+                                       <th className="px-4 py-3 font-bold text-right">TST VNĐ (45đ/Credit)</th>
                                        <th className="px-4 py-3 font-bold text-right">AUDITION AI</th>
                                       <th className="px-4 py-3 font-bold text-right">Lãi Gộp</th>
                                       <th className="px-4 py-3 font-bold">Config Key</th>
@@ -4743,11 +4745,6 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                            const grossProfit = Number.isFinite(auditionPrice) ? auditionPrice - row.vcoin : 0;
                                            const providerCostKnown = row.server !== 'gommo' || row.vcoin > 0;
                                            const gommo = getGommoPriceComparison(row, gommoCatalog);
-                                           const gommoCreditText = gommo?.minCredits === null || gommo?.minCredits === undefined
-                                               ? '-'
-                                               : gommo.minCredits === gommo.maxCredits
-                                                   ? `${gommo.minCredits} GCr`
-                                                   : `${gommo.minCredits}–${gommo.maxCredits} GCr`;
 
                                           return (
                                               <tr key={`${row.modelId}_${row.configKey}`} className="hover:neu-inset-sm transition-colors">
@@ -4787,39 +4784,13 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                   </td>
                                                   <td className="px-4 py-3 text-white">{row.server === 'gommo' ? row.providerModeLabel || row.speed || '-' : tstSpeedToUi(row.speed) || '-'}</td>
                                                   <td className="px-4 py-3 text-center text-white">{row.audio ? 'Có' : '-'}</td>
-                                                  <td className="px-4 py-3 text-right font-mono text-audi-cyan">{row.type === 'edit' || row.server === 'gommo' ? '-' : row.credits}</td>
+                                                   <td className="px-4 py-3 text-right font-mono text-audi-cyan">{row.type === 'edit' ? '-' : row.credits}</td>
                                                    <td className="px-4 py-3 text-right font-mono text-slate-200">
                                                       {row.type === 'edit' || row.server === 'gommo'
                                                           ? '-'
                                                           : row.billingUnit === 'second'
-                                                              ? `${row.vcoin} VC/s`
-                                                           : `${row.vcoin} VC`}
-                                                   </td>
-                                                   <td className="px-4 py-3 text-right font-mono text-violet-300">
-                                                       <div>{gommoCreditText}</div>
-                                                       {gommo?.minCostVcoin !== null && gommo?.minCostVcoin !== undefined && (
-                                                           <div className="mt-1 text-[10px] text-slate-400">
-                                                               ≈ {gommo.minCostVcoin === gommo.maxCostVcoin
-                                                                   ? gommo.minCostVcoin
-                                                                   : `${gommo.minCostVcoin}–${gommo.maxCostVcoin}`} VC vốn
-                                                           </div>
-                                                       )}
-                                                   </td>
-                                                   <td className="px-4 py-3">
-                                                       {gommo ? (
-                                                           <div>
-                                                               <div className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${
-                                                                   gommo.fallbackSupported && !['maintenance', 'off', 'unavailable'].includes(gommo.status.toLowerCase())
-                                                                       ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
-                                                                       : 'border-amber-500/30 bg-amber-500/10 text-amber-300'
-                                                               }`}>
-                                                                   {gommo.fallbackSupported ? gommo.status : 'Chỉ đối chiếu'}
-                                                               </div>
-                                                               <div className="mt-1 max-w-[180px] text-[10px] text-slate-400" title={`${gommo.modelId}${gommo.matchedMode ? ` · ${gommo.matchedMode}` : ''}`}>
-                                                                   {gommo.modelName}{gommo.matchedMode ? ` · ${gommo.matchedMode}` : ''}
-                                                               </div>
-                                                           </div>
-                                                       ) : <span className="text-slate-500">-</span>}
+                                                              ? `${row.credits * 45} đ/s`
+                                                           : `${row.credits * 45} đ`}
                                                    </td>
                                                    <td className="px-4 py-3">
                                                       <div className="flex items-center justify-end gap-2">
@@ -5107,7 +5078,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                       {/* Health Cards */}
                       <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl p-6 relative overflow-hidden">
-                          <h3 className="font-bold text-lg text-white mb-1">Gemini AI Engine</h3>
+                          <h3 className="font-bold text-lg text-white mb-1">Grok AI Engine</h3>
                           <div className="flex items-center justify-between mb-4">
                               <span className="text-sm text-slate-700 dark:text-slate-300 font-semibold">Kết nối</span>
                               <StatusBadge status={health.gemini.status} latency={health.gemini.latency} />
@@ -5439,12 +5410,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   <div className="neu-card p-6 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl">
                       <h3 className="font-bold text-lg text-white mb-4 flex items-center gap-2">
                           <Icons.Lock className="w-5 h-5 text-audi-pink" />
-                          Thêm mới Google Cloud Service Account JSON (Vertex AI)
+                          Cấu hình Grok API Key
                       </h3>
                       <div className="space-y-4">
                           <div>
                               <div className="flex justify-between items-end mb-2">
-                                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase">Service Account JSON</label>
+                                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase">Grok API Key (OpenAI-compatible)</label>
                                   <div className="flex items-center gap-2">
                                       <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${
                                           keyStatus === 'valid' ? 'bg-green-500/20 text-green-400' :
@@ -5459,14 +5430,6 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   </div>
                               </div>
                               <div className="flex gap-2 relative">
-                                  <select
-                                      value={apiKeyTier}
-                                      onChange={(e) => setApiKeyTier(e.target.value as 'flash' | 'pro')}
-                                      className="neu-inset-sm border border-white/10 rounded-lg p-3 text-slate-900 dark:text-white text-sm outline-none focus:border-audi-pink"
-                                  >
-                                      <option value="flash">Flash Key</option>
-                                      <option value="pro">Pro Key</option>
-                                  </select>
                                   <div className="flex-1 relative">
                                       <input 
                                           type={showKey ? "text" : "password"}
@@ -5475,7 +5438,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               setApiKey(e.target.value);
                                               setKeyStatus('unknown');
                                           }}
-                                          placeholder='{"type": "service_account", "project_id": "...", ...}'
+                                          placeholder='API key from sub.digishop.work'
                                           className="w-full neu-inset-sm border border-white/10 rounded-lg p-3 text-white font-mono text-sm pr-12"
                                       />
                                       <button 

@@ -4,7 +4,7 @@ import type { ImageEditRecipePayload, QueueProcessingStage, QueueProgressLogEntr
 import { SHARPEN_UPSCALE_CHARACTER_LOCK_PROMPT } from '../../shared/imageEditPrompts';
 import { DIRECT_IMAGE_EDIT_QUEUE_KIND } from '../../shared/queueKinds';
 import { getServiceRoleClient } from './_supabase';
-import { runVertexImageEdit } from './_vertex-image-edit';
+import { runNanoBananaImageEdit } from './_nano-banana-image-edit';
 import { compactTerminalQueuePayload } from './_queue-payload-retention';
 
 const DIRECT_EDIT_LEASE_MS = 10 * 60 * 1000;
@@ -277,7 +277,7 @@ export const processDirectImageEditJob = async (jobId: string) => {
   }
 
   try {
-    runtimePayload = appendQueueLog(runtimePayload, 'dispatching', 'Dang goi Vertex AI de xu ly anh.');
+    runtimePayload = appendQueueLog(runtimePayload, 'dispatching', 'Dang goi Nano Banana 2 de xu ly anh.');
     await updateJob(job.id, {
       progress: 35,
       queue_payload: runtimePayload,
@@ -285,7 +285,7 @@ export const processDirectImageEditJob = async (jobId: string) => {
       lease_expires_at: new Date(Date.now() + DIRECT_EDIT_LEASE_MS).toISOString(),
     });
 
-    const assetDataUrl = await runVertexImageEdit({
+    const assetDataUrl = await runNanoBananaImageEdit({
       sourceImage: runtimePayload.sourceImage,
       instruction: runtimePayload.prompt,
       modelId: runtimePayload.modelId,

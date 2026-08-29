@@ -39,8 +39,13 @@
 
 # Chuyển hướng các request API vào Netlify Functions
 [[redirects]]
-  from = "/api/get-vertex-token"
-  to = "/.netlify/functions/get-vertex-token"
+  from = "/api/grok-health"
+  to = "/.netlify/functions/grok-health"
+  status = 200
+
+[[redirects]]
+  from = "/api/grok-style-analysis"
+  to = "/.netlify/functions/grok-style-analysis"
   status = 200
 
 [[redirects]]

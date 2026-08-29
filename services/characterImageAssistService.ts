@@ -12,11 +12,11 @@ export const CHARACTER_ASSISTANT_RESOLUTION: AssistantResolution = '2K';
 const TOOL_META: Record<CharacterAssistantToolId, { toolName: string; modelId: string }> = {
   remove_bg_pro: {
     toolName: 'Tách Nền',
-    modelId: 'vertex-flash',
+    modelId: 'nano-banana-2',
   },
   sharpen_upscale: {
     toolName: 'Làm Nét',
-    modelId: 'vertex-flash',
+    modelId: 'nano-banana-2',
   },
 };
 
@@ -101,7 +101,7 @@ export const runCharacterAssistantAction = async ({
     prompt: displayPrompt,
     toolId,
     toolName: metadata.toolName,
-    engine: `Vertex Flash ${resolution}`,
+    engine: `Nano Banana 2 ${resolution}`,
     costVcoin,
     showInGenerationHistory,
     queuePayload,

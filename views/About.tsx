@@ -46,7 +46,7 @@ export const About: React.FC<AboutProps> = ({ lang }) => {
           <ul className="space-y-3 text-xs text-slate-500">
             <li className="flex items-center gap-3">
               <div className="w-8 h-8 neu-inset-sm rounded-xl flex items-center justify-center text-[#FF0099] font-bold">1</div>
-              <span>Google Gemini 3.0 Pro & Vertex AI Vision Engine</span>
+              <span>Grok AI Vision Engine</span>
             </li>
             <li className="flex items-center gap-3">
               <div className="w-8 h-8 neu-inset-sm rounded-xl flex items-center justify-center text-[#21D4FD] font-bold">2</div>

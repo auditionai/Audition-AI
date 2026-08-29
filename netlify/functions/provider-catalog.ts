@@ -1,5 +1,4 @@
 import type { Handler } from '@netlify/functions';
-import { getGommoProviderCatalog } from './_gommo-provider';
 
 const headers = {
   'Content-Type': 'application/json',
@@ -23,14 +22,10 @@ export const handler: Handler = async (event) => {
   }
 
   try {
-    const forceRefresh = event.queryStringParameters?.force === '1';
-    const gommo = await getGommoProviderCatalog(forceRefresh);
     return {
       statusCode: 200,
-      headers: forceRefresh
-        ? { ...headers, 'Cache-Control': 'no-store' }
-        : { ...headers, 'Cache-Control': 'public, max-age=60', 'Netlify-CDN-Cache-Control': 'public, durable, max-age=300' },
-      body: JSON.stringify({ gommo, fetchedAt: new Date().toISOString() }),
+      headers: { ...headers, 'Cache-Control': 'public, max-age=60', 'Netlify-CDN-Cache-Control': 'public, durable, max-age=300' },
+      body: JSON.stringify({ gommo: null, fetchedAt: new Date().toISOString() }),
     };
   } catch (error: any) {
     console.error('[provider-catalog] Gommo catalog error:', error);

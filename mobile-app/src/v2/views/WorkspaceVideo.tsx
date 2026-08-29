@@ -672,7 +672,7 @@ export function WorkspaceVideo() {
         target_model: scriptTargetModel || videoModel,
         error_message: error instanceof Error ? error.message.slice(0, 120) : 'unknown',
       });
-      notify(error instanceof Error ? error.message : 'Không thể tạo kịch bản video bằng Vertex AI.', 'error');
+      notify(error instanceof Error ? error.message : 'Không thể tạo kịch bản video bằng Grok AI.', 'error');
     } finally {
       setIsGeneratingScript(false);
     }

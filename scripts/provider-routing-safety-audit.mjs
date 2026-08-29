@@ -289,6 +289,8 @@ assert(!unlimitedSystemCapacityMigration.includes("raise exception 'SYSTEM_QUEUE
 assert(!unlimitedSystemCapacityMigration.includes('system_slots'));
 
 const tstCatalogSource = await readFile(new URL('../services/tstCatalog.ts', import.meta.url), 'utf8');
+assert(tstCatalogSource.includes("const PER_SECOND_VIDEO_DURATION_OPTIONS = ['5s', '10s', '15s'];"));
+assert(tstCatalogSource.includes('entries.some((entry) => normalizeSpeed(entry.speed) === \'per-second\')'));
 assert(tstCatalogSource.includes("String(entry.key || entry.config_key || '')"));
 assert(tstCatalogSource.includes("'image-gpt-2': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3']"));
 
@@ -331,6 +333,12 @@ const queueWorkerSource = await readFile(new URL('../netlify/functions/_queue-wo
 assert(queueWorkerSource.includes("targetProvider === 'tst' || targetProvider === 'gpti2'"));
 assert(queueWorkerSource.includes("String(toQueuePayloadObject(recipePayload).__targetProvider || '').trim().toLowerCase() === 'gpti2'"));
 assert(queueWorkerSource.includes("targetProvider === 'tst' || targetProvider === 'gommo' || targetProvider === 'gpti2'"));
+assert(queueWorkerSource.includes("targetProvider === 'gpti2' && isGpti2ProviderError(message)"));
+assert(queueWorkerSource.includes('payload.__tstFallbackValidated === true'));
+assert(queueWorkerSource.includes("updateQuery.is('job_id', null)"));
+assert(queueWorkerSource.includes('runtimeState?.provider'));
+assert(queueWorkerSource.includes('const persistResultForJob'));
+assert(queueWorkerSource.includes('VIDEO_OR_MOTION_QUEUE_KINDS.has(job.queue_kind)'));
 
 const gpti2ProviderSource = await readFile(new URL('../netlify/functions/_gpti2-provider.ts', import.meta.url), 'utf8');
 assert(gpti2ProviderSource.includes('const GPTI2_TIMEOUT_MS = 295_000;'));
@@ -339,6 +347,29 @@ assert(gpti2ProviderSource.includes("request('/images/edits'"));
 assert(gpti2ProviderSource.includes("'9:16': '720x1280'"));
 assert(gpti2ProviderSource.includes("'21:9': '1280x544'"));
 assert(gpti2ProviderSource.includes("raw.startsWith('data:') || /^https?:\\/\\//i.test(raw)"));
+assert(gpti2ProviderSource.includes('normalizeReferenceImage'));
+assert(gpti2ProviderSource.includes('.rotate()'));
+assert(gpti2ProviderSource.includes('mozjpeg: true'));
+assert(gpti2ProviderSource.includes('GPTI2_NANO_ASPECT_RATIO_UNSUPPORTED'));
+assert(gpti2ProviderSource.includes('GPTI2_NANO_TOO_MANY_REFERENCES'));
+assert(gpti2ProviderSource.includes("const NANO_OUTPUT_RESOLUTION = '2K';"));
+assert(gpti2ProviderSource.includes('const buildNanoRequest'));
+
+const grokProviderSource = await readFile(new URL('../netlify/functions/_grok.ts', import.meta.url), 'utf8');
+assert(grokProviderSource.includes("|| 'grok-4.5'"));
+assert(grokProviderSource.includes("https://sub.digishop.work/v1"));
+assert(grokProviderSource.includes('client.chat.completions.create'));
+const grokHealthSource = await readFile(new URL('../netlify/functions/grok-health.ts', import.meta.url), 'utf8');
+assert(grokHealthSource.includes('models.list'));
+const videoScriptDirectorSource = await readFile(new URL('../netlify/functions/video-script-director.ts', import.meta.url), 'utf8');
+assert(videoScriptDirectorSource.includes('VIDEO_SCRIPT_MAX_TOKENS = 650'));
+assert(videoScriptDirectorSource.includes('VIDEO_SCRIPT_TOTAL_TIMEOUT_MS = 25_000'));
+assert(videoScriptDirectorSource.includes('timeoutMs: VIDEO_SCRIPT_GROK_TIMEOUT_MS'));
+assert(videoScriptDirectorSource.includes('return { url: source }'));
+const grokVisionSource = await readFile(new URL('../netlify/functions/_grok-image-vision.ts', import.meta.url), 'utf8');
+assert(grokVisionSource.includes('timeoutMs: GROK_BACKGROUND_TIMEOUT_MS'));
+const grokImageVerifySource = await readFile(new URL('../netlify/functions/_grok-image-verify.ts', import.meta.url), 'utf8');
+assert(grokImageVerifySource.includes('timeoutMs: GROK_BACKGROUND_TIMEOUT_MS'));
 
 for (const filename of ['../views/features/GenerationTool.tsx', '../mobile-app/src/v2/views/WorkspaceImage.tsx']) {
   const source = await readFile(new URL(filename, import.meta.url), 'utf8');

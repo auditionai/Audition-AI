@@ -41,6 +41,7 @@ const GPT_REFERENCE_IMAGE_LIMIT = 5;
 const MAX_PROMPT_CHARACTERS = 10_000;
 const ASPECT_RATIOS = ['1:1', '9:16', '16:9', '3:4', '4:3', '2:3', '3:2'];
 const GPTI2_ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'];
+const GPTI2_NANO_ASPECT_RATIOS = GPTI2_ASPECT_RATIOS.filter((ratio) => ratio !== '21:9');
 const GPTI2_RESOLUTIONS = ['1K', '2K', '4K'];
 const MODEL_TABS: Array<{
   tier: TstGenerationTier;
@@ -240,7 +241,8 @@ export function WorkspacePromptImage() {
     gommoDefaultSelectionKeyRef.current = '';
     if (isGpti2Selected) {
       if (server !== GPTI2_SERVER_LABEL) setServer(GPTI2_SERVER_LABEL);
-      if (!GPTI2_ASPECT_RATIOS.includes(aspectRatio)) setAspectRatio(GPTI2_ASPECT_RATIOS[0]);
+      const gpti2Ratios = selectedModelId.startsWith('nano-banana') ? GPTI2_NANO_ASPECT_RATIOS : GPTI2_ASPECT_RATIOS;
+      if (!gpti2Ratios.includes(aspectRatio)) setAspectRatio(gpti2Ratios[0]);
       return;
     }
     if (tstAspectRatios.length > 0 && !tstAspectRatios.includes(aspectRatio)) {
@@ -302,7 +304,7 @@ export function WorkspacePromptImage() {
   }));
   const aspectRatioOptions = isGommoSelected && selectedGommoModel?.ratios.length
     ? selectedGommoModel.ratios.map((option) => option.type)
-    : isGpti2Selected ? GPTI2_ASPECT_RATIOS : (tstAspectRatios.length ? tstAspectRatios : ASPECT_RATIOS);
+    : isGpti2Selected ? (selectedModelId.startsWith('nano-banana') ? GPTI2_NANO_ASPECT_RATIOS : GPTI2_ASPECT_RATIOS) : (tstAspectRatios.length ? tstAspectRatios : ASPECT_RATIOS);
 
   useEffect(() => {
     if (isSelectedModelAllowed) return;

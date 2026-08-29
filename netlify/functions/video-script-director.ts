@@ -1,67 +1,46 @@
 import type { Handler } from '@netlify/functions';
-import { runWithVertexCredentialFailover } from './_vertex-credentials';
-import {
-  buildVertexGenerateContentUrl,
-  VERTEX_TEXT_FLASH_MODEL,
-  VERTEX_TEXT_PRO_MODEL,
-} from './_vertex-models';
+import { grokText, type GrokImageInput } from './_grok';
 import { getAuthenticatedRequestErrorStatus, requireAuthenticatedUser } from './_supabase';
 
-const VERTEX_MODELS = Array.from(new Set([
-  process.env.VERTEX_VIDEO_SCRIPT_MODEL,
-  VERTEX_TEXT_PRO_MODEL,
-  VERTEX_TEXT_FLASH_MODEL,
-].filter(Boolean))) as string[];
-const VERTEX_VIDEO_SCRIPT_TIMEOUT_MS = 55_000;
-const VIDEO_SCRIPT_DEADLINE_ERROR = 'VIDEO_SCRIPT_VERTEX_DEADLINE';
+const VIDEO_SCRIPT_DEADLINE_ERROR = 'VIDEO_SCRIPT_GROK_DEADLINE';
+// The Cloudflare proxy in front of the site cuts synchronous requests at about
+// 45 seconds. Keep this below that limit and constrain output for fast scripts.
+const VIDEO_SCRIPT_GROK_TIMEOUT_MS = 32_000;
+const VIDEO_SCRIPT_TOTAL_TIMEOUT_MS = 25_000;
+const VIDEO_SCRIPT_MAX_TOKENS = 650;
 
 const jsonHeaders = {
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': '*',
 };
 
-const parseErrorMessage = async (response: Response) => {
-  const text = await response.text().catch(() => '');
-  if (!text) return `${response.status} ${response.statusText}`;
-
-  try {
-    const data = JSON.parse(text);
-    return data?.error?.message || data?.error || data?.detail || data?.message || text.slice(0, 700);
-  } catch {
-    return text.slice(0, 700);
+const toGrokImageInput = (source: string): GrokImageInput => {
+  if (!source) throw new Error('Missing reference image.');
+  // R2 URLs are public inputs. Passing the URL directly avoids downloading and
+  // base64-encoding the image inside this synchronous Netlify function.
+  if (source.startsWith('http')) {
+    return { url: source };
   }
+  if (!source.startsWith('data:')) {
+    return { mimeType: 'image/jpeg', data: source };
+  }
+  const [header, data = ''] = source.split(',', 2);
+  const mimeType = header.match(/^data:(.*?);base64$/)?.[1] || 'image/jpeg';
+  if (!data.trim()) throw new Error('Reference image data is empty.');
+  return { mimeType, data: source.startsWith('data:') ? data : source.replace(/^data:[^;]+;base64,/, '') };
 };
 
-const toInlineImagePart = async (source: string) => {
-  if (!source) throw new Error('Missing reference image.');
-
-  let mimeType = 'image/jpeg';
-  let base64Data = source;
-
-  if (source.startsWith('http')) {
-    const response = await fetch(source, { signal: AbortSignal.timeout(60000) });
-    if (!response.ok) {
-      throw new Error(`Failed to fetch reference image: ${await parseErrorMessage(response)}`);
-    }
-    const arrayBuffer = await response.arrayBuffer();
-    mimeType = response.headers.get('content-type') || mimeType;
-    base64Data = Buffer.from(arrayBuffer).toString('base64');
-  } else if (source.startsWith('data:')) {
-    const [header, body] = source.split(',', 2);
-    base64Data = body || '';
-    mimeType = header.match(/^data:(.*?);base64$/)?.[1] || mimeType;
-  } else {
-    base64Data = source.replace(/^data:[^;]+;base64,/, '');
+const runVideoScriptWithDeadline = async <T>(operation: (signal: AbortSignal) => Promise<T>): Promise<T> => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), VIDEO_SCRIPT_TOTAL_TIMEOUT_MS);
+  try {
+    return await operation(controller.signal);
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error(VIDEO_SCRIPT_DEADLINE_ERROR);
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  if (!base64Data.trim()) throw new Error('Reference image data is empty.');
-
-  return {
-    inlineData: {
-      data: base64Data,
-      mimeType,
-    },
-  };
 };
 
 const clampDurationSeconds = (value: unknown) => {
@@ -235,64 +214,22 @@ export const handler: Handler = async (event) => {
         ? body.scriptOptions as Record<string, unknown>
         : {};
 
-    const imagePart = await toInlineImagePart(imageSource);
-    const promptPart = { text: buildDirectorInstruction(durationSeconds, userPrompt, scriptOptions) };
-
-    const script = await runWithVertexCredentialFailover({
-      taskName: 'video script director',
-      operation: async ({ projectId, accessToken }) => {
-        let lastModelError = '';
-
-        for (const modelName of VERTEX_MODELS) {
-          let response: Response;
-          try {
-            response = await fetch(
-              buildVertexGenerateContentUrl(projectId, modelName),
-              {
-                method: 'POST',
-                headers: {
-                  Authorization: `Bearer ${accessToken}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  contents: [{ role: 'user', parts: [imagePart, promptPart] }],
-                  generationConfig: {
-                    temperature: 0.7,
-                    topP: 0.9,
-                    maxOutputTokens: 2600,
-                  },
-                }),
-                signal: AbortSignal.timeout(VERTEX_VIDEO_SCRIPT_TIMEOUT_MS),
-              },
-            );
-          } catch (error: any) {
-            if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
-              throw new Error(VIDEO_SCRIPT_DEADLINE_ERROR);
-            }
-            throw error;
-          }
-
-          if (!response.ok) {
-            const errorMessage = await parseErrorMessage(response);
-            lastModelError = `${modelName}: ${errorMessage}`;
-            if (isModelUnavailableError(errorMessage) && modelName !== VERTEX_MODELS[VERTEX_MODELS.length - 1]) {
-              continue;
-            }
-            throw new Error(errorMessage);
-          }
-
-          const data = await response.json();
-          const text = sanitizeDirectorScript(extractCandidateText(data));
-          if (!text) {
-            throw new Error('Vertex AI did not return a video script.');
-          }
-          validateDirectorScript(text);
-          return text.slice(0, 10000);
-        }
-
-        throw new Error(lastModelError || 'No Vertex AI model is available for video script director.');
-      },
-    });
+    const imagePart = toGrokImageInput(imageSource);
+    let script: string;
+    try {
+      script = sanitizeDirectorScript(await runVideoScriptWithDeadline((signal) => grokText(
+        buildDirectorInstruction(durationSeconds, userPrompt, scriptOptions),
+        [imagePart],
+        VIDEO_SCRIPT_MAX_TOKENS,
+        { timeoutMs: VIDEO_SCRIPT_GROK_TIMEOUT_MS, signal },
+      )));
+    } catch (error: any) {
+      if (error?.name === 'TimeoutError' || error?.name === 'AbortError') throw new Error(VIDEO_SCRIPT_DEADLINE_ERROR);
+      throw error;
+    }
+    if (!script) throw new Error('Grok did not return a video script.');
+    validateDirectorScript(script);
+    script = script.slice(0, 10000);
 
     return {
       statusCode: 200,

@@ -29,12 +29,6 @@ services:
         sync: false
       - key: VITE_R2_PUBLIC_URL
         sync: false
-      - key: GOOGLE_CLOUD_PROJECT
-        sync: false
-      - key: GOOGLE_CLOUD_LOCATION
-        value: global
-      - key: GOOGLE_CREDENTIALS_JSON
-        sync: false
       - key: VITE_CAULENHAU_SUPABASE_URL
         sync: false
       - key: VITE_CAULENHAU_SUPABASE_ANON_KEY
@@ -47,12 +41,6 @@ services:
         sync: false
       - key: GPTI2_API_KEY
         sync: false
-      - key: GOMMO_ACCESS_TOKEN
-        sync: false
-      - key: GOMMO_DOMAIN
-        value: vmedia.ai
-      - key: GOMMO_PROJECT_ID
-        value: default
       - key: GENERATION_PROVIDER_DEFAULT
         value: tst
       - key: PAYMENT_GATEWAY
@@ -104,12 +92,6 @@ services:
         sync: false
       - key: GPTI2_API_KEY
         sync: false
-      - key: GOMMO_ACCESS_TOKEN
-        sync: false
-      - key: GOMMO_DOMAIN
-        value: vmedia.ai
-      - key: GOMMO_PROJECT_ID
-        value: default
       - key: GENERATION_PROVIDER_DEFAULT
         value: tst
       - key: SEPAY_MERCHANT_ID

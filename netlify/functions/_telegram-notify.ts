@@ -9,6 +9,7 @@ type JobNotificationRecord = {
   id: string;
   userId: string;
   providerJobId?: string | null;
+  provider?: string | null;
   prompt?: string | null;
   assetType?: string | null;
   toolId?: string | null;
@@ -38,6 +39,7 @@ type OperationalAlertOptions = {
 
 const OPERATIONAL_ALERT_STATE_KEY = 'telegram_operational_alert_state';
 const OPERATIONAL_ALERT_DEFAULT_COOLDOWN_MS = 30 * 60 * 1000;
+const inFlightJobNotifications = new Map<string, Promise<void>>();
 
 const toPayloadObject = (payload: unknown): Record<string, unknown> =>
   payload && typeof payload === 'object' ? { ...(payload as Record<string, unknown>) } : {};
@@ -171,6 +173,15 @@ const getConfigSummary = (payload: QueuePayloadObject, toolId?: string | null) =
     audio: typeof source.audio === 'boolean' ? source.audio : (typeof raw.audio === 'boolean' ? raw.audio : null),
     characterCount: Number.isFinite(Number(source.characterCount)) ? Number(source.characterCount) : null,
   };
+};
+
+const getProviderFromPayload = (payload: QueuePayloadObject) => {
+  const raw = toPayloadObject(payload);
+  const recipe = getEmbeddedRecipePayload(payload);
+  const source = Object.keys(recipe).length > 0 ? recipe : raw;
+  return String(
+    raw.__targetProvider || raw.__provider || source.provider || raw.provider || '',
+  ).trim().toLowerCase() || null;
 };
 
 const getNotificationApi = (payload: QueuePayloadObject) => {
@@ -434,6 +445,7 @@ export const sendTelegramJobNotification = async (
       job: {
         id: record.id,
         providerJobId: record.providerJobId || null,
+        provider: record.provider || getProviderFromPayload(record.queuePayload),
         userId: record.userId,
         displayName: userProfile?.display_name || null,
         email: userProfile?.email || null,
@@ -471,7 +483,12 @@ export const fireTelegramJobNotification = (
     return;
   }
 
-  void sendTelegramJobNotification(eventType, record);
+  const key = `${record.id}:${eventType}`;
+  if (inFlightJobNotifications.has(key)) return;
+  const task = sendTelegramJobNotification(eventType, record)
+    .catch(() => undefined)
+    .finally(() => inFlightJobNotifications.delete(key));
+  inFlightJobNotifications.set(key, task);
 };
 
 export const sendTelegramOperationalAlert = async (

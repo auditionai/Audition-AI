@@ -3,10 +3,8 @@ import {
   getImageCharacterReferenceGroups,
   type ImageGenerateRecipePayload,
 } from '../../shared/queueRecipes';
-import { runWithVertexCredentialFailover } from './_vertex-credentials';
-import { buildVertexGenerateContentUrl, VERTEX_TEXT_PRO_MODEL } from './_vertex-models';
+import { GROK_BACKGROUND_TIMEOUT_MS, grokJson } from './_grok';
 
-const VERTEX_MODEL = VERTEX_TEXT_PRO_MODEL;
 
 export type ImageOutputSlotStatus = 'matched' | 'missing' | 'duplicated' | 'substituted' | 'uncertain';
 
@@ -440,51 +438,13 @@ export const verifyGeneratedImageOutput = async (
   const parts: Array<Record<string, unknown>> = await Promise.all(orderedSources.map((image) => toInlineImagePart(image)));
   parts.push({ text: buildVerificationInstruction(payload) });
 
-  return runWithVertexCredentialFailover({
-    taskName: 'image output verification',
-    operation: async ({ projectId, accessToken }) => {
-      const response = await fetch(
-        buildVertexGenerateContentUrl(projectId, VERTEX_MODEL),
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            contents: [{ role: 'user', parts }],
-            generationConfig: {
-              temperature: 0.0,
-              topP: 0.1,
-              maxOutputTokens: 4096,
-              responseMimeType: 'application/json',
-            },
-          }),
-          signal: AbortSignal.timeout(180000),
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error(await parseErrorMessage(response));
-      }
-
-      const data = await response.json();
-      const candidate = data?.candidates?.[0];
-      const text = Array.isArray(candidate?.content?.parts)
-        ? candidate.content.parts
-            .map((part: any) => (typeof part?.text === 'string' ? part.text.trim() : ''))
-            .filter(Boolean)
-            .join('\n')
-            .trim()
-        : '';
-
-      if (!text) {
-        const finishReason = String(candidate?.finishReason || data?.promptFeedback?.blockReason || 'unknown');
-        throw new Error(`Vertex AI did not return an image verification result. finishReason=${finishReason}`);
-      }
-
-      const normalized = normalizeVerificationResult(
-        JSON.parse(extractJsonPayload(text)),
+  const instruction = parts.filter((part: any) => typeof part?.text === 'string').map((part: any) => part.text).join('\n\n');
+  const images = parts
+    .map((part: any) => part?.inlineData || part?.inline_data)
+    .filter((part: any) => typeof part?.data === 'string')
+    .map((part: any) => ({ mimeType: String(part.mimeType || part.mime_type || 'image/jpeg'), data: part.data }));
+  const normalized = normalizeVerificationResult(
+        await grokJson<Record<string, unknown>>(instruction, images, 4096, { timeoutMs: GROK_BACKGROUND_TIMEOUT_MS }),
         Boolean(payload.sampleImage),
       );
       if (!normalized.pass && shouldAcceptLayeredSingleSubjectVerificationResult(payload, normalized)) {
@@ -507,7 +467,5 @@ export const verifyGeneratedImageOutput = async (
         };
       }
 
-      return normalized;
-    },
-  });
+  return normalized;
 };

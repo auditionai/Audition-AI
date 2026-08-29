@@ -4,7 +4,7 @@ import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 import { triggerBackgroundQueueWorker } from './_queue-launcher';
 import { isDedicatedQueueWorkerMode } from './_queue-runtime-mode';
 import { validateQueuePayloadAgainstLiveCatalog } from './_tst-live-catalog';
-import { normalizeAndValidateGommoPayload } from './_gommo-provider';
+import { normalizeAndValidateGommoPayload } from './_disabled-provider';
 import { isProviderServerAllowedByConfig } from './_server-availability';
 import { getGommoServerIdForMode } from '../../shared/gommoServerRouting';
 import {
@@ -31,7 +31,7 @@ const USER_QUEUE_LIMIT = 3;
 const PROVIDER_CONCURRENCY_LIMITS = {
   tst: { userImage: 3, userVideo: 3 },
   gommo: { userImage: 3, userVideo: 3 },
-  gpti2: { userImage: 3, userVideo: 0 },
+  gpti2: { userImage: Number.POSITIVE_INFINITY, userVideo: 0 },
 } as const;
 const TST_QUEUE_KINDS = new Set(['image_generate', 'video_generate', 'motion_generate']);
 const VIDEO_OR_MOTION_QUEUE_KINDS = new Set(['video_generate', 'motion_generate']);
@@ -40,7 +40,7 @@ type GenerationProvider = 'tst' | 'gommo' | 'gpti2';
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PHONE_USER_AGENT_PATTERN = /iphone|ipod|android.+mobile|windows phone|blackberry|opera mini|mobile safari/i;
-const VND_PER_CREDIT = 40;
+const VND_PER_CREDIT = 45;
 const VND_PER_VCOIN = 1000;
 
 type QueueClientPlatform = 'mobile' | 'desktop' | 'unknown';
@@ -190,15 +190,12 @@ const ensureProviderConfiguredForQueueKind = (queueKind: string | undefined, pro
   }
 
   const hasTst = Boolean(String(process.env.TST_API_KEY || '').trim());
-  const hasGommo = Boolean(
-    String(process.env.GOMMO_ACCESS_TOKEN || process.env.GOMMO_API_TOKEN || '').trim() &&
-    String(process.env.GOMMO_DOMAIN || 'vmedia.ai').trim(),
-  );
+  const hasGommo = false;
   if (provider === 'tst' && !hasTst) {
     throw new Error('May chu Audition AI dang thieu TST_API_KEY nen tam thoi khong the nhan job moi.');
   }
   if (provider === 'gommo' && !hasGommo) {
-    throw new Error('May chu Audition AI dang thieu GOMMO_ACCESS_TOKEN nen tam thoi khong the nhan job moi.');
+    throw new Error('Gommo da duoc ngung su dung. Vui long chon TST hoac GPTi2.');
   }
 };
 
@@ -564,7 +561,7 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
     throw new Error('INSUFFICIENT_VCOIN');
   }
 
-  const [myImageProcessing, myVideoProcessing, myQueued, systemQueued] =
+  const [myImageProcessing, myVideoProcessing, myQueued, systemQueued, systemImageProcessing] =
     await Promise.all([
       countRows(
         admin
@@ -603,11 +600,20 @@ export const enqueueDirectly = async (userId: string, body: QueueBody) => {
           .in('queue_kind', TST_QUEUE_KIND_VALUES)
           .eq('provider', targetProvider),
       ),
+      countRows(
+        admin
+          .from('generated_images')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'processing')
+          .in('queue_kind', TST_QUEUE_KIND_VALUES)
+          .eq('provider', targetProvider)
+          .eq('asset_type', 'image'),
+      ),
     ]);
 
   const canDispatchNow =
     assetType === 'image'
-      ? myImageProcessing < providerLimits.userImage
+      ? myImageProcessing < providerLimits.userImage && (targetProvider !== 'gpti2' || systemImageProcessing < 20)
       : myVideoProcessing < providerLimits.userVideo;
 
   if (myQueued >= USER_QUEUE_LIMIT) {

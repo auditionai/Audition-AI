@@ -5,9 +5,9 @@ import { getAuthenticatedRequestErrorStatus, requireAuthenticatedUser } from './
 const VIDEO_SCRIPT_DEADLINE_ERROR = 'VIDEO_SCRIPT_GROK_DEADLINE';
 // The Cloudflare proxy in front of the site cuts synchronous requests at about
 // 45 seconds. Keep this below that limit and constrain output for fast scripts.
-const VIDEO_SCRIPT_GROK_TIMEOUT_MS = 32_000;
-const VIDEO_SCRIPT_TOTAL_TIMEOUT_MS = 25_000;
-const VIDEO_SCRIPT_MAX_TOKENS = 650;
+const VIDEO_SCRIPT_GROK_TIMEOUT_MS = 38_000;
+const VIDEO_SCRIPT_TOTAL_TIMEOUT_MS = 40_000;
+const VIDEO_SCRIPT_MAX_TOKENS = 450;
 
 const jsonHeaders = {
   'Content-Type': 'application/json',
@@ -128,6 +128,27 @@ const buildDirectorInstruction = (
   const voiceDialogue = Boolean(scriptOptions.voiceDialogue);
   const trendEdit = Boolean(scriptOptions.trendEdit);
   const textOverlay = Boolean(scriptOptions.textOverlay);
+
+  // This stays intentionally compact: the OpenAI-compatible gateway needs to
+  // inspect the image and produce a complete script within an interactive HTTP
+  // request, not a background queue job.
+  return [
+    'You are an AI video director. Inspect the reference image and write a concise Vietnamese image-to-video script.',
+    `Duration: ${durationSeconds}s. Style: ${style}. Theme: ${theme}. Sound: ${soundMood}.`,
+    `Trend pacing: ${trendEdit ? 'enabled' : 'disabled'}. Text overlay: ${textOverlay ? 'allowed only when useful' : 'disabled'}.`,
+    voiceDialogue ? 'Dialogue is allowed only when natural.' : 'Do not include spoken dialogue or voice-over.',
+    userPrompt.trim() ? `User idea: ${userPrompt.trim().slice(0, 800)}` : '',
+    'Write only Vietnamese. Keep the entire response under 2,500 characters.',
+    'Required exact structure:',
+    'Quan sat anh tham chieu: 2 short sentences with 4 concrete visible details: subject, clothing/colors, pose/framing, background or lighting.',
+    'Loai chu the: choose the accurate subject type and one visual reason.',
+    'Huong di chuyen: one short overall direction.',
+    'Canh 1 (0.0s-...): camera, action, transition, sound.',
+    'Canh 2 (...): camera, action, transition, sound.',
+    durationSeconds >= 8 ? 'Canh 3 (...): camera, action, transition, sound.' : '',
+    'Rang buoc am: preserve face, outfit, identity, proportions; no extra limbs, no deformation, no new person.',
+  ].filter(Boolean).join('\n');
+
   const shotCountRule = trendEdit
     ? '- For 5s video: create exactly 5 compact shots. For 8-10s: create 6-8 shots. For 15s or longer: create 8-12 shots.'
     : '- Use a natural number of shots for the image and idea: 2-4 shots for 5s, 3-5 shots for 8-10s, 4-7 shots for 15s or longer. Do not over-cut simple scenes.';

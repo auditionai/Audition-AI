@@ -355,6 +355,10 @@ assert(gpti2ProviderSource.includes('GPTI2_NANO_TOO_MANY_REFERENCES'));
 assert(gpti2ProviderSource.includes("const NANO_OUTPUT_RESOLUTION = '2K';"));
 assert(gpti2ProviderSource.includes('const buildNanoRequest'));
 
+const grokProviderSource = await readFile(new URL('../netlify/functions/_grok.ts', import.meta.url), 'utf8');
+assert(grokProviderSource.includes("|| 'grok-4.5'"));
+assert(grokProviderSource.includes("https://api.x.ai/v1/chat/completions"));
+
 for (const filename of ['../views/features/GenerationTool.tsx', '../mobile-app/src/v2/views/WorkspaceImage.tsx']) {
   const source = await readFile(new URL(filename, import.meta.url), 'utf8');
   assert(source.includes('group8'));

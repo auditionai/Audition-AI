@@ -461,7 +461,7 @@ const uploadToGemini = async (input: string, mimeType: string): Promise<string> 
     }
 };
 
-export const checkConnection = async (key?: string): Promise<{ success: boolean; message?: string }> => {
+const checkGeminiConnectionLegacy = async (key?: string): Promise<{ success: boolean; message?: string }> => {
     try {
         const ai = await getAiClient('flash', key);
         // Sử dụng Flash cho checkConnection (Admin) để ping nhanh và ổn định nhất
@@ -488,6 +488,26 @@ export const checkConnection = async (key?: string): Promise<{ success: boolean;
         }
 
         return { success: false, message: msg };
+    }
+};
+
+export const checkConnection = async (key?: string): Promise<{ success: boolean; message?: string }> => {
+    try {
+        const grokKey = key || await getSystemApiKey('grok');
+        if (!grokKey) throw new Error('GROK_NOT_CONFIGURED: Add a Grok API key in Admin Settings.');
+        const response = await runWithTimeout(fetch('https://api.x.ai/v1/chat/completions', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${grokKey}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: 'grok-4.5', messages: [{ role: 'user', content: 'Reply with OK.' }], max_tokens: 4, temperature: 0 }),
+        }), 15000, 'Ping Grok Connection');
+        if (!response.ok) throw new Error(`Grok API error ${response.status}: ${(await response.text()).slice(0, 400)}`);
+        return { success: true };
+    } catch (e: any) {
+        console.error('Grok Connection Check Failed', e);
+        const raw = e?.message || 'Unknown Error';
+        if (raw.includes('401') || raw.includes('403')) return { success: false, message: 'Grok API key khong hop le hoac khong co quyen truy cap.' };
+        if (raw.includes('429')) return { success: false, message: 'Grok API key dang bi gioi han (rate limit).' };
+        return { success: false, message: raw };
     }
 };
 

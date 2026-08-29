@@ -1562,7 +1562,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       const [geminiCheck, sbCheck, r2Ok] = await Promise.all([
           withHealthTimeout(
               checkConnection(keyToUse).catch((error) => {
-                  console.warn('[Admin] Gemini health check failed', error);
+                  console.warn('[Admin] Grok health check failed', error);
                   return { success: false, message: error?.message || 'Connection failed' };
               }),
               { success: false, message: 'Health check timed out' },
@@ -2933,7 +2933,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
           <div className="admin-command-health" aria-label="Tình trạng dịch vụ">
               {[
-                  { label: 'Gemini AI', value: health.gemini, icon: Icons.Sparkles },
+                  { label: 'Grok AI', value: health.gemini, icon: Icons.Sparkles },
                   { label: 'Supabase', value: health.supabase, icon: Icons.Database },
                   {
                       label: health.storage.type === 'R2'
@@ -3030,9 +3030,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               <div className="flex items-center gap-3 neu-inset-sm px-4 py-2 rounded-2xl">
                   <span className="text-[10px] font-bold text-slate-700 dark:text-slate-400 font-semibold dark:text-slate-700 dark:text-slate-300 font-semibold uppercase tracking-wider">Hệ thống:</span>
                   <div className="flex items-center gap-2 text-[10px] font-bold">
-                      <div className="flex items-center gap-1.5" title="Gemini AI Engine">
+                      <div className="flex items-center gap-1.5" title="Grok AI Engine">
                           <span className={`w-2.5 h-2.5 rounded-full ${health.gemini.status === 'connected' ? 'bg-emerald-500 shadow-[0_0_8px_#10B981]' : 'bg-red-500'}`} />
-                          <span className="text-slate-700 dark:text-slate-300">Gemini</span>
+                          <span className="text-slate-700 dark:text-slate-300">Grok</span>
                       </div>
                       <span className="text-slate-700 dark:text-slate-300 font-semibold dark:text-slate-600">•</span>
                       <div className="flex items-center gap-1.5" title="Supabase Database">
@@ -5078,7 +5078,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                       {/* Health Cards */}
                       <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl p-6 relative overflow-hidden">
-                          <h3 className="font-bold text-lg text-white mb-1">Gemini AI Engine</h3>
+                          <h3 className="font-bold text-lg text-white mb-1">Grok AI Engine</h3>
                           <div className="flex items-center justify-between mb-4">
                               <span className="text-sm text-slate-700 dark:text-slate-300 font-semibold">Kết nối</span>
                               <StatusBadge status={health.gemini.status} latency={health.gemini.latency} />

@@ -1846,7 +1846,7 @@ export const getApiKeyName = async (key: string): Promise<string> => {
     }
 };
 
-export const getSystemApiKey = async (tier: 'flash' | 'pro' = 'flash', excludedKeys: string[] = []): Promise<string | null> => {
+export const getSystemApiKey = async (tier: 'flash' | 'pro' | 'grok' = 'flash', excludedKeys: string[] = []): Promise<string | null> => {
     if (!supabase) return processEnv.API_KEY || null;
     try {
         // 1. Clean up expired stats
@@ -1907,13 +1907,20 @@ export const getSystemApiKey = async (tier: 'flash' | 'pro' = 'flash', excludedK
 
         // 3. Filter by tier
         let tierKeys = allKeys;
-        if (tier === 'pro') {
+        if (tier === 'grok') {
+            tierKeys = allKeys.filter((k: any) =>
+                (k.name && k.name.includes('[GROK]')) || String(k.key_value || '').trim().startsWith('xai-'),
+            );
+        } else if (tier === 'pro') {
             tierKeys = allKeys.filter((k: any) => k.name && k.name.includes('[PRO]'));
         } else {
             tierKeys = allKeys.filter((k: any) => !k.name || !k.name.includes('[PRO]'));
         }
 
         if (tierKeys.length === 0) {
+            if (tier === 'grok') {
+                return null;
+            }
             if (allKeys.length > 0) {
                 tierKeys = allKeys; // Borrow from other tier if empty
             } else {

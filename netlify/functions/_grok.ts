@@ -1,7 +1,7 @@
 import { getServiceRoleClient } from './_supabase';
 
 const GROK_API_URL = 'https://api.x.ai/v1/chat/completions';
-export const GROK_MODEL = process.env.GROK_MODEL?.trim() || 'grok-4-1-fast-reasoning';
+export const GROK_MODEL = process.env.GROK_MODEL?.trim() || 'grok-4.5';
 
 const extractJson = (value: string) => {
   const trimmed = value.trim();

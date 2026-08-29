@@ -357,7 +357,8 @@ assert(gpti2ProviderSource.includes('const buildNanoRequest'));
 
 const grokProviderSource = await readFile(new URL('../netlify/functions/_grok.ts', import.meta.url), 'utf8');
 assert(grokProviderSource.includes("|| 'grok-4.5'"));
-assert(grokProviderSource.includes("https://api.x.ai/v1/chat/completions"));
+assert(grokProviderSource.includes("https://sub.digishop.work/v1"));
+assert(grokProviderSource.includes('client.chat.completions.create'));
 
 for (const filename of ['../views/features/GenerationTool.tsx', '../mobile-app/src/v2/views/WorkspaceImage.tsx']) {
   const source = await readFile(new URL(filename, import.meta.url), 'utf8');

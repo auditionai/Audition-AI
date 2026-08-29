@@ -1909,7 +1909,7 @@ export const getSystemApiKey = async (tier: 'flash' | 'pro' | 'grok' = 'flash', 
         let tierKeys = allKeys;
         if (tier === 'grok') {
             tierKeys = allKeys.filter((k: any) =>
-                (k.name && k.name.includes('[GROK]')) || String(k.key_value || '').trim().startsWith('xai-'),
+                k.name && k.name.includes('[GROK]'),
             );
         } else if (tier === 'pro') {
             tierKeys = allKeys.filter((k: any) => k.name && k.name.includes('[PRO]'));

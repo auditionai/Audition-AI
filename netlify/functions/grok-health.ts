@@ -1,5 +1,5 @@
 import type { Handler } from '@netlify/functions';
-import { GROK_MODEL, getGrokApiKey, isGrokApiKey } from './_grok';
+import { GROK_MODEL, createGrokClient, getGrokApiKey, isGrokApiKey } from './_grok';
 import { requireAdminUser } from './_supabase';
 
 export const handler: Handler = async (event) => {
@@ -7,15 +7,14 @@ export const handler: Handler = async (event) => {
   try {
     await requireAdminUser(event);
     const suppliedKey = String(JSON.parse(event.body || '{}')?.key || '').trim();
-    if (suppliedKey && !isGrokApiKey(suppliedKey)) throw new Error('Grok API key must begin with xai- and be complete.');
+    if (suppliedKey && !isGrokApiKey(suppliedKey)) throw new Error('A valid OpenAI-compatible API key is required.');
     const apiKey = suppliedKey || await getGrokApiKey();
-    const response = await fetch('https://api.x.ai/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: GROK_MODEL, messages: [{ role: 'user', content: 'Reply with OK.' }], max_tokens: 4, temperature: 0 }),
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!response.ok) throw new Error(`Grok API error ${response.status}: ${(await response.text()).slice(0, 400)}`);
+    await createGrokClient(apiKey).chat.completions.create({
+      model: GROK_MODEL,
+      messages: [{ role: 'user', content: 'Reply with OK.' }],
+      max_tokens: 4,
+      temperature: 0,
+    }, { timeout: 15_000 });
     return { statusCode: 200, body: JSON.stringify({ success: true }) };
   } catch (error) {
     return { statusCode: 400, body: JSON.stringify({ success: false, error: error instanceof Error ? error.message : String(error) }) };

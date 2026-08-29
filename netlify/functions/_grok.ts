@@ -1,8 +1,23 @@
+import OpenAI from 'openai';
 import { getServiceRoleClient } from './_supabase';
 
-const GROK_API_URL = 'https://api.x.ai/v1/chat/completions';
+const DEFAULT_OPENAI_COMPATIBLE_BASE_URL = 'https://sub.digishop.work/v1';
+export const OPENAI_COMPATIBLE_BASE_URL = (process.env.OPENAI_COMPATIBLE_BASE_URL || DEFAULT_OPENAI_COMPATIBLE_BASE_URL)
+  .trim()
+  .replace(/\/+$/, '');
 export const GROK_MODEL = process.env.GROK_MODEL?.trim() || 'grok-4.5';
-export const isGrokApiKey = (value: unknown) => /^xai-[A-Za-z0-9_-]{20,}$/.test(String(value || '').trim());
+// The gateway issues its own OpenAI-compatible keys, so xAI's `xai-` prefix is not required.
+export const isGrokApiKey = (value: unknown) => {
+  const key = String(value || '').trim();
+  return key.length >= 8 && !/\s/.test(key) && !key.startsWith('{');
+};
+
+export const createGrokClient = (apiKey: string) => new OpenAI({
+  apiKey,
+  baseURL: OPENAI_COMPATIBLE_BASE_URL,
+  timeout: 180_000,
+  maxRetries: 0,
+});
 
 const extractJson = (value: string) => {
   const trimmed = value.trim();
@@ -14,9 +29,9 @@ const extractJson = (value: string) => {
 };
 
 export const getGrokApiKey = async () => {
-  const environmentKey = String(process.env.GROK_API_KEY || '').trim();
+  const environmentKey = String(process.env.OPENAI_COMPATIBLE_API_KEY || process.env.GROK_API_KEY || '').trim();
   if (environmentKey) {
-    if (!isGrokApiKey(environmentKey)) throw new Error('GROK_NOT_CONFIGURED: GROK_API_KEY must be a valid xAI key beginning with xai-.');
+    if (!isGrokApiKey(environmentKey)) throw new Error('GROK_NOT_CONFIGURED: The OpenAI-compatible API key is invalid.');
     return environmentKey;
   }
 
@@ -29,38 +44,42 @@ export const getGrokApiKey = async () => {
   if (error) throw error;
   const row = (data || []).find((candidate) => isGrokApiKey(candidate.key_value));
   const key = String(row?.key_value || '').trim();
-  if (!key) throw new Error('GROK_NOT_CONFIGURED: Add a valid xAI API key beginning with xai- in Admin Settings or set GROK_API_KEY.');
+  if (!key) throw new Error('GROK_NOT_CONFIGURED: Add an active [GROK] OpenAI-compatible API key in Admin Settings or set OPENAI_COMPATIBLE_API_KEY.');
   if (row?.id) void getServiceRoleClient().from('api_keys').update({ last_used_at: new Date().toISOString() }).eq('id', row.id);
   return key;
 };
 
 export const grokJson = async <T>(instruction: string, images: Array<{ mimeType: string; data: string }> = [], maxTokens = 2048): Promise<T> => {
   const apiKey = await getGrokApiKey();
-  const content: Array<Record<string, unknown>> = [{ type: 'text', text: instruction }];
+  const client = createGrokClient(apiKey);
+  const content: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [{ type: 'text', text: instruction }];
   for (const image of images) {
     content.push({ type: 'image_url', image_url: { url: `data:${image.mimeType};base64,${image.data}` } });
   }
-  const response = await fetch(GROK_API_URL, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: GROK_MODEL, messages: [{ role: 'user', content }], temperature: 0, max_tokens: maxTokens, response_format: { type: 'json_object' } }),
-    signal: AbortSignal.timeout(180000),
+  const response = await client.chat.completions.create({
+    model: GROK_MODEL,
+    messages: [{ role: 'user', content }],
+    temperature: 0,
+    max_tokens: maxTokens,
+    response_format: { type: 'json_object' },
   });
-  if (!response.ok) throw new Error(`Grok API error ${response.status}: ${(await response.text()).slice(0, 700)}`);
-  const data = await response.json();
-  const text = String(data?.choices?.[0]?.message?.content || '').trim();
+  const text = String(response.choices[0]?.message?.content || '').trim();
   if (!text) throw new Error('Grok returned an empty response.');
   return JSON.parse(extractJson(text)) as T;
 };
 
 export const grokText = async (instruction: string, images: Array<{ mimeType: string; data: string }> = [], maxTokens = 4096) => {
   const apiKey = await getGrokApiKey();
-  const content: Array<Record<string, unknown>> = [{ type: 'text', text: instruction }];
+  const client = createGrokClient(apiKey);
+  const content: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [{ type: 'text', text: instruction }];
   for (const image of images) content.push({ type: 'image_url', image_url: { url: `data:${image.mimeType};base64,${image.data}` } });
-  const response = await fetch(GROK_API_URL, { method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ model: GROK_MODEL, messages: [{ role: 'user', content }], temperature: 0.2, max_tokens: maxTokens }), signal: AbortSignal.timeout(180000) });
-  if (!response.ok) throw new Error(`Grok API error ${response.status}: ${(await response.text()).slice(0, 700)}`);
-  const data = await response.json();
-  const text = String(data?.choices?.[0]?.message?.content || '').trim();
+  const response = await client.chat.completions.create({
+    model: GROK_MODEL,
+    messages: [{ role: 'user', content }],
+    temperature: 0.2,
+    max_tokens: maxTokens,
+  });
+  const text = String(response.choices[0]?.message?.content || '').trim();
   if (!text) throw new Error('Grok returned an empty response.');
   return text;
 };

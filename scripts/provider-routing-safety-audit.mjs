@@ -371,6 +371,8 @@ const grokVisionSource = await readFile(new URL('../netlify/functions/_grok-imag
 assert(grokVisionSource.includes('timeoutMs: GROK_BACKGROUND_TIMEOUT_MS'));
 const grokImageVerifySource = await readFile(new URL('../netlify/functions/_grok-image-verify.ts', import.meta.url), 'utf8');
 assert(grokImageVerifySource.includes('timeoutMs: GROK_BACKGROUND_TIMEOUT_MS'));
+const grokVideoInputReviewSource = await readFile(new URL('../netlify/functions/_grok-video-input-review.ts', import.meta.url), 'utf8');
+assert(grokVideoInputReviewSource.includes('timeoutMs: GROK_BACKGROUND_TIMEOUT_MS'));
 
 for (const filename of ['../views/features/GenerationTool.tsx', '../mobile-app/src/v2/views/WorkspaceImage.tsx']) {
   const source = await readFile(new URL(filename, import.meta.url), 'utf8');

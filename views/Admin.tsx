@@ -624,7 +624,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
   // API Key States
   const [apiKey, setApiKey] = useState('');
-  const [apiKeyTier, setApiKeyTier] = useState<'flash' | 'pro'>('flash');
+  const [apiKeyTier] = useState<'grok'>('grok');
   const [showKey, setShowKey] = useState(false);
   const [keyStatus, setKeyStatus] = useState<'valid' | 'invalid' | 'unknown' | 'checking'>('unknown');
   const [dbKeys, setDbKeys] = useState<any[]>([]); 
@@ -1617,7 +1617,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       if (!apiKey.trim()) return;
       
       setKeyStatus('checking');
-      const check = await checkConnection(apiKey);
+      const check = apiKey.trim().startsWith('xai-')
+          ? { success: true, message: 'Grok API key format accepted.' }
+          : { success: false, message: 'Grok API key must start with xai-.' };
       
       // Allow saving if valid OR if user confirms to bypass
       let shouldSave = check.success;
@@ -5408,12 +5410,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   <div className="neu-card p-6 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl">
                       <h3 className="font-bold text-lg text-white mb-4 flex items-center gap-2">
                           <Icons.Lock className="w-5 h-5 text-audi-pink" />
-                          Thêm mới Google Cloud Service Account JSON (Vertex AI)
+                          Cấu hình xAI Grok API Key
                       </h3>
                       <div className="space-y-4">
                           <div>
                               <div className="flex justify-between items-end mb-2">
-                                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase">Service Account JSON</label>
+                                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase">Grok API Key</label>
                                   <div className="flex items-center gap-2">
                                       <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${
                                           keyStatus === 'valid' ? 'bg-green-500/20 text-green-400' :
@@ -5428,14 +5430,6 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   </div>
                               </div>
                               <div className="flex gap-2 relative">
-                                  <select
-                                      value={apiKeyTier}
-                                      onChange={(e) => setApiKeyTier(e.target.value as 'flash' | 'pro')}
-                                      className="neu-inset-sm border border-white/10 rounded-lg p-3 text-slate-900 dark:text-white text-sm outline-none focus:border-audi-pink"
-                                  >
-                                      <option value="flash">Flash Key</option>
-                                      <option value="pro">Pro Key</option>
-                                  </select>
                                   <div className="flex-1 relative">
                                       <input 
                                           type={showKey ? "text" : "password"}
@@ -5444,7 +5438,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               setApiKey(e.target.value);
                                               setKeyStatus('unknown');
                                           }}
-                                          placeholder='{"type": "service_account", "project_id": "...", ...}'
+                                          placeholder='xai-...'
                                           className="w-full neu-inset-sm border border-white/10 rounded-lg p-3 text-white font-mono text-sm pr-12"
                                       />
                                       <button 

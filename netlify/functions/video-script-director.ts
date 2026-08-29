@@ -1,19 +1,8 @@
 import type { Handler } from '@netlify/functions';
-import { runWithVertexCredentialFailover } from './_vertex-credentials';
-import {
-  buildVertexGenerateContentUrl,
-  VERTEX_TEXT_FLASH_MODEL,
-  VERTEX_TEXT_PRO_MODEL,
-} from './_vertex-models';
+import { grokText } from './_grok';
 import { getAuthenticatedRequestErrorStatus, requireAuthenticatedUser } from './_supabase';
 
-const VERTEX_MODELS = Array.from(new Set([
-  process.env.VERTEX_VIDEO_SCRIPT_MODEL,
-  VERTEX_TEXT_PRO_MODEL,
-  VERTEX_TEXT_FLASH_MODEL,
-].filter(Boolean))) as string[];
-const VERTEX_VIDEO_SCRIPT_TIMEOUT_MS = 55_000;
-const VIDEO_SCRIPT_DEADLINE_ERROR = 'VIDEO_SCRIPT_VERTEX_DEADLINE';
+const VIDEO_SCRIPT_DEADLINE_ERROR = 'VIDEO_SCRIPT_GROK_DEADLINE';
 
 const jsonHeaders = {
   'Content-Type': 'application/json',
@@ -236,63 +225,20 @@ export const handler: Handler = async (event) => {
         : {};
 
     const imagePart = await toInlineImagePart(imageSource);
-    const promptPart = { text: buildDirectorInstruction(durationSeconds, userPrompt, scriptOptions) };
-
-    const script = await runWithVertexCredentialFailover({
-      taskName: 'video script director',
-      operation: async ({ projectId, accessToken }) => {
-        let lastModelError = '';
-
-        for (const modelName of VERTEX_MODELS) {
-          let response: Response;
-          try {
-            response = await fetch(
-              buildVertexGenerateContentUrl(projectId, modelName),
-              {
-                method: 'POST',
-                headers: {
-                  Authorization: `Bearer ${accessToken}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  contents: [{ role: 'user', parts: [imagePart, promptPart] }],
-                  generationConfig: {
-                    temperature: 0.7,
-                    topP: 0.9,
-                    maxOutputTokens: 2600,
-                  },
-                }),
-                signal: AbortSignal.timeout(VERTEX_VIDEO_SCRIPT_TIMEOUT_MS),
-              },
-            );
-          } catch (error: any) {
-            if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
-              throw new Error(VIDEO_SCRIPT_DEADLINE_ERROR);
-            }
-            throw error;
-          }
-
-          if (!response.ok) {
-            const errorMessage = await parseErrorMessage(response);
-            lastModelError = `${modelName}: ${errorMessage}`;
-            if (isModelUnavailableError(errorMessage) && modelName !== VERTEX_MODELS[VERTEX_MODELS.length - 1]) {
-              continue;
-            }
-            throw new Error(errorMessage);
-          }
-
-          const data = await response.json();
-          const text = sanitizeDirectorScript(extractCandidateText(data));
-          if (!text) {
-            throw new Error('Vertex AI did not return a video script.');
-          }
-          validateDirectorScript(text);
-          return text.slice(0, 10000);
-        }
-
-        throw new Error(lastModelError || 'No Vertex AI model is available for video script director.');
-      },
-    });
+    let script: string;
+    try {
+      script = sanitizeDirectorScript(await grokText(
+        buildDirectorInstruction(durationSeconds, userPrompt, scriptOptions),
+        [{ mimeType: imagePart.inlineData.mimeType, data: imagePart.inlineData.data }],
+        2600,
+      ));
+    } catch (error: any) {
+      if (error?.name === 'TimeoutError' || error?.name === 'AbortError') throw new Error(VIDEO_SCRIPT_DEADLINE_ERROR);
+      throw error;
+    }
+    if (!script) throw new Error('Grok did not return a video script.');
+    validateDirectorScript(script);
+    script = script.slice(0, 10000);
 
     return {
       statusCode: 200,

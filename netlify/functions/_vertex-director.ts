@@ -7,6 +7,7 @@ import {
 } from '../../shared/queueRecipes';
 import { runWithVertexCredentialFailover } from './_vertex-credentials';
 import { buildVertexGenerateContentUrl, VERTEX_TEXT_PRO_MODEL } from './_vertex-models';
+import { grokJson } from './_grok';
 
 const VERTEX_MODEL = VERTEX_TEXT_PRO_MODEL;
 const normalizePromptWhitespace = (value: string) => value.replace(/\s+/g, ' ').trim();
@@ -342,6 +343,22 @@ const requestVertexPromptSynthesis = async (
   parts: Array<Record<string, unknown>>,
   outputTokenLimit: number,
 ) => {
+  const text = parts.map((part) => typeof part.text === 'string' ? part.text : '').filter(Boolean).join('\n');
+  const images = parts
+    .map((part: any) => part?.inlineData || part?.inline_data)
+    .filter((part: any) => typeof part?.data === 'string')
+    .map((part: any) => ({ mimeType: String(part.mimeType || part.mime_type || 'image/jpeg'), data: part.data }));
+  const grokResult = await grokJson<Record<string, unknown>>(`${text}\n\nReturn only the requested JSON object.`, images, outputTokenLimit);
+  const grokText = JSON.stringify(grokResult);
+  return {
+    data: { candidates: [{ content: { parts: [{ text: grokText }] } }] },
+    text: grokText,
+    finishReasons: [],
+    promptFeedback: null,
+    safetyRatings: [],
+  };
+
+  /* Vertex implementation retained below only as reference during rollout. */
   const response = await fetch(
     buildVertexGenerateContentUrl(projectId, VERTEX_MODEL),
     {

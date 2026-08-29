@@ -1,5 +1,6 @@
 import { GoogleAuth } from 'google-auth-library';
 import { getServiceRoleClient } from './_supabase';
+import { getGrokApiKey } from './_grok';
 
 type VertexCredentialRow = {
   id: string;
@@ -343,6 +344,15 @@ export const runWithVertexCredentialFailover = async <T>({
   operation,
   onAttemptFailure,
 }: RunWithVertexCredentialFailoverOptions<T>): Promise<T> => {
+  if (process.env.USE_GROK_AI !== 'false') {
+    return operation({
+      credentialId: 'grok',
+      credentialName: 'Grok API key',
+      credentials: {},
+      projectId: 'grok',
+      accessToken: await getGrokApiKey(),
+    });
+  }
   const attemptedCredentialIds = new Set<string>();
   let lastRetryableError: Error | null = null;
 

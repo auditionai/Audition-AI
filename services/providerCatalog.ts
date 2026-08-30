@@ -282,6 +282,17 @@ export const fetchProviderCatalog = async (
     throw new Error(payload?.error || 'Failed to load provider catalog');
   }
   const catalog = payload.gommo as GommoProviderCatalog;
+  // Gommo is optional. The endpoint returns `gommo: null` when it is not
+  // configured; that must not disable the independent TST/GPTi2 catalog.
+  if (!catalog || typeof catalog !== 'object') {
+    return {
+      configured: false,
+      domain: '',
+      vndPerCredit: null,
+      mappings: [],
+      models: [],
+    };
+  }
   if (includeAdminDisabledServers) return catalog;
   return {
     ...catalog,

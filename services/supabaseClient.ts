@@ -9,6 +9,7 @@ const supabaseAnonKey = metaEnv.VITE_SUPABASE_ANON_KEY || processEnv.VITE_SUPABA
 
 let client = null;
 const SESSION_CACHE_TTL_MS = 5000;
+const SESSION_READ_TIMEOUT_MS = 12000;
 let cachedSession: any = null;
 let cachedUser: any = null;
 let sessionFetchedAt = 0;
@@ -24,10 +25,13 @@ if (supabaseUrl && supabaseAnonKey) {
             autoRefreshToken: true,
         }
     });
-    client.auth.onAuthStateChange((_event: any, session: any) => {
-        cachedSession = session || null;
-        cachedUser = session?.user || null;
-        sessionFetchedAt = Date.now();
+    client.auth.onAuthStateChange((event: any, session: any) => {
+        // Do not turn a transient refresh failure into a client-side logout.
+        if (session || event === 'SIGNED_OUT' || event === 'INITIAL_SESSION') {
+            cachedSession = session || null;
+            cachedUser = session?.user || null;
+            sessionFetchedAt = Date.now();
+        }
         inFlightSessionPromise = null;
     });
   } catch (e) {
@@ -53,12 +57,19 @@ export const getSupabaseSession = async (force = false) => {
         return cachedSession;
     }
 
-    inFlightSessionPromise = supabase.auth
-        .getSession()
+    const sessionRead = Promise.race([
+        supabase.auth.getSession(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Supabase session read timed out')), SESSION_READ_TIMEOUT_MS)),
+    ]);
+    inFlightSessionPromise = sessionRead
         .then(({ data }: any) => {
             cachedSession = data?.session || null;
             cachedUser = cachedSession?.user || null;
             sessionFetchedAt = Date.now();
+            return cachedSession;
+        })
+        .catch((error: any) => {
+            console.warn('[auth] session read failed; keeping the existing session', error?.message || error);
             return cachedSession;
         })
         .finally(() => {
@@ -159,7 +170,6 @@ export const signInWithGoogle = async () => {
         provider: 'google',
         options: {
             redirectTo: window.location.origin,
-            queryParams: { access_type: 'offline', prompt: 'consent' },
         },
     });
 };

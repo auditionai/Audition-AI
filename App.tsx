@@ -299,12 +299,10 @@ function AppContent() {
                     warmupAuthenticatedData(session.user.id);
                     updateLastActive();
                 }
-            } else {
+            } else if (event === 'SIGNED_OUT') {
                 setAnalyticsUser(null);
                 warmedUserDataRef.current = null;
-                if (event === 'SIGNED_OUT') {
-                    trackEvent('logout');
-                }
+                trackEvent('logout');
                 setIsAuthenticated(false);
             }
         });

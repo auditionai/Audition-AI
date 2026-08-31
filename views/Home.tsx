@@ -78,6 +78,7 @@ export const Home: React.FC<HomeProps> = ({
   }, [heroPaused]);
 
   const features: Feature[] = APP_CONFIG.main_features;
+  const magicEditorFeature = features.find((feature) => feature.id === 'magic_editor_pro');
   const heroSlide = DESKTOP_HERO_SLIDES[activeHeroSlide];
 
   const filteredFeatures = features.filter((feat: Feature) => {
@@ -332,7 +333,9 @@ export const Home: React.FC<HomeProps> = ({
 
         <button
           type="button"
-          onClick={() => onNavigate('tools')}
+          onClick={() => {
+            if (magicEditorFeature) onSelectFeature(magicEditorFeature);
+          }}
           className="desktop-primary-tool desktop-primary-tool--editing desktop-neon-frame desktop-neon-frame--cyan text-left"
         >
           <span className="desktop-primary-tool__copy">

@@ -87,6 +87,23 @@ const parseDataUrl = (value: string) => {
   };
 };
 
+const downloadEditedImage = async (value: string) => {
+  const response = await fetch(value, { signal: AbortSignal.timeout(60_000) });
+  if (!response.ok) {
+    throw new Error(`Unable to download edited image (${response.status})`);
+  }
+
+  const mimeType = response.headers.get('content-type')?.split(';', 1)[0]?.trim() || 'image/png';
+  if (!mimeType.startsWith('image/')) {
+    throw new Error('Editor returned a non-image result');
+  }
+
+  return {
+    mimeType,
+    buffer: Buffer.from(await response.arrayBuffer()),
+  };
+};
+
 const mimeTypeToExtension = (mimeType: string) => {
   if (mimeType.includes('jpeg')) return 'jpg';
   if (mimeType.includes('webp')) return 'webp';
@@ -94,11 +111,18 @@ const mimeTypeToExtension = (mimeType: string) => {
 };
 
 const uploadEditedImage = async (userId: string, imageId: string, assetDataUrl: string) => {
+  const isRemoteImage = /^https?:\/\//i.test(assetDataUrl);
   if (!r2Client || !R2_BUCKET_NAME || !R2_PUBLIC_URL) {
     return assetDataUrl;
   }
 
-  const { mimeType, buffer } = parseDataUrl(assetDataUrl);
+  const { mimeType, buffer } = isRemoteImage
+    ? await downloadEditedImage(assetDataUrl)
+    : parseDataUrl(assetDataUrl);
+
+  if (buffer.length === 0) {
+    throw new Error('Editor returned an empty image result');
+  }
   const extension = mimeTypeToExtension(mimeType);
   const key = `edited/${userId}/${imageId}.${extension}`;
 

@@ -1500,17 +1500,22 @@
   animation: v2SheetIn .3s cubic-bezier(.2,.8,.2,1);
 }
 
+.v2-creation-sheet {
+  max-height: calc(100dvh - 16px);
+  scroll-padding-bottom: 18px;
+}
+
 .v2-creation-sheet__close,
 .v2-checkout-sheet__close,
 .v2-profile-modal > button:first-child { position: absolute; z-index: 3; right: 13px; top: 13px; display: grid; place-items: center; width: 42px; height: 42px; color: var(--v2-ink); border: 1px solid var(--v2-line); border-radius: 14px; background: var(--v2-surface-solid); }
-.v2-creation-sheet__media { min-height: 280px; max-height: 52dvh; overflow: hidden; border-radius: 22px; background: #0c0910; }
+.v2-creation-sheet__media { min-height: min(280px, 42dvh); max-height: 42dvh; overflow: hidden; border-radius: 22px; background: #0c0910; }
 .v2-creation-sheet__media img,
 .v2-creation-sheet__media video { width: 100%; height: 100%; object-fit: contain; }
 .v2-creation-sheet__info { display: grid; gap: 9px; padding-top: 16px; }
 .v2-creation-sheet__info > span { display: flex; align-items: center; gap: 6px; color: var(--v2-cosmic-blue); font-size: 9px; font-weight: 850; text-transform: uppercase; }
 .v2-creation-sheet__info h2 { margin: 0; font-size: 20px; }
 .v2-creation-sheet__info p { max-height: 90px; overflow: auto; margin: 0; color: var(--v2-ink-soft); font-size: 11px; }
-.v2-creation-sheet__info > div { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.v2-creation-sheet__actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .v2-creation-sheet__info button { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; color: var(--v2-ink); border: 1px solid var(--v2-line); border-radius: 14px; background: var(--v2-surface); font-size: 10px; font-weight: 850; }
 .v2-creation-sheet__info button.is-danger { color: #b21e4f; }
 
@@ -4038,6 +4043,11 @@
 }
 
 .mobile-v2-shell:has(.v2-checkout-sheet) .v2-bottom-nav-wrap {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.mobile-v2-shell:has(.v2-creation-sheet) .v2-bottom-nav-wrap {
   visibility: hidden;
   pointer-events: none;
 }

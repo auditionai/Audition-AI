@@ -218,12 +218,12 @@ export function GalleryV2() {
           <div className="v2-creation-sheet__info">
             <span><CheckCircle2 size={15} /> {selected.toolName}</span>
             <h2>{itemStatus(selected) === 'completed' ? 'Tác phẩm đã sẵn sàng' : 'Chi tiết tiến trình'}</h2>
-            <p>{selected.prompt || 'Không có mô tả.'}</p>
-            <div>
+            <div className="v2-creation-sheet__actions">
               <button type="button" onClick={() => void download(selected)}><Download size={18} /> Tải xuống</button>
               {assetKind(selected) === 'image' && <button type="button" onClick={() => void share(selected)}><Share2 size={18} /> Chia sẻ</button>}
               <button type="button" className="is-danger" onClick={() => remove(selected)}><Trash2 size={18} /> Xóa</button>
             </div>
+            <p>{selected.prompt || 'Không có mô tả.'}</p>
           </div>
         </div>
       )}

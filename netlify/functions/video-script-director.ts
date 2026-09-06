@@ -8,18 +8,35 @@ const VIDEO_SCRIPT_DEADLINE_ERROR = 'VIDEO_SCRIPT_GROK_DEADLINE';
 const VIDEO_SCRIPT_GROK_TIMEOUT_MS = 290_000;
 const VIDEO_SCRIPT_TOTAL_TIMEOUT_MS = 295_000;
 const VIDEO_SCRIPT_MAX_TOKENS = 2600;
+const MAX_REFERENCE_IMAGE_BYTES = 8 * 1024 * 1024;
 
 const jsonHeaders = {
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': '*',
 };
 
-const toGrokImageInput = (source: string): GrokImageInput => {
+const toGrokImageInput = async (source: string): Promise<GrokImageInput> => {
   if (!source) throw new Error('Missing reference image.');
-  // R2 URLs are public inputs. Passing the URL directly avoids downloading and
-  // base64-encoding the image inside this synchronous Netlify function.
+
+  // Gateway implementations can silently omit a remote image_url when
+  // forwarding an OpenAI-compatible request. Always supply verified bytes.
   if (source.startsWith('http')) {
-    return { url: source };
+    const response = await fetch(source, { signal: AbortSignal.timeout(60_000) });
+    if (!response.ok) throw new Error(`Khong the tai anh tham chieu de Grok phan tich (${response.status}).`);
+
+    const mimeType = String(response.headers.get('content-type') || 'image/jpeg').split(';', 1)[0].trim().toLowerCase();
+    const contentLength = Number(response.headers.get('content-length') || 0);
+    if (!mimeType.startsWith('image/')) throw new Error('Anh tham chieu tren R2 khong co dinh dang hinh anh hop le.');
+    if (Number.isFinite(contentLength) && contentLength > MAX_REFERENCE_IMAGE_BYTES) {
+      throw new Error('Anh tham chieu qua lon de Grok phan tich. Vui long dung anh nho hon 8 MB.');
+    }
+
+    const data = Buffer.from(await response.arrayBuffer());
+    if (!data.length) throw new Error('Anh tham chieu tren R2 trong hoac khong the doc.');
+    if (data.length > MAX_REFERENCE_IMAGE_BYTES) {
+      throw new Error('Anh tham chieu qua lon de Grok phan tich. Vui long dung anh nho hon 8 MB.');
+    }
+    return { mimeType, data: data.toString('base64') };
   }
   if (!source.startsWith('data:')) {
     return { mimeType: 'image/jpeg', data: source };
@@ -111,6 +128,12 @@ const validateDirectorScript = (value: string) => {
   if (!/loai chu the\s*:/i.test(normalized)) {
     throw new Error('AI chưa phân loại loại chủ thể trong ảnh. Vui lòng bấm tạo lại để AI phân tích ảnh rõ hơn.');
   }
+  if (!/khoa dong nhat tham chieu\s*:/i.test(normalized)) {
+    throw new Error('AI chưa trả về khóa đồng nhất nhân vật và bối cảnh từ ảnh tham chiếu. Hệ thống không thể dùng kịch bản này.');
+  }
+  if (!/khong (tao|them|phat minh) nhan vat moi/i.test(normalized) || !/giu nguyen/i.test(normalized)) {
+    throw new Error('AI chưa cam kết giữ nguyên nhân vật tham chiếu. Hệ thống không thể dùng kịch bản này.');
+  }
   if (/che do trend edit\s*:/i.test(normalized)) {
     throw new Error('AI trả về cấu hình nội bộ thay vì kịch bản video. Vui lòng bấm tạo lại.');
   }
@@ -159,6 +182,7 @@ const buildDirectorInstruction = (
     '- Build the script around those observed details and the actual composition of the image. If it is a close portrait, prefer facial micro-motion and subtle camera movement. If it is full-body, use body movement that fits the pose. If the background is important, use depth and environment motion.',
     '- Every shot must reuse at least one concrete observed detail from the image, for example the actual clothing color, accessory, posture, hand position, visible prop, background object, lighting direction, or camera crop.',
     '- Do not replace the subject with a different person or a real human actor.',
+    '- Treat the uploaded image as the single source of truth. Never fill missing details with a generic character, room, clothing item, prop, or setting from memory.',
     '',
     trendEdit
       ? 'Trend-edit direction: use high-retention cinematic pacing, multiple camera angles, beat-synced cuts, whip pan, match cut, flash cut, speed ramp, motion blur, light leak, glow burst, slow-motion highlights, and modern Douyin/TikTok/CapCut language where appropriate.'
@@ -172,6 +196,7 @@ const buildDirectorInstruction = (
     'Required final script format:',
     '- Start with "Quan sát ảnh tham chiếu:" followed by 2-3 concise Vietnamese sentences describing concrete visible details from the uploaded image.',
     '- Immediately after that, include "Loại chủ thể:" with the chosen subject type and visual evidence, for example "Loại chủ thể: nhân vật 3D/game avatar, vì khuôn mặt và chất liệu da/tóc là render phong cách game, không phải đồ chơi vật lý."',
+    '- Immediately after subject type, include "Khóa đồng nhất tham chiếu:". State the exact visible character count and lock every visible character\'s face, hair, expression, clothing, colors, accessories, body proportions, pose relationship, and visible setting/background. Explicitly say "không tạo nhân vật mới" and "giữ nguyên" these details. Do not add details that are not visible in the uploaded image.',
     '- Then write one concise overall direction sentence for the video. Do not print internal settings such as model name, theme value, trend edit mode, or text overlay mode.',
     '- Then write a numbered shot list by time range, for example: Canh 1 (0.0s-1.0s): ...',
     '- Each shot must include camera angle, camera/subject motion, subject action, transition, and sound/music cue.',
@@ -183,7 +208,8 @@ const buildDirectorInstruction = (
     '- Do not create a real human video.',
     '- Do not invent a new character.',
     '- Preserve the subject as stylized 3D/avatar/game characters when the reference image has that look. Do not relabel them as dolls, toys, figurines, mannequins, or physical collectibles.',
-    '- Preserve the exact face, facial proportions, makeup, accessories, outfit design, outfit colors, body identity, and character quality from the uploaded reference image.',
+    '- Preserve the exact number of subjects and the exact face, facial proportions, expression, hair, makeup, accessories, outfit design, outfit colors, body identity, pose relationship, and character quality from the uploaded reference image.',
+    '- Preserve the visible background, setting, key props, lighting direction, and composition unless a user explicitly asks for a background change. Never invent a different room, street, forest, prop, or scene.',
     '- Do not deform the face, eyes, nose, mouth, hands, outfit, or character silhouette.',
     '- Do not change clothing colors, logos, patterns, or material identity.',
     '- The character quality in the video must remain equivalent to the uploaded reference image.',
@@ -207,7 +233,7 @@ export const generateVideoScriptForRequest = async (body: VideoScriptRequestBody
   const durationSeconds = clampDurationSeconds(body.durationSeconds);
   const userPrompt = String(body.userPrompt || '').trim();
   const scriptOptions = body.scriptOptions && typeof body.scriptOptions === 'object' ? body.scriptOptions : {};
-  const imagePart = toGrokImageInput(imageSource);
+  const imagePart = await toGrokImageInput(imageSource);
   const script = sanitizeDirectorScript(await grokText(
     buildDirectorInstruction(durationSeconds, userPrompt, scriptOptions),
     [imagePart],

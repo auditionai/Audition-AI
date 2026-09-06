@@ -19,7 +19,7 @@ import { getUserProfile, getModelPricing, getTstServerAvailabilityConfig, getGen
 import { useConcurrency, CONCURRENCY_LIMITS } from '../../services/concurrencyService';
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
-import { compressDataImageForDirector, generateVideoScriptWithVertex } from '../../services/videoScriptDirectorService';
+import { compressDataImageForDirector, generateVideoScriptWithGrok } from '../../services/videoScriptDirectorService';
 import { trackEvent } from '../../services/analyticsService';
 import {
   fetchTstPricing, fetchTstModels,
@@ -228,6 +228,7 @@ export function WorkspaceVideo() {
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const lastGeneratedScriptRef = useRef('');
   const [uploadTarget, setUploadTarget] = useState<'keyframe' | 'endframe' | 'character' | 'motion' | null>(null);
 
   useEffect(() => {
@@ -607,7 +608,11 @@ export function WorkspaceVideo() {
     const reader = new FileReader();
     reader.onload = (event) => {
       const result = event.target?.result as string;
-      if (uploadTarget === 'keyframe') setKeyframeImage(result);
+      if (uploadTarget === 'keyframe') {
+        setKeyframeImage(result);
+        if (prompt === lastGeneratedScriptRef.current) setPrompt('');
+        lastGeneratedScriptRef.current = '';
+      }
       if (uploadTarget === 'endframe') setEndFrameImage(result);
       if (uploadTarget === 'character') setCharacterImage(result);
       setUploadTarget(null);
@@ -643,10 +648,10 @@ export function WorkspaceVideo() {
       notify('Đang tối ưu và tải ảnh tham chiếu lên R2...', 'info');
       const directorImageSource = await compressDataImageForDirector(keyframeImage);
       const directorImageUrl = await uploadFileToR2(directorImageSource, 'inputs/video-script-reference/mobile');
-      const script = await generateVideoScriptWithVertex({
+      const script = await generateVideoScriptWithGrok({
         imageSource: directorImageUrl,
         durationSeconds: parseInt(duration, 10) || 5,
-        userPrompt: prompt,
+        userPrompt: prompt === lastGeneratedScriptRef.current ? '' : prompt,
         scriptOptions: {
           style: scriptStyle,
           theme: scriptTheme,
@@ -658,6 +663,7 @@ export function WorkspaceVideo() {
         },
       });
       setPrompt(script);
+      lastGeneratedScriptRef.current = script;
       trackEvent('video_script_generate_success', {
         client_platform: 'mobile',
         duration_seconds: parseInt(duration, 10) || 5,

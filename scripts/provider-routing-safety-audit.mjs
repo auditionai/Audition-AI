@@ -365,7 +365,9 @@ const videoScriptDirectorSource = await readFile(new URL('../netlify/functions/v
 assert(videoScriptDirectorSource.includes('VIDEO_SCRIPT_MAX_TOKENS = 2600'));
 assert(videoScriptDirectorSource.includes('VIDEO_SCRIPT_TOTAL_TIMEOUT_MS = 295_000'));
 assert(videoScriptDirectorSource.includes('timeoutMs: VIDEO_SCRIPT_GROK_TIMEOUT_MS'));
-assert(videoScriptDirectorSource.includes('return { url: source }'));
+assert(videoScriptDirectorSource.includes('MAX_REFERENCE_IMAGE_BYTES'));
+assert(videoScriptDirectorSource.includes("data: data.toString('base64')"));
+assert(videoScriptDirectorSource.includes('Khoa dong nhat tham chieu'));
 assert(videoScriptDirectorSource.includes('Promise.race([operation(controller.signal), deadline])'));
 const grokVisionSource = await readFile(new URL('../netlify/functions/_grok-image-vision.ts', import.meta.url), 'utf8');
 assert(grokVisionSource.includes('timeoutMs: GROK_BACKGROUND_TIMEOUT_MS'));

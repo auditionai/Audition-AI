@@ -7,9 +7,10 @@ import { formatConcurrencyLimit, getProviderConcurrencyLimits, getProviderQueueS
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import { downloadAssetToBrowser } from '../../services/downloadService';
-import { compressDataImageForDirector, generateVideoScriptWithVertex } from '../../services/videoScriptDirectorService';
+import { compressDataImageForDirector, generateVideoScriptWithClaude } from '../../services/videoScriptDirectorService';
 import { trackEvent } from '../../services/analyticsService';
 import type { MotionGenerateRecipePayload, VideoGenerateRecipePayload } from '../../shared/queueRecipes';
+import { compileVideoScriptForDuration } from '../../shared/videoScriptCompiler';
 import {
   type AuditionPricingOverride,
   fetchTstModels,
@@ -26,6 +27,7 @@ import {
   getVideoCompatibleSpeeds,
   getVideoCostBreakdown,
   getVideoModelSpecs,
+  creditsToVcoin,
   sanitizePricingEntriesWithRuntimeModels,
   tstServerToUi,
   tstSpeedToUi,
@@ -39,6 +41,7 @@ import {
   getAuditionProviderPricing,
   getGommoCatalogPricingOptionId,
   getGommoPricingInput,
+  getMinimumAuditionModelPrice,
   getMinimumAuditionCatalogModelPrice,
   getGommoModelForAudition,
   isGommoCatalogModelAvailable,
@@ -69,7 +72,12 @@ interface AIModelOption {
 
 type VideoModelFamily = 'grok' | 'seedance' | 'kling' | 'veo' | 'hailuo' | 'wan' | 'other';
 
-const VIDEO_MODEL_FAMILY_ORDER: VideoModelFamily[] = ['grok', 'seedance', 'kling', 'veo', 'hailuo', 'wan', 'other'];
+const VIDEO_MODEL_FAMILY_ORDER: VideoModelFamily[] = ['grok', 'seedance', 'kling', 'veo'];
+
+const isExcludedVideoModel = (model: { id?: string; name?: string }) => {
+    const value = `${model.id || ''} ${model.name || ''}`.toLowerCase();
+    return value.includes('hailuo') || value.includes('wan') || value.includes('happyhorse') || value.includes('happy horse');
+};
 
 const VIDEO_MODEL_FAMILY_META: Record<VideoModelFamily, {
     label: string;
@@ -399,7 +407,8 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                 .map((spec) => ({
                   id: spec.modelId,
                   name: spec.displayName,
-                  price: getVideoCostBreakdown({
+                  price: (() => {
+                    const breakdown = getVideoCostBreakdown({
                       modelId: spec.modelId,
                       serverId: spec.servers[0] || 'fast',
                       resolution: spec.resolutions[0] || '720p',
@@ -408,10 +417,16 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                       audio: false,
                       pricingEntries: livePricing,
                       pricingOverrides: overrideRows
-                  }).vcoin
+                    });
+                    const configuredPrice = getMinimumAuditionModelPrice(pricingConfig || [], spec.modelId);
+                    const creditFallback = spec.minCredits > 0 ? creditsToVcoin(spec.minCredits) : 0;
+                    return breakdown.vcoin || configuredPrice || creditFallback;
+                  })()
               }));
               // Video models are shown only when present in the live TST catalog.
-              const routedVideoModels = liveVideoModels;
+              const routedVideoModels = liveVideoModels
+                .filter((model) => !isExcludedVideoModel(model))
+                .filter((model) => getVideoModelFamily(model) !== 'other');
               const liveMotionModels = getMotionModelSpecs(livePricing, filteredModels)
                 .filter((spec) => isModelAllowedForFeature(routingConfig, 'motion_control', spec.modelId))
                 .filter((spec) => resolveProviderForModel(routingConfig, spec.modelId, 'motion_control') === 'tst')
@@ -593,7 +608,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
   };
   const getDisplayedVideoModelPrice = (model: AIModelOption) =>
       activeMode === 'video_ai' && model.id === videoModel
-        ? (currentCostBreakdown.available ? currentCostBreakdown.vcoin : 0)
+        ? (currentCostBreakdown.available ? currentCostBreakdown.vcoin : model.price)
         : model.price;
   const perSecondCostLabel = currentCostBreakdown.billingUnit === 'second'
       ? `${currentCostBreakdown.unitVcoin || 0} Vcoin/s × ${currentCostBreakdown.billedSeconds || 0}s = ${currentCostBreakdown.vcoin || 0} Vcoin`
@@ -831,6 +846,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
   }, [activeMode, aspectRatio, duration, isGommoSelected, modelOptions, providerMode, quality, selectedGommoModel, server, serverOptions, sound, speed, speedOptions]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const lastGeneratedScriptRef = useRef('');
   const [uploadTarget, setUploadTarget] = useState<'keyframe' | 'endframe' | 'character' | 'motion' | null>(null);
 
   const getVideoDurationSeconds = async (file: File) => {
@@ -883,7 +899,11 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
     const reader = new FileReader();
     reader.onload = (event) => {
       const result = event.target?.result as string;
-      if (uploadTarget === 'keyframe') setKeyframeImage(result);
+      if (uploadTarget === 'keyframe') {
+        setKeyframeImage(result);
+        if (prompt === lastGeneratedScriptRef.current) setPrompt('');
+        lastGeneratedScriptRef.current = '';
+      }
       if (uploadTarget === 'endframe') setEndFrameImage(result);
       if (uploadTarget === 'character') setCharacterImage(result);
       setUploadTarget(null);
@@ -918,10 +938,10 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
       notify('Đang tối ưu và tải ảnh tham chiếu lên R2...', 'info');
       const directorImageSource = await compressDataImageForDirector(keyframeImage);
       const directorImageUrl = await tryStageInputToR2(directorImageSource, 'inputs/video-script-reference');
-      const script = await generateVideoScriptWithVertex({
+      const script = await generateVideoScriptWithClaude({
         imageSource: directorImageUrl,
         durationSeconds: parseInt(duration, 10) || 5,
-        userPrompt: prompt,
+        userPrompt: prompt === lastGeneratedScriptRef.current ? '' : prompt,
         scriptOptions: {
           style: scriptStyle,
           theme: scriptTheme,
@@ -933,6 +953,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
         },
       });
       setPrompt(script);
+      lastGeneratedScriptRef.current = script;
       trackEvent('video_script_generate_success', {
         client_platform: 'desktop',
         duration_seconds: parseInt(duration, 10) || 5,
@@ -948,7 +969,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
         target_model: scriptTargetModel || videoModel,
         error_message: error instanceof Error ? error.message.slice(0, 120) : 'unknown',
       });
-      notify(error instanceof Error ? error.message : 'Không thể tạo kịch bản video bằng Grok AI.', 'error');
+      notify(error instanceof Error ? error.message : 'Không thể tạo kịch bản video bằng Claude AI.', 'error');
     } finally {
       setIsGeneratingScript(false);
     }
@@ -1126,11 +1147,12 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                 ? await tryStageInputToR2(motionVideoFile!, 'inputs/motion-control')
                 : null;
 
+        const compiledVideoPrompt = activeMode === 'video_ai' ? compileVideoScriptForDuration(prompt, duration) : prompt;
         const queuePayload: VideoGenerateRecipePayload | MotionGenerateRecipePayload = activeMode === 'video_ai'
             ? {
                 recipeType: 'video_generate_recipe_v1',
                 modelId: videoModel,
-                prompt: prompt || 'Create a cinematic video',
+                prompt: compiledVideoPrompt || 'Create a cinematic video',
                 duration: duration.toLowerCase(),
                 resolution: isGommoVideoSelected ? gommoVideoPricingInput.resolution : quality.toLowerCase(),
                 aspectRatio,
@@ -1161,7 +1183,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
 
         await enqueueServerJob({
             id: queuedId,
-            prompt: queuedPrompt,
+            prompt: activeMode === 'video_ai' ? (compiledVideoPrompt || queuedPrompt) : queuedPrompt,
             toolId: effectiveToolId,
             toolName: effectiveToolName,
             engine: selectedModelName,
@@ -1384,8 +1406,8 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                     value={activeMode === 'video_ai' ? prompt : motionPrompt}
                     onChange={(e) => activeMode === 'video_ai' ? setPrompt(e.target.value) : setMotionPrompt(e.target.value)}
                     placeholder={activeMode === 'video_ai' ? "Mô tả kịch bản ngắn: nhân vật bước ra từ khung ảnh, xoay người tạo dáng tự tin..." : "Mô tả bối cảnh phía sau nhân vật..."}
-                    rows={6}
-                    className="w-full neu-input rounded-2xl p-4 text-xs leading-relaxed focus:outline-none resize-y font-sans"
+                    rows={16}
+                    className="w-full min-h-[360px] max-h-[70vh] overflow-y-auto neu-input rounded-2xl p-4 text-xs leading-relaxed focus:outline-none resize-y font-sans"
                 />
 
                 {activeMode === 'video_ai' && (
@@ -1397,7 +1419,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                           Đạo diễn kịch bản AI
                         </div>
                         <p className="mt-1 text-[10px] leading-relaxed text-slate-600 dark:text-slate-400">
-                Grok AI phân tích keyframe và viết kịch bản chuyển động tối ưu cho model đã chọn.
+                Claude Sonnet 4.6 phân tích keyframe và viết kịch bản chuyển động tối ưu cho model đã chọn.
                         </p>
                       </div>
                       <button

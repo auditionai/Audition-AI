@@ -8,9 +8,9 @@ import {
   type SampleVisionAnalysis,
   type StyleVisionAnalysis,
 } from '../../shared/queueRecipes';
-import { GROK_BACKGROUND_TIMEOUT_MS, GROK_MODEL, grokJson } from './_grok';
+import { CLAUDE_BACKGROUND_TIMEOUT_MS, CLAUDE_MODEL, claudeJson } from './_grok';
 
-const VERTEX_MODEL = GROK_MODEL;
+const CLAUDE_VISION_MODEL = CLAUDE_MODEL;
 
 type VertexDiagnosticCallback = (entry: QueueVertexDiagnosticEntry) => Promise<void> | void;
 type VisionAnalysisMode = 'default' | 'pro_structured';
@@ -80,7 +80,7 @@ const emitDiagnostic = async (
     at: new Date().toISOString(),
     task: 'image_reference_analysis',
     status,
-    model: VERTEX_MODEL,
+    model: CLAUDE_VISION_MODEL,
     message,
   });
 };
@@ -101,8 +101,8 @@ const generateVisionJson = async <T>(
     .map((part) => part?.inlineData || part?.inline_data)
     .filter((part) => typeof part?.data === 'string')
     .map((part) => ({ mimeType: String(part.mimeType || part.mime_type || 'image/jpeg'), data: part.data }));
-  const parsed = await grokJson<T>(instruction, images, mode === 'pro_structured' ? 1024 : 2048, { timeoutMs: GROK_BACKGROUND_TIMEOUT_MS });
-  await emitDiagnostic(onDiagnostic, 'success', `${taskName} succeeded via Grok.`);
+  const parsed = await claudeJson<T>(instruction, images, mode === 'pro_structured' ? 1024 : 2048, { timeoutMs: CLAUDE_BACKGROUND_TIMEOUT_MS });
+  await emitDiagnostic(onDiagnostic, 'success', `${taskName} succeeded via Claude.`);
   return parsed;
 };
 

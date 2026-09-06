@@ -19,18 +19,20 @@ import { getUserProfile, getModelPricing, getTstServerAvailabilityConfig, getGen
 import { useConcurrency, CONCURRENCY_LIMITS } from '../../services/concurrencyService';
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
-import { compressDataImageForDirector, generateVideoScriptWithVertex } from '../../services/videoScriptDirectorService';
+import { compressDataImageForDirector, generateVideoScriptWithClaude } from '../../services/videoScriptDirectorService';
 import { trackEvent } from '../../services/analyticsService';
 import {
   fetchTstPricing, fetchTstModels,
   getMotionCompatibleServers, getMotionCompatibleSpeeds, getMotionCostBreakdown, getMotionModelSpecs,
   getVideoCompatibleDurations, getVideoCompatibleResolutions, getVideoCompatibleServers, getVideoCompatibleSpeeds, getVideoCostBreakdown, getVideoModelSpecs,
+  creditsToVcoin,
   applyServerAvailabilityToRuntimeModels, sanitizePricingEntriesWithRuntimeModels,
   uiSpeedToTst, uiServerToTst, tstServerToUi, tstSpeedToUi,
   type TstPricingEntry, type TstRuntimeModel, type AuditionPricingOverride
 } from '../../services/tstCatalog';
 import type { ModelPricing } from '../../services/economyService';
 import type { GeneratedImage } from '../../types';
+import { compileVideoScriptForDuration } from '../../../../shared/videoScriptCompiler';
 import { fetchProviderCatalog, getAuditionProviderPricing, getGommoPricingInput, getMinimumAuditionModelPrice, getGommoModelForAudition, isGommoCatalogModelAvailable, resolveProviderForModel, type GommoCatalogModel, type GommoProviderCatalog } from '../../services/providerCatalog';
 import { isModelAllowedForFeature } from '../../../../shared/providerRouting';
 import { VIDEO_GENERATION_TIPS } from '../../../../shared/videoGenerationTips';
@@ -47,7 +49,12 @@ interface AIModelOption {
 
 type VideoModelFamily = 'grok' | 'seedance' | 'kling' | 'veo' | 'hailuo' | 'wan' | 'other';
 
-const VIDEO_MODEL_FAMILY_ORDER: VideoModelFamily[] = ['grok', 'seedance', 'kling', 'veo', 'hailuo', 'wan', 'other'];
+const VIDEO_MODEL_FAMILY_ORDER: VideoModelFamily[] = ['grok', 'seedance', 'kling', 'veo'];
+
+const isExcludedVideoModel = (model: { id?: string; name?: string }) => {
+  const value = `${model.id || ''} ${model.name || ''}`.toLowerCase();
+  return value.includes('hailuo') || value.includes('wan') || value.includes('happyhorse') || value.includes('happy horse');
+};
 
 const VIDEO_MODEL_FAMILY_META: Record<VideoModelFamily, { label: string; tag: string; description: string }> = {
   grok: {
@@ -228,6 +235,7 @@ export function WorkspaceVideo() {
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const lastGeneratedScriptRef = useRef('');
   const [uploadTarget, setUploadTarget] = useState<'keyframe' | 'endframe' | 'character' | 'motion' | null>(null);
 
   useEffect(() => {
@@ -268,7 +276,8 @@ export function WorkspaceVideo() {
           .map((spec: any) => ({
           id: spec.modelId,
           name: spec.displayName,
-          price: getVideoCostBreakdown({
+          price: (() => {
+            const breakdown = getVideoCostBreakdown({
             modelId: spec.modelId,
             serverId: spec.servers[0] || 'fast',
             resolution: spec.resolutions[0] || '720p',
@@ -277,9 +286,15 @@ export function WorkspaceVideo() {
             audio: false,
             pricingEntries: livePricing,
             pricingOverrides: overrideRows
-          }).vcoin
+            });
+            const configuredPrice = getMinimumAuditionModelPrice(pricingConfig || [], spec.modelId);
+            const creditFallback = spec.minCredits > 0 ? creditsToVcoin(spec.minCredits) : 0;
+            return breakdown.vcoin || configuredPrice || creditFallback;
+          })()
         }));
-        const routedVideoModels = liveVideoModels;
+        const routedVideoModels = liveVideoModels
+          .filter((model: AIModelOption) => !isExcludedVideoModel(model))
+          .filter((model: AIModelOption) => getVideoModelFamily(model) !== 'other');
 
         const liveMotionModels = getMotionModelSpecs(livePricing, filteredModels)
           .filter((spec: any) => isModelAllowedForFeature(routingConfig, 'motion_control', spec.modelId))
@@ -607,7 +622,11 @@ export function WorkspaceVideo() {
     const reader = new FileReader();
     reader.onload = (event) => {
       const result = event.target?.result as string;
-      if (uploadTarget === 'keyframe') setKeyframeImage(result);
+      if (uploadTarget === 'keyframe') {
+        setKeyframeImage(result);
+        if (prompt === lastGeneratedScriptRef.current) setPrompt('');
+        lastGeneratedScriptRef.current = '';
+      }
       if (uploadTarget === 'endframe') setEndFrameImage(result);
       if (uploadTarget === 'character') setCharacterImage(result);
       setUploadTarget(null);
@@ -643,10 +662,10 @@ export function WorkspaceVideo() {
       notify('Đang tối ưu và tải ảnh tham chiếu lên R2...', 'info');
       const directorImageSource = await compressDataImageForDirector(keyframeImage);
       const directorImageUrl = await uploadFileToR2(directorImageSource, 'inputs/video-script-reference/mobile');
-      const script = await generateVideoScriptWithVertex({
+      const script = await generateVideoScriptWithClaude({
         imageSource: directorImageUrl,
         durationSeconds: parseInt(duration, 10) || 5,
-        userPrompt: prompt,
+        userPrompt: prompt === lastGeneratedScriptRef.current ? '' : prompt,
         scriptOptions: {
           style: scriptStyle,
           theme: scriptTheme,
@@ -658,6 +677,7 @@ export function WorkspaceVideo() {
         },
       });
       setPrompt(script);
+      lastGeneratedScriptRef.current = script;
       trackEvent('video_script_generate_success', {
         client_platform: 'mobile',
         duration_seconds: parseInt(duration, 10) || 5,
@@ -672,7 +692,7 @@ export function WorkspaceVideo() {
         target_model: scriptTargetModel || videoModel,
         error_message: error instanceof Error ? error.message.slice(0, 120) : 'unknown',
       });
-      notify(error instanceof Error ? error.message : 'Không thể tạo kịch bản video bằng Grok AI.', 'error');
+      notify(error instanceof Error ? error.message : 'Không thể tạo kịch bản video bằng Claude AI.', 'error');
     } finally {
       setIsGeneratingScript(false);
     }
@@ -758,9 +778,10 @@ export function WorkspaceVideo() {
           stagedMotionVideoUrl = await uploadFileToR2(motionVideoFile, 'inputs/motion-control');
         }
 
+        const compiledVideoPrompt = activeMode === 'video_ai' ? compileVideoScriptForDuration(prompt, duration) : prompt;
         const queuePayload = activeMode === 'video_ai'
           ? {
-              recipeType: 'video_generate_recipe_v1', modelId: videoModel, prompt: queuedPrompt,
+              recipeType: 'video_generate_recipe_v1', modelId: videoModel, prompt: compiledVideoPrompt || queuedPrompt,
               duration: duration.toLowerCase(), resolution: isGommoVideoSelected ? gommoPricingInput.resolution : quality.toLowerCase(), aspectRatio,
               speed: isGommoVideoSelected ? gommoPricingInput.speed : effectiveSpeedId, serverId: effectiveServerId, providerMode: isGommoVideoSelected ? providerMode : undefined, pricingOptionId: isGommoVideoSelected ? gommoPricing?.optionId : undefined, keyframeImage: stagedKeyframeImage, endFrameImage: stagedEndFrameImage, audio: isGommoVideoSelected ? gommoPricingInput.audio : effectiveVideoAudio,
             }
@@ -777,7 +798,7 @@ export function WorkspaceVideo() {
             };
 
         await enqueueServerJob({
-          id: jobId, prompt: queuedPrompt, toolId: effectiveToolId, toolName: effectiveToolName,
+          id: jobId, prompt: activeMode === 'video_ai' ? (compiledVideoPrompt || queuedPrompt) : queuedPrompt, toolId: effectiveToolId, toolName: effectiveToolName,
           engine: selectedModelName, assetType: 'video', costVcoin: cost,
           queueKind: activeMode === 'video_ai' ? 'video_generate' : 'motion_generate',
           clientPlatform: 'mobile',
@@ -810,7 +831,7 @@ export function WorkspaceVideo() {
             Đạo diễn kịch bản AI
           </div>
           <p className="mt-1 text-[11px] leading-relaxed text-cyan-700/80 dark:text-cyan-100/80">
-            Nhập ý tưởng ngắn trong prompt, AI sẽ dùng ảnh tham chiếu trên R2 để viết kịch bản chi tiết.
+            Claude Sonnet 4.6 dùng ảnh tham chiếu trên R2 để viết kịch bản chi tiết.
           </p>
         </div>
         <button
@@ -973,7 +994,7 @@ export function WorkspaceVideo() {
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   placeholder="Nhập kịch bản ngắn hoặc ý tưởng chính. Ví dụ: nhân vật nhìn vào gương, giữ dáng tự tin, ánh sáng chuyển nhẹ..."
-                  className="w-full h-24 bg-transparent text-[15px] leading-relaxed resize-none focus:outline-none placeholder:text-gray-300 text-gray-800 dark:text-zinc-100"
+                  className="w-full min-h-[320px] max-h-[70vh] overflow-y-auto bg-transparent text-[15px] leading-relaxed resize-y focus:outline-none placeholder:text-gray-300 text-gray-800 dark:text-zinc-100"
                   disabled={stage === 'submitting'}
                 />
               </div>

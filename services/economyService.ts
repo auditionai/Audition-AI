@@ -1846,7 +1846,7 @@ export const getApiKeyName = async (key: string): Promise<string> => {
     }
 };
 
-export const getSystemApiKey = async (tier: 'flash' | 'pro' | 'grok' = 'flash', excludedKeys: string[] = []): Promise<string | null> => {
+export const getSystemApiKey = async (tier: 'flash' | 'pro' | 'claude' = 'flash', excludedKeys: string[] = []): Promise<string | null> => {
     if (!supabase) return processEnv.API_KEY || null;
     try {
         // 1. Clean up expired stats
@@ -1907,9 +1907,9 @@ export const getSystemApiKey = async (tier: 'flash' | 'pro' | 'grok' = 'flash', 
 
         // 3. Filter by tier
         let tierKeys = allKeys;
-        if (tier === 'grok') {
+        if (tier === 'claude') {
             tierKeys = allKeys.filter((k: any) =>
-                k.name && k.name.includes('[GROK]'),
+                k.name && k.name.includes('[CLAUDE]'),
             );
         } else if (tier === 'pro') {
             tierKeys = allKeys.filter((k: any) => k.name && k.name.includes('[PRO]'));
@@ -1918,7 +1918,7 @@ export const getSystemApiKey = async (tier: 'flash' | 'pro' | 'grok' = 'flash', 
         }
 
         if (tierKeys.length === 0) {
-            if (tier === 'grok') {
+            if (tier === 'claude') {
                 return null;
             }
             if (allKeys.length > 0) {
@@ -1983,11 +1983,11 @@ export const getSystemApiKey = async (tier: 'flash' | 'pro' | 'grok' = 'flash', 
     }
 };
 
-export const saveSystemApiKey = async (key: string, tier: 'flash' | 'pro' | 'grok' = 'grok'): Promise<{success: boolean, error?: string}> => {
+export const saveSystemApiKey = async (key: string, tier: 'flash' | 'pro' | 'claude' = 'claude'): Promise<{success: boolean, error?: string}> => {
     if (!supabase) return { success: false, error: "No Database" };
     try {
         const cleanKey = key.trim();
-        const tierTag = tier === 'grok' ? '[GROK]' : tier === 'pro' ? '[PRO]' : '[FLASH]';
+        const tierTag = tier === 'claude' ? '[CLAUDE]' : tier === 'pro' ? '[PRO]' : '[FLASH]';
         
         // Check if exists
         const { data: existing } = await supabase
@@ -1997,7 +1997,7 @@ export const saveSystemApiKey = async (key: string, tier: 'flash' | 'pro' | 'gro
             .single();
 
         if (existing) {
-             let newName = existing.name || `Grok API Key ${new Date().toISOString()}`;
+             let newName = existing.name || `Claude API Key ${new Date().toISOString()}`;
              if (!newName.includes(tierTag)) {
                  newName = `${tierTag} ${newName.replace(/\[PRO\]|\[FLASH\]/g, '').trim()}`;
              }
@@ -2005,7 +2005,7 @@ export const saveSystemApiKey = async (key: string, tier: 'flash' | 'pro' | 'gro
              if (error) throw error;
         } else {
              const { error } = await supabase.from('api_keys').insert({
-                 name: `${tierTag} ${tier === 'grok' ? 'Grok API Key' : 'Service Account'} ` + new Date().toISOString(),
+                 name: `${tierTag} ${tier === 'claude' ? 'Claude API Key' : 'Service Account'} ` + new Date().toISOString(),
                  key_value: cleanKey,
                  status: 'active'
              });

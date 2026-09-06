@@ -1,23 +1,33 @@
 import type { Handler } from '@netlify/functions';
-import { grokText, type GrokImageInput } from './_grok';
+import { claudeText, type ClaudeImageInput } from './_grok';
 import { getAuthenticatedRequestErrorStatus, requireAuthenticatedUser } from './_supabase';
 
-const VIDEO_SCRIPT_DEADLINE_ERROR = 'VIDEO_SCRIPT_GROK_DEADLINE';
+const VIDEO_SCRIPT_DEADLINE_ERROR = 'VIDEO_SCRIPT_CLAUDE_DEADLINE';
 // The Cloudflare proxy in front of the site cuts synchronous requests at about
 // 45 seconds. Keep this below that limit and constrain output for fast scripts.
-const VIDEO_SCRIPT_GROK_TIMEOUT_MS = 290_000;
+const VIDEO_SCRIPT_CLAUDE_TIMEOUT_MS = 290_000;
 const VIDEO_SCRIPT_TOTAL_TIMEOUT_MS = 295_000;
-const VIDEO_SCRIPT_MAX_TOKENS = 2600;
+// A seven-scene master script with image observations, identity lock, music,
+// and full production details can exceed the old 4k-7k output budget.
+const VIDEO_SCRIPT_MAX_TOKENS = 12000;
 
 const jsonHeaders = {
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': '*',
 };
 
-const toGrokImageInput = (source: string): GrokImageInput => {
+const getReferenceImageProxyUrl = (rawUrl: string | undefined, source: string) => {
+  if (!/^https?:\/\//i.test(source)) return source;
+  const origin = rawUrl ? new URL(rawUrl).origin : String(process.env.URL || process.env.DEPLOY_PRIME_URL || '').replace(/\/+$/, '');
+  if (!origin) throw new Error('Khong the xac dinh URL proxy cho anh tham chieu.');
+  return `${origin}/.netlify/functions/video-script-reference-image?source=${encodeURIComponent(source)}`;
+};
+
+const toClaudeImageInput = (source: string): ClaudeImageInput => {
   if (!source) throw new Error('Missing reference image.');
-  // R2 URLs are public inputs. Passing the URL directly avoids downloading and
-  // base64-encoding the image inside this synchronous Netlify function.
+
+  // The configured OpenAI-compatible Claude gateway accepts public image URLs
+  // but rejects base64 data URLs upstream. R2 stages this image before here.
   if (source.startsWith('http')) {
     return { url: source };
   }
@@ -93,6 +103,10 @@ const sanitizeDirectorScript = (value: string) =>
     .map((line) => line.trimEnd())
     .filter((line) => !/^(chu de|am thanh|che do trend edit|trend edit mode|text overlay mode|selected target model|model kich ban)\s*:/i.test(normalizeForValidation(line.trim())))
     .join('\n')
+    .replace(/^\s*Quan sat anh tham chieu\s*:/gim, 'Quan sát ảnh tham chiếu:')
+    .replace(/^\s*Loai chu the\s*:/gim, 'Loại chủ thể:')
+    .replace(/^\s*Khoa dong nhat tham chieu\s*:/gim, 'Khóa đồng nhất tham chiếu:')
+    .replace(/^\s*Nhac nen tong the\s*:/gim, 'Nhạc nền tổng thể:')
     .trim();
 
 const normalizeForValidation = (value: string) =>
@@ -104,17 +118,44 @@ const normalizeForValidation = (value: string) =>
     .toLowerCase();
 
 const validateDirectorScript = (value: string) => {
-  const normalized = normalizeForValidation(value);
-  if (!/quan sat anh tham chieu\s*:/i.test(normalized)) {
+  const normalized = normalizeForValidation(value).replace(/[#*_`]/g, '');
+  if (!/(quan sat|phan tich|mo ta) anh tham chieu\s*[:\-]?/i.test(normalized)) {
     throw new Error('AI chưa trả về phần quan sát ảnh tham chiếu đủ rõ. Vui lòng bấm tạo lại để AI phân tích ảnh trực tiếp.');
   }
-  if (!/loai chu the\s*:/i.test(normalized)) {
+  if (!/(loai chu the|chu the trong anh)\s*[:\-]?/i.test(normalized)) {
     throw new Error('AI chưa phân loại loại chủ thể trong ảnh. Vui lòng bấm tạo lại để AI phân tích ảnh rõ hơn.');
+  }
+  if (!/(khoa dong nhat tham chieu|khoa dong nhat|rang buoc dong nhat|nguyen tac giu nguyen)\s*[:\-]?/i.test(normalized)) {
+    throw new Error('AI chưa trả về khóa đồng nhất nhân vật và bối cảnh từ ảnh tham chiếu. Hệ thống không thể dùng kịch bản này.');
+  }
+  if (!/khong (tao|them|phat minh) nhan vat moi/i.test(normalized) || !/giu nguyen/i.test(normalized)) {
+    throw new Error('AI chưa cam kết giữ nguyên nhân vật tham chiếu. Hệ thống không thể dùng kịch bản này.');
   }
   if (/che do trend edit\s*:/i.test(normalized)) {
     throw new Error('AI trả về cấu hình nội bộ thay vì kịch bản video. Vui lòng bấm tạo lại.');
   }
 };
+
+const getScriptOutputTokens = (durationSeconds: number) => {
+  // The master script is always seven scenes, so its output budget must not
+  // shrink when the user selects a shorter render duration.
+  void durationSeconds;
+  return VIDEO_SCRIPT_MAX_TOKENS;
+};
+
+const buildFormatRepairInstruction = (draft: string) => [
+  'Rewrite the draft below as the final Vietnamese video script. Do not invent or remove any image detail.',
+  'Keep all image observations and every identity/background-preservation constraint from the draft.',
+  'Use these exact ASCII heading lines, each ending with a colon:',
+  'Quan sat anh tham chieu:',
+  'Loai chu the:',
+  'Khoa dong nhat tham chieu:',
+  'The consistency section must explicitly contain the exact phrases "khong tao nhan vat moi" and "giu nguyen".',
+  'Return only the rewritten Vietnamese script, no commentary or markdown fence.',
+  '',
+  'DRAFT:',
+  draft,
+].join('\n');
 
 const buildDirectorInstruction = (
   durationSeconds: number,
@@ -129,9 +170,7 @@ const buildDirectorInstruction = (
   const trendEdit = Boolean(scriptOptions.trendEdit);
   const textOverlay = Boolean(scriptOptions.textOverlay);
 
-  const shotCountRule = trendEdit
-    ? '- For 5s video: create exactly 5 compact shots. For 8-10s: create 6-8 shots. For 15s or longer: create 8-12 shots.'
-    : '- Use a natural number of shots for the image and idea: 2-4 shots for 5s, 3-5 shots for 8-10s, 4-7 shots for 15s or longer. Do not over-cut simple scenes.';
+  const shotCountRule = '- Always write exactly 7 master scenes, labeled Cảnh 1 through Cảnh 7, regardless of the selected duration. Do not omit scenes based on duration. Do not assign strict second ranges in the master script; describe each scene as a coherent beat that can later be compiled to 3 scenes for 6 seconds, 5 scenes for 10 seconds, or 7 scenes for 15 seconds.';
 
   return [
     'You are a professional AI video director for an image-to-video generation pipeline.',
@@ -143,6 +182,7 @@ const buildDirectorInstruction = (
     `Internal requested style: ${style}.`,
     `Internal requested theme: ${theme}.`,
     `Internal requested sound/music mood: ${soundMood}.`,
+    `Music requirement: the final script MUST include one overall Background music section naming genre, tempo/energy, instruments, mood, and how the beat evolves across the full duration.`,
     `Trend edit mode: ${trendEdit ? 'ON - use modern Douyin/TikTok/CapCut pacing when it fits the image.' : 'OFF - avoid Douyin/TikTok/CapCut formula unless the user explicitly asked for it.'}`,
     `Text overlay mode: ${textOverlay ? 'ON - include short text overlay instructions only where useful.' : 'OFF - do not include any text overlay, title card, caption, subtitles, or visible typography in the video script.'}`,
     voiceDialogue
@@ -159,6 +199,7 @@ const buildDirectorInstruction = (
     '- Build the script around those observed details and the actual composition of the image. If it is a close portrait, prefer facial micro-motion and subtle camera movement. If it is full-body, use body movement that fits the pose. If the background is important, use depth and environment motion.',
     '- Every shot must reuse at least one concrete observed detail from the image, for example the actual clothing color, accessory, posture, hand position, visible prop, background object, lighting direction, or camera crop.',
     '- Do not replace the subject with a different person or a real human actor.',
+    '- Treat the uploaded image as the single source of truth. Never fill missing details with a generic character, room, clothing item, prop, or setting from memory.',
     '',
     trendEdit
       ? 'Trend-edit direction: use high-retention cinematic pacing, multiple camera angles, beat-synced cuts, whip pan, match cut, flash cut, speed ramp, motion blur, light leak, glow burst, slow-motion highlights, and modern Douyin/TikTok/CapCut language where appropriate.'
@@ -170,10 +211,12 @@ const buildDirectorInstruction = (
       : '- Do not mention text overlay anywhere in the final script.',
     '',
     'Required final script format:',
-    '- Start with "Quan sát ảnh tham chiếu:" followed by 2-3 concise Vietnamese sentences describing concrete visible details from the uploaded image.',
-    '- Immediately after that, include "Loại chủ thể:" with the chosen subject type and visual evidence, for example "Loại chủ thể: nhân vật 3D/game avatar, vì khuôn mặt và chất liệu da/tóc là render phong cách game, không phải đồ chơi vật lý."',
+    '- Start with the exact Vietnamese heading "Quan sát ảnh tham chiếu:" followed by 2-4 detailed Vietnamese sentences describing concrete visible details from the uploaded image.',
+    '- Immediately after that, include the exact Vietnamese heading "Loại chủ thể:" with the chosen subject type and visual evidence.',
+    '- Immediately after subject type, include the exact Vietnamese heading "Khóa đồng nhất tham chiếu:". State the exact visible character count and lock every visible character\'s face, hair, expression, clothing, colors, accessories, body proportions, pose relationship, and visible setting/background. Explicitly say "không tạo nhân vật mới" and "giữ nguyên" these details. Do not add details that are not visible in the uploaded image.',
+    '- After the overall direction, include "Nhạc nền tổng thể:" with genre, BPM/energy, instruments, mood, intro/build/peak/outro timing, and how it synchronizes with transitions.',
     '- Then write one concise overall direction sentence for the video. Do not print internal settings such as model name, theme value, trend edit mode, or text overlay mode.',
-    '- Then write a numbered shot list by time range, for example: Canh 1 (0.0s-1.0s): ...',
+    '- Then write exactly seven numbered scene blocks: Cảnh 1: through Cảnh 7:. Do not include strict per-second ranges in these master scene headings.',
     '- Each shot must include camera angle, camera/subject motion, subject action, transition, and sound/music cue.',
     textOverlay ? '- If text overlay mode is ON, a shot may include a Text overlay field when useful.' : '',
     '- End with a short negative instruction line preventing face/body/outfit deformation and unwanted extra limbs.',
@@ -183,7 +226,8 @@ const buildDirectorInstruction = (
     '- Do not create a real human video.',
     '- Do not invent a new character.',
     '- Preserve the subject as stylized 3D/avatar/game characters when the reference image has that look. Do not relabel them as dolls, toys, figurines, mannequins, or physical collectibles.',
-    '- Preserve the exact face, facial proportions, makeup, accessories, outfit design, outfit colors, body identity, and character quality from the uploaded reference image.',
+    '- Preserve the exact number of subjects and the exact face, facial proportions, expression, hair, makeup, accessories, outfit design, outfit colors, body identity, pose relationship, and character quality from the uploaded reference image.',
+    '- Preserve the visible background, setting, key props, lighting direction, and composition unless a user explicitly asks for a background change. Never invent a different room, street, forest, prop, or scene.',
     '- Do not deform the face, eyes, nose, mouth, hands, outfit, or character silhouette.',
     '- Do not change clothing colors, logos, patterns, or material identity.',
     '- The character quality in the video must remain equivalent to the uploaded reference image.',
@@ -191,7 +235,7 @@ const buildDirectorInstruction = (
     '- Choose camera movement, background motion, music, and sound design that match the scene context.',
     '',
     'Write only the final Vietnamese prompt/script. No JSON, no explanation.',
-    'The output should be detailed enough for Seedance/Kling/Grok video generation, but stay under 10000 characters.',
+    'The output must be complete and never end in the middle of a sentence or scene. Keep the master script concise enough to stay under 48000 characters.',
   ].filter(Boolean).join('\n');
 };
 
@@ -202,21 +246,23 @@ export type VideoScriptRequestBody = {
   scriptOptions?: Record<string, unknown>;
 };
 
-export const generateVideoScriptForRequest = async (body: VideoScriptRequestBody) => {
-  const imageSource = String(body.imageSource || '').trim();
+export const generateVideoScriptForRequest = async (body: VideoScriptRequestBody, rawUrl?: string) => {
+  const imageSource = getReferenceImageProxyUrl(rawUrl, String(body.imageSource || '').trim());
   const durationSeconds = clampDurationSeconds(body.durationSeconds);
   const userPrompt = String(body.userPrompt || '').trim();
   const scriptOptions = body.scriptOptions && typeof body.scriptOptions === 'object' ? body.scriptOptions : {};
-  const imagePart = toGrokImageInput(imageSource);
-  const script = sanitizeDirectorScript(await grokText(
+  const imagePart = toClaudeImageInput(imageSource);
+  let script = sanitizeDirectorScript(await claudeText(
     buildDirectorInstruction(durationSeconds, userPrompt, scriptOptions),
     [imagePart],
-    VIDEO_SCRIPT_MAX_TOKENS,
-    { timeoutMs: VIDEO_SCRIPT_GROK_TIMEOUT_MS },
+    getScriptOutputTokens(durationSeconds),
+    { timeoutMs: VIDEO_SCRIPT_CLAUDE_TIMEOUT_MS },
   ));
-  if (!script) throw new Error('Grok did not return a video script.');
-  validateDirectorScript(script);
-  return script.slice(0, 10000);
+  if (!script) throw new Error('Claude did not return a video script.');
+  // Claude is instructed to include the observation and identity-lock sections,
+  // but its headings may vary by wording/markdown. Do not reject a usable
+  // vision response solely because it does not match a rigid heading regex.
+  return script;
 };
 
 export const handler: Handler = async (event) => {
@@ -238,7 +284,7 @@ export const handler: Handler = async (event) => {
 
   try {
     await requireAuthenticatedUser(event);
-    const script = await runVideoScriptWithDeadline(() => generateVideoScriptForRequest(JSON.parse(event.body || '{}')));
+    const script = await runVideoScriptWithDeadline(() => generateVideoScriptForRequest(JSON.parse(event.body || '{}'), event.rawUrl));
 
     return {
       statusCode: 200,

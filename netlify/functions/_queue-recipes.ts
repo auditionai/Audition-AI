@@ -17,7 +17,7 @@ import {
   synthesizeStrictImagePrompt,
 } from './_grok-director';
 import { analyzeImageGenerationVision } from './_grok-image-vision';
-import { GROK_MODEL } from './_grok';
+import { CLAUDE_MODEL } from './_grok';
 
 const TST_API_BASE = 'https://api.tramsangtao.com/v1';
 const TST_UPLOAD_STATUS_POLL_INTERVAL_MS = 2_000;
@@ -349,8 +349,8 @@ export const synthesizeImageGeneratePrompt = async (
         at: new Date().toISOString(),
         task: 'image_prompt_synthesis',
         status: 'warning',
-        model: GROK_MODEL,
-        message: `Skipped Grok AI prompt synthesis and used the local JSON prompt builder. Reasons: ${bypassDecision.reasons.join(', ')}`,
+        model: CLAUDE_MODEL,
+        message: `Skipped Claude prompt synthesis and used the local JSON prompt builder. Reasons: ${bypassDecision.reasons.join(', ')}`,
       });
     }
     return buildFallbackSynthesizedPrompt(payload);
@@ -370,14 +370,14 @@ export const synthesizeImageGeneratePrompt = async (
         at: new Date().toISOString(),
         task: 'image_prompt_synthesis',
         status: 'warning',
-        model: GROK_MODEL,
-        message: `Grok AI prompt synthesis fell back to the local JSON prompt builder. Original error: ${
+        model: CLAUDE_MODEL,
+        message: `Claude prompt synthesis fell back to the local JSON prompt builder. Original error: ${
           error instanceof Error ? error.message : String(error || 'Unknown error')
         }`,
       });
     }
 
-    console.warn('[queue-recipes] Grok AI prompt synthesis unavailable, falling back to base prompt:', error);
+    console.warn('[queue-recipes] Claude prompt synthesis unavailable, falling back to base prompt:', error);
     return buildFallbackSynthesizedPrompt(payload);
   }
 };
@@ -490,8 +490,8 @@ const synthesizeImageGeneratePromptWithLastResortFallback = async (
         at: new Date().toISOString(),
         task: 'image_prompt_synthesis',
         status: 'warning',
-        model: GROK_MODEL,
-        message: `Grok AI prompt synthesis hit the last-resort local JSON fallback. Original error: ${
+        model: CLAUDE_MODEL,
+        message: `Claude prompt synthesis hit the last-resort local JSON fallback. Original error: ${
           error instanceof Error ? error.message : String(error || 'Unknown error')
         }`,
       });
@@ -531,8 +531,8 @@ export const prepareImageGeneratePromptWithinLimit = async (
           at: new Date().toISOString(),
           task: 'image_reference_analysis',
           status: 'warning',
-          model: GROK_MODEL,
-          message: `Grok AI vision analysis fell back to rule-based prompting only. Original error: ${
+        model: CLAUDE_MODEL,
+        message: `Claude vision analysis fell back to rule-based prompting only. Original error: ${
             error instanceof Error ? error.message : String(error || 'Unknown error')
           }`,
         });

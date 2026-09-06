@@ -356,7 +356,7 @@ assert(gpti2ProviderSource.includes("const NANO_OUTPUT_RESOLUTION = '2K';"));
 assert(gpti2ProviderSource.includes('const buildNanoRequest'));
 
 const grokProviderSource = await readFile(new URL('../netlify/functions/_grok.ts', import.meta.url), 'utf8');
-assert(grokProviderSource.includes("|| 'grok-4.5'"));
+assert(grokProviderSource.includes("|| 'claude-sonnet-4-6'"));
 assert(grokProviderSource.includes("https://sub.digishop.work/v1"));
 assert(grokProviderSource.includes('client.chat.completions.create'));
 const grokHealthSource = await readFile(new URL('../netlify/functions/grok-health.ts', import.meta.url), 'utf8');
@@ -366,13 +366,14 @@ assert(videoScriptDirectorSource.includes('VIDEO_SCRIPT_MAX_TOKENS = 2600'));
 assert(videoScriptDirectorSource.includes('VIDEO_SCRIPT_TOTAL_TIMEOUT_MS = 295_000'));
 assert(videoScriptDirectorSource.includes('timeoutMs: VIDEO_SCRIPT_GROK_TIMEOUT_MS'));
 assert(videoScriptDirectorSource.includes('return { url: source }'));
+assert(videoScriptDirectorSource.includes('Khoa dong nhat tham chieu'));
 assert(videoScriptDirectorSource.includes('Promise.race([operation(controller.signal), deadline])'));
 const grokVisionSource = await readFile(new URL('../netlify/functions/_grok-image-vision.ts', import.meta.url), 'utf8');
-assert(grokVisionSource.includes('timeoutMs: GROK_BACKGROUND_TIMEOUT_MS'));
+assert(grokVisionSource.includes('timeoutMs: CLAUDE_BACKGROUND_TIMEOUT_MS'));
 const grokImageVerifySource = await readFile(new URL('../netlify/functions/_grok-image-verify.ts', import.meta.url), 'utf8');
-assert(grokImageVerifySource.includes('timeoutMs: GROK_BACKGROUND_TIMEOUT_MS'));
+assert(grokImageVerifySource.includes('timeoutMs: CLAUDE_BACKGROUND_TIMEOUT_MS'));
 const grokVideoInputReviewSource = await readFile(new URL('../netlify/functions/_grok-video-input-review.ts', import.meta.url), 'utf8');
-assert(grokVideoInputReviewSource.includes('timeoutMs: GROK_BACKGROUND_TIMEOUT_MS'));
+assert(grokVideoInputReviewSource.includes('timeoutMs: CLAUDE_BACKGROUND_TIMEOUT_MS'));
 
 for (const filename of ['../views/features/GenerationTool.tsx', '../mobile-app/src/v2/views/WorkspaceImage.tsx']) {
   const source = await readFile(new URL(filename, import.meta.url), 'utf8');

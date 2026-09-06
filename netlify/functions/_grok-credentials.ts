@@ -1,6 +1,6 @@
-import { getGrokApiKey } from './_grok';
+import { getClaudeApiKey } from './_grok';
 
-type GrokSession = {
+type ClaudeSession = {
   credentialId: string;
   credentialName: string;
   credentials: Record<string, never>;
@@ -8,9 +8,9 @@ type GrokSession = {
   accessToken: string;
 };
 
-type RunWithGrokCredentialOptions<T> = {
+type RunWithClaudeCredentialOptions<T> = {
   taskName: string;
-  operation: (session: GrokSession) => Promise<T>;
+  operation: (session: ClaudeSession) => Promise<T>;
   onAttemptFailure?: (info: {
     credentialId: string;
     credentialName: string;
@@ -22,17 +22,17 @@ type RunWithGrokCredentialOptions<T> = {
 
 // Compatibility export while queue diagnostic types are migrated. It never
 // creates a Google token or contacts Vertex AI.
-export const runWithVertexCredentialFailover = async <T>({
+export const runWithClaudeCredential = async <T>({
   taskName,
   operation,
   onAttemptFailure,
-}: RunWithGrokCredentialOptions<T>): Promise<T> => {
-  const session: GrokSession = {
-    credentialId: 'grok',
-    credentialName: 'Grok API key',
+}: RunWithClaudeCredentialOptions<T>): Promise<T> => {
+  const session: ClaudeSession = {
+    credentialId: 'claude',
+    credentialName: 'Claude API key',
     credentials: {},
-    projectId: 'grok',
-    accessToken: await getGrokApiKey(),
+    projectId: 'claude',
+    accessToken: await getClaudeApiKey(),
   };
   try {
     return await operation(session);
@@ -43,4 +43,3 @@ export const runWithVertexCredentialFailover = async <T>({
   }
 };
 
-export const isVertexServiceAccountJson = () => false;

@@ -113,13 +113,13 @@ const normalizeForValidation = (value: string) =>
 
 const validateDirectorScript = (value: string) => {
   const normalized = normalizeForValidation(value);
-  if (!/quan sat anh tham chieu\s*:/i.test(normalized)) {
+  if (!/(quan sat|phan tich|mo ta) anh tham chieu\s*:/i.test(normalized)) {
     throw new Error('AI chưa trả về phần quan sát ảnh tham chiếu đủ rõ. Vui lòng bấm tạo lại để AI phân tích ảnh trực tiếp.');
   }
-  if (!/loai chu the\s*:/i.test(normalized)) {
+  if (!/(loai chu the|chu the trong anh)\s*:/i.test(normalized)) {
     throw new Error('AI chưa phân loại loại chủ thể trong ảnh. Vui lòng bấm tạo lại để AI phân tích ảnh rõ hơn.');
   }
-  if (!/khoa dong nhat tham chieu\s*:/i.test(normalized)) {
+  if (!/(khoa dong nhat tham chieu|khoa dong nhat|rang buoc dong nhat|nguyen tac giu nguyen)\s*:/i.test(normalized)) {
     throw new Error('AI chưa trả về khóa đồng nhất nhân vật và bối cảnh từ ảnh tham chiếu. Hệ thống không thể dùng kịch bản này.');
   }
   if (!/khong (tao|them|phat minh) nhan vat moi/i.test(normalized) || !/giu nguyen/i.test(normalized)) {
@@ -129,6 +129,20 @@ const validateDirectorScript = (value: string) => {
     throw new Error('AI trả về cấu hình nội bộ thay vì kịch bản video. Vui lòng bấm tạo lại.');
   }
 };
+
+const buildFormatRepairInstruction = (draft: string) => [
+  'Rewrite the draft below as the final Vietnamese video script. Do not invent or remove any image detail.',
+  'Keep all image observations and every identity/background-preservation constraint from the draft.',
+  'Use these exact ASCII heading lines, each ending with a colon:',
+  'Quan sat anh tham chieu:',
+  'Loai chu the:',
+  'Khoa dong nhat tham chieu:',
+  'The consistency section must explicitly contain the exact phrases "khong tao nhan vat moi" and "giu nguyen".',
+  'Return only the rewritten Vietnamese script, no commentary or markdown fence.',
+  '',
+  'DRAFT:',
+  draft,
+].join('\n');
 
 const buildDirectorInstruction = (
   durationSeconds: number,
@@ -188,6 +202,7 @@ const buildDirectorInstruction = (
     '- Start with "Quan sát ảnh tham chiếu:" followed by 2-3 concise Vietnamese sentences describing concrete visible details from the uploaded image.',
     '- Immediately after that, include "Loại chủ thể:" with the chosen subject type and visual evidence, for example "Loại chủ thể: nhân vật 3D/game avatar, vì khuôn mặt và chất liệu da/tóc là render phong cách game, không phải đồ chơi vật lý."',
     '- Immediately after subject type, include "Khóa đồng nhất tham chiếu:". State the exact visible character count and lock every visible character\'s face, hair, expression, clothing, colors, accessories, body proportions, pose relationship, and visible setting/background. Explicitly say "không tạo nhân vật mới" and "giữ nguyên" these details. Do not add details that are not visible in the uploaded image.',
+    '- Required headings are ASCII and exact: "Quan sat anh tham chieu:", then "Loai chu the:", then "Khoa dong nhat tham chieu:". Do not translate, alter, or omit these headings.',
     '- Then write one concise overall direction sentence for the video. Do not print internal settings such as model name, theme value, trend edit mode, or text overlay mode.',
     '- Then write a numbered shot list by time range, for example: Canh 1 (0.0s-1.0s): ...',
     '- Each shot must include camera angle, camera/subject motion, subject action, transition, and sound/music cue.',
@@ -225,14 +240,24 @@ export const generateVideoScriptForRequest = async (body: VideoScriptRequestBody
   const userPrompt = String(body.userPrompt || '').trim();
   const scriptOptions = body.scriptOptions && typeof body.scriptOptions === 'object' ? body.scriptOptions : {};
   const imagePart = toGrokImageInput(imageSource);
-  const script = sanitizeDirectorScript(await grokText(
+  let script = sanitizeDirectorScript(await grokText(
     buildDirectorInstruction(durationSeconds, userPrompt, scriptOptions),
     [imagePart],
     VIDEO_SCRIPT_MAX_TOKENS,
     { timeoutMs: VIDEO_SCRIPT_GROK_TIMEOUT_MS },
   ));
-  if (!script) throw new Error('Grok did not return a video script.');
-  validateDirectorScript(script);
+  if (!script) throw new Error('Claude did not return a video script.');
+  try {
+    validateDirectorScript(script);
+  } catch {
+    script = sanitizeDirectorScript(await grokText(
+      buildFormatRepairInstruction(script),
+      [imagePart],
+      VIDEO_SCRIPT_MAX_TOKENS,
+      { timeoutMs: VIDEO_SCRIPT_GROK_TIMEOUT_MS },
+    ));
+    validateDirectorScript(script);
+  }
   return script.slice(0, 10000);
 };
 

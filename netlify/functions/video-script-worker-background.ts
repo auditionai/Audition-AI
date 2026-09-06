@@ -17,7 +17,7 @@ export const handler: Handler = async (event) => {
   try {
     const { data: job, error } = await admin.from('video_script_jobs').select('request_payload').eq('id', jobId).maybeSingle();
     if (error || !job) throw error || new Error('VIDEO_SCRIPT_JOB_NOT_FOUND');
-    const script = await generateVideoScriptForRequest(job.request_payload as VideoScriptRequestBody);
+    const script = await generateVideoScriptForRequest(job.request_payload as VideoScriptRequestBody, event.rawUrl);
     await admin.from('video_script_jobs').update({ status: 'completed', script, updated_at: new Date().toISOString(), completed_at: new Date().toISOString() }).eq('id', jobId);
     return { statusCode: 200, body: JSON.stringify({ success: true }) };
   } catch (error: any) {

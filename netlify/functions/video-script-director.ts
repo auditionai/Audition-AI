@@ -14,6 +14,13 @@ const jsonHeaders = {
   'Access-Control-Allow-Origin': '*',
 };
 
+const getReferenceImageProxyUrl = (rawUrl: string | undefined, source: string) => {
+  if (!/^https?:\/\//i.test(source)) return source;
+  const origin = rawUrl ? new URL(rawUrl).origin : String(process.env.URL || process.env.DEPLOY_PRIME_URL || '').replace(/\/+$/, '');
+  if (!origin) throw new Error('Khong the xac dinh URL proxy cho anh tham chieu.');
+  return `${origin}/.netlify/functions/video-script-reference-image?source=${encodeURIComponent(source)}`;
+};
+
 const toGrokImageInput = (source: string): GrokImageInput => {
   if (!source) throw new Error('Missing reference image.');
 
@@ -212,8 +219,8 @@ export type VideoScriptRequestBody = {
   scriptOptions?: Record<string, unknown>;
 };
 
-export const generateVideoScriptForRequest = async (body: VideoScriptRequestBody) => {
-  const imageSource = String(body.imageSource || '').trim();
+export const generateVideoScriptForRequest = async (body: VideoScriptRequestBody, rawUrl?: string) => {
+  const imageSource = getReferenceImageProxyUrl(rawUrl, String(body.imageSource || '').trim());
   const durationSeconds = clampDurationSeconds(body.durationSeconds);
   const userPrompt = String(body.userPrompt || '').trim();
   const scriptOptions = body.scriptOptions && typeof body.scriptOptions === 'object' ? body.scriptOptions : {};
@@ -248,7 +255,7 @@ export const handler: Handler = async (event) => {
 
   try {
     await requireAuthenticatedUser(event);
-    const script = await runVideoScriptWithDeadline(() => generateVideoScriptForRequest(JSON.parse(event.body || '{}')));
+    const script = await runVideoScriptWithDeadline(() => generateVideoScriptForRequest(JSON.parse(event.body || '{}'), event.rawUrl));
 
     return {
       statusCode: 200,

@@ -109,6 +109,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/video-script-reference-image"
+  to = "/.netlify/functions/video-script-reference-image"
+  status = 200
+
+[[redirects]]
   from = "/api/queue-enqueue"
   to = "/.netlify/functions/queue-enqueue"
   status = 200

@@ -979,7 +979,7 @@ export function WorkspaceVideo() {
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   placeholder="Nhập kịch bản ngắn hoặc ý tưởng chính. Ví dụ: nhân vật nhìn vào gương, giữ dáng tự tin, ánh sáng chuyển nhẹ..."
-                  className="w-full h-24 bg-transparent text-[15px] leading-relaxed resize-none focus:outline-none placeholder:text-gray-300 text-gray-800 dark:text-zinc-100"
+                  className="w-full min-h-[320px] max-h-[70vh] overflow-y-auto bg-transparent text-[15px] leading-relaxed resize-y focus:outline-none placeholder:text-gray-300 text-gray-800 dark:text-zinc-100"
                   disabled={stage === 'submitting'}
                 />
               </div>

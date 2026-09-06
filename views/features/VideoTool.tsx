@@ -1390,8 +1390,8 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                     value={activeMode === 'video_ai' ? prompt : motionPrompt}
                     onChange={(e) => activeMode === 'video_ai' ? setPrompt(e.target.value) : setMotionPrompt(e.target.value)}
                     placeholder={activeMode === 'video_ai' ? "Mô tả kịch bản ngắn: nhân vật bước ra từ khung ảnh, xoay người tạo dáng tự tin..." : "Mô tả bối cảnh phía sau nhân vật..."}
-                    rows={6}
-                    className="w-full neu-input rounded-2xl p-4 text-xs leading-relaxed focus:outline-none resize-y font-sans"
+                    rows={16}
+                    className="w-full min-h-[360px] max-h-[70vh] overflow-y-auto neu-input rounded-2xl p-4 text-xs leading-relaxed focus:outline-none resize-y font-sans"
                 />
 
                 {activeMode === 'video_ai' && (

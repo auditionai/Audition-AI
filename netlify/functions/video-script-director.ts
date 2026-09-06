@@ -7,7 +7,7 @@ const VIDEO_SCRIPT_DEADLINE_ERROR = 'VIDEO_SCRIPT_CLAUDE_DEADLINE';
 // 45 seconds. Keep this below that limit and constrain output for fast scripts.
 const VIDEO_SCRIPT_CLAUDE_TIMEOUT_MS = 290_000;
 const VIDEO_SCRIPT_TOTAL_TIMEOUT_MS = 295_000;
-const VIDEO_SCRIPT_MAX_TOKENS = 2600;
+const VIDEO_SCRIPT_MAX_TOKENS = 7000;
 
 const jsonHeaders = {
   'Content-Type': 'application/json',
@@ -101,6 +101,10 @@ const sanitizeDirectorScript = (value: string) =>
     .map((line) => line.trimEnd())
     .filter((line) => !/^(chu de|am thanh|che do trend edit|trend edit mode|text overlay mode|selected target model|model kich ban)\s*:/i.test(normalizeForValidation(line.trim())))
     .join('\n')
+    .replace(/^\s*Quan sat anh tham chieu\s*:/gim, 'Quan sát ảnh tham chiếu:')
+    .replace(/^\s*Loai chu the\s*:/gim, 'Loại chủ thể:')
+    .replace(/^\s*Khoa dong nhat tham chieu\s*:/gim, 'Khóa đồng nhất tham chiếu:')
+    .replace(/^\s*Nhac nen tong the\s*:/gim, 'Nhạc nền tổng thể:')
     .trim();
 
 const normalizeForValidation = (value: string) =>
@@ -128,6 +132,12 @@ const validateDirectorScript = (value: string) => {
   if (/che do trend edit\s*:/i.test(normalized)) {
     throw new Error('AI trả về cấu hình nội bộ thay vì kịch bản video. Vui lòng bấm tạo lại.');
   }
+};
+
+const getScriptOutputTokens = (durationSeconds: number) => {
+  if (durationSeconds >= 15) return 7000;
+  if (durationSeconds >= 10) return 5600;
+  return 4200;
 };
 
 const buildFormatRepairInstruction = (draft: string) => [
@@ -158,8 +168,8 @@ const buildDirectorInstruction = (
   const textOverlay = Boolean(scriptOptions.textOverlay);
 
   const shotCountRule = trendEdit
-    ? '- For 5s video: create exactly 5 compact shots. For 8-10s: create 6-8 shots. For 15s or longer: create 8-12 shots.'
-    : '- Use a natural number of shots for the image and idea: 2-4 shots for 5s, 3-5 shots for 8-10s, 4-7 shots for 15s or longer. Do not over-cut simple scenes.';
+    ? '- For 6s video: create exactly 5 compact shots covering 0.0s-6.0s. For 10s: create exactly 7 shots covering 0.0s-10.0s. For 15s: create exactly 9 shots covering 0.0s-15.0s.'
+    : '- For 6s video: create 3-4 coherent shots covering 0.0s-6.0s. For 10s: create 4-5 coherent shots covering 0.0s-10.0s. For 15s: create 5-7 coherent shots covering 0.0s-15.0s. Every second must belong to one shot; never stop early.';
 
   return [
     'You are a professional AI video director for an image-to-video generation pipeline.',
@@ -171,6 +181,7 @@ const buildDirectorInstruction = (
     `Internal requested style: ${style}.`,
     `Internal requested theme: ${theme}.`,
     `Internal requested sound/music mood: ${soundMood}.`,
+    `Music requirement: the final script MUST include one overall Background music section naming genre, tempo/energy, instruments, mood, and how the beat evolves across the full duration.`,
     `Trend edit mode: ${trendEdit ? 'ON - use modern Douyin/TikTok/CapCut pacing when it fits the image.' : 'OFF - avoid Douyin/TikTok/CapCut formula unless the user explicitly asked for it.'}`,
     `Text overlay mode: ${textOverlay ? 'ON - include short text overlay instructions only where useful.' : 'OFF - do not include any text overlay, title card, caption, subtitles, or visible typography in the video script.'}`,
     voiceDialogue
@@ -199,10 +210,10 @@ const buildDirectorInstruction = (
       : '- Do not mention text overlay anywhere in the final script.',
     '',
     'Required final script format:',
-    '- Start with "Quan sát ảnh tham chiếu:" followed by 2-3 concise Vietnamese sentences describing concrete visible details from the uploaded image.',
-    '- Immediately after that, include "Loại chủ thể:" with the chosen subject type and visual evidence, for example "Loại chủ thể: nhân vật 3D/game avatar, vì khuôn mặt và chất liệu da/tóc là render phong cách game, không phải đồ chơi vật lý."',
-    '- Immediately after subject type, include "Khóa đồng nhất tham chiếu:". State the exact visible character count and lock every visible character\'s face, hair, expression, clothing, colors, accessories, body proportions, pose relationship, and visible setting/background. Explicitly say "không tạo nhân vật mới" and "giữ nguyên" these details. Do not add details that are not visible in the uploaded image.',
-    '- Required headings are ASCII and exact: "Quan sat anh tham chieu:", then "Loai chu the:", then "Khoa dong nhat tham chieu:". Do not translate, alter, or omit these headings.',
+    '- Start with the exact Vietnamese heading "Quan sát ảnh tham chiếu:" followed by 2-4 detailed Vietnamese sentences describing concrete visible details from the uploaded image.',
+    '- Immediately after that, include the exact Vietnamese heading "Loại chủ thể:" with the chosen subject type and visual evidence.',
+    '- Immediately after subject type, include the exact Vietnamese heading "Khóa đồng nhất tham chiếu:". State the exact visible character count and lock every visible character\'s face, hair, expression, clothing, colors, accessories, body proportions, pose relationship, and visible setting/background. Explicitly say "không tạo nhân vật mới" and "giữ nguyên" these details. Do not add details that are not visible in the uploaded image.',
+    '- After the overall direction, include "Nhạc nền tổng thể:" with genre, BPM/energy, instruments, mood, intro/build/peak/outro timing, and how it synchronizes with transitions.',
     '- Then write one concise overall direction sentence for the video. Do not print internal settings such as model name, theme value, trend edit mode, or text overlay mode.',
     '- Then write a numbered shot list by time range, for example: Canh 1 (0.0s-1.0s): ...',
     '- Each shot must include camera angle, camera/subject motion, subject action, transition, and sound/music cue.',
@@ -223,7 +234,7 @@ const buildDirectorInstruction = (
     '- Choose camera movement, background motion, music, and sound design that match the scene context.',
     '',
     'Write only the final Vietnamese prompt/script. No JSON, no explanation.',
-    'The output should be detailed enough for Seedance/Kling video generation, but stay under 10000 characters.',
+    'The output must cover the entire selected duration without truncation. Keep it under 24000 characters and never end in the middle of a sentence or shot.',
   ].filter(Boolean).join('\n');
 };
 
@@ -243,14 +254,14 @@ export const generateVideoScriptForRequest = async (body: VideoScriptRequestBody
   let script = sanitizeDirectorScript(await claudeText(
     buildDirectorInstruction(durationSeconds, userPrompt, scriptOptions),
     [imagePart],
-    VIDEO_SCRIPT_MAX_TOKENS,
+    getScriptOutputTokens(durationSeconds),
     { timeoutMs: VIDEO_SCRIPT_CLAUDE_TIMEOUT_MS },
   ));
   if (!script) throw new Error('Claude did not return a video script.');
   // Claude is instructed to include the observation and identity-lock sections,
   // but its headings may vary by wording/markdown. Do not reject a usable
   // vision response solely because it does not match a rigid heading regex.
-  return script.slice(0, 10000);
+  return script.slice(0, 24000);
 };
 
 export const handler: Handler = async (event) => {

@@ -48,7 +48,7 @@ interface AIModelOption {
 
 type VideoModelFamily = 'grok' | 'seedance' | 'kling' | 'veo' | 'hailuo' | 'wan' | 'other';
 
-const VIDEO_MODEL_FAMILY_ORDER: VideoModelFamily[] = ['grok', 'seedance', 'kling', 'veo', 'other'];
+const VIDEO_MODEL_FAMILY_ORDER: VideoModelFamily[] = ['grok', 'seedance', 'kling', 'veo'];
 
 const isExcludedVideoModel = (model: { id?: string; name?: string }) => {
   const value = `${model.id || ''} ${model.name || ''}`.toLowerCase();
@@ -286,7 +286,9 @@ export function WorkspaceVideo() {
             pricingOverrides: overrideRows
           }).vcoin
         }));
-        const routedVideoModels = liveVideoModels.filter((model: AIModelOption) => !isExcludedVideoModel(model));
+        const routedVideoModels = liveVideoModels
+          .filter((model: AIModelOption) => !isExcludedVideoModel(model))
+          .filter((model: AIModelOption) => getVideoModelFamily(model) !== 'other');
 
         const liveMotionModels = getMotionModelSpecs(livePricing, filteredModels)
           .filter((spec: any) => isModelAllowedForFeature(routingConfig, 'motion_control', spec.modelId))

@@ -69,7 +69,12 @@ interface AIModelOption {
 
 type VideoModelFamily = 'grok' | 'seedance' | 'kling' | 'veo' | 'hailuo' | 'wan' | 'other';
 
-const VIDEO_MODEL_FAMILY_ORDER: VideoModelFamily[] = ['grok', 'seedance', 'kling', 'veo', 'hailuo', 'wan', 'other'];
+const VIDEO_MODEL_FAMILY_ORDER: VideoModelFamily[] = ['grok', 'seedance', 'kling', 'veo', 'other'];
+
+const isExcludedVideoModel = (model: { id?: string; name?: string }) => {
+    const value = `${model.id || ''} ${model.name || ''}`.toLowerCase();
+    return value.includes('hailuo') || value.includes('wan') || value.includes('happyhorse') || value.includes('happy horse');
+};
 
 const VIDEO_MODEL_FAMILY_META: Record<VideoModelFamily, {
     label: string;
@@ -411,7 +416,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                   }).vcoin
               }));
               // Video models are shown only when present in the live TST catalog.
-              const routedVideoModels = liveVideoModels;
+              const routedVideoModels = liveVideoModels.filter((model) => !isExcludedVideoModel(model));
               const liveMotionModels = getMotionModelSpecs(livePricing, filteredModels)
                 .filter((spec) => isModelAllowedForFeature(routingConfig, 'motion_control', spec.modelId))
                 .filter((spec) => resolveProviderForModel(routingConfig, spec.modelId, 'motion_control') === 'tst')

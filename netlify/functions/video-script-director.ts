@@ -8,35 +8,19 @@ const VIDEO_SCRIPT_DEADLINE_ERROR = 'VIDEO_SCRIPT_GROK_DEADLINE';
 const VIDEO_SCRIPT_GROK_TIMEOUT_MS = 290_000;
 const VIDEO_SCRIPT_TOTAL_TIMEOUT_MS = 295_000;
 const VIDEO_SCRIPT_MAX_TOKENS = 2600;
-const MAX_REFERENCE_IMAGE_BYTES = 8 * 1024 * 1024;
 
 const jsonHeaders = {
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': '*',
 };
 
-const toGrokImageInput = async (source: string): Promise<GrokImageInput> => {
+const toGrokImageInput = (source: string): GrokImageInput => {
   if (!source) throw new Error('Missing reference image.');
 
-  // Gateway implementations can silently omit a remote image_url when
-  // forwarding an OpenAI-compatible request. Always supply verified bytes.
+  // The configured OpenAI-compatible Grok gateway accepts public image URLs
+  // but rejects base64 data URLs upstream. R2 stages this image before here.
   if (source.startsWith('http')) {
-    const response = await fetch(source, { signal: AbortSignal.timeout(60_000) });
-    if (!response.ok) throw new Error(`Khong the tai anh tham chieu de Grok phan tich (${response.status}).`);
-
-    const mimeType = String(response.headers.get('content-type') || 'image/jpeg').split(';', 1)[0].trim().toLowerCase();
-    const contentLength = Number(response.headers.get('content-length') || 0);
-    if (!mimeType.startsWith('image/')) throw new Error('Anh tham chieu tren R2 khong co dinh dang hinh anh hop le.');
-    if (Number.isFinite(contentLength) && contentLength > MAX_REFERENCE_IMAGE_BYTES) {
-      throw new Error('Anh tham chieu qua lon de Grok phan tich. Vui long dung anh nho hon 8 MB.');
-    }
-
-    const data = Buffer.from(await response.arrayBuffer());
-    if (!data.length) throw new Error('Anh tham chieu tren R2 trong hoac khong the doc.');
-    if (data.length > MAX_REFERENCE_IMAGE_BYTES) {
-      throw new Error('Anh tham chieu qua lon de Grok phan tich. Vui long dung anh nho hon 8 MB.');
-    }
-    return { mimeType, data: data.toString('base64') };
+    return { url: source };
   }
   if (!source.startsWith('data:')) {
     return { mimeType: 'image/jpeg', data: source };
@@ -233,7 +217,7 @@ export const generateVideoScriptForRequest = async (body: VideoScriptRequestBody
   const durationSeconds = clampDurationSeconds(body.durationSeconds);
   const userPrompt = String(body.userPrompt || '').trim();
   const scriptOptions = body.scriptOptions && typeof body.scriptOptions === 'object' ? body.scriptOptions : {};
-  const imagePart = await toGrokImageInput(imageSource);
+  const imagePart = toGrokImageInput(imageSource);
   const script = sanitizeDirectorScript(await grokText(
     buildDirectorInstruction(durationSeconds, userPrompt, scriptOptions),
     [imagePart],

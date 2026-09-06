@@ -7,7 +7,9 @@ const VIDEO_SCRIPT_DEADLINE_ERROR = 'VIDEO_SCRIPT_CLAUDE_DEADLINE';
 // 45 seconds. Keep this below that limit and constrain output for fast scripts.
 const VIDEO_SCRIPT_CLAUDE_TIMEOUT_MS = 290_000;
 const VIDEO_SCRIPT_TOTAL_TIMEOUT_MS = 295_000;
-const VIDEO_SCRIPT_MAX_TOKENS = 7000;
+// A seven-scene master script with image observations, identity lock, music,
+// and full production details can exceed the old 4k-7k output budget.
+const VIDEO_SCRIPT_MAX_TOKENS = 12000;
 
 const jsonHeaders = {
   'Content-Type': 'application/json',
@@ -135,9 +137,10 @@ const validateDirectorScript = (value: string) => {
 };
 
 const getScriptOutputTokens = (durationSeconds: number) => {
-  if (durationSeconds >= 15) return 7000;
-  if (durationSeconds >= 10) return 5600;
-  return 4200;
+  // The master script is always seven scenes, so its output budget must not
+  // shrink when the user selects a shorter render duration.
+  void durationSeconds;
+  return VIDEO_SCRIPT_MAX_TOKENS;
 };
 
 const buildFormatRepairInstruction = (draft: string) => [
@@ -232,7 +235,7 @@ const buildDirectorInstruction = (
     '- Choose camera movement, background motion, music, and sound design that match the scene context.',
     '',
     'Write only the final Vietnamese prompt/script. No JSON, no explanation.',
-    'The output must be complete and never end in the middle of a sentence or scene. Keep the master script concise enough to stay under 32000 characters.',
+    'The output must be complete and never end in the middle of a sentence or scene. Keep the master script concise enough to stay under 48000 characters.',
   ].filter(Boolean).join('\n');
 };
 
@@ -259,7 +262,7 @@ export const generateVideoScriptForRequest = async (body: VideoScriptRequestBody
   // Claude is instructed to include the observation and identity-lock sections,
   // but its headings may vary by wording/markdown. Do not reject a usable
   // vision response solely because it does not match a rigid heading regex.
-  return script.slice(0, 32000);
+  return script;
 };
 
 export const handler: Handler = async (event) => {

@@ -135,8 +135,8 @@ const buildMissingImageError = (data: any, modelName: string) => {
   ].filter(Boolean);
 
   return details.length > 0
-    ? `Grok AI did not return an edited image (${modelName}); ${details.join(' | ')}`
-    : `Grok AI did not return an edited image (${modelName}).`;
+    ? `Claude did not return an edited image (${modelName}); ${details.join(' | ')}`
+    : `Claude did not return an edited image (${modelName}).`;
 };
 
 export const runNanoBananaImageEdit = async ({

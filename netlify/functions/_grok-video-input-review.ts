@@ -1,4 +1,4 @@
-import { GROK_BACKGROUND_TIMEOUT_MS, grokJson } from './_grok';
+import { CLAUDE_BACKGROUND_TIMEOUT_MS, claudeJson } from './_grok';
 
 
 export type VideoInputReviewIssue =
@@ -171,11 +171,11 @@ const reviewImageInput = async (
   mode: VideoInputReviewMode,
 ): Promise<VideoInputReviewResult> => {
   const imagePart = await toInlineImagePart(imageSource);
-  const result = await grokJson<Record<string, unknown>>(
+  const result = await claudeJson<Record<string, unknown>>(
     buildReviewInstruction(mode),
     [{ mimeType: imagePart.inlineData.mimeType, data: imagePart.inlineData.data }],
     1024,
-    { timeoutMs: GROK_BACKGROUND_TIMEOUT_MS },
+    { timeoutMs: CLAUDE_BACKGROUND_TIMEOUT_MS },
   );
   return normalizeReviewResult(result);
 };

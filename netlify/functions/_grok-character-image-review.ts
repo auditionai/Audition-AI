@@ -1,4 +1,4 @@
-import { grokJson } from './_grok';
+import { claudeJson } from './_grok';
 import sharp from 'sharp';
 
 
@@ -110,7 +110,7 @@ const loadImageSource = async (source: string): Promise<LoadedImageSource> => {
 
   if (source.startsWith('http')) {
     // This is used by a synchronous user-facing endpoint, so reserve time for
-    // the Grok request instead of allowing remote image download to exhaust it.
+    // the Claude request instead of allowing remote image download to exhaust it.
     const response = await fetch(source, { signal: AbortSignal.timeout(15_000) });
     if (!response.ok) {
       throw new Error(`Failed to fetch review image: ${await parseErrorMessage(response)}`);
@@ -326,7 +326,7 @@ export const reviewCharacterImage = async (
   const pixelMetrics = await analyzePixelQuality(loadedImage.buffer);
   const promptPart = { text: buildReviewInstruction() };
 
-  const result = await grokJson<Record<string, unknown>>(
+  const result = await claudeJson<Record<string, unknown>>(
     String(promptPart.text || ''),
     [{ mimeType: imagePart.inlineData.mimeType, data: imagePart.inlineData.data }],
     1024,

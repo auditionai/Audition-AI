@@ -1,11 +1,11 @@
 import type { Handler } from '@netlify/functions';
-import { grokText, type GrokImageInput } from './_grok';
+import { claudeText, type ClaudeImageInput } from './_grok';
 import { getAuthenticatedRequestErrorStatus, requireAuthenticatedUser } from './_supabase';
 
-const VIDEO_SCRIPT_DEADLINE_ERROR = 'VIDEO_SCRIPT_GROK_DEADLINE';
+const VIDEO_SCRIPT_DEADLINE_ERROR = 'VIDEO_SCRIPT_CLAUDE_DEADLINE';
 // The Cloudflare proxy in front of the site cuts synchronous requests at about
 // 45 seconds. Keep this below that limit and constrain output for fast scripts.
-const VIDEO_SCRIPT_GROK_TIMEOUT_MS = 290_000;
+const VIDEO_SCRIPT_CLAUDE_TIMEOUT_MS = 290_000;
 const VIDEO_SCRIPT_TOTAL_TIMEOUT_MS = 295_000;
 const VIDEO_SCRIPT_MAX_TOKENS = 2600;
 
@@ -21,10 +21,10 @@ const getReferenceImageProxyUrl = (rawUrl: string | undefined, source: string) =
   return `${origin}/.netlify/functions/video-script-reference-image?source=${encodeURIComponent(source)}`;
 };
 
-const toGrokImageInput = (source: string): GrokImageInput => {
+const toClaudeImageInput = (source: string): ClaudeImageInput => {
   if (!source) throw new Error('Missing reference image.');
 
-  // The configured OpenAI-compatible Grok gateway accepts public image URLs
+  // The configured OpenAI-compatible Claude gateway accepts public image URLs
   // but rejects base64 data URLs upstream. R2 stages this image before here.
   if (source.startsWith('http')) {
     return { url: source };
@@ -223,7 +223,7 @@ const buildDirectorInstruction = (
     '- Choose camera movement, background motion, music, and sound design that match the scene context.',
     '',
     'Write only the final Vietnamese prompt/script. No JSON, no explanation.',
-    'The output should be detailed enough for Seedance/Kling/Grok video generation, but stay under 10000 characters.',
+    'The output should be detailed enough for Seedance/Kling video generation, but stay under 10000 characters.',
   ].filter(Boolean).join('\n');
 };
 
@@ -239,12 +239,12 @@ export const generateVideoScriptForRequest = async (body: VideoScriptRequestBody
   const durationSeconds = clampDurationSeconds(body.durationSeconds);
   const userPrompt = String(body.userPrompt || '').trim();
   const scriptOptions = body.scriptOptions && typeof body.scriptOptions === 'object' ? body.scriptOptions : {};
-  const imagePart = toGrokImageInput(imageSource);
-  let script = sanitizeDirectorScript(await grokText(
+  const imagePart = toClaudeImageInput(imageSource);
+  let script = sanitizeDirectorScript(await claudeText(
     buildDirectorInstruction(durationSeconds, userPrompt, scriptOptions),
     [imagePart],
     VIDEO_SCRIPT_MAX_TOKENS,
-    { timeoutMs: VIDEO_SCRIPT_GROK_TIMEOUT_MS },
+    { timeoutMs: VIDEO_SCRIPT_CLAUDE_TIMEOUT_MS },
   ));
   if (!script) throw new Error('Claude did not return a video script.');
   // Claude is instructed to include the observation and identity-lock sections,

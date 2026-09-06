@@ -624,7 +624,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
   // API Key States
   const [apiKey, setApiKey] = useState('');
-  const [apiKeyTier] = useState<'grok'>('grok');
+  const [apiKeyTier] = useState<'claude'>('claude');
   const [showKey, setShowKey] = useState(false);
   const [keyStatus, setKeyStatus] = useState<'valid' | 'invalid' | 'unknown' | 'checking'>('unknown');
   const [dbKeys, setDbKeys] = useState<any[]>([]); 
@@ -2933,7 +2933,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
           <div className="admin-command-health" aria-label="Tình trạng dịch vụ">
               {[
-                  { label: 'Grok AI', value: health.gemini, icon: Icons.Sparkles },
+                  { label: 'Claude AI', value: health.gemini, icon: Icons.Sparkles },
                   { label: 'Supabase', value: health.supabase, icon: Icons.Database },
                   {
                       label: health.storage.type === 'R2'
@@ -3030,9 +3030,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               <div className="flex items-center gap-3 neu-inset-sm px-4 py-2 rounded-2xl">
                   <span className="text-[10px] font-bold text-slate-700 dark:text-slate-400 font-semibold dark:text-slate-700 dark:text-slate-300 font-semibold uppercase tracking-wider">Hệ thống:</span>
                   <div className="flex items-center gap-2 text-[10px] font-bold">
-                      <div className="flex items-center gap-1.5" title="Grok AI Engine">
+                      <div className="flex items-center gap-1.5" title="Claude AI Engine">
                           <span className={`w-2.5 h-2.5 rounded-full ${health.gemini.status === 'connected' ? 'bg-emerald-500 shadow-[0_0_8px_#10B981]' : 'bg-red-500'}`} />
-                          <span className="text-slate-700 dark:text-slate-300">Grok</span>
+                          <span className="text-slate-700 dark:text-slate-300">Claude</span>
                       </div>
                       <span className="text-slate-700 dark:text-slate-300 font-semibold dark:text-slate-600">•</span>
                       <div className="flex items-center gap-1.5" title="Supabase Database">
@@ -5078,7 +5078,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                       {/* Health Cards */}
                       <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl p-6 relative overflow-hidden">
-                          <h3 className="font-bold text-lg text-white mb-1">Grok AI Engine</h3>
+                          <h3 className="font-bold text-lg text-white mb-1">Claude AI Engine</h3>
                           <div className="flex items-center justify-between mb-4">
                               <span className="text-sm text-slate-700 dark:text-slate-300 font-semibold">Kết nối</span>
                               <StatusBadge status={health.gemini.status} latency={health.gemini.latency} />
@@ -5410,12 +5410,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   <div className="neu-card p-6 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl">
                       <h3 className="font-bold text-lg text-white mb-4 flex items-center gap-2">
                           <Icons.Lock className="w-5 h-5 text-audi-pink" />
-                          Cấu hình Grok API Key
+                          Cấu hình Claude API Key
                       </h3>
                       <div className="space-y-4">
                           <div>
                               <div className="flex justify-between items-end mb-2">
-                                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase">Grok API Key (OpenAI-compatible)</label>
+                                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase">Claude API Key (OpenAI-compatible)</label>
                                   <div className="flex items-center gap-2">
                                       <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${
                                           keyStatus === 'valid' ? 'bg-green-500/20 text-green-400' :

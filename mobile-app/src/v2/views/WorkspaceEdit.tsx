@@ -202,7 +202,7 @@ export function WorkspaceEdit() {
       displayPrompt = toolConfig.name;
     }
     
-    const engineLabel = activeTier === 'flash' ? `Grok AI Flash ${resolution}` : `Grok AI Pro ${resolution}`;
+    const engineLabel = activeTier === 'flash' ? `Claude AI Flash ${resolution}` : `Claude AI Pro ${resolution}`;
 
     const placeholderImage: GeneratedImage = {
       id: jobId,

@@ -72,7 +72,7 @@ const getPayloadError = (payload: any, response: Response) =>
   payload?.raw ||
   `Khong the goi video-script-director (${response.status} ${response.statusText || ''}).`;
 
-export const generateVideoScriptWithGrok = async ({
+export const generateVideoScriptWithClaude = async ({
   imageSource,
   durationSeconds,
   userPrompt,
@@ -122,5 +122,3 @@ export const generateVideoScriptWithGrok = async ({
   throw new Error('Grok dang xu ly lau hon du kien. Vui long mo Lai lich su sau it phut de kiem tra ket qua.');
 };
 
-/** @deprecated Use generateVideoScriptWithGrok. */
-export const generateVideoScriptWithVertex = generateVideoScriptWithGrok;

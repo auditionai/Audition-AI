@@ -5,10 +5,10 @@ import {
   type ImageGenerateRecipePayload,
   type QueueVertexDiagnosticEntry,
 } from '../../shared/queueRecipes';
-import { runWithVertexCredentialFailover } from './_grok-credentials';
-import { GROK_BACKGROUND_TIMEOUT_MS, GROK_MODEL, grokJson, grokText } from './_grok';
+import { runWithClaudeCredential } from './_grok-credentials';
+import { CLAUDE_BACKGROUND_TIMEOUT_MS, CLAUDE_MODEL, claudeJson, claudeText } from './_grok';
 
-const VERTEX_MODEL = GROK_MODEL;
+const CLAUDE_VISION_MODEL = CLAUDE_MODEL;
 const normalizePromptWhitespace = (value: string) => value.replace(/\s+/g, ' ').trim();
 type VertexDiagnosticTask = QueueVertexDiagnosticEntry['task'];
 type VertexDiagnosticCallback = (entry: QueueVertexDiagnosticEntry) => Promise<void> | void;
@@ -67,7 +67,7 @@ const collectSafetyRatings = (data: any) =>
 const extractJsonPayload = (value: string) => {
   const trimmed = value.trim();
   if (!trimmed) {
-    throw new Error('Grok AI returned an empty prompt synthesis payload.');
+    throw new Error('Claude returned an empty prompt synthesis payload.');
   }
 
   if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
@@ -85,13 +85,13 @@ const extractJsonPayload = (value: string) => {
     return trimmed.slice(firstBrace, lastBrace + 1);
   }
 
-  throw new Error('Grok AI did not return a valid JSON object for prompt synthesis.');
+  throw new Error('Claude did not return a valid JSON object for prompt synthesis.');
 };
 
 const normalizePromptJsonPayload = (value: string) => {
   const parsed = JSON.parse(extractJsonPayload(value));
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('Grok AI prompt synthesis JSON must be an object.');
+    throw new Error('Claude prompt synthesis JSON must be an object.');
   }
 
   return JSON.stringify(parsed);
@@ -132,7 +132,7 @@ const extractPromptFeedback = (data: any) => {
 };
 
 const parseErrorMessage = async (response: Response) => {
-  const fallback = `Grok AI request failed with ${response.status} ${response.statusText}`.trim();
+  const fallback = `Claude request failed with ${response.status} ${response.statusText}`.trim();
 
   try {
     const raw = await response.text();
@@ -166,8 +166,8 @@ const summarizeVertexPromptSynthesisFailure = (data: any) => {
   ].filter(Boolean);
 
   return details.length > 0
-    ? `Grok AI returned no prompt text for image prompt synthesis. ${details.join(' | ')}`
-    : 'Grok AI returned no prompt text for image prompt synthesis.';
+    ? `Claude returned no prompt text for image prompt synthesis. ${details.join(' | ')}`
+    : 'Claude returned no prompt text for image prompt synthesis.';
 };
 
 const emitVertexDiagnostic = async (
@@ -182,7 +182,7 @@ const emitVertexDiagnostic = async (
   await callback({
     at: new Date().toISOString(),
     task,
-    model: VERTEX_MODEL,
+    model: CLAUDE_VISION_MODEL,
     ...partial,
   });
 };
@@ -347,11 +347,11 @@ const requestVertexPromptSynthesis = async (
     .map((part: any) => part?.inlineData || part?.inline_data)
     .filter((part: any) => typeof part?.data === 'string')
     .map((part: any) => ({ mimeType: String(part.mimeType || part.mime_type || 'image/jpeg'), data: part.data }));
-  const grokResult = await grokJson<Record<string, unknown>>(`${text}\n\nReturn only the requested JSON object.`, images, outputTokenLimit, { timeoutMs: GROK_BACKGROUND_TIMEOUT_MS });
-  const grokText = JSON.stringify(grokResult);
+  const claudeResult = await claudeJson<Record<string, unknown>>(`${text}\n\nReturn only the requested JSON object.`, images, outputTokenLimit, { timeoutMs: CLAUDE_BACKGROUND_TIMEOUT_MS });
+  const claudeOutput = JSON.stringify(claudeResult);
   return {
-    data: { candidates: [{ content: { parts: [{ text: grokText }] } }] },
-    text: grokText,
+    data: { candidates: [{ content: { parts: [{ text: claudeOutput }] } }] },
+    text: claudeOutput,
     finishReasons: [],
     promptFeedback: null,
     safetyRatings: [],
@@ -379,7 +379,7 @@ export const synthesizeStrictImagePrompt = async (
     ? compactInstruction
     : buildStrictImageDirectorInstruction(payload, hasCharacters, hasSample, hasStyle);
 
-  return runWithVertexCredentialFailover({
+  return runWithClaudeCredential({
     taskName: 'image prompt synthesis',
     onAttemptFailure: async ({ credentialName, projectId, error, retryable }) => {
       if (!retryable) {
@@ -404,7 +404,7 @@ export const synthesizeStrictImagePrompt = async (
           const normalized = tryNormalize(primaryAttempt.text);
           await emitVertexDiagnostic(options?.onDiagnostic, 'image_prompt_synthesis', {
             status: 'success',
-            message: 'Grok AI synthesized the English JSON prompt successfully.',
+            message: 'Claude synthesized the English JSON prompt successfully.',
             credentialName: credentialName || undefined,
             projectId,
             finishReasons: primaryAttempt.finishReasons,
@@ -558,11 +558,11 @@ export const rewriteUserPromptToFitLimit = async (
     normalizedPrompt,
   ].join('\n');
 
-  const text = normalizePromptWhitespace(await grokText(instruction, [], 1024, { timeoutMs: GROK_BACKGROUND_TIMEOUT_MS }));
-  if (!text) throw new Error('Grok did not return a compressed user prompt.');
+  const text = normalizePromptWhitespace(await claudeText(instruction, [], 1024, { timeoutMs: CLAUDE_BACKGROUND_TIMEOUT_MS }));
+  if (!text) throw new Error('Claude did not return a compressed user prompt.');
   await emitVertexDiagnostic(onDiagnostic, 'image_prompt_compression', {
     status: 'success',
-    message: `Grok compressed the ${pipelineLabel} prompt successfully.`,
+    message: `Claude compressed the ${pipelineLabel} prompt successfully.`,
   });
   return text;
 };

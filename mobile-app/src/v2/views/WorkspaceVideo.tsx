@@ -19,7 +19,7 @@ import { getUserProfile, getModelPricing, getTstServerAvailabilityConfig, getGen
 import { useConcurrency, CONCURRENCY_LIMITS } from '../../services/concurrencyService';
 import { enqueueServerJob } from '../../services/serverQueueService';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
-import { compressDataImageForDirector, generateVideoScriptWithGrok } from '../../services/videoScriptDirectorService';
+import { compressDataImageForDirector, generateVideoScriptWithClaude } from '../../services/videoScriptDirectorService';
 import { trackEvent } from '../../services/analyticsService';
 import {
   fetchTstPricing, fetchTstModels,
@@ -648,7 +648,7 @@ export function WorkspaceVideo() {
       notify('Đang tối ưu và tải ảnh tham chiếu lên R2...', 'info');
       const directorImageSource = await compressDataImageForDirector(keyframeImage);
       const directorImageUrl = await uploadFileToR2(directorImageSource, 'inputs/video-script-reference/mobile');
-      const script = await generateVideoScriptWithGrok({
+      const script = await generateVideoScriptWithClaude({
         imageSource: directorImageUrl,
         durationSeconds: parseInt(duration, 10) || 5,
         userPrompt: prompt === lastGeneratedScriptRef.current ? '' : prompt,

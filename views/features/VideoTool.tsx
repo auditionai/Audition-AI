@@ -27,6 +27,7 @@ import {
   getVideoCompatibleSpeeds,
   getVideoCostBreakdown,
   getVideoModelSpecs,
+  creditsToVcoin,
   sanitizePricingEntriesWithRuntimeModels,
   tstServerToUi,
   tstSpeedToUi,
@@ -40,6 +41,7 @@ import {
   getAuditionProviderPricing,
   getGommoCatalogPricingOptionId,
   getGommoPricingInput,
+  getMinimumAuditionModelPrice,
   getMinimumAuditionCatalogModelPrice,
   getGommoModelForAudition,
   isGommoCatalogModelAvailable,
@@ -405,7 +407,8 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                 .map((spec) => ({
                   id: spec.modelId,
                   name: spec.displayName,
-                  price: getVideoCostBreakdown({
+                  price: (() => {
+                    const breakdown = getVideoCostBreakdown({
                       modelId: spec.modelId,
                       serverId: spec.servers[0] || 'fast',
                       resolution: spec.resolutions[0] || '720p',
@@ -414,7 +417,11 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                       audio: false,
                       pricingEntries: livePricing,
                       pricingOverrides: overrideRows
-                  }).vcoin
+                    });
+                    const configuredPrice = getMinimumAuditionModelPrice(pricingConfig || [], spec.modelId);
+                    const creditFallback = spec.minCredits > 0 ? creditsToVcoin(spec.minCredits) : 0;
+                    return breakdown.vcoin || configuredPrice || creditFallback;
+                  })()
               }));
               // Video models are shown only when present in the live TST catalog.
               const routedVideoModels = liveVideoModels
@@ -601,7 +608,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
   };
   const getDisplayedVideoModelPrice = (model: AIModelOption) =>
       activeMode === 'video_ai' && model.id === videoModel
-        ? (currentCostBreakdown.available ? currentCostBreakdown.vcoin : 0)
+        ? (currentCostBreakdown.available ? currentCostBreakdown.vcoin : model.price)
         : model.price;
   const perSecondCostLabel = currentCostBreakdown.billingUnit === 'second'
       ? `${currentCostBreakdown.unitVcoin || 0} Vcoin/s × ${currentCostBreakdown.billedSeconds || 0}s = ${currentCostBreakdown.vcoin || 0} Vcoin`

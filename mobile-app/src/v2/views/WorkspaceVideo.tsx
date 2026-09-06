@@ -25,6 +25,7 @@ import {
   fetchTstPricing, fetchTstModels,
   getMotionCompatibleServers, getMotionCompatibleSpeeds, getMotionCostBreakdown, getMotionModelSpecs,
   getVideoCompatibleDurations, getVideoCompatibleResolutions, getVideoCompatibleServers, getVideoCompatibleSpeeds, getVideoCostBreakdown, getVideoModelSpecs,
+  creditsToVcoin,
   applyServerAvailabilityToRuntimeModels, sanitizePricingEntriesWithRuntimeModels,
   uiSpeedToTst, uiServerToTst, tstServerToUi, tstSpeedToUi,
   type TstPricingEntry, type TstRuntimeModel, type AuditionPricingOverride
@@ -275,7 +276,8 @@ export function WorkspaceVideo() {
           .map((spec: any) => ({
           id: spec.modelId,
           name: spec.displayName,
-          price: getVideoCostBreakdown({
+          price: (() => {
+            const breakdown = getVideoCostBreakdown({
             modelId: spec.modelId,
             serverId: spec.servers[0] || 'fast',
             resolution: spec.resolutions[0] || '720p',
@@ -284,7 +286,11 @@ export function WorkspaceVideo() {
             audio: false,
             pricingEntries: livePricing,
             pricingOverrides: overrideRows
-          }).vcoin
+            });
+            const configuredPrice = getMinimumAuditionModelPrice(pricingConfig || [], spec.modelId);
+            const creditFallback = spec.minCredits > 0 ? creditsToVcoin(spec.minCredits) : 0;
+            return breakdown.vcoin || configuredPrice || creditFallback;
+          })()
         }));
         const routedVideoModels = liveVideoModels
           .filter((model: AIModelOption) => !isExcludedVideoModel(model))

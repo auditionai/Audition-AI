@@ -112,14 +112,14 @@ const normalizeForValidation = (value: string) =>
     .toLowerCase();
 
 const validateDirectorScript = (value: string) => {
-  const normalized = normalizeForValidation(value);
-  if (!/(quan sat|phan tich|mo ta) anh tham chieu\s*:/i.test(normalized)) {
+  const normalized = normalizeForValidation(value).replace(/[#*_`]/g, '');
+  if (!/(quan sat|phan tich|mo ta) anh tham chieu\s*[:\-]?/i.test(normalized)) {
     throw new Error('AI chưa trả về phần quan sát ảnh tham chiếu đủ rõ. Vui lòng bấm tạo lại để AI phân tích ảnh trực tiếp.');
   }
-  if (!/(loai chu the|chu the trong anh)\s*:/i.test(normalized)) {
+  if (!/(loai chu the|chu the trong anh)\s*[:\-]?/i.test(normalized)) {
     throw new Error('AI chưa phân loại loại chủ thể trong ảnh. Vui lòng bấm tạo lại để AI phân tích ảnh rõ hơn.');
   }
-  if (!/(khoa dong nhat tham chieu|khoa dong nhat|rang buoc dong nhat|nguyen tac giu nguyen)\s*:/i.test(normalized)) {
+  if (!/(khoa dong nhat tham chieu|khoa dong nhat|rang buoc dong nhat|nguyen tac giu nguyen)\s*[:\-]?/i.test(normalized)) {
     throw new Error('AI chưa trả về khóa đồng nhất nhân vật và bối cảnh từ ảnh tham chiếu. Hệ thống không thể dùng kịch bản này.');
   }
   if (!/khong (tao|them|phat minh) nhan vat moi/i.test(normalized) || !/giu nguyen/i.test(normalized)) {

@@ -20,6 +20,7 @@ export type GrokImageInput = {
   data?: string;
   url?: string;
 };
+const MAX_VISION_IMAGE_BYTES = 8 * 1024 * 1024;
 type GrokRequestOptions = {
   timeoutMs?: number;
   signal?: AbortSignal;
@@ -45,6 +46,22 @@ const extractJson = (value: string) => {
   const start = candidate.search(/[\[{]/);
   const end = Math.max(candidate.lastIndexOf('}'), candidate.lastIndexOf(']'));
   return start >= 0 && end >= start ? candidate.slice(start, end + 1) : candidate;
+};
+
+const toVisionDataUrl = async (image: GrokImageInput) => {
+  const direct = String(image.data || '').trim();
+  if (direct) return `data:${image.mimeType || 'image/jpeg'};base64,${direct.replace(/^data:[^,]+,/, '')}`;
+  const source = String(image.url || '').trim();
+  if (!source) throw new Error('CLAUDE_VISION_IMAGE_MISSING: Reference image is empty.');
+  const response = await fetch(source, { signal: AbortSignal.timeout(60_000) });
+  if (!response.ok) throw new Error(`CLAUDE_VISION_IMAGE_FETCH_FAILED: ${response.status}`);
+  const contentType = String(response.headers.get('content-type') || 'image/jpeg').split(';', 1)[0].trim().toLowerCase();
+  if (!contentType.startsWith('image/')) throw new Error('CLAUDE_VISION_IMAGE_INVALID: Source is not an image.');
+  const contentLength = Number(response.headers.get('content-length') || 0);
+  if (Number.isFinite(contentLength) && contentLength > MAX_VISION_IMAGE_BYTES) throw new Error('CLAUDE_VISION_IMAGE_TOO_LARGE: Maximum size is 8 MB.');
+  const bytes = Buffer.from(await response.arrayBuffer());
+  if (!bytes.length || bytes.length > MAX_VISION_IMAGE_BYTES) throw new Error('CLAUDE_VISION_IMAGE_INVALID: Image is empty or too large.');
+  return `data:${contentType};base64,${bytes.toString('base64')}`;
 };
 
 export const getGrokApiKey = async () => {
@@ -77,8 +94,7 @@ export const grokJson = async <T>(
   const apiKey = await getGrokApiKey();
   const client = createGrokClient(apiKey);
   const content: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [{ type: 'text', text: instruction }];
-  for (const image of images) {
-    const url = String(image.url || '').trim() || `data:${image.mimeType || 'image/jpeg'};base64,${image.data || ''}`;
+  for (const url of await Promise.all(images.map(toVisionDataUrl))) {
     content.push({ type: 'image_url', image_url: { url } });
   }
   const response = await client.chat.completions.create({
@@ -102,8 +118,7 @@ export const grokText = async (
   const apiKey = await getGrokApiKey();
   const client = createGrokClient(apiKey);
   const content: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [{ type: 'text', text: instruction }];
-  for (const image of images) {
-    const url = String(image.url || '').trim() || `data:${image.mimeType || 'image/jpeg'};base64,${image.data || ''}`;
+  for (const url of await Promise.all(images.map(toVisionDataUrl))) {
     content.push({ type: 'image_url', image_url: { url } });
   }
   const response = await client.chat.completions.create({

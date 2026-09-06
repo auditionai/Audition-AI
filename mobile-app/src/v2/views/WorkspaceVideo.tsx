@@ -31,6 +31,7 @@ import {
 } from '../../services/tstCatalog';
 import type { ModelPricing } from '../../services/economyService';
 import type { GeneratedImage } from '../../types';
+import { compileVideoScriptForDuration } from '../../../../shared/videoScriptCompiler';
 import { fetchProviderCatalog, getAuditionProviderPricing, getGommoPricingInput, getMinimumAuditionModelPrice, getGommoModelForAudition, isGommoCatalogModelAvailable, resolveProviderForModel, type GommoCatalogModel, type GommoProviderCatalog } from '../../services/providerCatalog';
 import { isModelAllowedForFeature } from '../../../../shared/providerRouting';
 import { VIDEO_GENERATION_TIPS } from '../../../../shared/videoGenerationTips';
@@ -769,9 +770,10 @@ export function WorkspaceVideo() {
           stagedMotionVideoUrl = await uploadFileToR2(motionVideoFile, 'inputs/motion-control');
         }
 
+        const compiledVideoPrompt = activeMode === 'video_ai' ? compileVideoScriptForDuration(prompt, duration) : prompt;
         const queuePayload = activeMode === 'video_ai'
           ? {
-              recipeType: 'video_generate_recipe_v1', modelId: videoModel, prompt: queuedPrompt,
+              recipeType: 'video_generate_recipe_v1', modelId: videoModel, prompt: compiledVideoPrompt || queuedPrompt,
               duration: duration.toLowerCase(), resolution: isGommoVideoSelected ? gommoPricingInput.resolution : quality.toLowerCase(), aspectRatio,
               speed: isGommoVideoSelected ? gommoPricingInput.speed : effectiveSpeedId, serverId: effectiveServerId, providerMode: isGommoVideoSelected ? providerMode : undefined, pricingOptionId: isGommoVideoSelected ? gommoPricing?.optionId : undefined, keyframeImage: stagedKeyframeImage, endFrameImage: stagedEndFrameImage, audio: isGommoVideoSelected ? gommoPricingInput.audio : effectiveVideoAudio,
             }
@@ -788,7 +790,7 @@ export function WorkspaceVideo() {
             };
 
         await enqueueServerJob({
-          id: jobId, prompt: queuedPrompt, toolId: effectiveToolId, toolName: effectiveToolName,
+          id: jobId, prompt: activeMode === 'video_ai' ? (compiledVideoPrompt || queuedPrompt) : queuedPrompt, toolId: effectiveToolId, toolName: effectiveToolName,
           engine: selectedModelName, assetType: 'video', costVcoin: cost,
           queueKind: activeMode === 'video_ai' ? 'video_generate' : 'motion_generate',
           clientPlatform: 'mobile',

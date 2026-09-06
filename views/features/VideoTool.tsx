@@ -10,6 +10,7 @@ import { downloadAssetToBrowser } from '../../services/downloadService';
 import { compressDataImageForDirector, generateVideoScriptWithClaude } from '../../services/videoScriptDirectorService';
 import { trackEvent } from '../../services/analyticsService';
 import type { MotionGenerateRecipePayload, VideoGenerateRecipePayload } from '../../shared/queueRecipes';
+import { compileVideoScriptForDuration } from '../../shared/videoScriptCompiler';
 import {
   type AuditionPricingOverride,
   fetchTstModels,
@@ -1137,11 +1138,12 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                 ? await tryStageInputToR2(motionVideoFile!, 'inputs/motion-control')
                 : null;
 
+        const compiledVideoPrompt = activeMode === 'video_ai' ? compileVideoScriptForDuration(prompt, duration) : prompt;
         const queuePayload: VideoGenerateRecipePayload | MotionGenerateRecipePayload = activeMode === 'video_ai'
             ? {
                 recipeType: 'video_generate_recipe_v1',
                 modelId: videoModel,
-                prompt: prompt || 'Create a cinematic video',
+                prompt: compiledVideoPrompt || 'Create a cinematic video',
                 duration: duration.toLowerCase(),
                 resolution: isGommoVideoSelected ? gommoVideoPricingInput.resolution : quality.toLowerCase(),
                 aspectRatio,
@@ -1172,7 +1174,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
 
         await enqueueServerJob({
             id: queuedId,
-            prompt: queuedPrompt,
+            prompt: activeMode === 'video_ai' ? (compiledVideoPrompt || queuedPrompt) : queuedPrompt,
             toolId: effectiveToolId,
             toolName: effectiveToolName,
             engine: selectedModelName,

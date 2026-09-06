@@ -167,9 +167,7 @@ const buildDirectorInstruction = (
   const trendEdit = Boolean(scriptOptions.trendEdit);
   const textOverlay = Boolean(scriptOptions.textOverlay);
 
-  const shotCountRule = trendEdit
-    ? '- For 6s video: create exactly 5 compact shots covering 0.0s-6.0s. For 10s: create exactly 7 shots covering 0.0s-10.0s. For 15s: create exactly 9 shots covering 0.0s-15.0s.'
-    : '- For 6s video: create 3-4 coherent shots covering 0.0s-6.0s. For 10s: create 4-5 coherent shots covering 0.0s-10.0s. For 15s: create 5-7 coherent shots covering 0.0s-15.0s. Every second must belong to one shot; never stop early.';
+  const shotCountRule = '- Always write exactly 7 master scenes, labeled Cảnh 1 through Cảnh 7, regardless of the selected duration. Do not omit scenes based on duration. Do not assign strict second ranges in the master script; describe each scene as a coherent beat that can later be compiled to 3 scenes for 6 seconds, 5 scenes for 10 seconds, or 7 scenes for 15 seconds.';
 
   return [
     'You are a professional AI video director for an image-to-video generation pipeline.',
@@ -215,7 +213,7 @@ const buildDirectorInstruction = (
     '- Immediately after subject type, include the exact Vietnamese heading "Khóa đồng nhất tham chiếu:". State the exact visible character count and lock every visible character\'s face, hair, expression, clothing, colors, accessories, body proportions, pose relationship, and visible setting/background. Explicitly say "không tạo nhân vật mới" and "giữ nguyên" these details. Do not add details that are not visible in the uploaded image.',
     '- After the overall direction, include "Nhạc nền tổng thể:" with genre, BPM/energy, instruments, mood, intro/build/peak/outro timing, and how it synchronizes with transitions.',
     '- Then write one concise overall direction sentence for the video. Do not print internal settings such as model name, theme value, trend edit mode, or text overlay mode.',
-    '- Then write a numbered shot list by time range, for example: Canh 1 (0.0s-1.0s): ...',
+    '- Then write exactly seven numbered scene blocks: Cảnh 1: through Cảnh 7:. Do not include strict per-second ranges in these master scene headings.',
     '- Each shot must include camera angle, camera/subject motion, subject action, transition, and sound/music cue.',
     textOverlay ? '- If text overlay mode is ON, a shot may include a Text overlay field when useful.' : '',
     '- End with a short negative instruction line preventing face/body/outfit deformation and unwanted extra limbs.',
@@ -234,7 +232,7 @@ const buildDirectorInstruction = (
     '- Choose camera movement, background motion, music, and sound design that match the scene context.',
     '',
     'Write only the final Vietnamese prompt/script. No JSON, no explanation.',
-    'The output must cover the entire selected duration without truncation. Keep it under 24000 characters and never end in the middle of a sentence or shot.',
+    'The output must be complete and never end in the middle of a sentence or scene. Keep the master script concise enough to stay under 32000 characters.',
   ].filter(Boolean).join('\n');
 };
 
@@ -261,7 +259,7 @@ export const generateVideoScriptForRequest = async (body: VideoScriptRequestBody
   // Claude is instructed to include the observation and identity-lock sections,
   // but its headings may vary by wording/markdown. Do not reject a usable
   // vision response solely because it does not match a rigid heading regex.
-  return script.slice(0, 24000);
+  return script.slice(0, 32000);
 };
 
 export const handler: Handler = async (event) => {

@@ -861,11 +861,26 @@ export const getPerSecondPricingKey = ({
     'per-second',
   ].filter(Boolean).join('|');
 
+const getPerSecondPricingKeyVariants = ({ modelId, serverId, resolution, speed, audio }: {
+  modelId: string; serverId?: string; resolution?: string; speed?: string; audio?: boolean;
+}) => {
+  const model = normalizeModelId(modelId);
+  const spd = normalizeSpeed(speed);
+  const res = normalizeResolution(resolution);
+  const audioToken = typeof audio === 'boolean' ? `audio-${audio ? 'on' : 'off'}` : '';
+  return Array.from(new Set([
+    getPerSecondPricingKey({ modelId, serverId, resolution, speed, audio }),
+    [model, spd, res, 'per-second', audioToken, 'per-second'].filter(Boolean).join('|'),
+    [model, res, spd, 'per-second', audioToken, 'per-second'].filter(Boolean).join('|'),
+    [model, spd, res, 'per-second', audioToken].filter(Boolean).join('|'),
+  ]));
+};
+
 const parseVideoConfigKey = (configKey?: string) => {
   const normalized = String(configKey || '').trim().toLowerCase();
   const resolution = normalized.match(/(?:^|[-_|])(480p|720p|1080p|4k_upscale|\d+k)(?:$|[-_|])/)?.[1];
-  const durationToken = normalized.match(/(?:^|[-_|])(\d+(?:\.\d+)?s?)(?:$|[-_|])/)?.[1];
-  const duration = durationToken ? (durationToken.endsWith('s') ? durationToken : `${durationToken}s`) : undefined;
+  const durationToken = normalized.match(/(?:^|[|_])(\d+(?:\.\d+)?s)(?:$|[|_])/i)?.[1];
+  const duration = durationToken || undefined;
   const speed = normalized.match(/(?:^|[-_|])(fast|slow)(?:$|[-_|])/)?.[1];
   const audioToken = normalized.match(/(?:^|[-_|])audio[-_]?(on|off|true|false)(?:$|[-_|])/)?.[1];
   return {
@@ -913,12 +928,12 @@ const matchesVideoResolutionForModel = (modelId: string, entryResolution?: strin
   return isGrokVideoModel(modelId) && !normalizedEntry;
 };
 
-const matchesVideoDurationForModel = (modelId: string, entryDuration?: string, requestedDuration?: string | null) => {
+const matchesVideoDurationForModel = (modelId: string, entryDuration?: string, requestedDuration?: string | null, perSecondModel = false) => {
   if (!requestedDuration) return true;
   if (!isDurationAllowedForModel(modelId, requestedDuration)) return false;
   const normalizedEntry = normalizeCatalogDuration(entryDuration);
   if (normalizedEntry === requestedDuration) return true;
-  return (isGrokVideoModel(modelId) || isPerSecondBillingModel(modelId, 'video')) && !normalizedEntry;
+  return (isGrokVideoModel(modelId) || perSecondModel || isPerSecondBillingModel(modelId, 'video')) && !normalizedEntry;
 };
 
 const mapPricingEntry = (entry: any): TstPricingEntry => {
@@ -1737,7 +1752,7 @@ export const getVideoCostBreakdown = ({
   const matchesVideoResolution = (entry: TstPricingEntry) =>
     matchesVideoResolutionForModel(modelId, entry.resolution, normalizedResolution);
   const matchesVideoDuration = (entry: TstPricingEntry) =>
-    matchesVideoDurationForModel(modelId, entry.duration, normalizedDuration);
+    matchesVideoDurationForModel(modelId, entry.duration, normalizedDuration, perSecondModel);
 
   const exactEntry = pickExactEntry(modelEntries, [
     (entry) =>
@@ -1778,7 +1793,7 @@ export const getVideoCostBreakdown = ({
         : fallbackVcoin;
       const unitVcoin = getAuditionPriceByConfigKeys(
         modelId,
-        [entryUnitConfigKey, requestedUnitConfigKey],
+        [...getPerSecondPricingKeyVariants({ modelId, serverId, resolution, speed, audio }), entryUnitConfigKey, requestedUnitConfigKey],
         unitFallbackVcoin,
         pricingOverrides,
       );

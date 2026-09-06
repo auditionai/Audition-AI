@@ -356,7 +356,7 @@ assert(gpti2ProviderSource.includes("const NANO_OUTPUT_RESOLUTION = '2K';"));
 assert(gpti2ProviderSource.includes('const buildNanoRequest'));
 
 const grokProviderSource = await readFile(new URL('../netlify/functions/_grok.ts', import.meta.url), 'utf8');
-assert(grokProviderSource.includes("|| 'grok-4.5'"));
+assert(grokProviderSource.includes("|| 'claude-sonnet-4-6'"));
 assert(grokProviderSource.includes("https://sub.digishop.work/v1"));
 assert(grokProviderSource.includes('client.chat.completions.create'));
 const grokHealthSource = await readFile(new URL('../netlify/functions/grok-health.ts', import.meta.url), 'utf8');

@@ -5,8 +5,8 @@ const DEFAULT_OPENAI_COMPATIBLE_BASE_URL = 'https://sub.digishop.work/v1';
 export const OPENAI_COMPATIBLE_BASE_URL = (process.env.OPENAI_COMPATIBLE_BASE_URL || DEFAULT_OPENAI_COMPATIBLE_BASE_URL)
   .trim()
   .replace(/\/+$/, '');
-export const GROK_MODEL = process.env.GROK_MODEL?.trim() || 'grok-4.5';
-export const GROK_DEFAULT_TIMEOUT_MS = Number(process.env.GROK_REQUEST_TIMEOUT_MS || 120_000);
+export const GROK_MODEL = process.env.CLAUDE_MODEL?.trim() || 'claude-sonnet-4-6';
+export const GROK_DEFAULT_TIMEOUT_MS = Number(process.env.CLAUDE_REQUEST_TIMEOUT_MS || process.env.GROK_REQUEST_TIMEOUT_MS || 120_000);
 const parseBoundedTimeout = (value: string | undefined, fallback: number) => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
@@ -14,7 +14,7 @@ const parseBoundedTimeout = (value: string | undefined, fallback: number) => {
 };
 // Queue workers can wait longer than browser-facing functions. Keep a finite
 // ceiling so an unavailable upstream cannot occupy a worker indefinitely.
-export const GROK_BACKGROUND_TIMEOUT_MS = parseBoundedTimeout(process.env.GROK_BACKGROUND_TIMEOUT_MS, 300_000);
+export const GROK_BACKGROUND_TIMEOUT_MS = parseBoundedTimeout(process.env.CLAUDE_BACKGROUND_TIMEOUT_MS || process.env.GROK_BACKGROUND_TIMEOUT_MS, 300_000);
 export type GrokImageInput = {
   mimeType?: string;
   data?: string;
@@ -24,7 +24,8 @@ type GrokRequestOptions = {
   timeoutMs?: number;
   signal?: AbortSignal;
 };
-// The gateway issues its own OpenAI-compatible keys, so xAI's `xai-` prefix is not required.
+// The gateway issues its own OpenAI-compatible keys; Claude keys use the same
+// transport and do not require an Anthropic-specific prefix.
 export const isGrokApiKey = (value: unknown) => {
   const key = String(value || '').trim();
   return key.length >= 8 && !/\s/.test(key) && !key.startsWith('{');
@@ -47,9 +48,9 @@ const extractJson = (value: string) => {
 };
 
 export const getGrokApiKey = async () => {
-  const environmentKey = String(process.env.OPENAI_COMPATIBLE_API_KEY || process.env.GROK_API_KEY || '').trim();
+  const environmentKey = String(process.env.CLAUDE_API_KEY || process.env.OPENAI_COMPATIBLE_API_KEY || '').trim();
   if (environmentKey) {
-    if (!isGrokApiKey(environmentKey)) throw new Error('GROK_NOT_CONFIGURED: The OpenAI-compatible API key is invalid.');
+    if (!isGrokApiKey(environmentKey)) throw new Error('CLAUDE_NOT_CONFIGURED: The Claude API key is invalid.');
     return environmentKey;
   }
 
@@ -57,12 +58,12 @@ export const getGrokApiKey = async () => {
     .from('api_keys')
     .select('id, key_value, last_used_at')
     .eq('status', 'active')
-    .ilike('name', '[GROK]%')
+    .ilike('name', '[CLAUDE]%')
     .order('last_used_at', { ascending: true, nullsFirst: true });
   if (error) throw error;
   const row = (data || []).find((candidate) => isGrokApiKey(candidate.key_value));
   const key = String(row?.key_value || '').trim();
-  if (!key) throw new Error('GROK_NOT_CONFIGURED: Add an active [GROK] OpenAI-compatible API key in Admin Settings or set OPENAI_COMPATIBLE_API_KEY.');
+  if (!key) throw new Error('CLAUDE_NOT_CONFIGURED: Add an active [CLAUDE] API key in Admin Settings or set CLAUDE_API_KEY.');
   if (row?.id) void getServiceRoleClient().from('api_keys').update({ last_used_at: new Date().toISOString() }).eq('id', row.id);
   return key;
 };

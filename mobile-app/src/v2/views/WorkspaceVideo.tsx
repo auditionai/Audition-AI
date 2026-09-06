@@ -678,7 +678,7 @@ export function WorkspaceVideo() {
         target_model: scriptTargetModel || videoModel,
         error_message: error instanceof Error ? error.message.slice(0, 120) : 'unknown',
       });
-      notify(error instanceof Error ? error.message : 'Không thể tạo kịch bản video bằng Grok AI.', 'error');
+      notify(error instanceof Error ? error.message : 'Không thể tạo kịch bản video bằng Claude AI.', 'error');
     } finally {
       setIsGeneratingScript(false);
     }
@@ -816,7 +816,7 @@ export function WorkspaceVideo() {
             Đạo diễn kịch bản AI
           </div>
           <p className="mt-1 text-[11px] leading-relaxed text-cyan-700/80 dark:text-cyan-100/80">
-            Nhập ý tưởng ngắn trong prompt, AI sẽ dùng ảnh tham chiếu trên R2 để viết kịch bản chi tiết.
+            Claude Sonnet 4.6 dùng ảnh tham chiếu trên R2 để viết kịch bản chi tiết.
           </p>
         </div>
         <button

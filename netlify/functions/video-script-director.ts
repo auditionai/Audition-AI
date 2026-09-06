@@ -247,17 +247,9 @@ export const generateVideoScriptForRequest = async (body: VideoScriptRequestBody
     { timeoutMs: VIDEO_SCRIPT_GROK_TIMEOUT_MS },
   ));
   if (!script) throw new Error('Claude did not return a video script.');
-  try {
-    validateDirectorScript(script);
-  } catch {
-    script = sanitizeDirectorScript(await grokText(
-      buildFormatRepairInstruction(script),
-      [imagePart],
-      VIDEO_SCRIPT_MAX_TOKENS,
-      { timeoutMs: VIDEO_SCRIPT_GROK_TIMEOUT_MS },
-    ));
-    validateDirectorScript(script);
-  }
+  // Claude is instructed to include the observation and identity-lock sections,
+  // but its headings may vary by wording/markdown. Do not reject a usable
+  // vision response solely because it does not match a rigid heading regex.
   return script.slice(0, 10000);
 };
 

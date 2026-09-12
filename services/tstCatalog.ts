@@ -1969,8 +1969,21 @@ export const getMotionCostBreakdown = ({
 
 export const getPricingRows = async (forceRefresh = false): Promise<TstPricingRow[]> => {
   const [rawPricingEntries, runtimeModels] = await Promise.all([fetchTstPricing(forceRefresh), fetchTstModels(forceRefresh)]);
-  const pricingEntries = sanitizePricingEntriesWithRuntimeModels(rawPricingEntries, runtimeModels);
-  const modelMap = new Map(runtimeModels.map((model) => [normalizeModelId(model.model), model]));
+  // GPTi2 2.5 models share GPT Image 2 pricing options, while the upstream
+  // TST catalog may not expose separate runtime model records for them yet.
+  // Mirror the live GPT Image 2 rows so Admin can configure prices per model.
+  const gpt25Ids = ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'];
+  const baseGptRows = rawPricingEntries.filter((entry) => normalizeModelId(entry.model) === 'image-gpt-2');
+  const mirroredPricing = baseGptRows.flatMap((entry) => gpt25Ids.map((model) => ({ ...entry, model })));
+  const effectiveRuntimeModels = [...runtimeModels, ...gpt25Ids.map((model) => ({
+    model,
+    name: model === 'gpt-image-2.5-flare' ? 'GPT Image 2.5 Flare' : 'GPT Image 2.5 Sunburst',
+    type: 'image',
+    servers: ['gpti2'],
+    capabilities: { resolutions: ['1K', '2K', '4K'], qualities: ['low', 'medium', 'high'] },
+  } as TstRuntimeModel))];
+  const pricingEntries = sanitizePricingEntriesWithRuntimeModels([...rawPricingEntries, ...mirroredPricing], effectiveRuntimeModels);
+  const modelMap = new Map(effectiveRuntimeModels.map((model) => [normalizeModelId(model.model), model]));
   const rows: Array<TstPricingRow | null> = pricingEntries.map((entry) => {
     const model = modelMap.get(normalizeModelId(entry.model));
     if (!model || !isAdminManagedPricingModel(model.model)) {

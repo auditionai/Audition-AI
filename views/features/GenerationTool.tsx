@@ -227,7 +227,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const [speed, setSpeed] = useState('Nhanh');
   const [server, setServer] = useState('VIP 1');
   const [gptQuality, setGptQuality] = useState<'low' | 'medium' | 'high'>('low');
-  const [aiModel, setAiModel] = useState<TstGenerationTier>('gpt');
+  const [aiModel, setAiModel] = useState<TstGenerationTier>('gpt_flare');
   const [providerMode, setProviderMode] = useState('');
   const gommoDefaultSelectionKeyRef = useRef('');
 

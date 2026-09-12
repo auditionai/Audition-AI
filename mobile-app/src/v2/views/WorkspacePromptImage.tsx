@@ -116,7 +116,7 @@ export function WorkspacePromptImage() {
   const [referenceImages, setReferenceImages] = useState<(string | null)[]>([null]);
   const [activeUploadIndex, setActiveUploadIndex] = useState(0);
   const [prompt, setPrompt] = useState('');
-  const [aiModel, setAiModel] = useState<TstGenerationTier>('gpt');
+  const [aiModel, setAiModel] = useState<TstGenerationTier>('gpt_flare');
   const [aspectRatio, setAspectRatio] = useState('9:16');
   const [resolution, setResolution] = useState('1K');
   const [speed, setSpeed] = useState('Nhanh');

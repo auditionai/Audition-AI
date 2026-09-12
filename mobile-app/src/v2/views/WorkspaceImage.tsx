@@ -90,6 +90,12 @@ const IMAGE_MODEL_OPTIONS: Array<{
     accent: 'from-fuchsia-500 via-violet-500 to-cyan-400',
   },
   {
+    tier: 'gpt_flare', label: 'Flare', tag: 'MỚI', title: 'GPT Image 2.5 Flare', description: 'GPT Image 2.5 Flare, tối ưu cho ảnh chi tiết và chữ tiếng Việt.', icon: Sparkles, accent: 'from-orange-400 via-rose-500 to-fuchsia-500',
+  },
+  {
+    tier: 'gpt_sunburst', label: 'Sunburst', tag: 'MỚI', title: 'GPT Image 2.5 Sunburst', description: 'GPT Image 2.5 Sunburst, phong cách nổi bật và màu sắc mạnh.', icon: Sparkles, accent: 'from-yellow-300 via-orange-500 to-red-500',
+  },
+  {
     tier: 'flash',
     label: 'Flash',
     tag: 'GIÁ RẺ',
@@ -359,7 +365,7 @@ export function WorkspaceImage() {
   const isTierAvailable = (tier: TstGenerationTier) => {
     const modelId = getGenerationModelId(tier);
     if (!isModelAllowedForFeature(providerConfig, providerRouteKey, modelId)) return false;
-    if (resolveProviderForModel(providerConfig, modelId, providerRouteKey) === 'gpti2') return ['image-gpt-2', 'nano-banana-2', 'nano-banana-pro'].includes(modelId);
+    if (resolveProviderForModel(providerConfig, modelId, providerRouteKey) === 'gpti2') return ['image-gpt-2', 'gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro'].includes(modelId);
     return resolveProviderForModel(providerConfig, modelId, providerRouteKey) === 'gommo'
       ? isGommoCatalogModelAvailable(getGommoModelForAudition(gommoCatalog, modelId))
       : runtimeImageModelIds.has(modelId) && pricingEntries.some((entry) => entry.model.trim().toLowerCase() === modelId);
@@ -371,6 +377,8 @@ export function WorkspaceImage() {
     flash: isFlashAvailable,
     pro: isProAvailable,
     gpt: isGptAvailable,
+    gpt_flare: isTierAvailable('gpt_flare'),
+    gpt_sunburst: isTierAvailable('gpt_sunburst'),
   };
   useEffect(() => {
     if (!isModelAllowedForFeature(providerConfig, providerRouteKey, getGenerationModelId(aiModel))) {
@@ -395,7 +403,7 @@ export function WorkspaceImage() {
     || !prompt.trim()
     || !hasCharacterImagesReady
     || isAnyCharacterAssistRunning
-    || (aiModel === 'flash' ? !isFlashAvailable : aiModel === 'pro' ? !isProAvailable : !isGptAvailable);
+    || !imageModelAvailability[aiModel];
   const generateHelperText = stage === 'submitting'
     ? submissionMessage || 'Đang chuẩn bị và gửi tác vụ vào hàng đợi'
     : cooldownRemaining > 0

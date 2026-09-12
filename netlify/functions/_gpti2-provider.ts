@@ -6,7 +6,7 @@ const GPTI2_BASE = 'https://gpti2.store/v1';
 // must have the same window to finish rendering a valid result.
 const GPTI2_TIMEOUT_MS = 295_000;
 const MODEL_ALIASES: Record<string, string> = { 'image-gpt-2': 'gpt-image-2' };
-const ALLOWED_MODELS = new Set(['gpt-image-2', 'nano-banana-2', 'nano-banana-pro']);
+const ALLOWED_MODELS = new Set(['gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro']);
 const NANO_ASPECT_RATIOS = new Set(['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3']);
 const MAX_NANO_REFERENCE_IMAGES = 8;
 const NANO_OUTPUT_RESOLUTION = '2K';

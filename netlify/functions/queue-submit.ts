@@ -774,7 +774,7 @@ export const handler: Handler = async (event) => {
     });
     const routingConfig = await getGenerationProvider(admin, modelId, providerRouteKey);
     if (routingConfig.allowedModels && !routingConfig.allowedModels.includes(modelId)
-      && !(providerRouteKey !== 'video_generation' && providerRouteKey !== 'motion_control' && routingConfig.provider === 'gpti2' && ['gpt-image-2', 'nano-banana-2', 'nano-banana-pro'].includes(modelId))) {
+      && !(providerRouteKey !== 'video_generation' && providerRouteKey !== 'motion_control' && routingConfig.provider === 'gpti2' && ['gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro'].includes(modelId))) {
       return {
         statusCode: 400,
         headers,

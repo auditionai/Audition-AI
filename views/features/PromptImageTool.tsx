@@ -83,6 +83,16 @@ const MODEL_TABS: Array<{
     accent: 'from-fuchsia-500 via-violet-500 to-cyan-400',
   },
   {
+    tier: 'gpt_flare', label: 'Flare', tag: 'MỚI', title: 'GPT Image 2.5 Flare',
+    description: 'GPT Image 2.5 Flare, tối ưu cho ảnh chi tiết và chữ tiếng Việt.', icon: Sparkles,
+    accent: 'from-orange-400 via-rose-500 to-fuchsia-500',
+  },
+  {
+    tier: 'gpt_sunburst', label: 'Sunburst', tag: 'MỚI', title: 'GPT Image 2.5 Sunburst',
+    description: 'GPT Image 2.5 Sunburst, phong cách nổi bật và màu sắc mạnh.', icon: Sparkles,
+    accent: 'from-yellow-300 via-orange-500 to-red-500',
+  },
+  {
     tier: 'flash',
     label: 'Flash',
     tag: 'GIÁ RẺ',

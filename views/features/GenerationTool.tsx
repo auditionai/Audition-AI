@@ -1,6 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
+import { Sparkles } from 'lucide-react';
 import { Feature, Language, GeneratedImage, ViewId } from '../../types';
 import { Icons } from '../../components/Icons';
 import {
@@ -97,6 +98,12 @@ const IMAGE_MODEL_OPTIONS: Array<{
     description: 'ChatGPT mới nhất, hiểu prompt tốt hơn, chi tiết chính xác và độ hoàn thiện cao nhất.',
     icon: Icons.Sparkles,
     accent: 'from-fuchsia-500 via-violet-500 to-cyan-400',
+  },
+  {
+    tier: 'gpt_flare', label: 'Flare', tag: 'MỚI', title: 'GPT Image 2.5 Flare', description: 'GPT Image 2.5 Flare, tối ưu cho ảnh chi tiết và chữ tiếng Việt.', icon: Sparkles, accent: 'from-orange-400 via-rose-500 to-fuchsia-500',
+  },
+  {
+    tier: 'gpt_sunburst', label: 'Sunburst', tag: 'MỚI', title: 'GPT Image 2.5 Sunburst', description: 'GPT Image 2.5 Sunburst, phong cách nổi bật và màu sắc mạnh.', icon: Sparkles, accent: 'from-yellow-300 via-orange-500 to-red-500',
   },
   {
     tier: 'flash',
@@ -468,7 +475,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           return isGommoCatalogModelAvailable(getGommoModelForAudition(gommoCatalog, modelId));
       }
       if (resolveProviderForModel(providerConfig, modelId, providerRouteKey) === 'gpti2') {
-          return ['image-gpt-2', 'nano-banana-2', 'nano-banana-pro'].includes(modelId);
+          return ['image-gpt-2', 'gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro'].includes(modelId);
       }
       return runtimeImageModelIds.has(modelId) && pricingEntries.some((entry) => entry.model.trim().toLowerCase() === modelId);
   };
@@ -476,9 +483,11 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const isProAvailable = isTierAvailable('pro');
   const isGptAvailable = isTierAvailable('gpt');
   const imageModelAvailability: Record<TstGenerationTier, boolean> = {
-      flash: isFlashAvailable,
-      pro: isProAvailable,
-      gpt: isGptAvailable,
+    flash: isFlashAvailable,
+    pro: isProAvailable,
+    gpt: isGptAvailable,
+    gpt_flare: isTierAvailable('gpt_flare'),
+    gpt_sunburst: isTierAvailable('gpt_sunburst'),
   };
   const isCatalogReady = !catalogLoading && (
       isGommoSelected
@@ -494,7 +503,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       !selectedGenerationCost.available ||
       !prompt.trim() ||
       !hasCharacterImagesReady ||
-      (aiModel === 'flash' ? !isFlashAvailable : aiModel === 'pro' ? !isProAvailable : !isGptAvailable);
+      !imageModelAvailability[aiModel];
   const availableSpeedLabels = isGommoSelected || isGpti2Selected ? [] : availableSpeeds.map((speedId) => speedId === 'slow' ? 'Tiết Kiệm' : 'Nhanh');
   const availableServerLabels = isGommoSelected ? [] : selectedProvider === 'gpti2' ? [GPTI2_SERVER_LABEL] : availableServers.map((serverId) => tstServerToUi(serverId));
   const gommoModes = isGommoSelected ? (selectedGommoModel?.modes || []) : [];

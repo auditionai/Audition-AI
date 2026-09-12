@@ -360,7 +360,7 @@ const stripInternalQueueMeta = (payload: Record<string, unknown> | ImageGenerate
   Object.fromEntries(Object.entries(payload).filter(([key]) => !key.startsWith('__')));
 
 const isGptImageRecipePayload = (payload?: Partial<ImageGenerateRecipePayload> | null) =>
-  String(payload?.modelId || '').trim().toLowerCase() === 'image-gpt-2';
+  ['image-gpt-2', 'gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(String(payload?.modelId || '').trim().toLowerCase());
 
 const sanitizeGptImageRecipePayload = (payload: ImageGenerateRecipePayload): ImageGenerateRecipePayload => {
   if (!isGptImageRecipePayload(payload)) {

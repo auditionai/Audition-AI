@@ -426,7 +426,7 @@ const normalizePromptWhitespace = (value?: string | null) => String(value || '')
 
 const normalizeModelId = (value?: string | null) => String(value || '').trim().toLowerCase();
 
-const isGptImageModel = (modelId?: string | null) => normalizeModelId(modelId) === 'image-gpt-2';
+const isGptImageModel = (modelId?: string | null) => ['image-gpt-2', 'gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(normalizeModelId(modelId));
 
 const combineImageGeneratePrompt = (systemPromptPrefix: string, userPromptInput: string) =>
   `${systemPromptPrefix}${userPromptInput}`.trim();

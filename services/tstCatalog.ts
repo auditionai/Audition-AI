@@ -1,6 +1,6 @@
 import modelsMarkdown from '../models.md?raw';
 
-export type TstGenerationTier = 'flash' | 'pro' | 'gpt';
+export type TstGenerationTier = 'flash' | 'pro' | 'gpt' | 'gpt_flare' | 'gpt_sunburst';
 export type TstGenerationSpeed = 'fast' | 'slow';
 // Resolution is provider-defined and must stay open-ended. TST/Gommo can add
 // values without an AUDITION deployment (for example 8K/10K/12K).
@@ -165,6 +165,8 @@ const TST_DOCS_VIDEO_ASPECT_RATIO_FALLBACKS: Record<string, string[]> = {
 };
 const TST_DOCS_IMAGE_ASPECT_RATIO_FALLBACKS: Record<string, string[]> = {
   'image-gpt-2': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'],
+  'gpt-image-2.5-flare': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'],
+  'gpt-image-2.5-sunburst': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'],
   'nano-banana-2': ['auto', '1:1', '4:3', '16:9', '9:16'],
   'nano-banana-pro': ['auto', '1:1', '4:3', '16:9', '21:9', '9:16', '3:4'],
 };
@@ -174,6 +176,8 @@ const tierToModelId: Record<TstGenerationTier, string> = {
   flash: 'nano-banana-2',
   pro: 'nano-banana-pro',
   gpt: 'image-gpt-2',
+  gpt_flare: 'gpt-image-2.5-flare',
+  gpt_sunburst: 'gpt-image-2.5-sunburst',
 };
 
 const uiServerMap: Record<string, string> = {
@@ -363,6 +367,8 @@ export const ADMIN_MANAGED_MODEL_LABELS = [
   'Nano Banana 2',
   'Nano Banana PRO',
   'GPT Image 2',
+  'GPT Image 2.5 Flare',
+  'GPT Image 2.5 Sunburst',
   'Kling 2.5 Turbo',
   'Kling 2.6',
   'Kling 3.0',
@@ -389,6 +395,8 @@ const ADMIN_MANAGED_MODEL_IDS = [
   'nano-banana-2',
   'nano-banana-pro',
   'image-gpt-2',
+  'gpt-image-2.5-flare',
+  'gpt-image-2.5-sunburst',
   'kling-2.5-turbo',
   'kling-2.6',
   'kling-3.0-video',
@@ -769,6 +777,8 @@ const getFallbackImageSpec = (tier: TstGenerationTier): TstImageModelSpec => {
   const displayName =
     tier === 'flash' ? 'Nano Banana 2' :
     tier === 'pro' ? 'Nano Banana PRO' :
+    tier === 'gpt_flare' ? 'GPT Image 2.5 Flare' :
+    tier === 'gpt_sunburst' ? 'GPT Image 2.5 Sunburst' :
     'GPT Image 2';
   return {
     modelId,

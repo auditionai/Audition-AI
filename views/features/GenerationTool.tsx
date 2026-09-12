@@ -343,6 +343,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
   const generationSpeedId = uiSpeedToTst(speed) || 'fast';
   const generationTier = aiModel;
+  const isGptImageTier = ['gpt', 'gpt_flare', 'gpt_sunburst'].includes(aiModel);
   const selectedModelId = getGenerationModelId(aiModel);
   const selectedProvider = resolveProviderForModel(providerConfig, selectedModelId, providerRouteKey);
   const generationServerId = selectedProvider === 'gpti2' ? GPTI2_SERVER_ID : uiServerToTst(server) || 'fast';
@@ -365,7 +366,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       pricingEntries,
       serverId: pricingServerId || '',
       speed: generationSpeedId,
-      quality: aiModel === 'gpt' ? gptQuality : undefined,
+      quality: isGptImageTier ? gptQuality : undefined,
   });
   const tstRuntimeResolutions = Array.from(new Set(
       (runtimeModels.find((model) => model.model.trim().toLowerCase() === selectedModelId)?.capabilities?.resolutions || [])
@@ -377,13 +378,13 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           .filter((option) => isSelectableGommoImageResolution(selectedModelId, option.type))
           .map((option) => option.type.toUpperCase())
       : isGpti2Selected
-          ? (selectedModelId === 'image-gpt-2' || selectedModelId === 'gpt-image-2' ? GPTI2_IMAGE_RESOLUTIONS : GPTI2_NANO_RESOLUTIONS)
+          ? (isGptImageTier ? GPTI2_IMAGE_RESOLUTIONS : GPTI2_NANO_RESOLUTIONS)
           : tstAvailableResolutions.length > 0 ? tstAvailableResolutions : tstRuntimeResolutions;
   const availableSpeeds = getCompatibleGenerationSpeeds({
       tier: generationTier,
       pricingEntries,
       resolution: resolution as TstResolution,
-      quality: aiModel === 'gpt' ? gptQuality : undefined,
+      quality: isGptImageTier ? gptQuality : undefined,
   });
   const availableServers = selectedProvider === 'gpti2'
       ? [GPTI2_SERVER_ID]
@@ -397,7 +398,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const tstSelectedGenerationCost = getGenerationCostBreakdown({
       tier: generationTier,
       resolution: resolution as TstResolution,
-      quality: aiModel === 'gpt' ? gptQuality : undefined,
+      quality: isGptImageTier ? gptQuality : undefined,
       speed: generationSpeedId,
        serverId: pricingServerId || '',
       pricingEntries,
@@ -405,7 +406,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   });
   const gommoPricingInput = getGommoPricingInput(selectedModelId, {
       resolution,
-      quality: aiModel === 'gpt' ? gptQuality : undefined,
+      quality: isGptImageTier ? gptQuality : undefined,
       speed: generationSpeedId,
       providerMode,
   });
@@ -716,7 +717,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       gommoDefaultSelectionKeyRef.current = '';
       if ((selectedProvider as string) === 'gpti2') {
           if (server !== GPTI2_SERVER_LABEL) setServer(GPTI2_SERVER_LABEL);
-          const gpti2Resolutions = selectedModelId === 'image-gpt-2' || selectedModelId === 'gpt-image-2' ? GPTI2_IMAGE_RESOLUTIONS : GPTI2_NANO_RESOLUTIONS;
+          const gpti2Resolutions = isGptImageTier ? GPTI2_IMAGE_RESOLUTIONS : GPTI2_NANO_RESOLUTIONS;
           if (!gpti2Resolutions.includes(resolution)) setResolution(gpti2Resolutions[0]);
           const gpti2Ratios = selectedModelId.startsWith('nano-banana') ? GPTI2_NANO_ASPECT_RATIOS : GPTI2_ASPECT_RATIOS;
           if (!gpti2Ratios.includes(aspectRatio)) setAspectRatio(gpti2Ratios[0]);
@@ -1888,7 +1889,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                     </div>}
 
                     <div className="space-y-4">
-                        {aiModel === 'gpt' && !isGommoSelected && (
+            {isGptImageTier && !isGommoSelected && (
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider">Chất lượng GPT</label>
                                 <div className="grid grid-cols-3 gap-2">

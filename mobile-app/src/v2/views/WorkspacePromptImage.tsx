@@ -180,7 +180,8 @@ export function WorkspacePromptImage() {
   const isGommoSelected = selectedProvider === 'gommo';
   const isGpti2Selected = selectedProvider === 'gpti2';
   const selectedGommoModel = getGommoModelForAudition(gommoCatalog, selectedModelId);
-  const tstReferenceImageLimit = aiModel === 'gpt' ? GPT_REFERENCE_IMAGE_LIMIT : DEFAULT_REFERENCE_IMAGE_LIMIT;
+  const isGptImageTier = ['gpt', 'gpt_flare', 'gpt_sunburst'].includes(aiModel);
+  const tstReferenceImageLimit = isGptImageTier ? GPT_REFERENCE_IMAGE_LIMIT : DEFAULT_REFERENCE_IMAGE_LIMIT;
   const maxReferenceImages = isGommoSelected && Number(selectedGommoModel?.maxReferenceImages) > 0
     ? Number(selectedGommoModel?.maxReferenceImages)
     : tstReferenceImageLimit;

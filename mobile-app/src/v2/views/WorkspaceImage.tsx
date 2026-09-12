@@ -299,6 +299,7 @@ export function WorkspaceImage() {
 
   const generationSpeedId = uiSpeedToTst(speed) || 'fast';
   const generationTier = aiModel;
+  const isGptImageTier = ['gpt', 'gpt_flare', 'gpt_sunburst'].includes(aiModel);
   const selectedModelId = getGenerationModelId(aiModel);
   const providerRouteKey = getImageProviderRouteKey(MODE_TO_CHARACTER_COUNT[activeMode]);
   const selectedProvider = resolveProviderForModel(providerConfig, selectedModelId, providerRouteKey);

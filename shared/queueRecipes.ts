@@ -917,7 +917,7 @@ export const getImageRenderReferenceEntries = (
   const characterGroups = getImageCharacterReferenceGroups(payload);
   const normalizedModelId = normalizeValue(payload.modelId);
 
-  if (normalizedModelId === 'image-gpt-2') {
+  if (['image-gpt-2', 'gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(normalizedModelId)) {
     const sampleEntry = buildSampleEntry();
     const styleEntry = buildStyleEntry();
     const bodyEntries = characterGroups
@@ -1788,7 +1788,7 @@ export const buildImageProviderPrompt = (
   void customNegativePrompt;
   const mergedNegativePrompt = IMAGE_NEGATIVE_PROMPT;
 
-  if (normalizeValue(payload.modelId) === 'image-gpt-2') {
+  if (['image-gpt-2', 'gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(normalizeValue(payload.modelId))) {
     return buildGptUserOnlyProviderPrompt(payload);
   }
 

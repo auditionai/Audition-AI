@@ -613,7 +613,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
           <div className="space-y-5 mt-5">
             <div className="space-y-3">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Mô hình AI</label>
-              <div className="grid gap-2">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {MODEL_TABS.map(({ tier, label, tag, title, description, icon: Icon, accent }) => {
                   const selected = aiModel === tier;
                   const available = isModelAllowedForFeature(providerConfig, 'image_prompt', getGenerationModelId(tier));
@@ -623,7 +623,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
                       type="button"
                       onClick={() => available && setAiModel(tier)}
                       disabled={!available}
-                      className={`group relative overflow-hidden rounded-2xl border p-4 text-left transition-all duration-300 ${
+                      className={`group relative overflow-hidden rounded-2xl border p-4 text-left transition-all duration-300 min-h-[116px] ${
                         selected
                           ? 'border-cyan-300/80 bg-gradient-to-br from-cyan-400/15 via-violet-500/10 to-fuchsia-500/15 shadow-[0_12px_35px_rgba(34,211,238,0.18)] ring-1 ring-cyan-300/30'
                           : 'border-white/10 bg-gradient-to-br from-white/[0.06] to-black/20 hover:-translate-y-0.5 hover:border-white/25 hover:bg-white/[0.09] hover:shadow-xl'

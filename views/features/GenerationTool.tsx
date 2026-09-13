@@ -1805,7 +1805,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                     {/* Model Picker */}
                     <div className="space-y-2">
                         <label className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider">Mô hình AI Engine</label>
-                        <div className="space-y-2">
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                             {IMAGE_MODEL_OPTIONS.map((model) => {
                                 const Icon = model.icon;
                                 const available = imageModelAvailability[model.tier];
@@ -1816,8 +1816,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                         type="button"
                                         onClick={() => available && setAiModel(model.tier)}
                                         disabled={!available}
-                                        className={`w-full p-3 rounded-2xl text-left transition-all flex items-center gap-3 ${
-                                            selected ? 'neu-inset-sm ring-2 ring-[#FF007F]' : 'neu-button'
+                                        className={`group relative w-full min-h-[116px] p-4 rounded-2xl text-left transition-all flex items-start gap-3 overflow-hidden ${
+                                            selected ? 'neu-inset-sm ring-2 ring-[#FF007F] bg-gradient-to-br from-fuchsia-500/15 to-cyan-400/10' : 'neu-button hover:-translate-y-0.5'
                                         } ${!available ? 'opacity-40 cursor-not-allowed' : ''}`}
                                     >
                                         <div className={`w-8 h-8 rounded-xl bg-gradient-to-br ${model.accent} flex items-center justify-center text-white shrink-0`}>
@@ -1830,11 +1830,16 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                                     {model.tag}
                                                 </span>
                                             </div>
-                                            <p className="text-[10px] text-slate-700 dark:text-slate-300 font-semibold truncate">{model.title}</p>
+                                            <p className="text-[10px] text-slate-700 dark:text-slate-300 font-semibold">{model.title}</p>
+                                            <p className="mt-1 text-[9px] leading-relaxed text-slate-500 dark:text-slate-400 line-clamp-2">{model.description}</p>
                                         </div>
                                     </button>
                                 );
                             })}
+                        </div>
+                        <div className="mt-3 rounded-2xl border border-cyan-300/20 bg-gradient-to-r from-cyan-400/10 via-violet-500/10 to-fuchsia-500/10 px-4 py-3">
+                            <div className="text-[10px] font-black uppercase tracking-wider text-cyan-700 dark:text-cyan-200">Đang chọn · {IMAGE_MODEL_OPTIONS.find((model) => model.tier === aiModel)?.title}</div>
+                            <p className="mt-1 text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">{IMAGE_MODEL_OPTIONS.find((model) => model.tier === aiModel)?.description}</p>
                         </div>
                     </div>
 

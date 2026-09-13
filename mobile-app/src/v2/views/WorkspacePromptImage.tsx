@@ -539,7 +539,7 @@ export function WorkspacePromptImage() {
 
         <div className="space-y-2">
           <h3 className="ml-1 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-zinc-500">MODEL AI</h3>
-          <div className="grid gap-2">
+          <div className="grid gap-3 sm:grid-cols-2">
             {MODEL_TABS.map(({ tier, label, tag, title, description, icon: Icon, accent }) => {
               const selected = aiModel === tier;
               const available = isModelAllowedForFeature(providerConfig, 'image_prompt', getGenerationModelId(tier));
@@ -549,7 +549,7 @@ export function WorkspacePromptImage() {
                   type="button"
                   onClick={() => available && setAiModel(tier)}
                   disabled={!available}
-                  className={`relative overflow-hidden rounded-[18px] border p-3 text-left transition-all ${
+                  className={`relative overflow-hidden rounded-[18px] border p-4 text-left transition-all min-h-[112px] ${
                     selected
                       ? 'border-cyan-300 bg-cyan-50 shadow-sm dark:border-cyan-400/70 dark:bg-cyan-500/10'
                       : 'border-gray-100 bg-white text-gray-500 dark:border-zinc-800 dark:bg-[#18181B] dark:text-zinc-400'

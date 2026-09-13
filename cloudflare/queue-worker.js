@@ -128,7 +128,7 @@ const processRow = async (env, row) => {
 
 const run = async (env) => {
   const rescued = await rescueAbandonedGpti2Dispatches(env);
-  const claim = await rpc(env, 'claim_dispatchable_generated_jobs', { p_limit: Number(env.CLOUDFLARE_QUEUE_BATCH || 4), p_lease_seconds: 900 });
+  const claim = await rpc(env, 'claim_cloudflare_gpti2_jobs', { p_limit: Number(env.CLOUDFLARE_QUEUE_BATCH || 4), p_lease_seconds: 900 });
   if (!claim.ok) throw new Error(`Supabase claim failed (${claim.status}): ${await claim.text()}`);
   const rows = await claim.json(); const summary = { rescued, claimed: rows.length, completed: 0, submitted: 0, failed: 0 };
   for (const row of rows) { try { Object.assign(summary, Object.fromEntries(Object.entries(await processRow(env, row)).map(([k, v]) => [k, Number(summary[k] || 0) + v]))); } catch (error) { summary.failed += 1; await updateJob(env, row.id, { status: 'failed', progress: 0, error_message: error instanceof Error ? error.message : String(error), finished_at: new Date().toISOString(), lease_token: null, lease_expires_at: null, next_poll_at: null, queue_payload: { ...payloadObject(row), __stage: 'failed', __cloudflareWorker: true } }); } }

@@ -68,6 +68,11 @@ const DIRECT_EDIT_STALE_MS = 12 * 60 * 1000;
 const DIRECT_EDIT_MAX_ATTEMPTS = 2;
 const DIRECT_EDIT_MAX_AGE_MS = 30 * 60 * 1000;
 const DIRECT_EDIT_WATCHDOG_LIMIT = 3;
+// A synchronous GPTi2 request has no provider job id while the HTTP request
+// is in flight. Once this window is exceeded, the worker that owned the
+// request is certainly gone; fail/refund instead of leaving the UI at 50%
+// forever. Retrying would risk creating a duplicate provider image.
+const GPTI2_SYNC_DISPATCH_STALE_MS = 20 * 60 * 1000;
 const SYSTEM_QUEUE_KINDS = ['image_generate', 'video_generate', 'motion_generate'];
 const MAX_QUEUE_LOG_ENTRIES = 80;
 
@@ -127,6 +132,14 @@ const isGpti2Job = (row: any) =>
   String(row?.provider || toPayloadObject(row?.queue_payload).__targetProvider || '').trim().toLowerCase() === 'gpti2'
   || ['gpt-image-2', 'image-gpt-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro']
     .includes(String(toPayloadObject(row?.queue_payload).modelId || toPayloadObject(row?.queue_payload).model || '').trim().toLowerCase());
+
+const isStaleGpti2SyncDispatch = (row: any, now: number) => {
+  const payload = toPayloadObject(row?.queue_payload);
+  if (String(payload.__stage || '').toLowerCase() !== 'dispatching') return false;
+  if (payload.__dispatchConfirmationPending !== true) return false;
+  const updatedAt = new Date(String(row?.updated_at || row?.created_at || '')).getTime();
+  return updatedAt > 0 && now - updatedAt >= GPTI2_SYNC_DISPATCH_STALE_MS;
+};
 
 const getLeaseState = (leaseExpiresAt: unknown, now = Date.now()): 'none' | 'active' | 'expired' => {
   const leaseMs = leaseExpiresAt ? new Date(String(leaseExpiresAt)).getTime() : 0;
@@ -700,6 +713,13 @@ export const runQueueWatchdog = async (options: { runWorkerAfterRescue?: boolean
       }
 
       if (isGpti2Job(row)) {
+        if (isStaleGpti2SyncDispatch(row, now)) {
+          await failAndRefund(
+            row,
+            'GPTi2 synchronous dispatch timed out without a completion response. The job was failed/refunded to prevent duplicate generation.',
+          );
+          summary.failedPreDispatch += 1;
+        }
         continue;
       }
 

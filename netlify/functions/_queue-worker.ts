@@ -3415,6 +3415,27 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
       submitProviderJob(job.queue_kind, providerPayloadForSubmit, targetProvider),
       targetProvider === 'gpti2' ? GPTI2_SYNC_DISPATCH_LEASE_SECONDS : DISPATCH_CLAIM_LEASE_SECONDS,
     );
+
+    // GPTi2 generation/edit endpoints are synchronous. Their response is the
+    // final image, not a provider job that can be polled. Persist it directly
+    // instead of writing a potentially multi-megabyte base64 data URL into
+    // queue_payload and creating a synthetic `inline` poll job.
+    if (providerSubmission.inlineResult) {
+      const completion = await completePolledJobWithResultUrl(
+        job,
+        providerSubmission.inlineResult,
+        {
+          completionMessage: 'GPTi2 da tao xong anh. Da luu ket qua.',
+          completionLevel: 'success',
+        },
+      );
+      if (completion === 'completed') {
+        logQueueWorkerEvent('Completed synchronous GPTi2 job.', getQueueWorkerLogJob(job));
+        return { completed: 1 };
+      }
+      return { failed: 1 };
+    }
+
     const submittedPayload = await markSubmittedWithOwnership(job, providerSubmission, dispatchAttemptId);
     if (!submittedPayload) {
       await cancelProviderJobBestEffort(providerSubmission.jobId, {

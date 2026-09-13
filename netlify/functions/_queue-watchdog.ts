@@ -124,7 +124,9 @@ const getStage = (payload: unknown) => {
 };
 
 const isGpti2Job = (row: any) =>
-  String(row?.provider || toPayloadObject(row?.queue_payload).__targetProvider || '').trim().toLowerCase() === 'gpti2';
+  String(row?.provider || toPayloadObject(row?.queue_payload).__targetProvider || '').trim().toLowerCase() === 'gpti2'
+  || ['gpt-image-2', 'image-gpt-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro']
+    .includes(String(toPayloadObject(row?.queue_payload).modelId || toPayloadObject(row?.queue_payload).model || '').trim().toLowerCase());
 
 const getLeaseState = (leaseExpiresAt: unknown, now = Date.now()): 'none' | 'active' | 'expired' => {
   const leaseMs = leaseExpiresAt ? new Date(String(leaseExpiresAt)).getTime() : 0;

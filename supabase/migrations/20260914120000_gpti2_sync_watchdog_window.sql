@@ -22,6 +22,7 @@ begin
       -- GPTi2 dispatch is synchronous and may legitimately have no provider
       -- job id while the HTTP request is still rendering.
       and lower(coalesce(gi.provider, gi.queue_payload ->> '__targetProvider', '')) <> 'gpti2'
+      and lower(coalesce(gi.queue_payload ->> 'modelId', gi.queue_payload ->> 'model', '')) not in ('gpt-image-2', 'image-gpt-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro')
       and coalesce(gi.queue_kind, '') in ('image_generate', 'video_generate', 'motion_generate')
       and (gi.lease_expires_at is null
         or gi.lease_expires_at < v_now - make_interval(secs => greatest(coalesce(p_pre_dispatch_grace_seconds, 15), 0))
@@ -46,6 +47,7 @@ begin
       from public.generated_images gi
       where gi.status = 'processing' and gi.job_id is null
         and lower(coalesce(gi.provider, gi.queue_payload ->> '__targetProvider', '')) <> 'gpti2'
+        and lower(coalesce(gi.queue_payload ->> 'modelId', gi.queue_payload ->> 'model', '')) not in ('gpt-image-2', 'image-gpt-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro')
         and coalesce(gi.queue_kind, '') in ('image_generate', 'video_generate', 'motion_generate')
         and (coalesce((gi.queue_payload ->> '__tstTouched')::boolean, false) is true
           or coalesce((gi.queue_payload ->> '__dispatchConfirmationPending')::boolean, false) is true

@@ -78,7 +78,7 @@ const MODEL_TABS: Array<{
     label: 'GPT',
     tag: 'BEST',
     title: 'GPT Image 2',
-    description: 'ChatGPT mới nhất, hiểu prompt tốt hơn, chi tiết chính xác và độ hoàn thiện cao nhất.',
+    description: 'Tạo ảnh nhân vật 3D AI ổn định nhất.',
     icon: Bot,
     accent: 'from-fuchsia-500 via-violet-500 to-cyan-400',
   },
@@ -625,7 +625,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
                       type="button"
                       onClick={() => available && setAiModel(tier)}
                       disabled={!available}
-                      className={`group relative overflow-hidden rounded-2xl border p-4 text-left transition-all duration-300 min-h-[116px] ${
+                      className={`group relative overflow-hidden rounded-2xl border p-4 text-left transition-all duration-300 min-h-[88px] ${
                         selected
                           ? 'border-cyan-300/80 bg-gradient-to-br from-cyan-400/15 via-violet-500/10 to-fuchsia-500/15 shadow-[0_12px_35px_rgba(34,211,238,0.18)] ring-1 ring-cyan-300/30'
                           : 'border-white/10 bg-gradient-to-br from-white/[0.06] to-black/20 hover:-translate-y-0.5 hover:border-white/25 hover:bg-white/[0.09] hover:shadow-xl'
@@ -645,7 +645,6 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
                             {selected && <span className="ml-auto text-xs font-black text-cyan-300">✓</span>}
                           </div>
                           <div className="mt-2 text-[11px] font-bold text-slate-200">{title}</div>
-                          <p className="mt-1 text-[10px] leading-relaxed text-slate-500">{description}</p>
                         </div>
                       </div>
                     </button>

@@ -95,7 +95,7 @@ const IMAGE_MODEL_OPTIONS: Array<{
     label: 'GPT',
     tag: 'BEST',
     title: 'GPT Image 2',
-    description: 'ChatGPT mới nhất, hiểu prompt tốt hơn, chi tiết chính xác và độ hoàn thiện cao nhất.',
+    description: 'Tạo ảnh nhân vật 3D AI ổn định nhất.',
     icon: Icons.Sparkles,
     accent: 'from-fuchsia-500 via-violet-500 to-cyan-400',
   },
@@ -1817,7 +1817,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                         type="button"
                                         onClick={() => available && setAiModel(model.tier)}
                                         disabled={!available}
-                                        className={`group relative w-full min-h-[116px] p-4 rounded-2xl text-left transition-all flex items-start gap-3 overflow-hidden ${
+                                        className={`group relative w-full min-h-[88px] p-4 rounded-2xl text-left transition-all flex items-start gap-3 overflow-hidden ${
                                             selected ? 'neu-inset-sm ring-2 ring-[#FF007F] bg-gradient-to-br from-fuchsia-500/15 to-cyan-400/10' : 'neu-button hover:-translate-y-0.5'
                                         } ${!available ? 'opacity-40 cursor-not-allowed' : ''}`}
                                     >
@@ -1832,7 +1832,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                                 </span>
                                             </div>
                                             <p className="text-[10px] text-slate-700 dark:text-slate-300 font-semibold">{model.title}</p>
-                                            <p className="mt-1 text-[9px] leading-relaxed text-slate-500 dark:text-slate-400 line-clamp-2">{model.description}</p>
                                         </div>
                                     </button>
                                 );

@@ -6,6 +6,16 @@ const envText = (env, key) => String(env[key] || '').trim();
 const payloadObject = (row) => row?.queue_payload && typeof row.queue_payload === 'object' ? row.queue_payload : {};
 const modelOf = (row) => String(payloadObject(row).model || payloadObject(row).modelId || row?.model_used || '').trim().toLowerCase();
 const providerOf = (row) => String(row?.provider || payloadObject(row).__targetProvider || '').trim().toLowerCase() || (GPTI2_MODELS.has(modelOf(row)) ? 'gpti2' : 'tst');
+const GPTI2_SIZES = {
+  '1K': { '1:1': '1024x1024', '16:9': '1280x720', '9:16': '720x1280', '4:3': '1024x768', '3:4': '768x1024', '3:2': '1536x1024', '2:3': '1024x1536', '21:9': '1280x544' },
+  '2K': { '1:1': '1536x1536', '16:9': '2560x1440', '9:16': '1440x2560', '4:3': '2048x1536', '3:4': '1536x2048', '3:2': '2400x1600', '2:3': '1600x2400', '21:9': '2560x1088' },
+  '4K': { '1:1': '2048x2048', '16:9': '3840x2160', '9:16': '2160x3840', '4:3': '3200x2400', '3:4': '2400x3200', '3:2': '3360x2240', '2:3': '2240x3360', '21:9': '3840x1632' },
+};
+const gpti2SizeOf = (payload) => {
+  const resolution = String(payload.resolution || payload.size || '1K').trim().toUpperCase();
+  const ratio = String(payload.aspect_ratio || payload.aspectRatio || '1:1').trim();
+  return GPTI2_SIZES[resolution]?.[ratio] || GPTI2_SIZES['1K']['1:1'];
+};
 const supabase = (env, path, init = {}) => fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, { ...init, headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`, 'content-type': 'application/json', ...(init.headers || {}) } });
 const rpc = (env, name, body) => fetch(`${env.SUPABASE_URL}/rest/v1/rpc/${name}`, { method: 'POST', headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`, 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
@@ -36,17 +46,20 @@ const gpti2 = async (env, row) => {
   const prompt = String(payload.prompt || row.prompt || '').trim();
   if (!prompt) throw new Error('GPTI2_ERROR: prompt is required');
   const refs = Array.isArray(payload.img_url) ? payload.img_url : Array.isArray(payload.image_urls) ? payload.image_urls : [];
-  const resolution = String(payload.resolution || payload.size || '1K').toUpperCase();
-  const size = resolution === '1K' ? '1024x1024' : resolution === '2K' ? '1536x1536' : '2048x2048';
+  const size = gpti2SizeOf(payload);
   let response;
   if (refs.length && !model.startsWith('nano-banana')) {
     const form = new FormData(); form.set('prompt', prompt); form.set('model', model); form.set('size', size); form.set('quality', String(payload.quality || 'low'));
-    for (const [i, url] of refs.entries()) { const source = await fetch(String(url)); if (!source.ok) throw new Error(`GPTI2 reference ${i + 1} unavailable`); form.append('image[]', await source.blob(), `reference-${i + 1}`); }
+    for (const [i, url] of refs.entries()) { const source = await fetch(String(url), { signal: AbortSignal.timeout(30000) }); if (!source.ok) throw new Error(`GPTI2 reference ${i + 1} unavailable`); form.append('image[]', await source.blob(), `reference-${i + 1}.jpg`); }
     response = await fetch('https://gpti2.store/v1/images/edits', { method: 'POST', headers: { Authorization: `Bearer ${env.GPTI2_API_KEY}` }, body: form, signal: AbortSignal.timeout(295000) });
   } else {
     response = await fetch('https://gpti2.store/v1/images/generations', { method: 'POST', headers: { Authorization: `Bearer ${env.GPTI2_API_KEY}`, 'content-type': 'application/json' }, body: JSON.stringify({ model, prompt, size, quality: String(payload.quality || 'low'), n: 1 }), signal: AbortSignal.timeout(295000) });
   }
-  if (!response.ok) throw new Error(`GPTI2_ERROR: ${await response.text()}`);
+  if (!response.ok) {
+    const detail = await response.text();
+    if (response.status === 429 || /suspicious activity|code.?\"?:.?\"?blocked/i.test(detail)) throw new Error(`GPTI2_ERROR: provider blocked this request; no retry attempted: ${detail}`);
+    throw new Error(`GPTI2_ERROR: ${detail}`);
+  }
   const data = await response.json();
   const raw = data?.data?.[0]?.b64_json || data?.data?.[0]?.url || data?.url;
   if (!raw) throw new Error('GPTI2_ERROR: provider returned no image');

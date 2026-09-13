@@ -342,8 +342,17 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
     allowGenericFallback: true,
     preferredOptionId: gommoPricingOptionId,
   });
+  const gpti2Pricing = selectedProvider === 'gpti2'
+    ? getAuditionProviderPricing(pricingOverrides, selectedModelId, {
+        resolution,
+        quality: isGptImageTier ? gptQuality : undefined,
+        speed: generationSpeedId,
+      }, { allowGenericFallback: true })
+    : null;
   const selectedCost = isGommoSelected
     ? { available: gommoPricing !== null && isGommoCatalogModelAvailable(selectedGommoModel), vcoin: gommoPricing?.vcoin || 0 }
+    : selectedProvider === 'gpti2'
+      ? { available: gpti2Pricing !== null, vcoin: gpti2Pricing?.vcoin || 0 }
     : tstSelectedCost;
   const totalCost = selectedCost.available ? selectedCost.vcoin * modeCountForPrice : 0;
   const resolutionCostMap = useMemo(
@@ -361,6 +370,12 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
                 allowGenericFallback: true,
                 preferredOptionId: getGommoCatalogPricingOptionId(selectedGommoModel, { resolution: item, providerMode }),
               })?.vcoin || 0
+            : selectedProvider === 'gpti2'
+              ? getAuditionProviderPricing(pricingOverrides, selectedModelId, {
+                  resolution: item,
+                  quality: isGptImageTier ? gptQuality : undefined,
+                  speed: generationSpeedId,
+                }, { allowGenericFallback: true })?.vcoin || 0
             : getGenerationCostBreakdown({
             tier: aiModel,
             resolution: item as TstResolution,

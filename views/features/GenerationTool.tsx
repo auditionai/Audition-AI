@@ -415,9 +415,21 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       allowGenericFallback: true,
       preferredOptionId: gommoPricingOptionId,
   });
+  // GPTi2 is billed from the same admin-managed `model_pricing` table as
+  // Gommo. Keep its UI price on that source too; TST catalog credits are only
+  // a provider fallback and can otherwise show a lower price than enqueue.
+  const gpti2SelectedPricing = isGpti2Selected
+      ? getAuditionProviderPricing(auditionPricing, selectedModelId, {
+          resolution,
+          quality: isGptImageTier ? gptQuality : undefined,
+          speed: generationSpeedId,
+      }, { allowGenericFallback: true })
+      : null;
   const selectedGenerationCost = isGommoSelected
       ? { available: gommoSelectedPricing !== null, vcoin: gommoSelectedPricing?.vcoin || 0 }
-      : tstSelectedGenerationCost;
+      : isGpti2Selected
+          ? { available: gpti2SelectedPricing !== null, vcoin: gpti2SelectedPricing?.vcoin || 0 }
+          : tstSelectedGenerationCost;
   const pricedGommoResolutions = new Set(
       isGommoSelected
           ? availableResolutions.filter((value) => Boolean(getAuditionProviderPricing(

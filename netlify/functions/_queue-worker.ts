@@ -51,7 +51,7 @@ import {
   pollGommoJob,
   submitGommoJob,
 } from './_disabled-provider';
-import { isGpti2Configured, isGpti2Model, pollGpti2Job, submitGpti2JobWithRetry } from './_gpti2-provider';
+import { isGpti2Configured, isGpti2Model, pollGpti2Job, submitGpti2Job } from './_gpti2-provider';
 import { DEFAULT_PROVIDER_BY_FEATURE, type GenerationProviderRouteKey } from '../../shared/providerRouting';
 import {
   extractProviderResultUrl,
@@ -1207,7 +1207,7 @@ const submitProviderJob = async (
   if (targetProvider === 'gpti2') {
     if (!isGpti2Configured()) throw new Error('GPTI2_NOT_CONFIGURED: Missing GPTI2_API_KEY environment variable');
     if (!isGpti2Model(getQueuePayloadModelId(plainPayload))) throw new Error(`GPTI2_MODEL_UNSUPPORTED: ${getQueuePayloadModelId(plainPayload) || '(empty)'}`);
-    const gpti2 = await submitGpti2JobWithRetry(queueKind, plainPayload);
+    const gpti2 = await submitGpti2Job(queueKind, plainPayload);
     return { ...gpti2 };
   }
   if (targetProvider === 'gommo') {

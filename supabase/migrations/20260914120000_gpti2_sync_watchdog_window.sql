@@ -1,5 +1,5 @@
--- GPTi2 image 2.5 is synchronous. Allow three 4-minute attempts plus the
--- retry gaps to finish before the stale-job invariant refunds the request.
+-- GPTi2 image 2.5 is synchronous. Allow the full provider request window to
+-- finish before the stale-job invariant refunds an abandoned request.
 create or replace function public.repair_stale_generated_queue_jobs(
   p_pre_dispatch_grace_seconds integer default 15,
   p_max_recoveries integer default 8,

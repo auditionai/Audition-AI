@@ -2,11 +2,10 @@
 import sharp from 'sharp';
 
 const GPTI2_BASE = 'https://gpti2.store/v1';
-// Match the TST generation timeout. GPTi2 image edits are synchronous and
-// must have the same window to finish rendering a valid result.
-const GPTI2_TIMEOUT_MS = 240_000;
-const GPTI2_MAX_ATTEMPTS = 3;
-const GPTI2_RETRY_DELAY_MS = 10_000;
+// GPT Image 2.5 is synchronous and Sunburst is explicitly the slower model.
+// Keep the full provider window; retrying a timed-out synchronous request is
+// unsafe because the provider may have accepted it before the response was lost.
+const GPTI2_TIMEOUT_MS = 295_000;
 const MODEL_ALIASES: Record<string, string> = { 'image-gpt-2': 'gpt-image-2' };
 const ALLOWED_MODELS = new Set(['gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro']);
 const NANO_ASPECT_RATIOS = new Set(['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3']);
@@ -169,26 +168,6 @@ export const submitGpti2Job = async (queueKind: string, payload: Record<string, 
   const result = extractUrl(data);
   if (!result) throw new Error('GPTI2_ERROR: generation endpoint returned no image');
   return { jobId: 'inline', inlineResult: result, provider: 'gpti2' as const, providerStartedAt: new Date().toISOString() };
-};
-
-// GPTi2 image 2.5 rendering is synchronous and occasionally loses a request
-// during a transient network/gateway failure. Retry the same exact payload up
-// to three times, ten seconds apart, before the queue worker applies TST
-// fallback. This keeps provider fallback deterministic instead of failing on
-// the first temporary timeout.
-export const submitGpti2JobWithRetry = async (queueKind: string, payload: Record<string, unknown>) => {
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= GPTI2_MAX_ATTEMPTS; attempt += 1) {
-    try {
-      return await submitGpti2Job(queueKind, payload);
-    } catch (error) {
-      lastError = error;
-      if (attempt < GPTI2_MAX_ATTEMPTS) {
-        await new Promise((resolve) => setTimeout(resolve, GPTI2_RETRY_DELAY_MS));
-      }
-    }
-  }
-  throw lastError instanceof Error ? lastError : new Error(String(lastError || 'GPTI2_ERROR: request failed'));
 };
 
 export const pollGpti2Job = async (jobId: string, inlineResult?: string) => {

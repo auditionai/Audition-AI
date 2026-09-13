@@ -35,6 +35,15 @@ const updateJob = async (env, id, values) => {
   if (!response.ok) throw new Error(`Supabase update failed (${response.status}): ${await response.text()}`);
 };
 
+const appendLog = (payload, stage, message, level = 'info') => ({
+  ...payload,
+  __stage: stage,
+  __logs: [
+    ...(Array.isArray(payload.__logs) ? payload.__logs : []),
+    { at: new Date().toISOString(), stage, level, message },
+  ].slice(-80),
+});
+
 const rescueAbandonedGpti2Dispatches = async (env) => {
   const cutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString();
   const response = await supabase(env, `generated_images?status=eq.processing&job_id=is.null&updated_at=lt.${encodeURIComponent(cutoff)}&select=id,queue_payload`);
@@ -50,7 +59,7 @@ const rescueAbandonedGpti2Dispatches = async (env) => {
   return rows.length;
 };
 
-const gpti2 = async (env, row) => {
+const gpti2 = async (env, row, report) => {
   const payload = payloadObject(row);
   const model = modelOf(row);
   if (!GPTI2_MODELS.has(model)) throw new Error(`GPTI2_MODEL_UNSUPPORTED: ${model}`);
@@ -60,10 +69,20 @@ const gpti2 = async (env, row) => {
   const size = gpti2SizeOf(payload);
   let response;
   if (refs.length && !model.startsWith('nano-banana')) {
+    await report('building_payload', `Da dung payload GPTi2: ${model}, ${size}, ${refs.length} anh tham chieu.`);
     const form = new FormData(); form.set('prompt', prompt); form.set('model', model); form.set('size', size); form.set('quality', String(payload.quality || 'low'));
-    for (const [i, url] of refs.entries()) { const source = await fetch(String(url), { signal: AbortSignal.timeout(30000) }); if (!source.ok) throw new Error(`GPTI2 reference ${i + 1} unavailable`); form.append('image[]', await source.blob(), `reference-${i + 1}.jpg`); }
+    for (const [i, url] of refs.entries()) {
+      await report('uploading_refs', `Dang tai va chuan bi anh tham chieu ${i + 1}/${refs.length}.`);
+      const source = await fetch(String(url), { signal: AbortSignal.timeout(30000) });
+      if (!source.ok) throw new Error(`GPTI2 reference ${i + 1} unavailable`);
+      form.append('image[]', await source.blob(), `reference-${i + 1}.jpg`);
+      await report('uploading_refs', `Da dua anh tham chieu ${i + 1}/${refs.length} vao payload GPTi2.`, 'success');
+    }
+    await report('dispatching', `Dang gui GPTi2 edit request voi ${refs.length} anh tham chieu.`);
     response = await fetch('https://gpti2.store/v1/images/edits', { method: 'POST', headers: { Authorization: `Bearer ${env.GPTI2_API_KEY}` }, body: form, signal: AbortSignal.timeout(295000) });
   } else {
+    await report('building_payload', `Da dung payload GPTi2: ${model}, ${size}, khong co anh tham chieu.`);
+    await report('dispatching', 'Dang gui GPTi2 generation request.');
     response = await fetch('https://gpti2.store/v1/images/generations', { method: 'POST', headers: { Authorization: `Bearer ${env.GPTI2_API_KEY}`, 'content-type': 'application/json' }, body: JSON.stringify({ model, prompt, size, quality: String(payload.quality || 'low'), n: 1 }), signal: AbortSignal.timeout(295000) });
   }
   if (!response.ok) {
@@ -74,6 +93,7 @@ const gpti2 = async (env, row) => {
   const data = await response.json();
   const raw = data?.data?.[0]?.b64_json || data?.data?.[0]?.url || data?.url;
   if (!raw) throw new Error('GPTI2_ERROR: provider returned no image');
+  await report('verifying_output', 'GPTi2 da tra ket qua. Dang kiem tra va luu anh.');
   return String(raw).startsWith('http') ? String(raw) : `data:image/png;base64,${raw}`;
 };
 
@@ -89,11 +109,16 @@ const tst = async (env, row) => {
 };
 
 const processRow = async (env, row) => {
-  const basePayload = { ...payloadObject(row), __stage: 'dispatching', __cloudflareWorker: true, __logs: [...(Array.isArray(payloadObject(row).__logs) ? payloadObject(row).__logs : []), { at: new Date().toISOString(), stage: 'dispatching', level: 'info', message: 'Cloudflare Worker bat dau gui request toi provider.' }] };
-  await updateJob(env, row.id, { status: 'processing', progress: 50, error_message: null, queue_payload: basePayload });
+  let activePayload = { ...payloadObject(row), __cloudflareWorker: true };
+  const report = async (stage, message, level = 'info') => {
+    activePayload = appendLog(activePayload, stage, message, level);
+    await updateJob(env, row.id, { status: 'processing', progress: stage === 'uploading_refs' ? 35 : stage === 'building_payload' ? 45 : stage === 'verifying_output' ? 85 : 50, error_message: null, queue_payload: activePayload });
+  };
+  await report('preparing', 'Cloudflare Worker da nhan job. Bat dau kiem tra payload GPTi2.');
   if (providerOf(row) === 'gpti2') {
-    const result = await gpti2(env, row);
-    await updateJob(env, row.id, { status: 'completed', progress: 100, image_url: result, finished_at: new Date().toISOString(), next_poll_at: null, lease_token: null, lease_expires_at: null, queue_payload: { ...basePayload, __stage: 'completed', __logs: [...basePayload.__logs, { at: new Date().toISOString(), stage: 'completed', level: 'success', message: 'Cloudflare Worker da nhan ket qua GPTi2 va luu anh.' }] } });
+    const result = await gpti2(env, row, report);
+    activePayload = appendLog(activePayload, 'completed', 'Cloudflare Worker da nhan ket qua GPTi2 va luu anh.', 'success');
+    await updateJob(env, row.id, { status: 'completed', progress: 100, image_url: result, finished_at: new Date().toISOString(), next_poll_at: null, lease_token: null, lease_expires_at: null, queue_payload: activePayload });
     return { completed: 1 };
   }
   const submission = await tst(env, row);

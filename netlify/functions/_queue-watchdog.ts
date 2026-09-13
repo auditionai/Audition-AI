@@ -123,6 +123,9 @@ const getStage = (payload: unknown) => {
   return typeof stage === 'string' ? stage : '';
 };
 
+const isGpti2Job = (row: any) =>
+  String(row?.provider || toPayloadObject(row?.queue_payload).__targetProvider || '').trim().toLowerCase() === 'gpti2';
+
 const getLeaseState = (leaseExpiresAt: unknown, now = Date.now()): 'none' | 'active' | 'expired' => {
   const leaseMs = leaseExpiresAt ? new Date(String(leaseExpiresAt)).getTime() : 0;
   if (!leaseMs) return 'none';
@@ -160,6 +163,10 @@ const getQueueHealthCode = (row: any, now = Date.now()): QueueHealthCode => {
   if (status !== 'processing') {
     return 'healthy';
   }
+
+  // GPTi2 image calls are synchronous and legitimately have no provider job
+  // id while the request is rendering. Never classify them as stale.
+  if (isGpti2Job(row)) return 'healthy';
 
   if (!hasProviderJob) {
     const leaseState = getLeaseState(row.lease_expires_at, now);
@@ -687,6 +694,10 @@ export const runQueueWatchdog = async (options: { runWorkerAfterRescue?: boolean
       }
 
       if (status !== 'processing') {
+        continue;
+      }
+
+      if (isGpti2Job(row)) {
         continue;
       }
 

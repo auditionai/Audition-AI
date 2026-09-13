@@ -6,6 +6,7 @@ const GPTI2_BASE = 'https://gpti2.store/v1';
 // Keep the full provider window; retrying a timed-out synchronous request is
 // unsafe because the provider may have accepted it before the response was lost.
 const GPTI2_TIMEOUT_MS = 295_000;
+const GPTI2_REFERENCE_TIMEOUT_MS = 30_000;
 const MODEL_ALIASES: Record<string, string> = { 'image-gpt-2': 'gpt-image-2' };
 const ALLOWED_MODELS = new Set(['gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro']);
 const NANO_ASPECT_RATIOS = new Set(['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3']);
@@ -22,11 +23,24 @@ const parseError = async (response: Response) => {
 };
 const request = async (path: string, init: RequestInit = {}) => {
   assertConfigured();
-  const response = await fetch(`${GPTI2_BASE}${path}`, {
-    ...init,
-    headers: { Authorization: `Bearer ${key()}`, ...(init.headers || {}) },
-    signal: AbortSignal.timeout(GPTI2_TIMEOUT_MS),
-  });
+  const startedAt = Date.now();
+  console.log('[gpti2] HTTP request started', { path, method: init.method || 'GET' });
+  let response: Response;
+  try {
+    response = await fetch(`${GPTI2_BASE}${path}`, {
+      ...init,
+      headers: { Authorization: `Bearer ${key()}`, ...(init.headers || {}) },
+      signal: AbortSignal.timeout(GPTI2_TIMEOUT_MS),
+    });
+  } catch (error) {
+    console.error('[gpti2] HTTP request failed before response', {
+      path,
+      elapsedMs: Date.now() - startedAt,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+  console.log('[gpti2] HTTP response received', { path, status: response.status, elapsedMs: Date.now() - startedAt });
   if (!response.ok) throw new Error(`GPTI2_ERROR: ${await parseError(response)}`);
   return response.json();
 };
@@ -82,7 +96,13 @@ const dataUrl = (value: unknown) => {
 const extractUrl = (data: any) => dataUrl(data?.data?.[0]?.b64_json || data?.data?.[0]?.url || data?.url);
 
 const normalizeReferenceImage = async (source: string, index: number) => {
-  const response = await fetch(source, { signal: AbortSignal.timeout(GPTI2_TIMEOUT_MS) });
+  const startedAt = Date.now();
+  let response: Response;
+  try {
+    response = await fetch(source, { signal: AbortSignal.timeout(GPTI2_REFERENCE_TIMEOUT_MS) });
+  } catch (error) {
+    throw new Error(`GPTI2_ERROR: Reference image ${index + 1} download timed out or failed after ${Date.now() - startedAt}ms.`);
+  }
   if (!response.ok) throw new Error(`GPTI2_ERROR: Cannot download reference image ${index + 1}`);
 
   const input = Buffer.from(await response.arrayBuffer());

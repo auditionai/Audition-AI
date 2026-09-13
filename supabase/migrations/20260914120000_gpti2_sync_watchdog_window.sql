@@ -47,6 +47,12 @@ begin
       from public.generated_images gi
       where gi.status = 'processing' and gi.job_id is null
         and coalesce(gi.queue_kind, '') in ('image_generate', 'video_generate', 'motion_generate')
+        -- Never fail a live dispatch merely because it has no provider job id.
+        -- GPTi2 is synchronous; this branch is only eligible after its lease
+        -- (or an explicitly stale preparation stage) has expired.
+        and (gi.lease_expires_at is null
+          or gi.lease_expires_at < v_now - make_interval(secs => greatest(coalesce(p_pre_dispatch_grace_seconds, 15), 0))
+          or (coalesce(gi.queue_payload ->> '__stage', '') in ('preparing', 'uploading_refs', 'synthesizing_prompt', 'building_payload') and gi.updated_at < v_now - interval '90 seconds'))
         and (coalesce((gi.queue_payload ->> '__tstTouched')::boolean, false) is true
           or coalesce((gi.queue_payload ->> '__dispatchConfirmationPending')::boolean, false) is true
           or coalesce(gi.queue_payload ->> '__stage', '') = 'dispatching'

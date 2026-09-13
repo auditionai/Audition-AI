@@ -84,12 +84,12 @@ const MODEL_TABS: Array<{
   },
   {
     tier: 'gpt_flare', label: 'Flare', tag: 'MỚI', title: 'GPT Image 2.5 Flare',
-    description: 'GPT Image 2.5 Flare, tối ưu cho ảnh chi tiết và chữ tiếng Việt.', icon: Sparkles,
+    description: 'Nhanh, bám sát mô tả, hợp poster, banner và ảnh có chữ.', icon: Sparkles,
     accent: 'from-orange-400 via-rose-500 to-fuchsia-500',
   },
   {
     tier: 'gpt_sunburst', label: 'Sunburst', tag: 'MỚI', title: 'GPT Image 2.5 Sunburst',
-    description: 'GPT Image 2.5 Sunburst, phong cách nổi bật và màu sắc mạnh.', icon: Sparkles,
+    description: 'Chậm hơn, giàu chi tiết, hợp ảnh quảng cáo và sản phẩm.', icon: Sparkles,
     accent: 'from-yellow-300 via-orange-500 to-red-500',
   },
   {
@@ -97,7 +97,7 @@ const MODEL_TABS: Array<{
     label: 'Flash',
     tag: 'GIÁ RẺ',
     title: 'Nano Banana 2',
-    description: 'Gemini Flash, tốc độ nhanh và tiết kiệm, phù hợp ảnh cơ bản/chất lượng trung bình.',
+    description: 'Nhanh và tiết kiệm, hợp thử ý tưởng và ảnh cơ bản.',
     icon: Zap,
     accent: 'from-cyan-400 via-sky-500 to-blue-500',
   },
@@ -106,7 +106,7 @@ const MODEL_TABS: Array<{
     label: 'Pro',
     tag: 'HOT',
     title: 'Nano Banana Pro',
-    description: 'Gemini Pro thông minh hơn Flash, ảnh chi tiết hơn, hỗ trợ hoàn thiện cao và 4K.',
+    description: 'Cân bằng tốc độ và chất lượng, phù hợp ảnh cần hoàn thiện cao.',
     icon: Crown,
     accent: 'from-amber-300 via-orange-500 to-fuchsia-500',
   },
@@ -623,10 +623,10 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
                       type="button"
                       onClick={() => available && setAiModel(tier)}
                       disabled={!available}
-                      className={`relative overflow-hidden rounded-2xl border p-3 text-left transition-all ${
+                      className={`group relative overflow-hidden rounded-2xl border p-4 text-left transition-all duration-300 ${
                         selected
-                          ? 'border-cyan-300/70 bg-cyan-500/10 shadow-[0_0_24px_rgba(34,211,238,0.16)]'
-                          : 'border-white/10 bg-black/25 hover:border-white/20 hover:bg-white/5'
+                          ? 'border-cyan-300/80 bg-gradient-to-br from-cyan-400/15 via-violet-500/10 to-fuchsia-500/15 shadow-[0_12px_35px_rgba(34,211,238,0.18)] ring-1 ring-cyan-300/30'
+                          : 'border-white/10 bg-gradient-to-br from-white/[0.06] to-black/20 hover:-translate-y-0.5 hover:border-white/25 hover:bg-white/[0.09] hover:shadow-xl'
                       } ${!available ? 'cursor-not-allowed opacity-40' : ''}`}
                     >
                       <div className={`absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r ${accent}`} />
@@ -642,7 +642,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
                             </span>
                             {selected && <span className="ml-auto text-xs font-black text-cyan-300">✓</span>}
                           </div>
-                          <div className="mt-1 text-[11px] font-bold text-slate-200">{title}</div>
+                          <div className="mt-2 text-[11px] font-bold text-slate-200">{title}</div>
                           <p className="mt-1 text-[10px] leading-relaxed text-slate-500">{description}</p>
                         </div>
                       </div>

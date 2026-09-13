@@ -90,17 +90,17 @@ const IMAGE_MODEL_OPTIONS: Array<{
     accent: 'from-fuchsia-500 via-violet-500 to-cyan-400',
   },
   {
-    tier: 'gpt_flare', label: 'Flare', tag: 'MỚI', title: 'GPT Image 2.5 Flare', description: 'GPT Image 2.5 Flare, tối ưu cho ảnh chi tiết và chữ tiếng Việt.', icon: Sparkles, accent: 'from-orange-400 via-rose-500 to-fuchsia-500',
+    tier: 'gpt_flare', label: 'Flare', tag: 'MỚI', title: 'GPT Image 2.5 Flare', description: 'Nhanh, bám sát mô tả, hợp poster, banner và ảnh có chữ.', icon: Sparkles, accent: 'from-orange-400 via-rose-500 to-fuchsia-500',
   },
   {
-    tier: 'gpt_sunburst', label: 'Sunburst', tag: 'MỚI', title: 'GPT Image 2.5 Sunburst', description: 'GPT Image 2.5 Sunburst, phong cách nổi bật và màu sắc mạnh.', icon: Sparkles, accent: 'from-yellow-300 via-orange-500 to-red-500',
+    tier: 'gpt_sunburst', label: 'Sunburst', tag: 'MỚI', title: 'GPT Image 2.5 Sunburst', description: 'Chậm hơn, giàu chi tiết, hợp ảnh quảng cáo và sản phẩm.', icon: Sparkles, accent: 'from-yellow-300 via-orange-500 to-red-500',
   },
   {
     tier: 'flash',
     label: 'Flash',
     tag: 'GIÁ RẺ',
     title: 'Nano Banana 2',
-    description: 'Gemini Flash, nhanh và tiết kiệm, phù hợp ảnh cơ bản.',
+    description: 'Nhanh và tiết kiệm, hợp thử ý tưởng và ảnh cơ bản.',
     icon: Zap,
     accent: 'from-cyan-400 via-sky-500 to-blue-500',
   },
@@ -109,7 +109,7 @@ const IMAGE_MODEL_OPTIONS: Array<{
     label: 'Pro',
     tag: 'HOT',
     title: 'Nano Banana Pro',
-    description: 'Gemini Pro thông minh hơn Flash, chi tiết hơn và hỗ trợ 4K.',
+    description: 'Cân bằng tốc độ và chất lượng, phù hợp ảnh cần hoàn thiện cao.',
     icon: Crown,
     accent: 'from-amber-300 via-orange-500 to-fuchsia-500',
   },
@@ -1312,7 +1312,7 @@ export function WorkspaceImage() {
                         </span>
                         {selected && <span className="ml-auto text-xs font-black text-cyan-500">✓</span>}
                       </div>
-                      <div className="mt-1 text-[11px] font-bold text-gray-700 dark:text-zinc-200">{model.title}</div>
+                      <div className="mt-2 text-[11px] font-bold text-gray-700 dark:text-zinc-200">{model.title}</div>
                       <p className="mt-1 text-[10px] leading-relaxed text-gray-500 dark:text-zinc-500">{model.description}</p>
                     </div>
                   </div>

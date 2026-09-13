@@ -800,6 +800,36 @@ const prepareProviderPayloadFromQueueRecipe = async (
 export const prepareTstProviderPayloadFromQueueRecipe = (payload: QueueRecipePayload) =>
   prepareProviderPayloadFromQueueRecipe(payload, { uploadReferencesToTst: true });
 
+// GPTi2 accepts the original HTTPS reference URLs and user prompt directly.
+// Do not run the TST/Vertex director preparation path for this provider.
+export const prepareGpti2ProviderPayloadFromQueueRecipe = (payload: QueueRecipePayload) => {
+  if (payload.recipeType === 'image_generate_recipe_v1') {
+    const imagePayload = payload as ImageGenerateRecipePayload;
+    const references = getImageRenderReferenceSources(imagePayload);
+    return Promise.resolve({
+      model: imagePayload.modelId,
+      prompt: String(imagePayload.userPromptInput || imagePayload.prompt || '').trim(),
+      img_url: references,
+      resolution: imagePayload.resolution?.toLowerCase(),
+      aspect_ratio: imagePayload.aspectRatio,
+      quality: imagePayload.quality,
+      speed: imagePayload.speed,
+    });
+  }
+  if (payload.recipeType === 'prompt_image_generate_recipe_v1') {
+    return Promise.resolve({
+      model: payload.modelId,
+      prompt: String(payload.prompt || '').trim(),
+      img_url: (payload.referenceImages || []).filter(Boolean),
+      resolution: payload.resolution?.toLowerCase(),
+      aspect_ratio: payload.aspectRatio,
+      quality: payload.quality,
+      speed: payload.speed,
+    });
+  }
+  throw new Error(`GPTI2_UNSUPPORTED_RECIPE: ${payload.recipeType}`);
+};
+
 export const prepareGommoProviderPayloadFromQueueRecipe = (payload: QueueRecipePayload) => {
   if (payload.recipeType === 'motion_generate_recipe_v1') {
     return Promise.resolve({

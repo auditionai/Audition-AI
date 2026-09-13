@@ -11,6 +11,7 @@ import { getTstGeneratePath } from './_tst-generate-endpoints';
 import { normalizeTstOutboundPayload } from './_tst-payload-normalizer';
 import {
   buildImageGenerateProviderPayload,
+  prepareGpti2ProviderPayloadFromQueueRecipe,
   prepareImageGeneratePromptWithinLimit,
   prepareGommoProviderPayloadFromQueueRecipe,
   prepareTstProviderPayloadFromQueueRecipe,
@@ -3220,7 +3221,7 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
     }
 
     if (
-      (targetProvider === 'tst' || targetProvider === 'gpti2') &&
+      targetProvider === 'tst' &&
       isQueueRecipePayload(currentPayload) &&
       currentPayload.recipeType === 'image_generate_recipe_v1'
     ) {
@@ -3242,6 +3243,23 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
       submitPayload = stagedResult.providerPayload;
       submitValidationResult = { pricingMatch: { config_key: String(stagedResult.providerPayload.config_key || '') || undefined } };
       job.queue_payload = stagedResult.storedPayload;
+    }
+
+    if (
+      targetProvider === 'gpti2' &&
+      isQueueRecipePayload(currentPayload) &&
+      (currentPayload.recipeType === 'image_generate_recipe_v1' || currentPayload.recipeType === 'prompt_image_generate_recipe_v1')
+    ) {
+      submitPayload = await withTimeout(
+        withLeaseHeartbeat(
+          job.id,
+          prepareGpti2ProviderPayloadFromQueueRecipe(currentPayload),
+          preparationLeaseSeconds,
+        ),
+        preparationTimeoutMs,
+        'GPTi2 payload preparation timed out before dispatching to provider.',
+      );
+      job.queue_payload = await persistPreparedPayload(job.id, submitPayload, job.queue_payload || currentPayload);
     }
 
     if (targetProvider === 'tst' && isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'prompt_image_generate_recipe_v1') {

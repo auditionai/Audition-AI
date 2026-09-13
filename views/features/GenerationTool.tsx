@@ -1176,7 +1176,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                 speed: isGommoSelected ? gommoPricingInput.speed : effectiveSpeedId,
                 serverId: effectiveServerId,
                 providerMode: isGommoSelected ? providerMode : undefined,
-                pricingOptionId: isGommoSelected ? gommoSelectedPricing?.optionId : undefined,
+                pricingOptionId: isGommoSelected ? gommoSelectedPricing?.optionId : isGpti2Selected ? gpti2SelectedPricing?.optionId : undefined,
                 negativePrompt: DEFAULT_IMAGE_NEGATIVE_PROMPT,
                 characterReferenceGroups: stagedCharacterGroups,
                 characterImages: stagedCharacterImages,

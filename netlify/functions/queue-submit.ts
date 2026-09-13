@@ -463,21 +463,33 @@ const resolveServerCostVcoin = async (
   queuePayload: Record<string, unknown>,
   targetProvider?: GenerationProvider,
 ) => {
-  const storedProvider = String(queuePayload.__targetProvider || '').trim().toLowerCase();
-  const resolvedProvider = targetProvider || (
-    storedProvider === 'gommo' || storedProvider === 'gpti2' ? storedProvider : 'tst'
-  );
-  if (resolvedProvider === 'gommo' || resolvedProvider === 'gpti2') {
-    return resolveGommoCostFromAuditionPricing(admin, queueKind, queuePayload);
+  void targetProvider;
+  const modelId = getQueueModelId(queuePayload);
+  let optionCandidates = buildLocalPricingOptionCandidates(queuePayload);
+  const requestedProvider = String(queuePayload.__targetProvider || '').trim().toLowerCase();
+  if (requestedProvider !== 'gpti2') {
+    const validation = await validateQueuePayloadAgainstLiveCatalog(queueKind, queuePayload, {
+      ignoreServerAvailability: false,
+    });
+    const validatedKey = String(validation.pricingMatch?.config_key || '').trim().toLowerCase();
+    if (validatedKey) optionCandidates = [validatedKey, ...optionCandidates.filter((key) => key !== validatedKey)];
   }
-  const validation = await validateQueuePayloadAgainstLiveCatalog(queueKind, queuePayload, {
-    ignoreServerAvailability: false,
-  });
-  const modelId = String(validation.modelId || '').trim();
-  const configKey = String(validation.pricingMatch?.config_key || '').trim();
-  const fallbackVcoin = creditsToVcoin(Number(validation.pricingMatch?.credits || 0));
-  const overrideVcoin = await getAuditionPriceOverride(admin, modelId, configKey);
-  const baseVcoin = overrideVcoin ?? fallbackVcoin;
+  if (!modelId || optionCandidates.length === 0) throw new Error('INVALID_SERVER_PRICE');
+
+  // Billing is always controlled by the Admin pricing table. Provider costs
+  // (TST/GPTi2) are reference metadata only and must never become a fallback.
+  const { data, error } = await admin
+    .from('model_pricing')
+    .select('option_id, audition_price_vcoin, tst_price_credits')
+    .eq('model_id', modelId)
+    .in('option_id', optionCandidates);
+  if (error) throw error;
+  const rows = Array.isArray(data) ? data : [];
+  const selected = optionCandidates
+    .map((optionId) => rows.find((row) => normalizePricingPart(row.option_id) === optionId))
+    .find((row) => Number(row?.audition_price_vcoin) > 0);
+  if (!selected) throw new Error(`INVALID_SERVER_PRICE: Missing AUDITION AI price for ${modelId}`);
+  const baseVcoin = Math.ceil(Number(selected.audition_price_vcoin));
   const multiplier = queueKind === 'image_generate' ? getImageBillingMultiplier(queuePayload) : 1;
   const costVcoin = Math.ceil(baseVcoin * multiplier);
 
@@ -489,11 +501,11 @@ const resolveServerCostVcoin = async (
     costVcoin,
     pricing: {
       model_id: modelId,
-      config_key: configKey || null,
-      provider_credits: Number(validation.pricingMatch?.credits || 0),
+      config_key: String(selected.option_id || ''),
+      provider_credits: Number(selected.tst_price_credits || 0),
       base_vcoin: baseVcoin,
       multiplier,
-      source: overrideVcoin ? 'model_pricing_override' : 'provider_pricing',
+      source: 'admin_pricing',
     },
   };
 };

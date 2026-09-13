@@ -32,9 +32,9 @@ export const GENERATION_PROVIDER_ROUTE_OPTIONS: Array<{
 export const DEFAULT_PROVIDER_BY_FEATURE: Partial<Record<GenerationProviderRouteKey, 'tst' | 'gommo'>> = {
   video_generation: 'tst',
   motion_control: 'tst',
-  image_group_6: 'gommo',
-  image_group_7: 'gommo',
-  image_group_8: 'gommo',
+  image_group_6: 'tst',
+  image_group_7: 'tst',
+  image_group_8: 'tst',
 };
 
 export const DEFAULT_ALLOWED_MODELS_BY_FEATURE: Partial<Record<GenerationProviderRouteKey, string[]>> = {

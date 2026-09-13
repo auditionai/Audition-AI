@@ -84,12 +84,12 @@ const MODEL_TABS: Array<{
   },
   {
     tier: 'gpt_flare', label: 'Flare', tag: 'MỚI', title: 'GPT Image 2.5 Flare',
-    description: 'Nhanh, bám sát mô tả, hợp poster, banner và ảnh có chữ.', icon: Sparkles,
+    description: 'Tạo nhân vật 3D nhanh, bám sát mô tả và giữ ngoại hình nhất quán qua nhiều ảnh.', icon: Sparkles,
     accent: 'from-orange-400 via-rose-500 to-fuchsia-500',
   },
   {
     tier: 'gpt_sunburst', label: 'Sunburst', tag: 'MỚI', title: 'GPT Image 2.5 Sunburst',
-    description: 'Chậm hơn, giàu chi tiết, hợp ảnh quảng cáo và sản phẩm.', icon: Sparkles,
+    description: 'Dựng nhân vật 3D giàu chi tiết với chất liệu, gương mặt và ánh sáng điện ảnh nổi bật.', icon: Sparkles,
     accent: 'from-yellow-300 via-orange-500 to-red-500',
   },
   {

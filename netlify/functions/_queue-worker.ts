@@ -200,6 +200,10 @@ const AMBIGUOUS_DISPATCH_RECOVERY_GRACE_MS = 3 * 60 * 1000;
 const LEASE_HEARTBEAT_INTERVAL_MS = 30_000;
 const DISPATCH_LEASE_SECONDS = parsePositiveIntEnv('QUEUE_DISPATCH_LEASE_SECONDS', 300, 30);
 const DISPATCH_CLAIM_LEASE_SECONDS = parsePositiveIntEnv('QUEUE_DISPATCH_CLAIM_LEASE_SECONDS', 60, 30);
+// GPTi2's /images/edits endpoint is synchronous. GPT Image 2.5 can spend
+// several minutes rendering before it returns the completed asset, so a
+// normal short dispatch lease lets the stale-job guard refund a live request.
+const GPTI2_SYNC_DISPATCH_LEASE_SECONDS = parsePositiveIntEnv('QUEUE_GPTI2_SYNC_DISPATCH_LEASE_SECONDS', 10 * 60, 300);
 const PROVIDER_DISPATCH_TIMEOUT_MS = parsePositiveIntEnv('QUEUE_PROVIDER_DISPATCH_TIMEOUT_MS', 45_000, 5_000);
 const LIVE_CATALOG_VALIDATION_TIMEOUT_MS = parsePositiveIntEnv('QUEUE_LIVE_CATALOG_VALIDATION_TIMEOUT_MS', 45_000, 5_000);
 const PROVIDER_RESULT_STORAGE_TIMEOUT_MS = parsePositiveIntEnv('QUEUE_PROVIDER_RESULT_STORAGE_TIMEOUT_MS', 75_000, 10_000);
@@ -1633,6 +1637,9 @@ const markSubmittingPreparedPayloadWithOwnership = async (
       __tstTouched: true,
       __dispatchConfirmationPending: true,
       __dispatchAttemptId: dispatchAttemptId,
+      ...(targetProvider === 'gpti2'
+        ? { __gpti2SynchronousDispatchStartedAt: new Date().toISOString() }
+        : {}),
     },
     'dispatching',
     `Đang gửi yêu cầu tới ${targetProvider === 'gpti2' ? 'API 1 · GPTi2' : targetProvider === 'tst' ? 'API 2 · TST' : 'API 3 · Gommo'}.`,
@@ -3388,7 +3395,7 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
     const providerSubmission = await withLeaseHeartbeat(
       job.id,
       submitProviderJob(job.queue_kind, providerPayloadForSubmit, targetProvider),
-      DISPATCH_CLAIM_LEASE_SECONDS,
+      targetProvider === 'gpti2' ? GPTI2_SYNC_DISPATCH_LEASE_SECONDS : DISPATCH_CLAIM_LEASE_SECONDS,
     );
     const submittedPayload = await markSubmittedWithOwnership(job, providerSubmission, dispatchAttemptId);
     if (!submittedPayload) {

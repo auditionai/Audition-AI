@@ -52,7 +52,7 @@ export function Support() {
             </div>
           </a>
           <div className="h-px bg-[var(--color-border)] mx-4" />
-          <a href="https://m.me/cm/AbZT2-fW9wJlrX7M" target="_blank" rel="noreferrer" className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-500/10 m-2 rounded-xl active:opacity-80 transition-colors">
+          <a href="https://www.facebook.com/codycn2804/" target="_blank" rel="noreferrer" className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-500/10 m-2 rounded-xl active:opacity-80 transition-colors">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white shrink-0">
                 <MonitorSmartphone className="w-4 h-4" />
@@ -64,7 +64,7 @@ export function Support() {
             </div>
           </a>
           <div className="h-px bg-[var(--color-border)] mx-4" />
-          <a href="https://www.facebook.com/iam.cody.real/" target="_blank" rel="noreferrer" className="flex items-center justify-between p-3 bg-indigo-50 dark:bg-indigo-500/10 m-2 rounded-xl active:opacity-80 transition-colors">
+          <a href="https://www.facebook.com/codycn2804/" target="_blank" rel="noreferrer" className="flex items-center justify-between p-3 bg-indigo-50 dark:bg-indigo-500/10 m-2 rounded-xl active:opacity-80 transition-colors">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white shrink-0">
                 <Globe2 className="w-4 h-4" />
@@ -72,6 +72,18 @@ export function Support() {
               <div>
                 <p className="text-sm font-bold text-indigo-800 dark:text-indigo-400">Facebook Cody CN</p>
                 <p className="text-[10px] text-indigo-600 dark:text-indigo-400">Liên hệ trực tiếp với nhà phát triển</p>
+              </div>
+            </div>
+          </a>
+          <div className="h-px bg-[var(--color-border)] mx-4" />
+          <a href="https://www.tiktok.com/@auditionai.io.vn" target="_blank" rel="noreferrer" className="flex items-center justify-between p-3 bg-fuchsia-50 dark:bg-fuchsia-500/10 m-2 rounded-xl active:opacity-80 transition-colors">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-fuchsia-500 to-cyan-400 flex items-center justify-center text-white shrink-0">
+                <span className="text-sm font-black">♪</span>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-fuchsia-800 dark:text-fuchsia-300">TikTok AUDITION AI</p>
+                <p className="text-[10px] text-fuchsia-600 dark:text-fuchsia-400">Xem video và mẹo mới nhất</p>
               </div>
             </div>
           </a>

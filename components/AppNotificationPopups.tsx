@@ -65,6 +65,20 @@ const eventStyles = {
 };
 
 const NOTIFICATION_SOUND_URL = '/audio/notification-ting.mp3';
+const SOCIAL_LINKS = {
+  facebook: 'https://www.facebook.com/codycn2804/',
+  tiktok: 'https://www.tiktok.com/@auditionai.io.vn',
+} as const;
+
+const SocialIcon = ({ type }: { type: keyof typeof SOCIAL_LINKS }) => (
+  <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5 fill-current">
+    {type === 'facebook' ? (
+      <path d="M13.5 21v-8h2.75l.42-3h-3.17V8.08c0-.87.24-1.46 1.5-1.46h1.8V3.94c-.31-.04-1.37-.14-2.6-.14-2.57 0-4.33 1.57-4.33 4.46V10H7v3h2.87v8h3.63Z" />
+    ) : (
+      <path d="M16.7 3c.22 1.9 1.28 3.04 3.1 3.16v3.05a7.52 7.52 0 0 1-3.07-.71v5.97c0 4.06-4.42 5.33-7.24 3.02-2.82-2.3-1.44-7.94 3.2-8.17v3.17c-1.98-.3-2.64 1.52-2.1 2.46.49.84 1.8.97 2.42.24.69-.8.3-3.22.3-4.9V3h3.39Z" />
+    )}
+  </svg>
+);
 let notificationAudio: HTMLAudioElement | null = null;
 let soundUnlockListenersAttached = false;
 
@@ -256,6 +270,32 @@ export function SystemAnnouncementModal({
               <div className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] ${style.border} ${style.accent}`}>
                 <Icons.Shield className="h-3.5 w-3.5" />
                 Chính thức
+              </div>
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-white/10 bg-black/25 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+              <div className="mb-3 text-center text-xs font-black uppercase tracking-[0.12em] text-white">
+                Theo dõi AUDITION AI để cập nhật tin mới nhất
+              </div>
+              <div className={`grid gap-3 ${isMobile ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                <a
+                  href={SOCIAL_LINKS.facebook}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group flex min-h-12 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 px-4 py-3 text-sm font-black text-white shadow-[0_10px_24px_rgba(37,99,235,0.28)] transition duration-200 hover:-translate-y-0.5 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300"
+                >
+                  <SocialIcon type="facebook" />
+                  <span>Follow Facebook</span>
+                </a>
+                <a
+                  href={SOCIAL_LINKS.tiktok}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group flex min-h-12 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-fuchsia-600 via-rose-500 to-cyan-400 px-4 py-3 text-sm font-black text-white shadow-[0_10px_24px_rgba(236,72,153,0.28)] transition duration-200 hover:-translate-y-0.5 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-300"
+                >
+                  <SocialIcon type="tiktok" />
+                  <span>Follow TikTok</span>
+                </a>
               </div>
             </div>
 

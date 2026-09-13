@@ -27,7 +27,7 @@ import {
   type AuditionPricingOverride,
 } from '../../services/tstCatalog';
 import { optimizePayload } from '../../utils/imageProcessor';
-import { buildAuditionKoreaMmoStylePrompt, DEFAULT_IMAGE_NEGATIVE_PROMPT } from '../../shared/imagePromptDefaults';
+import { buildAuditionKoreaMmoStylePrompt, DEFAULT_IMAGE_NEGATIVE_PROMPT, GPT_IMAGE_25_REFERENCE_LOCK_PROMPT } from '../../shared/imagePromptDefaults';
 import type { Feature, GeneratedImage, Language, ViewId } from '../../types';
 import type { ModelPricing } from '../../services/economyService';
 import type { PromptImageGenerateRecipePayload } from '../../shared/queueRecipes';
@@ -466,10 +466,12 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
       const queuedJobId = crypto.randomUUID();
       const modelLabel = getModelLabel(aiModel);
       const isGptPromptMode = aiModel === 'gpt';
+      const referenceLockPrompt = aiModel === 'gpt_flare' || aiModel === 'gpt_sunburst' ? GPT_IMAGE_25_REFERENCE_LOCK_PROMPT : '';
+      const effectivePrompt = `${referenceLockPrompt} ${prompt.trim()}`.trim();
       const queuePayload: PromptImageGenerateRecipePayload = {
         recipeType: 'prompt_image_generate_recipe_v1',
         modelId: getGenerationModelId(aiModel),
-        prompt,
+        prompt: effectivePrompt,
         promptMode: isGptPromptMode ? 'user_only' : 'system_assisted',
         systemPromptPrefix: isGptPromptMode ? null : buildAuditionKoreaMmoStylePrompt(null),
         negativePrompt: isGptPromptMode ? null : DEFAULT_IMAGE_NEGATIVE_PROMPT,
@@ -486,7 +488,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
       const queuedImage: GeneratedImage = {
         id: queuedJobId,
         url: uploadedImages[0] || '',
-        prompt,
+        prompt: effectivePrompt,
         timestamp: Date.now(),
         updatedAt: Date.now(),
         toolId: feature.id,
@@ -504,7 +506,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
       await saveImageToLocalCache(queuedImage);
       await enqueueServerJob({
         id: queuedJobId,
-        prompt,
+        prompt: effectivePrompt,
         toolId: feature.id,
         toolName: feature.name.en,
         engine: queuedImage.engine,

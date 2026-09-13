@@ -24,7 +24,7 @@ import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageSer
 import { downloadAssetToBrowser } from '../../services/downloadService';
 import { analyzeCharacterAppearanceProfile } from '../../utils/imageProcessor';
 import { APP_CONFIG } from '../../constants';
-import { buildAuditionKoreaMmoStylePrompt, DEFAULT_IMAGE_NEGATIVE_PROMPT } from '../../shared/imagePromptDefaults';
+import { buildAuditionKoreaMmoStylePrompt, DEFAULT_IMAGE_NEGATIVE_PROMPT, GPT_IMAGE_25_REFERENCE_LOCK_PROMPT } from '../../shared/imagePromptDefaults';
 import { PROMPT_LIBRARY_APPLY_EVENT, consumeStashedPromptForGenerator } from '../../shared/caulenhauSamples';
 import {
   type AuditionPricingOverride,
@@ -1040,7 +1040,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
     const styleMetadata = availableStyles.find((style: any) => style.image_url === activeStylePreset);
     const styleDirectivePrompt = buildAuditionKoreaMmoStylePrompt(styleMetadata?.trigger_prompt || styleMetadata?.name || null);
-    const basePrompt = `${activeFeature.defaultPrompt || ''}${prompt}`.trim();
+    const referenceLockPrompt = aiModel === 'gpt_flare' || aiModel === 'gpt_sunburst' ? GPT_IMAGE_25_REFERENCE_LOCK_PROMPT : '';
+    const basePrompt = `${referenceLockPrompt} ${activeFeature.defaultPrompt || ''}${prompt}`.trim();
     const requestedSpeedId = uiSpeedToTst(speed) || 'fast';
     const requestedServerId = isGpti2Selected ? GPTI2_SERVER_ID : uiServerToTst(server) || 'fast';
     const compatibleServers = getCompatibleGenerationServers({
@@ -1155,7 +1156,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                 modelId: getGenerationModelId(aiModel),
                 prompt: basePrompt,
                 userPromptInput: prompt.trim(),
-                systemPromptPrefix: activeFeature.defaultPrompt || '',
+                systemPromptPrefix: `${referenceLockPrompt} ${activeFeature.defaultPrompt || ''}`.trim(),
                 characterCount: characters.length,
                 resolution,
                 aspectRatio,

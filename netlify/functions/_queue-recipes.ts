@@ -18,6 +18,7 @@ import {
 } from './_grok-director';
 import { analyzeImageGenerationVision } from './_grok-image-vision';
 import { CLAUDE_MODEL } from './_grok';
+import { GPT_IMAGE_25_REFERENCE_LOCK_PROMPT } from '../../shared/imagePromptDefaults';
 
 const TST_API_BASE = 'https://api.tramsangtao.com/v1';
 const TST_UPLOAD_STATUS_POLL_INTERVAL_MS = 2_000;
@@ -649,7 +650,11 @@ const prepareProviderPayloadFromQueueRecipe = async (
     }
 
     case 'prompt_image_generate_recipe_v1': {
-      const userPrompt = String(payload.prompt || '');
+      const rawUserPrompt = String(payload.prompt || '');
+      const isGptImage25 = ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(normalizeModelId(payload.modelId));
+      const userPrompt = isGptImage25 && !rawUserPrompt.trimStart().startsWith(GPT_IMAGE_25_REFERENCE_LOCK_PROMPT)
+        ? `${GPT_IMAGE_25_REFERENCE_LOCK_PROMPT} ${rawUserPrompt}`.trim()
+        : rawUserPrompt;
       if (!userPrompt.trim()) {
         throw new Error('Prompt tạo ảnh không được để trống.');
       }

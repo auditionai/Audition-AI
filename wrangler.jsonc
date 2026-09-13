@@ -7,6 +7,9 @@
   "workers_dev": true,
   "preview_urls": false,
   "triggers": { "crons": ["*/1 * * * *"] },
+  "r2_buckets": [
+    { "binding": "RESULTS_BUCKET", "bucket_name": "audition-ai-images" }
+  ],
   "vars": {
     "CLOUDFLARE_QUEUE_BATCH": "4",
     "SUPABASE_URL": "https://wnosrdigcdjlrmofxemd.supabase.co"

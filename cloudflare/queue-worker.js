@@ -44,6 +44,38 @@ const appendLog = (payload, stage, message, level = 'info') => ({
   ].slice(-80),
 });
 
+const imageExtension = (contentType) => {
+  const mime = String(contentType || '').toLowerCase();
+  if (mime.includes('jpeg')) return 'jpg';
+  if (mime.includes('webp')) return 'webp';
+  return 'png';
+};
+
+const persistGpti2Result = async (env, row, result) => {
+  const keyBase = `users/${encodeURIComponent(row.user_id)}/generated/${encodeURIComponent(row.id)}`;
+  let body;
+  let contentType = 'image/png';
+  if (result.startsWith('data:image/')) {
+    const match = result.match(/^data:([^;]+);base64,(.+)$/s);
+    if (!match) throw new Error('GPTI2_ERROR: invalid inline image result');
+    contentType = match[1];
+    const binary = atob(match[2]);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+    body = bytes;
+  } else {
+    const response = await fetch(result, { signal: AbortSignal.timeout(60000) });
+    if (!response.ok) throw new Error(`GPTI2_ERROR: result download failed (${response.status})`);
+    contentType = response.headers.get('content-type') || contentType;
+    body = await response.arrayBuffer();
+  }
+  const key = `${keyBase}.${imageExtension(contentType)}`;
+  await env.RESULTS_BUCKET.put(key, body, { httpMetadata: { contentType } });
+  const publicBase = envText(env, 'R2_PUBLIC_URL').replace(/\/+$/, '');
+  if (!publicBase) throw new Error('R2_PUBLIC_URL is required to publish GPTi2 output');
+  return `${publicBase}/${key}`;
+};
+
 const rescueAbandonedGpti2Dispatches = async (env) => {
   const cutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString();
   const response = await supabase(env, `generated_images?status=eq.processing&job_id=is.null&updated_at=lt.${encodeURIComponent(cutoff)}&select=id,queue_payload`);
@@ -117,8 +149,10 @@ const processRow = async (env, row) => {
   await report('preparing', 'Cloudflare Worker da nhan job. Bat dau kiem tra payload GPTi2.');
   if (providerOf(row) === 'gpti2') {
     const result = await gpti2(env, row, report);
-    activePayload = appendLog(activePayload, 'completed', 'Cloudflare Worker da nhan ket qua GPTi2 va luu anh.', 'success');
-    await updateJob(env, row.id, { status: 'completed', progress: 100, image_url: result, finished_at: new Date().toISOString(), next_poll_at: null, lease_token: null, lease_expires_at: null, queue_payload: activePayload });
+    await report('verifying_output', 'Dang luu ket qua GPTi2 vao R2.');
+    const imageUrl = await persistGpti2Result(env, row, result);
+    activePayload = appendLog(activePayload, 'completed', 'Cloudflare Worker da luu ket qua GPTi2 vao R2.', 'success');
+    await updateJob(env, row.id, { status: 'completed', progress: 100, image_url: imageUrl, finished_at: new Date().toISOString(), next_poll_at: null, lease_token: null, lease_expires_at: null, queue_payload: activePayload });
     return { completed: 1 };
   }
   const submission = await tst(env, row);

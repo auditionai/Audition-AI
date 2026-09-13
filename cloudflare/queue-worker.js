@@ -171,5 +171,14 @@ const run = async (env) => {
 
 export default {
   async fetch(request, env, ctx) { if (request.method === 'GET') return json({ ok: true, worker: 'auditionai-queue-worker' }); ctx.waitUntil(run(env).catch((error) => console.error('[queue-worker]', error))); return json({ accepted: true }, 202); },
+  async queue(batch, env) {
+    try {
+      await run(env);
+      batch.ackAll();
+    } catch (error) {
+      console.error('[queue-worker] Queue delivery failed:', error);
+      batch.retryAll({ delaySeconds: 10 });
+    }
+  },
   async scheduled(_event, env, ctx) { ctx.waitUntil(run(env)); },
 };

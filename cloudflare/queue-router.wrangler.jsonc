@@ -1,0 +1,14 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "auditionai-queue-router",
+  "main": "queue-router.js",
+  "compatibility_date": "2026-09-13",
+  "workers_dev": true,
+  "preview_urls": false,
+  "queues": {
+    "producers": [
+      { "binding": "GPTI2_JOBS", "queue": "auditionai-gpti2-jobs" }
+    ]
+  },
+  "observability": { "enabled": true, "head_sampling_rate": 1 }
+}

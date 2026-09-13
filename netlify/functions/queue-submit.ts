@@ -736,6 +736,25 @@ const runSafeWorkerTick = async (rawUrl?: string | null) => {
   }
 };
 
+const wakeCloudflareGpti2Worker = async (jobId: string, provider: GenerationProvider) => {
+  if (provider !== 'gpti2') return;
+  const routerUrl = String(process.env.CLOUDFLARE_GPTI2_ROUTER_URL || '').trim();
+  const serviceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+  if (!routerUrl || !serviceRoleKey || !jobId) return;
+  try {
+    const response = await fetch(routerUrl, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${serviceRoleKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jobId, provider }),
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!response.ok) throw new Error(`Cloudflare queue router returned ${response.status}`);
+  } catch (error) {
+    // Cron remains the recovery path when the immediate wake signal fails.
+    console.warn('[queue-submit] Failed to wake Cloudflare GPTi2 worker:', error);
+  }
+};
+
 export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return {
@@ -884,6 +903,7 @@ export const handler: Handler = async (event) => {
       }
     }
 
+    await wakeCloudflareGpti2Worker(String(row?.id || body.id || ''), targetProvider);
     await runSafeWorkerTick(event.rawUrl);
 
     return {

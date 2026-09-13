@@ -1,3 +1,7 @@
+-- Remote projects may already have this function with a different OUT row
+-- type. PostgreSQL cannot replace a function while changing its return type.
+drop function if exists public.get_generation_queue_stats();
+
 CREATE OR REPLACE FUNCTION public.get_generation_queue_stats()
 RETURNS TABLE(
   my_image_processing integer,

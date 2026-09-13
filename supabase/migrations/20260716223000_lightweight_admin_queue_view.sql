@@ -2,6 +2,8 @@ begin;
 
 -- The admin queue list only needs operational metadata. Keep large recipe,
 -- reference-image, and provider payloads behind the on-demand detail endpoint.
+drop view if exists public.admin_generated_images_queue_lightweight;
+
 create or replace view public.admin_generated_images_queue_lightweight
 with (security_invoker = true)
 as

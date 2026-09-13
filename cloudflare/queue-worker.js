@@ -4,7 +4,7 @@ const GPTI2_MODELS = new Set(['gpt-image-2', 'image-gpt-2', 'gpt-image-2.5-flare
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 const envText = (env, key) => String(env[key] || '').trim();
 const payloadObject = (row) => row?.queue_payload && typeof row.queue_payload === 'object' ? row.queue_payload : {};
-const modelOf = (row) => String(row?.model_used || payloadObject(row).model || payloadObject(row).modelId || '').trim().toLowerCase();
+const modelOf = (row) => String(payloadObject(row).model || payloadObject(row).modelId || row?.model_used || '').trim().toLowerCase();
 const providerOf = (row) => String(row?.provider || payloadObject(row).__targetProvider || '').trim().toLowerCase() || (GPTI2_MODELS.has(modelOf(row)) ? 'gpti2' : 'tst');
 const supabase = (env, path, init = {}) => fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, { ...init, headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`, 'content-type': 'application/json', ...(init.headers || {}) } });
 const rpc = (env, name, body) => fetch(`${env.SUPABASE_URL}/rest/v1/rpc/${name}`, { method: 'POST', headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`, 'content-type': 'application/json' }, body: JSON.stringify(body) });
@@ -12,6 +12,21 @@ const rpc = (env, name, body) => fetch(`${env.SUPABASE_URL}/rest/v1/rpc/${name}`
 const updateJob = async (env, id, values) => {
   const response = await supabase(env, `generated_images?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ ...values, updated_at: new Date().toISOString() }) });
   if (!response.ok) throw new Error(`Supabase update failed (${response.status}): ${await response.text()}`);
+};
+
+const rescueAbandonedGpti2Dispatches = async (env) => {
+  const cutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  const response = await supabase(env, `generated_images?status=eq.processing&job_id=is.null&updated_at=lt.${encodeURIComponent(cutoff)}&select=id,queue_payload`);
+  if (!response.ok) throw new Error(`Supabase rescue scan failed (${response.status}): ${await response.text()}`);
+  const rows = (await response.json()).filter((row) => payloadObject(row).__targetProvider === 'gpti2' && payloadObject(row).__stage === 'dispatching');
+  for (const row of rows) {
+    await updateJob(env, row.id, {
+      status: 'queued', progress: 5, error_message: null, processing_started_at: null,
+      lease_token: null, lease_expires_at: null, next_poll_at: new Date().toISOString(),
+      queue_payload: { ...payloadObject(row), __stage: 'queued', __dispatchConfirmationPending: false, __tstTouched: false, __cloudflareRescuedAt: new Date().toISOString() },
+    });
+  }
+  return rows.length;
 };
 
 const gpti2 = async (env, row) => {
@@ -62,9 +77,10 @@ const processRow = async (env, row) => {
 };
 
 const run = async (env) => {
+  const rescued = await rescueAbandonedGpti2Dispatches(env);
   const claim = await rpc(env, 'claim_dispatchable_generated_jobs', { p_limit: Number(env.CLOUDFLARE_QUEUE_BATCH || 4), p_lease_seconds: 900 });
   if (!claim.ok) throw new Error(`Supabase claim failed (${claim.status}): ${await claim.text()}`);
-  const rows = await claim.json(); const summary = { claimed: rows.length, completed: 0, submitted: 0, failed: 0 };
+  const rows = await claim.json(); const summary = { rescued, claimed: rows.length, completed: 0, submitted: 0, failed: 0 };
   for (const row of rows) { try { Object.assign(summary, Object.fromEntries(Object.entries(await processRow(env, row)).map(([k, v]) => [k, Number(summary[k] || 0) + v]))); } catch (error) { summary.failed += 1; await updateJob(env, row.id, { status: 'failed', progress: 0, error_message: error instanceof Error ? error.message : String(error), finished_at: new Date().toISOString(), lease_token: null, lease_expires_at: null, next_poll_at: null, queue_payload: { ...payloadObject(row), __stage: 'failed', __cloudflareWorker: true } }); } }
   return summary;
 };

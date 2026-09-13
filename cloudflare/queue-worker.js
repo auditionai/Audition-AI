@@ -16,6 +16,17 @@ const gpti2SizeOf = (payload) => {
   const ratio = String(payload.aspect_ratio || payload.aspectRatio || '1:1').trim();
   return GPTI2_SIZES[resolution]?.[ratio] || GPTI2_SIZES['1K']['1:1'];
 };
+const referenceUrlsOf = (row) => {
+  const payload = payloadObject(row);
+  const recipe = payload.__recipePayload && typeof payload.__recipePayload === 'object' ? payload.__recipePayload : payload;
+  const urls = [];
+  const add = (value) => { if (typeof value === 'string' && /^https?:\/\//i.test(value.trim())) urls.push(value.trim()); };
+  const addMany = (value) => { if (Array.isArray(value)) value.forEach(addMany); else if (value && typeof value === 'object') Object.values(value).forEach(addMany); else add(value); };
+  addMany(payload.img_url); addMany(payload.image_urls); addMany(payload.image_url);
+  addMany(recipe.referenceImages); addMany(recipe.characterImages); addMany(recipe.sampleImage); addMany(recipe.styleImage);
+  addMany(recipe.characterReferenceGroups);
+  return [...new Set(urls)];
+};
 const supabase = (env, path, init = {}) => fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, { ...init, headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`, 'content-type': 'application/json', ...(init.headers || {}) } });
 const rpc = (env, name, body) => fetch(`${env.SUPABASE_URL}/rest/v1/rpc/${name}`, { method: 'POST', headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`, 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
@@ -45,7 +56,7 @@ const gpti2 = async (env, row) => {
   if (!GPTI2_MODELS.has(model)) throw new Error(`GPTI2_MODEL_UNSUPPORTED: ${model}`);
   const prompt = String(payload.prompt || row.prompt || '').trim();
   if (!prompt) throw new Error('GPTI2_ERROR: prompt is required');
-  const refs = Array.isArray(payload.img_url) ? payload.img_url : Array.isArray(payload.image_urls) ? payload.image_urls : [];
+  const refs = referenceUrlsOf(row);
   const size = gpti2SizeOf(payload);
   let response;
   if (refs.length && !model.startsWith('nano-banana')) {
@@ -78,10 +89,11 @@ const tst = async (env, row) => {
 };
 
 const processRow = async (env, row) => {
-  await updateJob(env, row.id, { status: 'processing', progress: 50, error_message: null, queue_payload: { ...payloadObject(row), __stage: 'dispatching', __cloudflareWorker: true } });
+  const basePayload = { ...payloadObject(row), __stage: 'dispatching', __cloudflareWorker: true, __logs: [...(Array.isArray(payloadObject(row).__logs) ? payloadObject(row).__logs : []), { at: new Date().toISOString(), stage: 'dispatching', level: 'info', message: 'Cloudflare Worker bat dau gui request toi provider.' }] };
+  await updateJob(env, row.id, { status: 'processing', progress: 50, error_message: null, queue_payload: basePayload });
   if (providerOf(row) === 'gpti2') {
     const result = await gpti2(env, row);
-    await updateJob(env, row.id, { status: 'completed', progress: 100, image_url: result, finished_at: new Date().toISOString(), next_poll_at: null, lease_token: null, lease_expires_at: null, queue_payload: { ...payloadObject(row), __stage: 'completed', __cloudflareWorker: true } });
+    await updateJob(env, row.id, { status: 'completed', progress: 100, image_url: result, finished_at: new Date().toISOString(), next_poll_at: null, lease_token: null, lease_expires_at: null, queue_payload: { ...basePayload, __stage: 'completed', __logs: [...basePayload.__logs, { at: new Date().toISOString(), stage: 'completed', level: 'success', message: 'Cloudflare Worker da nhan ket qua GPTi2 va luu anh.' }] } });
     return { completed: 1 };
   }
   const submission = await tst(env, row);

@@ -132,12 +132,53 @@ const gpti2 = async (env, row, report) => {
 const tst = async (env, row) => {
   const payload = payloadObject(row);
   const path = row.queue_kind === 'video_generate' ? '/video/generate' : row.queue_kind === 'motion_generate' ? '/motion/generate' : '/image/generate';
-  const response = await fetch(`https://api.tramsangtao.com/v1${path}`, { method: 'POST', headers: { Authorization: `Bearer ${env.TST_API_KEY}`, 'content-type': 'application/json' }, body: JSON.stringify({ ...payload, prompt: payload.prompt || row.prompt, model: modelOf(row) }), signal: AbortSignal.timeout(45000) });
+  const response = await fetch(`https://api.tramsangtao.com/v1${path}`, { method: 'POST', headers: { Authorization: `Bearer ${env.TST_API_KEY}`, 'content-type': 'application/json' }, body: JSON.stringify({ ...payload, prompt: payload.prompt || row.prompt, model: modelOf(row) }), signal: AbortSignal.timeout(120000) });
   if (!response.ok) throw new Error(`TST_ERROR: ${await response.text()}`);
   const data = await response.json();
   const id = data?.job_id || data?.jobId || data?.id;
   if (!id) throw new Error('TST_ERROR: provider returned no job id');
   return { id: String(id) };
+};
+
+const providerResultOf = (data, assetType) => {
+  const keys = assetType === 'video' ? ['video_url', 'videoUrl'] : ['image_url', 'imageUrl'];
+  const visit = (value) => {
+    if (typeof value === 'string' && /^https?:\/\//i.test(value)) return value;
+    if (Array.isArray(value)) return value.map(visit).find(Boolean) || '';
+    if (!value || typeof value !== 'object') return '';
+    for (const key of [...keys, 'result', 'output', 'url', 'data', 'results', 'outputs', 'files']) { const found = visit(value[key]); if (found) return found; }
+    return '';
+  };
+  return visit(data);
+};
+
+const pollTst = async (env, row) => {
+  const response = await fetch(`https://api.tramsangtao.com/v1/jobs/${encodeURIComponent(row.job_id)}`, { headers: { Authorization: `Bearer ${env.TST_API_KEY}` }, signal: AbortSignal.timeout(30000) });
+  if (!response.ok) throw new Error(`TST poll failed (${response.status}): ${await response.text()}`);
+  return response.json();
+};
+
+const pollDueRows = async (env) => {
+  const response = await rpc(env, 'claim_pollable_generated_jobs', { p_limit: Number(env.CLOUDFLARE_QUEUE_BATCH || 8), p_lease_seconds: 120 });
+  if (!response.ok) throw new Error(`Supabase poll claim failed (${response.status}): ${await response.text()}`);
+  const rows = await response.json();
+  for (const row of rows) {
+    try {
+      const data = await pollTst(env, row);
+      const status = String(data?.status || '').toLowerCase();
+      const result = providerResultOf(data, row.asset_type || 'image');
+      if (result && ['completed', 'success', 'succeeded', 'done'].includes(status)) {
+        await updateJob(env, row.id, { status: 'completed', progress: 100, image_url: result, finished_at: new Date().toISOString(), next_poll_at: null, lease_token: null, lease_expires_at: null, queue_payload: appendLog(payloadObject(row), 'completed', 'Cloudflare Worker da luu ket qua TST.', 'success') });
+      } else if (['failed', 'error', 'cancelled', 'canceled'].includes(status)) {
+        await updateJob(env, row.id, { status: 'failed', progress: 0, error_message: String(data?.error || data?.message || 'TST job failed'), finished_at: new Date().toISOString(), next_poll_at: null, lease_token: null, lease_expires_at: null, queue_payload: appendLog(payloadObject(row), 'failed', 'TST tra ve loi.', 'error') });
+      } else {
+        await updateJob(env, row.id, { status: 'processing', progress: Math.max(60, Number(data?.progress || 0)), next_poll_at: new Date(Date.now() + 15000).toISOString(), lease_token: null, lease_expires_at: null, queue_payload: appendLog(payloadObject(row), 'polling', 'Cloudflare Worker dang poll TST.') });
+      }
+    } catch (error) {
+      await updateJob(env, row.id, { status: 'processing', next_poll_at: new Date(Date.now() + 30000).toISOString(), lease_token: null, lease_expires_at: null, error_message: error instanceof Error ? error.message : String(error), queue_payload: appendLog(payloadObject(row), 'polling', 'Cloudflare Worker poll TST gap loi, se thu lai.', 'warning') });
+    }
+  }
+  return rows.length;
 };
 
 const processRow = async (env, row) => {
@@ -162,9 +203,10 @@ const processRow = async (env, row) => {
 
 const run = async (env) => {
   const rescued = await rescueAbandonedGpti2Dispatches(env);
-  const claim = await rpc(env, 'claim_cloudflare_gpti2_jobs', { p_limit: Number(env.CLOUDFLARE_QUEUE_BATCH || 4), p_lease_seconds: 900 });
+  const polled = await pollDueRows(env);
+  const claim = await rpc(env, 'claim_cloudflare_generated_jobs', { p_limit: Number(env.CLOUDFLARE_QUEUE_BATCH || 8), p_lease_seconds: 900 });
   if (!claim.ok) throw new Error(`Supabase claim failed (${claim.status}): ${await claim.text()}`);
-  const rows = await claim.json(); const summary = { rescued, claimed: rows.length, completed: 0, submitted: 0, failed: 0 };
+  const rows = await claim.json(); const summary = { rescued, polled, claimed: rows.length, completed: 0, submitted: 0, failed: 0 };
   for (const row of rows) { try { Object.assign(summary, Object.fromEntries(Object.entries(await processRow(env, row)).map(([k, v]) => [k, Number(summary[k] || 0) + v]))); } catch (error) { summary.failed += 1; await updateJob(env, row.id, { status: 'failed', progress: 0, error_message: error instanceof Error ? error.message : String(error), finished_at: new Date().toISOString(), lease_token: null, lease_expires_at: null, next_poll_at: null, queue_payload: { ...payloadObject(row), __stage: 'failed', __cloudflareWorker: true } }); } }
   return summary;
 };

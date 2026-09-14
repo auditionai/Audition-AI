@@ -17,7 +17,8 @@
   },
   "vars": {
     "CLOUDFLARE_QUEUE_BATCH": "4",
-    "SUPABASE_URL": "https://wnosrdigcdjlrmofxemd.supabase.co"
+    "SUPABASE_URL": "https://wnosrdigcdjlrmofxemd.supabase.co",
+    "R2_PUBLIC_URL": "https://pub-edbe379bb8ae48e3b618166c1ec678ca.r2.dev"
   },
-  "observability": { "enabled": true, "head_sampling_rate": 1 }
+  "observability": { "enabled": true, "head_sampling_rate": 1, "traces": { "enabled": true, "head_sampling_rate": 1 } }
 }

@@ -1,3 +1,55 @@
+# Cloudflare Workers production cutover
+
+The Cloudflare implementation is split by failure domain instead of placing all
+provider work in one Worker:
+
+| Worker/config | Responsibility |
+| --- | --- |
+| `../wrangler.jsonc` | GPTi2 queue consumer, TST dispatch/poll and complete TST reference preparation (URL upload, multipart fallback, status polling, MIME validation). |
+| `queue-router.wrangler.jsonc` | GPTi2 Queue producer/wake endpoint. |
+| `direct-edit.wrangler.jsonc` | Nano direct-image-edit lane and idempotent refund on terminal failure. |
+| `video-script.wrangler.jsonc` | Image-to-script director worker. |
+| `operations.wrangler.jsonc` | Queue stale-job recovery/refund and history cleanup. |
+| `api.wrangler.jsonc` | Public `/api/*` edge routes: SePay checkout/IPN/reconciliation, video script submit/status, TST upload proxies, R2 upload/delete, safe download proxy and bounded admin R2 cleanup. |
+
+## Production sequence
+
+1. Apply every migration in `../supabase/migrations`, including the three
+   `20260914*cloudflare*` migrations. The recovery/refund RPC is intentionally
+   database-atomic, so a retrying Worker cannot credit a job twice.
+2. Create the Queue `auditionai-gpti2-jobs` and bind the existing R2 bucket
+   `audition-ai-images` (the committed Wrangler configs name both resources).
+3. Set Worker secrets using `wrangler secret put`, never `vars`:
+
+   - Queue worker: `SUPABASE_SERVICE_ROLE_KEY`, `GPTI2_API_KEY`, `TST_API_KEY`, `QUEUE_WORKER_SECRET`
+   - Queue router: `SUPABASE_SERVICE_ROLE_KEY`
+   - Direct edit: `SUPABASE_SERVICE_ROLE_KEY`, `GPTI2_API_KEY`, `DIRECT_EDIT_WORKER_SECRET`
+   - Video script: `SUPABASE_SERVICE_ROLE_KEY`, `VIDEO_SCRIPT_WORKER_SECRET`; `CLAUDE_API_KEY` is optional because the Worker uses the active `[CLAUDE]` key in Supabase when present.
+   - Operations: `SUPABASE_SERVICE_ROLE_KEY`, `OPERATIONS_WORKER_SECRET`
+   - API: `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `TST_API_KEY`, `SEPAY_MERCHANT_ID`, `SEPAY_SECRET_KEY`, `SEPAY_API_TOKEN`, `SEPAY_RECONCILE_SECRET`, `OPERATIONS_WORKER_SECRET`, `VIDEO_SCRIPT_WORKER_SECRET`, `VIDEO_SCRIPT_WORKER_URL`
+
+4. Deploy each config with its own `wrangler deploy --config ...` command.
+   The API Worker has a fixed `NETLIFY_API_ORIGIN` compatibility fallback:
+   edge-native routes stay on Cloudflare while unported `/api/*` requests proxy
+   to Netlify. It is therefore safe to bind the Worker to
+   `https://<production-host>/api/*` without breaking the existing frontend.
+   Set SePay's IPN URL to
+   `https://<production-host>/api/sepay-ipn` and its checkout return URLs to
+   the same production host.
+5. SePay remains deliberately disabled until its three production secrets
+   (`SEPAY_MERCHANT_ID`, `SEPAY_SECRET_KEY`, and `SEPAY_API_TOKEN`) are set on
+   `auditionai-api-worker`. The queue watchdog continues independently while
+   this payment lane is staged.
+6. Only after the route is live, disable the matching Netlify scheduled
+   functions. Keep Netlify routes as rollback until a SePay checkout and a
+   small authenticated R2 upload have passed in production.
+
+`api-worker.js` rejects unauthenticated user/admin operations, restricts R2
+keys to the authenticated user's prefix, bounds administrative deletion to an
+explicit prefix/date range, and does not follow provider redirects to private
+or local HTTP targets. Workers Logs and Traces are enabled in all production
+configs.
+
 # Cloudflare Telegram Notify Worker
 
 This worker receives job events from Netlify Functions and forwards them to Telegram.

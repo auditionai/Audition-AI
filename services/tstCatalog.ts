@@ -1,6 +1,6 @@
 import modelsMarkdown from '../models.md?raw';
 
-export type TstGenerationTier = 'flash' | 'pro' | 'gpt';
+export type TstGenerationTier = 'flash' | 'pro' | 'gpt' | 'gpt_flare' | 'gpt_sunburst';
 export type TstGenerationSpeed = 'fast' | 'slow';
 // Resolution is provider-defined and must stay open-ended. TST/Gommo can add
 // values without an AUDITION deployment (for example 8K/10K/12K).
@@ -165,6 +165,8 @@ const TST_DOCS_VIDEO_ASPECT_RATIO_FALLBACKS: Record<string, string[]> = {
 };
 const TST_DOCS_IMAGE_ASPECT_RATIO_FALLBACKS: Record<string, string[]> = {
   'image-gpt-2': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'],
+  'gpt-image-2.5-flare': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'],
+  'gpt-image-2.5-sunburst': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'],
   'nano-banana-2': ['auto', '1:1', '4:3', '16:9', '9:16'],
   'nano-banana-pro': ['auto', '1:1', '4:3', '16:9', '21:9', '9:16', '3:4'],
 };
@@ -174,6 +176,8 @@ const tierToModelId: Record<TstGenerationTier, string> = {
   flash: 'nano-banana-2',
   pro: 'nano-banana-pro',
   gpt: 'image-gpt-2',
+  gpt_flare: 'gpt-image-2.5-flare',
+  gpt_sunburst: 'gpt-image-2.5-sunburst',
 };
 
 const uiServerMap: Record<string, string> = {
@@ -363,6 +367,8 @@ export const ADMIN_MANAGED_MODEL_LABELS = [
   'Nano Banana 2',
   'Nano Banana PRO',
   'GPT Image 2',
+  'GPT Image 2.5 Flare',
+  'GPT Image 2.5 Sunburst',
   'Kling 2.5 Turbo',
   'Kling 2.6',
   'Kling 3.0',
@@ -389,6 +395,8 @@ const ADMIN_MANAGED_MODEL_IDS = [
   'nano-banana-2',
   'nano-banana-pro',
   'image-gpt-2',
+  'gpt-image-2.5-flare',
+  'gpt-image-2.5-sunburst',
   'kling-2.5-turbo',
   'kling-2.6',
   'kling-3.0-video',
@@ -547,11 +555,30 @@ export const sanitizePricingEntriesWithRuntimeModels = (
   runtimeModels: TstRuntimeModel[] = [],
   serverAvailabilityConfig?: TstServerAvailabilityConfig | null,
 ) => {
+  // GPTi2 2.5 models use the same option matrix as GPT Image 2. The live
+  // catalog can omit their model records, so expose mirrored rows everywhere
+  // pricing is consumed (not only in the Admin table).
+  const gpt25Ids = ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'];
+  const baseGptRows = pricingEntries.filter((entry) => normalizeModelId(entry.model) === 'image-gpt-2');
+  const mirroredRows = baseGptRows.flatMap((entry) => gpt25Ids.map((model) => ({ ...entry, model })));
+  const effectivePricingEntries = [...pricingEntries, ...mirroredRows];
+  const effectiveRuntimeModels = [
+    ...runtimeModels,
+    ...gpt25Ids
+      .filter((model) => !runtimeModels.some((entry) => normalizeModelId(entry.model) === model))
+      .map((model) => ({
+        model,
+        name: model === 'gpt-image-2.5-flare' ? 'GPT Image 2.5 Flare' : 'GPT Image 2.5 Sunburst',
+        type: 'image',
+        servers: ['fast'],
+        capabilities: { resolutions: ['1K', '2K', '4K'], qualities: ['low', 'medium', 'high'] },
+      } as TstRuntimeModel)),
+  ];
   const modelMap = new Map(
-    runtimeModels.map((model) => [normalizeModelId(model.model), model]),
+    effectiveRuntimeModels.map((model) => [normalizeModelId(model.model), model]),
   );
 
-  return pricingEntries.filter((entry) => {
+  return effectivePricingEntries.filter((entry) => {
     const model = modelMap.get(normalizeModelId(entry.model));
     if (!model) return false;
 
@@ -562,7 +589,7 @@ export const sanitizePricingEntriesWithRuntimeModels = (
     const normalizedServer = normalizeCatalogServer(entry.server);
     if (normalizedServer && Array.isArray(model.servers) && model.servers.length > 0) {
       const allowedServers = model.servers.map((value) => normalizeCatalogServer(value)).filter(Boolean);
-      const hasLivePricingForServer = pricingEntries.some(
+      const hasLivePricingForServer = effectivePricingEntries.some(
         (candidate) =>
           normalizeModelId(candidate.model) === normalizeModelId(entry.model) &&
           normalizeCatalogServer(candidate.server) === normalizedServer,
@@ -769,6 +796,8 @@ const getFallbackImageSpec = (tier: TstGenerationTier): TstImageModelSpec => {
   const displayName =
     tier === 'flash' ? 'Nano Banana 2' :
     tier === 'pro' ? 'Nano Banana PRO' :
+    tier === 'gpt_flare' ? 'GPT Image 2.5 Flare' :
+    tier === 'gpt_sunburst' ? 'GPT Image 2.5 Sunburst' :
     'GPT Image 2';
   return {
     modelId,
@@ -1960,7 +1989,10 @@ export const getMotionCostBreakdown = ({
 export const getPricingRows = async (forceRefresh = false): Promise<TstPricingRow[]> => {
   const [rawPricingEntries, runtimeModels] = await Promise.all([fetchTstPricing(forceRefresh), fetchTstModels(forceRefresh)]);
   const pricingEntries = sanitizePricingEntriesWithRuntimeModels(rawPricingEntries, runtimeModels);
-  const modelMap = new Map(runtimeModels.map((model) => [normalizeModelId(model.model), model]));
+  const modelMap = new Map([
+    ...runtimeModels,
+    ...['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].map((model) => ({ model, name: model, type: 'image', servers: ['fast'] } as TstRuntimeModel)),
+  ].map((model) => [normalizeModelId(model.model), model]));
   const rows: Array<TstPricingRow | null> = pricingEntries.map((entry) => {
     const model = modelMap.get(normalizeModelId(entry.model));
     if (!model || !isAdminManagedPricingModel(model.model)) {

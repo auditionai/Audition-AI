@@ -11,6 +11,7 @@ import { getTstGeneratePath } from './_tst-generate-endpoints';
 import { normalizeTstOutboundPayload } from './_tst-payload-normalizer';
 import {
   buildImageGenerateProviderPayload,
+  prepareGpti2ProviderPayloadFromQueueRecipe,
   prepareImageGeneratePromptWithinLimit,
   prepareGommoProviderPayloadFromQueueRecipe,
   prepareTstProviderPayloadFromQueueRecipe,
@@ -200,6 +201,10 @@ const AMBIGUOUS_DISPATCH_RECOVERY_GRACE_MS = 3 * 60 * 1000;
 const LEASE_HEARTBEAT_INTERVAL_MS = 30_000;
 const DISPATCH_LEASE_SECONDS = parsePositiveIntEnv('QUEUE_DISPATCH_LEASE_SECONDS', 300, 30);
 const DISPATCH_CLAIM_LEASE_SECONDS = parsePositiveIntEnv('QUEUE_DISPATCH_CLAIM_LEASE_SECONDS', 60, 30);
+// GPTi2's /images/edits endpoint is synchronous. GPT Image 2.5 can spend
+// several minutes rendering before it returns the completed asset, so a
+// normal short dispatch lease lets the stale-job guard refund a live request.
+const GPTI2_SYNC_DISPATCH_LEASE_SECONDS = parsePositiveIntEnv('QUEUE_GPTI2_SYNC_DISPATCH_LEASE_SECONDS', 10 * 60, 300);
 const PROVIDER_DISPATCH_TIMEOUT_MS = parsePositiveIntEnv('QUEUE_PROVIDER_DISPATCH_TIMEOUT_MS', 45_000, 5_000);
 const LIVE_CATALOG_VALIDATION_TIMEOUT_MS = parsePositiveIntEnv('QUEUE_LIVE_CATALOG_VALIDATION_TIMEOUT_MS', 45_000, 5_000);
 const PROVIDER_RESULT_STORAGE_TIMEOUT_MS = parsePositiveIntEnv('QUEUE_PROVIDER_RESULT_STORAGE_TIMEOUT_MS', 75_000, 10_000);
@@ -360,7 +365,7 @@ const stripInternalQueueMeta = (payload: Record<string, unknown> | ImageGenerate
   Object.fromEntries(Object.entries(payload).filter(([key]) => !key.startsWith('__')));
 
 const isGptImageRecipePayload = (payload?: Partial<ImageGenerateRecipePayload> | null) =>
-  String(payload?.modelId || '').trim().toLowerCase() === 'image-gpt-2';
+  ['image-gpt-2', 'gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(String(payload?.modelId || '').trim().toLowerCase());
 
 const sanitizeGptImageRecipePayload = (payload: ImageGenerateRecipePayload): ImageGenerateRecipePayload => {
   if (!isGptImageRecipePayload(payload)) {
@@ -1633,6 +1638,9 @@ const markSubmittingPreparedPayloadWithOwnership = async (
       __tstTouched: true,
       __dispatchConfirmationPending: true,
       __dispatchAttemptId: dispatchAttemptId,
+      ...(targetProvider === 'gpti2'
+        ? { __gpti2SynchronousDispatchStartedAt: new Date().toISOString() }
+        : {}),
     },
     'dispatching',
     `Đang gửi yêu cầu tới ${targetProvider === 'gpti2' ? 'API 1 · GPTi2' : targetProvider === 'tst' ? 'API 2 · TST' : 'API 3 · Gommo'}.`,
@@ -3213,7 +3221,7 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
     }
 
     if (
-      (targetProvider === 'tst' || targetProvider === 'gpti2') &&
+      targetProvider === 'tst' &&
       isQueueRecipePayload(currentPayload) &&
       currentPayload.recipeType === 'image_generate_recipe_v1'
     ) {
@@ -3235,6 +3243,23 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
       submitPayload = stagedResult.providerPayload;
       submitValidationResult = { pricingMatch: { config_key: String(stagedResult.providerPayload.config_key || '') || undefined } };
       job.queue_payload = stagedResult.storedPayload;
+    }
+
+    if (
+      targetProvider === 'gpti2' &&
+      isQueueRecipePayload(currentPayload) &&
+      (currentPayload.recipeType === 'image_generate_recipe_v1' || currentPayload.recipeType === 'prompt_image_generate_recipe_v1')
+    ) {
+      submitPayload = await withTimeout(
+        withLeaseHeartbeat(
+          job.id,
+          prepareGpti2ProviderPayloadFromQueueRecipe(currentPayload),
+          preparationLeaseSeconds,
+        ),
+        preparationTimeoutMs,
+        'GPTi2 payload preparation timed out before dispatching to provider.',
+      );
+      job.queue_payload = await persistPreparedPayload(job.id, submitPayload, job.queue_payload || currentPayload);
     }
 
     if (targetProvider === 'tst' && isQueueRecipePayload(currentPayload) && currentPayload.recipeType === 'prompt_image_generate_recipe_v1') {
@@ -3388,8 +3413,29 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
     const providerSubmission = await withLeaseHeartbeat(
       job.id,
       submitProviderJob(job.queue_kind, providerPayloadForSubmit, targetProvider),
-      DISPATCH_CLAIM_LEASE_SECONDS,
+      targetProvider === 'gpti2' ? GPTI2_SYNC_DISPATCH_LEASE_SECONDS : DISPATCH_CLAIM_LEASE_SECONDS,
     );
+
+    // GPTi2 generation/edit endpoints are synchronous. Their response is the
+    // final image, not a provider job that can be polled. Persist it directly
+    // instead of writing a potentially multi-megabyte base64 data URL into
+    // queue_payload and creating a synthetic `inline` poll job.
+    if (providerSubmission.inlineResult) {
+      const completion = await completePolledJobWithResultUrl(
+        job,
+        providerSubmission.inlineResult,
+        {
+          completionMessage: 'GPTi2 da tao xong anh. Da luu ket qua.',
+          completionLevel: 'success',
+        },
+      );
+      if (completion === 'completed') {
+        logQueueWorkerEvent('Completed synchronous GPTi2 job.', getQueueWorkerLogJob(job));
+        return { completed: 1 };
+      }
+      return { failed: 1 };
+    }
+
     const submittedPayload = await markSubmittedWithOwnership(job, providerSubmission, dispatchAttemptId);
     if (!submittedPayload) {
       await cancelProviderJobBestEffort(providerSubmission.jobId, {

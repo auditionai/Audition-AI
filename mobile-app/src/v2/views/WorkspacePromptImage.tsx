@@ -62,11 +62,17 @@ const MODEL_TABS: Array<{
     accent: 'from-fuchsia-500 via-violet-500 to-cyan-400',
   },
   {
+    tier: 'gpt_flare', label: 'Flare', tag: 'MỚI', title: 'GPT Image 2.5 Flare', description: 'Tạo nhân vật 3D nhanh, bám sát mô tả và giữ ngoại hình nhất quán qua nhiều ảnh.', icon: Sparkles, accent: 'from-orange-400 via-rose-500 to-fuchsia-500',
+  },
+  {
+    tier: 'gpt_sunburst', label: 'Sunburst', tag: 'MỚI', title: 'GPT Image 2.5 Sunburst', description: 'Dựng nhân vật 3D giàu chi tiết với chất liệu, gương mặt và ánh sáng điện ảnh nổi bật.', icon: Sparkles, accent: 'from-yellow-300 via-orange-500 to-red-500',
+  },
+  {
     tier: 'flash',
     label: 'Flash',
     tag: 'GIÁ RẺ',
     title: 'Nano Banana 2',
-    description: 'Gemini Flash, nhanh và tiết kiệm, phù hợp ảnh cơ bản.',
+    description: 'Nhanh và tiết kiệm, hợp thử ý tưởng và ảnh cơ bản.',
     icon: Zap,
     accent: 'from-cyan-400 via-sky-500 to-blue-500',
   },
@@ -75,7 +81,7 @@ const MODEL_TABS: Array<{
     label: 'Pro',
     tag: 'HOT',
     title: 'Nano Banana Pro',
-    description: 'Gemini Pro thông minh hơn Flash, chi tiết hơn và hỗ trợ 4K.',
+    description: 'Cân bằng tốc độ và chất lượng, phù hợp ảnh cần hoàn thiện cao.',
     icon: Crown,
     accent: 'from-amber-300 via-orange-500 to-fuchsia-500',
   },
@@ -110,7 +116,7 @@ export function WorkspacePromptImage() {
   const [referenceImages, setReferenceImages] = useState<(string | null)[]>([null]);
   const [activeUploadIndex, setActiveUploadIndex] = useState(0);
   const [prompt, setPrompt] = useState('');
-  const [aiModel, setAiModel] = useState<TstGenerationTier>('gpt');
+  const [aiModel, setAiModel] = useState<TstGenerationTier>('gpt_flare');
   const [aspectRatio, setAspectRatio] = useState('9:16');
   const [resolution, setResolution] = useState('1K');
   const [speed, setSpeed] = useState('Nhanh');
@@ -174,7 +180,8 @@ export function WorkspacePromptImage() {
   const isGommoSelected = selectedProvider === 'gommo';
   const isGpti2Selected = selectedProvider === 'gpti2';
   const selectedGommoModel = getGommoModelForAudition(gommoCatalog, selectedModelId);
-  const tstReferenceImageLimit = aiModel === 'gpt' ? GPT_REFERENCE_IMAGE_LIMIT : DEFAULT_REFERENCE_IMAGE_LIMIT;
+  const isGptImageTier = ['gpt', 'gpt_flare', 'gpt_sunburst'].includes(aiModel);
+  const tstReferenceImageLimit = isGptImageTier ? GPT_REFERENCE_IMAGE_LIMIT : DEFAULT_REFERENCE_IMAGE_LIMIT;
   const maxReferenceImages = isGommoSelected && Number(selectedGommoModel?.maxReferenceImages) > 0
     ? Number(selectedGommoModel?.maxReferenceImages)
     : tstReferenceImageLimit;
@@ -532,7 +539,7 @@ export function WorkspacePromptImage() {
 
         <div className="space-y-2">
           <h3 className="ml-1 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-zinc-500">MODEL AI</h3>
-          <div className="grid gap-2">
+          <div className="grid gap-3 sm:grid-cols-2">
             {MODEL_TABS.map(({ tier, label, tag, title, description, icon: Icon, accent }) => {
               const selected = aiModel === tier;
               const available = isModelAllowedForFeature(providerConfig, 'image_prompt', getGenerationModelId(tier));
@@ -542,7 +549,7 @@ export function WorkspacePromptImage() {
                   type="button"
                   onClick={() => available && setAiModel(tier)}
                   disabled={!available}
-                  className={`relative overflow-hidden rounded-[18px] border p-3 text-left transition-all ${
+                  className={`relative overflow-hidden rounded-[18px] border p-4 text-left transition-all min-h-[112px] ${
                     selected
                       ? 'border-cyan-300 bg-cyan-50 shadow-sm dark:border-cyan-400/70 dark:bg-cyan-500/10'
                       : 'border-gray-100 bg-white text-gray-500 dark:border-zinc-800 dark:bg-[#18181B] dark:text-zinc-400'
@@ -561,7 +568,7 @@ export function WorkspacePromptImage() {
                         </span>
                         {selected && <span className="ml-auto text-xs font-black text-cyan-500">✓</span>}
                       </div>
-                      <div className="mt-1 text-[11px] font-bold text-gray-700 dark:text-zinc-200">{title}</div>
+                      <div className="mt-2 text-[11px] font-bold text-gray-700 dark:text-zinc-200">{title}</div>
                       <p className="mt-1 text-[10px] leading-relaxed text-gray-500 dark:text-zinc-500">{description}</p>
                     </div>
                   </div>

@@ -32,9 +32,9 @@ export const GENERATION_PROVIDER_ROUTE_OPTIONS: Array<{
 export const DEFAULT_PROVIDER_BY_FEATURE: Partial<Record<GenerationProviderRouteKey, 'tst' | 'gommo'>> = {
   video_generation: 'tst',
   motion_control: 'tst',
-  image_group_6: 'gommo',
-  image_group_7: 'gommo',
-  image_group_8: 'gommo',
+  image_group_6: 'tst',
+  image_group_7: 'tst',
+  image_group_8: 'tst',
 };
 
 export const DEFAULT_ALLOWED_MODELS_BY_FEATURE: Partial<Record<GenerationProviderRouteKey, string[]>> = {
@@ -43,7 +43,7 @@ export const DEFAULT_ALLOWED_MODELS_BY_FEATURE: Partial<Record<GenerationProvide
   image_group_8: ['image-gpt-2'],
 };
 
-export const GPTI2_IMAGE_MODELS = ['image-gpt-2', 'gpt-image-2', 'nano-banana-2', 'nano-banana-pro'];
+export const GPTI2_IMAGE_MODELS = ['image-gpt-2', 'gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro'];
 
 const normalize = (value: unknown) => String(value || '').trim().toLowerCase();
 

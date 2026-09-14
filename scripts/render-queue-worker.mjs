@@ -29,7 +29,10 @@ const lane = normalizeLane(process.env.RENDER_QUEUE_WORKER_LANE);
 const label = String(process.env.RENDER_QUEUE_WORKER_LABEL || `render-queue-${lane}`).trim() || `render-queue-${lane}`;
 const lockName = String(process.env.RENDER_QUEUE_WORKER_LOCK_NAME || `queue_worker_lock:${lane}`).trim() || `queue_worker_lock:${lane}`;
 
-const WORKER_LOCK_LEASE_SECONDS = parsePositiveIntEnv('RENDER_QUEUE_WORKER_LEASE_SECONDS', 180, 15);
+// GPTi2 image generation is synchronous and can take almost five minutes.
+// The worker lock must outlive one full dispatch plus result persistence, or a
+// second worker can steal the lane while the original request is still live.
+const WORKER_LOCK_LEASE_SECONDS = parsePositiveIntEnv('RENDER_QUEUE_WORKER_LEASE_SECONDS', 900, 15);
 const IDLE_DELAY_MS = parsePositiveIntEnv('RENDER_QUEUE_WORKER_IDLE_DELAY_MS', 15_000, 10_000);
 const ACTIVE_DELAY_MS = parsePositiveIntEnv('RENDER_QUEUE_WORKER_ACTIVE_DELAY_MS', 3_000, 250);
 const LOCKED_DELAY_MS = parsePositiveIntEnv('RENDER_QUEUE_WORKER_LOCKED_DELAY_MS', 5_000, 100);

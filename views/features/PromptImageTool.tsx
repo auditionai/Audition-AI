@@ -27,7 +27,7 @@ import {
   type AuditionPricingOverride,
 } from '../../services/tstCatalog';
 import { optimizePayload } from '../../utils/imageProcessor';
-import { buildAuditionKoreaMmoStylePrompt, DEFAULT_IMAGE_NEGATIVE_PROMPT } from '../../shared/imagePromptDefaults';
+import { buildAuditionKoreaMmoStylePrompt, DEFAULT_IMAGE_NEGATIVE_PROMPT, GPT_IMAGE_25_REFERENCE_LOCK_PROMPT } from '../../shared/imagePromptDefaults';
 import type { Feature, GeneratedImage, Language, ViewId } from '../../types';
 import type { ModelPricing } from '../../services/economyService';
 import type { PromptImageGenerateRecipePayload } from '../../shared/queueRecipes';
@@ -78,16 +78,26 @@ const MODEL_TABS: Array<{
     label: 'GPT',
     tag: 'BEST',
     title: 'GPT Image 2',
-    description: 'ChatGPT mới nhất, hiểu prompt tốt hơn, chi tiết chính xác và độ hoàn thiện cao nhất.',
+    description: 'Tạo ảnh nhân vật 3D AI ổn định nhất.',
     icon: Bot,
     accent: 'from-fuchsia-500 via-violet-500 to-cyan-400',
+  },
+  {
+    tier: 'gpt_flare', label: 'Flare', tag: 'MỚI', title: 'GPT Image 2.5 Flare',
+    description: 'Tạo nhân vật 3D nhanh, bám sát mô tả và giữ ngoại hình nhất quán qua nhiều ảnh.', icon: Sparkles,
+    accent: 'from-orange-400 via-rose-500 to-fuchsia-500',
+  },
+  {
+    tier: 'gpt_sunburst', label: 'Sunburst', tag: 'MỚI', title: 'GPT Image 2.5 Sunburst',
+    description: 'Dựng nhân vật 3D giàu chi tiết với chất liệu, gương mặt và ánh sáng điện ảnh nổi bật.', icon: Sparkles,
+    accent: 'from-yellow-300 via-orange-500 to-red-500',
   },
   {
     tier: 'flash',
     label: 'Flash',
     tag: 'GIÁ RẺ',
     title: 'Nano Banana 2',
-    description: 'Gemini Flash, tốc độ nhanh và tiết kiệm, phù hợp ảnh cơ bản/chất lượng trung bình.',
+    description: 'Nhanh và tiết kiệm, hợp thử ý tưởng và ảnh cơ bản.',
     icon: Zap,
     accent: 'from-cyan-400 via-sky-500 to-blue-500',
   },
@@ -96,7 +106,7 @@ const MODEL_TABS: Array<{
     label: 'Pro',
     tag: 'HOT',
     title: 'Nano Banana Pro',
-    description: 'Gemini Pro thông minh hơn Flash, ảnh chi tiết hơn, hỗ trợ hoàn thiện cao và 4K.',
+    description: 'Cân bằng tốc độ và chất lượng, phù hợp ảnh cần hoàn thiện cao.',
     icon: Crown,
     accent: 'from-amber-300 via-orange-500 to-fuchsia-500',
   },
@@ -130,7 +140,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
   const [referenceImages, setReferenceImages] = useState<PromptImageSlot[]>([null]);
   const [activeUploadIndex, setActiveUploadIndex] = useState(0);
   const [prompt, setPrompt] = useState('');
-  const [aiModel, setAiModel] = useState<TstGenerationTier>('gpt');
+  const [aiModel, setAiModel] = useState<TstGenerationTier>('gpt_sunburst');
   const [aspectRatio, setAspectRatio] = useState('3:4');
   const [resolution, setResolution] = useState('1K');
   const [speed, setSpeed] = useState('Nhanh');
@@ -198,7 +208,8 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
   const isGommoSelected = selectedProvider === 'gommo';
   const pricingServerId = selectedProvider === 'gpti2' ? undefined : generationServerId;
   const selectedGommoModel = getGommoModelForAudition(gommoCatalog, selectedModelId);
-  const tstReferenceImageLimit = aiModel === 'gpt' ? GPT_REFERENCE_IMAGE_LIMIT : DEFAULT_REFERENCE_IMAGE_LIMIT;
+  const isGptImageTier = ['gpt', 'gpt_flare', 'gpt_sunburst'].includes(aiModel);
+  const tstReferenceImageLimit = isGptImageTier ? GPT_REFERENCE_IMAGE_LIMIT : DEFAULT_REFERENCE_IMAGE_LIMIT;
   const maxReferenceImages = isGommoSelected && Number(selectedGommoModel?.maxReferenceImages) > 0
     ? Number(selectedGommoModel?.maxReferenceImages)
     : tstReferenceImageLimit;
@@ -331,8 +342,17 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
     allowGenericFallback: true,
     preferredOptionId: gommoPricingOptionId,
   });
+  const gpti2Pricing = selectedProvider === 'gpti2'
+    ? getAuditionProviderPricing(pricingOverrides, selectedModelId, {
+        resolution,
+        quality: isGptImageTier ? gptQuality : undefined,
+        speed: generationSpeedId,
+      }, { allowGenericFallback: true })
+    : null;
   const selectedCost = isGommoSelected
     ? { available: gommoPricing !== null && isGommoCatalogModelAvailable(selectedGommoModel), vcoin: gommoPricing?.vcoin || 0 }
+    : selectedProvider === 'gpti2'
+      ? { available: gpti2Pricing !== null, vcoin: gpti2Pricing?.vcoin || 0 }
     : tstSelectedCost;
   const totalCost = selectedCost.available ? selectedCost.vcoin * modeCountForPrice : 0;
   const resolutionCostMap = useMemo(
@@ -350,6 +370,12 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
                 allowGenericFallback: true,
                 preferredOptionId: getGommoCatalogPricingOptionId(selectedGommoModel, { resolution: item, providerMode }),
               })?.vcoin || 0
+            : selectedProvider === 'gpti2'
+              ? getAuditionProviderPricing(pricingOverrides, selectedModelId, {
+                  resolution: item,
+                  quality: isGptImageTier ? gptQuality : undefined,
+                  speed: generationSpeedId,
+                }, { allowGenericFallback: true })?.vcoin || 0
             : getGenerationCostBreakdown({
             tier: aiModel,
             resolution: item as TstResolution,
@@ -455,10 +481,12 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
       const queuedJobId = crypto.randomUUID();
       const modelLabel = getModelLabel(aiModel);
       const isGptPromptMode = aiModel === 'gpt';
+      const referenceLockPrompt = aiModel === 'gpt_flare' || aiModel === 'gpt_sunburst' ? GPT_IMAGE_25_REFERENCE_LOCK_PROMPT : '';
+      const effectivePrompt = `${referenceLockPrompt} ${prompt.trim()}`.trim();
       const queuePayload: PromptImageGenerateRecipePayload = {
         recipeType: 'prompt_image_generate_recipe_v1',
         modelId: getGenerationModelId(aiModel),
-        prompt,
+        prompt: effectivePrompt,
         promptMode: isGptPromptMode ? 'user_only' : 'system_assisted',
         systemPromptPrefix: isGptPromptMode ? null : buildAuditionKoreaMmoStylePrompt(null),
         negativePrompt: isGptPromptMode ? null : DEFAULT_IMAGE_NEGATIVE_PROMPT,
@@ -468,14 +496,14 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
         speed: isGommoSelected ? gommoPricingInput.speed : generationSpeedId,
         serverId: isGommoSelected ? undefined : generationServerId,
         providerMode: isGommoSelected ? providerMode : undefined,
-        pricingOptionId: isGommoSelected ? gommoPricing?.optionId : undefined,
+        pricingOptionId: isGommoSelected ? gommoPricing?.optionId : selectedProvider === 'gpti2' ? gpti2Pricing?.optionId : undefined,
         quality: isGommoSelected ? gommoPricingInput.quality : isGptPromptMode ? gptQuality : undefined,
       };
 
       const queuedImage: GeneratedImage = {
         id: queuedJobId,
         url: uploadedImages[0] || '',
-        prompt,
+        prompt: effectivePrompt,
         timestamp: Date.now(),
         updatedAt: Date.now(),
         toolId: feature.id,
@@ -493,7 +521,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
       await saveImageToLocalCache(queuedImage);
       await enqueueServerJob({
         id: queuedJobId,
-        prompt,
+        prompt: effectivePrompt,
         toolId: feature.id,
         toolName: feature.name.en,
         engine: queuedImage.engine,
@@ -602,7 +630,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
           <div className="space-y-5 mt-5">
             <div className="space-y-3">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Mô hình AI</label>
-              <div className="grid gap-2">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {MODEL_TABS.map(({ tier, label, tag, title, description, icon: Icon, accent }) => {
                   const selected = aiModel === tier;
                   const available = isModelAllowedForFeature(providerConfig, 'image_prompt', getGenerationModelId(tier));
@@ -612,10 +640,10 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
                       type="button"
                       onClick={() => available && setAiModel(tier)}
                       disabled={!available}
-                      className={`relative overflow-hidden rounded-2xl border p-3 text-left transition-all ${
+                      className={`group relative overflow-hidden rounded-2xl border p-4 text-left transition-all duration-300 min-h-[88px] ${
                         selected
-                          ? 'border-cyan-300/70 bg-cyan-500/10 shadow-[0_0_24px_rgba(34,211,238,0.16)]'
-                          : 'border-white/10 bg-black/25 hover:border-white/20 hover:bg-white/5'
+                          ? 'border-cyan-300/80 bg-gradient-to-br from-cyan-400/15 via-violet-500/10 to-fuchsia-500/15 shadow-[0_12px_35px_rgba(34,211,238,0.18)] ring-1 ring-cyan-300/30'
+                          : 'border-white/10 bg-gradient-to-br from-white/[0.06] to-black/20 hover:-translate-y-0.5 hover:border-white/25 hover:bg-white/[0.09] hover:shadow-xl'
                       } ${!available ? 'cursor-not-allowed opacity-40' : ''}`}
                     >
                       <div className={`absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r ${accent}`} />
@@ -631,8 +659,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
                             </span>
                             {selected && <span className="ml-auto text-xs font-black text-cyan-300">✓</span>}
                           </div>
-                          <div className="mt-1 text-[11px] font-bold text-slate-200">{title}</div>
-                          <p className="mt-1 text-[10px] leading-relaxed text-slate-500">{description}</p>
+                          <div className="mt-2 text-[11px] font-bold text-slate-200">{title}</div>
                         </div>
                       </div>
                     </button>

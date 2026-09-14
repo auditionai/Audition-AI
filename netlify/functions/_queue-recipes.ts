@@ -18,6 +18,7 @@ import {
 } from './_grok-director';
 import { analyzeImageGenerationVision } from './_grok-image-vision';
 import { CLAUDE_MODEL } from './_grok';
+import { GPT_IMAGE_25_REFERENCE_LOCK_PROMPT } from '../../shared/imagePromptDefaults';
 
 const TST_API_BASE = 'https://api.tramsangtao.com/v1';
 const TST_UPLOAD_STATUS_POLL_INTERVAL_MS = 2_000;
@@ -426,7 +427,7 @@ const normalizePromptWhitespace = (value?: string | null) => String(value || '')
 
 const normalizeModelId = (value?: string | null) => String(value || '').trim().toLowerCase();
 
-const isGptImageModel = (modelId?: string | null) => normalizeModelId(modelId) === 'image-gpt-2';
+const isGptImageModel = (modelId?: string | null) => ['image-gpt-2', 'gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(normalizeModelId(modelId));
 
 const combineImageGeneratePrompt = (systemPromptPrefix: string, userPromptInput: string) =>
   `${systemPromptPrefix}${userPromptInput}`.trim();
@@ -649,7 +650,11 @@ const prepareProviderPayloadFromQueueRecipe = async (
     }
 
     case 'prompt_image_generate_recipe_v1': {
-      const userPrompt = String(payload.prompt || '');
+      const rawUserPrompt = String(payload.prompt || '');
+      const isGptImage25 = ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(normalizeModelId(payload.modelId));
+      const userPrompt = isGptImage25 && !rawUserPrompt.trimStart().startsWith(GPT_IMAGE_25_REFERENCE_LOCK_PROMPT)
+        ? `${GPT_IMAGE_25_REFERENCE_LOCK_PROMPT} ${rawUserPrompt}`.trim()
+        : rawUserPrompt;
       if (!userPrompt.trim()) {
         throw new Error('Prompt tạo ảnh không được để trống.');
       }
@@ -794,6 +799,36 @@ const prepareProviderPayloadFromQueueRecipe = async (
 // serialize them as subjects/images according to the Gommo contract.
 export const prepareTstProviderPayloadFromQueueRecipe = (payload: QueueRecipePayload) =>
   prepareProviderPayloadFromQueueRecipe(payload, { uploadReferencesToTst: true });
+
+// GPTi2 accepts the original HTTPS reference URLs and user prompt directly.
+// Do not run the TST/Vertex director preparation path for this provider.
+export const prepareGpti2ProviderPayloadFromQueueRecipe = (payload: QueueRecipePayload) => {
+  if (payload.recipeType === 'image_generate_recipe_v1') {
+    const imagePayload = payload as ImageGenerateRecipePayload;
+    const references = getImageRenderReferenceSources(imagePayload);
+    return Promise.resolve({
+      model: imagePayload.modelId,
+      prompt: String(imagePayload.userPromptInput || imagePayload.prompt || '').trim(),
+      img_url: references,
+      resolution: imagePayload.resolution?.toLowerCase(),
+      aspect_ratio: imagePayload.aspectRatio,
+      quality: imagePayload.quality,
+      speed: imagePayload.speed,
+    });
+  }
+  if (payload.recipeType === 'prompt_image_generate_recipe_v1') {
+    return Promise.resolve({
+      model: payload.modelId,
+      prompt: String(payload.prompt || '').trim(),
+      img_url: (payload.referenceImages || []).filter(Boolean),
+      resolution: payload.resolution?.toLowerCase(),
+      aspect_ratio: payload.aspectRatio,
+      quality: payload.quality,
+      speed: payload.speed,
+    });
+  }
+  throw new Error(`GPTI2_UNSUPPORTED_RECIPE: ${payload.recipeType}`);
+};
 
 export const prepareGommoProviderPayloadFromQueueRecipe = (payload: QueueRecipePayload) => {
   if (payload.recipeType === 'motion_generate_recipe_v1') {

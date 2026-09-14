@@ -111,27 +111,28 @@ export const resolveProviderForModel = (
   modelId: string,
   featureKey?: GenerationProviderRouteKey | null,
 ): GenerationProviderMode => {
+  const normalizeRetiredProvider = (provider: GenerationProviderMode): GenerationProviderMode => provider === 'gommo' ? 'tst' : provider;
   const normalizedModelId = normalize(modelId);
   const normalizedFeatureKey = normalize(featureKey);
   if (normalizedFeatureKey) {
     const priority = config?.providerPriorityByFeature?.[normalizedFeatureKey];
     if (Array.isArray(priority) && priority.length > 0) {
       const first = priority.find((provider) => provider === 'gpti2' || provider === 'tst' || provider === 'gommo');
-      if (first) return normalizedFeatureKey === 'video_generation' || normalizedFeatureKey === 'motion_control'
+      if (first) return normalizeRetiredProvider(normalizedFeatureKey === 'video_generation' || normalizedFeatureKey === 'motion_control'
         ? (first === 'gpti2' ? 'tst' : first)
-        : first;
+        : first);
     }
     const featureProvider = config?.providerByFeature?.[normalizedFeatureKey];
     if (featureProvider) {
-      return normalizedFeatureKey === 'video_generation' || normalizedFeatureKey === 'motion_control'
+      return normalizeRetiredProvider(normalizedFeatureKey === 'video_generation' || normalizedFeatureKey === 'motion_control'
         ? (featureProvider === 'gpti2' ? 'tst' : featureProvider)
-        : featureProvider;
+        : featureProvider);
     }
     const featureDefault = DEFAULT_PROVIDER_BY_FEATURE[normalizedFeatureKey as GenerationProviderRouteKey];
     if (featureDefault) return featureDefault;
-    return config?.provider || 'tst';
+    return normalizeRetiredProvider(config?.provider || 'tst');
   }
-  return config?.providerByModel?.[normalizedModelId] || config?.provider || 'tst';
+  return normalizeRetiredProvider(config?.providerByModel?.[normalizedModelId] || config?.provider || 'tst');
 };
 
 export const getGommoModelForAudition = (

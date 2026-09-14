@@ -463,21 +463,33 @@ const resolveServerCostVcoin = async (
   queuePayload: Record<string, unknown>,
   targetProvider?: GenerationProvider,
 ) => {
-  const storedProvider = String(queuePayload.__targetProvider || '').trim().toLowerCase();
-  const resolvedProvider = targetProvider || (
-    storedProvider === 'gommo' || storedProvider === 'gpti2' ? storedProvider : 'tst'
-  );
-  if (resolvedProvider === 'gommo' || resolvedProvider === 'gpti2') {
-    return resolveGommoCostFromAuditionPricing(admin, queueKind, queuePayload);
+  void targetProvider;
+  const modelId = getQueueModelId(queuePayload);
+  let optionCandidates = buildLocalPricingOptionCandidates(queuePayload);
+  const requestedProvider = String(queuePayload.__targetProvider || '').trim().toLowerCase();
+  if (requestedProvider !== 'gpti2') {
+    const validation = await validateQueuePayloadAgainstLiveCatalog(queueKind, queuePayload, {
+      ignoreServerAvailability: false,
+    });
+    const validatedKey = String(validation.pricingMatch?.config_key || '').trim().toLowerCase();
+    if (validatedKey) optionCandidates = [validatedKey, ...optionCandidates.filter((key) => key !== validatedKey)];
   }
-  const validation = await validateQueuePayloadAgainstLiveCatalog(queueKind, queuePayload, {
-    ignoreServerAvailability: false,
-  });
-  const modelId = String(validation.modelId || '').trim();
-  const configKey = String(validation.pricingMatch?.config_key || '').trim();
-  const fallbackVcoin = creditsToVcoin(Number(validation.pricingMatch?.credits || 0));
-  const overrideVcoin = await getAuditionPriceOverride(admin, modelId, configKey);
-  const baseVcoin = overrideVcoin ?? fallbackVcoin;
+  if (!modelId || optionCandidates.length === 0) throw new Error('INVALID_SERVER_PRICE');
+
+  // Billing is always controlled by the Admin pricing table. Provider costs
+  // (TST/GPTi2) are reference metadata only and must never become a fallback.
+  const { data, error } = await admin
+    .from('model_pricing')
+    .select('option_id, audition_price_vcoin, tst_price_credits')
+    .eq('model_id', modelId)
+    .in('option_id', optionCandidates);
+  if (error) throw error;
+  const rows = Array.isArray(data) ? data : [];
+  const selected = optionCandidates
+    .map((optionId) => rows.find((row) => normalizePricingPart(row.option_id) === optionId))
+    .find((row) => Number(row?.audition_price_vcoin) > 0);
+  if (!selected) throw new Error(`INVALID_SERVER_PRICE: Missing AUDITION AI price for ${modelId}`);
+  const baseVcoin = Math.ceil(Number(selected.audition_price_vcoin));
   const multiplier = queueKind === 'image_generate' ? getImageBillingMultiplier(queuePayload) : 1;
   const costVcoin = Math.ceil(baseVcoin * multiplier);
 
@@ -489,11 +501,11 @@ const resolveServerCostVcoin = async (
     costVcoin,
     pricing: {
       model_id: modelId,
-      config_key: configKey || null,
-      provider_credits: Number(validation.pricingMatch?.credits || 0),
+      config_key: String(selected.option_id || ''),
+      provider_credits: Number(selected.tst_price_credits || 0),
       base_vcoin: baseVcoin,
       multiplier,
-      source: overrideVcoin ? 'model_pricing_override' : 'provider_pricing',
+      source: 'admin_pricing',
     },
   };
 };
@@ -724,6 +736,25 @@ const runSafeWorkerTick = async (rawUrl?: string | null) => {
   }
 };
 
+const wakeCloudflareGpti2Worker = async (jobId: string, provider: GenerationProvider) => {
+  if (provider !== 'gpti2') return;
+  const routerUrl = String(process.env.CLOUDFLARE_GPTI2_ROUTER_URL || '').trim();
+  const serviceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+  if (!routerUrl || !serviceRoleKey || !jobId) return;
+  try {
+    const response = await fetch(routerUrl, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${serviceRoleKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jobId, provider }),
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!response.ok) throw new Error(`Cloudflare queue router returned ${response.status}`);
+  } catch (error) {
+    // Cron remains the recovery path when the immediate wake signal fails.
+    console.warn('[queue-submit] Failed to wake Cloudflare GPTi2 worker:', error);
+  }
+};
+
 export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return {
@@ -774,7 +805,7 @@ export const handler: Handler = async (event) => {
     });
     const routingConfig = await getGenerationProvider(admin, modelId, providerRouteKey);
     if (routingConfig.allowedModels && !routingConfig.allowedModels.includes(modelId)
-      && !(providerRouteKey !== 'video_generation' && providerRouteKey !== 'motion_control' && routingConfig.provider === 'gpti2' && ['gpt-image-2', 'nano-banana-2', 'nano-banana-pro'].includes(modelId))) {
+      && !(providerRouteKey !== 'video_generation' && providerRouteKey !== 'motion_control' && routingConfig.provider === 'gpti2' && ['gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro'].includes(modelId))) {
       return {
         statusCode: 400,
         headers,
@@ -872,6 +903,7 @@ export const handler: Handler = async (event) => {
       }
     }
 
+    await wakeCloudflareGpti2Worker(String(row?.id || body.id || ''), targetProvider);
     await runSafeWorkerTick(event.rawUrl);
 
     return {

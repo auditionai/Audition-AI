@@ -1,8 +1,24 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "auditionai-telegram-notify",
-  "main": "cloudflare/telegram-notify-worker.js",
-  "compatibility_date": "2026-08-07",
+  "name": "auditionai-queue-worker",
+  "main": "cloudflare/queue-worker.js",
+  "compatibility_date": "2026-09-13",
+  "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
-  "preview_urls": false
+  "preview_urls": false,
+  "triggers": { "crons": ["*/1 * * * *"] },
+  "r2_buckets": [
+    { "binding": "RESULTS_BUCKET", "bucket_name": "audition-ai-images" }
+  ],
+  "queues": {
+    "consumers": [
+      { "queue": "auditionai-gpti2-jobs", "max_batch_size": 8, "max_batch_timeout": 1 }
+    ]
+  },
+  "vars": {
+    "CLOUDFLARE_QUEUE_BATCH": "4",
+    "SUPABASE_URL": "https://wnosrdigcdjlrmofxemd.supabase.co",
+    "R2_PUBLIC_URL": "https://pub-edbe379bb8ae48e3b618166c1ec678ca.r2.dev"
+  },
+  "observability": { "enabled": true, "head_sampling_rate": 1, "traces": { "enabled": true, "head_sampling_rate": 1 } }
 }

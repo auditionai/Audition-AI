@@ -965,6 +965,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           }
           if (expectedType === 'image') {
               models.set('gpt-image-2', 'GPTi2 · GPT Image 2');
+              models.set('gpt-image-2.5-flare', 'GPTi2 · GPT Image 2.5 Flare');
+              models.set('gpt-image-2.5-sunburst', 'GPTi2 · GPT Image 2.5 Sunburst');
               models.set('nano-banana-2', 'GPTi2 · Nano Banana 2');
               models.set('nano-banana-pro', 'GPTi2 · Nano Banana Pro');
           }
@@ -1045,7 +1047,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const dirtyPricingCount = dirtyPricingRows.length;
   const missingPricingCount = allPricingRows.filter((row) => !getEffectiveAuditionPricing(row)).length;
   const isGpti2PricingRow = (row: TstPricingRow) =>
-      ['image-gpt-2', 'gpt-image-2', 'nano-banana-2', 'nano-banana-pro'].includes(row.modelId.trim().toLowerCase());
+      ['image-gpt-2', 'gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro'].includes(row.modelId.trim().toLowerCase());
   const gpti2PricingCount = allPricingRows.filter(isGpti2PricingRow).length;
   const tstPricingCount = allPricingRows.filter((row) => !isGpti2PricingRow(row)).length;
   const providerFilteredPricingRows = pricingProviderFilter === 'all'
@@ -4373,7 +4375,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                const usesDefaultModels = !explicitModels;
                                const allowsAllModels = explicitModels?.includes('*') || (!explicitModels && !DEFAULT_ALLOWED_MODELS_BY_FEATURE[route.key]);
                                const providerModelOptions = modelOptions.filter((model) => effectiveProvider === 'gpti2'
-                                   ? ['gpt-image-2', 'nano-banana-2', 'nano-banana-pro'].includes(model.id)
+                                   ? ['gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro'].includes(model.id)
                                    : effectiveProvider === 'tst'
                                    ? pricingRows.some((row) => row.modelId.trim().toLowerCase() === model.id)
                                    : gommoCatalog?.models.some((entry) =>

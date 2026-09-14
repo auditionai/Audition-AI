@@ -11,8 +11,8 @@ export const Support: React.FC<SupportProps> = ({ lang, onNavigate }) => {
   const devInfo = {
     email: 'support@auditionai.vn',
     zalo: 'https://zalo.me/g/kodwgn037',
-    facebook: 'https://www.facebook.com/iam.cody.real/',
-    facebookChat: 'https://www.facebook.com/groups/-837625495307432/chats/1641021490531432/'
+    facebook: 'https://www.facebook.com/codycn2804/',
+    tiktok: 'https://www.tiktok.com/@auditionai.io.vn'
   };
 
   return (
@@ -75,7 +75,7 @@ export const Support: React.FC<SupportProps> = ({ lang, onNavigate }) => {
             rel="noopener noreferrer"
             className="neu-button block py-3 rounded-2xl text-center text-xs font-bold uppercase tracking-wider text-blue-500 hover:text-blue-400"
           >
-            Facebook Cody CN
+            Facebook AUDITION AI
           </a>
         </div>
 
@@ -90,12 +90,12 @@ export const Support: React.FC<SupportProps> = ({ lang, onNavigate }) => {
               : 'Join the community chat to exchange experience, receive updates, and get faster support.'}
           </p>
           <a
-            href={devInfo.facebookChat}
+            href={devInfo.tiktok}
             target="_blank"
             rel="noopener noreferrer"
             className="neu-button-primary block py-3 rounded-2xl text-center text-xs font-bold uppercase tracking-wider"
           >
-            {lang === 'vi' ? 'Tham gia nhóm chat Facebook' : 'Join Facebook group chat'}
+            {lang === 'vi' ? 'Theo dõi TikTok AUDITION AI' : 'Follow AUDITION AI on TikTok'}
           </a>
         </div>
       </div>

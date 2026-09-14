@@ -1,6 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
+import { Sparkles } from 'lucide-react';
 import { Feature, Language, GeneratedImage, ViewId } from '../../types';
 import { Icons } from '../../components/Icons';
 import {
@@ -23,7 +24,7 @@ import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageSer
 import { downloadAssetToBrowser } from '../../services/downloadService';
 import { analyzeCharacterAppearanceProfile } from '../../utils/imageProcessor';
 import { APP_CONFIG } from '../../constants';
-import { buildAuditionKoreaMmoStylePrompt, DEFAULT_IMAGE_NEGATIVE_PROMPT } from '../../shared/imagePromptDefaults';
+import { buildAuditionKoreaMmoStylePrompt, DEFAULT_IMAGE_NEGATIVE_PROMPT, GPT_IMAGE_25_REFERENCE_LOCK_PROMPT } from '../../shared/imagePromptDefaults';
 import { PROMPT_LIBRARY_APPLY_EVENT, consumeStashedPromptForGenerator } from '../../shared/caulenhauSamples';
 import {
   type AuditionPricingOverride,
@@ -94,16 +95,22 @@ const IMAGE_MODEL_OPTIONS: Array<{
     label: 'GPT',
     tag: 'BEST',
     title: 'GPT Image 2',
-    description: 'ChatGPT mới nhất, hiểu prompt tốt hơn, chi tiết chính xác và độ hoàn thiện cao nhất.',
+    description: 'Tạo ảnh nhân vật 3D AI ổn định nhất.',
     icon: Icons.Sparkles,
     accent: 'from-fuchsia-500 via-violet-500 to-cyan-400',
+  },
+  {
+    tier: 'gpt_flare', label: 'Flare', tag: 'MỚI', title: 'GPT Image 2.5 Flare', description: 'Tạo nhân vật 3D nhanh, bám sát mô tả và giữ ngoại hình nhất quán qua nhiều ảnh.', icon: Sparkles, accent: 'from-orange-400 via-rose-500 to-fuchsia-500',
+  },
+  {
+    tier: 'gpt_sunburst', label: 'Sunburst', tag: 'MỚI', title: 'GPT Image 2.5 Sunburst', description: 'Dựng nhân vật 3D giàu chi tiết với chất liệu, gương mặt và ánh sáng điện ảnh nổi bật.', icon: Sparkles, accent: 'from-yellow-300 via-orange-500 to-red-500',
   },
   {
     tier: 'flash',
     label: 'Flash',
     tag: 'GIÁ RẺ',
     title: 'Nano Banana 2',
-    description: 'Gemini Flash, tốc độ nhanh và tiết kiệm, phù hợp ảnh cơ bản/chất lượng trung bình.',
+    description: 'Nhanh và tiết kiệm, hợp thử ý tưởng và ảnh cơ bản.',
     icon: Icons.Zap,
     accent: 'from-cyan-400 via-sky-500 to-blue-500',
   },
@@ -112,7 +119,7 @@ const IMAGE_MODEL_OPTIONS: Array<{
     label: 'Pro',
     tag: 'HOT',
     title: 'Nano Banana Pro',
-    description: 'Gemini Pro thông minh hơn Flash, ảnh chi tiết hơn, hỗ trợ hoàn thiện cao và 4K.',
+    description: 'Cân bằng tốc độ và chất lượng, phù hợp ảnh cần hoàn thiện cao.',
     icon: Icons.Crown,
     accent: 'from-amber-300 via-orange-500 to-fuchsia-500',
   },
@@ -220,7 +227,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const [speed, setSpeed] = useState('Nhanh');
   const [server, setServer] = useState('VIP 1');
   const [gptQuality, setGptQuality] = useState<'low' | 'medium' | 'high'>('low');
-  const [aiModel, setAiModel] = useState<TstGenerationTier>('gpt');
+  const [aiModel, setAiModel] = useState<TstGenerationTier>('gpt_sunburst');
   const [providerMode, setProviderMode] = useState('');
   const gommoDefaultSelectionKeyRef = useRef('');
 
@@ -336,6 +343,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
   const generationSpeedId = uiSpeedToTst(speed) || 'fast';
   const generationTier = aiModel;
+  const isGptImageTier = ['gpt', 'gpt_flare', 'gpt_sunburst'].includes(aiModel);
   const selectedModelId = getGenerationModelId(aiModel);
   const selectedProvider = resolveProviderForModel(providerConfig, selectedModelId, providerRouteKey);
   const generationServerId = selectedProvider === 'gpti2' ? GPTI2_SERVER_ID : uiServerToTst(server) || 'fast';
@@ -358,7 +366,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       pricingEntries,
       serverId: pricingServerId || '',
       speed: generationSpeedId,
-      quality: aiModel === 'gpt' ? gptQuality : undefined,
+      quality: isGptImageTier ? gptQuality : undefined,
   });
   const tstRuntimeResolutions = Array.from(new Set(
       (runtimeModels.find((model) => model.model.trim().toLowerCase() === selectedModelId)?.capabilities?.resolutions || [])
@@ -370,13 +378,13 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           .filter((option) => isSelectableGommoImageResolution(selectedModelId, option.type))
           .map((option) => option.type.toUpperCase())
       : isGpti2Selected
-          ? (selectedModelId === 'image-gpt-2' || selectedModelId === 'gpt-image-2' ? GPTI2_IMAGE_RESOLUTIONS : GPTI2_NANO_RESOLUTIONS)
+          ? (isGptImageTier ? GPTI2_IMAGE_RESOLUTIONS : GPTI2_NANO_RESOLUTIONS)
           : tstAvailableResolutions.length > 0 ? tstAvailableResolutions : tstRuntimeResolutions;
   const availableSpeeds = getCompatibleGenerationSpeeds({
       tier: generationTier,
       pricingEntries,
       resolution: resolution as TstResolution,
-      quality: aiModel === 'gpt' ? gptQuality : undefined,
+      quality: isGptImageTier ? gptQuality : undefined,
   });
   const availableServers = selectedProvider === 'gpti2'
       ? [GPTI2_SERVER_ID]
@@ -390,7 +398,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const tstSelectedGenerationCost = getGenerationCostBreakdown({
       tier: generationTier,
       resolution: resolution as TstResolution,
-      quality: aiModel === 'gpt' ? gptQuality : undefined,
+      quality: isGptImageTier ? gptQuality : undefined,
       speed: generationSpeedId,
        serverId: pricingServerId || '',
       pricingEntries,
@@ -398,7 +406,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   });
   const gommoPricingInput = getGommoPricingInput(selectedModelId, {
       resolution,
-      quality: aiModel === 'gpt' ? gptQuality : undefined,
+      quality: isGptImageTier ? gptQuality : undefined,
       speed: generationSpeedId,
       providerMode,
   });
@@ -407,9 +415,21 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       allowGenericFallback: true,
       preferredOptionId: gommoPricingOptionId,
   });
+  // GPTi2 is billed from the same admin-managed `model_pricing` table as
+  // Gommo. Keep its UI price on that source too; TST catalog credits are only
+  // a provider fallback and can otherwise show a lower price than enqueue.
+  const gpti2SelectedPricing = isGpti2Selected
+      ? getAuditionProviderPricing(auditionPricing, selectedModelId, {
+          resolution,
+          quality: isGptImageTier ? gptQuality : undefined,
+          speed: generationSpeedId,
+      }, { allowGenericFallback: true })
+      : null;
   const selectedGenerationCost = isGommoSelected
       ? { available: gommoSelectedPricing !== null, vcoin: gommoSelectedPricing?.vcoin || 0 }
-      : tstSelectedGenerationCost;
+      : isGpti2Selected
+          ? { available: gpti2SelectedPricing !== null, vcoin: gpti2SelectedPricing?.vcoin || 0 }
+          : tstSelectedGenerationCost;
   const pricedGommoResolutions = new Set(
       isGommoSelected
           ? availableResolutions.filter((value) => Boolean(getAuditionProviderPricing(
@@ -468,7 +488,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           return isGommoCatalogModelAvailable(getGommoModelForAudition(gommoCatalog, modelId));
       }
       if (resolveProviderForModel(providerConfig, modelId, providerRouteKey) === 'gpti2') {
-          return ['image-gpt-2', 'nano-banana-2', 'nano-banana-pro'].includes(modelId);
+          return ['image-gpt-2', 'gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro'].includes(modelId);
       }
       return runtimeImageModelIds.has(modelId) && pricingEntries.some((entry) => entry.model.trim().toLowerCase() === modelId);
   };
@@ -476,9 +496,11 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const isProAvailable = isTierAvailable('pro');
   const isGptAvailable = isTierAvailable('gpt');
   const imageModelAvailability: Record<TstGenerationTier, boolean> = {
-      flash: isFlashAvailable,
-      pro: isProAvailable,
-      gpt: isGptAvailable,
+    flash: isFlashAvailable,
+    pro: isProAvailable,
+    gpt: isGptAvailable,
+    gpt_flare: isTierAvailable('gpt_flare'),
+    gpt_sunburst: isTierAvailable('gpt_sunburst'),
   };
   const isCatalogReady = !catalogLoading && (
       isGommoSelected
@@ -494,7 +516,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       !selectedGenerationCost.available ||
       !prompt.trim() ||
       !hasCharacterImagesReady ||
-      (aiModel === 'flash' ? !isFlashAvailable : aiModel === 'pro' ? !isProAvailable : !isGptAvailable);
+      !imageModelAvailability[aiModel];
   const availableSpeedLabels = isGommoSelected || isGpti2Selected ? [] : availableSpeeds.map((speedId) => speedId === 'slow' ? 'Tiết Kiệm' : 'Nhanh');
   const availableServerLabels = isGommoSelected ? [] : selectedProvider === 'gpti2' ? [GPTI2_SERVER_LABEL] : availableServers.map((serverId) => tstServerToUi(serverId));
   const gommoModes = isGommoSelected ? (selectedGommoModel?.modes || []) : [];
@@ -707,7 +729,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       gommoDefaultSelectionKeyRef.current = '';
       if ((selectedProvider as string) === 'gpti2') {
           if (server !== GPTI2_SERVER_LABEL) setServer(GPTI2_SERVER_LABEL);
-          const gpti2Resolutions = selectedModelId === 'image-gpt-2' || selectedModelId === 'gpt-image-2' ? GPTI2_IMAGE_RESOLUTIONS : GPTI2_NANO_RESOLUTIONS;
+          const gpti2Resolutions = isGptImageTier ? GPTI2_IMAGE_RESOLUTIONS : GPTI2_NANO_RESOLUTIONS;
           if (!gpti2Resolutions.includes(resolution)) setResolution(gpti2Resolutions[0]);
           const gpti2Ratios = selectedModelId.startsWith('nano-banana') ? GPTI2_NANO_ASPECT_RATIOS : GPTI2_ASPECT_RATIOS;
           if (!gpti2Ratios.includes(aspectRatio)) setAspectRatio(gpti2Ratios[0]);
@@ -1030,7 +1052,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
     const styleMetadata = availableStyles.find((style: any) => style.image_url === activeStylePreset);
     const styleDirectivePrompt = buildAuditionKoreaMmoStylePrompt(styleMetadata?.trigger_prompt || styleMetadata?.name || null);
-    const basePrompt = `${activeFeature.defaultPrompt || ''}${prompt}`.trim();
+    const referenceLockPrompt = aiModel === 'gpt_flare' || aiModel === 'gpt_sunburst' ? GPT_IMAGE_25_REFERENCE_LOCK_PROMPT : '';
+    const basePrompt = `${referenceLockPrompt} ${activeFeature.defaultPrompt || ''}${prompt}`.trim();
     const requestedSpeedId = uiSpeedToTst(speed) || 'fast';
     const requestedServerId = isGpti2Selected ? GPTI2_SERVER_ID : uiServerToTst(server) || 'fast';
     const compatibleServers = getCompatibleGenerationServers({
@@ -1145,7 +1168,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                 modelId: getGenerationModelId(aiModel),
                 prompt: basePrompt,
                 userPromptInput: prompt.trim(),
-                systemPromptPrefix: activeFeature.defaultPrompt || '',
+                systemPromptPrefix: `${referenceLockPrompt} ${activeFeature.defaultPrompt || ''}`.trim(),
                 characterCount: characters.length,
                 resolution,
                 aspectRatio,
@@ -1153,7 +1176,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                 speed: isGommoSelected ? gommoPricingInput.speed : effectiveSpeedId,
                 serverId: effectiveServerId,
                 providerMode: isGommoSelected ? providerMode : undefined,
-                pricingOptionId: isGommoSelected ? gommoSelectedPricing?.optionId : undefined,
+                pricingOptionId: isGommoSelected ? gommoSelectedPricing?.optionId : isGpti2Selected ? gpti2SelectedPricing?.optionId : undefined,
                 negativePrompt: DEFAULT_IMAGE_NEGATIVE_PROMPT,
                 characterReferenceGroups: stagedCharacterGroups,
                 characterImages: stagedCharacterImages,
@@ -1795,7 +1818,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                     {/* Model Picker */}
                     <div className="space-y-2">
                         <label className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider">Mô hình AI Engine</label>
-                        <div className="space-y-2">
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                             {IMAGE_MODEL_OPTIONS.map((model) => {
                                 const Icon = model.icon;
                                 const available = imageModelAvailability[model.tier];
@@ -1806,8 +1829,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                         type="button"
                                         onClick={() => available && setAiModel(model.tier)}
                                         disabled={!available}
-                                        className={`w-full p-3 rounded-2xl text-left transition-all flex items-center gap-3 ${
-                                            selected ? 'neu-inset-sm ring-2 ring-[#FF007F]' : 'neu-button'
+                                        className={`group relative w-full min-h-[88px] p-4 rounded-2xl text-left transition-all flex items-start gap-3 overflow-hidden ${
+                                            selected ? 'neu-inset-sm ring-2 ring-[#FF007F] bg-gradient-to-br from-fuchsia-500/15 to-cyan-400/10' : 'neu-button hover:-translate-y-0.5'
                                         } ${!available ? 'opacity-40 cursor-not-allowed' : ''}`}
                                     >
                                         <div className={`w-8 h-8 rounded-xl bg-gradient-to-br ${model.accent} flex items-center justify-center text-white shrink-0`}>
@@ -1820,11 +1843,15 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                                     {model.tag}
                                                 </span>
                                             </div>
-                                            <p className="text-[10px] text-slate-700 dark:text-slate-300 font-semibold truncate">{model.title}</p>
+                                            <p className="text-[10px] text-slate-700 dark:text-slate-300 font-semibold">{model.title}</p>
                                         </div>
                                     </button>
                                 );
                             })}
+                        </div>
+                        <div className="mt-3 rounded-2xl border border-cyan-300/20 bg-gradient-to-r from-cyan-400/10 via-violet-500/10 to-fuchsia-500/10 px-4 py-3">
+                            <div className="text-[10px] font-black uppercase tracking-wider text-cyan-700 dark:text-cyan-200">Đang chọn · {IMAGE_MODEL_OPTIONS.find((model) => model.tier === aiModel)?.title}</div>
+                            <p className="mt-1 text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">{IMAGE_MODEL_OPTIONS.find((model) => model.tier === aiModel)?.description}</p>
                         </div>
                     </div>
 
@@ -1879,7 +1906,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                     </div>}
 
                     <div className="space-y-4">
-                        {aiModel === 'gpt' && !isGommoSelected && (
+            {isGptImageTier && !isGommoSelected && (
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider">Chất lượng GPT</label>
                                 <div className="grid grid-cols-3 gap-2">

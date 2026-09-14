@@ -293,52 +293,6 @@ async function sendTelegramRequest(env, method, body) {
   return response.json();
 }
 
-const telegramDiagnostic = async (env) => {
-  const getMeResponse = await fetch(telegramUrl(env, 'getMe'), { signal: AbortSignal.timeout(10000) });
-  const getMePayload = await getMeResponse.json().catch(() => ({}));
-  if (!getMeResponse.ok || !getMePayload?.ok) {
-    return {
-      ok: false,
-      stage: 'getMe',
-      status: getMeResponse.status,
-      description: String(getMePayload?.description || 'Telegram rejected TELEGRAM_BOT_TOKEN'),
-    };
-  }
-
-  const updatesResponse = await fetch(`${telegramUrl(env, 'getUpdates')}?limit=10`, { signal: AbortSignal.timeout(10000) });
-  const updatesPayload = await updatesResponse.json().catch(() => ({}));
-  const latestMessage = Array.isArray(updatesPayload?.result)
-    ? [...updatesPayload.result].reverse().map((update) => update?.message || update?.channel_post).find(Boolean)
-    : null;
-  const latestUpdateChat = latestMessage?.chat
-    ? { id: latestMessage.chat.id || null, type: latestMessage.chat.type || null, username: latestMessage.chat.username || null }
-    : null;
-  const getChatResponse = await fetch(
-    `${telegramUrl(env, 'getChat')}?chat_id=${encodeURIComponent(telegramChatId(env))}`,
-    { signal: AbortSignal.timeout(10000) },
-  );
-  const getChatPayload = await getChatResponse.json().catch(() => ({}));
-  if (!getChatResponse.ok || !getChatPayload?.ok) {
-    return {
-      ok: false,
-      stage: 'getChat',
-      status: getChatResponse.status,
-      bot: { id: getMePayload?.result?.id || null, username: getMePayload?.result?.username || null },
-      configuredChatId: telegramChatId(env),
-      configuredChatIdLength: telegramChatId(env).length,
-      latestUpdateChat,
-      description: String(getChatPayload?.description || 'Telegram rejected TELEGRAM_CHAT_ID'),
-    };
-  }
-
-  return {
-    ok: true,
-    bot: { id: getMePayload?.result?.id || null, username: getMePayload?.result?.username || null },
-    chat: { id: getChatPayload?.result?.id || null, type: getChatPayload?.result?.type || null, title: getChatPayload?.result?.title || null },
-    latestUpdateChat,
-  };
-};
-
 async function sendText(env, text) {
   const body = new URLSearchParams();
   body.set('chat_id', telegramChatId(env));
@@ -509,9 +463,6 @@ export default {
 
     try {
       const payload = await request.json();
-      if (String(payload?.eventType || '') === '__telegram_diagnostic') {
-        return json(await telegramDiagnostic(env));
-      }
       await handleNotification(env, payload);
       return json({ ok: true });
     } catch (error) {

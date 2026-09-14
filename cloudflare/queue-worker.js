@@ -258,9 +258,9 @@ const persistGpti2Result = async (env, row, result) => {
     body = bytes;
   } else {
     const response = await fetch(result, { signal: AbortSignal.timeout(60000) });
-    if (!response.ok) throw new Error(`GPTI2_ERROR: result download failed (${response.status})`);
+    if (!response.ok || !response.body) throw new Error(`GPTI2_ERROR: result download failed (${response.status})`);
     contentType = response.headers.get('content-type') || contentType;
-    body = await response.arrayBuffer();
+    body = response.body;
   }
   const key = `${keyBase}.${imageExtension(contentType)}`;
   await env.RESULTS_BUCKET.put(key, body, { httpMetadata: { contentType } });
@@ -467,7 +467,7 @@ const prepareTstPayload = async (env, row, report) => {
   const providerPayload = buildTstProviderPayload(row, uploadedUrls);
   await validateTstPayloadAgainstLiveCatalog(env, row, providerPayload);
   const nextPayload = {
-    ...activePayload,
+    ...originalPayload,
     __uploadSources: sources,
     __uploadedUrls: uploadedUrls,
     __tstPreparedAt: new Date().toISOString(),
@@ -529,8 +529,8 @@ const persistProviderResult = async (env, row, resultUrl) => {
   const response = await fetch(resultUrl, { signal: AbortSignal.timeout(60000) });
   if (!response.ok) throw new Error(`TST result download failed (${response.status})`);
   const contentType = String(response.headers.get('content-type') || (row.asset_type === 'video' ? 'video/mp4' : 'image/png')).split(';', 1)[0].trim();
-  const body = await response.arrayBuffer();
-  if (!body.byteLength) throw new Error('TST result download was empty');
+  const body = response.body;
+  if (!body) throw new Error('TST result download was empty');
   const extension = mimeTypeToExtension(contentType, row.asset_type === 'video' ? 'video' : 'image');
   const key = `users/${encodeURIComponent(row.user_id)}/generated/${encodeURIComponent(row.id)}-tst.${extension}`;
   await bucket.put(key, body, { httpMetadata: { contentType } });
@@ -562,28 +562,32 @@ const pollTst = async (env, row) => {
   return response.json();
 };
 
-const pollDueRows = async (env) => {
-  const response = await rpc(env, 'claim_cloudflare_pollable_tst_jobs', { p_limit: Number(env.CLOUDFLARE_QUEUE_BATCH || 8), p_lease_seconds: 120 });
-  if (!response.ok) throw new Error(`Supabase poll claim failed (${response.status}): ${await response.text()}`);
-  const rows = await response.json();
-  for (const row of rows) {
-    try {
-      const data = await pollTst(env, row);
-      const status = String(data?.status || '').toLowerCase();
-      const result = providerResultOf(data, row.asset_type || 'image');
-      if (result && ['completed', 'success', 'succeeded', 'done'].includes(status)) {
-        const storedUrl = await persistProviderResult(env, row, result);
-        await updateJob(env, row.id, { status: 'completed', progress: 100, image_url: storedUrl, finished_at: new Date().toISOString(), next_poll_at: null, lease_token: null, lease_expires_at: null, queue_payload: appendLog(payloadObject(row), 'completed', 'Cloudflare Worker da luu ket qua TST.', 'success') });
-      } else if (['failed', 'error', 'cancelled', 'canceled'].includes(status)) {
-        await failAndRefund(env, row, String(data?.error || data?.message || 'TST job failed'));
-      } else {
-        await updateJob(env, row.id, { status: 'processing', progress: Math.max(60, Number(data?.progress || 0)), next_poll_at: new Date(Date.now() + 15000).toISOString(), lease_token: null, lease_expires_at: null, queue_payload: appendLog(payloadObject(row), 'polling', 'Cloudflare Worker dang poll TST.') });
-      }
-    } catch (error) {
-      await updateJob(env, row.id, { status: 'processing', next_poll_at: new Date(Date.now() + 30000).toISOString(), lease_token: null, lease_expires_at: null, error_message: error instanceof Error ? error.message : String(error), queue_payload: appendLog(payloadObject(row), 'polling', 'Cloudflare Worker poll TST gap loi, se thu lai.', 'warning') });
+const schedulePoll = async (env, jobId, delaySeconds = 15) => {
+  await env.GENERATION_JOBS.send({ jobId, action: 'poll', requestedAt: new Date().toISOString() }, { delaySeconds });
+};
+
+const pollRow = async (env, row) => {
+  try {
+    const data = await pollTst(env, row);
+    const status = String(data?.status || '').toLowerCase();
+    const result = providerResultOf(data, row.asset_type || 'image');
+    if (result && ['completed', 'success', 'succeeded', 'done'].includes(status)) {
+      const storedUrl = await persistProviderResult(env, row, result);
+      await updateJob(env, row.id, { status: 'completed', progress: 100, image_url: storedUrl, finished_at: new Date().toISOString(), next_poll_at: null, lease_token: null, lease_expires_at: null, queue_payload: appendLog(payloadObject(row), 'completed', 'Cloudflare Worker da luu ket qua TST.', 'success') });
+      return 'completed';
     }
+    if (['failed', 'error', 'cancelled', 'canceled'].includes(status)) {
+      await failAndRefund(env, row, String(data?.error || data?.message || 'TST job failed'));
+      return 'failed';
+    }
+    await updateJob(env, row.id, { status: 'processing', progress: Math.max(60, Number(data?.progress || 0)), next_poll_at: new Date(Date.now() + 15000).toISOString(), lease_token: null, lease_expires_at: null, queue_payload: appendLog(payloadObject(row), 'polling', 'Cloudflare Worker dang poll TST.') });
+    await schedulePoll(env, row.id);
+    return 'pending';
+  } catch (error) {
+    await updateJob(env, row.id, { status: 'processing', next_poll_at: new Date(Date.now() + 30000).toISOString(), lease_token: null, lease_expires_at: null, error_message: error instanceof Error ? error.message : String(error), queue_payload: appendLog(payloadObject(row), 'polling', 'Cloudflare Worker poll TST gap loi, se thu lai.', 'warning') });
+    await schedulePoll(env, row.id, 30);
+    return 'retrying';
   }
-  return rows.length;
 };
 
 const processRow = async (env, row) => {
@@ -609,22 +613,45 @@ const processRow = async (env, row) => {
   return { submitted: 1 };
 };
 
-const run = async (env) => {
-  const rescued = await rescueAbandonedGpti2Dispatches(env);
-  const polled = await pollDueRows(env);
-  const claim = await rpc(env, 'claim_cloudflare_generated_jobs', { p_limit: Number(env.CLOUDFLARE_QUEUE_BATCH || 8), p_lease_seconds: 900 });
-  if (!claim.ok) throw new Error(`Supabase claim failed (${claim.status}): ${await claim.text()}`);
-  const rows = await claim.json(); const summary = { rescued, polled, claimed: rows.length, completed: 0, submitted: 0, failed: 0 };
-  for (const row of rows) {
-    try {
-      Object.assign(summary, Object.fromEntries(Object.entries(await processRow(env, row)).map(([k, v]) => [k, Number(summary[k] || 0) + v])));
-    } catch (error) {
-      summary.failed += 1;
-      const message = error instanceof Error ? error.message : String(error);
-      try { await failAndRefund(env, row, message); } catch (refundError) { console.error('[queue-worker] failed to fail/refund row', row.id, refundError); }
+const rowState = async (env, id) => {
+  const response = await supabase(env, `generated_images?id=eq.${encodeURIComponent(id)}&select=status,job_id,provider,next_poll_at`);
+  if (!response.ok) throw new Error(`Job lookup failed (${response.status})`);
+  return (await response.json())?.[0] || null;
+};
+
+const processQueueMessage = async (env, message) => {
+  const body = message.body && typeof message.body === 'object' ? message.body : {};
+  const jobId = String(body.jobId || '').trim();
+  const action = String(body.action || 'dispatch').toLowerCase();
+  if (!/^[0-9a-f-]{36}$/i.test(jobId) || !['dispatch', 'poll'].includes(action)) return { ack: true, reason: 'invalid_message' };
+  const claimName = action === 'poll' ? 'claim_cloudflare_tst_poll_job_by_id' : 'claim_cloudflare_generated_job_by_id';
+  const claimed = await rpc(env, claimName, { p_job_id: jobId, p_lease_seconds: action === 'poll' ? 120 : 900 });
+  if (!claimed.ok) throw new Error(`Message claim failed (${claimed.status}): ${await claimed.text()}`);
+  const rows = await claimed.json();
+  if (!rows?.[0]) {
+    const state = await rowState(env, jobId);
+    if (state?.status === 'queued' && action === 'dispatch') {
+      await env.GENERATION_JOBS.send({ jobId, action: 'dispatch', requestedAt: new Date().toISOString() }, { delaySeconds: 30 });
+      return { ack: true, reason: 'capacity_rescheduled' };
     }
+    if (state?.status === 'processing' && action === 'poll' && state.job_id) {
+      const dueAt = Date.parse(state.next_poll_at || '');
+      const delaySeconds = Number.isFinite(dueAt) ? Math.max(5, Math.ceil((dueAt - Date.now()) / 1000)) : 15;
+      await schedulePoll(env, jobId, delaySeconds);
+      return { ack: true, reason: 'poll_rescheduled' };
+    }
+    return { ack: true, reason: 'already_claimed_or_terminal' };
   }
-  return summary;
+  const row = rows[0];
+  if (action === 'poll') { await pollRow(env, row); return { ack: true, reason: 'polled' }; }
+  try {
+    const result = await processRow(env, row);
+    if (result.submitted) await schedulePoll(env, row.id);
+    return { ack: true, reason: 'dispatched' };
+  } catch (error) {
+    await failAndRefund(env, row, error instanceof Error ? error.message : String(error));
+    return { ack: true, reason: 'failed' };
+  }
 };
 
 export default {
@@ -632,17 +659,21 @@ export default {
     if (request.method === 'GET') return json({ ok: true, worker: 'auditionai-queue-worker' });
     if (request.method !== 'POST') return json({ error: 'Method Not Allowed' }, 405);
     if (!isAuthorizedWorkerRequest(request, env)) return json({ error: 'Unauthorized' }, 401);
-    ctx.waitUntil(run(env).catch((error) => console.error('[queue-worker]', error)));
+    const body = await request.json().catch(() => null);
+    const jobId = String(body?.jobId || '').trim();
+    if (!/^[0-9a-f-]{36}$/i.test(jobId)) return json({ error: 'jobId is required' }, 400);
+    ctx.waitUntil(processQueueMessage(env, { body }).catch((error) => console.error('[queue-worker]', error)));
     return json({ accepted: true }, 202);
   },
   async queue(batch, env) {
-    try {
-      await run(env);
-      batch.ackAll();
-    } catch (error) {
-      console.error('[queue-worker] Queue delivery failed:', error);
-      batch.retryAll({ delaySeconds: 10 });
+    for (const message of batch.messages) {
+      try {
+        const outcome = await processQueueMessage(env, message);
+        if (outcome.ack) message.ack(); else message.retry({ delaySeconds: outcome.delaySeconds || 30 });
+      } catch (error) {
+        console.error('[queue-worker] Queue delivery failed:', error);
+        message.retry({ delaySeconds: 30 });
+      }
     }
   },
-  async scheduled(_event, env, ctx) { ctx.waitUntil(run(env)); },
 };

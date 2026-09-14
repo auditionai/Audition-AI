@@ -11,11 +11,10 @@
       "zone_name": "auditionai.io.vn"
     }
   ],
-  "triggers": { "crons": ["*/2 * * * *"] },
   "r2_buckets": [{ "binding": "RESULTS_BUCKET", "bucket_name": "audition-ai-images" }],
   "vars": {
     "SUPABASE_URL": "https://wnosrdigcdjlrmofxemd.supabase.co",
-    "R2_PUBLIC_URL": "https://pub-edbe379bb8ae48e3b618166c1ec678ca.r2.dev",
+    "R2_PUBLIC_URL": "https://media.auditionai.io.vn",
     "NETLIFY_API_ORIGIN": "https://audition-ai.netlify.app",
     "SEPAY_RECONCILE_LIMIT": "10"
   },

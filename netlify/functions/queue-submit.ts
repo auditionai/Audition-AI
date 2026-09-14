@@ -737,7 +737,7 @@ const runSafeWorkerTick = async (rawUrl?: string | null) => {
 };
 
 const wakeCloudflareGpti2Worker = async (jobId: string, provider: GenerationProvider) => {
-  if (provider !== 'gpti2') return;
+  if (!['gpti2', 'tst'].includes(provider)) return;
   const routerUrl = String(process.env.CLOUDFLARE_GPTI2_ROUTER_URL || '').trim();
   const serviceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
   if (!routerUrl || !serviceRoleKey || !jobId) return;

@@ -10,6 +10,7 @@ const GPTI2_SIZES = {
   '2K': { '1:1': '1536x1536', '16:9': '2560x1440', '9:16': '1440x2560', '4:3': '2048x1536', '3:4': '1536x2048', '3:2': '2400x1600', '2:3': '1600x2400', '21:9': '2560x1088' },
   '4K': { '1:1': '2048x2048', '16:9': '3840x2160', '9:16': '2160x3840', '4:3': '3200x2400', '3:4': '2400x3200', '3:2': '3360x2240', '2:3': '2240x3360', '21:9': '3840x1632' },
 };
+const isRetryableGpti2Error = (message) => /timeout|timed out|network|429|5\d\d|provider returned no image|endpoint returned no image/i.test(String(message || ''));
 
 const modelOf = (row) => String(payloadObject(row).model || payloadObject(row).modelId || row?.model_used || '').trim().toLowerCase();
 const gpti2SizeOf = (payload) => GPTI2_SIZES[String(payload.resolution || payload.size || '1K').trim().toUpperCase()]?.[String(payload.aspect_ratio || payload.aspectRatio || '1:1').trim()] || GPTI2_SIZES['1K']['1:1'];
@@ -100,6 +101,25 @@ const failAndRefund = async (env, row, message) => {
   if (!refund.ok) console.error(JSON.stringify({ worker: 'queue-gpti2', event: 'refund_failed', jobId: row.id, status: refund.status }));
 };
 
+const retryBeforeFallback = async (env, row, message, attemptCount) => {
+  if (!isRetryableGpti2Error(message) || attemptCount >= 3) return false;
+  const payload = appendLog(payloadObject(row), 'queued', `GPTi2 chua phan hoi on dinh. Thu lai lan ${attemptCount + 1}/3 truoc khi dung API du phong.`, 'warning');
+  await updateJob(env, row.id, {
+    status: 'queued', progress: 0, job_id: null, lease_token: null, lease_expires_at: null,
+    processing_started_at: null, next_poll_at: new Date(Date.now() + Math.min(30, 5 * (attemptCount + 1)) * 1000).toISOString(),
+    attempt_count: attemptCount + 1, error_message: message, queue_payload: payload,
+  });
+  await enqueueDelayed(env.GPTI2_JOBS, { jobId: row.id, provider: 'gpti2_image', action: 'dispatch', requestedAt: new Date().toISOString() }, Math.min(30, 5 * (attemptCount + 1)));
+  return true;
+};
+
+const fallbackToTst = async (env, row, message) => {
+  const provider = row.queue_kind === 'image_edit_direct' || String(row.queue_payload?.recipeType || '') === 'image_edit_recipe_v1' ? 'tst_edit' : 'tst_image';
+  const payload = appendLog({ ...payloadObject(row), __targetProvider: 'tst', __providerFallbackHistory: [{ at: new Date().toISOString(), fromProvider: 'gpti2', toProvider: 'tst', reason: message.slice(0, 500) }] }, 'queued', 'GPTi2 khong phan hoi sau 3 lan. Chuyen sang TST du phong.', 'warning');
+  await updateJob(env, row.id, { status: 'queued', progress: 0, provider: 'tst', job_id: null, lease_token: null, lease_expires_at: null, processing_started_at: null, next_poll_at: null, attempt_count: 0, error_message: null, queue_payload: payload });
+  await env.TST_JOBS.send({ jobId: row.id, provider, action: 'dispatch', requestedAt: new Date().toISOString() });
+};
+
 const dispatch = async (env, row) => {
   let activePayload = { ...payloadObject(row), __cloudflareWorker: true };
   const report = async (stage, message, level = 'info') => { activePayload = appendLog(activePayload, stage, message, level); await updateJob(env, row.id, { status: 'processing', progress: stage === 'uploading_refs' ? 35 : stage === 'building_payload' ? 45 : stage === 'verifying_output' ? 85 : 50, error_message: null, queue_payload: activePayload }); };
@@ -122,7 +142,14 @@ const processMessage = async (env, message) => {
   }
   if (!isGpti2Lane(row, provider)) { console.error(JSON.stringify({ worker: 'queue-gpti2', event: 'wrong_lane', jobId, provider, rowProvider: row.provider })); return { ack: true, reason: 'wrong_lane' }; }
   try { await dispatch(env, row); return { ack: true, reason: 'dispatched' }; }
-  catch (error) { await failAndRefund(env, row, error instanceof Error ? error.message : String(error)); return { ack: true, reason: 'failed' }; }
+  catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const state = await jobState(env, row.id).catch(() => null);
+    if (await retryBeforeFallback(env, row, message, Number(state?.attempt_count || 0))) return { ack: true, reason: 'retry_before_fallback' };
+    if (isRetryableGpti2Error(message)) { await fallbackToTst(env, row, message); return { ack: true, reason: 'fallback_tst' }; }
+    await failAndRefund(env, row, message);
+    return { ack: true, reason: 'failed' };
+  }
 };
 
 export default {

@@ -7,7 +7,7 @@
   "preview_urls": false,
   "queues": {
     "producers": [{ "binding": "TST_JOBS", "queue": "auditionai-tst-jobs-v2" }],
-    "consumers": [{ "queue": "auditionai-tst-jobs-v2", "max_batch_size": 8, "max_retries": 3, "max_batch_timeout": 1, "max_concurrency": 3 }]
+    "consumers": [{ "queue": "auditionai-tst-jobs-v2", "max_batch_size": 4, "max_retries": 3, "max_batch_timeout": 1, "max_concurrency": 4 }]
   },
   "r2_buckets": [{ "binding": "RESULTS_BUCKET", "bucket_name": "audition-ai-images" }],
   "vars": { "SUPABASE_URL": "https://wnosrdigcdjlrmofxemd.supabase.co", "R2_PUBLIC_URL": "https://media.auditionai.io.vn" },

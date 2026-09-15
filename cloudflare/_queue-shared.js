@@ -94,7 +94,7 @@ export const claimJob = async (env, jobId, action) => {
 };
 
 export const jobState = async (env, id) => {
-  const response = await supabase(env, `generated_images?id=eq.${encodeURIComponent(id)}&select=status,job_id,provider,next_poll_at,queue_kind,queue_payload`);
+  const response = await supabase(env, `generated_images?id=eq.${encodeURIComponent(id)}&select=status,job_id,provider,next_poll_at,queue_kind,queue_payload,attempt_count`);
   if (!response.ok) throw new Error(`Job lookup failed (${response.status})`);
   return (await response.json())?.[0] || null;
 };

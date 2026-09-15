@@ -347,6 +347,9 @@ const isAmbiguousDispatchError = (message: string) => {
 const isGpti2ProviderError = (message: string) =>
   /^GPTI2_ERROR:/i.test(String(message || '').trim());
 
+const isRetryableGpti2ProviderError = (message: string) =>
+  isTransientError(message) || /provider returned no image|endpoint returned no image/i.test(String(message || ''));
+
 const parseErrorMessage = async (response: Response) => {
   try {
     const data = await response.json();
@@ -3475,6 +3478,17 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
     // Switch to the configured TST fallback before the generic retry path,
     // which treats __tstTouched as a committed dispatch and refunds/fails it.
     if (providerDispatchStarted && targetProvider === 'gpti2' && isGpti2ProviderError(message)) {
+      const currentState = await getJobRuntimeState(job.id);
+      if (isRetryableGpti2ProviderError(message)) {
+        const gpti2Attempts = Number(currentState?.attempt_count || 0) + 1;
+        if (gpti2Attempts < 3) {
+          const retryResult = await requeueJob(job, message);
+          if (retryResult === 'requeued') {
+            logQueueWorkerEvent('Retrying GPTi2 before fallback.', { ...getQueueWorkerLogJob(job), gpti2Attempts });
+            return { requeued: 1 };
+          }
+        }
+      }
       if (await trySmartImageProviderFallback(job, message, await getJobRuntimeState(job.id))) {
         return { requeued: 1 };
       }

@@ -471,13 +471,15 @@ const processMessage = async (env, message) => {
 };
 
 export default {
-  async fetch(request, env, ctx) {
+  async fetch(request, env) {
     if (request.method === 'GET') return json({ ok: true, worker: 'auditionai-queue-tst' });
     if (request.method !== 'POST') return json({ error: 'Method Not Allowed' }, 405);
     if (!isAuthorizedWorkerRequest(request, env)) return json({ error: 'Unauthorized' }, 401);
     const body = await request.json().catch(() => null);
     if (!isJobId(body?.jobId) || !TST_PROVIDERS.has(String(body?.provider || '').toLowerCase())) return json({ error: 'jobId and TST provider are required' }, 400);
-    ctx.waitUntil(processMessage(env, { body }).catch((error) => console.error(JSON.stringify({ worker: 'queue-tst', event: 'http_process_failed', error: String(error) }))));
+    // HTTP wake requests enqueue work; Queue delivery gives long provider calls
+    // the execution lifetime they need.
+    await env.TST_JOBS.send({ ...body, action: 'dispatch', requestedAt: new Date().toISOString() });
     return json({ accepted: true }, 202);
   },
   async queue(batch, env) {

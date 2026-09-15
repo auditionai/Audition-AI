@@ -502,7 +502,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
     gpt_flare: isTierAvailable('gpt_flare'),
     gpt_sunburst: isTierAvailable('gpt_sunburst'),
   };
-  const isCatalogReady = !catalogLoading && (
+  const isCatalogReady = (!catalogLoading || isGpti2Selected) && (
       isGommoSelected
           ? isGommoCatalogModelAvailable(selectedGommoModel) && selectedGenerationCost.available
           : isGpti2Selected
@@ -553,15 +553,27 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
               setProviderConfig(routingConfig);
               setGommoCatalog(providerCatalog);
 
-              const [entries, models, serverAvailabilityConfig] = await Promise.all([
-                  fetchTstPricing(forceRefresh),
-                  fetchTstModels(forceRefresh),
-                  getTstServerAvailabilityConfig()
-              ]);
-              const filteredModels = applyServerAvailabilityToRuntimeModels(models, serverAvailabilityConfig);
-              setPricingEntries(sanitizePricingEntriesWithRuntimeModels(entries, filteredModels, serverAvailabilityConfig));
-              setRuntimeModels(filteredModels);
-              setCatalogError(null);
+              // GPTi2 uses its own catalog and can be used immediately. TST's
+              // live catalog is only needed for TST/Gommo fallback options.
+              setCatalogLoading(false);
+              try {
+                  const [entries, models, serverAvailabilityConfig] = await Promise.all([
+                      fetchTstPricing(forceRefresh),
+                      fetchTstModels(forceRefresh),
+                      getTstServerAvailabilityConfig()
+                  ]);
+                  const filteredModels = applyServerAvailabilityToRuntimeModels(models, serverAvailabilityConfig);
+                  setPricingEntries(sanitizePricingEntriesWithRuntimeModels(entries, filteredModels, serverAvailabilityConfig));
+                  setRuntimeModels(filteredModels);
+                  setCatalogError(null);
+              } catch (tstError) {
+                  console.warn('TST catalog unavailable; keeping GPTi2 available', tstError);
+                  setPricingEntries([]);
+                  setRuntimeModels([]);
+                  if (!isGpti2Selected) {
+                      setCatalogError(lang === 'vi' ? 'Dá»‹ch vá»¥ TST Ä‘ang báº£o trÃ¬ hoáº·c khÃ´ng sáºµn sÃ ng.' : 'The TST service is unavailable.');
+                  }
+              }
           } catch (error) {
               console.warn("Failed to load provider catalogs for generation tool", error);
               try {

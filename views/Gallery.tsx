@@ -115,7 +115,19 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
 
   useEffect(() => {
       if (typeof window === 'undefined') return;
-      const handleTerminalGeneration = () => {
+      const handleTerminalGeneration = (event: Event) => {
+          const row = (event as CustomEvent).detail as Record<string, unknown> | undefined;
+          const id = String(row?.id || '').trim();
+          if (id) {
+              setImages((current) => current.map((image) => image.id !== id ? image : {
+                  ...image,
+                  status: String(row?.status || image.status) as GeneratedImage['status'],
+                  progress: Number.isFinite(Number(row?.progress)) ? Number(row?.progress) : image.progress,
+                  url: String(row?.image_url || image.url || ''),
+                  error: String(row?.error_message || image.error || ''),
+                  updatedAt: Date.parse(String(row?.updated_at || '')) || image.updatedAt,
+              }));
+          }
           invalidateGalleryCache();
           loadImages(true).catch((error) => {
               console.warn('[Gallery] Terminal generation refresh failed', error);

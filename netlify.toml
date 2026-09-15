@@ -15,6 +15,12 @@
   QUEUE_WORKER_MODE = "netlify"
   DISABLE_BACKGROUND_QUEUE_TRIGGER = "false"
 
+# The develop branch is the Cloudflare Queue performance test environment.
+# Production remains dedicated as configured below and is not changed here.
+[context."branch:develop".environment]
+  QUEUE_WORKER_MODE = "dedicated"
+  DISABLE_BACKGROUND_QUEUE_TRIGGER = "true"
+
 [context.deploy-preview.environment]
   QUEUE_WORKER_MODE = "netlify"
   DISABLE_BACKGROUND_QUEUE_TRIGGER = "false"

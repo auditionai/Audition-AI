@@ -21,3 +21,7 @@ export const getSepayApiToken = () => getEnvVar('SEPAY_API_TOKEN', 'SEPAY_USER_A
 export const getSepayEnv = () => getEnvVar('SEPAY_ENV');
 export const getSepayPaymentMethod = () => getEnvVar('SEPAY_PAYMENT_METHOD');
 export const getSepayApiTimeoutMs = () => getEnvVar('SEPAY_API_TIMEOUT_MS');
+
+export const getSupabaseUrl = () => getEnvVar('SUPABASE_URL', 'CAULENHAU_SUPABASE_URL');
+export const getSupabaseAnonKey = () => getEnvVar('SUPABASE_ANON_KEY', 'CAULENHAU_SUPABASE_ANON_KEY');
+export const getSupabaseServiceRoleKey = () => getEnvVar('SUPABASE_SERVICE_ROLE_KEY', 'CAULENHAU_SUPABASE_SERVICE_ROLE_KEY');

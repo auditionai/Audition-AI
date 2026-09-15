@@ -736,8 +736,20 @@ const runSafeWorkerTick = async (rawUrl?: string | null) => {
   }
 };
 
-const wakeCloudflareGpti2Worker = async (jobId: string, provider: GenerationProvider) => {
-  if (!['gpti2', 'tst'].includes(provider)) return;
+const getCloudflareQueueProvider = (provider: GenerationProvider, queueKind?: string, queuePayload?: Record<string, unknown>) => {
+  const recipeType = String(queuePayload?.recipeType || '').trim().toLowerCase();
+  if (provider === 'gpti2') return recipeType === 'image_edit_recipe_v1' || queueKind === 'image_edit_direct' ? 'gpti2_edit' : 'gpti2_image';
+  if (provider === 'tst') {
+    if (recipeType === 'image_edit_recipe_v1' || queueKind === 'image_edit_direct') return 'tst_edit';
+    if (queueKind === 'video_generate' || queueKind === 'motion_generate') return 'tst_video';
+    return 'tst_image';
+  }
+  return '';
+};
+
+const wakeCloudflareGpti2Worker = async (jobId: string, provider: GenerationProvider, queueKind?: string, queuePayload?: Record<string, unknown>) => {
+  const lane = getCloudflareQueueProvider(provider, queueKind, queuePayload);
+  if (!lane) return;
   const routerUrl = String(process.env.CLOUDFLARE_GPTI2_ROUTER_URL || '').trim();
   const serviceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
   if (!routerUrl || !serviceRoleKey || !jobId) return;
@@ -745,7 +757,7 @@ const wakeCloudflareGpti2Worker = async (jobId: string, provider: GenerationProv
     const response = await fetch(routerUrl, {
       method: 'POST',
       headers: { Authorization: `Bearer ${serviceRoleKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jobId, provider }),
+      body: JSON.stringify({ jobId, provider: lane }),
       signal: AbortSignal.timeout(5_000),
     });
     if (!response.ok) throw new Error(`Cloudflare queue router returned ${response.status}`);
@@ -903,7 +915,7 @@ export const handler: Handler = async (event) => {
       }
     }
 
-    await wakeCloudflareGpti2Worker(String(row?.id || body.id || ''), targetProvider);
+    await wakeCloudflareGpti2Worker(String(row?.id || body.id || ''), targetProvider, body.queueKind, body.queuePayload);
     await runSafeWorkerTick(event.rawUrl);
 
     return {

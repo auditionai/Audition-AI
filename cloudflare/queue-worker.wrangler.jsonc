@@ -1,23 +1,11 @@
 {
   "$schema": "../node_modules/wrangler/config-schema.json",
-  "name": "auditionai-queue-worker",
+  "name": "auditionai-queue-worker-legacy-stub",
   "main": "queue-worker.js",
   "compatibility_date": "2026-09-14",
   "workers_dev": true,
   "preview_urls": false,
-  "queues": {
-    "producers": [
-      { "binding": "GENERATION_JOBS", "queue": "auditionai-gpti2-jobs" }
-    ],
-    "consumers": [
-      {
-        "queue": "auditionai-gpti2-jobs",
-        "max_batch_size": 8,
-        "max_retries": 3,
-        "max_batch_timeout": 1
-      }
-    ]
-  },
+  "queues": { "producers": [], "consumers": [] },
   "r2_buckets": [
     { "binding": "RESULTS_BUCKET", "bucket_name": "audition-ai-images" }
   ],

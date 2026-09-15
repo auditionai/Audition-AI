@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "auditionai-queue-worker",
+  "name": "auditionai-queue-worker-legacy-stub",
   "main": "cloudflare/queue-worker.js",
   "compatibility_date": "2026-09-13",
   "compatibility_flags": ["nodejs_compat"],
@@ -12,7 +12,7 @@
   ],
   "queues": {
     "consumers": [
-      { "queue": "auditionai-gpti2-jobs", "max_batch_size": 8, "max_batch_timeout": 1 }
+      { "queue": "auditionai-gpti2-jobs-v2", "max_batch_size": 1, "max_batch_timeout": 1 }
     ]
   },
   "vars": {

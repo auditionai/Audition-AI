@@ -1,0 +1,240 @@
+var __defProp = Object.defineProperty;
+var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
+
+// _queue-shared.js
+var UUID_RE = /^[0-9a-f-]{36}$/i;
+var json = /* @__PURE__ */ __name((body, status = 200) => new Response(JSON.stringify(body), {
+  status,
+  headers: { "content-type": "application/json" }
+}), "json");
+var envText = /* @__PURE__ */ __name((env, key) => String(env[key] || "").trim(), "envText");
+var payloadObject = /* @__PURE__ */ __name((row) => row?.queue_payload && typeof row.queue_payload === "object" ? row.queue_payload : {}, "payloadObject");
+var isJobId = /* @__PURE__ */ __name((value) => UUID_RE.test(String(value || "").trim()), "isJobId");
+var isAuthorizedWorkerRequest = /* @__PURE__ */ __name((request, env) => {
+  const expected = envText(env, "QUEUE_WORKER_SECRET");
+  return Boolean(expected) && (request.headers.get("authorization") === `Bearer ${expected}` || request.headers.get("x-worker-secret") === expected);
+}, "isAuthorizedWorkerRequest");
+var supabase = /* @__PURE__ */ __name((env, path, init = {}) => fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
+  ...init,
+  headers: {
+    apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+    Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+    "content-type": "application/json",
+    ...init.headers || {}
+  }
+}), "supabase");
+var rpc = /* @__PURE__ */ __name((env, name, body) => fetch(`${env.SUPABASE_URL}/rest/v1/rpc/${name}`, {
+  method: "POST",
+  headers: {
+    apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+    Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+    "content-type": "application/json"
+  },
+  body: JSON.stringify(body)
+}), "rpc");
+var updateJob = /* @__PURE__ */ __name(async (env, id, values) => {
+  const response = await supabase(env, `generated_images?id=eq.${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({ ...values, updated_at: (/* @__PURE__ */ new Date()).toISOString() })
+  });
+  if (!response.ok) throw new Error(`Supabase update failed (${response.status}): ${await response.text()}`);
+}, "updateJob");
+var appendLog = /* @__PURE__ */ __name((payload, stage, message, level = "info") => ({
+  ...payload,
+  __stage: stage,
+  __logs: [
+    ...Array.isArray(payload.__logs) ? payload.__logs : [],
+    { at: (/* @__PURE__ */ new Date()).toISOString(), stage, level, message }
+  ].slice(-80)
+}), "appendLog");
+var claimJob = /* @__PURE__ */ __name(async (env, jobId, action) => {
+  const poll = action === "poll";
+  const response = await rpc(env, poll ? "claim_cloudflare_tst_poll_job_by_id" : "claim_cloudflare_generated_job_by_id", {
+    p_job_id: jobId,
+    p_lease_seconds: poll ? 120 : 900
+  });
+  if (!response.ok) throw new Error(`Message claim failed (${response.status}): ${await response.text()}`);
+  const rows = await response.json();
+  return rows?.[0] || null;
+}, "claimJob");
+var jobState = /* @__PURE__ */ __name(async (env, id) => {
+  const response = await supabase(env, `generated_images?id=eq.${encodeURIComponent(id)}&select=status,job_id,provider,next_poll_at,queue_kind,queue_payload`);
+  if (!response.ok) throw new Error(`Job lookup failed (${response.status})`);
+  return (await response.json())?.[0] || null;
+}, "jobState");
+var enqueueDelayed = /* @__PURE__ */ __name((queue, body, delaySeconds = 0) => queue.send(body, { delaySeconds }), "enqueueDelayed");
+
+// queue-gpti2-worker.js
+var GPTI2_PROVIDERS = /* @__PURE__ */ new Set(["gpti2_image", "gpti2_edit"]);
+var GPTI2_MODELS = /* @__PURE__ */ new Set(["gpt-image-2", "image-gpt-2", "gpt-image-2.5-flare", "gpt-image-2.5-sunburst", "nano-banana-2", "nano-banana-pro"]);
+var GPTI2_SIZES = {
+  "1K": { "1:1": "1024x1024", "16:9": "1280x720", "9:16": "720x1280", "4:3": "1024x768", "3:4": "768x1024", "3:2": "1536x1024", "2:3": "1024x1536", "21:9": "1280x544" },
+  "2K": { "1:1": "1536x1536", "16:9": "2560x1440", "9:16": "1440x2560", "4:3": "2048x1536", "3:4": "1536x2048", "3:2": "2400x1600", "2:3": "1600x2400", "21:9": "2560x1088" },
+  "4K": { "1:1": "2048x2048", "16:9": "3840x2160", "9:16": "2160x3840", "4:3": "3200x2400", "3:4": "2400x3200", "3:2": "3360x2240", "2:3": "2240x3360", "21:9": "3840x1632" }
+};
+var modelOf = /* @__PURE__ */ __name((row) => String(payloadObject(row).model || payloadObject(row).modelId || row?.model_used || "").trim().toLowerCase(), "modelOf");
+var gpti2SizeOf = /* @__PURE__ */ __name((payload) => GPTI2_SIZES[String(payload.resolution || payload.size || "1K").trim().toUpperCase()]?.[String(payload.aspect_ratio || payload.aspectRatio || "1:1").trim()] || GPTI2_SIZES["1K"]["1:1"], "gpti2SizeOf");
+var referenceUrlsOf = /* @__PURE__ */ __name((row) => {
+  const payload = payloadObject(row);
+  const recipe = payload.__recipePayload && typeof payload.__recipePayload === "object" ? payload.__recipePayload : payload;
+  const urls = [];
+  const add = /* @__PURE__ */ __name((value) => {
+    if (typeof value === "string" && /^https?:\/\//i.test(value.trim())) urls.push(value.trim());
+  }, "add");
+  const addMany = /* @__PURE__ */ __name((value) => {
+    if (Array.isArray(value)) value.forEach(addMany);
+    else if (value && typeof value === "object") Object.values(value).forEach(addMany);
+    else add(value);
+  }, "addMany");
+  addMany(payload.img_url);
+  addMany(payload.image_urls);
+  addMany(payload.image_url);
+  addMany(recipe.referenceImages);
+  addMany(recipe.characterImages);
+  addMany(recipe.sampleImage);
+  addMany(recipe.styleImage);
+  addMany(recipe.characterReferenceGroups);
+  return [...new Set(urls)];
+}, "referenceUrlsOf");
+var imageExtension = /* @__PURE__ */ __name((contentType) => String(contentType || "").toLowerCase().includes("jpeg") ? "jpg" : String(contentType || "").toLowerCase().includes("webp") ? "webp" : "png", "imageExtension");
+var isGpti2Lane = /* @__PURE__ */ __name((row, provider) => {
+  if (!GPTI2_PROVIDERS.has(provider)) return false;
+  const stored = String(row.provider || payloadObject(row).__targetProvider || "").trim().toLowerCase();
+  if (stored === provider) return true;
+  if (stored !== "gpti2") return false;
+  const recipeType = String(payloadObject(row).__recipePayload?.recipeType || payloadObject(row).recipeType || "").toLowerCase();
+  return provider === (recipeType === "image_edit_recipe_v1" ? "gpti2_edit" : "gpti2_image");
+}, "isGpti2Lane");
+var persistGpti2Result = /* @__PURE__ */ __name(async (env, row, result) => {
+  const keyBase = `users/${encodeURIComponent(row.user_id)}/generated/${encodeURIComponent(row.id)}`;
+  let body;
+  let contentType = "image/png";
+  if (result.startsWith("data:image/")) {
+    const match = result.match(/^data:([^;]+);base64,(.+)$/s);
+    if (!match) throw new Error("GPTI2_ERROR: invalid inline image result");
+    contentType = match[1];
+    const binary = atob(match[2]);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+    body = bytes;
+  } else {
+    const response = await fetch(result, { signal: AbortSignal.timeout(6e4) });
+    if (!response.ok || !response.body) throw new Error(`GPTI2_ERROR: result download failed (${response.status})`);
+    contentType = response.headers.get("content-type") || contentType;
+    body = response.body;
+  }
+  const publicBase = envText(env, "R2_PUBLIC_URL").replace(/\/+$/, "");
+  if (!publicBase) throw new Error("R2_PUBLIC_URL is required to publish GPTi2 output");
+  const key = `${keyBase}.${imageExtension(contentType)}`;
+  await env.RESULTS_BUCKET.put(key, body, { httpMetadata: { contentType } });
+  return `${publicBase}/${key}`;
+}, "persistGpti2Result");
+var submitGpti2 = /* @__PURE__ */ __name(async (env, row, report) => {
+  const payload = payloadObject(row);
+  const model = modelOf(row);
+  if (!GPTI2_MODELS.has(model)) throw new Error(`GPTI2_MODEL_UNSUPPORTED: ${model}`);
+  const prompt = String(payload.prompt || row.prompt || "").trim();
+  if (!prompt) throw new Error("GPTI2_ERROR: prompt is required");
+  const refs = referenceUrlsOf(row);
+  const size = gpti2SizeOf(payload);
+  let response;
+  if (refs.length && !model.startsWith("nano-banana")) {
+    await report("building_payload", `Da dung payload GPTi2: ${model}, ${size}, ${refs.length} anh tham chieu.`);
+    const form = new FormData();
+    form.set("prompt", prompt);
+    form.set("model", model);
+    form.set("size", size);
+    form.set("quality", String(payload.quality || "low"));
+    for (const [i, url] of refs.entries()) {
+      await report("uploading_refs", `Dang tai va chuan bi anh tham chieu ${i + 1}/${refs.length}.`);
+      const source = await fetch(url, { signal: AbortSignal.timeout(3e4) });
+      if (!source.ok) throw new Error(`GPTI2 reference ${i + 1} unavailable`);
+      form.append("image[]", await source.blob(), `reference-${i + 1}.jpg`);
+      await report("uploading_refs", `Da dua anh tham chieu ${i + 1}/${refs.length} vao payload GPTi2.`, "success");
+    }
+    await report("dispatching", `Dang gui GPTi2 edit request voi ${refs.length} anh tham chieu.`);
+    response = await fetch("https://gpti2.store/v1/images/edits", { method: "POST", headers: { Authorization: `Bearer ${env.GPTI2_API_KEY}` }, body: form, signal: AbortSignal.timeout(295e3) });
+  } else {
+    await report("building_payload", `Da dung payload GPTi2: ${model}, ${size}, khong co anh tham chieu.`);
+    await report("dispatching", "Dang gui GPTi2 generation request.");
+    response = await fetch("https://gpti2.store/v1/images/generations", { method: "POST", headers: { Authorization: `Bearer ${env.GPTI2_API_KEY}`, "content-type": "application/json" }, body: JSON.stringify({ model, prompt, size, quality: String(payload.quality || "low"), n: 1 }), signal: AbortSignal.timeout(295e3) });
+  }
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`GPTI2_ERROR: ${detail}`);
+  }
+  const data = await response.json();
+  const raw = data?.data?.[0]?.b64_json || data?.data?.[0]?.url || data?.url;
+  if (!raw) throw new Error("GPTI2_ERROR: provider returned no image");
+  await report("verifying_output", "GPTi2 da tra ket qua. Dang kiem tra va luu anh.");
+  return String(raw).startsWith("http") ? String(raw) : `data:image/png;base64,${raw}`;
+}, "submitGpti2");
+var failAndRefund = /* @__PURE__ */ __name(async (env, row, message) => {
+  await updateJob(env, row.id, { status: "failed", progress: 0, error_message: message, finished_at: (/* @__PURE__ */ new Date()).toISOString(), next_poll_at: null, lease_token: null, lease_expires_at: null, queue_payload: appendLog(payloadObject(row), "failed", message, "error") });
+  const refund = await supabase(env, "rpc/refund_generated_job", { method: "POST", body: JSON.stringify({ p_generated_image_id: row.id, p_reason: `Refund: GPTi2 queue job failed (${String(row.tool_name || row.queue_kind || "generation").slice(0, 120)})` }) });
+  if (!refund.ok) console.error(JSON.stringify({ worker: "queue-gpti2", event: "refund_failed", jobId: row.id, status: refund.status }));
+}, "failAndRefund");
+var dispatch = /* @__PURE__ */ __name(async (env, row) => {
+  let activePayload = { ...payloadObject(row), __cloudflareWorker: true };
+  const report = /* @__PURE__ */ __name(async (stage, message, level = "info") => {
+    activePayload = appendLog(activePayload, stage, message, level);
+    await updateJob(env, row.id, { status: "processing", progress: stage === "uploading_refs" ? 35 : stage === "building_payload" ? 45 : stage === "verifying_output" ? 85 : 50, error_message: null, queue_payload: activePayload });
+  }, "report");
+  await report("preparing", "Cloudflare GPTi2 Worker da nhan job. Bat dau kiem tra payload.");
+  const result = await submitGpti2(env, row, report);
+  await report("verifying_output", "Dang luu ket qua GPTi2 vao R2.");
+  const imageUrl = await persistGpti2Result(env, row, result);
+  activePayload = appendLog(activePayload, "completed", "Cloudflare Worker da luu ket qua GPTi2 vao R2.", "success");
+  await updateJob(env, row.id, { status: "completed", progress: 100, image_url: imageUrl, finished_at: (/* @__PURE__ */ new Date()).toISOString(), next_poll_at: null, lease_token: null, lease_expires_at: null, queue_payload: activePayload });
+}, "dispatch");
+var processMessage = /* @__PURE__ */ __name(async (env, message) => {
+  const body = message.body && typeof message.body === "object" ? message.body : {};
+  const jobId = String(body.jobId || "").trim();
+  const provider = String(body.provider || "").trim().toLowerCase();
+  if (!isJobId(jobId) || !GPTI2_PROVIDERS.has(provider) || String(body.action || "dispatch").toLowerCase() !== "dispatch") return { ack: true, reason: "invalid_message" };
+  const row = await claimJob(env, jobId, "dispatch");
+  if (!row) {
+    const state = await jobState(env, jobId);
+    if (state?.status === "queued") await enqueueDelayed(env.GPTI2_JOBS, { ...body, jobId, provider, action: "dispatch", requestedAt: (/* @__PURE__ */ new Date()).toISOString() }, 30);
+    return { ack: true, reason: "already_claimed_or_rescheduled" };
+  }
+  if (!isGpti2Lane(row, provider)) {
+    console.error(JSON.stringify({ worker: "queue-gpti2", event: "wrong_lane", jobId, provider, rowProvider: row.provider }));
+    return { ack: true, reason: "wrong_lane" };
+  }
+  try {
+    await dispatch(env, row);
+    return { ack: true, reason: "dispatched" };
+  } catch (error) {
+    await failAndRefund(env, row, error instanceof Error ? error.message : String(error));
+    return { ack: true, reason: "failed" };
+  }
+}, "processMessage");
+var queue_gpti2_worker_default = {
+  async fetch(request, env, ctx) {
+    if (request.method === "GET") return json({ ok: true, worker: "auditionai-queue-gpti2" });
+    if (request.method !== "POST") return json({ error: "Method Not Allowed" }, 405);
+    if (!isAuthorizedWorkerRequest(request, env)) return json({ error: "Unauthorized" }, 401);
+    const body = await request.json().catch(() => null);
+    if (!isJobId(body?.jobId) || !GPTI2_PROVIDERS.has(String(body?.provider || "").toLowerCase())) return json({ error: "jobId and GPTi2 provider are required" }, 400);
+    ctx.waitUntil(processMessage(env, { body }).catch((error) => console.error(JSON.stringify({ worker: "queue-gpti2", event: "http_process_failed", error: String(error) }))));
+    return json({ accepted: true }, 202);
+  },
+  async queue(batch, env) {
+    for (const message of batch.messages) {
+      try {
+        const outcome = await processMessage(env, message);
+        if (outcome.ack) message.ack();
+        else message.retry({ delaySeconds: 30 });
+      } catch (error) {
+        console.error(JSON.stringify({ worker: "queue-gpti2", event: "queue_delivery_failed", error: String(error) }));
+        message.retry({ delaySeconds: 30 });
+      }
+    }
+  }
+};
+export {
+  queue_gpti2_worker_default as default
+};
+//# sourceMappingURL=queue-gpti2-worker.js.map

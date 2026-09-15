@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { GeneratedImage, Language, HistoryItem } from '../types';
 import type { QueueProgressLogEntry } from '../shared/queueRecipes';
-import { checkR2Connection, getAllImagesFromStorage, deleteImageFromStorage, getHistoryRetentionDays, publishImageToShowcase, invalidateGalleryCache } from '../services/storageService';
+import { checkR2Connection, getAllImagesFromStorage, getCachedImagesForCurrentUser, deleteImageFromStorage, getHistoryRetentionDays, publishImageToShowcase, invalidateGalleryCache } from '../services/storageService';
 import { getUnifiedHistory } from '../services/economyService';
 import { downloadAssetToBrowser } from '../services/downloadService';
 import { Icons } from '../components/Icons';
@@ -47,6 +47,17 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
   const retentionDays = getHistoryRetentionDays();
   const loadImages = useCallback(async (silent = false) => {
     if (!silent) setLoadingImages(true);
+
+    // Show the last known history immediately, then reconcile with Supabase.
+    // This prevents a blank gallery while the remote query crosses regions.
+    if (!silent) {
+      const cachedImages = await getCachedImagesForCurrentUser();
+      if (cachedImages.length > 0) {
+        setImages(cachedImages);
+        setLoadingImages(false);
+      }
+    }
+
     try {
       const storedImages = await getAllImagesFromStorage();
       setImages(storedImages);

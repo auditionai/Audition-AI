@@ -114,6 +114,18 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
   }, [loadImages]);
 
   useEffect(() => {
+      if (typeof window === 'undefined') return;
+      const handleTerminalGeneration = () => {
+          invalidateGalleryCache();
+          loadImages(true).catch((error) => {
+              console.warn('[Gallery] Terminal generation refresh failed', error);
+          });
+      };
+      window.addEventListener('audition:generation-terminal', handleTerminalGeneration);
+      return () => window.removeEventListener('audition:generation-terminal', handleTerminalGeneration);
+  }, [loadImages]);
+
+  useEffect(() => {
       if (activeTab !== 'generation' || !hasActiveGenerationJobs) return;
 
       const interval = setInterval(() => {

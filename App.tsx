@@ -444,6 +444,8 @@ function AppContent() {
             const status = row.status;
             if (status !== 'completed' && status !== 'failed') return;
 
+            window.dispatchEvent(new CustomEvent('audition:generation-terminal', { detail: row }));
+
             const eventKey = `${row.id || row.job_id || payload.commit_timestamp}:${status}`;
             if (notifiedTerminalJobsRef.current.has(eventKey)) return;
             notifiedTerminalJobsRef.current.add(eventKey);

@@ -98,6 +98,50 @@ export const compactWorkerPayload = (value) => {
   return { ...compacted, __workerPayloadCompacted: true };
 };
 
+export const notifyTelegramJob = async (env, eventType, row, overrides = {}) => {
+  const webhookUrl = envText(env, 'TELEGRAM_NOTIFY_WEBHOOK_URL');
+  const webhookSecret = envText(env, 'TELEGRAM_NOTIFY_WEBHOOK_SECRET');
+  if (!webhookUrl || !webhookSecret) return;
+
+  const queuePayload = compactWorkerPayload(row);
+  const body = {
+    eventType,
+    app: 'Audition AI',
+    job: {
+      id: row.id,
+      providerJobId: row.job_id || null,
+      provider: row.provider || queuePayload.__targetProvider || null,
+      userId: row.user_id,
+      prompt: row.prompt || '',
+      assetType: row.asset_type || 'image',
+      toolId: row.tool_id || null,
+      toolName: row.tool_name || null,
+      engine: row.model_used || null,
+      queueKind: row.queue_kind || null,
+      costVcoin: Number(row.cost_vcoin || 0),
+      status: eventType,
+      createdAt: row.created_at || null,
+      finishedAt: overrides.finishedAt || null,
+      errorMessage: overrides.errorMessage || null,
+      resultUrl: overrides.resultUrl || null,
+      config: {
+        modelId: queuePayload.modelId || queuePayload.model || null,
+        resolution: queuePayload.resolution || null,
+        aspectRatio: queuePayload.aspectRatio || queuePayload.aspect_ratio || null,
+      },
+    },
+    media: { outputUrl: overrides.resultUrl || null },
+  };
+
+  const response = await fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-notify-secret': webhookSecret },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!response.ok) throw new Error(`Telegram notification failed (${response.status})`);
+};
+
 export const claimJob = async (env, jobId, action) => {
   const poll = action === 'poll';
   const response = await rpc(env, poll ? 'claim_cloudflare_tst_poll_job_by_id' : 'claim_cloudflare_generated_job_by_id', {

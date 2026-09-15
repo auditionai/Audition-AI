@@ -1,6 +1,6 @@
 import {
   appendLog, claimJob, enqueueDelayed, envText, isAuthorizedWorkerRequest, isJobId,
-  jobState, json, mimeTypeToExtension, payloadObject, persistResultToR2, rpc, supabase, updateJob,
+  jobState, json, mimeTypeToExtension, notifyTelegramJob, payloadObject, persistResultToR2, rpc, supabase, updateJob,
 } from './_queue-shared.js';
 
 const TST_PROVIDERS = new Set(['tst_image', 'tst_video', 'tst_edit']);
@@ -395,6 +395,7 @@ const providerResultOf = (data, assetType) => {
 
 const failAndRefund = async (env, row, message) => {
   await updateJob(env, row.id, { status: 'failed', progress: 0, error_message: message, finished_at: new Date().toISOString(), next_poll_at: null, lease_token: null, lease_expires_at: null, queue_payload: appendLog(payloadObject(row), 'failed', message, 'error') });
+  await notifyTelegramJob(env, 'failed', row, { errorMessage: message, finishedAt: new Date().toISOString() }).catch((error) => console.warn('[queue-tst] Telegram notification failed', error));
   const refund = await rpc(env, 'refund_generated_job', { p_generated_image_id: row.id, p_reason: `Refund: TST queue job failed (${String(row.tool_name || row.queue_kind || 'generation').slice(0, 120)})` });
   if (!refund.ok) console.error(JSON.stringify({ worker: 'queue-tst', event: 'refund_failed', jobId: row.id, status: refund.status }));
 };
@@ -415,6 +416,7 @@ const pollRow = async (env, row, provider) => {
     if (result && ['completed', 'success', 'succeeded', 'done'].includes(status)) {
       const storedUrl = await persistResultToR2(env, row, result, '-tst');
       await updateJob(env, row.id, { status: 'completed', progress: 100, image_url: storedUrl, finished_at: new Date().toISOString(), next_poll_at: null, lease_token: null, lease_expires_at: null, queue_payload: appendLog(payloadObject(row), 'completed', 'Cloudflare Worker da luu ket qua TST.', 'success') });
+      await notifyTelegramJob(env, 'completed', row, { resultUrl: storedUrl, finishedAt: new Date().toISOString() }).catch((error) => console.warn('[queue-tst] Telegram notification failed', error));
       return 'completed';
     }
     if (['failed', 'error', 'cancelled', 'canceled'].includes(status)) {

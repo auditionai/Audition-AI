@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Handler } from '@netlify/functions';
+import { sendTelegramJobNotification } from './_telegram-notify';
 import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 import { triggerBackgroundQueueWorker } from './_queue-launcher';
 import { isDedicatedQueueWorkerMode } from './_queue-runtime-mode';
@@ -917,6 +918,20 @@ export const handler: Handler = async (event) => {
       }
     }
 
+    await sendTelegramJobNotification('queued', {
+      id: String(row?.id || body.id || ''),
+      userId: user.id,
+      provider: targetProvider,
+      prompt: body.prompt || '',
+      assetType: body.assetType,
+      toolId: normalizedToolMeta.toolId,
+      toolName: normalizedToolMeta.toolName,
+      engine: body.engine || normalizedToolMeta.toolName || body.queueKind,
+      queueKind: body.queueKind,
+      costVcoin: serverPrice.costVcoin,
+      createdAt: new Date().toISOString(),
+      queuePayload: queuePayloadWithLogs,
+    });
     await wakeCloudflareGpti2Worker(String(row?.id || body.id || ''), targetProvider, body.queueKind, body.queuePayload);
     await runSafeWorkerTick(event.rawUrl);
 

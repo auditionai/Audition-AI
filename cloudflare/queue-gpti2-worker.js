@@ -1,6 +1,6 @@
 import {
   appendLog, claimJob, compactWorkerPayload, enqueueDelayed, envText, isAuthorizedWorkerRequest, isJobId,
-  jobState, json, payloadObject, supabase, updateJob,
+  jobState, json, notifyTelegramJob, payloadObject, supabase, updateJob,
 } from './_queue-shared.js';
 
 const GPTI2_PROVIDERS = new Set(['gpti2_image', 'gpti2_edit']);
@@ -97,6 +97,7 @@ const submitGpti2 = async (env, row, report) => {
 
 const failAndRefund = async (env, row, message) => {
   await updateJob(env, row.id, { status: 'failed', progress: 0, error_message: message, finished_at: new Date().toISOString(), next_poll_at: null, lease_token: null, lease_expires_at: null, queue_payload: appendLog(compactWorkerPayload(row), 'failed', message, 'error') });
+  await notifyTelegramJob(env, 'failed', row, { errorMessage: message, finishedAt: new Date().toISOString() }).catch((error) => console.warn('[queue-gpti2] Telegram notification failed', error));
   const refund = await supabase(env, 'rpc/refund_generated_job', { method: 'POST', body: JSON.stringify({ p_generated_image_id: row.id, p_reason: `Refund: GPTi2 queue job failed (${String(row.tool_name || row.queue_kind || 'generation').slice(0, 120)})` }) });
   if (!refund.ok) console.error(JSON.stringify({ worker: 'queue-gpti2', event: 'refund_failed', jobId: row.id, status: refund.status }));
 };
@@ -128,6 +129,7 @@ const dispatch = async (env, row) => {
   const imageUrl = await persistGpti2Result(env, row, result);
   activePayload = appendLog(activePayload, 'completed', 'Cloudflare Worker da luu ket qua GPTi2 vao R2.', 'success');
   await updateJob(env, row.id, { status: 'completed', progress: 100, image_url: imageUrl, finished_at: new Date().toISOString(), next_poll_at: null, lease_token: null, lease_expires_at: null, queue_payload: activePayload });
+  await notifyTelegramJob(env, 'completed', row, { resultUrl: imageUrl, finishedAt: new Date().toISOString() }).catch((error) => console.warn('[queue-gpti2] Telegram notification failed', error));
 };
 
 const processMessage = async (env, message) => {

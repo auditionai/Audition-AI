@@ -12,8 +12,8 @@ const loadEnvFile = (): Record<string, string> => {
   if (envCache) return envCache;
 
   try {
-    // Try to load .env from project root (2 levels up from netlify/functions)
-    const envPath = join(__dirname, '..', '..', '.env');
+    // Try to load .env.secrets from the same directory (bundled by Netlify)
+    const envPath = join(__dirname, '.env.secrets');
     const content = readFileSync(envPath, 'utf-8');
 
     const parsed: Record<string, string> = {};
@@ -38,16 +38,16 @@ const loadEnvFile = (): Record<string, string> => {
 };
 
 /**
- * Get environment variable with fallback to .env file
+ * Get environment variable with fallback to bundled .env.secrets file
  */
 export const getEnvVar = (...keys: string[]): string => {
-  // First try process.env (Netlify environment variables)
+  // First try process.env (Netlify will have minimal env vars)
   for (const key of keys) {
     const value = process.env[key];
     if (value) return value;
   }
 
-  // Fallback to .env file
+  // Then try bundled .env.secrets file
   const envFile = loadEnvFile();
   for (const key of keys) {
     const value = envFile[key];

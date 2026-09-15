@@ -20,6 +20,7 @@ import { useNotification } from '../../components/NotificationSystem';
 import { caulenhauClient } from '../../services/supabaseClient';
 import { formatConcurrencyLimit, getProviderConcurrencyLimits, getProviderQueueStats, setActiveQueueProvider, useConcurrency } from '../../services/concurrencyService';
 import { enqueueServerJob } from '../../services/serverQueueService';
+import { GenerationDiscountPrice } from '../../components/GenerationDiscountPrice';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import { downloadAssetToBrowser } from '../../services/downloadService';
 import { analyzeCharacterAppearanceProfile } from '../../utils/imageProcessor';
@@ -2046,10 +2047,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                     <div className="neu-inset-sm p-4 rounded-2xl space-y-2">
                         <div className="flex items-center justify-between">
                             <span className="text-xs font-black text-slate-700 dark:text-slate-300">Chi phí Vcoin:</span>
-                            <div className="flex items-baseline gap-1">
-                                <span className="text-2xl font-black text-amber-500 font-accent">{calculateCost()}</span>
-                                <span className="text-xs font-black text-amber-500">VCOIN</span>
-                            </div>
+                            <GenerationDiscountPrice originalCost={calculateCost()} assetType="image" />
                         </div>
                         <p className="text-[10px] text-slate-700 dark:text-slate-300 font-semibold">Trừ trực tiếp số dư khi bắt đầu khởi tạo job render AI.</p>
                     </div>

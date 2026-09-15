@@ -18,6 +18,7 @@ import { useNotification } from '../../components/NotificationSystem';
 import { getUserProfile, getModelPricing, getTstServerAvailabilityConfig, getGenerationProviderConfig, type GenerationProviderConfig } from '../../services/economyService';
 import { useConcurrency, CONCURRENCY_LIMITS } from '../../services/concurrencyService';
 import { enqueueServerJob } from '../../services/serverQueueService';
+import { GenerationDiscountPrice } from '../../../../components/GenerationDiscountPrice';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import { compressDataImageForDirector, generateVideoScriptWithClaude } from '../../services/videoScriptDirectorService';
 import { trackEvent } from '../../services/analyticsService';
@@ -1419,10 +1420,7 @@ export function WorkspaceVideo() {
             </>
           )}
 
-          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-black/20 px-2.5 py-1 rounded-full backdrop-blur-md">
-            <span className="text-[12px] font-bold text-white">{isCatalogReady ? calculateCost() : '...'}</span>
-            <Gem className="w-3 h-3 text-yellow-300" />
-          </div>
+          <div className="absolute right-2 top-1/2 -translate-y-1/2"><GenerationDiscountPrice originalCost={isCatalogReady ? calculateCost() : 0} assetType="video" compact /></div>
         </Button>
       </div>
 

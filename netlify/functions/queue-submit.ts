@@ -492,7 +492,18 @@ const resolveServerCostVcoin = async (
   if (!selected) throw new Error(`INVALID_SERVER_PRICE: Missing AUDITION AI price for ${modelId}`);
   const baseVcoin = Math.ceil(Number(selected.audition_price_vcoin));
   const multiplier = queueKind === 'image_generate' ? getImageBillingMultiplier(queuePayload) : 1;
-  const costVcoin = Math.ceil(baseVcoin * multiplier);
+  const originalCostVcoin = Math.ceil(baseVcoin * multiplier);
+  const { data: discountSetting, error: discountError } = await admin
+    .from('system_settings').select('value').eq('key', 'generation_discount').maybeSingle();
+  if (discountError) throw discountError;
+  const discount = discountSetting?.value || {};
+  const discountPercent = Math.max(0, Math.min(90, Math.floor(Number(discount.discountPercent || 0))));
+  const appliesTo = String(discount.appliesTo || 'all');
+  const activeDiscount = discount.isActive === true && discountPercent > 0
+    && (appliesTo === 'all' || appliesTo === (queueKind === 'image_generate' ? 'image' : 'video'))
+    && Date.parse(String(discount.startTime || '')) <= Date.now()
+    && Date.parse(String(discount.endTime || '')) > Date.now();
+  const costVcoin = activeDiscount ? Math.max(1, Math.ceil(originalCostVcoin * (100 - discountPercent) / 100)) : originalCostVcoin;
 
   if (!Number.isFinite(costVcoin) || costVcoin <= 0) {
     throw new Error('INVALID_SERVER_PRICE');
@@ -506,6 +517,8 @@ const resolveServerCostVcoin = async (
       provider_credits: Number(selected.tst_price_credits || 0),
       base_vcoin: baseVcoin,
       multiplier,
+      original_cost_vcoin: originalCostVcoin,
+      discount_percent: activeDiscount ? discountPercent : 0,
       source: 'admin_pricing',
     },
   };

@@ -420,6 +420,16 @@ export interface PromotionCampaign {
     isActive: boolean; // Manual Kill Switch
 }
 
+export type GenerationDiscountConfig = {
+    isActive: boolean;
+    title: string;
+    discountPercent: number;
+    appliesTo: 'all' | 'image' | 'video';
+    startTime: string;
+    endTime: string;
+    updatedAt?: string;
+};
+
 export type PromotionConfig = Promotion;
 export interface Promotion { 
     id: string; 

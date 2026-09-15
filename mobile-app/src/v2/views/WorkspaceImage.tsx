@@ -1451,11 +1451,8 @@ export function WorkspaceImage() {
                 <p>Kiểm tra cấu hình trước khi tạo ảnh</p>
               </div>
             </div>
-            <div className="v2-image-flow-card__cost rounded-2xl bg-gray-50 px-3 py-2 text-right dark:bg-[#27272A]">
-              <div className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-zinc-500">Chi phí</div>
-              <div className="mt-1"><GenerationDiscountPrice originalCost={Number(costDisplay) || 0} assetType="image" compact /></div>
-            </div>
           </div>
+          <div className="mt-4"><GenerationDiscountPrice originalCost={Number(costDisplay) || 0} assetType="image" panel /></div>
           <div role="note" className="mt-4 rounded-2xl border border-cyan-200 bg-cyan-50/70 px-3 py-3 text-xs font-medium leading-relaxed text-cyan-900 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-100">
             <span aria-hidden="true">💡</span>{' '}
             <strong>{GENERATION_SECTION_TIPS.render.title}:</strong>{' '}

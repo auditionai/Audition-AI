@@ -11,6 +11,14 @@
   QUEUE_WORKER_MODE = "dedicated"
   DISABLE_BACKGROUND_QUEUE_TRIGGER = "true"
 
+[context.branch-deploy.environment]
+  QUEUE_WORKER_MODE = "netlify"
+  DISABLE_BACKGROUND_QUEUE_TRIGGER = "false"
+
+[context.deploy-preview.environment]
+  QUEUE_WORKER_MODE = "netlify"
+  DISABLE_BACKGROUND_QUEUE_TRIGGER = "false"
+
 [[headers]]
   for = "/assets/*"
   [headers.values]

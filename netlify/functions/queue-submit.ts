@@ -3,6 +3,7 @@ import type { Handler } from '@netlify/functions';
 import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 import { triggerBackgroundQueueWorker } from './_queue-launcher';
 import { isDedicatedQueueWorkerMode } from './_queue-runtime-mode';
+import { getTstApiKey } from './_secrets';
 import { validateQueuePayloadAgainstLiveCatalog } from './_tst-live-catalog';
 import { normalizeAndValidateGommoPayload } from './_disabled-provider';
 import { isProviderServerAllowedByConfig } from './_server-availability';

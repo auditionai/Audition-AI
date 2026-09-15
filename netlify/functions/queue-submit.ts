@@ -750,20 +750,20 @@ const getCloudflareQueueProvider = (provider: GenerationProvider, queueKind?: st
 const wakeCloudflareGpti2Worker = async (jobId: string, provider: GenerationProvider, queueKind?: string, queuePayload?: Record<string, unknown>) => {
   const lane = getCloudflareQueueProvider(provider, queueKind, queuePayload);
   if (!lane) return;
-  const routerUrl = String(process.env.CLOUDFLARE_GPTI2_ROUTER_URL || '').trim();
-  const serviceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
-  if (!routerUrl || !serviceRoleKey || !jobId) return;
+  const routerUrl = String(process.env.CLOUDFLARE_QUEUE_ROUTER_URL || '').trim();
+  const queueWorkerSecret = String(process.env.CLOUDFLARE_QUEUE_WORKER_SECRET || '').trim();
+  if (!routerUrl || !queueWorkerSecret || !jobId) return;
   try {
     const response = await fetch(routerUrl, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${serviceRoleKey}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${queueWorkerSecret}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ jobId, provider: lane }),
       signal: AbortSignal.timeout(5_000),
     });
     if (!response.ok) throw new Error(`Cloudflare queue router returned ${response.status}`);
   } catch (error) {
     // Cron remains the recovery path when the immediate wake signal fails.
-    console.warn('[queue-submit] Failed to wake Cloudflare GPTi2 worker:', error);
+    console.warn('[queue-submit] Failed to wake Cloudflare queue router:', error);
   }
 };
 

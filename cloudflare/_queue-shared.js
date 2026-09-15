@@ -73,6 +73,31 @@ export const appendLog = (payload, stage, message, level = 'info') => ({
   ].slice(-80),
 });
 
+const isHttpUrl = (value) => typeof value === 'string' && /^https?:\/\//i.test(value.trim());
+
+// Queue rows may initially contain local base64 inputs. Once a Worker has
+// claimed a job, retaining those blobs in every progress PATCH can make the
+// Supabase REST update exceed its upstream timeout. Keep the operation's
+// metadata, prompt, and remotely staged reference URLs only.
+export const compactWorkerPayload = (value) => {
+  const trim = (entry, depth = 0) => {
+    if (depth > 8 || entry == null) return undefined;
+    if (typeof entry === 'string') {
+      if (entry.startsWith('data:')) return undefined;
+      return entry.length > 8_000 && !isHttpUrl(entry) ? entry.slice(0, 8_000) : entry;
+    }
+    if (Array.isArray(entry)) return entry.map((item) => trim(item, depth + 1)).filter((item) => item !== undefined);
+    if (typeof entry !== 'object') return entry;
+    return Object.fromEntries(Object.entries(entry)
+      .map(([key, item]) => [key, trim(item, depth + 1)])
+      .filter(([, item]) => item !== undefined));
+  };
+
+  const payload = payloadObject(value);
+  const compacted = trim(payload) || {};
+  return { ...compacted, __workerPayloadCompacted: true };
+};
+
 export const claimJob = async (env, jobId, action) => {
   const poll = action === 'poll';
   const response = await rpc(env, poll ? 'claim_cloudflare_tst_poll_job_by_id' : 'claim_cloudflare_generated_job_by_id', {

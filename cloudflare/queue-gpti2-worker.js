@@ -1,5 +1,5 @@
 import {
-  appendLog, claimJob, enqueueDelayed, envText, isAuthorizedWorkerRequest, isJobId,
+  appendLog, claimJob, compactWorkerPayload, enqueueDelayed, envText, isAuthorizedWorkerRequest, isJobId,
   jobState, json, payloadObject, supabase, updateJob,
 } from './_queue-shared.js';
 
@@ -96,14 +96,14 @@ const submitGpti2 = async (env, row, report) => {
 };
 
 const failAndRefund = async (env, row, message) => {
-  await updateJob(env, row.id, { status: 'failed', progress: 0, error_message: message, finished_at: new Date().toISOString(), next_poll_at: null, lease_token: null, lease_expires_at: null, queue_payload: appendLog(payloadObject(row), 'failed', message, 'error') });
+  await updateJob(env, row.id, { status: 'failed', progress: 0, error_message: message, finished_at: new Date().toISOString(), next_poll_at: null, lease_token: null, lease_expires_at: null, queue_payload: appendLog(compactWorkerPayload(row), 'failed', message, 'error') });
   const refund = await supabase(env, 'rpc/refund_generated_job', { method: 'POST', body: JSON.stringify({ p_generated_image_id: row.id, p_reason: `Refund: GPTi2 queue job failed (${String(row.tool_name || row.queue_kind || 'generation').slice(0, 120)})` }) });
   if (!refund.ok) console.error(JSON.stringify({ worker: 'queue-gpti2', event: 'refund_failed', jobId: row.id, status: refund.status }));
 };
 
 const retryBeforeFallback = async (env, row, message, attemptCount) => {
   if (!isRetryableGpti2Error(message) || attemptCount >= 3) return false;
-  const payload = appendLog(payloadObject(row), 'queued', `GPTi2 chua phan hoi on dinh. Thu lai lan ${attemptCount + 1}/3 truoc khi dung API du phong.`, 'warning');
+  const payload = appendLog(compactWorkerPayload(row), 'queued', `GPTi2 chua phan hoi on dinh. Thu lai lan ${attemptCount + 1}/3 truoc khi dung API du phong.`, 'warning');
   await updateJob(env, row.id, {
     status: 'queued', progress: 0, job_id: null, lease_token: null, lease_expires_at: null,
     processing_started_at: null, next_poll_at: new Date(Date.now() + Math.min(30, 5 * (attemptCount + 1)) * 1000).toISOString(),
@@ -115,13 +115,13 @@ const retryBeforeFallback = async (env, row, message, attemptCount) => {
 
 const fallbackToTst = async (env, row, message) => {
   const provider = row.queue_kind === 'image_edit_direct' || String(row.queue_payload?.recipeType || '') === 'image_edit_recipe_v1' ? 'tst_edit' : 'tst_image';
-  const payload = appendLog({ ...payloadObject(row), __targetProvider: 'tst', __providerFallbackHistory: [{ at: new Date().toISOString(), fromProvider: 'gpti2', toProvider: 'tst', reason: message.slice(0, 500) }] }, 'queued', 'GPTi2 khong phan hoi sau 3 lan. Chuyen sang TST du phong.', 'warning');
+  const payload = appendLog({ ...compactWorkerPayload(row), __targetProvider: 'tst', __providerFallbackHistory: [{ at: new Date().toISOString(), fromProvider: 'gpti2', toProvider: 'tst', reason: message.slice(0, 500) }] }, 'queued', 'GPTi2 khong phan hoi sau 3 lan. Chuyen sang TST du phong.', 'warning');
   await updateJob(env, row.id, { status: 'queued', progress: 0, provider: 'tst', job_id: null, lease_token: null, lease_expires_at: null, processing_started_at: null, next_poll_at: null, attempt_count: 0, error_message: null, queue_payload: payload });
   await env.TST_JOBS.send({ jobId: row.id, provider, action: 'dispatch', requestedAt: new Date().toISOString() });
 };
 
 const dispatch = async (env, row) => {
-  let activePayload = { ...payloadObject(row), __cloudflareWorker: true };
+  let activePayload = { ...compactWorkerPayload(row), __cloudflareWorker: true };
   const report = async (stage, message, level = 'info') => { activePayload = appendLog(activePayload, stage, message, level); await updateJob(env, row.id, { status: 'processing', progress: stage === 'uploading_refs' ? 35 : stage === 'building_payload' ? 45 : stage === 'verifying_output' ? 85 : 50, error_message: null, queue_payload: activePayload }); };
   await report('preparing', 'Cloudflare GPTi2 Worker da nhan job. Bat dau kiem tra payload.');
   const result = await submitGpti2(env, row, report); await report('verifying_output', 'Dang luu ket qua GPTi2 vao R2.');

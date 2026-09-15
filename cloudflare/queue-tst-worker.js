@@ -483,9 +483,9 @@ export default {
     return json({ accepted: true }, 202);
   },
   async queue(batch, env) {
-    for (const message of batch.messages) {
+    await Promise.all(batch.messages.map(async (message) => {
       try { const outcome = await processMessage(env, message); if (outcome.ack) message.ack(); else message.retry({ delaySeconds: 30 }); }
       catch (error) { console.error(JSON.stringify({ worker: 'queue-tst', event: 'queue_delivery_failed', error: String(error) })); message.retry({ delaySeconds: 30 }); }
-    }
+    }));
   },
 };

@@ -77,7 +77,18 @@ const submitGpti2 = async (env, row, report) => {
     response = await fetch('https://gpti2.store/v1/images/generations', { method: 'POST', headers: { Authorization: `Bearer ${env.GPTI2_API_KEY}`, 'content-type': 'application/json' }, body: JSON.stringify({ model, prompt, size, quality: String(payload.quality || 'low'), n: 1 }), signal: AbortSignal.timeout(295000) });
   }
   if (!response.ok) { const detail = await response.text(); throw new Error(`GPTI2_ERROR: ${detail}`); }
-  const data = await response.json(); const raw = data?.data?.[0]?.b64_json || data?.data?.[0]?.url || data?.url;
+  const data = await response.json();
+  const findResult = (value, depth = 0) => {
+    if (depth > 6 || value == null) return '';
+    if (typeof value === 'string') return /^https?:\/\//i.test(value.trim()) || value.trim().startsWith('data:image/') || value.trim().length > 128 ? value.trim() : '';
+    if (Array.isArray(value)) { for (const item of value) { const found = findResult(item, depth + 1); if (found) return found; } return ''; }
+    if (typeof value !== 'object') return '';
+    const object = value;
+    for (const key of ['b64_json', 'image_url', 'imageUrl', 'result_url', 'resultUrl', 'output_url', 'outputUrl', 'url', 'result', 'output', 'image']) { const found = findResult(object[key], depth + 1); if (found) return found; }
+    for (const [key, child] of Object.entries(object)) { if (/prompt|status|message|error|model|usage|id/i.test(key)) continue; const found = findResult(child, depth + 1); if (found) return found; }
+    return '';
+  };
+  const raw = findResult(data);
   if (!raw) throw new Error('GPTI2_ERROR: provider returned no image');
   await report('verifying_output', 'GPTi2 da tra ket qua. Dang kiem tra va luu anh.');
   return String(raw).startsWith('http') ? String(raw) : `data:image/png;base64,${raw}`;
@@ -127,9 +138,9 @@ export default {
     return json({ accepted: true }, 202);
   },
   async queue(batch, env) {
-    for (const message of batch.messages) {
+    await Promise.all(batch.messages.map(async (message) => {
       try { const outcome = await processMessage(env, message); if (outcome.ack) message.ack(); else message.retry({ delaySeconds: 30 }); }
       catch (error) { console.error(JSON.stringify({ worker: 'queue-gpti2', event: 'queue_delivery_failed', error: String(error) })); message.retry({ delaySeconds: 30 }); }
-    }
+    }));
   },
 };

@@ -8,7 +8,7 @@ import {
   getImageRenderReferenceSources,
   isProImageGenerationModel,
   trimProviderPromptForServer,
-} from './_prompt-director-recipes';
+} from '../../shared/queueRecipes';
 import { getTstApiKey as getSecretTstApiKey } from './_secrets';
 import {
   type ImageGenerateRecipePayload,

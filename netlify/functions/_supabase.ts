@@ -1,18 +1,11 @@
 import type { HandlerEvent } from '@netlify/functions';
 import { createHash } from 'node:crypto';
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
+import { getEnvVar } from './_env-loader';
 
-const getEnv = (...keys: string[]) => {
-  for (const key of keys) {
-    const value = process.env[key];
-    if (value) return value;
-  }
-  return '';
-};
-
-const supabaseUrl = getEnv('SUPABASE_URL', 'VITE_SUPABASE_URL');
-const supabaseAnonKey = getEnv('SUPABASE_ANON_KEY', 'VITE_SUPABASE_ANON_KEY');
-const supabaseServiceRoleKey = getEnv('SUPABASE_SERVICE_ROLE_KEY');
+const supabaseUrl = getEnvVar('SUPABASE_URL', 'VITE_SUPABASE_URL');
+const supabaseAnonKey = getEnvVar('SUPABASE_ANON_KEY', 'VITE_SUPABASE_ANON_KEY');
+const supabaseServiceRoleKey = getEnvVar('SUPABASE_SERVICE_ROLE_KEY');
 
 const assertEnv = (value: string, label: string) => {
   if (!value) {

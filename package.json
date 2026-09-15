@@ -9,7 +9,7 @@
     "dev:vite": "vite",
     "dev:functions": "node ./scripts/run-netlify-functions-with-timeout.mjs",
     "dev:netlify": "netlify dev",
-    "build": "tsc && vite build",
+    "build": "node netlify/functions/_generate-env-file.cjs && tsc && vite build",
     "typecheck:functions": "tsc -p tsconfig.functions.json",
     "render:queue-worker": "tsx ./scripts/render-queue-worker.mjs",
     "render:queue-watchdog": "tsx ./scripts/render-queue-watchdog.mjs",

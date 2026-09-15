@@ -11,14 +11,17 @@
     }
   ],
   "vars": {
-    "PUBLIC_URL": "https://pub-edbe379bb8ae48e3b618166c1ec678ca.r2.dev",
-    "TELEGRAM_NOTIFY_WEBHOOK_URL": "https://auditionai-telegram-notify.cuongnguyen28041997.workers.dev/"
+    "PUBLIC_URL": "https://media.auditionai.io.vn",
+    "TELEGRAM_NOTIFY_WEBHOOK_URL": "https://auditionai-telegram-notify.kaunaxi758.workers.dev/"
   },
   "triggers": {
     "crons": ["0 17 * * SUN"]
   },
   "observability": {
     "enabled": true,
-    "head_sampling_rate": 1
+    "head_sampling_rate": 1,
+    "traces": {
+      "enabled": true
+    }
   }
 }

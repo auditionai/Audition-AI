@@ -3,7 +3,7 @@ import type { QueueNotificationMediaEntry } from '../../shared/queueRecipes';
 
 type QueuePayloadObject = Record<string, unknown> | null | undefined;
 
-type JobNotificationEvent = 'queued' | 'completed' | 'failed';
+type JobNotificationEvent = 'completed' | 'failed';
 
 type JobNotificationRecord = {
   id: string;
@@ -264,7 +264,7 @@ const buildNotificationSignature = (
   if (eventType === 'completed') {
     return String(record.resultUrl || '').trim() || 'completed';
   }
-  return 'queued';
+  return 'completed';
 };
 
 const shouldSkipDuplicateNotification = async (
@@ -420,10 +420,6 @@ export const sendTelegramJobNotification = async (
   eventType: JobNotificationEvent,
   record: JobNotificationRecord,
 ) => {
-  if (eventType === 'queued') {
-    return;
-  }
-
   if (!notifyWebhookUrl || !notifyWebhookSecret) {
     return;
   }
@@ -479,10 +475,6 @@ export const fireTelegramJobNotification = (
   eventType: JobNotificationEvent,
   record: JobNotificationRecord,
 ) => {
-  if (eventType === 'queued') {
-    return;
-  }
-
   const key = `${record.id}:${eventType}`;
   if (inFlightJobNotifications.has(key)) return;
   const task = sendTelegramJobNotification(eventType, record)

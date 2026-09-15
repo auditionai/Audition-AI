@@ -18,6 +18,7 @@ import { useNotification } from '../../components/NotificationSystem';
 import { getUserProfile, getModelPricing, getTstServerAvailabilityConfig, getGenerationProviderConfig, type GenerationProviderConfig } from '../../services/economyService';
 import { useConcurrency, CONCURRENCY_LIMITS } from '../../services/concurrencyService';
 import { enqueueServerJob } from '../../services/serverQueueService';
+import { GenerationDiscountPrice } from '../../../../components/GenerationDiscountPrice';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import { compressDataImageForDirector, generateVideoScriptWithClaude } from '../../services/videoScriptDirectorService';
 import { trackEvent } from '../../services/analyticsService';
@@ -1393,6 +1394,7 @@ export function WorkspaceVideo() {
 
       {/* Generate Button - Fixed Bottom */}
       <div className="fixed bottom-[70px] left-0 right-0 p-5 pt-8 bg-gradient-to-t from-[#fcfcfc] via-[#fcfcfc] dark:from-[#09090b] dark:via-[#09090b] to-transparent max-w-md mx-auto xl:absolute xl:bottom-0">
+        <div className="mb-3"><GenerationDiscountPrice originalCost={isCatalogReady ? calculateCost() : 0} assetType="video" /></div>
         {currentCostBreakdown.billingUnit === 'second' && (
           <div className="mb-2 rounded-2xl border border-yellow-200 bg-yellow-50 px-3 py-2 text-center text-[11px] font-black text-yellow-700 dark:border-yellow-500/30 dark:bg-yellow-500/10 dark:text-yellow-200">
             Kling tính theo giây: {perSecondCostLabel}
@@ -1419,10 +1421,7 @@ export function WorkspaceVideo() {
             </>
           )}
 
-          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-black/20 px-2.5 py-1 rounded-full backdrop-blur-md">
-            <span className="text-[12px] font-bold text-white">{isCatalogReady ? calculateCost() : '...'}</span>
-            <Gem className="w-3 h-3 text-yellow-300" />
-          </div>
+          <div className="absolute right-2 top-1/2 -translate-y-1/2"><GenerationDiscountPrice originalCost={isCatalogReady ? calculateCost() : 0} assetType="video" compact /></div>
         </Button>
       </div>
 

@@ -1,0 +1,22 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "auditionai-queue-worker-legacy-stub",
+  "main": "queue-worker.js",
+  "compatibility_date": "2026-09-14",
+  "workers_dev": true,
+  "preview_urls": false,
+  "queues": { "producers": [], "consumers": [] },
+  "r2_buckets": [
+    { "binding": "RESULTS_BUCKET", "bucket_name": "audition-ai-images" }
+  ],
+  "vars": {
+    "SUPABASE_URL": "https://wnosrdigcdjlrmofxemd.supabase.co",
+    "CLOUDFLARE_QUEUE_BATCH": "8",
+    "R2_PUBLIC_URL": "https://media.auditionai.io.vn"
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "traces": { "enabled": true, "head_sampling_rate": 1 }
+  }
+}

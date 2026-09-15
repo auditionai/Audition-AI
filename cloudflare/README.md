@@ -5,8 +5,10 @@ provider work in one Worker:
 
 | Worker/config | Responsibility |
 | --- | --- |
-| `../wrangler.jsonc` | GPTi2 queue consumer, TST dispatch/poll and complete TST reference preparation (URL upload, multipart fallback, status polling, MIME validation). |
-| `queue-router.wrangler.jsonc` | GPTi2 Queue producer/wake endpoint. |
+| `queue-gpti2.wrangler.jsonc` | GPTi2 image/edit queue consumer. |
+| `queue-tst.wrangler.jsonc` | TST image/video/edit queue consumer with delayed polling. |
+| `queue-router.wrangler.jsonc` | Authenticated producer/wake endpoint routing jobs to either queue. |
+| `../wrangler.jsonc` | Legacy unified queue stub; do not deploy. |
 | `direct-edit.wrangler.jsonc` | Nano direct-image-edit lane and idempotent refund on terminal failure. |
 | `video-script.wrangler.jsonc` | Image-to-script director worker. |
 | `operations.wrangler.jsonc` | Queue stale-job recovery/refund and history cleanup. |
@@ -17,12 +19,16 @@ provider work in one Worker:
 1. Apply every migration in `../supabase/migrations`, including the three
    `20260914*cloudflare*` migrations. The recovery/refund RPC is intentionally
    database-atomic, so a retrying Worker cannot credit a job twice.
-2. Create the Queue `auditionai-gpti2-jobs` and bind the existing R2 bucket
-   `audition-ai-images` (the committed Wrangler configs name both resources).
+2. Create the Queues `auditionai-gpti2-jobs-v2` and
+   `auditionai-tst-jobs-v2`, and bind the existing R2 bucket
+   `audition-ai-images` (the committed Wrangler configs name these resources).
 3. Set Worker secrets using `wrangler secret put`, never `vars`:
 
-   - Queue worker: `SUPABASE_SERVICE_ROLE_KEY`, `GPTI2_API_KEY`, `TST_API_KEY`, `QUEUE_WORKER_SECRET`
-   - Queue router: `SUPABASE_SERVICE_ROLE_KEY`
+   - GPTi2 queue worker: `SUPABASE_SERVICE_ROLE_KEY`, `GPTI2_API_KEY`, `QUEUE_WORKER_SECRET`
+   - TST queue worker: `SUPABASE_SERVICE_ROLE_KEY`, `TST_API_KEY`, `QUEUE_WORKER_SECRET`
+   - Queue router: `QUEUE_WORKER_SECRET` (must exactly match Netlify's
+     `CLOUDFLARE_QUEUE_WORKER_SECRET`). The router authenticates wake requests
+     with this value; it does not access Supabase.
    - Direct edit: `SUPABASE_SERVICE_ROLE_KEY`, `GPTI2_API_KEY`, `DIRECT_EDIT_WORKER_SECRET`
    - Video script: `SUPABASE_SERVICE_ROLE_KEY`, `VIDEO_SCRIPT_WORKER_SECRET`; `CLAUDE_API_KEY` is optional because the Worker uses the active `[CLAUDE]` key in Supabase when present.
    - Operations: `SUPABASE_SERVICE_ROLE_KEY`, `OPERATIONS_WORKER_SECRET`

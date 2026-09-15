@@ -20,6 +20,7 @@ import { useNotification } from '../../components/NotificationSystem';
 import { caulenhauClient } from '../../services/supabaseClient';
 import { formatConcurrencyLimit, getProviderConcurrencyLimits, getProviderQueueStats, setActiveQueueProvider, useConcurrency } from '../../services/concurrencyService';
 import { enqueueServerJob } from '../../services/serverQueueService';
+import { GenerationDiscountPrice } from '../../components/GenerationDiscountPrice';
 import { saveImageToLocalCache, uploadFileToR2 } from '../../services/storageService';
 import { downloadAssetToBrowser } from '../../services/downloadService';
 import { analyzeCharacterAppearanceProfile } from '../../utils/imageProcessor';
@@ -502,7 +503,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
     gpt_flare: isTierAvailable('gpt_flare'),
     gpt_sunburst: isTierAvailable('gpt_sunburst'),
   };
-  const isCatalogReady = !catalogLoading && (
+  const isCatalogReady = (!catalogLoading || isGpti2Selected) && (
       isGommoSelected
           ? isGommoCatalogModelAvailable(selectedGommoModel) && selectedGenerationCost.available
           : isGpti2Selected
@@ -553,15 +554,27 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
               setProviderConfig(routingConfig);
               setGommoCatalog(providerCatalog);
 
-              const [entries, models, serverAvailabilityConfig] = await Promise.all([
-                  fetchTstPricing(forceRefresh),
-                  fetchTstModels(forceRefresh),
-                  getTstServerAvailabilityConfig()
-              ]);
-              const filteredModels = applyServerAvailabilityToRuntimeModels(models, serverAvailabilityConfig);
-              setPricingEntries(sanitizePricingEntriesWithRuntimeModels(entries, filteredModels, serverAvailabilityConfig));
-              setRuntimeModels(filteredModels);
-              setCatalogError(null);
+              // GPTi2 uses its own catalog and can be used immediately. TST's
+              // live catalog is only needed for TST/Gommo fallback options.
+              setCatalogLoading(false);
+              try {
+                  const [entries, models, serverAvailabilityConfig] = await Promise.all([
+                      fetchTstPricing(forceRefresh),
+                      fetchTstModels(forceRefresh),
+                      getTstServerAvailabilityConfig()
+                  ]);
+                  const filteredModels = applyServerAvailabilityToRuntimeModels(models, serverAvailabilityConfig);
+                  setPricingEntries(sanitizePricingEntriesWithRuntimeModels(entries, filteredModels, serverAvailabilityConfig));
+                  setRuntimeModels(filteredModels);
+                  setCatalogError(null);
+              } catch (tstError) {
+                  console.warn('TST catalog unavailable; keeping GPTi2 available', tstError);
+                  setPricingEntries([]);
+                  setRuntimeModels([]);
+                  if (!isGpti2Selected) {
+                      setCatalogError(lang === 'vi' ? 'Dá»‹ch vá»¥ TST Ä‘ang báº£o trÃ¬ hoáº·c khÃ´ng sáºµn sÃ ng.' : 'The TST service is unavailable.');
+                  }
+              }
           } catch (error) {
               console.warn("Failed to load provider catalogs for generation tool", error);
               try {
@@ -2031,13 +2044,10 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                         {GENERATION_SECTION_TIPS.render.text}
                     </div>
 
-                    <div className="neu-inset-sm p-4 rounded-2xl space-y-2">
-                        <div className="flex items-center justify-between">
+                    <div className="space-y-2">
+                        <div className="w-full">
                             <span className="text-xs font-black text-slate-700 dark:text-slate-300">Chi phí Vcoin:</span>
-                            <div className="flex items-baseline gap-1">
-                                <span className="text-2xl font-black text-amber-500 font-accent">{calculateCost()}</span>
-                                <span className="text-xs font-black text-amber-500">VCOIN</span>
-                            </div>
+                            <GenerationDiscountPrice originalCost={calculateCost()} assetType="image" />
                         </div>
                         <p className="text-[10px] text-slate-700 dark:text-slate-300 font-semibold">Trừ trực tiếp số dư khi bắt đầu khởi tạo job render AI.</p>
                     </div>

@@ -1,6 +1,7 @@
 import type { Handler } from '@netlify/functions';
 import { getAuthenticatedRequestErrorStatus, getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 import { markManualStopMeta } from '../../shared/queueRescueState';
+import { getTstApiKey } from './_secrets';
 
 const headers = {
   'Content-Type': 'application/json',
@@ -9,7 +10,7 @@ const headers = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-const TST_API_KEY = process.env.TST_API_KEY || '';
+const TST_API_KEY = getTstApiKey() || '';
 const TST_API_BASE = 'https://api.tramsangtao.com/v1';
 
 type QueueProgressLogEntry = {

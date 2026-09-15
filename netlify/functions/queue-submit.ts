@@ -3,6 +3,7 @@ import type { Handler } from '@netlify/functions';
 import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
 import { triggerBackgroundQueueWorker } from './_queue-launcher';
 import { isDedicatedQueueWorkerMode } from './_queue-runtime-mode';
+import { getTstApiKey } from './_secrets';
 import { validateQueuePayloadAgainstLiveCatalog } from './_tst-live-catalog';
 import { normalizeAndValidateGommoPayload } from './_disabled-provider';
 import { isProviderServerAllowedByConfig } from './_server-availability';
@@ -189,7 +190,7 @@ const ensureProviderConfiguredForQueueKind = (queueKind: string | undefined, pro
     throw new Error('GPTi2 chỉ hỗ trợ tạo ảnh; video và Motion Control chỉ dùng API 2 (TST) hoặc API 3 (Gommo).');
   }
 
-  const hasTst = Boolean(String(process.env.TST_API_KEY || '').trim());
+  const hasTst = Boolean(String(getTstApiKey() || '').trim());
   const hasGommo = false;
   if (provider === 'tst' && !hasTst) {
     throw new Error('May chu Audition AI dang thieu TST_API_KEY nen tam thoi khong the nhan job moi.');
@@ -491,7 +492,18 @@ const resolveServerCostVcoin = async (
   if (!selected) throw new Error(`INVALID_SERVER_PRICE: Missing AUDITION AI price for ${modelId}`);
   const baseVcoin = Math.ceil(Number(selected.audition_price_vcoin));
   const multiplier = queueKind === 'image_generate' ? getImageBillingMultiplier(queuePayload) : 1;
-  const costVcoin = Math.ceil(baseVcoin * multiplier);
+  const originalCostVcoin = Math.ceil(baseVcoin * multiplier);
+  const { data: discountSetting, error: discountError } = await admin
+    .from('system_settings').select('value').eq('key', 'generation_discount').maybeSingle();
+  if (discountError) throw discountError;
+  const discount = discountSetting?.value || {};
+  const discountPercent = Math.max(0, Math.min(90, Math.floor(Number(discount.discountPercent || 0))));
+  const appliesTo = String(discount.appliesTo || 'all');
+  const activeDiscount = discount.isActive === true && discountPercent > 0
+    && (appliesTo === 'all' || appliesTo === (queueKind === 'image_generate' ? 'image' : 'video'))
+    && Date.parse(String(discount.startTime || '')) <= Date.now()
+    && Date.parse(String(discount.endTime || '')) > Date.now();
+  const costVcoin = activeDiscount ? Math.max(1, Math.ceil(originalCostVcoin * (100 - discountPercent) / 100)) : originalCostVcoin;
 
   if (!Number.isFinite(costVcoin) || costVcoin <= 0) {
     throw new Error('INVALID_SERVER_PRICE');
@@ -505,6 +517,8 @@ const resolveServerCostVcoin = async (
       provider_credits: Number(selected.tst_price_credits || 0),
       base_vcoin: baseVcoin,
       multiplier,
+      original_cost_vcoin: originalCostVcoin,
+      discount_percent: activeDiscount ? discountPercent : 0,
       source: 'admin_pricing',
     },
   };
@@ -736,22 +750,35 @@ const runSafeWorkerTick = async (rawUrl?: string | null) => {
   }
 };
 
-const wakeCloudflareGpti2Worker = async (jobId: string, provider: GenerationProvider) => {
-  if (provider !== 'gpti2') return;
-  const routerUrl = String(process.env.CLOUDFLARE_GPTI2_ROUTER_URL || '').trim();
-  const serviceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
-  if (!routerUrl || !serviceRoleKey || !jobId) return;
+const getCloudflareQueueProvider = (provider: GenerationProvider, queueKind?: string, queuePayload?: Record<string, unknown>) => {
+  const recipeType = String(queuePayload?.recipeType || '').trim().toLowerCase();
+  if (provider === 'gpti2') return recipeType === 'image_edit_recipe_v1' || queueKind === 'image_edit_direct' ? 'gpti2_edit' : 'gpti2_image';
+  if (provider === 'tst') {
+    if (recipeType === 'image_edit_recipe_v1' || queueKind === 'image_edit_direct') return 'tst_edit';
+    if (queueKind === 'video_generate' || queueKind === 'motion_generate') return 'tst_video';
+    return 'tst_image';
+  }
+  return '';
+};
+
+const wakeCloudflareGpti2Worker = async (jobId: string, provider: GenerationProvider, queueKind?: string, queuePayload?: Record<string, unknown>) => {
+  const { getCloudflareRouterUrl, getCloudflareQueueWorkerSecret } = await import('./_secrets');
+  const lane = getCloudflareQueueProvider(provider, queueKind, queuePayload);
+  if (!lane) return;
+  const routerUrl = getCloudflareRouterUrl();
+  const queueWorkerSecret = getCloudflareQueueWorkerSecret();
+  if (!routerUrl || !queueWorkerSecret || !jobId) return;
   try {
     const response = await fetch(routerUrl, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${serviceRoleKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jobId, provider }),
+      headers: { Authorization: `Bearer ${queueWorkerSecret}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jobId, provider: lane }),
       signal: AbortSignal.timeout(5_000),
     });
     if (!response.ok) throw new Error(`Cloudflare queue router returned ${response.status}`);
   } catch (error) {
     // Cron remains the recovery path when the immediate wake signal fails.
-    console.warn('[queue-submit] Failed to wake Cloudflare GPTi2 worker:', error);
+    console.warn('[queue-submit] Failed to wake Cloudflare queue router:', error);
   }
 };
 
@@ -903,7 +930,7 @@ export const handler: Handler = async (event) => {
       }
     }
 
-    await wakeCloudflareGpti2Worker(String(row?.id || body.id || ''), targetProvider);
+    await wakeCloudflareGpti2Worker(String(row?.id || body.id || ''), targetProvider, body.queueKind, body.queuePayload);
     await runSafeWorkerTick(event.rawUrl);
 
     return {

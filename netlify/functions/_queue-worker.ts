@@ -57,6 +57,7 @@ import {
   extractProviderResultUrl,
   isResultUrlCompatibleWithAssetType,
 } from '../../shared/providerResultUrl';
+import { getTstApiKey } from './_secrets';
 
 type QueueJobRow = {
   id: string;
@@ -162,7 +163,7 @@ let lastStalePreparingRecoveryAt = 0;
 let lastFailedRescueScanAt = 0;
 const MAINTENANCE_SCAN_INTERVAL_MS = 60_000;
 
-const TST_API_KEY = process.env.TST_API_KEY || '';
+const TST_API_KEY = getTstApiKey() || '';
 const TST_API_BASE = 'https://api.tramsangtao.com/v1';
 const GENERATION_PROVIDER_DEFAULT: GenerationProvider =
   String(process.env.GENERATION_PROVIDER_DEFAULT || 'tst').trim().toLowerCase() === 'gommo' ? 'gommo' : 'tst';
@@ -189,10 +190,10 @@ const SINGLE_AND_COUPLE_PREPARE_TIMEOUT_MS = 10 * 60 * 1000;
 const GROUP_OF_THREE_PREPARE_TIMEOUT_MS = 15 * 60 * 1000;
 const GROUP_OF_FOUR_PREPARE_TIMEOUT_MS = 20 * 60 * 1000;
 const IMAGE_REFERENCE_UPLOAD_CHUNK_SIZE = 2;
-const DISPATCH_CLAIM_LIMIT = parsePositiveIntEnv('QUEUE_DISPATCH_CLAIM_LIMIT', 4);
+const DISPATCH_CLAIM_LIMIT = parsePositiveIntEnv('QUEUE_DISPATCH_CLAIM_LIMIT', 6);
 const POLL_CLAIM_LIMIT = parsePositiveIntEnv('QUEUE_POLL_CLAIM_LIMIT', 6);
-const DISPATCH_CONCURRENCY_LIMIT = parsePositiveIntEnv('QUEUE_DISPATCH_CONCURRENCY_LIMIT', 2);
-const POLL_CONCURRENCY_LIMIT = parsePositiveIntEnv('QUEUE_POLL_CONCURRENCY_LIMIT', 4);
+const DISPATCH_CONCURRENCY_LIMIT = parsePositiveIntEnv('QUEUE_DISPATCH_CONCURRENCY_LIMIT', 3);
+const POLL_CONCURRENCY_LIMIT = parsePositiveIntEnv('QUEUE_POLL_CONCURRENCY_LIMIT', 6);
 const WORKER_TICK_BUDGET_MS = 8_000;
 const MAX_QUEUE_LOG_ENTRIES = 80;
 const MAX_VERTEX_DIAGNOSTIC_ENTRIES = 24;
@@ -345,6 +346,9 @@ const isAmbiguousDispatchError = (message: string) => {
 
 const isGpti2ProviderError = (message: string) =>
   /^GPTI2_ERROR:/i.test(String(message || '').trim());
+
+const isRetryableGpti2ProviderError = (message: string) =>
+  isTransientError(message) || /provider returned no image|endpoint returned no image/i.test(String(message || ''));
 
 const parseErrorMessage = async (response: Response) => {
   try {
@@ -3474,6 +3478,17 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
     // Switch to the configured TST fallback before the generic retry path,
     // which treats __tstTouched as a committed dispatch and refunds/fails it.
     if (providerDispatchStarted && targetProvider === 'gpti2' && isGpti2ProviderError(message)) {
+      const currentState = await getJobRuntimeState(job.id);
+      if (isRetryableGpti2ProviderError(message)) {
+        const gpti2Attempts = Number(currentState?.attempt_count || 0) + 1;
+        if (gpti2Attempts < 3) {
+          const retryResult = await requeueJob(job, message);
+          if (retryResult === 'requeued') {
+            logQueueWorkerEvent('Retrying GPTi2 before fallback.', { ...getQueueWorkerLogJob(job), gpti2Attempts });
+            return { requeued: 1 };
+          }
+        }
+      }
       if (await trySmartImageProviderFallback(job, message, await getJobRuntimeState(job.id))) {
         return { requeued: 1 };
       }

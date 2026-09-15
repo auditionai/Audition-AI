@@ -18,6 +18,7 @@ const GALLERY_HISTORY_LOOKBACK_MS = HISTORY_RETENTION_DAYS * 24 * 60 * 60 * 1000
 const ACTIVE_GALLERY_CLIENT_CACHE_TTL_MS = 8_000;
 const IDLE_GALLERY_CLIENT_CACHE_TTL_MS = 120_000;
 const GALLERY_API_TIMEOUT_MS = 12_000;
+const GALLERY_RPC_TIMEOUT_MS = 6_000;
 const GENERATED_IMAGE_ROW_SELECT = 'id, image_url, prompt, created_at, updated_at, asset_type, queue_kind, tool_id, tool_name, model_used, is_public, user_id, user_name, status, job_id, progress, queue_payload, error_message, cost_vcoin';
 const GENERATED_IMAGE_ROW_LIGHT_SELECT = 'id, image_url, prompt, created_at, updated_at, asset_type, queue_kind, tool_id, tool_name, model_used, is_public, user_id, user_name, status, job_id, progress, error_message, cost_vcoin';
 const GENERATED_IMAGE_ROW_RECOVERY_SELECT = 'id, image_url, created_at, updated_at, asset_type, queue_kind, tool_id, tool_name, model_used, is_public, user_id, user_name, status, job_id, progress, error_message, cost_vcoin';
@@ -150,6 +151,30 @@ const fetchWithTimeout = async (input: RequestInfo | URL, init: RequestInit, tim
   } finally {
     clearTimeout(timeoutId);
   }
+};
+
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> => {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+};
+
+export const getCachedImagesForCurrentUser = async (): Promise<GeneratedImage[]> => {
+  const [localImages, user] = await Promise.all([
+    readLocalImages().catch(() => [] as GeneratedImage[]),
+    getSupabaseUser(),
+  ]);
+
+  if (!user) return [];
+  return localImages.filter((image) => image.userId === user.id);
 };
 
 const replaceLocalImagesForUser = async (userId: string, images: GeneratedImage[]): Promise<void> => {
@@ -343,7 +368,7 @@ const upsertImageMetadata = async (image: GeneratedImage, user: { id: string; us
   }
 };
 
-const mapGeneratedImageRow = (row: any, fallbackUserName: string, fallbackCost?: number): GeneratedImage => {
+export const mapGeneratedImageRow = (row: any, fallbackUserName: string, fallbackCost?: number): GeneratedImage => {
   const queuePayload =
     row.queue_payload && typeof row.queue_payload === 'object'
       ? row.queue_payload
@@ -847,15 +872,18 @@ export const getAllImagesSystemWide = async (): Promise<GeneratedImage[]> => {
 };
 
 export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
-  const localImages = await readLocalImages().catch((error) => {
-    console.warn("Local image cache load failed", error);
-    return [] as GeneratedImage[];
-  });
+  const [localImages, authenticatedUser] = await Promise.all([
+    readLocalImages().catch((error) => {
+      console.warn("Local image cache load failed", error);
+      return [] as GeneratedImage[];
+    }),
+    supabase ? getSupabaseUser() : Promise.resolve(null),
+  ]);
 
   // 1. SUPABASE (Fetches metadata, URL points to R2 or Supabase Storage)
   if (supabase) {
     try {
-        const user = await getSupabaseUser();
+        const user = authenticatedUser;
         if(user) {
             const localImagesForUser = localImages.filter((image) => image.userId === user.id);
             if (galleryFetchCache && galleryFetchCache.userId === user.id && galleryFetchCache.expiresAt > Date.now()) {
@@ -872,9 +900,10 @@ export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
             galleryFetchPromise = (async () => {
               let useGalleryApiFallback = false;
               try {
-                const { data: directRpcRows, error: directRpcError } = await supabase.rpc(
-                  'get_my_gallery_images_lightweight',
-                  { p_limit: 24 },
+                const { data: directRpcRows, error: directRpcError } = await withTimeout<any>(
+                  supabase.rpc('get_my_gallery_images_lightweight', { p_limit: 24 }),
+                  GALLERY_RPC_TIMEOUT_MS,
+                  'Gallery query',
                 );
 
                 if (!directRpcError && Array.isArray(directRpcRows)) {

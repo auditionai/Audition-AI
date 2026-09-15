@@ -1,6 +1,6 @@
 ﻿import { getSupabaseAuthHeader, getSupabaseUser, supabase } from './supabaseClient';
 import { trackEvent } from './analyticsService';
-import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, HistoryItem, VcoinLog, AdminQueueJob, AdminQueueSummary, AdminQueueJobDetail, AdminQueueHealthReport, AdminQueueRescueResult } from '../types';
+import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, HistoryItem, VcoinLog, AdminQueueJob, AdminQueueSummary, AdminQueueJobDetail, AdminQueueHealthReport, AdminQueueRescueResult, GenerationDiscountConfig } from '../types';
 import { shouldUseMobileShell } from '../shared/shellDetection';
 import {
   creditsToVcoin,
@@ -461,6 +461,7 @@ let userProfilePromise: Promise<UserProfile> | null = null;
 let userProfileFailureCache: { userId: string; message: string; expiresAt: number } | null = null;
 let packageCache: TimedCache<CreditPackage[]> | null = null;
 let promotionCache: TimedCache<PromotionCampaign | null> | null = null;
+let generationDiscountCache: TimedCache<GenerationDiscountConfig> | null = null;
 const DEFAULT_CHECKIN_STATUS: CheckinStatusState = {
     isCheckedInToday: false,
     history: [],
@@ -497,6 +498,44 @@ export const invalidatePackageCache = () => {
 
 export const invalidatePromotionCache = () => {
     promotionCache = null;
+};
+
+export const DEFAULT_GENERATION_DISCOUNT_CONFIG: GenerationDiscountConfig = {
+    isActive: false, title: 'Ưu đãi tạo AI', discountPercent: 0, appliesTo: 'all',
+    startTime: new Date().toISOString(), endTime: new Date().toISOString(),
+};
+
+const normalizeGenerationDiscountConfig = (value: any): GenerationDiscountConfig => ({
+    isActive: value?.isActive === true,
+    title: String(value?.title || DEFAULT_GENERATION_DISCOUNT_CONFIG.title).trim() || DEFAULT_GENERATION_DISCOUNT_CONFIG.title,
+    discountPercent: Math.max(0, Math.min(90, Math.floor(Number(value?.discountPercent || 0)))),
+    appliesTo: value?.appliesTo === 'image' || value?.appliesTo === 'video' ? value.appliesTo : 'all',
+    startTime: typeof value?.startTime === 'string' ? value.startTime : DEFAULT_GENERATION_DISCOUNT_CONFIG.startTime,
+    endTime: typeof value?.endTime === 'string' ? value.endTime : DEFAULT_GENERATION_DISCOUNT_CONFIG.endTime,
+    updatedAt: typeof value?.updatedAt === 'string' ? value.updatedAt : undefined,
+});
+
+export const getGenerationDiscountConfig = async (force = false): Promise<GenerationDiscountConfig> => {
+    if (!supabase) return DEFAULT_GENERATION_DISCOUNT_CONFIG;
+    if (!force && generationDiscountCache && generationDiscountCache.expiresAt > Date.now()) return generationDiscountCache.value;
+    try {
+        const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'generation_discount').maybeSingle();
+        if (error) throw error;
+        const value = normalizeGenerationDiscountConfig(data?.value);
+        generationDiscountCache = { value, expiresAt: Date.now() + PROMOTION_CACHE_TTL_MS };
+        return value;
+    } catch { return DEFAULT_GENERATION_DISCOUNT_CONFIG; }
+};
+
+export const saveGenerationDiscountConfig = async (config: GenerationDiscountConfig) => {
+    if (!supabase) return { success: false, error: 'No Database' };
+    try {
+        const value = { ...normalizeGenerationDiscountConfig(config), updatedAt: new Date().toISOString() };
+        const { error } = await supabase.from('system_settings').upsert({ key: 'generation_discount', value }, { onConflict: 'key' });
+        if (error) throw error;
+        generationDiscountCache = null;
+        return { success: true };
+    } catch (error: any) { return { success: false, error: error?.message || String(error) }; }
 };
 
 export const invalidateCheckinStatusCache = () => {

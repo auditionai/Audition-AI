@@ -13,7 +13,9 @@ const NANO_ASPECT_RATIOS = new Set(['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', 
 const MAX_NANO_REFERENCE_IMAGES = 8;
 const NANO_OUTPUT_RESOLUTION = '2K';
 
-const key = () => String(process.env.GPTI2_API_KEY || '').trim();
+import { getGpti2ApiKey } from './_secrets';
+
+const key = () => getGpti2ApiKey();
 const normalize = (value: unknown) => String(value || '').trim().toLowerCase();
 const assertConfigured = () => { if (!key()) throw new Error('GPTI2_NOT_CONFIGURED: Missing GPTI2_API_KEY environment variable'); };
 const parseError = async (response: Response) => {
@@ -93,7 +95,39 @@ const dataUrl = (value: unknown) => {
   if (raw.startsWith('data:') || /^https?:\/\//i.test(raw)) return raw;
   return `data:image/png;base64,${raw}`;
 };
-const extractUrl = (data: any) => dataUrl(data?.data?.[0]?.b64_json || data?.data?.[0]?.url || data?.url);
+const extractUrl = (data: any) => {
+  const preferredKeys = ['b64_json', 'image_url', 'imageUrl', 'result_url', 'resultUrl', 'output_url', 'outputUrl', 'url', 'result', 'output', 'image'];
+  const visit = (value: unknown, depth = 0): string => {
+    if (depth > 6 || value == null) return '';
+    if (typeof value === 'string') {
+      const normalized = value.trim();
+      if (/^https?:\/\//i.test(normalized) || normalized.startsWith('data:image/') || /^[A-Za-z0-9+/=\r\n]{128,}$/.test(normalized)) {
+        return dataUrl(normalized);
+      }
+      return '';
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const found = visit(item, depth + 1);
+        if (found) return found;
+      }
+      return '';
+    }
+    if (typeof value !== 'object') return '';
+    const object = value as Record<string, unknown>;
+    for (const key of preferredKeys) {
+      const found = visit(object[key], depth + 1);
+      if (found) return found;
+    }
+    for (const [key, child] of Object.entries(object)) {
+      if (/prompt|status|message|error|model|usage|id/i.test(key)) continue;
+      const found = visit(child, depth + 1);
+      if (found) return found;
+    }
+    return '';
+  };
+  return visit(data);
+};
 
 const normalizeReferenceImage = async (source: string, index: number) => {
   const startedAt = Date.now();

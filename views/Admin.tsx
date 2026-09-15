@@ -18,6 +18,9 @@ import {
     deleteGiftcode, 
     getGiftcodePromoConfig, 
     saveGiftcodePromoConfig, 
+    getGenerationDiscountConfig,
+    saveGenerationDiscountConfig,
+    DEFAULT_GENERATION_DISCOUNT_CONFIG,
     getTutorialVideo,
     saveTutorialVideo,
     getGenerationGuideImages,
@@ -101,7 +104,7 @@ import {
 } from '../services/tstCatalog';
 import { Icons } from '../components/Icons';
 import { APP_CONFIG } from '../constants';
-import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, GeneratedImage, Language, StylePreset, HistoryItem, AdminQueueJob, AdminQueueSummary, AdminQueueJobDetail, AdminQueueInputMedia, AdminQueueMediaSection, AdminQueueHealthReport, AdminQueueHealthSnapshot } from '../types';
+import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, GeneratedImage, Language, StylePreset, HistoryItem, AdminQueueJob, AdminQueueSummary, AdminQueueJobDetail, AdminQueueInputMedia, AdminQueueMediaSection, AdminQueueHealthReport, AdminQueueHealthSnapshot, GenerationDiscountConfig } from '../types';
 import './admin-command-center.css';
 import { GiftcodeAbuseWorkspaceV2, TransactionsWorkspaceV2, UsersWorkspaceV2 } from './admin-v2/AdminOperations';
 import QueueWorkspaceV2 from './admin-v2/QueueWorkspaceV2';
@@ -631,6 +634,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   
   // Giftcode Promo Config
   const [giftcodePromo, setGiftcodePromo] = useState({ text: '', isActive: false });
+  const [generationDiscount, setGenerationDiscount] = useState<GenerationDiscountConfig>(DEFAULT_GENERATION_DISCOUNT_CONFIG);
 
   // Tutorial Video Config
   const [tutorialVideo, setTutorialVideo] = useState({ url: '', isActive: true });
@@ -818,7 +822,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           setPackages(commerce.packages as CreditPackage[]);
           setPromotions(commerce.promotions as PromotionCampaign[]);
           setGiftcodes(commerce.giftcodes as Giftcode[]);
-          if (view === 'marketing') setGiftcodePromo(await getGiftcodePromoConfig());
+          if (view === 'marketing') {
+              const [giftcodeConfig, generationDiscountConfig] = await Promise.all([getGiftcodePromoConfig(), getGenerationDiscountConfig(force)]);
+              setGiftcodePromo(giftcodeConfig);
+              setGenerationDiscount(generationDiscountConfig);
+          }
       } else if (view === 'styles') {
           setStylePresets(await getStylePresets() || []);
       } else if (view === 'tours') {
@@ -2689,6 +2697,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       });
   };
 
+  const handleSaveGenerationDiscount = async () => {
+      const result = await saveGenerationDiscountConfig(generationDiscount);
+      if (result.success) showToast('Đã lưu sự kiện giảm giá tạo AI.', 'success');
+      else showToast(`Lỗi lưu giảm giá: ${result.error}`, 'error');
+  };
+
   const handleApproveTransaction = async (txId: string) => {
       if (processingTxId) return;
 
@@ -4201,6 +4215,20 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
           {activeView === 'marketing' && (
               <div className="space-y-8 animate-fade-in">
+                  <section className="border border-pink-500/25 bg-gradient-to-br from-pink-500/10 via-transparent to-cyan-500/10 p-5 shadow-xl neu-card rounded-3xl">
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                          <div><h2 className="flex items-center gap-2 text-xl font-black uppercase tracking-wider text-slate-950 dark:text-white font-accent"><Icons.Zap className="h-5 w-5 text-pink-500" /> Giảm giá tạo ảnh & video</h2><p className="mt-1 max-w-2xl text-xs font-semibold text-slate-700 dark:text-slate-300">Giá gốc luôn lấy từ Bảng giá AI. Server tự áp mức giảm lúc charge Vcoin.</p></div>
+                          <button onClick={handleSaveGenerationDiscount} className="neu-button-primary px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-wider">Lưu sự kiện giảm giá</button>
+                      </div>
+                      <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+                          <label className="text-xs font-black text-slate-700 dark:text-slate-300">Tên event<input value={generationDiscount.title} onChange={(e) => setGenerationDiscount((v) => ({ ...v, title: e.target.value }))} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-black/20 dark:text-white" /></label>
+                          <label className="text-xs font-black text-slate-700 dark:text-slate-300">Giảm (%)<input type="number" min="1" max="90" value={generationDiscount.discountPercent} onChange={(e) => setGenerationDiscount((v) => ({ ...v, discountPercent: Math.max(0, Math.min(90, Number(e.target.value))) }))} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-black/20 dark:text-white" /></label>
+                          <label className="text-xs font-black text-slate-700 dark:text-slate-300">Áp dụng<select value={generationDiscount.appliesTo} onChange={(e) => setGenerationDiscount((v) => ({ ...v, appliesTo: e.target.value as GenerationDiscountConfig['appliesTo'] }))} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-black/20 dark:text-white"><option value="all">Ảnh và video</option><option value="image">Chỉ ảnh</option><option value="video">Chỉ video</option></select></label>
+                          <label className="text-xs font-black text-slate-700 dark:text-slate-300">Bắt đầu <span className="text-cyan-600 dark:text-cyan-300">UTC+7</span><input type="datetime-local" step="60" value={formatVietnamDateTimeLocal(generationDiscount.startTime)} onChange={(e) => setGenerationDiscount((v) => ({ ...v, startTime: parseVietnamDateTimeLocalToIso(e.target.value, generationDiscount.startTime) }))} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-black/20 dark:text-white" /></label>
+                          <label className="text-xs font-black text-slate-700 dark:text-slate-300">Kết thúc <span className="text-cyan-600 dark:text-cyan-300">UTC+7</span><input type="datetime-local" step="60" value={formatVietnamDateTimeLocal(generationDiscount.endTime)} onChange={(e) => setGenerationDiscount((v) => ({ ...v, endTime: parseVietnamDateTimeLocalToIso(e.target.value, generationDiscount.endTime) }))} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-black/20 dark:text-white" /></label>
+                      </div>
+                      <label className="mt-4 inline-flex min-h-11 items-center gap-3 rounded-xl border border-pink-500/30 bg-pink-500/10 px-4 text-xs font-black text-pink-700 dark:text-pink-200"><input type="checkbox" checked={generationDiscount.isActive} onChange={(e) => setGenerationDiscount((v) => ({ ...v, isActive: e.target.checked }))} /> Kích hoạt event giảm giá</label>
+                  </section>
                   {/* Promotion Section */}
                   <div className="space-y-5">
                       <div className="flex justify-between items-center neu-card p-6 rounded-3xl shadow-xl border border-slate-300 dark:border-slate-800">

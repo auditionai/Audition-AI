@@ -2,6 +2,7 @@ import type { Handler } from '@netlify/functions';
 import { isSystemQueueKind } from '../../shared/queueKinds';
 import { getAuthenticatedRequestErrorStatus, getServiceRoleClient, requireAdminUser } from './_supabase';
 import { triggerBackgroundQueueWorker } from './_queue-launcher';
+import { getTstApiKey, getGommoAccessToken, getGpti2ApiKey } from './_secrets';
 
 const headers = {
   'Content-Type': 'application/json',
@@ -18,16 +19,16 @@ const toPayload = (value: unknown): Record<string, unknown> =>
     : {};
 
 const assertProviderConfigured = (provider: AdminRetryProvider) => {
-  if (provider === 'tst' && !String(process.env.TST_API_KEY || '').trim()) {
+  if (provider === 'tst' && !String(getTstApiKey() || '').trim()) {
     throw new Error('API 1 chưa được cấu hình TST_API_KEY.');
   }
   if (
     provider === 'gommo' &&
-    !String(process.env.GOMMO_ACCESS_TOKEN || process.env.GOMMO_API_TOKEN || '').trim()
+    !String(getGommoAccessToken() || '').trim()
   ) {
     throw new Error('API 2 chưa được cấu hình GOMMO_ACCESS_TOKEN.');
   }
-  if (provider === 'gpti2' && !String(process.env.GPTI2_API_KEY || '').trim()) throw new Error('API GPTi2 chua duoc cau hinh GPTI2_API_KEY.');
+  if (provider === 'gpti2' && !String(getGpti2ApiKey() || '').trim()) throw new Error('API GPTi2 chua duoc cau hinh GPTI2_API_KEY.');
 };
 
 const buildRetryPayload = (

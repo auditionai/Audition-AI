@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import type { Handler } from '@netlify/functions';
 import { runQueueDaemon } from './_queue-daemon';
 import { triggerBackgroundQueueWorker } from './_queue-launcher';
 import { areQueueWorkersDisabled, isDedicatedQueueWorkerMode } from './_queue-runtime-mode';
@@ -67,44 +66,26 @@ const releaseQueueWorkerLock = async (owner: string) => {
   }
 };
 
-export const handler: Handler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 204,
-      body: '',
-    };
-  }
+const json = (body: Record<string, unknown>, status = 200) => new Response(JSON.stringify(body), {
+  status,
+  headers: { 'content-type': 'application/json' },
+});
 
-  if (event.httpMethod !== 'POST') {
-    return {
-      statusCode: 405,
-      body: JSON.stringify({ error: 'Method Not Allowed' }),
-    };
-  }
+export default async (request: Request) => {
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204 });
+  if (request.method !== 'POST') return json({ error: 'Method Not Allowed' }, 405);
 
-  if (!verifyInternalRequest(
-    'queue-worker-background',
-    event.body || '',
-    (name) => event.headers[name] || event.headers[name.toLowerCase()] || '',
-  )) {
-    return {
-      statusCode: 401,
-      body: JSON.stringify({ error: 'Unauthorized internal request' }),
-    };
+  const body = await request.text();
+  if (!verifyInternalRequest('queue-worker-background', body, (name) => request.headers.get(name))) {
+    return json({ error: 'Unauthorized internal request' }, 401);
   }
 
   if (areQueueWorkersDisabled()) {
-    return {
-      statusCode: 202,
-      body: JSON.stringify({ success: true, skipped: true, reason: 'queue_workers_disabled' }),
-    };
+    return json({ success: true, skipped: true, reason: 'queue_workers_disabled' }, 202);
   }
 
   if (isDedicatedQueueWorkerMode()) {
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ success: true, skipped: true, reason: 'dedicated_worker_mode' }),
-    };
+    return json({ success: true, skipped: true, reason: 'dedicated_worker_mode' });
   }
 
   const lockOwner = `queue-worker:${randomUUID()}`;
@@ -112,29 +93,20 @@ export const handler: Handler = async (event) => {
   try {
     const acquired = await tryAcquireQueueWorkerLock(lockOwner);
     if (!acquired) {
-      return {
-        statusCode: 202,
-        body: JSON.stringify({ success: true, skipped: true, reason: 'worker_locked' }),
-      };
+      return json({ success: true, skipped: true, reason: 'worker_locked' }, 202);
     }
 
     const summary = await runQueueDaemon();
     followUpLaunchNeeded = hasQueueActivity(summary) || (await hasOutstandingQueueWork());
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ success: true, summary, followUpLaunchNeeded }),
-    };
+    return json({ success: true, summary, followUpLaunchNeeded });
   } catch (error: any) {
     console.error('[queue-worker-background] failed:', error);
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: error?.message || 'Internal Server Error' }),
-    };
+    return json({ error: error?.message || 'Internal Server Error' }, 500);
   } finally {
     await releaseQueueWorkerLock(lockOwner);
     if (followUpLaunchNeeded) {
       try {
-        await triggerBackgroundQueueWorker(event.rawUrl, 1_000);
+        await triggerBackgroundQueueWorker(request.url, 1_000);
       } catch (error) {
         console.warn('[queue-worker-background] Failed to launch follow-up worker:', error);
       }

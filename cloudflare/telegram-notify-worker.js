@@ -421,6 +421,10 @@ async function sendSingleJobMessage(env, payload) {
 }
 
 async function handleNotification(env, payload) {
+  if (String(payload?.eventType || '').toLowerCase() === 'queued') {
+    return;
+  }
+
   if (String(payload?.eventType || '').toLowerCase() === 'queue_alert') {
     await sendText(env, buildAlertMessage(payload));
     return;

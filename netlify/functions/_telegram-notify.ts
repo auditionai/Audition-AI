@@ -3,7 +3,7 @@ import type { QueueNotificationMediaEntry } from '../../shared/queueRecipes';
 
 type QueuePayloadObject = Record<string, unknown> | null | undefined;
 
-type JobNotificationEvent = 'queued' | 'completed' | 'failed';
+type JobNotificationEvent = 'completed' | 'failed';
 
 type JobNotificationRecord = {
   id: string;
@@ -264,7 +264,7 @@ const buildNotificationSignature = (
   if (eventType === 'completed') {
     return String(record.resultUrl || '').trim() || 'completed';
   }
-  return 'queued';
+  return 'completed';
 };
 
 const shouldSkipDuplicateNotification = async (

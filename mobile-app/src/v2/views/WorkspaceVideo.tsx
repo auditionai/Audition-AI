@@ -1394,7 +1394,7 @@ export function WorkspaceVideo() {
 
       {/* Generate Button - Fixed Bottom */}
       <div className="fixed bottom-[70px] left-0 right-0 p-5 pt-8 bg-gradient-to-t from-[#fcfcfc] via-[#fcfcfc] dark:from-[#09090b] dark:via-[#09090b] to-transparent max-w-md mx-auto xl:absolute xl:bottom-0">
-        <div className="mb-3"><GenerationDiscountPrice originalCost={isCatalogReady ? calculateCost() : 0} assetType="video" panel /></div>
+        <div className="mb-3"><GenerationDiscountPrice originalCost={isCatalogReady ? calculateCost() : 0} assetType="video" /></div>
         {currentCostBreakdown.billingUnit === 'second' && (
           <div className="mb-2 rounded-2xl border border-yellow-200 bg-yellow-50 px-3 py-2 text-center text-[11px] font-black text-yellow-700 dark:border-yellow-500/30 dark:bg-yellow-500/10 dark:text-yellow-200">
             Kling tính theo giây: {perSecondCostLabel}

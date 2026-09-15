@@ -1452,7 +1452,7 @@ export function WorkspaceImage() {
               </div>
             </div>
           </div>
-          <div className="mt-4"><GenerationDiscountPrice originalCost={Number(costDisplay) || 0} assetType="image" panel /></div>
+          <div className="mt-4"><GenerationDiscountPrice originalCost={Number(costDisplay) || 0} assetType="image" /></div>
           <div role="note" className="mt-4 rounded-2xl border border-cyan-200 bg-cyan-50/70 px-3 py-3 text-xs font-medium leading-relaxed text-cyan-900 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-100">
             <span aria-hidden="true">💡</span>{' '}
             <strong>{GENERATION_SECTION_TIPS.render.title}:</strong>{' '}

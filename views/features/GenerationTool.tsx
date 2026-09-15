@@ -2045,9 +2045,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                     </div>
 
                     <div className="space-y-2">
-                        <div className="flex items-center justify-between">
+                        <div className="w-full">
                             <span className="text-xs font-black text-slate-700 dark:text-slate-300">Chi phí Vcoin:</span>
-                            <GenerationDiscountPrice originalCost={calculateCost()} assetType="image" panel />
+                            <GenerationDiscountPrice originalCost={calculateCost()} assetType="image" />
                         </div>
                         <p className="text-[10px] text-slate-700 dark:text-slate-300 font-semibold">Trừ trực tiếp số dư khi bắt đầu khởi tạo job render AI.</p>
                     </div>

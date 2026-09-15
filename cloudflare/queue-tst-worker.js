@@ -205,6 +205,44 @@ const uniqueSources = (values) => [...new Set(values
   .map((value) => String(value || '').trim())
   .filter(Boolean))];
 
+const imageToDataUrl = async (url) => {
+  const response = await fetch(url, { signal: AbortSignal.timeout(60_000) });
+  if (!response.ok) throw new Error(`Sample analysis image fetch failed (${response.status})`);
+  const mime = String(response.headers.get('content-type') || 'image/jpeg').split(';', 1)[0];
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (!bytes.length || bytes.length > 8 * 1024 * 1024) throw new Error('Sample analysis image must be between 1 byte and 8 MB');
+  let binary = ''; for (const byte of bytes) binary += String.fromCharCode(byte);
+  return `data:${mime};base64,${btoa(binary)}`;
+};
+const claudeKey = async (env) => {
+  const configured = envText(env, 'CLAUDE_API_KEY') || envText(env, 'OPENAI_COMPATIBLE_API_KEY');
+  if (configured) return configured;
+  const response = await supabase(env, 'api_keys?select=key_value&status=eq.active&name=ilike.%5BCLAUDE%5D%25&order=last_used_at.asc.nullsfirst');
+  if (!response.ok) throw new Error(`Claude key lookup failed (${response.status})`);
+  const row = (await response.json()).find((item) => String(item?.key_value || '').trim().length >= 8);
+  if (!row?.key_value) throw new Error('CLAUDE_NOT_CONFIGURED');
+  return String(row.key_value).trim();
+};
+const applySampleSwapPrompt = async (env, recipe, sources, prompt) => {
+  const sampleUrl = String(recipe?.sampleImage || '').trim();
+  const characterUrl = sources.find((url) => url !== sampleUrl);
+  if (!isHttpUrl(sampleUrl) || !characterUrl) return prompt;
+  const [characterImage, sampleImage] = await Promise.all([imageToDataUrl(characterUrl), imageToDataUrl(sampleUrl)]);
+  const response = await fetch(`${(envText(env, 'OPENAI_COMPATIBLE_BASE_URL') || 'https://sub.digishop.work/v1').replace(/\/+$/, '')}/chat/completions`, {
+    method: 'POST', headers: { Authorization: `Bearer ${await claudeKey(env)}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ model: envText(env, 'CLAUDE_MODEL') || 'claude-sonnet-4-6', temperature: 0, max_tokens: 900, messages: [{ role: 'user', content: [
+      { type: 'text', text: 'Image 1 is the required character identity. Image 2 is the sample canvas. Analyze Image 2 pose, facial expression, head direction, camera angle, crop, lens, body placement, hands, lighting and background. Return one compact English image-edit instruction: replace the full face and body in Image 2 with Image 1 identity; preserve Image 2 pose, expression, camera, framing and scene exactly. Do not mention analysis or JSON.' },
+      { type: 'image_url', image_url: { url: characterImage } }, { type: 'image_url', image_url: { url: sampleImage } },
+    ] }] }), signal: AbortSignal.timeout(120_000),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(`Claude sample analysis failed (${response.status})`);
+  const instruction = String(data?.choices?.[0]?.message?.content || '').trim();
+  if (!instruction) throw new Error('Claude sample analysis returned no instruction');
+  return `${instruction}\n\n${prompt}`.trim();
+};
+const sampleSwapFallbackPrompt = (prompt) => `FULL FACE AND BODY REPLACEMENT. Use the character reference image(s) as the only identity source. Use the sample image as the base canvas. Replace the sample subject one-to-one while preserving the sample's exact pose, facial expression, head direction, camera angle, crop, framing, body placement, hand visibility, lighting, background, props, and depth. Never copy the sample person's identity, face, hair, outfit, or body. ${prompt}`;
+
 const collectCharacterReferenceSources = (recipe) => {
   const groups = Array.isArray(recipe?.characterReferenceGroups) ? recipe.characterReferenceGroups : [];
   const grouped = groups.flatMap((group) => {
@@ -225,8 +263,8 @@ const collectTstReferenceSources = (row) => {
     const explicit = Array.isArray(payload.__uploadSources) && payload.__uploadSources.length > 0
       ? payload.__uploadSources
       : uniqueSources([
-          recipe.sampleImage,
           collectCharacterReferenceSources(recipe),
+          recipe.sampleImage,
           recipe.styleImage,
           recipe.referenceImages,
         ]);
@@ -336,6 +374,11 @@ const prepareTstPayload = async (env, row, report) => {
   }
 
   const providerPayload = buildTstProviderPayload(row, uploadedUrls);
+  if (String(recipePayloadOf(row)?.recipeType || '') === 'image_generate_recipe_v1') {
+    const originalPrompt = String(providerPayload.prompt || row.prompt || '');
+    try { providerPayload.prompt = await applySampleSwapPrompt(env, recipePayloadOf(row), sources, originalPrompt); }
+    catch (error) { if (String(recipePayloadOf(row)?.sampleImage || '').trim()) { providerPayload.prompt = sampleSwapFallbackPrompt(originalPrompt); await report('building_payload', 'Claude sample analysis unavailable; using the strict sample-swap contract.', 'warning'); } else throw error; }
+  }
   await validateTstPayloadAgainstLiveCatalog(env, row, providerPayload);
   const nextPayload = {
     ...originalPayload,

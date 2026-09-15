@@ -14,16 +14,59 @@ const isRetryableGpti2Error = (message) => /timeout|timed out|network|429|5\d\d|
 
 const modelOf = (row) => String(payloadObject(row).model || payloadObject(row).modelId || row?.model_used || '').trim().toLowerCase();
 const gpti2SizeOf = (payload) => GPTI2_SIZES[String(payload.resolution || payload.size || '1K').trim().toUpperCase()]?.[String(payload.aspect_ratio || payload.aspectRatio || '1:1').trim()] || GPTI2_SIZES['1K']['1:1'];
+const isHttpUrl = (value) => typeof value === 'string' && /^https?:\/\//i.test(value.trim());
 const referenceUrlsOf = (row) => {
   const payload = payloadObject(row);
   const recipe = payload.__recipePayload && typeof payload.__recipePayload === 'object' ? payload.__recipePayload : payload;
   const urls = [];
-  const add = (value) => { if (typeof value === 'string' && /^https?:\/\//i.test(value.trim())) urls.push(value.trim()); };
+  const add = (value) => { if (isHttpUrl(value)) urls.push(value.trim()); };
   const addMany = (value) => { if (Array.isArray(value)) value.forEach(addMany); else if (value && typeof value === 'object') Object.values(value).forEach(addMany); else add(value); };
-  addMany(payload.img_url); addMany(payload.image_urls); addMany(payload.image_url);
-  addMany(recipe.referenceImages); addMany(recipe.characterImages); addMany(recipe.sampleImage); addMany(recipe.styleImage); addMany(recipe.characterReferenceGroups);
+  // Reference order is part of the prompt contract: character identity first,
+  // then the sample canvas, then optional style/reference images.
+  const groups = Array.isArray(recipe.characterReferenceGroups) ? recipe.characterReferenceGroups : [];
+  for (const group of groups) addMany(Array.isArray(group?.references) ? group.references.map((reference) => reference?.source || reference) : []);
+  addMany(recipe.characterImages); add(recipe.sampleImage); add(recipe.styleImage); addMany(recipe.referenceImages);
+  addMany(payload.img_url); addMany(payload.image_urls); add(payload.image_url);
   return [...new Set(urls)];
 };
+const imageToDataUrl = async (url) => {
+  const response = await fetch(url, { signal: AbortSignal.timeout(60_000) });
+  if (!response.ok) throw new Error(`Sample analysis image fetch failed (${response.status})`);
+  const mime = String(response.headers.get('content-type') || 'image/jpeg').split(';', 1)[0];
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (!bytes.length || bytes.length > 8 * 1024 * 1024) throw new Error('Sample analysis image must be between 1 byte and 8 MB');
+  let binary = ''; for (const byte of bytes) binary += String.fromCharCode(byte);
+  return `data:${mime};base64,${btoa(binary)}`;
+};
+const claudeKey = async (env) => {
+  const configured = envText(env, 'CLAUDE_API_KEY') || envText(env, 'OPENAI_COMPATIBLE_API_KEY');
+  if (configured) return configured;
+  const response = await supabase(env, 'api_keys?select=key_value&status=eq.active&name=ilike.%5BCLAUDE%5D%25&order=last_used_at.asc.nullsfirst');
+  if (!response.ok) throw new Error(`Claude key lookup failed (${response.status})`);
+  const row = (await response.json()).find((item) => String(item?.key_value || '').trim().length >= 8);
+  if (!row?.key_value) throw new Error('CLAUDE_NOT_CONFIGURED');
+  return String(row.key_value).trim();
+};
+const buildSampleSwapPrompt = async (env, row, refs, basePrompt) => {
+  const payload = payloadObject(row); const recipe = payload.__recipePayload && typeof payload.__recipePayload === 'object' ? payload.__recipePayload : payload;
+  const sampleUrl = String(recipe.sampleImage || '').trim();
+  const characterUrl = refs.find((url) => url !== sampleUrl);
+  if (!isHttpUrl(sampleUrl) || !characterUrl) return basePrompt;
+  const [characterImage, sampleImage] = await Promise.all([imageToDataUrl(characterUrl), imageToDataUrl(sampleUrl)]);
+  const response = await fetch(`${(envText(env, 'OPENAI_COMPATIBLE_BASE_URL') || 'https://sub.digishop.work/v1').replace(/\/+$/, '')}/chat/completions`, {
+    method: 'POST', headers: { Authorization: `Bearer ${await claudeKey(env)}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ model: envText(env, 'CLAUDE_MODEL') || 'claude-sonnet-4-6', temperature: 0, max_tokens: 900, messages: [{ role: 'user', content: [
+      { type: 'text', text: 'Image 1 is the required character identity. Image 2 is the sample canvas. Analyze Image 2 pose, facial expression, head direction, camera angle, crop, lens, body placement, hands, lighting and background. Return one compact English image-edit instruction: replace the full face and body in Image 2 with Image 1 identity; preserve Image 2 pose, expression, camera, framing and scene exactly. Do not mention analysis or JSON.' },
+      { type: 'image_url', image_url: { url: characterImage } }, { type: 'image_url', image_url: { url: sampleImage } },
+    ] }] }), signal: AbortSignal.timeout(120_000),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(`Claude sample analysis failed (${response.status})`);
+  const instruction = String(data?.choices?.[0]?.message?.content || '').trim();
+  if (!instruction) throw new Error('Claude sample analysis returned no instruction');
+  return `${instruction}\n\n${basePrompt}`.trim();
+};
+const sampleSwapFallbackPrompt = (basePrompt) => `FULL FACE AND BODY REPLACEMENT. Use the character reference image(s) as the only identity source. Use the sample image as the base canvas. Replace the sample subject one-to-one while preserving the sample's exact pose, facial expression, head direction, camera angle, crop, framing, body placement, hand visibility, lighting, background, props, and depth. Never copy the sample person's identity, face, hair, outfit, or body. ${basePrompt}`;
 const imageExtension = (contentType) => String(contentType || '').toLowerCase().includes('jpeg') ? 'jpg' : String(contentType || '').toLowerCase().includes('webp') ? 'webp' : 'png';
 const isGpti2Lane = (row, provider) => {
   if (!GPTI2_PROVIDERS.has(provider)) return false;
@@ -58,10 +101,13 @@ const persistGpti2Result = async (env, row, result) => {
 const submitGpti2 = async (env, row, report) => {
   const payload = payloadObject(row); const model = modelOf(row);
   if (!GPTI2_MODELS.has(model)) throw new Error(`GPTI2_MODEL_UNSUPPORTED: ${model}`);
-  const prompt = String(payload.prompt || row.prompt || '').trim();
-  if (!prompt) throw new Error('GPTI2_ERROR: prompt is required');
+  const rawPrompt = String(payload.prompt || row.prompt || '').trim();
+  if (!rawPrompt) throw new Error('GPTI2_ERROR: prompt is required');
   const refs = referenceUrlsOf(row); const size = gpti2SizeOf(payload); let response;
-  if (refs.length && !model.startsWith('nano-banana')) {
+  let prompt = rawPrompt;
+  try { prompt = await buildSampleSwapPrompt(env, row, refs, rawPrompt); }
+  catch (error) { if (String(payloadObject(row).__recipePayload?.sampleImage || payloadObject(row).sampleImage || '').trim()) { prompt = sampleSwapFallbackPrompt(rawPrompt); await report('building_payload', 'Claude sample analysis unavailable; using the strict sample-swap contract.', 'warning'); } else throw error; }
+  if (refs.length) {
     await report('building_payload', `Da dung payload GPTi2: ${model}, ${size}, ${refs.length} anh tham chieu.`);
     const form = new FormData(); form.set('prompt', prompt); form.set('model', model); form.set('size', size); form.set('quality', String(payload.quality || 'low'));
     for (const [i, url] of refs.entries()) {

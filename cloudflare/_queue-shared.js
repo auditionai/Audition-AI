@@ -47,6 +47,23 @@ export const updateJob = async (env, id, values) => {
   if (!response.ok) throw new Error(`Supabase update failed (${response.status}): ${await response.text()}`);
 };
 
+const claimJobViaConditionalUpdate = async (env, jobId, leaseSeconds) => {
+  const response = await supabase(env, `generated_images?id=eq.${encodeURIComponent(jobId)}&status=eq.queued`, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify({
+      status: 'processing',
+      progress: 10,
+      processing_started_at: new Date().toISOString(),
+      lease_token: crypto.randomUUID(),
+      lease_expires_at: new Date(Date.now() + Math.max(leaseSeconds, 60) * 1000).toISOString(),
+      error_message: null,
+    }),
+  });
+  if (!response.ok) throw new Error(`Fallback message claim failed (${response.status}): ${await response.text()}`);
+  return (await response.json())?.[0] || null;
+};
+
 export const appendLog = (payload, stage, message, level = 'info') => ({
   ...payload,
   __stage: stage,
@@ -62,7 +79,16 @@ export const claimJob = async (env, jobId, action) => {
     p_job_id: jobId,
     p_lease_seconds: poll ? 120 : 900,
   });
-  if (!response.ok) throw new Error(`Message claim failed (${response.status}): ${await response.text()}`);
+  if (!response.ok) {
+    const detail = await response.text();
+    // Keep queue processing available while a deployed claim RPC is repaired.
+    // The status filter makes this fallback idempotent under at-least-once delivery.
+    if (!poll && response.status === 400 && /column reference "id" is ambiguous|42702/i.test(detail)) {
+      console.error(JSON.stringify({ worker: 'queue', event: 'claim_rpc_ambiguous_id_fallback', jobId }));
+      return claimJobViaConditionalUpdate(env, jobId, 900);
+    }
+    throw new Error(`Message claim failed (${response.status}): ${detail}`);
+  }
   const rows = await response.json();
   return rows?.[0] || null;
 };

@@ -118,20 +118,25 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
       const handleTerminalGeneration = (event: Event) => {
           const row = (event as CustomEvent).detail as Record<string, unknown> | undefined;
           const id = String(row?.id || '').trim();
-          if (id) {
-              setImages((current) => current.map((image) => image.id !== id ? image : {
-                  ...image,
-                  status: String(row?.status || image.status) as GeneratedImage['status'],
-                  progress: Number.isFinite(Number(row?.progress)) ? Number(row?.progress) : image.progress,
-                  url: String(row?.image_url || image.url || ''),
-                  error: String(row?.error_message || image.error || ''),
-                  updatedAt: Date.parse(String(row?.updated_at || '')) || image.updatedAt,
-              }));
-          }
           invalidateGalleryCache();
-          loadImages(true).catch((error) => {
-              console.warn('[Gallery] Terminal generation refresh failed', error);
-          });
+          loadImages(true)
+              .catch((error) => {
+                  console.warn('[Gallery] Terminal generation refresh failed', error);
+              })
+              .finally(() => {
+                  // The event contains the terminal write that triggered the
+                  // notification. Apply it last so an older in-flight query
+                  // cannot regress a completed item back to 0%.
+                  if (!id) return;
+                  setImages((current) => current.map((image) => image.id !== id ? image : {
+                      ...image,
+                      status: String(row?.status || image.status) as GeneratedImage['status'],
+                      progress: Number.isFinite(Number(row?.progress)) ? Number(row?.progress) : image.progress,
+                      url: String(row?.image_url || image.url || ''),
+                      error: String(row?.error_message || image.error || ''),
+                      updatedAt: Date.parse(String(row?.updated_at || '')) || image.updatedAt,
+                  }));
+              });
       };
       window.addEventListener('audition:generation-terminal', handleTerminalGeneration);
       return () => window.removeEventListener('audition:generation-terminal', handleTerminalGeneration);

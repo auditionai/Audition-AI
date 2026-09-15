@@ -57,6 +57,7 @@ import {
   extractProviderResultUrl,
   isResultUrlCompatibleWithAssetType,
 } from '../../shared/providerResultUrl';
+import { getTstApiKey } from './_secrets';
 
 type QueueJobRow = {
   id: string;
@@ -162,7 +163,7 @@ let lastStalePreparingRecoveryAt = 0;
 let lastFailedRescueScanAt = 0;
 const MAINTENANCE_SCAN_INTERVAL_MS = 60_000;
 
-const TST_API_KEY = process.env.TST_API_KEY || '';
+const TST_API_KEY = getTstApiKey() || '';
 const TST_API_BASE = 'https://api.tramsangtao.com/v1';
 const GENERATION_PROVIDER_DEFAULT: GenerationProvider =
   String(process.env.GENERATION_PROVIDER_DEFAULT || 'tst').trim().toLowerCase() === 'gommo' ? 'gommo' : 'tst';

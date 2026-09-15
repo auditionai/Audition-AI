@@ -3,6 +3,7 @@ import { getAuthenticatedRequestErrorStatus, requireAdminUser } from './_supabas
 import { normalizeTstOutboundPayload } from './_tst-payload-normalizer';
 import { getTstVideoGeneratePath } from './_tst-generate-endpoints';
 import { validateQueuePayloadAgainstLiveCatalog } from './_tst-live-catalog';
+import { getTstApiKey } from './_secrets';
 
 const jsonHeaders = {
   'Content-Type': 'application/json',
@@ -28,7 +29,7 @@ export const handler: Handler = async (event) => {
 
   try {
     await requireAdminUser(event);
-    const TST_API_KEY = process.env.TST_API_KEY;
+    const TST_API_KEY = getTstApiKey();
     if (!TST_API_KEY) {
       return {
         statusCode: 500,

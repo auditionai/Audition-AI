@@ -8,6 +8,8 @@ import {
   getImageRenderReferenceSources,
   isProImageGenerationModel,
   trimProviderPromptForServer,
+} from './_prompt-director-recipes';
+import { getTstApiKey as getSecretTstApiKey } from './_secrets';
   type ImageGenerateRecipePayload,
   type QueueVertexDiagnosticEntry,
   type QueueRecipePayload,
@@ -47,7 +49,7 @@ const mimeTypeToFileExtension = (mimeType: string, kind: 'image' | 'video') => {
 };
 
 const getTstApiKey = () => {
-  const apiKey = process.env.TST_API_KEY;
+  const apiKey = getSecretTstApiKey();
   if (!apiKey) {
     throw new Error('Missing TST_API_KEY environment variable');
   }

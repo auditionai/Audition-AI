@@ -1,4 +1,12 @@
 import crypto from 'crypto';
+import {
+  getSepayMerchantId,
+  getSepaySecretKey,
+  getSepayApiToken,
+  getSepayEnv,
+  getSepayPaymentMethod,
+  getSepayApiTimeoutMs,
+} from './_secrets';
 
 export type SePayEnv = {
   env: 'sandbox' | 'production';
@@ -23,11 +31,11 @@ const SIGNED_FIELDS = [
 ];
 
 export const getSePayEnv = (): SePayEnv => {
-  const merchantId = process.env.SEPAY_MERCHANT_ID || '';
-  const secretKey = process.env.SEPAY_SECRET_KEY || '';
-  const apiToken = process.env.SEPAY_API_TOKEN || process.env.SEPAY_USER_API_TOKEN || '';
-  const env = process.env.SEPAY_ENV === 'sandbox' ? 'sandbox' : 'production';
-  const rawPaymentMethod = process.env.SEPAY_PAYMENT_METHOD || 'BANK_TRANSFER';
+  const merchantId = getSepayMerchantId() || '';
+  const secretKey = getSepaySecretKey() || '';
+  const apiToken = getSepayApiToken() || '';
+  const env = getSepayEnv() === 'sandbox' ? 'sandbox' : 'production';
+  const rawPaymentMethod = getSepayPaymentMethod() || 'BANK_TRANSFER';
   const paymentMethod = rawPaymentMethod === 'NAPAS_BANK_TRANSFER' ? 'NAPAS_BANK_TRANSFER' : 'BANK_TRANSFER';
 
   if (!merchantId || !secretKey) {
@@ -47,7 +55,7 @@ export const getSePayUserApiBaseUrl = (env: SePayEnv['env']) =>
   env === 'sandbox' ? 'https://userapi-sandbox.sepay.vn/v2' : 'https://userapi.sepay.vn/v2';
 
 const getSePayRequestTimeoutMs = () => {
-  const value = Number(process.env.SEPAY_API_TIMEOUT_MS || 8000);
+  const value = Number(getSepayApiTimeoutMs() || '8000');
   return Number.isFinite(value) && value >= 1000 ? value : 8000;
 };
 

@@ -1,10 +1,11 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { getSupabaseServiceRoleKey } from './_secrets';
 
 const INTERNAL_REQUEST_MAX_AGE_MS = 5 * 60 * 1000;
 const TIMESTAMP_HEADER = 'x-audition-internal-timestamp';
 const SIGNATURE_HEADER = 'x-audition-internal-signature';
 
-const getSigningSecret = () => String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+const getSigningSecret = () => String(getSupabaseServiceRoleKey() || '').trim();
 
 const sign = (scope: string, timestamp: string, body: string) => {
   const secret = getSigningSecret();

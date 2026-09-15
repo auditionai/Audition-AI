@@ -1,4 +1,5 @@
 import { getServerAvailabilityConfig, isServerAllowedBySnapshot } from './_server-availability';
+import { getTstApiKey } from './_secrets';
 
 const TST_API_BASE = 'https://api.tramsangtao.com/v1';
 export const TST_LIVE_CATALOG_TTL_MS = 5 * 60_000;
@@ -76,7 +77,7 @@ const sortByOrder = (values: string[], order: string[]) =>
   });
 
 const getApiKey = () => {
-  const apiKey = process.env.TST_API_KEY;
+  const apiKey = getTstApiKey();
   if (!apiKey) {
     throw new Error('TST_UNAVAILABLE: Missing TST_API_KEY environment variable');
   }

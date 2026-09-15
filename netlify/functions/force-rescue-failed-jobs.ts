@@ -4,6 +4,7 @@ import { triggerBackgroundQueueWorker } from './_queue-launcher';
 import { clearFailedRescueMeta, hasFailedRescueFinalized, hasManualStopFlag } from '../../shared/queueRescueState';
 import { extractProviderResultUrl, isResultUrlCompatibleWithAssetType } from '../../shared/providerResultUrl';
 import { persistProviderResultToR2 } from './_r2-result-storage';
+import { getTstApiKey } from './_secrets';
 
 const headers = {
   'Content-Type': 'application/json',
@@ -12,7 +13,7 @@ const headers = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-const TST_API_KEY = process.env.TST_API_KEY || '';
+const TST_API_KEY = getTstApiKey() || '';
 const TST_API_BASE = 'https://api.tramsangtao.com/v1';
 const POLL_INTERVAL_SECONDS = 10;
 const MAX_QUEUE_LOG_ENTRIES = 80;

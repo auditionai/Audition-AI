@@ -189,7 +189,7 @@ const ensureProviderConfiguredForQueueKind = (queueKind: string | undefined, pro
     throw new Error('GPTi2 chỉ hỗ trợ tạo ảnh; video và Motion Control chỉ dùng API 2 (TST) hoặc API 3 (Gommo).');
   }
 
-  const hasTst = Boolean(String(process.env.TST_API_KEY || '').trim());
+  const hasTst = Boolean(String(getTstApiKey() || '').trim());
   const hasGommo = false;
   if (provider === 'tst' && !hasTst) {
     throw new Error('May chu Audition AI dang thieu TST_API_KEY nen tam thoi khong the nhan job moi.');
@@ -748,10 +748,11 @@ const getCloudflareQueueProvider = (provider: GenerationProvider, queueKind?: st
 };
 
 const wakeCloudflareGpti2Worker = async (jobId: string, provider: GenerationProvider, queueKind?: string, queuePayload?: Record<string, unknown>) => {
+  const { getCloudflareRouterUrl, getCloudflareQueueWorkerSecret } = await import('./_secrets');
   const lane = getCloudflareQueueProvider(provider, queueKind, queuePayload);
   if (!lane) return;
-  const routerUrl = String(process.env.CLOUDFLARE_QUEUE_ROUTER_URL || '').trim();
-  const queueWorkerSecret = String(process.env.CLOUDFLARE_QUEUE_WORKER_SECRET || '').trim();
+  const routerUrl = getCloudflareRouterUrl();
+  const queueWorkerSecret = getCloudflareQueueWorkerSecret();
   if (!routerUrl || !queueWorkerSecret || !jobId) return;
   try {
     const response = await fetch(routerUrl, {

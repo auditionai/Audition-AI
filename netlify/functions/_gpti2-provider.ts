@@ -13,7 +13,9 @@ const NANO_ASPECT_RATIOS = new Set(['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', 
 const MAX_NANO_REFERENCE_IMAGES = 8;
 const NANO_OUTPUT_RESOLUTION = '2K';
 
-const key = () => String(process.env.GPTI2_API_KEY || '').trim();
+import { getGpti2ApiKey } from './_secrets';
+
+const key = () => getGpti2ApiKey();
 const normalize = (value: unknown) => String(value || '').trim().toLowerCase();
 const assertConfigured = () => { if (!key()) throw new Error('GPTI2_NOT_CONFIGURED: Missing GPTI2_API_KEY environment variable'); };
 const parseError = async (response: Response) => {

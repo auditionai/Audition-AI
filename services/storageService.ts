@@ -368,7 +368,7 @@ const upsertImageMetadata = async (image: GeneratedImage, user: { id: string; us
   }
 };
 
-const mapGeneratedImageRow = (row: any, fallbackUserName: string, fallbackCost?: number): GeneratedImage => {
+export const mapGeneratedImageRow = (row: any, fallbackUserName: string, fallbackCost?: number): GeneratedImage => {
   const queuePayload =
     row.queue_payload && typeof row.queue_payload === 'object'
       ? row.queue_payload

@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { GeneratedImage, Language, HistoryItem } from '../types';
 import type { QueueProgressLogEntry } from '../shared/queueRecipes';
-import { checkR2Connection, getAllImagesFromStorage, getCachedImagesForCurrentUser, deleteImageFromStorage, getHistoryRetentionDays, publishImageToShowcase, invalidateGalleryCache } from '../services/storageService';
+import { checkR2Connection, getAllImagesFromStorage, getCachedImagesForCurrentUser, deleteImageFromStorage, getHistoryRetentionDays, mapGeneratedImageRow, publishImageToShowcase, invalidateGalleryCache } from '../services/storageService';
 import { getUnifiedHistory } from '../services/economyService';
 import { downloadAssetToBrowser } from '../services/downloadService';
 import { Icons } from '../components/Icons';
@@ -67,6 +67,28 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
       if (!silent) setLoadingImages(false);
     }
   }, []);
+  const applyRealtimeGenerationUpdate = useCallback((row: Record<string, unknown>) => {
+      const id = String(row?.id || '').trim();
+      if (!id) return;
+
+      const incoming = mapGeneratedImageRow(row, 'Me');
+      setImages((current) => {
+          const existingIndex = current.findIndex((image) => image.id === id);
+          if (existingIndex < 0) return [incoming, ...current];
+
+          const existing = current[existingIndex];
+          const next = [...current];
+          next[existingIndex] = {
+              ...existing,
+              ...incoming,
+              cost: incoming.cost ?? existing.cost,
+              queueLogs: incoming.queueLogs ?? existing.queueLogs,
+              queueStage: incoming.queueStage ?? existing.queueStage,
+              updatedAt: Math.max(existing.updatedAt || 0, incoming.updatedAt || 0),
+          };
+          return next;
+      });
+  }, []);
   const hasActiveGenerationJobs = useMemo(() => {
       return images.some((image) => {
           const status = image.displayStatus || image.status;
@@ -115,6 +137,15 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
 
   useEffect(() => {
       if (typeof window === 'undefined') return;
+      const handleGenerationUpdate = (event: Event) => {
+          applyRealtimeGenerationUpdate(((event as CustomEvent).detail || {}) as Record<string, unknown>);
+      };
+      window.addEventListener('audition:generation-update', handleGenerationUpdate);
+      return () => window.removeEventListener('audition:generation-update', handleGenerationUpdate);
+  }, [applyRealtimeGenerationUpdate]);
+
+  useEffect(() => {
+      if (typeof window === 'undefined') return;
       const handleTerminalGeneration = (event: Event) => {
           const row = (event as CustomEvent).detail as Record<string, unknown> | undefined;
           const id = String(row?.id || '').trim();
@@ -150,7 +181,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
           loadImages(true).catch((error) => {
               console.warn('[Gallery] Active job refresh failed', error);
           });
-      }, 20_000);
+      }, 5_000);
 
       return () => clearInterval(interval);
   }, [activeTab, hasActiveGenerationJobs, loadImages]);

@@ -9,6 +9,9 @@ const TST_UPLOAD_STATUS_POLL_INTERVAL_MS = 2000;
 const TST_UPLOAD_STATUS_TIMEOUT_MS = 240000;
 const TST_SOURCE_FETCH_TIMEOUT_MS = 120000;
 const TST_VIDEO_SOURCE_FETCH_TIMEOUT_MS = 180000;
+// TST is asynchronous. A short poll interval makes a completed provider job
+// visible in the gallery promptly without changing the generation concurrency.
+const TST_RESULT_POLL_INTERVAL_SECONDS = 5;
 const TST_MAX_REFERENCE_IMAGES = 8;
 const TST_CATALOG_TTL_MS = 5 * 60 * 1000;
 let tstCatalogCache = null;
@@ -396,7 +399,7 @@ const failAndRefund = async (env, row, message) => {
   if (!refund.ok) console.error(JSON.stringify({ worker: 'queue-tst', event: 'refund_failed', jobId: row.id, status: refund.status }));
 };
 
-const schedulePoll = async (env, jobId, provider, delaySeconds = 15) => enqueueDelayed(env.TST_JOBS, { jobId, provider, action: 'poll', requestedAt: new Date().toISOString() }, delaySeconds);
+const schedulePoll = async (env, jobId, provider, delaySeconds = TST_RESULT_POLL_INTERVAL_SECONDS) => enqueueDelayed(env.TST_JOBS, { jobId, provider, action: 'poll', requestedAt: new Date().toISOString() }, delaySeconds);
 
 const fetchTstJob = async (env, jobId) => {
   const response = await fetch(`${TST_API_BASE}/jobs/${encodeURIComponent(jobId)}`, { headers: { Authorization: `Bearer ${envText(env, 'TST_API_KEY')}` }, signal: AbortSignal.timeout(30000) });
@@ -418,7 +421,7 @@ const pollRow = async (env, row, provider) => {
       await failAndRefund(env, row, String(data?.error || data?.message || 'TST job failed'));
       return 'failed';
     }
-    await updateJob(env, row.id, { status: 'processing', progress: Math.max(60, Number(data?.progress || 0)), next_poll_at: new Date(Date.now() + 15000).toISOString(), lease_token: null, lease_expires_at: null, queue_payload: appendLog(payloadObject(row), 'polling', 'Cloudflare Worker dang poll TST.') });
+    await updateJob(env, row.id, { status: 'processing', progress: Math.max(60, Number(data?.progress || 0)), next_poll_at: new Date(Date.now() + TST_RESULT_POLL_INTERVAL_SECONDS * 1000).toISOString(), lease_token: null, lease_expires_at: null, queue_payload: appendLog(payloadObject(row), 'polling', 'Cloudflare Worker dang poll TST.') });
     await schedulePoll(env, row.id, provider);
     return 'pending';
   } catch (error) {
@@ -436,7 +439,7 @@ const dispatch = async (env, row, provider) => {
   activePayload = prepared.queuePayload;
   const submission = await submitTst(env, row, prepared.providerPayload, report);
   const submittedPayload = appendLog({ ...activePayload, __cloudflareWorker: true }, 'submitted', 'TST da nhan job. Dang cho ket qua.', 'success');
-  await updateJob(env, row.id, { status: 'processing', progress: 60, provider: 'tst', job_id: submission.id, next_poll_at: new Date(Date.now() + 15000).toISOString(), lease_token: null, lease_expires_at: null, queue_payload: submittedPayload });
+  await updateJob(env, row.id, { status: 'processing', progress: 60, provider: 'tst', job_id: submission.id, next_poll_at: new Date(Date.now() + TST_RESULT_POLL_INTERVAL_SECONDS * 1000).toISOString(), lease_token: null, lease_expires_at: null, queue_payload: submittedPayload });
   await schedulePoll(env, row.id, provider);
 };
 
@@ -456,7 +459,7 @@ const processMessage = async (env, message) => {
     }
     if (action === 'poll' && state?.status === 'processing' && state.job_id) {
       const dueAt = Date.parse(state.next_poll_at || '');
-      const delaySeconds = Number.isFinite(dueAt) ? Math.max(5, Math.ceil((dueAt - Date.now()) / 1000)) : 15;
+      const delaySeconds = Number.isFinite(dueAt) ? Math.max(5, Math.ceil((dueAt - Date.now()) / 1000)) : TST_RESULT_POLL_INTERVAL_SECONDS;
       await schedulePoll(env, jobId, provider, delaySeconds);
       return { ack: true, reason: 'poll_rescheduled' };
     }

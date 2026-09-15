@@ -26,7 +26,9 @@ provider work in one Worker:
 
    - GPTi2 queue worker: `SUPABASE_SERVICE_ROLE_KEY`, `GPTI2_API_KEY`, `QUEUE_WORKER_SECRET`
    - TST queue worker: `SUPABASE_SERVICE_ROLE_KEY`, `TST_API_KEY`, `QUEUE_WORKER_SECRET`
-   - Queue router: `SUPABASE_SERVICE_ROLE_KEY`
+   - Queue router: `QUEUE_WORKER_SECRET` (must exactly match Netlify's
+     `CLOUDFLARE_QUEUE_WORKER_SECRET`). The router authenticates wake requests
+     with this value; it does not access Supabase.
    - Direct edit: `SUPABASE_SERVICE_ROLE_KEY`, `GPTI2_API_KEY`, `DIRECT_EDIT_WORKER_SECRET`
    - Video script: `SUPABASE_SERVICE_ROLE_KEY`, `VIDEO_SCRIPT_WORKER_SECRET`; `CLAUDE_API_KEY` is optional because the Worker uses the active `[CLAUDE]` key in Supabase when present.
    - Operations: `SUPABASE_SERVICE_ROLE_KEY`, `OPERATIONS_WORKER_SECRET`

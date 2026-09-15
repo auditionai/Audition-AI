@@ -442,6 +442,9 @@ function AppContent() {
           (payload: any) => {
             const row = payload?.new || {};
             const status = row.status;
+            // Forward every database write. Gallery consumes these updates
+            // directly so progress/log changes do not wait for its polling pass.
+            window.dispatchEvent(new CustomEvent('audition:generation-update', { detail: row }));
             if (status !== 'completed' && status !== 'failed') return;
 
             window.dispatchEvent(new CustomEvent('audition:generation-terminal', { detail: row }));

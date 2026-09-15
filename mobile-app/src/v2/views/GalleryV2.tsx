@@ -24,6 +24,7 @@ import {
   getHistoryRetentionDays,
   getAllImagesFromStorage,
   invalidateGalleryCache,
+  mapGeneratedImageRow,
   publishImageToShowcase,
 } from '../../services/storageService';
 import { downloadAssetToBrowser } from '../../../../services/downloadService';
@@ -67,6 +68,49 @@ export function GalleryV2() {
     window.addEventListener(QUEUE_SUBMITTED_EVENT, refresh);
     return () => window.removeEventListener(QUEUE_SUBMITTED_EVENT, refresh);
   }, [loadItems]);
+
+  useEffect(() => {
+    const applyUpdate = (event: Event) => {
+      const row = ((event as CustomEvent).detail || {}) as Record<string, unknown>;
+      const id = String(row.id || '').trim();
+      if (!id) return;
+      const incoming = mapGeneratedImageRow(row, 'Me');
+      setItems((current) => {
+        const index = current.findIndex((item) => item.id === id);
+        if (index < 0) return [incoming, ...current];
+        const next = [...current];
+        const existing = next[index];
+        next[index] = {
+          ...existing,
+          ...incoming,
+          cost: incoming.cost ?? existing.cost,
+          queueLogs: incoming.queueLogs ?? existing.queueLogs,
+          queueStage: incoming.queueStage ?? existing.queueStage,
+          updatedAt: Math.max(existing.updatedAt || 0, incoming.updatedAt || 0),
+        };
+        return next;
+      });
+    };
+
+    window.addEventListener('audition:generation-update', applyUpdate);
+    return () => window.removeEventListener('audition:generation-update', applyUpdate);
+  }, []);
+
+  const hasActiveJobs = useMemo(
+    () => items.some((item) => ['queued', 'processing', 'rescuing'].includes(itemStatus(item))),
+    [items],
+  );
+
+  useEffect(() => {
+    if (!hasActiveJobs) return;
+
+    const interval = window.setInterval(() => {
+      invalidateGalleryCache();
+      void loadItems();
+    }, 5_000);
+
+    return () => window.clearInterval(interval);
+  }, [hasActiveJobs, loadItems]);
 
   useEffect(() => {
     if (mode !== 'wallet' || history.length > 0) return;

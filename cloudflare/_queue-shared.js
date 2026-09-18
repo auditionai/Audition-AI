@@ -75,6 +75,70 @@ export const appendLog = (payload, stage, message, level = 'info') => ({
 
 const isHttpUrl = (value) => typeof value === 'string' && /^https?:\/\//i.test(value.trim());
 
+const addNotificationMedia = (entries, value, role, kind = 'image', userProvided = true) => {
+  if (!isHttpUrl(value) || entries.some((entry) => entry.url === value.trim())) return;
+  entries.push({ url: value.trim(), role, kind, userProvided });
+};
+
+const addNotificationMediaList = (entries, value, role, kind = 'image', userProvided = true) => {
+  if (Array.isArray(value)) value.forEach((item) => addNotificationMediaList(entries, item, role, kind, userProvided));
+  else addNotificationMedia(entries, value, role, kind, userProvided);
+};
+
+// Keep this metadata separate from the provider payload so Telegram can link
+// every uploaded reference without trying to re-send those assets as media.
+const notificationInputMedia = (payload) => {
+  const raw = payload && typeof payload === 'object' ? payload : {};
+  const recipe = raw.__recipePayload && typeof raw.__recipePayload === 'object' ? raw.__recipePayload : raw;
+  const entries = [];
+  const explicit = Array.isArray(raw.__notifyInputMedia) ? raw.__notifyInputMedia : [];
+  for (const entry of explicit) {
+    if (entry && typeof entry === 'object') addNotificationMedia(entries, entry.url, entry.role || 'reference', entry.kind === 'video' ? 'video' : 'image', entry.userProvided !== false);
+  }
+  if (entries.length) return entries;
+
+  addNotificationMedia(entries, recipe.sampleImage, 'sample');
+  addNotificationMedia(entries, recipe.styleImage, 'style', 'image', false);
+  addNotificationMedia(entries, recipe.sourceImage, 'source');
+  addNotificationMedia(entries, recipe.keyframeImage, 'keyframe');
+  addNotificationMedia(entries, recipe.characterImage, 'character');
+  addNotificationMediaList(entries, recipe.characterImages, 'character');
+  addNotificationMediaList(entries, recipe.referenceImages, 'reference');
+  addNotificationMediaList(entries, recipe.__uploadSources, 'reference');
+  for (const group of Array.isArray(recipe.characterReferenceGroups) ? recipe.characterReferenceGroups : []) {
+    addNotificationMediaList(entries, group?.references?.map((reference) => reference?.source || reference), 'character');
+  }
+  addNotificationMedia(entries, recipe.motionVideoDataUrl, 'motion', 'video');
+  return entries;
+};
+
+const notificationUserProfile = async (env, userId) => {
+  if (!userId) return null;
+  try {
+    const response = await supabase(env, `users?id=eq.${encodeURIComponent(userId)}&select=display_name,email&limit=1`);
+    if (!response.ok) return null;
+    return (await response.json())?.[0] || null;
+  } catch {
+    return null;
+  }
+};
+
+const recordTelegramDelivery = async (env, row, eventType) => {
+  const response = await supabase(env, `generated_images?id=eq.${encodeURIComponent(row.id)}&select=queue_payload&limit=1`);
+  if (!response.ok) throw new Error(`Telegram delivery state lookup failed (${response.status})`);
+  const current = (await response.json())?.[0]?.queue_payload;
+  const queuePayload = current && typeof current === 'object' ? current : {};
+  await updateJob(env, row.id, {
+    queue_payload: {
+      ...queuePayload,
+      __telegramDelivery: {
+        ...(queuePayload.__telegramDelivery && typeof queuePayload.__telegramDelivery === 'object' ? queuePayload.__telegramDelivery : {}),
+        [eventType]: { status: 'delivered', deliveredAt: new Date().toISOString() },
+      },
+    },
+  });
+};
+
 // Queue rows may initially contain local base64 inputs. Once a Worker has
 // claimed a job, retaining those blobs in every progress PATCH can make the
 // Supabase REST update exceed its upstream timeout. Keep the operation's
@@ -104,6 +168,8 @@ export const notifyTelegramJob = async (env, eventType, row, overrides = {}) => 
   if (!webhookUrl || !webhookSecret) return;
 
   const queuePayload = compactWorkerPayload(row);
+  const profile = await notificationUserProfile(env, row.user_id);
+  const inputMedia = notificationInputMedia(queuePayload);
   const body = {
     eventType,
     app: 'Audition AI',
@@ -112,6 +178,8 @@ export const notifyTelegramJob = async (env, eventType, row, overrides = {}) => 
       providerJobId: row.job_id || null,
       provider: row.provider || queuePayload.__targetProvider || null,
       userId: row.user_id,
+      displayName: row.user_name || profile?.display_name || null,
+      email: profile?.email || null,
       prompt: row.prompt || '',
       assetType: row.asset_type || 'image',
       toolId: row.tool_id || null,
@@ -130,16 +198,24 @@ export const notifyTelegramJob = async (env, eventType, row, overrides = {}) => 
         aspectRatio: queuePayload.aspectRatio || queuePayload.aspect_ratio || null,
       },
     },
-    media: { outputUrl: overrides.resultUrl || null },
+    media: {
+      outputUrl: overrides.resultUrl || null,
+      inputMedia,
+      inputUrls: inputMedia.map((entry) => entry.url),
+    },
   };
 
-  const response = await fetch(webhookUrl, {
+  const request = new Request(webhookUrl, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-notify-secret': webhookSecret },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(8000),
   });
+  const response = env.TELEGRAM_NOTIFIER
+    ? await env.TELEGRAM_NOTIFIER.fetch(request)
+    : await fetch(request);
   if (!response.ok) throw new Error(`Telegram notification failed (${response.status})`);
+  await recordTelegramDelivery(env, row, eventType);
 };
 
 export const claimJob = async (env, jobId, action) => {

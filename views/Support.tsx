@@ -11,7 +11,7 @@ export const Support: React.FC<SupportProps> = ({ lang, onNavigate }) => {
   const devInfo = {
     email: 'support@auditionai.vn',
     zalo: 'https://zalo.me/g/kodwgn037',
-    facebook: 'https://www.facebook.com/codycn2804/',
+    facebook: 'https://www.facebook.com/profile.php?id=61573249500027',
     tiktok: 'https://www.tiktok.com/@auditionai.io.vn'
   };
 

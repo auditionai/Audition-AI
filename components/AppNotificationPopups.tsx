@@ -66,7 +66,7 @@ const eventStyles = {
 
 const NOTIFICATION_SOUND_URL = '/audio/notification-ting.mp3';
 const SOCIAL_LINKS = {
-  facebook: 'https://www.facebook.com/codycn2804/',
+  facebook: 'https://www.facebook.com/profile.php?id=61573249500027',
   tiktok: 'https://www.tiktok.com/@auditionai.io.vn',
 } as const;
 

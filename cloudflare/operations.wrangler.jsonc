@@ -7,5 +7,6 @@
   "preview_urls": false,
   "triggers": { "crons": ["*/5 * * * *"] },
   "vars": { "SUPABASE_URL": "https://wnosrdigcdjlrmofxemd.supabase.co" },
+  "services": [{ "binding": "TELEGRAM_NOTIFIER", "service": "auditionai-telegram-notify" }],
   "observability": { "enabled": true, "head_sampling_rate": 1, "traces": { "enabled": true, "head_sampling_rate": 1 } }
 }

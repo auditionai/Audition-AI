@@ -96,6 +96,16 @@ export const retryFailedQueueJob = async (params: {
     throw new Error('UNSUPPORTED_RETRY_QUEUE_KIND');
   }
 
+  // A retry reuses the original row and must never leave a prior terminal
+  // failure charged. The refund function is idempotent by generated-image id.
+  if (Number(source.cost_vcoin || 0) > 0) {
+    const { error: refundError } = await admin.rpc('refund_generated_job', {
+      p_generated_image_id: jobId,
+      p_reason: 'Refund: failed job reconciled before admin retry',
+    });
+    if (refundError) throw refundError;
+  }
+
   // Return an active child when the admin double-clicks instead of charging twice.
   const { data: activeRetries, error: activeRetryError } = await admin
     .from('generated_images')

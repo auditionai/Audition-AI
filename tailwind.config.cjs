@@ -36,6 +36,7 @@ module.exports = {
         'pulse-glow': 'pulseGlow 2s ease-in-out infinite',
         'fade-in': 'fadeIn 0.5s ease-out forwards',
         'slide-in-right': 'slideInRight 0.4s ease-out forwards',
+        marquee: 'marquee 40s linear infinite',
       },
       keyframes: {
         beat: {
@@ -58,6 +59,9 @@ module.exports = {
         slideInRight: {
           '0%': { opacity: '0', transform: 'translateX(30px)' },
           '100%': { opacity: '1', transform: 'none' },
+        },
+        marquee: {
+          to: { transform: 'translateX(-50%)' },
         },
       },
     },

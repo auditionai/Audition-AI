@@ -133,6 +133,18 @@ const extractInputMedia = (payload: QueuePayloadObject) => {
       }
     }
 
+    if (Array.isArray(source.characterReferenceGroups)) {
+      source.characterReferenceGroups.forEach((group) => {
+        if (!group || typeof group !== 'object' || !Array.isArray((group as { references?: unknown[] }).references)) return;
+        (group as { references: unknown[] }).references.forEach((reference) => {
+          const url = reference && typeof reference === 'object'
+            ? (reference as { source?: unknown }).source
+            : reference;
+          pushInputMedia(inputMedia, url, 'character', 'image', true);
+        });
+      });
+    }
+
     pushInputMedia(inputMedia, source.motionVideoDataUrl, 'motion', 'video', true);
   }
 

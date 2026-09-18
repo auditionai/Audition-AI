@@ -54,9 +54,16 @@ const downloadReferenceImage = async (url, index) => {
   const response = await fetch(url, { signal: AbortSignal.timeout(30000) });
   if (!response.ok) throw new Error(`GPTI2 reference ${index + 1} unavailable`);
   const contentType = String(response.headers.get('content-type') || 'image/jpeg').split(';', 1)[0];
-  const bytes = new Uint8Array(await response.arrayBuffer());
+  let bytes = new Uint8Array(await response.arrayBuffer());
+  const isJpeg = contentType === 'image/jpeg';
+  const missingJpegEnd = isJpeg && bytes.length > 2 && bytes[0] === 0xff && bytes[1] === 0xd8 && !(bytes[bytes.length - 2] === 0xff && bytes[bytes.length - 1] === 0xd9);
+  if (missingJpegEnd) {
+    const repaired = new Uint8Array(bytes.length + 2);
+    repaired.set(bytes); repaired[bytes.length] = 0xff; repaired[bytes.length + 1] = 0xd9;
+    bytes = repaired;
+  }
   assertCompleteReferenceImage(bytes, contentType, index);
-  return new Blob([bytes], { type: contentType });
+  return { blob: new Blob([bytes], { type: contentType }), repaired: missingJpegEnd };
 };
 const imageToDataUrl = async (url) => {
   const response = await fetch(url, { signal: AbortSignal.timeout(60_000) });
@@ -138,7 +145,9 @@ const submitGpti2 = async (env, row, report) => {
   const referenceBlobs = [];
   for (const [i, url] of refs.entries()) {
     await report('uploading_refs', `Dang kiem tra anh tham chieu ${i + 1}/${refs.length}.`);
-    referenceBlobs.push(await downloadReferenceImage(url, i));
+    const reference = await downloadReferenceImage(url, i);
+    if (reference.repaired) await report('uploading_refs', `Da sua marker ket thuc cho JPEG tham chieu ${i + 1} truoc khi gui GPTi2.`, 'warning');
+    referenceBlobs.push(reference.blob);
   }
   let prompt = rawPrompt;
   try { prompt = await buildSampleSwapPrompt(env, row, refs, rawPrompt); }

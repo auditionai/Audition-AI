@@ -10,9 +10,19 @@ const GPTI2_SIZES = {
   '2K': { '1:1': '1536x1536', '16:9': '2560x1440', '9:16': '1440x2560', '4:3': '2048x1536', '3:4': '1536x2048', '3:2': '2400x1600', '2:3': '1600x2400', '21:9': '2560x1088' },
   '4K': { '1:1': '2048x2048', '16:9': '3840x2160', '9:16': '2160x3840', '4:3': '3200x2400', '3:4': '2400x3200', '3:2': '3360x2240', '2:3': '2240x3360', '21:9': '3840x1632' },
 };
-const isRetryableGpti2Error = (message) => /timeout|timed out|network|429|5\d\d|provider returned no image|endpoint returned no image/i.test(String(message || ''));
+const GPTI2_MAX_ATTEMPTS = 6;
+const GPTI2_TEMPORARILY_UNAVAILABLE_MODELS = new Set(['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst']);
+const isRetryableGpti2Error = (message) => /timeout|timed out|network|429|rate_limit|rate limit|service busy|temporarily unavailable|5\d\d|provider returned no image|endpoint returned no image/i.test(String(message || ''));
+const retryAfterSeconds = (message) => {
+  const match = String(message || '').match(/retry\s+in\s+(\d+)s/i);
+  return match ? Math.max(10, Math.min(600, Number(match[1]) + 2)) : 0;
+};
 
 const modelOf = (row) => String(payloadObject(row).model || payloadObject(row).modelId || row?.model_used || '').trim().toLowerCase();
+const executableModelOf = (row) => {
+  const requested = modelOf(row);
+  return GPTI2_TEMPORARILY_UNAVAILABLE_MODELS.has(requested) ? 'gpt-image-2' : requested;
+};
 const gpti2SizeOf = (payload) => GPTI2_SIZES[String(payload.resolution || payload.size || '1K').trim().toUpperCase()]?.[String(payload.aspect_ratio || payload.aspectRatio || '1:1').trim()] || GPTI2_SIZES['1K']['1:1'];
 const isHttpUrl = (value) => typeof value === 'string' && /^https?:\/\//i.test(value.trim());
 const referenceUrlsOf = (row) => {
@@ -99,7 +109,7 @@ const persistGpti2Result = async (env, row, result) => {
 };
 
 const submitGpti2 = async (env, row, report) => {
-  const payload = payloadObject(row); const model = modelOf(row);
+  const payload = payloadObject(row); const model = executableModelOf(row);
   if (!GPTI2_MODELS.has(model)) throw new Error(`GPTI2_MODEL_UNSUPPORTED: ${model}`);
   const rawPrompt = String(payload.prompt || row.prompt || '').trim();
   if (!rawPrompt) throw new Error('GPTI2_ERROR: prompt is required');
@@ -149,28 +159,44 @@ const failAndRefund = async (env, row, message) => {
 };
 
 const retryBeforeFallback = async (env, row, message, attemptCount) => {
-  if (!isRetryableGpti2Error(message) || attemptCount >= 3) return false;
-  const payload = appendLog(compactWorkerPayload(row), 'queued', `GPTi2 chua phan hoi on dinh. Thu lai lan ${attemptCount + 1}/3 truoc khi dung API du phong.`, 'warning');
+  if (!isRetryableGpti2Error(message) || attemptCount >= GPTI2_MAX_ATTEMPTS) return false;
+  const delaySeconds = retryAfterSeconds(message) || Math.min(120, 10 * (attemptCount + 1));
+  const payload = appendLog(compactWorkerPayload(row), 'queued', `GPTi2 tam ban. Se thu lai lan ${attemptCount + 1}/${GPTI2_MAX_ATTEMPTS} sau ${delaySeconds}s.`, 'warning');
   await updateJob(env, row.id, {
     status: 'queued', progress: 0, job_id: null, lease_token: null, lease_expires_at: null,
-    processing_started_at: null, next_poll_at: new Date(Date.now() + Math.min(30, 5 * (attemptCount + 1)) * 1000).toISOString(),
+    processing_started_at: null, next_poll_at: new Date(Date.now() + delaySeconds * 1000).toISOString(),
     attempt_count: attemptCount + 1, error_message: message, queue_payload: payload,
   });
-  await enqueueDelayed(env.GPTI2_JOBS, { jobId: row.id, provider: 'gpti2_image', action: 'dispatch', requestedAt: new Date().toISOString() }, Math.min(30, 5 * (attemptCount + 1)));
+  await enqueueDelayed(env.GPTI2_JOBS, { jobId: row.id, provider: 'gpti2_image', action: 'dispatch', requestedAt: new Date().toISOString() }, delaySeconds);
   return true;
-};
-
-const fallbackToTst = async (env, row, message) => {
-  const provider = row.queue_kind === 'image_edit_direct' || String(row.queue_payload?.recipeType || '') === 'image_edit_recipe_v1' ? 'tst_edit' : 'tst_image';
-  const payload = appendLog({ ...compactWorkerPayload(row), __targetProvider: 'tst', __providerFallbackHistory: [{ at: new Date().toISOString(), fromProvider: 'gpti2', toProvider: 'tst', reason: message.slice(0, 500) }] }, 'queued', 'GPTi2 khong phan hoi sau 3 lan. Chuyen sang TST du phong.', 'warning');
-  await updateJob(env, row.id, { status: 'queued', progress: 0, provider: 'tst', job_id: null, lease_token: null, lease_expires_at: null, processing_started_at: null, next_poll_at: null, attempt_count: 0, error_message: null, queue_payload: payload });
-  await env.TST_JOBS.send({ jobId: row.id, provider, action: 'dispatch', requestedAt: new Date().toISOString() });
 };
 
 const dispatch = async (env, row) => {
   let activePayload = { ...compactWorkerPayload(row), __cloudflareWorker: true };
-  const report = async (stage, message, level = 'info') => { activePayload = appendLog(activePayload, stage, message, level); await updateJob(env, row.id, { status: 'processing', progress: stage === 'uploading_refs' ? 35 : stage === 'building_payload' ? 45 : stage === 'verifying_output' ? 85 : 50, error_message: null, queue_payload: activePayload }); };
+  const report = async (stage, message, level = 'info') => {
+    activePayload = appendLog(activePayload, stage, message, level);
+    if (stage === 'dispatching') {
+      activePayload.__gpti2SynchronousDispatchStartedAt = new Date().toISOString();
+    }
+    await updateJob(env, row.id, {
+      status: 'processing',
+      progress: stage === 'uploading_refs' ? 35 : stage === 'building_payload' ? 45 : stage === 'verifying_output' ? 85 : 50,
+      error_message: null,
+      queue_payload: activePayload,
+    });
+  };
   await report('preparing', 'Cloudflare GPTi2 Worker da nhan job. Bat dau kiem tra payload.');
+  const requestedModel = modelOf(row);
+  const executableModel = executableModelOf(row);
+  if (requestedModel !== executableModel) {
+    activePayload.modelId = executableModel;
+    activePayload.model = executableModel;
+    if (activePayload.__recipePayload && typeof activePayload.__recipePayload === 'object') {
+      activePayload.__recipePayload = { ...activePayload.__recipePayload, modelId: executableModel, model: executableModel };
+    }
+    await report('preparing', `Model ${requestedModel} dang tam ngung tren GPTi2. Da chuyen an toan sang ${executableModel}.`, 'warning');
+    row.queue_payload = activePayload;
+  }
   const result = await submitGpti2(env, row, report); await report('verifying_output', 'Dang luu ket qua GPTi2 vao R2.');
   const imageUrl = await persistGpti2Result(env, row, result);
   activePayload = appendLog(activePayload, 'completed', 'Cloudflare Worker da luu ket qua GPTi2 vao R2.', 'success');
@@ -194,7 +220,6 @@ const processMessage = async (env, message) => {
     const message = error instanceof Error ? error.message : String(error);
     const state = await jobState(env, row.id).catch(() => null);
     if (await retryBeforeFallback(env, row, message, Number(state?.attempt_count || 0))) return { ack: true, reason: 'retry_before_fallback' };
-    if (isRetryableGpti2Error(message)) { await fallbackToTst(env, row, message); return { ack: true, reason: 'fallback_tst' }; }
     await failAndRefund(env, row, message);
     return { ack: true, reason: 'failed' };
   }

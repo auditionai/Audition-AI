@@ -52,7 +52,7 @@ export function Support() {
             </div>
           </a>
           <div className="h-px bg-[var(--color-border)] mx-4" />
-          <a href="https://www.facebook.com/codycn2804/" target="_blank" rel="noreferrer" className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-500/10 m-2 rounded-xl active:opacity-80 transition-colors">
+          <a href="https://www.facebook.com/profile.php?id=61573249500027" target="_blank" rel="noreferrer" className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-500/10 m-2 rounded-xl active:opacity-80 transition-colors">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white shrink-0">
                 <MonitorSmartphone className="w-4 h-4" />
@@ -64,7 +64,7 @@ export function Support() {
             </div>
           </a>
           <div className="h-px bg-[var(--color-border)] mx-4" />
-          <a href="https://www.facebook.com/codycn2804/" target="_blank" rel="noreferrer" className="flex items-center justify-between p-3 bg-indigo-50 dark:bg-indigo-500/10 m-2 rounded-xl active:opacity-80 transition-colors">
+          <a href="https://www.facebook.com/profile.php?id=61573249500027" target="_blank" rel="noreferrer" className="flex items-center justify-between p-3 bg-indigo-50 dark:bg-indigo-500/10 m-2 rounded-xl active:opacity-80 transition-colors">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white shrink-0">
                 <Globe2 className="w-4 h-4" />

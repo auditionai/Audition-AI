@@ -547,9 +547,13 @@ CREATE POLICY "Public read access" ON public.users FOR SELECT TO anon USING (tru
           <div className="w-full overflow-hidden relative group">
               <div className="absolute top-0 left-0 bottom-0 w-12 md:w-32 bg-gradient-to-r from-[#090014] to-transparent z-10 pointer-events-none"></div>
               <div className="absolute top-0 right-0 bottom-0 w-12 md:w-32 bg-gradient-to-l from-[#090014] to-transparent z-10 pointer-events-none"></div>
-              <div className="flex w-max animate-marquee pause-on-hover gap-6 px-6">
-                   {displayShowcase.map((item, i) => <ShowcaseCard key={`s1-${i}`} item={item} />)}
-                   {displayShowcase.map((item, i) => <ShowcaseCard key={`s2-${i}`} item={item} />)}
+              <div className="flex w-max animate-marquee hover:[animation-play-state:paused] motion-reduce:animate-none">
+                  <div className="flex shrink-0 gap-6 pr-6">
+                    {displayShowcase.map((item, i) => <ShowcaseCard key={`s1-${i}`} item={item} />)}
+                  </div>
+                  <div className="flex shrink-0 gap-6 pr-6" aria-hidden="true">
+                    {displayShowcase.map((item, i) => <ShowcaseCard key={`s2-${i}`} item={item} />)}
+                  </div>
               </div>
           </div>
       </div>

@@ -237,6 +237,20 @@ const buildMediaCaption = (payload, extraLines = []) =>
     1020,
   );
 
+const sendLinkMessages = async (env, links) => {
+  if (!links.length) return;
+  const prefix = '<b>Link media</b>\n';
+  let message = prefix;
+  for (const link of links) {
+    if (`${message}${link}\n`.length > 3900) {
+      await sendText(env, message);
+      message = prefix;
+    }
+    message += `${link}\n`;
+  }
+  if (message !== prefix) await sendText(env, message.trim());
+};
+
 const collectCandidateMedia = (payload) => {
   const candidates = [];
   const outputUrl = isHttpUrl(payload?.media?.outputUrl) ? payload.media.outputUrl.trim() : null;
@@ -267,7 +281,6 @@ const buildMediaLinks = (payload, shownUrls = []) => {
     if (shown.has(entry.url)) continue;
     if (entry.userProvided === false && entry.role === 'style') continue;
     lines.push(`• ${getRoleLabel(entry.role)}: <a href="${escapeHtml(entry.url)}">mở</a>`);
-    if (lines.length >= 4) break;
   }
 
   return lines;
@@ -361,17 +374,6 @@ async function sendMedia(env, item, caption = '') {
   }
 }
 
-async function sendMediaGroup(env, mediaItems) {
-  const body = new URLSearchParams();
-  body.set('chat_id', telegramChatId(env));
-  body.set('media', JSON.stringify(mediaItems));
-
-  const threadId = getThreadId(env);
-  if (threadId) body.set('message_thread_id', threadId);
-
-  return sendTelegramRequest(env, 'sendMediaGroup', body);
-}
-
 async function sendSingleJobMessage(env, payload) {
   const candidates = collectCandidateMedia(payload);
   const inspected = [];
@@ -397,27 +399,16 @@ async function sendSingleJobMessage(env, payload) {
     return isVideoUrl(item.url) || isVideoByContentType(item.mediaInfo?.contentType);
   });
 
-  const shownUrls = eligibleMedia.map((item) => item.url);
-  const extraLinks = buildMediaLinks(payload, shownUrls);
-
-  if (eligibleMedia.length >= 2) {
-    const mediaItems = eligibleMedia.slice(0, 4).map((item, index) => ({
-      type: item.type,
-      media: item.url,
-      ...(index === 0 ? { caption: buildMediaCaption(payload, extraLinks), parse_mode: 'HTML' } : {}),
-    }));
-
-    await sendMediaGroup(env, mediaItems);
-
-    return;
-  }
-
   if (eligibleMedia.length === 1) {
-    await sendMedia(env, eligibleMedia[0], buildMediaCaption(payload, extraLinks));
+    const item = eligibleMedia[0];
+    await sendMedia(env, item, buildMediaCaption(payload));
+    await sendLinkMessages(env, buildMediaLinks(payload, [item.url]));
     return;
   }
 
-  await sendText(env, buildTextMessage(payload, extraLinks));
+  const extraLinks = buildMediaLinks(payload);
+  await sendText(env, buildTextMessage(payload));
+  await sendLinkMessages(env, extraLinks);
 }
 
 async function handleNotification(env, payload) {

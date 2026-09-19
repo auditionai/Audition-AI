@@ -39,6 +39,32 @@ const referenceUrlsOf = (row) => {
   addMany(payload.img_url); addMany(payload.image_urls); add(payload.image_url);
   return [...new Set(urls)];
 };
+const assertCompleteReferenceImage = (bytes, contentType, index) => {
+  const type = String(contentType || '').toLowerCase().split(';', 1)[0];
+  const has = (...values) => values.every((value, position) => bytes[position] === value);
+  const endsWith = (...values) => values.every((value, position) => bytes[bytes.length - values.length + position] === value);
+  let valid = bytes.length > 0;
+  if (type === 'image/jpeg') valid = valid && has(0xff, 0xd8) && endsWith(0xff, 0xd9);
+  if (type === 'image/png') valid = valid && has(0x89, 0x50, 0x4e, 0x47) && endsWith(0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82);
+  if (type === 'image/gif') valid = valid && (has(0x47, 0x49, 0x46, 0x38, 0x37, 0x61) || has(0x47, 0x49, 0x46, 0x38, 0x39, 0x61)) && endsWith(0x3b);
+  if (type === 'image/webp') valid = valid && has(0x52, 0x49, 0x46, 0x46) && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50;
+  if (!valid) throw new Error(`GPTI2_INPUT_INVALID: Reference image #${index + 1} is truncated or corrupt. Re-upload the original image before retrying.`);
+};
+const downloadReferenceImage = async (url, index) => {
+  const response = await fetch(url, { signal: AbortSignal.timeout(30000) });
+  if (!response.ok) throw new Error(`GPTI2 reference ${index + 1} unavailable`);
+  const contentType = String(response.headers.get('content-type') || 'image/jpeg').split(';', 1)[0];
+  let bytes = new Uint8Array(await response.arrayBuffer());
+  const isJpeg = contentType === 'image/jpeg';
+  const missingJpegEnd = isJpeg && bytes.length > 2 && bytes[0] === 0xff && bytes[1] === 0xd8 && !(bytes[bytes.length - 2] === 0xff && bytes[bytes.length - 1] === 0xd9);
+  if (missingJpegEnd) {
+    const repaired = new Uint8Array(bytes.length + 2);
+    repaired.set(bytes); repaired[bytes.length] = 0xff; repaired[bytes.length + 1] = 0xd9;
+    bytes = repaired;
+  }
+  assertCompleteReferenceImage(bytes, contentType, index);
+  return { blob: new Blob([bytes], { type: contentType }), repaired: missingJpegEnd };
+};
 const imageToDataUrl = async (url) => {
   const response = await fetch(url, { signal: AbortSignal.timeout(60_000) });
   if (!response.ok) throw new Error(`Sample analysis image fetch failed (${response.status})`);
@@ -114,17 +140,23 @@ const submitGpti2 = async (env, row, report) => {
   const rawPrompt = String(payload.prompt || row.prompt || '').trim();
   if (!rawPrompt) throw new Error('GPTI2_ERROR: prompt is required');
   const refs = referenceUrlsOf(row); const size = gpti2SizeOf(payload); let response;
+  // Validate every reference before any analysis or provider request so a
+  // corrupt R2 object cannot consume a GPTi2 generation attempt.
+  const referenceBlobs = [];
+  for (const [i, url] of refs.entries()) {
+    await report('uploading_refs', `Dang kiem tra anh tham chieu ${i + 1}/${refs.length}.`);
+    const reference = await downloadReferenceImage(url, i);
+    if (reference.repaired) await report('uploading_refs', `Da sua marker ket thuc cho JPEG tham chieu ${i + 1} truoc khi gui GPTi2.`, 'warning');
+    referenceBlobs.push(reference.blob);
+  }
   let prompt = rawPrompt;
   try { prompt = await buildSampleSwapPrompt(env, row, refs, rawPrompt); }
   catch (error) { if (String(payloadObject(row).__recipePayload?.sampleImage || payloadObject(row).sampleImage || '').trim()) { prompt = sampleSwapFallbackPrompt(rawPrompt); await report('building_payload', 'Claude sample analysis unavailable; using the strict sample-swap contract.', 'warning'); } else throw error; }
   if (refs.length) {
     await report('building_payload', `Da dung payload GPTi2: ${model}, ${size}, ${refs.length} anh tham chieu.`);
     const form = new FormData(); form.set('prompt', prompt); form.set('model', model); form.set('size', size); form.set('quality', String(payload.quality || 'low'));
-    for (const [i, url] of refs.entries()) {
-      await report('uploading_refs', `Dang tai va chuan bi anh tham chieu ${i + 1}/${refs.length}.`);
-      const source = await fetch(url, { signal: AbortSignal.timeout(30000) });
-      if (!source.ok) throw new Error(`GPTI2 reference ${i + 1} unavailable`);
-      form.append('image[]', await source.blob(), `reference-${i + 1}.jpg`);
+    for (const [i, blob] of referenceBlobs.entries()) {
+      form.append('image[]', blob, `reference-${i + 1}.jpg`);
       await report('uploading_refs', `Da dua anh tham chieu ${i + 1}/${refs.length} vao payload GPTi2.`, 'success');
     }
     await report('dispatching', `Dang gui GPTi2 edit request voi ${refs.length} anh tham chieu.`);

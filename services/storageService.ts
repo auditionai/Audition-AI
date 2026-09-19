@@ -565,6 +565,31 @@ const processBase64Data = (base64: string): { blob: Blob, type: string } => {
   };
 };
 
+const repairAndAssertCompleteImageBlob = async (blob: Blob) => {
+  const type = String(blob.type || '').toLowerCase().split(';', 1)[0];
+  if (!type.startsWith('image/')) return blob;
+
+  let bytes = new Uint8Array(await blob.arrayBuffer());
+  const has = (...values: number[]) => values.every((value, index) => bytes[index] === value);
+  const endsWith = (...values: number[]) => values.every((value, index) => bytes[bytes.length - values.length + index] === value);
+  // Some mobile encoders produce an otherwise complete JPEG but omit its EOI
+  // marker. Appending it is a lossless container repair; other corruption is
+  // intentionally rejected rather than silently changing the user's image.
+  if (type === 'image/jpeg' && bytes.length > 2 && has(0xff, 0xd8) && !endsWith(0xff, 0xd9)) {
+    const repaired = new Uint8Array(bytes.length + 2);
+    repaired.set(bytes); repaired[bytes.length] = 0xff; repaired[bytes.length + 1] = 0xd9;
+    bytes = repaired;
+  }
+  let valid = bytes.length > 0;
+  if (type === 'image/jpeg') valid = valid && has(0xff, 0xd8) && endsWith(0xff, 0xd9);
+  if (type === 'image/png') valid = valid && has(0x89, 0x50, 0x4e, 0x47) && endsWith(0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82);
+  if (type === 'image/gif') valid = valid && (has(0x47, 0x49, 0x46, 0x38, 0x37, 0x61) || has(0x47, 0x49, 0x46, 0x38, 0x39, 0x61)) && endsWith(0x3b);
+  if (type === 'image/webp') valid = valid && has(0x52, 0x49, 0x46, 0x46) && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50;
+
+  if (!valid) throw new Error('Ảnh tải lên bị thiếu hoặc hỏng. Vui lòng chọn lại tệp ảnh gốc.');
+  return new Blob([bytes], { type });
+};
+
 // --- NEW: UPLOAD INPUT FILE TO R2 ---
 export const uploadFileToR2 = async (file: File | Blob | string, folder: string = 'inputs'): Promise<string> => {
     try {
@@ -580,6 +605,7 @@ export const uploadFileToR2 = async (file: File | Blob | string, folder: string 
             contentType = file.type || 'image/png';
             blob = new Blob([arrayBuffer], { type: contentType });
         }
+        blob = await repairAndAssertCompleteImageBlob(blob);
 
         const authHeader = await getSessionAuthHeader();
         const prepareResponse = await fetchWithTimeout('/api/storage-upload-url', {

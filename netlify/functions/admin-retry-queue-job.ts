@@ -2,7 +2,13 @@ import type { Handler } from '@netlify/functions';
 import { isSystemQueueKind } from '../../shared/queueKinds';
 import { getAuthenticatedRequestErrorStatus, getServiceRoleClient, requireAdminUser } from './_supabase';
 import { triggerBackgroundQueueWorker } from './_queue-launcher';
-import { getTstApiKey, getGommoAccessToken, getGpti2ApiKey } from './_secrets';
+import {
+  getCloudflareQueueWorkerSecret,
+  getCloudflareRouterUrl,
+  getTstApiKey,
+  getGommoAccessToken,
+  getGpti2ApiKey,
+} from './_secrets';
 
 const headers = {
   'Content-Type': 'application/json',
@@ -68,6 +74,30 @@ const buildRetryPayload = (
       message: `Quản trị viên chạy lại job bằng ${provider === 'tst' ? 'API 1' : 'API 2'}.`,
     }],
   };
+};
+
+const wakeCloudflareGpti2Worker = async (jobId: string, queueKind: string, payload: Record<string, unknown>) => {
+  const routerUrl = getCloudflareRouterUrl();
+  const queueWorkerSecret = getCloudflareQueueWorkerSecret();
+  if (!routerUrl || !queueWorkerSecret) {
+    throw new Error('GPTi2 queue router is not configured.');
+  }
+
+  const recipe = toPayload(payload.__recipePayload);
+  const recipeType = String(payload.recipeType || recipe.recipeType || '').trim().toLowerCase();
+  const provider = recipeType === 'image_edit_recipe_v1' || queueKind === 'image_edit_direct'
+    ? 'gpti2_edit'
+    : 'gpti2_image';
+  const response = await fetch(routerUrl, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${queueWorkerSecret}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ jobId, provider }),
+    signal: AbortSignal.timeout(5_000),
+  });
+  if (!response.ok) throw new Error(`Cloudflare queue router returned ${response.status}`);
 };
 
 export const retryFailedQueueJob = async (params: {
@@ -146,7 +176,15 @@ export const retryFailedQueueJob = async (params: {
     lease_token: null, lease_expires_at: null, queue_payload: retryPayload, updated_at: retryNow,
   }).eq('id', jobId);
   if (resetError) throw resetError;
-  try { await triggerBackgroundQueueWorker(params.rawUrl); } catch (workerError) { console.warn('[admin-retry-queue-job] worker launch failed:', workerError); }
+  try {
+    if (provider === 'gpti2') {
+      await wakeCloudflareGpti2Worker(jobId, String(source.queue_kind || ''), retryPayload);
+    } else {
+      await triggerBackgroundQueueWorker(params.rawUrl);
+    }
+  } catch (workerError) {
+    console.warn('[admin-retry-queue-job] queue wake failed:', workerError);
+  }
   return { success: true, reused: false, sourceJobId: jobId, retryJobId: jobId, status: 'queued', queuePosition: 0, provider, costVcoin: Number(source.cost_vcoin || 0) };
 
   /* Legacy child-job implementation retained below only for historical reference. */

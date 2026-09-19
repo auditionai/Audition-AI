@@ -99,6 +99,26 @@ const reconcileTelegramNotifications = async (env) => {
   }
   return { scanned: rows.length, pending: candidates.length, delivered };
 };
+const nudgeQueuedGpti2Jobs = async (env) => {
+  const response = await db(env, 'generated_images?select=id,queue_kind,queue_payload&status=eq.queued&provider=eq.gpti2&queue_kind=in.(image_generate,image_edit_direct)&order=updated_at.asc&limit=100');
+  if (!response.ok) throw new Error(`Queued GPTi2 scan failed (${response.status}): ${await response.text()}`);
+  const jobs = await response.json();
+  let enqueued = 0;
+  for (const job of jobs) {
+    const payload = job.queue_payload && typeof job.queue_payload === 'object' ? job.queue_payload : {};
+    const recipe = payload.__recipePayload && typeof payload.__recipePayload === 'object' ? payload.__recipePayload : {};
+    const isEdit = String(payload.recipeType || recipe.recipeType || '').toLowerCase() === 'image_edit_recipe_v1'
+      || job.queue_kind === 'image_edit_direct';
+    await env.GPTI2_JOBS.send({
+      jobId: job.id,
+      provider: isEdit ? 'gpti2_edit' : 'gpti2_image',
+      action: 'dispatch',
+      requestedAt: new Date().toISOString(),
+    });
+    enqueued += 1;
+  }
+  return { scanned: jobs.length, enqueued };
+};
 const run = async (env) => {
   const result = {};
   for (const [name, body] of [
@@ -110,6 +130,7 @@ const run = async (env) => {
   }
   result.reconcile_failed_generation_refunds = await reconcileFailedRefunds(env);
   result.reconcile_telegram_notifications = await reconcileTelegramNotifications(env);
+  result.nudge_queued_gpti2_jobs = await nudgeQueuedGpti2Jobs(env);
   return result;
 };
 export default {

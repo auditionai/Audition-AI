@@ -999,7 +999,7 @@ export function WorkspaceImage() {
           characterCount: characters.length,
           resolution,
           aspectRatio,
-          quality: isGommoSelected ? gommoPricingInput.quality : aiModel === 'gpt' ? gptQuality : undefined,
+          quality: isGommoSelected ? gommoPricingInput.quality : isGptImageTier ? gptQuality : undefined,
           speed: isGommoSelected ? gommoPricingInput.speed : effectiveSpeedId,
           serverId: effectiveServerId,
           providerMode: isGommoSelected ? providerMode : undefined,

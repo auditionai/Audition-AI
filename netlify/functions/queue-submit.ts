@@ -380,7 +380,16 @@ export const buildLocalPricingOptionCandidates = (queuePayload: Record<string, u
   const payload = getLocalPricingPayload(queuePayload) as Record<string, unknown>;
   const explicitConfigKey = normalizePricingPart(payload.config_key || queuePayload.config_key);
   const resolution = normalizePricingPart(payload.resolution);
-  const quality = normalizePricingPart(payload.quality);
+  const modelId = getQueueModelId(queuePayload);
+  // GPT Image jobs always use an explicit low/medium/high tier. Older clients
+  // omitted `quality` for the 2.5 variants, which made billing fall through to
+  // the unrelated `default` row. Low is the UI default and preserves those
+  // jobs' intended configuration.
+  const quality = normalizePricingPart(payload.quality) || (
+    resolution && /^(image-gpt-2|gpt-image-2(?:\.5-(?:flare|sunburst))?)$/.test(modelId)
+      ? 'low'
+      : ''
+  );
   const speed = normalizePricingPart(payload.speed);
   const duration = normalizePricingPart(payload.duration).replace(/s$/, '');
   const durationWithSuffix = duration ? `${duration}s` : '';
@@ -404,9 +413,13 @@ export const buildLocalPricingOptionCandidates = (queuePayload: Record<string, u
     providerMode,
     resolution,
     speed,
-    speed ? `default-${speed}` : '',
-    'default',
   ];
+  // A generic price is only valid for a request which carries no billable
+  // configuration at all. It must never silently replace a selected size,
+  // duration, quality, or mode.
+  if (!resolution && !quality && !duration && !providerMode && !explicitConfigKey) {
+    candidates.push(speed ? `default-${speed}` : '', 'default');
+  }
   return Array.from(new Set(candidates.filter(Boolean)));
 };
 

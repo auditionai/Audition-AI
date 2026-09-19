@@ -410,7 +410,7 @@ export function WorkspacePromptImage() {
         serverId: isGommoSelected ? undefined : generationServerId,
         providerMode: isGommoSelected ? providerMode : undefined,
         pricingOptionId: isGommoSelected ? gommoPricing?.optionId : undefined,
-        quality: isGommoSelected ? gommoPricingInput.quality : isGptPromptMode ? gptQuality : undefined,
+        quality: isGommoSelected ? gommoPricingInput.quality : isGptImageTier ? gptQuality : undefined,
         __billingUnits: modeCountForPrice,
       };
       const queuedImage: GeneratedImage = {

@@ -497,7 +497,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
         serverId: isGommoSelected ? undefined : generationServerId,
         providerMode: isGommoSelected ? providerMode : undefined,
         pricingOptionId: isGommoSelected ? gommoPricing?.optionId : selectedProvider === 'gpti2' ? gpti2Pricing?.optionId : undefined,
-        quality: isGommoSelected ? gommoPricingInput.quality : isGptPromptMode ? gptQuality : undefined,
+        quality: isGommoSelected ? gommoPricingInput.quality : isGptImageTier ? gptQuality : undefined,
       };
 
       const queuedImage: GeneratedImage = {

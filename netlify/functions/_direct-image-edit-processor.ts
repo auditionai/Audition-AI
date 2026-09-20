@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import type { ImageEditRecipePayload, QueueProcessingStage, QueueProgressLogEntry } from '../../shared/queueRecipes';
-import { SHARPEN_UPSCALE_CHARACTER_LOCK_PROMPT } from '../../shared/imageEditPrompts';
+import { REMOVE_BACKGROUND_CHARACTER_LOCK_PROMPT, SHARPEN_UPSCALE_CHARACTER_LOCK_PROMPT } from '../../shared/imageEditPrompts';
 import { DIRECT_IMAGE_EDIT_QUEUE_KIND } from '../../shared/queueKinds';
 import { getServiceRoleClient } from './_supabase';
-import { runNanoBananaImageEdit } from './_nano-banana-image-edit';
+import { runGpti2DirectImageEdit } from './_nano-banana-image-edit';
 import { compactTerminalQueuePayload } from './_queue-payload-retention';
 
 const DIRECT_EDIT_LEASE_MS = 10 * 60 * 1000;
@@ -296,12 +296,21 @@ export const processDirectImageEditJob = async (jobId: string) => {
   if (job.tool_id === 'sharpen_upscale') {
     runtimePayload = {
       ...runtimePayload,
+      modelId: 'gpt-image-2',
       prompt: SHARPEN_UPSCALE_CHARACTER_LOCK_PROMPT,
     };
+  } else if (job.tool_id === 'remove_bg_pro') {
+    runtimePayload = {
+      ...runtimePayload,
+      modelId: 'gpt-image-2',
+      prompt: REMOVE_BACKGROUND_CHARACTER_LOCK_PROMPT,
+    };
+  } else {
+    runtimePayload = { ...runtimePayload, modelId: 'gpt-image-2' };
   }
 
   try {
-    runtimePayload = appendQueueLog(runtimePayload, 'dispatching', 'Dang goi Nano Banana 2 de xu ly anh.');
+    runtimePayload = appendQueueLog(runtimePayload, 'dispatching', 'Dang goi GPTi2 GPT Image 2 de xu ly anh.');
     await updateJob(job.id, {
       progress: 35,
       queue_payload: runtimePayload,
@@ -309,7 +318,7 @@ export const processDirectImageEditJob = async (jobId: string) => {
       lease_expires_at: new Date(Date.now() + DIRECT_EDIT_LEASE_MS).toISOString(),
     });
 
-    const assetDataUrl = await runNanoBananaImageEdit({
+    const assetDataUrl = await runGpti2DirectImageEdit({
       sourceImage: runtimePayload.sourceImage,
       instruction: runtimePayload.prompt,
       modelId: runtimePayload.modelId,

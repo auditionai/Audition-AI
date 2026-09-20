@@ -170,6 +170,10 @@ const ADMIN_NAV_SECTIONS: Array<{
     },
 ];
 
+const MODEL_VISIBILITY_ROUTE_OPTIONS = GENERATION_PROVIDER_ROUTE_OPTIONS.filter((route) =>
+    route.key === 'image_prompt' || route.key === 'video_generation' || route.key === 'motion_control',
+);
+
 interface SystemHealth {
     gemini: { status: string, latency: number };
     supabase: { status: string, latency: number };
@@ -1294,6 +1298,18 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       }
       setAllowedModelsByFeature(nextAllowedModelsByFeature);
       showToast('Đã cập nhật danh sách model cho chức năng.', 'success');
+  };
+
+  const handleToggleModelVisibility = (featureKey: GenerationProviderRouteKey, modelId: string) => {
+      const normalizedModelId = modelId.trim().toLowerCase();
+      const configuredModels = getAllowedModelsForFeature({ allowedModelsByFeature }, featureKey);
+      const availableModels = (featureModelOptions[featureKey] || []).map((model) => model.id);
+      const visibleModels = configuredModels || availableModels;
+      const nextModels = visibleModels.includes(normalizedModelId)
+          ? visibleModels.filter((id) => id !== normalizedModelId)
+          : [...visibleModels, normalizedModelId];
+
+      void handleChangeFeatureAllowedModels(featureKey, nextModels);
   };
 
   const handleSaveAllPricing = async () => {
@@ -4365,6 +4381,64 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                            </button>
                        </div>
                    </div>
+
+                   <section className="neu-card rounded-3xl border border-slate-300 p-5 shadow-xl dark:border-slate-800">
+                       <div className="flex flex-col gap-2 border-b border-slate-300 pb-4 dark:border-slate-800 sm:flex-row sm:items-start sm:justify-between">
+                           <div>
+                               <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wider text-slate-900 dark:text-white">
+                                   <Icons.Eye className="h-4 w-4 text-audi-cyan" />
+                                   Hiển thị model cho người dùng
+                               </h3>
+                               <p className="mt-1 max-w-3xl text-xs font-semibold leading-relaxed text-slate-700 dark:text-slate-300">
+                                   Tắt model tại đây để ẩn khỏi giao diện tạo ảnh hoặc tạo video. Cấu hình cũng được kiểm tra lại khi nhận job để các yêu cầu cũ không thể dùng model đã tắt.
+                               </p>
+                           </div>
+                           <span className="shrink-0 rounded-full border border-audi-cyan/30 bg-audi-cyan/10 px-2.5 py-1 text-[10px] font-black uppercase text-audi-cyan">Áp dụng ngay</span>
+                       </div>
+                       <div className="mt-4 grid gap-4 xl:grid-cols-3">
+                           {MODEL_VISIBILITY_ROUTE_OPTIONS.map((route) => {
+                               const models = featureModelOptions[route.key] || [];
+                               const configuredModels = getAllowedModelsForFeature({ allowedModelsByFeature }, route.key);
+                               return (
+                                   <div key={`visibility_${route.key}`} className="rounded-2xl border border-white/10 bg-black/[0.12] p-3">
+                                       <div className="flex items-start justify-between gap-3">
+                                           <div>
+                                               <div className="text-xs font-black text-slate-900 dark:text-white">{route.label}</div>
+                                               <div className="mt-1 text-[10px] leading-relaxed text-slate-600 dark:text-slate-400">{route.description}</div>
+                                           </div>
+                                           <span className="rounded-full bg-white/10 px-2 py-1 text-[9px] font-black text-slate-500 dark:text-slate-300">{configuredModels ? `${configuredModels.length}/${models.length}` : `${models.length}/${models.length}`}</span>
+                                       </div>
+                                       <div className="mt-3 max-h-60 space-y-2 overflow-y-auto pr-1">
+                                           {models.map((model) => {
+                                               const visible = configuredModels === null || configuredModels.includes(model.id);
+                                               return (
+                                                   <div key={`visibility_${route.key}_${model.id}`} className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-white/5 px-3 py-2">
+                                                       <span className="min-w-0">
+                                                           <span className="block truncate text-[11px] font-bold text-slate-800 dark:text-slate-100">{model.name}</span>
+                                                           <span className="block truncate font-mono text-[9px] text-slate-500">{model.id}</span>
+                                                       </span>
+                                                       <button
+                                                           type="button"
+                                                           role="switch"
+                                                           aria-checked={visible}
+                                                           aria-label={`${visible ? 'Ẩn' : 'Hiển thị'} ${model.name}`}
+                                                           title={visible ? 'Ẩn model khỏi giao diện người dùng' : 'Hiển thị model cho người dùng'}
+                                                           disabled={switchingGenerationProvider}
+                                                           onClick={() => handleToggleModelVisibility(route.key, model.id)}
+                                                           className={`relative h-6 w-11 shrink-0 rounded-full border transition-colors focus:outline-none focus:ring-2 focus:ring-audi-cyan/60 disabled:cursor-not-allowed disabled:opacity-50 ${visible ? 'border-emerald-400/50 bg-emerald-500/70' : 'border-slate-500 bg-slate-700'}`}
+                                                       >
+                                                           <span className={`absolute top-0.5 h-4.5 w-4.5 rounded-full bg-white shadow transition-transform ${visible ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                                                       </button>
+                                                   </div>
+                                               );
+                                           })}
+                                           {models.length === 0 && <div className="rounded-xl border border-dashed border-white/10 px-3 py-5 text-center text-[10px] font-semibold text-slate-500">Chưa có model khả dụng từ catalog.</div>}
+                                       </div>
+                                   </div>
+                               );
+                           })}
+                       </div>
+                   </section>
 
                    <div className="neu-card p-5 rounded-3xl border border-slate-300 dark:border-slate-800 shadow-xl">
                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">

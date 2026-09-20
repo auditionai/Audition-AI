@@ -202,7 +202,7 @@ export function WorkspaceEdit() {
       displayPrompt = toolConfig.name;
     }
     
-    const engineLabel = activeTier === 'flash' ? `Claude AI Flash ${resolution}` : `Claude AI Pro ${resolution}`;
+    const engineLabel = `GPT Image 2 ${resolution}`;
 
     const placeholderImage: GeneratedImage = {
       id: jobId,
@@ -238,7 +238,7 @@ export function WorkspaceEdit() {
 
       const queuePayload: ImageEditRecipePayload = {
         recipeType: 'image_edit_recipe_v1',
-        modelId: activeTier === 'flash' ? 'vertex-flash' : 'vertex-pro',
+        modelId: 'gpt-image-2',
         prompt: buildInstructionPrompt(featureId, prompt, resolution),
         sourceImage: stagedSource,
         mimeType: extractMimeType(stagedSource) || extractMimeType(sourceImage),

@@ -1,13 +1,9 @@
-export const SHARPEN_UPSCALE_CHARACTER_LOCK_PROMPT = `CHARACTER LOCK: Use the uploaded 3D character image as the ONLY source for face, facial features, hairstyle, hair color, skin tone, outfit, and all clothing/accessory details. Do NOT change, redesign, or reinterpret any part of the character's identity or outfit.
+const CHARACTER_IDENTITY_LOCK = `The uploaded image is the sole, immutable reference. Preserve the exact same character with zero identity or design changes: face, facial expression, eyes, nose, mouth, face shape, hairstyle, hair color, skin tone, body shape, proportions, pose, hands, fingers, outfit, every garment, accessories, shoes, colors, materials, textures, logos, and all visible details. Do not redraw, reinterpret, beautify, humanize, stylize, recolor, crop, replace, add, remove, or invent any part of the character.`;
 
-REFERENCE IMAGE: Use only for full-body pose, standing stance, arm/hand position, camera angle, framing, and composition — replicate the pose and camera angle 100% identical to the reference.
+export const SHARPEN_UPSCALE_CHARACTER_LOCK_PROMPT = `${CHARACTER_IDENTITY_LOCK}
 
-Render the uploaded character standing in the exact same pose, body posture, and camera angle as the reference photo. Full-body front-facing shot, vertical 9:16 aspect ratio.
+TASK: Improve only technical image clarity. Reduce blur, compression artifacts, noise, and jagged edges while preserving every visual detail and the original framing exactly. Do not alter the background, lighting, shadows, camera angle, composition, or any character pixel semantics. Do not generate a new image or a different version of the character. Output the same image, only cleaner and sharper.`;
 
-Hands and fingers must be anatomically perfect, fully separated (no fused/stuck fingers), sharp and detailed.
+export const REMOVE_BACKGROUND_CHARACTER_LOCK_PROMPT = `${CHARACTER_IDENTITY_LOCK}
 
-Facial identity locked exactly to the uploaded character — do not alter eyes, nose, mouth, or face shape.
-
-Background: clean, simple studio-style backdrop, no text, no logos, no watermarks on the image.
-
-Quality: 8K ultra-sharp, high detail, realistic lighting, crisp render, no blur.`;
+TASK: Remove only the background and every non-character/UI element. Keep the complete original character intact with its exact silhouette, pose, framing, facial expression, clothing, shoes, colors, and all details. Preserve clean edge detail around hair, fingers, accessories, and shoes without halos. Place the unchanged character on a solid pure black background (#000000). Do not crop, resize, retouch, redraw, or change the character in any way.`;

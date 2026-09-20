@@ -44,6 +44,7 @@ export const DEFAULT_ALLOWED_MODELS_BY_FEATURE: Partial<Record<GenerationProvide
 };
 
 export const GPTI2_IMAGE_MODELS = ['image-gpt-2', 'gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro'];
+export const VEO3_VIDEO_MODELS = ['veo3.1-fast', 'veo3.1-lite', 'veo3.1-omni', 'veo3.1-quality'];
 
 const normalize = (value: unknown) => String(value || '').trim().toLowerCase();
 

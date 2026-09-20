@@ -11,7 +11,6 @@ const GPTI2_SIZES = {
   '4K': { '1:1': '2048x2048', '16:9': '3840x2160', '9:16': '2160x3840', '4:3': '3200x2400', '3:4': '2400x3200', '3:2': '3360x2240', '2:3': '2240x3360', '21:9': '3840x1632' },
 };
 const GPTI2_MAX_ATTEMPTS = 6;
-const GPTI2_TEMPORARILY_UNAVAILABLE_MODELS = new Set(['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst']);
 const isRetryableGpti2Error = (message) => /timeout|timed out|network|429|rate_limit|rate limit|service busy|temporarily unavailable|5\d\d|provider returned no image|endpoint returned no image/i.test(String(message || ''));
 const retryAfterSeconds = (message) => {
   const match = String(message || '').match(/retry\s+in\s+(\d+)s/i);
@@ -19,9 +18,11 @@ const retryAfterSeconds = (message) => {
 };
 
 const modelOf = (row) => String(payloadObject(row).model || payloadObject(row).modelId || row?.model_used || '').trim().toLowerCase();
-const executableModelOf = (row) => {
-  const requested = modelOf(row);
-  return GPTI2_TEMPORARILY_UNAVAILABLE_MODELS.has(requested) ? 'gpt-image-2' : requested;
+const isDirectImageEdit = (row) => {
+  const payload = payloadObject(row);
+  const recipe = payload.__recipePayload && typeof payload.__recipePayload === 'object' ? payload.__recipePayload : payload;
+  return String(recipe.recipeType || '').trim().toLowerCase() === 'image_edit_recipe_v1'
+    || String(row?.queue_kind || '').trim().toLowerCase() === 'image_edit_direct';
 };
 const gpti2SizeOf = (payload) => GPTI2_SIZES[String(payload.resolution || payload.size || '1K').trim().toUpperCase()]?.[String(payload.aspect_ratio || payload.aspectRatio || '1:1').trim()] || GPTI2_SIZES['1K']['1:1'];
 const isHttpUrl = (value) => typeof value === 'string' && /^https?:\/\//i.test(value.trim());
@@ -135,7 +136,7 @@ const persistGpti2Result = async (env, row, result) => {
 };
 
 const submitGpti2 = async (env, row, report) => {
-  const payload = payloadObject(row); const model = executableModelOf(row);
+  const payload = payloadObject(row); const model = isDirectImageEdit(row) ? 'gpt-image-2' : modelOf(row);
   if (!GPTI2_MODELS.has(model)) throw new Error(`GPTI2_MODEL_UNSUPPORTED: ${model}`);
   const rawPrompt = String(payload.prompt || row.prompt || '').trim();
   if (!rawPrompt) throw new Error('GPTI2_ERROR: prompt is required');
@@ -218,15 +219,12 @@ const dispatch = async (env, row) => {
     });
   };
   await report('preparing', 'Cloudflare GPTi2 Worker da nhan job. Bat dau kiem tra payload.');
-  const requestedModel = modelOf(row);
-  const executableModel = executableModelOf(row);
-  if (requestedModel !== executableModel) {
-    activePayload.modelId = executableModel;
-    activePayload.model = executableModel;
+  if (isDirectImageEdit(row)) {
+    activePayload.model = 'gpt-image-2';
+    activePayload.modelId = 'gpt-image-2';
     if (activePayload.__recipePayload && typeof activePayload.__recipePayload === 'object') {
-      activePayload.__recipePayload = { ...activePayload.__recipePayload, modelId: executableModel, model: executableModel };
+      activePayload.__recipePayload = { ...activePayload.__recipePayload, model: 'gpt-image-2', modelId: 'gpt-image-2' };
     }
-    await report('preparing', `Model ${requestedModel} dang tam ngung tren GPTi2. Da chuyen an toan sang ${executableModel}.`, 'warning');
     row.queue_payload = activePayload;
   }
   const result = await submitGpti2(env, row, report); await report('verifying_output', 'Dang luu ket qua GPTi2 vao R2.');

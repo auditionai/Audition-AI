@@ -51,10 +51,7 @@ const EDITING_TABS = [
 type GenerationTier = 'flash' | 'pro';
 type Resolution = '1K' | '2K' | '4K';
 
-const NANO_BANANA_MODEL_ID_BY_TIER: Record<GenerationTier, string> = {
-  flash: 'nano-banana-2',
-  pro: 'nano-banana-2',
-};
+const GPT_IMAGE_2_MODEL_ID = 'gpt-image-2';
 
 const extractMimeType = (input: string) =>
   input.startsWith('data:') ? input.substring(input.indexOf(':') + 1, input.indexOf(';')) : undefined;
@@ -224,8 +221,8 @@ export const EditingTool: React.FC<EditingToolProps> = ({
     if (!isCatalogReady) {
       notify(
         lang === 'vi'
-          ? 'Dịch vụ Nano Banana 2 đang khởi tạo. Vui lòng thử lại sau ít giây.'
-          : 'Nano Banana 2 is still initializing. Please try again in a few seconds.',
+          ? 'Dịch vụ GPT Image 2 đang khởi tạo. Vui lòng thử lại sau ít giây.'
+          : 'GPT Image 2 is still initializing. Please try again in a few seconds.',
         'error',
       );
       return;
@@ -233,8 +230,8 @@ export const EditingTool: React.FC<EditingToolProps> = ({
     if (!selectedGenerationCost.available) {
       notify(
         lang === 'vi'
-          ? 'Cấu hình Nano Banana 2 hiện không khả dụng cho tool này.'
-          : 'This Nano Banana 2 configuration is not available for the selected tool.',
+          ? 'Cấu hình GPT Image 2 hiện không khả dụng cho tool này.'
+          : 'This GPT Image 2 configuration is not available for the selected tool.',
         'error',
       );
       return;
@@ -265,9 +262,9 @@ export const EditingTool: React.FC<EditingToolProps> = ({
     setIsSubmitting(true);
     const queuedJobId = crypto.randomUUID();
 
-    const vertexModelId = NANO_BANANA_MODEL_ID_BY_TIER[activeTier];
+    const vertexModelId = GPT_IMAGE_2_MODEL_ID;
     const displayPrompt = buildDisplayPrompt(feature.id, prompt, resolution, lang);
-    const engineLabel = `Nano Banana 2 ${resolution}`;
+    const engineLabel = `GPT Image 2 ${resolution}`;
 
     const queuedImage: GeneratedImage = {
       id: queuedJobId,
@@ -595,7 +592,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({
 
             {!isCatalogReady && (
               <div role="alert" className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs font-semibold text-amber-700 dark:text-amber-300">
-                Đang đồng bộ bảng giá Nano Banana 2. Nút xử lý sẽ được mở khi dữ liệu sẵn sàng.
+                Đang đồng bộ bảng giá GPT Image 2. Nút xử lý sẽ được mở khi dữ liệu sẵn sàng.
               </div>
             )}
 
@@ -651,8 +648,8 @@ export const EditingTool: React.FC<EditingToolProps> = ({
                       </div>
                     ) : (
                       <div className="neu-inset-sm p-3 rounded-2xl flex items-center justify-between">
-                          <span className="text-xs font-bold text-slate-500">Nano Banana 2 Edition:</span>
-                          <span className="text-xs font-black text-[#00F2FE] font-mono">{activeTier.toUpperCase()}</span>
+                          <span className="text-xs font-bold text-slate-500">Engine AI:</span>
+                          <span className="text-xs font-black text-[#00F2FE] font-mono">GPT IMAGE 2</span>
                       </div>
                     )}
                 </div>

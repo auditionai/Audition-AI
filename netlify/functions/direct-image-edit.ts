@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Handler } from '@netlify/functions';
 import type { ImageEditRecipePayload, QueueProgressLogEntry } from '../../shared/queueRecipes';
-import { SHARPEN_UPSCALE_CHARACTER_LOCK_PROMPT } from '../../shared/imageEditPrompts';
+import { REMOVE_BACKGROUND_CHARACTER_LOCK_PROMPT, SHARPEN_UPSCALE_CHARACTER_LOCK_PROMPT } from '../../shared/imageEditPrompts';
 import { DIRECT_IMAGE_EDIT_QUEUE_KIND, isDirectImageEditToolId } from '../../shared/queueKinds';
 import { triggerBackgroundFunction } from './_queue-launcher';
 import { createInternalRequestHeaders } from './_internal-request-auth';
@@ -234,7 +234,7 @@ export const handler: Handler = async (event) => {
     const toolId = String(body.toolId || '').trim();
     const toolName = String(body.toolName || toolId || 'Image Edit').trim();
     const prompt = String(body.prompt || '').trim();
-    const engine = String(body.engine || 'Nano Banana 2').trim();
+    const engine = 'GPT Image 2';
     const showInGenerationHistory = body.showInGenerationHistory === true;
     let queuePayload = body.queuePayload;
 
@@ -246,10 +246,17 @@ export const handler: Handler = async (event) => {
       throw new Error('Missing direct image edit payload');
     }
 
+    queuePayload = { ...queuePayload, modelId: 'gpt-image-2' };
+
     if (toolId === 'sharpen_upscale') {
       queuePayload = {
         ...queuePayload,
         prompt: SHARPEN_UPSCALE_CHARACTER_LOCK_PROMPT,
+      };
+    } else if (toolId === 'remove_bg_pro') {
+      queuePayload = {
+        ...queuePayload,
+        prompt: REMOVE_BACKGROUND_CHARACTER_LOCK_PROMPT,
       };
     }
 

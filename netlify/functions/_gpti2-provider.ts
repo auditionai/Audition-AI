@@ -236,8 +236,8 @@ export const pollGpti2Job = async (jobId: string, inlineResult?: string) => {
 
 export const cancelGpti2Job = async () => false;
 
-// Direct editor jobs share the GPTi2 queue provider but need a completed asset
-// in the same server invocation. Nano Banana 2 is the sole editor model.
+// Direct editor jobs share the GPTi2 queue provider and always use GPT Image 2
+// so source-image edits follow the synchronous GPTi2 image-edit contract.
 export const runGpti2ImageEdit = async (params: {
   sourceImage: string;
   instruction: string;
@@ -247,7 +247,7 @@ export const runGpti2ImageEdit = async (params: {
     throw new Error('GPTI2_ERROR: Direct image editing requires an uploaded HTTPS source image.');
   }
   const submission = await submitGpti2Job('image_generate', {
-    model: 'nano-banana-2',
+    model: 'gpt-image-2',
     prompt: params.instruction,
     image_urls: [params.sourceImage],
     aspect_ratio: params.aspectRatio || '1:1',
@@ -255,8 +255,8 @@ export const runGpti2ImageEdit = async (params: {
   for (let attempt = 0; attempt < 60; attempt += 1) {
     const state = await pollGpti2Job(submission.jobId, submission.inlineResult);
     if (state.status === 'completed' && state.result) return state.result;
-    if (state.status === 'failed') throw new Error(`GPTI2_ERROR: ${state.error || 'Nano Banana 2 edit failed'}`);
+    if (state.status === 'failed') throw new Error(`GPTI2_ERROR: ${state.error || 'GPT Image 2 edit failed'}`);
     await new Promise((resolve) => setTimeout(resolve, 5_000));
   }
-  throw new Error('GPTI2_ERROR: Nano Banana 2 edit timed out.');
+  throw new Error('GPTI2_ERROR: GPT Image 2 edit timed out.');
 };

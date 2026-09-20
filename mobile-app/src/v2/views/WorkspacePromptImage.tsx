@@ -540,7 +540,9 @@ export function WorkspacePromptImage() {
         <div className="space-y-2">
           <h3 className="ml-1 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-zinc-500">MODEL AI</h3>
           <div className="grid gap-3 sm:grid-cols-2">
-            {MODEL_TABS.map(({ tier, label, tag, title, description, icon: Icon, accent }) => {
+            {MODEL_TABS.filter(({ tier }) =>
+              isModelAllowedForFeature(providerConfig, 'image_prompt', getGenerationModelId(tier)),
+            ).map(({ tier, label, tag, title, description, icon: Icon, accent }) => {
               const selected = aiModel === tier;
               const available = isModelAllowedForFeature(providerConfig, 'image_prompt', getGenerationModelId(tier));
               return (

@@ -139,7 +139,7 @@ const buildMissingImageError = (data: any, modelName: string) => {
     : `Claude did not return an edited image (${modelName}).`;
 };
 
-export const runNanoBananaImageEdit = async ({
+export const runGpti2DirectImageEdit = async ({
   sourceImage,
   instruction,
   modelId,

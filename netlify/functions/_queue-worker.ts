@@ -18,7 +18,7 @@ import {
   TST_PROMPT_MAX_CHARACTERS,
   uploadImageToTst,
 } from './_queue-recipes';
-import { runNanoBananaImageEdit } from './_nano-banana-image-edit';
+import { runGpti2DirectImageEdit } from './_nano-banana-image-edit';
 import {
   buildImageProviderPrompt,
   getImageCharacterReferenceGroups,
@@ -3158,7 +3158,7 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
       const resultUrl = await withTimeout(
         withLeaseHeartbeat(
           job.id,
-          runNanoBananaImageEdit({
+          runGpti2DirectImageEdit({
             sourceImage: editPayload.sourceImage,
             instruction: editPayload.prompt,
             modelId: editPayload.modelId,

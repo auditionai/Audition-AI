@@ -631,7 +631,9 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
             <div className="space-y-3">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Mô hình AI</label>
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {MODEL_TABS.map(({ tier, label, tag, title, description, icon: Icon, accent }) => {
+                {MODEL_TABS.filter(({ tier }) =>
+                  isModelAllowedForFeature(providerConfig, 'image_prompt', getGenerationModelId(tier)),
+                ).map(({ tier, label, tag, title, description, icon: Icon, accent }) => {
                   const selected = aiModel === tier;
                   const available = isModelAllowedForFeature(providerConfig, 'image_prompt', getGenerationModelId(tier));
                   return (

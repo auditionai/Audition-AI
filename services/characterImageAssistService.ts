@@ -1,7 +1,7 @@
 import { uploadFileToR2 } from './storageService';
 import { runDirectImageEdit } from './directImageEditService';
 import type { ImageEditRecipePayload } from '../shared/queueRecipes';
-import { SHARPEN_UPSCALE_CHARACTER_LOCK_PROMPT } from '../shared/imageEditPrompts';
+import { REMOVE_BACKGROUND_CHARACTER_LOCK_PROMPT, SHARPEN_UPSCALE_CHARACTER_LOCK_PROMPT } from '../shared/imageEditPrompts';
 import { calculateAspectRatioString, loadImageWithTimeout } from '../utils/imageProcessor';
 
 export type CharacterAssistantToolId = 'remove_bg_pro' | 'sharpen_upscale';
@@ -12,11 +12,11 @@ export const CHARACTER_ASSISTANT_RESOLUTION: AssistantResolution = '2K';
 const TOOL_META: Record<CharacterAssistantToolId, { toolName: string; modelId: string }> = {
   remove_bg_pro: {
     toolName: 'Tách Nền',
-    modelId: 'nano-banana-2',
+    modelId: 'gpt-image-2',
   },
   sharpen_upscale: {
     toolName: 'Làm Nét',
-    modelId: 'nano-banana-2',
+    modelId: 'gpt-image-2',
   },
 };
 
@@ -42,17 +42,7 @@ export const buildEnhancedVertexEditInstruction = (
     return SHARPEN_UPSCALE_CHARACTER_LOCK_PROMPT;
   }
 
-  return [
-    'Remove the background completely and isolate the main character on a pure black background (#000000).',
-    'CRITICAL GOAL: extract the exact same uploaded character cleanly, even when the source is a phone photo, a game screenshot, a noisy monitor capture, or a cluttered UI scene.',
-    'Preserve the exact face, hairstyle, skin tone, body proportions, outfit, shoes, accessories, tattoos, and stylized game-avatar topology.',
-    'Delete the original environment, game UI, menus, icons, text, profile-card frame, shopping-mall panel, lobby window, room background, outdoor scene, extra objects, and every non-character element.',
-    'If the character appears inside an in-game card, poster, framed panel, or UI window, remove that card or frame too and keep only the character.',
-    'Keep clean edges around hair, fingers, shoes, and small accessories. Preserve all subject details sharply without soft halos.',
-    'Treat a solid black background as the correct final output. Do NOT replace it with transparency, gradients, or a new scene.',
-    'Do NOT crop, blur, downscale, repaint the character, change colors, replace the face, humanize the subject, or invent new body parts or clothing.',
-    'Output a strong, production-ready character cutout on black for identity-accurate AI image generation.',
-  ].join(' ');
+  return REMOVE_BACKGROUND_CHARACTER_LOCK_PROMPT;
 };
 
 export const buildCharacterAssistantInstruction = buildEnhancedVertexEditInstruction;
@@ -101,7 +91,7 @@ export const runCharacterAssistantAction = async ({
     prompt: displayPrompt,
     toolId,
     toolName: metadata.toolName,
-    engine: `Nano Banana 2 ${resolution}`,
+    engine: `GPT Image 2 ${resolution}`,
     costVcoin,
     showInGenerationHistory,
     queuePayload,

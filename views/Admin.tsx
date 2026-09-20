@@ -85,6 +85,7 @@ import {
     DEFAULT_PROVIDER_BY_FEATURE,
     GENERATION_PROVIDER_ROUTE_OPTIONS,
     getAllowedModelsForFeature,
+    VEO3_VIDEO_MODELS,
     type GenerationProviderRouteKey,
 } from '../shared/providerRouting';
 import { checkR2Connection, getUserImagesFromStorage, cleanupExpiredImages, cleanupR2Directly } from '../services/storageService';
@@ -1002,6 +1003,15 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               models.set('gpt-image-2.5-sunburst', 'GPTi2 · GPT Image 2.5 Sunburst');
               models.set('nano-banana-2', 'GPTi2 · Nano Banana 2');
               models.set('nano-banana-pro', 'GPTi2 · Nano Banana Pro');
+          }
+          if (route.key === 'video_generation') {
+              const labels: Record<string, string> = {
+                  'veo3.1-fast': 'VEO 3.1 Fast',
+                  'veo3.1-lite': 'VEO 3.1 Lite',
+                  'veo3.1-omni': 'VEO 3.1 Omni',
+                  'veo3.1-quality': 'VEO 3.1 Quality',
+              };
+              for (const modelId of VEO3_VIDEO_MODELS) models.set(modelId, labels[modelId]);
           }
           result[route.key] = Array.from(models, ([id, name]) => ({ id, name }))
               .sort((a, b) => a.name.localeCompare(b.name, 'vi'));

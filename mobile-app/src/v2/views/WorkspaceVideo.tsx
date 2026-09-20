@@ -35,7 +35,7 @@ import type { ModelPricing } from '../../services/economyService';
 import type { GeneratedImage } from '../../types';
 import { compileVideoScriptForDuration } from '../../../../shared/videoScriptCompiler';
 import { fetchProviderCatalog, getAuditionProviderPricing, getGommoPricingInput, getMinimumAuditionModelPrice, getGommoModelForAudition, isGommoCatalogModelAvailable, resolveProviderForModel, type GommoCatalogModel, type GommoProviderCatalog } from '../../services/providerCatalog';
-import { isModelAllowedForFeature } from '../../../../shared/providerRouting';
+import { isModelAllowedForFeature, VEO3_VIDEO_MODELS } from '../../../../shared/providerRouting';
 import { VIDEO_GENERATION_TIPS } from '../../../../shared/videoGenerationTips';
 import { getVideoModelPresentation } from '../../../../shared/videoModelPresentation';
 
@@ -343,6 +343,9 @@ export function WorkspaceVideo() {
   }));
 
   const selectedVideoSpec = getVideoModelSpecs(pricingEntries, runtimeModels).find((spec: any) => spec.modelId === videoModel);
+  const showVeoFamily = VEO3_VIDEO_MODELS.some((modelId) =>
+    isModelAllowedForFeature(providerConfig, 'video_generation', modelId),
+  );
   const isGommoVideoSelected = activeMode === 'video_ai' && resolveProviderForModel(providerConfig, videoModel, 'video_generation') === 'gommo';
   const isGommoMotionSelected = activeMode === 'motion_control' && resolveProviderForModel(providerConfig, motionModel, 'motion_control') === 'gommo';
   const isGommoSelected = isGommoVideoSelected || isGommoMotionSelected;
@@ -1033,7 +1036,7 @@ export function WorkspaceVideo() {
               <div className="col-span-2 space-y-3">
                 <h3 className="text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider ml-1">Model AI</h3>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  {VIDEO_MODEL_FAMILY_ORDER.map((family) => {
+                  {VIDEO_MODEL_FAMILY_ORDER.filter((family) => family !== 'veo' || showVeoFamily).map((family) => {
                     const meta = VIDEO_MODEL_FAMILY_META[family];
                     const familyModels = getModelsByFamily(videoModelOptions, family);
                     const isActive = videoModelFamily === family;

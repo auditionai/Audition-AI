@@ -49,7 +49,7 @@ import {
   type GommoCatalogModel,
   type GommoProviderCatalog,
 } from '../../services/providerCatalog';
-import { isModelAllowedForFeature } from '../../shared/providerRouting';
+import { isModelAllowedForFeature, VEO3_VIDEO_MODELS } from '../../shared/providerRouting';
 import { VIDEO_GENERATION_TIPS } from '../../shared/videoGenerationTips';
 import { getVideoModelPresentation } from '../../shared/videoModelPresentation';
 
@@ -475,6 +475,9 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
   const [isConcurrencyExpanded, setIsConcurrencyExpanded] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
   const selectedVideoProvider = resolveProviderForModel(providerConfig, videoModel, 'video_generation');
+  const showVeoFamily = VEO3_VIDEO_MODELS.some((modelId) =>
+      isModelAllowedForFeature(providerConfig, 'video_generation', modelId),
+  );
   const isGommoVideoSelected = activeMode === 'video_ai' && selectedVideoProvider === 'gommo';
   const selectedGommoVideoModel = getGommoModelForAudition(gommoCatalog, videoModel);
   const selectedMotionProvider = resolveProviderForModel(providerConfig, motionModel, 'motion_control');
@@ -1519,7 +1522,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
               {activeMode === 'video_ai' ? (
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {VIDEO_MODEL_FAMILY_ORDER.map((family) => {
+                    {VIDEO_MODEL_FAMILY_ORDER.filter((family) => family !== 'veo' || showVeoFamily).map((family) => {
                       const meta = VIDEO_MODEL_FAMILY_META[family];
                       const familyModels = getModelsByFamily(videoModelOptions, family);
                       const FamilyIcon = getVideoFamilyIcon(family);

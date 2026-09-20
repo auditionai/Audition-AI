@@ -113,7 +113,8 @@ const VIDEO_FAMILY_STYLES: Record<VideoModelFamily, { active: string; badge: str
   other: { active: 'border-rose-300 bg-rose-50 text-rose-900 shadow-[0_8px_24px_rgba(251,113,133,0.18)] dark:border-rose-500/40 dark:bg-rose-500/15 dark:text-white', badge: 'bg-gradient-to-r from-rose-400 to-red-600', icon: 'bg-gradient-to-br from-rose-400 to-red-600 text-white', model: 'bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-500/10 dark:text-rose-200 dark:border-rose-500/30' },
 };
 
-const getFamilyPriceLabel = (models: AIModelOption[]) => {
+const getFamilyPriceLabel = (models: AIModelOption[], family?: VideoModelFamily) => {
+  if (models.length === 0 && family === 'veo') return 'VEO3 chưa được provider mở';
   if (models.length === 0) return 'Bảo trì';
   const prices = models.map((model) => model.price).filter((price) => Number.isFinite(price) && price > 0);
   if (prices.length === 0) return 'Đang đồng bộ';
@@ -1031,7 +1032,7 @@ export function WorkspaceVideo() {
             <div data-tour-id="mobile.video.settings" className="grid grid-cols-2 gap-4">
               <div className="col-span-2 space-y-3">
                 <h3 className="text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider ml-1">Model AI</h3>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                   {VIDEO_MODEL_FAMILY_ORDER.map((family) => {
                     const meta = VIDEO_MODEL_FAMILY_META[family];
                     const familyModels = getModelsByFamily(videoModelOptions, family);
@@ -1063,7 +1064,7 @@ export function WorkspaceVideo() {
                           <FamilyIcon className="h-4 w-4" />
                         </div>
                         <div className="truncate text-[12px] font-black" title={familyLabel}>{familyLabel}</div>
-                        <div className="mt-1 text-[9px] font-black text-cyan-600 dark:text-cyan-300">{getFamilyPriceLabel(familyModels)}</div>
+                        <div className="mt-1 text-[9px] font-black text-cyan-600 dark:text-cyan-300">{getFamilyPriceLabel(familyModels, family)}</div>
                       </button>
                     );
                   })}

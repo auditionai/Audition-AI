@@ -123,8 +123,8 @@ const getVideoModelFamily = (model?: Pick<AIModelOption, 'id' | 'name'> | null):
 const getModelsByFamily = (models: AIModelOption[], family: VideoModelFamily) =>
     models.filter((model) => getVideoModelFamily(model) === family);
 
-const getFamilyPriceLabel = (models: AIModelOption[]) => {
-    if (models.length === 0) return 'Không khả dụng';
+const getFamilyPriceLabel = (models: AIModelOption[], family?: VideoModelFamily) => {
+    if (models.length === 0) return family === 'veo' ? 'VEO3 chưa được provider mở' : 'Không khả dụng';
     const prices = models.map((model) => model.price).filter((price) => Number.isFinite(price) && price > 0);
     if (prices.length === 0) return 'Đang đồng bộ';
     return `Từ ${Math.min(...prices)} VC`;
@@ -1518,7 +1518,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
             <div className="space-y-5">
               {activeMode === 'video_ai' ? (
                 <div className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {VIDEO_MODEL_FAMILY_ORDER.map((family) => {
                       const meta = VIDEO_MODEL_FAMILY_META[family];
                       const familyModels = getModelsByFamily(videoModelOptions, family);
@@ -1547,7 +1547,7 @@ export const VideoTool: React.FC<VideoToolProps> = ({ feature, lang, onNavigateT
                             </span>
                           </span>
                           <span className="block mt-2 truncate text-sm font-black font-accent text-slate-900 dark:text-white" title={familyLabel}>{familyLabel}</span>
-                          <span className="block mt-0.5 text-[10px] font-bold text-slate-600 dark:text-slate-300">{getFamilyPriceLabel(familyModels)}</span>
+                          <span className="block mt-0.5 text-[10px] font-bold text-slate-600 dark:text-slate-300">{getFamilyPriceLabel(familyModels, family)}</span>
                         </button>
                       );
                     })}

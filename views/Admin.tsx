@@ -174,6 +174,27 @@ const MODEL_VISIBILITY_ROUTE_OPTIONS = GENERATION_PROVIDER_ROUTE_OPTIONS.filter(
     route.key === 'image_prompt' || route.key === 'video_generation' || route.key === 'motion_control',
 );
 
+const getModelFamilyLabel = (modelId: string) => {
+    const normalized = modelId.trim().toLowerCase();
+    if (normalized.includes('gpt-image') || normalized.includes('image-gpt')) return 'GPT Image';
+    if (normalized.includes('nano-banana')) return 'Nano Banana';
+    if (normalized.includes('grok')) return 'Grok';
+    if (normalized.includes('seedance')) return 'Seedance';
+    if (normalized.includes('kling')) return 'Kling';
+    if (normalized.includes('veo')) return 'VEO';
+    if (normalized.includes('motion-control')) return 'Motion Control';
+    return 'Khác';
+};
+
+const groupModelsByFamily = <T extends { id: string }>(models: T[]) => {
+    const groups = new Map<string, T[]>();
+    for (const model of models) {
+        const family = getModelFamilyLabel(model.id);
+        groups.set(family, [...(groups.get(family) || []), model]);
+    }
+    return Array.from(groups.entries());
+};
+
 interface SystemHealth {
     gemini: { status: string, latency: number };
     supabase: { status: string, latency: number };
@@ -4408,8 +4429,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                            </div>
                                            <span className="rounded-full bg-white/10 px-2 py-1 text-[9px] font-black text-slate-500 dark:text-slate-300">{configuredModels ? `${configuredModels.length}/${models.length}` : `${models.length}/${models.length}`}</span>
                                        </div>
-                                       <div className="mt-3 max-h-60 space-y-2 overflow-y-auto pr-1">
-                                           {models.map((model) => {
+                                       <div className="mt-3 max-h-60 space-y-3 overflow-y-auto pr-1">
+                                           {groupModelsByFamily(models).map(([family, familyModels]) => (
+                                               <div key={`${route.key}_${family}`} className="space-y-2">
+                                                   <div className="px-1 text-[9px] font-black uppercase tracking-wider text-slate-500">{family}</div>
+                                                   {familyModels.map((model) => {
                                                const visible = configuredModels === null || configuredModels.includes(model.id);
                                                return (
                                                    <div key={`visibility_${route.key}_${model.id}`} className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-white/5 px-3 py-2">
@@ -4431,7 +4455,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                        </button>
                                                    </div>
                                                );
-                                           })}
+                                                   })}
+                                               </div>
+                                           ))}
                                            {models.length === 0 && <div className="rounded-xl border border-dashed border-white/10 px-3 py-5 text-center text-[10px] font-semibold text-slate-500">Chưa có model khả dụng từ catalog.</div>}
                                        </div>
                                    </div>

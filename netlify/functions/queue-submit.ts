@@ -9,8 +9,9 @@ import { normalizeAndValidateGommoPayload } from './_disabled-provider';
 import { isProviderServerAllowedByConfig } from './_server-availability';
 import { getGommoServerIdForMode } from '../../shared/gommoServerRouting';
 import {
-  DEFAULT_PROVIDER_BY_FEATURE,
-  getAllowedModelsForFeature,
+    DEFAULT_PROVIDER_BY_FEATURE,
+  GPTI2_IMAGE_MODELS,
+    getAllowedModelsForFeature,
   inferGenerationProviderRouteKey,
   type GenerationProviderRouteKey,
 } from '../../shared/providerRouting';
@@ -857,9 +858,12 @@ export const handler: Handler = async (event) => {
     }
     const normalizedQueueKind = String(body.queueKind || '').trim().toLowerCase();
     const isVideoOrMotionQueue = body.assetType === 'video' || normalizedQueueKind === 'video_generate' || normalizedQueueKind === 'motion_generate';
-    const targetProvider: GenerationProvider = isVideoOrMotionQueue && routingConfig.provider === 'gpti2'
-      ? routingConfig.priority.find((provider) => provider === 'tst' || provider === 'gommo') || 'tst'
-      : routingConfig.provider;
+    const isGpti2ImageModel = !isVideoOrMotionQueue && GPTI2_IMAGE_MODELS.includes(modelId);
+    const targetProvider: GenerationProvider = isGpti2ImageModel
+      ? 'gpti2'
+      : isVideoOrMotionQueue && routingConfig.provider === 'gpti2'
+        ? routingConfig.priority.find((provider) => provider === 'tst' || provider === 'gommo') || 'tst'
+        : routingConfig.provider;
     ensureProviderConfiguredForQueueKind(body.queueKind, targetProvider);
     if (
       TST_QUEUE_KINDS.has(String(body.queueKind || '').trim().toLowerCase()) &&
@@ -884,8 +888,8 @@ export const handler: Handler = async (event) => {
       ...body.queuePayload,
       __targetProvider: targetProvider,
       __providerRouteKey: providerRouteKey,
-      __smartProviderFallbackEnabled: routingConfig.smartFallbackEnabled,
-      __providerPriority: routingConfig.priority,
+      __smartProviderFallbackEnabled: isGpti2ImageModel ? false : routingConfig.smartFallbackEnabled,
+      __providerPriority: isGpti2ImageModel ? ['gpti2'] : routingConfig.priority,
     };
 
     let row: any;

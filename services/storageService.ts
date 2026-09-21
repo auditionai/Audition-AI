@@ -135,8 +135,8 @@ const saveLocalImage = async (image: GeneratedImage): Promise<void> => {
   });
 };
 
-const getSessionAuthHeader = async () => {
-  return getSupabaseAuthHeader();
+const getSessionAuthHeader = async (force = false) => {
+  return getSupabaseAuthHeader(force);
 };
 
 const fetchWithTimeout = async (input: RequestInfo | URL, init: RequestInit, timeoutMs: number) => {
@@ -607,18 +607,19 @@ export const uploadFileToR2 = async (file: File | Blob | string, folder: string 
         }
         blob = await repairAndAssertCompleteImageBlob(blob);
 
-        const authHeader = await getSessionAuthHeader();
-        const prepareResponse = await fetchWithTimeout('/api/storage-upload-url', {
+        const prepareUpload = async (forceRefresh = false) => fetchWithTimeout('/api/storage-upload-url', {
             method: 'POST',
             headers: {
-                ...authHeader,
+                ...(await getSessionAuthHeader(forceRefresh)),
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({ folder, contentType }),
         }, 15_000);
+        let prepareResponse = await prepareUpload();
+        if (prepareResponse.status === 401) prepareResponse = await prepareUpload(true);
         const preparePayload = await prepareResponse.json().catch(() => ({}));
         if (!prepareResponse.ok || !preparePayload?.publicUrl) {
-            throw new Error(preparePayload?.error || 'Không thể chuẩn bị vùng tải tệp.');
+            throw new Error(preparePayload?.error || `Upload staging preparation failed (${prepareResponse.status}).`);
         }
 
         if (preparePayload.provider === 'supabase') {
@@ -650,7 +651,8 @@ export const uploadFileToR2 = async (file: File | Blob | string, folder: string 
             }, 25_000);
         }
         if (!uploadResponse.ok) {
-            throw new Error(`Tải tệp thất bại (${uploadResponse.status}).`);
+            const detail = await uploadResponse.text().catch(() => '');
+            throw new Error(`Upload failed (${uploadResponse.status})${detail ? `: ${detail.slice(0, 180)}` : ''}.`);
         }
 
         return String(preparePayload.publicUrl);

@@ -174,7 +174,8 @@ const tryStageGenerationInput = async (source: string, folder: string) => {
         return await uploadFileToR2(source, folder);
     } catch (error) {
         console.warn('[GenerationTool] Failed to stage generation input to storage.', error);
-        throw new Error('Không thể tải ảnh tham chiếu lên vùng đệm. Vui lòng thử lại.');
+        const reason = error instanceof Error ? error.message : '';
+        throw new Error(`Không thể tải ảnh tham chiếu lên vùng đệm${reason ? `: ${reason}` : '. Vui lòng thử lại.'}`);
     }
 };
 

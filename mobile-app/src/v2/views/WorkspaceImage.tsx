@@ -198,7 +198,8 @@ const tryStageGenerationInput = async (source: string, folder: string) => {
     return await uploadFileToR2(source, folder);
   } catch (error) {
     console.warn('[WorkspaceImage] Failed to stage generation input.', error);
-    throw new Error('Không thể tải ảnh nhân vật lên vùng đệm. Vui lòng thử lại.');
+    const reason = error instanceof Error ? error.message : '';
+    throw new Error(`Không thể tải ảnh nhân vật lên vùng đệm${reason ? `: ${reason}` : '. Vui lòng thử lại.'}`);
   }
 };
 

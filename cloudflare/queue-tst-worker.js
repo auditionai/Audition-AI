@@ -17,6 +17,16 @@ const TST_CATALOG_TTL_MS = 5 * 60 * 1000;
 let tstCatalogCache = null;
 
 const modelOf = (row) => String(payloadObject(row).model || payloadObject(row).modelId || row?.model_used || '').trim().toLowerCase();
+const GPTI2_IMAGE_MODELS = new Set(['image-gpt-2', 'gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro']);
+const isGpti2ImageJob = (row) => {
+  const payload = payloadObject(row);
+  const recipe = payload.__recipePayload && typeof payload.__recipePayload === 'object' ? payload.__recipePayload : payload;
+  const model = String(recipe.model || recipe.modelId || modelOf(row)).trim().toLowerCase();
+  const recipeType = String(recipe.recipeType || '').trim().toLowerCase();
+  const queueKind = String(row?.queue_kind || '').trim().toLowerCase();
+  return GPTI2_IMAGE_MODELS.has(model)
+    && (queueKind === 'image_generate' || queueKind === 'image_edit_direct' || recipeType === 'image_edit_recipe_v1');
+};
 const recipePayloadOf = (row) => {
   const payload = payloadObject(row);
   return payload.__recipePayload && typeof payload.__recipePayload === 'object' ? payload.__recipePayload : payload;
@@ -488,6 +498,18 @@ const dispatch = async (env, row, provider) => {
   await schedulePoll(env, row.id, provider);
 };
 
+const redirectGpti2ImageJob = async (env, row) => {
+  const payload = appendLog(payloadObject(row), 'queued', `Model ${modelOf(row)} chi dung GPTi2. Da chuyen job sang GPTi2 truoc khi gui provider.`, 'warning');
+  await updateJob(env, row.id, {
+    status: 'queued', progress: 0, provider: 'gpti2', job_id: null, next_poll_at: null,
+    lease_token: null, lease_expires_at: null, processing_started_at: null, error_message: null,
+    queue_payload: { ...payload, __targetProvider: 'gpti2', __smartProviderFallbackEnabled: false, __providerPriority: ['gpti2'] },
+  });
+  const recipe = payloadObject(row).__recipePayload && typeof payloadObject(row).__recipePayload === 'object' ? payloadObject(row).__recipePayload : payloadObject(row);
+  const isEdit = String(recipe.recipeType || '').trim().toLowerCase() === 'image_edit_recipe_v1' || String(row.queue_kind || '').trim().toLowerCase() === 'image_edit_direct';
+  await env.GPTI2_JOBS.send({ jobId: row.id, provider: isEdit ? 'gpti2_edit' : 'gpti2_image', action: 'dispatch', requestedAt: new Date().toISOString() });
+};
+
 const processMessage = async (env, message) => {
   const body = message.body && typeof message.body === 'object' ? message.body : {};
   const jobId = String(body.jobId || '').trim();
@@ -512,6 +534,11 @@ const processMessage = async (env, message) => {
   }
 
   if (action === 'poll') { await pollRow(env, row, provider); return { ack: true, reason: 'polled' }; }
+
+  if (isGpti2ImageJob(row)) {
+    await redirectGpti2ImageJob(env, row);
+    return { ack: true, reason: 'redirected_to_gpti2' };
+  }
 
   if (!isTstLane(row, provider)) { console.error(JSON.stringify({ worker: 'queue-tst', event: 'wrong_lane', jobId, provider, rowProvider: row.provider })); return { ack: true, reason: 'wrong_lane' }; }
   try { await dispatch(env, row, provider); return { ack: true, reason: 'dispatched' }; }

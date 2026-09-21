@@ -613,6 +613,89 @@ const reencodeDecodableImageBlob = async (blob: Blob) => {
   }
 };
 
+// GPTi2 rejects oversized and occasionally poorly encoded reference files.
+// Stage user inputs as a conventional JPEG below the provider-safe payload
+// size before they ever leave the browser. Generated/published assets retain
+// their original bytes because this is only used for `inputs/` folders.
+const GPTI2_REFERENCE_TARGET_BYTES = Math.floor(2.8 * 1024 * 1024);
+const GPTI2_REFERENCE_PREFERRED_MIN_BYTES = 1 * 1024 * 1024;
+// Always try the source dimensions first. Reference identity benefits more
+// from preserved pixels than from an unnecessarily small upload.
+const JPEG_QUALITY_STEPS = [0.96, 0.94, 0.92, 0.9, 0.88, 0.86, 0.84, 0.82, 0.78, 0.72];
+
+const canvasToJpegBlob = (canvas: HTMLCanvasElement, quality: number) =>
+  new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((result) => {
+      if (result) {
+        resolve(result);
+        return;
+      }
+      reject(new Error('Image compression failed.'));
+    }, 'image/jpeg', quality);
+  });
+
+const compressReferenceImageForProvider = async (blob: Blob) => {
+  const imageType = String(blob.type || '').toLowerCase().split(';', 1)[0];
+  if (!imageType.startsWith('image/') || blob.size <= GPTI2_REFERENCE_TARGET_BYTES) {
+    return blob;
+  }
+  if (typeof document === 'undefined') {
+    throw new Error('Image compression is unavailable in this environment.');
+  }
+
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const element = new Image();
+      element.onload = () => resolve(element);
+      element.onerror = () => reject(new Error('Image could not be decoded for compression.'));
+      element.src = objectUrl;
+    });
+    const sourceWidth = image.naturalWidth;
+    const sourceHeight = image.naturalHeight;
+    if (!sourceWidth || !sourceHeight) throw new Error('Image has no dimensions.');
+
+    let maxEdge = Math.max(sourceWidth, sourceHeight);
+    let smallest: Blob | null = null;
+    let bestWithinTarget: Blob | null = null;
+    for (let resizeAttempt = 0; resizeAttempt < 5; resizeAttempt += 1) {
+      const scale = Math.min(1, maxEdge / Math.max(sourceWidth, sourceHeight));
+      const width = Math.max(1, Math.round(sourceWidth * scale));
+      const height = Math.max(1, Math.round(sourceHeight * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('Image canvas is unavailable.');
+      // JPEG has no alpha; use white rather than a black transparent fill.
+      context.fillStyle = '#ffffff';
+      context.fillRect(0, 0, width, height);
+      context.imageSmoothingEnabled = true;
+      context.imageSmoothingQuality = 'high';
+      context.drawImage(image, 0, 0, width, height);
+
+      for (const quality of JPEG_QUALITY_STEPS) {
+        const encoded = await canvasToJpegBlob(canvas, quality);
+        if (!smallest || encoded.size < smallest.size) smallest = encoded;
+        if (encoded.size <= GPTI2_REFERENCE_TARGET_BYTES) {
+          // The steps are highest quality first. Prefer the first result that
+          // occupies the 1-2.8 MiB quality band, without inventing bytes when
+          // a low-detail source naturally encodes smaller than 1 MiB.
+          if (encoded.size >= GPTI2_REFERENCE_PREFERRED_MIN_BYTES) return encoded;
+          bestWithinTarget ??= encoded;
+        }
+      }
+      if (bestWithinTarget) return bestWithinTarget;
+      maxEdge = Math.max(1_536, Math.floor(maxEdge * 0.85));
+    }
+
+    if (smallest && smallest.size <= GPTI2_REFERENCE_TARGET_BYTES) return smallest;
+    throw new Error('Ảnh sau khi nén vẫn vượt quá 3 MB. Vui lòng chọn ảnh có độ phân giải thấp hơn.');
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+};
+
 const repairAndAssertCompleteImageBlob = async (blob: Blob) => {
   const type = String(blob.type || '').toLowerCase().split(';', 1)[0];
   if (!type.startsWith('image/')) return blob;
@@ -662,6 +745,12 @@ export const uploadFileToR2 = async (file: File | Blob | string, folder: string 
             blob = new Blob([arrayBuffer], { type: contentType });
         }
         blob = await repairAndAssertCompleteImageBlob(blob);
+        if (folder.replace(/^\/+/, '').startsWith('inputs/')) {
+            blob = await compressReferenceImageForProvider(blob);
+        }
+        // A recoverable corrupt input may have been re-encoded to PNG/JPEG.
+        // The signed-upload metadata must always match the bytes we send.
+        contentType = blob.type || contentType;
 
         const prepareUpload = async (forceRefresh = false) => fetchWithTimeout('/api/storage-upload-url', {
             method: 'POST',

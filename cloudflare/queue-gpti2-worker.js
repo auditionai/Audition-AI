@@ -42,19 +42,22 @@ const referenceUrlsOf = (row) => {
 };
 const assertCompleteReferenceImage = (bytes, contentType, index) => {
   const type = String(contentType || '').toLowerCase().split(';', 1)[0];
+  if (!bytes.length || !type.startsWith('image/')) {
+    throw new Error(`GPTI2_INPUT_INVALID: Reference image #${index + 1} is empty or not an image.`);
+  }
+};
+const detectedImageType = (bytes, fallback) => {
   const has = (...values) => values.every((value, position) => bytes[position] === value);
-  const endsWith = (...values) => values.every((value, position) => bytes[bytes.length - values.length + position] === value);
-  let valid = bytes.length > 0;
-  if (type === 'image/jpeg') valid = valid && has(0xff, 0xd8) && endsWith(0xff, 0xd9);
-  if (type === 'image/png') valid = valid && has(0x89, 0x50, 0x4e, 0x47) && endsWith(0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82);
-  if (type === 'image/gif') valid = valid && (has(0x47, 0x49, 0x46, 0x38, 0x37, 0x61) || has(0x47, 0x49, 0x46, 0x38, 0x39, 0x61)) && endsWith(0x3b);
-  if (type === 'image/webp') valid = valid && has(0x52, 0x49, 0x46, 0x46) && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50;
-  if (!valid) throw new Error(`GPTI2_INPUT_INVALID: Reference image #${index + 1} is truncated or corrupt. Re-upload the original image before retrying.`);
+  if (has(0xff, 0xd8)) return 'image/jpeg';
+  if (has(0x89, 0x50, 0x4e, 0x47)) return 'image/png';
+  if (has(0x47, 0x49, 0x46, 0x38)) return 'image/gif';
+  if (has(0x52, 0x49, 0x46, 0x46) && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) return 'image/webp';
+  return fallback;
 };
 const downloadReferenceImage = async (url, index) => {
   const response = await fetch(url, { signal: AbortSignal.timeout(30000) });
   if (!response.ok) throw new Error(`GPTI2 reference ${index + 1} unavailable`);
-  const contentType = String(response.headers.get('content-type') || 'image/jpeg').split(';', 1)[0];
+  let contentType = String(response.headers.get('content-type') || 'image/jpeg').split(';', 1)[0];
   let bytes = new Uint8Array(await response.arrayBuffer());
   const isJpeg = contentType === 'image/jpeg';
   const missingJpegEnd = isJpeg && bytes.length > 2 && bytes[0] === 0xff && bytes[1] === 0xd8 && !(bytes[bytes.length - 2] === 0xff && bytes[bytes.length - 1] === 0xd9);
@@ -63,6 +66,7 @@ const downloadReferenceImage = async (url, index) => {
     repaired.set(bytes); repaired[bytes.length] = 0xff; repaired[bytes.length + 1] = 0xd9;
     bytes = repaired;
   }
+  contentType = detectedImageType(bytes, contentType);
   assertCompleteReferenceImage(bytes, contentType, index);
   return { blob: new Blob([bytes], { type: contentType }), repaired: missingJpegEnd };
 };

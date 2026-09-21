@@ -1,6 +1,6 @@
 import type { TstPricingRow } from './tstCatalog';
 import type { GenerationProviderConfig, GenerationProviderMode, ModelPricing } from './economyService';
-import { DEFAULT_PROVIDER_BY_FEATURE, type GenerationProviderRouteKey } from '../shared/providerRouting';
+import { DEFAULT_PROVIDER_BY_FEATURE, GPTI2_IMAGE_MODELS, type GenerationProviderRouteKey } from '../shared/providerRouting';
 
 export type GommoCatalogPrice = {
   mode: string | null;
@@ -114,6 +114,9 @@ export const resolveProviderForModel = (
   const normalizeRetiredProvider = (provider: GenerationProviderMode): GenerationProviderMode => provider === 'gommo' ? 'tst' : provider;
   const normalizedModelId = normalize(modelId);
   const normalizedFeatureKey = normalize(featureKey);
+  // GPT Image models are served only by GPTi2. Do not let a global or
+  // feature-level TST default make the UI validate them against TST's catalog.
+  if (GPTI2_IMAGE_MODELS.includes(normalizedModelId)) return 'gpti2';
   if (normalizedFeatureKey) {
     const priority = config?.providerPriorityByFeature?.[normalizedFeatureKey];
     if (Array.isArray(priority) && priority.length > 0) {

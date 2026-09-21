@@ -565,6 +565,54 @@ const processBase64Data = (base64: string): { blob: Blob, type: string } => {
   };
 };
 
+const reencodeDecodableImageBlob = async (blob: Blob) => {
+  if (typeof document === 'undefined') throw new Error('Image decoder is unavailable.');
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Image canvas is unavailable.');
+  let source: CanvasImageSource | null = null;
+  let bitmap: ImageBitmap | null = null;
+
+  try {
+    if (typeof createImageBitmap === 'function') {
+      bitmap = await createImageBitmap(blob);
+      source = bitmap;
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+    }
+  } catch {
+    // Some browsers render a recoverable screenshot that createImageBitmap
+    // rejects. Fall through to the HTML image decoder before giving up.
+  }
+
+  if (!source) {
+    const objectUrl = URL.createObjectURL(blob);
+    try {
+      const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const element = new Image();
+        element.onload = () => resolve(element);
+        element.onerror = () => reject(new Error('Image could not be decoded.'));
+        element.src = objectUrl;
+      });
+      source = image;
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  }
+
+  try {
+    if (!canvas.width || !canvas.height) throw new Error('Image has no dimensions.');
+    context.drawImage(source, 0, 0);
+    const normalized = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+    if (!normalized) throw new Error('Image normalization failed.');
+    return normalized;
+  } finally {
+    bitmap?.close();
+  }
+};
+
 const repairAndAssertCompleteImageBlob = async (blob: Blob) => {
   const type = String(blob.type || '').toLowerCase().split(';', 1)[0];
   if (!type.startsWith('image/')) return blob;
@@ -586,7 +634,15 @@ const repairAndAssertCompleteImageBlob = async (blob: Blob) => {
   if (type === 'image/gif') valid = valid && (has(0x47, 0x49, 0x46, 0x38, 0x37, 0x61) || has(0x47, 0x49, 0x46, 0x38, 0x39, 0x61)) && endsWith(0x3b);
   if (type === 'image/webp') valid = valid && has(0x52, 0x49, 0x46, 0x46) && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50;
 
-  if (!valid) throw new Error('Ảnh tải lên bị thiếu hoặc hỏng. Vui lòng chọn lại tệp ảnh gốc.');
+  if (!valid) {
+    try {
+      // Some screenshots have malformed container terminators but browsers can
+      // still decode their pixels. Re-encode only that decodable raster.
+      return await reencodeDecodableImageBlob(blob);
+    } catch {
+      throw new Error('Ảnh tải lên bị thiếu hoặc hỏng. Vui lòng chọn lại tệp ảnh gốc.');
+    }
+  }
   return new Blob([bytes], { type });
 };
 

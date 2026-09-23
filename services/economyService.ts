@@ -975,10 +975,29 @@ const parseSettingValue = <T,>(value: any, fallback: T): T => {
   return value as T;
 };
 
+const getEdgeConfig = async <T,>(key: string): Promise<T | null> => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const response = await fetch(`/api/edge-config?key=${encodeURIComponent(key)}`, { headers: { Accept: 'application/json' } });
+    if (!response.ok) return null;
+    const body = await response.json();
+    return (body?.value ?? null) as T | null;
+  } catch {
+    return null;
+  }
+};
+
 export const getModelPricing = async (options?: { force?: boolean }): Promise<ModelPricing[]> => {
   if (!supabase) return [];
   if (!options?.force && modelPricingCache && modelPricingCache.expiresAt > Date.now()) {
     return modelPricingCache.value;
+  }
+  if (!options?.force) {
+    const edgeValue = await getEdgeConfig<ModelPricing[]>('model_pricing');
+    if (edgeValue) {
+      modelPricingCache = { value: edgeValue, expiresAt: Date.now() + MODEL_PRICING_CACHE_TTL_MS };
+      return edgeValue;
+    }
   }
   let data: ModelPricing[] | null = null;
   let error: { message?: string } | null = null;
@@ -1521,13 +1540,33 @@ export const logVisit = async () => {
             route,
             user_agent: navigator.userAgent || null
         };
-        const { error } = await supabase.from('app_visits').insert(visitData);
-        
-        if (error && error.message.includes('column "user_id" does not exist')) {
-            await supabase.from('app_visits').insert({ uid: null });
+        let analyticsResponse: Response | null = null;
+        try {
+            analyticsResponse = await fetch('/api/analytics/visit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    userId: visitData.user_id,
+                    visitDate: visitData.visit_date,
+                    route: visitData.route,
+                    userAgent: visitData.user_agent,
+                }),
+                keepalive: true,
+            });
+        } catch {
+            analyticsResponse = null;
         }
 
-        if (!error) {
+        let recorded = Boolean(analyticsResponse?.ok);
+        if (!analyticsResponse || !analyticsResponse.ok) {
+            const { error } = await supabase.from('app_visits').insert(visitData);
+            if (error && error.message.includes('column "user_id" does not exist')) {
+                await supabase.from('app_visits').insert({ uid: null });
+            }
+            recorded = !error;
+        }
+
+        if (recorded) {
             window.localStorage.setItem(visitThrottleKey, String(Date.now()));
         }
     } catch(e) {
@@ -1542,7 +1581,8 @@ export const getPackages = async (): Promise<CreditPackage[]> => {
     if (packageCache && packageCache.expiresAt > Date.now()) {
         return packageCache.value;
     }
-    const { data } = await supabase
+    const edgePackages = await getEdgeConfig<any[]>('credit_packages');
+    const { data } = edgePackages ? { data: edgePackages } : await supabase
         .from('credit_packages')
         .select('id, name, credits_amount, price_vnd, tag, bonus_credits, is_featured, is_active, display_order, transfer_syntax')
         .eq('is_active', true)
@@ -1638,13 +1678,16 @@ export const getActivePromotion = async (): Promise<PromotionCampaign | null> =>
     }
     const now = new Date().toISOString();
     try {
-        const { data, error } = await supabase
-            .from('promotions')
-            .select('*')
-            .eq('is_active', true)
-            .lt('start_time', now)
-            .gt('end_time', now)
-            .maybeSingle();
+        const edgePromotions = await getEdgeConfig<any[]>('promotions');
+        const { data, error } = edgePromotions
+            ? { data: edgePromotions.find((item) => item.start_time < now && item.end_time > now) || null, error: null }
+            : await supabase
+                .from('promotions')
+                .select('*')
+                .eq('is_active', true)
+                .lt('start_time', now)
+                .gt('end_time', now)
+                .maybeSingle();
             
         if (error || !data) {
             promotionCache = {
@@ -3973,6 +4016,8 @@ export const adminGiftcodeAction = async (
 
 export const getStylePresets = async () => {
     if (!supabase) return [];
+    const edgeValue = await getEdgeConfig<any[]>('style_presets');
+    if (edgeValue) return edgeValue;
     const { data } = await supabase.from('style_presets').select('*').eq('is_active', true);
     return data || [];
 };
@@ -4411,6 +4456,17 @@ const countAdminRows = async (tableName: string, since?: string) => {
     return count || 0;
 };
 
+const getD1VisitSummary = async () => {
+    try {
+        const headers = await getSupabaseAuthHeader();
+        const response = await fetch('/api/analytics/summary', { headers });
+        if (!response.ok) return null;
+        return await response.json() as { total: number; today: number };
+    } catch {
+        return null;
+    }
+};
+
 export const getAdminOverviewStats = async () => {
     const emptyDashboard = {
         visitsToday: 0,
@@ -4428,6 +4484,7 @@ export const getAdminOverviewStats = async () => {
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
     const lookbackIso = getAdminLookbackIso();
 
+    const d1Visits = await getD1VisitSummary();
     const [
         usersTotal,
         newUsersToday,
@@ -4441,8 +4498,8 @@ export const getAdminOverviewStats = async () => {
         countAdminRows('users', startOfToday),
         countAdminRows('generated_images', lookbackIso),
         countAdminRows('generated_images', startOfToday),
-        countAdminRows('app_visits', lookbackIso),
-        countAdminRows('app_visits', startOfToday),
+        d1Visits ? Promise.resolve(d1Visits.total) : countAdminRows('app_visits', lookbackIso),
+        d1Visits ? Promise.resolve(d1Visits.today) : countAdminRows('app_visits', startOfToday),
         supabase
             .from('vcoin_transactions')
             .select('amount, description, metadata, reference_type, created_at')

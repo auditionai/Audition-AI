@@ -13,6 +13,8 @@
     }
   ],
   "r2_buckets": [{ "binding": "RESULTS_BUCKET", "bucket_name": "audition-ai-images" }],
+  "kv_namespaces": [{ "binding": "AUDITION_CONFIG_CACHE", "id": "ebabe6533ca64bb0ae62b2e468ea6ff3" }],
+  "d1_databases": [{ "binding": "AUDITION_ANALYTICS", "database_name": "auditionai-analytics", "database_id": "a5c161d0-50de-4e1b-a5ad-94475c287bb2" }],
   "vars": {
     "SUPABASE_URL": "https://empcvsaskngwesdbhvaj.supabase.co",
     "R2_PUBLIC_URL": "https://media.auditionai.io.vn",

@@ -14,7 +14,7 @@
   ],
   "r2_buckets": [{ "binding": "RESULTS_BUCKET", "bucket_name": "audition-ai-images" }],
   "vars": {
-    "SUPABASE_URL": "https://wnosrdigcdjlrmofxemd.supabase.co",
+    "SUPABASE_URL": "https://empcvsaskngwesdbhvaj.supabase.co",
     "R2_PUBLIC_URL": "https://media.auditionai.io.vn",
     "NETLIFY_API_ORIGIN": "https://audition-ai.netlify.app",
     "SEPAY_RECONCILE_LIMIT": "10"

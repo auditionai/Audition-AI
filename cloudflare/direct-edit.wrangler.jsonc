@@ -7,6 +7,6 @@
   "preview_urls": false,
   "triggers": { "crons": ["*/1 * * * *"] },
   "r2_buckets": [{ "binding": "RESULTS_BUCKET", "bucket_name": "audition-ai-images" }],
-  "vars": { "SUPABASE_URL": "https://wnosrdigcdjlrmofxemd.supabase.co", "CLOUDFLARE_QUEUE_BATCH": "4", "DIRECT_EDIT_MAX_CONCURRENCY": "2", "R2_PUBLIC_URL": "https://media.auditionai.io.vn" },
+  "vars": { "SUPABASE_URL": "https://empcvsaskngwesdbhvaj.supabase.co", "CLOUDFLARE_QUEUE_BATCH": "4", "DIRECT_EDIT_MAX_CONCURRENCY": "2", "R2_PUBLIC_URL": "https://media.auditionai.io.vn" },
   "observability": { "enabled": true, "head_sampling_rate": 1, "traces": { "enabled": true, "head_sampling_rate": 1 } }
 }

@@ -14,6 +14,6 @@
   },
   "r2_buckets": [{ "binding": "RESULTS_BUCKET", "bucket_name": "audition-ai-images" }],
   "services": [{ "binding": "TELEGRAM_NOTIFIER", "service": "auditionai-telegram-notify" }],
-  "vars": { "SUPABASE_URL": "https://wnosrdigcdjlrmofxemd.supabase.co", "R2_PUBLIC_URL": "https://media.auditionai.io.vn" },
+  "vars": { "SUPABASE_URL": "https://empcvsaskngwesdbhvaj.supabase.co", "R2_PUBLIC_URL": "https://media.auditionai.io.vn" },
   "observability": { "enabled": true, "logs": { "enabled": true, "head_sampling_rate": 1 }, "traces": { "enabled": true, "head_sampling_rate": 1 } }
 }

@@ -2,7 +2,7 @@
 
 **Ngày hoàn thành:** 2026-09-15  
 **Trạng thái:** ✅ Sẵn sàng deploy  
-**Supabase Project:** wnosrdigcdjlrmofxemd.supabase.co
+**Supabase Project:** empcvsaskngwesdbhvaj.supabase.co
 
 ---
 
@@ -42,7 +42,7 @@ Total Upload: 14.50 KiB / gzip: 4.50 KiB
 Bindings:
   - GPTI2_JOBS → auditionai-gpti2-jobs-v2 (queue consumer)
   - RESULTS_BUCKET → audition-ai-images (R2)
-  - SUPABASE_URL → https://wnosrdigcdjlrmofxemd.supabase...
+  - SUPABASE_URL → https://empcvsaskngwesdbhvaj.supabase...
   - R2_PUBLIC_URL → https://media.auditionai.io.vn
 ```
 
@@ -52,7 +52,7 @@ Total Upload: 33.01 KiB / gzip: 8.09 KiB
 Bindings:
   - TST_JOBS → auditionai-tst-jobs-v2 (queue consumer + delayed polling)
   - RESULTS_BUCKET → audition-ai-images (R2)
-  - SUPABASE_URL → https://wnosrdigcdjlrmofxemd.supabase...
+  - SUPABASE_URL → https://empcvsaskngwesdbhvaj.supabase...
   - R2_PUBLIC_URL → https://media.auditionai.io.vn
 ```
 

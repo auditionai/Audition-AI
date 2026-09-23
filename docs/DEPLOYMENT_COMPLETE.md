@@ -1,7 +1,7 @@
 # ✅ Queue Split Deployment Complete
 
 **Deployment Date:** 2026-09-15  
-**Supabase Project:** `wnosrdigcdjlrmofxemd.supabase.co`
+**Supabase Project:** `empcvsaskngwesdbhvaj.supabase.co`
 
 ---
 

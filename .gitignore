@@ -47,6 +47,18 @@ dist-ssr
 /supabase/cloud-sync/
 *.dump
 *.backup
+/backup-*.sql
+/restore-*.sql
+/verify-*.sql
+/*-counts.json
+/*-public-*.json
+/audit-*.json
+/old-*.json
+/new-*.json
+/*-routine-hashes.json
+/*-revoke-defs.json
+/.wrangler-deploy-output/
+/cloudflare/.wrangler-deploy-output/
 
 # Local test/build reports
 /coverage/

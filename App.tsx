@@ -36,6 +36,9 @@ const AppLoadingFallback = () => (
 
 const SYSTEM_ANNOUNCEMENT_DISMISS_STORAGE_KEY = 'auditionai:system-announcement-dismissed';
 const SYSTEM_ANNOUNCEMENT_DISMISS_MS = 12 * 60 * 60 * 1000;
+// Full-row Realtime events include queue_payload on every progress/lease write.
+// Gallery polling uses the compact cached endpoint and avoids that egress.
+const DISABLE_GENERATED_IMAGES_REALTIME = false;
 
 const shouldShowSystemAnnouncement = (config: SystemAnnouncementConfig | null) => {
   if (!config?.isActive) return false;
@@ -421,7 +424,7 @@ function AppContent() {
   }, [applyDesktopRouteFromLocation, isAuthenticated]);
 
   useEffect(() => {
-    if (!isAuthenticated || !supabase) return;
+    if (DISABLE_GENERATED_IMAGES_REALTIME || !isAuthenticated || !supabase) return;
 
     let isDisposed = false;
     let channel: any = null;
@@ -436,11 +439,12 @@ function AppContent() {
           {
             event: '*',
             schema: 'public',
-            table: 'generated_images',
+            table: 'generation_terminal_events',
             filter: `user_id=eq.${authUser.id}`,
           },
           (payload: any) => {
-            const row = payload?.new || {};
+            const event = payload?.new || {};
+            const row = { ...event, id: event.generation_id };
             const status = row.status;
             // Forward every database write. Gallery consumes these updates
             // directly so progress/log changes do not wait for its polling pass.

@@ -10,7 +10,7 @@
     { "binding": "RESULTS_BUCKET", "bucket_name": "audition-ai-images" }
   ],
   "vars": {
-    "SUPABASE_URL": "https://wnosrdigcdjlrmofxemd.supabase.co",
+    "SUPABASE_URL": "https://empcvsaskngwesdbhvaj.supabase.co",
     "CLOUDFLARE_QUEUE_BATCH": "8",
     "R2_PUBLIC_URL": "https://media.auditionai.io.vn"
   },

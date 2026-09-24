@@ -11,6 +11,7 @@ import {
     saveSystemApiKey, 
     deleteApiKey, 
     updateAdminUserProfile, 
+    resetAdminUserPassword,
     savePackage, 
     deletePackage, 
     updatePackageOrder, 
@@ -705,6 +706,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const [editingUserOriginalBalance, setEditingUserOriginalBalance] = useState<number | null>(null);
   const [adminUserAdjustmentReason, setAdminUserAdjustmentReason] = useState('');
+  const [adminUserNewPassword, setAdminUserNewPassword] = useState('');
+  const [adminUserNewPasswordConfirm, setAdminUserNewPasswordConfirm] = useState('');
   const [viewingUser, setViewingUser] = useState<UserProfile | null>(null);
   const [userHistory, setUserHistory] = useState<HistoryItem[]>([]);
   const [userImages, setUserImages] = useState<GeneratedImage[]>([]);
@@ -1823,6 +1826,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       setEditingUser(user);
       setEditingUserOriginalBalance(Number(user.vcoin_balance || 0));
       setAdminUserAdjustmentReason('');
+      setAdminUserNewPassword('');
+      setAdminUserNewPasswordConfirm('');
   };
 
   const userLedgerSections = [
@@ -2393,6 +2398,15 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
   const handleSaveUser = async () => {
       if (editingUser) {
+          const newPassword = adminUserNewPassword;
+          if (newPassword && newPassword.length < 6) {
+              showToast('Mật khẩu mới phải có ít nhất 6 ký tự.', 'error');
+              return;
+          }
+          if (newPassword && newPassword !== adminUserNewPasswordConfirm) {
+              showToast('Xác nhận mật khẩu mới không khớp.', 'error');
+              return;
+          }
           const nextBalance = Number(editingUser.vcoin_balance || 0);
           const balanceChanged = editingUserOriginalBalance !== null && Math.abs(nextBalance - editingUserOriginalBalance) > 0.0001;
           const adjustmentReason = adminUserAdjustmentReason.trim();
@@ -2405,9 +2419,18 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           const result = await updateAdminUserProfile(editingUser, { adjustmentReason });
           
           if (result.success) {
+              if (newPassword) {
+                  const passwordResult = await resetAdminUserPassword(editingUser.id, newPassword);
+                  if (!passwordResult.success) {
+                      showToast(`Đã lưu hồ sơ nhưng không đổi được mật khẩu: ${passwordResult.error}`, 'error');
+                      return;
+                  }
+              }
               setEditingUser(null);
               setEditingUserOriginalBalance(null);
               setAdminUserAdjustmentReason('');
+              setAdminUserNewPassword('');
+              setAdminUserNewPasswordConfirm('');
               await refreshData();
               showToast('Cập nhật người dùng thành công!');
           } else {
@@ -6651,8 +6674,14 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           <label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase mb-1 block">Ảnh đại diện URL</label>
                           <input value={editingUser.avatar || ''} onChange={e => setEditingUser({...editingUser, avatar: e.target.value})} className="w-full neu-inset-sm border border-white/10 rounded-xl p-3 text-slate-300 text-xs font-mono focus:border-audi-pink outline-none" />
                       </div>
+                      <div>
+                          <label className="text-xs font-bold text-slate-700 dark:text-slate-300 font-semibold uppercase mb-1 block">Mật khẩu mới (không bắt buộc)</label>
+                          <input type="password" value={adminUserNewPassword} onChange={e => setAdminUserNewPassword(e.target.value)} autoComplete="new-password" placeholder="Để trống nếu không đổi" className="w-full neu-inset-sm border border-white/10 rounded-xl p-3 text-white focus:border-audi-pink outline-none" />
+                          <input type="password" value={adminUserNewPasswordConfirm} onChange={e => setAdminUserNewPasswordConfirm(e.target.value)} autoComplete="new-password" placeholder="Nhập lại mật khẩu mới" className="w-full mt-2 neu-inset-sm border border-white/10 rounded-xl p-3 text-white focus:border-audi-pink outline-none" />
+                          <div className="mt-1 text-[11px] text-slate-700 dark:text-slate-400 font-semibold">Admin có thể đặt mật khẩu mới trực tiếp, không cần mật khẩu cũ.</div>
+                      </div>
                   </div>
-                  <div className="flex gap-3"><button onClick={() => { setEditingUser(null); setEditingUserOriginalBalance(null); setAdminUserAdjustmentReason(''); }} className="flex-1 py-3 rounded-xl neu-inset-sm hover:bg-white/10 text-slate-300 font-bold">Hủy</button><button onClick={handleSaveUser} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-slate-900 dark:text-white font-bold">Lưu</button></div>
+                  <div className="flex gap-3"><button onClick={() => { setEditingUser(null); setEditingUserOriginalBalance(null); setAdminUserAdjustmentReason(''); setAdminUserNewPassword(''); setAdminUserNewPasswordConfirm(''); }} className="flex-1 py-3 rounded-xl neu-inset-sm hover:bg-white/10 text-slate-300 dark:text-slate-300 font-bold">Hủy</button><button onClick={handleSaveUser} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-slate-900 dark:text-white font-bold">Lưu</button></div>
               </div>
           </div>
           </AdminModalPortal>

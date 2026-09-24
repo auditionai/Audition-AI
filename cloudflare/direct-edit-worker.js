@@ -1,5 +1,5 @@
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
-const headers = (env) => ({ apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`, 'content-type': 'application/json' });
+const headers = (env) => { const key = String(env.SUPABASE_SERVICE_ROLE_KEY || '').replace(/^\uFEFF/, '').trim(); return { apikey: key, Authorization: `Bearer ${key}`, 'content-type': 'application/json' }; };
 const isAuthorizedWorkerRequest = (request, env) => {
   const expected = String(env.DIRECT_EDIT_WORKER_SECRET || '').trim();
   if (!expected) return false;

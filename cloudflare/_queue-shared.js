@@ -5,7 +5,7 @@ export const json = (body, status = 200) => new Response(JSON.stringify(body), {
   headers: { 'content-type': 'application/json' },
 });
 
-export const envText = (env, key) => String(env[key] || '').trim();
+export const envText = (env, key) => String(env[key] || '').replace(/^\uFEFF/, '').trim();
 export const payloadObject = (row) => row?.queue_payload && typeof row.queue_payload === 'object' ? row.queue_payload : {};
 export const isJobId = (value) => UUID_RE.test(String(value || '').trim());
 export const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -21,8 +21,8 @@ export const isAuthorizedWorkerRequest = (request, env) => {
 export const supabase = (env, path, init = {}) => fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
   ...init,
   headers: {
-    apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-    Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+    apikey: envText(env, 'SUPABASE_SERVICE_ROLE_KEY'),
+    Authorization: `Bearer ${envText(env, 'SUPABASE_SERVICE_ROLE_KEY')}`,
     'content-type': 'application/json',
     ...(init.headers || {}),
   },
@@ -31,8 +31,8 @@ export const supabase = (env, path, init = {}) => fetch(`${env.SUPABASE_URL}/res
 export const rpc = (env, name, body) => fetch(`${env.SUPABASE_URL}/rest/v1/rpc/${name}`, {
   method: 'POST',
   headers: {
-    apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-    Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+    apikey: envText(env, 'SUPABASE_SERVICE_ROLE_KEY'),
+    Authorization: `Bearer ${envText(env, 'SUPABASE_SERVICE_ROLE_KEY')}`,
     'content-type': 'application/json',
   },
   body: JSON.stringify(body),

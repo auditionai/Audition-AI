@@ -4456,6 +4456,24 @@ const countAdminRows = async (tableName: string, since?: string) => {
     return count || 0;
 };
 
+export const resetAdminUserPassword = async (
+    targetUserId: string,
+    password: string,
+): Promise<{ success: boolean; error?: string }> => {
+    try {
+        const response = await fetch('/api/admin-reset-user-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(await getSupabaseAuthHeader()) },
+            body: JSON.stringify({ userId: targetUserId, password }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload?.success === false) throw new Error(payload?.error || 'Không thể đặt lại mật khẩu.');
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: error?.message || 'Không thể đặt lại mật khẩu.' };
+    }
+};
+
 const getD1VisitSummary = async () => {
     try {
         const headers = await getSupabaseAuthHeader();

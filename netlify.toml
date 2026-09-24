@@ -234,6 +234,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/admin-reset-user-password"
+  to = "/.netlify/functions/admin-reset-user-password"
+  status = 200
+
+[[redirects]]
   from = "/api/sepay-sync-transaction"
   to = "/.netlify/functions/sepay-sync-transaction"
   status = 200

@@ -89,7 +89,7 @@ import {
     VEO3_VIDEO_MODELS,
     type GenerationProviderRouteKey,
 } from '../shared/providerRouting';
-import { checkR2Connection, getUserImagesFromStorage, cleanupExpiredImages, cleanupR2Directly } from '../services/storageService';
+import { checkR2Connection, getUserImagesFromStorage, cleanupExpiredImages, cleanupR2Directly, uploadFileToR2, deleteImageFromStorage } from '../services/storageService';
 import { checkConnection, analyzeStyleImage } from '../services/geminiService';
 import { checkSupabaseConnection } from '../services/supabaseClient';
 import {
@@ -129,7 +129,7 @@ interface AdminProps {
   isAdmin: boolean;
 }
 
-type AdminView = 'overview' | 'transactions' | 'users' | 'giftcode_abuse' | 'queue' | 'packages' | 'marketing' | 'pricing' | 'system' | 'styles' | 'tours';
+type AdminView = 'overview' | 'transactions' | 'users' | 'giftcode_abuse' | 'queue' | 'packages' | 'marketing' | 'pricing' | 'system' | 'styles' | 'tours' | 'showcase';
 
 const ADMIN_NAV_SECTIONS: Array<{
     label: string;
@@ -165,6 +165,7 @@ const ADMIN_NAV_SECTIONS: Array<{
         label: 'Trải nghiệm',
         eyebrow: 'Experience',
         tabs: [
+            { id: 'showcase', icon: Icons.Image, label: 'Ảnh publish', description: 'Quản lý ảnh trang chủ' },
             { id: 'styles', icon: Icons.Palette, label: 'Style mẫu', description: 'Preset hình ảnh' },
             { id: 'tours', icon: Icons.Info, label: 'Hướng dẫn', description: 'Tour onboarding' },
             { id: 'system', icon: Icons.Cpu, label: 'Hệ thống', description: 'Tích hợp và bảo trì' },
@@ -617,6 +618,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [promotions, setPromotions] = useState<PromotionCampaign[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [stylePresets, setStylePresets] = useState<StylePreset[]>([]);
+  const [showcaseImages, setShowcaseImages] = useState<GeneratedImage[]>([]);
+  const [showcaseUploading, setShowcaseUploading] = useState(false);
+  const [showcaseDeletingId, setShowcaseDeletingId] = useState<string | null>(null);
   const [modelPricing, setModelPricing] = useState<ModelPricing[]>([]);
   const [pricingRows, setPricingRows] = useState<TstPricingRow[]>([]);
   const [gommoCatalog, setGommoCatalog] = useState<GommoProviderCatalog | null>(null);
@@ -858,6 +862,31 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           }
       } else if (view === 'styles') {
           setStylePresets(await getStylePresets() || []);
+      } else if (view === 'showcase') {
+          const { data, error } = await supabase
+              .from('generated_images')
+              .select('id,image_url,prompt,created_at,updated_at,asset_type,tool_id,tool_name,model_used,is_public,user_id,user_name,status,progress')
+              .eq('is_public', true)
+              .eq('asset_type', 'image')
+              .order('created_at', { ascending: false })
+              .limit(500);
+          if (error) throw error;
+          setShowcaseImages((data || []).map((row: any) => ({
+              id: row.id,
+              url: row.image_url,
+              prompt: row.prompt || '',
+              timestamp: Date.parse(row.created_at) || Date.now(),
+              updatedAt: Date.parse(row.updated_at) || undefined,
+              assetType: 'image',
+              toolId: row.tool_id || 'showcase',
+              toolName: row.tool_name || 'Homepage Showcase',
+              engine: row.model_used || 'Admin',
+              isShared: true,
+              userId: row.user_id,
+              userName: row.user_name || 'Audition AI',
+              status: row.status || 'completed',
+              progress: row.progress ?? 100,
+          })));
       } else if (view === 'tours') {
           const toursConfig = await getAppToursConfig();
           setAppTours(toursConfig);
@@ -899,6 +928,63 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           showToast('Không thể tải dữ liệu quản trị. Vui lòng thử lại.', 'error');
       });
   }, [activeView, isAdmin]);
+
+  const handleShowcaseUpload = async (file: File) => {
+      if (!supabase || !file.type.startsWith('image/')) {
+          showToast('Vui lòng chọn một tệp ảnh hợp lệ.', 'error');
+          return;
+      }
+      if (file.size > 20 * 1024 * 1024) {
+          showToast('Ảnh không được vượt quá 20MB.', 'error');
+          return;
+      }
+      setShowcaseUploading(true);
+      try {
+          const authUser = await getSupabaseUser();
+          if (!authUser?.id) throw new Error('Không xác định được tài khoản admin.');
+          const imageId = crypto.randomUUID();
+          const imageUrl = await uploadFileToR2(file, `published/admin/${imageId}`);
+          const now = new Date().toISOString();
+          const { error } = await supabase.from('generated_images').insert({
+              id: imageId,
+              user_id: authUser.id,
+              user_name: 'Audition AI',
+              image_url: imageUrl,
+              prompt: 'Admin homepage showcase',
+              model_used: 'Admin upload',
+              created_at: now,
+              updated_at: now,
+              is_public: true,
+              tool_id: 'admin_showcase',
+              tool_name: 'Homepage Showcase',
+              status: 'completed',
+              progress: 100,
+              asset_type: 'image',
+              provider: 'tst',
+          });
+          if (error) throw error;
+          loadedAdminViews.current.delete('showcase');
+          await loadAdminViewData('showcase', true);
+          showToast('Đã thêm ảnh vào danh sách publish.');
+      } catch (error: any) {
+          showToast(error?.message || 'Không thể tải ảnh lên.', 'error');
+      } finally {
+          setShowcaseUploading(false);
+      }
+  };
+
+  const handleShowcaseDelete = async (image: GeneratedImage) => {
+      setShowcaseDeletingId(image.id);
+      try {
+          await deleteImageFromStorage(image.id, image.userId, image.url);
+          setShowcaseImages((current) => current.filter((item) => item.id !== image.id));
+          showToast('Đã xoá ảnh khỏi publish và R2.');
+      } catch (error: any) {
+          showToast(error?.message || 'Không thể xoá ảnh.', 'error');
+      } finally {
+          setShowcaseDeletingId(null);
+      }
+  };
 
   useEffect(() => {
       if (!isAdmin || activeView !== 'users' || !userSearchEmail.trim()) return;
@@ -5011,6 +5097,52 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   </div>
               </div>
           )}
+
+{activeView === 'showcase' && (
+              <div className="space-y-6 animate-slide-in-right">
+                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                      <div>
+                          <h2 className="text-lg md:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                              <Icons.Image className="w-5 h-5 text-audi-cyan" />
+                              Quản lý ảnh publish
+                          </h2>
+                          <p className="mt-1 text-xs text-slate-700 dark:text-slate-300 font-semibold">Ảnh trong danh sách này đang hiển thị trên AI Showcase trang chủ và được lưu lâu dài trên R2.</p>
+                      </div>
+                      <label className={`inline-flex min-h-[44px] cursor-pointer items-center justify-center gap-2 rounded-xl bg-audi-pink px-4 py-2 text-xs font-black text-white transition hover:bg-pink-600 ${showcaseUploading ? 'pointer-events-none opacity-60' : ''}`}>
+                          {showcaseUploading ? <Icons.Loader className="h-4 w-4 animate-spin" /> : <Icons.Upload className="h-4 w-4" />}
+                          {showcaseUploading ? 'Đang tải...' : 'Thêm ảnh publish'}
+                          <input type="file" accept="image/*" className="sr-only" disabled={showcaseUploading} onChange={(event) => {
+                              const file = event.target.files?.[0];
+                              event.target.value = '';
+                              if (file) void handleShowcaseUpload(file);
+                          }} />
+                      </label>
+                  </div>
+
+                  {showcaseImages.length === 0 ? (
+                      <div className="rounded-2xl border border-dashed border-white/20 py-16 text-center text-sm text-slate-500">Chưa có ảnh publish nào.</div>
+                  ) : (
+                      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                          {showcaseImages.map((image) => (
+                              <article key={image.id} className="group overflow-hidden rounded-2xl border border-white/10 bg-black/20 shadow-xl">
+                                  <div className="aspect-[3/4] overflow-hidden bg-black/30">
+                                      <img src={image.url} alt={image.prompt || 'Published showcase image'} loading="lazy" className="h-full w-full object-cover transition duration-300 group-hover:scale-105" />
+                                  </div>
+                                  <div className="flex items-center justify-between gap-2 p-3">
+                                      <div className="min-w-0">
+                                          <p className="truncate text-[11px] font-bold text-slate-200">{image.userName || 'Audition AI'}</p>
+                                          <p className="text-[10px] text-slate-500">{new Date(image.timestamp).toLocaleDateString('vi-VN')}</p>
+                                      </div>
+                                      <button type="button" aria-label="Xoá ảnh publish" title="Xoá vĩnh viễn khỏi R2" disabled={showcaseDeletingId === image.id} onClick={() => showConfirm('Xoá ảnh này khỏi trang chủ và xoá vĩnh viễn object trên R2?', () => { void handleShowcaseDelete(image); })} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-red-400 transition hover:bg-red-500/20 hover:text-red-300 disabled:opacity-50">
+                                          {showcaseDeletingId === image.id ? <Icons.Loader className="h-4 w-4 animate-spin" /> : <Icons.Trash className="h-4 w-4" />}
+                                      </button>
+                                  </div>
+                              </article>
+                          ))}
+                      </div>
+                  )}
+              </div>
+           )}
 
 {activeView === 'styles' && (
               <div className="space-y-6 animate-slide-in-right">

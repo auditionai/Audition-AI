@@ -23,7 +23,7 @@ export const handler: Handler = async (event) => {
     if (body.action === 'save-template') {
       const payload = {
         title: String(body.template?.title || '').slice(0, 160), description: String(body.template?.description || '').slice(0, 1000), category: String(body.template?.category || 'Dance AI').slice(0, 80),
-        preview_video_url: String(body.template?.preview_video_url || ''), thumbnail_url: String(body.template?.thumbnail_url || '') || null,
+        preview_video_url: String(body.template?.preview_video_url || ''),
         price_vcoin: Math.max(1, Number(body.template?.price_vcoin) || 0), required_image_count: Math.min(8, Math.max(1, Number(body.template?.required_image_count) || 1)),
         is_active: body.template?.is_active !== false, display_order: Number(body.template?.display_order) || 0, updated_at: new Date().toISOString(),
       };

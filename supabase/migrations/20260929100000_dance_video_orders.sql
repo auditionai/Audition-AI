@@ -6,7 +6,6 @@ create table if not exists public.dance_video_templates (
   description text not null default '',
   category text not null default 'Dance AI',
   preview_video_url text not null,
-  thumbnail_url text,
   price_vcoin integer not null check (price_vcoin > 0),
   required_image_count integer not null default 1 check (required_image_count between 1 and 8),
   is_active boolean not null default true,

@@ -12,7 +12,6 @@ export interface DanceVideoTemplate {
   description?: string;
   category?: string;
   preview_video_url: string;
-  thumbnail_url?: string;
   price_vcoin: number;
   required_image_count: number;
   is_active: boolean;

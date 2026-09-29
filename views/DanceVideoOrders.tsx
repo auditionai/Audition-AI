@@ -4,37 +4,105 @@ import { useNotification } from '../components/NotificationSystem';
 import { createDanceVideoOrder, getDanceVideoTemplates } from '../services/danceVideoService';
 import { uploadFileToR2 } from '../services/storageService';
 import type { DanceVideoTemplate } from '../types';
+import './dance-video-orders.css';
 
-const STATUS_COPY = ['1. Thanh toán Vcoin', '2. Tải ảnh nhân vật', '3. Xác nhận & chờ xử lý'];
+type CheckoutStep = 'review' | 'assets' | 'confirm';
+const checkoutSteps: Array<{ id: CheckoutStep; label: string }> = [
+  { id: 'review', label: 'Kiểm tra mẫu' }, { id: 'assets', label: 'Ảnh nhân vật' }, { id: 'confirm', label: 'Đặt đơn' },
+];
+const socialLinks = [
+  { label: 'Facebook', href: 'https://www.facebook.com/profile.php?id=61573249500027', Icon: Icons.Facebook },
+  { label: 'Zalo', href: 'tel:0824280497', Icon: Icons.Phone },
+  { label: 'TikTok', href: 'https://www.tiktok.com/@auditionai.io.vn', Icon: Icons.MessageSquare },
+];
+
 export const DanceVideoOrders: React.FC = () => {
   const { notify } = useNotification();
   const [templates, setTemplates] = useState<DanceVideoTemplate[]>([]);
-  const [search, setSearch] = useState(''); const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<DanceVideoTemplate | null>(null); const [step, setStep] = useState(1);
-  const [files, setFiles] = useState<File[]>([]); const [name, setName] = useState(''); const [zalo, setZalo] = useState(''); const [note, setNote] = useState(''); const [submitting, setSubmitting] = useState(false);
-  const load = async () => { setLoading(true); try { setTemplates(await getDanceVideoTemplates()); } catch (e: any) { notify(e.message || 'Không thể tải video mẫu.', 'error'); } finally { setLoading(false); } };
-  useEffect(() => { void load(); }, []);
-  const visible = useMemo(() => templates.filter((item) => `${item.title} ${item.description} ${item.category}`.toLowerCase().includes(search.toLowerCase())), [templates, search]);
-  const openOrder = (template: DanceVideoTemplate) => { setSelected(template); setStep(1); setFiles([]); };
-  const submit = async () => {
+  const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState('');
+  const [category, setCategory] = useState('Tất cả');
+  const [selected, setSelected] = useState<DanceVideoTemplate | null>(null);
+  const [step, setStep] = useState<CheckoutStep>('review');
+  const [files, setFiles] = useState<File[]>([]);
+  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
+  const [zalo, setZalo] = useState('');
+  const [note, setNote] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const loadTemplates = async () => {
+    setLoading(true);
+    try { setTemplates(await getDanceVideoTemplates()); }
+    catch (error: any) { notify(error?.message || 'Không thể tải danh mục video.', 'error'); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { void loadTemplates(); }, []);
+  useEffect(() => () => previewUrls.forEach(URL.revokeObjectURL), [previewUrls]);
+
+  const categories = useMemo(() => ['Tất cả', ...Array.from(new Set(templates.map((item) => item.category || 'Dance AI')))], [templates]);
+  const visible = useMemo(() => templates.filter((item) => {
+    const matchesCategory = category === 'Tất cả' || item.category === category;
+    const haystack = `${item.title} ${item.description || ''} ${item.category || ''}`.toLocaleLowerCase('vi-VN');
+    return matchesCategory && haystack.includes(query.toLocaleLowerCase('vi-VN').trim());
+  }), [templates, category, query]);
+  const stepIndex = checkoutSteps.findIndex((item) => item.id === step);
+
+  const openOrder = (template: DanceVideoTemplate) => {
+    setSelected(template); setStep('review'); setFiles([]); setPreviewUrls([]); setZalo(''); setNote('');
+  };
+  const changeFiles = (input: FileList | null) => {
+    if (!input || !selected) return;
+    previewUrls.forEach(URL.revokeObjectURL);
+    const next = Array.from(input).slice(0, selected.required_image_count);
+    setFiles(next); setPreviewUrls(next.map((file) => URL.createObjectURL(file)));
+  };
+  const removeFile = (index: number) => {
+    URL.revokeObjectURL(previewUrls[index]);
+    setFiles((current) => current.filter((_, itemIndex) => itemIndex !== index));
+    setPreviewUrls((current) => current.filter((_, itemIndex) => itemIndex !== index));
+  };
+  const submitOrder = async () => {
     if (!selected || files.length !== selected.required_image_count) return;
     setSubmitting(true);
     try {
-      const urls = await Promise.all(files.map((file, index) => uploadFileToR2(file, `dance-orders/${selected.id}/character-${index + 1}`)));
-      await createDanceVideoOrder({ templateId: selected.id, characterImageUrls: urls, customerName: name, contactZalo: zalo, note });
-      notify('Đặt video thành công. Job đã được ghim ở đầu Lịch sử tạo.', 'success'); setSelected(null); window.location.assign('/gallery');
-    } catch (e: any) { notify(e.message?.includes('INSUFFICIENT_VCOIN') ? 'Số dư Vcoin không đủ. Vui lòng nạp thêm.' : (e.message || 'Không thể tạo đơn.'), 'error'); } finally { setSubmitting(false); }
+      const characterImageUrls = await Promise.all(files.map((file, index) => uploadFileToR2(file, `dance-orders/${selected.id}/character-${index + 1}`)));
+      await createDanceVideoOrder({ templateId: selected.id, characterImageUrls, contactZalo: zalo, note });
+      notify('Đơn video đã được tạo. Theo dõi tiến độ trong Lịch sử tạo.', 'success');
+      window.location.assign('/gallery');
+    } catch (error: any) {
+      notify(error?.message?.includes('INSUFFICIENT_VCOIN') ? 'Số dư Vcoin không đủ cho đơn này.' : (error?.message || 'Không thể tạo đơn video.'), 'error');
+    } finally { setSubmitting(false); }
   };
-  return <div className="space-y-6 pb-24 animate-fade-in">
-    <section className="neu-card overflow-hidden border border-fuchsia-500/30 bg-gradient-to-r from-[#160b25] via-[#11152c] to-[#071d27] p-6 sm:p-9">
-      <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between"><div className="max-w-2xl"><span className="inline-flex items-center gap-2 rounded-full border border-fuchsia-400/30 bg-black/20 px-3 py-1 text-[11px] font-black uppercase tracking-widest text-fuchsia-300"><Icons.Video className="h-4 w-4" /> Motion Control Studio</span><h1 className="mt-3 font-accent text-3xl font-black text-white sm:text-4xl">Đặt Làm Video AI</h1><p className="mt-2 text-sm leading-relaxed text-slate-300">Chọn video Dance AI mẫu, gửi ảnh nhân vật game và nhận video copy đúng chuyển động mẫu. Xử lý nhanh từ 15–30 phút, tối đa 24 giờ.</p></div><div className="rounded-2xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-xs font-bold text-amber-100"><b className="block text-amber-300">Chỉ làm theo video mẫu</b>Không nhận copy video ngoài thư viện.</div></div>
+
+  return <div className="dance-order-page">
+    <header className="dance-order-header">
+      <div className="dance-order-brand"><span className="dance-order-kicker"><Icons.Video /> Motion catalog</span><h1>Đặt Làm Video AI</h1><p>Chọn một chuyển động mẫu. Chúng tôi tái tạo video cho nhân vật của bạn, không nhận video ngoài danh mục.</p></div>
+      <div className="dance-order-sla"><span><b>15-30'</b><small>Nhanh nhất</small></span><span><b>24h</b><small>Tối đa</small></span><span><b>100%</b><small>Theo video mẫu</small></span></div>
+    </header>
+
+    <section className="dance-order-toolbar" aria-label="Tìm và lọc video mẫu">
+      <label className="dance-search"><Icons.Search /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm tên dance, concept, mood..." /></label>
+      <div className="dance-category-rail">{categories.map((item) => <button key={item} onClick={() => setCategory(item)} className={category === item ? 'is-active' : ''}>{item}</button>)}</div>
+      <button className="dance-refresh" onClick={() => void loadTemplates()} aria-label="Tải lại danh mục"><Icons.RefreshCw className={loading ? 'spin' : ''} /></button>
     </section>
-    <section className="neu-card p-4 sm:p-5"><label className="relative block"><Icons.Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-fuchsia-400" /><input className="neu-input h-14 w-full rounded-2xl pl-12 pr-4 text-base font-bold" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm dance, concept hoặc phong cách..." /></label></section>
-    {loading ? <div className="neu-card flex min-h-64 items-center justify-center"><Icons.Loader className="h-8 w-8 animate-spin text-fuchsia-500" /></div> : visible.length === 0 ? <div className="neu-card p-12 text-center text-sm text-slate-400">Chưa có video mẫu phù hợp. Admin có thể thêm mẫu trong Quản trị Admin.</div> : <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{visible.map((item) => <article key={item.id} className="neu-card group overflow-hidden p-3"><div className="relative aspect-video overflow-hidden rounded-2xl bg-black"><video src={item.preview_video_url} className="h-full w-full object-cover" muted playsInline preload="metadata" controls /><span className="absolute left-3 top-3 rounded-full bg-black/70 px-2 py-1 text-[10px] font-black text-white">{item.category || 'Dance AI'}</span></div><div className="p-2 pt-4"><h2 className="font-accent text-base font-black text-slate-900 dark:text-white">{item.title}</h2><p className="mt-1 min-h-10 text-xs leading-relaxed text-slate-500 dark:text-slate-300">{item.description || 'Video copy chuyển động Motion Control.'}</p><div className="mt-4 flex items-center justify-between"><span className="inline-flex items-center gap-1 text-sm font-black text-amber-500"><Icons.Gem className="h-4 w-4" />{item.price_vcoin.toLocaleString()} Vcoin</span><button onClick={() => openOrder(item)} className="neu-button-primary inline-flex min-h-11 items-center gap-2 rounded-xl px-4 text-xs font-black"><Icons.Video className="h-4 w-4" />Đặt làm video</button></div></div></article>)}</section>}
-    {selected && <div className="fixed inset-0 z-[100] flex items-end bg-black/65 p-0 backdrop-blur-sm sm:items-center sm:justify-center sm:p-5"><section role="dialog" aria-modal="true" className="max-h-[92dvh] w-full max-w-2xl overflow-y-auto rounded-t-[2rem] border border-white/15 bg-[#101221] p-5 shadow-2xl sm:rounded-[2rem] sm:p-7"><div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-black uppercase tracking-widest text-fuchsia-400">Đặt theo mẫu đã chọn</p><h2 className="mt-1 text-xl font-black text-white">{selected.title}</h2></div><button aria-label="Đóng" onClick={() => setSelected(null)} className="neu-button flex h-11 w-11 items-center justify-center rounded-xl"><Icons.X className="h-5 w-5" /></button></div><div className="mt-6 grid grid-cols-3 gap-2">{STATUS_COPY.map((label, index) => <div key={label} className={`rounded-xl p-3 text-center text-[11px] font-bold ${step === index + 1 ? 'bg-fuchsia-500 text-white' : 'bg-white/5 text-slate-400'}`}>{label}</div>)}</div>
-      {step === 1 && <div className="mt-6 space-y-4"><div className="rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm leading-relaxed text-amber-50"><b>Thanh toán trước: {selected.price_vcoin.toLocaleString()} Vcoin.</b><br/>Khi xác nhận ở bước cuối, hệ thống trừ Vcoin trực tiếp. Đơn đã được admin tiếp nhận sẽ không hủy hoặc hoàn Vcoin.</div><button onClick={() => setStep(2)} className="neu-button-primary w-full rounded-2xl py-3.5 text-sm font-black">Tiếp tục tải ảnh nhân vật</button></div>}
-      {step === 2 && <div className="mt-6 space-y-4"><div className="rounded-2xl border border-cyan-400/25 bg-cyan-400/10 p-4 text-xs leading-relaxed text-cyan-50">Cần <b>{selected.required_image_count} ảnh nhân vật</b> rõ nét{selected.required_image_count > 1 ? ', mỗi nhân vật một ảnh' : ''}. Ảnh tách nền càng tốt. Hãy mix sẵn trang phục mong muốn trong game.</div><label className="block cursor-pointer rounded-2xl border-2 border-dashed border-fuchsia-400/40 p-6 text-center"><Icons.Upload className="mx-auto h-7 w-7 text-fuchsia-400" /><b className="mt-2 block text-sm text-white">Chọn đúng {selected.required_image_count} ảnh nhân vật</b><small className="mt-1 block text-slate-400">PNG, JPG, WEBP · tải thẳng lên R2 bảo mật</small><input className="sr-only" type="file" accept="image/*" multiple={selected.required_image_count > 1} onChange={(e) => setFiles(Array.from(e.target.files || []).slice(0, selected.required_image_count))} /></label>{files.length > 0 && <p className={files.length === selected.required_image_count ? 'text-xs text-emerald-400' : 'text-xs text-amber-400'}>Đã chọn {files.length}/{selected.required_image_count} ảnh: {files.map((file) => file.name).join(', ')}</p>}<a className="block text-center text-xs font-bold text-fuchsia-300 underline" href="/support">Không biết chụp ảnh? Liên hệ Facebook / TikTok / Zalo Admin để được hỗ trợ.</a><div className="flex gap-3"><button onClick={() => setStep(1)} className="neu-button flex-1 rounded-2xl py-3 text-sm font-bold">Quay lại</button><button disabled={files.length !== selected.required_image_count} onClick={() => setStep(3)} className="neu-button-primary flex-1 rounded-2xl py-3 text-sm font-black disabled:opacity-40">Tiếp tục</button></div></div>}
-      {step === 3 && <div className="mt-6 space-y-4"><div className="grid gap-3 sm:grid-cols-2"><label className="text-xs font-bold text-slate-300">Tên liên hệ<input className="neu-input mt-1 h-11 w-full rounded-xl px-3" value={name} onChange={(e) => setName(e.target.value)} placeholder="Không bắt buộc" /></label><label className="text-xs font-bold text-slate-300">Zalo để Admin liên hệ<input className="neu-input mt-1 h-11 w-full rounded-xl px-3" value={zalo} onChange={(e) => setZalo(e.target.value)} placeholder="Không bắt buộc" /></label></div><label className="block text-xs font-bold text-slate-300">Ghi chú yêu cầu<textarea className="neu-input mt-1 min-h-20 w-full rounded-xl p-3" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ví dụ: cần giao trước 20:00..." /></label><div className="rounded-2xl bg-white/5 p-4 text-xs leading-relaxed text-slate-300"><b className="text-white">Xác nhận:</b> Video sẽ làm giống mẫu “{selected.title}”, job xuất hiện ở đầu Lịch sử tạo với trạng thái “Đang chờ xử lý”.</div><div className="flex gap-3"><button onClick={() => setStep(2)} className="neu-button flex-1 rounded-2xl py-3 text-sm font-bold">Quay lại</button><button disabled={submitting} onClick={() => void submit()} className="neu-button-primary flex-1 rounded-2xl py-3 text-sm font-black disabled:opacity-50">{submitting ? 'Đang tạo job...' : `Xác nhận · trừ ${selected.price_vcoin} Vcoin`}</button></div></div>}
-    </section></div>}
+
+    <section className="dance-order-intro"><span><Icons.Clock /> Thời gian xử lý từ 15-30 phút, chậm nhất 24 tiếng</span><span><Icons.AlertTriangle /> Đơn chỉ được hoàn khi vẫn chờ xử lý và Admin chưa tiếp nhận</span></section>
+
+    <section className="dance-catalog-heading"><div><span>Danh mục đang mở</span><h2>Chọn chuyển động bạn muốn</h2></div><b>{visible.length.toLocaleString('vi-VN')} mẫu</b></section>
+    {loading ? <div className="dance-loading"><Icons.Loader className="spin" /> Đang đồng bộ thư viện video...</div> : <section className="dance-catalog-grid">
+      {visible.map((template, index) => <article className={`dance-template ${index === 0 ? 'is-featured' : ''}`} key={template.id}>
+        <div className="dance-template-media"><video src={template.preview_video_url} muted playsInline preload="metadata" controls /><span>{template.category || 'Dance AI'}</span></div>
+        <div className="dance-template-body"><div className="dance-template-title"><h3>{template.title}</h3><b><Icons.Gem /> {template.price_vcoin.toLocaleString('vi-VN')}</b></div><p>{template.description || 'Motion Control theo đúng chuyển động của video mẫu.'}</p><footer><span><Icons.User /> {template.required_image_count} ảnh nhân vật</span><button onClick={() => openOrder(template)}>Chọn mẫu <Icons.ChevronRight /></button></footer></div>
+      </article>)}
+      {!visible.length && <div className="dance-empty"><Icons.Search /><b>Không tìm thấy video phù hợp</b><span>Thử lại với từ khóa hoặc danh mục khác.</span></div>}
+    </section>}
+
+    {selected && <aside className="dance-order-drawer" aria-label="Đặt video theo mẫu">
+      <header><div><span>Đơn video mới</span><h2>{selected.title}</h2></div><button onClick={() => setSelected(null)} aria-label="Đóng panel"><Icons.X /></button></header>
+      <div className="dance-checkout-steps">{checkoutSteps.map((item, index) => <button key={item.id} className={index === stepIndex ? 'is-current' : index < stepIndex ? 'is-done' : ''} onClick={() => index <= stepIndex && setStep(item.id)}><i>{index + 1}</i>{item.label}</button>)}</div>
+      {step === 'review' && <div className="dance-drawer-body"><div className="dance-order-preview"><video src={selected.preview_video_url} muted playsInline controls preload="metadata" /><div><b>{selected.title}</b><span>{selected.required_image_count} ảnh nhân vật · {selected.price_vcoin} Vcoin</span></div></div><div className="dance-policy"><Icons.AlertTriangle /><p><b>Thanh toán được xác nhận ở bước cuối.</b> Khi đơn đang chờ, chưa được Admin tiếp nhận, bạn có thể yêu cầu hủy hoặc hoàn Vcoin. Sau khi Admin tiếp nhận, đơn không thể hủy hoặc hoàn.</p></div><button className="dance-primary" onClick={() => setStep('assets')}>Tiếp tục với ảnh nhân vật <Icons.ChevronRight /></button></div>}
+      {step === 'assets' && <div className="dance-drawer-body"><div className="dance-upload-guide"><b>Cần {selected.required_image_count} ảnh nhân vật</b><span>Ảnh rõ nét, ưu tiên đã tách nền. Hãy mix sẵn trang phục mong muốn trong game.</span></div><label className="dance-dropzone"><Icons.Upload /><b>Tải ảnh nhân vật</b><span>PNG, JPG hoặc WEBP · tối đa {selected.required_image_count} ảnh</span><input type="file" accept="image/*" multiple={selected.required_image_count > 1} onChange={(event) => changeFiles(event.target.files)} /></label>{previewUrls.length > 0 && <div className="dance-uploaded-grid">{previewUrls.map((url, index) => <figure key={url}><img src={url} alt={`Nhân vật ${index + 1}`} /><button onClick={() => removeFile(index)} aria-label={`Xóa ảnh ${index + 1}`}><Icons.X /></button><figcaption>Nhân vật {index + 1}</figcaption></figure>)}</div>}<div className="dance-help-links">{socialLinks.map(({ label, href, Icon }) => <a href={href} key={label} target={href.startsWith('http') ? '_blank' : undefined} rel="noreferrer"><Icon />{label}</a>)}</div><p className="dance-help-note">Không biết chụp ảnh? Liên hệ trực tiếp Admin để được hỗ trợ đăng nhập game và chụp nhân vật.</p><div className="dance-drawer-actions"><button onClick={() => setStep('review')}>Quay lại</button><button className="dance-primary" disabled={files.length !== selected.required_image_count} onClick={() => setStep('confirm')}>Kiểm tra đơn <Icons.ChevronRight /></button></div></div>}
+      {step === 'confirm' && <div className="dance-drawer-body"><dl className="dance-order-summary"><div><dt>Video mẫu</dt><dd>{selected.title}</dd></div><div><dt>Chi phí</dt><dd>{selected.price_vcoin.toLocaleString('vi-VN')} Vcoin</dd></div><div><dt>Ảnh đã chọn</dt><dd>{files.length}/{selected.required_image_count}</dd></div></dl><label className="dance-field">Zalo để Admin liên hệ<input value={zalo} onChange={(event) => setZalo(event.target.value)} placeholder="Không bắt buộc" /></label><label className="dance-field">Mô tả yêu cầu<textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="Ví dụ: thời gian mong muốn, lưu ý về nhân vật..." /></label><div className="dance-confirm-note">Xác nhận tạo đơn sẽ trừ <b>{selected.price_vcoin.toLocaleString('vi-VN')} Vcoin</b>. Job sẽ xuất hiện ở đầu Lịch sử tạo với trạng thái <b>Chờ xử lý</b>.</div><div className="dance-drawer-actions"><button onClick={() => setStep('assets')}>Quay lại</button><button className="dance-primary" disabled={submitting} onClick={() => void submitOrder()}>{submitting ? 'Đang tạo đơn...' : 'Xác nhận đặt video'} <Icons.Check /></button></div></div>}
+    </aside>}
   </div>;
 };

@@ -206,6 +206,7 @@ export const Layout: React.FC<LayoutProps> = ({
   };
 
   const navItems = [
+    { id: 'dance_video_orders' as ViewId, label: { vi: 'Đặt Làm Video AI', en: 'Order AI Video' }, icon: Icons.Video, badge: 'NEW' },
     { id: 'home' as ViewId, label: { vi: 'Trang Chủ', en: 'Home' }, icon: Icons.Home },
     { id: 'tools' as ViewId, label: { vi: 'Tạo Ảnh AI', en: 'AI Image' }, icon: Icons.Sparkles, badge: 'HOT' },
     { id: 'video' as ViewId, label: { vi: 'Tạo Video AI', en: 'AI Video' }, icon: Icons.Video },

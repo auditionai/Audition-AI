@@ -159,6 +159,16 @@
   status = 200
 
 [[redirects]]
+  from = "/api/dance-video-order"
+  to = "/.netlify/functions/dance-video-order"
+  status = 200
+
+[[redirects]]
+  from = "/api/admin-dance-video"
+  to = "/.netlify/functions/admin-dance-video"
+  status = 200
+
+[[redirects]]
   from = "/api/admin-model-pricing"
   to = "/.netlify/functions/admin-model-pricing"
   status = 200

@@ -66,6 +66,12 @@ const quickActions: QuickAction[] = [
 
 const heroSlides = [
   {
+    kicker: 'Motion Control Service', title: 'Đặt làm', highlight: 'Video Dance AI',
+    description: 'Chọn video mẫu, gửi ảnh nhân vật game và nhận video copy chuyển động đúng mẫu.',
+    cta: 'Chọn video mẫu', path: '/dat-lam-video-ai', Icon: Film, accent: 'violet',
+    imageLight: '/assets/audition-characters/mobile-hero-squad-light-v2.webp', imageDark: '/assets/audition-characters/mobile-hero-squad-v2.webp',
+  },
+  {
     kicker: 'Character Dream Lab',
     title: 'Biến bạn thành',
     highlight: 'nhân vật 3D',

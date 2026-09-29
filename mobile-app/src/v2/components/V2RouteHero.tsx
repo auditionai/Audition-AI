@@ -29,6 +29,7 @@ type HeroMeta = {
 };
 
 const routeMeta: Array<[RegExp, HeroMeta]> = [
+  [/^\/dat-lam-video-ai/, { eyebrow: 'Motion Control Service', title: 'Đặt Làm Video AI', description: 'Chọn video mẫu và gửi ảnh nhân vật để nhận Dance AI đúng chuyển động.', Icon: Film, accent: 'violet' }],
   [/^\/prompt-library/, { eyebrow: 'Trending Now', title: 'Vũ trụ mẫu HOT', description: 'Khám phá công thức đang thịnh hành và đưa thẳng vào studio chỉ bằng một chạm.', Icon: MessageSquareText, accent: 'orange' }],
   [/^\/gallery/, { eyebrow: 'Creation Timeline', title: 'Dòng thời gian sáng tạo', description: 'Theo dõi tiến trình, xem lại tác phẩm và quản lý toàn bộ lịch sử giao dịch.', Icon: History, accent: 'blue' }],
   [/^\/topup|^\/payment-gateway/, { eyebrow: 'Vcoin Planet', title: 'Kho năng lượng Vcoin', description: 'Chọn gói năng lượng, nhận ưu đãi và theo dõi thanh toán an toàn.', Icon: Gem, accent: 'gold' }],

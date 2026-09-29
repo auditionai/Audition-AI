@@ -23,6 +23,7 @@ const About = lazy(() => import('./views/About').then((module) => ({ default: mo
 const Guide = lazy(() => import('./views/Guide').then((module) => ({ default: module.Guide })));
 const Support = lazy(() => import('./views/Support').then((module) => ({ default: module.Support })));
 const PromptLibrary = lazy(() => import('./views/PromptLibrary').then((module) => ({ default: module.PromptLibrary })));
+const DanceVideoOrders = lazy(() => import('./views/DanceVideoOrders').then((module) => ({ default: module.DanceVideoOrders })));
 const Landing = lazy(() => import('./views/Landing').then((module) => ({ default: module.Landing })));
 const TopUp = lazy(() => import('./views/TopUp').then((module) => ({ default: module.TopUp })));
 const ManualPaymentGateway = lazy(() => import('./views/ManualPaymentGateway').then((module) => ({ default: module.ManualPaymentGateway })));
@@ -103,6 +104,7 @@ const resolveDesktopRoute = () => {
   if (pathname === '/support') return { view: 'support' as ViewId, feature: null };
   if (pathname === '/gallery') return { view: 'gallery' as ViewId, feature: null };
   if (pathname === '/prompt-library') return { view: 'prompt_library' as ViewId, feature: null };
+  if (pathname === '/dat-lam-video-ai') return { view: 'dance_video_orders' as ViewId, feature: null };
   if (pathname === '/topup') return { view: 'topup' as ViewId, feature: null };
   if (pathname === '/payment-gateway') return { view: 'payment_gateway' as ViewId, feature: null };
   if (pathname === '/generate/image') {
@@ -154,6 +156,8 @@ const buildDesktopPath = (view: ViewId, selectedFeature: Feature | null) => {
       return '/gallery';
     case 'prompt_library':
       return '/prompt-library';
+    case 'dance_video_orders':
+      return '/dat-lam-video-ai';
     case 'topup':
       return '/topup';
     case 'payment_gateway':
@@ -631,6 +635,8 @@ function AppContent() {
         return <Gallery lang={lang} />;
       case 'prompt_library':
         return <PromptLibrary onUsePrompt={handleUsePromptLibraryPrompt} />;
+      case 'dance_video_orders':
+        return <DanceVideoOrders />;
       case 'topup':
         return <TopUp lang={lang} onNavigate={handleNavigate} />;
       case 'payment_gateway':

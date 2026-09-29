@@ -8,6 +8,12 @@ const NEON_FRAME_TONES = ['magenta', 'violet', 'cyan', 'emerald', 'amber', 'blue
 
 const DESKTOP_HERO_SLIDES = [
   {
+    eyebrow: 'MOTION CONTROL SERVICE', title: 'ĐẶT LÀM VIDEO AI', highlight: 'COPY DANCE MẪU',
+    description: 'Chọn video Dance AI mẫu, gửi ảnh nhân vật game và nhận video chuyển động đúng theo mẫu. Xử lý từ 15–30 phút, tối đa 24 giờ.',
+    buttonLabel: 'Chọn video mẫu', view: 'dance_video_orders' as ViewId,
+    imageLight: '/assets/audition-characters/desktop-hero-squad-light-v2.webp', imageDark: '/assets/audition-characters/desktop-hero-squad-v2.webp',
+  },
+  {
     eyebrow: 'AUDITION AI STUDIO v4.2',
     title: 'TẠO ẢNH & VIDEO AI',
     highlight: 'NHÂN VẬT AUDITION 3D',

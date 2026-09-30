@@ -245,12 +245,14 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
       }
   }, [activeTab]);
 
-  const handleDelete = (e: React.MouseEvent, id: string, imageUrl?: string, userId?: string) => {
+  const handleDelete = (e: React.MouseEvent, id: string, imageUrl?: string, userId?: string, isDanceVideoOrder = false) => {
     e.stopPropagation();
     confirm({
-        title: lang === 'vi' ? 'Xóa ảnh?' : 'Delete Image?',
-        message: lang === 'vi' ? 'Bạn có chắc chắn muốn xóa vĩnh viễn hình ảnh này không?' : 'Are you sure you want to permanently delete this image?',
-        confirmText: lang === 'vi' ? 'Xóa ngay' : 'Delete',
+        title: isDanceVideoOrder ? (lang === 'vi' ? 'Hủy đơn video AI?' : 'Cancel AI video order?') : (lang === 'vi' ? 'Xóa ảnh?' : 'Delete Image?'),
+        message: isDanceVideoOrder
+            ? (lang === 'vi' ? 'Đơn chỉ có thể hủy và hoàn 100% VCoin khi Admin chưa tiếp nhận.' : 'This order can be cancelled with a full VCoin refund only before admin acceptance.')
+            : (lang === 'vi' ? 'Bạn có chắc chắn muốn xóa vĩnh viễn hình ảnh này không?' : 'Are you sure you want to permanently delete this image?'),
+        confirmText: isDanceVideoOrder ? (lang === 'vi' ? 'Hủy đơn & hoàn VCoin' : 'Cancel & refund') : (lang === 'vi' ? 'Xóa ngay' : 'Delete'),
         cancelText: lang === 'vi' ? 'Hủy' : 'Cancel',
         isDanger: true,
         onConfirm: async () => {
@@ -261,7 +263,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                 newSet.delete(id);
                 return newSet;
             });
-            notify(lang === 'vi' ? 'Đã xóa ảnh.' : 'Image deleted.', 'info');
+            notify(isDanceVideoOrder ? (lang === 'vi' ? 'Đã hủy đơn và hoàn VCoin.' : 'Order cancelled and VCoin refunded.') : (lang === 'vi' ? 'Đã xóa ảnh.' : 'Image deleted.'), 'info');
         }
     });
   };
@@ -734,7 +736,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                                     </button>
                                                 )}
                                                 <button
-                                                    onClick={(e) => handleDelete(e, img.id, img.url, img.userId)}
+                                                    onClick={(e) => handleDelete(e, img.id, img.url, img.userId, img.toolId === 'dance_video_order')}
                                                     className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
                                                     title="Xóa"
                                                 >
@@ -1150,7 +1152,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                         onClick={(e) => {
                                             setViewingImage(null);
                                             setShowLogViewer(false);
-                                            handleDelete(e, viewingImage.id, viewingImage.url, viewingImage.userId);
+                                            handleDelete(e, viewingImage.id, viewingImage.url, viewingImage.userId, viewingImage.toolId === 'dance_video_order');
                                         }}
                                         className="neu-button flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-xs font-black text-red-500 sm:col-span-3"
                                     >

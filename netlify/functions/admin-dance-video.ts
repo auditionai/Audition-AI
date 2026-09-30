@@ -40,10 +40,19 @@ export const handler: Handler = async (event) => {
     if (body.action === 'delete-job') {
       const id = String(body.id || '');
       if (!id) throw new Error('Thiếu ID đơn hàng cần xóa.');
-      await admin.from('generated_images').delete().eq('id', id);
-      const { error } = await admin.from('dance_video_jobs').delete().eq('id', id);
-      if (error) throw error;
-      return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
+      const { data: job, error: jobError } = await admin
+        .from('dance_video_jobs')
+        .select('id, user_id')
+        .eq('id', id)
+        .maybeSingle();
+      if (jobError) throw jobError;
+      if (!job) throw new Error('DANCE_ORDER_NOT_FOUND');
+      const { data: refundedAmount, error: cancelError } = await admin.rpc('cancel_dance_video_order', {
+        p_user_id: job.user_id,
+        p_job_id: job.id,
+      });
+      if (cancelError) throw cancelError;
+      return { statusCode: 200, headers, body: JSON.stringify({ ok: true, refundedAmount }) };
     }
     if (body.action === 'update-job') {
       const status = String(body.status || ''); if (!statuses.has(status)) throw new Error('Trạng thái không hợp lệ.');
@@ -61,6 +70,11 @@ export const handler: Handler = async (event) => {
     throw new Error('Unsupported action');
   } catch (error: any) {
     const message = error?.message || 'Lỗi quản trị Dance AI.';
-    return { statusCode: message === 'Forbidden' ? 403 : 400, headers, body: JSON.stringify({ error: message }) };
+    const isDanceOrderLocked = String(message).includes('DANCE_ORDER_CANCELLATION_UNAVAILABLE');
+    return {
+      statusCode: message === 'Forbidden' ? 403 : isDanceOrderLocked ? 409 : 400,
+      headers,
+      body: JSON.stringify({ error: isDanceOrderLocked ? 'Đơn đã được tiếp nhận nên không thể xóa hoặc hoàn VCoin.' : message }),
+    };
   }
 };

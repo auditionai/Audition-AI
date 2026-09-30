@@ -72,6 +72,25 @@ export const handler: Handler = async (event) => {
     ]);
     if (imageError) throw imageError;
     if (requesterError) throw requesterError;
+    // Dance AI orders share their ID with the generation-history row. Route
+    // these through the transaction that refunds only a pending order.
+    const { data: danceOrder, error: danceOrderError } = await admin
+      .from('dance_video_jobs')
+      .select('id, user_id')
+      .eq('id', imageId)
+      .maybeSingle();
+    if (danceOrderError) throw danceOrderError;
+    if (danceOrder) {
+      if (danceOrder.user_id !== user.id && requester?.is_admin !== true) {
+        return { statusCode: 403, headers, body: JSON.stringify({ error: 'You cannot cancel this Dance AI order.' }) };
+      }
+      const { data: refundedAmount, error: cancelError } = await admin.rpc('cancel_dance_video_order', {
+        p_user_id: danceOrder.user_id,
+        p_job_id: imageId,
+      });
+      if (cancelError) throw cancelError;
+      return { statusCode: 200, headers, body: JSON.stringify({ success: true, cancelledDanceOrder: true, refundedAmount }) };
+    }
     if (!image) {
       return { statusCode: 404, headers, body: JSON.stringify({ error: 'Không tìm thấy tác phẩm.' }) };
     }
@@ -101,8 +120,13 @@ export const handler: Handler = async (event) => {
     return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
   } catch (error: any) {
     const message = String(error?.message || 'Internal Server Error');
-    const statusCode = message === 'Unauthorized' ? 401 : message === 'AccountLocked' ? 403 : 500;
+    const isDanceOrderLocked = message.includes('DANCE_ORDER_CANCELLATION_UNAVAILABLE');
+    const statusCode = message === 'Unauthorized' ? 401 : message === 'AccountLocked' ? 403 : isDanceOrderLocked ? 409 : 500;
     console.error('[storage-delete] failed:', message);
-    return { statusCode, headers, body: JSON.stringify({ error: message }) };
+    return {
+      statusCode,
+      headers,
+      body: JSON.stringify({ error: isDanceOrderLocked ? 'Đơn video đã được Admin tiếp nhận nên không thể hủy hoặc hoàn VCoin.' : message }),
+    };
   }
 };

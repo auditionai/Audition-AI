@@ -1266,6 +1266,27 @@ export const deleteImageFromStorage = async (id: string, _targetUserId?: string,
   });
 };
 
+export const getGenerationCancellationPreview = async (jobId: string) => {
+  const response = await fetch('/api/cancel-generation-job', {
+    method: 'POST', headers: { ...(await getSessionAuthHeader()), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'preview', jobId }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload?.error || 'Không thể kiểm tra điều kiện hủy job.');
+  return payload as { cancellable: boolean; refundEligible: boolean; amount: number; state: 'queued' | 'processing' };
+};
+
+export const cancelGenerationJob = async (jobId: string) => {
+  const response = await fetch('/api/cancel-generation-job', {
+    method: 'POST', headers: { ...(await getSessionAuthHeader()), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'cancel', jobId }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload?.error || 'Không thể hủy job.');
+  window.dispatchEvent(new Event('balance_updated'));
+  return payload as { refunded: boolean; refund_eligible: boolean; was_processing: boolean; providerCancelRequested: boolean };
+};
+
 export const cleanupR2Directly = async (): Promise<number> => {
     if (!r2Client) return 0;
     

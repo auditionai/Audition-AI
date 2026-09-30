@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { GeneratedImage, Language, HistoryItem } from '../types';
 import type { QueueProgressLogEntry } from '../shared/queueRecipes';
-import { checkR2Connection, getAllImagesFromStorage, getCachedImagesForCurrentUser, deleteImageFromStorage, getHistoryRetentionDays, mapGeneratedImageRow, publishImageToShowcase, invalidateGalleryCache } from '../services/storageService';
+import { cancelGenerationJob, checkR2Connection, getAllImagesFromStorage, getCachedImagesForCurrentUser, deleteImageFromStorage, getGenerationCancellationPreview, getHistoryRetentionDays, mapGeneratedImageRow, publishImageToShowcase, invalidateGalleryCache } from '../services/storageService';
 import { getUnifiedHistory } from '../services/economyService';
 import { downloadAssetToBrowser } from '../services/downloadService';
 import { Icons } from '../components/Icons';
@@ -39,6 +39,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
   const [loadingImages, setLoadingImages] = useState(true);
   const [filter, setFilter] = useState<'all' | 'completed' | 'failed' | 'processing' | 'queued' | 'rescuing'>('all');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [cancellingJobId, setCancellingJobId] = useState<string | null>(null);
   const [viewingImage, setViewingImage] = useState<GeneratedImage | null>(null);
   const [showLogViewer, setShowLogViewer] = useState(false);
 
@@ -286,6 +287,37 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
               notify(lang === 'vi' ? 'Đã xóa các mục đã chọn.' : 'Selected items deleted.', 'info');
           }
       });
+  };
+
+  const handleCancelJob = async (image: GeneratedImage) => {
+    try {
+      const preview = await getGenerationCancellationPreview(image.id);
+      const refundText = preview.refundEligible
+        ? `Job đang trong hàng chờ. Hủy ngay sẽ hoàn ${Number(preview.amount || 0).toLocaleString('vi-VN')} VCoin.`
+        : 'Job đã được hệ thống tiếp nhận và đang xử lý. Bạn vẫn có thể hủy, nhưng VCoin sẽ không được hoàn.';
+      confirm({
+        title: lang === 'vi' ? 'Hủy job đang chạy?' : 'Cancel running job?',
+        message: lang === 'vi' ? `${refundText} Lịch sử job vẫn được giữ lại.` : `${preview.refundEligible ? 'This queued job will be refunded.' : 'This processing job will not be refunded.'} The job will remain in your history.`,
+        confirmText: preview.refundEligible ? (lang === 'vi' ? 'Hủy & hoàn VCoin' : 'Cancel & refund') : (lang === 'vi' ? 'Hủy không hoàn tiền' : 'Cancel without refund'),
+        cancelText: lang === 'vi' ? 'Quay lại' : 'Back',
+        isDanger: true,
+        onConfirm: async () => {
+          setCancellingJobId(image.id);
+          try {
+            const result = await cancelGenerationJob(image.id);
+            invalidateGalleryCache();
+            await loadImages(true);
+            notify(result.refunded ? (lang === 'vi' ? 'Đã hủy job và hoàn VCoin.' : 'Job cancelled and VCoin refunded.') : (lang === 'vi' ? 'Đã hủy job. VCoin không được hoàn do job đã xử lý.' : 'Job cancelled. No VCoin refund applies after processing.'), result.refunded ? 'success' : 'info');
+          } catch (error: any) {
+            notify(error?.message || (lang === 'vi' ? 'Không thể hủy job.' : 'Unable to cancel job.'), 'error');
+          } finally {
+            setCancellingJobId(null);
+          }
+        },
+      });
+    } catch (error: any) {
+      notify(error?.message || (lang === 'vi' ? 'Không thể kiểm tra điều kiện hủy job.' : 'Unable to check cancellation.'), 'error');
+    }
   };
 
   const handleDownload = async (imageUrl: string, filename: string, assetKind: 'image' | 'video' = 'image') => {
@@ -609,6 +641,8 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                 const isCompleted = !displayStatus || displayStatus === 'completed';
                                 const isFailed = displayStatus === 'failed';
                                 const isProcessing = displayStatus === 'processing' || displayStatus === 'queued' || displayStatus === 'rescuing';
+                                const canCancel = displayStatus === 'processing' || displayStatus === 'queued';
+                                const wasCancelled = /cancelled by user/i.test(img.errorRaw || img.error || '');
 
                                 return (
                                     <tr
@@ -692,7 +726,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                                         : 'bg-red-500/10 text-red-400 border border-red-500/20'
                                                 }`}>
                                                     <div className={`w-1.5 h-1.5 rounded-full ${img.adminNote ? 'bg-amber-400' : 'bg-red-500'}`}></div>
-                                                    {img.adminNote ? 'Có tin nhắn Admin' : 'Thất bại · Hoàn Vcoin'}
+                                                    {img.adminNote ? 'Có tin nhắn Admin' : wasCancelled ? 'Đã hủy' : 'Thất bại · Hoàn Vcoin'}
                                                 </span>
                                             )}
                                             {isProcessing && (
@@ -713,7 +747,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                             )}
                                         </td>
                                         <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
-                                            <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <div className="flex flex-wrap items-center justify-end gap-2">
                                                 {isCompleted && img.url && (
                                                     <button
                                                         onClick={() => handleDownload(img.url, getDownloadFilename(img), getAssetKind(img))}
@@ -735,13 +769,27 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                                         <Icons.Activity className="w-4 h-4" />
                                                     </button>
                                                 )}
-                                                <button
-                                                    onClick={(e) => handleDelete(e, img.id, img.url, img.userId, img.toolId === 'dance_video_order')}
-                                                    className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                                                    title="Xóa"
-                                                >
-                                                    <Icons.Trash className="w-4 h-4" />
-                                                </button>
+                                                {canCancel && (
+                                                    <button
+                                                        onClick={() => void handleCancelJob(img)}
+                                                        disabled={cancellingJobId === img.id}
+                                                        className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-amber-400/50 bg-amber-500/15 px-3 text-[11px] font-black text-amber-200 transition hover:bg-amber-500/25 disabled:opacity-50"
+                                                        title="Hủy job đang chạy"
+                                                    >
+                                                        {cancellingJobId === img.id ? <Icons.Loader className="h-3.5 w-3.5 animate-spin" /> : <Icons.X className="h-3.5 w-3.5" />}
+                                                        <span>Hủy job</span>
+                                                    </button>
+                                                )}
+                                                {!isProcessing && (
+                                                    <button
+                                                        onClick={(e) => handleDelete(e, img.id, img.url, img.userId)}
+                                                        className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-red-400/40 bg-red-500/10 px-3 text-[11px] font-black text-red-300 transition hover:bg-red-500/20"
+                                                        title="Xóa khỏi lịch sử"
+                                                    >
+                                                        <Icons.Trash className="h-3.5 w-3.5" />
+                                                        <span>Xóa</span>
+                                                    </button>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>
@@ -1147,18 +1195,30 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                             {lang === 'vi' ? 'Nhật ký' : 'Progress log'}
                                         </button>
                                     )}
-                                    <button
-                                        type="button"
-                                        onClick={(e) => {
-                                            setViewingImage(null);
-                                            setShowLogViewer(false);
-                                            handleDelete(e, viewingImage.id, viewingImage.url, viewingImage.userId, viewingImage.toolId === 'dance_video_order');
-                                        }}
-                                        className="neu-button flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-xs font-black text-red-500 sm:col-span-3"
-                                    >
-                                        <Icons.Trash className="h-4 w-4" />
-                                        {lang === 'vi' ? 'Xóa khỏi lịch sử' : 'Delete from history'}
-                                    </button>
+                                    {['processing', 'queued'].includes(viewingImage.displayStatus || viewingImage.status || '') ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => void handleCancelJob(viewingImage)}
+                                            disabled={cancellingJobId === viewingImage.id}
+                                            className="flex min-h-[68px] items-center justify-center gap-2 rounded-2xl border border-amber-400/50 bg-amber-500/15 px-4 py-3 text-xs font-black text-amber-200 transition hover:bg-amber-500/25 disabled:opacity-50 sm:col-span-3"
+                                        >
+                                            {cancellingJobId === viewingImage.id ? <Icons.Loader className="h-4 w-4 animate-spin" /> : <Icons.X className="h-4 w-4" />}
+                                            {lang === 'vi' ? 'Hủy job' : 'Cancel job'}
+                                        </button>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                setViewingImage(null);
+                                                setShowLogViewer(false);
+                                                handleDelete(e, viewingImage.id, viewingImage.url, viewingImage.userId);
+                                            }}
+                                            className="neu-button flex min-h-[68px] items-center justify-center gap-2 rounded-2xl px-4 py-3 text-xs font-black text-red-500 sm:col-span-3"
+                                        >
+                                            <Icons.Trash className="h-4 w-4" />
+                                            {lang === 'vi' ? 'Xóa khỏi lịch sử' : 'Delete from history'}
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         </div>

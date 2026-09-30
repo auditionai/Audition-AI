@@ -234,6 +234,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/cancel-generation-job"
+  to = "/.netlify/functions/cancel-generation-job"
+  status = 200
+
+[[redirects]]
   from = "/api/checkin-reward"
   to = "/.netlify/functions/checkin-reward"
   status = 200

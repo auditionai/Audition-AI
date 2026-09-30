@@ -67,35 +67,19 @@ export const handler: Handler = async (event) => {
 
     const admin = getServiceRoleClient();
     const [{ data: image, error: imageError }, { data: requester, error: requesterError }] = await Promise.all([
-      admin.from('generated_images').select('id, user_id, image_url').eq('id', imageId).maybeSingle(),
+      admin.from('generated_images').select('id, user_id, image_url, status').eq('id', imageId).maybeSingle(),
       admin.from('users').select('is_admin').eq('id', user.id).maybeSingle(),
     ]);
     if (imageError) throw imageError;
     if (requesterError) throw requesterError;
-    // Dance AI orders share their ID with the generation-history row. Route
-    // these through the transaction that refunds only a pending order.
-    const { data: danceOrder, error: danceOrderError } = await admin
-      .from('dance_video_jobs')
-      .select('id, user_id')
-      .eq('id', imageId)
-      .maybeSingle();
-    if (danceOrderError) throw danceOrderError;
-    if (danceOrder) {
-      if (danceOrder.user_id !== user.id && requester?.is_admin !== true) {
-        return { statusCode: 403, headers, body: JSON.stringify({ error: 'You cannot cancel this Dance AI order.' }) };
-      }
-      const { data: refundedAmount, error: cancelError } = await admin.rpc('cancel_dance_video_order', {
-        p_user_id: danceOrder.user_id,
-        p_job_id: imageId,
-      });
-      if (cancelError) throw cancelError;
-      return { statusCode: 200, headers, body: JSON.stringify({ success: true, cancelledDanceOrder: true, refundedAmount }) };
-    }
     if (!image) {
       return { statusCode: 404, headers, body: JSON.stringify({ error: 'Không tìm thấy tác phẩm.' }) };
     }
     if (image.user_id !== user.id && requester?.is_admin !== true) {
       return { statusCode: 403, headers, body: JSON.stringify({ error: 'Bạn không có quyền xóa tác phẩm này.' }) };
+    }
+    if (['queued', 'processing'].includes(String(image.status || '').toLowerCase())) {
+      return { statusCode: 409, headers, body: JSON.stringify({ error: 'Job đang chạy. Hãy dùng nút Hủy job để dừng tiến trình.' }) };
     }
 
     const r2Key = extractR2Key(String(image.image_url || ''));
@@ -116,6 +100,7 @@ export const handler: Handler = async (event) => {
 
     const { error: deleteError } = await admin.from('generated_images').delete().eq('id', imageId);
     if (deleteError) throw deleteError;
+    await admin.from('dance_video_jobs').delete().eq('id', imageId);
 
     return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
   } catch (error: any) {

@@ -21,9 +21,11 @@ import { getUnifiedHistory } from '../../services/economyService';
 import { QUEUE_SUBMITTED_EVENT } from '../../services/serverQueueService';
 import {
   checkR2Connection,
+  cancelGenerationJob,
   deleteImageFromStorage,
   getHistoryRetentionDays,
   getAllImagesFromStorage,
+  getGenerationCancellationPreview,
   invalidateGalleryCache,
   mapGeneratedImageRow,
   publishImageToShowcase,
@@ -50,6 +52,7 @@ export function GalleryV2() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<GeneratedImage | null>(null);
+  const [cancellingJobId, setCancellingJobId] = useState<string | null>(null);
   const retentionDays = getHistoryRetentionDays();
 
   const loadItems = useCallback(async () => {
@@ -146,6 +149,36 @@ export function GalleryV2() {
     },
   });
 
+  const cancel = async (item: GeneratedImage) => {
+    try {
+      const preview = await getGenerationCancellationPreview(item.id);
+      confirm({
+        title: 'Hủy job đang chạy?',
+        message: preview.refundEligible
+          ? `Job đang trong hàng chờ. Hủy sẽ hoàn ${Number(preview.amount || 0).toLocaleString('vi-VN')} VCoin và vẫn giữ lịch sử.`
+          : 'Job đã được hệ thống tiếp nhận và đang xử lý. Bạn vẫn có thể hủy, nhưng VCoin sẽ không được hoàn. Lịch sử vẫn được giữ lại.',
+        confirmText: preview.refundEligible ? 'Hủy & hoàn VCoin' : 'Hủy không hoàn tiền',
+        cancelText: 'Quay lại',
+        isDanger: true,
+        onConfirm: async () => {
+          setCancellingJobId(item.id);
+          try {
+            const result = await cancelGenerationJob(item.id);
+            invalidateGalleryCache();
+            await loadItems();
+            notify(result.refunded ? 'Đã hủy job và hoàn VCoin.' : 'Đã hủy job. VCoin không được hoàn do job đã xử lý.', result.refunded ? 'success' : 'info');
+          } catch (error: any) {
+            notify(error?.message || 'Không thể hủy job.', 'error');
+          } finally {
+            setCancellingJobId(null);
+          }
+        },
+      });
+    } catch (error: any) {
+      notify(error?.message || 'Không thể kiểm tra điều kiện hủy job.', 'error');
+    }
+  };
+
   const download = async (item: GeneratedImage) => {
     if (!item.url) return;
     await downloadAssetToBrowser(item.url, `audition-ai-${item.id}.${assetKind(item) === 'video' ? 'mp4' : 'png'}`);
@@ -220,6 +253,7 @@ export function GalleryV2() {
                 const kind = assetKind(item);
                 const status = itemStatus(item);
                 const active = ['queued', 'processing', 'rescuing'].includes(status);
+                const wasCancelled = /cancelled by user/i.test(item.errorRaw || item.error || '');
                 return (
                   <button type="button" key={item.id} className="v2-creation-card v2-tap" onClick={() => setSelected(item)}>
                     <span className="v2-creation-card__media">
@@ -233,7 +267,7 @@ export function GalleryV2() {
                     <span className="v2-creation-card__copy">
                       <small>{kind === 'video' ? <Video size={13} /> : <ImageIcon size={13} />}{item.toolName || 'Audition AI'}</small>
                       <strong className={status === 'failed' ? 'v2-creation-card__status--failed' : undefined}>
-                        {active ? 'Đang sáng tạo…' : status === 'failed' ? (item.adminNote ? 'Có lưu ý từ Admin' : 'Thất bại · Hoàn Vcoin') : 'Đã hoàn thành'}
+                        {active ? 'Đang sáng tạo…' : status === 'failed' ? (item.adminNote ? 'Có lưu ý từ Admin' : wasCancelled ? 'Đã hủy' : 'Thất bại · Hoàn Vcoin') : 'Đã hoàn thành'}
                       </strong>
                       <em>{new Date(item.timestamp).toLocaleDateString('vi-VN')}</em>
                     </span>
@@ -334,9 +368,17 @@ export function GalleryV2() {
                 <span><CheckCircle2 size={15} /> {selected.toolName}</span>
                 <h2>{itemStatus(selected) === 'completed' ? 'Tác phẩm đã sẵn sàng' : 'Chi tiết tiến trình'}</h2>
                 <div className="v2-creation-sheet__actions">
-                  <button type="button" onClick={() => void download(selected)}><Download size={18} /> Tải xuống</button>
-                  {assetKind(selected) === 'image' && <button type="button" onClick={() => void share(selected)}><Share2 size={18} /> Chia sẻ</button>}
-                  <button type="button" className="is-danger" onClick={() => remove(selected)}><Trash2 size={18} /> Xóa</button>
+                  {['queued', 'processing'].includes(itemStatus(selected)) ? (
+                    <button type="button" className="is-danger" disabled={cancellingJobId === selected.id} onClick={() => void cancel(selected)}>
+                      {cancellingJobId === selected.id ? <Loader className="v2-spin" size={18} /> : <X size={18} />} Hủy job
+                    </button>
+                  ) : (
+                    <>
+                      <button type="button" onClick={() => void download(selected)}><Download size={18} /> Tải xuống</button>
+                      {assetKind(selected) === 'image' && <button type="button" onClick={() => void share(selected)}><Share2 size={18} /> Chia sẻ</button>}
+                      <button type="button" className="is-danger" onClick={() => remove(selected)}><Trash2 size={18} /> Xóa</button>
+                    </>
+                  )}
                 </div>
                 <p>{selected.prompt || 'Không có mô tả.'}</p>
               </div>

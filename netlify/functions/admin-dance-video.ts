@@ -12,7 +12,7 @@ export const handler: Handler = async (event) => {
     if (event.httpMethod === 'GET') {
       const [templates, jobs] = await Promise.all([
         admin.from('dance_video_templates').select('*').order('display_order').order('created_at', { ascending: false }),
-        admin.from('dance_video_jobs').select('*, dance_video_templates(title,preview_video_url,price_vcoin), users(display_name,email)').order('created_at', { ascending: false }).limit(300),
+        admin.from('dance_video_jobs').select('*, dance_video_templates(id,title,preview_video_url,price_vcoin,category,description,required_image_count), users(display_name,email)').order('created_at', { ascending: false }).limit(300),
       ]);
       if (templates.error) throw templates.error;
       if (jobs.error) throw jobs.error;
@@ -34,6 +34,14 @@ export const handler: Handler = async (event) => {
     }
     if (body.action === 'delete-template') {
       const { error } = await admin.from('dance_video_templates').delete().eq('id', String(body.id || ''));
+      if (error) throw error;
+      return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
+    }
+    if (body.action === 'delete-job') {
+      const id = String(body.id || '');
+      if (!id) throw new Error('Thiếu ID đơn hàng cần xóa.');
+      await admin.from('generated_images').delete().eq('id', id);
+      const { error } = await admin.from('dance_video_jobs').delete().eq('id', id);
       if (error) throw error;
       return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
     }

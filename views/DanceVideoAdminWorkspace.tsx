@@ -29,6 +29,14 @@ export const DanceVideoAdminWorkspace: React.FC = () => {
   const [uploadingTemplateVideo, setUploadingTemplateVideo] = useState(false);
   const [uploadingJobId, setUploadingJobId] = useState<string | null>(null);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
+  const [previewVideoModal, setPreviewVideoModal] = useState<{
+    url: string;
+    title: string;
+    category?: string;
+    price_vcoin?: number;
+    description?: string;
+  } | null>(null);
+  const [deletingJobId, setDeletingJobId] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -48,7 +56,7 @@ export const DanceVideoAdminWorkspace: React.FC = () => {
   const visibleJobs = useMemo(() => {
     return jobs.filter((job) => {
       const matchesStatus = statusFilter === 'all' || job.status === statusFilter;
-      const haystack = `${job.dance_video_templates?.title || ''} ${job.users?.display_name || ''} ${job.users?.email || ''} ${job.contact_zalo || ''} ${job.note || ''}`.toLowerCase();
+      const haystack = `${job.dance_video_templates?.title || ''} ${job.dance_video_templates?.category || ''} ${job.customer_name || ''} ${job.users?.display_name || ''} ${job.users?.email || ''} ${job.contact_zalo || ''} ${job.note || ''}`.toLowerCase();
       return matchesStatus && haystack.includes(query.toLowerCase().trim());
     });
   }, [jobs, query, statusFilter]);
@@ -70,6 +78,23 @@ export const DanceVideoAdminWorkspace: React.FC = () => {
       resultVideoUrl: patch.resultVideoUrl ?? job.result_video_url,
     });
     await load();
+  };
+
+  const handleDeleteJob = async (job: any) => {
+    const templateTitle = job.dance_video_templates?.title || 'Mẫu video';
+    const customer = job.customer_name || job.users?.display_name || job.users?.email || 'Khách hàng';
+    const confirmMsg = `Bạn có chắc chắn muốn XÓA ĐƠN HÀNG này?\n\n• Mẫu video: ${templateTitle}\n• Khách hàng: ${customer}\n• Mã đơn: ${job.id}\n\nThao tác này sẽ xóa vĩnh viễn và không thể khôi phục!`;
+    if (!window.confirm(confirmMsg)) return;
+
+    setDeletingJobId(job.id);
+    try {
+      await adminDanceVideoAction({ action: 'delete-job', id: job.id });
+      await load();
+    } catch (err: any) {
+      alert('Lỗi xóa đơn hàng: ' + (err?.message || 'Không xác định'));
+    } finally {
+      setDeletingJobId(null);
+    }
   };
 
   const handleUploadResultVideo = async (job: any, file: File) => {
@@ -303,14 +328,14 @@ export const DanceVideoAdminWorkspace: React.FC = () => {
 
           {/* Orders Table */}
           <div className="overflow-x-auto dance-admin-table-scroll rounded-2xl neu-inset-sm p-1">
-            <table className="w-full text-left text-xs text-slate-800 dark:text-slate-200">
+            <table className="w-full text-left text-xs text-slate-800 dark:text-slate-200 min-w-[960px]">
               <thead className="neu-raised-sm text-[10px] font-black text-slate-950 dark:text-white uppercase font-accent border-b border-slate-300 dark:border-slate-700">
                 <tr>
-                  <th className="px-4 py-3.5">Khách & Mẫu Video</th>
-                  <th className="px-4 py-3.5">Ảnh Nhân Vật Game</th>
-                  <th className="px-4 py-3.5">Liên Hệ & Ghi Chú</th>
+                  <th className="px-4 py-3.5 min-w-[280px]">Mẫu Video Vũ Đạo (Template)</th>
+                  <th className="px-4 py-3.5 min-w-[220px]">Khách Hàng & Ghi Chú</th>
+                  <th className="px-4 py-3.5 min-w-[140px]">Ảnh Nhân Vật Game</th>
                   <th className="px-4 py-3.5 min-w-[260px]">Video Kết Quả (Cloudflare R2)</th>
-                  <th className="px-4 py-3.5 text-right">Trạng Thái Đơn</th>
+                  <th className="px-4 py-3.5 text-right min-w-[160px]">Trạng Thái & Thao Tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
@@ -324,63 +349,185 @@ export const DanceVideoAdminWorkspace: React.FC = () => {
                   visibleJobs.map((job) => {
                     const badge = getStatusBadge(job.status);
                     const isUploadingThis = uploadingJobId === job.id;
+                    const isDeletingThis = deletingJobId === job.id;
+                    const template = job.dance_video_templates;
                     return (
                       <tr key={job.id} className="hover:bg-slate-200/40 dark:hover:bg-white/5 transition-colors align-top">
-                        {/* 1. Customer & Template */}
-                        <td className="px-4 py-4 space-y-1">
-                          <b className="block text-slate-950 dark:text-white font-accent font-black text-sm">
-                            {job.dance_video_templates?.title || 'Mẫu video'}
-                          </b>
-                          <div className="text-slate-600 dark:text-slate-400 text-xs">
-                            {job.users?.display_name || job.users?.email || job.user_id}
-                          </div>
-                          <div className="text-[10px] text-slate-500 font-mono">
-                            {new Date(job.created_at).toLocaleString('vi-VN')}
-                          </div>
-                        </td>
-
-                        {/* 2. Character Reference Images */}
+                        {/* 1. Dance Video Template Preview & Info */}
                         <td className="px-4 py-4">
-                          <div className="flex flex-wrap gap-2">
-                            {(job.character_image_urls || []).map((url: string, index: number) => (
-                              <button
-                                key={url}
-                                type="button"
-                                onClick={() => setZoomedImage(url)}
-                                className="group relative w-12 h-12 rounded-xl overflow-hidden border border-slate-300 dark:border-slate-700 hover:border-[#00F2FE] transition-colors"
-                                title="Bấm để xem ảnh phóng to"
-                              >
-                                <img
-                                  src={url}
-                                  alt={`Nhân vật ${index + 1}`}
-                                  className="w-full h-full object-cover group-hover:scale-110 transition-transform"
+                          <div className="flex items-start gap-3">
+                            {/* Video Thumbnail with Hover Play & Modal Trigger */}
+                            <div
+                              onClick={() => {
+                                if (template?.preview_video_url) {
+                                  setPreviewVideoModal({
+                                    url: template.preview_video_url,
+                                    title: template.title || 'Mẫu video vũ đạo',
+                                    category: template.category,
+                                    price_vcoin: template.price_vcoin,
+                                    description: template.description,
+                                  });
+                                }
+                              }}
+                              className="group relative w-20 h-24 rounded-2xl overflow-hidden bg-black flex-shrink-0 cursor-pointer border border-slate-300 dark:border-slate-700 hover:border-[#FF007F] hover:shadow-[0_0_15px_rgba(255,0,127,0.35)] transition-all"
+                              title="Bấm để xem video mẫu vũ đạo"
+                            >
+                              {template?.preview_video_url ? (
+                                <video
+                                  src={template.preview_video_url}
+                                  muted
+                                  loop
+                                  playsInline
+                                  onMouseEnter={(e) => void e.currentTarget.play().catch(() => {})}
+                                  onMouseLeave={(e) => { e.currentTarget.pause(); e.currentTarget.currentTime = 0; }}
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                                 />
-                                <span className="absolute bottom-0 inset-x-0 bg-black/75 text-[9px] font-bold text-center text-white py-0.5">
-                                  Ảnh {index + 1}
+                              ) : (
+                                <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 gap-1">
+                                  <Icons.Video className="w-6 h-6" />
+                                  <span className="text-[9px]">Chưa có video</span>
+                                </div>
+                              )}
+
+                              <div className="absolute inset-0 bg-black/35 group-hover:bg-black/10 flex items-center justify-center transition-colors">
+                                <span className="w-7 h-7 rounded-full bg-black/70 group-hover:bg-[#FF007F] text-white flex items-center justify-center shadow-lg transition-transform group-hover:scale-110">
+                                  <Icons.Play className="w-3.5 h-3.5 fill-current ml-0.5" />
                                 </span>
+                              </div>
+
+                              <span className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/95 via-black/70 to-transparent text-[8px] font-black text-center text-white py-1 uppercase tracking-wider font-accent">
+                                Xem Mẫu
+                              </span>
+                            </div>
+
+                            {/* Template Metadata */}
+                            <div className="space-y-1.5 flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="neu-inset-sm px-2 py-0.5 rounded-md text-[9px] font-black uppercase text-[#FF007F] border border-[#FF007F]/20 font-accent tracking-wide">
+                                  {template?.category || 'Dance AI'}
+                                </span>
+                                {template?.price_vcoin && (
+                                  <span className="neu-inset-sm px-1.5 py-0.5 rounded-md text-[9px] font-mono text-amber-500 font-bold">
+                                    {template.price_vcoin} Vcoin
+                                  </span>
+                                )}
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (template?.preview_video_url) {
+                                    setPreviewVideoModal({
+                                      url: template.preview_video_url,
+                                      title: template.title || 'Mẫu video vũ đạo',
+                                      category: template.category,
+                                      price_vcoin: template.price_vcoin,
+                                      description: template.description,
+                                    });
+                                  }
+                                }}
+                                className="text-left font-accent font-black text-sm text-slate-950 dark:text-white hover:text-[#FF007F] transition-colors line-clamp-2 block leading-snug"
+                                title="Bấm để xem video mẫu này"
+                              >
+                                {template?.title || 'Mẫu video không tên'}
                               </button>
-                            ))}
+
+                              <div className="text-[11px] text-slate-500 flex items-center gap-1.5 font-mono">
+                                <Icons.Users className="w-3 h-3 text-slate-400" />
+                                <span>Yêu cầu:</span>
+                                <span className="font-bold text-slate-700 dark:text-slate-300">
+                                  {template?.required_image_count || job.character_image_urls?.length || 1} nhân vật
+                                </span>
+                              </div>
+
+                              {template?.preview_video_url && (
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewVideoModal({
+                                    url: template.preview_video_url,
+                                    title: template.title || 'Mẫu video vũ đạo',
+                                    category: template.category,
+                                    price_vcoin: template.price_vcoin,
+                                    description: template.description,
+                                  })}
+                                  className="inline-flex items-center gap-1 text-[10px] font-bold text-[#00F2FE] hover:underline"
+                                >
+                                  <Icons.Video className="w-3 h-3" />
+                                  <span>Phát video mẫu full</span>
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </td>
 
-                        {/* 3. Contact & Customer Note */}
-                        <td className="px-4 py-4 space-y-1.5 max-w-[200px]">
-                          {job.contact_zalo ? (
-                            <a
-                              href={`https://zalo.me/${job.contact_zalo}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1 neu-inset-sm px-2.5 py-1 rounded-lg text-amber-500 font-mono font-bold text-xs hover:underline"
-                            >
-                              <Icons.Phone className="w-3 h-3" />
-                              <span>Zalo: {job.contact_zalo}</span>
-                            </a>
-                          ) : (
-                            <span className="text-[11px] text-slate-400 italic">Không có Zalo</span>
+                        {/* 2. Customer, Contact & Note */}
+                        <td className="px-4 py-4 space-y-2">
+                          <div>
+                            <div className="flex items-center gap-1.5 text-slate-950 dark:text-white font-accent font-bold text-sm">
+                              <Icons.User className="w-3.5 h-3.5 text-[#FF007F]" />
+                              <span>{job.customer_name || job.users?.display_name || 'Khách vãng lai'}</span>
+                            </div>
+                            <div className="text-slate-500 dark:text-slate-400 text-xs font-mono pl-5">
+                              {job.users?.email || job.user_id}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1 text-[10px] text-slate-500 font-mono pl-5">
+                            <Icons.Clock className="w-3 h-3" />
+                            <span>{new Date(job.created_at).toLocaleString('vi-VN')}</span>
+                          </div>
+
+                          {job.contact_zalo && (
+                            <div className="pl-5 pt-0.5">
+                              <a
+                                href={`https://zalo.me/${job.contact_zalo.replace(/[^0-9]/g, '')}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 neu-inset-sm px-2.5 py-1 rounded-lg text-amber-500 font-mono font-bold text-xs hover:underline border border-amber-500/20"
+                              >
+                                <Icons.Phone className="w-3 h-3" />
+                                <span>Zalo: {job.contact_zalo}</span>
+                              </a>
+                            </div>
                           )}
-                          <p className="text-xs text-slate-600 dark:text-slate-400 whitespace-pre-wrap leading-relaxed">
-                            {job.note || 'Không có ghi chú thêm.'}
-                          </p>
+
+                          {job.note && (
+                            <div className="pl-5 pt-1">
+                              <div className="text-[11px] text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/40 p-2 rounded-xl border border-slate-200 dark:border-slate-800 whitespace-pre-wrap leading-relaxed">
+                                <span className="font-bold text-slate-700 dark:text-slate-300 block mb-0.5">Ghi chú của khách:</span>
+                                {job.note}
+                              </div>
+                            </div>
+                          )}
+                        </td>
+
+                        {/* 3. Character Reference Images */}
+                        <td className="px-4 py-4">
+                          <div className="space-y-1.5">
+                            <div className="flex flex-wrap gap-2">
+                              {(job.character_image_urls || []).map((url: string, index: number) => (
+                                <button
+                                  key={url}
+                                  type="button"
+                                  onClick={() => setZoomedImage(url)}
+                                  className="group relative w-12 h-12 rounded-xl overflow-hidden border border-slate-300 dark:border-slate-700 hover:border-[#00F2FE] hover:shadow-[0_0_10px_rgba(0,242,254,0.3)] transition-all flex-shrink-0"
+                                  title="Bấm để xem ảnh phóng to"
+                                >
+                                  <img
+                                    src={url}
+                                    alt={`Nhân vật ${index + 1}`}
+                                    className="w-full h-full object-cover group-hover:scale-110 transition-transform"
+                                  />
+                                  <span className="absolute bottom-0 inset-x-0 bg-black/80 text-[8px] font-bold text-center text-white py-0.5">
+                                    Ảnh {index + 1}
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                            <span className="text-[10px] text-slate-500 font-mono block">
+                              {(job.character_image_urls || []).length} ảnh nhân vật
+                            </span>
+                          </div>
                         </td>
 
                         {/* 4. Result Video Console */}
@@ -435,9 +582,9 @@ export const DanceVideoAdminWorkspace: React.FC = () => {
                           </div>
                         </td>
 
-                        {/* 5. Status Selector */}
+                        {/* 5. Status & Actions (including Delete Order) */}
                         <td className="px-4 py-4 text-right">
-                          <div className="space-y-2 inline-flex flex-col items-end">
+                          <div className="space-y-2.5 inline-flex flex-col items-end">
                             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-black font-accent uppercase ${badge.classes}`}>
                               <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} />
                               <span>{badge.label}</span>
@@ -453,6 +600,22 @@ export const DanceVideoAdminWorkspace: React.FC = () => {
                               <option value="processing">Đang render AI</option>
                               <option value="completed">Đã hoàn thành</option>
                             </select>
+
+                            {/* DELETE ORDER BUTTON */}
+                            <button
+                              type="button"
+                              onClick={() => void handleDeleteJob(job)}
+                              disabled={isDeletingThis}
+                              className="neu-button px-2.5 py-1.5 rounded-xl text-[11px] font-bold text-rose-500 hover:text-rose-400 hover:bg-rose-500/10 border border-rose-500/20 flex items-center gap-1.5 transition-all disabled:opacity-50"
+                              title="Xóa vĩnh viễn đơn hàng này"
+                            >
+                              {isDeletingThis ? (
+                                <Icons.Loader className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Icons.Trash className="w-3.5 h-3.5" />
+                              )}
+                              <span>Xóa đơn</span>
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -800,6 +963,89 @@ export const DanceVideoAdminWorkspace: React.FC = () => {
                 type="button"
                 onClick={() => setZoomedImage(null)}
                 className="neu-button px-4 py-1.5 rounded-xl text-xs font-black text-slate-900 dark:text-white"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 8. PREVIEW TEMPLATE VIDEO MODAL */}
+      {previewVideoModal && (
+        <div
+          className="fixed inset-0 z-[140] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
+          onClick={() => setPreviewVideoModal(null)}
+        >
+          <div
+            className="neu-card w-full max-w-2xl rounded-3xl border border-slate-300 dark:border-slate-800 shadow-2xl p-5 sm:p-6 dance-modal-animate space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl neu-inset-sm flex items-center justify-center text-[#FF007F]">
+                  <Icons.Video className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 font-accent">
+                      Video Mẫu Vũ Đạo Gốc
+                    </span>
+                    {previewVideoModal.category && (
+                      <span className="neu-inset-sm px-1.5 py-0.5 rounded text-[9px] font-bold text-[#FF007F]">
+                        {previewVideoModal.category}
+                      </span>
+                    )}
+                    {previewVideoModal.price_vcoin && (
+                      <span className="neu-inset-sm px-1.5 py-0.5 rounded text-[9px] font-mono text-amber-500 font-bold">
+                        {previewVideoModal.price_vcoin} Vcoin
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="text-base font-black font-accent text-slate-950 dark:text-white uppercase line-clamp-1">
+                    {previewVideoModal.title}
+                  </h3>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewVideoModal(null)}
+                className="neu-button w-8 h-8 rounded-xl flex items-center justify-center text-slate-500 hover:text-white"
+              >
+                <Icons.X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="relative aspect-video max-h-[65vh] w-full rounded-2xl overflow-hidden bg-black shadow-inner flex items-center justify-center">
+              <video
+                src={previewVideoModal.url}
+                controls
+                autoPlay
+                playsInline
+                className="w-full h-full object-contain"
+              />
+            </div>
+
+            {previewVideoModal.description && (
+              <p className="text-xs text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/40 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800">
+                {previewVideoModal.description}
+              </p>
+            )}
+
+            <div className="flex items-center justify-between pt-1">
+              <a
+                href={previewVideoModal.url}
+                target="_blank"
+                rel="noreferrer"
+                className="neu-button px-3.5 py-2 rounded-xl text-xs font-bold text-[#00F2FE] flex items-center gap-1.5"
+              >
+                <Icons.ExternalLink className="w-3.5 h-3.5" />
+                <span>Mở trong tab mới</span>
+              </a>
+              <button
+                type="button"
+                onClick={() => setPreviewVideoModal(null)}
+                className="neu-button px-5 py-2 rounded-xl text-xs font-black uppercase text-slate-700 dark:text-slate-300 hover:text-white"
               >
                 Đóng
               </button>

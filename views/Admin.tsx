@@ -152,7 +152,7 @@ const ADMIN_NAV_SECTIONS: Array<{
             { id: 'users', icon: Icons.Users, label: 'Người dùng', description: 'Tài khoản và số dư' },
             { id: 'giftcode_abuse', icon: Icons.AlertTriangle, label: 'Vi phạm code', description: 'Phát hiện lạm dụng' },
             { id: 'queue', icon: Icons.Activity, label: 'Queue Jobs', description: 'Luồng render realtime' },
-            { id: 'dance_video', icon: Icons.Video, label: 'Đơn Dance AI', description: 'Mẫu & job Motion Control' },
+            { id: 'dance_video', icon: Icons.Video, label: 'Đặt làm video AI', description: 'Mẫu & đơn Motion Control' },
         ],
     },
     {

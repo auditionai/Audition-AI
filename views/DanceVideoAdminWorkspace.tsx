@@ -488,15 +488,15 @@ export const DanceVideoAdminWorkspace: React.FC = () => {
             </button>
           </div>
 
-          {/* Templates Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          {/* Templates Grid - Compact & Refined */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-4">
             {templates.map((template) => (
               <article
                 key={template.id}
-                className="neu-card rounded-3xl overflow-hidden border border-slate-300 dark:border-slate-800 shadow-xl flex flex-col justify-between"
+                className="neu-card rounded-2xl overflow-hidden border border-slate-300 dark:border-slate-800 shadow-lg flex flex-col justify-between"
               >
                 <div>
-                  <div className="relative aspect-video w-full bg-black overflow-hidden">
+                  <div className="relative aspect-video max-h-[175px] w-full bg-black overflow-hidden">
                     <video
                       src={template.preview_video_url}
                       controls

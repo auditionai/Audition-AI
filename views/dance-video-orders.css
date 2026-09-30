@@ -2,9 +2,7 @@
 
 .dance-order-page {
   width: 100%;
-  max-width: 1400px;
-  margin: 0 auto;
-  padding-bottom: 96px;
+  padding-bottom: 80px;
 }
 
 /* Custom scrollbars for category rails */
@@ -18,11 +16,11 @@
 
 /* Video Card Aspect & Hover Glow */
 .dance-card-glow {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .dance-card-glow:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 16px 36px -10px rgba(255, 0, 127, 0.25), 0 0 20px rgba(0, 242, 254, 0.18);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 28px -8px rgba(255, 0, 127, 0.22), 0 0 16px rgba(0, 242, 254, 0.15);
 }
 
 /* Drawer animations */
@@ -38,7 +36,7 @@
 }
 
 .dance-drawer-animate {
-  animation: danceDrawerSlideIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: danceDrawerSlideIn 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 /* Pulse animation for live badge */

@@ -31,7 +31,10 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
 export const useNotification = () => {
   const context = useContext(NotificationContext);
   if (!context) {
-    throw new Error('useNotification must be used within a NotificationProvider');
+    return {
+      notify: (message: string, type: NotificationType = 'info') => { if (typeof window !== 'undefined') console.log('[Notification ' + type + ']: ' + message); },
+      confirm: (options: ConfirmOptions) => { if (typeof window !== 'undefined' && window.confirm(options.message)) options.onConfirm(); else if (options.onCancel) options.onCancel(); }
+    };
   }
   return context;
 };

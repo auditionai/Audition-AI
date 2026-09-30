@@ -309,6 +309,61 @@ export function HomeV2() {
             <span className="v2-outline-button">Tạo ngay <ArrowRight size={16} /></span>
           </span>
         </button>
+
+        <button
+          type="button"
+          className="v2-feature-card v2-feature-card--dance v2-neon-frame v2-tap"
+          data-accent="violet"
+          onClick={() => openFeature('/dat-lam-video-ai')}
+        >
+          <span className="v2-feature-card__art" aria-hidden="true">
+            <span className="v2-art-avatar v2-art-avatar--dance"><Film size={58} strokeWidth={1.15} /></span>
+          </span>
+          <span className="v2-feature-card__veil" />
+          <span className="v2-feature-card__content">
+            <span className="v2-feature-card__icon"><Film size={22} /></span>
+            <strong>Đặt làm video AI</strong>
+            <small>Chọn mẫu vũ đạo, tạo video nhảy Audition theo yêu cầu</small>
+            <span className="v2-outline-button">Đặt ngay <ArrowRight size={16} /></span>
+          </span>
+        </button>
+
+        <button
+          type="button"
+          className="v2-feature-card v2-feature-card--video v2-neon-frame v2-tap"
+          data-accent="cyan"
+          onClick={() => openFeature('/generate/video?tool=video_ai_gen', 'video_ai_gen')}
+          disabled={isLocked('video_ai_gen')}
+        >
+          <span className="v2-feature-card__art" aria-hidden="true">
+            <span className="v2-art-avatar v2-art-avatar--video"><Video size={58} strokeWidth={1.15} /></span>
+          </span>
+          <span className="v2-feature-card__veil" />
+          <span className="v2-feature-card__content">
+            <span className="v2-feature-card__icon"><Video size={22} /></span>
+            <strong>Ảnh thành Video</strong>
+            <small>Biến ảnh 3D thành video chuyển động sống động</small>
+            <span className="v2-outline-button">Tạo ngay <ArrowRight size={16} /></span>
+          </span>
+        </button>
+
+        <button
+          type="button"
+          className="v2-feature-card v2-feature-card--edit v2-neon-frame v2-tap"
+          data-accent="pink"
+          onClick={() => openFeature('/tools-hub/edit')}
+        >
+          <span className="v2-feature-card__art" aria-hidden="true">
+            <span className="v2-art-avatar v2-art-avatar--edit"><Crop size={58} strokeWidth={1.15} /></span>
+          </span>
+          <span className="v2-feature-card__veil" />
+          <span className="v2-feature-card__content">
+            <span className="v2-feature-card__icon"><Crop size={22} /></span>
+            <strong>Chỉnh sửa ảnh</strong>
+            <small>Tách nền Pro, làm nét và phục hồi chi tiết ảnh</small>
+            <span className="v2-outline-button">Khám phá <ArrowRight size={16} /></span>
+          </span>
+        </button>
       </section>
 
       {showCheckin && (

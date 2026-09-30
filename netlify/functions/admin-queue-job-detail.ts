@@ -107,6 +107,11 @@ const toAdminJob = (row: any, profile?: { email?: string; displayName?: string }
     error: normalizeQueueErrorMessage(displayErrorSource || row.error_message || undefined) || undefined,
     errorCategory: errorInfo.category,
     errorRaw: repairVietnameseMojibake(row.error_message || undefined) || undefined,
+    adminNote:
+      (typeof payload?.__adminErrorNote === 'string' && payload.__adminErrorNote.trim()) ||
+      (typeof row.error_message === 'string' && row.error_message.startsWith('[ADMIN]: ')
+        ? row.error_message.replace('[ADMIN]: ', '').trim()
+        : undefined),
     createdAt: row.created_at || undefined,
     updatedAt: row.updated_at || undefined,
     nextPollAt: row.next_poll_at || undefined,

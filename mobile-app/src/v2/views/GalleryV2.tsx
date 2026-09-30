@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clock3,
+  Copy,
   Gem,
   Download,
   Image as ImageIcon,
@@ -28,6 +29,7 @@ import {
   publishImageToShowcase,
 } from '../../services/storageService';
 import { downloadAssetToBrowser } from '../../../../services/downloadService';
+import { getUserFriendlyErrorInfo } from '../../../../shared/queueErrorClassifier';
 import type { GeneratedImage, HistoryItem } from '../../types';
 
 type ViewMode = 'creations' | 'wallet';
@@ -230,7 +232,9 @@ export function GalleryV2() {
                     </span>
                     <span className="v2-creation-card__copy">
                       <small>{kind === 'video' ? <Video size={13} /> : <ImageIcon size={13} />}{item.toolName || 'Audition AI'}</small>
-                      <strong>{active ? 'Đang sáng tạo…' : status === 'failed' ? 'Cần thử lại' : 'Đã hoàn thành'}</strong>
+                      <strong className={status === 'failed' ? 'v2-creation-card__status--failed' : undefined}>
+                        {active ? 'Đang sáng tạo…' : status === 'failed' ? (item.adminNote ? 'Có lưu ý từ Admin' : 'Thất bại · Hoàn Vcoin') : 'Đã hoàn thành'}
+                      </strong>
                       <em>{new Date(item.timestamp).toLocaleDateString('vi-VN')}</em>
                     </span>
                   </button>
@@ -256,19 +260,88 @@ export function GalleryV2() {
       {selected && (
         <div className="v2-creation-sheet" role="dialog" aria-modal="true" aria-label="Chi tiết tác phẩm">
           <button type="button" className="v2-creation-sheet__close" onClick={() => setSelected(null)} aria-label="Đóng"><X size={20} /></button>
-          <div className="v2-creation-sheet__media">
-            {assetKind(selected) === 'video' ? <video src={selected.url} controls playsInline /> : <img src={selected.url} alt={selected.toolName} />}
-          </div>
-          <div className="v2-creation-sheet__info">
-            <span><CheckCircle2 size={15} /> {selected.toolName}</span>
-            <h2>{itemStatus(selected) === 'completed' ? 'Tác phẩm đã sẵn sàng' : 'Chi tiết tiến trình'}</h2>
-            <div className="v2-creation-sheet__actions">
-              <button type="button" onClick={() => void download(selected)}><Download size={18} /> Tải xuống</button>
-              {assetKind(selected) === 'image' && <button type="button" onClick={() => void share(selected)}><Share2 size={18} /> Chia sẻ</button>}
-              <button type="button" className="is-danger" onClick={() => remove(selected)}><Trash2 size={18} /> Xóa</button>
-            </div>
-            <p>{selected.prompt || 'Không có mô tả.'}</p>
-          </div>
+          {itemStatus(selected) === 'failed' ? (() => {
+            const errInfo = getUserFriendlyErrorInfo(selected.errorRaw || selected.error, selected.adminNote);
+            return (
+              <>
+                <div className="v2-creation-sheet__media v2-creation-sheet__media--failed">
+                  <div className="v2-creation-failed-card">
+                    <span className="v2-creation-failed-icon">
+                      <AlertTriangle size={36} />
+                    </span>
+                    <strong className="v2-creation-failed-title">{errInfo.title}</strong>
+                    <span className="v2-creation-failed-tag">Đã hoàn 100% Vcoin</span>
+                  </div>
+                </div>
+                <div className="v2-creation-sheet__info">
+                  <span className="v2-creation-sheet__tag--danger">
+                    <AlertTriangle size={14} /> {selected.toolName || 'Tác vụ AI'} · Thất bại
+                  </span>
+
+                  {selected.adminNote && (
+                    <div className="v2-admin-note-banner">
+                      <div className="v2-admin-note-header">
+                        <Sparkles size={14} />
+                        <strong>Lời nhắn từ Quản trị viên:</strong>
+                      </div>
+                      <p>{selected.adminNote}</p>
+                    </div>
+                  )}
+
+                  <div className="v2-error-detail-box">
+                    <div className="v2-error-section">
+                      <small>Nguyên nhân:</small>
+                      <p>{errInfo.reason}</p>
+                    </div>
+                    <div className="v2-error-section is-solution">
+                      <small>Hướng xử lý:</small>
+                      <p>{errInfo.resolution}</p>
+                    </div>
+                  </div>
+
+                  {selected.prompt && (
+                    <div className="v2-prompt-review-box">
+                      <small>Mô tả (Prompt) đã dùng:</small>
+                      <p>{selected.prompt}</p>
+                    </div>
+                  )}
+
+                  <div className="v2-creation-sheet__actions">
+                    {selected.prompt && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void navigator.clipboard?.writeText(selected.prompt);
+                          notify('Đã sao chép prompt để tạo lại!', 'success');
+                        }}
+                      >
+                        <Copy size={16} /> Sao chép prompt
+                      </button>
+                    )}
+                    <button type="button" className="is-danger" onClick={() => remove(selected)}>
+                      <Trash2 size={16} /> Xóa tác vụ
+                    </button>
+                  </div>
+                </div>
+              </>
+            );
+          })() : (
+            <>
+              <div className="v2-creation-sheet__media">
+                {assetKind(selected) === 'video' ? <video src={selected.url} controls playsInline /> : <img src={selected.url} alt={selected.toolName} />}
+              </div>
+              <div className="v2-creation-sheet__info">
+                <span><CheckCircle2 size={15} /> {selected.toolName}</span>
+                <h2>{itemStatus(selected) === 'completed' ? 'Tác phẩm đã sẵn sàng' : 'Chi tiết tiến trình'}</h2>
+                <div className="v2-creation-sheet__actions">
+                  <button type="button" onClick={() => void download(selected)}><Download size={18} /> Tải xuống</button>
+                  {assetKind(selected) === 'image' && <button type="button" onClick={() => void share(selected)}><Share2 size={18} /> Chia sẻ</button>}
+                  <button type="button" className="is-danger" onClick={() => remove(selected)}><Trash2 size={18} /> Xóa</button>
+                </div>
+                <p>{selected.prompt || 'Không có mô tả.'}</p>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>

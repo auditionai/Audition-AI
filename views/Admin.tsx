@@ -41,6 +41,7 @@ import {
     getAdminUserHistory,
     getAdminQueueJobs,
     getAdminQueueJobDetail,
+    updateAdminQueueJobNote,
     stopAdminQueueJob,
     retryAdminQueueJob,
     getGiftcodeUsages,
@@ -125,6 +126,7 @@ import {
 } from '../services/providerCatalog';
 import { getGommoServerGroups } from '../shared/gommoServerRouting';
 import { sanitizeProviderDisplayText } from '../shared/providerDisplay';
+import { getUserFriendlyErrorInfo } from '../shared/queueErrorClassifier';
 
 interface AdminProps {
   lang: Language;
@@ -704,6 +706,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [queueJobPendingRetry, setQueueJobPendingRetry] = useState<AdminQueueJob | null>(null);
   const [retryingQueueJobProvider, setRetryingQueueJobProvider] = useState<'tst' | 'gommo' | 'gpti2' | null>(null);
   const [queuePromptExpanded, setQueuePromptExpanded] = useState(false);
+  const [adminCustomErrorNote, setAdminCustomErrorNote] = useState('');
+  const [savingAdminNote, setSavingAdminNote] = useState(false);
   const [reopeningAutoDisabledKey, setReopeningAutoDisabledKey] = useState<string | null>(null);
 
   // Health State
@@ -2443,14 +2447,49 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       setSelectedQueueJobId(jobId);
       setSelectedQueueJobDetail(null);
       setQueuePromptExpanded(false);
+      setAdminCustomErrorNote('');
       setLoadingQueueJobDetail(true);
       try {
           const detail = await getAdminQueueJobDetail(jobId);
           setSelectedQueueJobDetail(detail);
+          setAdminCustomErrorNote(detail.job.adminNote || '');
       } catch (error: any) {
           showToast(`Lỗi tải chi tiết job: ${error?.message || error}`, 'error');
       } finally {
           setLoadingQueueJobDetail(false);
+      }
+  };
+
+  const handleSaveAdminQueueJobNote = async (jobId: string, customNote: string) => {
+      setSavingAdminNote(true);
+      try {
+          await updateAdminQueueJobNote(jobId, customNote.trim());
+          showToast('Đã lưu ghi chú thông báo cho user thành công.');
+          if (selectedQueueJobDetail && selectedQueueJobDetail.job.id === jobId) {
+              setSelectedQueueJobDetail({
+                  ...selectedQueueJobDetail,
+                  job: {
+                      ...selectedQueueJobDetail.job,
+                      adminNote: customNote.trim() || undefined,
+                      error: customNote.trim() ? customNote.trim() : selectedQueueJobDetail.job.error,
+                  },
+              });
+          }
+          setQueueJobs((prev) =>
+              prev.map((job) =>
+                  job.id === jobId
+                      ? {
+                            ...job,
+                            adminNote: customNote.trim() || undefined,
+                            error: customNote.trim() ? customNote.trim() : job.error,
+                        }
+                      : job,
+              ),
+          );
+      } catch (error: any) {
+          showToast(`Lỗi lưu ghi chú: ${error?.message || error}`, 'error');
+      } finally {
+          setSavingAdminNote(false);
       }
   };
 
@@ -4284,6 +4323,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                           {getQueueErrorCategoryLabel(job.errorCategory)}
                                                       </div>
                                                   )}
+                                                  {job.adminNote && (
+                                                      <div className="mb-1.5 inline-flex items-center gap-1 rounded bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 text-[10px] font-bold text-amber-300">
+                                                          <Icons.Edit2 className="w-3 h-3 text-amber-400" />
+                                                          <span>Ghi chú Admin: {job.adminNote}</span>
+                                                      </div>
+                                                  )}
                                                   <div className="text-red-300">{job.error || '-'}</div>
                                                   {lastLogMessage && <div className="mt-2 text-slate-300">{lastLogMessage}</div>}
                                                   {job.jobId && <div className="mt-1 text-[11px] text-audi-cyan">Provider ID: {job.jobId}</div>}
@@ -4327,6 +4372,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       {job.errorCategory && job.error && (
                                           <div className={`inline-flex mt-3 px-2 py-1 rounded border text-[10px] font-bold uppercase ${getQueueErrorCategoryClass(job.errorCategory)}`}>
                                               {getQueueErrorCategoryLabel(job.errorCategory)}
+                                          </div>
+                                      )}
+                                      {job.adminNote && (
+                                          <div className="mt-2 inline-flex items-center gap-1 rounded bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 text-[10px] font-bold text-amber-300">
+                                              <Icons.Edit2 className="w-3 h-3 text-amber-400" />
+                                              <span>Ghi chú Admin: {job.adminNote}</span>
                                           </div>
                                       )}
                                       {job.health && (
@@ -6542,30 +6593,151 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           </div>
                                       )}
 
-                                      {(selectedQueueJobDetail.job.error || selectedQueueJobDetail.job.errorRaw) && (
-                                          <div className="neu-inset-sm border border-white/10 rounded-2xl p-4 space-y-3">
-                                              <div className="flex items-center gap-3">
-                                                  <div className="text-sm font-bold text-slate-900 dark:text-white">Phân tích lỗi</div>
-                                                  {selectedQueueJobDetail.job.errorCategory && (
-                                                      <div className={`inline-flex px-2 py-1 rounded border text-[10px] font-bold uppercase ${getQueueErrorCategoryClass(selectedQueueJobDetail.job.errorCategory)}`}>
-                                                          {getQueueErrorCategoryLabel(selectedQueueJobDetail.job.errorCategory)}
+                                      {(() => {
+                                          const errInfo = getUserFriendlyErrorInfo(
+                                              selectedQueueJobDetail.job.errorRaw || selectedQueueJobDetail.job.error,
+                                              selectedQueueJobDetail.job.adminNote
+                                          );
+                                          const isFailedJob = (selectedQueueJobDetail.job.displayStatus || selectedQueueJobDetail.job.status) === 'failed' || !!selectedQueueJobDetail.job.error || !!selectedQueueJobDetail.job.errorRaw;
+                                          return (
+                                              <div className="space-y-4">
+                                                  {/* Phân tích lỗi chi tiết */}
+                                                  {isFailedJob && (
+                                                      <div className="neu-inset-sm border border-red-500/20 bg-red-950/20 rounded-2xl p-4 space-y-3">
+                                                          <div className="flex items-center justify-between gap-3">
+                                                              <div className="flex items-center gap-2">
+                                                                  <Icons.AlertTriangle className="w-4 h-4 text-red-400" />
+                                                                  <div className="text-sm font-bold text-red-200">{errInfo.title}</div>
+                                                              </div>
+                                                              {selectedQueueJobDetail.job.errorCategory && (
+                                                                  <div className={`inline-flex px-2 py-1 rounded border text-[10px] font-bold uppercase ${getQueueErrorCategoryClass(selectedQueueJobDetail.job.errorCategory)}`}>
+                                                                      {getQueueErrorCategoryLabel(selectedQueueJobDetail.job.errorCategory)}
+                                                                  </div>
+                                                              )}
+                                                          </div>
+
+                                                          <div className="rounded-xl bg-black/30 p-3 border border-red-500/10 space-y-2 text-xs">
+                                                              <div>
+                                                                  <span className="text-[10px] uppercase font-bold tracking-wider text-red-300/70 block mb-0.5">Nguyên nhân cụ thể:</span>
+                                                                  <p className="text-red-200 leading-relaxed font-medium">{errInfo.reason}</p>
+                                                              </div>
+                                                              <div className="pt-1 border-t border-white/5">
+                                                                  <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-300/80 block mb-0.5">Hướng dẫn xử lý cho User:</span>
+                                                                  <p className="text-emerald-200 leading-relaxed font-medium">{errInfo.resolution}</p>
+                                                              </div>
+                                                          </div>
+
+                                                          {selectedQueueJobDetail.job.errorRaw && (
+                                                              <details className="text-[11px] text-slate-400">
+                                                                  <summary className="cursor-pointer select-none text-[10px] font-bold uppercase text-slate-500 hover:text-slate-300">
+                                                                      Mã lỗi kỹ thuật (Debug / Raw provider)
+                                                                  </summary>
+                                                                  <div className="mt-2 p-2.5 rounded-lg bg-black/40 border border-white/5 font-mono text-[10px] text-red-300 break-all leading-relaxed">
+                                                                      {selectedQueueJobDetail.job.errorRaw}
+                                                                  </div>
+                                                              </details>
+                                                          )}
                                                       </div>
                                                   )}
+
+                                                  {/* Khu vực Admin tùy chỉnh thông báo lỗi cho người dùng */}
+                                                  <div className="neu-inset-sm border border-amber-500/25 bg-amber-950/15 rounded-2xl p-4 space-y-3">
+                                                      <div className="flex items-center justify-between gap-3">
+                                                          <div className="flex items-center gap-2">
+                                                              <Icons.Edit2 className="w-4 h-4 text-amber-400" />
+                                                              <div className="text-sm font-bold text-amber-200">Ghi chú thông báo cho User (Admin Note)</div>
+                                                          </div>
+                                                          {selectedQueueJobDetail.job.adminNote && (
+                                                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/30">
+                                                                  Đang áp dụng
+                                                              </span>
+                                                          )}
+                                                      </div>
+
+                                                      <p className="text-[11px] text-slate-400 leading-relaxed">
+                                                          Admin có thể tùy chỉnh thông báo lỗi riêng cho tác vụ này. Lời nhắn này sẽ được ưu tiên hiển thị trực quan cho người dùng trên cả giao diện Máy tính & Điện thoại.
+                                                      </p>
+
+                                                      {/* Quick Presets */}
+                                                      <div>
+                                                          <div className="text-[10px] uppercase font-bold tracking-wider text-slate-500 mb-1.5">Gợi ý nhanh theo trường hợp:</div>
+                                                          <div className="flex flex-wrap gap-1.5">
+                                                              {[
+                                                                  {
+                                                                      label: 'Ảnh mờ / che mặt',
+                                                                      text: 'Ảnh mẫu khuôn mặt quá mờ hoặc bị che khuất. Vui lòng chọn ảnh chân dung rõ mặt, nhìn thẳng và đủ sáng.',
+                                                                  },
+                                                                  {
+                                                                      label: 'Vi phạm từ khóa AI',
+                                                                      text: 'Từ khóa trong mô tả hoặc hình ảnh bị bộ lọc an toàn của AI từ chối. Vui lòng đổi từ ngữ mô tả hoặc thay ảnh mẫu.',
+                                                                  },
+                                                                  {
+                                                                      label: 'Server gián đoạn (502/Timeout)',
+                                                                      text: 'Máy chủ AI quá tải hoặc ngắt kết nối gián đoạn. Vcoin đã hoàn, bạn vui lòng bấm thử lại.',
+                                                                  },
+                                                                  {
+                                                                      label: 'Ảnh sai định dạng',
+                                                                      text: 'Tệp ảnh đầu vào không tải được hoặc vượt dung lượng cho phép. Vui lòng dùng ảnh JPG/PNG dưới 10MB.',
+                                                                  },
+                                                              ].map((preset) => (
+                                                                  <button
+                                                                      key={preset.label}
+                                                                      type="button"
+                                                                      onClick={() => setAdminCustomErrorNote(preset.text)}
+                                                                      className="text-[10px] font-medium px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white transition"
+                                                                  >
+                                                                      {preset.label}
+                                                                  </button>
+                                                              ))}
+                                                              {adminCustomErrorNote && (
+                                                                  <button
+                                                                      type="button"
+                                                                      onClick={() => setAdminCustomErrorNote('')}
+                                                                      className="text-[10px] font-medium px-2 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-300 transition"
+                                                                  >
+                                                                      Xóa trắng
+                                                                  </button>
+                                                              )}
+                                                          </div>
+                                                      </div>
+
+                                                      {/* Textarea & Save */}
+                                                      <div className="space-y-2">
+                                                          <textarea
+                                                              value={adminCustomErrorNote}
+                                                              onChange={(e) => setAdminCustomErrorNote(e.target.value)}
+                                                              placeholder="Nhập lý do cụ thể và hướng dẫn xử lý gửi tới người dùng..."
+                                                              rows={3}
+                                                              className="w-full rounded-xl bg-black/40 border border-white/10 p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 transition resize-none"
+                                                          />
+                                                          <div className="flex items-center justify-between gap-3 pt-1">
+                                                              <span className="text-[10px] text-slate-500 font-mono">
+                                                                  {adminCustomErrorNote.length}/1000 ký tự
+                                                              </span>
+                                                              <button
+                                                                  type="button"
+                                                                  disabled={savingAdminNote}
+                                                                  onClick={() => handleSaveAdminQueueJobNote(selectedQueueJobDetail.job.id, adminCustomErrorNote)}
+                                                                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-black transition shadow-lg shadow-amber-500/20 disabled:opacity-50"
+                                                              >
+                                                                  {savingAdminNote ? (
+                                                                      <>
+                                                                          <Icons.Loader className="w-3.5 h-3.5 animate-spin" />
+                                                                          Đang lưu...
+                                                                      </>
+                                                                  ) : (
+                                                                      <>
+                                                                          <Icons.Check className="w-3.5 h-3.5" />
+                                                                          Lưu ghi chú cho User
+                                                                      </>
+                                                                  )}
+                                                              </button>
+                                                          </div>
+                                                      </div>
+                                                  </div>
                                               </div>
-                                              {selectedQueueJobDetail.job.error && (
-                                                  <div>
-                                                      <div className="text-[10px] uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold font-bold">Tóm tắt dễ hiểu</div>
-                                                      <div className="text-sm text-red-300 mt-2 leading-relaxed">{selectedQueueJobDetail.job.error}</div>
-                                                  </div>
-                                              )}
-                                              {selectedQueueJobDetail.job.errorRaw && selectedQueueJobDetail.job.errorRaw !== selectedQueueJobDetail.job.error && (
-                                                  <div>
-                                                      <div className="text-[10px] uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold font-bold">Lỗi gốc từ hệ thống</div>
-                                                      <div className="text-sm text-slate-700 dark:text-slate-300 font-semibold mt-2 leading-relaxed break-all">{selectedQueueJobDetail.job.errorRaw}</div>
-                                                  </div>
-                                              )}
-                                          </div>
-                                      )}
+                                          );
+                                      })()}
                                   </div>
                               </div>
 

@@ -249,6 +249,7 @@ const mergeImageVersions = (cloudImage: GeneratedImage, localImage: GeneratedIma
     cost: primary.cost ?? secondary.cost,
     progress: primary.progress ?? secondary.progress,
     error: primary.error || secondary.error,
+    adminNote: primary.adminNote || secondary.adminNote,
     status: primary.status || secondary.status,
     jobId: primary.jobId ?? secondary.jobId,
     timestamp: primary.timestamp || secondary.timestamp,
@@ -404,8 +405,13 @@ export const mapGeneratedImageRow = (row: any, fallbackUserName: string, fallbac
           typeof entry.message === 'string'
         ))
       : undefined;
+  const adminNote =
+    (queuePayload && typeof queuePayload.__adminErrorNote === 'string' && queuePayload.__adminErrorNote.trim()) ||
+    (typeof row.error_message === 'string' && row.error_message.startsWith('[ADMIN]: ')
+      ? row.error_message.replace('[ADMIN]: ', '').trim()
+      : undefined);
   const displayErrorSource = pickQueueFailureMessage(row.error_message || undefined, queueLogs);
-  const errorInfo = classifyQueueError(displayErrorSource || row.error_message || undefined);
+  const errorInfo = classifyQueueError(adminNote ? `[ADMIN]: ${adminNote}` : (displayErrorSource || row.error_message || undefined));
   const isRescuing =
     String(row.status || '') === 'failed' &&
     hasFailedRescuePending(queuePayload) &&
@@ -443,9 +449,10 @@ export const mapGeneratedImageRow = (row: any, fallbackUserName: string, fallbac
       ? queuePayload.__stage
       : undefined,
   queueLogs,
-  error: normalizeQueueErrorMessage(displayErrorSource || row.error_message || undefined) || undefined,
+  error: normalizeQueueErrorMessage(adminNote ? `[ADMIN]: ${adminNote}` : (displayErrorSource || row.error_message || undefined)) || undefined,
   errorCategory: errorInfo.category,
   errorRaw: repairVietnameseMojibake(row.error_message || undefined) || undefined,
+  adminNote,
   cost: Number.isFinite(Number(row.cost_vcoin)) ? Number(row.cost_vcoin) : fallbackCost,
   });
 };

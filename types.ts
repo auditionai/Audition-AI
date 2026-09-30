@@ -117,6 +117,7 @@ export interface GeneratedImage {
   error?: string;
   errorCategory?: QueueErrorCategory;
   errorRaw?: string;
+  adminNote?: string;
   cost?: number; // Keep track of cost for refunds
 }
 
@@ -144,6 +145,7 @@ export interface AdminQueueJob {
   error?: string;
   errorCategory?: QueueErrorCategory;
   errorRaw?: string;
+  adminNote?: string;
   createdAt?: string;
   updatedAt?: string;
   nextPollAt?: string;

@@ -1,0 +1,35 @@
+/* DANCE VIDEO ADMIN WORKSPACE - 3D NEUMORPHISM DESIGN SYSTEM */
+
+.dance-admin-workspace {
+  width: 100%;
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Modal and Drawer Transitions */
+@keyframes danceModalFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.dance-modal-animate {
+  animation: danceModalFadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Custom scrollbars for admin table */
+.dance-admin-table-scroll::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+.dance-admin-table-scroll::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 4px;
+}
+.dance-admin-table-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 0, 127, 0.5);
+}

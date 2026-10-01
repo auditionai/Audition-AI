@@ -206,6 +206,7 @@ export const Layout: React.FC<LayoutProps> = ({
   };
 
   const navItems = [
+    { id: 'dance_video_orders' as ViewId, label: { vi: 'Đặt Làm Video AI', en: 'Order AI Video' }, icon: Icons.Video, badge: 'NEW' },
     { id: 'home' as ViewId, label: { vi: 'Trang Chủ', en: 'Home' }, icon: Icons.Home },
     { id: 'tools' as ViewId, label: { vi: 'Tạo Ảnh AI', en: 'AI Image' }, icon: Icons.Sparkles, badge: 'HOT' },
     { id: 'video' as ViewId, label: { vi: 'Tạo Video AI', en: 'AI Video' }, icon: Icons.Video },
@@ -214,6 +215,18 @@ export const Layout: React.FC<LayoutProps> = ({
     { id: 'gallery' as ViewId, label: { vi: 'Lịch Sử Tạo', en: 'Generation History' }, icon: Icons.History },
     ...(user?.role === 'admin' ? [{ id: 'admin' as ViewId, label: { vi: 'Quản Trị Admin', en: 'Admin Portal' }, icon: Icons.Shield }] : []),
   ];
+
+  // Keep the paid Motion Control service beside Video AI. Its label is long,
+  // so it deliberately has no visual badge competing for sidebar space.
+  navItems.sort((left, right) => {
+    const order: Partial<Record<ViewId, number>> = {
+      home: 0, tools: 1, video: 2, dance_video_orders: 3, prompt_library: 4,
+      topup: 5, gallery: 6, admin: 7,
+    };
+    return (order[left.id] ?? 99) - (order[right.id] ?? 99);
+  });
+  const danceOrderItem = navItems.find((item) => item.id === 'dance_video_orders');
+  if (danceOrderItem) delete danceOrderItem.badge;
 
   const fallbackViewLabels: Partial<Record<ViewId, { vi: string; en: string }>> = {
     support: { vi: 'Hỗ trợ khách hàng', en: 'Customer Support' },

@@ -1,4 +1,4 @@
-﻿import { getSupabaseAuthHeader, getSupabaseUser, supabase } from './supabaseClient';
+import { getSupabaseAuthHeader, getSupabaseUser, supabase } from './supabaseClient';
 import { trackEvent } from './analyticsService';
 import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, HistoryItem, VcoinLog, AdminQueueJob, AdminQueueSummary, AdminQueueJobDetail, AdminQueueHealthReport, AdminQueueRescueResult, GenerationDiscountConfig } from '../types';
 import { shouldUseMobileShell } from '../shared/shellDetection';
@@ -2775,6 +2775,25 @@ export const getAdminQueueJobDetail = async (jobId: string): Promise<AdminQueueJ
     }
 
     return payload as AdminQueueJobDetail;
+};
+
+export const updateAdminQueueJobNote = async (jobId: string, customNote: string) => {
+    const authHeader = await getSessionAuthHeader();
+    const response = await fetch('/api/admin-update-queue-job-note', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...authHeader,
+        },
+        body: JSON.stringify({ jobId, customNote }),
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        throw new Error(payload?.error || 'Không thể cập nhật ghi chú queue job');
+    }
+
+    return payload as { success: boolean; jobId: string; customNote: string; errorMessage: string };
 };
 
 export const stopAdminQueueJob = async (jobId: string) => {

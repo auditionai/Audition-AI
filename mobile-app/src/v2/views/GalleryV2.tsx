@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clock3,
+  Copy,
   Gem,
   Download,
   Image as ImageIcon,
@@ -20,14 +21,17 @@ import { getUnifiedHistory } from '../../services/economyService';
 import { QUEUE_SUBMITTED_EVENT } from '../../services/serverQueueService';
 import {
   checkR2Connection,
+  cancelGenerationJob,
   deleteImageFromStorage,
   getHistoryRetentionDays,
   getAllImagesFromStorage,
+  getGenerationCancellationPreview,
   invalidateGalleryCache,
   mapGeneratedImageRow,
   publishImageToShowcase,
 } from '../../services/storageService';
 import { downloadAssetToBrowser } from '../../../../services/downloadService';
+import { getUserFriendlyErrorInfo } from '../../../../shared/queueErrorClassifier';
 import type { GeneratedImage, HistoryItem } from '../../types';
 
 type ViewMode = 'creations' | 'wallet';
@@ -48,6 +52,7 @@ export function GalleryV2() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<GeneratedImage | null>(null);
+  const [cancellingJobId, setCancellingJobId] = useState<string | null>(null);
   const retentionDays = getHistoryRetentionDays();
 
   const loadItems = useCallback(async () => {
@@ -144,6 +149,36 @@ export function GalleryV2() {
     },
   });
 
+  const cancel = async (item: GeneratedImage) => {
+    try {
+      const preview = await getGenerationCancellationPreview(item.id);
+      confirm({
+        title: 'Hủy job đang chạy?',
+        message: preview.refundEligible
+          ? `Job đang trong hàng chờ. Hủy sẽ hoàn ${Number(preview.amount || 0).toLocaleString('vi-VN')} VCoin và vẫn giữ lịch sử.`
+          : 'Job đã được hệ thống tiếp nhận và đang xử lý. Bạn vẫn có thể hủy, nhưng VCoin sẽ không được hoàn. Lịch sử vẫn được giữ lại.',
+        confirmText: preview.refundEligible ? 'Hủy & hoàn VCoin' : 'Hủy không hoàn tiền',
+        cancelText: 'Quay lại',
+        isDanger: true,
+        onConfirm: async () => {
+          setCancellingJobId(item.id);
+          try {
+            const result = await cancelGenerationJob(item.id);
+            invalidateGalleryCache();
+            await loadItems();
+            notify(result.refunded ? 'Đã hủy job và hoàn VCoin.' : 'Đã hủy job. VCoin không được hoàn do job đã xử lý.', result.refunded ? 'success' : 'info');
+          } catch (error: any) {
+            notify(error?.message || 'Không thể hủy job.', 'error');
+          } finally {
+            setCancellingJobId(null);
+          }
+        },
+      });
+    } catch (error: any) {
+      notify(error?.message || 'Không thể kiểm tra điều kiện hủy job.', 'error');
+    }
+  };
+
   const download = async (item: GeneratedImage) => {
     if (!item.url) return;
     await downloadAssetToBrowser(item.url, `audition-ai-${item.id}.${assetKind(item) === 'video' ? 'mp4' : 'png'}`);
@@ -218,6 +253,7 @@ export function GalleryV2() {
                 const kind = assetKind(item);
                 const status = itemStatus(item);
                 const active = ['queued', 'processing', 'rescuing'].includes(status);
+                const wasCancelled = /cancelled by user/i.test(item.errorRaw || item.error || '');
                 return (
                   <button type="button" key={item.id} className="v2-creation-card v2-tap" onClick={() => setSelected(item)}>
                     <span className="v2-creation-card__media">
@@ -230,7 +266,9 @@ export function GalleryV2() {
                     </span>
                     <span className="v2-creation-card__copy">
                       <small>{kind === 'video' ? <Video size={13} /> : <ImageIcon size={13} />}{item.toolName || 'Audition AI'}</small>
-                      <strong>{active ? 'Đang sáng tạo…' : status === 'failed' ? 'Cần thử lại' : 'Đã hoàn thành'}</strong>
+                      <strong className={status === 'failed' ? 'v2-creation-card__status--failed' : undefined}>
+                        {active ? 'Đang sáng tạo…' : status === 'failed' ? (item.adminNote ? 'Có lưu ý từ Admin' : wasCancelled ? 'Đã hủy' : 'Thất bại · Hoàn Vcoin') : 'Đã hoàn thành'}
+                      </strong>
                       <em>{new Date(item.timestamp).toLocaleDateString('vi-VN')}</em>
                     </span>
                   </button>
@@ -256,19 +294,96 @@ export function GalleryV2() {
       {selected && (
         <div className="v2-creation-sheet" role="dialog" aria-modal="true" aria-label="Chi tiết tác phẩm">
           <button type="button" className="v2-creation-sheet__close" onClick={() => setSelected(null)} aria-label="Đóng"><X size={20} /></button>
-          <div className="v2-creation-sheet__media">
-            {assetKind(selected) === 'video' ? <video src={selected.url} controls playsInline /> : <img src={selected.url} alt={selected.toolName} />}
-          </div>
-          <div className="v2-creation-sheet__info">
-            <span><CheckCircle2 size={15} /> {selected.toolName}</span>
-            <h2>{itemStatus(selected) === 'completed' ? 'Tác phẩm đã sẵn sàng' : 'Chi tiết tiến trình'}</h2>
-            <div className="v2-creation-sheet__actions">
-              <button type="button" onClick={() => void download(selected)}><Download size={18} /> Tải xuống</button>
-              {assetKind(selected) === 'image' && <button type="button" onClick={() => void share(selected)}><Share2 size={18} /> Chia sẻ</button>}
-              <button type="button" className="is-danger" onClick={() => remove(selected)}><Trash2 size={18} /> Xóa</button>
-            </div>
-            <p>{selected.prompt || 'Không có mô tả.'}</p>
-          </div>
+          {itemStatus(selected) === 'failed' ? (() => {
+            const errInfo = getUserFriendlyErrorInfo(selected.errorRaw || selected.error, selected.adminNote);
+            return (
+              <>
+                <div className="v2-creation-sheet__media v2-creation-sheet__media--failed">
+                  <div className="v2-creation-failed-card">
+                    <span className="v2-creation-failed-icon">
+                      <AlertTriangle size={36} />
+                    </span>
+                    <strong className="v2-creation-failed-title">{errInfo.title}</strong>
+                    <span className="v2-creation-failed-tag">Đã hoàn 100% Vcoin</span>
+                  </div>
+                </div>
+                <div className="v2-creation-sheet__info">
+                  <span className="v2-creation-sheet__tag--danger">
+                    <AlertTriangle size={14} /> {selected.toolName || 'Tác vụ AI'} · Thất bại
+                  </span>
+
+                  {selected.adminNote && (
+                    <div className="v2-admin-note-banner">
+                      <div className="v2-admin-note-header">
+                        <Sparkles size={14} />
+                        <strong>Lời nhắn từ Quản trị viên:</strong>
+                      </div>
+                      <p>{selected.adminNote}</p>
+                    </div>
+                  )}
+
+                  <div className="v2-error-detail-box">
+                    <div className="v2-error-section">
+                      <small>Nguyên nhân:</small>
+                      <p>{errInfo.reason}</p>
+                    </div>
+                    <div className="v2-error-section is-solution">
+                      <small>Hướng xử lý:</small>
+                      <p>{errInfo.resolution}</p>
+                    </div>
+                  </div>
+
+                  {selected.prompt && (
+                    <div className="v2-prompt-review-box">
+                      <small>Mô tả (Prompt) đã dùng:</small>
+                      <p>{selected.prompt}</p>
+                    </div>
+                  )}
+
+                  <div className="v2-creation-sheet__actions">
+                    {selected.prompt && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void navigator.clipboard?.writeText(selected.prompt);
+                          notify('Đã sao chép prompt để tạo lại!', 'success');
+                        }}
+                      >
+                        <Copy size={16} /> Sao chép prompt
+                      </button>
+                    )}
+                    <button type="button" className="is-danger" onClick={() => remove(selected)}>
+                      <Trash2 size={16} /> Xóa tác vụ
+                    </button>
+                  </div>
+                </div>
+              </>
+            );
+          })() : (
+            <>
+              <div className="v2-creation-sheet__media">
+                {assetKind(selected) === 'video' ? <video src={selected.url} controls playsInline /> : <img src={selected.url} alt={selected.toolName} />}
+              </div>
+              <div className="v2-creation-sheet__info">
+                <span><CheckCircle2 size={15} /> {selected.toolName}</span>
+                <h2>{itemStatus(selected) === 'completed' ? 'Tác phẩm đã sẵn sàng' : 'Chi tiết tiến trình'}</h2>
+                <div className="v2-creation-sheet__actions">
+                  {['queued', 'processing'].includes(itemStatus(selected)) ? (
+                    <button type="button" className="is-danger" disabled={cancellingJobId === selected.id} onClick={() => void cancel(selected)}>
+                      {cancellingJobId === selected.id ? <Loader className="v2-spin" size={18} /> : <X size={18} />} Hủy job
+                    </button>
+                  ) : (
+                    <>
+                      <button type="button" onClick={() => void download(selected)}><Download size={18} /> Tải xuống</button>
+                      {assetKind(selected) === 'image' && <button type="button" onClick={() => void share(selected)}><Share2 size={18} /> Chia sẻ</button>}
+                      <button type="button" className="is-danger" onClick={() => remove(selected)}><Trash2 size={18} /> Xóa</button>
+                    </>
+                  )}
+                </div>
+                <p>{selected.prompt || 'Không có mô tả.'}</p>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>

@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { Icons } from './Icons';
 import { sanitizeProviderDisplayText } from '../shared/providerDisplay';
+import { useModalViewportLock } from './useModalViewportLock';
 
 type NotificationType = 'success' | 'error' | 'info' | 'warning';
 
@@ -31,7 +32,10 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
 export const useNotification = () => {
   const context = useContext(NotificationContext);
   if (!context) {
-    throw new Error('useNotification must be used within a NotificationProvider');
+    return {
+      notify: (message: string, type: NotificationType = 'info') => { if (typeof window !== 'undefined') console.log('[Notification ' + type + ']: ' + message); },
+      confirm: (options: ConfirmOptions) => { if (typeof window !== 'undefined' && window.confirm(options.message)) options.onConfirm(); else if (options.onCancel) options.onCancel(); }
+    };
   }
   return context;
 };
@@ -42,6 +46,8 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
 
   // --- MODAL STATE ---
   const [confirmModal, setConfirmModal] = useState<ConfirmOptions & { isOpen: boolean } | null>(null);
+
+  useModalViewportLock(Boolean(confirmModal?.isOpen));
 
   const notify = useCallback((message: string, type: NotificationType = 'info') => {
     const id = Date.now();
@@ -118,7 +124,7 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
 
       {/* --- CONFIRM MODAL OVERLAY (TRANSPARENT GLASS) --- */}
       {confirmModal && confirmModal.isOpen && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 animate-fade-in">
+        <div className="app-modal-overlay fixed inset-0 z-[10000] flex items-start justify-center overflow-y-auto p-4 animate-fade-in">
           <div className="bg-[#12121a] border border-white/20 p-6 rounded-3xl max-w-sm w-full shadow-2xl transform scale-100 transition-all">
             
             <div className="w-16 h-16 mx-auto bg-white/5 rounded-full flex items-center justify-center mb-4 border border-white/10">

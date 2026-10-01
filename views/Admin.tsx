@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { useModalViewportLock } from '../components/useModalViewportLock';
 import { getSupabaseUser, supabase } from '../services/supabaseClient';
 import { 
     getAdminOverviewStats,
@@ -41,6 +42,7 @@ import {
     getAdminUserHistory,
     getAdminQueueJobs,
     getAdminQueueJobDetail,
+    updateAdminQueueJobNote,
     stopAdminQueueJob,
     retryAdminQueueJob,
     getGiftcodeUsages,
@@ -105,10 +107,12 @@ import {
     type TstServerAvailabilityConfig
 } from '../services/tstCatalog';
 import { Icons } from '../components/Icons';
+import { adminDanceVideoAction, getAdminDanceVideoData } from '../services/danceVideoService';
 import { APP_CONFIG } from '../constants';
 import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, GeneratedImage, Language, StylePreset, HistoryItem, AdminQueueJob, AdminQueueSummary, AdminQueueJobDetail, AdminQueueInputMedia, AdminQueueMediaSection, AdminQueueHealthReport, AdminQueueHealthSnapshot, GenerationDiscountConfig } from '../types';
 import './admin-command-center.css';
 import { GiftcodeAbuseWorkspaceV2, TransactionsWorkspaceV2, UsersWorkspaceV2 } from './admin-v2/AdminOperations';
+import { DanceVideoAdminWorkspace } from './DanceVideoAdminWorkspace';
 import QueueWorkspaceV2 from './admin-v2/QueueWorkspaceV2';
 import AIUsageAnalyticsV2 from './admin-v2/AIUsageAnalyticsV2';
 import {
@@ -123,13 +127,14 @@ import {
 } from '../services/providerCatalog';
 import { getGommoServerGroups } from '../shared/gommoServerRouting';
 import { sanitizeProviderDisplayText } from '../shared/providerDisplay';
+import { getUserFriendlyErrorInfo } from '../shared/queueErrorClassifier';
 
 interface AdminProps {
   lang: Language;
   isAdmin: boolean;
 }
 
-type AdminView = 'overview' | 'transactions' | 'users' | 'giftcode_abuse' | 'queue' | 'packages' | 'marketing' | 'pricing' | 'system' | 'styles' | 'tours' | 'showcase';
+type AdminView = 'overview' | 'transactions' | 'users' | 'giftcode_abuse' | 'queue' | 'dance_video' | 'packages' | 'marketing' | 'pricing' | 'system' | 'styles' | 'tours' | 'showcase';
 
 const ADMIN_NAV_SECTIONS: Array<{
     label: string;
@@ -150,6 +155,7 @@ const ADMIN_NAV_SECTIONS: Array<{
             { id: 'users', icon: Icons.Users, label: 'Người dùng', description: 'Tài khoản và số dư' },
             { id: 'giftcode_abuse', icon: Icons.AlertTriangle, label: 'Vi phạm code', description: 'Phát hiện lạm dụng' },
             { id: 'queue', icon: Icons.Activity, label: 'Queue Jobs', description: 'Luồng render realtime' },
+            { id: 'dance_video', icon: Icons.Video, label: 'Đặt làm video AI', description: 'Mẫu & đơn Motion Control' },
         ],
     },
     {
@@ -583,7 +589,7 @@ const formatVietnamDateTimeDisplay = (value?: string) =>
 
 const AdminModalPortal: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     if (typeof document === 'undefined') return null;
-    return createPortal(children, document.body);
+    return createPortal(<div className="app-modal-host">{children}</div>, document.body);
 };
 
 const ADMIN_PRICING_DRAFTS_STORAGE_KEY = 'admin_pricing_drafts_v1';
@@ -619,6 +625,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [stylePresets, setStylePresets] = useState<StylePreset[]>([]);
   const [showcaseImages, setShowcaseImages] = useState<GeneratedImage[]>([]);
+  const [danceTemplates, setDanceTemplates] = useState<any[]>([]);
+  const [danceJobs, setDanceJobs] = useState<any[]>([]);
+  const [danceTemplateDraft, setDanceTemplateDraft] = useState<any>(null);
+  const [danceAdminSection, setDanceAdminSection] = useState<'orders' | 'templates'>('orders');
   const [showcaseUploading, setShowcaseUploading] = useState(false);
   const [showcaseDeletingId, setShowcaseDeletingId] = useState<string | null>(null);
   const [modelPricing, setModelPricing] = useState<ModelPricing[]>([]);
@@ -697,6 +707,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [queueJobPendingRetry, setQueueJobPendingRetry] = useState<AdminQueueJob | null>(null);
   const [retryingQueueJobProvider, setRetryingQueueJobProvider] = useState<'tst' | 'gommo' | 'gpti2' | null>(null);
   const [queuePromptExpanded, setQueuePromptExpanded] = useState(false);
+  const [adminCustomErrorNote, setAdminCustomErrorNote] = useState('');
+  const [savingAdminNote, setSavingAdminNote] = useState(false);
   const [reopeningAutoDisabledKey, setReopeningAutoDisabledKey] = useState<string | null>(null);
 
   // Health State
@@ -757,6 +769,15 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [toasts, setToasts] = useState<ToastMsg[]>([]);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmState>({ show: false, msg: '', onConfirm: () => {} });
   const loadedAdminViews = useRef(new Set<string>());
+
+  // Admin renders many dialogs through a body portal. Keep the admin work area
+  // exactly where the operator left it while any dialog is open.
+  useModalViewportLock(Boolean(
+    editingUser || viewingUser || editingPackage || editingGiftcode || editingPromotion ||
+    viewingGiftcodeUsage || editingStyle || danceTemplateDraft || selectedQueueJobId ||
+    queueJobPendingRetry || showGiftcodeFix || showUserFix || showBalanceFix ||
+    r2CleanupPreview || confirmDialog.show
+  ));
 
   // Helpers for Notifications
   const showToast = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
@@ -862,6 +883,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           }
       } else if (view === 'styles') {
           setStylePresets(await getStylePresets() || []);
+      } else if (view === 'dance_video') {
+          const data = await getAdminDanceVideoData();
+          setDanceTemplates(data.templates || []);
+          setDanceJobs(data.jobs || []);
       } else if (view === 'showcase') {
           const { data, error } = await supabase
               .from('generated_images')
@@ -2432,14 +2457,49 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       setSelectedQueueJobId(jobId);
       setSelectedQueueJobDetail(null);
       setQueuePromptExpanded(false);
+      setAdminCustomErrorNote('');
       setLoadingQueueJobDetail(true);
       try {
           const detail = await getAdminQueueJobDetail(jobId);
           setSelectedQueueJobDetail(detail);
+          setAdminCustomErrorNote(detail.job.adminNote || '');
       } catch (error: any) {
           showToast(`Lỗi tải chi tiết job: ${error?.message || error}`, 'error');
       } finally {
           setLoadingQueueJobDetail(false);
+      }
+  };
+
+  const handleSaveAdminQueueJobNote = async (jobId: string, customNote: string) => {
+      setSavingAdminNote(true);
+      try {
+          await updateAdminQueueJobNote(jobId, customNote.trim());
+          showToast('Đã lưu ghi chú thông báo cho user thành công.');
+          if (selectedQueueJobDetail && selectedQueueJobDetail.job.id === jobId) {
+              setSelectedQueueJobDetail({
+                  ...selectedQueueJobDetail,
+                  job: {
+                      ...selectedQueueJobDetail.job,
+                      adminNote: customNote.trim() || undefined,
+                      error: customNote.trim() ? customNote.trim() : selectedQueueJobDetail.job.error,
+                  },
+              });
+          }
+          setQueueJobs((prev) =>
+              prev.map((job) =>
+                  job.id === jobId
+                      ? {
+                            ...job,
+                            adminNote: customNote.trim() || undefined,
+                            error: customNote.trim() ? customNote.trim() : job.error,
+                        }
+                      : job,
+              ),
+          );
+      } catch (error: any) {
+          showToast(`Lỗi lưu ghi chú: ${error?.message || error}`, 'error');
+      } finally {
+          setSavingAdminNote(false);
       }
   };
 
@@ -3390,7 +3450,30 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   timeAgo={getTimeAgo}
               />
           )}
+
+          {false && activeView === 'dance_video' && (
+              <div className="space-y-6 animate-fade-in">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div><h2 className="text-xl font-black text-slate-900 dark:text-white">Quản lý Đơn Dance AI</h2><p className="mt-1 text-xs text-slate-500">Video mẫu, ảnh R2, tiến độ thủ công và video kết quả của khách.</p></div>
+                      <button type="button" onClick={() => setDanceTemplateDraft({ title: '', description: '', category: 'Dance AI', preview_video_url: '', price_vcoin: 50, required_image_count: 1, is_active: true, display_order: danceTemplates.length })} className="neu-button-primary rounded-xl px-4 py-3 text-xs font-black"><Icons.Plus className="mr-1 inline h-4 w-4" />Thêm video mẫu</button>
+                  </div>
+                  <section className="grid gap-4 lg:grid-cols-2">{danceTemplates.map((template) => <article key={template.id} className="neu-card overflow-hidden p-3"><video src={template.preview_video_url} className="aspect-video w-full rounded-xl bg-black object-cover" controls preload="metadata" /><div className="flex items-start justify-between gap-3 p-2 pt-4"><div><b className="text-sm text-slate-900 dark:text-white">{template.title}</b><p className="mt-1 text-xs text-slate-500">{template.price_vcoin} Vcoin · {template.required_image_count} ảnh · {template.is_active ? 'Đang mở' : 'Đang ẩn'}</p></div><div className="flex gap-2"><button onClick={() => setDanceTemplateDraft(template)} className="neu-button rounded-lg p-2" aria-label="Sửa mẫu"><Icons.Edit2 className="h-4 w-4" /></button><button onClick={() => { if (window.confirm('Xóa video mẫu này?')) void adminDanceVideoAction({ action: 'delete-template', id: template.id }).then(() => getAdminDanceVideoData()).then((d) => setDanceTemplates(d.templates)); }} className="neu-button rounded-lg p-2 text-red-400" aria-label="Xóa mẫu"><Icons.Trash className="h-4 w-4" /></button></div></div></article>)}</section>
+                  <section className="neu-card overflow-hidden p-5"><h3 className="text-base font-black text-slate-900 dark:text-white">Job đang chờ xử lý</h3><div className="mt-4 space-y-3">{danceJobs.map((job) => <article key={job.id} className="rounded-2xl border border-white/10 bg-black/10 p-4"><div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"><div><b className="text-sm text-white">{job.dance_video_templates?.title || 'Video mẫu'}</b><p className="mt-1 text-xs text-slate-400">{job.users?.display_name || job.users?.email || job.user_id} · {new Date(job.created_at).toLocaleString('vi-VN')}</p><p className="mt-1 text-xs text-cyan-300">Ảnh R2: {(job.character_image_urls || []).map((url: string, i: number) => <a className="mr-2 underline" key={url} href={url} target="_blank" rel="noreferrer">Ảnh {i + 1}</a>)}</p>{job.contact_zalo && <p className="mt-1 text-xs text-amber-300">Zalo: {job.contact_zalo}</p>}{job.note && <p className="mt-1 text-xs text-slate-300">Yêu cầu: {job.note}</p>}</div><div className="flex min-w-[270px] flex-col gap-2"><input defaultValue={job.result_video_url || ''} onBlur={(e) => { if (e.target.value !== (job.result_video_url || '')) void adminDanceVideoAction({ action: 'update-job', id: job.id, status: job.status, adminNote: job.admin_note, resultVideoUrl: e.target.value }).then(() => getAdminDanceVideoData()).then((d) => setDanceJobs(d.jobs)); }} className="neu-input h-10 rounded-xl px-3 text-xs" placeholder="URL video kết quả (R2)" /><label className="cursor-pointer rounded-xl border border-dashed border-emerald-400/40 p-2 text-center text-[11px] font-bold text-emerald-300"><Icons.Upload className="mr-1 inline h-3.5 w-3.5" />Tải video kết quả lên R2<input className="sr-only" type="file" accept="video/*" onChange={(e) => { const file = e.target.files?.[0]; if (file) void uploadFileToR2(file, `dance-orders/${job.id}/result`).then((url) => adminDanceVideoAction({ action: 'update-job', id: job.id, status: job.status, adminNote: job.admin_note, resultVideoUrl: url })).then(() => getAdminDanceVideoData()).then((d) => setDanceJobs(d.jobs)).catch((error) => showToast(error?.message || 'Không thể tải video kết quả.', 'error')); }} /></label><select defaultValue={job.status} onChange={(e) => void adminDanceVideoAction({ action: 'update-job', id: job.id, status: e.target.value, adminNote: job.admin_note, resultVideoUrl: job.result_video_url }).then(() => getAdminDanceVideoData()).then((d) => setDanceJobs(d.jobs))} className="neu-input h-10 rounded-xl px-3 text-xs"><option value="pending">Chờ xử lý</option><option value="accepted">Đã tiếp nhận</option><option value="processing">Đang xử lý</option><option value="completed">Đã hoàn thành</option></select></div></div></article>)}{danceJobs.length === 0 && <p className="py-10 text-center text-sm text-slate-500">Chưa có job Dance AI.</p>}</div></section>
+                  {danceTemplateDraft && <AdminModalPortal><div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4"><div className="w-full max-w-xl rounded-3xl bg-[#111425] p-6 shadow-2xl"><div className="flex items-center justify-between"><h3 className="font-black text-white">{danceTemplateDraft.id ? 'Sửa video mẫu' : 'Thêm video mẫu'}</h3><button onClick={() => setDanceTemplateDraft(null)}><Icons.X className="h-5 w-5" /></button></div><div className="mt-5 grid gap-3 sm:grid-cols-2">{[['title','Tên mẫu'],['category','Danh mục'],['preview_video_url','URL video R2'],['price_vcoin','Giá Vcoin'],['required_image_count','Số ảnh cần']].map(([key,label]) => <label key={key} className="text-xs font-bold text-slate-300">{label}<input value={danceTemplateDraft[key] || ''} type={key === 'price_vcoin' || key === 'required_image_count' ? 'number' : 'text'} onChange={(e) => setDanceTemplateDraft((x: any) => ({ ...x, [key]: e.target.value }))} className="neu-input mt-1 h-11 w-full rounded-xl px-3" /></label>)}</div><p className="mt-3 text-xs text-cyan-200">Thumbnail tự lấy từ khung hình đầu tiên của video mẫu.</p><label className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-cyan-400/50 p-3 text-xs font-bold text-cyan-200"><Icons.Upload className="h-4 w-4" />Tải video mẫu lên R2<input className="sr-only" type="file" accept="video/*" onChange={(e) => { const file = e.target.files?.[0]; if (file) void uploadFileToR2(file, `dance-templates/${danceTemplateDraft.id || crypto.randomUUID()}`).then((url) => setDanceTemplateDraft((x: any) => ({ ...x, preview_video_url: url }))).catch((error) => showToast(error?.message || 'Không thể tải video lên R2.', 'error')); }} /></label><label className="mt-3 block text-xs font-bold text-slate-300">Mô tả<textarea value={danceTemplateDraft.description || ''} onChange={(e) => setDanceTemplateDraft((x: any) => ({ ...x, description: e.target.value }))} className="neu-input mt-1 min-h-20 w-full rounded-xl p-3" /></label><label className="mt-3 flex items-center gap-2 text-xs text-slate-200"><input checked={danceTemplateDraft.is_active !== false} type="checkbox" onChange={(e) => setDanceTemplateDraft((x: any) => ({ ...x, is_active: e.target.checked }))} />Hiển thị mẫu cho khách</label><button onClick={() => void adminDanceVideoAction({ action: 'save-template', template: { ...danceTemplateDraft, price_vcoin: Number(danceTemplateDraft.price_vcoin), required_image_count: Number(danceTemplateDraft.required_image_count) } }).then(() => getAdminDanceVideoData()).then((d) => { setDanceTemplates(d.templates); setDanceJobs(d.jobs); setDanceTemplateDraft(null); })} className="neu-button-primary mt-5 w-full rounded-xl py-3 text-sm font-black">Lưu video mẫu</button></div></div></AdminModalPortal>}
+              </div>
+          )}
           
+          {false && activeView === 'dance_video' && (
+              <div className="space-y-5 animate-fade-in">
+                  <header className="border-l-4 border-fuchsia-500 bg-white/5 px-5 py-4"><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><span className="text-[10px] font-black uppercase tracking-[.18em] text-fuchsia-400">Motion Control Operations</span><h2 className="mt-1 text-xl font-black text-white">Dance AI</h2><p className="mt-1 text-xs text-slate-400">Tách riêng quản lý mẫu video và tiếp nhận đơn hàng.</p></div><div className="flex rounded-xl border border-white/10 p-1"><button onClick={() => setDanceAdminSection('orders')} className={`rounded-lg px-4 py-2 text-xs font-black ${danceAdminSection === 'orders' ? 'bg-fuchsia-500 text-white' : 'text-slate-400'}`}>Đơn hàng ({danceJobs.length})</button><button onClick={() => setDanceAdminSection('templates')} className={`rounded-lg px-4 py-2 text-xs font-black ${danceAdminSection === 'templates' ? 'bg-cyan-500 text-black' : 'text-slate-400'}`}>Mẫu video ({danceTemplates.length})</button></div></div></header>
+                  {danceAdminSection === 'templates' && <section className="space-y-4"><div className="flex items-center justify-between"><div><h3 className="text-sm font-black text-white">Thư viện mẫu Motion Control</h3><p className="mt-1 text-xs text-slate-400">Mẫu đang mở sẽ được hiển thị cho khách tại Đặt Làm Video AI.</p></div><button type="button" onClick={() => setDanceTemplateDraft({ title: '', description: '', category: 'Dance AI', preview_video_url: '', price_vcoin: 50, required_image_count: 1, is_active: true, display_order: danceTemplates.length })} className="neu-button-primary rounded-xl px-4 py-2.5 text-xs font-black"><Icons.Plus className="mr-1 inline h-4 w-4" />Tạo mẫu video</button></div><div className="grid gap-3 xl:grid-cols-2">{danceTemplates.map((template) => <article key={template.id} className="grid grid-cols-[170px_1fr] gap-3 border border-white/10 bg-black/15 p-3"><video src={template.preview_video_url} className="h-[96px] w-full bg-black object-cover" muted controls preload="metadata" /><div className="min-w-0"><div className="flex justify-between gap-2"><b className="truncate text-sm text-white">{template.title}</b><span className={template.is_active ? 'text-[10px] font-black text-emerald-400' : 'text-[10px] font-black text-slate-500'}>{template.is_active ? 'ĐANG MỞ' : 'ĐANG ẨN'}</span></div><p className="mt-1 line-clamp-2 text-xs text-slate-400">{template.description || 'Chưa có mô tả.'}</p><div className="mt-3 flex items-center justify-between"><span className="text-[11px] font-bold text-amber-300">{template.price_vcoin} Vcoin · {template.required_image_count} ảnh</span><div className="flex gap-2"><button onClick={() => setDanceTemplateDraft(template)} className="neu-button rounded-lg p-2" aria-label="Sửa mẫu"><Icons.Edit2 className="h-3.5 w-3.5" /></button><button onClick={() => { if (window.confirm('Xóa mẫu video này?')) void adminDanceVideoAction({ action: 'delete-template', id: template.id }).then(() => getAdminDanceVideoData()).then((data) => setDanceTemplates(data.templates)); }} className="neu-button rounded-lg p-2 text-red-400" aria-label="Xóa mẫu"><Icons.Trash className="h-3.5 w-3.5" /></button></div></div></div></article>)}{danceTemplates.length === 0 && <p className="border border-dashed border-white/15 py-14 text-center text-sm text-slate-500 xl:col-span-2">Chưa có mẫu video.</p>}</div></section>}
+                  {danceAdminSection === 'orders' && <section className="space-y-3"><div className="flex items-center justify-between"><div><h3 className="text-sm font-black text-white">Đơn hàng Dance AI</h3><p className="mt-1 text-xs text-slate-400">Cập nhật trạng thái và giao video kết quả từ R2.</p></div><button onClick={() => void getAdminDanceVideoData().then((data) => { setDanceJobs(data.jobs); setDanceTemplates(data.templates); })} className="neu-button rounded-xl p-2.5" aria-label="Làm mới"><Icons.RefreshCw className="h-4 w-4" /></button></div><div className="overflow-x-auto border border-white/10"><table className="min-w-[900px] w-full text-left text-xs"><thead className="bg-white/5 text-[10px] uppercase text-slate-400"><tr><th className="px-4 py-3">Đơn / Khách</th><th className="px-4 py-3">Ảnh & yêu cầu</th><th className="px-4 py-3">Liên hệ</th><th className="px-4 py-3">Kết quả</th><th className="px-4 py-3">Trạng thái</th></tr></thead><tbody className="divide-y divide-white/10">{danceJobs.map((job) => <tr key={job.id}><td className="px-4 py-3 align-top"><b className="block text-white">{job.dance_video_templates?.title || 'Mẫu video'}</b><span className="mt-1 block text-slate-400">{job.users?.display_name || job.users?.email || job.user_id}</span><span className="mt-1 block text-[10px] text-slate-500">{new Date(job.created_at).toLocaleString('vi-VN')}</span></td><td className="px-4 py-3 align-top">{(job.character_image_urls || []).map((url: string, index: number) => <a key={url} href={url} target="_blank" rel="noreferrer" className="mr-2 inline-flex border border-cyan-400/30 px-2 py-1 text-[10px] font-bold text-cyan-300">Ảnh {index + 1}</a>)}<p className="mt-2 max-w-[190px] whitespace-pre-wrap text-slate-400">{job.note || 'Không có ghi chú'}</p></td><td className="px-4 py-3 align-top text-amber-300">{job.contact_zalo || 'Không để lại Zalo'}</td><td className="px-4 py-3 align-top"><input defaultValue={job.result_video_url || ''} onBlur={(event) => { if (event.target.value !== (job.result_video_url || '')) void adminDanceVideoAction({ action: 'update-job', id: job.id, status: job.status, adminNote: job.admin_note, resultVideoUrl: event.target.value }).then(() => getAdminDanceVideoData()).then((data) => setDanceJobs(data.jobs)); }} className="neu-input h-9 w-52 rounded-lg px-2 text-[11px]" placeholder="URL video R2" /><label className="mt-2 block cursor-pointer border border-dashed border-emerald-400/40 px-2 py-1.5 text-center text-[10px] font-bold text-emerald-300">Tải kết quả R2<input className="sr-only" type="file" accept="video/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadFileToR2(file, `dance-orders/${job.id}/result`).then((url) => adminDanceVideoAction({ action: 'update-job', id: job.id, status: job.status, adminNote: job.admin_note, resultVideoUrl: url })).then(() => getAdminDanceVideoData()).then((data) => setDanceJobs(data.jobs)); }} /></label></td><td className="px-4 py-3 align-top"><select value={job.status} onChange={(event) => void adminDanceVideoAction({ action: 'update-job', id: job.id, status: event.target.value, adminNote: job.admin_note, resultVideoUrl: job.result_video_url }).then(() => getAdminDanceVideoData()).then((data) => setDanceJobs(data.jobs))} className="neu-input h-9 rounded-lg px-2 text-[11px]"><option value="pending">Chờ xử lý</option><option value="accepted">Đã tiếp nhận</option><option value="processing">Đang xử lý</option><option value="completed">Đã hoàn thành</option></select></td></tr>)}{danceJobs.length === 0 && <tr><td colSpan={5} className="py-14 text-center text-slate-500">Chưa có đơn hàng.</td></tr>}</tbody></table></div></section>}
+                  {danceTemplateDraft && <AdminModalPortal><div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 p-4"><div className="w-full max-w-2xl border border-cyan-400/25 bg-[#121526] p-5 shadow-2xl"><div className="flex items-center justify-between"><div><span className="text-[10px] font-black uppercase tracking-[.16em] text-cyan-300">Video template</span><h3 className="mt-1 font-black text-white">{danceTemplateDraft.id ? 'Chỉnh sửa mẫu video' : 'Tạo mẫu video mới'}</h3></div><button onClick={() => setDanceTemplateDraft(null)} className="neu-button rounded-lg p-2"><Icons.X className="h-4 w-4" /></button></div><div className="mt-4 grid gap-3 md:grid-cols-3"><label className="text-xs font-bold text-slate-300 md:col-span-2">Tên mẫu<input value={danceTemplateDraft.title || ''} onChange={(event) => setDanceTemplateDraft((current: any) => ({ ...current, title: event.target.value }))} className="neu-input mt-1 h-10 w-full rounded-lg px-3" /></label><label className="text-xs font-bold text-slate-300">Danh mục<input value={danceTemplateDraft.category || ''} onChange={(event) => setDanceTemplateDraft((current: any) => ({ ...current, category: event.target.value }))} className="neu-input mt-1 h-10 w-full rounded-lg px-3" /></label><label className="text-xs font-bold text-slate-300 md:col-span-2">URL video R2<input value={danceTemplateDraft.preview_video_url || ''} onChange={(event) => setDanceTemplateDraft((current: any) => ({ ...current, preview_video_url: event.target.value }))} className="neu-input mt-1 h-10 w-full rounded-lg px-3" /></label><label className="text-xs font-bold text-slate-300">Giá Vcoin<input type="number" value={danceTemplateDraft.price_vcoin || ''} onChange={(event) => setDanceTemplateDraft((current: any) => ({ ...current, price_vcoin: event.target.value }))} className="neu-input mt-1 h-10 w-full rounded-lg px-3" /></label><label className="text-xs font-bold text-slate-300">Số ảnh cần<input type="number" min="1" max="8" value={danceTemplateDraft.required_image_count || 1} onChange={(event) => setDanceTemplateDraft((current: any) => ({ ...current, required_image_count: event.target.value }))} className="neu-input mt-1 h-10 w-full rounded-lg px-3" /></label><label className="mt-5 cursor-pointer border border-dashed border-cyan-400/45 px-3 py-2 text-center text-xs font-black text-cyan-200 md:col-span-2">Tải video mẫu lên R2<input className="sr-only" type="file" accept="video/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadFileToR2(file, `dance-templates/${danceTemplateDraft.id || crypto.randomUUID()}`).then((url) => setDanceTemplateDraft((current: any) => ({ ...current, preview_video_url: url }))); }} /></label></div><p className="mt-2 text-[11px] text-slate-400">Thumbnail tự dùng khung hình đầu tiên của video.</p><label className="mt-3 block text-xs font-bold text-slate-300">Mô tả<textarea value={danceTemplateDraft.description || ''} onChange={(event) => setDanceTemplateDraft((current: any) => ({ ...current, description: event.target.value }))} className="neu-input mt-1 min-h-20 w-full rounded-lg p-3" /></label><div className="mt-4 flex items-center justify-between"><label className="flex items-center gap-2 text-xs text-slate-300"><input checked={danceTemplateDraft.is_active !== false} type="checkbox" onChange={(event) => setDanceTemplateDraft((current: any) => ({ ...current, is_active: event.target.checked }))} />Hiển thị cho khách</label><button onClick={() => void adminDanceVideoAction({ action: 'save-template', template: { ...danceTemplateDraft, price_vcoin: Number(danceTemplateDraft.price_vcoin), required_image_count: Number(danceTemplateDraft.required_image_count) } }).then(() => getAdminDanceVideoData()).then((data) => { setDanceTemplates(data.templates); setDanceJobs(data.jobs); setDanceTemplateDraft(null); })} className="neu-button-primary rounded-lg px-5 py-2.5 text-xs font-black">Lưu mẫu video</button></div></div></div></AdminModalPortal>}
+              </div>
+          )}
+
+          {activeView === 'dance_video' && <DanceVideoAdminWorkspace />}
+
           {/* 1. OVERVIEW VIEW */}
           {activeView === 'overview' && (
               <div className="space-y-6 animate-fade-in">
@@ -4250,6 +4333,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                           {getQueueErrorCategoryLabel(job.errorCategory)}
                                                       </div>
                                                   )}
+                                                  {job.adminNote && (
+                                                      <div className="mb-1.5 inline-flex items-center gap-1 rounded bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 text-[10px] font-bold text-amber-300">
+                                                          <Icons.Edit2 className="w-3 h-3 text-amber-400" />
+                                                          <span>Ghi chú Admin: {job.adminNote}</span>
+                                                      </div>
+                                                  )}
                                                   <div className="text-red-300">{job.error || '-'}</div>
                                                   {lastLogMessage && <div className="mt-2 text-slate-300">{lastLogMessage}</div>}
                                                   {job.jobId && <div className="mt-1 text-[11px] text-audi-cyan">Provider ID: {job.jobId}</div>}
@@ -4293,6 +4382,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       {job.errorCategory && job.error && (
                                           <div className={`inline-flex mt-3 px-2 py-1 rounded border text-[10px] font-bold uppercase ${getQueueErrorCategoryClass(job.errorCategory)}`}>
                                               {getQueueErrorCategoryLabel(job.errorCategory)}
+                                          </div>
+                                      )}
+                                      {job.adminNote && (
+                                          <div className="mt-2 inline-flex items-center gap-1 rounded bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 text-[10px] font-bold text-amber-300">
+                                              <Icons.Edit2 className="w-3 h-3 text-amber-400" />
+                                              <span>Ghi chú Admin: {job.adminNote}</span>
                                           </div>
                                       )}
                                       {job.health && (
@@ -6508,30 +6603,151 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           </div>
                                       )}
 
-                                      {(selectedQueueJobDetail.job.error || selectedQueueJobDetail.job.errorRaw) && (
-                                          <div className="neu-inset-sm border border-white/10 rounded-2xl p-4 space-y-3">
-                                              <div className="flex items-center gap-3">
-                                                  <div className="text-sm font-bold text-slate-900 dark:text-white">Phân tích lỗi</div>
-                                                  {selectedQueueJobDetail.job.errorCategory && (
-                                                      <div className={`inline-flex px-2 py-1 rounded border text-[10px] font-bold uppercase ${getQueueErrorCategoryClass(selectedQueueJobDetail.job.errorCategory)}`}>
-                                                          {getQueueErrorCategoryLabel(selectedQueueJobDetail.job.errorCategory)}
+                                      {(() => {
+                                          const errInfo = getUserFriendlyErrorInfo(
+                                              selectedQueueJobDetail.job.errorRaw || selectedQueueJobDetail.job.error,
+                                              selectedQueueJobDetail.job.adminNote
+                                          );
+                                          const isFailedJob = (selectedQueueJobDetail.job.displayStatus || selectedQueueJobDetail.job.status) === 'failed' || !!selectedQueueJobDetail.job.error || !!selectedQueueJobDetail.job.errorRaw;
+                                          return (
+                                              <div className="space-y-4">
+                                                  {/* Phân tích lỗi chi tiết */}
+                                                  {isFailedJob && (
+                                                      <div className="neu-inset-sm border border-red-500/20 bg-red-950/20 rounded-2xl p-4 space-y-3">
+                                                          <div className="flex items-center justify-between gap-3">
+                                                              <div className="flex items-center gap-2">
+                                                                  <Icons.AlertTriangle className="w-4 h-4 text-red-400" />
+                                                                  <div className="text-sm font-bold text-red-200">{errInfo.title}</div>
+                                                              </div>
+                                                              {selectedQueueJobDetail.job.errorCategory && (
+                                                                  <div className={`inline-flex px-2 py-1 rounded border text-[10px] font-bold uppercase ${getQueueErrorCategoryClass(selectedQueueJobDetail.job.errorCategory)}`}>
+                                                                      {getQueueErrorCategoryLabel(selectedQueueJobDetail.job.errorCategory)}
+                                                                  </div>
+                                                              )}
+                                                          </div>
+
+                                                          <div className="rounded-xl bg-black/30 p-3 border border-red-500/10 space-y-2 text-xs">
+                                                              <div>
+                                                                  <span className="text-[10px] uppercase font-bold tracking-wider text-red-300/70 block mb-0.5">Nguyên nhân cụ thể:</span>
+                                                                  <p className="text-red-200 leading-relaxed font-medium">{errInfo.reason}</p>
+                                                              </div>
+                                                              <div className="pt-1 border-t border-white/5">
+                                                                  <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-300/80 block mb-0.5">Hướng dẫn xử lý cho User:</span>
+                                                                  <p className="text-emerald-200 leading-relaxed font-medium">{errInfo.resolution}</p>
+                                                              </div>
+                                                          </div>
+
+                                                          {selectedQueueJobDetail.job.errorRaw && (
+                                                              <details className="text-[11px] text-slate-400">
+                                                                  <summary className="cursor-pointer select-none text-[10px] font-bold uppercase text-slate-500 hover:text-slate-300">
+                                                                      Mã lỗi kỹ thuật (Debug / Raw provider)
+                                                                  </summary>
+                                                                  <div className="mt-2 p-2.5 rounded-lg bg-black/40 border border-white/5 font-mono text-[10px] text-red-300 break-all leading-relaxed">
+                                                                      {selectedQueueJobDetail.job.errorRaw}
+                                                                  </div>
+                                                              </details>
+                                                          )}
                                                       </div>
                                                   )}
+
+                                                  {/* Khu vực Admin tùy chỉnh thông báo lỗi cho người dùng */}
+                                                  <div className="neu-inset-sm border border-amber-500/25 bg-amber-950/15 rounded-2xl p-4 space-y-3">
+                                                      <div className="flex items-center justify-between gap-3">
+                                                          <div className="flex items-center gap-2">
+                                                              <Icons.Edit2 className="w-4 h-4 text-amber-400" />
+                                                              <div className="text-sm font-bold text-amber-200">Ghi chú thông báo cho User (Admin Note)</div>
+                                                          </div>
+                                                          {selectedQueueJobDetail.job.adminNote && (
+                                                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/30">
+                                                                  Đang áp dụng
+                                                              </span>
+                                                          )}
+                                                      </div>
+
+                                                      <p className="text-[11px] text-slate-400 leading-relaxed">
+                                                          Admin có thể tùy chỉnh thông báo lỗi riêng cho tác vụ này. Lời nhắn này sẽ được ưu tiên hiển thị trực quan cho người dùng trên cả giao diện Máy tính & Điện thoại.
+                                                      </p>
+
+                                                      {/* Quick Presets */}
+                                                      <div>
+                                                          <div className="text-[10px] uppercase font-bold tracking-wider text-slate-500 mb-1.5">Gợi ý nhanh theo trường hợp:</div>
+                                                          <div className="flex flex-wrap gap-1.5">
+                                                              {[
+                                                                  {
+                                                                      label: 'Ảnh mờ / che mặt',
+                                                                      text: 'Ảnh mẫu khuôn mặt quá mờ hoặc bị che khuất. Vui lòng chọn ảnh chân dung rõ mặt, nhìn thẳng và đủ sáng.',
+                                                                  },
+                                                                  {
+                                                                      label: 'Vi phạm từ khóa AI',
+                                                                      text: 'Từ khóa trong mô tả hoặc hình ảnh bị bộ lọc an toàn của AI từ chối. Vui lòng đổi từ ngữ mô tả hoặc thay ảnh mẫu.',
+                                                                  },
+                                                                  {
+                                                                      label: 'Server gián đoạn (502/Timeout)',
+                                                                      text: 'Máy chủ AI quá tải hoặc ngắt kết nối gián đoạn. Vcoin đã hoàn, bạn vui lòng bấm thử lại.',
+                                                                  },
+                                                                  {
+                                                                      label: 'Ảnh sai định dạng',
+                                                                      text: 'Tệp ảnh đầu vào không tải được hoặc vượt dung lượng cho phép. Vui lòng dùng ảnh JPG/PNG dưới 10MB.',
+                                                                  },
+                                                              ].map((preset) => (
+                                                                  <button
+                                                                      key={preset.label}
+                                                                      type="button"
+                                                                      onClick={() => setAdminCustomErrorNote(preset.text)}
+                                                                      className="text-[10px] font-medium px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white transition"
+                                                                  >
+                                                                      {preset.label}
+                                                                  </button>
+                                                              ))}
+                                                              {adminCustomErrorNote && (
+                                                                  <button
+                                                                      type="button"
+                                                                      onClick={() => setAdminCustomErrorNote('')}
+                                                                      className="text-[10px] font-medium px-2 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-300 transition"
+                                                                  >
+                                                                      Xóa trắng
+                                                                  </button>
+                                                              )}
+                                                          </div>
+                                                      </div>
+
+                                                      {/* Textarea & Save */}
+                                                      <div className="space-y-2">
+                                                          <textarea
+                                                              value={adminCustomErrorNote}
+                                                              onChange={(e) => setAdminCustomErrorNote(e.target.value)}
+                                                              placeholder="Nhập lý do cụ thể và hướng dẫn xử lý gửi tới người dùng..."
+                                                              rows={3}
+                                                              className="w-full rounded-xl bg-black/40 border border-white/10 p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 transition resize-none"
+                                                          />
+                                                          <div className="flex items-center justify-between gap-3 pt-1">
+                                                              <span className="text-[10px] text-slate-500 font-mono">
+                                                                  {adminCustomErrorNote.length}/1000 ký tự
+                                                              </span>
+                                                              <button
+                                                                  type="button"
+                                                                  disabled={savingAdminNote}
+                                                                  onClick={() => handleSaveAdminQueueJobNote(selectedQueueJobDetail.job.id, adminCustomErrorNote)}
+                                                                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-black transition shadow-lg shadow-amber-500/20 disabled:opacity-50"
+                                                              >
+                                                                  {savingAdminNote ? (
+                                                                      <>
+                                                                          <Icons.Loader className="w-3.5 h-3.5 animate-spin" />
+                                                                          Đang lưu...
+                                                                      </>
+                                                                  ) : (
+                                                                      <>
+                                                                          <Icons.Check className="w-3.5 h-3.5" />
+                                                                          Lưu ghi chú cho User
+                                                                      </>
+                                                                  )}
+                                                              </button>
+                                                          </div>
+                                                      </div>
+                                                  </div>
                                               </div>
-                                              {selectedQueueJobDetail.job.error && (
-                                                  <div>
-                                                      <div className="text-[10px] uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold font-bold">Tóm tắt dễ hiểu</div>
-                                                      <div className="text-sm text-red-300 mt-2 leading-relaxed">{selectedQueueJobDetail.job.error}</div>
-                                                  </div>
-                                              )}
-                                              {selectedQueueJobDetail.job.errorRaw && selectedQueueJobDetail.job.errorRaw !== selectedQueueJobDetail.job.error && (
-                                                  <div>
-                                                      <div className="text-[10px] uppercase tracking-wider text-slate-700 dark:text-slate-400 font-semibold font-bold">Lỗi gốc từ hệ thống</div>
-                                                      <div className="text-sm text-slate-700 dark:text-slate-300 font-semibold mt-2 leading-relaxed break-all">{selectedQueueJobDetail.job.errorRaw}</div>
-                                                  </div>
-                                              )}
-                                          </div>
-                                      )}
+                                          );
+                                      })()}
                                   </div>
                               </div>
 

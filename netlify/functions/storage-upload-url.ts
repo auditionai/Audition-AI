@@ -142,7 +142,12 @@ export const handler: Handler = async (event) => {
     }
 
     const requestedFolder = cleanSegment(String(body.folder || 'inputs')) || 'inputs';
-    const key = `users/${user.id}/${requestedFolder}/${Date.now()}-${randomUUID()}.${extensionForMime(contentType)}`;
+    // Keep videos in a dedicated top-level namespace so retention jobs can
+    // never remove them together with temporary image inputs.
+    const storageFolder = contentType.startsWith('video/')
+      ? (requestedFolder === 'videos' || requestedFolder.startsWith('videos/') ? requestedFolder : `videos/${requestedFolder}`)
+      : requestedFolder;
+    const key = `users/${user.id}/${storageFolder}/${Date.now()}-${randomUUID()}.${extensionForMime(contentType)}`;
 
     if (!isR2Configured()) {
       await ensureSupabaseStorageBucket();

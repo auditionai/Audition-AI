@@ -159,6 +159,16 @@
   status = 200
 
 [[redirects]]
+  from = "/api/dance-video-order"
+  to = "/.netlify/functions/dance-video-order"
+  status = 200
+
+[[redirects]]
+  from = "/api/admin-dance-video"
+  to = "/.netlify/functions/admin-dance-video"
+  status = 200
+
+[[redirects]]
   from = "/api/admin-model-pricing"
   to = "/.netlify/functions/admin-model-pricing"
   status = 200
@@ -181,6 +191,11 @@
 [[redirects]]
   from = "/api/admin-retry-queue-job"
   to = "/.netlify/functions/admin-retry-queue-job"
+  status = 200
+
+[[redirects]]
+  from = "/api/admin-update-queue-job-note"
+  to = "/.netlify/functions/admin-update-queue-job-note"
   status = 200
 
 [[redirects]]
@@ -216,6 +231,11 @@
 [[redirects]]
   from = "/api/storage-delete"
   to = "/.netlify/functions/storage-delete"
+  status = 200
+
+[[redirects]]
+  from = "/api/cancel-generation-job"
+  to = "/.netlify/functions/cancel-generation-job"
   status = 200
 
 [[redirects]]

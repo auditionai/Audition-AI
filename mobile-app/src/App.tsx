@@ -23,6 +23,7 @@ const WorkspacePromptImage = lazy(() => import('./v2/views/WorkspacePromptImage'
 const WorkspaceEdit = lazy(() => import('./v2/views/WorkspaceEdit').then((module) => ({ default: module.WorkspaceEdit })));
 const GalleryV2 = lazy(() => import('./v2/views/GalleryV2').then((module) => ({ default: module.GalleryV2 })));
 const PromptLibraryV2 = lazy(() => import('./v2/views/PromptLibraryV2').then((module) => ({ default: module.PromptLibraryV2 })));
+const DanceVideoOrdersV2 = lazy(() => import('./v2/views/DanceVideoOrdersV2').then((module) => ({ default: module.DanceVideoOrdersV2 })));
 const TopUpV2 = lazy(() => import('./v2/views/TopUpV2').then((module) => ({ default: module.TopUpV2 })));
 const PaymentGatewayView = lazy(() => import('./v2/views/PaymentGateway').then((module) => ({ default: module.PaymentGatewayView })));
 const ProfileV2 = lazy(() => import('./v2/views/ProfileV2').then((module) => ({ default: module.ProfileV2 })));
@@ -100,6 +101,7 @@ const getMobileTourScreen = (pathname: string) => {
   if (pathname.startsWith('/generate/') || pathname.startsWith('/tools/')) return 'tool_workspace';
   if (pathname === '/gallery') return 'gallery';
   if (pathname === '/prompt-library') return 'prompt_library';
+  if (pathname === '/dat-lam-video-ai') return 'dance_video_orders';
   if (pathname === '/topup') return 'topup';
   if (pathname === '/profile') return 'settings';
   return pathname.replace(/^\/+/, '') || 'home';
@@ -166,6 +168,7 @@ function AppRoutes() {
             <Route path="/tools/:toolId" element={<FeatureMaintenanceGuard><EditStudioV2 /></FeatureMaintenanceGuard>} />
             <Route path="/gallery" element={<GalleryV2 />} />
             <Route path="/prompt-library" element={<PromptLibraryV2 />} />
+            <Route path="/dat-lam-video-ai" element={<DanceVideoOrdersV2 />} />
             <Route path="/topup" element={<TopUpV2 />} />
             <Route path="/payment-gateway" element={<PaymentGatewayV2 />} />
             <Route path="/profile" element={<ProfileV2 />} />

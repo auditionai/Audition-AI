@@ -67,7 +67,7 @@ export const handler: Handler = async (event) => {
 
     const admin = getServiceRoleClient();
     const [{ data: image, error: imageError }, { data: requester, error: requesterError }] = await Promise.all([
-      admin.from('generated_images').select('id, user_id, image_url').eq('id', imageId).maybeSingle(),
+      admin.from('generated_images').select('id, user_id, image_url, status').eq('id', imageId).maybeSingle(),
       admin.from('users').select('is_admin').eq('id', user.id).maybeSingle(),
     ]);
     if (imageError) throw imageError;
@@ -77,6 +77,9 @@ export const handler: Handler = async (event) => {
     }
     if (image.user_id !== user.id && requester?.is_admin !== true) {
       return { statusCode: 403, headers, body: JSON.stringify({ error: 'Bạn không có quyền xóa tác phẩm này.' }) };
+    }
+    if (['queued', 'processing'].includes(String(image.status || '').toLowerCase())) {
+      return { statusCode: 409, headers, body: JSON.stringify({ error: 'Job đang chạy. Hãy dùng nút Hủy job để dừng tiến trình.' }) };
     }
 
     const r2Key = extractR2Key(String(image.image_url || ''));
@@ -97,12 +100,18 @@ export const handler: Handler = async (event) => {
 
     const { error: deleteError } = await admin.from('generated_images').delete().eq('id', imageId);
     if (deleteError) throw deleteError;
+    await admin.from('dance_video_jobs').delete().eq('id', imageId);
 
     return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
   } catch (error: any) {
     const message = String(error?.message || 'Internal Server Error');
-    const statusCode = message === 'Unauthorized' ? 401 : message === 'AccountLocked' ? 403 : 500;
+    const isDanceOrderLocked = message.includes('DANCE_ORDER_CANCELLATION_UNAVAILABLE');
+    const statusCode = message === 'Unauthorized' ? 401 : message === 'AccountLocked' ? 403 : isDanceOrderLocked ? 409 : 500;
     console.error('[storage-delete] failed:', message);
-    return { statusCode, headers, body: JSON.stringify({ error: message }) };
+    return {
+      statusCode,
+      headers,
+      body: JSON.stringify({ error: isDanceOrderLocked ? 'Đơn video đã được Admin tiếp nhận nên không thể hủy hoặc hoàn VCoin.' : message }),
+    };
   }
 };

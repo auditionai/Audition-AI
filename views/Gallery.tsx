@@ -2,13 +2,14 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { GeneratedImage, Language, HistoryItem } from '../types';
 import type { QueueProgressLogEntry } from '../shared/queueRecipes';
-import { checkR2Connection, getAllImagesFromStorage, getCachedImagesForCurrentUser, deleteImageFromStorage, getHistoryRetentionDays, mapGeneratedImageRow, publishImageToShowcase, invalidateGalleryCache } from '../services/storageService';
+import { cancelGenerationJob, checkR2Connection, getAllImagesFromStorage, getCachedImagesForCurrentUser, deleteImageFromStorage, getGenerationCancellationPreview, getHistoryRetentionDays, mapGeneratedImageRow, publishImageToShowcase, invalidateGalleryCache } from '../services/storageService';
 import { getUnifiedHistory } from '../services/economyService';
 import { downloadAssetToBrowser } from '../services/downloadService';
 import { Icons } from '../components/Icons';
 import { useNotification } from '../components/NotificationSystem';
 import { QUEUE_SUBMITTED_EVENT } from '../services/serverQueueService';
 import { sanitizeProviderDisplayText } from '../shared/providerDisplay';
+import { getUserFriendlyErrorInfo } from '../shared/queueErrorClassifier';
 
 interface GalleryProps {
   lang: Language;
@@ -38,6 +39,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
   const [loadingImages, setLoadingImages] = useState(true);
   const [filter, setFilter] = useState<'all' | 'completed' | 'failed' | 'processing' | 'queued' | 'rescuing'>('all');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [cancellingJobId, setCancellingJobId] = useState<string | null>(null);
   const [viewingImage, setViewingImage] = useState<GeneratedImage | null>(null);
   const [showLogViewer, setShowLogViewer] = useState(false);
 
@@ -244,12 +246,14 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
       }
   }, [activeTab]);
 
-  const handleDelete = (e: React.MouseEvent, id: string, imageUrl?: string, userId?: string) => {
+  const handleDelete = (e: React.MouseEvent, id: string, imageUrl?: string, userId?: string, isDanceVideoOrder = false) => {
     e.stopPropagation();
     confirm({
-        title: lang === 'vi' ? 'Xóa ảnh?' : 'Delete Image?',
-        message: lang === 'vi' ? 'Bạn có chắc chắn muốn xóa vĩnh viễn hình ảnh này không?' : 'Are you sure you want to permanently delete this image?',
-        confirmText: lang === 'vi' ? 'Xóa ngay' : 'Delete',
+        title: isDanceVideoOrder ? (lang === 'vi' ? 'Hủy đơn video AI?' : 'Cancel AI video order?') : (lang === 'vi' ? 'Xóa ảnh?' : 'Delete Image?'),
+        message: isDanceVideoOrder
+            ? (lang === 'vi' ? 'Đơn chỉ có thể hủy và hoàn 100% VCoin khi Admin chưa tiếp nhận.' : 'This order can be cancelled with a full VCoin refund only before admin acceptance.')
+            : (lang === 'vi' ? 'Bạn có chắc chắn muốn xóa vĩnh viễn hình ảnh này không?' : 'Are you sure you want to permanently delete this image?'),
+        confirmText: isDanceVideoOrder ? (lang === 'vi' ? 'Hủy đơn & hoàn VCoin' : 'Cancel & refund') : (lang === 'vi' ? 'Xóa ngay' : 'Delete'),
         cancelText: lang === 'vi' ? 'Hủy' : 'Cancel',
         isDanger: true,
         onConfirm: async () => {
@@ -260,7 +264,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                 newSet.delete(id);
                 return newSet;
             });
-            notify(lang === 'vi' ? 'Đã xóa ảnh.' : 'Image deleted.', 'info');
+            notify(isDanceVideoOrder ? (lang === 'vi' ? 'Đã hủy đơn và hoàn VCoin.' : 'Order cancelled and VCoin refunded.') : (lang === 'vi' ? 'Đã xóa ảnh.' : 'Image deleted.'), 'info');
         }
     });
   };
@@ -283,6 +287,37 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
               notify(lang === 'vi' ? 'Đã xóa các mục đã chọn.' : 'Selected items deleted.', 'info');
           }
       });
+  };
+
+  const handleCancelJob = async (image: GeneratedImage) => {
+    try {
+      const preview = await getGenerationCancellationPreview(image.id);
+      const refundText = preview.refundEligible
+        ? `Job đang trong hàng chờ. Hủy ngay sẽ hoàn ${Number(preview.amount || 0).toLocaleString('vi-VN')} VCoin.`
+        : 'Job đã được hệ thống tiếp nhận và đang xử lý. Bạn vẫn có thể hủy, nhưng VCoin sẽ không được hoàn.';
+      confirm({
+        title: lang === 'vi' ? 'Hủy job đang chạy?' : 'Cancel running job?',
+        message: lang === 'vi' ? `${refundText} Lịch sử job vẫn được giữ lại.` : `${preview.refundEligible ? 'This queued job will be refunded.' : 'This processing job will not be refunded.'} The job will remain in your history.`,
+        confirmText: preview.refundEligible ? (lang === 'vi' ? 'Hủy & hoàn VCoin' : 'Cancel & refund') : (lang === 'vi' ? 'Hủy không hoàn tiền' : 'Cancel without refund'),
+        cancelText: lang === 'vi' ? 'Quay lại' : 'Back',
+        isDanger: true,
+        onConfirm: async () => {
+          setCancellingJobId(image.id);
+          try {
+            const result = await cancelGenerationJob(image.id);
+            invalidateGalleryCache();
+            await loadImages(true);
+            notify(result.refunded ? (lang === 'vi' ? 'Đã hủy job và hoàn VCoin.' : 'Job cancelled and VCoin refunded.') : (lang === 'vi' ? 'Đã hủy job. VCoin không được hoàn do job đã xử lý.' : 'Job cancelled. No VCoin refund applies after processing.'), result.refunded ? 'success' : 'info');
+          } catch (error: any) {
+            notify(error?.message || (lang === 'vi' ? 'Không thể hủy job.' : 'Unable to cancel job.'), 'error');
+          } finally {
+            setCancellingJobId(null);
+          }
+        },
+      });
+    } catch (error: any) {
+      notify(error?.message || (lang === 'vi' ? 'Không thể kiểm tra điều kiện hủy job.' : 'Unable to check cancellation.'), 'error');
+    }
   };
 
   const handleDownload = async (imageUrl: string, filename: string, assetKind: 'image' | 'video' = 'image') => {
@@ -351,10 +386,14 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
           ? (lang === 'vi' ? 'Đang tạo video...' : 'Video is generating...')
           : (lang === 'vi' ? 'Đang tạo ảnh...' : 'Image is generating...');
 
-  const getFailedAssetMessage = (img: GeneratedImage) =>
-      sanitizeProviderDisplayText(img.error?.trim()) || (lang === 'vi'
-          ? 'Tiến trình đã thất bại nhưng chưa có mô tả lỗi chi tiết.'
-          : 'The generation failed without a detailed error message.');
+  const getFailedAssetInfo = (img: GeneratedImage) => {
+      return getUserFriendlyErrorInfo(img.errorRaw || img.error, img.adminNote);
+  };
+
+  const getFailedAssetMessage = (img: GeneratedImage) => {
+      const info = getFailedAssetInfo(img);
+      return sanitizeProviderDisplayText(info.summary || info.reason);
+  };
 
   const getProcessingStageLabel = (img: GeneratedImage) => {
       const assetKind = getAssetKind(img);
@@ -602,6 +641,8 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                 const isCompleted = !displayStatus || displayStatus === 'completed';
                                 const isFailed = displayStatus === 'failed';
                                 const isProcessing = displayStatus === 'processing' || displayStatus === 'queued' || displayStatus === 'rescuing';
+                                const canCancel = displayStatus === 'processing' || displayStatus === 'queued';
+                                const wasCancelled = /cancelled by user/i.test(img.errorRaw || img.error || '');
 
                                 return (
                                     <tr
@@ -642,8 +683,12 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                                     {isFailed && (
                                                         <div className="mt-1.5 flex items-start gap-1.5 text-[11px] text-red-300 leading-relaxed max-w-[220px] md:max-w-[320px]">
                                                             <Icons.AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-red-400" />
-                                                            <span className="line-clamp-2" title={getFailedAssetMessage(img)}>
-                                                                {getFailedAssetMessage(img)}
+                                                            <span className="line-clamp-2" title={img.adminNote ? `Lưu ý từ Admin: ${img.adminNote}` : getFailedAssetMessage(img)}>
+                                                                {img.adminNote ? (
+                                                                    <span className="text-amber-300 font-semibold">[Admin]: {img.adminNote}</span>
+                                                                ) : (
+                                                                    getFailedAssetMessage(img)
+                                                                )}
                                                             </span>
                                                         </div>
                                                     )}
@@ -675,8 +720,13 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                                 </span>
                                             )}
                                             {isFailed && (
-                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 text-[10px] font-bold uppercase tracking-wider">
-                                                    <div className="w-1.5 h-1.5 rounded-full bg-red-500"></div> Thất bại
+                                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                                                    img.adminNote
+                                                        ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                                                        : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                                                }`}>
+                                                    <div className={`w-1.5 h-1.5 rounded-full ${img.adminNote ? 'bg-amber-400' : 'bg-red-500'}`}></div>
+                                                    {img.adminNote ? 'Có tin nhắn Admin' : wasCancelled ? 'Đã hủy' : 'Thất bại · Hoàn Vcoin'}
                                                 </span>
                                             )}
                                             {isProcessing && (
@@ -697,7 +747,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                             )}
                                         </td>
                                         <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
-                                            <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <div className="flex flex-wrap items-center justify-end gap-2">
                                                 {isCompleted && img.url && (
                                                     <button
                                                         onClick={() => handleDownload(img.url, getDownloadFilename(img), getAssetKind(img))}
@@ -719,13 +769,27 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                                         <Icons.Activity className="w-4 h-4" />
                                                     </button>
                                                 )}
-                                                <button
-                                                    onClick={(e) => handleDelete(e, img.id, img.url, img.userId)}
-                                                    className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                                                    title="Xóa"
-                                                >
-                                                    <Icons.Trash className="w-4 h-4" />
-                                                </button>
+                                                {canCancel && (
+                                                    <button
+                                                        onClick={() => void handleCancelJob(img)}
+                                                        disabled={cancellingJobId === img.id}
+                                                        className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-amber-400/50 bg-amber-500/15 px-3 text-[11px] font-black text-amber-200 transition hover:bg-amber-500/25 disabled:opacity-50"
+                                                        title="Hủy job đang chạy"
+                                                    >
+                                                        {cancellingJobId === img.id ? <Icons.Loader className="h-3.5 w-3.5 animate-spin" /> : <Icons.X className="h-3.5 w-3.5" />}
+                                                        <span>Hủy job</span>
+                                                    </button>
+                                                )}
+                                                {!isProcessing && (
+                                                    <button
+                                                        onClick={(e) => handleDelete(e, img.id, img.url, img.userId)}
+                                                        className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-red-400/40 bg-red-500/10 px-3 text-[11px] font-black text-red-300 transition hover:bg-red-500/20"
+                                                        title="Xóa khỏi lịch sử"
+                                                    >
+                                                        <Icons.Trash className="h-3.5 w-3.5" />
+                                                        <span>Xóa</span>
+                                                    </button>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>
@@ -1042,15 +1106,49 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                     </section>
                                 )}
 
-                                {(viewingImage.displayStatus || viewingImage.status) === 'failed' && viewingImage.error && (
-                                    <section className="rounded-2xl border border-red-500/25 bg-red-500/10 p-4">
-                                        <div className="mb-1 flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-red-500">
-                                            <Icons.AlertTriangle className="h-4 w-4" />
-                                            {lang === 'vi' ? 'Lý do thất bại' : 'Failure reason'}
-                                        </div>
-                                        <p className="text-sm leading-relaxed text-red-400">{getFailedAssetMessage(viewingImage)}</p>
-                                    </section>
-                                )}
+                                {(viewingImage.displayStatus || viewingImage.status) === 'failed' && (viewingImage.error || viewingImage.adminNote) && (() => {
+                                    const failInfo = getFailedAssetInfo(viewingImage);
+                                    return (
+                                        <section className="rounded-2xl border border-red-500/25 bg-red-500/10 p-4 space-y-3">
+                                            <div className="flex items-center justify-between gap-2">
+                                                 <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-red-400">
+                                                     <Icons.AlertTriangle className="h-4 w-4 shrink-0 text-red-500" />
+                                                     <span>{failInfo.title}</span>
+                                                 </div>
+                                                 <span className="rounded-md bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300 border border-emerald-500/30 shrink-0">
+                                                     Đã hoàn Vcoin
+                                                 </span>
+                                            </div>
+
+                                            {viewingImage.adminNote && (
+                                                <div className="rounded-xl border border-amber-500/30 bg-amber-500/15 p-3">
+                                                    <div className="flex items-center gap-1.5 text-[10px] font-black uppercase text-amber-300 mb-1">
+                                                        <Icons.Edit2 className="h-3.5 w-3.5" />
+                                                        <span>{lang === 'vi' ? 'Lời nhắn từ Quản trị viên:' : 'Message from Admin:'}</span>
+                                                    </div>
+                                                    <p className="text-xs text-amber-100 leading-relaxed font-semibold">
+                                                        {viewingImage.adminNote}
+                                                    </p>
+                                                </div>
+                                            )}
+
+                                            <div className="space-y-2 text-xs">
+                                                <div>
+                                                    <span className="text-[10px] uppercase font-bold text-red-300/80 block mb-0.5">
+                                                        {lang === 'vi' ? 'Nguyên nhân:' : 'Reason:'}
+                                                    </span>
+                                                    <p className="text-red-200 leading-relaxed font-medium">{failInfo.reason}</p>
+                                                </div>
+                                                <div className="pt-2 border-t border-red-500/15">
+                                                    <span className="text-[10px] uppercase font-bold text-emerald-400 block mb-0.5">
+                                                        {lang === 'vi' ? 'Hướng xử lý:' : 'Resolution:'}
+                                                    </span>
+                                                    <p className="text-slate-200 leading-relaxed font-medium">{failInfo.resolution}</p>
+                                                </div>
+                                            </div>
+                                        </section>
+                                    );
+                                })()}
 
                                 {viewingImage.providerPrompt && (
                                     <details className="neu-inset-sm group rounded-2xl p-4">
@@ -1097,18 +1195,30 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                                             {lang === 'vi' ? 'Nhật ký' : 'Progress log'}
                                         </button>
                                     )}
-                                    <button
-                                        type="button"
-                                        onClick={(e) => {
-                                            setViewingImage(null);
-                                            setShowLogViewer(false);
-                                            handleDelete(e, viewingImage.id, viewingImage.url, viewingImage.userId);
-                                        }}
-                                        className="neu-button flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-xs font-black text-red-500 sm:col-span-3"
-                                    >
-                                        <Icons.Trash className="h-4 w-4" />
-                                        {lang === 'vi' ? 'Xóa khỏi lịch sử' : 'Delete from history'}
-                                    </button>
+                                    {['processing', 'queued'].includes(viewingImage.displayStatus || viewingImage.status || '') ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => void handleCancelJob(viewingImage)}
+                                            disabled={cancellingJobId === viewingImage.id}
+                                            className="flex min-h-[68px] items-center justify-center gap-2 rounded-2xl border border-amber-400/50 bg-amber-500/15 px-4 py-3 text-xs font-black text-amber-200 transition hover:bg-amber-500/25 disabled:opacity-50 sm:col-span-3"
+                                        >
+                                            {cancellingJobId === viewingImage.id ? <Icons.Loader className="h-4 w-4 animate-spin" /> : <Icons.X className="h-4 w-4" />}
+                                            {lang === 'vi' ? 'Hủy job' : 'Cancel job'}
+                                        </button>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                setViewingImage(null);
+                                                setShowLogViewer(false);
+                                                handleDelete(e, viewingImage.id, viewingImage.url, viewingImage.userId);
+                                            }}
+                                            className="neu-button flex min-h-[68px] items-center justify-center gap-2 rounded-2xl px-4 py-3 text-xs font-black text-red-500 sm:col-span-3"
+                                        >
+                                            <Icons.Trash className="h-4 w-4" />
+                                            {lang === 'vi' ? 'Xóa khỏi lịch sử' : 'Delete from history'}
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         </div>

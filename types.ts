@@ -3,7 +3,32 @@ import type { QueueErrorCategory } from './shared/queueErrorClassifier';
 
 export type Language = 'vi' | 'en';
 export type Theme = 'light' | 'dark';
-export type ViewId = 'home' | 'tools' | 'video' | 'prompt_library' | 'gallery' | 'admin' | 'guide' | 'about' | 'tool_workspace' | 'support' | 'settings' | 'topup' | 'payment_gateway';
+export type ViewId = 'home' | 'tools' | 'video' | 'prompt_library' | 'dance_video_orders' | 'gallery' | 'admin' | 'guide' | 'about' | 'tool_workspace' | 'support' | 'settings' | 'topup' | 'payment_gateway';
+
+export type DanceVideoJobStatus = 'pending' | 'accepted' | 'processing' | 'completed';
+export interface DanceVideoTemplate {
+  id: string;
+  title: string;
+  description?: string;
+  category?: string;
+  preview_video_url: string;
+  price_vcoin: number;
+  required_image_count: number;
+  is_active: boolean;
+  display_order: number;
+}
+export interface DanceVideoJob {
+  id: string;
+  template_id: string;
+  status: DanceVideoJobStatus;
+  customer_name?: string;
+  contact_zalo?: string;
+  note?: string;
+  character_image_urls: string[];
+  result_video_url?: string;
+  created_at: string;
+  template?: DanceVideoTemplate;
+}
 export type QueueClientPlatform = 'mobile' | 'desktop' | 'unknown';
 
 declare global {
@@ -92,6 +117,7 @@ export interface GeneratedImage {
   error?: string;
   errorCategory?: QueueErrorCategory;
   errorRaw?: string;
+  adminNote?: string;
   cost?: number; // Keep track of cost for refunds
 }
 
@@ -119,6 +145,7 @@ export interface AdminQueueJob {
   error?: string;
   errorCategory?: QueueErrorCategory;
   errorRaw?: string;
+  adminNote?: string;
   createdAt?: string;
   updatedAt?: string;
   nextPollAt?: string;

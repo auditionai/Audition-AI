@@ -14,6 +14,9 @@ const MAX_R2_OBJECTS = 500;
 const MAX_R2_SCAN_PAGES = 3;
 const DELETE_CHUNK_SIZE = 500;
 
+const isVideoKey = (key: string) => /\.(mp4|mov|webm|m4v|avi|mkv)$/i.test(key) || /(^|\/)videos?(\/|$)/i.test(key);
+const isPublishKey = (key: string) => /(^|\/)publish(?:ed|lish)(\/|$)/i.test(key);
+
 const getEnv = (...keys: string[]) => {
   for (const key of keys) {
     const value = process.env[key];
@@ -186,7 +189,7 @@ const listR2ObjectsByDate = async (
       const key = object.Key || '';
       const lastModified = object.LastModified;
       if (!key || !lastModified || protectedKeys.has(key)) continue;
-      if (lastModified >= start && lastModified < endExclusive) {
+      if (lastModified >= start && lastModified < endExclusive && !isVideoKey(key) && !isPublishKey(key)) {
         keys.push(key);
         if (samples.length < 20) {
           samples.push({ key, lastModified: lastModified.toISOString(), size: object.Size });
@@ -243,6 +246,7 @@ export const handler: Handler = async (event) => {
       .gte('created_at', startIso)
       .lt('created_at', endExclusiveIso)
       .not('status', 'in', '("queued","processing")')
+      .neq('asset_type', 'video')
       .limit(MAX_DB_ROWS);
 
     if (!includePublic) {
@@ -255,7 +259,7 @@ export const handler: Handler = async (event) => {
     const dbRows = (rows || []) as CandidateRow[];
     const dbR2Keys = dbRows
       .map((row) => extractR2KeyFromUrl(row.image_url))
-      .filter((key): key is string => Boolean(key) && !protectedKeys.has(key));
+      .filter((key): key is string => Boolean(key) && !protectedKeys.has(key) && !isVideoKey(key) && !isPublishKey(key));
     const dbSamples = dbRows.slice(0, 20).map((row) => ({
       id: row.id,
       createdAt: row.created_at,

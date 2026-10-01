@@ -249,6 +249,7 @@ const mergeImageVersions = (cloudImage: GeneratedImage, localImage: GeneratedIma
     cost: primary.cost ?? secondary.cost,
     progress: primary.progress ?? secondary.progress,
     error: primary.error || secondary.error,
+    adminNote: primary.adminNote || secondary.adminNote,
     status: primary.status || secondary.status,
     jobId: primary.jobId ?? secondary.jobId,
     timestamp: primary.timestamp || secondary.timestamp,
@@ -404,8 +405,13 @@ export const mapGeneratedImageRow = (row: any, fallbackUserName: string, fallbac
           typeof entry.message === 'string'
         ))
       : undefined;
+  const adminNote =
+    (queuePayload && typeof queuePayload.__adminErrorNote === 'string' && queuePayload.__adminErrorNote.trim()) ||
+    (typeof row.error_message === 'string' && row.error_message.startsWith('[ADMIN]: ')
+      ? row.error_message.replace('[ADMIN]: ', '').trim()
+      : undefined);
   const displayErrorSource = pickQueueFailureMessage(row.error_message || undefined, queueLogs);
-  const errorInfo = classifyQueueError(displayErrorSource || row.error_message || undefined);
+  const errorInfo = classifyQueueError(adminNote ? `[ADMIN]: ${adminNote}` : (displayErrorSource || row.error_message || undefined));
   const isRescuing =
     String(row.status || '') === 'failed' &&
     hasFailedRescuePending(queuePayload) &&
@@ -443,9 +449,10 @@ export const mapGeneratedImageRow = (row: any, fallbackUserName: string, fallbac
       ? queuePayload.__stage
       : undefined,
   queueLogs,
-  error: normalizeQueueErrorMessage(displayErrorSource || row.error_message || undefined) || undefined,
+  error: normalizeQueueErrorMessage(adminNote ? `[ADMIN]: ${adminNote}` : (displayErrorSource || row.error_message || undefined)) || undefined,
   errorCategory: errorInfo.category,
   errorRaw: repairVietnameseMojibake(row.error_message || undefined) || undefined,
+  adminNote,
   cost: Number.isFinite(Number(row.cost_vcoin)) ? Number(row.cost_vcoin) : fallbackCost,
   });
 };
@@ -744,8 +751,10 @@ export const uploadFileToR2 = async (file: File | Blob | string, folder: string 
             contentType = file.type || 'image/png';
             blob = new Blob([arrayBuffer], { type: contentType });
         }
-        blob = await repairAndAssertCompleteImageBlob(blob);
-        if (folder.replace(/^\/+/, '').startsWith('inputs/')) {
+        if (contentType.startsWith('image/')) {
+          blob = await repairAndAssertCompleteImageBlob(blob);
+        }
+        if (contentType.startsWith('image/') && folder.replace(/^\/+/, '').startsWith('inputs/')) {
             blob = await compressReferenceImageForProvider(blob);
         }
         // A recoverable corrupt input may have been re-encoded to PNG/JPEG.
@@ -1257,6 +1266,27 @@ export const deleteImageFromStorage = async (id: string, _targetUserId?: string,
     request.onsuccess = () => resolve();
     request.onerror = () => reject(request.error);
   });
+};
+
+export const getGenerationCancellationPreview = async (jobId: string) => {
+  const response = await fetch('/api/cancel-generation-job', {
+    method: 'POST', headers: { ...(await getSessionAuthHeader()), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'preview', jobId }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload?.error || 'Không thể kiểm tra điều kiện hủy job.');
+  return payload as { cancellable: boolean; refundEligible: boolean; amount: number; state: 'queued' | 'processing' };
+};
+
+export const cancelGenerationJob = async (jobId: string) => {
+  const response = await fetch('/api/cancel-generation-job', {
+    method: 'POST', headers: { ...(await getSessionAuthHeader()), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'cancel', jobId }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload?.error || 'Không thể hủy job.');
+  window.dispatchEvent(new Event('balance_updated'));
+  return payload as { refunded: boolean; refund_eligible: boolean; was_processing: boolean; providerCancelRequested: boolean };
 };
 
 export const cleanupR2Directly = async (): Promise<number> => {

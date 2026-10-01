@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Icons } from '../components/Icons';
 import { useNotification } from '../components/NotificationSystem';
 import { createDanceVideoOrder, getDanceVideoTemplates } from '../services/danceVideoService';
@@ -422,7 +423,7 @@ export const DanceVideoOrders: React.FC = () => {
       )}
 
       {/* 4. ORDER MODAL: stays attached to the current viewport while the page scroll position is locked */}
-      {selected && (
+      {selected && typeof document !== 'undefined' ? createPortal(
         <div className="app-modal-overlay fixed inset-0 z-[120] flex items-start justify-center p-3 sm:p-5 bg-black/75 backdrop-blur-md overflow-y-auto overscroll-contain">
           {/* Backdrop click to dismiss */}
           <div className="fixed inset-0" onClick={() => setSelected(null)} />
@@ -756,8 +757,9 @@ export const DanceVideoOrders: React.FC = () => {
             </div>
 
           </div>
-        </div>
-      )}
+        </div>,
+        document.body,
+      ) : null}
 
     </div>
   );

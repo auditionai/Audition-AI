@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Icons } from './Icons';
 import { performCheckin, subscribeCheckinStatus, getLocalTodayStr } from '../services/economyService';
+import { useModalViewportLock } from './useModalViewportLock';
 
 interface DailyCheckinProps {
   onClose: () => void;
@@ -14,6 +15,8 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
   const [loading, setLoading] = useState(false);
   const [history, setHistory] = useState<string[]>([]);
   const [message, setMessage] = useState<string | null>(null);
+
+  useModalViewportLock(true);
 
   const todayStr = getLocalTodayStr();
   const today = new Date(`${todayStr}T00:00:00`);
@@ -96,7 +99,7 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
     : ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
   return createPortal(
-    <div className="fixed inset-0 z-[5000] flex items-center justify-center p-4 animate-fade-in bg-black/60 backdrop-blur-md">
+    <div className="app-modal-overlay fixed inset-0 z-[5000] flex items-start justify-center overflow-y-auto p-4 animate-fade-in bg-black/60 backdrop-blur-md">
       <div className="w-full max-w-[480px] neu-card p-6 sm:p-8 relative shadow-2xl flex flex-col max-h-[92vh] overflow-y-auto border border-white/20">
         
         {/* Top Header */}

@@ -66,6 +66,8 @@ const r2 = new S3Client({
 const matches = [];
 let scanned = 0;
 let continuationToken;
+const isVideoKey = (key = '') => /\.(mp4|mov|webm|m4v|avi|mkv)$/i.test(key) || /(^|\/)videos?(\/|$)/i.test(key);
+const isPublishKey = (key = '') => /(^|\/)publish(?:ed|lish)(\/|$)/i.test(key);
 
 do {
   const response = await r2.send(new ListObjectsV2Command({
@@ -78,7 +80,7 @@ do {
   for (const object of response.Contents || []) {
     scanned += 1;
     if (!object.Key || !object.LastModified) continue;
-    if (object.LastModified >= startDate && object.LastModified <= endDate) {
+    if (object.LastModified >= startDate && object.LastModified <= endDate && !isVideoKey(object.Key) && !isPublishKey(object.Key)) {
       matches.push({
         Key: object.Key,
         LastModified: object.LastModified.toISOString(),

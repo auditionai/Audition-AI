@@ -751,8 +751,10 @@ export const uploadFileToR2 = async (file: File | Blob | string, folder: string 
             contentType = file.type || 'image/png';
             blob = new Blob([arrayBuffer], { type: contentType });
         }
-        blob = await repairAndAssertCompleteImageBlob(blob);
-        if (folder.replace(/^\/+/, '').startsWith('inputs/')) {
+        if (contentType.startsWith('image/')) {
+          blob = await repairAndAssertCompleteImageBlob(blob);
+        }
+        if (contentType.startsWith('image/') && folder.replace(/^\/+/, '').startsWith('inputs/')) {
             blob = await compressReferenceImageForProvider(blob);
         }
         // A recoverable corrupt input may have been re-encoded to PNG/JPEG.

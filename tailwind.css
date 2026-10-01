@@ -1284,6 +1284,40 @@
 
 }
 
+/* Modal viewport contract: dialogs open in the currently visible viewport,
+   while their own content remains independently scrollable on small screens. */
+.app-modal-overlay {
+  padding-top: max(12px, env(safe-area-inset-top));
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  overscroll-behavior: contain;
+}
+
+.app-modal-panel {
+  margin-block: 0;
+}
+
+/* Admin dialogs are legacy portal children. Normalize their overlay alignment
+   without requiring each large admin surface to duplicate modal boilerplate. */
+.app-modal-host > .fixed.inset-0 {
+  align-items: flex-start !important;
+  padding-top: max(12px, env(safe-area-inset-top)) !important;
+  padding-bottom: max(12px, env(safe-area-inset-bottom)) !important;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.app-modal-host > .fixed.inset-0 > :not(.absolute) {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+@media (min-width: 640px) {
+  .app-modal-overlay {
+    padding-top: max(20px, env(safe-area-inset-top));
+    padding-bottom: max(20px, env(safe-area-inset-bottom));
+  }
+}
+
 /* Realtime queue HUD */
 .queue-hud {
   position: relative;

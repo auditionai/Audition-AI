@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { useModalViewportLock } from '../components/useModalViewportLock';
 import { getSupabaseUser, supabase } from '../services/supabaseClient';
 import { 
     getAdminOverviewStats,
@@ -588,7 +589,7 @@ const formatVietnamDateTimeDisplay = (value?: string) =>
 
 const AdminModalPortal: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     if (typeof document === 'undefined') return null;
-    return createPortal(children, document.body);
+    return createPortal(<div className="app-modal-host">{children}</div>, document.body);
 };
 
 const ADMIN_PRICING_DRAFTS_STORAGE_KEY = 'admin_pricing_drafts_v1';
@@ -768,6 +769,15 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [toasts, setToasts] = useState<ToastMsg[]>([]);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmState>({ show: false, msg: '', onConfirm: () => {} });
   const loadedAdminViews = useRef(new Set<string>());
+
+  // Admin renders many dialogs through a body portal. Keep the admin work area
+  // exactly where the operator left it while any dialog is open.
+  useModalViewportLock(Boolean(
+    editingUser || viewingUser || editingPackage || editingGiftcode || editingPromotion ||
+    viewingGiftcodeUsage || editingStyle || danceTemplateDraft || selectedQueueJobId ||
+    queueJobPendingRetry || showGiftcodeFix || showUserFix || showBalanceFix ||
+    r2CleanupPreview || confirmDialog.show
+  ));
 
   // Helpers for Notifications
   const showToast = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {

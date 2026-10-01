@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Icons } from './Icons';
 import type { SystemAnnouncementConfig } from '../services/economyService';
+import { useModalViewportLock } from './useModalViewportLock';
 
 export type AppEventPopupData = {
   type: 'payment_success' | 'generation_success' | 'generation_failed';
@@ -155,6 +156,8 @@ export function SystemAnnouncementModal({
   mode: 'desktop' | 'mobile';
   onClose: () => void;
 }) {
+  useModalViewportLock(Boolean(config?.isActive));
+
   useEffect(() => {
     ensureNotificationSoundUnlock();
     if (config?.isActive) {
@@ -180,7 +183,7 @@ export function SystemAnnouncementModal({
 
   const modal = (
     <div
-      className={`fixed inset-0 z-[10020] flex items-center justify-center overflow-y-auto bg-[#020309]/80 backdrop-blur-xl ${
+      className={`app-modal-overlay fixed inset-0 z-[10020] flex items-start justify-center overflow-y-auto bg-[#020309]/80 backdrop-blur-xl ${
         isMobile ? 'p-4' : 'p-6'
       }`}
       role="dialog"

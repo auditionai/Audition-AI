@@ -2,6 +2,11 @@
 import { createClient } from '@supabase/supabase-js';
 import { S3Client, DeleteObjectCommand, ListObjectsV2Command, DeleteObjectsCommand } from "@aws-sdk/client-s3";
 
+// Netlify Scheduled Functions invoke the handler without an HTTP method.
+// Keep an explicit schedule in code so cleanup is not dependent on a manual
+// request or an undocumented dashboard setting.
+export const config = { schedule: "0 3 * * *" };
+
 // Initialize Supabase
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -20,13 +25,14 @@ const r2 = new S3Client({
 const r2BucketName = process.env.R2_BUCKET_NAME || process.env.VITE_R2_BUCKET_NAME;
 
 export const handler = async (event, context) => {
-  if (event.httpMethod !== 'POST') {
+  const isScheduledInvocation = !event?.httpMethod;
+  if (!isScheduledInvocation && event.httpMethod !== 'POST') {
     return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
   }
 
   const expectedSecret = process.env.CRON_SECRET || '';
   const providedSecret = event.headers['x-cron-secret'] || event.headers['X-Cron-Secret'] || '';
-  if (!expectedSecret || providedSecret !== expectedSecret) {
+  if (!isScheduledInvocation && (!expectedSecret || providedSecret !== expectedSecret)) {
     return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
   }
 
@@ -49,9 +55,10 @@ export const handler = async (event, context) => {
     // 2. Query assets to delete: Older than the retention window AND NOT public (shared)
     const { data: imagesToDelete, error } = await supabase
       .from('generated_images')
-      .select('id, user_id, is_public, image_url')
+      .select('id, user_id, is_public, image_url, asset_type')
       .lt('created_at', isoDate)
       .eq('is_public', false)
+      .neq('asset_type', 'video')
       .limit(50); // Delete in batches to avoid timeouts
 
     if (error) throw error;
@@ -67,7 +74,8 @@ export const handler = async (event, context) => {
                     : null;
 
                 // A. Delete from R2 only for legacy/published objects stored there
-                if (fileName) {
+                const isPublishKey = fileName && /(^|\/)publish(?:ed|lish)(\/|$)/i.test(fileName);
+                if (fileName && !isPublishKey) {
                     await r2.send(new DeleteObjectCommand({
                         Bucket: r2BucketName,
                         Key: fileName
@@ -105,6 +113,9 @@ export const handler = async (event, context) => {
         const objectsToDelete = objects.filter(obj => {
             if (!obj.Key || !obj.LastModified) return false;
             const age = now - obj.LastModified.getTime();
+            // Video uploads are intentionally retained for manual cleanup.
+            if (/\.(mp4|mov|webm|m4v|avi|mkv)$/i.test(obj.Key)) return false;
+            if (/(^|\/)publish(?:ed|lish)(\/|$)/i.test(obj.Key)) return false;
             return age > retentionMs;
         }).map(obj => ({ Key: obj.Key }));
 

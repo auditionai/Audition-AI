@@ -119,7 +119,9 @@ export const persistProviderResultToR2 = async (
   }
   const cleanUser = encodeURIComponent(userId);
   const cleanJob = encodeURIComponent(jobId);
-  const keyBase = `users/${cleanUser}/generated/${cleanJob}`;
+  const keyBase = assetType === 'video'
+    ? `users/${cleanUser}/videos/generated/${cleanJob}`
+    : `users/${cleanUser}/generated/${cleanJob}`;
   let extension = assetType === 'video' ? 'mp4' : 'png';
   try {
     const head = await fetch(sourceUrl, { method: 'HEAD', signal: AbortSignal.timeout(10_000) });

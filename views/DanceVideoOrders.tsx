@@ -4,6 +4,7 @@ import { useNotification } from '../components/NotificationSystem';
 import { createDanceVideoOrder, getDanceVideoTemplates } from '../services/danceVideoService';
 import { uploadFileToR2 } from '../services/storageService';
 import type { DanceVideoTemplate } from '../types';
+import { useModalViewportLock } from '../components/useModalViewportLock';
 import './dance-video-orders.css';
 
 type CheckoutStep = 'review' | 'assets' | 'confirm';
@@ -186,6 +187,8 @@ export const DanceVideoOrders: React.FC = () => {
   const [zalo, setZalo] = useState('');
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  useModalViewportLock(Boolean(selected));
 
   const loadTemplates = async () => {
     setLoading(true);
@@ -418,14 +421,14 @@ export const DanceVideoOrders: React.FC = () => {
         </section>
       )}
 
-      {/* 4. REDESIGNED CENTERED ORDER MODAL (LUXURY, INTUITIVE & PERFECTLY CENTERED ON MOBILE & DESKTOP) */}
+      {/* 4. ORDER MODAL: stays attached to the current viewport while the page scroll position is locked */}
       {selected && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-5 bg-black/75 backdrop-blur-md overflow-y-auto">
+        <div className="app-modal-overlay fixed inset-0 z-[120] flex items-start justify-center p-3 sm:p-5 bg-black/75 backdrop-blur-md overflow-y-auto overscroll-contain">
           {/* Backdrop click to dismiss */}
           <div className="fixed inset-0" onClick={() => setSelected(null)} />
 
           {/* Modal Container */}
-          <div className="relative z-10 w-full max-w-lg max-h-[92vh] sm:max-h-[88vh] neu-card rounded-3xl border border-slate-300 dark:border-slate-800 shadow-2xl flex flex-col overflow-hidden dance-modal-animate my-auto">
+          <div className="app-modal-panel relative z-10 w-full max-w-lg max-h-[calc(100dvh-24px)] sm:max-h-[calc(100dvh-40px)] neu-card rounded-3xl border border-slate-300 dark:border-slate-800 shadow-2xl flex flex-col overflow-hidden dance-modal-animate">
             
             {/* Modal Header */}
             <div className="p-4 sm:p-5 border-b border-slate-300 dark:border-slate-800 flex items-center justify-between bg-slate-200/50 dark:bg-black/20 shrink-0">

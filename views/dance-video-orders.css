@@ -23,6 +23,65 @@
   box-shadow: 0 16px 36px -10px rgba(255, 0, 127, 0.25), 0 0 20px rgba(0, 242, 254, 0.18);
 }
 
+.dance-template-player {
+  isolation: isolate;
+  background: #060915;
+}
+
+.dance-template-player video {
+  position: relative;
+  z-index: 1;
+}
+
+.dance-template-player__loading,
+.dance-template-player__error {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  color: #cbd5e1;
+  background: linear-gradient(145deg, #080b18, #10162a);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.dance-template-player__controls {
+  position: absolute;
+  z-index: 3;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  gap: 8px;
+}
+
+.dance-template-player__button {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 10px;
+  color: #fff;
+  background: rgba(4, 7, 16, 0.82);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(10px);
+  transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.dance-template-player__button:hover,
+.dance-template-player__button:focus-visible {
+  border-color: #00f2fe;
+  background: rgba(255, 0, 127, 0.88);
+  outline: none;
+}
+
+.dance-template-player__button:active {
+  transform: scale(0.94);
+}
+
 /* Modal and Drawer Animations */
 @keyframes danceModalZoomIn {
   from {

@@ -37,47 +37,45 @@ const useSafeNotify = () => {
   }
 };
 
-// --- VIDEO TEMPLATE CARD (CLEAN VIDEO VIEWPORT, HOVER AUTOPLAY WITH AUDIO, METADATA BELOW) ---
+// --- VIDEO TEMPLATE CARD ---
 const VideoTemplateCard: React.FC<{
   template: DanceVideoTemplate;
   onSelect: (template: DanceVideoTemplate) => void;
 }> = ({ template, onSelect }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
+  const [hasFrame, setHasFrame] = useState(false);
+  const [videoError, setVideoError] = useState(false);
 
-  // Play video with audio automatically on hover
-  const handleMouseEnter = async () => {
-    if (!videoRef.current) return;
+  const showFirstFrame = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    setHasFrame(true);
+    if (!isPlaying && Number.isFinite(video.duration) && video.duration > 0.12 && video.currentTime === 0) {
+      video.currentTime = 0.1;
+    }
+  };
+
+  const togglePlayback = async () => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (!video.paused) {
+      video.pause();
+      return;
+    }
     try {
-      videoRef.current.muted = false;
-      await videoRef.current.play();
+      await video.play();
     } catch {
-      // Browser autoplay policy might require muted fallback before first interaction
-      if (videoRef.current) {
-        videoRef.current.muted = true;
-        void videoRef.current.play();
-      }
+      setVideoError(true);
     }
   };
 
-  const handleMouseLeave = () => {
-    if (!videoRef.current) return;
-    videoRef.current.pause();
-    videoRef.current.currentTime = 0;
-  };
-
-  const handleClickVideo = async () => {
-    if (!videoRef.current) return;
-    if (videoRef.current.paused) {
-      try {
-        videoRef.current.muted = false;
-        await videoRef.current.play();
-      } catch {
-        videoRef.current.muted = true;
-        void videoRef.current.play();
-      }
-    } else {
-      videoRef.current.pause();
-    }
+  const toggleMute = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = !video.muted;
+    setIsMuted(video.muted);
   };
 
   const hashtags = useMemo(() => {
@@ -86,25 +84,36 @@ const VideoTemplateCard: React.FC<{
   }, [template.category]);
 
   return (
-    <article
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-      className="neu-card dance-card-glow rounded-3xl overflow-hidden border border-slate-300 dark:border-slate-800 shadow-xl flex flex-col justify-between group transition-all"
-    >
+    <article className="neu-card dance-card-glow rounded-3xl overflow-hidden border border-slate-300 dark:border-slate-800 shadow-xl flex flex-col justify-between group transition-all">
       {/* 1. 100% CLEAN VIDEO VIEWPORT - NO ICONS, NO BADGES OVERLAYING THE VIDEO */}
       <div 
-        onClick={handleClickVideo}
-        className="relative w-full aspect-[16/10] sm:aspect-video min-h-[220px] max-h-[290px] bg-slate-950 overflow-hidden cursor-pointer"
+        className="dance-template-player relative w-full aspect-[16/10] sm:aspect-video min-h-[220px] max-h-[290px] bg-slate-950 overflow-hidden"
         title="Rê chuột hoặc chạm để xem video có tiếng"
       >
         <video
           ref={videoRef}
           src={template.preview_video_url}
-          className="w-full h-full object-cover"
+          className={`w-full h-full object-cover transition-opacity duration-200 ${hasFrame ? 'opacity-100' : 'opacity-0'}`}
           playsInline
           loop
-          preload="metadata"
+          muted={isMuted}
+          preload="auto"
+          onLoadedData={showFirstFrame}
+          onSeeked={() => setHasFrame(true)}
+          onPlay={() => { setIsPlaying(true); setVideoError(false); }}
+          onPause={() => setIsPlaying(false)}
+          onError={() => setVideoError(true)}
         />
+        {!hasFrame && !videoError && <div className="dance-template-player__loading" aria-label="Đang tải video mẫu"><Icons.Loader className="w-6 h-6 animate-spin text-[#00F2FE]" /></div>}
+        {videoError && <div className="dance-template-player__error">Không thể tải video mẫu.</div>}
+        <div className="dance-template-player__controls">
+          <button type="button" onClick={togglePlayback} className="dance-template-player__button" aria-label={isPlaying ? 'Tạm dừng video' : 'Phát video'} title={isPlaying ? 'Tạm dừng' : 'Phát video'}>
+            {isPlaying ? <Icons.Pause className="w-4 h-4" /> : <Icons.Play className="w-4 h-4" />}
+          </button>
+          <button type="button" onClick={toggleMute} className="dance-template-player__button" aria-label={isMuted ? 'Bật âm thanh' : 'Tắt âm thanh'} title={isMuted ? 'Bật âm thanh' : 'Tắt âm thanh'}>
+            {isMuted ? <Icons.VolumeX className="w-4 h-4" /> : <Icons.Volume2 className="w-4 h-4" />}
+          </button>
+        </div>
       </div>
 
       {/* 2. CARD METADATA & BODY (ALL BADGES AND INFO LOCATED SAFELY BELOW THE VIDEO) */}

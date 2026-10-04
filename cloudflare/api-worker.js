@@ -88,8 +88,14 @@ const runWatchdog = async (env) => {
 const uploadTst = async (request, env, kind) => { await requireUser(request, env, true); const response = await fetch(`https://api.tramsangtao.com/v1/files/upload/${kind}`, { method: 'POST', headers: { authorization: `Bearer ${text(env, 'TST_API_KEY')}`, 'content-type': request.headers.get('content-type') || '' }, body: request.body, signal: AbortSignal.timeout(120000) }); return new Response(response.body, { status: response.status, headers: { 'content-type': response.headers.get('content-type') || 'application/json' } }); };
 const submitVideoScript = async (request, env) => { const user = await requireUser(request, env); const payload = await request.json(); const created = await db(env, 'video_script_jobs', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ user_id: user.id, request_payload: payload }) }); const rows = await created.json(); if (!created.ok || !rows?.[0]?.id) throw new Error('VIDEO_SCRIPT_JOB_CREATE_FAILED'); const id = rows[0].id; const worker = text(env, 'VIDEO_SCRIPT_WORKER_URL'); const secret = text(env, 'VIDEO_SCRIPT_WORKER_SECRET'); if (!worker || !secret) throw new Error('VIDEO_SCRIPT_WORKER_URL is not configured'); const wake = await fetch(worker, { method: 'POST', headers: { 'content-type': 'application/json', 'x-worker-secret': secret }, body: JSON.stringify({ jobId: id }) }); if (!wake.ok) throw new Error(`VIDEO_SCRIPT_WORKER_LAUNCH_FAILED (${wake.status})`); return json({ jobId: id, status: 'queued' }, 202); };
 const EDGE_CONFIG_KEYS = ['model_pricing', 'credit_packages', 'promotions', 'style_presets'];
-const refreshEdgeConfig = async (env) => {
+const EDGE_CONFIG_REFRESH_MS = 60 * 60 * 1000;
+const refreshEdgeConfig = async (env, force = false) => {
   if (!env.AUDITION_CONFIG_CACHE) return;
+  if (!force) {
+    const current = await env.AUDITION_CONFIG_CACHE.get('model_pricing', 'json');
+    const cachedAt = new Date(String(current?.cachedAt || '')).getTime();
+    if (cachedAt > 0 && Date.now() - cachedAt < EDGE_CONFIG_REFRESH_MS) return;
+  }
   const queries = {
     model_pricing: 'model_pricing?select=*&order=model_id.asc,option_id.asc',
     credit_packages: 'credit_packages?select=id,name,credits_amount,price_vnd,tag,bonus_credits,is_featured,is_active,display_order,transfer_syntax&is_active=eq.true&order=display_order.asc',
@@ -100,7 +106,7 @@ const refreshEdgeConfig = async (env) => {
     const response = await db(env, queries[key]);
     if (!response.ok) throw new Error(`Unable to refresh ${key} cache (${response.status})`);
     const value = await response.json();
-    await env.AUDITION_CONFIG_CACHE.put(key, JSON.stringify({ value, cachedAt: new Date().toISOString() }), { expirationTtl: 900 });
+    await env.AUDITION_CONFIG_CACHE.put(key, JSON.stringify({ value, cachedAt: new Date().toISOString() }), { expirationTtl: 7200 });
   }));
 };
 const readEdgeConfig = async (env, key) => {
@@ -115,6 +121,40 @@ const recordAnalyticsVisit = async (request, env) => {
     'INSERT INTO app_visits (user_id, visit_date, route, user_agent, created_at) VALUES (?, ?, ?, ?, datetime(\'now\'))',
   ).bind(body.userId || null, body.visitDate || new Date().toISOString().slice(0, 10), String(body.route || '').slice(0, 500), String(body.userAgent || '').slice(0, 500)).run();
   return json({ accepted: true }, 202);
+};
+const createDanceVideoOrder = async (request, env) => {
+  const user = await requireUser(request, env);
+  const body = await request.json().catch(() => ({}));
+  const templateId = String(body.templateId || '').trim();
+  const characterImageUrls = Array.isArray(body.characterImageUrls)
+    ? body.characterImageUrls.filter((value) => typeof value === 'string' && value.length < 2048).slice(0, 8)
+    : [];
+  if (!templateId || characterImageUrls.length === 0) return json({ error: 'INVALID_ORDER_DATA' }, 400);
+  const id = await rpc(env, 'create_dance_video_order', {
+    p_user_id: user.id,
+    p_template_id: templateId,
+    p_character_image_urls: characterImageUrls,
+    p_customer_name: String(body.customerName || '').slice(0, 120) || null,
+    p_contact_zalo: String(body.contactZalo || '').slice(0, 120) || null,
+    p_note: String(body.note || '').slice(0, 1000) || null,
+  });
+  const templateResponse = await db(env, `dance_video_templates?id=eq.${encodeURIComponent(templateId)}&select=title,price_vcoin&limit=1`);
+  const template = templateResponse.ok ? (await templateResponse.json())?.[0] : null;
+  const notifier = env.TELEGRAM_NOTIFIER;
+  if (notifier && text(env, 'TELEGRAM_NOTIFY_WEBHOOK_SECRET')) {
+    const notification = new Request('https://telegram-notifier.internal/dance-video-order', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-notify-secret': text(env, 'TELEGRAM_NOTIFY_WEBHOOK_SECRET') },
+      body: JSON.stringify({ eventType: 'dance_video_order', app: 'Audition AI', order: {
+        id: String(id), templateTitle: String(template?.title || templateId), customerName: String(body.customerName || '').slice(0, 120) || null,
+        contactZalo: String(body.contactZalo || '').slice(0, 120) || null, characterImageCount: characterImageUrls.length,
+        costVcoin: Number(template?.price_vcoin || 0), note: String(body.note || '').slice(0, 1000) || null, createdAt: new Date().toISOString(),
+      } }),
+    });
+    const response = await notifier.fetch(notification);
+    if (!response.ok) console.error(JSON.stringify({ worker: 'api', event: 'dance_video_notification_failed', status: response.status, orderId: id }));
+  }
+  return json({ id }, 201);
 };
 const readAnalyticsSummary = async (request, env) => {
   await requireUser(request, env, true);
@@ -137,11 +177,12 @@ async function handle(request, env, ctx) {
   }
   if (path === 'edge-config-refresh' && request.method === 'POST') {
     await requiredSecret(request, env, 'EDGE_CONFIG_REFRESH_SECRET', 'x-worker-secret');
-    await refreshEdgeConfig(env);
+    await refreshEdgeConfig(env, true);
     return json({ refreshed: true, keys: EDGE_CONFIG_KEYS });
   }
   if (path === 'analytics/visit' && request.method === 'POST') return recordAnalyticsVisit(request, env);
   if (path === 'analytics/summary' && request.method === 'GET') return readAnalyticsSummary(request, env);
+  if (path === 'dance-video-order' && request.method === 'POST') return createDanceVideoOrder(request, env);
   if (path === 'sepay-checkout' && request.method === 'GET') { const raw = url.searchParams.get('payload') || ''; const payload = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(raw.replace(/-/g, '+').replace(/_/g, '/')), (char) => char.charCodeAt(0)))); const checkout = String(payload.checkoutUrl || ''); if (!/^https:\/\/pay(?:-sandbox)?\.sepay\.vn\//.test(checkout) || !payload.fields || typeof payload.fields !== 'object') return new Response('Invalid SePay checkout payload', { status: 400 }); const escaped = (value) => String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]); const fields = Object.entries(payload.fields).map(([key, value]) => `<input type="hidden" name="${escaped(key)}" value="${escaped(value)}">`).join(''); return new Response(`<!doctype html><meta charset="utf-8"><form id="p" method="post" action="${escaped(checkout)}">${fields}</form><script>p.submit()</script>`, { headers: { 'content-type': 'text/html; charset=utf-8' } }); }
   if ((path === 'sepay-ipn' || path === 'sepay-webhook')) { if (request.method === 'GET') return json({ success: true, message: 'SePay IPN endpoint is ready' }); if (request.method !== 'POST') return json({ error: 'Method Not Allowed' }, 405); await requiredSecret(request, env, 'SEPAY_SECRET_KEY', 'x-secret-key'); const payload = await request.json(); const code = sepayOrderCode(payload); const amount = sepayAmount(payload); const filter = code ? `or=(provider_order_code.eq.${encodeURIComponent(code)},order_code.eq.${encodeURIComponent(code)})` : `amount_vnd=eq.${amount ?? -1}`; const response = await db(env, `payment_transactions?select=id,amount_vnd,status&${filter}&order=created_at.desc&limit=1`); const rows = await response.json(); if (!rows?.[0]) return json({ success: true, ignored: true, reason: 'Unknown orderCode', orderCode: code }); return json({ success: true, data: await settleSePay(env, rows[0], payload, 'checkout_ipn') }); }
   if (path === 'sepay-reconcile-pending') { await requiredSecret(request, env, 'SEPAY_RECONCILE_SECRET', 'x-cron-secret'); return json(await reconcileSePay(env, Number(url.searchParams.get('limit') || 10))); }

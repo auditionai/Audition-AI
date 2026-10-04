@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ArrowRight,
   BookOpenText,
@@ -16,6 +17,10 @@ import {
   Sparkles,
   UsersRound,
   Video,
+  Play,
+  Pause,
+  Maximize2,
+  X,
   type LucideIcon,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -23,6 +28,7 @@ import { DailyCheckin } from '../../components/DailyCheckin';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   getStartupSettings,
+  getTutorialVideo,
   isFeatureInMaintenance,
   subscribeCheckinStatus,
   type FeatureMaintenanceConfig,
@@ -112,6 +118,15 @@ const heroSlides = [
   },
 ];
 
+const extractYouTubeId = (url?: string): string => {
+  if (!url) return 'ba2WR8txe_c';
+  const clean = url.trim();
+  const match = clean.match(/(?:[?&]v=|\/embed\/|\/live\/|\/shorts\/|^https?:\/\/youtu\.be\/|\/v\/)([^&#?]+)/);
+  if (match && match[1]) return match[1];
+  if (/^[a-zA-Z0-9_-]{11}$/.test(clean)) return clean;
+  return 'ba2WR8txe_c';
+};
+
 export function HomeV2() {
   const navigate = useNavigate();
   const { user, userRole } = useAuth();
@@ -120,6 +135,30 @@ export function HomeV2() {
   const [featureMaintenance, setFeatureMaintenance] = useState<FeatureMaintenanceConfig>({ disabledFeatureIds: [] });
   const [activeSlide, setActiveSlide] = useState(0);
   const [carouselPaused, setCarouselPaused] = useState(false);
+  const [tutorialVideo, setTutorialVideo] = useState({ url: 'https://www.youtube.com/watch?v=ba2WR8txe_c', isActive: true });
+  const [isPlayingTutorial, setIsPlayingTutorial] = useState(false);
+  const [isCinemaModalOpen, setIsCinemaModalOpen] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    getTutorialVideo().then((data) => {
+      if (isMounted && data) {
+        setTutorialVideo(data);
+      }
+    }).catch(() => {});
+    return () => { isMounted = false; };
+  }, []);
+
+  const tutorialVideoId = extractYouTubeId(tutorialVideo.url);
+
+  useEffect(() => {
+    if (!isCinemaModalOpen) return;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [isCinemaModalOpen]);
 
   useEffect(() => subscribeCheckinStatus(
     (status) => setIsCheckedIn(status.isCheckedInToday),
@@ -239,6 +278,115 @@ export function HomeV2() {
           <button type="button" onClick={() => setActiveSlide((activeSlide + 1) % heroSlides.length)} aria-label="Banner sau"><ChevronRight size={18} /></button>
         </div>
       </section>
+
+      {/* ====================================================
+          TUTORIAL VIDEO BANNER (Video Hướng Dẫn Sử Dụng)
+         ==================================================== */}
+      {tutorialVideo.isActive && (
+        <section
+          className="v2-tutorial-card v2-neon-frame"
+          data-accent="raspberry"
+          aria-label="Video hướng dẫn sử dụng Audition AI"
+        >
+          {/* Header Badge */}
+          <div className="v2-tutorial-card__header">
+            <div className="v2-tutorial-card__pill">
+              <span className="v2-tutorial-card__pulse" />
+              <Sparkles size={12} className="v2-tutorial-card__sparkle" />
+              <span>HƯỚNG DẪN CHI TIẾT AI 3D</span>
+            </div>
+            <span className="v2-tutorial-card__badge-hd">HD 1080P</span>
+          </div>
+
+          {/* Title & Description */}
+          <div className="v2-tutorial-card__title-group">
+            <h2 className="v2-tutorial-card__title">
+              Hướng Dẫn Sử Dụng Audition AI
+            </h2>
+            <p className="v2-tutorial-card__desc">
+              Video hướng dẫn sử dụng ứng dụng Audition AI để tạo ảnh 3D AI từ A-Z
+            </p>
+          </div>
+
+          {/* Interactive Player Frame (16:9) */}
+          <div className="v2-tutorial-card__player-frame">
+            {isPlayingTutorial ? (
+              <>
+                <iframe
+                  src={`https://www.youtube.com/embed/${tutorialVideoId}?autoplay=1&rel=0&playsinline=1`}
+                  title="Video hướng dẫn sử dụng ứng dụng Audition AI để tạo ảnh 3D AI"
+                  className="v2-tutorial-card__iframe"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+                <button
+                  type="button"
+                  className="v2-tutorial-card__corner-pause v2-tap"
+                  onClick={() => setIsPlayingTutorial(false)}
+                  aria-label="Tạm dừng video"
+                  title="Tạm dừng video"
+                >
+                  <Pause size={12} />
+                  <span>Tạm dừng</span>
+                </button>
+              </>
+            ) : (
+              <div
+                className="v2-tutorial-card__poster"
+                onClick={() => setIsPlayingTutorial(true)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setIsPlayingTutorial(true)}
+                aria-label="Phát video hướng dẫn sử dụng Audition AI"
+              >
+                <img
+                  src={`https://img.youtube.com/vi/${tutorialVideoId}/hqdefault.jpg`}
+                  alt="Video hướng dẫn sử dụng ứng dụng Audition AI để tạo ảnh 3D AI"
+                  className="v2-tutorial-card__poster-img"
+                  loading="lazy"
+                />
+                <div className="v2-tutorial-card__poster-scrim" />
+                <div className="v2-tutorial-card__play-btn">
+                  <span className="v2-tutorial-card__play-pulse" />
+                  <span className="v2-tutorial-card__play-ring">
+                    <Play size={22} fill="currentColor" />
+                  </span>
+                </div>
+                <div className="v2-tutorial-card__poster-tags">
+                  <span className="v2-tutorial-card__tag">Cody CN • A-Z</span>
+                  <span className="v2-tutorial-card__tag v2-tutorial-card__tag--cta">Bấm để phát</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Footer Bar */}
+          <div className="v2-tutorial-card__footer">
+            {isPlayingTutorial ? (
+              <button
+                type="button"
+                className="v2-tutorial-card__pause-btn v2-tap"
+                onClick={() => setIsPlayingTutorial(false)}
+              >
+                <Pause size={13} />
+                <span>Tạm dừng video</span>
+              </button>
+            ) : (
+              <span className="v2-tutorial-card__footer-note">
+                Bấm Play để xem trực tiếp hoặc
+              </span>
+            )}
+            <button
+              type="button"
+              className="v2-tutorial-card__theater-btn v2-tap"
+              onClick={() => setIsCinemaModalOpen(true)}
+            >
+              <Maximize2 size={13} />
+              <span>Toàn màn hình</span>
+            </button>
+          </div>
+        </section>
+      )}
 
       <section className="v2-quick-grid" aria-label="Truy cập nhanh">
         {quickActions.map(({ label, helper, path, featureId, Icon, accent }) => {
@@ -372,6 +520,65 @@ export function HomeV2() {
           onClose={() => setShowCheckin(false)}
           onSuccess={() => setIsCheckedIn(true)}
         />
+      )}
+
+      {/* Video Theater Lightbox Modal */}
+      {isCinemaModalOpen && typeof document !== 'undefined' && createPortal(
+        <div
+          className="v2-video-modal-backdrop"
+          onClick={() => setIsCinemaModalOpen(false)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="v2-video-modal v2-neon-frame"
+            data-accent="raspberry"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="v2-video-modal__header">
+              <div className="v2-video-modal__title-box">
+                <div className="v2-video-modal__icon">
+                  <Video size={16} />
+                </div>
+                <div>
+                  <h3 className="v2-video-modal__title">Hướng Dẫn Sử Dụng Audition AI</h3>
+                  <p className="v2-video-modal__subtitle">Video hướng dẫn tạo ảnh 3D AI từ A-Z</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="v2-video-modal__close-btn v2-tap"
+                onClick={() => setIsCinemaModalOpen(false)}
+                aria-label="Đóng rạp chiếu"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="v2-video-modal__player">
+              <iframe
+                src={`https://www.youtube.com/embed/${tutorialVideoId}?autoplay=1&rel=0`}
+                title="Video hướng dẫn sử dụng ứng dụng Audition AI để tạo ảnh 3D AI"
+                className="v2-video-modal__iframe"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            </div>
+
+            <div className="v2-video-modal__footer">
+              <span className="v2-video-modal__author">Cody CN • Audition AI Studio</span>
+              <button
+                type="button"
+                className="v2-primary-button v2-tap"
+                style={{ padding: '8px 16px', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase' }}
+                onClick={() => setIsCinemaModalOpen(false)}
+              >
+                Đã hiểu
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

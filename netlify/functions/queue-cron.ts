@@ -3,7 +3,13 @@ import { runQueueDaemon } from './_queue-daemon';
 import { areQueueWorkersDisabled, isDedicatedQueueWorkerMode } from './_queue-runtime-mode';
 import { refreshAutoDisabledServerAvailability } from './_server-availability';
 
-export const config = {
+// Production uses Cloudflare's scheduled queue worker. Do not register a
+// Netlify cron that can only return "skipped" in dedicated mode; preview
+// contexts keep their queue coverage.
+const usesDedicatedProductionQueue = process.env.CONTEXT === 'production'
+  && process.env.QUEUE_WORKER_MODE === 'dedicated';
+
+export const config = usesDedicatedProductionQueue ? {} : {
   schedule: '*/15 * * * *',
 };
 

@@ -2,7 +2,10 @@ import type { Config, Handler } from '@netlify/functions';
 import { runQueueWatchdog } from './_queue-watchdog';
 import { areQueueWorkersDisabled, isDedicatedQueueWorkerMode } from './_queue-runtime-mode';
 
-export const config: Config = {
+const usesDedicatedProductionQueue = process.env.CONTEXT === 'production'
+  && process.env.QUEUE_WORKER_MODE === 'dedicated';
+
+export const config: Config = usesDedicatedProductionQueue ? {} : {
   schedule: '*/15 * * * *',
 };
 

@@ -1,5 +1,6 @@
 import type { Handler } from '@netlify/functions';
 import { getAuthenticatedRequestErrorStatus, getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
+import { sendTelegramDanceVideoOrderNotification } from './_telegram-notify';
 
 const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Audition-Device-Key', 'Access-Control-Allow-Methods': 'POST, OPTIONS' };
 
@@ -20,6 +21,21 @@ export const handler: Handler = async (event) => {
       p_note: String(body.note || '').slice(0, 1000) || null,
     });
     if (error) throw error;
+    const { data: template } = await admin
+      .from('dance_video_templates')
+      .select('title, price_vcoin')
+      .eq('id', templateId)
+      .maybeSingle();
+    await sendTelegramDanceVideoOrderNotification({
+      id: String(data),
+      templateTitle: String(template?.title || templateId),
+      customerName: String(body.customerName || '').slice(0, 120) || null,
+      contactZalo: String(body.contactZalo || '').slice(0, 120) || null,
+      characterImageCount: imageUrls.length,
+      costVcoin: Number(template?.price_vcoin || 0),
+      note: String(body.note || '').slice(0, 1000) || null,
+      createdAt: new Date().toISOString(),
+    });
     return { statusCode: 201, headers, body: JSON.stringify({ id: data }) };
   } catch (error: any) {
     const message = error?.message || 'Không thể tạo đơn đặt video.';

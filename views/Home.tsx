@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { APP_CONFIG } from '../constants';
 import { Language, Feature, ViewId } from '../types';
 import { Icons } from '../components/Icons';
-import { subscribeCheckinStatus, isFeatureInMaintenance, type FeatureMaintenanceConfig } from '../services/economyService';
+import { subscribeCheckinStatus, isFeatureInMaintenance, type FeatureMaintenanceConfig, getTutorialVideo } from '../services/economyService';
 
 const NEON_FRAME_TONES = ['magenta', 'violet', 'cyan', 'emerald', 'amber', 'blue'] as const;
 
@@ -45,6 +46,15 @@ const DESKTOP_HERO_SLIDES = [
   },
 ];
 
+const extractYouTubeId = (url?: string): string => {
+  if (!url) return 'ba2WR8txe_c';
+  const clean = url.trim();
+  const match = clean.match(/(?:[?&]v=|\/embed\/|\/live\/|\/shorts\/|^https?:\/\/youtu\.be\/|\/v\/)([^&#?]+)/);
+  if (match && match[1]) return match[1];
+  if (/^[a-zA-Z0-9_-]{11}$/.test(clean)) return clean;
+  return 'ba2WR8txe_c';
+};
+
 interface HomeProps {
   lang: Language;
   onSelectFeature: (feature: Feature) => void;
@@ -68,6 +78,35 @@ export const Home: React.FC<HomeProps> = ({
   const [activeCategory, setActiveCategory] = useState<'all' | 'generation' | 'video' | 'editing'>('all');
   const [activeHeroSlide, setActiveHeroSlide] = useState(0);
   const [heroPaused, setHeroPaused] = useState(false);
+  const [tutorialConfig, setTutorialConfig] = useState({ url: 'https://www.youtube.com/watch?v=ba2WR8txe_c', isActive: true });
+  const [isPlayingTutorial, setIsPlayingTutorial] = useState(false);
+  const [isCinemaModalOpen, setIsCinemaModalOpen] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    getTutorialVideo().then((config) => {
+      if (isMounted && config) {
+        setTutorialConfig(config);
+      }
+    }).catch(() => {});
+    return () => { isMounted = false; };
+  }, []);
+
+  const tutorialVideoId = extractYouTubeId(tutorialConfig.url);
+
+  useEffect(() => {
+    if (!isCinemaModalOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsCinemaModalOpen(false);
+    };
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isCinemaModalOpen]);
 
   useEffect(() => {
     return subscribeCheckinStatus((status) => {
@@ -199,83 +238,8 @@ export const Home: React.FC<HomeProps> = ({
 
           </div>
 
-          {/* Right Clean 2x2 Feature Grid */}
-          <div className="hidden lg:col-span-5 grid-cols-2 gap-3">
-            
-            {/* Card 1: Tạo Ảnh */}
-            <div 
-              onClick={() => onNavigate('video')}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') onNavigate('video');
-              }}
-              className="desktop-neon-card desktop-neon-frame--magenta neu-card p-4 rounded-2xl cursor-pointer transition-all group flex flex-col justify-between"
-            >
-              <div>
-                <div className="w-9 h-9 neu-inset-sm rounded-xl flex items-center justify-center text-[#FF007F] mb-2.5 group-hover:scale-110 transition-transform">
-                  <Icons.Sparkles className="w-4.5 h-4.5 text-[#FF007F]" />
-                </div>
-                <h4 className="text-xs font-black text-slate-950 dark:text-white font-accent">TẠO ẢNH AI 4K</h4>
-                <p className="text-[10px] text-slate-700 dark:text-slate-300 font-semibold mt-0.5">Ảnh Đơn, Đôi, Nhóm 3-5 người</p>
-              </div>
-              <div className="mt-3 pt-2 border-t border-slate-200 dark:border-slate-800 text-[10px] font-black text-[#FF007F]">
-                Giá từ 5 Vcoin
-              </div>
-            </div>
-
-            {/* Card 2: Video AI */}
-            <div 
-              onClick={() => onNavigate('tools')}
-              className="desktop-neon-card desktop-neon-frame--violet neu-card p-4 rounded-2xl cursor-pointer transition-all group flex flex-col justify-between"
-            >
-              <div>
-                <div className="w-9 h-9 neu-inset-sm rounded-xl flex items-center justify-center text-[#FF007F] mb-2.5 group-hover:scale-110 transition-transform">
-                  <Icons.Video className="w-4.5 h-4.5 text-[#FF007F]" />
-                </div>
-                <h4 className="text-xs font-black text-slate-950 dark:text-white font-accent">VIDEO AI LAB</h4>
-                <p className="text-[10px] text-slate-700 dark:text-slate-300 font-semibold mt-0.5">Biến ảnh thành Video vũ đạo</p>
-              </div>
-              <div className="mt-3 pt-2 border-t border-slate-200 dark:border-slate-800 text-[10px] font-black text-[#FF007F]">
-                Giá từ 15 Vcoin
-              </div>
-            </div>
-
-            {/* Card 3: Prompt Hub */}
-            <div 
-              onClick={() => onNavigate('prompt_library')}
-              className="desktop-neon-card desktop-neon-frame--cyan neu-card p-4 rounded-2xl cursor-pointer transition-all group flex flex-col justify-between"
-            >
-              <div>
-                <div className="w-9 h-9 neu-inset-sm rounded-xl flex items-center justify-center text-[#FF007F] mb-2.5 group-hover:scale-110 transition-transform">
-                  <Icons.BookOpen className="w-4.5 h-4.5 text-[#FF007F]" />
-                </div>
-                <h4 className="text-xs font-black text-slate-950 dark:text-white font-accent">PROMPT HUB</h4>
-                <p className="text-[10px] text-slate-700 dark:text-slate-300 font-semibold mt-0.5">Thư viện prompt mẫu Audition</p>
-              </div>
-              <div className="mt-3 pt-2 border-t border-slate-200 dark:border-slate-800 text-[10px] font-black text-[#FF007F]">
-                Miễn phí 100%
-              </div>
-            </div>
-
-            {/* Card 4: Store Vcoin */}
-            <div 
-              onClick={() => onNavigate('topup')}
-              className="desktop-neon-card desktop-neon-frame--amber neu-card p-4 rounded-2xl cursor-pointer transition-all group flex flex-col justify-between"
-            >
-              <div>
-                <div className="w-9 h-9 neu-inset-sm rounded-xl flex items-center justify-center text-amber-500 mb-2.5 group-hover:scale-110 transition-transform">
-                  <Icons.Gem className="w-4.5 h-4.5 text-amber-500" />
-                </div>
-                <h4 className="text-xs font-black text-slate-950 dark:text-white font-accent">STORE VCOIN</h4>
-                <p className="text-[10px] text-slate-700 dark:text-slate-300 font-semibold mt-0.5">Nạp Vcoin ưu đãi sự kiện</p>
-              </div>
-              <div className="mt-3 pt-2 border-t border-slate-200 dark:border-slate-800 text-[10px] font-black text-amber-600 dark:text-amber-400">
-                +50% Bonus
-              </div>
-            </div>
-
-          </div>
+          {/* Right column empty to preserve 100% visibility of 3D Audition character artwork */}
+          <div className="hidden lg:block lg:col-span-5 pointer-events-none" />
 
         </div>
 
@@ -309,6 +273,154 @@ export const Home: React.FC<HomeProps> = ({
         </div>
 
       </section>
+
+      {/* ====================================================
+          2. DEDICATED TUTORIAL VIDEO BANNER (Video Hướng Dẫn Sáng Tạo)
+         ==================================================== */}
+      {tutorialConfig.isActive && (
+        <section
+          className="desktop-tutorial-cinema-banner desktop-rainbow-frame neu-raised-lg p-6 sm:p-8 relative overflow-hidden border border-slate-300/80 dark:border-slate-800 shadow-2xl rounded-[2.5rem] bg-slate-900/95 dark:bg-slate-950"
+          aria-label="Video hướng dẫn sử dụng Audition AI để tạo ảnh 3D AI"
+        >
+          {/* Subtle Ambient Cyber Accents */}
+          <div className="absolute -top-24 -right-24 w-80 h-80 bg-[#FF007F]/15 rounded-full blur-[100px] pointer-events-none" />
+          <div className="absolute -bottom-24 -left-24 w-80 h-80 bg-[#00F2FE]/15 rounded-full blur-[100px] pointer-events-none" />
+
+          <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+            
+            {/* Left Column: Title, Annotation, Badges & Guidance */}
+            <div className="lg:col-span-7 space-y-4">
+              
+              <div className="flex flex-wrap items-center gap-2.5">
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#FF007F]/20 border border-[#FF007F]/50 shadow-[0_0_15px_rgba(255,0,127,0.35)]">
+                  <span className="w-2 h-2 rounded-full bg-[#FF007F] animate-ping" />
+                  <span className="text-[11px] font-black uppercase tracking-wider text-pink-300 font-accent flex items-center gap-1.5">
+                    <Icons.Sparkles className="w-3.5 h-3.5 text-[#FF007F]" />
+                    VIDEO HƯỚNG DẪN AI 3D CHÍNH THỨC
+                  </span>
+                </div>
+                <span className="px-3 py-1 rounded-full text-[10px] font-extrabold uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  Full HD 1080P
+                </span>
+                <span className="px-3 py-1 rounded-full text-[10px] font-extrabold uppercase bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                  Dành Cho Người Mới
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                <h2 className="text-xl sm:text-2xl lg:text-3xl font-black uppercase tracking-tight text-white font-accent leading-tight">
+                  Video Hướng Dẫn Sử Dụng Ứng Dụng <span className="text-[#FF007F]">Audition AI</span> Để Tạo Ảnh 3D AI
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-300 font-medium leading-relaxed max-w-2xl">
+                  Xem video chi tiết từng bước để làm chủ công cụ tạo ảnh nhân vật 3D, ghép đôi couple, tạo đội hình nhóm và biến ảnh thành video vũ đạo chuẩn nét từ A-Z.
+                </p>
+              </div>
+
+              {/* 3 Quick Benefit Chips */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                <div className="p-3 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-[#FF007F] block">01. CHUẨN DÁNG AU</span>
+                  <p className="text-[11px] text-slate-300 font-medium mt-0.5">Cách chọn prompt và pose mẫu sắc nét</p>
+                </div>
+                <div className="p-3 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-[#00F2FE] block">02. TỐI ƯU VCOIN</span>
+                  <p className="text-[11px] text-slate-300 font-medium mt-0.5">Mẹo tạo ảnh đẹp chỉ từ 5 Vcoin</p>
+                </div>
+                <div className="p-3 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 block">03. CODY CN</span>
+                  <p className="text-[11px] text-slate-300 font-medium mt-0.5">Hướng dẫn thực tế, dễ hiểu</p>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsCinemaModalOpen(true)}
+                  className="neu-button-primary px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-xl hover:scale-105 transition-all"
+                >
+                  <Icons.Maximize2 className="w-4 h-4 text-white" />
+                  <span>Rạp chiếu toàn màn hình</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onNavigate('tools')}
+                  className="neu-button px-6 py-3 rounded-2xl text-xs font-black text-white flex items-center gap-2 hover:border-[#FF007F] transition-all bg-white/10 border-white/20"
+                >
+                  <Icons.Wand className="w-4 h-4 text-[#FF007F]" />
+                  <span>Bắt đầu tạo ảnh ngay</span>
+                </button>
+              </div>
+
+            </div>
+
+            {/* Right Column: 16:9 Interactive Cyber Player */}
+            <div className="lg:col-span-5 w-full flex flex-col justify-center">
+              <div className="relative w-full aspect-video rounded-2xl sm:rounded-3xl overflow-hidden bg-black border-2 border-[#FF007F]/40 shadow-[0_0_35px_rgba(255,0,127,0.3)] group/player">
+                {isPlayingTutorial ? (
+                  <>
+                    <iframe
+                      src={`https://www.youtube.com/embed/${tutorialVideoId}?autoplay=1&rel=0&playsinline=1`}
+                      title="Video hướng dẫn sử dụng ứng dụng Audition AI để tạo ảnh 3D AI"
+                      className="w-full h-full border-0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setIsPlayingTutorial(false)}
+                      className="absolute top-3 right-3 z-10 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/80 hover:bg-rose-600 text-white border border-white/25 text-xs font-bold transition-all shadow-lg backdrop-blur-md"
+                      title="Tạm dừng video"
+                    >
+                      <Icons.Pause className="w-3.5 h-3.5" />
+                      <span>Tạm dừng</span>
+                    </button>
+                  </>
+                ) : (
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setIsPlayingTutorial(true)}
+                    onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setIsPlayingTutorial(true)}
+                    className="relative w-full h-full cursor-pointer overflow-hidden flex items-center justify-center focus:outline-none"
+                    aria-label="Phát video hướng dẫn sử dụng Audition AI"
+                  >
+                    <img
+                      src={`https://img.youtube.com/vi/${tutorialVideoId}/hqdefault.jpg`}
+                      alt="Video hướng dẫn sử dụng ứng dụng Audition AI để tạo ảnh 3D AI"
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover/player:scale-105"
+                      loading="lazy"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-black/20" />
+
+                    {/* Glowing Play Button */}
+                    <div className="absolute flex items-center justify-center">
+                      <div className="absolute w-20 h-20 rounded-full bg-[#FF007F]/40 animate-ping pointer-events-none" />
+                      <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-[#FF007F] via-[#9D00FF] to-[#00F2FE] p-[2px] shadow-[0_0_30px_rgba(255,0,127,0.7)] group-hover/player:scale-110 transition-transform">
+                        <div className="w-full h-full rounded-full bg-slate-950/80 backdrop-blur-sm flex items-center justify-center text-white">
+                          <Icons.Play className="w-7 h-7 fill-white ml-1 text-white" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Bottom thumbnail bar */}
+                    <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-xs text-white font-bold pointer-events-none">
+                      <span className="px-2.5 py-1 rounded-lg bg-black/70 backdrop-blur-sm border border-white/20">
+                        Cody CN • Hướng dẫn A-Z
+                      </span>
+                      <span className="px-2.5 py-1 rounded-lg bg-[#FF007F] text-white shadow">
+                        Bấm để xem video
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+          </div>
+        </section>
+      )}
 
       <section className="desktop-primary-tools grid grid-cols-1 md:grid-cols-3 gap-4" aria-label="Công cụ sáng tạo chính">
         <button
@@ -486,6 +598,75 @@ export const Home: React.FC<HomeProps> = ({
         </div>
 
       </section>
+      
+      {/* Cinema Fullscreen Modal (Portalled directly to document.body to ensure it covers 100% of viewport) */}
+      {isCinemaModalOpen && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 z-[99999] flex items-center justify-center p-4 sm:p-6 md:p-8 bg-black/90 backdrop-blur-xl animate-fade-in"
+          onClick={() => setIsCinemaModalOpen(false)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="relative w-full max-w-4xl bg-slate-900 border-2 border-[#FF007F]/60 rounded-3xl p-5 sm:p-6 shadow-[0_0_80px_rgba(255,0,127,0.5)] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-[#FF007F]/20 border border-[#FF007F]/50 flex items-center justify-center text-[#FF007F] shadow-[0_0_15px_rgba(255,0,127,0.3)] shrink-0">
+                  <Icons.Video className="w-5 h-5 text-[#FF007F]" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black text-white font-accent tracking-wide flex items-center gap-2">
+                    Video Hướng Dẫn Sử Dụng Audition AI
+                    <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-[#FF007F] text-white">
+                      Full HD
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-300 font-medium">
+                    Hướng dẫn sử dụng ứng dụng Audition AI để tạo ảnh 3D AI
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsCinemaModalOpen(false)}
+                className="w-10 h-10 rounded-2xl bg-slate-800/90 hover:bg-rose-600 border border-slate-700 hover:border-rose-500 text-slate-300 hover:text-white flex items-center justify-center transition-all shadow shrink-0"
+                aria-label="Đóng rạp chiếu (ESC)"
+                title="Đóng rạp chiếu (ESC)"
+              >
+                <Icons.X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Video Player 16:9 Frame */}
+            <div className="w-full aspect-video rounded-2xl overflow-hidden bg-black border border-slate-800 shadow-2xl">
+              <iframe
+                src={`https://www.youtube.com/embed/${tutorialVideoId}?autoplay=1&rel=0`}
+                title="Video hướng dẫn sử dụng ứng dụng Audition AI để tạo ảnh 3D AI"
+                className="w-full h-full border-0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            </div>
+
+            {/* Modal Footer Note */}
+            <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between text-xs text-slate-300">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                <span>Video chính thức bởi <strong>Cody CN</strong> • Audition AI Studio</span>
+              </div>
+              <button
+                onClick={() => setIsCinemaModalOpen(false)}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#FF007F] to-[#9D00FF] hover:brightness-110 text-white font-black uppercase text-[11px] tracking-wider transition-all shadow-lg"
+              >
+                Đã hiểu, quay lại Studio
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
     </div>
   );

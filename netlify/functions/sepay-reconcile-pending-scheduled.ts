@@ -2,7 +2,12 @@ import type { Config, Handler } from '@netlify/functions';
 import { runSePayPendingReconcile } from './sepay-reconcile-pending';
 import { isDedicatedQueueWorkerMode } from './_queue-runtime-mode';
 
-export const config: Config = {
+// Cloudflare API cron reconciles SePay in production. Keeping this schedule
+// there would only consume Netlify compute before returning "skipped".
+const usesDedicatedProductionQueue = process.env.CONTEXT === 'production'
+  && process.env.QUEUE_WORKER_MODE === 'dedicated';
+
+export const config: Config = usesDedicatedProductionQueue ? {} : {
   schedule: '*/15 * * * *',
 };
 

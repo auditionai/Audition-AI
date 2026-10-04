@@ -96,6 +96,8 @@ const getEventLabel = (eventType) => {
       return 'THẤT BẠI';
     case 'queue_alert':
       return 'CANH BAO HE THONG';
+    case 'dance_video_order':
+      return 'DON DAT VIDEO AI MOI';
     default:
       return 'ĐANG XỬ LÝ';
   }
@@ -229,6 +231,22 @@ const buildAlertMessage = (payload) => {
   }
 
   return lines.join('\n');
+};
+
+const buildDanceVideoOrderMessage = (payload) => {
+  const order = payload?.order || {};
+  return [
+    buildHeader(payload?.app || 'Audition AI', 'dance_video_order'),
+    '',
+    `- Ma don: <code>${escapeHtml(getShortId(order.id))}</code>`,
+    `- Mau video: <b>${escapeHtml(displayValue(order.templateTitle))}</b>`,
+    `- Khach hang: ${escapeHtml(displayValue(order.customerName, 'Chua cung cap'))}`,
+    `- Zalo: ${escapeHtml(displayValue(order.contactZalo, 'Chua cung cap'))}`,
+    `- Anh nhan vat: ${escapeHtml(displayValue(order.characterImageCount, '0'))}`,
+    `- VCoin: ${escapeHtml(displayValue(order.costVcoin, '0'))}`,
+    `- Ghi chu: ${escapeHtml(truncate(order.note || 'Khong co', 260))}`,
+    `- Tao luc: ${escapeHtml(formatIso(order.createdAt))}`,
+  ].join('\n');
 };
 
 const buildMediaCaption = (payload, extraLines = []) =>
@@ -418,6 +436,11 @@ async function handleNotification(env, payload) {
 
   if (String(payload?.eventType || '').toLowerCase() === 'queue_alert') {
     await sendText(env, buildAlertMessage(payload));
+    return;
+  }
+
+  if (String(payload?.eventType || '').toLowerCase() === 'dance_video_order') {
+    await sendText(env, buildDanceVideoOrderMessage(payload));
     return;
   }
 

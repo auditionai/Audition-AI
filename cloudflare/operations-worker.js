@@ -133,6 +133,7 @@ const run = async (env) => {
   result.nudge_queued_gpti2_jobs = await nudgeQueuedGpti2Jobs(env);
   return result;
 };
+
 export default {
   async fetch(request, env, ctx) {
     if (request.method === 'GET') return json({ ok: true, worker: 'auditionai-operations-worker' });

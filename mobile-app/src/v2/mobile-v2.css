@@ -420,6 +420,406 @@
   to { opacity: 1; transform: scale(1); }
 }
 
+/* ====================================================
+   V2 TUTORIAL VIDEO BANNER & THEATER LIGHTBOX
+   ==================================================== */
+.v2-tutorial-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 24px;
+  background: var(--v2-surface-solid);
+  box-shadow: 0 12px 30px rgba(93, 24, 57, 0.08), 0 0 20px rgba(255, 38, 120, 0.12);
+  overflow: hidden;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.dark .v2-tutorial-card {
+  background: #151322;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.4), 0 0 25px rgba(255, 78, 145, 0.18);
+}
+
+.v2-tutorial-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.v2-tutorial-card__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  background: rgba(255, 38, 120, 0.12);
+  border: 1px solid rgba(255, 38, 120, 0.35);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--v2-primary);
+}
+
+.v2-tutorial-card__pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ff2678;
+  box-shadow: 0 0 8px #ff2678;
+  animation: v2Pulse 1.8s infinite;
+}
+
+@keyframes v2Pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.4); opacity: 0.6; }
+}
+
+.v2-tutorial-card__sparkle {
+  color: #ff2678;
+  flex-shrink: 0;
+}
+
+.v2-tutorial-card__badge-hd {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 900;
+  background: rgba(16, 185, 129, 0.15);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.dark .v2-tutorial-card__badge-hd {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.4);
+}
+
+.v2-tutorial-card__title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.v2-tutorial-card__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1.25;
+  color: var(--v2-ink);
+  letter-spacing: -0.01em;
+}
+
+.v2-tutorial-card__desc {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--v2-ink-soft);
+}
+
+.v2-tutorial-card__player-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #000;
+  border: 1px solid rgba(255, 38, 120, 0.2);
+  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.6);
+}
+
+.v2-tutorial-card__iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.v2-tutorial-card__poster {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.v2-tutorial-card__poster-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.4s ease;
+}
+
+.v2-tutorial-card__poster:hover .v2-tutorial-card__poster-img,
+.v2-tutorial-card__poster:active .v2-tutorial-card__poster-img {
+  transform: scale(1.04);
+}
+
+.v2-tutorial-card__poster-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.2) 0%, rgba(0, 0, 0, 0.4) 60%, rgba(0, 0, 0, 0.85) 100%);
+}
+
+.v2-tutorial-card__play-btn {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.v2-tutorial-card__play-pulse {
+  position: absolute;
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: rgba(255, 38, 120, 0.35);
+  animation: v2PlayGlow 2s infinite ease-out;
+}
+
+@keyframes v2PlayGlow {
+  0% { transform: scale(0.9); opacity: 0.9; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
+.v2-tutorial-card__play-ring {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #ff2678 0%, #b30950 100%);
+  color: #fff;
+  box-shadow: 0 4px 18px rgba(255, 38, 120, 0.6);
+  padding-left: 2px;
+}
+
+.v2-tutorial-card__poster-tags {
+  position: absolute;
+  bottom: 8px;
+  left: 10px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.v2-tutorial-card__tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.v2-tutorial-card__tag--cta {
+  background: rgba(255, 38, 120, 0.85);
+  border-color: rgba(255, 38, 120, 0.9);
+}
+
+.v2-tutorial-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.v2-tutorial-card__footer-note {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--v2-ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.v2-tutorial-card__pause-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 800;
+  background: rgba(255, 38, 120, 0.15);
+  color: var(--v2-primary);
+  border: 1px solid rgba(255, 38, 120, 0.4);
+  box-shadow: 0 2px 10px rgba(255, 38, 120, 0.2);
+  transition: all 0.2s ease;
+}
+
+.v2-tutorial-card__pause-btn:hover,
+.v2-tutorial-card__pause-btn:active {
+  background: rgba(255, 38, 120, 0.25);
+  transform: scale(0.98);
+}
+
+.v2-tutorial-card__corner-pause {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 800;
+  background: rgba(0, 0, 0, 0.78);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  transition: all 0.2s ease;
+}
+
+.v2-tutorial-card__corner-pause:active {
+  background: rgba(255, 38, 120, 0.85);
+  border-color: #ff2678;
+  transform: scale(0.96);
+}
+
+.v2-tutorial-card__theater-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(255, 38, 120, 0.1);
+  color: var(--v2-primary);
+  border: 1px solid rgba(255, 38, 120, 0.25);
+  flex-shrink: 0;
+}
+
+/* Video Theater Lightbox Modal */
+.v2-video-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.82);
+  backdrop-filter: blur(8px);
+}
+
+.v2-video-modal {
+  position: relative;
+  width: 100%;
+  max-width: 440px;
+  background: #141220;
+  border-radius: 24px;
+  padding: 16px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 30px rgba(255, 38, 120, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.v2-video-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.v2-video-modal__title-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.v2-video-modal__icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: rgba(255, 38, 120, 0.18);
+  border: 1px solid rgba(255, 38, 120, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ff2678;
+  flex-shrink: 0;
+}
+
+.v2-video-modal__title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 900;
+  color: #fff;
+  line-height: 1.25;
+}
+
+.v2-video-modal__subtitle {
+  margin: 0;
+  font-size: 10.5px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.v2-video-modal__close-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.v2-video-modal__player {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.v2-video-modal__iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.v2-video-modal__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.v2-video-modal__author {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.65);
+}
+
 .v2-quick-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

@@ -530,3 +530,21 @@ export const sendTelegramOperationalAlert = async (
     console.warn('[telegram-notify] Failed to send operational alert:', error);
   }
 };
+
+export const sendTelegramDanceVideoOrderNotification = async (order: {
+  id: string;
+  templateTitle: string;
+  customerName?: string | null;
+  contactZalo?: string | null;
+  characterImageCount: number;
+  costVcoin: number;
+  note?: string | null;
+  createdAt: string;
+}) => {
+  if (!notifyWebhookUrl || !notifyWebhookSecret) return;
+  try {
+    await postNotification({ eventType: 'dance_video_order', app: 'Audition AI', order });
+  } catch (error) {
+    console.warn('[telegram-notify] Failed to send dance video order notification:', error);
+  }
+};

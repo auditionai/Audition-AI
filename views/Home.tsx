@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { APP_CONFIG } from '../constants';
 import { Language, Feature, ViewId } from '../types';
 import { Icons } from '../components/Icons';
@@ -92,6 +93,20 @@ export const Home: React.FC<HomeProps> = ({
   }, []);
 
   const tutorialVideoId = extractYouTubeId(tutorialConfig.url);
+
+  useEffect(() => {
+    if (!isCinemaModalOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsCinemaModalOpen(false);
+    };
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isCinemaModalOpen]);
 
   useEffect(() => {
     return subscribeCheckinStatus((status) => {
@@ -573,22 +588,22 @@ export const Home: React.FC<HomeProps> = ({
 
       </section>
       
-      {/* Cinema Fullscreen Modal */}
-      {isCinemaModalOpen && (
+      {/* Cinema Fullscreen Modal (Portalled directly to document.body to ensure it covers 100% of viewport) */}
+      {isCinemaModalOpen && typeof document !== 'undefined' && createPortal(
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/85 backdrop-blur-md animate-fade-in"
+          className="fixed inset-0 z-[99999] flex items-center justify-center p-4 sm:p-6 md:p-8 bg-black/90 backdrop-blur-xl animate-fade-in"
           onClick={() => setIsCinemaModalOpen(false)}
           role="dialog"
           aria-modal="true"
         >
           <div
-            className="relative w-full max-w-4xl bg-slate-900 border-2 border-[#FF007F]/60 rounded-3xl p-5 shadow-[0_0_60px_rgba(255,0,127,0.45)] overflow-hidden"
+            className="relative w-full max-w-4xl bg-slate-900 border-2 border-[#FF007F]/60 rounded-3xl p-5 sm:p-6 shadow-[0_0_80px_rgba(255,0,127,0.5)] overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
             <div className="flex items-center justify-between gap-3 mb-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-[#FF007F]/20 border border-[#FF007F]/50 flex items-center justify-center text-[#FF007F] shadow-[0_0_15px_rgba(255,0,127,0.3)]">
+                <div className="w-10 h-10 rounded-2xl bg-[#FF007F]/20 border border-[#FF007F]/50 flex items-center justify-center text-[#FF007F] shadow-[0_0_15px_rgba(255,0,127,0.3)] shrink-0">
                   <Icons.Video className="w-5 h-5 text-[#FF007F]" />
                 </div>
                 <div>
@@ -605,8 +620,9 @@ export const Home: React.FC<HomeProps> = ({
               </div>
               <button
                 onClick={() => setIsCinemaModalOpen(false)}
-                className="w-10 h-10 rounded-2xl bg-slate-800/90 hover:bg-rose-600/80 border border-slate-700 hover:border-rose-500 text-slate-300 hover:text-white flex items-center justify-center transition-all shadow"
-                aria-label="Đóng rạp chiếu"
+                className="w-10 h-10 rounded-2xl bg-slate-800/90 hover:bg-rose-600 border border-slate-700 hover:border-rose-500 text-slate-300 hover:text-white flex items-center justify-center transition-all shadow shrink-0"
+                aria-label="Đóng rạp chiếu (ESC)"
+                title="Đóng rạp chiếu (ESC)"
               >
                 <Icons.X className="w-5 h-5" />
               </button>
@@ -637,7 +653,8 @@ export const Home: React.FC<HomeProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
     </div>

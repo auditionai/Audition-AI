@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ArrowRight,
   BookOpenText,
@@ -148,6 +149,15 @@ export function HomeV2() {
   }, []);
 
   const tutorialVideoId = extractYouTubeId(tutorialVideo.url);
+
+  useEffect(() => {
+    if (!isCinemaModalOpen) return;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [isCinemaModalOpen]);
 
   useEffect(() => subscribeCheckinStatus(
     (status) => setIsCheckedIn(status.isCheckedInToday),
@@ -489,7 +499,7 @@ export function HomeV2() {
       )}
 
       {/* Video Theater Lightbox Modal */}
-      {isCinemaModalOpen && (
+      {isCinemaModalOpen && typeof document !== 'undefined' && createPortal(
         <div
           className="v2-video-modal-backdrop"
           onClick={() => setIsCinemaModalOpen(false)}
@@ -543,7 +553,8 @@ export function HomeV2() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

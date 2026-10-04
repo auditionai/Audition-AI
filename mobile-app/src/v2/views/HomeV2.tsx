@@ -18,6 +18,7 @@ import {
   UsersRound,
   Video,
   Play,
+  Pause,
   Maximize2,
   X,
   type LucideIcon,
@@ -310,13 +311,25 @@ export function HomeV2() {
           {/* Interactive Player Frame (16:9) */}
           <div className="v2-tutorial-card__player-frame">
             {isPlayingTutorial ? (
-              <iframe
-                src={`https://www.youtube.com/embed/${tutorialVideoId}?autoplay=1&rel=0&playsinline=1`}
-                title="Video hướng dẫn sử dụng ứng dụng Audition AI để tạo ảnh 3D AI"
-                className="v2-tutorial-card__iframe"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
+              <>
+                <iframe
+                  src={`https://www.youtube.com/embed/${tutorialVideoId}?autoplay=1&rel=0&playsinline=1`}
+                  title="Video hướng dẫn sử dụng ứng dụng Audition AI để tạo ảnh 3D AI"
+                  className="v2-tutorial-card__iframe"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+                <button
+                  type="button"
+                  className="v2-tutorial-card__corner-pause v2-tap"
+                  onClick={() => setIsPlayingTutorial(false)}
+                  aria-label="Tạm dừng video"
+                  title="Tạm dừng video"
+                >
+                  <Pause size={12} />
+                  <span>Tạm dừng</span>
+                </button>
+              </>
             ) : (
               <div
                 className="v2-tutorial-card__poster"
@@ -349,9 +362,20 @@ export function HomeV2() {
 
           {/* Footer Bar */}
           <div className="v2-tutorial-card__footer">
-            <span className="v2-tutorial-card__footer-note">
-              {isPlayingTutorial ? 'Đang phát video hướng dẫn' : 'Bấm Play để xem trực tiếp hoặc'}
-            </span>
+            {isPlayingTutorial ? (
+              <button
+                type="button"
+                className="v2-tutorial-card__pause-btn v2-tap"
+                onClick={() => setIsPlayingTutorial(false)}
+              >
+                <Pause size={13} />
+                <span>Tạm dừng video</span>
+              </button>
+            ) : (
+              <span className="v2-tutorial-card__footer-note">
+                Bấm Play để xem trực tiếp hoặc
+              </span>
+            )}
             <button
               type="button"
               className="v2-tutorial-card__theater-btn v2-tap"

@@ -359,13 +359,24 @@ export const Home: React.FC<HomeProps> = ({
             <div className="lg:col-span-5 w-full flex flex-col justify-center">
               <div className="relative w-full aspect-video rounded-2xl sm:rounded-3xl overflow-hidden bg-black border-2 border-[#FF007F]/40 shadow-[0_0_35px_rgba(255,0,127,0.3)] group/player">
                 {isPlayingTutorial ? (
-                  <iframe
-                    src={`https://www.youtube.com/embed/${tutorialVideoId}?autoplay=1&rel=0&playsinline=1`}
-                    title="Video hướng dẫn sử dụng ứng dụng Audition AI để tạo ảnh 3D AI"
-                    className="w-full h-full border-0"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                  />
+                  <>
+                    <iframe
+                      src={`https://www.youtube.com/embed/${tutorialVideoId}?autoplay=1&rel=0&playsinline=1`}
+                      title="Video hướng dẫn sử dụng ứng dụng Audition AI để tạo ảnh 3D AI"
+                      className="w-full h-full border-0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setIsPlayingTutorial(false)}
+                      className="absolute top-3 right-3 z-10 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/80 hover:bg-rose-600 text-white border border-white/25 text-xs font-bold transition-all shadow-lg backdrop-blur-md"
+                      title="Tạm dừng video"
+                    >
+                      <Icons.Pause className="w-3.5 h-3.5" />
+                      <span>Tạm dừng</span>
+                    </button>
+                  </>
                 ) : (
                   <div
                     role="button"

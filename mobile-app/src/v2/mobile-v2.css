@@ -651,6 +651,54 @@
   text-overflow: ellipsis;
 }
 
+.v2-tutorial-card__pause-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 800;
+  background: rgba(255, 38, 120, 0.15);
+  color: var(--v2-primary);
+  border: 1px solid rgba(255, 38, 120, 0.4);
+  box-shadow: 0 2px 10px rgba(255, 38, 120, 0.2);
+  transition: all 0.2s ease;
+}
+
+.v2-tutorial-card__pause-btn:hover,
+.v2-tutorial-card__pause-btn:active {
+  background: rgba(255, 38, 120, 0.25);
+  transform: scale(0.98);
+}
+
+.v2-tutorial-card__corner-pause {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 800;
+  background: rgba(0, 0, 0, 0.78);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  transition: all 0.2s ease;
+}
+
+.v2-tutorial-card__corner-pause:active {
+  background: rgba(255, 38, 120, 0.85);
+  border-color: #ff2678;
+  transform: scale(0.96);
+}
+
 .v2-tutorial-card__theater-btn {
   display: inline-flex;
   align-items: center;

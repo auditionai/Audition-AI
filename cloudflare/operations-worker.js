@@ -134,49 +134,6 @@ const run = async (env) => {
   return result;
 };
 
-const formatBytes = (value) => {
-  const bytes = Number(value || 0);
-  if (!Number.isFinite(bytes) || bytes < 0) return 'unknown';
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-};
-
-const sendDailyPlatformUsageReport = async (env) => {
-  const snapshot = await rpc(env, 'get_daily_platform_usage_snapshot', {});
-  const databaseBytes = Number(snapshot?.database_bytes || 0);
-  const databaseLimitBytes = 0.5 * 1024 * 1024 * 1024;
-  const rows = snapshot?.rows || {};
-  const queue = snapshot?.queue || {};
-  const details = {
-    report_date_vietnam: snapshot?.report_date || 'unknown',
-    supabase_database: `${formatBytes(databaseBytes)} / 512 MB (${((databaseBytes / databaseLimitBytes) * 100).toFixed(1)}%)`,
-    generated_images_storage: formatBytes(snapshot?.generated_images_bytes),
-    db_writes: `visits=${rows.app_visits || 0}, ledger=${rows.vcoin_transactions || 0}, checkins=${rows.daily_check_ins || 0}, uploads=${rows.cloudflare_upload_tokens || 0}`,
-    generation_activity: `jobs=${rows.generated_images || 0}, terminal_events=${rows.generation_terminal_events || 0}, dance_orders=${rows.dance_video_orders || 0}`,
-    generated_payload_today: formatBytes(queue.payload_bytes_created),
-    active_queue_jobs: String(queue.active || 0),
-    supabase_log_ingestion: 'Dashboard-only meter: alert at 70%, hard stop review at 85%',
-    supabase_egress: 'Dashboard-only meter: alert at 70%, hard stop review at 85%',
-    netlify_compute: 'Production scheduled Functions: 0 after dedicated-mode deploy; credit cap: 300/month',
-    cloudflare_workers: 'Scheduled baseline: API 96/day + Operations 96/day; request quota must be read from Cloudflare dashboard/API token',
-    data_source: 'Supabase DB RPC + deployment schedule; provider billing APIs are intentionally not guessed',
-  };
-  const request = new Request('https://telegram-notifier.internal/daily-platform-usage', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-notify-secret': String(env.TELEGRAM_NOTIFY_WEBHOOK_SECRET || '') },
-    body: JSON.stringify({ eventType: 'queue_alert', app: 'Audition AI', alert: { title: 'Bao cao tai nguyen hang ngay', severity: databaseBytes / databaseLimitBytes >= 0.7 ? 'warning' : 'info', key: `daily-platform-usage:${snapshot?.report_date || 'unknown'}`, createdAt: new Date().toISOString(), details } }),
-  });
-  const response = env.TELEGRAM_NOTIFIER ? await env.TELEGRAM_NOTIFIER.fetch(request) : await fetch(request);
-  if (!response.ok) throw new Error(`Daily platform usage report failed (${response.status})`);
-};
-
-const isVietnamDailyReportSlot = (now = new Date()) => {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-  }).formatToParts(now);
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return values.hour === '00' && values.minute === '15';
-};
 export default {
   async fetch(request, env, ctx) {
     if (request.method === 'GET') return json({ ok: true, worker: 'auditionai-operations-worker' });
@@ -193,10 +150,5 @@ export default {
     ctx.waitUntil(run(env).catch((error) => console.error('[operations-worker]', error)));
     return json({ accepted: true }, 202);
   },
-  async scheduled(_event, env, ctx) {
-    ctx.waitUntil(run(env));
-    if (isVietnamDailyReportSlot()) {
-      ctx.waitUntil(sendDailyPlatformUsageReport(env).catch((error) => console.error(JSON.stringify({ worker: 'operations', event: 'daily_usage_report_failed', error: error instanceof Error ? error.message : String(error) }))));
-    }
-  },
+  async scheduled(_event, env, ctx) { ctx.waitUntil(run(env)); },
 };

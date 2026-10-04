@@ -122,6 +122,40 @@ const recordAnalyticsVisit = async (request, env) => {
   ).bind(body.userId || null, body.visitDate || new Date().toISOString().slice(0, 10), String(body.route || '').slice(0, 500), String(body.userAgent || '').slice(0, 500)).run();
   return json({ accepted: true }, 202);
 };
+const createDanceVideoOrder = async (request, env) => {
+  const user = await requireUser(request, env);
+  const body = await request.json().catch(() => ({}));
+  const templateId = String(body.templateId || '').trim();
+  const characterImageUrls = Array.isArray(body.characterImageUrls)
+    ? body.characterImageUrls.filter((value) => typeof value === 'string' && value.length < 2048).slice(0, 8)
+    : [];
+  if (!templateId || characterImageUrls.length === 0) return json({ error: 'INVALID_ORDER_DATA' }, 400);
+  const id = await rpc(env, 'create_dance_video_order', {
+    p_user_id: user.id,
+    p_template_id: templateId,
+    p_character_image_urls: characterImageUrls,
+    p_customer_name: String(body.customerName || '').slice(0, 120) || null,
+    p_contact_zalo: String(body.contactZalo || '').slice(0, 120) || null,
+    p_note: String(body.note || '').slice(0, 1000) || null,
+  });
+  const templateResponse = await db(env, `dance_video_templates?id=eq.${encodeURIComponent(templateId)}&select=title,price_vcoin&limit=1`);
+  const template = templateResponse.ok ? (await templateResponse.json())?.[0] : null;
+  const notifier = env.TELEGRAM_NOTIFIER;
+  if (notifier && text(env, 'TELEGRAM_NOTIFY_WEBHOOK_SECRET')) {
+    const notification = new Request('https://telegram-notifier.internal/dance-video-order', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-notify-secret': text(env, 'TELEGRAM_NOTIFY_WEBHOOK_SECRET') },
+      body: JSON.stringify({ eventType: 'dance_video_order', app: 'Audition AI', order: {
+        id: String(id), templateTitle: String(template?.title || templateId), customerName: String(body.customerName || '').slice(0, 120) || null,
+        contactZalo: String(body.contactZalo || '').slice(0, 120) || null, characterImageCount: characterImageUrls.length,
+        costVcoin: Number(template?.price_vcoin || 0), note: String(body.note || '').slice(0, 1000) || null, createdAt: new Date().toISOString(),
+      } }),
+    });
+    const response = await notifier.fetch(notification);
+    if (!response.ok) console.error(JSON.stringify({ worker: 'api', event: 'dance_video_notification_failed', status: response.status, orderId: id }));
+  }
+  return json({ id }, 201);
+};
 const readAnalyticsSummary = async (request, env) => {
   await requireUser(request, env, true);
   const result = await env.AUDITION_ANALYTICS.batch([
@@ -148,6 +182,7 @@ async function handle(request, env, ctx) {
   }
   if (path === 'analytics/visit' && request.method === 'POST') return recordAnalyticsVisit(request, env);
   if (path === 'analytics/summary' && request.method === 'GET') return readAnalyticsSummary(request, env);
+  if (path === 'dance-video-order' && request.method === 'POST') return createDanceVideoOrder(request, env);
   if (path === 'sepay-checkout' && request.method === 'GET') { const raw = url.searchParams.get('payload') || ''; const payload = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(raw.replace(/-/g, '+').replace(/_/g, '/')), (char) => char.charCodeAt(0)))); const checkout = String(payload.checkoutUrl || ''); if (!/^https:\/\/pay(?:-sandbox)?\.sepay\.vn\//.test(checkout) || !payload.fields || typeof payload.fields !== 'object') return new Response('Invalid SePay checkout payload', { status: 400 }); const escaped = (value) => String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]); const fields = Object.entries(payload.fields).map(([key, value]) => `<input type="hidden" name="${escaped(key)}" value="${escaped(value)}">`).join(''); return new Response(`<!doctype html><meta charset="utf-8"><form id="p" method="post" action="${escaped(checkout)}">${fields}</form><script>p.submit()</script>`, { headers: { 'content-type': 'text/html; charset=utf-8' } }); }
   if ((path === 'sepay-ipn' || path === 'sepay-webhook')) { if (request.method === 'GET') return json({ success: true, message: 'SePay IPN endpoint is ready' }); if (request.method !== 'POST') return json({ error: 'Method Not Allowed' }, 405); await requiredSecret(request, env, 'SEPAY_SECRET_KEY', 'x-secret-key'); const payload = await request.json(); const code = sepayOrderCode(payload); const amount = sepayAmount(payload); const filter = code ? `or=(provider_order_code.eq.${encodeURIComponent(code)},order_code.eq.${encodeURIComponent(code)})` : `amount_vnd=eq.${amount ?? -1}`; const response = await db(env, `payment_transactions?select=id,amount_vnd,status&${filter}&order=created_at.desc&limit=1`); const rows = await response.json(); if (!rows?.[0]) return json({ success: true, ignored: true, reason: 'Unknown orderCode', orderCode: code }); return json({ success: true, data: await settleSePay(env, rows[0], payload, 'checkout_ipn') }); }
   if (path === 'sepay-reconcile-pending') { await requiredSecret(request, env, 'SEPAY_RECONCILE_SECRET', 'x-cron-secret'); return json(await reconcileSePay(env, Number(url.searchParams.get('limit') || 10))); }

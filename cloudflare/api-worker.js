@@ -88,8 +88,14 @@ const runWatchdog = async (env) => {
 const uploadTst = async (request, env, kind) => { await requireUser(request, env, true); const response = await fetch(`https://api.tramsangtao.com/v1/files/upload/${kind}`, { method: 'POST', headers: { authorization: `Bearer ${text(env, 'TST_API_KEY')}`, 'content-type': request.headers.get('content-type') || '' }, body: request.body, signal: AbortSignal.timeout(120000) }); return new Response(response.body, { status: response.status, headers: { 'content-type': response.headers.get('content-type') || 'application/json' } }); };
 const submitVideoScript = async (request, env) => { const user = await requireUser(request, env); const payload = await request.json(); const created = await db(env, 'video_script_jobs', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ user_id: user.id, request_payload: payload }) }); const rows = await created.json(); if (!created.ok || !rows?.[0]?.id) throw new Error('VIDEO_SCRIPT_JOB_CREATE_FAILED'); const id = rows[0].id; const worker = text(env, 'VIDEO_SCRIPT_WORKER_URL'); const secret = text(env, 'VIDEO_SCRIPT_WORKER_SECRET'); if (!worker || !secret) throw new Error('VIDEO_SCRIPT_WORKER_URL is not configured'); const wake = await fetch(worker, { method: 'POST', headers: { 'content-type': 'application/json', 'x-worker-secret': secret }, body: JSON.stringify({ jobId: id }) }); if (!wake.ok) throw new Error(`VIDEO_SCRIPT_WORKER_LAUNCH_FAILED (${wake.status})`); return json({ jobId: id, status: 'queued' }, 202); };
 const EDGE_CONFIG_KEYS = ['model_pricing', 'credit_packages', 'promotions', 'style_presets'];
-const refreshEdgeConfig = async (env) => {
+const EDGE_CONFIG_REFRESH_MS = 60 * 60 * 1000;
+const refreshEdgeConfig = async (env, force = false) => {
   if (!env.AUDITION_CONFIG_CACHE) return;
+  if (!force) {
+    const current = await env.AUDITION_CONFIG_CACHE.get('model_pricing', 'json');
+    const cachedAt = new Date(String(current?.cachedAt || '')).getTime();
+    if (cachedAt > 0 && Date.now() - cachedAt < EDGE_CONFIG_REFRESH_MS) return;
+  }
   const queries = {
     model_pricing: 'model_pricing?select=*&order=model_id.asc,option_id.asc',
     credit_packages: 'credit_packages?select=id,name,credits_amount,price_vnd,tag,bonus_credits,is_featured,is_active,display_order,transfer_syntax&is_active=eq.true&order=display_order.asc',
@@ -100,7 +106,7 @@ const refreshEdgeConfig = async (env) => {
     const response = await db(env, queries[key]);
     if (!response.ok) throw new Error(`Unable to refresh ${key} cache (${response.status})`);
     const value = await response.json();
-    await env.AUDITION_CONFIG_CACHE.put(key, JSON.stringify({ value, cachedAt: new Date().toISOString() }), { expirationTtl: 900 });
+    await env.AUDITION_CONFIG_CACHE.put(key, JSON.stringify({ value, cachedAt: new Date().toISOString() }), { expirationTtl: 7200 });
   }));
 };
 const readEdgeConfig = async (env, key) => {
@@ -137,7 +143,7 @@ async function handle(request, env, ctx) {
   }
   if (path === 'edge-config-refresh' && request.method === 'POST') {
     await requiredSecret(request, env, 'EDGE_CONFIG_REFRESH_SECRET', 'x-worker-secret');
-    await refreshEdgeConfig(env);
+    await refreshEdgeConfig(env, true);
     return json({ refreshed: true, keys: EDGE_CONFIG_KEYS });
   }
   if (path === 'analytics/visit' && request.method === 'POST') return recordAnalyticsVisit(request, env);

@@ -53,7 +53,9 @@ const recipe = (payload: Record<string, unknown>) =>
     : payload;
 const modelOf = (payload: Record<string, unknown>) => {
   const requestedModel = normalize(payload.model || payload.modelId || recipe(payload).model || recipe(payload).modelId);
-  const model = MODEL_ALIASES[requestedModel] || requestedModel;
+  const model = MODEL_ALIASES[requestedModel]
+    || ({ 'image-gpt-2.5-flare': 'gpt-image-2.5-flare', 'image-gpt-2.5-sunburst': 'gpt-image-2.5-sunburst' } as Record<string, string>)[requestedModel]
+    || requestedModel;
   if (!ALLOWED_MODELS.has(model)) throw new Error(`GPTI2_MODEL_UNSUPPORTED: ${model || '(empty)'}`);
   return model;
 };

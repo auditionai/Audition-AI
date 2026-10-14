@@ -496,10 +496,10 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           return isGommoCatalogModelAvailable(getGommoModelForAudition(gommoCatalog, modelId));
       }
       if (resolveProviderForModel(providerConfig, modelId, providerRouteKey) === 'gpti2') {
-          return ['image-gpt-2', 'gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro'].includes(modelId);
+          return ['image-gpt-2', 'gpt-image-2', 'image-gpt-2.5-flare', 'image-gpt-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro'].includes(modelId);
       }
       return pricingEntries.some((entry) => entry.model.trim().toLowerCase() === modelId)
-          && (runtimeImageModelIds.has(modelId) || ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(modelId));
+          && runtimeImageModelIds.has(modelId);
   };
   const isFlashAvailable = isTierAvailable('flash');
   const isProAvailable = isTierAvailable('pro');

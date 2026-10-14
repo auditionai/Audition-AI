@@ -166,8 +166,8 @@ const TST_DOCS_VIDEO_ASPECT_RATIO_FALLBACKS: Record<string, string[]> = {
 };
 const TST_DOCS_IMAGE_ASPECT_RATIO_FALLBACKS: Record<string, string[]> = {
   'image-gpt-2': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'],
-  'gpt-image-2.5-flare': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'],
-  'gpt-image-2.5-sunburst': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'],
+  'image-gpt-2.5-flare': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'],
+  'image-gpt-2.5-sunburst': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'],
   'nano-banana-2': ['auto', '1:1', '4:3', '16:9', '9:16'],
   'nano-banana-pro': ['auto', '1:1', '4:3', '16:9', '21:9', '9:16', '3:4'],
 };
@@ -177,8 +177,8 @@ const tierToModelId: Record<TstGenerationTier, string> = {
   flash: 'nano-banana-2',
   pro: 'nano-banana-pro',
   gpt: 'image-gpt-2',
-  gpt_flare: 'gpt-image-2.5-flare',
-  gpt_sunburst: 'gpt-image-2.5-sunburst',
+  gpt_flare: 'image-gpt-2.5-flare',
+  gpt_sunburst: 'image-gpt-2.5-sunburst',
 };
 
 const uiServerMap: Record<string, string> = {
@@ -396,6 +396,8 @@ const ADMIN_MANAGED_MODEL_IDS = [
   'nano-banana-2',
   'nano-banana-pro',
   'image-gpt-2',
+  'image-gpt-2.5-flare',
+  'image-gpt-2.5-sunburst',
   'gpt-image-2.5-flare',
   'gpt-image-2.5-sunburst',
   'kling-2.5-turbo',
@@ -559,7 +561,7 @@ export const sanitizePricingEntriesWithRuntimeModels = (
   // GPTi2 2.5 models use the same option matrix as GPT Image 2. The live
   // catalog can omit their model records, so expose mirrored rows everywhere
   // pricing is consumed (not only in the Admin table).
-  const gpt25Ids = ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'];
+  const gpt25Ids = ['image-gpt-2.5-flare', 'image-gpt-2.5-sunburst'];
   const baseGptRows = pricingEntries.filter((entry) => normalizeModelId(entry.model) === 'image-gpt-2');
   const mirroredRows = baseGptRows.flatMap((entry) => gpt25Ids.map((model) => ({ ...entry, model })));
   const effectivePricingEntries = [...pricingEntries, ...mirroredRows];
@@ -569,7 +571,7 @@ export const sanitizePricingEntriesWithRuntimeModels = (
       .filter((model) => !runtimeModels.some((entry) => normalizeModelId(entry.model) === model))
       .map((model) => ({
         model,
-        name: model === 'gpt-image-2.5-flare' ? 'GPT Image 2.5 Flare' : 'GPT Image 2.5 Sunburst',
+        name: model === 'image-gpt-2.5-flare' ? 'GPT Image 2.5 Flare' : 'GPT Image 2.5 Sunburst',
         type: 'image',
         servers: ['fast'],
         capabilities: { resolutions: ['1K', '2K', '4K'], qualities: ['low', 'medium', 'high'] },
@@ -1992,7 +1994,7 @@ export const getPricingRows = async (forceRefresh = false): Promise<TstPricingRo
   const pricingEntries = sanitizePricingEntriesWithRuntimeModels(rawPricingEntries, runtimeModels);
   const modelMap = new Map([
     ...runtimeModels,
-    ...['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].map((model) => ({ model, name: model, type: 'image', servers: ['fast'] } as TstRuntimeModel)),
+    ...['image-gpt-2.5-flare', 'image-gpt-2.5-sunburst'].map((model) => ({ model, name: model, type: 'image', servers: ['fast'] } as TstRuntimeModel)),
   ].map((model) => [normalizeModelId(model.model), model]));
   const rows: Array<TstPricingRow | null> = pricingEntries.map((entry) => {
     const model = modelMap.get(normalizeModelId(entry.model));

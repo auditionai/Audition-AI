@@ -267,6 +267,7 @@ const getGlobalGenerationProvider = async (modelId: string, featureKey?: string)
 const resolveDispatchProvider = async (payload: Record<string, unknown>): Promise<GenerationProvider> => {
   const stored = String(payload.__targetProvider || '').trim().toLowerCase();
   const queueKind = String(payload.queueKind || '').trim().toLowerCase();
+  const modelId = getQueuePayloadModelId(payload);
   if (stored === 'gpti2' && VIDEO_OR_MOTION_QUEUE_KINDS.has(queueKind)) return 'tst';
   // A fallback reaches TST only after its live catalog validates a compatible
   // server, so retain that explicit dispatch decision on the next claim.
@@ -274,7 +275,7 @@ const resolveDispatchProvider = async (payload: Record<string, unknown>): Promis
   if (stored === 'gommo') return 'tst';
   if (stored === 'tst' || stored === 'gpti2') return stored;
   return getGlobalGenerationProvider(
-    getQueuePayloadModelId(payload),
+    modelId,
     String(payload.__providerRouteKey || ''),
   );
 };

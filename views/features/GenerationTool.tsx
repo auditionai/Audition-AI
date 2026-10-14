@@ -62,7 +62,7 @@ import {
   resolveProviderForModel,
   type GommoProviderCatalog,
 } from '../../services/providerCatalog';
-import { getImageProviderRouteKey, isModelAllowedForFeature } from '../../shared/providerRouting';
+import { canonicalGenerationModelId, getImageProviderRouteKey, isModelAllowedForFeature } from '../../shared/providerRouting';
 import type { CharacterReferenceGroup, ImageGenerateRecipePayload } from '../../shared/queueRecipes';
 import { GENERATION_SECTION_TIPS } from '../../shared/generationSectionTips';
 import { getGommoModeForServerGroup, getGommoServerGroups, getPreferredGommoBasicMode } from '../../shared/gommoServerRouting';
@@ -291,6 +291,12 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const providerRouteKey = getImageProviderRouteKey(characters.length);
 
   useEffect(() => {
+      const modelId = providerConfig?.defaultModelByFeature?.[providerRouteKey]?.desktop;
+      const tier = IMAGE_MODEL_OPTIONS.find((model) => canonicalGenerationModelId(getGenerationModelId(model.tier)) === canonicalGenerationModelId(modelId))?.tier;
+      if (tier && isModelAllowedForFeature(providerConfig, providerRouteKey, modelId)) setAiModel(tier);
+  }, [providerConfig, providerRouteKey]);
+
+  useEffect(() => {
       if (!isModelAllowedForFeature(providerConfig, providerRouteKey, getGenerationModelId(aiModel))) {
           const firstAllowed = IMAGE_MODEL_OPTIONS.find((model) =>
               isModelAllowedForFeature(providerConfig, providerRouteKey, getGenerationModelId(model.tier)),
@@ -490,9 +496,10 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           return isGommoCatalogModelAvailable(getGommoModelForAudition(gommoCatalog, modelId));
       }
       if (resolveProviderForModel(providerConfig, modelId, providerRouteKey) === 'gpti2') {
-          return ['image-gpt-2', 'gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro'].includes(modelId);
+          return ['image-gpt-2', 'gpt-image-2', 'image-gpt-2.5-flare', 'image-gpt-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro'].includes(modelId);
       }
-      return runtimeImageModelIds.has(modelId) && pricingEntries.some((entry) => entry.model.trim().toLowerCase() === modelId);
+      return pricingEntries.some((entry) => entry.model.trim().toLowerCase() === modelId)
+          && runtimeImageModelIds.has(modelId);
   };
   const isFlashAvailable = isTierAvailable('flash');
   const isProAvailable = isTierAvailable('pro');

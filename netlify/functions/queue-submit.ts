@@ -10,7 +10,6 @@ import { isProviderServerAllowedByConfig } from './_server-availability';
 import { getGommoServerIdForMode } from '../../shared/gommoServerRouting';
 import {
     DEFAULT_PROVIDER_BY_FEATURE,
-  GPTI2_IMAGE_MODELS,
     getAllowedModelsForFeature,
   inferGenerationProviderRouteKey,
   type GenerationProviderRouteKey,
@@ -437,7 +436,7 @@ const resolveGommoCostFromAuditionPricing = async (
 
   const { data, error } = await admin
     .from('model_pricing')
-    .select('option_id, audition_price_vcoin, tst_price_credits')
+    .select('model_id, option_id, audition_price_vcoin, tst_price_credits')
     .eq('model_id', modelId)
     .in('option_id', optionCandidates);
   if (error) throw error;
@@ -491,17 +490,27 @@ const resolveServerCostVcoin = async (
   }
   if (!modelId || optionCandidates.length === 0) throw new Error('INVALID_SERVER_PRICE');
 
+  // TST exposes Flare/Sunburst as separate model ids, while the Admin price
+  // table historically stored the shared GPT Image 2 Vcoin matrix only under
+  // image-gpt-2. Prefer a model-specific row when present, otherwise inherit
+  // the matching GPT Image 2 option without mutating existing pricing rows.
+  const pricingModelIds = [modelId];
+  if (['image-gpt-2.5-flare', 'image-gpt-2.5-sunburst'].includes(modelId)) {
+    pricingModelIds.push('image-gpt-2');
+  }
+
   // Billing is always controlled by the Admin pricing table. Provider costs
   // (TST/GPTi2) are reference metadata only and must never become a fallback.
   const { data, error } = await admin
     .from('model_pricing')
-    .select('option_id, audition_price_vcoin, tst_price_credits')
-    .eq('model_id', modelId)
+    .select('model_id, option_id, audition_price_vcoin, tst_price_credits')
+    .in('model_id', pricingModelIds)
     .in('option_id', optionCandidates);
   if (error) throw error;
   const rows = Array.isArray(data) ? data : [];
   const selected = optionCandidates
-    .map((optionId) => rows.find((row) => normalizePricingPart(row.option_id) === optionId))
+    .map((optionId) => rows.find((row) => row.model_id === modelId && normalizePricingPart(row.option_id) === optionId)
+      || rows.find((row) => normalizePricingPart(row.option_id) === optionId))
     .find((row) => Number(row?.audition_price_vcoin) > 0);
   if (!selected) throw new Error(`INVALID_SERVER_PRICE: Missing AUDITION AI price for ${modelId}`);
   const baseVcoin = Math.ceil(Number(selected.audition_price_vcoin));
@@ -846,7 +855,7 @@ export const handler: Handler = async (event) => {
     });
     const routingConfig = await getGenerationProvider(admin, modelId, providerRouteKey);
     if (routingConfig.allowedModels && !routingConfig.allowedModels.includes(modelId)
-      && !(providerRouteKey !== 'video_generation' && providerRouteKey !== 'motion_control' && routingConfig.provider === 'gpti2' && ['gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro'].includes(modelId))) {
+      && !(providerRouteKey !== 'video_generation' && providerRouteKey !== 'motion_control' && routingConfig.provider === 'gpti2' && ['image-gpt-2', 'gpt-image-2', 'image-gpt-2.5-flare', 'image-gpt-2.5-sunburst', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro'].includes(modelId))) {
       return {
         statusCode: 400,
         headers,
@@ -858,12 +867,10 @@ export const handler: Handler = async (event) => {
     }
     const normalizedQueueKind = String(body.queueKind || '').trim().toLowerCase();
     const isVideoOrMotionQueue = body.assetType === 'video' || normalizedQueueKind === 'video_generate' || normalizedQueueKind === 'motion_generate';
-    const isGpti2ImageModel = !isVideoOrMotionQueue && GPTI2_IMAGE_MODELS.includes(modelId);
-    const targetProvider: GenerationProvider = isGpti2ImageModel && routingConfig.provider !== 'tst'
-      ? 'gpti2'
-      : isVideoOrMotionQueue && routingConfig.provider === 'gpti2'
+    const targetProvider: GenerationProvider = isVideoOrMotionQueue && routingConfig.provider === 'gpti2'
         ? routingConfig.priority.find((provider) => provider === 'tst' || provider === 'gommo') || 'tst'
         : routingConfig.provider;
+    const providerPriority = routingConfig.priority;
     ensureProviderConfiguredForQueueKind(body.queueKind, targetProvider);
     if (
       TST_QUEUE_KINDS.has(String(body.queueKind || '').trim().toLowerCase()) &&
@@ -889,7 +896,7 @@ export const handler: Handler = async (event) => {
       __targetProvider: targetProvider,
       __providerRouteKey: providerRouteKey,
       __smartProviderFallbackEnabled: routingConfig.smartFallbackEnabled,
-      __providerPriority: routingConfig.priority,
+      __providerPriority: providerPriority,
     };
 
     let row: any;

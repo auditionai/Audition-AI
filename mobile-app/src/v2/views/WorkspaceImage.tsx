@@ -62,7 +62,7 @@ import {
   resolveProviderForModel,
   type GommoProviderCatalog,
 } from '../../services/providerCatalog';
-import { getImageProviderRouteKey, isModelAllowedForFeature } from '../../../../shared/providerRouting';
+import { canonicalGenerationModelId, getImageProviderRouteKey, isModelAllowedForFeature } from '../../../../shared/providerRouting';
 import { GENERATION_SECTION_TIPS } from '../../../../shared/generationSectionTips';
 import { getGommoModeForServerGroup, getGommoServerGroups, getPreferredGommoBasicMode } from '../../../../shared/gommoServerRouting';
 
@@ -304,6 +304,11 @@ export function WorkspaceImage() {
   const isGptImageTier = ['gpt', 'gpt_flare', 'gpt_sunburst'].includes(aiModel);
   const selectedModelId = getGenerationModelId(aiModel);
   const providerRouteKey = getImageProviderRouteKey(MODE_TO_CHARACTER_COUNT[activeMode]);
+  useEffect(() => {
+    const modelId = providerConfig?.defaultModelByFeature?.[providerRouteKey]?.mobile;
+    const tier = IMAGE_MODEL_OPTIONS.find((model) => canonicalGenerationModelId(getGenerationModelId(model.tier)) === canonicalGenerationModelId(modelId))?.tier;
+    if (tier && isModelAllowedForFeature(providerConfig, providerRouteKey, modelId)) setAiModel(tier);
+  }, [providerConfig, providerRouteKey]);
   const selectedProvider = resolveProviderForModel(providerConfig, selectedModelId, providerRouteKey);
   const generationServerId = selectedProvider === 'gpti2' ? GPTI2_SERVER_ID : uiServerToTst(server) || 'fast';
   const isGommoSelected = selectedProvider === 'gommo';
@@ -368,10 +373,11 @@ export function WorkspaceImage() {
   const isTierAvailable = (tier: TstGenerationTier) => {
     const modelId = getGenerationModelId(tier);
     if (!isModelAllowedForFeature(providerConfig, providerRouteKey, modelId)) return false;
-    if (resolveProviderForModel(providerConfig, modelId, providerRouteKey) === 'gpti2') return ['image-gpt-2', 'gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro'].includes(modelId);
+    if (resolveProviderForModel(providerConfig, modelId, providerRouteKey) === 'gpti2') return ['image-gpt-2', 'gpt-image-2', 'image-gpt-2.5-flare', 'image-gpt-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro'].includes(modelId);
     return resolveProviderForModel(providerConfig, modelId, providerRouteKey) === 'gommo'
       ? isGommoCatalogModelAvailable(getGommoModelForAudition(gommoCatalog, modelId))
-      : runtimeImageModelIds.has(modelId) && pricingEntries.some((entry) => entry.model.trim().toLowerCase() === modelId);
+      : pricingEntries.some((entry) => entry.model.trim().toLowerCase() === modelId)
+        && runtimeImageModelIds.has(modelId);
   };
   const isFlashAvailable = isTierAvailable('flash');
   const isProAvailable = isTierAvailable('pro');

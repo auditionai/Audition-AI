@@ -32,7 +32,7 @@ import { buildAuditionKoreaMmoStylePrompt, DEFAULT_IMAGE_NEGATIVE_PROMPT } from 
 import type { GeneratedImage } from '../../types';
 import type { ModelPricing } from '../../services/economyService';
 import type { PromptImageGenerateRecipePayload } from '../../../../shared/queueRecipes';
-import { isModelAllowedForFeature } from '../../../../shared/providerRouting';
+import { canonicalGenerationModelId, isModelAllowedForFeature } from '../../../../shared/providerRouting';
 import { fetchProviderCatalog, getAuditionProviderPricing, getGommoPricingInput, getGommoModelForAudition, isGommoCatalogModelAvailable, isSelectableGommoImageResolution, resolveProviderForModel, GPTI2_SERVER_ID, GPTI2_SERVER_LABEL, type GommoProviderCatalog } from '../../services/providerCatalog';
 import { getPreferredGommoBasicMode } from '../../../../shared/gommoServerRouting';
 
@@ -174,6 +174,11 @@ export function WorkspacePromptImage() {
   const uploadedCount = uploadedImages.length;
   const generationSpeedId = speedLabelToTst(speed);
   const selectedModelId = getGenerationModelId(aiModel);
+  useEffect(() => {
+    const modelId = providerConfig?.defaultModelByFeature?.image_prompt?.mobile;
+    const tier = MODEL_TABS.find((model) => canonicalGenerationModelId(getGenerationModelId(model.tier)) === canonicalGenerationModelId(modelId))?.tier;
+    if (tier && isModelAllowedForFeature(providerConfig, 'image_prompt', modelId)) setAiModel(tier);
+  }, [providerConfig]);
   const selectedProvider = resolveProviderForModel(providerConfig, selectedModelId, 'image_prompt');
   const generationServerId = selectedProvider === 'gpti2' ? GPTI2_SERVER_ID : uiServerToTst(server) || 'fast';
   const isSelectedModelAllowed = isModelAllowedForFeature(providerConfig, 'image_prompt', selectedModelId);

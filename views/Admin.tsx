@@ -93,6 +93,7 @@ import {
     getAllowedModelsForFeature,
     VEO3_VIDEO_MODELS,
     type GenerationProviderRouteKey,
+  canonicalGenerationModelId,
 } from '../shared/providerRouting';
 import { checkR2Connection, getUserImagesFromStorage, cleanupExpiredImages, cleanupR2Directly, uploadFileToR2, deleteImageFromStorage } from '../services/storageService';
 import { checkConnection, analyzeStyleImage } from '../services/geminiService';
@@ -642,6 +643,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [generationProviderByModel, setGenerationProviderByModel] = useState<Record<string, GenerationProviderMode>>({});
   const [generationProviderByFeature, setGenerationProviderByFeature] = useState<Record<string, GenerationProviderMode>>({});
   const [providerPriorityByFeature, setProviderPriorityByFeature] = useState<Record<string, GenerationProviderMode[]>>({});
+  const [defaultModelByFeature, setDefaultModelByFeature] = useState<Record<string, { desktop?: string; mobile?: string }>>({});
   const [allowedModelsByFeature, setAllowedModelsByFeature] = useState<Record<string, string[]>>({});
   const [smartProviderFallbackEnabled, setSmartProviderFallbackEnabled] = useState(true);
   const [switchingGenerationProvider, setSwitchingGenerationProvider] = useState(false);
@@ -863,6 +865,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               setGenerationProviderByModel(providerConfig.providerByModel || {});
               setGenerationProviderByFeature(providerConfig.providerByFeature || {});
               setProviderPriorityByFeature(providerConfig.providerPriorityByFeature || {});
+              setDefaultModelByFeature(providerConfig.defaultModelByFeature || {});
               setAllowedModelsByFeature(providerConfig.allowedModelsByFeature || {});
               setSmartProviderFallbackEnabled(providerConfig.smartFallbackEnabled !== false);
               if (providerCatalog) setGommoCatalogError('');
@@ -1076,11 +1079,24 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       return [];
   }, [gommoCatalog]);
 
+  const isGpti2ModelId = (modelId: string) =>
+      ['image-gpt-2', 'gpt-image-2', 'image-gpt-2.5-flare', 'image-gpt-2.5-sunburst', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro'].includes(modelId.trim().toLowerCase());
+
   const allPricingRows = useMemo(() => {
       const union = new Map<string, TstPricingRow>();
       for (const row of [...pricingRows, ...gommoPricingRows]) {
-          const key = `${row.modelId}::${row.configKey}`;
-          if (!union.has(key) || row.server !== 'gommo') union.set(key, row);
+          const tstRow = row.provider ? row : { ...row, provider: row.server === 'gommo' ? undefined : 'tst' as const };
+          const key = `${tstRow.provider || 'legacy'}::${tstRow.modelId}::${tstRow.configKey}`;
+          if (!union.has(key) || tstRow.server !== 'gommo') union.set(key, tstRow);
+          if (tstRow.provider === 'tst' && tstRow.type === 'image' && isGpti2ModelId(tstRow.modelId)) {
+              const gpti2Row: TstPricingRow = {
+                  ...tstRow,
+                  provider: 'gpti2',
+                  server: GPTI2_SERVER_ID,
+                  modelName: `GPTi2 · ${tstRow.modelName}`,
+              };
+              union.set(`gpti2::${gpti2Row.modelId}::${gpti2Row.configKey}`, gpti2Row);
+          }
       }
       return Array.from(union.values());
   }, [gommoPricingRows, pricingRows]);
@@ -1123,13 +1139,13 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           const models = new Map<string, string>();
           for (const row of allPricingRows) {
               if (row.type !== expectedType) continue;
-              const id = row.modelId.trim().toLowerCase();
+              const id = canonicalGenerationModelId(row.modelId);
               if (id && !models.has(id)) models.set(id, row.modelName || row.modelId);
           }
           if (expectedType === 'image') {
               models.set('gpt-image-2', 'GPTi2 · GPT Image 2');
-              models.set('gpt-image-2.5-flare', 'GPTi2 · GPT Image 2.5 Flare');
-              models.set('gpt-image-2.5-sunburst', 'GPTi2 · GPT Image 2.5 Sunburst');
+              models.set('gpt-image-2.5-flare', 'GPT · GPT Image 2.5 Flare');
+              models.set('gpt-image-2.5-sunburst', 'GPT · GPT Image 2.5 Sunburst');
               models.set('nano-banana-2', 'GPTi2 · Nano Banana 2');
               models.set('nano-banana-pro', 'GPTi2 · Nano Banana Pro');
           }
@@ -1218,8 +1234,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const dirtyPricingRows = allPricingRows.filter(isPricingRowDirty);
   const dirtyPricingCount = dirtyPricingRows.length;
   const missingPricingCount = allPricingRows.filter((row) => !getEffectiveAuditionPricing(row)).length;
-  const isGpti2PricingRow = (row: TstPricingRow) =>
-      ['image-gpt-2', 'gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro'].includes(row.modelId.trim().toLowerCase());
+  const isGpti2PricingRow = (row: TstPricingRow) => row.provider === 'gpti2';
   const gpti2PricingCount = allPricingRows.filter(isGpti2PricingRow).length;
   const tstPricingCount = allPricingRows.filter((row) => !isGpti2PricingRow(row)).length;
   const providerFilteredPricingRows = pricingProviderFilter === 'all'
@@ -1325,6 +1340,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           providerPriorityByFeature,
           allowedModelsByFeature,
           smartFallbackEnabled: smartProviderFallbackEnabled,
+          defaultModelByFeature,
       });
       setSwitchingGenerationProvider(false);
       if (!result.success) {
@@ -1382,6 +1398,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           providerPriorityByFeature,
           allowedModelsByFeature,
           smartFallbackEnabled: smartProviderFallbackEnabled,
+          defaultModelByFeature,
       });
       setSwitchingGenerationProvider(false);
       if (!result.success) {
@@ -1415,6 +1432,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           providerPriorityByFeature: nextPriorities,
           allowedModelsByFeature,
           smartFallbackEnabled: smartProviderFallbackEnabled,
+          defaultModelByFeature,
       });
       setSwitchingGenerationProvider(false);
       if (!result.success) {
@@ -1450,6 +1468,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           providerPriorityByFeature,
           allowedModelsByFeature: nextAllowedModelsByFeature,
           smartFallbackEnabled: smartProviderFallbackEnabled,
+          defaultModelByFeature,
       });
       setSwitchingGenerationProvider(false);
       if (!result.success) {
@@ -1470,6 +1489,30 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           : [...visibleModels, normalizedModelId];
 
       void handleChangeFeatureAllowedModels(featureKey, nextModels);
+  };
+
+  const handleChangeDefaultModel = async (featureKey: GenerationProviderRouteKey, surface: 'desktop' | 'mobile', modelId: string) => {
+      const nextDefaults = {
+          ...defaultModelByFeature,
+          [featureKey]: { ...(defaultModelByFeature[featureKey] || {}), [surface]: modelId || undefined },
+      };
+      setSwitchingGenerationProvider(true);
+      const result = await saveGenerationProviderConfig({
+          provider: generationProvider,
+          providerByModel: generationProviderByModel,
+          providerByFeature: generationProviderByFeature,
+          providerPriorityByFeature,
+          allowedModelsByFeature,
+          smartFallbackEnabled: smartProviderFallbackEnabled,
+          defaultModelByFeature: nextDefaults,
+      });
+      setSwitchingGenerationProvider(false);
+      if (!result.success) {
+          showToast(`Không thể lưu model mặc định: ${result.error}`, 'error');
+          return;
+      }
+      setDefaultModelByFeature(nextDefaults);
+      showToast('Đã lưu model mặc định cho giao diện.', 'success');
   };
 
   const handleSaveAllPricing = async () => {
@@ -4857,6 +4900,28 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                )}
                                            </div>
                                        </div>
+                                       {route.key !== 'video_generation' && route.key !== 'motion_control' && (
+                                           <div className="mt-3 grid grid-cols-2 gap-2">
+                                               {(['desktop', 'mobile'] as const).map((surface) => {
+                                                   const configured = defaultModelByFeature[route.key]?.[surface] || '';
+                                                   const options = featureModelOptions[route.key] || [];
+                                                   return (
+                                                       <label key={`${route.key}_${surface}`} className="text-[9px] font-black uppercase tracking-wider text-slate-500">
+                                                           Model mặc định {surface === 'desktop' ? 'máy tính' : 'điện thoại'}
+                                                           <select
+                                                               value={configured}
+                                                               disabled={switchingGenerationProvider}
+                                                               onChange={(event) => handleChangeDefaultModel(route.key, surface, event.target.value)}
+                                                               className="mt-1 w-full rounded-lg border border-white/10 bg-slate-950/60 px-2 py-2 text-[10px] font-bold normal-case text-slate-200"
+                                                           >
+                                                               <option value="">Theo model đầu tiên khả dụng</option>
+                                                               {options.map((model) => <option key={model.id} value={model.id}>{model.name}</option>)}
+                                                           </select>
+                                                       </label>
+                                                   );
+                                               })}
+                                           </div>
+                                       )}
                                        <div className="mt-4 border-t border-white/10 pt-3">
                                            <div className="flex items-center justify-between gap-2">
                                                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">Server {effectiveProvider.toUpperCase()} realtime</span>
@@ -5136,7 +5201,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                            const gommo = getGommoPriceComparison(row, gommoCatalog);
 
                                           return (
-                                              <tr key={`${row.modelId}_${row.configKey}`} className="hover:neu-inset-sm transition-colors">
+                                              <tr key={`${row.provider || 'legacy'}_${row.modelId}_${row.configKey}`} className="hover:neu-inset-sm transition-colors">
                                                   <td className="px-4 py-3">
                                                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full neu-inset-sm border border-white/10 text-[10px] font-bold uppercase tracking-wider">
                                                           {typeLabel}
@@ -5148,8 +5213,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                                   </td>
                                                   <td className="px-4 py-3 text-white">
                                                       <div className="flex items-center gap-2">
-                                                          <span>{row.server === 'gommo' ? row.providerServerLabel || 'AI Gateway' : tstServerToUi(row.server) || '-'}</span>
-                                                          {!isProviderServerEnabledForModel(
+                                                          <span>{row.provider === 'gpti2' ? GPTI2_SERVER_LABEL : row.server === 'gommo' ? row.providerServerLabel || 'AI Gateway' : tstServerToUi(row.server) || '-'}</span>
+                                                          {row.provider !== 'gpti2' && !isProviderServerEnabledForModel(
                                                               serverAvailabilityConfig,
                                                               row.server === 'gommo' ? 'gommo' : 'tst',
                                                               row.modelId,

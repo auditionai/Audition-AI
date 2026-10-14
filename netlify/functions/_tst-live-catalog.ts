@@ -177,7 +177,7 @@ const matchesDurationForModel = (modelId: string, entryDuration?: string, reques
 
 const normalizePricingEntryForValidation = (entry: TstProviderPricingEntry): TstProviderPricingEntry => {
   const configKey = String(entry.key || entry.config_key || '').trim();
-  if (normalize(entry.model) === 'image-gpt-2') {
+  if (normalize(entry.model).startsWith('image-gpt')) {
     const parsed = parseGptImage2ConfigKey(configKey);
   return {
     ...entry,
@@ -389,7 +389,7 @@ const findPricingMatch = (
   },
 ) => entries.find((entry) => {
   const isGptFastGenericEntry =
-    normalize(modelId) === 'image-gpt-2' &&
+    ['image-gpt-2', 'image-gpt-2.5-flare', 'image-gpt-2.5-sunburst'].includes(normalize(modelId)) &&
     normalizeServer(entry.server) === 'fast' &&
     !normalizeResolution(entry.resolution) &&
     !normalizeQuality(entry.quality) &&

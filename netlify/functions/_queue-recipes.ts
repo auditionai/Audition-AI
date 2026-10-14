@@ -430,7 +430,7 @@ const normalizePromptWhitespace = (value?: string | null) => String(value || '')
 
 const normalizeModelId = (value?: string | null) => String(value || '').trim().toLowerCase();
 
-const isGptImageModel = (modelId?: string | null) => ['image-gpt-2', 'gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(normalizeModelId(modelId));
+const isGptImageModel = (modelId?: string | null) => ['image-gpt-2', 'gpt-image-2', 'image-gpt-2.5-flare', 'image-gpt-2.5-sunburst', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(normalizeModelId(modelId));
 
 const combineImageGeneratePrompt = (systemPromptPrefix: string, userPromptInput: string) =>
   `${systemPromptPrefix}${userPromptInput}`.trim();
@@ -654,7 +654,7 @@ const prepareProviderPayloadFromQueueRecipe = async (
 
     case 'prompt_image_generate_recipe_v1': {
       const rawUserPrompt = String(payload.prompt || '');
-      const isGptImage25 = ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(normalizeModelId(payload.modelId));
+      const isGptImage25 = ['image-gpt-2.5-flare', 'image-gpt-2.5-sunburst', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(normalizeModelId(payload.modelId));
       const userPrompt = isGptImage25 && !rawUserPrompt.trimStart().startsWith(GPT_IMAGE_25_REFERENCE_LOCK_PROMPT)
         ? `${GPT_IMAGE_25_REFERENCE_LOCK_PROMPT} ${rawUserPrompt}`.trim()
         : rawUserPrompt;
@@ -689,7 +689,7 @@ const prepareProviderPayloadFromQueueRecipe = async (
         model: payload.modelId,
       };
 
-      if (uploadedUrls.length > 0) providerPayload.img_url = uploadedUrls;
+      if (uploadedUrls.length > 0) providerPayload.img_url = uploadedUrls.length === 1 ? uploadedUrls[0] : uploadedUrls;
       if (payload.resolution) {
         providerPayload.resolution = getEffectiveImageGenerationResolution(
           payload.modelId,
@@ -712,7 +712,7 @@ const prepareProviderPayloadFromQueueRecipe = async (
       const providerPayload: Record<string, unknown> = {
         prompt: providerPrompt,
         model: payload.modelId,
-        img_url: [uploadedUrl],
+        img_url: uploadedUrl,
       };
 
       if (payload.resolution) providerPayload.resolution = payload.resolution.toLowerCase();

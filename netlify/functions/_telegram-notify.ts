@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import type { QueueNotificationMediaEntry } from '../../shared/queueRecipes';
+import { normalizeQueueErrorMessage } from '../../shared/queueErrorClassifier';
 
 type QueuePayloadObject = Record<string, unknown> | null | undefined;
 
@@ -468,7 +469,9 @@ export const sendTelegramJobNotification = async (
         status: eventType,
         createdAt: record.createdAt || new Date().toISOString(),
         finishedAt: record.finishedAt || null,
-        errorMessage: record.errorMessage || null,
+        errorMessage: record.errorMessage
+          ? normalizeQueueErrorMessage(record.errorMessage) || record.errorMessage
+          : null,
         resultUrl: isHttpUrl(record.resultUrl) ? record.resultUrl : null,
         config,
       },

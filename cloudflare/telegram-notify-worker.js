@@ -23,6 +23,49 @@ const truncate = (value, maxLength = 360) => {
   return `${normalized.slice(0, maxLength - 3)}...`;
 };
 
+// Keep Telegram aligned with the app/admin queue: hide provider prefixes,
+// error codes, and raw JSON from user-facing failure notifications.
+const normalizeFailureMessage = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return 'Tạo thất bại do máy chủ AI (Đã hoàn Vcoin).';
+  let message = raw;
+  try {
+    const parsed = JSON.parse(raw);
+    message = typeof parsed === 'string' ? parsed : parsed?.error?.message || parsed?.error || parsed?.message || parsed?.detail || raw;
+    if (typeof message !== 'string') message = JSON.stringify(message);
+  } catch {
+    const jsonStart = raw.indexOf('{');
+    if (jsonStart >= 0) {
+      try {
+        const parsed = JSON.parse(raw.slice(jsonStart));
+        message = parsed?.error?.message || parsed?.error || parsed?.message || parsed?.detail || raw;
+      } catch { message = raw; }
+    }
+  }
+  const lower = String(message).toLowerCase();
+  if (lower.includes('rate_limit') || lower.includes('rate limit') || lower.includes('service busy') || lower.includes('too many requests')) {
+    return 'Máy chủ AI quá tải hoặc gián đoạn kết nối (Đã hoàn Vcoin).';
+  }
+  if (lower.includes('provider returned no image') || lower.includes('returned no image') || lower.includes('no image')) {
+    return 'Máy chủ AI quá tải hoặc gián đoạn kết nối (Đã hoàn Vcoin).';
+  }
+  if ((lower.includes('image') || lower.includes('img_url') || lower.includes('input') || lower.includes('file') || lower.includes('video'))
+    && (lower.includes('invalid') || lower.includes('unsupported') || lower.includes('not found') || lower.includes('download') || lower.includes('decode') || lower.includes('read'))) {
+    return 'Tệp hình ảnh hoặc video đầu vào không đọc được.';
+  }
+  if (lower.includes('prompt') && (lower.includes('too long') || lower.includes('length') || lower.includes('character') || lower.includes('maximum'))) {
+    return 'Câu lệnh mô tả vượt quá số ký tự cho phép.';
+  }
+  if (lower.includes('moderation') || lower.includes('safety') || lower.includes('prohibited')) {
+    return 'Nội dung hoặc ảnh mẫu không vượt qua bộ lọc an toàn AI.';
+  }
+  if (lower.includes('timeout') || lower.includes('timed out') || lower.includes('502') || lower.includes('503') || lower.includes('504') || lower.includes('network')) {
+    return 'Máy chủ AI quá tải hoặc gián đoạn kết nối (Đã hoàn Vcoin).';
+  }
+  if (/[À-ỹ]/u.test(String(message)) && !/^[A-Z0-9_]+_ERROR\b/i.test(String(message))) return truncate(String(message), 220);
+  return 'Tạo thất bại do máy chủ AI (Đã hoàn Vcoin).';
+};
+
 const isHttpUrl = (value) => typeof value === 'string' && /^https?:\/\//i.test(value.trim());
 
 const isVideoUrl = (value) =>
@@ -190,7 +233,7 @@ const buildSummaryLines = (payload) => {
   if (payload?.eventType === 'completed') {
     lines.push(`• Hoàn tất: ${escapeHtml(formatIso(job?.finishedAt))}`);
   } else if (payload?.eventType === 'failed') {
-    lines.push(`• Lỗi: ${escapeHtml(truncate(job?.errorMessage || 'Không có chi tiết lỗi.', 220))}`);
+    lines.push(`• Lỗi: ${escapeHtml(normalizeFailureMessage(job?.errorMessage))}`);
   } else {
     lines.push(`• Tạo lúc: ${escapeHtml(formatIso(job?.createdAt))}`);
   }

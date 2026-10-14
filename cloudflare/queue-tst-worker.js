@@ -17,16 +17,6 @@ const TST_CATALOG_TTL_MS = 5 * 60 * 1000;
 let tstCatalogCache = null;
 
 const modelOf = (row) => String(payloadObject(row).model || payloadObject(row).modelId || row?.model_used || '').trim().toLowerCase();
-const GPTI2_IMAGE_MODELS = new Set(['image-gpt-2', 'gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro']);
-const isGpti2ImageJob = (row) => {
-  const payload = payloadObject(row);
-  const recipe = payload.__recipePayload && typeof payload.__recipePayload === 'object' ? payload.__recipePayload : payload;
-  const model = String(recipe.model || recipe.modelId || modelOf(row)).trim().toLowerCase();
-  const recipeType = String(recipe.recipeType || '').trim().toLowerCase();
-  const queueKind = String(row?.queue_kind || '').trim().toLowerCase();
-  return GPTI2_IMAGE_MODELS.has(model)
-    && (queueKind === 'image_generate' || queueKind === 'image_edit_direct' || recipeType === 'image_edit_recipe_v1');
-};
 const recipePayloadOf = (row) => {
   const payload = payloadObject(row);
   return payload.__recipePayload && typeof payload.__recipePayload === 'object' ? payload.__recipePayload : payload;
@@ -302,7 +292,7 @@ const buildTstProviderPayload = (row, uploadedUrls) => {
   const payload = { prompt, model };
 
   if (recipeType === 'image_generate_recipe_v1' || recipeType === 'prompt_image_generate_recipe_v1') {
-    if (uploadedUrls.length > 0) payload.img_url = uploadedUrls;
+    if (uploadedUrls.length > 0) payload.img_url = uploadedUrls.length === 1 ? uploadedUrls[0] : uploadedUrls;
     copyIfPresent(payload, 'resolution', String(recipe.resolution || '').toLowerCase());
     copyIfPresent(payload, 'aspect_ratio', recipe.aspectRatio);
     copyIfPresent(payload, 'quality', recipe.quality);
@@ -315,7 +305,7 @@ const buildTstProviderPayload = (row, uploadedUrls) => {
 
   if (recipeType === 'image_edit_recipe_v1') {
     if (!uploadedUrls[0]) throw new Error('TST image edit source is missing');
-    payload.img_url = [uploadedUrls[0]];
+    payload.img_url = uploadedUrls[0];
     copyIfPresent(payload, 'resolution', String(recipe.resolution || '').toLowerCase());
     copyIfPresent(payload, 'aspect_ratio', recipe.aspectRatio);
     copyIfPresent(payload, 'speed', recipe.speed);
@@ -468,15 +458,20 @@ const pollRow = async (env, row, provider) => {
     const result = providerResultOf(data, row.asset_type || 'image');
     if (result && ['completed', 'success', 'succeeded', 'done'].includes(status)) {
       const storedUrl = await persistResultToR2(env, row, result, '-tst');
-      await updateJob(env, row.id, { status: 'completed', progress: 100, image_url: storedUrl, finished_at: new Date().toISOString(), next_poll_at: null, lease_token: null, lease_expires_at: null, queue_payload: appendLog(payloadObject(row), 'completed', 'Cloudflare Worker da luu ket qua TST.', 'success') });
+      await updateJob(env, row.id, { status: 'completed', progress: 100, image_url: storedUrl, finished_at: new Date().toISOString(), next_poll_at: null, lease_token: null, lease_expires_at: null, queue_payload: appendLog(payloadObject(row), 'completed', '[API TST · Worker queue-tst] Đã lưu kết quả TST.', 'success') });
       await notifyTelegramJob(env, 'completed', row, { resultUrl: storedUrl, finishedAt: new Date().toISOString() }).catch((error) => console.warn('[queue-tst] Telegram notification failed', error));
       return 'completed';
     }
     if (['failed', 'error', 'cancelled', 'canceled'].includes(status)) {
-      await failAndRefund(env, row, String(data?.error || data?.message || 'TST job failed'));
+      const message = String(data?.error || data?.message || 'TST job failed');
+      if (canFallbackToGpti2(row)) {
+        await restartWithGpti2(env, row, message);
+        return 'restarted_with_gpti2';
+      }
+      await failAndRefund(env, row, message);
       return 'failed';
     }
-    await updateJob(env, row.id, { status: 'processing', progress: Math.max(60, Number(data?.progress || 0)), next_poll_at: new Date(Date.now() + TST_RESULT_POLL_INTERVAL_SECONDS * 1000).toISOString(), lease_token: null, lease_expires_at: null, queue_payload: appendLog(payloadObject(row), 'polling', 'Cloudflare Worker dang poll TST.') });
+    await updateJob(env, row.id, { status: 'processing', progress: Math.max(60, Number(data?.progress || 0)), next_poll_at: new Date(Date.now() + TST_RESULT_POLL_INTERVAL_SECONDS * 1000).toISOString(), lease_token: null, lease_expires_at: null, queue_payload: appendLog(payloadObject(row), 'polling', '[API TST · Worker queue-tst] Đang poll TST.') });
     await schedulePoll(env, row.id, provider);
     return 'pending';
   } catch (error) {
@@ -488,8 +483,8 @@ const pollRow = async (env, row, provider) => {
 
 const dispatch = async (env, row, provider) => {
   let activePayload = { ...payloadObject(row), __cloudflareWorker: true };
-  const report = async (stage, message, level = 'info') => { activePayload = appendLog(activePayload, stage, message, level); await updateJob(env, row.id, { status: 'processing', progress: stage === 'uploading_refs' ? 35 : stage === 'building_payload' ? 45 : stage === 'dispatching' ? 55 : 50, error_message: null, queue_payload: activePayload }); };
-  await report('preparing', 'Cloudflare TST Worker da nhan job. Bat dau kiem tra payload.');
+  const report = async (stage, message, level = 'info') => { const tagged = message.startsWith('[API TST') ? message : `[API TST · Worker queue-tst] ${message}`; activePayload = appendLog(activePayload, stage, tagged, level); await updateJob(env, row.id, { status: 'processing', progress: stage === 'uploading_refs' ? 35 : stage === 'building_payload' ? 45 : stage === 'dispatching' ? 55 : 50, error_message: null, queue_payload: activePayload }); };
+  await report('preparing', 'Bắt đầu kiểm tra payload TST.');
   const prepared = await prepareTstPayload(env, row, report);
   activePayload = prepared.queuePayload;
   const submission = await submitTst(env, row, prepared.providerPayload, report);
@@ -498,14 +493,30 @@ const dispatch = async (env, row, provider) => {
   await schedulePoll(env, row.id, provider);
 };
 
-const redirectGpti2ImageJob = async (env, row) => {
-  const payload = appendLog(payloadObject(row), 'queued', `Model ${modelOf(row)} chi dung GPTi2. Da chuyen job sang GPTi2 truoc khi gui provider.`, 'warning');
+const canFallbackToGpti2 = (row) => {
+  const payload = payloadObject(row);
+  return payload.__smartProviderFallbackEnabled !== false
+    && Array.isArray(payload.__providerPriority)
+    && payload.__providerPriority.map((value) => String(value).toLowerCase()).includes('gpti2');
+};
+
+const restartWithGpti2 = async (env, row, reason) => {
+  // Keep the original AUDITION AI job and charge. This only resets the
+  // existing row and sends its id to the GPTi2 queue; it never enqueues a new
+  // generated_images row or creates a second billable job.
+  const payload = appendLog(payloadObject(row), 'queued', `TST thất bại; khởi động lại toàn bộ quy trình bằng GPTi2: ${reason}`, 'warning');
+  delete payload.__uploadedUrls;
+  delete payload.__uploadSources;
+  delete payload.__tstProviderPayload;
+  delete payload.__tstPreparedAt;
+  payload.__targetProvider = 'gpti2';
+  payload.__providerPriority = ['gpti2'];
   await updateJob(env, row.id, {
     status: 'queued', progress: 0, provider: 'gpti2', job_id: null, next_poll_at: null,
     lease_token: null, lease_expires_at: null, processing_started_at: null, error_message: null,
-    queue_payload: { ...payload, __targetProvider: 'gpti2', __smartProviderFallbackEnabled: false, __providerPriority: ['gpti2'] },
+    queue_payload: payload,
   });
-  const recipe = payloadObject(row).__recipePayload && typeof payloadObject(row).__recipePayload === 'object' ? payloadObject(row).__recipePayload : payloadObject(row);
+  const recipe = payload.__recipePayload && typeof payload.__recipePayload === 'object' ? payload.__recipePayload : payload;
   const isEdit = String(recipe.recipeType || '').trim().toLowerCase() === 'image_edit_recipe_v1' || String(row.queue_kind || '').trim().toLowerCase() === 'image_edit_direct';
   await env.GPTI2_JOBS.send({ jobId: row.id, provider: isEdit ? 'gpti2_edit' : 'gpti2_image', action: 'dispatch', requestedAt: new Date().toISOString() });
 };
@@ -535,14 +546,17 @@ const processMessage = async (env, message) => {
 
   if (action === 'poll') { await pollRow(env, row, provider); return { ack: true, reason: 'polled' }; }
 
-  if (isGpti2ImageJob(row)) {
-    await redirectGpti2ImageJob(env, row);
-    return { ack: true, reason: 'redirected_to_gpti2' };
-  }
-
   if (!isTstLane(row, provider)) { console.error(JSON.stringify({ worker: 'queue-tst', event: 'wrong_lane', jobId, provider, rowProvider: row.provider })); return { ack: true, reason: 'wrong_lane' }; }
   try { await dispatch(env, row, provider); return { ack: true, reason: 'dispatched' }; }
-  catch (error) { await failAndRefund(env, row, error instanceof Error ? error.message : String(error)); return { ack: true, reason: 'failed' }; }
+  catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (canFallbackToGpti2(row)) {
+      await restartWithGpti2(env, row, message);
+      return { ack: true, reason: 'restarted_with_gpti2' };
+    }
+    await failAndRefund(env, row, message);
+    return { ack: true, reason: 'failed' };
+  }
 };
 
 export default {

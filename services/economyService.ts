@@ -2,6 +2,7 @@ import { getSupabaseAuthHeader, getSupabaseUser, supabase } from './supabaseClie
 import { trackEvent } from './analyticsService';
 import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, HistoryItem, VcoinLog, AdminQueueJob, AdminQueueSummary, AdminQueueJobDetail, AdminQueueHealthReport, AdminQueueRescueResult, GenerationDiscountConfig } from '../types';
 import { shouldUseMobileShell } from '../shared/shellDetection';
+import { canonicalGenerationModelId } from '../shared/providerRouting';
 import {
   creditsToVcoin,
   fetchTstModels,
@@ -145,6 +146,7 @@ export type GenerationProviderConfig = {
     smartFallbackEnabled: boolean;
     providerPriorityByFeature?: Record<string, GenerationProviderMode[]>;
     providerPriorityByModel?: Record<string, GenerationProviderMode[]>;
+  defaultModelByFeature?: Record<string, { desktop?: string; mobile?: string }>;
     updatedAt?: string;
 };
 
@@ -212,6 +214,7 @@ export const DEFAULT_GENERATION_PROVIDER_CONFIG: GenerationProviderConfig = {
     providerByFeature: {},
     allowedModelsByFeature: {},
     smartFallbackEnabled: true,
+  defaultModelByFeature: {},
 };
 
 export const APP_TOUR_TARGETS: Array<{ id: string; label: string; surface: AppTourSurface; screen: string; featureId?: string; description?: string }> = [
@@ -3140,6 +3143,14 @@ export const getGenerationProviderConfig = async (): Promise<GenerationProviderC
         const normalizePriority = (value: unknown) => Array.from(new Set((Array.isArray(value) ? value : []).map((provider) => provider === 'gommo' || provider === 'gpti2' || provider === 'tst' ? provider : null).filter(Boolean))) as GenerationProviderMode[];
         const providerPriorityByFeature = Object.fromEntries(Object.entries(data?.value?.providerPriorityByFeature || {}).map(([key, value]) => [String(key).trim().toLowerCase(), normalizePriority(value)]).filter(([, value]) => (value as GenerationProviderMode[]).length)) as Record<string, GenerationProviderMode[]>;
         const providerPriorityByModel = Object.fromEntries(Object.entries(data?.value?.providerPriorityByModel || {}).map(([key, value]) => [String(key).trim().toLowerCase(), normalizePriority(value)]).filter(([, value]) => (value as GenerationProviderMode[]).length)) as Record<string, GenerationProviderMode[]>;
+        const normalizeDefaultModelId = canonicalGenerationModelId;
+        const defaultModelByFeature = Object.fromEntries(Object.entries(data?.value?.defaultModelByFeature || {}).map(([key, value]) => {
+            const item = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+            return [String(key).trim().toLowerCase(), {
+                desktop: normalizeDefaultModelId(item.desktop) || undefined,
+                mobile: normalizeDefaultModelId(item.mobile) || undefined,
+            }];
+        })) as Record<string, { desktop?: string; mobile?: string }>;
         return {
             provider: data?.value?.provider === 'gommo' ? 'gommo' : data?.value?.provider === 'gpti2' ? 'gpti2' : 'tst',
             providerByModel,
@@ -3148,6 +3159,7 @@ export const getGenerationProviderConfig = async (): Promise<GenerationProviderC
             smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false,
             providerPriorityByFeature,
             providerPriorityByModel,
+            defaultModelByFeature,
             updatedAt: typeof data?.value?.updatedAt === 'string' ? data.value.updatedAt : undefined,
         };
     } catch (e) {
@@ -3192,6 +3204,14 @@ export const saveGenerationProviderConfig = async (
                 ])
                 .filter(([featureKey, modelIds]) => Boolean(featureKey && (modelIds as string[]).length)),
         ) as Record<string, string[]>;
+        const normalizeDefaultModelId = canonicalGenerationModelId;
+        const defaultModelByFeature = Object.fromEntries(Object.entries(input.defaultModelByFeature || {}).map(([key, value]) => [
+            String(key).trim().toLowerCase(),
+            {
+                desktop: normalizeDefaultModelId(value?.desktop) || undefined,
+                mobile: normalizeDefaultModelId(value?.mobile) || undefined,
+            },
+        ]));
         const payload: GenerationProviderConfig = {
             provider: input.provider === 'gommo' ? 'gommo' : input.provider === 'gpti2' ? 'gpti2' : 'tst',
             providerByModel,
@@ -3200,6 +3220,7 @@ export const saveGenerationProviderConfig = async (
             smartFallbackEnabled: input.smartFallbackEnabled !== false,
             providerPriorityByFeature: input.providerPriorityByFeature || {},
             providerPriorityByModel: input.providerPriorityByModel || {},
+            defaultModelByFeature,
             updatedAt: new Date().toISOString(),
         };
         const { error } = await supabase.from('system_settings').upsert(

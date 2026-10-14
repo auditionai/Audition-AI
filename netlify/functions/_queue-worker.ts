@@ -267,20 +267,15 @@ const getGlobalGenerationProvider = async (modelId: string, featureKey?: string)
 const resolveDispatchProvider = async (payload: Record<string, unknown>): Promise<GenerationProvider> => {
   const stored = String(payload.__targetProvider || '').trim().toLowerCase();
   const queueKind = String(payload.queueKind || '').trim().toLowerCase();
+  const modelId = getQueuePayloadModelId(payload);
   if (stored === 'gpti2' && VIDEO_OR_MOTION_QUEUE_KINDS.has(queueKind)) return 'tst';
   // A fallback reaches TST only after its live catalog validates a compatible
   // server, so retain that explicit dispatch decision on the next claim.
   if (stored === 'tst' && payload.__tstFallbackValidated === true) return 'tst';
-  // GPTi2-only models cannot be submitted to TST/Gommo. This also repairs
-  // legacy queued rows whose provider metadata was written before GPTi2
-  // routing was persisted.
-  if (!VIDEO_OR_MOTION_QUEUE_KINDS.has(queueKind) && isGpti2Model(getQueuePayloadModelId(payload))) {
-    return 'gpti2';
-  }
   if (stored === 'gommo') return 'tst';
   if (stored === 'tst' || stored === 'gpti2') return stored;
   return getGlobalGenerationProvider(
-    getQueuePayloadModelId(payload),
+    modelId,
     String(payload.__providerRouteKey || ''),
   );
 };
@@ -590,7 +585,12 @@ const withQueueLog = (
   message: string,
   level: QueueProgressLogEntry['level'] = 'info',
 ) => {
-  const nextEntry = buildQueueLogEntry(stage, message, level);
+  const providerLabel = getJobProvider(payload) === 'gpti2' ? 'GPTi2' : getJobProvider(payload) === 'gommo' ? 'Gommo' : 'TST';
+  const workerLabel = providerLabel === 'GPTi2' ? 'queue-gpti2' : providerLabel === 'TST' ? 'queue-tst' : 'queue-worker';
+  const taggedMessage = message.startsWith(`[API ${providerLabel}`)
+    ? message
+    : `[API ${providerLabel} · Worker ${workerLabel}] ${message}`;
+  const nextEntry = buildQueueLogEntry(stage, taggedMessage, level);
   const previousLogs = getQueueLogs(payload);
   const lastEntry = previousLogs.at(-1);
   const nextLogs =

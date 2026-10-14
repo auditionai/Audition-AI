@@ -120,8 +120,8 @@ const getGenerationProvider = async (
     : 'tst';
   const defaultPriority = (provider: GenerationProvider): GenerationProvider[] =>
     featureKey === 'video_generation' || featureKey === 'motion_control'
-      ? provider === 'tst' ? ['tst', 'gommo'] : [provider, 'tst']
-      : provider === 'gpti2' ? ['gpti2', 'tst', 'gommo'] : provider === 'tst' ? ['tst', 'gommo'] : ['gommo', 'tst'];
+      ? ['tst']
+      : provider === 'gpti2' ? ['gpti2'] : ['tst'];
   try {
     const { data, error } = await admin
       .from('system_settings')
@@ -131,15 +131,15 @@ const getGenerationProvider = async (
     if (error) throw error;
     const allowedModels = getAllowedModelsForFeature(data?.value, featureKey);
     const configuredPriority = (featureKey && data?.value?.providerPriorityByFeature?.[featureKey]) || data?.value?.providerPriorityByModel?.[modelId];
-    let priority = Array.isArray(configuredPriority) ? configuredPriority.filter((provider: unknown): provider is GenerationProvider => provider === 'tst' || provider === 'gommo' || provider === 'gpti2') : [];
+    let priority = Array.isArray(configuredPriority) ? configuredPriority.filter((provider: unknown): provider is GenerationProvider => provider === 'tst' || provider === 'gpti2') : [];
     if (featureKey === 'video_generation' || featureKey === 'motion_control') {
-      priority = priority.filter((provider) => provider === 'tst' || provider === 'gommo');
+      priority = priority.filter((provider) => provider === 'tst');
     }
     const featureProvider = String(featureKey ? data?.value?.providerByFeature?.[featureKey] || '' : '').trim().toLowerCase();
     if (!priority.length && (featureProvider === 'gommo' || featureProvider === 'tst' || featureProvider === 'gpti2')) {
       priority = defaultPriority(featureProvider);
       if (featureKey === 'video_generation' || featureKey === 'motion_control') {
-        priority = priority.filter((provider) => provider === 'tst' || provider === 'gommo');
+        priority = priority.filter((provider) => provider === 'tst');
       }
     }
     if (priority.length) {
@@ -147,7 +147,7 @@ const getGenerationProvider = async (
     }
     const featureDefault = featureKey ? DEFAULT_PROVIDER_BY_FEATURE[featureKey] : undefined;
     if (featureDefault) {
-      const featurePriority = defaultPriority(featureDefault).filter((provider) => featureKey === 'video_generation' || featureKey === 'motion_control' ? provider !== 'gpti2' : true);
+      const featurePriority = defaultPriority(featureDefault);
       return { provider: featurePriority[0], smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false, allowedModels, priority: featurePriority };
     }
     const selected = String(data?.value?.provider || '').trim().toLowerCase();
@@ -155,7 +155,7 @@ const getGenerationProvider = async (
       return {
         provider: (selected === 'gommo' || selected === 'tst') && (featureKey === 'video_generation' || featureKey === 'motion_control') ? selected : selected === 'gommo' ? 'gommo' : selected === 'gpti2' ? 'gpti2' : selected === 'tst' ? 'tst' : fallback,
         smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false,
-        allowedModels, priority: (featureKey === 'video_generation' || featureKey === 'motion_control') ? ['tst', 'gommo'] : defaultPriority(fallback),
+        allowedModels, priority: (featureKey === 'video_generation' || featureKey === 'motion_control') ? ['tst'] : defaultPriority(fallback),
       };
     }
     const modelProvider = String(data?.value?.providerByModel?.[modelId] || '').trim().toLowerCase();

@@ -109,6 +109,7 @@ export const getUserFriendlyErrorInfo = (
   // 3. Upstream Gateway / Network Drop / 502 / 504 / 520-526 / GPT12_ERROR / GOMMO_ERROR
   const isUpstreamOrNetwork =
     lower.includes('gpt12_error') ||
+    lower.includes('gpti2_error') ||
     lower.includes('gommo_error') ||
     lower.includes('gommo_model_unavailable') ||
     lower.includes('gommo_unsupported_model') ||
@@ -135,7 +136,11 @@ export const getUserFriendlyErrorInfo = (
     lower.includes('job set not found') ||
     lower.includes('job not found') ||
     lower.includes('provider dang xu ly') ||
-    lower.includes('provider job failed');
+    lower.includes('provider job failed') ||
+    lower.includes('provider returned no image') ||
+    lower.includes('service busy') ||
+    lower.includes('rate_limit') ||
+    lower.includes('rate limit');
 
   if (isUpstreamOrNetwork) {
     return {

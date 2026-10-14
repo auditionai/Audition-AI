@@ -10,7 +10,6 @@ import { isProviderServerAllowedByConfig } from './_server-availability';
 import { getGommoServerIdForMode } from '../../shared/gommoServerRouting';
 import {
     DEFAULT_PROVIDER_BY_FEATURE,
-  GPTI2_IMAGE_MODELS,
     getAllowedModelsForFeature,
   inferGenerationProviderRouteKey,
   type GenerationProviderRouteKey,
@@ -858,12 +857,10 @@ export const handler: Handler = async (event) => {
     }
     const normalizedQueueKind = String(body.queueKind || '').trim().toLowerCase();
     const isVideoOrMotionQueue = body.assetType === 'video' || normalizedQueueKind === 'video_generate' || normalizedQueueKind === 'motion_generate';
-    const isGpti2ImageModel = !isVideoOrMotionQueue && GPTI2_IMAGE_MODELS.includes(modelId);
-    const targetProvider: GenerationProvider = isGpti2ImageModel && routingConfig.provider !== 'tst'
-      ? 'gpti2'
-      : isVideoOrMotionQueue && routingConfig.provider === 'gpti2'
+    const targetProvider: GenerationProvider = isVideoOrMotionQueue && routingConfig.provider === 'gpti2'
         ? routingConfig.priority.find((provider) => provider === 'tst' || provider === 'gommo') || 'tst'
         : routingConfig.provider;
+    const providerPriority = routingConfig.priority;
     ensureProviderConfiguredForQueueKind(body.queueKind, targetProvider);
     if (
       TST_QUEUE_KINDS.has(String(body.queueKind || '').trim().toLowerCase()) &&
@@ -889,7 +886,7 @@ export const handler: Handler = async (event) => {
       __targetProvider: targetProvider,
       __providerRouteKey: providerRouteKey,
       __smartProviderFallbackEnabled: routingConfig.smartFallbackEnabled,
-      __providerPriority: routingConfig.priority,
+      __providerPriority: providerPriority,
     };
 
     let row: any;

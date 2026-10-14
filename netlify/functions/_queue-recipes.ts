@@ -689,7 +689,7 @@ const prepareProviderPayloadFromQueueRecipe = async (
         model: payload.modelId,
       };
 
-      if (uploadedUrls.length > 0) providerPayload.img_url = uploadedUrls;
+      if (uploadedUrls.length > 0) providerPayload.img_url = uploadedUrls.length === 1 ? uploadedUrls[0] : uploadedUrls;
       if (payload.resolution) {
         providerPayload.resolution = getEffectiveImageGenerationResolution(
           payload.modelId,
@@ -712,7 +712,7 @@ const prepareProviderPayloadFromQueueRecipe = async (
       const providerPayload: Record<string, unknown> = {
         prompt: providerPrompt,
         model: payload.modelId,
-        img_url: [uploadedUrl],
+        img_url: uploadedUrl,
       };
 
       if (payload.resolution) providerPayload.resolution = payload.resolution.toLowerCase();

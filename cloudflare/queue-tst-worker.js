@@ -292,7 +292,7 @@ const buildTstProviderPayload = (row, uploadedUrls) => {
   const payload = { prompt, model };
 
   if (recipeType === 'image_generate_recipe_v1' || recipeType === 'prompt_image_generate_recipe_v1') {
-    if (uploadedUrls.length > 0) payload.img_url = uploadedUrls;
+    if (uploadedUrls.length > 0) payload.img_url = uploadedUrls.length === 1 ? uploadedUrls[0] : uploadedUrls;
     copyIfPresent(payload, 'resolution', String(recipe.resolution || '').toLowerCase());
     copyIfPresent(payload, 'aspect_ratio', recipe.aspectRatio);
     copyIfPresent(payload, 'quality', recipe.quality);
@@ -305,7 +305,7 @@ const buildTstProviderPayload = (row, uploadedUrls) => {
 
   if (recipeType === 'image_edit_recipe_v1') {
     if (!uploadedUrls[0]) throw new Error('TST image edit source is missing');
-    payload.img_url = [uploadedUrls[0]];
+    payload.img_url = uploadedUrls[0];
     copyIfPresent(payload, 'resolution', String(recipe.resolution || '').toLowerCase());
     copyIfPresent(payload, 'aspect_ratio', recipe.aspectRatio);
     copyIfPresent(payload, 'speed', recipe.speed);

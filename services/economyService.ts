@@ -4494,7 +4494,7 @@ export const resetAdminUserPassword = async (
 };
 
 export type AdminAccountLockDetails = {
-    user: { id: string; account_status: string; locked_at?: string | null; lock_reason?: string | null };
+    user?: { id: string; account_status: string; locked_at?: string | null; lock_reason?: string | null };
     bindings: Array<{ browser_key_hash: string; account_index: number; is_checkin_allowed: boolean; first_seen_at: string; last_seen_at: string }>;
     relatedAccounts: Array<{
         browser_key_hash: string;
@@ -4502,7 +4502,7 @@ export type AdminAccountLockDetails = {
         is_checkin_allowed: boolean;
         first_seen_at: string;
         last_seen_at: string;
-        users: { id: string; email: string; display_name: string; account_status: string };
+        users?: { id: string; email: string; display_name: string; account_status: string };
     }>;
     events: Array<{ id: string; event_type: 'locked' | 'unlocked'; reason_code: string; reason: string; evidence: Record<string, unknown>; actor_user_id?: string | null; created_at: string }>;
 };

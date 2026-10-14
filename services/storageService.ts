@@ -40,6 +40,9 @@ const getEnv = (key: string) => {
 
 const R2_PUBLIC_URL = getEnv('VITE_R2_PUBLIC_URL'); 
 const R2_BUCKET_NAME = getEnv('VITE_R2_BUCKET_NAME');
+const isProtectedR2Asset = (key: string) => /(^|\/)(dance-templates|dance-orders|results|publish(?:ed|lish)?)(\/|$)/i.test(key);
+const isVideoR2Asset = (key: string) => /\.(mp4|mov|webm|m4v|avi|mkv)$/i.test(key) || /(^|\/)videos?(\/|$)/i.test(key);
+const isExpiredInputAsset = (key: string) => /^(?:users\/[\w-]+\/)?inputs(?:\/|$)/i.test(key) && !isVideoR2Asset(key) && !isProtectedR2Asset(key);
 
 // Browser code never receives R2 credentials. All writes are authorized by server endpoints.
 const getBrowserR2Client = (): S3Client | null => null;
@@ -1328,6 +1331,7 @@ export const cleanupR2Directly = async (): Promise<number> => {
                 
                 // Protect public images
                 if (publicImageKeys.has(obj.Key)) return false;
+                if (!isExpiredInputAsset(obj.Key)) return false;
 
                 // Check expiration
                 const age = now - obj.LastModified.getTime();

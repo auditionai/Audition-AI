@@ -896,6 +896,19 @@ export const handler: Handler = async (event) => {
     const queuePayloadWithLogs = buildInitialQueuePayload(body.queuePayload, body.queueKind, clientPlatform);
     const normalizedToolMeta = getImageGenerateToolMetadata(body.queueKind, queuePayloadWithLogs, body.toolId, body.toolName);
     const serverPrice = await resolveServerCostVcoin(admin, body.queueKind, queuePayloadWithLogs, targetProvider);
+    const recipe = queuePayloadWithLogs.__recipePayload && typeof queuePayloadWithLogs.__recipePayload === 'object'
+      ? queuePayloadWithLogs.__recipePayload as Record<string, unknown>
+      : queuePayloadWithLogs;
+    queuePayloadWithLogs.__providerPlan = {
+      modelId,
+      resolution: String(recipe.resolution || '').trim().toLowerCase(),
+      quality: String(recipe.quality || '').trim().toLowerCase(),
+      aspectRatio: String(recipe.aspectRatio || recipe.aspect_ratio || '').trim(),
+      chargedVcoin: serverPrice.costVcoin,
+      providerCredits: Number(serverPrice.pricing.provider_credits || 0),
+      pricingOptionId: String(serverPrice.pricing.config_key || ''),
+      initialProvider: targetProvider,
+    };
     const normalizedBody: QueueBody = {
       ...body,
       costVcoin: serverPrice.costVcoin,

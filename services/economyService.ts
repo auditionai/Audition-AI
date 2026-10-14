@@ -4525,6 +4525,11 @@ export const unlockAdminAccount = async (targetUserId: string, reason: string) =
         body: JSON.stringify({ userId: targetUserId, reason }),
     });
     const result = await response.json().catch(() => ({}));
+    // Older deployments may have the UI before the dedicated audit endpoint.
+    // Reuse the existing protected admin action so manual unlocking is not blocked.
+    if (response.status === 404) {
+        return adminGiftcodeAction('unlock', { userId: targetUserId, reason });
+    }
     if (!response.ok || result?.success === false) {
         throw new Error(result?.error || 'Khong the mo khoa tai khoan.');
     }

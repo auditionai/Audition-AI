@@ -35,6 +35,20 @@ const normalizePricingRow = (input: PricingInput) => {
   };
 };
 
+// The admin table can show the same configuration through more than one
+// provider view (for example TST and GPTi2).  Those views intentionally share
+// one `model_id + option_id` price, but Postgres does not allow an UPSERT
+// payload to target that same unique row twice.
+const deduplicatePricingRows = (rows: ReturnType<typeof normalizePricingRow>[]) => {
+  const uniqueRows = new Map<string, ReturnType<typeof normalizePricingRow>>();
+  for (const row of rows) {
+    // Keep the last edit for a key. This matches the order the client submits
+    // its current drafts, while guaranteeing one ON CONFLICT target per row.
+    uniqueRows.set(`${row.model_id}\u0000${row.option_id}`, row);
+  }
+  return Array.from(uniqueRows.values());
+};
+
 export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
   if (event.httpMethod !== 'POST') {
@@ -48,7 +62,7 @@ export const handler: Handler = async (event) => {
     if (!rawRows.length) throw new Error('PRICING_ROWS_REQUIRED');
     if (rawRows.length > 1000) throw new Error('TOO_MANY_PRICING_ROWS');
 
-    const rows = rawRows.map(normalizePricingRow);
+    const rows = deduplicatePricingRows(rawRows.map(normalizePricingRow));
     const admin = getServiceRoleClient();
     const { data, error } = await admin
       .from('model_pricing')

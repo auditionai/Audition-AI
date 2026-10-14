@@ -121,7 +121,7 @@ const getGenerationProvider = async (
   const defaultPriority = (provider: GenerationProvider): GenerationProvider[] =>
     featureKey === 'video_generation' || featureKey === 'motion_control'
       ? ['tst']
-      : provider === 'gpti2' ? ['gpti2'] : ['tst'];
+      : provider === 'gpti2' ? ['gpti2', 'tst'] : ['tst', 'gpti2'];
   try {
     const { data, error } = await admin
       .from('system_settings')
@@ -859,7 +859,7 @@ export const handler: Handler = async (event) => {
     const normalizedQueueKind = String(body.queueKind || '').trim().toLowerCase();
     const isVideoOrMotionQueue = body.assetType === 'video' || normalizedQueueKind === 'video_generate' || normalizedQueueKind === 'motion_generate';
     const isGpti2ImageModel = !isVideoOrMotionQueue && GPTI2_IMAGE_MODELS.includes(modelId);
-    const targetProvider: GenerationProvider = isGpti2ImageModel
+    const targetProvider: GenerationProvider = isGpti2ImageModel && routingConfig.provider !== 'tst'
       ? 'gpti2'
       : isVideoOrMotionQueue && routingConfig.provider === 'gpti2'
         ? routingConfig.priority.find((provider) => provider === 'tst' || provider === 'gommo') || 'tst'
@@ -888,8 +888,8 @@ export const handler: Handler = async (event) => {
       ...body.queuePayload,
       __targetProvider: targetProvider,
       __providerRouteKey: providerRouteKey,
-      __smartProviderFallbackEnabled: isGpti2ImageModel ? false : routingConfig.smartFallbackEnabled,
-      __providerPriority: isGpti2ImageModel ? ['gpti2'] : routingConfig.priority,
+      __smartProviderFallbackEnabled: routingConfig.smartFallbackEnabled,
+      __providerPriority: routingConfig.priority,
     };
 
     let row: any;

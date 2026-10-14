@@ -2536,16 +2536,21 @@ const trySmartImageProviderFallback = async (
   const nextConfiguredProvider = priority.find((provider) => provider !== sourceProvider && !historyProviders.has(provider));
   const providerOrderedTstServer = priority.length > 0 && nextConfiguredProvider !== 'tst' ? null : nextTstServer;
   const configuredTstUnavailable = nextConfiguredProvider === 'tst' && !providerOrderedTstServer;
+  const canFallbackToGpti2 =
+    job.queue_kind === 'image_generate' &&
+    sourceProvider !== 'gpti2' &&
+    nextConfiguredProvider === 'gpti2' &&
+    isGpti2Model(identity.modelId);
   const canFallbackToGommo = sourceProvider !== 'gommo' && !providerOrderedTstServer && (!nextConfiguredProvider || nextConfiguredProvider === 'gommo' || configuredTstUnavailable) && isGommoConfigured() && await canUseGommoForPayload(
     job.queue_kind,
     { ...payload, model: identity.modelId },
   ).catch(() => false);
 
-  if (!providerOrderedTstServer && !canFallbackToGommo) {
+  if (!providerOrderedTstServer && !canFallbackToGpti2 && !canFallbackToGommo) {
     return false;
   }
 
-  const targetProvider: GenerationProvider = providerOrderedTstServer ? 'tst' : 'gommo';
+  const targetProvider: GenerationProvider = providerOrderedTstServer ? 'tst' : canFallbackToGpti2 ? 'gpti2' : 'gommo';
   const fallbackPayload = providerOrderedTstServer
     ? withFallbackServer(payload, providerOrderedTstServer)
     : { ...payload };

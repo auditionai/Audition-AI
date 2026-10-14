@@ -1390,7 +1390,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   ) => {
       if (switchingGenerationProvider) return;
       const isVideoRoute = featureKey === 'video_generation' || featureKey === 'motion_control';
-      const allowedProviders: GenerationProviderMode[] = isVideoRoute ? ['tst'] : ['gpti2'];
+      const allowedProviders: GenerationProviderMode[] = isVideoRoute ? ['tst'] : ['gpti2', 'tst'];
       const current = (providerPriorityByFeature[featureKey] || allowedProviders).filter((entry, index, list) => allowedProviders.includes(entry) && list.indexOf(entry) === index);
       for (const entry of allowedProviders) if (!current.includes(entry)) current.push(entry);
       const index = current.indexOf(provider);
@@ -4727,7 +4727,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                            {GENERATION_PROVIDER_ROUTE_OPTIONS.map((route) => {
                                 const isVideoRoute = route.key === 'video_generation' || route.key === 'motion_control';
-                                const providerOptions: GenerationProviderMode[] = isVideoRoute ? ['tst'] : ['gpti2'];
+                                const providerOptions: GenerationProviderMode[] = isVideoRoute ? ['tst'] : ['gpti2', 'tst'];
                                 const configuredPriority = providerPriorityByFeature[route.key] || [];
                                 const defaultProvider = isVideoRoute
                                     ? 'tst'

@@ -4493,6 +4493,44 @@ export const resetAdminUserPassword = async (
     }
 };
 
+export type AdminAccountLockDetails = {
+    user: { id: string; account_status: string; locked_at?: string | null; lock_reason?: string | null };
+    bindings: Array<{ browser_key_hash: string; account_index: number; is_checkin_allowed: boolean; first_seen_at: string; last_seen_at: string }>;
+    relatedAccounts: Array<{
+        browser_key_hash: string;
+        account_index: number;
+        is_checkin_allowed: boolean;
+        first_seen_at: string;
+        last_seen_at: string;
+        users: { id: string; email: string; display_name: string; account_status: string };
+    }>;
+    events: Array<{ id: string; event_type: 'locked' | 'unlocked'; reason_code: string; reason: string; evidence: Record<string, unknown>; actor_user_id?: string | null; created_at: string }>;
+};
+
+export const getAdminAccountLockDetails = async (targetUserId: string): Promise<AdminAccountLockDetails> => {
+    const response = await fetch(`/api/admin-account-lock?userId=${encodeURIComponent(targetUserId)}`, {
+        headers: await getSupabaseAuthHeader(),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || result?.success === false) {
+        throw new Error(result?.error || 'Khong the tai chi tiet khoa tai khoan.');
+    }
+    return result as AdminAccountLockDetails;
+};
+
+export const unlockAdminAccount = async (targetUserId: string, reason: string) => {
+    const response = await fetch('/api/admin-account-lock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await getSupabaseAuthHeader()) },
+        body: JSON.stringify({ userId: targetUserId, reason }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || result?.success === false) {
+        throw new Error(result?.error || 'Khong the mo khoa tai khoan.');
+    }
+    return result;
+};
+
 const getD1VisitSummary = async () => {
     try {
         const headers = await getSupabaseAuthHeader();

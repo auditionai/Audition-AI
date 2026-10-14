@@ -81,7 +81,10 @@ import {
     AdminR2CleanupResult,
     adminGiftcodeAction,
     getGiftcodeAbuseCases,
-    GiftcodeAbuseCase
+    GiftcodeAbuseCase,
+    getAdminAccountLockDetails,
+    unlockAdminAccount,
+    AdminAccountLockDetails
 } from '../services/economyService';
 import {
     DEFAULT_ALLOWED_MODELS_BY_FEATURE,
@@ -727,6 +730,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [viewingUser, setViewingUser] = useState<UserProfile | null>(null);
   const [userHistory, setUserHistory] = useState<HistoryItem[]>([]);
   const [userImages, setUserImages] = useState<GeneratedImage[]>([]);
+  const [accountLockDetails, setAccountLockDetails] = useState<AdminAccountLockDetails | null>(null);
+  const [unlockReason, setUnlockReason] = useState('');
+  const [unlockingAccount, setUnlockingAccount] = useState(false);
   const [totalImagesCreated, setTotalImagesCreated] = useState(0);
   const [loadingUserDetails, setLoadingUserDetails] = useState(false);
   const [userLedgerDateScope, setUserLedgerDateScope] = useState<'all' | 'today' | '7d' | '30d'>('all');
@@ -1865,10 +1871,13 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       setUserLedgerSectionLimits({});
       setUserHistory([]);
       setUserImages([]);
+      setAccountLockDetails(null);
+      setUnlockReason('');
       try {
-          const [historyResult, imagesResult] = await Promise.allSettled([
+          const [historyResult, imagesResult, lockResult] = await Promise.allSettled([
               getAdminUserHistory(user.id),
               getUserImagesFromStorage(user.id, 80),
+              getAdminAccountLockDetails(user.id),
           ]);
 
           const history = historyResult.status === 'fulfilled' ? historyResult.value : [];
@@ -1878,6 +1887,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           setUserHistory(history.length > 0 ? history : fallbackHistory);
           setUserImages(images);
           setTotalImagesCreated(images.length);
+          if (lockResult.status === 'fulfilled') setAccountLockDetails(lockResult.value);
 
           if (historyResult.status === 'rejected' && imagesResult.status === 'rejected') {
               throw historyResult.reason || imagesResult.reason;
@@ -1886,6 +1896,26 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           showToast('Lỗi tải dữ liệu người dùng', 'error');
       } finally {
           setLoadingUserDetails(false);
+      }
+  };
+
+  const handleManualUnlock = async () => {
+      if (!viewingUser || !unlockReason.trim() || unlockingAccount) return;
+      setUnlockingAccount(true);
+      try {
+          await unlockAdminAccount(viewingUser.id, unlockReason.trim());
+          setViewingUser({ ...viewingUser, accountStatus: 'active', lockedAt: null, lockReason: null });
+          setUnlockReason('');
+          setAccountLockDetails((current) => current ? {
+              ...current,
+              user: { ...current.user, account_status: 'active', locked_at: null, lock_reason: null },
+          } : current);
+          await refreshData();
+          showToast('Da mo khoa tai khoan va luu ly do thao tac.');
+      } catch (error: any) {
+          showToast(error?.message || 'Khong the mo khoa tai khoan.', 'error');
+      } finally {
+          setUnlockingAccount(false);
       }
   };
 
@@ -6810,6 +6840,64 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           <Icons.X className="w-6 h-6" />
                       </button>
                   </div>
+
+                  {viewingUser.accountStatus === 'locked' && (
+                      <section className="mb-6 border border-red-500/30 bg-red-950/20 p-4 rounded-xl">
+                          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                              <div>
+                                  <div className="flex items-center gap-2 text-sm font-black text-red-200">
+                                      <Icons.Lock className="h-4 w-4" /> Tài khoản đang bị khóa
+                                  </div>
+                                  <p className="mt-1 text-xs leading-5 text-red-100/80">
+                                      {accountLockDetails?.user.lock_reason || viewingUser.lockReason || 'Chưa có lý do được ghi nhận.'}
+                                  </p>
+                                  {accountLockDetails?.user.locked_at && (
+                                      <p className="mt-1 text-[11px] text-red-200/70">Khóa lúc: {new Date(accountLockDetails.user.locked_at).toLocaleString('vi-VN')}</p>
+                                  )}
+                              </div>
+                              <span className="shrink-0 border border-red-400/30 bg-red-500/15 px-2 py-1 text-[10px] font-bold uppercase text-red-200">Cần admin duyệt</span>
+                          </div>
+
+                          {accountLockDetails?.relatedAccounts?.length ? (
+                              <div className="mt-4 overflow-x-auto border border-white/10 bg-black/20">
+                                  <table className="min-w-[620px] w-full text-left text-xs">
+                                      <thead className="bg-white/5 text-[10px] uppercase text-slate-400"><tr><th className="px-3 py-2">Thứ tự</th><th className="px-3 py-2">Tài khoản cùng thiết bị</th><th className="px-3 py-2">Trạng thái</th><th className="px-3 py-2">Lần cuối</th></tr></thead>
+                                      <tbody className="divide-y divide-white/10">
+                                          {accountLockDetails.relatedAccounts.map((binding) => (
+                                              <tr key={`${binding.browser_key_hash}-${binding.users.id}`} className={binding.users.id === viewingUser.id ? 'bg-red-500/10' : ''}>
+                                                  <td className="px-3 py-2 font-mono text-slate-300">#{binding.account_index}</td>
+                                                  <td className="px-3 py-2"><span className="block font-bold text-white">{binding.users.display_name || 'Không đặt tên'}</span><span className="text-slate-400">{binding.users.email}</span></td>
+                                                  <td className="px-3 py-2"><span className={binding.users.account_status === 'locked' ? 'text-red-300' : 'text-emerald-300'}>{binding.users.account_status === 'locked' ? 'Đã khóa' : 'Hoạt động'}</span></td>
+                                                  <td className="px-3 py-2 text-slate-400">{new Date(binding.last_seen_at).toLocaleString('vi-VN')}</td>
+                                              </tr>
+                                          ))}
+                                      </tbody>
+                                  </table>
+                              </div>
+                          ) : <p className="mt-3 text-xs text-slate-400">Không có dữ liệu thiết bị để đối chiếu.</p>}
+
+                          {accountLockDetails?.events?.length ? (
+                              <div className="mt-3 border-l-2 border-cyan-400/50 pl-3 text-xs">
+                                  <div className="mb-1 font-bold text-cyan-200">Nhật ký khóa / mở khóa</div>
+                                  {accountLockDetails.events.slice(0, 3).map((entry) => (
+                                      <div key={entry.id} className="flex flex-wrap gap-x-2 gap-y-1 py-1 text-slate-300">
+                                          <span className={entry.event_type === 'locked' ? 'text-red-300' : 'text-emerald-300'}>{entry.event_type === 'locked' ? 'Khóa' : 'Mở khóa'}</span>
+                                          <span>{entry.reason}</span>
+                                          <span className="text-slate-500">{new Date(entry.created_at).toLocaleString('vi-VN')}</span>
+                                      </div>
+                                  ))}
+                              </div>
+                          ) : null}
+
+                          <div className="mt-4 grid gap-2 md:grid-cols-[1fr_auto]">
+                              <label className="sr-only" htmlFor="unlock-reason">Lý do mở khóa</label>
+                              <input id="unlock-reason" value={unlockReason} onChange={(event) => setUnlockReason(event.target.value)} className="h-10 border border-white/15 bg-black/30 px-3 text-sm text-white outline-none focus:border-cyan-400" placeholder="Bắt buộc: lý do mở khóa để lưu nhật ký" />
+                              <button type="button" onClick={handleManualUnlock} disabled={!unlockReason.trim() || unlockingAccount} className="inline-flex h-10 items-center justify-center gap-2 border border-emerald-400/40 bg-emerald-500/15 px-4 text-xs font-black text-emerald-200 disabled:cursor-not-allowed disabled:opacity-40">
+                                  {unlockingAccount ? <Icons.Loader className="h-4 w-4 animate-spin" /> : <Icons.Unlock className="h-4 w-4" />} Mở khóa thủ công
+                              </button>
+                          </div>
+                      </section>
+                  )}
 
                   {loadingUserDetails ? (
                       <div className="flex-1 flex items-center justify-center py-12">

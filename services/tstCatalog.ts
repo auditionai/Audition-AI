@@ -713,7 +713,11 @@ export const getDisabledServersForModel = (
   modelId: string,
 ) => {
   const normalizedConfig = normalizeServerAvailabilityConfig(config);
-  return normalizedConfig.disabledByModel[normalizeModelId(modelId)] || [];
+  const normalizedModelId = normalizeModelId(modelId);
+  return unique([
+    ...(normalizedConfig.disabledByModel[normalizedModelId] || []),
+    ...(normalizedConfig.disabledByProviderModel?.tst?.[normalizedModelId] || []),
+  ]);
 };
 
 export const isServerEnabledForModel = (

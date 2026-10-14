@@ -177,7 +177,7 @@ const matchesDurationForModel = (modelId: string, entryDuration?: string, reques
 
 const normalizePricingEntryForValidation = (entry: TstProviderPricingEntry): TstProviderPricingEntry => {
   const configKey = String(entry.key || entry.config_key || '').trim();
-  if (normalize(entry.model) === 'image-gpt-2') {
+  if (normalize(entry.model).startsWith('image-gpt')) {
     const parsed = parseGptImage2ConfigKey(configKey);
   return {
     ...entry,

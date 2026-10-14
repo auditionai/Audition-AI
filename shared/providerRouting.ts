@@ -29,12 +29,18 @@ export const GENERATION_PROVIDER_ROUTE_OPTIONS: Array<{
   { key: 'motion_control', label: 'Motion Control', description: 'Điều khiển chuyển động bằng video mẫu.' },
 ];
 
-export const DEFAULT_PROVIDER_BY_FEATURE: Partial<Record<GenerationProviderRouteKey, 'tst' | 'gommo'>> = {
+export const DEFAULT_PROVIDER_BY_FEATURE: Partial<Record<GenerationProviderRouteKey, 'gpti2' | 'tst'>> = {
+  image_single: 'gpti2',
+  image_couple: 'gpti2',
+  image_group_3: 'gpti2',
+  image_group_4: 'gpti2',
+  image_group_5: 'gpti2',
+  image_group_6: 'gpti2',
+  image_group_7: 'gpti2',
+  image_group_8: 'gpti2',
+  image_prompt: 'gpti2',
   video_generation: 'tst',
   motion_control: 'tst',
-  image_group_6: 'tst',
-  image_group_7: 'tst',
-  image_group_8: 'tst',
 };
 
 export const DEFAULT_ALLOWED_MODELS_BY_FEATURE: Partial<Record<GenerationProviderRouteKey, string[]>> = {

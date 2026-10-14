@@ -51,7 +51,7 @@ import {
   pollGommoJob,
   submitGommoJob,
 } from './_disabled-provider';
-import { isGpti2Configured, isGpti2Model, pollGpti2Job, submitGpti2Job } from './_gpti2-provider';
+import { assertGpti2ImagePlan, isGpti2Configured, isGpti2Model, pollGpti2Job, submitGpti2Job } from './_gpti2-provider';
 import { DEFAULT_PROVIDER_BY_FEATURE, type GenerationProviderRouteKey } from '../../shared/providerRouting';
 import {
   extractProviderResultUrl,
@@ -2481,8 +2481,12 @@ const getNextTstFallbackServer = async (
 
   for (const serverId of candidates) {
     try {
-      await validateQueuePayloadAgainstLiveCatalog('image_generate', withFallbackServer(payload, serverId));
-      return serverId;
+      const validation = await validateQueuePayloadAgainstLiveCatalog('image_generate', withFallbackServer(payload, serverId));
+      return {
+        serverId,
+        pricingOptionId: String(validation.pricingMatch?.config_key || ''),
+        providerCredits: Number(validation.pricingMatch?.credits || 0),
+      };
     } catch (error) {
       console.warn('[queue-worker] Skipping invalid TST fallback server.', {
         modelId,
@@ -2536,18 +2540,23 @@ const trySmartImageProviderFallback = async (
   const nextConfiguredProvider = priority.find((provider) => provider !== sourceProvider && !historyProviders.has(provider));
   const providerOrderedTstServer = priority.length > 0 && nextConfiguredProvider !== 'tst' ? null : nextTstServer;
   const configuredTstUnavailable = nextConfiguredProvider === 'tst' && !providerOrderedTstServer;
+  const canFallbackToGpti2 =
+    job.queue_kind === 'image_generate' &&
+    sourceProvider !== 'gpti2' &&
+    nextConfiguredProvider === 'gpti2' &&
+    isGpti2Model(identity.modelId);
   const canFallbackToGommo = sourceProvider !== 'gommo' && !providerOrderedTstServer && (!nextConfiguredProvider || nextConfiguredProvider === 'gommo' || configuredTstUnavailable) && isGommoConfigured() && await canUseGommoForPayload(
     job.queue_kind,
     { ...payload, model: identity.modelId },
   ).catch(() => false);
 
-  if (!providerOrderedTstServer && !canFallbackToGommo) {
+  if (!providerOrderedTstServer && !canFallbackToGpti2 && !canFallbackToGommo) {
     return false;
   }
 
-  const targetProvider: GenerationProvider = providerOrderedTstServer ? 'tst' : 'gommo';
+  const targetProvider: GenerationProvider = providerOrderedTstServer ? 'tst' : canFallbackToGpti2 ? 'gpti2' : 'gommo';
   const fallbackPayload = providerOrderedTstServer
-    ? withFallbackServer(payload, providerOrderedTstServer)
+    ? withFallbackServer(payload, providerOrderedTstServer.serverId)
     : { ...payload };
   const history = Array.isArray(payload.__providerFallbackHistory)
     ? payload.__providerFallbackHistory.filter((entry) => entry && typeof entry === 'object')
@@ -2558,6 +2567,13 @@ const trySmartImageProviderFallback = async (
     __tstFallbackValidated: targetProvider === 'tst',
     __smartProviderFallbackEnabled: true,
     __tstFallbackTriedServers: triedServers,
+    __fallbackProviderPlan: providerOrderedTstServer ? {
+      ...(payload.__providerPlan && typeof payload.__providerPlan === 'object' ? payload.__providerPlan : {}),
+      provider: 'tst',
+      serverId: providerOrderedTstServer.serverId,
+      pricingOptionId: providerOrderedTstServer.pricingOptionId,
+      providerCredits: providerOrderedTstServer.providerCredits,
+    } : undefined,
     __providerFallbackHistory: [
       ...history,
       {
@@ -2565,7 +2581,7 @@ const trySmartImageProviderFallback = async (
         fromProvider: sourceProvider,
         fromServer: sourceProvider === 'tst' ? identity.serverId || null : null,
         toProvider: targetProvider,
-        toServer: providerOrderedTstServer || null,
+        toServer: providerOrderedTstServer?.serverId || null,
         providerJobId: job.job_id || null,
         reason: String(failureMessage || 'TST provider job failed').slice(0, 1_000),
       },
@@ -2583,7 +2599,7 @@ const trySmartImageProviderFallback = async (
   delete nextPayload.__providerLostJobFinalConfirmationPending;
 
   const fallbackDescription = nextTstServer
-    ? `${sourceProvider === 'gommo' ? 'Gommo' : 'TST'} xác nhận job thất bại; tự động thử lại bằng API 1, server ${nextTstServer.toUpperCase()} của cùng model.`
+    ? `${sourceProvider === 'gommo' ? 'Gommo' : 'TST'} xác nhận job thất bại; tự động thử lại bằng API 1, server ${nextTstServer.serverId.toUpperCase()} của cùng model.`
     : 'Tất cả server TST khả dụng của model đã thất bại; tự động chuyển job sang Gommo.';
   const queuedPayload = withQueueLog(nextPayload, 'queued', fallbackDescription, 'warning');
   const admin = getServiceRoleClient();
@@ -2621,7 +2637,7 @@ const trySmartImageProviderFallback = async (
     modelId: identity.modelId,
     fromServer: identity.serverId || null,
     toProvider: targetProvider,
-    toServer: nextTstServer,
+    toServer: nextTstServer?.serverId || null,
     triedServers,
   });
   return true;
@@ -3263,6 +3279,7 @@ const processDispatchJob = async (job: QueueJobRow, workerStartedAt: number): Pr
         preparationTimeoutMs,
         'GPTi2 payload preparation timed out before dispatching to provider.',
       );
+      assertGpti2ImagePlan(submitPayload);
       job.queue_payload = await persistPreparedPayload(job.id, submitPayload, job.queue_payload || currentPayload);
     }
 

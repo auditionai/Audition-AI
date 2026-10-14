@@ -120,8 +120,8 @@ const getGenerationProvider = async (
     : 'tst';
   const defaultPriority = (provider: GenerationProvider): GenerationProvider[] =>
     featureKey === 'video_generation' || featureKey === 'motion_control'
-      ? provider === 'tst' ? ['tst', 'gommo'] : [provider, 'tst']
-      : provider === 'gpti2' ? ['gpti2', 'tst', 'gommo'] : provider === 'tst' ? ['tst', 'gommo'] : ['gommo', 'tst'];
+      ? ['tst']
+      : provider === 'gpti2' ? ['gpti2', 'tst'] : ['tst', 'gpti2'];
   try {
     const { data, error } = await admin
       .from('system_settings')
@@ -131,15 +131,15 @@ const getGenerationProvider = async (
     if (error) throw error;
     const allowedModels = getAllowedModelsForFeature(data?.value, featureKey);
     const configuredPriority = (featureKey && data?.value?.providerPriorityByFeature?.[featureKey]) || data?.value?.providerPriorityByModel?.[modelId];
-    let priority = Array.isArray(configuredPriority) ? configuredPriority.filter((provider: unknown): provider is GenerationProvider => provider === 'tst' || provider === 'gommo' || provider === 'gpti2') : [];
+    let priority = Array.isArray(configuredPriority) ? configuredPriority.filter((provider: unknown): provider is GenerationProvider => provider === 'tst' || provider === 'gpti2') : [];
     if (featureKey === 'video_generation' || featureKey === 'motion_control') {
-      priority = priority.filter((provider) => provider === 'tst' || provider === 'gommo');
+      priority = priority.filter((provider) => provider === 'tst');
     }
     const featureProvider = String(featureKey ? data?.value?.providerByFeature?.[featureKey] || '' : '').trim().toLowerCase();
     if (!priority.length && (featureProvider === 'gommo' || featureProvider === 'tst' || featureProvider === 'gpti2')) {
       priority = defaultPriority(featureProvider);
       if (featureKey === 'video_generation' || featureKey === 'motion_control') {
-        priority = priority.filter((provider) => provider === 'tst' || provider === 'gommo');
+        priority = priority.filter((provider) => provider === 'tst');
       }
     }
     if (priority.length) {
@@ -147,7 +147,7 @@ const getGenerationProvider = async (
     }
     const featureDefault = featureKey ? DEFAULT_PROVIDER_BY_FEATURE[featureKey] : undefined;
     if (featureDefault) {
-      const featurePriority = defaultPriority(featureDefault).filter((provider) => featureKey === 'video_generation' || featureKey === 'motion_control' ? provider !== 'gpti2' : true);
+      const featurePriority = defaultPriority(featureDefault);
       return { provider: featurePriority[0], smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false, allowedModels, priority: featurePriority };
     }
     const selected = String(data?.value?.provider || '').trim().toLowerCase();
@@ -155,7 +155,7 @@ const getGenerationProvider = async (
       return {
         provider: (selected === 'gommo' || selected === 'tst') && (featureKey === 'video_generation' || featureKey === 'motion_control') ? selected : selected === 'gommo' ? 'gommo' : selected === 'gpti2' ? 'gpti2' : selected === 'tst' ? 'tst' : fallback,
         smartFallbackEnabled: data?.value?.smartFallbackEnabled !== false,
-        allowedModels, priority: (featureKey === 'video_generation' || featureKey === 'motion_control') ? ['tst', 'gommo'] : defaultPriority(fallback),
+        allowedModels, priority: (featureKey === 'video_generation' || featureKey === 'motion_control') ? ['tst'] : defaultPriority(fallback),
       };
     }
     const modelProvider = String(data?.value?.providerByModel?.[modelId] || '').trim().toLowerCase();
@@ -859,7 +859,7 @@ export const handler: Handler = async (event) => {
     const normalizedQueueKind = String(body.queueKind || '').trim().toLowerCase();
     const isVideoOrMotionQueue = body.assetType === 'video' || normalizedQueueKind === 'video_generate' || normalizedQueueKind === 'motion_generate';
     const isGpti2ImageModel = !isVideoOrMotionQueue && GPTI2_IMAGE_MODELS.includes(modelId);
-    const targetProvider: GenerationProvider = isGpti2ImageModel
+    const targetProvider: GenerationProvider = isGpti2ImageModel && routingConfig.provider !== 'tst'
       ? 'gpti2'
       : isVideoOrMotionQueue && routingConfig.provider === 'gpti2'
         ? routingConfig.priority.find((provider) => provider === 'tst' || provider === 'gommo') || 'tst'
@@ -888,14 +888,27 @@ export const handler: Handler = async (event) => {
       ...body.queuePayload,
       __targetProvider: targetProvider,
       __providerRouteKey: providerRouteKey,
-      __smartProviderFallbackEnabled: isGpti2ImageModel ? false : routingConfig.smartFallbackEnabled,
-      __providerPriority: isGpti2ImageModel ? ['gpti2'] : routingConfig.priority,
+      __smartProviderFallbackEnabled: routingConfig.smartFallbackEnabled,
+      __providerPriority: routingConfig.priority,
     };
 
     let row: any;
     const queuePayloadWithLogs = buildInitialQueuePayload(body.queuePayload, body.queueKind, clientPlatform);
     const normalizedToolMeta = getImageGenerateToolMetadata(body.queueKind, queuePayloadWithLogs, body.toolId, body.toolName);
     const serverPrice = await resolveServerCostVcoin(admin, body.queueKind, queuePayloadWithLogs, targetProvider);
+    const recipe = queuePayloadWithLogs.__recipePayload && typeof queuePayloadWithLogs.__recipePayload === 'object'
+      ? queuePayloadWithLogs.__recipePayload as Record<string, unknown>
+      : queuePayloadWithLogs;
+    queuePayloadWithLogs.__providerPlan = {
+      modelId,
+      resolution: String(recipe.resolution || '').trim().toLowerCase(),
+      quality: String(recipe.quality || '').trim().toLowerCase(),
+      aspectRatio: String(recipe.aspectRatio || recipe.aspect_ratio || '').trim(),
+      chargedVcoin: serverPrice.costVcoin,
+      providerCredits: Number(serverPrice.pricing.provider_credits || 0),
+      pricingOptionId: String(serverPrice.pricing.config_key || ''),
+      initialProvider: targetProvider,
+    };
     const normalizedBody: QueueBody = {
       ...body,
       costVcoin: serverPrice.costVcoin,

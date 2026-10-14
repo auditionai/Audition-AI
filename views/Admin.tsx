@@ -805,6 +805,15 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       });
   };
 
+  useEffect(() => {
+      if (!confirmDialog.show) return;
+      const handleKeyDown = (event: KeyboardEvent) => {
+          if (event.key === 'Escape') setConfirmDialog(prev => ({ ...prev, show: false }));
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [confirmDialog.show]);
+
   // Load only the active admin surface. Large ledgers and catalogs are fetched
   // when the administrator explicitly opens the relevant tab.
   useEffect(() => {
@@ -1390,7 +1399,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   ) => {
       if (switchingGenerationProvider) return;
       const isVideoRoute = featureKey === 'video_generation' || featureKey === 'motion_control';
-      const allowedProviders: GenerationProviderMode[] = isVideoRoute ? ['tst'] : ['gpti2', 'tst', 'gommo'];
+      const allowedProviders: GenerationProviderMode[] = isVideoRoute ? ['tst'] : ['gpti2', 'tst'];
       const current = (providerPriorityByFeature[featureKey] || allowedProviders).filter((entry, index, list) => allowedProviders.includes(entry) && list.indexOf(entry) === index);
       for (const entry of allowedProviders) if (!current.includes(entry)) current.push(entry);
       const index = current.indexOf(provider);
@@ -3133,7 +3142,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   };
 
   return (
-    <div className="admin-command-center min-h-screen pb-24 animate-fade-in text-slate-800 dark:text-slate-100 font-sans">
+    <div className="admin-command-center min-h-screen pb-24 text-slate-800 dark:text-slate-100 font-sans">
       {/* --- TOASTS CONTAINER --- */}
       <div className="fixed top-24 right-4 z-[9999] flex flex-col gap-2 pointer-events-none w-full max-w-sm px-4 md:px-0">
           {toasts.map(t => (
@@ -3151,8 +3160,13 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
       {/* --- CONFIRM / ALERT DIALOG --- */}
       {confirmDialog.show && (
-          <div className="fixed inset-0 z-[10000] flex items-start justify-center p-4 pt-24 animate-fade-in overflow-y-auto bg-black/60 backdrop-blur-sm">
-              <div className="neu-card p-6 rounded-3xl max-w-lg w-full m-4 max-h-[90vh] overflow-y-auto custom-scrollbar">
+          <AdminModalPortal>
+          <div
+              className="fixed inset-0 z-[12000] flex min-h-[100dvh] items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm animate-fade-in"
+              role="presentation"
+              onMouseDown={(event) => { if (event.target === event.currentTarget) setConfirmDialog(prev => ({ ...prev, show: false })); }}
+          >
+              <div role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()} className="neu-card m-auto w-full max-w-lg max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-3xl p-6 custom-scrollbar">
                   <div className="w-12 h-12 neu-inset-sm rounded-full flex items-center justify-center mb-4 text-amber-500 mx-auto">
                       <Icons.Bell className="w-6 h-6 animate-pulse" />
                   </div>
@@ -3171,6 +3185,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   </div>
               </div>
           </div>
+          </AdminModalPortal>
       )}
       
       <section className="admin-command-hero" aria-labelledby="admin-command-title">
@@ -4727,7 +4742,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                            {GENERATION_PROVIDER_ROUTE_OPTIONS.map((route) => {
                                 const isVideoRoute = route.key === 'video_generation' || route.key === 'motion_control';
-                                const providerOptions: GenerationProviderMode[] = isVideoRoute ? ['tst'] : ['gpti2', 'tst', 'gommo'];
+                                const providerOptions: GenerationProviderMode[] = isVideoRoute ? ['tst'] : ['gpti2', 'tst'];
                                 const configuredPriority = providerPriorityByFeature[route.key] || [];
                                 const defaultProvider = isVideoRoute
                                     ? 'tst'

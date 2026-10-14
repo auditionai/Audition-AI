@@ -16,6 +16,10 @@ const DELETE_CHUNK_SIZE = 500;
 
 const isVideoKey = (key: string) => /\.(mp4|mov|webm|m4v|avi|mkv)$/i.test(key) || /(^|\/)videos?(\/|$)/i.test(key);
 const isPublishKey = (key: string) => /(^|\/)publish(?:ed|lish)(\/|$)/i.test(key);
+const isProtectedAssetKey = (key: string) => /(^|\/)(dance-templates|dance-orders|results)(\/|$)/i.test(key);
+const isCleanupInputPrefix = (prefix: string) => /^(?:users\/[\w-]+\/)?inputs(?:\/|$)/i.test(prefix);
+const isCleanupEligibleKey = (key: string) =>
+  isCleanupInputPrefix(key) && !isVideoKey(key) && !isPublishKey(key) && !isProtectedAssetKey(key);
 
 const getEnv = (...keys: string[]) => {
   for (const key of keys) {
@@ -189,7 +193,7 @@ const listR2ObjectsByDate = async (
       const key = object.Key || '';
       const lastModified = object.LastModified;
       if (!key || !lastModified || protectedKeys.has(key)) continue;
-      if (lastModified >= start && lastModified < endExclusive && !isVideoKey(key) && !isPublishKey(key)) {
+      if (lastModified >= start && lastModified < endExclusive && isCleanupEligibleKey(key)) {
         keys.push(key);
         if (samples.length < 20) {
           samples.push({ key, lastModified: lastModified.toISOString(), size: object.Size });
@@ -238,6 +242,9 @@ export const handler: Handler = async (event) => {
     if (includeOrphanR2 && !prefix) {
       throw new Error('Vui long nhap prefix R2 khi quet file mo coi de tranh quet toan bucket.');
     }
+    if (includeOrphanR2 && !isCleanupInputPrefix(prefix)) {
+      throw new Error('Cleanup R2 chi duoc phep quet prefix inputs/. Video mau va file giao don duoc bao ve.');
+    }
     const protectedKeys = includeOrphanR2 ? await loadProtectedKeys(includePublic) : new Set<string>();
 
     let dbQuery = admin
@@ -259,7 +266,7 @@ export const handler: Handler = async (event) => {
     const dbRows = (rows || []) as CandidateRow[];
     const dbR2Keys = dbRows
       .map((row) => extractR2KeyFromUrl(row.image_url))
-      .filter((key): key is string => Boolean(key) && !protectedKeys.has(key) && !isVideoKey(key) && !isPublishKey(key));
+      .filter((key): key is string => Boolean(key) && !protectedKeys.has(key) && isCleanupEligibleKey(key));
     const dbSamples = dbRows.slice(0, 20).map((row) => ({
       id: row.id,
       createdAt: row.created_at,

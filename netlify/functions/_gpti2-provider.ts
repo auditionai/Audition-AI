@@ -86,6 +86,20 @@ const sizeOf = (payload: Record<string, unknown>) => {
   return SIZE_BY_RESOLUTION_AND_RATIO[value]?.[ratioOf(payload)] || value;
 };
 
+export const assertGpti2ImagePlan = (payload: Record<string, unknown>) => {
+  const model = modelOf(payload);
+  const aspectRatio = ratioOf(payload);
+  if (model.startsWith('nano-banana')) {
+    if (!NANO_ASPECT_RATIOS.has(aspectRatio)) throw new Error(`GPTI2_NANO_ASPECT_RATIO_UNSUPPORTED: ${aspectRatio}`);
+    return { model, resolution: NANO_OUTPUT_RESOLUTION, quality: null, aspectRatio };
+  }
+  const resolution = String(payload.size || payload.resolution || recipe(payload).size || '1K').trim().toUpperCase();
+  const quality = qualityOf(payload).trim().toLowerCase();
+  if (!SIZE_BY_RESOLUTION_AND_RATIO[resolution]?.[aspectRatio]) throw new Error(`GPTI2_RESOLUTION_OR_ASPECT_RATIO_UNSUPPORTED: ${resolution} ${aspectRatio}`);
+  if (!['low', 'medium', 'high'].includes(quality)) throw new Error(`GPTI2_QUALITY_UNSUPPORTED: ${quality}`);
+  return { model, resolution, quality, aspectRatio };
+};
+
 const dataUrl = (value: unknown) => {
   const raw = String(value || '').trim();
   if (!raw) return '';
@@ -174,7 +188,8 @@ export const isGpti2Configured = () => Boolean(key());
 export const isGpti2Model = (modelId: unknown) => ALLOWED_MODELS.has(MODEL_ALIASES[normalize(modelId)] || normalize(modelId));
 
 export const submitGpti2Job = async (queueKind: string, payload: Record<string, unknown>) => {
-  const model = modelOf(payload);
+  const plan = assertGpti2ImagePlan(payload);
+  const model = plan.model;
   const prompt = promptOf(payload);
   if (!prompt) throw new Error('GPTI2_ERROR: prompt is required');
   const sources = sourcesOf(payload);

@@ -585,7 +585,12 @@ const withQueueLog = (
   message: string,
   level: QueueProgressLogEntry['level'] = 'info',
 ) => {
-  const nextEntry = buildQueueLogEntry(stage, message, level);
+  const providerLabel = getJobProvider(payload) === 'gpti2' ? 'GPTi2' : getJobProvider(payload) === 'gommo' ? 'Gommo' : 'TST';
+  const workerLabel = providerLabel === 'GPTi2' ? 'queue-gpti2' : providerLabel === 'TST' ? 'queue-tst' : 'queue-worker';
+  const taggedMessage = message.startsWith(`[API ${providerLabel}`)
+    ? message
+    : `[API ${providerLabel} · Worker ${workerLabel}] ${message}`;
+  const nextEntry = buildQueueLogEntry(stage, taggedMessage, level);
   const previousLogs = getQueueLogs(payload);
   const lastEntry = previousLogs.at(-1);
   const nextLogs =

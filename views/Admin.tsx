@@ -93,6 +93,7 @@ import {
     getAllowedModelsForFeature,
     VEO3_VIDEO_MODELS,
     type GenerationProviderRouteKey,
+  canonicalGenerationModelId,
 } from '../shared/providerRouting';
 import { checkR2Connection, getUserImagesFromStorage, cleanupExpiredImages, cleanupR2Directly, uploadFileToR2, deleteImageFromStorage } from '../services/storageService';
 import { checkConnection, analyzeStyleImage } from '../services/geminiService';
@@ -1138,13 +1139,13 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           const models = new Map<string, string>();
           for (const row of allPricingRows) {
               if (row.type !== expectedType) continue;
-              const id = row.modelId.trim().toLowerCase();
+              const id = canonicalGenerationModelId(row.modelId);
               if (id && !models.has(id)) models.set(id, row.modelName || row.modelId);
           }
           if (expectedType === 'image') {
               models.set('gpt-image-2', 'GPTi2 · GPT Image 2');
-              models.set('image-gpt-2.5-flare', 'GPT · GPT Image 2.5 Flare');
-              models.set('image-gpt-2.5-sunburst', 'GPT · GPT Image 2.5 Sunburst');
+              models.set('gpt-image-2.5-flare', 'GPT · GPT Image 2.5 Flare');
+              models.set('gpt-image-2.5-sunburst', 'GPT · GPT Image 2.5 Sunburst');
               models.set('nano-banana-2', 'GPTi2 · Nano Banana 2');
               models.set('nano-banana-pro', 'GPTi2 · Nano Banana Pro');
           }

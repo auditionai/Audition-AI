@@ -211,7 +211,8 @@ const retryBeforeFallback = async (env, row, message, attemptCount) => {
 const dispatch = async (env, row) => {
   let activePayload = { ...compactWorkerPayload(row), __cloudflareWorker: true };
   const report = async (stage, message, level = 'info') => {
-    activePayload = appendLog(activePayload, stage, message, level);
+    const tagged = message.startsWith('[API GPTi2') ? message : `[API GPTi2 · Worker queue-gpti2] ${message}`;
+    activePayload = appendLog(activePayload, stage, tagged, level);
     if (stage === 'dispatching') {
       activePayload.__gpti2SynchronousDispatchStartedAt = new Date().toISOString();
     }
@@ -233,7 +234,7 @@ const dispatch = async (env, row) => {
   }
   const result = await submitGpti2(env, row, report); await report('verifying_output', 'Dang luu ket qua GPTi2 vao R2.');
   const imageUrl = await persistGpti2Result(env, row, result);
-  activePayload = appendLog(activePayload, 'completed', 'Cloudflare Worker da luu ket qua GPTi2 vao R2.', 'success');
+  activePayload = appendLog(activePayload, 'completed', '[API GPTi2 · Worker queue-gpti2] Đã lưu kết quả GPTi2 vào R2.', 'success');
   await updateJob(env, row.id, { status: 'completed', progress: 100, image_url: imageUrl, finished_at: new Date().toISOString(), next_poll_at: null, lease_token: null, lease_expires_at: null, queue_payload: activePayload });
   await notifyTelegramJob(env, 'completed', row, { resultUrl: imageUrl, finishedAt: new Date().toISOString() }).catch((error) => console.warn('[queue-gpti2] Telegram notification failed', error));
 };

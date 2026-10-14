@@ -62,7 +62,7 @@ import {
   resolveProviderForModel,
   type GommoProviderCatalog,
 } from '../../services/providerCatalog';
-import { getImageProviderRouteKey, isModelAllowedForFeature } from '../../shared/providerRouting';
+import { canonicalGenerationModelId, getImageProviderRouteKey, isModelAllowedForFeature } from '../../shared/providerRouting';
 import type { CharacterReferenceGroup, ImageGenerateRecipePayload } from '../../shared/queueRecipes';
 import { GENERATION_SECTION_TIPS } from '../../shared/generationSectionTips';
 import { getGommoModeForServerGroup, getGommoServerGroups, getPreferredGommoBasicMode } from '../../shared/gommoServerRouting';
@@ -292,7 +292,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
   useEffect(() => {
       const modelId = providerConfig?.defaultModelByFeature?.[providerRouteKey]?.desktop;
-      const tier = IMAGE_MODEL_OPTIONS.find((model) => getGenerationModelId(model.tier) === modelId)?.tier;
+      const tier = IMAGE_MODEL_OPTIONS.find((model) => canonicalGenerationModelId(getGenerationModelId(model.tier)) === canonicalGenerationModelId(modelId))?.tier;
       if (tier && isModelAllowedForFeature(providerConfig, providerRouteKey, modelId)) setAiModel(tier);
   }, [providerConfig, providerRouteKey]);
 

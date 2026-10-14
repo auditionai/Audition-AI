@@ -62,7 +62,7 @@ import {
   resolveProviderForModel,
   type GommoProviderCatalog,
 } from '../../services/providerCatalog';
-import { getImageProviderRouteKey, isModelAllowedForFeature } from '../../../../shared/providerRouting';
+import { canonicalGenerationModelId, getImageProviderRouteKey, isModelAllowedForFeature } from '../../../../shared/providerRouting';
 import { GENERATION_SECTION_TIPS } from '../../../../shared/generationSectionTips';
 import { getGommoModeForServerGroup, getGommoServerGroups, getPreferredGommoBasicMode } from '../../../../shared/gommoServerRouting';
 
@@ -306,7 +306,7 @@ export function WorkspaceImage() {
   const providerRouteKey = getImageProviderRouteKey(MODE_TO_CHARACTER_COUNT[activeMode]);
   useEffect(() => {
     const modelId = providerConfig?.defaultModelByFeature?.[providerRouteKey]?.mobile;
-    const tier = IMAGE_MODEL_OPTIONS.find((model) => getGenerationModelId(model.tier) === modelId)?.tier;
+    const tier = IMAGE_MODEL_OPTIONS.find((model) => canonicalGenerationModelId(getGenerationModelId(model.tier)) === canonicalGenerationModelId(modelId))?.tier;
     if (tier && isModelAllowedForFeature(providerConfig, providerRouteKey, modelId)) setAiModel(tier);
   }, [providerConfig, providerRouteKey]);
   const selectedProvider = resolveProviderForModel(providerConfig, selectedModelId, providerRouteKey);

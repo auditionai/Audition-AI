@@ -458,7 +458,7 @@ const pollRow = async (env, row, provider) => {
     const result = providerResultOf(data, row.asset_type || 'image');
     if (result && ['completed', 'success', 'succeeded', 'done'].includes(status)) {
       const storedUrl = await persistResultToR2(env, row, result, '-tst');
-      await updateJob(env, row.id, { status: 'completed', progress: 100, image_url: storedUrl, finished_at: new Date().toISOString(), next_poll_at: null, lease_token: null, lease_expires_at: null, queue_payload: appendLog(payloadObject(row), 'completed', 'Cloudflare Worker da luu ket qua TST.', 'success') });
+      await updateJob(env, row.id, { status: 'completed', progress: 100, image_url: storedUrl, finished_at: new Date().toISOString(), next_poll_at: null, lease_token: null, lease_expires_at: null, queue_payload: appendLog(payloadObject(row), 'completed', '[API TST · Worker queue-tst] Đã lưu kết quả TST.', 'success') });
       await notifyTelegramJob(env, 'completed', row, { resultUrl: storedUrl, finishedAt: new Date().toISOString() }).catch((error) => console.warn('[queue-tst] Telegram notification failed', error));
       return 'completed';
     }
@@ -471,7 +471,7 @@ const pollRow = async (env, row, provider) => {
       await failAndRefund(env, row, message);
       return 'failed';
     }
-    await updateJob(env, row.id, { status: 'processing', progress: Math.max(60, Number(data?.progress || 0)), next_poll_at: new Date(Date.now() + TST_RESULT_POLL_INTERVAL_SECONDS * 1000).toISOString(), lease_token: null, lease_expires_at: null, queue_payload: appendLog(payloadObject(row), 'polling', 'Cloudflare Worker dang poll TST.') });
+    await updateJob(env, row.id, { status: 'processing', progress: Math.max(60, Number(data?.progress || 0)), next_poll_at: new Date(Date.now() + TST_RESULT_POLL_INTERVAL_SECONDS * 1000).toISOString(), lease_token: null, lease_expires_at: null, queue_payload: appendLog(payloadObject(row), 'polling', '[API TST · Worker queue-tst] Đang poll TST.') });
     await schedulePoll(env, row.id, provider);
     return 'pending';
   } catch (error) {
@@ -483,8 +483,8 @@ const pollRow = async (env, row, provider) => {
 
 const dispatch = async (env, row, provider) => {
   let activePayload = { ...payloadObject(row), __cloudflareWorker: true };
-  const report = async (stage, message, level = 'info') => { activePayload = appendLog(activePayload, stage, message, level); await updateJob(env, row.id, { status: 'processing', progress: stage === 'uploading_refs' ? 35 : stage === 'building_payload' ? 45 : stage === 'dispatching' ? 55 : 50, error_message: null, queue_payload: activePayload }); };
-  await report('preparing', 'Cloudflare TST Worker da nhan job. Bat dau kiem tra payload.');
+  const report = async (stage, message, level = 'info') => { const tagged = message.startsWith('[API TST') ? message : `[API TST · Worker queue-tst] ${message}`; activePayload = appendLog(activePayload, stage, tagged, level); await updateJob(env, row.id, { status: 'processing', progress: stage === 'uploading_refs' ? 35 : stage === 'building_payload' ? 45 : stage === 'dispatching' ? 55 : 50, error_message: null, queue_payload: activePayload }); };
+  await report('preparing', 'Bắt đầu kiểm tra payload TST.');
   const prepared = await prepareTstPayload(env, row, report);
   activePayload = prepared.queuePayload;
   const submission = await submitTst(env, row, prepared.providerPayload, report);

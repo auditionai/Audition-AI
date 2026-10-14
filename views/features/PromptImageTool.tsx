@@ -31,7 +31,7 @@ import { buildAuditionKoreaMmoStylePrompt, DEFAULT_IMAGE_NEGATIVE_PROMPT, GPT_IM
 import type { Feature, GeneratedImage, Language, ViewId } from '../../types';
 import type { ModelPricing } from '../../services/economyService';
 import type { PromptImageGenerateRecipePayload } from '../../shared/queueRecipes';
-import { isModelAllowedForFeature } from '../../shared/providerRouting';
+import { canonicalGenerationModelId, isModelAllowedForFeature } from '../../shared/providerRouting';
 import {
   fetchProviderCatalog,
   getAuditionProviderPricing,
@@ -201,7 +201,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
   const selectedModelId = getGenerationModelId(aiModel);
   useEffect(() => {
     const modelId = providerConfig?.defaultModelByFeature?.image_prompt?.desktop;
-    const tier = MODEL_TABS.find((model) => getGenerationModelId(model.tier) === modelId)?.tier;
+    const tier = MODEL_TABS.find((model) => canonicalGenerationModelId(getGenerationModelId(model.tier)) === canonicalGenerationModelId(modelId))?.tier;
     if (tier && isModelAllowedForFeature(providerConfig, 'image_prompt', modelId)) setAiModel(tier);
   }, [providerConfig]);
   const isSelectedModelAllowed = isModelAllowedForFeature(providerConfig, 'image_prompt', selectedModelId);

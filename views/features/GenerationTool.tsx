@@ -291,6 +291,12 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const providerRouteKey = getImageProviderRouteKey(characters.length);
 
   useEffect(() => {
+      const modelId = providerConfig?.defaultModelByFeature?.[providerRouteKey]?.desktop;
+      const tier = IMAGE_MODEL_OPTIONS.find((model) => getGenerationModelId(model.tier) === modelId)?.tier;
+      if (tier && isModelAllowedForFeature(providerConfig, providerRouteKey, modelId)) setAiModel(tier);
+  }, [providerConfig, providerRouteKey]);
+
+  useEffect(() => {
       if (!isModelAllowedForFeature(providerConfig, providerRouteKey, getGenerationModelId(aiModel))) {
           const firstAllowed = IMAGE_MODEL_OPTIONS.find((model) =>
               isModelAllowedForFeature(providerConfig, providerRouteKey, getGenerationModelId(model.tier)),
@@ -492,7 +498,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       if (resolveProviderForModel(providerConfig, modelId, providerRouteKey) === 'gpti2') {
           return ['image-gpt-2', 'gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro'].includes(modelId);
       }
-      return runtimeImageModelIds.has(modelId) && pricingEntries.some((entry) => entry.model.trim().toLowerCase() === modelId);
+      return pricingEntries.some((entry) => entry.model.trim().toLowerCase() === modelId)
+          && (runtimeImageModelIds.has(modelId) || ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(modelId));
   };
   const isFlashAvailable = isTierAvailable('flash');
   const isProAvailable = isTierAvailable('pro');

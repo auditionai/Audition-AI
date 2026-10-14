@@ -304,6 +304,11 @@ export function WorkspaceImage() {
   const isGptImageTier = ['gpt', 'gpt_flare', 'gpt_sunburst'].includes(aiModel);
   const selectedModelId = getGenerationModelId(aiModel);
   const providerRouteKey = getImageProviderRouteKey(MODE_TO_CHARACTER_COUNT[activeMode]);
+  useEffect(() => {
+    const modelId = providerConfig?.defaultModelByFeature?.[providerRouteKey]?.mobile;
+    const tier = IMAGE_MODEL_OPTIONS.find((model) => getGenerationModelId(model.tier) === modelId)?.tier;
+    if (tier && isModelAllowedForFeature(providerConfig, providerRouteKey, modelId)) setAiModel(tier);
+  }, [providerConfig, providerRouteKey]);
   const selectedProvider = resolveProviderForModel(providerConfig, selectedModelId, providerRouteKey);
   const generationServerId = selectedProvider === 'gpti2' ? GPTI2_SERVER_ID : uiServerToTst(server) || 'fast';
   const isGommoSelected = selectedProvider === 'gommo';
@@ -371,7 +376,8 @@ export function WorkspaceImage() {
     if (resolveProviderForModel(providerConfig, modelId, providerRouteKey) === 'gpti2') return ['image-gpt-2', 'gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro'].includes(modelId);
     return resolveProviderForModel(providerConfig, modelId, providerRouteKey) === 'gommo'
       ? isGommoCatalogModelAvailable(getGommoModelForAudition(gommoCatalog, modelId))
-      : runtimeImageModelIds.has(modelId) && pricingEntries.some((entry) => entry.model.trim().toLowerCase() === modelId);
+      : pricingEntries.some((entry) => entry.model.trim().toLowerCase() === modelId)
+        && (runtimeImageModelIds.has(modelId) || ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(modelId));
   };
   const isFlashAvailable = isTierAvailable('flash');
   const isProAvailable = isTierAvailable('pro');

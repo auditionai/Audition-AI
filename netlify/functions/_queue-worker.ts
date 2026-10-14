@@ -271,12 +271,6 @@ const resolveDispatchProvider = async (payload: Record<string, unknown>): Promis
   // A fallback reaches TST only after its live catalog validates a compatible
   // server, so retain that explicit dispatch decision on the next claim.
   if (stored === 'tst' && payload.__tstFallbackValidated === true) return 'tst';
-  // GPTi2-only models cannot be submitted to TST/Gommo. This also repairs
-  // legacy queued rows whose provider metadata was written before GPTi2
-  // routing was persisted.
-  if (!VIDEO_OR_MOTION_QUEUE_KINDS.has(queueKind) && isGpti2Model(getQueuePayloadModelId(payload))) {
-    return 'gpti2';
-  }
   if (stored === 'gommo') return 'tst';
   if (stored === 'tst' || stored === 'gpti2') return stored;
   return getGlobalGenerationProvider(

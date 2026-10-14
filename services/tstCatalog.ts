@@ -111,6 +111,7 @@ export interface TstServerAvailabilityConfig {
 }
 
 export interface TstPricingRow {
+  provider?: 'tst' | 'gpti2';
   type: TstMediaType;
   modelId: string;
   modelName: string;

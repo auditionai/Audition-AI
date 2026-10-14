@@ -174,6 +174,11 @@ export function WorkspacePromptImage() {
   const uploadedCount = uploadedImages.length;
   const generationSpeedId = speedLabelToTst(speed);
   const selectedModelId = getGenerationModelId(aiModel);
+  useEffect(() => {
+    const modelId = providerConfig?.defaultModelByFeature?.image_prompt?.mobile;
+    const tier = MODEL_TABS.find((model) => getGenerationModelId(model.tier) === modelId)?.tier;
+    if (tier && isModelAllowedForFeature(providerConfig, 'image_prompt', modelId)) setAiModel(tier);
+  }, [providerConfig]);
   const selectedProvider = resolveProviderForModel(providerConfig, selectedModelId, 'image_prompt');
   const generationServerId = selectedProvider === 'gpti2' ? GPTI2_SERVER_ID : uiServerToTst(server) || 'fast';
   const isSelectedModelAllowed = isModelAllowedForFeature(providerConfig, 'image_prompt', selectedModelId);

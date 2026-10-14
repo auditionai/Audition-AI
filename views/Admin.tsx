@@ -1908,7 +1908,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           setUnlockReason('');
           setAccountLockDetails((current) => current ? {
               ...current,
-              user: { ...current.user, account_status: 'active', locked_at: null, lock_reason: null },
+              user: { id: current.user?.id || viewingUser.id, ...current.user, account_status: 'active', locked_at: null, lock_reason: null },
           } : current);
           await refreshData();
           showToast('Da mo khoa tai khoan va luu ly do thao tac.');
@@ -6849,10 +6849,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       <Icons.Lock className="h-4 w-4" /> Tài khoản đang bị khóa
                                   </div>
                                   <p className="mt-1 text-xs leading-5 text-red-100/80">
-                                      {accountLockDetails?.user.lock_reason || viewingUser.lockReason || 'Chưa có lý do được ghi nhận.'}
+                                      {accountLockDetails?.user?.lock_reason || viewingUser.lockReason || 'Chưa có lý do được ghi nhận.'}
                                   </p>
-                                  {accountLockDetails?.user.locked_at && (
-                                      <p className="mt-1 text-[11px] text-red-200/70">Khóa lúc: {new Date(accountLockDetails.user.locked_at).toLocaleString('vi-VN')}</p>
+                                  {(accountLockDetails?.user?.locked_at || viewingUser.lockedAt) && (
+                                      <p className="mt-1 text-[11px] text-red-200/70">Khóa lúc: {new Date(accountLockDetails?.user?.locked_at || viewingUser.lockedAt || '').toLocaleString('vi-VN')}</p>
                                   )}
                               </div>
                               <span className="shrink-0 border border-red-400/30 bg-red-500/15 px-2 py-1 text-[10px] font-bold uppercase text-red-200">Cần admin duyệt</span>
@@ -6863,11 +6863,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   <table className="min-w-[620px] w-full text-left text-xs">
                                       <thead className="bg-white/5 text-[10px] uppercase text-slate-400"><tr><th className="px-3 py-2">Thứ tự</th><th className="px-3 py-2">Tài khoản cùng thiết bị</th><th className="px-3 py-2">Trạng thái</th><th className="px-3 py-2">Lần cuối</th></tr></thead>
                                       <tbody className="divide-y divide-white/10">
-                                          {accountLockDetails.relatedAccounts.map((binding) => (
-                                              <tr key={`${binding.browser_key_hash}-${binding.users.id}`} className={binding.users.id === viewingUser.id ? 'bg-red-500/10' : ''}>
+                                          {accountLockDetails.relatedAccounts.filter((binding) => Boolean(binding.users?.id)).map((binding) => (
+                                              <tr key={`${binding.browser_key_hash}-${binding.users?.id}`} className={binding.users?.id === viewingUser.id ? 'bg-red-500/10' : ''}>
                                                   <td className="px-3 py-2 font-mono text-slate-300">#{binding.account_index}</td>
-                                                  <td className="px-3 py-2"><span className="block font-bold text-white">{binding.users.display_name || 'Không đặt tên'}</span><span className="text-slate-400">{binding.users.email}</span></td>
-                                                  <td className="px-3 py-2"><span className={binding.users.account_status === 'locked' ? 'text-red-300' : 'text-emerald-300'}>{binding.users.account_status === 'locked' ? 'Đã khóa' : 'Hoạt động'}</span></td>
+                                                  <td className="px-3 py-2"><span className="block font-bold text-white">{binding.users?.display_name || 'Không đặt tên'}</span><span className="text-slate-400">{binding.users?.email || 'Không rõ email'}</span></td>
+                                                  <td className="px-3 py-2"><span className={binding.users?.account_status === 'locked' ? 'text-red-300' : 'text-emerald-300'}>{binding.users?.account_status === 'locked' ? 'Đã khóa' : 'Hoạt động'}</span></td>
                                                   <td className="px-3 py-2 text-slate-400">{new Date(binding.last_seen_at).toLocaleString('vi-VN')}</td>
                                               </tr>
                                           ))}
